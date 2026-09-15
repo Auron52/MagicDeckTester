@@ -65,6 +65,10 @@ MODELED_ELSEWHERE_KEYWORDS = {
     # Demonstrate (Creative Technique): modeled structurally via the demonstrate param
     # (a cast-trigger stack entry), not a keyword tag -- mirrors cascade.
     "demonstrate",
+    # Ascend (Ocelot Pride): modeled structurally via the `ascend` param ->
+    # Player::has_city_blessing, a per-player designation checked by RefreshCityBlessing,
+    # not a keyword tag -- and not a combat/evasion keyword, so stripping it is safe.
+    "ascend",
 }
 # Supertypes the engine does NOT model because they are inert in goldfishing:
 # Basic-ness is derived from the card name; the World rule never fires (one

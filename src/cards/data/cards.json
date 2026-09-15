@@ -7607,6 +7607,35 @@
    }
   },
   {
+   "name": "Ocelot Pride",
+   "mana_cost": "{W}",
+   "types": [
+    "Creature"
+   ],
+   "subtypes": [
+    "Cat"
+   ],
+   "keywords": [
+    "Lifelink",
+    "First strike"
+   ],
+   "power": 1,
+   "toughness": 1,
+   "oracle_text": "First strike, lifelink\nAscend (If you control ten or more permanents, you get the city's blessing for the rest of the game.)\nAt the beginning of your end step, if you gained life this turn, create a 1/1 white Cat creature token. Then if you have the city's blessing, for each token you control that entered this turn, create a token that's a copy of it. [NOT LEGENDARY (Scryfall type_line \"Creature — Cat\"), so four copies coexist and their triggers COMPOUND -- see the doubling note below. THE TOKEN IS THE POINT, NOT THE BODY: each 1/1 Cat is a creature ENTERING, so in this deck one Cat fires Soul Warden x4, Soul's Attendant x4, Auriok Champion x4 and Daxos = up to 13 SEPARATE life-gain EVENTS (CR 119.10), each of which is a +1/+1 counter on every Ajani's Pridemate and Voice of the Blessed, a team-wide counter from every Archangel of Thune, and a Heliod, Sun-Crowned counter. Modelled as endstep_lifegain_tokens 1 + endstep_token_power/_toughness 1 + endstep_token_color \"W\" + endstep_token_subtypes [\"Cat\"], resolved by the shared PerformEndStepLifegainTokens called IDENTICALLY from GameEngine::EndStep (executor) and TurnSolver::SimulateEndAndStartNextTurn (rollout) -- lockstep, or the rollout projects a board the real game keeps growing every turn (a systematic fd-diverge). The token enters via CreateToken -> FireEtbWatchers, the universal enter cascade, so every watcher above fires exactly as it does for a cast creature. INTERVENING-IF (CR 603.4): \"if you gained life this turn\" is checked both when the ability would go on the stack and again on resolution; the engine reads Player::life_gained_this_turn once at the end step, which is equivalent here (one active player, nothing able to undo a gain in between). It reads the BOOLEAN \">0\", never the amount -- a turn that gained 1 life and a turn that gained 40 are the same trigger -- which is why the sim key folds a bare marker rather than the value. In this deck the condition is met on almost every turn: any creature entering on EITHER side, including the passive opponent's spawn tokens, gains us life. ASCEND = the `ascend` param -> Player::has_city_blessing, a per-PLAYER DESIGNATION (CR 702.131), not a permanent state and not a counter. Once gained it is held \"for the rest of the game\": dropping back below ten permanents, or losing every Ocelot Pride, does NOT take it back. CR 702.131b makes ascend a STATE TRIGGER, so RefreshCityBlessing is called wherever the permanent count can RISE -- the universal enter cascade (FireEtbWatchers) and the shared land drop (LandPlay::PlayLand; land drops deliberately do NOT route through that cascade) -- plus both turn-start resyncs as a backstop. Checking on the RISE is what makes a momentary peak count, which is the faithful reading: an Orzhov Basilica entering as the tenth permanent grants the blessing even though its own ETB bounce immediately drops the count back to nine. PARTIAL: a permanent whose CONTROL changes to us mid-turn would only be picked up at the next turn-start resync -- unreachable in this deck (nothing here steals a permanent or is given one), and the backstop bounds the error to one turn. THE COPY HALF (\"then if you have the city's blessing, for each token you control that entered this turn, create a token that's a copy of it\") = endstep_token_ascend_copy. Read ON RESOLUTION, i.e. AFTER this trigger's own Cat is created, over every own token with Permanent::is_token && entered_this_turn -- so it also copies an Ajani, Strength of the Pride -2 Pridemate token made this turn. The source set is SNAPSHOT before any copy is created: the copies are made simultaneously as one resolution and must not feed back into the set being iterated (and push_back would invalidate that iteration regardless). A copy of a NAMED token re-resolves the real definition through CreateTokenCopyOfCard, so a copied Ajani's Pridemate token keeps its own live lifegain_self_counters trigger. MULTIPLE COPIES COMPOUND, exactly as printed: each Ocelot Pride's trigger resolves separately and sees the tokens the earlier ones just made, so with the city's blessing and T tokens already entered this turn, N Prides end the turn on 2^N*(T+2)-2 entered-this-turn tokens (T=0: 2, 6, 14, 30 for N=1..4). Bounded PER TURN -- entered_this_turn clears at the next untap -- so it cannot run away across turns. LIFELINK is MODELLED and is NOT goldfish-inert: its combat damage is a life-gain event, which is a Pridemate/Voice/Heliod counter and an Archangel team pump; per CR 510.2 combat damage is simultaneous, so counters from a combat lifelink gain do NOT add to that same combat's damage (Combat.cpp defers the gains until after every attacker's damage is assigned). PARTIAL: FIRST STRIKE is parsed (Keyword::FirstStrike) but is structurally INERT here -- the passive opponent never blocks and the engine collapses the combat damage step into one event, so strike order can never change an outcome (the same disclosure Archangel of Thune's flying carries). The ascend reminder text is reminder text, not a separate ability.]",
+   "template": "custom",
+   "parameters": {
+    "endstep_lifegain_tokens": 1,
+    "endstep_token_power": 1,
+    "endstep_token_toughness": 1,
+    "endstep_token_color": "W",
+    "endstep_token_subtypes": [
+     "Cat"
+    ],
+    "endstep_token_ascend_copy": true,
+    "ascend": true
+   }
+  },
+  {
    "name": "Serra Ascendant",
    "mana_cost": "{W}",
    "types": [

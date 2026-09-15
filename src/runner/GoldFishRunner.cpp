@@ -902,6 +902,16 @@ void GoldFishRunner::StampDeckTraits(GameState& state, const Decklist& deck)
         }
         return false;
     }();
+    // Does anything in this deck READ life_gained_this_turn at the END STEP (Ocelot Pride)? Gates
+    // the life_gained_this_turn key fold only -- see GameState::deck_reads_endstep_lifegain.
+    state.deck_reads_endstep_lifegain = [&deck]{
+        for (const Card& c : deck.mainboard)
+        {
+            const CardDefinition* d = CardDatabase::Instance().LookupCached(c);
+            if (d && d->params.endstep_lifegain_tokens > 0) { return true; }
+        }
+        return false;
+    }();
     // NOTE: opponent_library_dealt is deliberately NOT stamped here. It means "a library was
     // actually dealt", and only opponentdeck::Deal may raise it -- see the comment there. Callers
     // that stamp traits without running SetupGame (the scenario harness) must otherwise get the

@@ -57,6 +57,15 @@
     "toughness": null,
     "type_line": "Artifact"
   },
+  "Ajani's Pridemate": {
+    "cmc": 2.0,
+    "keywords": [],
+    "mana_cost": "{1}{W}",
+    "oracle_text": "Whenever you gain life, put a +1/+1 counter on this creature.",
+    "power": "2",
+    "toughness": "2",
+    "type_line": "Creature — Cat Soldier"
+  },
   "Ajani, Strength of the Pride": {
     "cmc": 4.0,
     "keywords": [],
@@ -232,6 +241,17 @@
     "power": null,
     "toughness": null,
     "type_line": "Enchantment — Aura"
+  },
+  "Auriok Champion": {
+    "cmc": 2.0,
+    "keywords": [
+      "Protection"
+    ],
+    "mana_cost": "{W}{W}",
+    "oracle_text": "Protection from black and from red\nWhenever another creature enters, you may gain 1 life.",
+    "power": "1",
+    "toughness": "1",
+    "type_line": "Creature — Human Cleric"
   },
   "Azorius Chancery": {
     "cmc": 0.0,
@@ -2250,6 +2270,19 @@
     "toughness": null,
     "type_line": "Artifact — Equipment"
   },
+  "Ocelot Pride": {
+    "cmc": 1.0,
+    "keywords": [
+      "Ascend",
+      "First strike",
+      "Lifelink"
+    ],
+    "mana_cost": "{W}",
+    "oracle_text": "First strike, lifelink\nAscend (If you control ten or more permanents, you get the city's blessing for the rest of the game.)\nAt the beginning of your end step, if you gained life this turn, create a 1/1 white Cat creature token. Then if you have the city's blessing, for each token you control that entered this turn, create a token that's a copy of it.",
+    "power": "1",
+    "toughness": "1",
+    "type_line": "Creature — Cat"
+  },
   "Oko, Thief of Crowns": {
     "cmc": 3.0,
     "keywords": [
@@ -2822,6 +2855,17 @@
     "toughness": null,
     "type_line": "Instant"
   },
+  "Serra Ascendant": {
+    "cmc": 1.0,
+    "keywords": [
+      "Lifelink"
+    ],
+    "mana_cost": "{W}",
+    "oracle_text": "Lifelink (Damage dealt by this creature also causes you to gain that much life.)\nAs long as you have 30 or more life, this creature gets +5/+5 and has flying.",
+    "power": "1",
+    "toughness": "1",
+    "type_line": "Creature — Human Monk"
+  },
   "Sethron, Hurloon General": {
     "cmc": 5.0,
     "keywords": [],
@@ -3028,6 +3072,15 @@
     "keywords": [],
     "mana_cost": "{W}",
     "oracle_text": "Whenever another creature enters, you gain 1 life.",
+    "power": "1",
+    "toughness": "1",
+    "type_line": "Creature — Human Cleric"
+  },
+  "Soul's Attendant": {
+    "cmc": 1.0,
+    "keywords": [],
+    "mana_cost": "{W}",
+    "oracle_text": "Whenever another creature enters, you may gain 1 life.",
     "power": "1",
     "toughness": "1",
     "type_line": "Creature — Human Cleric"
@@ -3496,6 +3549,15 @@
     "toughness": "2",
     "type_line": "Creature — Elemental"
   },
+  "Voice of the Blessed": {
+    "cmc": 2.0,
+    "keywords": [],
+    "mana_cost": "{W}{W}",
+    "oracle_text": "Whenever you gain life, put a +1/+1 counter on this creature.\nAs long as this creature has four or more +1/+1 counters on it, it has flying and vigilance.\nAs long as this creature has ten or more +1/+1 counters on it, it has indestructible.",
+    "power": "2",
+    "toughness": "2",
+    "type_line": "Creature — Spirit Cleric"
+  },
   "Wild Growth": {
     "cmc": 1.0,
     "keywords": [
@@ -3600,54 +3662,5 @@
     "power": null,
     "toughness": null,
     "type_line": "Land — Swamp Forest Island"
-  },
-  "Soul's Attendant": {
-    "cmc": 1.0,
-    "keywords": [],
-    "mana_cost": "{W}",
-    "oracle_text": "Whenever another creature enters, you may gain 1 life.",
-    "power": "1",
-    "toughness": "1",
-    "type_line": "Creature — Human Cleric"
-  },
-  "Auriok Champion": {
-    "cmc": 2.0,
-    "keywords": [
-      "Protection"
-    ],
-    "mana_cost": "{W}{W}",
-    "oracle_text": "Protection from black and from red\nWhenever another creature enters, you may gain 1 life.",
-    "power": "1",
-    "toughness": "1",
-    "type_line": "Creature — Human Cleric"
-  },
-  "Serra Ascendant": {
-    "cmc": 1.0,
-    "keywords": [
-      "Lifelink"
-    ],
-    "mana_cost": "{W}",
-    "oracle_text": "Lifelink (Damage dealt by this creature also causes you to gain that much life.)\nAs long as you have 30 or more life, this creature gets +5/+5 and has flying.",
-    "power": "1",
-    "toughness": "1",
-    "type_line": "Creature — Human Monk"
-  },
-  "Ajani's Pridemate": {
-    "cmc": 2.0,
-    "keywords": [],
-    "mana_cost": "{1}{W}",
-    "oracle_text": "Whenever you gain life, put a +1/+1 counter on this creature.",
-    "power": "2",
-    "toughness": "2",
-    "type_line": "Creature — Cat Soldier"
-  },
-  "Voice of the Blessed": {
-    "cmc": 2.0,
-    "keywords": [],
-    "mana_cost": "{W}{W}",
-    "oracle_text": "Whenever you gain life, put a +1/+1 counter on this creature.\nAs long as this creature has four or more +1/+1 counters on it, it has flying and vigilance.\nAs long as this creature has ten or more +1/+1 counters on it, it has indestructible.",
-    "power": "2",
-    "toughness": "2",
-    "type_line": "Creature — Spirit Cleric"
   }
 }

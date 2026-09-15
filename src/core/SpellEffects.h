@@ -3831,6 +3831,102 @@ inline void CreateTokenCopyOfCard(GameState& state, int controller, const Card& 
     FireEtbWatchers(state, controller, static_cast<int>(state.battlefield.size()) - 1);
 }
 
+// ---- ASCEND: the city's blessing (CR 702.131) ---------------------------------------
+// "If you control ten or more permanents, you get the city's blessing for the rest of the game."
+// A STATE TRIGGER (CR 702.131b), so it is checked continuously rather than on any one event -- in
+// practice that means "wherever the permanent count can RISE", because entering the battlefield is
+// the only way to control more permanents. Call sites: the universal enter cascade
+// (FireEtbWatchers), the shared land drop (lands deliberately do NOT route through that cascade),
+// and both turn-start resyncs as the backstop for any path that reaches the battlefield another
+// way (a control change, the scenario harness stamping a board directly).
+//
+// Checking on the RISE is what makes a momentary peak count, which is the faithful reading: an
+// Orzhov Basilica entering as your tenth permanent grants the blessing even though its own ETB
+// immediately bounces a land back to hand and drops you to nine again.
+//
+// The designation is monotone -- never cleared here or anywhere -- so this can only ever raise the
+// flag. Param-gated early-out on the battlefield holding an `ascend` permanent at all, so it is one
+// cached-lookup scan for a deck that runs one and a single loop-and-return for every other deck.
+inline void RefreshCityBlessing(GameState& state)
+{
+    for (int pi = 0; pi < 2; ++pi)
+    {
+        Player& pl = state.players[pi];
+        if (pl.has_city_blessing) { continue; }
+        bool has_ascend = false;
+        int  owned      = 0;
+        for (const Permanent& p : state.battlefield)
+        {
+            if (p.controller_index != pi) { continue; }
+            ++owned;
+            if (has_ascend) { continue; }
+            const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+            if (d && d->params.ascend) { has_ascend = true; }
+        }
+        if (has_ascend && owned >= 10) { pl.has_city_blessing = true; }
+    }
+}
+
+// ---- Ocelot Pride: "at the beginning of your end step, if you gained life this turn ..." --------
+// Called from BOTH end-of-turn sites in lockstep (GameEngine::EndStep and the rollout's
+// SimulateEndAndStartNextTurn) -- an fd-diverge otherwise, since the tokens it makes are real board
+// state the next turn attacks with.
+//
+// CR 603.4 intervening-if: "if you gained life this turn" is checked when the ability would go on
+// the stack AND again on resolution. With one active player and nothing here able to undo a gain
+// between the two, a single check is equivalent.
+//
+// Param-gated early-out -> byte-identical for every deck without such a card.
+inline void PerformEndStepLifegainTokens(GameState& state)
+{
+    const int active = state.active_player_index;
+    // Snapshot the TRIGGERING definitions first: the tokens created below push_back onto the
+    // battlefield (invalidating references) and, for a copy of an Ajani's Pridemate token, resolve
+    // to a real definition -- neither may add a trigger to this turn's set.
+    std::vector<const CardDefinition*> triggers;
+    for (const Permanent& p : state.battlefield)
+    {
+        if (p.controller_index != active) { continue; }
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+        if (d && d->params.endstep_lifegain_tokens > 0) { triggers.push_back(d); }
+    }
+    if (triggers.empty()) { return; }
+    // The intervening-if. Note it reads ">0", never the amount: a turn that gained 1 life and a turn
+    // that gained 40 produce exactly the same trigger.
+    if (state.players[active].life_gained_this_turn <= 0) { return; }
+
+    for (const CardDefinition* d : triggers)
+    {
+        const CardParams& pp = d->params;
+        for (int i = 0; i < pp.endstep_lifegain_tokens; ++i)
+        {
+            // Enters through the universal cascade: in a lifegain deck each Cat is a creature
+            // ENTERING, i.e. a Soul Warden / Soul's Attendant / Auriok Champion / Daxos trigger
+            // apiece -- which is more life gained, which is a counter on every Pridemate and Voice
+            // and a team pump from every Archangel of Thune.
+            CreateToken(state, active, pp.endstep_token_power, pp.endstep_token_toughness,
+                        pp.endstep_token_subtypes, pp.endstep_token_color, {});
+        }
+        if (!pp.endstep_token_ascend_copy || !state.players[active].has_city_blessing) { continue; }
+        // "Then if you have the city's blessing, for each token you control that entered this turn,
+        // create a token that's a copy of it." Read ON RESOLUTION, so the set INCLUDES the token
+        // just created above and any other token that entered this turn (an Ajani, Strength of the
+        // Pride -2 Pridemate, an earlier Ocelot Pride trigger's output). SNAPSHOT the source cards
+        // before creating anything: the copies are created simultaneously as one resolution, so
+        // they must not feed back into the set being iterated -- and push_back would invalidate the
+        // iteration regardless.
+        std::vector<Card> sources;
+        for (const Permanent& q : state.battlefield)
+        {
+            if (q.controller_index == active && q.is_token && q.entered_this_turn)
+            { sources.push_back(q.card); }
+        }
+        // A copy of a NAMED token (the Ajani Pridemate token) re-resolves the real definition, so
+        // its own "whenever you gain life" trigger stays live on the copy.
+        for (const Card& c : sources) { CreateTokenCopyOfCard(state, active, c); }
+    }
+}
+
 // ---- Dragonstorm kill-engine shared helpers (Scourge / Lathliss / Utvara) -----------
 // One cascade + one attack-token maker + one firebreathing routine, called IDENTICALLY from the
 // executor (EffectHandler / GameEngine / AIEngine) and the rollout (TurnSolver) so the ETB ping
@@ -3979,6 +4075,11 @@ inline void FireEtbWatchers(GameState& state, int controller, int entered_index)
     // later permanent lifting devotion to 5 flips an older Heliod on WITHOUT it "entering" (only
     // the actual entrant is passed to the creature-enter watchers). Param-gated early-out.
     RefreshDevotionCreatures(state);
+    // ASCEND (Ocelot Pride): a permanent just ENTERED, which is the only way the count can rise, so
+    // this is where the city's-blessing state trigger is checked (CR 702.131b). Above the watchers
+    // below for the same reason devotion is: the designation is part of the board the entering
+    // permanent's own triggers see. Param-gated -> byte-identical for every non-ascend deck.
+    RefreshCityBlessing(state);
     // Snow-enter scry watcher (param-gated; one supertype bit-test for every other deck).
     FireSnowEnterWatchers(state, entered_index);
     // Creature-enter watchers (Creature Giving: Wardens / Suture Priest). This function is the

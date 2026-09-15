@@ -922,6 +922,15 @@ CardParams CardDatabase::BuildParamsFromJson(const json& params) const
     p.lifegain_each_own_creature_counters = params.value("lifegain_each_own_creature_counters", 0);
     p.lifegain_target_own_counter         = params.value("lifegain_target_own_counter", false);
     p.own_creature_dies_lifegain          = params.value("own_creature_dies_lifegain", 0);
+    // Ocelot Pride's end-step token trigger + ascend (see CardParams for the model).
+    p.endstep_lifegain_tokens             = params.value("endstep_lifegain_tokens", 0);
+    p.endstep_token_power                 = params.value("endstep_token_power", 0);
+    p.endstep_token_toughness             = params.value("endstep_token_toughness", 0);
+    p.endstep_token_color                 = params.value("endstep_token_color", std::string());
+    for (const std::string& s : params.value("endstep_token_subtypes", json::array()))
+        p.endstep_token_subtypes.push_back(s);
+    p.endstep_token_ascend_copy           = params.value("endstep_token_ascend_copy", false);
+    p.ascend                              = params.value("ascend", false);
     p.etb_opp_creatures_debuff      = params.value("etb_opp_creatures_debuff", 0);
     p.opp_dies_life_loss            = params.value("opp_dies_life_loss", 0);
     p.cumulative_upkeep_opp_token   = params.value("cumulative_upkeep_opp_token", false);

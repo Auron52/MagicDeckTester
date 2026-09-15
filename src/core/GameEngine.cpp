@@ -215,6 +215,7 @@ void GameEngine::UntapStep(GameState& state)
     ap.life_gained_this_turn     = 0;   // Fortifying Draught lifegain-count resets each turn (same lockstep)
     ap.cards_cycled_or_discarded_this_turn = 0;   // Hollow One cycle/discard count (same lockstep)
     RefreshDevotionCreatures(state);    // Heliod's devotion gate: per-turn correctness ceiling (lockstep w/ rollout)
+    RefreshCityBlessing(state);         // ascend backstop for any non-cascade board change (lockstep w/ rollout)
     // Rimescale Dragon's static ("Creatures with ice counters on them don't untap during their
     // controllers' untap steps"). Two cheap gates before any lookup: only consulted when some
     // permanent actually has an ice counter AND a source with the param is out -- every other
@@ -655,7 +656,12 @@ void GameEngine::EndStep(GameState& state)
             state.battlefield.erase(state.battlefield.begin() + i);
         }
     }
-    // TODO: "end of turn" triggered abilities (Phase 1.2)
+    // "At the beginning of your end step, if you gained life this turn, create a 1/1 white Cat"
+    // (Ocelot Pride). Lockstep twin at the top of TurnSolver::SimulateEndAndStartNextTurn; after
+    // the exile sweep above, which is the other beginning-of-end-step effect. Param-gated ->
+    // no-op for every deck without such a card.
+    PerformEndStepLifegainTokens(state);
+    // TODO: other "end of turn" triggered abilities (Phase 1.2)
     ResolveStack(state);
 }
 

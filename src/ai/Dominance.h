@@ -106,7 +106,14 @@ static_assert(sizeof(Permanent) == 280,
 // one any-colour tap, and under the blink loop's untaps that is what separates "this Hub can still
 // fix" from "it is a plain {C} source" -- and it is NOT monotone in the goldfish sense we could
 // declare a direction over, because a state that SPENT its energy bought a coloured mana with it.
-static_assert(sizeof(Player) == 192,
+// 192 -> 200 (2026-09-15): Player gained `has_city_blessing` (ASCEND, CR 702.131 -- Ocelot Pride).
+// Classification: an EXACT-MATCH field, folded below gated on being TRUE. It is future-determining
+// (a player holding it doubles their end-step tokens; one without it does not) and, unusually for a
+// player field, MONOTONE -- it is a designation held "for the rest of the game", never reset at
+// untap and never lost. Monotone does NOT make it droppable: the direction is "having it is at
+// least as good", but dominance here is an EQUALITY key, not an ordering, so two states differing
+// in it must not be merged. Gating the fold on true keeps every non-ascend deck byte-identical.
+static_assert(sizeof(Player) == 200,
               "Player changed size -- fold any new field into dominance::Build() (see the "
               "MAINTENANCE HAZARD note at the top of Dominance.h) before updating this number.");
 // 688 -> 696 (2026-09-01): ManaPool gained `wild_c`, and GameState embeds one as floating_mana.
@@ -130,7 +137,11 @@ static_assert(sizeof(Player) == 192,
 // wild_c above verbatim: a SUBSET COUNT of ManaPool::wild, so wild_phantom > 0 implies wild > 0
 // implies floating_mana.Total() > 0, which the mid-turn boundary assertion below already stands
 // the whole comparator down on. Nothing to fold.
-static_assert(sizeof(GameState) == 776,
+// 776 -> 792 (2026-09-15): the two embedded Players each gained `has_city_blessing` (8 bytes each
+// once padding settles), folded above. GameState itself gained `deck_reads_endstep_lifegain`, which
+// is a DECK CONSTANT (stamped once at SetupGame) -- identical across every pair of states Build()
+// could ever compare, so nothing to fold, exactly like deck_reads_mv_cast above it.
+static_assert(sizeof(GameState) == 792,
               "GameState changed size -- fold any new field into dominance::Build() (see the "
               "MAINTENANCE HAZARD note at the top of Dominance.h) before updating this number.");
 
@@ -497,6 +508,12 @@ inline DomSnap Build(const GameState& s, const DecisionProvider& prov,
         fold(static_cast<std::uint64_t>(p.bonus_land_drops_this_turn));
         fold(static_cast<std::uint64_t>(p.cards_drawn_this_turn));
         fold(static_cast<std::uint64_t>(p.life_gained_this_turn));
+        // The city's blessing (ascend, Ocelot Pride). NOT a per-turn counter like its neighbours:
+        // it is a monotone designation held for the rest of the game, so two states that differ in
+        // it have different futures (one doubles its end-step tokens, the other does not) and must
+        // never dominate one another. Folded only when TRUE -> byte-identical for every non-ascend
+        // deck, which is the same guard the gated folds below use.
+        if (p.has_city_blessing) { fold(0xCB1Eull); }
         fold(static_cast<std::uint64_t>(p.poison_counters));
         // Hollow One cycle/discard-count. NOT folded unconditionally like the counters above: every
         // dig deck (treasure_hunt / auras / dragons) drives this counter nonzero, so an

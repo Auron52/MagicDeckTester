@@ -1,0 +1,28 @@
+{
+  "deck": "decks/CritterLifegain/CritterLifegain.cod",
+  "turn": 4,
+  "on_the_play": true,
+  "active_life": 20,
+  "opponent_life": 40,
+  "library_filler": "Plains",
+  "library_size": 30,
+  "depth": 3,
+  "budget_ms": 50,
+  "max_turns": 4,
+  "_comment": "CritterLifegain / Ocelot Pride (2026-09-15). ASCEND end to end, through the REAL executor end step -- the integration half of the unit tests in test/unit/test_critter_lifegain.cpp (which pin the trigger, the intervening-if and the copy arithmetic directly). Nine permanents are staged (5 Plains + Soul Warden + Soul's Attendant + Ajani's Pridemate + Ocelot Pride) and the hand is EMPTY, so the turn's land drop comes off the Plains filler draw and takes us to TEN -- which is the point: it grants the city's blessing at the LandPlay call site, the one RefreshCityBlessing site that FireEtbWatchers does not cover (land drops deliberately do not route through the universal enter cascade). Life ledger: attack with Warden 1 + Attendant 1 + Ocelot Pride 1 + Pridemate 2 = 5 damage (opponent 40 -> 35); Ocelot Pride's lifelink is +1 (20 -> 21) and is the gain that arms the intervening-if; at the end step the trigger creates a Cat, whose ENTRY fires Warden and Attendant for +2 (-> 23); then the city's blessing copies every token that entered this turn -- just that Cat -- and the copy's entry fires them again for +2 (-> 25). Assert 25. THE DISCRIMINATOR IS OUR LIFE AND NOTHING ELSE: with one fewer staged Plains the land drop reaches only nine, no blessing, one Cat, and the board reads active_life 23 with THE SAME opponent_life 35 -- so a win-turn or damage assertion is structurally blind to the ascend half, and only expect_active_life can pin it. 23 here means the blessing never switched on; 21 means the end-step trigger itself is gone.",
+  "battlefield": [
+    { "name": "Plains" },
+    { "name": "Plains" },
+    { "name": "Plains" },
+    { "name": "Plains" },
+    { "name": "Plains" },
+    { "name": "Soul Warden" },
+    { "name": "Soul's Attendant" },
+    { "name": "Ajani's Pridemate" },
+    { "name": "Ocelot Pride" }
+  ],
+  "hand": [],
+  "expect_no_win": true,
+  "expect_opponent_life": 35,
+  "expect_active_life": 25
+}

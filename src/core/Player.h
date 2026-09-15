@@ -53,6 +53,15 @@ struct Player
     // cards_drawn_this_turn; folded into the sim key under the same >0 guard, so it is 0 forever --
     // and byte-identical -- for every deck with no cycle/discard-count payload.
     int cards_cycled_or_discarded_this_turn = 0;
+    // THE CITY'S BLESSING (CR 702.131, ASCEND -- Ocelot Pride). A player DESIGNATION, not a
+    // permanent state and not a counter: once gained it is held "for the rest of the game", so
+    // unlike every per-turn field above it is NEVER reset at untap and NEVER lost -- dropping back
+    // below ten permanents, or losing the ascend permanent entirely, does not take it away. Raised
+    // only by RefreshCityBlessing, which runs wherever the permanent count can RISE (CR 702.131b
+    // makes ascend a state trigger). Read only by an endstep_token_ascend_copy trigger, and folded
+    // into the state keys only when true, so it is false forever -- and byte-identical -- for every
+    // deck with no ascend card.
+    bool has_city_blessing         = false;
     int poison_counters            = 0;
     // Rad counters (Mariposa Military Base: "You may have this land enter tapped. If you do, you
     // get two rad counters"). A PLAYER resource, not a permanent's. At the beginning of this

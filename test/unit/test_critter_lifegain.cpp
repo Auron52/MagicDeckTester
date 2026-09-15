@@ -331,3 +331,166 @@ TEST_CASE("Legend rule: a second Heliod dying as a CREATURE is a death -- Daxos 
     EnforceLegendRule(u, 0);
     CHECK(u.players[0].life == 20);
 }
+
+// ---------------------------------------------------------------------------------------------
+// Ocelot Pride (2026-09-15). Four separable claims, one test each, because each fails silently on
+// its own: the intervening-if, the token's ENTER (which is the card's whole payoff in this deck),
+// ascend's monotone designation, and the city's-blessing copy half.
+// ---------------------------------------------------------------------------------------------
+
+namespace
+{
+int CountTokens(const GameState& s, int controller)
+{
+    int n = 0;
+    for (const Permanent& p : s.battlefield)
+    { if (p.controller_index == controller && p.is_token) { ++n; } }
+    return n;
+}
+// Lands, so a board can reach ten permanents without adding creatures (which would gain life
+// through the watchers and confuse the ledger under test).
+void PutLands(GameState& s, int n, int first_number)
+{
+    for (int i = 0; i < n; ++i) { Put(s, "Plains", 0, first_number + i); }
+}
+}   // namespace
+
+TEST_CASE("Ocelot Pride: the end-step trigger needs a life gain this turn (CR 603.4 intervening-if)")
+{
+    EnsureCardsLoaded();
+    GameState s = Fresh();
+    Put(s, "Ocelot Pride", 0, 20);
+
+    // No life gained this turn -> no trigger, no token. This is the clause a "make a Cat every end
+    // step" implementation would pass every other check while getting wrong.
+    REQUIRE(s.players[0].life_gained_this_turn == 0);
+    PerformEndStepLifegainTokens(s);
+    CHECK(CountTokens(s, 0) == 0);
+
+    // One point of life is enough -- the trigger reads ">0", never the amount.
+    GainLife(s, 0, 1);
+    PerformEndStepLifegainTokens(s);
+    CHECK(CountTokens(s, 0) == 1);
+
+    // ... and forty is not more enough: still exactly one Cat per trigger.
+    GameState t = Fresh();
+    Put(t, "Ocelot Pride", 0, 20);
+    GainLife(t, 0, 40);
+    PerformEndStepLifegainTokens(t);
+    CHECK(CountTokens(t, 0) == 1);
+
+    // The token is a 1/1 white Cat, and it is a TOKEN (the copy half below reads is_token).
+    const Permanent* cat = nullptr;
+    for (const Permanent& p : t.battlefield) { if (p.is_token) { cat = &p; } }
+    REQUIRE(cat != nullptr);
+    CHECK(cat->card.m_power == 1);
+    CHECK(cat->card.m_toughness == 1);
+    CHECK(cat->card.IsCreature());
+    CHECK(CardHasSubtype(cat->card, "Cat"));
+    CHECK(cat->entered_this_turn);
+}
+
+TEST_CASE("Ocelot Pride: the Cat ENTERS, so it feeds the deck's enter-watchers")
+{
+    EnsureCardsLoaded();
+    GameState s = Fresh();
+    // The point of the card in this deck is not a 1/1 body -- it is that a creature ENTERED.
+    Put(s, "Soul Warden", 0, 1);
+    Put(s, "Soul's Attendant", 0, 2);
+    const int pm = Put(s, "Ajani's Pridemate", 0, 3);
+    Put(s, "Ocelot Pride", 0, 20);
+
+    GainLife(s, 0, 1);                                   // arm the intervening-if (1 event)
+    const int life_before     = s.players[0].life;
+    const int counters_before = PlusCounters(s.battlefield[pm]);
+
+    PerformEndStepLifegainTokens(s);
+
+    // One Cat enters -> Soul Warden and Soul's Attendant each fire, and each is its OWN life-gain
+    // event (CR 119.10): +2 life, and TWO counters on the Pridemate, not one.
+    CHECK(s.players[0].life == life_before + 2);
+    CHECK(PlusCounters(s.battlefield[pm]) == counters_before + 2);
+}
+
+TEST_CASE("Ascend: ten permanents grants the city's blessing, and it is never lost")
+{
+    EnsureCardsLoaded();
+    GameState s = Fresh();
+    PutLands(s, 8, 1);
+    Put(s, "Ocelot Pride", 0, 20);                       // 9 permanents
+    RefreshCityBlessing(s);
+    CHECK_FALSE(s.players[0].has_city_blessing);
+
+    PutLands(s, 1, 9);                                   // 10 permanents
+    RefreshCityBlessing(s);
+    CHECK(s.players[0].has_city_blessing);
+
+    // "for the rest of the game": dropping back below ten does NOT take it away.
+    s.battlefield.erase(s.battlefield.begin(), s.battlefield.begin() + 5);
+    RefreshCityBlessing(s);
+    CHECK(s.players[0].has_city_blessing);
+
+    // Nor does losing every ascend permanent.
+    for (int i = static_cast<int>(s.battlefield.size()) - 1; i >= 0; --i)
+    { if (s.battlefield[i].card.m_name == "Ocelot Pride") { s.battlefield.erase(s.battlefield.begin() + i); } }
+    RefreshCityBlessing(s);
+    CHECK(s.players[0].has_city_blessing);
+
+    // Ten permanents with NO ascend permanent grants nothing.
+    GameState t = Fresh();
+    PutLands(t, 12, 1);
+    RefreshCityBlessing(t);
+    CHECK_FALSE(t.players[0].has_city_blessing);
+}
+
+TEST_CASE("Ocelot Pride: the city's blessing copies every token that entered this turn")
+{
+    EnsureCardsLoaded();
+    GameState s = Fresh();
+    PutLands(s, 9, 1);
+    Put(s, "Ocelot Pride", 0, 20);                       // 10 permanents
+    RefreshCityBlessing(s);
+    REQUIRE(s.players[0].has_city_blessing);
+
+    GainLife(s, 0, 1);
+    PerformEndStepLifegainTokens(s);
+    // Create the Cat (1 token entered this turn), then copy each such token: 1 -> 2.
+    CHECK(CountTokens(s, 0) == 2);
+
+    // A SECOND trigger sees the tokens the first one made (they entered this turn too), which is
+    // why multiple copies compound: from T entered-this-turn tokens a trigger leaves 2*(T+1).
+    PerformEndStepLifegainTokens(s);                      // re-fire the same single Pride
+    CHECK(CountTokens(s, 0) == 6);
+
+    // Without the blessing the same board makes exactly one Cat per trigger.
+    GameState t = Fresh();
+    Put(t, "Ocelot Pride", 0, 20);
+    GainLife(t, 0, 1);
+    PerformEndStepLifegainTokens(t);
+    CHECK(CountTokens(t, 0) == 1);
+
+    // TWO Prides on one board resolve as two separate triggers in one call: 0 -> 2 -> 6.
+    GameState u = Fresh();
+    PutLands(u, 8, 1);
+    Put(u, "Ocelot Pride", 0, 20);
+    Put(u, "Ocelot Pride", 0, 21);                       // 10 permanents
+    RefreshCityBlessing(u);
+    REQUIRE(u.players[0].has_city_blessing);
+    GainLife(u, 0, 1);
+    PerformEndStepLifegainTokens(u);
+    CHECK(CountTokens(u, 0) == 6);
+
+    // A token that entered on an EARLIER turn is not copied ("entered this turn").
+    GameState v = Fresh();
+    PutLands(v, 9, 1);
+    Put(v, "Ocelot Pride", 0, 20);
+    RefreshCityBlessing(v);
+    for (Permanent& p : v.battlefield) { p.entered_this_turn = false; }
+    CreateToken(v, 0, 1, 1, {"Cat"}, "W", {});
+    for (Permanent& p : v.battlefield) { p.entered_this_turn = false; }   // ... last turn's Cat
+    v.players[0].life_gained_this_turn = 0;
+    GainLife(v, 0, 1);
+    PerformEndStepLifegainTokens(v);
+    // The new Cat is copied; the stale one is not: 1 (stale) + 1 (new) + 1 (copy of new) = 3.
+    CHECK(CountTokens(v, 0) == 3);
+}

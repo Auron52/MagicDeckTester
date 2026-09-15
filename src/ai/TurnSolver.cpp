@@ -25231,6 +25231,13 @@ static bool SimulateEndAndStartNextTurn(GameState& state)
         }
     }
 
+    // "At the beginning of your end step, if you gained life this turn, create a 1/1 white Cat"
+    // (Ocelot Pride). Lockstep twin of GameEngine::EndStep -- same position (after the exile
+    // sweep), same shared helper. Without this the rollout would project a board the executor
+    // actually grows every turn, i.e. a systematic fd-diverge. Param-gated -> byte-identical for
+    // every deck without such a card.
+    PerformEndStepLifegainTokens(state);
+
     // Check for "no maximum hand size" permanent (e.g. Reliquary Tower) — if present,
     // skip the discard-to-7 step so the lookahead correctly models turns after RT is played.
     bool unlimited_hand = false;
@@ -25386,6 +25393,7 @@ static bool SimulateEndAndStartNextTurn(GameState& state)
     ap.life_gained_this_turn      = 0;             // Fortifying Draught lifegain-count resets each turn (same lockstep)
     ap.cards_cycled_or_discarded_this_turn = 0;    // Hollow One cycle/discard count (same lockstep)
     RefreshDevotionCreatures(state);               // Heliod's devotion gate: per-turn correctness ceiling (lockstep w/ UntapStep)
+    RefreshCityBlessing(state);                    // ascend backstop for any non-cascade board change (lockstep w/ UntapStep)
 
     // Untap and advance Aether Vial counters (upkeep trigger).
     // Rimescale ice lock -- lockstep twin of GameEngine::UntapStep's gate (see the comment there).
@@ -32042,6 +32050,20 @@ static TranspositionTable::Key BuildSimKey(const GameState& state, int depth, in
             if (reads_lifegain)
             { Fold(k, 0x1F5E); Fold(k, static_cast<uint64_t>(p.life_gained_this_turn)); }
         }
+        // Ocelot Pride's end-step trigger reads life_gained_this_turn at the END of the turn, which
+        // makes the counter future-determining in a way the two folds above are not: they matter
+        // only to a SAME-TURN cast that reads them, whereas this one decides whether the turn ends
+        // with extra Cats on the board. It reads ">0" and never the amount (see
+        // PerformEndStepLifegainTokens), so fold a BARE MARKER rather than the value -- a 1-life
+        // turn and a 40-life turn are the same position to the trigger and must share a key.
+        // Deck-gated (deck_reads_endstep_lifegain), so every other lifegain deck keeps the EXACT
+        // prior key.
+        if (state.deck_reads_endstep_lifegain && p.life_gained_this_turn > 0)
+        { Fold(k, 0x0CE10); }
+        // The city's blessing (ascend). Monotone and never reset, so two otherwise-identical states
+        // that differ in it have genuinely different futures (one doubles its tokens every end step,
+        // the other does not). Folded only when TRUE -> byte-identical for every non-ascend deck.
+        if (p.has_city_blessing) { Fold(k, 0x0CB1E); }
         // Hollow One cycle/discard-count: identical shape and reasoning again -- future-determining
         // only for a SAME-TURN cast that reads it, gated on the hand actually holding a
         // cost_less_per_cycle_or_discard card AND the count being nonzero, so every deck without

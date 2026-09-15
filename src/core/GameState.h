@@ -273,6 +273,14 @@ struct GameState
     // key folds only; the accumulator itself always runs (cheap, and lockstep is simpler than
     // a conditional increment at five sites).
     bool                     deck_reads_mv_cast = false;
+    // Deck-level stamp (GoldFishRunner::SetupGame), same shape and same rationale as
+    // deck_reads_mv_cast: true iff some card in the deck carries endstep_lifegain_tokens, i.e.
+    // something actually READS Player::life_gained_this_turn at the end step. Ocelot Pride's
+    // trigger makes that counter future-determining in a way it was not before (a turn that gained
+    // life ends with more permanents than one that did not), so it must join the sim key -- but
+    // ONLY for a deck that runs such a card, or every lifegain deck's keys would shift for a value
+    // none of them reads. Gates the key fold only; the counter itself always runs.
+    bool                     deck_reads_endstep_lifegain = false;
     // "You can cast only one more spell this turn" (Irencrag Feat, CardParams::max_casts_after) enforced
     // at EXECUTION time: -1 = no restrictor active (unlimited); otherwise the number of ADDITIONAL spells
     // still castable this turn. Installed when a max_casts_after spell is cast, decremented at every later

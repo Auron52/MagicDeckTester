@@ -108,6 +108,12 @@ bool PlayLandFromHand(GameState& state, std::size_t hand_index, const CardDefini
         perm.counters.push_back(dep);
     }
     state.battlefield.push_back(perm);
+    // ASCEND (Ocelot Pride): a land drop raises the permanent count, and land drops deliberately do
+    // NOT route through FireEtbWatchers (see the snow-watcher note below), so the city's-blessing
+    // state trigger is checked here too. Placed on the RISE -- before the ETBs below -- so a Karoo
+    // that enters as the tenth permanent and then bounces a land still grants the blessing. This is
+    // THE land drop for all three callers, so this one edit is executor/rollout lockstep.
+    RefreshCityBlessing(state);
 
     ap.hand.erase(it);
     ++ap.lands_played_this_turn;

@@ -380,6 +380,191 @@ With this the pipeline for the deck is complete: profile -> value leaf -> mullig
 ## Open questions surfaced (non-blocking)
 (collected here and re-raised in the closing message)
 
+## Ocelot Pride implemented (2026-09-15) — Tier 3, new card + two new engine mechanics
+
+User asked to look at deck modifications, naming **Ocelot Pride** (new card, lifegain side) and
+**Remote Farm** (depletion land) as the two additions to consider, with Ajani's Pridemate /
+Ranger-Captain / Heliod / "a couple of" Archangel of Thune as replacement candidates, and the
+bouncelands or Plains as the land-side cuts. Ocelot Pride first, Serra Ascendant cases later.
+
+**Remote Farm needed nothing** — already in `cards.json` and exercised by BreachingDragonstorm
+(`enters_tapped_with_depletion 2`, `produces_amount 2`; the depletion decrement, the empty-land
+sacrifice and the tap-order rank are all live in `LandPlay` / `ManaPayment` / `DecisionProviders`).
+
+**Ocelot Pride was NOT in `cards.json`** and needed a Tier-3 implementation. Oracle text fetched
+live from Scryfall first, per 2a — and it differed from recall in two load-bearing ways: it is
+**not legendary** (so four copies coexist and their triggers compound) and it has **lifelink**
+(which in this deck is a life-gain EVENT, i.e. a counter on every Pridemate/Voice and an Archangel
+team pump — not a goldfish-inert keyword).
+
+Two mechanics the engine did not have:
+
+| mechanic | model |
+|---|---|
+| **The end-step trigger** — "at the beginning of your end step, if you gained life this turn, create a 1/1 white Cat" | `endstep_lifegain_tokens` + `endstep_token_power/_toughness/_color/_subtypes`, resolved by the shared `PerformEndStepLifegainTokens` called from BOTH `GameEngine::EndStep` and `TurnSolver::SimulateEndAndStartNextTurn` in lockstep. `GameEngine::EndStep` previously held only a `TODO` for end-of-turn triggers; this is the first one. The intervening-if (CR 603.4) reads the pre-existing `Player::life_gained_this_turn` — **`>0`, never the amount**, so a 1-life turn and a 40-life turn are the same trigger. |
+| **ASCEND / the city's blessing** (CR 702.131) | `ascend` param -> new `Player::has_city_blessing`, a per-player DESIGNATION: monotone, never reset at untap, never lost. CR 702.131b makes it a STATE TRIGGER, so `RefreshCityBlessing` runs wherever the permanent count can RISE — the universal enter cascade (`FireEtbWatchers`) and the shared land drop (`LandPlay`; land drops deliberately do not route through that cascade) — plus both turn-start resyncs as a backstop. |
+
+**Why the token, not the body, is the whole card here.** Each Cat is a creature ENTERING, so one
+Cat fires Soul Warden x4 + Soul's Attendant x4 + Auriok Champion x4 + Daxos = up to 13 separate
+life-gain events (CR 119.10), each a +1/+1 counter on every Pridemate and Voice, a team-wide
+counter from every Archangel, and a Heliod counter. The token therefore goes through `CreateToken`
+-> `FireEtbWatchers` like any other entrant; a "create the token" implementation that bypassed the
+cascade would look correct and be worth nothing.
+
+**The copy half** (`endstep_token_ascend_copy`) reads its set ON RESOLUTION, after this trigger's
+own Cat exists, over every own `is_token && entered_this_turn` permanent — so it also copies an
+Ajani -2 Pridemate token made this turn, and a copied NAMED token re-resolves the real definition
+(`CreateTokenCopyOfCard`) so its own lifegain trigger stays live. The source set is SNAPSHOT before
+any copy is made: the copies are created simultaneously as one resolution and must not feed back.
+Multiple copies compound as printed — from T entered-this-turn tokens, N Prides leave
+`2^N*(T+2)-2` (T=0: 2, 6, 14, 30 for N=1..4), bounded per turn because `entered_this_turn` clears
+at untap.
+
+**State-key work (the part that would have failed silently).** Both new fields are future-determining:
+* `life_gained_this_turn` was previously future-determining only for a SAME-TURN cast that read it;
+  the end-step trigger makes it decide whether the turn ENDS with extra Cats. Folded into
+  `BuildSimKey` as a **bare marker** (not the value — the trigger reads only `>0`), gated on a new
+  deck-level stamp `GameState::deck_reads_endstep_lifegain` so every other lifegain deck keeps its
+  exact prior key.
+* `has_city_blessing` folded into `BuildSimKey` **and** `dominance::Build()`, gated on being true.
+  Monotone does not make it droppable — dominance here is an equality key, not an ordering.
+* `Dominance.h`'s `static_assert` size guards fired on both `Player` (192->200) and `GameState`
+  (776->792) exactly as designed, and each now carries its classification note.
+
+### Verification
+
+| check | result |
+|---|---|
+| unit tests (`mtg-test`) | **90/90 pass**, including 4 new Ocelot Pride cases: the intervening-if (both directions), the Cat's ENTRY feeding the watchers, ascend's grant/monotonicity/no-ascend-permanent cases, and the copy arithmetic (1->2, 2->6, two Prides 0->6, stale tokens not copied) |
+| scenarios (`test/scenarios.sh`) | **87/87 pass**, including 2 new fixtures driving the REAL executor end step |
+| smoke regression | **161/165 byte-identical.** The param-gated early-outs hold: every other deck's digest is unchanged |
+| coverage | clean — `missing: []`, no partial, Ocelot Pride `full` |
+| `audit_card_fields.py` | **PASS** — "All hard fields (cost, P/T, types, keywords) match the snapshot". `ascend` added to `MODELED_ELSEWHERE_KEYWORDS` (structurally modelled via the param, mirroring cycling/cascade) |
+| `audit_card_costs.py` | "All mana costs match Scryfall" over the 274 that resolved; 118 were HTTP-429 rate-limit transients including Ocelot Pride, **verified by hand**: live Scryfall `{W}` / cmc 1.0 / 1/1 / "Creature — Cat" == cards.json |
+
+**The 4 smoke failures are FiveColour and are NOT from this work — proven, not argued.** All four
+FiveColour cases fail (e.g. `fivecolour_smoke_d3_s1001` exp 4.9600/94247794612f3f57, got
+4.7867/a258118e68261f0e). Stashing every change in this session, rebuilding, and re-running that
+exact case standalone reproduces **4.7867/a258118e68261f0e identically** — the pre-change binary
+gives the failing number, so the GT is stale, not the engine. Root cause: commit `9feb6bf2`
+(2026-09-13) adopted FiveColour's exhaustive keep+bottom profile — and a keep table is
+**presence-gated**, so dropping the `.gz` beside the deck changes play the moment it lands — but
+that commit touched only the two artifacts and **did not re-accept the regression ground truth**.
+NOT rebaselined here: FiveColour's GT is entangled with the open "FiveColour is NON-COMPLIANT and
+needs a decision" item in `keepgen-bottoming-HANDOFF.md` §3, and re-accepting it is the user's call.
+
+### Viewer (2c-ter)
+
+Ocelot Pride creates **no interactive choice**: the end-step trigger is mandatory with no target,
+no mode and no "may"; the token count is fixed; the copy set is defined by the rules, not chosen;
+ascend is automatic. Bucket A with nothing to confirm and no new decision type — no wiring needed,
+nothing left silently heuristic-resolved. Remote Farm likewise (the depletion tap is a mana
+decision the existing tap-order path already owns).
+
+## Ocelot Pride / Remote Farm screen (2026-09-15) — 3 screens, 2 held-out confirmations
+
+Apparatus for all three: the shipped R=40 K=13 table with **two aliases chained in** (the approved
+no-regeneration route) — `Ocelot Pride` into Ajani's Pridemate's bucket, `Remote Farm` into Orzhov
+Basilica's — in `logs/deckcmp/critter_op_apparatus/`, with `<stem>.profile.json` and
+`<stem>.value.json` copied alongside so the engine resolves the value leaf directory-relative
+(pointing `profile` at `decks/` instead silently detaches it). `pool_table: false`. K unchanged,
+33,565 cells, worst-arm composition fall-through **0.10%** (limit 1%, ~0.00006t of one-sided bias).
+d5/b20, 20,000 paired games per arm, one pooled batch each.
+
+### Screen 1 — `logs/deckcmp/critter_ocelot.json` → `logs/ocelot/screen.out` (base 4.7759)
+
+| arm | edit | delta | se | t |
+|---|---|---|---|---|
+| op4_thune2 | Thune 4->2, Heliod 2->1, RC 1->0, **Ocelot 4** | **-0.1941** | 0.0037 | -52.2 |
+| op4_heliod_rc | Heliod 2->0, RC 1->0, Thune 4->3, **Ocelot 4** | -0.1663 | 0.0036 | -46.5 |
+| op4_auriok | Auriok Champion 4->0, **Ocelot 4** | -0.1592 | 0.0036 | -44.8 |
+| rf3_basilica | Orzhov Basilica 3->0, **Remote Farm 3** | -0.0896 | 0.0020 | -43.9 |
+| rf2_basilica | Orzhov Basilica 3->1, **Remote Farm 2** | -0.0609 | 0.0017 | -35.5 |
+| rf3_plains | Plains 21->18, **Remote Farm 3** | -0.0317 | 0.0028 | -11.4 |
+| op2_pridemate | Ajani's Pridemate 4->2, **Ocelot 2** | -0.0076 | 0.0023 | -3.3 |
+| op4_pridemate | Ajani's Pridemate 4->0, **Ocelot 4** | **+0.0092** | 0.0032 | +2.9 |
+
+Held-out confirm of op4_thune2 (seed 1420000): -0.1976 +-0.0037, shrinkage -0.0035 +-0.0053
+(t -0.66) — reproduces; pooled **-0.1958 over 40,000 games**.
+
+### Screen 2 — THE CONTROL, and it is the one that makes screen 1 readable
+
+Screen 1's three big winners all CUT EXPENSIVE CARDS (Archangel of Thune is a 5-drop) to make room
+for a 1-drop, so its headline cannot separate *"Ocelot Pride is good"* from *"this deck's top end is
+too expensive for a goldfish"*. `logs/deckcmp/critter_ocelot_control.json` holds the CUT FIXED
+(Thune 4->2, Heliod 2->1, RC 1->0) and varies only the FILL (base 4.7705):
+
+| arm | fills the same 4 slots with | delta | se |
+|---|---|---|---|
+| fill_ocelot4 | 4 Ocelot Pride | **-0.1953** | 0.0037 |
+| fill_serra2 | 2 Serra Ascendant + 2 Plains | -0.0825 | 0.0034 |
+| fill_plains4 | 4 Plains | **-0.0246** | 0.0040 |
+| *cut_thune2_only* | *Thune 4->2 for 2 Plains, nothing else touched* | *-0.0494* | *0.0026* |
+| *cut_heliod_rc_only* | *Heliod 2->0 + RC 1->0 for 3 Plains* | ***+0.0338*** | *0.0040* |
+
+**Two findings, and the second one redirected the whole search:**
+1. The four freed slots are worth only **-0.025** as plain lands, so Ocelot Pride itself carries
+   **~-0.17** of the -0.195 — it is the card, not the curve. Against the best *existing* cheap
+   creature (Serra) it is still -0.113 ahead.
+2. The two halves of that cut have **OPPOSITE SIGNS**: dropping two Archangel of Thune for lands is
+   -0.049 (an improvement on its own), while dropping Heliod + Ranger-Captain for lands is
+   **+0.034 (a real loss)**. So two of the three replacement candidates the user named are
+   *carrying their weight* and should be kept; the cut belongs to Archangel of Thune alone.
+
+### Screen 3 — the configuration screen 2 points at (`critter_ocelot_best.json`, base 4.7606)
+
+Keep Heliod 2 and Ranger-Captain 1; trade Archangel of Thune for Ocelot Pride; stack the land-side
+winner on top.
+
+| arm | edit | delta | se | t |
+|---|---|---|---|---|
+| **thune4_ocelot4_rf3** | **Thune 4->0, Ocelot 4, Basilica 3->0, Remote Farm 3** | **-0.2963** | 0.0041 | -73.1 |
+| thune4_ocelot4_rf2 | Thune 4->0, Ocelot 4, Basilica 3->1, Remote Farm 2 | -0.2754 | 0.0040 | -68.9 |
+| thune4_ocelot4 | Thune 4->0, Ocelot 4 | -0.2283 | 0.0038 | -59.3 |
+| thune3_ocelot3 | Thune 4->1, Ocelot 3 | -0.1779 | 0.0035 | -51.0 |
+| thune2_ocelot2 | Thune 4->2, Ocelot 2 | -0.1273 | 0.0030 | -42.2 |
+
+Clean monotone dose-response (2/3/4 copies = -0.127/-0.178/-0.228) and the land edit stacks
+additively. Held-out confirm of the winner (seed 1440000): -0.3005 +-0.0041, shrinkage
+-0.0043 +-0.0058 (t -0.74) — reproduces; pooled **-0.2984 over 40,000 games**, i.e. base 4.76 -> 4.46.
+
+### Does ASCEND actually fire? (200 logged games of the winning arm, `logs/ocelot/ascend_probe`)
+
+- **71.5%** of games reach 10+ own permanents (the ascend threshold) at some point.
+- A **>=2-token jump in one phase — the copy half firing — happens in 45/200 = 22.5% of games**,
+  with a real tail (17/18/19/29 tokens in four games).
+- So the *front* half (one Cat per end step) does most of the work and the city's blessing is a
+  genuine but occasional bonus. Worth knowing: the result does not rest on the exponential half.
+
+### READ WITH THESE CAVEATS (the judgement the driver cannot make)
+
+- **The apparatus bias floor is UNMEASURED.** `--floor` generates a table, which the approved route
+  forbids here, so `t` is not a verdict. The mitigation is structural, not measured: every arm runs
+  the same table over the same composition space, and a bucket-constant alias makes that space
+  identical to base's. Against a typical measured floor of 0.005-0.01 the -0.298 headline is a
+  30-60x margin, so the ranking is not in doubt even if the floor is several times larger than
+  usual — but say "unmeasured", not "significant".
+- **Cutting all four Archangel of Thune is a bigger real-world call than the number implies.** Its
+  flying is inert here (the passive opponent never blocks) and the goldfish never needs to
+  stabilise or win a damage race, which is exactly what a 5-mana 3/4 lifelink flier that pumps the
+  team is *for*. The screen measures it purely as an expensive card in a deck that wants to curve
+  out. Treat -0.049 (cut two for lands) as "the 3rd and 4th copies are surplus to a goldfish",
+  not as "Archangel of Thune is bad".
+- **Auriok Champion's protection from black and red remains un-modelled** (inert on all four DEBT
+  axes against this opponent), so `op4_auriok`'s -0.159 banks a slot that is not free in a real
+  game. Same class of caveat the user already ruled on for Unexpectedly Absent. Not carried into
+  screens 2/3 for that reason.
+- **Ocelot Pride is NOT an upgrade over Ajani's Pridemate** — the one arm that swaps them straight
+  (`op4_pridemate`) measured **+0.0092, i.e. slightly WORSE**. Both cards belong in the deck; the
+  slots come from elsewhere. This is also a useful sanity check that the new implementation is not
+  accidentally overpowered.
+- Remote Farm's real cost (enters tapped, a two-use battery that then sacrifices itself) is fully
+  modelled, as is Orzhov Basilica's (enters tapped + bounce). The Basilica's un-modelled upside is
+  flood insurance, which a 24-land goldfish rarely needs — so the -0.090 slightly overstates the
+  cut, the same way `cut_basilica` did on 2026-09-08.
+- **NOT ADOPTED.** Deckbuilding is the user's call, and an adopted list owes its own artifacts
+  (value leaf + mulligan) — the screen's number is a RANKING, not that deck's measured strength.
+
 <!-- verify_deck:begin (generated -- do not edit inside) -->
 ## Last verification (2026-09-08)
 

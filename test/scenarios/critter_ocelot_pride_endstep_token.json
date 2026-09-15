@@ -1,0 +1,30 @@
+{
+  "deck": "decks/CritterLifegain/CritterLifegain.cod",
+  "turn": 3,
+  "on_the_play": true,
+  "active_life": 20,
+  "opponent_life": 40,
+  "library_filler": "Plains",
+  "library_size": 30,
+  "depth": 3,
+  "budget_ms": 50,
+  "max_turns": 3,
+  "_comment": "CritterLifegain / Ocelot Pride (2026-09-15). THE END-STEP TRIGGER, isolated. Ocelot Pride + one Soul Warden + one Soul's Attendant on an otherwise bare board (4 permanents, so ASCEND cannot switch on -- that half is pinned by critter_ocelot_pride_ascend_doubling). Opponent at 40 so nothing can win and the turn runs to its end step with the assertion falling on OUR life, which is the only thing that sees the token: the deck's damage output would not distinguish a token that entered from one that did not. Life ledger for the turn: Ocelot Pride's lifelink attack for 1 = +1 (20 -> 21, one gain EVENT, which is what satisfies the trigger's intervening-if), then at the end step the trigger fires and creates a 1/1 white Cat -- and the Cat ENTERING is a creature entering, so Soul Warden and Soul's Attendant each gain 1 = 21 -> 23. Assert 23. A regression that drops the trigger lands on 21; one that creates the token WITHOUT routing it through FireEtbWatchers (the universal enter cascade) lands on 21 as well, which is the failure this fixture is really aimed at -- the token's value here is entirely the watchers it fires, not its body.",
+  "battlefield": [
+    {
+      "name": "Plains"
+    },
+    {
+      "name": "Soul Warden"
+    },
+    {
+      "name": "Soul's Attendant"
+    },
+    {
+      "name": "Ocelot Pride"
+    }
+  ],
+  "hand": [],
+  "expect_no_win": true,
+  "expect_active_life": 23
+}

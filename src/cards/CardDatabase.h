@@ -1269,6 +1269,41 @@ struct CardParams
     int  lifegain_each_own_creature_counters = 0;
     bool lifegain_target_own_counter         = false;
     int  own_creature_dies_lifegain          = 0;
+    // ---- Ocelot Pride: end-step token trigger + ASCEND (the city's blessing) ----------------
+    // "At the beginning of your end step, if you gained life this turn, create a 1/1 white Cat
+    //  creature token. Then if you have the city's blessing, for each token you control that
+    //  entered this turn, create a token that's a copy of it."
+    //   endstep_lifegain_tokens    -- how many tokens the trigger makes (N>0 arms the whole
+    //                                 clause). The intervening-if reads Player::life_gained_this_turn
+    //                                 (CR 603.4) -- ">0", never the amount, so ONE 13-life turn and
+    //                                 one 1-life turn are the same to it.
+    //   endstep_token_power/_toughness/_color/_subtypes -- the token's printed stats. The token
+    //                                 enters through CreateToken -> FireEtbWatchers, so it is a
+    //                                 creature ENTERING: in this deck each one feeds Soul Warden /
+    //                                 Soul's Attendant / Auriok Champion / Daxos, i.e. it is not a
+    //                                 body, it is N more life-gain EVENTS.
+    //   endstep_token_ascend_copy  -- the city's-blessing half. Read ON RESOLUTION, after the
+    //                                 token above is created, over every token you control that
+    //                                 ENTERED THIS TURN (Permanent::is_token && entered_this_turn) --
+    //                                 which is why a second copy's trigger doubles the first's
+    //                                 output. The source set is SNAPSHOT before any copy is made,
+    //                                 so the copies never feed back into it (they are created
+    //                                 simultaneously as one resolution).
+    int  endstep_lifegain_tokens     = 0;
+    int  endstep_token_power         = 0;
+    int  endstep_token_toughness     = 0;
+    std::string              endstep_token_color;
+    std::vector<std::string> endstep_token_subtypes;
+    bool endstep_token_ascend_copy   = false;
+    // ASCEND (CR 702.131): "If you control ten or more permanents, you get the city's blessing for
+    // the rest of the game." A per-PLAYER designation (Player::has_city_blessing), not a permanent
+    // state -- once gained it NEVER goes away, so losing the ascend permanent or dropping below ten
+    // does not take it back. CR 702.131b makes it a STATE TRIGGER, so it is checked wherever the
+    // count can RISE (the universal enter cascade + the shared land drop -- entering is the only way
+    // to control more permanents) plus both turn-start resyncs as a backstop. Checking on the rise
+    // is what makes a momentary peak count: an Orzhov Basilica that enters as your tenth permanent
+    // and then bounces a land back to hand still grants the blessing.
+    bool ascend = false;
     // Massacre Wurm ETB: "creatures your opponents control get -2/-2 until end of turn",
     // collapsed to "destroy each opponent creature with toughness - damage <= N at ETB"
     // (equivalent in goldfish: opp creatures never block/attack/get buffs, and the power
