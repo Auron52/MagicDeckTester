@@ -38,6 +38,9 @@ BOTTOM_FLOOR = int(sys.argv[4]) if len(sys.argv) > 4 else 2
 # SE_SCALE multiplies every standard error, so SE_SCALE=sqrt(30/R) simulates the table at
 # effective R rollouts/cell (se ~ 1/sqrt(R)). Used to answer 'would more R fix this?'.
 SE_SCALE = float(os.environ.get('SE_SCALE', '1'))
+# SE_CAP caps every standard error, simulating a raised generation FLOOR (no cell may be
+# less precise than this) as distinct from SE_SCALE, which raises the cap for every cell.
+SE_CAP = float(os.environ.get('SE_CAP', '0')) or None
 
 ENTRY = re.compile(
     r'\{"comp":\[([\d,]+)\],"count":\[(\d+),(\d+)\],'
@@ -73,6 +76,7 @@ for H, start, end in segs:
                 mu = sm[pd] / c
                 mean[pd] = mu
                 se[pd] = ((max(0.0, sq[pd] / c - mu * mu) / c) ** 0.5) * SE_SCALE
+                if SE_CAP is not None and se[pd] > SE_CAP: se[pd] = SE_CAP
             elif c == 1:
                 mean[pd] = sm[pd]
         if H == 7:
@@ -161,7 +165,7 @@ def vhat(H, pd, comp):
 # cov(u0,u1) is an unbiased estimate of cov(r0,r1) with no noise term to subtract. Only the
 # VARIANCES need de-noising, which is what TAU_R already is.
 print()
-print('=== 0. CROSS-pd CORRELATION of the structural residuals (measured, not assumed) ===')
+print('=== 0. CROSS-pd CORRELATION of the cell VALUES, disattenuated (measured) ===')
 print(f'{"size":>4} {"cells":>8} {"tau_r(0)":>9} {"tau_r(1)":>9} {"cov":>9} {"rho":>7}')
 RHO = {}
 for H in sorted(cells, reverse=True):
@@ -169,24 +173,29 @@ for H in sorted(cells, reverse=True):
         continue
     tab = cells[H]
     n = 0
-    su0 = su1 = s00 = s11 = s01 = 0.0
+    a0 = a1 = q0 = q1 = q01 = ms0 = ms1 = 0.0
     for comp, (mean, se, cnt) in tab.items():
         if cnt[0] <= 1 or cnt[1] <= 1:
             continue
-        u0 = mean[0] - vhat(H, 0, comp)
-        u1 = mean[1] - vhat(H, 1, comp)
         n += 1
-        su0 += u0; su1 += u1
-        s00 += u0 * u0; s11 += u1 * u1; s01 += u0 * u1
+        a0 += mean[0]; a1 += mean[1]
+        q0 += mean[0] ** 2; q1 += mean[1] ** 2; q01 += mean[0] * mean[1]
+        ms0 += se[0] ** 2; ms1 += se[1] ** 2
     if n < 50:
         continue
-    m0, m1 = su0 / n, su1 / n
-    cov = s01 / n - m0 * m1
-    t0, t1 = TAU_R[(H, 0)], TAU_R[(H, 1)]
-    rho = cov / (t0 * t1) if t0 > 0 and t1 > 0 else 0.0
-    rho = max(-0.99, min(0.99, rho))
+    m0, m1 = a0 / n, a1 / n
+    v0, v1 = q0 / n - m0 * m0, q1 / n - m1 * m1
+    cov = q01 / n - m0 * m1
+    # Disattenuate: observed variance = true variance + mean sampling variance. The two pds'
+    # rollouts are independent, so the COVARIANCE needs no correction -- only the variances.
+    t0, t1 = max(0.0, v0 - ms0 / n * n / n), max(0.0, v1 - ms1 / n * n / n)
+    t0, t1 = max(0.0, v0 - ms0 / n), max(0.0, v1 - ms1 / n)
+    rho = cov / math.sqrt(t0 * t1) if t0 > 0 and t1 > 0 else 0.0
+    if rho > 0.995 or rho < -0.995:
+        print(f'  WARNING size {H}: disattenuated rho={rho:.3f} out of range -- capping at 0.95')
+    rho = max(-0.95, min(0.95, rho))
     RHO[H] = rho
-    print(f'{H:>4} {n:>8} {t0:>9.4f} {t1:>9.4f} {cov:>9.4f} {rho:>7.3f}')
+    print(f'{H:>4} {n:>8} {math.sqrt(t0):>9.4f} {math.sqrt(t1):>9.4f} {cov:>9.4f} {rho:>7.3f}')
 
 
 def subcomps(hand, target):

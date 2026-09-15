@@ -68,12 +68,13 @@ keeps every decision inside the table. Two levers, both offline, both already me
    **62.7 %** of the keep-side curse, far more than the 23.9 % it recovers on the bottoming side,
    because the unfiltered set is noisier and therefore has more to gain from shrinkage.
 2. **Cross-pd conditioning** (documented as unused in the bottoming doc's §8): a further 12.4 %.
-   The doc estimated the play/draw correlation at 0.885; **measured on the structural residuals it is
-   0.990 at size 6 and 0.969 at size 5** — each pd's rollouts are very nearly a second independent
-   sample of the same cell. The correlation collapses at small sizes (0.261 at size 2), so the term
-   must be weighted by a per-size measured rho, not a global constant.
+   The doc's **0.885 is correct** and an earlier draft of this document was wrong to "correct" it:
+   computing rho on *structural residuals* with `tau_r` in the denominator gave **1.142**, an
+   impossible value that silently hit a 0.99 clamp. Disattenuated on the raw cell values the
+   correlation is 0.885 (size 6), 0.887 (5), 0.836 (4), 0.697 (3), 0.551 (2) — so it must be a
+   per-size measured rho, not a global constant, and the gains below use those.
 
-Together: **0.1766 → 0.0440 t, 75.1 % of the curse removed, with no deferral and no new rollouts.**
+Together: **0.1766 → 0.0440 t, ~75 % of the curse removed, with no deferral and no new rollouts.**
 
 ## 5. What is NOT established
 
@@ -89,8 +90,54 @@ Together: **0.1766 → 0.0440 t, 75.1 % of the curse removed, with no deferral a
   radius than the bottoming fix, which provably left `D_opt` identical to 6 figures. Any keep-side
   correction must be validated with the full keep A/B, not just a bottoming A/B.
 
+## 5b. WHY the table loses to a peek-nullified lookahead — the mechanism, measured
+
+The puzzle: under `MTG_CONFOUND_BOTTOM=1` the lookahead bottomer's peek is destroyed by a reshuffle,
+yet it still beats the ungated table. Bucket abstraction does **not** explain it — FiveColour's
+discovery merged almost nothing (K=27 over ~27 distinct cards), so the table sees essentially real
+cards. The mechanism is that **the generator's adaptive refinement makes the candidate pool
+adversarial**:
+
+```
+size pd  floorN   refN  meanV(floor)  meanV(ref)    diff  corr(cnt,V)
+  6  0  197700 319583        6.8500      5.7456  +1.1044       -0.724
+  6  1  224285 292998        7.4606      6.1470  +1.3136       -0.766
+  5  0   46306  69757        7.2651      6.1399  +1.1252       -0.739
+  4  1   10161  11542        8.3284      7.1883  +1.1402       -0.829
+```
+
+Refinement targets contenders, so cells left at the R=2 floor are **1.1–1.3 turns worse** than
+refined cells while carrying 2–4x the standard error (`corr(cnt,V)` = −0.72…−0.86 at every size).
+A floor cell therefore needs only a ~2σ downward fluctuation to win an argmin, and when it does the
+mistake costs **more than a full turn**.
+
+This is the one failure mode that can be **worse than random selection**: a lookahead rollout, once
+confounded, is an essentially unbiased draw among plausible candidates, whereas the table's argmin
+systematically prefers whichever candidate is both bad and lucky. That is why *declining to answer*
+bought so much — the gate skips the selection step, not the estimation step.
+
+**And it is exactly what `best_sub`'s `cnt > bottom_floor` filter already prevents** — which is why
+bottoming's regret is 0.0593 while the unfiltered keep argmin's is 0.1766. Measured on identical
+candidate sets differing only by that filter:
+
+| candidate set | regret |
+|---|---|
+| unfiltered (what `KeepVal` does today) | **0.1766 t** |
+| filtered (what `best_sub` already does) | **0.0593 t** |
+
+**So the first thing to try on the keep side is not a new estimator — it is giving `KeepVal` the
+filter `best_sub` has had all along.** Worth ~3x, one condition, no rollouts, no deferral.
+
+Caveat before implementing: `KeepVal` returns a *value*, not just a choice, so filtering shifts
+`D_opt` — deliberately upward, since it removes the lucky-low floor cells. A genuinely-best cell
+should already be refined (that is the generator's contract and `best_sub`'s stated rationale), but
+the fallback `best_sub` uses when NO candidate is refined (6.3 % of m=1 decisions) must be carried
+over too.
+
 ## 6. Suggested order of work
 
+0. **Give `KeepVal` `best_sub`'s refined-only filter** (§5b) — by far the best ratio of value to
+   risk, and it needs no estimator work at all.
 1. Implement the shrinkage + cross-pd posterior for `KeepVal`/`ArgminSub` behind the merge path.
 2. Rebuild FiveColour and Melira offline; diff `D_opt` and the mull-from-7 rate against the
    incumbents — §3's prediction says the debiased build should mulligan **less**.
