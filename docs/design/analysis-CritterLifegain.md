@@ -925,6 +925,24 @@ ledger says:
    the +0.037 gain does not, so `serra4_ajani1_rc0` (+0.0355) and `serra3_ajani1` (+0.0216) are
    reasonable, more conservative versions of the same finding.
 
+5. **KEEPING THE AURIOK IS AFFORDABLE -- pay with a land instead (user-directed follow-up).** Arm
+   `B` = Serra 4, Ajani walker 1, **Auriok kept at 3**, 23 lands (19 Plains + 4 Remote Farm).
+   Held-out confirmed vs the shipped list at **-0.3274 (20 life) / -0.4685 (2HG) over 80,000 games
+   each**. It trails `serra4_ajani1_auriok2` by <0.009 -- under the resolution limit at 20 life --
+   and the measured mulligan bias below runs against it, so treat them as TIED and let the Auriok's
+   un-modelled protection break the tie.
+   * **The land cut is the PRICE, not the gain.** Swapping the 24th land for a NEUTRAL filler (a 3rd
+     Heliod, own marginal ~0) measures **+0.0051 at 20 life (worse) and -0.0012 in 2HG (nil)**, and
+     22 lands is worse again. The lower curve does not make 23 lands better; it makes the 24th land
+     *cheap*, which is what lets the mana base fund a Serra. Swapping that same land for the 4th
+     Serra is **-0.0088 / -0.0880**.
+   * **The user's mulligan caveat is real and was MEASURED, and it points their way.** The screen
+     shares the shipped table raw, i.e. the BASE deck's count vector (21 Plains), so every arm is
+     mulliganed by a policy fitted to 24 lands. Re-running the key arms with NO table (symmetric
+     generic keep, fitted to no land count) makes B's advantage over A **three times larger** at 20
+     life: -0.0088 -> -0.0267 (and -0.0880 -> -0.0958 in 2HG). The fitted table **understates B by
+     +0.0180 / +0.0077**.
+
 Also recorded there: the win-turn distributions (the deck is a turn-4/5 kill in both formats, and
 **only 0.03%/0.09% of games are unwon by turn 8** -- the sharpest available statement of why the
 Archangel ruling has to override the measurement), the mana-curve reading, and the per-card table of

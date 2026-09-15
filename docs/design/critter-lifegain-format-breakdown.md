@@ -15,8 +15,11 @@ binaries over 4 MB, so size is the available proxy):
 | its held-out confirmation | `--confirm serra4_ajani1_auriok2` | 2,300,000 | 2 arms x 2 formats = 4 | 160,000 |
 | the second-head probe | `logs/deckcmp/critter_heads_inert.json` | 1,700,000 | 2 arms x 2 formats = 4 | 40,000 |
 | Sol Ring, both formats (§7a) | `logs/deckcmp/critter_solring_2fmt.json` | 2,000,000 | 3 arms x 2 formats = 6 | 240,000 |
+| the land-count screen (§6a) | `logs/deckcmp/critter_lands.json` | 2,400,000 | 7 arms x 2 formats = 14 | 560,000 |
+| its held-out confirmation | `--confirm B_serra4_ajani1_L23` | 2,900,000 | 2 arms x 2 formats = 4 | 160,000 |
+| the mulligan-bias control (§6a) | `logs/deckcmp/critter_lands_notable.json` | 2,500,000 | 4 arms x 2 formats = 8 | 160,000 |
 
-**2.6M games.** A sixth run — a first attempt at the Sol Ring spec, seed 1,900,000 — is **discarded
+**3.5M games.** A sixth run — a first attempt at the Sol Ring spec, seed 1,900,000 — is **discarded
 and not used anywhere in this document**; it silently lost the keep table on every arm, which §7a
 records in full because the failure mode is worth knowing.
 
@@ -286,6 +289,85 @@ un-modelled upside points up.
 
 ---
 
+## 6a. Keeping the Auriok and paying with a land instead (user-directed)
+
+> USER: *"Is it possible to answer how keeping the Auriok and dropping an Ajani + a plains would do?
+> ... With the lower curve one less land might make sense."* → *"So we would have 3 Auriok, 23 lands,
+> 4 Serra's Ascendant in the potential list."*
+
+The §6 winner funds the 4th Serra from **two** slots: the 2nd Ajani walker *and* the 3rd Auriok
+Champion. This asks whether the second slot can come from the **mana base** instead — which keeps the
+one card whose un-modelled protection points up. Arm **B**:
+
+```
+4 Soul Warden          4 Voice of the Blessed          2 Heliod, Sun-Crowned
+4 Soul's Attendant     1 Daxos, Blessed by the Sun     3 Auriok Champion
+4 Serra Ascendant      1 Ajani, Strength of the Pride  1 Ranger-Captain of Eos
+4 Ajani's Pridemate    2 Archangel of Thune            3 Unexpectedly Absent
+4 Ocelot Pride        19 Plains                        4 Remote Farm
+```
+60 cards, **23 lands**. Measured against the settled list, both formats, one pooled batch
+(`critter_lands.json`, 14 cells, 40,000 paired games each):
+
+| arm | lands | 20 life | 2HG |
+|---|---:|---:|---:|
+| `F` — Serra 4, walker 1, **Auriok 2** (the §6 winner) | 24 | **−0.0353** | **−0.2064** |
+| **`B` — Serra 4, walker 1, Auriok 3, −1 Plains (YOURS)** | **23** | **−0.0310** | **−0.1978** |
+| `E` — as B, one land further (3rd Heliod for the 23rd land) | 22 | −0.0234 | −0.1945 |
+| `A` — Serra 3, walker 1, Auriok 3 | 24 | −0.0222 | −0.1098 |
+| `D` — as A, 3rd Heliod for the 24th land | 23 | −0.0171 | −0.1109 |
+
+**Your list is held-out confirmed against the shipped deck at −0.3274 (20 life) and −0.4685 (2HG),
+80,000 games each** (screen −0.3289 / −0.4699, held-out −0.3260 / −0.4672, both shrinkages inside
+noise).
+
+### It works — but the land cut is the PRICE, not the gain
+
+Arms D and E exist to separate two things the single arm B confounds. At 24 lands this deck already
+plays four copies of every card that beats a Plains, so the only way to cut a land is to add the
+*fifth-best* card — and the 3rd/4th Serra **is** that card. D and E therefore drop the land for a
+**neutral** filler (the 3rd Heliod, whose own marginal measured ~0: +0.0011 / +0.0059). Paired
+directly:
+
+| | 20 life | 2HG |
+|---|---:|---:|
+| 24th land → a 3rd Heliod *(the land question alone)* | **+0.0051** ±0.0015 | −0.0012 ±0.0016 |
+| 23rd land → a 3rd Heliod *(one further)* | **+0.0076** ±0.0015 | +0.0033 ±0.0015 |
+| 24th land → **the 4th Serra** | **−0.0088** ±0.0022 | **−0.0880** ±0.0026 |
+
+**So the deck does not want fewer lands.** Swapping the 24th land for a neutral card is slightly
+*bad* at 20 life and exactly nil in 2HG, and going to 22 is worse again. The lower curve does not make
+23 lands *better* — it makes the 24th land **cheap**, about half a hundredth of a turn, and free in
+2HG. That is what lets the mana base fund a Serra without much loss. The gain is entirely the Serra.
+
+### Your mulligan caveat is real, it is measurable, and it points YOUR way
+
+You flagged it exactly: the screen shares the **shipped table raw**, i.e. the base deck's count vector
+(21 Plains) weights every arm's hands — so every arm is mulliganed by a policy fitted to **24 lands**,
+and B is judged by a keep that does not know it cut one. Regenerating a per-arm table is prohibited on
+this route, so the bias is bounded from the other side: `critter_lands_notable.json` re-runs the key
+arms with **no table at all**, so every arm falls to the same generic heuristic keep — weaker, but
+fitted to no land count and therefore unable to prefer 24.
+
+| B vs A (the 4th Serra in place of the 24th land) | 20 life | 2HG |
+|---|---:|---:|
+| under the shipped table (fitted to 24 lands) | −0.0088 ±0.0022 | −0.0880 ±0.0026 |
+| under **no table** (land-count blind) | **−0.0267** ±0.0032 | **−0.0958** ±0.0038 |
+| ⇒ the fitted table **understates B** by | **+0.0180** | **+0.0077** |
+
+**B's advantage is three times larger once the 24-land-fitted mulligan is removed.** The bias is real,
+it runs against the land cut exactly as you predicted, and it is worth ~0.018t at 20 life. (Sanity
+check on that control: dropping the table costs +0.167t / +0.133t of play quality on *every* arm
+including base, so it is a weaker world — but symmetric, which is all a ranking check needs.)
+
+**Reading it.** Under the shipped table B trails F by +0.0043 ±0.0024 (20 life) and +0.0086 ±0.0029
+(2HG) — at 20 life that is already below this document's 0.006 resolution limit. Correct for the
+measured mulligan bias and **B is ahead of F at 20 life and level in 2HG**. Since B also keeps a card
+whose real value is strictly higher than the sim can score, **B is the better list of the two on every
+axis that is not noise.** The correction is an argument built on a measured quantity rather than a
+direct measurement of B-vs-F under an arm-fitted table — that would need the generation this route
+forbids — so treat the two as tied on the numbers and let the Auriok break the tie.
+
 ## 7. The mana side
 
 - **Remote Farm vs Plains is a wash at the 4th copy**: +0.0035 (20 life) / +0.0016 (2HG), both inside
@@ -433,10 +515,13 @@ instead. All three are improvements.
 
 ## 9. Recommendations
 
-**If one list has to serve both formats** — take `serra4_ajani1_auriok2` (§6). It is the best measured
-arm in each format independently, so there is no trade to make. Gain over the settled list: −0.037
-(20 life), −0.202 (2HG); over the shipped list, **−0.3356 and −0.4739, both held-out confirmed over
-80,000 games**.
+**If one list has to serve both formats** — take the §6a arm **B**: Serra 4, Ajani walker 1, **Auriok
+kept at 3**, 23 lands. Held-out confirmed over 80,000 games per format at **−0.3274 (20 life) and
+−0.4685 (2HG)** against the shipped list. On the raw numbers it trails `serra4_ajani1_auriok2` (§6,
+−0.3356 / −0.4739) by less than 0.009 — below this document's resolution limit at 20 life — and the
+measured mulligan bias (§6a) runs +0.0180 / +0.0077 *against* it, which more than covers the gap. It
+also keeps the Auriok, whose protection is un-modelled upside. **Treat the two as tied on the numbers
+and let the Auriok break the tie.**
 
 **If you would rather not lean on the two flattered cuts** — `serra3_ajani1` (Serra 3, walker to 1,
 nothing else touched) gets −0.0216 / −0.1062 while cutting only the slot that measures negative in
@@ -470,9 +555,13 @@ leaf, then its own mulligan table (strictly that order, alone on the box), then 
   `logs/deckcmp/critter_op_apparatus/`. **The Sol Ring run (§7a) uses a third alias chained onto that
   one** — Sol Ring into the Plains bucket, in `critter_op_apparatus_sr/` — because an introduced card
   the table does not bucket would otherwise drop the table from every arm. K stays 13 in both.
+  **The §6a mulligan-bias control deliberately has NO table** (`critter_op_apparatus_notable/` holds
+  only the profile and the value leaf), so `use_table` is false and every arm falls to the same
+  generic heuristic keep. That is the point of it: a policy fitted to no land count cannot prefer a
+  particular one.
 - **The table was live on every cell of every run**, which is asserted rather than assumed:
-  composition fall-through 0.13% (breakdown), 0.41% (funding screen), 0.03% (Sol Ring) — all inside
-  the 1% limit. The discarded sixth run is the counter-example, and it is what this bullet exists to
+  composition fall-through 0.13% (breakdown), 0.41% (funding screen), 0.03% (Sol Ring), 0.52% (land
+  screen) — all inside the 1% limit. The discarded sixth run is the counter-example, and it is what this bullet exists to
   catch.
 - **The apparatus is fitted at 20 life / 1 head.** It is symmetric across arms, so every delta in this
   document holds; the 2HG *levels* are not comparable to 20-life ones, and a format-native table and
@@ -501,6 +590,9 @@ python3 scripts/deck_compare.py logs/deckcmp/critter_serra_2hg.json      # 16 ce
 python3 scripts/deck_compare.py logs/deckcmp/critter_serra_2hg.json --confirm serra4_ajani1_auriok2
 python3 scripts/deck_compare.py logs/deckcmp/critter_heads_inert.json    # the digest probe
 python3 scripts/deck_compare.py logs/deckcmp/critter_solring_2fmt.json   # 6 cells, 240k games
+python3 scripts/deck_compare.py logs/deckcmp/critter_lands.json          # 14 cells, 560k games
+python3 scripts/deck_compare.py logs/deckcmp/critter_lands.json --confirm B_serra4_ajani1_L23
+python3 scripts/deck_compare.py logs/deckcmp/critter_lands_notable.json  # the mulligan-bias control
 python3 scripts/screen_marginals.py logs/deckcmp/critter_breakdown.json --ref final --dist base,final
 ```
 
