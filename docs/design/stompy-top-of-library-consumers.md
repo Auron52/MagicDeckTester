@@ -167,6 +167,34 @@ On the shipped deck it is **strictly one-sided** — 39 games faster, not one sl
 small because the line, while real, is rare (5% of games) and often redundant with a Natural Order
 that would have deployed the same body anyway.
 
+### The heuristic is DELIBERATELY not searched, and it costs nothing
+
+USER, 2026-09-15: *"How about if you always activate it in upkeep if we Worldly Tutored up a threat
+last turn and otherwise do not? It might make sense to have a heuristic like that to avoid paying a
+budgetary cost."* That is exactly the rule implemented above, and it is a decision NOT to build the
+`Plan`-axis version floated as a follow-up: refining a 0.002-turn effect is not worth branching in
+the hottest code in the repo. The gate is an integer compare that fails instantly on every turn and
+every deck that did not stack.
+
+"A threat" is implemented as **MV > the activation cost (4)**, and the deck makes that unambiguous —
+its Worldly Tutor targets are Worldspine Wurm 11, Apex Altisaur 9, Terastodon 8, Craterhoof 8,
+Vaultborn Tyrant / Hornet Queen / Elderscale Wurm 7, then the dorks at 1-3. **Nothing sits at MV 4-6**,
+so the threat/dork split has a three-point margin either side and cannot misfire.
+
+Cost, measured two ways:
+
+| test | result |
+|---|---|
+| Goblins (a deck that can NEVER trigger it), lever ON vs OFF | **identical digest** `15d64391adf24192`; ms +0.6% (noise) |
+| the recommended list, 3 INTERLEAVED 20,000-game pairs | +4.62%, −1.33%, −0.43% — **sign flips, no measurable cost** |
+
+**A TRAP worth the line, because it nearly produced a wrong verdict.** Three SEQUENTIAL off-then-on
+runs read +1.5%, +3.5% and +5.9% and looked like a consistent wall regression -- enough to call this
+"not a clean win". Interleaving showed it was box drift: the OFF arm alone moved 700,034 -> 795,982 ms
+across the three pairs. `ms=` is a SUM of per-game wall times, so it tracks machine load, exactly as
+`.claude/skills/deck-screening.md` warns ("compare runs on a quiet box"). **Never read an A/B wall
+delta off sequential runs; interleave, and look at whether the sign is stable.**
+
 **Why this number mattered beyond the card.** The same evening's deck screening
 (`analysis-StompySurprise.md`) cut Call of the Wild 4 -> 2 in favour of World War Hulk, which is a
 comparison where the engine modelled one side less completely — exactly the judgement the
@@ -174,7 +202,12 @@ deck-screening skill says no guard can make. The bias is the DIFFERENCE of the t
 **0.0014 turns**, against a measured per-copy value of ~0.015–0.02. Under a tenth of one copy: the
 screening conclusions are unaffected. Recording it because the check, not the outcome, is the point.
 
-### Adoption blocker — human play has no chooser
+### Adoption blocker — human play has no chooser (the ONLY one left)
+
+On quality and performance this now reads as a clean win: strictly better play on the shipped deck
+(39 games faster, none slower), no measurable wall cost, and bit-identical where it cannot fire. The
+chooser below is the one thing standing between here and flipping the default.
+
 
 Echo surfaces its pay-vs-decline to a human (`m_external_echo_chooser`); this window does not, so
 with the lever ON it would fire autonomously mid-viewer-session and record an activation the player
