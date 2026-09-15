@@ -196,6 +196,116 @@ ever do not. An earlier attempt at this compensated inside `emit_table` by avera
 intersection; that was removed. A second mechanism silently papering over the first is how the
 divergence stays invisible -- the guard reports, the skip list fixes.
 
+## Snow (2026-09-15): the filter reshapes the population, and then the backstop removes every bound
+
+Measured on the stopped Snow matrix (`logs/vlq_snow`, 456 `SLOW-GAME` rows, 4 seeds, 43 cells with
+results). Snow is the first deck to run this machinery well past the rate it was designed for, and
+three separate things go wrong. The first two cost time; **the third is a non-convergence, and no
+amount of engine optimisation fixes it.**
+
+### Abandonment is not a tail on this deck
+
+Per-rung abandon rate, pooled over the four seeds, from `wins/*.abandoned` against `wins/*.wins`:
+
+```
+  H1  0%    H2  4%    H3 18%    H4 34%    H5 43%
+  V1  0%    V2  0%    V3  0%    V4  3%    V5 14%      (V6-V8: 14%, 2 seeds, reference-only)
+```
+
+Detection is per cell but application is global, so what the table actually excludes is the UNION:
+**41 of the first 100 offsets (4 seeds x 25) are degenerate somewhere.** §2's graceful-degradation
+note says the quiet part out loud -- "past some rate the games being dropped are not a tail any
+more, they are the distribution" -- and 41% is past it. The H row means in `matrix.txt` are over the
+~59% of games that complete, and `!! UNEQUAL GAME SETS` is already firing on s8008.
+
+### ...so the skip cap trips, and disarming is not a safe answer HERE
+
+`--max-skip-frac` is 0.10 of `--target`, i.e. **40 skips** per (deck, seed) at `MATRIX_TARGET=400`.
+At a 41% union rate each seed reaches 40 skips around offset 98 -- a quarter of the way to target.
+Past the cap `skip_capped` sets `abandon_units`, `abandon_k` AND `abandon_floor_units` all to 0: the
+per-game work ceiling is **gone**.
+
+Disarming assumes that a game with no work ceiling is merely slow, because the cell-level wall-clock
+rules still bound it. On Snow they do not. `NEVER_CONDEMN=5` makes every H rung and V1-V5 exempt, and
+the exemption is checked at the top of `condemn_cell` (`BatchRunner.cpp:1297`), so it defeats the
+median rule, `max_game_sec`, AND the `HARD OVERRUN` backstop alike. The result is a cell with no
+per-game bound and no cell-level bound at all:
+
+```
+  41% union skip rate  ->  cap (40) trips at ~offset 98  ->  work ceiling disarmed
+                       ->  never_condemn_depth=5 blocks every condemnation rule
+                       ->  H3/H4/H5 run degenerate games unbounded, forever
+```
+
+This is why Snow's phase C must not simply be restarted and left alone. Raising `--max-skip-frac`
+keeps the ceiling armed but concedes that the table measures a filtered population; the honest
+alternatives are a cheaper estimand (fewer rungs, a lower `MATRIX_TARGET`) or fixing the cost itself.
+Whichever is chosen, `never_condemn_depth` and `max_skip_frac` must be decided TOGETHER -- the cap's
+disarm is only safe while something else can still bound the cell.
+
+### The absolute floor is a floor, not a cap -- and on this deck the ratio wins
+
+`lim = max(floor_units, k * median)` (`BatchRunner.cpp:1776`). §"The threshold policy" reasons about
+the case where `k x median` sits UNDER the floor, and records for Mirrorwing that "25 x median tops
+out around 7.8M ... so the ratio never fires here and the rule reduces to `abandon a game costing
+more than ~30 minutes`". That is a property of Mirrorwing, not of the rule. On Snow the ratio wins in
+**11 of 43 cells**, and by a lot:
+
+```
+  H5_s9009   median 40,000,000  ->  ceiling 1,000,000,000   = 25.0x the 40M floor
+  H4_s9009   median 23,456,110  ->  ceiling   586,402,750   = 14.7x
+  H5_s10010  median 16,361,840  ->  ceiling   409,046,000   = 10.2x
+  H5_s11011  median 11,078,543  ->  ceiling   276,963,575   =  6.9x
+```
+
+Those are exactly the cells the monsters live in, so the user's stated intent ("it must be above 10
+minutes... maybe even 30 minutes. Beyond that, I think it's okay to condemn") is not what Snow runs:
+observed abandonments took **up to 4.97 h of wall on a single game**. If ~30 minutes is the policy,
+the rule needs an absolute CAP beside the floor -- `min(max(floor, k*med), cap)` -- not a larger `k`.
+
+### The skip list is applied to RESULTS continuously, but never to the in-flight QUEUE
+
+The 2026-08-15 fix above made `apply_skiplist` run on every chunk, which is what keeps the game SETS
+equal. It does not stop a degenerate game from being RUN again. `build_queue` honours
+`skiplist(c)`, but the queue is built once per pass and handed over as ONE manifest -- Snow's whole
+run was a single `queue: 832 chunks` pass with no `resumed skip list` line -- so every cell that had
+an offset queued paid full ceiling price for it, independently:
+
+```
+  --seed 11013 --game-index 2   run at V5, V6, V7, V8   ~4 h each, ALL abandoned   19.65 h total
+  --seed 9018  --game-index 9   11 rungs, 5 abandoned                               8.51 h
+  --seed 11018 --game-index 7    9 rungs, 5 abandoned                               8.09 h
+```
+
+Priced over the 456 slow rows: **146.5 h of 174.7 h (84%) went to games the union discards
+entirely.** Paying for each degenerate game exactly once would save ~107 h of that; adding the
+absolute cap above takes it to ~116-123 h (66-70% of all slow-game time).
+
+Two caveats, and the first is load-bearing:
+
+* **It cannot apply inside the calibration window.** The sample is deliberately "a FIXED set of
+  games, not a running median"; skipping one would change the cell's median, hence its frozen
+  ceiling, hence its abandoned set -- reintroducing exactly the interleave-dependence the unit
+  currency exists to remove. So the live skip must be restricted to global index >=
+  `abandon_calib`. 401 of Snow's 456 slow rows are `off0`, i.e. calibration, so the measured 107 h
+  is what the mechanism is worth over a FULL run, not what it would have saved on this stopped one.
+* Which cell pays the one abandonment becomes interleave-dependent. That is harmless: the union
+  drops the game from every cell either way, so the table is unchanged -- only the wasted work is.
+
+A cheap partial version needs no engine change at all: `--batch` the pass in a few waves so
+`build_queue` re-runs against a grown skip list. That contradicts the pooled-queue rule in
+CLAUDE.md, which is why the real fix belongs in `BatchRunner` as a shared per-(deck, seed) abandoned
+set consulted before a game starts.
+
+### Abandonment was monotone in rung, within the measured ladder
+
+71 of 71 (arm, seed, offset) triples abandoned at some rung <= 5 were abandoned at every higher rung
+<= 5 -- zero violations. The only three exceptions sit at V6-V8, the 2-game reference-only rungs, and
+they are real: a deeper search CAN complete where a shallower one was abandoned, because the leaf
+only terminates if the budget completes the depth. So monotonicity is an observation, not a licence
+to predict abandonment. It is not needed anyway -- the union already discards the game, which is the
+sound reason to skip it.
+
 ## Quality-based rung condemnation, and the channel it needed
 
 The rule is §6's: condemn a rung when the extra depth buys nothing, on a PAIRED equivalence test

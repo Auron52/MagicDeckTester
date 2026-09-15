@@ -1387,6 +1387,70 @@ Two things this settles beyond the seed itself:
 Left as found because it is a **shared** mechanism and one deck's evidence should not rescope it —
 consistent with the standing rule that a deck-owner ruling outranks a favourable A/B.
 
+## §12. Where the label cost actually IS (instrumented, 2026-09-15), and one lever measured DEAD
+
+Instrumented build (`cmake -S . -B build-instr -DMTG_PROFILE=ON -DCMAKE_BUILD_TYPE=Release` -- the
+route `CMakeLists.txt:85` documents; `build.sh profile` does NOT define `MTG_PROFILE`). Two phase-A
+standouts from the 125-game sample, run solo at 1 thread with phase A's own flags
+(`MTG_DUMP_VALUE_ROWS`, `MTG_EVAL_ROWS_K=3`, `MTG_EVAL_ROWS_ROLLOUT=0`) -- without those the game is
+ordinary play and costs nothing like this.
+
+```
+                          gi=12 (seed 900262, 40 s)     gi=13 (seed 900263, 13.4 min)
+ApplyPlanDirect calls            2,414,539                    43,593,612
+  ... fsw-plans (cand loop)              --                    32,834,829  (75.3%)
+  ... ladder-pass                        --                    10,684,821  (24.5%)
+FSLineWin nodes / candidates    4,794 / 647,739   (135x)   51,277 / 7,229,812  (141x)
+by depth left                   d1 = 95% of entries          d1 = 810,038 (92%)
+EnumeratePlans                  196,430 -> 1,491,478         2,111,686 -> 19,093,067
+```
+
+**The shape is width at the LAST ply, not depth.** 92-95% of `FSLineWin` entries sit at depth-left 1
+over a ~140-wide candidate list. Counted work units badly understate this -- gi=13 spends 43.6M plan
+applies against 1.18M budget units, so `units_total` prices ~1 in 37 of the applies. That is the
+recorded "units UNDERSTATE enumerator work" trap in its sharpest form yet.
+
+The winless machinery is working where it was aimed: `CERT[m1] checks=201,859 fired=172,261 (85.3%)`,
+`EDGE TAIL elided=3,576,294`, `LADDER DEDUP inherited=1,454 (58.6%)`. The residual is `29,540 of
+201,859 edge nodes (14.6%) resolved by neither` -- that 14.6% is where the real search lives.
+**The develop closure is still the named gap: `distinct end-states=879,573 collapsed=160,190
+(15.4%)`.** It collapses RESULTS after paying the apply and the full end-of-turn simulation; the
+lossless prize is terminating the generator instead.
+
+Two mechanisms are inert on this workload and are pure overhead here, though neither is inert *by
+construction* -- do not delete a shared mechanism on one deck's evidence (that overstatement was
+made once already, see §8):
+
+* `WINLESS CAST-SEED: tries=51,203 wins=0 (0.0%) plans-applied=0` -- it bails cheaply, so this is a
+  note, not a lever.
+* `[enum-memo] hits=104 misses=54,278` (0.19%; 0.24% on gi=12). Also negligible against 43.6M applies.
+
+The go-off seed is **not** inert on the label path: `tries=51,261 wins=58`. Those are executed wins,
+so it earns its place here whatever §11 concluded about unbudgeted play.
+
+### `MTG_TT_NOWIN_CACHE` -- LOSSLESS but DEAD on the label path (do not re-try it here)
+
+The flag is `DEFAULT OFF pending measurement` (`TurnSolver.cpp:32281`). Measured on gi=13, one game,
+one thread, paired:
+
+| arm | units_total | rows |
+|---|---|---|
+| `MTG_TT_NOWIN_CACHE=0` | 43,714,535 | 6 |
+| `MTG_TT_NOWIN_CACHE=1` | 43,648,662 | 6 |
+| | **0.15%** | **6/6 IDENTICAL** |
+
+Lossless, as designed (bound-qualified), and worth **0.15%** -- nothing. The structural reason, which
+is the part to carry: the label path runs `MTG_EVAL_ROWS_ROLLOUT=0`, so its leaf is not a rollout and
+the LEAF table this memo fills is barely exercised. Its motivating measurement (treasure_hunt seed
+9010 gi 1: 138,346 lookups, 0 stores) was a **PLAY**-path observation. The flag may still pay in
+budgeted play; it was measured in the wrong regime here. `pending measurement` is now answered for
+the label path only.
+
+**A zero counter is not always a dead mechanism.** `fsline_lookups` reads 0 on this path, which looks
+like "the interior-node memo is never probed" -- it is not. `PROF_INC(fsline_lookups)` sits in the
+NON-order-free `else` branch (`TurnSolver.cpp:35523`); the label path takes the order-free memo path,
+which counts through `g_fs_memo_win_hits`. The memo is active.
+
 ## Open questions for the user (surfaced, not blocking)
 
 1. ~~`{S}` modelled as generic `{1}`~~ — **CLOSED 2026-09-06** by the real snow-mana model
