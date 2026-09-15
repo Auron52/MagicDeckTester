@@ -1249,6 +1249,24 @@ public:
     // of all enumerated plans sit at horizon-EDGE nodes, and only 7 of 6,943 of those can win.
     // See the implementation's contract block in DecisionProviders.cpp.
     bool ProvenWinlessThisTurn(const GameState& s, int controller) const override;
+
+    // MTG_SNOW_CONDEMN -- DEFAULT OFF, and the measurement is the point of it existing.
+    //
+    // Condemnation is completely inert on this deck today (MTG_ROLLOUT_STATS reports
+    // bp_condemn_seen=0 drops=0 across the 18-game label manifest) because nothing opts in, so
+    // "would condemnation help Snow?" had no measured answer. This gives it one.
+    //
+    // The recorded doctrine argues AGAINST it, and specifically: the base hook's comment says the
+    // filter is "safe only on a deck whose breakpoints do not have [the cantrip/staging chain]
+    // property", because after a dig a declined card really is worth reconsidering. Snow's
+    // breakpoints are exactly that -- Scrying Sheets, Frost Augur, and the Astrolabe / Ice-Fang
+    // Coatl ETB draws are the deck's whole breakpoint population. So the prior is that this is a
+    // QUALITY prune here, not a free one, which is why it ships off.
+    bool CondemnsConsideredAtBreakpoint() const override
+    {
+        static const bool v = EnvOn("MTG_SNOW_CONDEMN");
+        return v;
+    }
 };
 
 // CritterLifegain (mono-white "whenever you gain life" aggro: Soul Warden / Soul's Attendant /

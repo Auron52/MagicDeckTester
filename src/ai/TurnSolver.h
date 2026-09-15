@@ -887,7 +887,21 @@ public:
         // MTG_BP_WAVE_NSKIP: it lets the variant's apply report the continuation list's real length
         // back to the base plan's wave slot, which is otherwise discoverable only by applying into
         // the slot and being told the rank is past the end. Never read by play or by any dedup key.
+        //
+        // IT IS A POST-SORT INDEX, and keeping it that way is a correctness requirement, not
+        // bookkeeping. AppendBreakpointVariants stamps it while the vector is still in enumeration
+        // order, but FSLineWin calls MoveOrderPlans afterwards and PERMUTES that vector, while the
+        // wave walker addresses base plans by their post-sort position. The stamp is therefore
+        // remapped through the permutation right after the sort (see FSLineWin); without that the
+        // skip could decline a slot belonging to a DIFFERENT base plan -- lossy, not merely a
+        // missed saving. bp_self below is what makes the remap possible.
         int bp_base = -1;
+
+        // This plan's own index immediately BEFORE MoveOrderPlans, stamped only when
+        // MTG_BP_WAVE_NSKIP is on (-1 otherwise, so every other configuration is untouched). It is
+        // the permutation witness: after the sort, bp_self says where each plan came FROM, which is
+        // exactly what turns a pre-sort bp_base into a post-sort one. Never read by play.
+        int bp_self = -1;
 
         bool empty() const { return actions.empty(); }
     };

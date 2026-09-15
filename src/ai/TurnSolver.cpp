@@ -29936,6 +29936,10 @@ static bool BpWaveCompleteNodes()
     return on;
 }
 
+// Defined with the certificate's scoping latches far below; needed here by BpWaveNSkipOn, which
+// takes the same scope for the same reason (see its comment).
+static bool UnbudgetedWorkScopeActive();
+
 // MTG_BP_WAVE_PROBE=1: did a wave phase get to run, how far up the ranks did it reach, and did the
 // search ever PREFER a deferred continuation? `no-slots` counts nodes with no breakpoint-opening
 // plan (the phase is inert there), `budget-stopped` the ones cut short with ranks still unseen.
@@ -30061,23 +30065,40 @@ namespace
     // variant was beam-cut, or its apply never reached that breakpoint) records nothing and the
     // slot opens exactly as it does today, so the fallback is current behaviour rather than a cut.
     //
-    // *** NOT READY TO ADOPT -- KNOWN HAZARD, DO NOT FLIP THE DEFAULT (2026-09-15). ***
-    // Plan::bp_base is an INDEX into the plan vector, stamped inside AppendBreakpointVariants --
-    // but FSLineWin calls MoveOrderPlans(pre) AFTERWARDS, which SORTS that vector. So by the time
-    // the walker looks a base plan up, every stamped index may point at a different plan, and the
-    // skip can then decline a slot belonging to some other base. That is a LOSSY failure mode, not
-    // merely a missed saving. It did not show up in the 4-game smoke (rows identical) and that
-    // proves nothing -- this is the index-vs-content trap the repo has already paid for once
-    // (reference-replay anchoring: anchor on CONTENT, never on an INDEX).
-    // TO FIX: stamp each base plan with its own pre-sort index too, then after MoveOrderPlans
-    // rebuild old->new from the base plans and remap every variant's bp_base -- or drop the index
-    // entirely and key the map on the base plan's content.
-    // MEASURED WORTH, for whoever picks it up: 4 Snow label games, rows byte-identical,
-    // units 2,251,274 -> 2,212,481 (-1.7%); slots 228,213 -> 191,107; wave applies -3.6%.
+    // THE STALE-INDEX HAZARD THIS CARRIED IS FIXED (2026-09-15); the note stays because the shape
+    // recurs. Plan::bp_base is an INDEX into the plan vector, stamped inside
+    // AppendBreakpointVariants -- but FSLineWin calls MoveOrderPlans(pre) AFTERWARDS, which SORTS
+    // that vector, while the walker addresses base plans by their POST-sort position. Every stamp
+    // was therefore read against a different plan, and the skip could decline a slot belonging to
+    // some other base: a LOSSY failure mode, not merely a missed saving. The 4-game smoke came back
+    // rows-identical throughout and proved nothing -- this is the index-vs-content trap the repo
+    // has already paid for once (reference-replay anchoring: anchor on CONTENT, never an INDEX).
+    // FIXED by witnessing the permutation: Plan::bp_self records each plan's pre-sort index, and
+    // FSLineWin remaps every bp_base through old->new immediately after MoveOrderPlans, so writer
+    // and walker address the same plan. A base that does not survive leaves -1, which the write
+    // site already treats as "record nothing".
+    // DEFAULT ON since the remap landed (MTG_BP_WAVE_NSKIP=0 reverts). Measured on the 18-game Snow
+    // label manifest, one pooled batch per arm:
+    //   off -> units_total=40,681,661  slots=4,618,573  stillborn=3,426,123  improved=133
+    //   on  -> units_total=38,976,531  slots=2,918,243  stillborn=1,724,192  improved=133
+    // 123 value rows byte-identical. `improved` being the SAME 133 on both arms is the soundness
+    // signal that matters here: 1.7M slots were never opened and the wave still found every
+    // improvement it found before, which is what "removes only the exhausted-list probe" predicts.
+    // SCOPED TO UNBUDGETED WORK, and that scope is load-bearing rather than caution. Ungated, this
+    // reached BUDGETED play and the suite caught it: 103 passed / 5 FAILED, every failure a
+    // "searched play-changed at same score" on a deck that is not Snow (Fluctuator, Kitty,
+    // Goblins). Nothing was lost -- the avg is identical in all five -- but under a budget, work
+    // this skip saves is work the budget spends elsewhere, so the committed line moves and five GT
+    // keys churn for decks that gain nothing from a Snow label-path lever. Under NO budget there is
+    // nothing to re-spend, so the skip is inert on the answer and pure saving.
+    //
+    // UnbudgetedWorkScopeActive() is the same structural latch the develop closure uses and carries
+    // the same argument (drops no distinct line). NOT `budget->Unlimited()` -- see the scoping bug
+    // in a54fdaff: default-constructed sub-budgets INSIDE a budgeted search report Unlimited().
     inline bool BpWaveNSkipOn()
     {
-        static const bool on = EnvOn("MTG_BP_WAVE_NSKIP");
-        return on;
+        static const bool on = EnvOn("MTG_BP_WAVE_NSKIP", true);
+        return on && UnbudgetedWorkScopeActive();
     }
 
     inline void BpWaveMax(std::atomic<int>& m, int k)
@@ -36522,7 +36543,35 @@ static TurnSolver::SearchLine FSLineWin(const GameState& state, int depth, int m
         pre = EnumeratePlansWithLand(state, true);
         g_fresh_axis_enum = fresh_prev;
         g_bp_root_enum = false;
+        // MTG_BP_WAVE_NSKIP correctness (see Plan::bp_base / Plan::bp_self). bp_base is stamped by
+        // AppendBreakpointVariants as a PRE-sort index and the wave walker addresses base plans by
+        // their POST-sort position, so the sort below silently invalidates every stamp. Witness the
+        // permutation, then remap through it. Off unless the lever is on -> byte-identical.
+        const bool nskip_remap = BpWaveNSkipOn();
+        if (nskip_remap)
+        {
+            for (std::size_t i = 0; i < pre.size(); ++i)
+            { pre[i].bp_self = static_cast<int>(i); }
+        }
         MoveOrderPlans(pre);   // lethal-looking / higher-value plans first -> earlier B&B cutoff
+        if (nskip_remap)
+        {
+            std::vector<int> remap(pre.size(), -1);
+            for (std::size_t i = 0; i < pre.size(); ++i)
+            {
+                const int from = pre[i].bp_self;
+                if (from >= 0 && from < static_cast<int>(remap.size()))
+                { remap[from] = static_cast<int>(i); }
+            }
+            for (TurnSolver::Plan& p : pre)
+            {
+                // A base that somehow did not survive the sort leaves -1, which the write site
+                // already treats as "record nothing" -- the documented fallback is current
+                // behaviour, never a skip on a stale target.
+                p.bp_base = (p.bp_base >= 0 && p.bp_base < static_cast<int>(remap.size()))
+                          ? remap[p.bp_base] : -1;
+            }
+        }
         if (winlesscert::StatsOn())
         {
             const unsigned long long np = pre.size();
