@@ -710,6 +710,7 @@ inline DomSnap Build(const GameState& s, const DecisionProvider& prov,
         raw[static_cast<std::size_t>(DomAxis::ChargeCounters)]  = p.charge_counters;
         raw[static_cast<std::size_t>(DomAxis::StorageCounters)] = p.storage_counters;
         raw[static_cast<std::size_t>(DomAxis::VerseCounters)]   = p.verse_counters;
+        raw[static_cast<std::size_t>(DomAxis::LoreCounters)]    = p.lore_counters;   // Sagas (0 elsewhere)
         raw[static_cast<std::size_t>(DomAxis::AgeCounters)]     = p.age_counters;
         raw[static_cast<std::size_t>(DomAxis::Loyalty)]         = p.loyalty;
         for (const Counter& c : p.counters)
@@ -740,6 +741,24 @@ inline DomSnap Build(const GameState& s, const DecisionProvider& prov,
                     dp.v[i] = -static_cast<std::int32_t>(raw[i]); break;
                 case DomDir::EqualRequired:
                     // Not a comparable axis for this deck -> an exact-match field instead.
+                    //
+                    // AXES ADDED AFTER THE ORIGINAL SET FOLD ONLY WHEN NONZERO. The folds are
+                    // unconditional for the historical axes, so every permanent in every deck
+                    // contributes (0xE00+i, 0) for each EqualRequired axis it does not use. That
+                    // makes the match hash depend on the SET of axes: appending one would re-hash
+                    // every permanent in every deck, changing dominance grouping and therefore
+                    // play -- for decks that cannot even reach the new axis. Skipping the zero
+                    // keeps their key byte-identical while still separating Saga states, which are
+                    // the only ones where LoreCounters is nonzero.
+                    //
+                    // NOT MEASURED, and deliberately so: this key is only built on the dominance
+                    // path, which is not enabled in shipped play (see
+                    // docs/design/dominance-prune... -- EOT dominance was NOT adopted), so adding
+                    // the axis unconditionally was verified to leave smoke byte-identical. The
+                    // guard is here so that turning dominance ON later does not silently rebaseline
+                    // every deck. Give any future EqualRequired axis the same treatment.
+                    if (i == static_cast<std::size_t>(DomAxis::LoreCounters) && raw[i] == 0)
+                    { break; }
                     mfold(0xE00ull + i);
                     mfold(static_cast<std::uint64_t>(raw[i]));
                     break;

@@ -106,6 +106,10 @@ enum class DomAxis : std::uint8_t
     LoyaltyCounter,      // Counter::Type::Loyalty       -- viewer mirror of Permanent::loyalty
     PoisonCounter,       // Counter::Type::Poison
     DepletionCounter,    // Counter::Type::Depletion     -- Sandstone Needle / Saprazzan Skerry
+    // Appended LAST deliberately: the raw array is indexed by this enum, so a new axis inserted
+    // mid-list would renumber every existing one. Zero on every permanent that is not a Saga, so
+    // adding it changes nothing for any other deck.
+    LoreCounters,        // Permanent::lore_counters     -- Sagas (CR 714)
     _Count
 };
 
@@ -1253,6 +1257,11 @@ public:
             case DomAxis::ChargeCounters:   return DomDir::EqualRequired;
             case DomAxis::AgeCounters:      return DomDir::EqualRequired;
             case DomAxis::PoisonCounter:    return DomDir::EqualRequired;
+            // A Saga's lore count is NON-MONOTONE: more counters is closer to its best chapter but
+            // also closer to being sacrificed, and which chapter is worth most is card-specific
+            // (World War Hulk's chapter I -- a free fatty -- dwarfs II and III). Neither direction
+            // dominates, so require equality. Same reasoning as AgeCounters.
+            case DomAxis::LoreCounters:     return DomDir::EqualRequired;
             default:                        return DomDir::EqualRequired;
         }
     }

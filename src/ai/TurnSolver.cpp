@@ -23142,6 +23142,9 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
             // ...and clause 2's self-bounce (recorded by FireEtbWatchers if this entrant is a
             // watched-subtype permanent): safe here, no saved battlefield indices are live.
             DrainPendingSelfBounces(state);
+            // ...and a Saga's first lore counter + chapter I (CR 714.2a), lockstep with the
+            // executor's end-of-Resolve drain.
+            DrainPendingSagaEnters(state);
 
             // ETB library dig (Acclaimed Contender): performed inline so the clairvoyant
             // rollout sees the dug card in hand for later turns. The real game does the
@@ -23909,6 +23912,8 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
             // PUT mid-resolution, e.g. a Dragonstorm tutor wave, whose FireEtbWatchers recorded
             // here): drained now, matching the executor's end-of-Resolve drain point.
             DrainPendingSelfBounces(state);
+            // ...and a Saga's first lore counter + chapter I (CR 714.2a), same drain point.
+            DrainPendingSagaEnters(state);
             // ...and that draw is a DECISION POINT (breakpoint site 6): the card it put in hand is
             // castable with the mana this turn's plan has left, and until this existed it never
             // could be -- see TurnSolver::EquipmentDrawBreakpoint for the measurement.
@@ -25842,6 +25847,7 @@ static bool SimulateEndAndStartNextTurn(GameState& state)
     state.spells_cast_this_turn   = 0;             // STORM counter resets each turn (lockstep w/ GameEngine::UntapStep)
     state.mv_cast_this_turn       = 0;             // CFT damage accumulator resets with its pair
     DrainPendingSelfBounces(state);                // safety net (lockstep w/ UntapStep): off-cascade bounces land by turn start
+    DrainPendingSagaEnters(state);                 // safety net: an off-cascade Saga enter takes its counter by turn start
     state.casts_remaining_this_turn = -1;          // Irencrag "one more spell" budget clears each turn (see GameState)
     state.hand_size_at_combat   = -1;              // post-combat productivity markers are per turn (see
     state.battlefield_at_combat = -1;              // GameState); lockstep with GameEngine's turn start
@@ -26055,6 +26061,10 @@ static bool SimulateEndAndStartNextTurn(GameState& state)
     if (ap.library.empty()) { return false; }
     ap.hand.push_back(ap.library.DrawTop());
     ap.cards_drawn_this_turn += 1;   // the draw step is a real CR-121 draw (lockstep w/ DrawStep)
+    // SAGA lore counter + chapter, CR 714.2b -- the lockstep twin of GameEngine::DrawStep's call.
+    // Must stay on THIS side of the draw: a chapter that reads the hand (chapter I's free cast)
+    // would otherwise see a different hand in the two worlds.
+    AdvanceSagas(state);
     // Next simulated turn opens on its pre-combat main (partner of the PostCombatMain write at the
     // end of SimulateCombat; see the note there). Write-only for every other deck.
     state.phase = Phase::PreCombatMain;
@@ -32990,6 +33000,12 @@ static TranspositionTable::Key BuildSimKey(const GameState& state, int depth, in
         // permanent keeps the EXACT prior key (byte-identical).
         if (perm.age_counters > 0)
         { Fold(tk, 0xA6E0); Fold(tk, static_cast<uint64_t>(perm.age_counters)); }
+        // SAGA lore counters: future-determining in exactly the same way (a later draw step fires
+        // the NEXT chapter, and the last one sacrifices the Saga), so two states differing only in
+        // which chapter a Saga has reached must not share a TT entry. Folded ONLY when nonzero, so
+        // every deck without a Saga keeps the EXACT prior key (byte-identical).
+        if (perm.lore_counters > 0)
+        { Fold(tk, 0x5A6A); Fold(tk, static_cast<uint64_t>(perm.lore_counters)); }
         // Chosen creature type (Urza's Incubator): future-determining -- it decides WHICH spells the
         // permanent discounts. Today it is a deck-constant (DominantCreatureSubtypeId), so folding it
         // cannot actually split any state; it is folded anyway so that making the choice a real

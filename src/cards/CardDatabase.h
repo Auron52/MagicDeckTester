@@ -1816,6 +1816,32 @@ struct CardParams
     // the viewer. 0 = no upkeep reorder.
     int upkeep_reorder = 0;
 
+    // ---- SAGA (CR 714) -- the scheduling half, shared by every Saga --------------------------
+    // saga_chapters = the number of chapters (III -> 3); 0 means "not a Saga" and keeps every
+    // other card byte-identical. The permanent carries Permanent::lore_counters: one as it enters
+    // (CR 714.2a, an as-enters replacement -- so chapter I resolves the turn it lands), one more
+    // after its controller's draw step (CR 714.2b), and the Saga is sacrificed once the final
+    // chapter has resolved (CR 714.4). Advanced by AdvanceSagas() in BOTH worlds.
+    int  saga_chapters = 0;
+
+    // ---- SAGA chapter effects, keyed by chapter number ---------------------------------------
+    // Each is inert when 0/empty, so a partially-modelled Saga still ticks and sacrifices on time.
+    //
+    // Chapter I (World War Hulk): "The next red or green creature spell you cast this turn can be
+    // cast without paying its mana cost." Grants ONE charge on the shared free-cast bank
+    // (GameState::free_casts_available) carrying the colour restriction named here, which expires
+    // with the turn because both worlds zero the bank at untap. Empty = no chapter-I free cast.
+    std::string saga_ch1_free_cast_creature_colors;
+
+    // Chapter II (World War Hulk): "Put three +1/+1 counters on target creature you control."
+    int  saga_ch2_counters_on_target = 0;
+
+    // Chapter III (World War Hulk): "Choose target creature you control. Until end of turn, double
+    // its power and toughness and it gains trample." The trample half is NOT modelled and is
+    // provably inert (the passive opponent never blocks, so excess damage through blockers never
+    // occurs -- the same disclosure Craterhoof's trample grant carries).
+    bool saga_ch3_double_pt_target = false;
+
     // Vaultborn Tyrant: "Whenever this creature or another creature you control with power 4 or
     // greater enters, you gain 3 life and draw a card." Extends the own_creature_enters_lifegain
     // watcher with a minimum-power filter (effective power incl. counters/lords), a draw rider,

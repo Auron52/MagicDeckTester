@@ -92,6 +92,14 @@ struct Permanent
     int       temp_tough_bonus     = 0;
     int       charge_counters      = 0;    // Aether Vial charge counter count
     int       verse_counters       = 0;    // Aria of Flame verse counter count
+    // SAGA lore counters (CR 714). A Saga enters with one (CR 714.2a -- an as-enters replacement,
+    // so chapter I fires on the turn it lands) and gains one after its controller's draw step
+    // (CR 714.2b, the post-2022 timing printed on the card; pre-2022 Sagas said "at your precombat
+    // main phase" -- the mtg-rules skill still quotes the OLD wording, but the printed oracle text
+    // governs). Sacrificed once the final chapter has resolved (CR 714.4). Advanced by
+    // AdvanceSagas() in BOTH worlds, and folded into the dominance key: a Saga on chapter I and the
+    // same Saga on chapter III are DIFFERENT states, so omitting it would collide the memo.
+    int       lore_counters        = 0;
     int       storage_counters     = 0;    // storage-counter land battery (Dwarven Hold, Mercadian
                                            // Bazaar): accumulated over idle turns; an untapped charged
                                            // storage land taps to burst {R} x storage_counters (zeroing

@@ -418,6 +418,12 @@ struct GameState
     // CAUTION (user): banking is only safe because the free cast carries nothing across a phase
     // boundary -- a future card producing MANA mid-combat must NOT reuse this pattern blindly.
     int                      free_casts_available = 0;
+    // NOTE (World War Hulk, Saga chapter I): a Saga's "the next red or green creature spell you
+    // cast this turn can be cast without paying its mana cost" deliberately does NOT ride this
+    // bank. The bank is a PHASE-BOUNDARY mechanism -- it is filled by combat damage and spent in
+    // the post-combat main, and AIEngine's own comment warns it "must NOT behave like a standing
+    // menu option". Chapter I instead resolves INSIDE the Saga's own resolution (see
+    // PerformSagaFreeCast in SpellEffects.h), which is where the card's permission first exists.
     bool                     on_the_play           = false; // if true, skip the turn-1 draw step (player is on the play)
     // Non-owning pointer to the deck's decision heuristics (set in GoldFishRunner::SetupGame,
     // propagated through every deep copy). Never folded into BuildSimKey. nullptr -> callers

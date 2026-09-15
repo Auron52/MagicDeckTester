@@ -204,6 +204,7 @@ void GameEngine::UntapStep(GameState& state)
     state.spells_cast_this_turn = 0;    // STORM counter resets each turn (lockstep w/ SimulateEndAndStartNextTurn); no-op for non-storm decks
     state.mv_cast_this_turn     = 0;    // CFT damage accumulator resets with its pair
     DrainPendingSelfBounces(state);     // safety net: an off-cascade bounce (e.g. off-suspend Dragon) lands by turn start
+    DrainPendingSagaEnters(state);      // safety net (lockstep w/ SimulateEndAndStartNextTurn): Saga enters take their counter by turn start
     state.casts_remaining_this_turn = -1; // Irencrag "one more spell" budget clears each turn (see GameState); no-op for non-restrictor decks
     state.hand_size_at_combat   = -1;   // post-combat productivity markers are per turn (see GameState);
     state.battlefield_at_combat = -1;   // -1 = no combat yet this turn = "assume productive"
@@ -431,6 +432,12 @@ void GameEngine::DrawStep(GameState& state)
         m_logger->CommitPhase(ap.life, state.Opponent().life, bf, hand, obf, gy, staged);
     }
     ap.hand.push_back(std::move(drawn));
+    // SAGA (CR 714.2b): "after your draw step, add a lore counter" -- each Saga we control gains
+    // one and the chapter it reaches resolves, the final one sacrificing it (CR 714.4). Lockstep
+    // with the rollout's identical call after its draw. Param-gated -> byte-identical for every
+    // deck without a Saga. (The turn-1-on-the-play early return above skips this, which is
+    // unreachable: no Saga can be on the battlefield before its controller's first draw step.)
+    AdvanceSagas(state);
     ResolveStack(state);
 }
 

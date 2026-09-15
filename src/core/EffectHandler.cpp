@@ -184,6 +184,10 @@ bool EffectHandler::Resolve(GameState& state, const StackEntry& entry, const Car
     // twin: apply_one's DrainPendingSelfBounces calls. No-op (empty check) for every deck
     // without the param.
     DrainPendingSelfBounces(state);
+    // ...and a Saga that entered during this resolution takes its first lore counter here, firing
+    // chapter I (CR 714.2a). Same safety argument: the resolution is complete, so chapter I may
+    // append the creature it free-casts. Rollout twin: apply_one's DrainPendingSagaEnters calls.
+    DrainPendingSagaEnters(state);
     return ok;
 }
 

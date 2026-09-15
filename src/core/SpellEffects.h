@@ -4571,6 +4571,16 @@ inline std::vector<std::string> WalkedNonHitNames(const std::vector<int>& seen_n
 struct PendingEtbFreeCast { int controller; Card source; };
 inline thread_local std::vector<PendingEtbFreeCast> g_pending_etb_free_casts;
 
+// Pending SAGA enters (CR 714.2a: a Saga enters with a lore counter, so chapter I resolves on the
+// turn it lands). Recorded by FireOwnEtbTriggers and drained by DrainPendingSagaEnters at exactly
+// the points the two queues above are drained, for the same reason: chapter I can APPEND a
+// permanent (it free-casts a creature) and a one-chapter Saga would ERASE itself, either of which
+// shifts the saved slot indices callers of the enter cascade hold. Keyed by permanent m_number so
+// the drain re-finds the Saga rather than trusting an index.
+struct PendingSagaEnter { int controller; int perm_number; };
+inline thread_local std::vector<PendingSagaEnter> g_pending_saga_enters;
+inline void DrainPendingSagaEnters(GameState& state);   // defined with the Saga block below
+
 // Pending self-bounces (Breaching Dragonstorm clause 2: "When a Dragon you control enters,
 // return this enchantment to its owner's hand"). FireEtbWatchers RECORDS the trigger (it must
 // not erase a battlefield permanent mid-cascade: callers hold saved slot indices -- e.g. the
@@ -4764,6 +4774,17 @@ inline void FireOwnEtbTriggers(GameState& state, int controller, int entered_ind
         CardDatabase::Instance().LookupCached(state.battlefield[entered_index].card);
     if (!def) { return; }
     const CardParams& p = def->params;
+
+    // SAGA (CR 714.2a): record the enter so the first lore counter -- and therefore chapter I --
+    // lands at the next drain point. RECORDED, not resolved: chapter I free-casts a creature, and
+    // appending a permanent here would shift the saved slot indices this cascade's callers hold
+    // (the same hazard g_pending_self_bounces exists for). Param-gated -> byte-identical for every
+    // deck without a Saga.
+    if (p.saga_chapters > 0)
+    {
+        g_pending_saga_enters.push_back(
+            PendingSagaEnter{ controller, state.battlefield[entered_index].card.m_number });
+    }
 
     // "As this permanent enters, choose a color" (Coldsteel Heart). A REPLACEMENT effect, not a
     // trigger (CR 614 / the rules skill's "as [source] enters" row): it does not use the stack and
@@ -18884,6 +18905,277 @@ inline void SurveilTop(GameState& state, int n, const std::string& source = "Sur
     for (int _e = 0; _e < look; ++_e) { ap.library.erase(ap.library.begin()); }
     ApplyTopDisposition(state, looked, disp, LookKind::Surveil);
     return;
+}
+
+// ================================ SAGA (CR 714) ==============================================
+//
+// The first Saga in this engine (World War Hulk {3}{G}{G}). Three pieces:
+//   * SCHEDULING -- a lore counter as it enters (CR 714.2a) and one after its controller's draw
+//     step (CR 714.2b), sacrificed once the final chapter resolves (CR 714.4).
+//   * CHAPTER I -- resolved inside the Saga's own ENTER, because that is the first moment the
+//     card's permission exists.
+//   * CHAPTERS II+ -- resolved by AdvanceSagas() at the draw step, in BOTH worlds.
+//
+// TIMING NOTE. The printed oracle text says "As this Saga enters and AFTER YOUR DRAW STEP, add a
+// lore counter" -- the post-2022 wording (CR 714.2b). `.claude/skills/mtg-rules.md` still
+// summarises the PRE-2022 rule ("add one at each precombat main phase"); the printed card governs,
+// and the two are equivalent here anyway (nothing happens between the draw step and the precombat
+// main against a passive opponent that never acts).
+
+// Target for a Saga chapter that says "target creature you control". Mirrors
+// DefaultLifegainCounterTarget's shape deliberately: prefer a body that can still SWING THIS TURN
+// (a chapter resolves before combat, so the buff converts to face damage immediately), then the
+// highest EffectivePower, ties to the LOWEST battlefield index so executor and rollout agree.
+// Returns a battlefield index, or -1 when we control no creature -- in which case the chapter has
+// no legal target and is simply removed from the stack (CR 608.2b), which is a no-op here.
+inline int DefaultSagaChapterTarget(const GameState& state, int controller)
+{
+    int best = -1, best_key = -1;
+    for (int i = 0; i < static_cast<int>(state.battlefield.size()); ++i)
+    {
+        const Permanent& q = state.battlefield[i];
+        if (q.controller_index != controller || !q.card.IsCreature()) { continue; }
+        const bool swings_now = !q.tapped && CanAttackFull(q, state.battlefield, controller);
+        const int  key = (swings_now ? 1000 : 0) + q.EffectivePower();
+        if (key > best_key) { best_key = key; best = i; }
+    }
+    return best;
+}
+
+// Total power our side can actually swing with right now -- the quantity a goldfish race is
+// maximising. Used to SCORE the chapter-I free-cast candidates below.
+inline int OwnAttackingPower(const GameState& state, int controller)
+{
+    int sum = 0;
+    for (const Permanent& q : state.battlefield)
+    {
+        if (q.controller_index != controller || !q.card.IsCreature()) { continue; }
+        if (q.tapped || !CanAttackFull(q, state.battlefield, controller)) { continue; }
+        sum += std::max(0, q.EffectivePower());
+    }
+    return sum;
+}
+
+// CHAPTER I -- "The next red or green creature spell you cast this turn can be cast without paying
+// its mana cost."
+//
+// WHY THIS IS NOT ON GameState::free_casts_available. That bank is a PHASE-BOUNDARY mechanism
+// (filled by combat damage, spent in the post-combat main); AIEngine's own comment warns it must
+// not become "a standing menu option", and the plan enumerator only ever emits free-cast variants
+// when the bank is ALREADY non-zero at enumeration time. A Saga grants its charge mid-main-phase,
+// which that machinery cannot express without reworking the subset validity, ordering and dedup of
+// the hottest code in the repo.
+//
+// WHAT IS MODELLED INSTEAD: the freed spell is chosen and cast AT CHAPTER I'S RESOLUTION. This is
+// the house pattern for a resolution-time choice (Terastodon's put path picks K by a
+// resolution-time lethality heuristic; the Goblin Lackey put and the sac-tutor put-list are the
+// same shape), and the ordering freedom it gives up is dominated: the controller already chooses
+// WHEN in the main phase to cast the Saga, so "deploy the elves, THEN cast the Saga and free-cast
+// Craterhoof" is expressible. What it cannot express is casting the Saga early and the freed spell
+// later in that same turn -- which is never better, since the freed spell costs nothing either way.
+//
+// DISCLOSED SIMPLIFICATION: the freed creature is put onto the battlefield through the shared ETB
+// cascade rather than moving through the stack as a cast spell. Inert for this deck (it holds no
+// "whenever you cast" trigger, there is no opponent to counter it, and nothing reads storm count);
+// a deck that cared would need the real cast path.
+//
+// CHOICE: no searched axis. Candidates are scored by the damage they add THIS turn (which is what
+// a race is about, and what separates a hasty Craterhoof from a summoning-sick Worldspine Wurm),
+// tie-broken by the permanent board power they leave behind. The scoring does a real put on a
+// COPY of the state so an ETB that pumps the team (Craterhoof) or makes bodies (Hornet Queen) is
+// measured rather than guessed -- gated on there being more than one distinct candidate, so the
+// common single-candidate case costs nothing.
+inline void PerformSagaFreeCast(GameState& state, int controller, const CardParams& pp,
+                                const std::string& source_name)
+{
+    // MTG_SAGA_TRACE: DIAGNOSTIC only (no play change) -- prints what chapter I saw and chose.
+    // A Saga is the first of its mechanic here, and the failure mode is silent: the chapter fires,
+    // finds nothing castable and the card looks merely weak rather than broken.
+    static const bool s_trace = EnvOn("MTG_SAGA_TRACE");
+    if (pp.saga_ch1_free_cast_creature_colors.empty()) { return; }
+    Player& pl = state.players[controller];
+
+    // Legal candidates: CREATURE cards in hand whose colour is among the listed ones. One entry
+    // per distinct NAME (duplicate copies are fungible -- the first copy is cast).
+    std::vector<int> cand_slots;                  // hand index of the first copy of each name
+    std::vector<std::string> seen;
+    for (int i = 0; i < static_cast<int>(pl.hand.size()); ++i)
+    {
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(pl.hand[i]);
+        if (d == nullptr || !d->card.IsCreature()) { continue; }
+        // Colour comes from the DATABASE card, never from the hand copy. The Card objects moving
+        // between zones are lightweight -- PutCardOntoBattlefield itself does `perm.card = d->card`
+        // and keeps only m_number from the copy it is handed -- so m_color_mask is not populated on
+        // them, and testing the hand copy silently reports every card colourless. That is exactly
+        // the bug MTG_SAGA_TRACE caught here: every green fatty scored as an illegal candidate and
+        // chapter I never fired, which reads as "the card is weak" rather than "the card is broken".
+        bool colour_ok = false;
+        for (char c : pp.saga_ch1_free_cast_creature_colors)
+        { if (CardHasColorNamed(d->card, std::string(1, c))) { colour_ok = true; break; } }
+        if (!colour_ok) { continue; }
+        const std::string nm = pl.hand[i].m_name.str();
+        if (std::find(seen.begin(), seen.end(), nm) != seen.end()) { continue; }
+        seen.push_back(nm);
+        cand_slots.push_back(i);
+    }
+    if (s_trace)
+    {
+        std::string h;
+        for (const Card& c : pl.hand)
+        {
+            const CardDefinition* hd = CardDatabase::Instance().LookupCached(c);
+            h += c.m_name.str() + (hd && hd->card.IsCreature() ? "(cr" : "(non")
+               + (hd && CardHasColorNamed(hd->card, "G") ? ",G)" : ")") + " ";
+        }
+        std::fprintf(stderr, "[saga] T%d chapter I: hand=[%s] candidates=%zu\n",
+                     state.turn_number, h.c_str(), cand_slots.size());
+    }
+    if (cand_slots.empty()) { return; }   // the permission simply goes unused ("CAN be cast")
+
+    int pick = cand_slots[0];
+    if (cand_slots.size() > 1)
+    {
+        const int before = OwnAttackingPower(state, controller);
+        long long best_key = std::numeric_limits<long long>::min();
+        for (int slot : cand_slots)
+        {
+            GameState trial = state;
+            Card      c     = trial.players[controller].hand[slot];
+            trial.players[controller].hand.erase(trial.players[controller].hand.begin() + slot);
+            PutCardOntoBattlefield(trial, controller, c, source_name);
+            int board = 0;
+            for (const Permanent& q : trial.battlefield)
+            {
+                if (q.controller_index == controller && q.card.IsCreature())
+                { board += std::max(0, q.EffectivePower()); }
+            }
+            const long long key = static_cast<long long>(OwnAttackingPower(trial, controller) - before)
+                                      * 1000LL + board;
+            if (key > best_key) { best_key = key; pick = slot; }
+        }
+    }
+
+    const Card chosen = pl.hand[pick];
+    pl.hand.erase(pl.hand.begin() + pick);
+    PutCardOntoBattlefield(state, controller, chosen, source_name);
+}
+
+// Resolve chapter `chapter` of `def` for `controller`. Each effect is inert when its param is
+// unset, so a partially-modelled Saga still ticks and sacrifices on schedule.
+inline void FireSagaChapter(GameState& state, int controller, const CardDefinition& def, int chapter)
+{
+    const CardParams& pp = def.params;
+
+    if (chapter == 1)
+    { PerformSagaFreeCast(state, controller, pp, def.card.m_name.str()); return; }
+
+    const bool wants_target = (chapter == 2 && pp.saga_ch2_counters_on_target > 0)
+                           || (chapter == 3 && pp.saga_ch3_double_pt_target);
+    if (!wants_target) { return; }
+    const int ti = DefaultSagaChapterTarget(state, controller);
+    if (ti < 0) { return; }                       // no legal target (CR 608.2b)
+    Permanent& tgt = state.battlefield[ti];
+
+    static const bool s_ch_trace = EnvOn("MTG_SAGA_TRACE");   // DIAGNOSTIC only, no play change
+    if (s_ch_trace)
+    {
+        std::fprintf(stderr, "[saga] T%d chapter %s: target=%s (%d/%d)\n", state.turn_number,
+                     chapter == 2 ? "II" : "III", tgt.card.m_name.str().c_str(),
+                     tgt.EffectivePower(), tgt.EffectiveToughness());
+    }
+    if (chapter == 2)
+    { tgt.counters.push_back(Counter{Counter::Type::PlusOnePlusOne, pp.saga_ch2_counters_on_target}); }
+    else
+    {
+        // "Until end of turn, double its power and toughness" == it gets +X/+Y until end of turn,
+        // where X is its power and Y its toughness AS THE ABILITY RESOLVES. temp_*_bonus is the
+        // until-end-of-turn accumulator the cleanup step clears, and EffectivePower/Toughness
+        // already include counters and any earlier bonus, so this doubles the CURRENT value.
+        // The "gains trample" half is NOT modelled -- provably inert (the passive opponent never
+        // blocks, so excess damage through blockers never occurs), the same disclosure
+        // Craterhoof's trample grant carries.
+        tgt.temp_power_bonus += std::max(0, tgt.EffectivePower());
+        tgt.temp_tough_bonus += std::max(0, tgt.EffectiveToughness());
+    }
+}
+
+// Drain the pending Saga-enter queue. CR 714.2a puts the first lore counter on AS the Saga enters
+// (an as-enters replacement, not a trigger), so chapter I resolves on the turn it lands. Deferred
+// out of the enter cascade via g_pending_saga_enters because chapter I appends a permanent -- see
+// that queue's comment. Safe at every drain point: no saved battlefield indices are live there.
+inline void DrainPendingSagaEnters(GameState& state)
+{
+    if (g_pending_saga_enters.empty()) { return; }
+    std::vector<PendingSagaEnter> pend;
+    pend.swap(g_pending_saga_enters);
+    for (const PendingSagaEnter& e : pend)
+    {
+        int idx = -1;
+        for (int i = 0; i < static_cast<int>(state.battlefield.size()); ++i)
+        {
+            if (state.battlefield[i].card.m_number == e.perm_number
+                && state.battlefield[i].controller_index == e.controller) { idx = i; break; }
+        }
+        if (idx < 0) { continue; }                 // left the battlefield before the drain
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(state.battlefield[idx].card);
+        if (d == nullptr || d->params.saga_chapters <= 0) { continue; }
+        if (state.battlefield[idx].lore_counters > 0) { continue; }   // already ticked (double record)
+        state.battlefield[idx].lore_counters = 1;
+        FireSagaChapter(state, e.controller, *d, 1);
+        if (d->params.saga_chapters > 1) { continue; }
+        // A one-chapter Saga is sacrificed at once (CR 714.4). Re-find by per-copy number:
+        // chapter I's free cast appended a permanent and its ETB cascade may have moved slots.
+        for (int i = 0; i < static_cast<int>(state.battlefield.size()); ++i)
+        {
+            if (state.battlefield[i].card.m_number != e.perm_number) { continue; }
+            state.players[state.battlefield[i].owner_index].graveyard.push_back(state.battlefield[i].card);
+            state.battlefield.erase(state.battlefield.begin() + i);
+            break;
+        }
+    }
+}
+
+// CR 714.2b: after the active player's DRAW STEP, each Saga they control gains a lore counter and
+// the chapter it reaches resolves; CR 714.4 sacrifices it once the final chapter has resolved.
+// Called from BOTH worlds immediately after the draw (GameEngine::DrawStep and the rollout's draw
+// in TurnSolver) -- the lockstep pair. Param-gated on saga_chapters, so every deck without a Saga
+// is byte-identical.
+inline void AdvanceSagas(GameState& state)
+{
+    const int active = state.active_player_index;
+    // Snapshot the Sagas by PER-COPY NUMBER first: a chapter can append permanents (chapter I's
+    // free cast) and the final chapter erases the Saga itself, so battlefield indices are not
+    // stable across the loop.
+    std::vector<int> numbers;
+    for (const Permanent& p : state.battlefield)
+    {
+        if (p.controller_index != active) { continue; }
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+        if (d && d->params.saga_chapters > 0) { numbers.push_back(p.card.m_number); }
+    }
+    for (int num : numbers)
+    {
+        int idx = -1;
+        for (int i = 0; i < static_cast<int>(state.battlefield.size()); ++i)
+        { if (state.battlefield[i].card.m_number == num) { idx = i; break; } }
+        if (idx < 0) { continue; }                 // already gone (sacrificed by an earlier chapter)
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(state.battlefield[idx].card);
+        if (d == nullptr || d->params.saga_chapters <= 0) { continue; }
+        const int chapters = d->params.saga_chapters;
+        const int ch       = ++state.battlefield[idx].lore_counters;
+        if (ch > chapters) { continue; }            // past the last chapter, awaiting cleanup
+        FireSagaChapter(state, active, *d, ch);
+        if (ch < chapters) { continue; }
+        // CR 714.4 -- sacrifice once the FINAL chapter has resolved. Re-find by number: the
+        // chapter may have moved battlefield slots.
+        for (int i = 0; i < static_cast<int>(state.battlefield.size()); ++i)
+        {
+            if (state.battlefield[i].card.m_number != num) { continue; }
+            state.players[state.battlefield[i].owner_index].graveyard.push_back(state.battlefield[i].card);
+            state.battlefield.erase(state.battlefield.begin() + i);
+            break;
+        }
+    }
 }
 
 // ---- Fetchland resolution (Windswept Heath etc.) ------------------------------
