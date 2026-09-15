@@ -17203,6 +17203,93 @@ inline bool SnowCertVanillaToken(const Permanent& p)
 {
     return p.is_token;   // paired with d == nullptr at the call site; see the argument above
 }
+// MTG_SNOW_CERT_GAIN (DEFAULT ON; =0 reverts) -- bound snow_gain by the CARDS that could actually
+// become snow permanents, not by mana alone.
+//
+// The existing bound credits one new snow permanent for every point of bounded mana. That is a
+// true upper bound but a very loose one: mana does not become a permanent by itself, it has to buy
+// a CARD, and a turn only has so many of those within reach. Measured on the 4-game smoke, 1545 of
+// the 1596 surviving CombatLethal declines are caused by this term alone (MTG_WINLESS_STATS prints
+// the split), and each decline costs a full unbounded enumeration.
+//
+// Every route to one more snow permanent, and what it costs:
+//
+//   land drop        free, once per turn        a snow land in hand / graveyard-under-Kaldring,
+//                                               or one dug this turn
+//   cast from hand   its mana value (>= 1)      snow nonland permanents in hand
+//   Kaldring replay  its mana value (>= 1)      snow nonland permanents in the graveyard
+//   dig, then cast   >= 2 (the dig, then the    the library, and only while Scrying Sheets or
+//                    cast)                      Frost Augur is live
+//   ice counter      >= 2 (Owl {1}{S} = 2,      an existing NON-snow permanent, and only while
+//                    Dragon {2}{S} = 3)         the Owl or the Dragon is out
+//
+// So: one free land drop, then as many cards as the reachable pool can deploy inside the mana
+// bound (cheapest-first is exact for "most cards within a budget"), then -- for whatever budget is
+// left over -- one further snow permanent per 2 mana IF a route priced at 2 exists at all.
+//
+// Deliberately generous in three places, so that the result can only ever be an upper bound:
+//   * the land drop is credited whenever one is available, without asking whether a snow land is
+//     actually reachable (that is what the old `!hand.empty()` test stood in for);
+//   * the leftover-budget term ignores that the dig and the ice counter compete for the same mana
+//     and that ice counters are capped by the non-snow permanent count;
+//   * the result is clamped to the OLD bound, so this can never widen anything.
+//
+// Computed only on the decline path (see the call site), so the 98.6% of nodes that already fire
+// pay nothing for it.
+long long SnowCertGainBound(const GameState& s, int me, long long max_mana, bool can_drop)
+{
+    const CardDatabase& db = CardDatabase::Instance();
+    const Player&       ap = s.players[me];
+
+    std::vector<int> costs;   // mana values of snow NONLAND permanents we could deploy
+    auto scan = [&](const std::vector<Card>& zone)
+    {
+        for (const Card& c : zone)
+        {
+            if (!c.HasSupertype(Supertype::Snow)) { continue; }
+            if (c.IsInstant() || c.IsSorcery())   { continue; }   // Skred is a snow INSTANT
+            if (c.IsLand())                       { continue; }   // the land drop is its own term
+            costs.push_back(c.m_mana_cost.ManaValue());
+        }
+    };
+    scan(ap.hand);
+    // The GRAVEYARD is scanned UNCONDITIONALLY, not gated on Kaldring being on the battlefield.
+    // Kaldring is an artifact, so a copy CAST this turn has no summoning sickness on its {T} and
+    // makes the graveyard reachable immediately -- a board test could not see that. Scanning a
+    // graveyard that is in fact unreachable only makes the bound looser, which is the safe way to
+    // be wrong.
+    scan(ap.graveyard);
+    std::sort(costs.begin(), costs.end());
+
+    long long budget = max_mana;
+    // Credit EVERY remaining land drop, not one. LandDropsAvailable() is not always 1, and
+    // crediting a single drop would understate the reachable count -- an unsound direction.
+    long long gain = can_drop
+                   ? std::max(0, ap.LandDropsAvailable() - ap.lands_played_this_turn)
+                   : 0;
+    for (int c : costs)
+    {
+        if (budget < c) { break; }        // sorted, so nothing cheaper remains
+        budget -= c;
+        ++gain;
+    }
+    // Leftover budget: one further snow permanent per 2 mana, UNCONDITIONALLY. Gating this on a
+    // dig/ice source already being on the battlefield was unsound -- Rimefeather Owl's ice ability
+    // carries no {T}, so an Owl cast from hand THIS TURN can ice immediately, and a board test
+    // could not see that. It is also what covers the LIBRARY: a library card has to be dug into
+    // hand (>= 1) before it can be cast (>= 1), so every library-sourced permanent costs >= 2.
+    // Every residual route is therefore priced at >= 2 and the ungated form stays an upper bound,
+    // while no longer resting on a claim about board state.
+    gain += budget / 2;
+    return gain;
+}
+
+inline bool SnowCertGainBoundOn()
+{
+    static const bool v = EnvOn("MTG_SNOW_CERT_GAIN", true);
+    return v;
+}
+
 struct SnowWhyDumper
 {
     ~SnowWhyDumper()
@@ -17358,11 +17445,21 @@ bool SnowProvider::ProvenWinlessThisTurn(const GameState& s, int me) const
     // route. `untapped_perms` bounds the mana (nothing untaps, nothing taps for two), and
     // floating mana already in the pool is added because it is spendable without a tap.
     long long snow_gain = 0;
+    bool      gain_retryable = false;   // a tighter snow_gain exists and has not been tried yet
+    long long tight_mana = 0;
+    bool      tight_drop = false;
     if (have_treefolk || have_owl)
     {
         const bool can_drop = ap.lands_played_this_turn < ap.LandDropsAvailable() && !ap.hand.empty();
         const long long max_mana = untapped_perms + s.floating_mana.Total();
         snow_gain = (can_drop ? 1 : 0) + max_mana;
+        // Do NOT pay for the card-pool bound here -- 98.6% of nodes refute on the loose one and
+        // never need it. It is recomputed below, only if the loose bound would decline.
+        gain_retryable = SnowCertGainBoundOn();
+        tight_mana     = max_mana;
+        // NOTE the dropped `!hand.empty()`: with an empty hand a dig can still put a land INTO
+        // hand to be played, so the land drop has to be credited on hand size alone.
+        tight_drop     = ap.lands_played_this_turn < ap.LandDropsAvailable();
     }
 
     long long combat = fixed_combat;
@@ -17375,6 +17472,23 @@ bool SnowProvider::ProvenWinlessThisTurn(const GameState& s, int me) const
     {
         combat += static_cast<long long>(n_owl)
                 * (SnowPermanentCount(s, -1) + snow_gain);
+    }
+
+    // The loose bound says lethal. Before declining -- and therefore handing this node back to a
+    // full unbounded enumeration -- retry once on the card-pool bound, which is what actually
+    // limits how many snow permanents can arrive. Paid only here, on the decline path.
+    if (combat >= opp.life && gain_retryable)
+    {
+        const long long tight = std::min(snow_gain, SnowCertGainBound(s, me, tight_mana, tight_drop));
+        if (tight < snow_gain)
+        {
+            snow_gain = tight;
+            combat    = fixed_combat;
+            if (n_treefolk > 0)
+            { combat += static_cast<long long>(n_treefolk) * (SnowPermanentCount(s, me) + snow_gain); }
+            if (n_owl > 0)
+            { combat += static_cast<long long>(n_owl) * (SnowPermanentCount(s, -1) + snow_gain); }
+        }
     }
 
     if (combat >= opp.life)
