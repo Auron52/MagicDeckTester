@@ -17055,6 +17055,234 @@ bool EldraziFlickerProvider::ProvenWinlessThisTurn(const GameState& s, int me) c
     }
 }
 
+// =============== SNOW: "STUCK -- PASS THE TURN" CERTIFICATE ===============
+//
+// Second implementation of DecisionProvider::ProvenWinlessThisTurn. Same contract, same
+// scoping (unbounded label / depth-matrix search only -- never under a real budget, so the
+// regression suite is byte-identical BY CONSTRUCTION), and the same asymmetric direction of
+// error: a false positive silently deletes a real win, so every quantity below is an UPPER
+// bound on what the player can do and anything outside the audited pool declines.
+//
+// WHY SNOW IS WORTH A SECOND IMPLEMENTATION, measured rather than assumed. On an ordinary Snow
+// label game (seed 900250 gi 0, MTG_WINLESS_STATS):
+//
+//     fsw nodes all=7766  label=7746  EDGE=6936      (89.3% of nodes are horizon-edge)
+//     plans    all=653079 label=652617 EDGE=604367   (92.5% of enumerated plans)
+//     WINLESS SEED: edge tries=6943 wins=7           (0.1% of edge nodes can actually win)
+//     RESIDUAL: 6936 of 6943 edge nodes (99.9%) resolved by neither
+//
+// So nine tenths of the label search's plan enumeration happens at nodes asking one question --
+// "can I kill THIS turn?" -- whose answer is no essentially always, and before this Snow had no
+// way to answer it except by enumerating. The cost that motivated it: Snow's value-leaf phase A
+// ran 57.5 h and phase C projected 13-17 days, with the worst single games at 44.3 h / 31.9 h /
+// 28.9 h; a stack sample of the 44.3 h game lands in EnumerateEarliestWins every time. And the
+// tail is specifically the UNWINNABLE games -- over 456 logged slow games, the 145 that ended
+// `wt=INT_MIN` were 32% of the games but 68% of the time (mean 2,959 s vs 642 s), which is
+// exactly the shape "no incumbent, so branch-and-bound never prunes" predicts.
+//
+// THE COMPLETENESS CLAIM. Soundness needs "combat damage is the ONLY way this deck can move the
+// opponent's life total or library, and the only things that can raise an attacker's power are
+// the two snow-count creatures". Read off the real card data (src/cards/data/cards.json), for
+// this pool:
+//   * Skred -- "deals damage to target CREATURE". It cannot be pointed at a player, so it can
+//     never contribute to a kill. (It is also goldfish-inert: no blockers are modelled.)
+//   * Nothing drains, mills, or gains/loses life. No poison. No alternate win.
+//   * NOTHING GRANTS HASTE, animates a land, equips, enchants a creature, or is a lord. So no
+//     attacker can be ADDED this turn: a creature cast now is summoning sick (CR 302.6), and a
+//     snow permanent replayed off Kaldring "enters tapped" on top of that.
+//   * Marit Lage's Slumber creates its 20/20 ONLY "at the beginning of your upkeep". A token
+//     created this turn entered this turn, so it cannot attack this turn either -- the bound
+//     does not depend on the phase for that reason. A token from an EARLIER turn is an ordinary
+//     20-power attacker and is counted as one, which is why a Marit Lage board declines.
+//   * The only variable power is the two */* creatures, both of which read a SNOW COUNT:
+//     Abominable Treefolk (snow permanents YOU CONTROL) and Rimefeather Owl (snow permanents
+//     ON THE BATTLEFIELD, so an ice counter on any permanent, including an opponent's, grows it).
+// One card in a reachable zone outside the audited pool disables the certificate, so a decklist
+// change makes this SLOWER, never WRONG -- the same discipline as EdfCertKnownDef above.
+//
+// WHY THE SNOW-COUNT BOUND IS A COUNT OF MANA. Both */* creatures grow by one per additional
+// snow permanent, and every route to an additional snow permanent this turn costs at least one
+// mana except the land drop:
+//   * a snow land off the drop                          -- free, but at most ONE per turn (CR 305.2)
+//   * any snow permanent cast from hand                 -- cheapest is Arcum's Astrolabe at {S} = 1
+//   * an ice counter (which MAKES a permanent snow)     -- Rimefeather Owl {1}{S} = 2, Rimescale
+//                                                          Dragon {2}{S} = 3, so >= 2 each
+//   * a snow permanent replayed off Kaldring            -- pays its own cost; a LAND replayed off
+//                                                          it still consumes the one land drop
+// so `snow_gain <= land_drop + max_mana`, and `max_mana` needs no yield arithmetic: NOTHING in
+// this pool untaps a permanent or produces two mana from one tap (Jorn -- the MDFC front face
+// that untaps every snow permanent -- is deliberately NOT modelled; only the Kaldring back face
+// is in the deck), so each permanent we control can contribute at most one mana per turn.
+// Counting every untapped permanent as one mana is therefore an upper bound that cannot be beaten,
+// and it stays an upper bound as the board grows.
+namespace {
+
+inline bool SnowCertStatsOn() { static const bool v = EnvOn("MTG_WINLESS_STATS"); return v; }
+
+// WHY a Snow board declined. Same rationale as CertWhy above: a fire rate with no reason attached
+// is a number you cannot act on.
+enum class SnowWhy { Fired = 0, AlreadyWon, OppDeckThin, Zones, UnknownCard, OppPermanent,
+                     Token, CombatLethal, Count };
+inline std::atomic<unsigned long long> g_snow_why[static_cast<int>(SnowWhy::Count)] = {};
+inline bool SnowNote(SnowWhy w, bool ret)
+{
+    if (SnowCertStatsOn())
+    { g_snow_why[static_cast<int>(w)].fetch_add(1, std::memory_order_relaxed); }
+    return ret;
+}
+struct SnowWhyDumper
+{
+    ~SnowWhyDumper()
+    {
+        if (!SnowCertStatsOn()) { return; }
+        static const char* kName[] = { "fired", "already-won", "opp-deck-thin", "zones",
+                                       "unknown-card", "opp-permanent", "token", "combat-lethal" };
+        bool any = false;
+        for (int i = 0; i < static_cast<int>(SnowWhy::Count); ++i)
+        { if (g_snow_why[i].load()) { any = true; break; } }
+        if (!any) { return; }
+        std::fprintf(stderr, "=== SNOW WINLESS CERT reasons:");
+        for (int i = 0; i < static_cast<int>(SnowWhy::Count); ++i)
+        {
+            const unsigned long long v = g_snow_why[i].load();
+            if (v) { std::fprintf(stderr, " %s=%llu", kName[i], v); }
+        }
+        std::fprintf(stderr, " ===\n");
+    }
+};
+inline SnowWhyDumper g_snow_why_dumper;
+
+// The pool the completeness argument above was written against. Memoised per definition POINTER
+// (this runs at every horizon-edge node), so the string compare happens once per card per thread.
+bool SnowCertKnownDef(const CardDefinition* d)
+{
+    if (d == nullptr) { return false; }
+    static thread_local std::unordered_map<const CardDefinition*, char> memo;
+    const auto it = memo.find(d);
+    if (it != memo.end()) { return it->second != 0; }
+    static const std::set<std::string> kPool = {
+        // main deck (decks/Snow/Snow.cod)
+        "Skred", "Rimefeather Owl", "Scrying Sheets", "Snow-Covered Island",
+        "Snow-Covered Forest", "Snow-Covered Mountain", "Coldsteel Heart", "Boreal Druid",
+        "Abominable Treefolk", "Arcum's Astrolabe", "Frost Augur", "Ice-Fang Coatl",
+        "Kaldring, the Rimestaff", "Marit Lage's Slumber", "Rimewood Falls",
+        "Rimescale Dragon", "Highland Weald",
+        // sideboard. Unreachable today (the deck runs no wish), listed so that making one
+        // reachable does not silently widen what the argument covers.
+        "Into the North", "Spirit of the Aldergard", "On Thin Ice", "Search for Glory",
+    };
+    const bool ok = kPool.count(d->card.m_name.str()) != 0;
+    if (!ok)
+    {
+        static const bool s_dbg = EnvOn("MTG_WINLESS_DEBUG");
+        if (s_dbg)
+        { std::fprintf(stderr, "[winless] SNOW POOL MISS: '%s'\n", d->card.m_name.str().c_str()); }
+    }
+    memo[d] = ok ? 1 : 0;
+    return ok;
+}
+
+}   // namespace
+
+bool SnowProvider::ProvenWinlessThisTurn(const GameState& s, int me) const
+{
+    if (me < 0 || me > 1) { return false; }
+    const Player& ap  = s.players[me];
+    const Player& opp = s.players[1 - me];
+
+    // Never claim a winless turn on a board the caller is about to score as a win, and never one
+    // where the opponent's own draw could deck them without a play of ours.
+    if (opp.life <= 0 || s.opponent_decked)                  { return SnowNote(SnowWhy::AlreadyWon, false); }
+    if (opp.poison_counters > 0)                             { return SnowNote(SnowWhy::AlreadyWon, false); }
+    if (s.opponent_library_dealt && opp.library.size() <= 1) { return SnowNote(SnowWhy::OppDeckThin, false); }
+    // Zones this analysis does not model at all.
+    if (!ap.staged_cards.empty() || !ap.suspended_cards.empty())
+    { return SnowNote(SnowWhy::Zones, false); }
+
+    // ---------------------------------------------------------------- pool gate ---------------
+    // Every card that could reach a castable/playable zone THIS turn. Hand and battlefield are
+    // obvious; the GRAVEYARD is reachable through Kaldring ("you may play target snow permanent
+    // card from your graveyard"); and the LIBRARY is reachable through Scrying Sheets and Frost
+    // Augur, both of which put a revealed snow card straight into hand. A miss anywhere is a
+    // decline, never a guess.
+    //
+    // Exile needs no walk here, and the reason is worth stating rather than leaving as a gap:
+    // the two exile zones this engine can PLAY from are `staged_cards` and `suspended_cards`,
+    // and both are required EMPTY above. Plain `GameState::exile` is not a playable zone.
+    const CardDatabase& db = CardDatabase::Instance();
+    for (const Card& c : ap.hand)
+    { if (!SnowCertKnownDef(db.LookupCached(c))) { return SnowNote(SnowWhy::UnknownCard, false); } }
+    for (const Card& c : ap.graveyard)
+    { if (!SnowCertKnownDef(db.LookupCached(c))) { return SnowNote(SnowWhy::UnknownCard, false); } }
+    for (const Card& c : ap.library)
+    { if (!SnowCertKnownDef(db.LookupCached(c))) { return SnowNote(SnowWhy::UnknownCard, false); } }
+
+    // ---------------------------------------------------------------- battlefield -------------
+    long long untapped_perms = 0;   // an upper bound on mana: <=1 per permanent, nothing untaps
+    bool      have_treefolk = false, have_owl = false;
+    long long fixed_combat  = 0;    // attackers whose power cannot change this turn
+    int       n_treefolk    = 0;    // attackers whose power is a snow count (they scale together)
+    int       n_owl         = 0;
+
+    for (const Permanent& p : s.battlefield)
+    {
+        const CardDefinition* d = db.LookupCached(p.card);
+        if (p.controller_index != me)
+        {
+            // The opponent's side can only ever REDUCE our damage (blockers), which is the safe
+            // direction for an upper bound -- so passive P/T tokens with no definition are fine
+            // to ignore. A definition-carrying opponent permanent outside the pool is not: that
+            // one could do something this analysis has not reasoned about.
+            if (d != nullptr && !SnowCertKnownDef(d))
+            { return SnowNote(SnowWhy::OppPermanent, false); }
+            continue;
+        }
+        // One of OUR permanents with no definition is a token -- for this deck that means Marit
+        // Lage, a 20/20 that is lethal from a full life total the moment it can attack. Decline
+        // rather than reason about it: those boards are exactly the ones that CAN win.
+        if (d == nullptr)            { return SnowNote(SnowWhy::Token, false); }
+        if (!SnowCertKnownDef(d))    { return SnowNote(SnowWhy::UnknownCard, false); }
+
+        if (!p.tapped) { ++untapped_perms; }
+
+        if (p.card.IsCreature() || p.is_animated)
+        {
+            if (!CanAttackFull(p, s.battlefield, me)) { continue; }
+            if (d->params.pt_equals_snow_permanents_you_control)        { ++n_treefolk; have_treefolk = true; }
+            else if (d->params.pt_equals_snow_permanents_on_battlefield) { ++n_owl; have_owl = true; }
+            else { fixed_combat += std::max(0, p.EffectivePower()); }
+        }
+    }
+
+    // ---------------------------------------------------------------- the snow-count bound ----
+    // `snow_gain` is the most additional snow permanents that can exist by the time damage is
+    // dealt. See the block comment: one free land drop, and at least one mana for every other
+    // route. `untapped_perms` bounds the mana (nothing untaps, nothing taps for two), and
+    // floating mana already in the pool is added because it is spendable without a tap.
+    long long snow_gain = 0;
+    if (have_treefolk || have_owl)
+    {
+        const bool can_drop = ap.lands_played_this_turn < ap.LandDropsAvailable() && !ap.hand.empty();
+        const long long max_mana = untapped_perms + s.floating_mana.Total();
+        snow_gain = (can_drop ? 1 : 0) + max_mana;
+    }
+
+    long long combat = fixed_combat;
+    if (n_treefolk > 0)
+    {
+        combat += static_cast<long long>(n_treefolk)
+                * (SnowPermanentCount(s, me) + snow_gain);
+    }
+    if (n_owl > 0)
+    {
+        combat += static_cast<long long>(n_owl)
+                * (SnowPermanentCount(s, -1) + snow_gain);
+    }
+
+    if (combat >= opp.life) { return SnowNote(SnowWhy::CombatLethal, false); }
+    return SnowNote(SnowWhy::Fired, true);
+}
+
 // WHICH creature to blink. Unnarrowed this is "every creature on the board", and across two or
 // three outlets that product is a large part of the 1.38e9. Only two targets can matter:
 //

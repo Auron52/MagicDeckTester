@@ -451,6 +451,60 @@ Two consequences worth carrying:
   the profile is written before it starts, and on this deck it will occupy the whole box for an
   unbounded time. The run above was stopped for exactly that reason; the profile is unaffected.
 
+## Value leaf RESTARTED 2026-09-11 — the 2026-09-09 "unaffordable" verdict is REFUTED (8.7x)
+
+**The section below is HISTORY, not current state.** Its verdict — *"Snow's degenerate games must
+be made tractable before a value leaf is affordable here"* — was correct when measured and is now
+obsolete: the prerequisite work it named was done upstream, by other hands, and nobody re-priced
+the deck afterwards. The lesson is the transferable part: **a cost-based deferral has an expiry
+date, and the expiring event is any engine work on the path that made it expensive.** A deferral
+recorded as a property of the deck ("Snow is too slow") outlives the measurement it rests on; the
+honest form is a property of the deck *at a commit*.
+
+**IT IS THE TAIL THAT CHANGED, NOT THE TYPICAL GAME — and the first read of this got it wrong.**
+A 24-game sample (`logs/snow_vlcheck/sample.{json,log,rows}`, even spread over the 171 banked
+offsets) cost **0.0391 core-h/game**, which against the deferral's headline 0.34 core-h/game reads
+as 8.7x. **That comparison is invalid**, and the trap is worth naming because it is easy to repeat:
+the sample was drawn from the games the cancelled run had *completed*, i.e. its CHEAP ones, while
+0.34 is a BLENDED average over a population whose cost was ~88% concentrated in games that never
+finished at all. Re-derive the old cost on the sample's own population: 1 h 58 m x 24 cores =
+47.2 core-h, less ~41.4 core-h already sunk in the 23 blocked >=1.8 h games, leaves ~5.8 core-h for
+140 completed games = **0.041 core-h/game**. Against 0.0391 that is ~5% — exactly the order of
+`61b3cfb7`'s "Snow -6% cost". *Never compare a sample of the survivors against a blended average;
+on a heavy-tailed deck that ratio is a measure of the censoring, not of any engine change.*
+
+| | 2026-09-09 (src `1233dc76`) | 2026-09-11 (src `507e01c7`) |
+|---|---|---|
+| typical game, like-for-like | ~0.041 core-h | **0.0391 core-h** (~5% better) |
+| worst single game | **1.8 h+, NEVER FINISHED** (23 of them at once) | **18.2 min** (gi=37, wt=8, won T8) |
+| phase A (2500 games) | **>=35 h and rising; instantaneous throughput ~0** | **~12-24 h wall @24, live rate** |
+
+So the deferral is lifted by TERMINATION, not by throughput: the degenerate games now end. That is
+the whole difference between a phase that completes and one that asymptotes, which is why the
+verdict flips on a ~5% per-game change.
+
+**What bought it** — all on the UNBOUNDED label path phase A uses, all default ON:
+`a6c6a3f7` (four lossless go-off cuts on `earliest_only`; "monsters 5h -> 11-49min"),
+`411e16dc` (winless-turn certificate + stuck-turn state closure for unbounded search),
+`93017db4` (`MTG_UNBUDGETED_LEAF_MEMO`), plus `MTG_LABEL_GOFF_DOM` and `MTG_LABEL_EDGE_TAIL`
+(`MTG_LABEL_WAVES` is lossy and stays OFF). None of this was aimed at Snow.
+
+**The 171 banked rows were VERIFIED reusable, not assumed.** `check_freeze` reports
+`PLAY CHANGED (3b366eed8cf0 -> a0f00f14d22f)`, and the documented KNOWN LIMIT is that phase A's
+game-level resume keeps every game that banked a row regardless — so that verdict is a decision a
+human has to make, and the smoke fold cannot make it (it does not contain Snow, and its per-deck
+probe is bounded d3/b10 play, not the unbounded label path). Made it directly instead: re-dumped 24
+banked games at the phase A config and diffed the labels. **22 byte-identical, 2 old-truncated
+monsters that now run to completion (supersets), 0 mismatches.** So `61b3cfb7` ("Snow -6% cost AND
+better play") moved bounded play but not the label path, and the resume is sound. *Method note: to
+decide whether banked rows survive an engine move, re-derive a sample and diff the rows — do not
+reason from commit subjects, and do not accept the smoke fold as a proxy for a deck it excludes.*
+
+**Also cleared on the way in:** `references/Snow/claude_s4_gi3.json` — recorded 2026-09-08 as
+un-replayable and needing a hand re-play by the user — now replays clean. `scripts/ref_bench.py
+--deck snow` is 6/6 with human == search on every game (avg 5.667 both, `0/6 short`, 0 hand
+mismatches). Snow had **no `test/ref_bench.json` entry at all**, so no regression watch was in place.
+
 ## Value leaf ATTEMPTED and DEFERRED 2026-09-09 — the degenerate tail makes phase A unaffordable
 
 `bash scripts/valueleaf.sh run decks/Snow` was started on frozen commit `a26d4632` / src
@@ -935,6 +989,181 @@ A second, subtler instance of the same class: `ActionFoldSig` initially hashed `
 which is the very field two interchangeable copies differ in -- every activation class failed the
 identity check and the fold stopped firing, detected only because the branching census read back
 the unfolded mean width (75.96) to four significant figures.
+
+## Winless certificate for Snow (2026-09-14) — the label search root-caused, and cut ~8x
+
+Session mandate after the value leaf was stopped (USER: *"It needs to be way faster than it is
+right now"*, *"start optimizing by looking at slowest games"*).
+
+### 1. The three monsters have THREE DIFFERENT causes, and only one of them is "play"
+
+A per-decision streaming instrument (`MTG_DECISION_PROGRESS`, default off) was needed first,
+because the two existing instruments — `MTG_PROFILE`'s per-decision table and `MTG_ROLLOUT_STATS` —
+both report at **exit**, which is no signal at all on a game that runs 44 hours; and the one
+existing LIVE per-decision print, `MTG_DECISION_WORK_DEBUG`'s `[dw]` line, is gated on
+`budget != nullptr && !budget->Unlimited()` and is therefore **structurally silent on exactly the
+unbounded label path these games run under**. It brackets the LABEL half (`EmitEvalRows`)
+separately from the PLAY half, and tags each line `real` / `roll` / `bot`.
+
+On an ordinary Snow game (seed 900250 gi 0) at phase-A settings:
+
+| half | cost |
+|---|---|
+| **LABEL** (`EmitEvalRows`, K=3, unbounded) | **7,443 ms (97%)** |
+| PLAY (budgeted d5/b20) | 253 ms (3%) |
+
+Label cost decays hard with turn number (t1 5,975 ms, t2 1,449, t3 18, t4 1) because the unbounded
+label's horizon shrinks as the game advances. **Phase A is ~30x more expensive than the play it is
+labelling**, and the three recorded monsters split three ways:
+
+| game | cause |
+|---|---|
+| 44.3 h `--seed 900807 --game-index 57` | **LABEL** — never completes turn 1. gdb, 3/3 samples: `EmitEvalRows` → `EnumerateEarliestWins` → `FSLineTail`/`FSLineWin` → `ApplyPlanDirect` → mana tapping |
+| 31.9 h `--seed 901348 --game-index 98` | **LABEL** — t1 15.1 s, **t2 233.8 s** |
+| 28.9 h `--seed 901523 --game-index 23` | **BOTTOMING** — 142 complete simulated games (`bot`) before reaching turn 1 |
+
+### 2. The expensive games are the UNWINNABLE ones
+
+From phase C's own `slow_games.log` (456 games over 30 s):
+
+| | games | total | mean | max |
+|---|---|---|---|---|
+| **UNWON** (`wt=INT_MIN`) | 145 (**31.8%**) | **119.2 h (68.2%)** | 2,959 s | 17,882 s |
+| WON | 311 (68.2%) | 55.5 h (31.8%) | 642 s | 15,183 s |
+
+**4.6x on the mean.** Exactly the shape "no incumbent ⇒ branch-and-bound never prunes" predicts:
+a search for the EARLIEST win has nothing to bound with until it finds one, so proving a negative
+costs full horizon exhaustion.
+
+### 3. Where the work is: the horizon EDGE — already instrumented, never exploited
+
+`MTG_WINLESS_STATS` on the same game, BEFORE any change:
+
+```
+fsw nodes all=7766  label=7746  EDGE=6936       (89.3% of nodes)
+plans    all=653079 label=652617 EDGE=604367    (92.5% of enumerated plans)
+WINLESS SEED: edge tries=6943 wins=7            (0.1% of edge nodes can actually win)
+WINLESS CERT[m1]: checks=6943 fired=0 (0.0%)
+RESIDUAL: 6936 of 6943 edge nodes (99.9%) resolved by neither
+```
+
+**92.5% of the label search's plan enumeration answers one question — "can I kill THIS turn?" —
+whose answer is no 99.9% of the time.** `DecisionProvider::ProvenWinlessThisTurn` exists for
+precisely this and is default ON, but only `EldraziFlickerProvider` implemented it; the base
+returns false, so Snow declined every time and paid the full enumeration.
+
+### 4. `SnowProvider::ProvenWinlessThisTurn`
+
+Snow is an unusually clean case. **Combat damage is the deck's ONLY route to the opponent's life
+total** — Skred reads "damage to target CREATURE" and cannot be pointed at a player; nothing
+drains, mills or gains life; no poison; no alternate win. And **nothing in the pool grants haste**,
+animates a land, equips, enchants a creature or is a lord, so **no attacker can be ADDED this
+turn**: a creature cast now is summoning sick (CR 302.6), and a snow permanent replayed off
+Kaldring enters tapped on top of that. Marit Lage's Slumber creates its 20/20 only "at the
+beginning of your upkeep", and a token created this turn entered this turn — so it cannot attack
+either, and the bound does not depend on the phase for that reason; a token from an EARLIER turn is
+counted as an ordinary 20-power attacker, which is why those boards correctly decline.
+
+The only variable power is the two `*/*` snow-count creatures, and **every route to an additional
+snow permanent costs at least one mana except the single land drop** (Astrolabe `{S}`=1; an ice
+counter — which is what MAKES a permanent snow — is `{1}{S}`=2 via Owl or `{2}{S}`=3 via Dragon; a
+Kaldring replay pays the card's own cost, and a land replayed off it still consumes the one land
+drop). Nothing untaps a permanent and nothing taps for two — **Jorn, the MDFC front face that
+untaps every snow permanent, is deliberately not modelled; only the Kaldring back face is in the
+deck** — so counting every untapped permanent as one mana is an upper bound that cannot be beaten:
+
+```
+snow_gain <= land_drop + untapped_permanents + floating_mana
+```
+
+Pool-gated over hand / graveyard / library / battlefield exactly like `EdfCertKnownDef`, so a
+decklist change makes this SLOWER, never WRONG. (Exile needs no walk: the two exile zones this
+engine can PLAY from are `staged_cards` and `suspended_cards`, and both are required empty.)
+
+### 5. Measured
+
+Same game, control vs certificate:
+
+| | control | certificate |
+|---|---|---|
+| wall | 12.71 s | **1.59 s (8.0x)** |
+| plans enumerated | 653,079 | **62,648 (−90.4%)** |
+| edge nodes paying full enumeration | 6,936 | **185 (2.7%)** |
+| fire rate | 0% | **97.2%** (declines: token 187, combat-lethal 192) |
+| **value rows emitted** | 5 | **5, BYTE-IDENTICAL** |
+
+The 31.9 h monster's turn-2 label: **233,793 ms → 25,888 ms (9.0x)**.
+
+**The measurement that actually matters, done PAIRED PER GAME against phase A.** Because
+`freeze.src == HEAD:src`, `logs/vlq_snow/rows.batch.log` is a per-game timing log for the SAME
+games on the SAME source tree without the certificate (1,443 `SLOW-GAME` entries with repro seeds).
+Restricting to games that phase A logged as slow **and** the certificate run has actually FINISHED:
+
+| | phase A (no certificate) | with certificate |
+|---|---|---|
+| 113 games, total | 280,924 s (**78.0 core-h**) | **≤14,726 s** |
+| ratio | — | **≥19.1x** |
+| of those, dropped under the 30 s log threshold | — | **51 of 113** |
+
+| seed | phase A | certificate |
+|---|---|---|
+| 900299 | **21.6 h** | **<30 s** (≥2,592x) |
+| 900523 | **17.8 h** | **<30 s** (≥2,141x) |
+| 900265 | 5.5 h | <30 s (≥664x) |
+| 900285 | 4.7 h | <30 s (≥566x) |
+| 900277 | 4.2 h | 351.9 s (42.5x) |
+
+**The tail — the thing that made the value leaf unaffordable — largely stops existing.** The
+certificate column is an UPPER bound (a sub-30 s game is counted as 30 s), so the true ratio is
+higher. Two honest caveats: phase A ran 24 workers against this run's 16, so some of the gain is
+reduced contention (worth ~1.2x, not 19x); and the 44.3 h monster (seed 900807) is EXCLUDED because
+this batch had not reached it — see the open item below.
+
+**METHOD WARNING, because I nearly published the wrong version of this table.** The first pass
+treated every phase-A slow game ABSENT from the certificate run's slow log as "now under 30 s" —
+but the batch was only 172 of 500 games in, so most of those had simply **not run yet**. That
+inflated the result enormously and is the same survivor-bias class already recorded above
+(*"never ratio a SURVIVOR sample against a BLENDED average"*). The fix is the `done` set: a game
+counts only if it banked a row under its own seed.
+
+**The gates, all four measured rather than argued:**
+
+| gate | instrument | result |
+|---|---|---|
+| **Soundness** | `MTG_WINLESS_AUDIT=1` — re-runs the engine's OWN go-off at every node the certificate refuted | **122,212 certified-winless nodes probed, violations = 0** (12 games; plus 30 earlier games with no violation print — violations print loudly at the site, not just at exit) |
+| **Label identity** | diff produced rows against the BANKED phase-A rows | **1,683 / 1,683 rows byte-identical across 245 distinct games** (see below) |
+| **Suite — smoke** | `regression.sh --smoke` | **80 passed / 0 failed**, 0 of 80 configs changed, searched+d0 slower=0 faster=0 play-changed=0 |
+| **Suite — regression** | `regression.sh --regression` | **108 passed / 0 failed**, 0 of 108 configs changed, slower=0 faster=0 play-changed=0; viewer protocol 0 play-drift / 0 enum-gap / 0 contract-fail |
+
+**The label-identity baseline was free, and the trick generalises.** `logs/vlq_snow/freeze.src` and
+`git rev-parse HEAD:src` are the SAME tree hash (`507e01c7`) — the certificate lives in the
+*working tree*, uncommitted — so the **15,029 rows phase A already banked were produced by exactly
+this source tree WITHOUT the certificate**. That makes them a ready-made control arm: re-run any of
+those games with the certificate on and diff the rows by `(seed, turn)`. No slow cert-OFF run is
+needed at all. (For contrast: a 12-game cert-OFF arm spent **over 50 minutes on a single game**
+reproducing what the banked rows give for nothing.)
+
+**Why this is suite-safe BY CONSTRUCTION, not by measurement.** The certificate is armed only where
+the search has no budget to distort — inside `EnumerateEarliestWins` and under a genuinely
+`Unlimited()` budget. Pruning consumes no work units, so under a real budget it would change what
+fits in one and therefore change play; every regression case runs at an explicit budget. So this
+accelerates **phase A (labels) and phase C (the `--budget 0` matrix cells)** — the 13–17 day
+blocker — and leaves budgeted play untouched.
+
+**What it does NOT touch, stated plainly.** Snow's 4.7–8.7 s/game PLAY cost (the suite-inclusion
+question) is unaffected by design, and so is the BOTTOMING loop, which is budgeted — the 28.9 h
+monster is a bottoming game and gains nothing here. Those are separate levers.
+
+### 6. Operational hazard found the hard way: the label path OOMs at high worker counts
+
+A 20-worker audited batch **OOM-killed the box** (`anon-rss:30570732kB` — 30.5 GB in one process,
+109 GB virtual) and took the session with it. `scripts/valueleaf.sh` already documents this class
+("the label path's UNBOUNDED search has a per-game transient that spiked the batch 5 GB → 23 GB in
+under 8 minutes on 32 workers... per-game footprint is fine solo") — which is why
+`MTG_VLQ_ROWS_THREADS` exists. **`MTG_WINLESS_AUDIT=1` is the worst offender**, adding a full
+go-off apply at every certified node (~13k extra applies per game at Snow's fire rate); it is a
+diagnostic and must never be left on. Run label batches at 4–8 threads on this box, with a
+memory watchdog beside them.
 
 ## Open questions for the user (surfaced, not blocking)
 

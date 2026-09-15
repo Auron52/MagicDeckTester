@@ -28,6 +28,24 @@
 #include <fstream>
 #include <map>
 #include <stdexcept>
+#include <chrono>   // MTG_DECISION_PROGRESS wall timing (diagnostic only)
+
+// ---- LIVE PER-DECISION PROGRESS (MTG_DECISION_PROGRESS; DIAGNOSTIC, DEFAULT OFF) -------------
+//
+// Streams one stderr line per top-level decision as the game plays, so a game that will not
+// finish for hours still says WHERE its cost is going while it runs.
+//
+// Why this exists rather than the counters that were already here. The two existing instruments
+// both report at EXIT: Profiler's per-decision table (MTG_PROFILE) and MTG_ROLLOUT_STATS's site
+// partition. On a game that runs 44 hours, "report at exit" means no signal at all -- and Snow's
+// value-leaf phase A had three such games (44.3 h / 31.9 h / 28.9 h). The one existing LIVE
+// per-decision print, MTG_DECISION_WORK_DEBUG's [dw] line, is gated on
+// `budget != nullptr && !budget->Unlimited()`, so it is structurally silent on exactly the
+// UNBOUNDED label path those monsters run under.
+//
+// Cost when off: one cached `static const bool` test per top-level decision (a handful per turn),
+// nothing on any inner loop. Play is byte-identical -- this only reads counters and prints.
+static const bool s_decision_progress = EnvOn("MTG_DECISION_PROGRESS");
 
 // Non-convergence detector gate, read once. When set (MTG_FLAG_NONCONV in the
 // environment), TakeTurn checks each committed decision and prints a [nonconv]
@@ -2038,7 +2056,25 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
         // shallow pass can already prove, not the label; -1 (every other deck) is a no-op scope.
         TurnSolver::SearchLeafDepthScope _sld_rows(m_profile.search_leaf_depth,
                                                    m_profile.search_leaf_first_turn_depth);
+        // MTG_DECISION_PROGRESS: the LABEL half, reported separately from the PLAY half below.
+        // Phase A runs both at every real pre-combat main, and they are charged to completely
+        // different regimes -- play is budgeted (d5/b20 for Snow), the K=3 labels are an
+        // UNBOUNDED search. Lumping them into one per-turn number cannot say which one owns a
+        // 44-hour game, which is the first question to answer about one.
+        const std::chrono::steady_clock::time_point lp_t0 =
+            s_decision_progress ? std::chrono::steady_clock::now()
+                                : std::chrono::steady_clock::time_point{};
+        const long long lp_work0 = s_decision_progress ? gamework::t_used : 0;
         EmitEvalRows(state, m_max_turns, m_search_post_combat);
+        if (s_decision_progress)
+        {
+            std::fprintf(stderr, "[dprog] t%d LABEL ms=%.0f work=%lld game_work=%lld\n",
+                         state.turn_number,
+                         std::chrono::duration<double, std::milli>(
+                             std::chrono::steady_clock::now() - lp_t0).count(),
+                         gamework::t_used - lp_work0, gamework::t_used);
+            std::fflush(stderr);
+        }
     }
 
     // The post-combat (second) main phase does NOTHING unless post-combat search
@@ -2647,6 +2683,12 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
             // every TakeTurn of that loop's rollouts shares one table; nullptr in normal
             // play, where SolveWithLookahead keeps its own per-decision table as before.
             SearchBudget budget = SearchBudget::FromVirtualMs(m_budget_ms);
+            // MTG_DECISION_PROGRESS: wall clock for THIS decision. Taken here, read beside
+            // PROF_RECORD_DECISION below, so it brackets exactly the SolveWithLookahead call.
+            const std::chrono::steady_clock::time_point dp_t0 =
+                s_decision_progress ? std::chrono::steady_clock::now()
+                                    : std::chrono::steady_clock::time_point{};
+            const long long dp_work0 = s_decision_progress ? gamework::t_used : 0;
             int committed_win       = m_max_turns + 1;
             int committed_sub_depth = 0;
             // EXPERIMENTAL (MTG_HONEST_PLAY, default off): run the search's forward model
@@ -2930,6 +2972,30 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
             }
             PROF_ADD_NODES(budget.Used());
             PROF_RECORD_DECISION(state.turn_number, is_pre_combat_main, budget.Used());
+            if (s_decision_progress)
+            {
+                // `work` is gamework's per-GAME accumulator, which runs even when the meter is
+                // disarmed (limit 0) -- see GameWorkMeter.h -- so it is readable on the unbounded
+                // label path where budget.Used() is the only other signal. Both are printed:
+                // `units` is this decision's search charge, `work` its share of the game total.
+                const double dp_ms = std::chrono::duration<double, std::milli>(
+                                         std::chrono::steady_clock::now() - dp_t0).count();
+                // WHICH REGIME this decision belongs to. Without it the stream cannot be read:
+                // the mulligan/bottoming loop plays whole simulated games through this same
+                // TakeTurn, so a run that has not yet reached turn 1 of the REAL game still
+                // prints a long series of t1..t7 lines that look exactly like real play.
+                // real = the actual game; roll = a rollout inside a search; bot = the
+                // clairvoyant bottoming loop (m_shared_tt is non-null only there).
+                const char* dp_tag = m_shared_tt  ? "bot "
+                                   : m_in_rollout ? "roll"
+                                                  : "real";
+                std::fprintf(stderr,
+                             "[dprog] %s t%d %s ms=%.0f units=%lld work=%lld game_work=%lld\n",
+                             dp_tag, state.turn_number, is_pre_combat_main ? "pre " : "post",
+                             dp_ms, static_cast<long long>(budget.Used()),
+                             gamework::t_used - dp_work0, gamework::t_used);
+                std::fflush(stderr);
+            }
             // Committed-depth telemetry (MTG_ROLLOUT_STATS): what iterative deepening actually
             // reached under this decision's budget. Inert unless the flag is set.
             TurnSolver::RecordCommittedDepth(committed_sub_depth);

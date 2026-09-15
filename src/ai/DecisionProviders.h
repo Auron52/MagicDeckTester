@@ -1240,6 +1240,15 @@ public:
     // nothing and its {R} is demand for a spell that cannot matter. See the definition.
     int EtbChosenColor(const GameState& s, int controller,
                        const CardDefinition& def) const override;
+
+    // "STUCK -- PASS THE TURN" CERTIFICATE. Admissible: proves no line wins THIS turn, so the
+    // unbounded label / depth-matrix search can drop the node without enumerating its plan space.
+    // Snow is an unusually clean case for it -- combat damage is the deck's ONLY route to the
+    // opponent's life total, and nothing in the pool grants haste -- so the bound is a closed sum
+    // over the creatures that can already attack. Measured motivation: on a Snow label game 92.5%
+    // of all enumerated plans sit at horizon-EDGE nodes, and only 7 of 6,943 of those can win.
+    // See the implementation's contract block in DecisionProviders.cpp.
+    bool ProvenWinlessThisTurn(const GameState& s, int controller) const override;
 };
 
 // CritterLifegain (mono-white "whenever you gain life" aggro: Soul Warden / Soul's Attendant /
