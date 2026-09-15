@@ -17122,13 +17122,86 @@ inline bool SnowCertStatsOn() { static const bool v = EnvOn("MTG_WINLESS_STATS")
 // WHY a Snow board declined. Same rationale as CertWhy above: a fire rate with no reason attached
 // is a number you cannot act on.
 enum class SnowWhy { Fired = 0, AlreadyWon, OppDeckThin, Zones, UnknownCard, OppPermanent,
-                     Token, CombatLethal, Count };
+                     Token, CombatLethal, TokenBounded, Count };
 inline std::atomic<unsigned long long> g_snow_why[static_cast<int>(SnowWhy::Count)] = {};
-inline bool SnowNote(SnowWhy w, bool ret)
+
+// CombatLethal decomposition (MTG_WINLESS_STATS only; see the decline site). CombatLethal is the
+// largest surviving decline class once the token bound lands, and these three say which TERM is
+// responsible -- i.e. whether tightening is worth anything at all:
+//   fixed      -- lethal from fixed_combat alone, no scaling creature involved. IRREDUCIBLE.
+//   nogain     -- lethal from the CURRENT snow count, with snow_gain forced to 0. IRREDUCIBLE.
+//   gain_only  -- lethal ONLY because snow_gain credited a new snow permanent per point of
+//                 bounded mana. This is the loose term and the only recoverable one.
+//   rescuable  -- of the gain_only declines, how many a HAND-POOL cap would flip to `fired`.
+//   reach      -- of the gain_only declines, how many sit under a live Kaldring / Scrying Sheets /
+//                 Frost Augur, where the hand is NOT the whole pool and a hand-only cap would be
+//                 unsound. The tightening is worth adopting only on (rescuable - reach).
+inline std::atomic<unsigned long long> g_cl_fixed{0};
+inline std::atomic<unsigned long long> g_cl_nogain{0};
+inline std::atomic<unsigned long long> g_cl_gain_only{0};
+inline std::atomic<unsigned long long> g_cl_rescuable{0};
+inline std::atomic<unsigned long long> g_cl_reach{0};
+
+inline void SnowTally(SnowWhy w)
 {
     if (SnowCertStatsOn())
     { g_snow_why[static_cast<int>(w)].fetch_add(1, std::memory_order_relaxed); }
-    return ret;
+}
+inline bool SnowNote(SnowWhy w, bool ret) { SnowTally(w); return ret; }
+
+// MTG_SNOW_CERT_TOKEN (DEFAULT OFF; =1 arms) -- BOUND our own token instead of declining on it.
+//
+// `Token` is the certificate's single largest decline class (51,034 on the gi=13 monster label
+// game, against 29,598 m1 declines), and each decline hands the node back to a full unbounded
+// enumeration -- the exact cost the certificate exists to delete.
+//
+// The decline is sound but strictly weaker than the bound this function already computes. The
+// completeness argument in the header says it outright: *"A token created this turn entered this
+// turn, so it cannot attack this turn either... A token from an EARLIER turn is an ordinary
+// 20-power attacker and is counted as one, which is why a Marit Lage board declines."* Only the
+// SECOND half needs a decline. A Marit Lage that cannot attack -- created this turn, or tapped --
+// contributes nothing to this turn's damage, and this deck has no other route to the opponent's
+// life total, so that board is as winless as every board the certificate already fires on.
+//
+// So: count the token as the body it is. Untapped, it joins untapped_perms (which only WIDENS the
+// snow-count bound -- the conservative direction). Able to attack, its power joins fixed_combat
+// and the combat-lethal test below reaches the SAME decline it reached before, by the proper
+// route. Unable to attack, the certificate fires.
+//
+// SCOPED STRUCTURALLY, not by name -- and the first attempt at this got that wrong in a way worth
+// recording. It matched `m_name == "Marit Lage"`, which can never be true: CreateToken BUILDS the
+// name from the body as `<P>/<T> <subtype> Token` (SpellEffects.h), so the permanent is called
+// "20/20 Avatar Token". The A/B came back byte-identical with the firing counter at zero -- the
+// silent-no-op signature -- and the counter is the only reason it was caught rather than banked.
+//
+// The right key is the one that carries the soundness argument. `d == nullptr` on OUR side means
+// CreateToken made it, and a CreateToken permanent is a VANILLA BODY by construction: it has no
+// CardDefinition, therefore no params, therefore no mana ability, no activated ability, no ETB and
+// no attack trigger -- the three routes by which a permanent could add damage or mana that this
+// analysis does not already count. Its keywords come from one closed hard-coded set
+// {Flying, Haste, Trample, Vigilance, Indestructible}, of which only Haste changes the bound, and
+// CanAttackFull already reads Haste alongside summoning sickness. So the body IS the whole of it,
+// for any such token, not merely for the one this deck happens to make.
+//
+// The one token shape this does NOT cover is CreateTokenCopyOfCard, which copies a real card's
+// name -- so LookupCached FINDS it and it takes the SnowCertKnownDef path above, where an
+// out-of-pool copy still declines. That is what keeps "adding a token maker makes this slower,
+// never wrong" true without naming a card here.
+// DEFAULT ON (MTG_SNOW_CERT_TOKEN=0 reverts, for the A/B). Measured on the 18-game Snow label
+// manifest, one pooled batch per arm on an otherwise idle box:
+//   off -> units_total=203118747  wall=880s  m1 refuted 90.8%  token declines=226432
+//   on  -> units_total= 46988513  wall=107s  m1 refuted 98.6%  token declines=0
+// i.e. 4.32x on the contention-immune metric, with the 123 dumped value rows BYTE-IDENTICAL, and
+// the firing counter (token-bounded=120340) proving the branch is actually taken -- the check the
+// first cut of this lever failed silently.
+inline bool SnowCertTokenBoundOn()
+{
+    static const bool v = EnvOn("MTG_SNOW_CERT_TOKEN", true);
+    return v;
+}
+inline bool SnowCertVanillaToken(const Permanent& p)
+{
+    return p.is_token;   // paired with d == nullptr at the call site; see the argument above
 }
 struct SnowWhyDumper
 {
@@ -17136,7 +17209,8 @@ struct SnowWhyDumper
     {
         if (!SnowCertStatsOn()) { return; }
         static const char* kName[] = { "fired", "already-won", "opp-deck-thin", "zones",
-                                       "unknown-card", "opp-permanent", "token", "combat-lethal" };
+                                       "unknown-card", "opp-permanent", "token", "combat-lethal",
+                                       "token-bounded" };
         bool any = false;
         for (int i = 0; i < static_cast<int>(SnowWhy::Count); ++i)
         { if (g_snow_why[i].load()) { any = true; break; } }
@@ -17148,6 +17222,14 @@ struct SnowWhyDumper
             if (v) { std::fprintf(stderr, " %s=%llu", kName[i], v); }
         }
         std::fprintf(stderr, " ===\n");
+        if (g_snow_why[static_cast<int>(SnowWhy::CombatLethal)].load())
+        {
+            std::fprintf(stderr,
+                         "=== SNOW COMBAT-LETHAL split: fixed=%llu nogain=%llu gain-only=%llu"
+                         " (rescuable=%llu reach=%llu) ===\n",
+                         g_cl_fixed.load(), g_cl_nogain.load(), g_cl_gain_only.load(),
+                         g_cl_rescuable.load(), g_cl_reach.load());
+        }
     }
 };
 inline SnowWhyDumper g_snow_why_dumper;
@@ -17240,7 +17322,23 @@ bool SnowProvider::ProvenWinlessThisTurn(const GameState& s, int me) const
         // One of OUR permanents with no definition is a token -- for this deck that means Marit
         // Lage, a 20/20 that is lethal from a full life total the moment it can attack. Decline
         // rather than reason about it: those boards are exactly the ones that CAN win.
-        if (d == nullptr)            { return SnowNote(SnowWhy::Token, false); }
+        if (d == nullptr)
+        {
+            // See SnowCertTokenBoundOn: bound it rather than bail, where we know what it is.
+            if (!SnowCertTokenBoundOn() || !SnowCertVanillaToken(p))
+            { return SnowNote(SnowWhy::Token, false); }
+            SnowTally(SnowWhy::TokenBounded);
+            // NOT counted in untapped_perms, and that is a TIGHTENING rather than a liberty.
+            // untapped_perms exists to bound MANA ("<=1 per permanent"), and a vanilla token has
+            // no mana ability at all -- the same `d == nullptr` that licenses this branch is what
+            // guarantees it has no params to carry one. Counting it would inflate `snow_gain`,
+            // which inflates the treefolk/owl combat bound, which turns nodes the certificate
+            // should refute into CombatLethal declines for no reason. (Measured: the first cut
+            // did count it, and combat-lethal rose 1180 -> 1596 on the 4-game smoke.)
+            if (CanAttackFull(p, s.battlefield, me))
+            { fixed_combat += std::max(0, p.EffectivePower()); }
+            continue;
+        }
         if (!SnowCertKnownDef(d))    { return SnowNote(SnowWhy::UnknownCard, false); }
 
         if (!p.tapped) { ++untapped_perms; }
@@ -17279,7 +17377,71 @@ bool SnowProvider::ProvenWinlessThisTurn(const GameState& s, int me) const
                 * (SnowPermanentCount(s, -1) + snow_gain);
     }
 
-    if (combat >= opp.life) { return SnowNote(SnowWhy::CombatLethal, false); }
+    if (combat >= opp.life)
+    {
+        // DIAGNOSTIC (MTG_WINLESS_STATS only): decompose the decline so the NEXT tightening is
+        // aimed rather than guessed. CombatLethal is the largest surviving decline class once the
+        // token bound lands, and each decline costs a full unbounded enumeration -- but only the
+        // part of it driven by `snow_gain` is recoverable, because snow_gain is the loose term
+        // (it credits one new snow permanent per point of bounded mana without ever asking
+        // whether a snow permanent is actually PLAYABLE from hand for that mana).
+        if (SnowCertStatsOn())
+        {
+            long long combat0 = fixed_combat;   // the same bound with snow_gain forced to zero
+            if (n_treefolk > 0)
+            { combat0 += static_cast<long long>(n_treefolk) * SnowPermanentCount(s, me); }
+            if (n_owl > 0)
+            { combat0 += static_cast<long long>(n_owl) * SnowPermanentCount(s, -1); }
+            if (fixed_combat >= opp.life)      { ++g_cl_fixed; }
+            else if (combat0 >= opp.life)      { ++g_cl_nogain; }
+            else
+            {
+                ++g_cl_gain_only;
+                // Would a CARD-POOL cap on snow_gain rescue this decline? A new snow permanent
+                // cannot appear from mana alone -- it needs a card to play. This prices the
+                // tightening BEFORE adopting it: cap the gain at what the HAND can actually
+                // deploy (cheapest-first is exact for "most cards playable within a budget"),
+                // and count how many declines would flip to `fired`.
+                long long land_slot = 0;
+                std::vector<int> costs;
+                for (const Card& c : ap.hand)
+                {
+                    if (!c.HasSupertype(Supertype::Snow))  { continue; }
+                    if (c.IsInstant() || c.IsSorcery())    { continue; }   // Skred is a snow INSTANT
+                    if (c.IsLand()) { land_slot = 1; continue; }
+                    costs.push_back(c.m_mana_cost.ManaValue());
+                }
+                std::sort(costs.begin(), costs.end());
+                const long long max_mana2 = untapped_perms + s.floating_mana.Total();
+                long long budget = max_mana2, n_cast = 0;
+                for (int cst : costs)
+                { if (budget >= cst) { budget -= cst; ++n_cast; } else { break; } }
+                const bool can_drop2 = ap.lands_played_this_turn < ap.LandDropsAvailable();
+                const long long tight = (can_drop2 ? land_slot : 0) + n_cast;
+                long long c2 = fixed_combat;
+                if (n_treefolk > 0) { c2 += static_cast<long long>(n_treefolk) * (SnowPermanentCount(s, me) + tight); }
+                if (n_owl > 0)      { c2 += static_cast<long long>(n_owl)      * (SnowPermanentCount(s, -1) + tight); }
+                if (c2 < opp.life) { ++g_cl_rescuable; }
+                // ...and is the hand really the whole pool at this node? Kaldring reaches the
+                // GRAVEYARD, Scrying Sheets / Frost Augur reach the LIBRARY (into hand). Where one
+                // of those is live the hand-only cap is NOT sound on its own, so count those nodes
+                // separately rather than letting them flatter the rescue number.
+                bool reach = false;
+                for (const Permanent& q : s.battlefield)
+                {
+                    if (q.controller_index != me) { continue; }
+                    const CardDefinition* qd = db.LookupCached(q.card);
+                    if (qd == nullptr) { continue; }
+                    const std::string& qn = qd->card.m_name.str();
+                    if (qn == "Kaldring, the Rimestaff"
+                        || (!q.tapped && (qn == "Scrying Sheets" || qn == "Frost Augur")))
+                    { reach = true; break; }
+                }
+                if (reach) { ++g_cl_reach; }
+            }
+        }
+        return SnowNote(SnowWhy::CombatLethal, false);
+    }
     return SnowNote(SnowWhy::Fired, true);
 }
 
