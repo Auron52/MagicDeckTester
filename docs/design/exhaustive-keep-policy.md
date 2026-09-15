@@ -150,6 +150,13 @@ A feasibility pre-check mode (bucket → distinct-hand count + coverage curve, n
   [(max_mull+1)×2] + reserved `bottom_keep`). Field on `MulliganProfile`; serialized in
   `MulliganProfileIO.h` (`ExhaustiveKeep{To,From}JsonObj`). `AIEngine::KeepHand` consults it FIRST
   (present=false → falls through to keep_model/static, so other decks byte-identical).
+- **Play-time backing is an ON-DISK, SEEKABLE table** (2026-09-15, `src/ai/KeepTable.h`; design in
+  [keep-table-on-disk.md](keep-table-on-disk.md)). The maps above are the generator's/merge tool's
+  representation; play loads attach a fixed-width, key-sorted record file under
+  `MTG_KEEP_TABLE_DIR` (default `~/.cache/mtg/keeptable`, never the repo's 9p checkout), built once per
+  sidecar version by streaming the JSON entries straight to disk, and look compositions up by binary
+  search with positioned reads. Resident cost per policy: the header. `MTG_KEEP_TABLE=0` forces the
+  legacy in-memory load. The `<sidecar>.bincache` blob it replaces no longer exists.
 - **eval-hand probe:** `mtg <deck> --profile <exhaustive.profile.json> --eval-hand "n1;n2;..." [--eval-mull N] [--eval-draw]`
   runs the exact runtime keep predicate on a constructed hand.
 

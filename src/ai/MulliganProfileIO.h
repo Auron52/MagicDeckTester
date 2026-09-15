@@ -3,14 +3,17 @@
 #include "MulliganProfile.h"
 #include "../core/EnvFlags.h"   // EnvOn (MTG_VALUE_FLAT)
 #include <nlohmann/json.hpp>
+#include <chrono>
 #include <cstdint>
 #include <cstdlib>
 #include <cstring>
 #include <filesystem>
 #include <fstream>
+#include <functional>
 #include <iostream>
 #include <iterator>
 #include <mutex>
+#include <random>
 #include <stdexcept>
 #include <string>
 #include <unordered_map>
@@ -472,8 +475,16 @@ inline std::string DeckProfileToJson(const MulliganProfile& profile)
     return profile.HasExhaustiveKeep() ? root.dump() : root.dump(2);
 }
 
-// Returns a default profile if the JSON is malformed or missing expected keys.
-inline MulliganProfile DeckProfileFromJson(const std::string& json_str)
+// Receives each exhaustive_keep entry AS IT IS PARSED (see ParseDeckProfileJson): the composition,
+// its keep flags, and its bottom rows (null when the entry has no "bottom_keep"). The on-disk table
+// builder streams these to disk so the maps are never built.
+using EntrySink = std::function<void(std::vector<int>& comp, std::vector<char>& flags,
+                                     std::vector<std::vector<int>>* rows)>;
+
+// Returns a default profile if the JSON is malformed or missing expected keys. With `sink` null the
+// exhaustive entries land in the returned policy's maps; with a sink they are handed to it instead
+// and the returned policy carries only the block's header fields (buckets, scalars, provenance).
+inline MulliganProfile ParseDeckProfileJson(const std::string& json_str, const EntrySink* sink)
 {
     using json = nlohmann::json;
 
@@ -508,12 +519,15 @@ inline MulliganProfile DeckProfileFromJson(const std::string& json_str)
                 std::vector<int> comp = parsed["comp"].get<std::vector<int>>();
                 std::vector<char> flags;
                 for (const json& v : parsed["keep"]) { flags.push_back(static_cast<char>(v.get<int>())); }
-                ek_stream.keep[comp] = std::move(flags);
-                if (parsed.contains("bottom_keep"))
+                std::vector<std::vector<int>> bk;
+                const bool has_bk = parsed.contains("bottom_keep");
+                if (has_bk)
+                { for (const json& sub : parsed["bottom_keep"]) { bk.push_back(sub.get<std::vector<int>>()); } }
+                if (sink) { (*sink)(comp, flags, has_bk ? &bk : nullptr); }
+                else
                 {
-                    std::vector<std::vector<int>> bk;
-                    for (const json& sub : parsed["bottom_keep"]) { bk.push_back(sub.get<std::vector<int>>()); }
-                    ek_stream.bottom_keep[comp] = std::move(bk);
+                    ek_stream.keep[comp] = std::move(flags);
+                    if (has_bk) { ek_stream.bottom_keep[comp] = std::move(bk); }
                 }
                 kstack.pop_back();
                 return false;   // drop the entry from the DOM (already captured)
@@ -619,6 +633,11 @@ inline MulliganProfile DeckProfileFromJson(const std::string& json_str)
     }
 
     return profile;
+}
+
+inline MulliganProfile DeckProfileFromJson(const std::string& json_str)
+{
+    return ParseDeckProfileJson(json_str, nullptr);
 }
 
 // Reads a profile file into a string, transparently decompressing gzip when the path ends in
@@ -775,304 +794,88 @@ inline bool SaveDeckProfile(const std::filesystem::path& path, const MulliganPro
 // loaded profile already has an exhaustive block (i.e. --profile pointed straight at it) or the path
 // isn't a `<name>.profile.json`. NOT called by the analyzer's rollout-profile loads (that would be
 // circular during generation) -- only from the game-play entry points.
-// Process-global cache of parsed exhaustive-keep blocks, keyed by resolved sidecar path. The block is
-// large (the committed .gz is ~1-2 MB, ~13 MB raw JSON), and a --batch run loads the SAME deck's sidecar
-// once PER JOB (treasure_hunt x5, Knights x5, ... across the seed/depth matrix). Without this each job
-// re-opens, re-gunzips and re-parses the whole table -- minutes of single-threaded startup before the
-// worker pool even spawns (measured: the batch sat at 1 thread for many minutes on the exhaustive-keep
-// decks). Parse once per path, then hand back a copy: the sidecar file is immutable for a run, so keying
-// on its path is exact. Mutex-guarded because attach can run off any thread (defensive; batch loads jobs
-// on the main thread). Empty policies are cached too (a missing/garbage sidecar isn't retried per job).
-// Returns a SHARED handle to the cached policy (or nullptr if the path has none). The one loaded instance
-// is shared by every profile that attaches it, so a THREADS=N batch holds 1 copy, not N. Read-only after
-// load (Index() ran in the loader), so concurrent readers are safe.
-// ---- Cross-process parsed-sidecar cache ---------------------------------------------------------
-// The exhaustive keep sidecar is a large gzipped JSON whose nlohmann::json::parse dominates every
-// launch (~14 s Knights, ~68 s Anti-Lifegain; ~60% in the parse). The in-process CachedExhaustiveKeep
-// below only helps WITHIN one process, but the play server spawns a FRESH mtg per keep-hint, so each
-// re-parses from scratch. We write a compact binary of the PARSED ExhaustiveKeepPolicy next to the
-// sidecar (`<sidecar>.bincache`) on first parse, and every later launch memcpy-loads it (<1 s) instead
-// of re-parsing -- keyed by the source's (size, mtime) so a regenerated sidecar invalidates it
-// automatically. The .bincache is a derived artifact (gitignored); a corrupt/short/stale one fails the
-// header check and is silently rebuilt. Format is internal + version-gated, never shipped/pooled.
-constexpr uint32_t kBinCacheMagic   = 0x4b504f4cu;  // 'LOPK'
-constexpr uint32_t kBinCacheVersion = 1u;
-
-namespace bincache_detail
+// ---- On-disk keep table (the play-time backing) --------------------------------------------------
+// The sidecar's parsed policy used to be cached as a `<sidecar>.bincache` blob beside it and decoded
+// into the in-memory maps on every launch (~10 s and ~5.3 GB resident for FiveColour). Both are gone.
+// Play loads now attach an on-disk, seekable table (ai/KeepTable.h) that is built ONCE per sidecar
+// version by streaming the JSON entries straight into the table writer -- the maps are never built,
+// so the one-time build peaks at the JSON text (~1.8 GB for FiveColour) instead of text + maps
+// (~7.3 GB, which did not fit under this box's 8 GB RSS cap without a manual override), and every
+// later launch is an open() plus a header read. MTG_KEEP_TABLE=0 (DEFAULT ON) forces the legacy
+// in-memory load for A/B or debugging: slow and large, never wrong.
+inline std::shared_ptr<const keeptable::Table>
+BuildKeepTable(const std::filesystem::path& sidecar, const std::filesystem::path& table_path,
+               const std::string& src_key, uint64_t src_size, uint64_t src_mtime)
 {
-    // SINKS. The emitter below is templated on the sink so the STRING and FILE paths share one code
-    // path and cannot drift byte-for-byte (test/unit/test_bincache_sink.cpp asserts they agree).
-    //
-    // Why the file sink exists: materialising the whole blob in a std::string costs its full size in
-    // RAM on top of the policy that is already resident. FiveColour's is 3.59 GB against a 5.3 GB
-    // policy, so the one-time cache build peaked at 8.7 GB and tripped the 8.02 GB RSS watchdog on
-    // this 10.7 GB box -- while the same artifact is unremarkable on the 47 GB box the budget was
-    // first tuned on. The budget derivation is already machine-relative; what was NOT is this
-    // transient, whose size tracks the ARTIFACT rather than the machine. Streaming it bounds the
-    // spike to the buffer below, on every machine.
-    struct StringSink
+    std::error_code ec;
+    std::filesystem::create_directories(table_path.parent_path(), ec);
+    // Uniquified temp so concurrent launches (the play server spawns one mtg per keep-hint) cannot
+    // write into each other's file; a torn or failed build leaves no temp behind.
+    std::random_device rd;
+    const uint64_t nonce = (static_cast<uint64_t>(rd()) << 32) ^ rd();
+    const std::filesystem::path tmp = table_path.string() + "." + std::to_string(nonce) + ".tmp";
+    const auto t0 = std::chrono::steady_clock::now();
+    std::cerr << "[keeptable] building " << table_path.filename().string() << " from " << sidecar.string() << " ...\n";
+
+    std::string content = ReadProfileText(sidecar);
+    if (content.empty()) { return nullptr; }
+    keeptable::Writer w(tmp);
+    struct Abort {};
+    MulliganProfile head;   // everything BUT the entries, which the sink streams to the writer
+    try
     {
-        std::string b;
-        void append(const char* p, std::size_t n) { b.append(p, n); }
+        const EntrySink sink = [&](std::vector<int>& comp, std::vector<char>& flags,
+                                   std::vector<std::vector<int>>* rows)
+        { if (!w.Add(comp, flags, rows)) { throw Abort{}; } };
+        head = ParseDeckProfileJson(content, &sink);
+    }
+    catch (const Abort&)            { /* w.error() says why */ }
+    catch (const std::exception& e) { std::cerr << "[keeptable] parse failed: " << e.what() << "\n"; }
+    catch (...)                     {}
+    content.clear(); content.shrink_to_fit();
+    auto give_up = [&](const std::string& why)
+    {
+        std::cerr << "[keeptable] NOT built (" << why << "); falling back to the in-memory policy\n";
+        std::error_code rmec; std::filesystem::remove(tmp, rmec);
+        return std::shared_ptr<const keeptable::Table>();
     };
-    struct FileSink
+    if (!w.ok())              { return give_up(w.error()); }
+    if (!head.exhaustive_keep){ return give_up("no exhaustive_keep block"); }
+    if (w.count() == 0)       { return give_up("no entries"); }
+    keeptable::Header h;
+    h.src_path = src_key; h.src_size = src_size; h.src_mtime = src_mtime;
+    const ExhaustiveKeepPolicy& ek = *head.exhaustive_keep;
+    h.buckets = ek.buckets; h.max_mull = ek.max_mull; h.bottoming_enabled = ek.bottoming_enabled;
+    h.commit = ek.commit; h.play_digest = ek.play_digest; h.effective_R = ek.effective_R;
+    if (!w.Finish(h))         { return give_up(w.error()); }
+    std::filesystem::rename(tmp, table_path, ec);
+    if (ec)
     {
-        std::ofstream os;
-        std::string   buf;
-        bool          ok = true;
-        explicit FileSink(const std::filesystem::path& p, std::size_t cap = (8u << 20))
-            : os(p, std::ios::binary) { buf.reserve(cap); cap_ = cap; }
-        void append(const char* p, std::size_t n)
-        {
-            if (buf.size() + n > cap_) { Flush(); }
-            if (n >= cap_) { os.write(p, static_cast<std::streamsize>(n)); ok = ok && bool(os); }
-            else           { buf.append(p, n); }
-        }
-        void Flush()
-        {
-            if (!buf.empty()) { os.write(buf.data(), static_cast<std::streamsize>(buf.size())); ok = ok && bool(os); buf.clear(); }
-        }
-        bool Close() { Flush(); os.flush(); ok = ok && bool(os); os.close(); return ok; }
-    private:
-        std::size_t cap_ = 0;
-    };
-
-    template <class S, class T> inline void PutPod(S& b, T v)
-    { b.append(reinterpret_cast<const char*>(&v), sizeof(T)); }
-    template <class S> inline void PutStr(S& b, const std::string& s)
-    { PutPod<S, uint32_t>(b, static_cast<uint32_t>(s.size())); b.append(s.data(), s.size()); }
-    template <class S> inline void PutIVec(S& b, const std::vector<int>& v)
-    {
-        PutPod<S, uint32_t>(b, static_cast<uint32_t>(v.size()));
-        static_assert(sizeof(int) == sizeof(int32_t), "bincache stores ints as raw int32_t");
-        if (!v.empty()) { b.append(reinterpret_cast<const char*>(v.data()), v.size() * sizeof(int32_t)); }
+        // Another launch raced us to the same table (Windows refuses to replace an open file). Ours
+        // is discarded; whatever is there is validated below exactly like any other cache.
+        std::error_code rmec; std::filesystem::remove(tmp, rmec);
     }
-
-    // READERS. Mirrors of the sinks above, for the same reason: the cache is decoded either from a
-    // blob already in RAM (tests, small callers) or STREAMED from the file with a bounded buffer.
-    // Holding the blob costs its full size on top of the policy being built -- 3.59 GB + 5.3 GB for
-    // FiveColour -- which is the per-launch half of the spike the streaming writer fixed for builds.
-    //
-    // Deliberately NOT a memory mapping, though the decode would suit one. This repo lives on a
-    // 9p/drvfs share where temp+rename is not atomic against an open fd: a concurrent rebuild can
-    // shrink the file mid-read. Today that yields a short read, which the length-exactness check at
-    // the end of Deserialize rejects (measured 2026-08-25 on Mirrorwing: a zero-tailed blob scored
-    // 6.1630 against the correct 5.9320, silently). Under a mapping the same race is a SIGBUS on
-    // pages past the new EOF -- a crash instead of a rejected cache. Sequential reads give the same
-    // memory win with none of that exposure, and need no per-platform code.
-    struct MemReader
+    std::string why;
+    auto t = keeptable::Table::Open(table_path, src_key, src_size, src_mtime, &why);
+    const double secs = std::chrono::duration<double>(std::chrono::steady_clock::now() - t0).count();
+    if (t)
     {
-        const char* p; const char* end;
-        MemReader(const char* d, std::size_t n) : p(d), end(d + n) {}
-        const char* Need(std::size_t n)
-        { if (static_cast<std::size_t>(end - p) < n) { return nullptr; } const char* r = p; p += n; return r; }
-        bool AtEnd() const { return p == end; }
-    };
-    struct StreamReader
-    {
-        std::ifstream is;
-        std::string   buf;      // holds [pos_, fill_) of the file, compacted on demand
-        std::size_t   pos_ = 0, fill_ = 0, cap_;
-        bool          eof_ = false;
-        explicit StreamReader(const std::filesystem::path& p, std::size_t cap = (8u << 20))
-            : is(p, std::ios::binary), cap_(cap) { buf.resize(cap); }
-        bool Ok() const { return static_cast<bool>(is); }
-        // Guarantees n CONTIGUOUS bytes or nullptr. Grows only if a single record ever exceeds the
-        // buffer (records here are a few hundred bytes at most), so the footprint stays ~cap.
-        const char* Need(std::size_t n)
-        {
-            if (fill_ - pos_ >= n) { const char* r = buf.data() + pos_; pos_ += n; return r; }
-            if (n > cap_) { cap_ = n * 2; buf.resize(cap_); }
-            const std::size_t keep = fill_ - pos_;
-            std::memmove(&buf[0], buf.data() + pos_, keep);
-            pos_ = 0; fill_ = keep;
-            while (fill_ < n && !eof_)
-            {
-                is.read(&buf[fill_], static_cast<std::streamsize>(cap_ - fill_));
-                const std::size_t got = static_cast<std::size_t>(is.gcount());
-                if (got == 0) { eof_ = true; break; }
-                fill_ += got;
-            }
-            if (fill_ - pos_ < n) { return nullptr; }
-            const char* r = buf.data() + pos_; pos_ += n; return r;
-        }
-        // True only when the file is fully consumed -- the length-exactness check depends on this
-        // being exact, so it must confirm there is no unread tail left in the stream either.
-        bool AtEnd()
-        {
-            if (fill_ - pos_ > 0) { return false; }
-            return Need(1) == nullptr;
-        }
-    };
-
-    template <class R, class T> inline bool RGetPod(R& r, T& v)
-    { const char* p = r.Need(sizeof(T)); if (!p) { return false; } std::memcpy(&v, p, sizeof(T)); return true; }
-    template <class R> inline bool RGetStr(R& r, std::string& s)
-    { uint32_t n; if (!RGetPod(r, n)) { return false; } const char* p = r.Need(n); if (!p) { return false; } s.assign(p, n); return true; }
-    template <class R> inline bool RGetBytes(R& r, std::vector<char>& v, uint32_t n)
-    { const char* p = r.Need(n); if (!p) { return false; } v.assign(p, p + n); return true; }
-    template <class R> inline bool RGetIVec(R& r, std::vector<int>& v)
-    {
-        static_assert(sizeof(int) == sizeof(int32_t), "bincache stores ints as raw int32_t");
-        uint32_t n; if (!RGetPod(r, n)) { return false; }
-        const std::size_t bytes = static_cast<std::size_t>(n) * sizeof(int32_t);
-        const char* p = r.Need(bytes); if (!p) { return false; }
-        v.resize(n);
-        if (n != 0) { std::memcpy(v.data(), p, bytes); }
-        return true;
+        std::cerr << "[keeptable] built " << t->size() << " compositions ("
+                  << (static_cast<double>(std::filesystem::file_size(table_path, ec)) / 1048576.0) << " MB) in "
+                  << secs << " s\n";
     }
-
-    template <class T> inline bool GetPod(const char*& p, const char* end, T& v)
-    { if (end - p < static_cast<std::ptrdiff_t>(sizeof(T))) { return false; } std::memcpy(&v, p, sizeof(T)); p += sizeof(T); return true; }
-    inline bool GetStr(const char*& p, const char* end, std::string& s)
-    { uint32_t n; if (!GetPod(p, end, n) || end - p < static_cast<std::ptrdiff_t>(n)) { return false; } s.assign(p, n); p += n; return true; }
-    // BULK read: one length check for the whole array, then a single memcpy -- instead of a
-    // per-element `end - p` test plus a 4-byte memcpy. This is the single hottest function of a
-    // batch launch (callgrind 2026-09-11: 22.4% of a short goblins run's TOTAL instructions, the
-    // composition keys of a ~600 MB .bincache), and it is a pure byte-for-byte decode, so the
-    // vectors it produces are identical. Checking the length BEFORE resize() is also strictly
-    // safer than the old order: a corrupt count used to reach `v.resize(n)` with n up to 2^32 and
-    // try to allocate 16 GB before discovering the blob was short.
-    inline bool GetIVec(const char*& p, const char* end, std::vector<int>& v)
-    {
-        static_assert(sizeof(int) == sizeof(int32_t), "bincache stores ints as raw int32_t");
-        uint32_t n;
-        if (!GetPod(p, end, n)) { return false; }
-        const std::size_t bytes = static_cast<std::size_t>(n) * sizeof(int32_t);
-        if (static_cast<std::size_t>(end - p) < bytes) { return false; }
-        v.resize(n);
-        if (n != 0) { std::memcpy(v.data(), p, bytes); }
-        p += bytes;
-        return true;
-    }
+    else { std::cerr << "[keeptable] built table failed to open (" << why << "); falling back to the in-memory policy\n"; }
+    return t;
 }
 
-// Serialize a parsed policy to the binary cache blob (header carries the source size+mtime for
-// invalidation). Mirrors ExhaustiveKeepPolicy field-for-field; Deserialize is the exact inverse.
-template <class S>
-inline void EmitExhaustiveKeep(S& b, const ExhaustiveKeepPolicy& ek,
-                               uint64_t src_size, uint64_t src_mtime)
-{
-    using namespace bincache_detail;
-    PutPod<S, uint32_t>(b, kBinCacheMagic);
-    PutPod<S, uint32_t>(b, kBinCacheVersion);
-    PutPod<S, uint64_t>(b, src_size);
-    PutPod<S, uint64_t>(b, src_mtime);
-    PutPod<S, uint32_t>(b, static_cast<uint32_t>(ek.buckets.size()));
-    for (const auto& bk : ek.buckets)
-    { PutPod<S, uint32_t>(b, static_cast<uint32_t>(bk.size())); for (const auto& n : bk) { PutStr(b, n); } }
-    PutPod<S, int32_t>(b, static_cast<int32_t>(ek.max_mull));
-    PutPod<S, uint32_t>(b, static_cast<uint32_t>(ek.keep.size()));
-    for (const auto& kv : ek.keep)
-    { PutIVec(b, kv.first); PutPod<S, uint32_t>(b, static_cast<uint32_t>(kv.second.size())); b.append(kv.second.data(), kv.second.size()); }
-    PutPod<S, uint32_t>(b, static_cast<uint32_t>(ek.bottom_keep.size()));
-    for (const auto& kv : ek.bottom_keep)
-    { PutIVec(b, kv.first); PutPod<S, uint32_t>(b, static_cast<uint32_t>(kv.second.size())); for (const auto& sub : kv.second) { PutIVec(b, sub); } }
-    PutPod<S, uint8_t>(b, static_cast<uint8_t>(ek.bottoming_enabled ? 1 : 0));
-    PutStr(b, ek.commit);
-    PutStr(b, ek.play_digest);
-    PutPod<S, int32_t>(b, static_cast<int32_t>(ek.effective_R));
-}
-
-// In-memory form. Kept for tests and small callers; the cache WRITER streams instead (see below),
-// because this string is the size of the whole cache.
-inline std::string SerializeExhaustiveKeep(const ExhaustiveKeepPolicy& ek,
-                                           uint64_t src_size, uint64_t src_mtime)
-{
-    bincache_detail::StringSink s;
-    EmitExhaustiveKeep(s, ek, src_size, src_mtime);
-    return std::move(s.b);
-}
-
-// Streaming form: writes the same bytes straight to `path` with a bounded buffer, so building the
-// cache costs ~8 MB of transient RAM instead of the blob's full size. Returns false on any write
-// error (the caller then removes the temp and simply leaves the cache unbuilt).
-inline bool WriteExhaustiveKeepBinCache(const std::filesystem::path& path,
-                                        const ExhaustiveKeepPolicy& ek,
-                                        uint64_t src_size, uint64_t src_mtime)
-{
-    bincache_detail::FileSink fs(path);
-    if (!fs.os) { return false; }
-    EmitExhaustiveKeep(fs, ek, src_size, src_mtime);
-    return fs.Close();
-}
-
-// Inverse of Serialize. Returns false (ek left partial) on ANY magic/version/size/mtime mismatch or
-// truncation, so the caller falls back to the JSON parse. On success ek.Index() has been run.
-template <class R>
-inline bool DecodeExhaustiveKeep(R& r, uint64_t src_size, uint64_t src_mtime,
-                                 ExhaustiveKeepPolicy& ek)
-{
-    using namespace bincache_detail;
-    uint32_t magic, version; uint64_t sz, mt;
-    if (!RGetPod(r, magic) || magic != kBinCacheMagic)         { return false; }
-    if (!RGetPod(r, version) || version != kBinCacheVersion)   { return false; }
-    if (!RGetPod(r, sz) || !RGetPod(r, mt))                    { return false; }
-    if (sz != src_size || mt != src_mtime)                     { return false; }   // source changed
-    uint32_t nb; if (!RGetPod(r, nb)) { return false; }
-    ek.buckets.assign(nb, {});
-    for (auto& bk : ek.buckets)
-    { uint32_t nn; if (!RGetPod(r, nn)) { return false; } bk.resize(nn); for (auto& n : bk) { if (!RGetStr(r, n)) { return false; } } }
-    int32_t max_mull; if (!RGetPod(r, max_mull)) { return false; } ek.max_mull = max_mull;
-    // SORTED-APPEND insertion. Serialize walks `ek.keep` / `ek.bottom_keep` in std::map order, so
-    // the blob's composition keys arrive strictly ASCENDING -- which makes end() the correct hint
-    // and turns each insert into libstdc++'s O(1) rightmost-append path. Plain emplace() instead
-    // walked the red-black tree from the root, lexicographically comparing K-int composition
-    // vectors at every level: 28.5% of a short goblins run's total instructions (callgrind
-    // 2026-09-11). RESULT-IDENTICAL by construction and NOT dependent on the blob being sorted --
-    // a wrong hint only costs the ordinary search, and _unique emplace still rejects a duplicate
-    // key -- so a corrupt/foreign blob builds exactly the map it built before.
-    uint32_t nk; if (!RGetPod(r, nk)) { return false; }
-    for (uint32_t i = 0; i < nk; ++i)
-    {
-        std::vector<int> comp; if (!RGetIVec(r, comp)) { return false; }
-        uint32_t nf; if (!RGetPod(r, nf)) { return false; }
-        std::vector<char> flags; if (!RGetBytes(r, flags, nf)) { return false; }
-        ek.keep.emplace_hint(ek.keep.end(), std::move(comp), std::move(flags));
-    }
-    uint32_t nbk; if (!RGetPod(r, nbk)) { return false; }
-    for (uint32_t i = 0; i < nbk; ++i)
-    {
-        std::vector<int> comp; if (!RGetIVec(r, comp)) { return false; }
-        uint32_t nsub; if (!RGetPod(r, nsub)) { return false; }
-        std::vector<std::vector<int>> subs(nsub);
-        for (auto& sub : subs) { if (!RGetIVec(r, sub)) { return false; } }
-        ek.bottom_keep.emplace_hint(ek.bottom_keep.end(), std::move(comp), std::move(subs));
-    }
-    uint8_t be; if (!RGetPod(r, be)) { return false; } ek.bottoming_enabled = (be != 0);
-    if (!RGetStr(r, ek.commit))      { return false; }
-    if (!RGetStr(r, ek.play_digest)) { return false; }
-    int32_t eff_R; if (!RGetPod(r, eff_R)) { return false; } ek.effective_R = eff_R;
-    // The blob must be consumed EXACTLY. Serialize is this function's inverse, so a well-formed cache
-    // always ends here with p == end; anything left over means the bytes we parsed did not all come
-    // from one coherent write (a zero tail from a short read, or a mix of two files from a non-atomic
-    // rename on 9p). Those parse "successfully" -- zero-filled counts read as legitimate empty
-    // vectors -- so length-exactness is what separates a valid cache from a plausible-looking corrupt
-    // one. Cheap, and byte-identical for every intact cache.
-    if (!r.AtEnd()) { return false; }
-    ek.Index();
-    return true;
-}
-
-// In-memory decode (tests, small callers).
-inline bool DeserializeExhaustiveKeep(const std::string& blob, uint64_t src_size, uint64_t src_mtime,
-                                      ExhaustiveKeepPolicy& ek)
-{
-    bincache_detail::MemReader r(blob.data(), blob.size());
-    return DecodeExhaustiveKeep(r, src_size, src_mtime, ek);
-}
-
-// Streaming decode straight from the cache file -- the production path. Costs ~8 MB of transient
-// RAM instead of the cache's full size, and is the exact same decoder as above.
-inline bool ReadExhaustiveKeepBinCache(const std::filesystem::path& path,
-                                       uint64_t src_size, uint64_t src_mtime,
-                                       ExhaustiveKeepPolicy& ek)
-{
-    bincache_detail::StreamReader r(path);
-    if (!r.Ok()) { return false; }
-    return DecodeExhaustiveKeep(r, src_size, src_mtime, ek);
-}
-
+// Process-global cache of loaded exhaustive-keep policies, keyed by sidecar path. A --batch run loads
+// the SAME deck's sidecar once PER JOB (treasure_hunt x5, Knights x5, ... across the seed/depth matrix);
+// without this each job re-opened and re-validated the table (and, before the on-disk table, re-parsed
+// it -- minutes of single-threaded startup before the worker pool even spawned). Mutex-guarded because
+// attach can run off any thread. Empty policies are cached too (a missing/garbage sidecar isn't retried
+// per job). Returns a SHARED handle (or nullptr if the path has none): one instance is shared by every
+// profile that attaches it, so a THREADS=N batch holds 1 copy, not N. Read-only after load (Index()
+// ran here), so concurrent readers are safe -- table lookups serialise inside the table itself.
 inline std::shared_ptr<const ExhaustiveKeepPolicy> CachedExhaustiveKeep(const std::filesystem::path& path)
 {
     static std::mutex mtx;
@@ -1082,58 +885,41 @@ inline std::shared_ptr<const ExhaustiveKeepPolicy> CachedExhaustiveKeep(const st
     auto it = cache.find(key);
     if (it != cache.end()) { return it->second; }
 
-    // Source (size, mtime) fingerprint for cross-process cache validation. On any FS error, skip the
-    // binary cache entirely and just parse (cache disabled, never wrong).
-    std::error_code ec_sz, ec_mt;
+    std::shared_ptr<const ExhaustiveKeepPolicy> result;
+    // DEFAULT ON; =0 forces the legacy in-memory load (the whole table as std::maps).
+    static const bool use_table = EnvOn("MTG_KEEP_TABLE", true);
+    // Source fingerprint for cache validation. On any FS error, skip the table entirely and just
+    // parse (cache disabled, never wrong). Keyed by the CANONICAL path so a symlinked sidecar
+    // (deck_compare's apparatus dirs, keep_delta's link) shares the real file's table instead of
+    // building its own; size/mtime follow the link too.
+    std::error_code ec_sz, ec_mt, ec_cn;
     const uint64_t src_size  = static_cast<uint64_t>(std::filesystem::file_size(path, ec_sz));
     const auto     wt        = std::filesystem::last_write_time(path, ec_mt);
     const uint64_t src_mtime = static_cast<uint64_t>(wt.time_since_epoch().count());
-    const bool     fp_ok     = !ec_sz && !ec_mt;
-    const std::filesystem::path binpath = key + ".bincache";
-
-    std::shared_ptr<const ExhaustiveKeepPolicy> result;
-
-    // 1) Fast path: memcpy-load the parsed binary cache if it exists and matches the source fingerprint.
-    if (fp_ok)
+    const std::filesystem::path canon = std::filesystem::weakly_canonical(path, ec_cn);
+    if (use_table && !ec_sz && !ec_mt && !ec_cn)
     {
-        // STREAMED, not slurped: holding the whole cache costs its full size on top of the policy
-        // being built from it (3.59 GB + 5.3 GB for FiveColour, which tripped this box's 8.02 GB RSS
-        // watchdog). The decoder is sequential, so an 8 MB window is all it ever needs.
-        //
-        // The truncation hazard the old bulk read guarded against is UNCHANGED and still handled: a
-        // concurrent rebuild on 9p can shrink this file mid-read, and a short tail parses as
-        // legitimate empty counts (zeros), which would yield a silently TRUNCATED policy -- neither
-        // the model nor the heuristic (measured 2026-08-25 on Mirrorwing: 6.1630 against the correct
-        // 5.9320, no error reported). What rejects it is Decode's length-exactness check, which the
-        // StreamReader honours by confirming the file has no unread tail.
+        const std::string src_key = canon.string();
+        const std::filesystem::path table_path = keeptable::KeepTableDir() / keeptable::TableFileName(src_key);
+        std::string why;
+        auto t = keeptable::Table::Open(table_path, src_key, src_size, src_mtime, &why);
+        if (!t) { t = BuildKeepTable(path, table_path, src_key, src_size, src_mtime); }
+        if (t)
         {
             ExhaustiveKeepPolicy ek;
-            if (ReadExhaustiveKeepBinCache(binpath, src_size, src_mtime, ek) && !ek.empty())
-            { result = std::make_shared<const ExhaustiveKeepPolicy>(std::move(ek)); }
+            const keeptable::Header& h = t->header();
+            ek.buckets = h.buckets; ek.max_mull = h.max_mull; ek.bottoming_enabled = h.bottoming_enabled;
+            ek.commit = h.commit; ek.play_digest = h.play_digest; ek.effective_R = h.effective_R;
+            ek.disk = t;
+            ek.Index();
+            result = std::make_shared<const ExhaustiveKeepPolicy>(std::move(ek));
         }
     }
-
-    // 2) Miss/stale/corrupt: the slow JSON parse, then write the binary cache for next time (atomic
-    //    temp+rename; temp name is uniquified by the per-process mutex address so concurrent launches
-    //    don't clobber, and a torn/failed write just fails validation next time and is rebuilt).
     if (!result)
     {
         MulliganProfile exh = LoadDeckProfile(path);   // exh.exhaustive_keep is already shared_ptr<const>
-        if (fp_ok && exh.exhaustive_keep && !exh.exhaustive_keep->empty())
-        {
-            const std::filesystem::path tmp =
-                binpath.string() + "." + std::to_string(reinterpret_cast<uintptr_t>(&mtx)) + ".tmp";
-            // STREAMED, not materialised: see FileSink. A failed write leaves no temp behind and
-            // simply means the next launch parses the JSON again -- never a short/torn cache, which
-            // Deserialize would reject anyway but which would also waste the disk.
-            const bool wrote = WriteExhaustiveKeepBinCache(tmp, *exh.exhaustive_keep, src_size, src_mtime);
-            std::error_code rec;
-            if (wrote) { std::filesystem::rename(tmp, binpath, rec); }
-            if (!wrote || rec) { std::error_code rmec; std::filesystem::remove(tmp, rmec); }
-        }
         result = std::move(exh.exhaustive_keep);
     }
-
     cache.emplace(key, result);
     return result;
 }

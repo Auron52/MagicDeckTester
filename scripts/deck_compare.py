@@ -1486,10 +1486,6 @@ def apparatus_dir(out, name, stem, profile_src, table_src):
     os.makedirs(d, exist_ok=True)
     prof = os.path.join(d, stem + ".profile.json")
     subprocess.check_call(["cp", "-f", profile_src, prof])
-    # Carry the target's parsed-table cache in with it. The engine keys the cache on the LINK path
-    # (`<sidecar>.bincache`) but fingerprints it by the SOURCE's (size, mtime), which follows the
-    # symlink -- so a cache built beside the real table is valid here, and without this link every
-    # apparatus directory re-parses the sidecar from scratch (14-68 s on the big decks, per run).
     # Clear BOTH names the engine would resolve, not just the one we are about to write.
     # AttachExhaustiveSidecar (MulliganProfileIO.h) tries ".gz" FIRST and falls back to the plain
     # .json, so a directory reused across runs -- app_ship/ is reused by every --floor on a deck --
@@ -1497,24 +1493,18 @@ def apparatus_dir(out, name, stem, profile_src, table_src):
     # measurement: a --floor whose shared apparatus was a pool table (plain .json) actually ran under
     # a `.gz` shipped table left behind by an earlier run, and reported that table's numbers under the
     # pool table's label, with the coverage print (computed from the INTENDED table) saying "full".
-    # The `.bincache` beside each is deliberately LEFT: it is keyed by the source's (size, mtime),
-    # which follows the symlink, so it invalidates itself -- and deleting it would charge every run a
-    # full re-parse of the sidecar (14-68 s on the big ones).
+    # No parsed-table cache to carry along any more: the engine's on-disk keep table (ai/KeepTable.h)
+    # is keyed by the sidecar's CANONICAL path, so a symlink here shares the real table's cache by
+    # itself. A `.bincache` link left by an older version of this script is removed as dead weight.
     for e in (".keepmodel.exhaustive.profile.json.gz", ".keepmodel.exhaustive.profile.json"):
         p = os.path.join(d, stem + e)
         if os.path.lexists(p):
             os.remove(p)
-        # Drop a cache LINK we planted for the old target (below) -- left behind, the engine would
-        # find its fingerprint stale and rebuild THROUGH the symlink, overwriting the real table's
-        # cache in decks/ with one for a different table. A real cache file here is left alone.
         if os.path.islink(p + ".bincache"):
             os.remove(p + ".bincache")
     ext = ".keepmodel.exhaustive.profile.json" + (".gz" if table_src.endswith(".gz") else "")
     link = os.path.join(d, stem + ext)
     os.symlink(os.path.abspath(table_src), link)
-    src_cache = os.path.abspath(table_src) + ".bincache"
-    if os.path.exists(src_cache) and not os.path.lexists(link + ".bincache"):
-        os.symlink(src_cache, link + ".bincache")
     return prof
 
 

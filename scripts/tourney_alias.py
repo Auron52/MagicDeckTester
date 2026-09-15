@@ -308,9 +308,8 @@ def build(m):
         fi.seek(head_len)
         fo.write(patched.encode())
         shutil.copyfileobj(fi, fo, 1 << 22)
-    bc = ap["table"] + ".bincache"
-    if os.path.exists(bc):                      # stale cache would serve the PREVIOUS bucketing
-        os.remove(bc)
+    # (The engine's on-disk keep table is keyed by this file's size+mtime, so the rewrite above
+    # invalidates the previous bucketing's cache by itself; nothing to delete here.)
     for i, b in enumerate(new):
         if len(b) > 1:
             print(f"    bucket {i:2d}: {b[0]} <- {b[1]}")

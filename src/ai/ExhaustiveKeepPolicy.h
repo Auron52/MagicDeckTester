@@ -1,8 +1,10 @@
 #pragma once
 #include <algorithm>
 #include <map>
+#include <memory>
 #include <string>
 #include <vector>
+#include "KeepTable.h"
 
 // Runtime keep policy produced by the exhaustive bucketed evaluation (see analyzer/ExhaustiveKeep).
 //
@@ -11,6 +13,13 @@
 // play/draw. At runtime KeepHand maps the hand to its composition and looks the decision up; a hand
 // whose composition is somehow absent (or contains an unbucketed card) yields present=false so the
 // caller falls back to the static/model keep. Empty() => no exhaustive policy loaded.
+//
+// TWO BACKINGS, one decision. The generator, the merge tool and the JSON emitters work on the two
+// in-memory maps below. PLAY loads instead attach an on-disk table (`disk`, see KeepTable.h) and leave
+// the maps EMPTY: a 2M-composition table is ~5 GB as maps and is consulted a few times per game, so
+// resident maps were the memory ceiling on a 10 GB box. Decide/DecideBottom consult whichever backing
+// is present and return identical answers for identical tables -- the table's clear-bit rows are
+// exactly the maps' missing/empty rows (test/unit/test_keep_table.cpp checks every key both ways).
 struct ExhaustiveKeepPolicy
 {
     std::vector<std::vector<std::string>>         buckets;   // bucket index -> member card names
@@ -22,6 +31,9 @@ struct ExhaustiveKeepPolicy
     // subcomposition to KEEP after bottoming `mull` cards (sum = 7-mull). Empty => no bottoming table
     // (fall back to the heuristic). Populated only for mull >= 1.
     std::map<std::vector<int>, std::vector<std::vector<int>>> bottom_keep;
+    // On-disk backing for play loads (null when the maps are the backing). Read-only, shared by every
+    // profile/engine that attaches this policy; lookups are mutex-serialised inside the table.
+    std::shared_ptr<const keeptable::Table> disk;
     // Whether this profile's blind exhaustive bottoming should be USED at runtime (vs. falling through
     // to lookahead/heuristic bottoming). Generation ALWAYS bakes this true and there is NO off switch,
     // so in practice every shipped table has it set; the JSON loader likewise defaults it ON for a
@@ -47,7 +59,9 @@ struct ExhaustiveKeepPolicy
     // name -> bucket index; rebuilt by Index() after buckets are populated (loader/analyzer call it).
     std::map<std::string, int> name_to_bucket;
 
-    bool empty() const { return keep.empty(); }
+    bool empty() const { return keep.empty() && !(disk && disk->size() > 0); }
+    // Number of tabled compositions, whichever backing holds them.
+    std::size_t table_size() const { return disk ? static_cast<std::size_t>(disk->size()) : keep.size(); }
 
     void Index()
     {
@@ -56,21 +70,36 @@ struct ExhaustiveKeepPolicy
             for (const std::string& n : buckets[b]) { name_to_bucket[n] = b; }
     }
 
+    // Hand -> bucket composition; false if any card is unbucketed.
+    bool Composition(const std::vector<std::string>& hand, std::vector<int>& comp) const
+    {
+        comp.assign(buckets.size(), 0);
+        for (const std::string& n : hand)
+        {
+            auto it = name_to_bucket.find(n);
+            if (it == name_to_bucket.end()) { return false; }
+            comp[it->second]++;
+        }
+        return true;
+    }
+
     // Keep decision for a hand given by card name. Read-only (thread-safe after Index()); sets
     // present=false when the hand can't be resolved to a tabled composition (caller falls back).
     bool Decide(const std::vector<std::string>& hand, int mull, bool on_play, bool& present) const
     {
-        const int K = static_cast<int>(buckets.size());
-        std::vector<int> comp(K, 0);
-        for (const std::string& n : hand)
+        std::vector<int> comp;
+        if (!Composition(hand, comp)) { present = false; return false; }
+        const int idx = std::min(mull, max_mull) * 2 + (on_play ? 1 : 0);
+        if (disk)
         {
-            auto it = name_to_bucket.find(n);
-            if (it == name_to_bucket.end()) { present = false; return false; }
-            comp[it->second]++;
+            std::vector<char> rec;
+            if (!disk->Find(comp, rec)) { present = false; return false; }
+            if (idx < 0 || idx >= static_cast<int>(disk->header().F_keep)) { present = false; return false; }
+            present = true;
+            return disk->KeepFlag(rec, idx);
         }
         auto it = keep.find(comp);
         if (it == keep.end()) { present = false; return false; }
-        const int idx = std::min(mull, max_mull) * 2 + (on_play ? 1 : 0);
         if (idx < 0 || idx >= static_cast<int>(it->second.size())) { present = false; return false; }
         present = true;
         return it->second[idx] != 0;
@@ -83,15 +112,23 @@ struct ExhaustiveKeepPolicy
     bool DecideBottom(const std::vector<std::string>& hand, int count, bool on_play,
                       std::vector<int>& target) const
     {
-        if (bottom_keep.empty()) { return false; }
         const int K = static_cast<int>(buckets.size());
-        std::vector<int> comp(K, 0);
-        for (const std::string& n : hand)
+        if (disk)
         {
-            auto it = name_to_bucket.find(n);
-            if (it == name_to_bucket.end()) { return false; }
-            comp[it->second]++;
+            if (disk->header().F_bot == 0) { return false; }          // no bottoming table at all
+            std::vector<int> comp;
+            if (!Composition(hand, comp)) { return false; }
+            std::vector<char> rec;
+            if (!disk->Find(comp, rec)) { return false; }
+            const int idx = std::min(count, max_mull) * 2 + (on_play ? 1 : 0);
+            if (idx < 0 || idx >= static_cast<int>(disk->header().F_bot)) { return false; }
+            if (!disk->HasRow(rec, idx)) { return false; }             // absent / empty / non-K row
+            disk->Row(rec, idx, target);
+            return true;
         }
+        if (bottom_keep.empty()) { return false; }
+        std::vector<int> comp;
+        if (!Composition(hand, comp)) { return false; }
         auto it = bottom_keep.find(comp);
         if (it == bottom_keep.end()) { return false; }
         const int idx = std::min(count, max_mull) * 2 + (on_play ? 1 : 0);

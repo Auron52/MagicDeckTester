@@ -155,16 +155,18 @@ def write_arm_deck(deck_dir, arm_counts_by_name, out):
         for name in order:
             if per.get(name):
                 f.write(f"{per[name]} {name}\n")
-    # Link the shipped sidecar (and its .bincache) rather than materialising plain JSON. Now that the
-    # scorer resolves `.gz`, this keeps the fast load path: re-parsing Hinata2's 431k-cell table from
-    # expanded JSON costs MINUTES per invocation and dwarfs the rollouts the run is trying to measure.
+    # Link the shipped sidecar rather than materialising plain JSON. Now that the scorer resolves
+    # `.gz`, this keeps the fast load path: re-parsing Hinata2's 431k-cell table from expanded JSON
+    # costs MINUTES per invocation and dwarfs the rollouts the run is trying to measure. The engine's
+    # on-disk keep table is keyed by the sidecar's CANONICAL path, so the link shares the shipped
+    # table's cache with nothing further to carry along (a stale `.bincache` link is just removed).
     base = os.path.join(out, stem.rsplit(".", 1)[0] + ".keepmodel.exhaustive.profile.json")
-    for suffix in ("", ".bincache"):
-        src, dst = os.path.abspath(prof) + suffix, base + (".gz" if prof.endswith(".gz") else "") + suffix
-        if os.path.lexists(dst):
-            os.unlink(dst)
-        if os.path.exists(src):
-            os.symlink(src, dst)
+    dst = base + (".gz" if prof.endswith(".gz") else "")
+    for stale in (dst, dst + ".bincache"):
+        if os.path.lexists(stale):
+            os.unlink(stale)
+    if os.path.exists(prof):
+        os.symlink(os.path.abspath(prof), dst)
     return os.path.join(out, stem), per
 
 
