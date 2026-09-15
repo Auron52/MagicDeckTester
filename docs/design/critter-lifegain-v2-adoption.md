@@ -1,7 +1,17 @@
 # CritterLifegain v2 — the list, and the adoption pipeline
 
-**Status: SAVED, NOT INSTALLED.** `decks/CritterLifegain/CritterLifegain.cod` is still v1. This file is
-the v2 list plus the exact steps to adopt it, written down so the work survives a context compaction.
+**Status: ADOPTED AND SHIPPED, 2026-09-15.** All five steps below are complete; the sections that
+follow are kept as the record of what was planned and why. See **"Outcome"** at the foot of this file
+for what each stage actually measured. `decks/CritterLifegain/CritterLifegain.cod` is now v2, with its
+own play profile, value leaf and mulligan profile, and all three GT tiers re-accepted.
+
+| step | commit | result |
+|---|---|---|
+| 1. install list, drop v1 sidecars | `07b41b0a` | 60 cards / 23 lands; coverage 15/15 full |
+| 2. analyze → play profile | `07b41b0a` | `NO_COST_INTERACTIONS`, `DISCARD_INERT` |
+| 3. value leaf | `438d791e` | −0.00162t at t −3.05, **0.31x cost** — clean win, adopted |
+| 4. mulligan profile | `03cadcf2` | keep **−0.1967t**, bottoming **−0.0251t**, both 16/16 seeds |
+| 5. regression GT | `4355394c` | **20/20 cases faster**, mean ≈ −0.37t |
 
 **User decision, 2026-09-15:** *"let's save this list... The idea will be to make this the new list...
 So a pipeline of Analyze -> value-leaf -> Mulligan profile"* and *"As usual we should keep the old
@@ -190,3 +200,119 @@ test/check_gt_logs.py` afterwards if anything was rebased in between.
    replaces** — `test/regression_cases.sh`'s `DECK_FILE`/`DECK_PROF` keep pointing at
    `decks/CritterLifegain/`, which now holds v2, and v1 lives on only as an archive. Adding v1 as a
    second suite deck would cost suite time in every tier for a list we no longer play.
+
+---
+
+## Outcome (2026-09-15) — what each stage actually measured
+
+Run on ONE frozen commit throughout: `git rev-parse HEAD:src` = `7129a4d1`, unchanged across all four
+commits (every commit touched only `decks/`, `test/` or `docs/`). Each generation stage ran alone on
+the box at 29–31 of 32 cores.
+
+### Step 2 — play profile
+
+Coverage clean, 15/15 `full`, 0 missing. The profile prices the two headline changes independently of
+the six screens that chose the list: **Ocelot Pride `[0.306, 0.211]`** is among the deck's best cards
+and its 2nd copy still scores high, and **Serra Ascendant `[0.024, 0.150]`** scores *higher* on the
+2nd copy than the 1st — the format finding reappearing in a separate measurement.
+
+### Step 3 — value leaf
+
+The v1 queue **refused to resume**: the script's decklist fingerprint caught that every row and matrix
+cell in it was fitted to the old list. Archived to `logs/vlq_critterlifegain_v1_thune4_basilica/` and
+regenerated from scratch — 11,275 rows from 2,500 games, held-out RMSE 0.4545, 52/52 matrix cells at
+400 games, 0 condemned.
+
+| arm | avg | delta | paired t | better/worse | cost |
+|---|---:|---:|---:|---|---:|
+| live (no sidecar) | 4.50887 | — | — | — | 3844 core-s |
+| **staged (new leaf)** | 4.50725 | **−0.00162** | **−3.05** | 7/1 | **1175 core-s (0.31x)** |
+
+Better *and* 3.2x cheaper — the no-drawback case that is pre-approved for adoption.
+
+Two results the harness itself flags as **not** evidence: `value_trust_depth=5` was "accepted" but all
+8 seeds are byte-identical, so the trust lever never engaged; and the V4 trust candidate gap `+0.0037`
+is inconclusive against `tol=0.0020`, left unset.
+
+**A shape probe was run first** (`scripts/shape_probe.py`, minutes) and is worth recording because it
+raised a real question the leaf then answered. It found `fit_nl` — leafless, `ladder: single` — at
+**0.24x** the plain rollout ladder with z +2.4, and only **6 games in 2,000 differing at all** between
+shapes. That is the "fast decks prove everything inside the horizon" signature. It could not settle
+leaf-vs-`fit_nl` (it compares only model-less shapes against `heur`), and the generated leaf then
+measured 0.31x with quality over 8,000 games rather than 2,000. **Open item:** an on-policy screen of
+the adopted leaf against `fit_nl` is the rigorous version of that question and has NOT been run.
+
+### Step 4 — mulligan profile
+
+Ran as the **first-version** case, correctly: v1's table buckets Orzhov Basilica and knows neither
+Ocelot Pride nor Remote Farm, so every v2 hand would hit an unbucketed card and fall through. There
+was no comparable prior table to A/B against.
+
+K=13, entries 28997, sub_cells 38048, min_rollouts 40, `bottoming_enabled=True`.
+
+| gate | delta | detail |
+|---|---:|---|
+| keep (exhaustive vs static) | **−0.196688t** | 16/16 seeds, mean/se −37.84 |
+| bottoming (blind exh vs lookahead, confound-corrected) | **−0.025062t** | 16/16 seeds, mean/se −13.22 |
+
+#### Why K=13, and what merged — the interesting part
+
+15 distinct cards, two discovered merges. Discovery is objective-relative: swap A for B across 400
+probe hands sharing a fixed library (CRN, so the rollout is deterministic) and see whether the
+clairvoyant win-turn ever moves.
+
+| bucket | members |
+|---|---|
+| 0 | Soul Warden + Soul's Attendant *(v1 merged these too)* |
+| 1 | **Ajani's Pridemate + Voice of the Blessed** *(new in v2)* |
+
+**The new merge is caused by this list's mana base, not by discovery being sloppy.** The two cards
+differ only in cost (`{1}{W}` vs `{W}{W}`) and in Voice's counter thresholds (flying+vigilance at 4,
+indestructible at 10). Voice's upgrades are all inert against a passive goldfish opponent that never
+blocks, never attacks and casts no removal; and in a mono-white deck where every land makes `W`, the
+cost difference is inert too. **In v1 it was NOT inert:** Orzhov Basilica makes `{W}{B}`, so a lone
+Basilica could cast Pridemate (`{1}{W}`) but never Voice (`{W}{W}`) — which is exactly why v1 kept
+them in separate buckets. Cutting the Basilica removed the last thing distinguishing them.
+
+> **Deckbuilding caveat.** The sim now reports these two cards as identical **by construction**, so it
+> cannot be used to screen Pridemate vs Voice. In a real game Voice's flying at 4 counters is genuine
+> evasion.
+
+**Remote Farm did NOT merge into Plains** (separate buckets 8 and 10). That is the specific failure
+mode worth watching — a profile-less generation once merged a mana source that could not cast the
+deck's key card. Discovery correctly kept them apart: Remote Farm enters tapped with depletion
+counters and sacrifices itself after two uses.
+
+#### Artifact shape
+
+Ship **gzipped**; the uncompressed `.json` is deliberately removed. A batch run warned it had resolved
+the sidecar to the uncompressed fallback, and that `.gz`→`.json` resolution flip is the leading
+suspect in a past batch-pool contamination. Verified after compressing: no warning, and the table is
+provably live — same seed, d3/b10, 120 games, **4.3250 shipped vs 4.4833 with
+`MTG_EXHAUSTIVE_PROFILE=none`**.
+
+### Step 5 — regression GT
+
+All 20 cases were stale by construction and all 20 moved **faster**; mean ≈ −0.37t. Searched depths
+(−0.39…−0.43) land on the −0.3274 the independent 80,000-game screen predicted, from a different
+apparatus and disjoint seeds. Only critter keys changed; `check_gt_logs.py` over the whole corpus:
+456 consistent, 0 STALE, 0 missing.
+
+**Do not re-review the 571 searched "slower" games as a play regression.** That review exists to catch
+the engine deciding worse on the *same* game; the decklist changed, so GT `gi=N` and new `gi=N` share
+a seed and nothing else. The log contains a direct self-contradiction showing the tooling cannot speak
+to this case — `.wins` says `gi11: 5->6` (slower) while `explain_game` says `old T7 -> new T6`
+(faster), because `explain_game.py` replays the **old binary against the current deck file** and so
+reproduces neither game. `.wins` is trusted on exactly this disagreement.
+
+Reference reproducibility (`--strict`) is **clean**: 0 play-drift, 0 enum-gap. The 10 `mull-drift` are
+the 10 hand-played `references/CritterLifegain/` games — played on v1, and unable to reproduce their
+opening hands against a v2 library. `mull-drift` never gates. Those references are untouched
+(commit-only) and should now be read as **v1** references.
+
+## Still open
+
+1. **On-policy screen: the adopted leaf vs `fit_nl`** (leafless, `ladder: single`, `alpha: relaxed`).
+   The shape probe suggests v2 may prove nearly everything inside the horizon; the leaf is a clean win
+   over *no sidecar*, but was never measured against the best leafless shape.
+2. **New reference games on v2, if a human play-quality check is wanted.** The existing 10 are v1's.
