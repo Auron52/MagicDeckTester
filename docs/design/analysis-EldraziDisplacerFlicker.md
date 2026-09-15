@@ -7554,3 +7554,226 @@ correctness; it is the old path (both levers off) and is not what ships.
 8. **melira_pod s10_gi9 regressed 4 -> 5 upstream between 72fe64e6 (09-08) and 38842e3f (09-11)**
    (see §5); a reference the search no longer matches, outside this session's EDF scope -- bisect
    the two esc/FIT Melira commits first.
+
+## Session 28 (2026-09-15, 07:00-10:30 UTC): the references' constructs, bisected at true fidelity
+
+**USER brief:** *"sort out the issues with EDF references. After that we can return to
+performance."* Base: origin tip 5e50300b (Session 27's push, nothing local). Bench at the tip,
+re-read from the committed stamp: 4.786, **5/14 short** (s6 +1, s8 +1, s9 +1, s12 +1, s14 +1); at
+100 ms 4.643, 3 short (s6, s8, s12). So s9 / s14 are budget-bound and s6 / s8 / s12 are constructs;
+this session is the constructs.
+
+### 1. Method: hand the human's board to the search, one frame at a time
+
+`--choices-then-auto` (`src/main.cpp` `ClaudePlayHarness::HandBackToSearch`,
+`AIEngine::kHandBackToSearch`): the claude-play harness replays the recorded picks and, when the
+`--choices` stream runs out at a main-phase frame, the SHIPPED autonomous search plays the rest of
+the game -- human play suppressed for good (`g_human_play_suppressed`, so `HumanPlayActive()` and
+`DecisionUnpruned()` both read false), every `g_play_*` chooser nulled with the sinks kept, the
+vial / echo / mulligan / bottom choosers nulled, play settings resolved by `ResolvePlaySettings` so
+the default is the bench's d5 / 20 ms. `scripts/ref_handoff.py <ref> --turn T [--frame k]
+[--budget-ms N] [--env K=V] [--log-dir D]` wraps it: walks the reference to the frame with the
+viewer-protocol session, prints the board there and the search's win turn from it, and with
+`--log-dir` writes the goldfish action log (`then_auto_s<seed>_gi<gi>_game.json`) for the viewer.
+
+**Fidelity check first:** a hand-off at T1 frame 0 reproduces the bench cell (s6 -> 5, s12 -> 5,
+s8 -> 4). So a frame-by-frame walk down the human's go-off turn locates the exact decision the
+search cannot make, on the REAL board -- sick flags, the used land drop, the opponent's library all
+as the reference had them -- instead of a hand-typed fixture that may or may not be the same board
+(§2's s6 fixture is the cautionary case).
+
+Two scenario keys came with it for freezing a mid-turn frame: `"resume_at": "main1"|"main2"`
+(start INSIDE the turn, no untap and no draw, via `GameEngine::PlayOutFrom(..., ResumeAt::Main1)`)
+and `"floating_mana": {"W":1,"G":2,"C":1}`. `MTG_FS_ROOT_DUMP=<turn>` (the value is the TURN) now
+prints an Aura's host as `->#num`; `[edf-loop]` traces the draw sink and the Clue cracks.
+
+### 2. The bisects
+
+**s6_gi5, T4 (human wins T4; search 5 from T4 frame 0 at 20 and 100 ms).** Board at frame 0:
+Brushland (Fertile Ground), Kitchen (Overgrowth); hand Eladamri's Call, Living Wish x2, Peregrine
+Drake x2, Training Grounds.
+
+| frame | what the human just did | board / hand / pool at the frame | search from here |
+|---|---|---|---|
+| 0 | -- | 2 lands + 2 Auras; hand Call Wish Wish Drake Drake TG | 5 (100 ms: 5) |
+| 1 | Wish -> Adarkar Wastes, Wish -> Cloud of Faeries | Brushland(T) Kitchen(T); hand +Wastes +Cloud; pool U | 5 |
+| 2 | Wastes down, Cloud (untap two) | 3 lands untapped + Cloud; hand Call Drake Drake TG | 5 (100 ms: 5) |
+| 3 | **Drake, Drake** | pool G; hand Call TG | **4** |
+| 4 | Call -> Displacer, Training Grounds | pool W G G C; hand Displacer | 5 (100 / 500 ms: 5) |
+| 5 | **Displacer, paid from the float keeping {C}** | pool C; loop live | **4** |
+
+Two constructs, at frames 2 and 4:
+* **Frame 2, the chain [Drake, Drake, Call -> Displacer, TG] on 5 mana.** Every multi-cast subset
+  holding a Drake reads `early-gate` at cost 7..12 against pool 5 (`MTG_DBG_MULTI=4`), and the
+  canonical walk `SubsetPayableSequential` visits casts in `CastOrderRank` order, where EDF ranked
+  the activation reducer (Training Grounds, 5) BEFORE the ETB-untap payload (Drake, 6): [TG, Drake,
+  Drake, Call] is unpayable (TG first leaves 4, Drake needs 5) while [Drake, Drake, ...] pays
+  itself and untaps ten lands on the way. The untapper-hoisted retry that would re-order it is
+  `HumanPlayActive()`-only (Session 18's viewer fix): the only thing that ever paid the chain was
+  the human's button.
+* **Frame 4, the float.** Pool {W}{G}{G}{C}, Displacer ({2}{W}) in hand, a Displacer loop that
+  cranks for {2}{C}. `SpendFloatingTowardCost` pays generic wild -> colourless -> WUBRG, so the
+  Displacer's {2} eats the {C} and the first crank has no colourless (`[edf-loop] STOP at k=0:
+  pay-failed`). Holding it (`MTG_HOLD_C_FOR_LINE`: the blink's {C} pip joins `g_line_unpaid_cost`,
+  which `SpendFloatingTowardCost` already honours) pays the Displacer from {G}{G}{W}, keeps the {C},
+  and the loop then cranks TWICE -- because its draw sink (Investigate + Clue crack, now traced as
+  `[edf-loop] draw-sink ... / clue-crack ...`) spends the next crank's {C} at k=2 (`post-draw-sink
+  ... avail c0 *0`). Frozen as `test/scenarios/open/edf_ref_s6_t4_float_keeps_c_for_blink.json`:
+  5 without the hold, **6 with it** -- the hold moves the failure, it does not remove it.
+
+**s12_gi11, T3 (human wins T4; search 5 from T3 frame 0 at 20 / 100 / 500 ms, 4 from T4 frame
+0).** Board at T3: Brushland, Kitchen; hand Azorius Chancery, Displacer, Emiel, Drake, Trace of
+Abundance, Training Grounds. The human plays Chancery bouncing Brushland (kept for T4's drop) and
+puts the Trace on **Kitchen**; T4 is then Brushland + Drake + Displacer + TG on 7 mana -> loop. The
+search's T3 root (`MTG_FS_ROOT_DUMP=3`, hosts printed) offers `Chancery: Trace->#6` (Brushland
+host, tail 5) and never `Trace->#30` (Kitchen host): the autonomous plan-dedup signature keys on
+cast NAMES only (a plan's sub-decisions fold to the heuristic's first pick), so the Kitchen-host
+variant was a duplicate -- and the Brushland-host plan is then undone by the karoo's own
+`BounceLandCandidates` (score karoo -1000, tapped +100, enters-untapped +10, nothing about the
+Aura a land carries), which bounces the enchanted Brushland and loses the Trace with it. T4 from
+the human's T3 board wins 4 -- but only under `MTG_EDF_PAYLOAD_FIRST` (that 7-mana chain is [Drake,
+Displacer, TG], the same order defect as s6).
+
+**s8_gi7, T3 (human wins T3; search 4 at 20 and 100 ms).** Board at T3 frame 0: Conservatory
+(Fertile Ground), Mariposa Military Base, Wild Growth; hand Cloud of Faeries, Displacer, Fertile
+Ground, Yavimaya Coast.
+
+| frame | what the human just did | search from here |
+|---|---|---|
+| 0 | -- | 5 |
+| 1 | Yavimaya down, Fertile Ground on it, Cloud (untap two); pool C | 5 |
+| 2 | Displacer | 5 |
+| 10 | banking Displacer / Cloud cranks: pool G14 | 4 |
+| 27 | Investigate + Clue draws; pool G33, Overgrowth drawn | 4 |
+| 30 | Overgrowth, Drake, a second Wild Growth cast mid-loop; pool G16 C2 | 4 |
+
+The human's T3 is a 33-decision go-off: bank cranks into a green float, dig 17 cards (Investigate,
+Clue cracks, Mariposa) to a Living Wish -> Essence Depleter, drain. Two things the search lacks:
+(a) at frames 0-2 the hand go-off's casts (Fertile Ground + Cloud + Displacer) are paid by a payer
+that taps Mariposa and Yavimaya -- the {C} sources -- so the first crank sees `avail g1 *3 c0` and
+`[edf-loop] STOP at k=0: pay-failed` (914 of the trace's stops are k=0); (b) the finisher is in the
+library: `FlickerGoOffCount` reads 0 with no drain on the board or in hand (`EdfAutoGoOffAfterCasts`
+needs > 0), and only `MTG_EDF_LIB_ROUTE=1` prices the dig (`[goff] t3 ... dig=17 -> count=221`) --
+and then (a) stops it anyway. Even from frame 30, the loop's engine fully assembled and {C}{C}
+floating, the search wins 4, not 3: bank-then-dig-then-wish is not a plan the ranking can see.
+Frozen as `test/scenarios/open/edf_ref_s8_t3_bank_dig_wish_drain.json` (expects 3, gets 5).
+
+### 3. Levers (each `EnvOn` + a heurarm slot so `ref_bench_arms.py` runs the arms in ONE pool)
+
+* **`MTG_EDF_PAYLOAD_FIRST` (ON)** -- `EldraziFlickerProvider::CastOrderRank`: an ETB-untap payload
+  (`etb_untap_lands > 0`) ranks 5, the activation reducer 6 (was reducer 5 / payload 6). The
+  canonical walk then pays [Drake, Drake, Call, TG] on 5: s6 frame 2 -> 4, s12's T4 chain -> 4.
+  No other provider changes.
+* **`MTG_EDF_AURA_HOST_SIG` (ON)** -- the autonomous `plan_signature` appends `#H<host>` for a land
+  Aura with a chosen host, so host variants survive the dedup. Deliberate side effect:
+  `edf_land_aura_multicast_offered` now reads `choose` with 3 host variants instead of `accept` / 1
+  (expectation updated; its original guard -- legal but not enumerated -- still holds, every
+  variant contains the Trace).
+* **`MTG_BOUNCE_SPARE_AURA` (ON)** -- base `DecisionProvider::BounceLandCandidates`: -500 for a land
+  carrying an Aura (`aura_attached_to == land number`); every deck with a karoo.
+* **`MTG_HOLD_C_FOR_LINE` (OFF)** -- `LineCastCostTotal` adds the line's `ActivateBlink` pips
+  (generic zeroed) to `g_line_unpaid_cost`, so `SpendFloatingTowardCost` holds {C} across the
+  casts. Bench-neutral at 20 and 100 ms and WORSE on the float fixture (5 -> 6, §2) until the draw
+  sink reserves the next crank; ships OFF, the measurement is in the reader's comment.
+
+s12's T3 needs the host signature and nothing else (the split bench in §4: without it s12 reads 5
+again; without the karoo lever it still reads 4 -- with the Kitchen host enumerated the search
+picks the human's plan, and the karoo bounces an unenchanted Brushland). `BOUNCE_SPARE_AURA` is
+therefore bench-neutral and ships on its rules argument alone (the bounce kills the Aura, CR
+303.4d), flagged for a one-binary A/B. s6's frame 2 needs only `PAYLOAD_FIRST`. **New gated fixture**
+`test/scenarios/edf_ref_s12_t3_trace_host_then_goff.json`: the s12 T3 board with the reference's
+library order, expects the T4 win (PASSES; fails with `MTG_EDF_AURA_HOST_SIG=0`).
+
+### 4. Measured
+
+**Bench, four arms, ONE pooled batch (56 jobs), 14 refs, d5 / 20 ms
+(`logs/ref_bench_edf/levers1/run.log`):**
+
+| reference | human | off | hostsig | nohold (3 levers) | all (+ hold) |
+|---|---|---|---|---|---|
+| s1 3 / s2 4 / s3 4 / s5 4 / s10 4 / s11 6 / s15 6 / s4 6 / s7 5 | -- | = | = | = | = |
+| s6_gi5 | 4 | 5 | 5 | **4** | 4 |
+| s8_gi7 | 3 | 4 | 4 | 4 | 4 |
+| s9_gi8 | 4 | 5 | 5 | 5 | 5 |
+| s12_gi11 | 4 | 5 | **4** | **4** | 4 |
+| s14_gi13 | 5 | 6 | 6 | 6 | 6 |
+| **mean / short** | 4.429 | 4.786 / 5 | 4.714 / 4 | **4.643 / 3** | 4.643 / 3 |
+
+Nothing worse anywhere. Digests moved on eight references under `nohold` (s4 s6 s7 s8 s9 s10 s11
+s12) and every one landed on the same turn or better; `hold` adds nothing at either budget.
+
+**Split, three arms, one pool (`levers1_split/run.log`, d5 / 20 ms):** all three 4.643 / 3;
+**without `AURA_HOST_SIG` 4.714 / 4 (s12 back to 5)**; without `BOUNCE_SPARE_AURA` 4.643 / 3
+(s12 still 4; digests move on s4 and s7 only, same turns). The host signature is the lever that
+closes s12 -- and, being the plan-doubling one, the lever that carries the wall cost in §5.
+
+**100 ms, two arms, one pool (`levers1_b100/run.log`):** off 4.643 / 3 short (s6 s8 s12) ->
+nohold **4.500 / 1 short (s8 only)**; s9 and s14 match the human at 100 ms in both arms, nothing
+worse. So the residual after this session is **s8 (construct, +1 at every budget)** and
+**s9 / s14 (budget, 20 ms only)**.
+
+### 5. Gates (final binary = this tree, levers at their defaults)
+
+* scenarios **88/88** (87 + the new s12 fixture); combo_off fixtures **33/33**.
+* smoke **76/4** and FULL regression **102/6** -- every PASS/FAIL line byte-identical to the last
+  gate on the tree without the levers (`logs/gate_wip_smoke.log`, `logs/gate_wip_fullreg.log`):
+  the same six FiveColour stale-GT digests (Session 27 §5), the viewer step the same set (328 refs,
+  0 play-drift, 1 board-diverged, the 7 Snow validate-line REGRESSIONs). The only diff in either
+  log is the new fixture's PASS line. No deck in the suite carries a land Aura or a karoo the
+  levers could move, so the identity is expected -- and it is measured, not assumed.
+* Fleet `ref_bench.py --stale-only` at the committed tree (every deck was stale: the stamp predated
+  the 09-11 perf commits; 361 games, ONE pool): **4/361 short** -- EDF 3/14 (s8 s9 s14), melira_pod
+  1/10 (the upstream s10_gi9 move, Session 27 §7.8); every other deck 0 short, none moved.
+* **Deck average** (`scripts/deck_avg_arms.py --stats`, 100 games/arm, seeds 3001/3061 in
+  10-game paired chunks, max_turns 12, ONE pooled batch of 20 jobs, RAM-bounded binary at
+  `MTG_MEM_BUDGET_MB=16384`, run alone after the regression):
+
+  | arm | mean win turn | paired vs off | chunks better / worse / tied | paired t | wall (sum of job ms) |
+  |---|---|---|---|---|---|
+  | off (3 levers = 0) | 4.6900 | -- | -- | -- | 2355 s |
+  | nohold (3 levers = 1) | 4.6500 | **-0.0400** | 4 / 2 / 4 | -1.08 | 2678 s (**+13.7%**) |
+
+  Quality: not worse (the adoption bar), a hair better and not significant. **Cost: +13.7% wall on
+  this batch**, and it is not one slow game -- eight of the ten chunks are slower under the levers
+  (+2%, +24%, +61%, +49%, +29%, +21%, +11%, +7%, and two faster -23%, -3%). The suspect is the
+  host signature: an EDF hand with a land Aura now enumerates one plan per host (two, since
+  `LandAuraHostCandidates` narrows to two) at every root and every rollout ply. Both sides
+  counted; the levers are adopted on the user's brief (references first, "after that we can
+  return to performance") and the wall is the first item of that performance pass -- see §6.
+
+### 6. Open, carried forward
+
+0. **The levers' wall cost (+13.7% on the deck average, §5) -- first item of the performance
+   pass.** The host signature doubles every land-Aura plan at every ply; the failure it fixes
+   needs a karoo in the SAME plan (the folded host is only wrong when the bounce takes it), so
+   the cheap narrowing is to keep host variants distinct only when the plan's land is a karoo
+   (or the deck holds one), and fold them as before otherwise. Re-gate with the paired deck
+   average (wall is the metric) and the bench (s12 must stay 4).
+1. **The {C} / colour RESERVATION for a line that assembles a loop** (the user's floating-colour
+   item, Session 27 §7.5). Two faces of one defect: the casts' payer taps the {C} sources (s8
+   frames 0-2, `avail c0`), and the float's generic spend eats the {C} (s6 frame 4). The line's
+   demand is already computed (`g_line_unpaid_cost`, `TapForCostSharedOnce`'s `reserved_mask`) but
+   every reader is `HumanPlayActive()`-gated; the autonomous extension is the fix shape, behind a
+   flag, fixture-first (`open/edf_ref_s6_t4_float_keeps_c_for_blink`, `open/edf_ref_s8_t3_*`).
+2. **The draw sink spends the next crank's {C}** (s6 frame 4 under the hold: k=2 `post-draw-sink
+   avail c0`). Sink position in the loop, not a reservation (the lesson from Session 22): the sink
+   must be all-or-nothing against the crank it precedes. Until this is closed `MTG_HOLD_C_FOR_LINE`
+   cannot be adopted.
+3. **s8's library route**: a finisher 17 cards deep is not a go-off the recogniser counts
+   (`FlickerGoOffCount` 0 -> `EdfAutoGoOffAfterCasts` never fires); `MTG_EDF_LIB_ROUTE=1` prices it
+   but (1) stops the first crank. Also the `HandGoOffCandidates` mana floor
+   (`have_total < cast_mv + econ.cost_mv`) double-counts the float and credits neither the land
+   drop nor the payload's refund.
+4. **`open/edf_ref_s6_t4_drake_chain_before_reducer`** still loses a turn (5) on the FROZEN
+   board while the real frame (`ref_handoff.py --turn 4 --frame 2`) wins 4 with the levers: the
+   difference between a frame and its fixture (sick flags / the used land drop / the opponent's
+   library) is itself the open question -- the reason the hand-off, not the fixture, is the
+   instrument of record.
+5. **s9 / s14 are budget-bound at 20 ms** (both match at 100 ms in both arms). EDF has no
+   `value_play`; a budget is a deck-setting decision for the user -- the 100 ms deck-average cost
+   is the number to put in front of them before anything is adopted.
+6. The sweep's 12 missed offers (MAIN_2 frames, next-turn wins, no live loop) -- re-run
+   `test/combo_off_sweep.py` after (1)-(3).
+7. Carried from Session 27: `ProjectsAlternateWin`'s up-front mana demand; `MTG_EDF_CO_ROOT` /
+   `MTG_EDF_CO_LOOK` OFF; FiveColour GT stale at the tip and Snow's 8 viewer reds (upstream's);
+   melira_pod s10_gi9 4 -> 5 between 72fe64e6 and 38842e3f (bisect the esc/FIT Melira commits).

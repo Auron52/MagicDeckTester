@@ -37,6 +37,8 @@ dispatch, before the normal arg parse).
   "library_filler": "Swords to Plowshares",  // library = N copies of this (draws / rollouts don't run dry)
   "library_size": 40,
   "depth": 5, "budget_ms": 100, "max_turns": 4,
+  "resume_at": "main1",                  // optional: start INSIDE this turn (main1|main2): no untap, no draw
+  "floating_mana": { "W": 1, "G": 2, "C": 1 },  // optional: the pool at that frame (W/U/B/R/G/C)
   "expect_win_turn": 4,                  // optional: FAIL (exit 1) if the actual win is later / absent
   "log_out": "logs/play/foo.json"        // optional: write the per-turn trace for inspection
 }
@@ -49,6 +51,12 @@ dispatch, before the normal arg parse).
   that won't perturb the interaction: a **dead draw** (e.g. `Swords to Plowshares` when there's no
   creature to target → never cast) keeps the board fixed. A basic land would be drawn and PLAYED,
   handing the AI extra mana and dissolving a "must tap a scarce source" setup.
+- **Mid-turn frames (2026-09-15).** A board taken from the middle of a hand-played turn (a
+  `scripts/ref_handoff.py` frame: some lands already tapped, mana floating, the land drop used) is
+  not a "state after turn N-1". `resume_at` starts the playout at that main phase of `turn`
+  (`GameEngine::PlayOutFrom(..., ResumeAt::Main1|Main2)`) with no untap step and no draw, and
+  `floating_mana` fills the pool. Without `resume_at` the pool is emptied by the untap/draw the
+  harness runs first. The `open/` fixtures under `test/scenarios/` are all of this form.
 
 ## Pass/fail suite + regression gate
 

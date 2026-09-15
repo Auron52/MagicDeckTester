@@ -2060,7 +2060,7 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
     // hand reproduces the real search's game. m_in_rollout gates it off there (the rollout then
     // follows the normal autonomous search path, exactly like a goldfish rollout).
     const bool use_external = m_external_chooser != nullptr && !m_in_rollout;
-    const bool play_this_phase =
+    bool play_this_phase =
         is_pre_combat_main || m_search_post_combat || use_external;
 
     // External-controller intercept (Claude-play / human-play prototype, opt-in via
@@ -2201,6 +2201,9 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
 
         std::set<std::string> prev_inplay;  // untapped in-play sac sources before the last applied plan
         bool drew_last = false;             // did the last applied plan draw (library shrank)?
+        // --choices-then-auto: the chooser returned kHandBackToSearch -- leave this block WITHOUT
+        // returning and let the autonomous path below play the rest of the phase (and the game).
+        bool handed_back = false;
         for (int seg = 0; seg < 64; ++seg)
         {
             // NO GENERIC MANA IN THE POOL THE HUMAN IS ABOUT TO LOOK AT (see ConcretiseHumanFloat).
@@ -2350,6 +2353,7 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
             g_play_cur_main_ordinal = this_main_ordinal;
             int idx = m_external_chooser(state, plans, is_pre_combat_main);
             g_play_frame_no_ordinal = false;
+            if (idx == kHandBackToSearch) { handed_back = true; break; }      // the search plays on
             if (idx < 0 || idx >= static_cast<int>(plans.size())) { break; }  // pass / done
             // An EMPTY committed plan ("land=none; cast: (nothing)") means exactly what a pass
             // means, so it must END the phase like one. Applying it changes nothing, and under the
@@ -2471,6 +2475,8 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
             prev_inplay = std::move(cur_inplay);
         }
 
+        if (!handed_back)
+        {
         // Grove of the Burnwillows drip -- the same end-of-pre-combat-main sweep the autonomous
         // executor (below, ~3716) and the rollout (ApplyPlanDirect) both run. This external-chooser
         // path returns before reaching that call, so human play never swept leftover drip lands;
@@ -2498,6 +2504,15 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
         }
         ap_after.hand = std::move(regular_hand);
         return false;  // ApplyPlan resolved draw-engine re-solves inline; no second pass
+        }
+        // HAND-BACK (--choices-then-auto): uninstall the chooser AFTER its call returned (it is
+        // the lambda that just ran -- destroying it from inside would be UB) and fall through to
+        // the ordinary autonomous path. Any staged cards / drip sweep are handled there exactly as
+        // in a game that never had a chooser. Re-derive the phase gate without the human term.
+        m_external_chooser = nullptr;
+        play_this_phase = is_pre_combat_main || m_search_post_combat;
+        std::cerr << "[then-auto] search takes over: turn " << state.turn_number
+                  << (is_pre_combat_main ? " pre-combat main" : " post-combat main") << "\n";
     }
 
     TurnSolver::Plan plan;  // empty plan == do nothing this phase

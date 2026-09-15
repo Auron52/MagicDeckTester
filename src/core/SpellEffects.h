@@ -11830,6 +11830,12 @@ inline int CrackCluesForCards(GameState& state, int controller, const ManaCost& 
             if (!have.CanPay(AddManaCosts(c, keep_payable))) { break; }
         }
         if (!pay(c)) { break; }
+        if (blinkloop::TraceOn())
+        {
+            std::fprintf(stderr, "[edf-loop]   clue-crack paid %s (keep %s) float=%d avail=%u\n",
+                         c.ToString().c_str(), keep_payable.ToString().c_str(),
+                         state.floating_mana.Total(), AvailableManaPool(state, nullptr).Total());
+        }
         ApplyPermAbility(state, controller, id, PermAbilityMode::SacDraw);
         ++drawn;
     }
@@ -12192,6 +12198,12 @@ inline int SpendSurplusOnDrawSinks(GameState& state, int controller, const ManaC
         state.battlefield[i].tapped = true;
         if (!pay(c)) { SetPermTapped(state, controller, id, false); continue; }
         if (finishstats::On()) { finishstats::g_draw_paid.fetch_add(1, std::memory_order_relaxed); }
+        if (blinkloop::TraceOn())
+        {
+            std::fprintf(stderr, "[edf-loop]   draw-sink %s paid %s (keep %s) float=%d avail=%u\n",
+                         d->card.m_name.c_str(), c.ToString().c_str(), keep_payable.ToString().c_str(),
+                         state.floating_mana.Total(), AvailableManaPool(state, nullptr).Total());
+        }
         ApplyPermAbility(state, controller, id, mode);
         if (mode == PermAbilityMode::TapDraw) { ++drawn; }
     }
@@ -17474,7 +17486,13 @@ inline void SpendFloatingTowardCost(ManaPool& reserve, ManaCost& cost, bool keep
     // `_own_c` is captured BEFORE step 1 drains the pip. MTG_HOLD_C_FOR_PIPS=0 restores the old
     // order (one-binary A/B).
     static const bool s_hold_c_own = EnvOn("MTG_HOLD_C_FOR_PIPS", true);
-    const bool hold_c = g_hold_colorless_for_pips || (s_hold_c_own && _own_c);
+    // ...AND a {C} pip the LINE still owes holds colourless back the same way (2026-09-15): the
+    // line hold (g_line_unpaid_cost) now carries a blink activation's pips when MTG_HOLD_C_FOR_LINE
+    // is on (LineCastCostTotal), so "a later payment in this same line needs {C}" is a readable
+    // signal here rather than a guess. No CAST cost in the card database carries a {C} pip, so the
+    // hold below is reachable only through that activation term; every other line is unchanged.
+    const bool hold_c = g_hold_colorless_for_pips || (s_hold_c_own && _own_c)
+                     || g_line_unpaid_cost.colorless > 0;
     if (!hold_c) { drain(cost.generic, reserve.colorless); }
     // BUDGETED FIRST PASS (see g_generic_spend_budget): while a budget is live, each colour may pay
     // generic pips only out of its SURPLUS, and the colourless bank sits between that surplus and

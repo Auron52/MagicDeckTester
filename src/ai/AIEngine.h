@@ -182,6 +182,12 @@ public:
     using ExternalChooser =
         std::function<int(const GameState&, const std::vector<TurnSolver::Plan>&, bool)>;
     void SetExternalChooser(ExternalChooser chooser) { m_external_chooser = std::move(chooser); }
+    // HAND-BACK sentinel (--choices-then-auto): the external chooser returns this instead of a plan
+    // index to say "the scripted picks are exhausted -- the SEARCH plays from here". TakeTurn then
+    // uninstalls the chooser and falls through to its ordinary autonomous path for THIS main phase
+    // and every later decision, so a reference's recorded prefix can hand the shipped search the
+    // human's exact mid-game board (real shuffle, real pool, real exile) and ask what it does.
+    static constexpr int kHandBackToSearch = -2;
 
     // Aether Vial upkeep charge decision (Vial-as-a-choice). The DEFAULT is the current
     // heuristic (charge up to the deck's dominant creature MV, vial_target_mv), so the

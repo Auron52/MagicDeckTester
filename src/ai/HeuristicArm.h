@@ -175,6 +175,10 @@ enum Slot : int
     EDF_CO_LOOK,              // MTG_EDF_CO_LOOK         a LOOKAHEAD ply queries the same rule, no trial (~1.5us vs 0.3-0.8ms)
     EDF_EXACT_EXECUTOR,       // MTG_EDF_EXACT_EXECUTOR  the AUTONOMOUS go-off apply gets the button's finish machinery
     EDF_HAND_GOFF,            // MTG_EDF_HAND_GOFF       a go-off whose outlet/payload is CAST THIS PLAN is one enumerated plan
+    EDF_PAYLOAD_FIRST,        // MTG_EDF_PAYLOAD_FIRST   cast order: the ETB-untap payload BEFORE the activation reducer
+    EDF_AURA_HOST_SIG,        // MTG_EDF_AURA_HOST_SIG   autonomous plan dedup keeps land-Aura HOST variants distinct
+    BOUNCE_SPARE_AURA,        // MTG_BOUNCE_SPARE_AURA   a karoo bounce ranks a land carrying an Aura last
+    HOLD_C_FOR_LINE,          // MTG_HOLD_C_FOR_LINE     a blink activation's {C} pip joins the line hold -> float keeps {C} (default OFF)
     COUNT
 };
 
@@ -327,6 +331,10 @@ inline const char* Name(int slot)
         "MTG_EDF_CO_LOOK",
         "MTG_EDF_EXACT_EXECUTOR",
         "MTG_EDF_HAND_GOFF",
+        "MTG_EDF_PAYLOAD_FIRST",
+        "MTG_EDF_AURA_HOST_SIG",
+        "MTG_BOUNCE_SPARE_AURA",
+        "MTG_HOLD_C_FOR_LINE",
     };
     // The enum and this table are ONE mapping split across two lists: a slot added to one and not
     // the other silently shifts every lever after it (a manifest asking for lever X would set Y).

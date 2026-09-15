@@ -1,0 +1,98 @@
+{
+ "deck": "decks/EldraziDisplacerFlicker/EldraziDisplacerFlicker.cod",
+ "active_life": 20,
+ "opponent_life": 20,
+ "opponent_library_size": 50,
+ "library_filler": "Forest",
+ "depth": 5,
+ "budget_ms": 20,
+ "max_turns": 8,
+ "_comment": [
+  "claude_s6_gi5 T4, the human's third main-phase frame (human wins T4; the search handed this exact board",
+  "wins T5 at 20 and 100 ms -- scripts/ref_handoff.py --turn 4 --frame 2, 2026-09-15). resume_at main1: the",
+  "land drop is used (Adarkar Wastes, tapped for the Cloud), Cloud's ETB untapped Brushland + Kitchen.",
+  "HUMAN: Drake (5 of 5, untap 5 -> 6), Drake (untap -> 7), Eladamri's Call -> Displacer, Training Grounds,",
+  "Displacer, blink Drake for {C} per pass, Kitchen investigate + Clue dig 25 cards to Living Wish -> Depleter.",
+  "SEARCH: the 4-cast subset [Drake, TG, Drake, Call] is rejected by the canonical walk (ef-walk-fail: TG rank",
+  "5 sorts before the Drake's 6, 1+5 against 5) -- the human-only untapper-hoisted retry is what admitted it in",
+  "the viewer. From the NEXT frame (both Drakes resolved) the search does win T4.",
+  "library_top = the real library after the T4 draw (then_auto log of the frame-5 hand-off)."
+ ],
+ "turn": 4,
+ "on_the_play": true,
+ "resume_at": "main1",
+ "battlefield": [
+  {
+   "name": "Adarkar Wastes",
+   "controller": 0,
+   "tapped": true
+  },
+  {
+   "name": "Brushland",
+   "controller": 0,
+   "tapped": false
+  },
+  {
+   "name": "Kitchen",
+   "controller": 0,
+   "tapped": false
+  },
+  {
+   "name": "Fertile Ground",
+   "controller": 0,
+   "tapped": false,
+   "equips": "Brushland"
+  },
+  {
+   "name": "Overgrowth",
+   "controller": 0,
+   "tapped": false,
+   "equips": "Kitchen"
+  },
+  {
+   "name": "Cloud of Faeries",
+   "controller": 0,
+   "tapped": false,
+   "sick": true
+  }
+ ],
+ "hand": [
+  "Eladamri's Call",
+  "Peregrine Drake",
+  "Peregrine Drake",
+  "Training Grounds"
+ ],
+ "library_top": [
+  "Aether Hub",
+  "Wild Growth",
+  "Eldrazi Displacer",
+  "Trace of Abundance",
+  "Mariposa Military Base",
+  "Mariposa Military Base",
+  "Adarkar Wastes",
+  "Aether Hub",
+  "Cloud of Faeries",
+  "Conservatory",
+  "Overgrowth",
+  "Yavimaya Coast",
+  "Shivan Gorge",
+  "Overgrowth",
+  "Yavimaya Coast",
+  "Emiel the Blessed",
+  "Eldrazi Displacer",
+  "Fertile Ground",
+  "Wild Growth",
+  "Kitchen",
+  "Adarkar Wastes",
+  "Yavimaya Coast",
+  "Brushland",
+  "Wild Growth",
+  "Living Wish",
+  "Conservatory",
+  "Peregrine Drake",
+  "Yavimaya Coast",
+  "Conservatory"
+ ],
+ "library_size": 20,
+ "expect_win_turn": 4
+}

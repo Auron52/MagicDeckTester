@@ -3862,6 +3862,9 @@ static void FsDumpPlan(const char* tag, const TurnSolver::Plan& p, int win)
         s += a.card_name.str();
         if (a.chosen_x > 0)   { s += "(x" + std::to_string(a.chosen_x) + ")"; }
         if (a.ponder_keep >= 0) { s += a.ponder_keep ? "[keep]" : "[shuf]"; }
+        // An Aura's HOST is a searched variant (one plan per legal host); print it, or two host
+        // variants of the same Aura read as one plan scanned twice (claude_s12_gi11 T3).
+        if (a.enchant_target > 0) { s += "->#" + std::to_string(a.enchant_target); }
     }
     // The LAND half of the plan is not in `actions` (land_to_play + its searched sub-decisions),
     // so print it too -- a T1/T2 root on a land-only turn is otherwise five identical blank lines.
@@ -20742,8 +20745,33 @@ struct BpPrefixSnap
 ManaCost LineCastCostTotal(const std::vector<Action>& acts)
 {
     ManaCost total;
+    // A BLINK ACTIVATION'S {C} PIP JOINS THE HOLD (MTG_HOLD_C_FOR_LINE, default OFF; 2026-09-15).
+    // The hold exists so an earlier payment does not spend what a later one in the SAME line
+    // needs, and a blink loop's first crank is exactly such a payment: on claude_s6_gi5 T4 the
+    // plan "cast Eldrazi Displacer, blink x189" paid the Displacer's generic {2} out of a
+    // {W}{G}{G}{C} float colourless-first (SpendFloatingTowardCost's default order), and the
+    // loop's {C} was gone before it started -- a plan the recogniser had counted at 189
+    // iterations realised zero. Only the activation's PIPS are held (one activation; the loop
+    // funds the rest), and only from an ActivateBlink, so every line without one is unchanged.
+    // DEFAULT OFF, measured: on the 14-reference bench (d5/20 ms, one pooled batch, 2026-09-15)
+    // the hold moved nothing on top of the other three levers (4.643 / 3 short either way), and
+    // on that exact s6 board (test/scenarios/open/edf_ref_s6_t4_float_keeps_c_for_blink.json)
+    // it is WORSE: the first crank now pays, and two iterations later the loop's draw sink spends
+    // the whole float and every {C}-capable land on an Investigate + Clue crack (its guard's trial
+    // passes on a pool that the sequential payer then strands), so the turn ends with the board
+    // tapped out where the un-held line at least kept its mana for the next turn. The hold is
+    // right; the sink's reservation is the missing half. Kept as a lever for that fix.
+    static const bool s_hold_c_line_env = EnvOn("MTG_HOLD_C_FOR_LINE", false);
+    const bool hold_blink = heurarm::Flag(heurarm::HOLD_C_FOR_LINE, s_hold_c_line_env);
     for (const Action& a : acts)
     {
+        if (hold_blink && a.kind == Action::Kind::ActivateBlink)
+        {
+            ManaCost pips = a.cost;
+            pips.generic  = 0;
+            AddManaCost(total, pips);
+            continue;
+        }
         if (a.kind != Action::Kind::CastFromHand && a.kind != Action::Kind::CastFromGraveyard) { continue; }
         if (a.free_cast || a.alt_cost) { continue; }
         AddManaCost(total, a.cost);
@@ -28736,7 +28764,9 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
     // games came back "(none - not moved by this batch)" purely because there was nothing to turn off.
     // MTG_LEGACY_BESTOW_SIG=1 restores the collapsed signature (the pre-fix search).
     static const bool s_legacy_bestow_sig = EnvOn("MTG_LEGACY_BESTOW_SIG");
-    auto plan_signature = [s_human_play_sig](const TurnSolver::Plan& p) -> std::string
+    static const bool s_aura_host_sig_env = EnvOn("MTG_EDF_AURA_HOST_SIG", true);
+    const bool s_aura_host_sig = heurarm::Flag(heurarm::EDF_AURA_HOST_SIG, s_aura_host_sig_env);
+    auto plan_signature = [s_human_play_sig, s_aura_host_sig](const TurnSolver::Plan& p) -> std::string
     {
         std::vector<std::string> v, s, a, g, l, u, msf;
         for (const Action& act : p.actions)
@@ -28810,7 +28840,19 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
                         // spells sharing a name (different cost, the body self-sacs) -- the
                         // bestow lesson. Gated on the param, so no existing deck moves.
                         + ((act.def && act.def->params.evoke_cost.has_value())
-                           ? (act.evoke ? "#E1" : "#E0") : "")); break;
+                           ? (act.evoke ? "#E1" : "#E0") : "")
+                        // LAND-AURA HOST (MTG_EDF_AURA_HOST_SIG, default ON; 2026-09-15): WHICH land
+                        // carries a Wild Growth / Trace of Abundance is a real decision, not a
+                        // sub-decision the host heuristic can be trusted with -- a karoo in the same
+                        // plan bounces one of the two hosts, and the heuristic's tie-break picked the
+                        // one it bounced (claude_s12_gi11 T3: the Kitchen-host plan, the human's,
+                        // was enumerated and then folded into the Brushland-host plan). The provider
+                        // already narrows the host set (LandAuraHostCandidates, two), so keeping the
+                        // variants distinct at most doubles the Aura plans. Gated on the param, so no
+                        // deck without land Auras moves; =0 restores the name-only fold.
+                        + ((act.def && act.def->params.is_land_aura && act.enchant_target > 0
+                            && s_aura_host_sig)
+                           ? ("#H" + std::to_string(act.enchant_target)) : "")); break;
                 case Action::Kind::CastFromGraveyard: g.push_back(act.card_name); break;
                 case Action::Kind::DiscardToLandsEdge:
                     l.push_back(act.card_name + "#" + std::to_string(act.discard_lands)); break;

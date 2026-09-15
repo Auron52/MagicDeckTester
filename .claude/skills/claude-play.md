@@ -147,6 +147,28 @@ decision and exits:
 
 Reproduce any game (e.g. to inspect a flag) by replaying its exact CSV.
 
+### Handing a reference's board to the search (`--choices-then-auto`)
+
+`--choices-then-auto` turns the replay into a bisect tool: the harness applies the `--choices`
+stream and, when it runs out at a main-phase frame, the SHIPPED autonomous search plays the rest
+of the game from that exact board (human play suppressed for good, every play chooser nulled,
+play settings resolved the way `mtg <deck>` resolves them -- so the default is the bench's
+depth/budget). The win turn it prints is "what the search does from here". Walking a human's
+go-off turn one frame at a time finds the single decision the search cannot make, on the REAL
+board (sick flags, the used land drop, the opponent's library as recorded) rather than a
+hand-typed fixture. The wrapper:
+
+```
+python3 scripts/ref_handoff.py references/<Deck>/claude_s6_gi5.json --turn 4 [--frame 2] \
+        [--phase pre_main|post_main|any] [--budget-ms 100] [--env MTG_X=1 ...] [--log-dir logs/x]
+```
+
+prints the board at the frame, the `[play]`/`[then-auto]` lines and the search's win turn;
+`--log-dir` also writes the goldfish action log (`then_auto_s<seed>_gi<gi>_game.json`) for the
+viewer. A hand-off at turn 1 frame 0 reproduces `scripts/ref_bench.py`'s cell for that reference
+-- the fidelity check to run first. To freeze a frame as a `--scenario` fixture use the
+`resume_at` + `floating_mana` keys (docs/design/scenario-harness.md).
+
 ---
 
 ## Playing well

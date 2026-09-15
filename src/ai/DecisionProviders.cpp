@@ -1097,6 +1097,19 @@ std::vector<int> DecisionProvider::BounceLandCandidates(
     const GameState& s, int /*controller*/, int /*self_index*/,
     const std::vector<int>& legal) const
 {
+    // SPARE THE ENCHANTED LAND (MTG_BOUNCE_SPARE_AURA, default ON; 2026-09-15). Returning a land
+    // that carries an Aura sends the Aura to the graveyard (CR 303.4d) -- the bounce costs a card
+    // AND the ramp it bought, which no tapped/untapped tempo can repay. claude_s12_gi11 T3: the
+    // search's Trace of Abundance rode Brushland and its Azorius Chancery then bounced that very
+    // land, so its "ramp" turn ended with the Aura in the graveyard. Ranked below every other
+    // option rather than excluded (the bounce is mandatory; with one land it is still the pick).
+    static const bool s_spare_aura_env = EnvOn("MTG_BOUNCE_SPARE_AURA", true);
+    const bool spare_aura = heurarm::Flag(heurarm::BOUNCE_SPARE_AURA, s_spare_aura_env);
+    auto carries_aura = [&](const Permanent& land) -> bool {
+        for (const Permanent& q : s.battlefield)
+        { if (q.aura_attached_to != 0 && q.aura_attached_to == land.card.m_number) { return true; } }
+        return false;
+    };
     auto score = [&](int i) -> long {
         const Permanent& p = s.battlefield[i];
         const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
@@ -1107,6 +1120,7 @@ std::vector<int> DecisionProvider::BounceLandCandidates(
         if (is_karoo)        { v -= 1000; }   // never re-trigger the bounce loop
         if (p.tapped)        { v += 100;  }   // already spent -> no mana lost this turn
         if (enters_untapped) { v += 10;   }   // clean replay
+        if (spare_aura && carries_aura(p)) { v -= 500; }   // the Aura would die with the bounce
         return v;
     };
     std::vector<int> out = legal;
@@ -18605,6 +18619,22 @@ int EldraziFlickerProvider::CastOrderRank(const GameState& s, const CardDefiniti
         // ONLY thing this changes is the order AMONG land Auras -- they still all precede the rest
         // of the deck exactly as before.
         return score - 1000;
+    }
+    // PAYLOAD BEFORE REDUCER (MTG_EDF_PAYLOAD_FIRST, default ON; 2026-09-15). The payload's ETB
+    // untap is the line's MANA, so it must resolve before the casts it funds -- the reducer is one
+    // of them. With Training Grounds ranked ahead, [Drake, Displacer, Training Grounds] on five
+    // mana priced 1 + 5 against 5 and the sequential walk refused it, though Drake-first pays it
+    // exactly (the user's own seed-12 T4 line; claude_s12_gi11's T4 child and claude_s6_gi5's T4
+    // [Drake, Drake, Call, Training Grounds] both died on it). The human-only untapper-hoisted
+    // retry existed for precisely this order; the autonomous walk and apply follow THIS rank, so
+    // the rank is where the fix belongs. Nothing is lost the other way: the reducer's discount is
+    // on ACTIVATIONS, which happen after every cast regardless. =0 restores reducer-first.
+    static const bool s_payload_first_env = EnvOn("MTG_EDF_PAYLOAD_FIRST", true);
+    const bool payload_first = heurarm::Flag(heurarm::EDF_PAYLOAD_FIRST, s_payload_first_env);
+    if (payload_first)
+    {
+        if (def.params.etb_untap_lands > 0)          { return 5; }   // the payload funds what follows
+        if (def.params.reduces_creature_activation)  { return 6; }   // Training Grounds cheapens both outlets
     }
     if (def.params.reduces_creature_activation)  { return 5; }   // Training Grounds cheapens both outlets
     if (def.params.etb_untap_lands > 0)          { return 6; }   // the payload refunds its own cost

@@ -1,0 +1,73 @@
+{
+ "deck": "decks/EldraziDisplacerFlicker/EldraziDisplacerFlicker.cod",
+ "active_life": 20,
+ "opponent_life": 20,
+ "opponent_library_size": 50,
+ "library_filler": "Forest",
+ "depth": 5,
+ "budget_ms": 20,
+ "max_turns": 8,
+ "_comment": [
+  "claude_s8_gi7 T3 (human wins T3; the search handed this board wins T5 at 20 ms; its own line wins T4 --",
+  "2026-09-15 hand-off probes). Conservatory+Fertile Ground and Mariposa+Wild Growth untapped, hand = Cloud,",
+  "Displacer, Fertile Ground; T3 draw = Yavimaya Coast (library_top[0]).",
+  "HUMAN T3: Yavimaya; Fertile Ground -> Mariposa; Cloud (untap 2); Displacer; blink Cloud x24 for {2}{C}",
+  "against a 5-mana untap (net +2, bank); then Conservatory investigate / Mariposa draw / Clue cracks",
+  "interleaved with blinks until the 17th dug card is Living Wish -> Essence Depleter -> drain 20.",
+  "Session 23 named this the H-construct 'bank -> dig -> wish -> deploy -> sink inside ONE main phase'.",
+  "library_top = the recorded draw order (the reference's own `drew` fields)."
+ ],
+ "turn": 3,
+ "on_the_play": true,
+ "battlefield": [
+  {
+   "name": "Conservatory",
+   "controller": 0,
+   "tapped": false
+  },
+  {
+   "name": "Mariposa Military Base",
+   "controller": 0,
+   "tapped": false
+  },
+  {
+   "name": "Fertile Ground",
+   "controller": 0,
+   "tapped": false,
+   "equips": "Conservatory"
+  },
+  {
+   "name": "Wild Growth",
+   "controller": 0,
+   "tapped": false,
+   "equips": "Mariposa Military Base"
+  }
+ ],
+ "hand": [
+  "Cloud of Faeries",
+  "Eldrazi Displacer",
+  "Fertile Ground"
+ ],
+ "library_top": [
+  "Yavimaya Coast",
+  "Overgrowth",
+  "Peregrine Drake",
+  "Wild Growth",
+  "Adarkar Wastes",
+  "Wild Growth",
+  "Yavimaya Coast",
+  "Fertile Ground",
+  "Emiel the Blessed",
+  "Overgrowth",
+  "Emiel the Blessed",
+  "Kitchen",
+  "Aether Hub",
+  "Brushland",
+  "Mariposa Military Base",
+  "Brushland",
+  "Fertile Ground",
+  "Living Wish"
+ ],
+ "library_size": 25,
+ "expect_win_turn": 3
+}

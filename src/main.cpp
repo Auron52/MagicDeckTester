@@ -3038,7 +3038,7 @@ std::map<std::pair<int, int>, bool> ParseStorageHoldSpec(const std::string& stor
 // The engine holds RAW POINTERS to the chooser objects RunClaudePlay owns on its stack, so every one
 // has to be cleared before those objects go out of scope. Keeping the full list in one function makes
 // a missed entry visible instead of buried at the end of a 1100-line body.
-void ClearClaudePlayChoosers()
+void ClearClaudePlayChoosers(bool keep_sinks)
 {
 g_play_top_chooser = nullptr;
 g_play_target_chooser = nullptr;
@@ -3069,10 +3069,13 @@ g_play_cast_order_chooser = nullptr;
 g_play_attackers_chooser = nullptr;
 g_play_tap_pref_chooser = nullptr;
 g_play_storage_hold_chooser = nullptr;
-g_play_draw_sink = nullptr;
-g_play_reveal_sink = nullptr;
-g_play_event_sink = nullptr;
-g_play_dropped_cast_sink = nullptr;
+if (!keep_sinks)   // --choices-then-auto keeps them: the search's turns still narrate final_events
+{
+    g_play_draw_sink = nullptr;
+    g_play_reveal_sink = nullptr;
+    g_play_event_sink = nullptr;
+    g_play_dropped_cast_sink = nullptr;
+}
 // Was MISSING: installed at RunClaudePlay (the only g_play_* hook set outside Install), so the
 // global outlived the harness it pointed into. Harmless only because the process returns from main
 // straight after -- but this function's whole point is that one list makes a gap visible.
@@ -3241,6 +3244,35 @@ struct ClaudePlayHarness
     // N-1 earlier plan fans; a persistent child pays only for its own frame. Same code path as a
     // continuous game -- the choosers just loop back into their consume branch instead of exiting.
     bool        interactive    = false;
+    // --choices-then-auto: when the --choices stream runs out at a MAIN-PHASE frame, instead of
+    // emitting the frame and exiting 70, hand the game to the shipped search (AIEngine::
+    // kHandBackToSearch) -- human-play widening off, every human chooser uninstalled -- so a
+    // reference's recorded prefix puts the autonomous engine on the human's exact board. The
+    // diagnostic behind "can the search win from here, and at what budget?".
+    bool        then_auto      = false;
+    bool        handed_back    = false;
+    AIEngine*   engine         = nullptr;   // set by Install; needed to uninstall its own choosers
+    int HandBackToSearch(const GameState& s)
+    {
+        handed_back = true;
+        // The rest of the game is AUTONOMOUS: HumanPlayActive() false and MTG_UNPRUNED suppressed
+        // (DecisionUnpruned reads the same flag), exactly as inside the engine's own rollouts --
+        // set permanently rather than scoped.
+        g_human_play_suppressed = true;
+        ClearClaudePlayChoosers(/*keep_sinks=*/true);
+        if (engine)
+        {
+            engine->SetExternalVialChooser(nullptr);
+            engine->SetExternalEchoChooser(nullptr);
+            engine->SetExternalMulliganChooser(nullptr);
+            engine->SetExternalBottomChooser(nullptr);
+            // NOT the main chooser: this call is running inside it; AIEngine drops it on return.
+        }
+        std::cerr << "[then-auto] --choices exhausted after " << decisions_made
+                  << " picks (main_ordinal " << main_ordinal << ") at turn " << s.turn_number
+                  << " -- handing the board to the search\n";
+        return AIEngine::kHandBackToSearch;
+    }
     // #10: ordinal of the current main-phase decision among all main-phase decisions (the external
     // chooser is called once per main-phase decision, exactly mirroring AIEngine::m_ext_main_ordinal).
     // Emitted in the decision JSON so the viewer keys --cast-order by it. Post-incremented per call.
@@ -3556,6 +3588,7 @@ void ClaudePlayHarness::Install(AIEngine& ai)
     // tells RevealLogPause it can no longer take the "nothing is installed" fast path. Set once,
     // never cleared -- ClearClaudePlayChoosers deliberately leaves it true (sticky by design).
     g_play_hooks_installed   = true;
+    engine                   = &ai;
     g_play_draw_sink         = &draw_log;
     g_play_reveal_sink       = &reveal_log;
     g_play_event_sink        = &event_log;
@@ -3621,6 +3654,8 @@ void ClaudePlayHarness::InstallEngineChoosers(AIEngine& ai)
                 dropped_log.clear();
                 return chosen;
             }
+            // --choices-then-auto: the scripted prefix ends HERE; the search plays the rest.
+            if (then_auto) { return HandBackToSearch(s); }
             // Human-play line reconciliation: if a --validate-line was supplied, this is the
             // FIRST un-chosen main-phase decision -- reconcile the hand-assembled line against
             // the model instead of dumping the plan menu. Accept -> emit the matched plan index
@@ -5107,7 +5142,8 @@ static int RunClaudePlay(const Decklist& deck, const MulliganProfile& profile,
                          bool jitte_prompt = false,
                          const std::string& force_attackers_spec = "",
                          const std::string& tap_pref_spec = "",
-                         bool interactive = false)
+                         bool interactive = false,
+                         bool then_auto = false)
 {
     GameState state = GoldFishRunner::SetupGame(deck, seed);
     state.vial_target_mv = profile.vial_target_mv;
@@ -5115,9 +5151,19 @@ static int RunClaudePlay(const Decklist& deck, const MulliganProfile& profile,
     // Stamp stable per-copy card numbers (goldfish only does this under --log-dir). Claude-play needs
     // them so the emitted hand/decision JSON carries real "num"s and --force-mulligan can bottom a
     // specific card by number (mulligan reproducibility). See docs/design/claude-play-mulligan-*.
-    GoldFishRunner::AssignCardNumbers(state, GoldFishRunner::BuildCardNumbering(deck));
+    const std::map<std::string, std::vector<int>> numbering = GoldFishRunner::BuildCardNumbering(deck);
+    GoldFishRunner::AssignCardNumbers(state, numbering);
 
     AIEngine ai(profile, lookahead_depth, timeout_ms);
+    // --choices-then-auto + --log-dir: ALSO write the ordinary goldfish action log (the search's
+    // turns have no decision frames, so without this the hand-off's turns would be invisible).
+    GameLogger then_auto_logger;
+    const bool log_then_auto = then_auto && !log_dir.empty();
+    if (log_then_auto)
+    {
+        then_auto_logger.StartGame("then_auto", game_index, "d1", seed, numbering);
+        ai.SetLogger(&then_auto_logger);
+    }
 
     // Mulligan reproducibility (--force-mulligan "<count>:<n1,n2,...>"): reconstruct a reference's
     // exact opening hand by keeping at <count> mulligans and bottoming the listed card numbers,
@@ -5148,14 +5194,23 @@ static int RunClaudePlay(const Decklist& deck, const MulliganProfile& profile,
     h.attackers_by_turn    = ParseForceAttackersSpec(force_attackers_spec);
     h.tap_pref_by_phase    = ParseTapPrefSpec(tap_pref_spec);
     h.interactive          = interactive;
+    h.then_auto            = then_auto;
     // Belt-and-braces (see g_play_hooks_installed): this process drives human choosers, so it must
     // never take the pause fast path even if a future chooser is installed outside Install().
     g_play_hooks_installed = true;
     h.Install(ai);
 
     GameEngine engine(ai);
+    if (log_then_auto) { engine.SetLogger(&then_auto_logger); }
     int win_turn = engine.RunGame(state, max_turns);
-    ClearClaudePlayChoosers();
+    ClearClaudePlayChoosers(/*keep_sinks=*/false);
+    if (log_then_auto)
+    {
+        then_auto_logger.EndGame(win_turn);
+        std::filesystem::create_directories(log_dir);
+        then_auto_logger.WriteToFile(log_dir / ("then_auto_s" + std::to_string(seed) + "_gi"
+                                                + std::to_string(game_index) + "_game.json"));
+    }
     bool won = win_turn > 0 && win_turn <= max_turns;
 
     // Mulligan reproducibility: the actual (count, bottomed-card-numbers) this game used. Recorded
@@ -5604,6 +5659,29 @@ static int RunScenario(const std::filesystem::path& scenario_path)
     // energy-gated colour mode would otherwise be unreachable from a fixture -- and unreachable
     // code is untested code.
     state.players[0].energy_counters = j.value("energy_counters", 0);
+    // Stage a FLOATING POOL ("floating_mana": {"W": 1, "G": 2, "C": 1}). A reconstructed mid-turn
+    // frame was otherwise always asked with an EMPTY pool (the combo-off sweep's first listed blind
+    // spot), so a construct that hinges on WHICH floating colour pays a generic pip -- claude_s6_gi5
+    // T4: cast the outlet out of {W}{G}{G}{C} and keep the {C} for the first blink -- had no fixture
+    // form at all. Applies to the board as authored (the enumeration / combo-off probes); a
+    // win-turn probe steps into the turn through an untap, where any pool empties as in the game.
+    if (j.contains("floating_mana"))
+    {
+        for (auto it = j["floating_mana"].begin(); it != j["floating_mana"].end(); ++it)
+        {
+            const std::string k = it.key();
+            const int         n = it.value().get<int>();
+            Color c = Color::Colorless;
+            if      (k == "W") { c = Color::White; }
+            else if (k == "U") { c = Color::Blue; }
+            else if (k == "B") { c = Color::Black; }
+            else if (k == "R") { c = Color::Red; }
+            else if (k == "G") { c = Color::Green; }
+            else if (k != "C")
+            { std::cerr << "scenario: floating_mana key must be one of W/U/B/R/G/C: " << k << "\n"; return 2; }
+            state.floating_mana.Add(c, n);
+        }
+    }
     state.players[1].life       = j.value("opponent_life", 20);
     // 2HG opponent heads (core/GameSetup.h): how many opposing players share players[1]'s pool.
     // A fixture field (default unset -> env -> 1) so the second-face targeting and "each opponent"
@@ -5634,6 +5712,19 @@ static int RunScenario(const std::filesystem::path& scenario_path)
     state.active_player_index   = 0;
     state.priority_player_index = 0;
     state.turn_number           = turn - 1;   // PlayOut steps INTO `turn`
+    // MID-TURN FIXTURE ("resume_at": "main1" | "main2"): the board is a frame INSIDE `turn` -- lands
+    // already tapped, a pool floating, the land drop possibly used -- so the playout must start at
+    // that main phase of `turn` itself (GameEngine::PlayOutFrom) rather than step into `turn`
+    // through an untap and a draw that would untap the lands, empty the pool and add a card. This
+    // is what lets a reference's mid-go-off frame (claude_s6_gi5 T4, ninth pick) be a fixture at
+    // all. Default (absent) is the historical new-turn entry, byte-identical.
+    const std::string resume_at = j.value("resume_at", std::string(""));
+    if (!resume_at.empty())
+    {
+        if (resume_at != "main1" && resume_at != "main2")
+        { std::cerr << "scenario: resume_at must be \"main1\" or \"main2\"\n"; return 2; }
+        state.turn_number = turn;   // the turn already in progress
+    }
     state.on_the_play           = j.value("on_the_play", true);
     state.game_seed             = j.value("seed", 1);
 
@@ -5993,7 +6084,10 @@ static int RunScenario(const std::filesystem::path& scenario_path)
     GameEngine engine(ai);
     engine.SetLogger(&logger);
 
-    const int win_turn = engine.PlayOut(state, max_turns);
+    const int win_turn = resume_at.empty()
+        ? engine.PlayOut(state, max_turns)
+        : engine.PlayOutFrom(state, max_turns, resume_at == "main1" ? GameEngine::ResumeAt::Main1
+                                                                     : GameEngine::ResumeAt::Main2);
     logger.EndGame(win_turn);
 
     const std::string log_out = j.value("log_out", std::string(""));
@@ -6449,6 +6543,7 @@ int main(int argc, char* argv[])
                                                 // even under claude-play (which skips it by default)
     std::string choices_str;          // comma-separated plan indices for --claude-play
     bool        play_interactive = false;   // --interactive: viewer persistent-child mode
+    bool        choices_then_auto = false;  // --choices-then-auto: search plays on after the prefix
     std::string firebreathe_str;      // #4: "turn:count,..." firebreathe-amount side-channel (turn-keyed)
     bool firebreathe_prompt = false;  // #4: --firebreathe-prompt -> exit-70 to ask when a turn is unanswered
     std::string jitte_str;            // Umezawa's Jitte: "turn:count,..." counter-spend side-channel
@@ -6481,6 +6576,7 @@ int main(int argc, char* argv[])
         if (flag == "--trace")               { trace_t1 = true; continue; }
         if (flag == "--claude-play")         { claude_play = true; continue; }
         if (flag == "--interactive")         { play_interactive = true; continue; }   // viewer persistent-child mode (value-less; see ClaudePlayHarness::AwaitMoreChoices)
+        if (flag == "--choices-then-auto")   { choices_then_auto = true; continue; } // reference prefix, then the shipped search (see ClaudePlayHarness::then_auto)
         if (flag == "--exhaustive-keep")     { force_exhaustive_keep = true; continue; }
         if (flag == "--ignore-play-profile") { ignore_play_profile = true; continue; }
         if (flag == "--eval-draw")           { eval_on_play = false; continue; }
@@ -6743,12 +6839,31 @@ int main(int argc, char* argv[])
             {
                 if (!tok.empty()) { choices.push_back(std::stoi(tok)); }
             }
+            // --choices-then-auto: the search that takes over must run at the deck's SHIPPED play
+            // settings (value_play, else the built-in d5/20), exactly as the goldfish path below
+            // resolves them -- the plain claude-play path passes the raw CLI values because its
+            // main phases never search.
+            if (choices_then_auto)
+            {
+                try
+                {
+                    PlaySettings ps = ResolvePlaySettings(profile,
+                        depth_provided  ? lookahead_depth : -1,
+                        budget_provided ? timeout_ms      : -1,
+                        ignore_play_profile);
+                    lookahead_depth = ps.depth;
+                    timeout_ms      = ps.budget_ms;
+                    std::cerr << "[play] depth=" << ps.depth << " budget=" << ps.budget_ms
+                              << "ms source=" << ps.source << " (then-auto)\n";
+                }
+                catch (const std::exception& e) { std::cerr << "Error: " << e.what() << "\n"; return 1; }
+            }
             return RunClaudePlay(deck, profile, seed, base_game_index, max_turns,
                                  lookahead_depth, timeout_ms, choices, reveal_count, log_dir,
                                  validate_line, force_mulligan, firebreathe_str, firebreathe_prompt,
                                  cast_order_str, storage_hold_str, storage_hold_prompt,
                                  jitte_str, jitte_prompt, force_attackers_str, tap_pref_str,
-                                 play_interactive);
+                                 play_interactive, choices_then_auto);
         }
 
         // Forced-mulligan replay (isolates play from mulligan/bottoming): reconstruct a recorded

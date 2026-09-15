@@ -1,0 +1,72 @@
+{
+ "deck": "decks/EldraziDisplacerFlicker/EldraziDisplacerFlicker.cod",
+ "active_life": 20,
+ "opponent_life": 20,
+ "opponent_library_size": 50,
+ "library_filler": "Forest",
+ "depth": 5,
+ "budget_ms": 20,
+ "max_turns": 8,
+ "_comment": [
+  "claude_s12_gi11 T3 (human wins T4, search T5 -- 2026-09-15 hand-off probes, scripts/ref_handoff.py).",
+  "Two untapped lands, hand = Chancery, Displacer, Emiel, Drake, Trace, TG (Trace is the T3 draw: library_top[0]).",
+  "HUMAN T3: tap Kitchen+Brushland for Trace -> Kitchen, play Azorius Chancery bouncing the TAPPED Brushland.",
+  "T4: replay Brushland = Kitchen(2)+Chancery(2)+Brushland(1) = 5 -> Drake (untap 5) -> Displacer + TG -> blink",
+  "loop on Brushland's {C}, Kitchen investigate dig, Living Wish -> Essence Depleter, drain 20.",
+  "SEARCH T3 (20/100/500 ms): Chancery + Training Grounds; its 'Chancery + Trace' plan scored a T5 tail because",
+  "its only Trace variant enchants BRUSHLAND and the karoo then bounces that very land (aura lost) -- and in the",
+  "T4 child the [Displacer, Drake] subset fails the canonical walk (TG-first order strands the Drake).",
+  "library_top = the game's real order from the T3 draw on (then_auto log of the T4 hand-off)."
+ ],
+ "turn": 3,
+ "on_the_play": true,
+ "battlefield": [
+  {
+   "name": "Brushland",
+   "controller": 0,
+   "tapped": false
+  },
+  {
+   "name": "Kitchen",
+   "controller": 0,
+   "tapped": false
+  }
+ ],
+ "hand": [
+  "Azorius Chancery",
+  "Eldrazi Displacer",
+  "Emiel the Blessed",
+  "Peregrine Drake",
+  "Training Grounds"
+ ],
+ "library_top": [
+  "Trace of Abundance",
+  "Brushland",
+  "Wild Growth",
+  "Conservatory",
+  "Fertile Ground",
+  "Eldrazi Displacer",
+  "Eldrazi Displacer",
+  "Conservatory",
+  "Wild Growth",
+  "Brushland",
+  "Aether Hub",
+  "Adarkar Wastes",
+  "Eladamri's Call",
+  "Mariposa Military Base",
+  "Wild Growth",
+  "Mariposa Military Base",
+  "Overgrowth",
+  "Emiel the Blessed",
+  "Aether Hub",
+  "Aether Hub",
+  "Peregrine Drake",
+  "Trace of Abundance",
+  "Yavimaya Coast",
+  "Living Wish",
+  "Brushland",
+  "Peregrine Drake"
+ ],
+ "library_size": 20,
+ "expect_win_turn": 4
+}

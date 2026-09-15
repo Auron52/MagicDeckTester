@@ -1,0 +1,116 @@
+{
+ "deck": "decks/EldraziDisplacerFlicker/EldraziDisplacerFlicker.cod",
+ "active_life": 20,
+ "opponent_life": 20,
+ "opponent_library_size": 50,
+ "library_filler": "Forest",
+ "depth": 5,
+ "budget_ms": 20,
+ "max_turns": 8,
+ "_comment": [
+  "claude_s6_gi5 T4, the human's fifth main-phase frame (2026-09-15 hand-off probes): every land tapped,",
+  "{W}{G}{G}{C} floating, Training Grounds and both Drakes on the battlefield, Eldrazi Displacer in hand.",
+  "THE WHOLE TURN IS: cast Displacer paying {2}{W} from W+G+G and KEEP the {C}, blink a Drake for {C} (TG),",
+  "untap 5 lands, loop, Kitchen investigate + Clue dig 25 cards to Living Wish -> Essence Depleter, drain.",
+  "The search handed this board wins T5 at 20/100/500 ms although its root holds the plan",
+  "'Eldrazi Displacer + Eldrazi Displacer(x189)' (hand go-off recognised, count 189): the trial apply spends",
+  "the floating {C} on the Displacer's generic pip (SpendFloatingTowardCost drains colourless before colours",
+  "unless the cost itself carries {C}), so the first blink cannot be paid. From the NEXT frame (Displacer",
+  "resolved, {C} floating) the search wins T4."
+ ],
+ "turn": 4,
+ "on_the_play": true,
+ "resume_at": "main1",
+ "battlefield": [
+  {
+   "name": "Adarkar Wastes",
+   "controller": 0,
+   "tapped": true
+  },
+  {
+   "name": "Brushland",
+   "controller": 0,
+   "tapped": true
+  },
+  {
+   "name": "Kitchen",
+   "controller": 0,
+   "tapped": true
+  },
+  {
+   "name": "Fertile Ground",
+   "controller": 0,
+   "tapped": false,
+   "equips": "Brushland"
+  },
+  {
+   "name": "Overgrowth",
+   "controller": 0,
+   "tapped": false,
+   "equips": "Kitchen"
+  },
+  {
+   "name": "Cloud of Faeries",
+   "controller": 0,
+   "tapped": false,
+   "sick": true
+  },
+  {
+   "name": "Peregrine Drake",
+   "controller": 0,
+   "tapped": false,
+   "sick": true
+  },
+  {
+   "name": "Peregrine Drake",
+   "controller": 0,
+   "tapped": false,
+   "sick": true
+  },
+  {
+   "name": "Training Grounds",
+   "controller": 0,
+   "tapped": false
+  }
+ ],
+ "hand": [
+  "Eldrazi Displacer"
+ ],
+ "floating_mana": {
+  "W": 1,
+  "G": 2,
+  "C": 1
+ },
+ "library_top": [
+  "Aether Hub",
+  "Wild Growth",
+  "Trace of Abundance",
+  "Mariposa Military Base",
+  "Mariposa Military Base",
+  "Adarkar Wastes",
+  "Aether Hub",
+  "Cloud of Faeries",
+  "Conservatory",
+  "Overgrowth",
+  "Yavimaya Coast",
+  "Shivan Gorge",
+  "Overgrowth",
+  "Yavimaya Coast",
+  "Emiel the Blessed",
+  "Eldrazi Displacer",
+  "Fertile Ground",
+  "Wild Growth",
+  "Kitchen",
+  "Adarkar Wastes",
+  "Yavimaya Coast",
+  "Brushland",
+  "Wild Growth",
+  "Living Wish",
+  "Conservatory",
+  "Peregrine Drake",
+  "Yavimaya Coast",
+  "Conservatory"
+ ],
+ "library_size": 20,
+ "expect_win_turn": 4
+}
