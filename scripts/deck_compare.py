@@ -514,6 +514,21 @@ class Spec:
         self.games   = int(s.get("games", 20000))
         self.seed    = int(s.get("seed", 910000))
         self.maxturn = int(s.get("max_turns", 8))
+        # FORMAT axis (2-Headed Giant): "starting_life": 30 + "opponent_heads": 2, the same two
+        # manifest keys test/regression.sh's <deck>2hg cases set (core/GameSetup.h). Applied
+        # IDENTICALLY to every arm, so the format is part of the shared apparatus and cancels out of
+        # the delta exactly like the play settings do. Unset -> the keys are absent from every job
+        # and the manifest is byte-identical to before.
+        #
+        # THE CAVEAT THIS CANNOT FIX, and it must be disclosed by the caller: a deck's keep table and
+        # value leaf are fitted at ONE format. The value leaf's cross-combination transfer argument
+        # (its features are generic and not card-indexed) does NOT extend across formats, where
+        # OppLife/OppCreatures stop being single-opponent scalars. Running a 20-life-fitted apparatus
+        # at 2HG is what the regression suite's 2hg cases already do (a recorded user decision), and
+        # it is SYMMETRIC across arms so the DELTA stays meaningful -- but the absolute level is not
+        # comparable to a 20-life screen's, and a format-native apparatus would be a separate build.
+        self.starting_life  = s.get("starting_life")
+        self.opponent_heads = s.get("opponent_heads")
         self.threads = int(s.get("threads", 0))
         self.base_path = s["base"] if os.path.isabs(s["base"]) else os.path.join(ROOT, s["base"])
         self.deck  = read_decklist(self.base_path)
@@ -541,6 +556,15 @@ class Spec:
         # cost a 20-minute generation, and it only failed LOUDLY because the two decks had disjoint
         # card names; two specs over the SAME deck would have mis-numbered in silence.
         self.out = os.path.join(OUT, self.name)
+        # ... and the per-RUN artifacts are namespaced by the SPEC, because `out` is keyed on the
+        # DECK. Two specs over one deck (a 2HG screen and its 20-life twin, a Serra sweep and an
+        # Ocelot sweep) otherwise overwrite each other's `screen.fingerprint.json` /
+        # `.results.json`, and the loser is a later `--confirm`: it reads whatever screen wrote last
+        # and compares a held-out block against the wrong run. That is the residual half of the
+        # hazard the note above records -- per-deck directories fixed two DECKS colliding, not two
+        # SPECS. Hit for real 2026-09-15: a 20-life twin clobbered the 2HG screen's fingerprint and
+        # the confirm refused, correctly, on a format mismatch that was pure stale bookkeeping.
+        self.stem = os.path.splitext(os.path.basename(self.raw_path))[0]
         self.arms = {"base": dict(self.counts)}
         for tag, ov in s["combinations"].items():
             c = dict(self.counts)
@@ -632,6 +656,9 @@ class Spec:
         j = {"name": name, "deck": deck, "deck_numbering": numbering,
              "games": self.games, "seed": self.seed if seed is None else seed,
              "max_turns": self.maxturn}
+        # Format keys, when set, go on EVERY job (see the Spec note) -- never per arm.
+        if self.starting_life  is not None: j["starting_life"]  = int(self.starting_life)
+        if self.opponent_heads is not None: j["opponent_heads"] = int(self.opponent_heads)
         if self.pin_play:
             # ResolvePlaySettings THROWS on an explicit depth while value_play drives, so a pinned
             # depth must say so. Omitting both is what lets the engine resolve the deck's own policy
@@ -1057,6 +1084,16 @@ def screen(spec, dry_run, only=None, seed=None, label="screen", with_floor=None)
     print("\napparatus:")
     print(f"  play profile   {os.path.relpath(spec.profile, ROOT) if spec.profile else 'NONE (deliberate)'}")
     print(f"  play settings  d{spec.depth} / {spec.budget}ms   <- {spec.play_source}")
+    if spec.starting_life is not None or spec.opponent_heads is not None:
+        print(f"  FORMAT         starting_life={spec.starting_life} opponent_heads={spec.opponent_heads}"
+              f"  (identical on every arm)")
+        print( "                 NOTE: the keep table and value leaf below were fitted at the deck's"
+               " OWN format.\n"
+               "                 Symmetric across arms, so the DELTA holds; the absolute level is NOT"
+               " comparable\n"
+               "                 to a single-opponent screen, and card thresholds keyed on a life"
+               " total (Serra\n"
+               "                 Ascendant's 30) can change state entirely.")
     print(f"  value model    {os.path.relpath(spec.value_profile, ROOT) if spec.value_profile else 'none'}"
           + ("" if not spec.value_profile else
              "  (LEGACY ladder rig: attached but never decides -- plays 0.079t below shipped)"
@@ -1190,12 +1227,17 @@ def screen(spec, dry_run, only=None, seed=None, label="screen", with_floor=None)
                "engine": stamp(os.path.join(ROOT, "build/Release/mtg")),
                "profile": stamp(profile), "table": stamp(table_src or (tpath if use_table else None)),
                "value_profile": stamp(spec.value_profile),
+               # The FORMAT is part of the apparatus: a --confirm whose held-out block ran at a
+               # different starting_life / opponent_heads is not a held-out block, it is a different
+               # game. Recorded here so the comparison is refused rather than silently reported as
+               # shrinkage.
+               "starting_life": spec.starting_life, "opponent_heads": spec.opponent_heads,
                "seed": spec.seed if seed is None else seed},
-              open(os.path.join(spec.out, f"{label}.fingerprint.json"), "w"), indent=1)
+              open(os.path.join(spec.out, f"{spec.stem}.{label}.fingerprint.json"), "w"), indent=1)
     print(f"\n{len(jobs)} arms x {spec.games:,} games -> ONE pooled batch"
           + (f"   (seed {seed}, held out from the screen's {spec.seed})" if seed is not None else ""))
     if dry_run:
-        json.dump({"jobs": jobs}, open(os.path.join(spec.out, f"{label}.manifest.json"), "w"), indent=1)
+        json.dump({"jobs": jobs}, open(os.path.join(spec.out, f"{spec.stem}.{label}.manifest.json"), "w"), indent=1)
         return 0
 
     # Drop the TABLE without dropping the PROFILE. Passing profile=None would do both -- the arm
@@ -1203,12 +1245,12 @@ def screen(spec, dry_run, only=None, seed=None, label="screen", with_floor=None)
     # to DefaultProfile() in silence. MTG_EXHAUSTIVE_PROFILE=none suppresses exactly the sidecar
     # (AttachExhaustiveSidecar), process-globally, which is what "symmetric" means here.
     env = {} if use_table else {"MTG_EXHAUSTIVE_PROFILE": "none"}
-    got = score(run_batch(jobs, spec.out, label, spec.threads, env, pin_deck=spec.base_path),
+    got = score(run_batch(jobs, spec.out, f"{spec.stem}.{label}", spec.threads, env, pin_deck=spec.base_path),
                 [j["name"] for j in jobs],
                 spec.maxturn, expect=spec.games)
     common = sorted(set.intersection(*[set(v) for v in got.values()]))
     print(f"\n{len(common):,} paired games, d{spec.depth} budget {spec.budget}ms   (negative delta = FASTER)\n")
-    cost = {k: v for k, v in job_costs(os.path.join(spec.out, f"{label}.err")).items()
+    cost = {k: v for k, v in job_costs(os.path.join(spec.out, f"{spec.stem}.{label}.err")).items()
             if k in run_arms}
     print(f"  {'combination':22s} {'avg':>8s} {'delta':>9s} {'se':>8s} {'t':>7s} {'ident':>7s} "
           f"{'n@3sig/0.03t':>13s} {'ms/game':>9s}")
@@ -1290,7 +1332,7 @@ def screen(spec, dry_run, only=None, seed=None, label="screen", with_floor=None)
                "engine_commit": head_commit(), "seed": spec.seed if seed is None else seed,
                "games": spec.games, "n_paired": len(common), "base_avg":
                    st.mean([got["base"][g] for g in common]), "results": results},
-              open(os.path.join(spec.out, f"{label}.results.json"), "w"), indent=1)
+              open(os.path.join(spec.out, f"{spec.stem}.{label}.results.json"), "w"), indent=1)
     if fmeta:
         ftags, route, per_arm, base_key, R, cell_name = fmeta
         for tag in ftags:
@@ -1844,7 +1886,7 @@ def confirm(spec, tag, dry_run):
     if dry_run:
         return rc
 
-    fps = [os.path.join(spec.out, f"{k}.fingerprint.json") for k in ("screen", "confirm")]
+    fps = [os.path.join(spec.out, f"{spec.stem}.{k}.fingerprint.json") for k in ("screen", "confirm")]
     if all(os.path.exists(f) for f in fps):
         fa, fb = (json.load(open(f)) for f in fps)
         # The git commit is METADATA, not the fingerprint: two commits touching only this
@@ -1871,13 +1913,13 @@ def confirm(spec, tag, dry_run):
                 + "".join(f"  {k}:\n" + show(k) for k in diff)
                 + "  A held-out block only tests SELECTION bias if everything except the games is\n"
                   "  held fixed; otherwise a shrunken effect is ambiguous. Re-run the screen.")
-    prev = os.path.join(spec.out, "screen.err")
+    prev = os.path.join(spec.out, f"{spec.stem}.screen.err")
     if not os.path.exists(prev):
         print("\n  (no earlier screen log beside this spec, so there is nothing to compare against --"
               "\n   this run stands on its own)")
         return 0
     a = score(prev, list(spec.arms), spec.maxturn)
-    b = score(os.path.join(spec.out, "confirm.err"), ["base", tag], spec.maxturn)
+    b = score(os.path.join(spec.out, f"{spec.stem}.confirm.err"), ["base", tag], spec.maxturn)
     if not (a.get("base") and a.get(tag)):
         print("\n  (the earlier screen log does not carry this combination -- nothing to compare)")
         return 0

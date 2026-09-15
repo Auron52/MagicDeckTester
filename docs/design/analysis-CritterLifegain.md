@@ -672,6 +672,72 @@ whose protection from black and red is INERT on all four DEBT axes against this 
 class of un-modelled upside the user already ruled on for Unexpectedly Absent. Its 0.007t edge over
 the Ajani/Serra line is inside that bias, so it is not a real winner.
 
+## 2HG — the format inverts the Serra Ascendant answer (2026-09-15)
+
+> USER: *"Serra Ascendant I'm less sure about. Have you tested 2HG? Serra Ascendant is really good
+> there."*
+
+**No — every screen above ran at 20 life / 1 head, and that omission is load-bearing for exactly
+this card.** `life_threshold_pump_life` is a **literal 30** and `SpellEffects.h` reads
+`players[c].life >= 30`, while 2HG starts at **30**. So in 2HG Serra Ascendant is a **6/6 flying
+lifelink for `{W}` the turn it lands**, instead of a 1/1 that must first gain +10 — and its lifelink
+connection is then a **six-life EVENT**, i.e. a counter on every Ajani's Pridemate and Voice of the
+Blessed and a team-wide pump from every Archangel of Thune. The 20-life screens under-rate it
+structurally, and the `Serra 2->1` cut in the screen-4 list was **20-life overfitting**.
+
+Run as `logs/deckcmp/critter_2hg_serra.json` (`starting_life 30`, `opponent_heads 2` — the same two
+manifest keys the suite's `critter2hg` cases use) and an otherwise-identical 20-life twin
+(`critter_20life_serra.json`), same arms, same apparatus, disjoint seed blocks.
+
+| arm | 20 life (base 4.7697) | 2HG (base 5.1190) |
+|---|---|---|
+| `serra0_ocelot2` — Serra 2->0, +2 Ocelot Pride | **-0.0388** (helps) | **+0.1784** (hurts badly) |
+| `serra4_voice2` — Serra 2->4, Voice 4->2 | **+0.0419** (hurts) | **-0.1687** (helps a lot) |
+| `serra4_auriok2` — Serra 2->4, Auriok 4->2 | -0.0472 | -0.2475 |
+| `best_serra1` — screen-4 list (Serra 1) | **-0.2848** | -0.1547 |
+| `best_serra2` — same, Serra 2 (Voice 4->3 instead) | -0.2721 | -0.2442 |
+| `best_serra4` — same, Serra 4 (Voice 4->3, Pridemate 4->2) | -0.2367 | **-0.3847** |
+
+**THE SIGN LITERALLY FLIPS on both isolated arms.** Cutting Serra is a small *gain* at 20 life and a
+large *loss* at 2HG; going to four is a small *loss* at 20 life and a large *gain* at 2HG. Paired
+within each format, on the working list:
+
+```
+20 life :  best_serra1 beats best_serra4 by  0.0481
+2HG     :  best_serra4 beats best_serra1 by  0.2300     <- ~4.8x larger, opposite direction
+```
+
+Held-out confirm of the 2HG winner (`--confirm best_serra4`, seed 1480000): -0.3895 +-0.0055 against
+the screen's -0.3847 +-0.0054, shrinkage -0.0047 +-0.0077 (t = -0.61) — reproduces; pooled
+**-0.3871 over 40,000 games**.
+
+**Reading it.** Unless the deck is played overwhelmingly at 20 life, **Serra Ascendant should go UP,
+not down** — the 2HG gain is roughly five times the 20-life cost, and the 20-life cost is itself
+inside the range where an unmeasured apparatus floor lives. Note also that the sim still
+*under*-rates Serra in 2HG: the granted FLYING is inert here (no blocker path), and in real 2HG
+evasion on a 6/6 is a large part of why the card is good. Every arrow points the same way.
+
+**A format caveat that is NOT resolved by this run:** the keep table and value leaf are fitted at 20
+life. Symmetric across arms, so the DELTA holds and the ranking is sound; the LEVEL is not comparable
+to a 20-life screen's (2HG base 5.119 vs 4.770), and a format-native apparatus would be a separate
+build. This is the configuration the suite's `critter2hg` cases already use, per a recorded user
+decision — it is an accepted approximation here, not a new one.
+
+### Driver changes this required (`scripts/deck_compare.py`)
+
+1. **A format axis**: spec keys `starting_life` / `opponent_heads`, applied IDENTICALLY to every arm
+   (so the format is shared apparatus and cancels out of the delta), echoed in the `apparatus:` block
+   with the fitted-at-another-format caveat, and **recorded in the fingerprint** so a `--confirm`
+   cannot silently compare blocks from two different formats.
+2. **Per-SPEC namespacing of the per-run artifacts.** `spec.out` is keyed on the DECK, so two specs
+   over one deck overwrote each other's `screen.fingerprint.json` / `.results.json` / `.err`. The
+   note at `Spec.out` already recorded the per-deck half of this hazard and predicted the rest:
+   *"two specs over the SAME deck would have mis-numbered in silence."* It bit for real here — the
+   20-life twin clobbered the 2HG screen's fingerprint, and the confirm **correctly refused** on a
+   format mismatch that was pure stale bookkeeping. Artifacts are now `<spec-stem>.<label>.*` and
+   the confirm reads the same names. The new `starting_life` fingerprint field is what made the
+   collision visible rather than a silently wrong comparison.
+
 <!-- verify_deck:begin (generated -- do not edit inside) -->
 ## Last verification (2026-09-08)
 
