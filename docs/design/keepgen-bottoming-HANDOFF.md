@@ -140,7 +140,73 @@ clamping silently. Corrected cross-pd gains: 38.7 % (bottoming), 73.2 % (keep, b
 
 ---
 
-## 5. WHY a peek-nullified lookahead still beats an ungated table
+## 5. WHY FiveColour fails the confounded gate — THREE HYPOTHESES TESTED AND ELIMINATED
+
+**This is unexplained. Do not re-tread the three below.** The user's read was right:
+*"There isn't a good explanation I can think of for this problem."*
+
+The baseline that makes it a puzzle: `confounded-bottoming-gate-failures.md` root-caused the only
+two prior failures (Dragons +0.0641, Mirrorwing +0.1006) to **starved sub-tables at R=1**, repaired
+both, and both flipped decisively negative (−0.1176 / −0.0918). Its conclusion — *"no deck with a
+properly-sampled sub-table has ever failed this gate"* — was written 2026-09-01, **before FiveColour
+existed. FiveColour is the first counterexample.**
+
+### Eliminated 1 — adaptive-floor "adversarial pool"
+
+Refinement targets contenders, so cells left at the R=2 floor are measurably worse AND noisier
+(dV +1.19…+1.63, corr(cnt,V) −0.67…−0.72 on all adaptive decks). Attractive, and **wrong as an
+explanation of the gate outcomes**:
+
+* **Goblins** has the worst pool of any deck (floor 58.2 %, dV +1.628) and **passes**.
+* **Dragons** had *no* floor cells at all (uniform R=40) and **failed**.
+* **FiveColour** has the mildest pool of the three adaptive decks and **fails**.
+
+The structure is real and worth knowing (§5b of `keep-argmin-winners-curse.md`), but it does not
+predict who fails.
+
+### Eliminated 2 — under-sampled sub-tables (the Dragons/Mirrorwing cause)
+
+FiveColour's sub-cells are trimodal 2/18/30, not starved at 1. `confounded-bottoming-gate-failures.md`
+explicitly lists **Goblins at "2 (= adaptive floor, legitimate)" as a PASS**. So an adaptive floor of
+2 is not by itself the defect. FiveColour's artifact check reports `min_rollouts=2 sub_target=2` and
+passes legitimately.
+
+### Eliminated 3 — fetchland bucket abstraction
+
+FiveColour is the only deck whose largest merge is heterogeneous in a way that matters: **5
+fetchlands (13 of 60 physical cards) fetching 5 different colour pairs, on a five-colour deck**,
+force-merged by construction. P(>=2 fetchlands in an opening 7) = **47.6 %**, so with bottoming
+firing on ~58.6 % of games the table faces a choice it cannot express on ~27.9 % of all games — very
+close to the 56.4 % deferral the gate chose. Every other deck's merges are functionally equivalent in
+context (Melira's are colour-matched by user ruling; slivers/mana-dorks are near-identical cards).
+
+**Tested against the shipped gated profile and refuted — deferral runs the WRONG WAY:**
+
+```
+ fetchlands in hand        slots     deferred   defer%
+                  0     20448610     12168701    59.5%
+                  1      5617080      2717779    48.4%
+                  2      1321040       603665    45.7%
+                  5         4704          972    20.7%
+                  6          364           18     4.9%
+  <=1 fetchland:  57.1% deferred      >=2 fetchlands: 45.2% deferred
+```
+
+The gate is **most** confident on fetchland-heavy hands, monotonically. So the +0.0142 t it buys is
+not coming from repairing fetchland choices. (Caveat worth keeping: abstraction error would make the
+table *confidently wrong*, which a margin-based gate cannot see — so this refutes "abstraction shows
+up as low confidence", not abstraction outright. But it does refute the gate's benefit being
+fetchland-driven, which was the testable part.)
+
+### What is still live
+
+**Play drift.** FiveColour's raw carries `commit 2f7822a2` / `play_digest b79a141457869ca5`, and every
+A/B here ran at HEAD. The labels were fit to play that no longer exists. Another agent was testing
+exactly this when this handoff was written — **check that result before spending anything else**, and
+note the precedent: the Mirrorwing repair recorded a stale-digest table that still shipped fine, so
+drift is not automatically disqualifying.
+
+## 5b. Why a peek-nullified lookahead can beat an ungated table (mechanism, not deck-specific)
 
 Not bucket abstraction — FiveColour's discovery merged almost nothing (K=27 over ~27 distinct cards).
 The mechanism is that **adaptive refinement makes the candidate pool adversarial**. Refinement
@@ -158,11 +224,23 @@ Melira Pod             23  30    600866   45.4%  +1.446  -0.72   0.472   3.06
 over a turn. This is the one failure mode that can be **worse than random** — a confounded lookahead
 rollout is an unbiased draw; the argmin prefers bad-and-lucky.
 
-**`fast` is what creates it.** Surveying all 22 committed raws, only those four decks have floor
-cells and they are exactly the four built with `--gen-mulligan fast`. All 18 `complete` decks
-(R=40, `sub_target:40`) refine every sub-cell and have none. So **`fast` is not merely "less R"** —
-it buys its 22–38 % saving by leaving the *worst* cells unrefined, which the recipe study does not
-mention. Weigh that when choosing a recipe. Melira was generated `fast`.
+**Adaptive bottoming is what creates it** — which `--gen-mulligan fast` selects. **Detect it from the
+count distribution, NOT from `R`**: adaptive runs are trimodal (2 / 18 / 30), bottoming-full runs are
+uniform at the cap. `sub_target` is absent from most raws (legacy) and is not a usable marker.
+
+```
+adaptive:  Creature Giving, FiveColour, Goblins, Melira Pod   (R=30, counts 2/18/30)
+           Mirrorwing Dragon v2                               (R=60 POOLED, counts 4/20/32/36/60)
+uniform:   everything else (R=40 / 60 / 41 / 22, 100% at cap)
+```
+
+**A fixed `cnt <= 2` threshold misses pooled adaptive decks** — pooling sums counts, so two floor
+cells become 4. That is how an earlier pass of this survey missed Mirrorwing v2. Detect the floor
+empirically.
+
+So `fast` is not merely "less R" — it buys its 22–38 % saving by leaving the *worst* cells unrefined.
+Worth weighing when choosing a recipe. **But per §5 this does not predict gate failure**, so do not
+treat it as the explanation for FiveColour.
 
 Residual exposure after `best_sub`'s filter: the fallback when *no* candidate is refined —
 **8.2 %** of m=1 decisions on Melira, 6.3 % on FiveColour.
