@@ -882,6 +882,13 @@ public:
         // decides who waits, not who is reachable. Meaningless once the plan is applied.
         bool bp_wave0 = false;
 
+        // Index of the BASE plan this wave-0 variant was fanned out from (-1 on a base plan and on
+        // anything not produced by AppendBreakpointVariants). Purely an back-pointer for
+        // MTG_BP_WAVE_NSKIP: it lets the variant's apply report the continuation list's real length
+        // back to the base plan's wave slot, which is otherwise discoverable only by applying into
+        // the slot and being told the rank is past the end. Never read by play or by any dedup key.
+        int bp_base = -1;
+
         bool empty() const { return actions.empty(); }
     };
 

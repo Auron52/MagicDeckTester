@@ -8497,6 +8497,31 @@ static uint64_t BpCandFingerprint(const TurnSolver::Plan& p)
 // the same one-apply-measures-the-list convention as g_bp_cands_last.
 static thread_local int g_bp_cands_fp_distinct = -1;
 
+// Global tally of the above (MTG_ROLLOUT_STATS only -- the fingerprints are computed only there).
+// Prints how much of the ranked continuation list is plain PLAN-LEVEL repetition.
+namespace bpcands
+{
+    inline std::atomic<uint64_t> g_fp_total{0}, g_fp_distinct{0}, g_fp_lists{0};
+    struct Dumper
+    {
+        ~Dumper()
+        {
+            const uint64_t t = g_fp_total.load(), d = g_fp_distinct.load();
+            if (t == 0) { return; }
+            std::fprintf(stderr,
+                "[bp-cands] LIST FINGERPRINTS: lists=%llu entries=%llu distinct=%llu"
+                " duplicate=%llu (%.1f%%) mean len=%.1f -> %.1f\n",
+                static_cast<unsigned long long>(g_fp_lists.load()),
+                static_cast<unsigned long long>(t), static_cast<unsigned long long>(d),
+                static_cast<unsigned long long>(t - d),
+                100.0 * static_cast<double>(t - d) / static_cast<double>(t),
+                static_cast<double>(t) / static_cast<double>(g_fp_lists.load()),
+                static_cast<double>(d) / static_cast<double>(g_fp_lists.load()));
+        }
+    };
+    inline Dumper g_dumper;
+}
+
 // Does this continuation cand APPLY as a no-op -- i.e. field-for-field what the explicit EMPTY
 // continuation's special case constructs (Plan{} + land_decided)? Checks every field
 // ApplyPlanDirect reads (ordering-only metadata -- value / wins_this_turn / pump_waste /
@@ -21632,6 +21657,17 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
                 std::sort(fps.begin(), fps.end());
                 g_bp_cands_fp_distinct =
                     static_cast<int>(std::unique(fps.begin(), fps.end()) - fps.begin());
+                // ...and the same number as a GLOBAL total, which nothing was keeping. It prices
+                // the one dedup on this path that is lossless in the SAFE direction: two entries
+                // with the same fingerprint are the same PLAN, and the same plan applied to the
+                // same state gives the same state -- the opposite of the twice-refuted "different
+                // plans, same state" inference. Every duplicate entry costs the wave a full rank
+                // (an ApplyPlanDirect) to rediscover a line it already has.
+                bpcands::g_fp_total.fetch_add(static_cast<uint64_t>(cands.size()),
+                                              std::memory_order_relaxed);
+                bpcands::g_fp_distinct.fetch_add(static_cast<uint64_t>(g_bp_cands_fp_distinct),
+                                                 std::memory_order_relaxed);
+                bpcands::g_fp_lists.fetch_add(1, std::memory_order_relaxed);
             }
             // EMPTY pre-skip channel (PLAY logic under the node, unlike the stats block above):
             // report whether the list holds an apply-empty entry, so the host can skip its
@@ -29715,8 +29751,9 @@ static void AppendBreakpointVariants(const GameState& state, std::vector<TurnSol
     const bool dig_bp = BpDigFanoutPending(state, sites);
     std::vector<TurnSolver::Plan> variants;
     int fanned = 0;
-    for (TurnSolver::Plan& p : plans)
+    for (std::size_t base_i = 0; base_i < plans.size(); ++base_i)
     {
+        TurnSolver::Plan& p = plans[base_i];
         // NOTE: the dig bypass below does NOT override the site mask, and cannot. BpDigFanoutPending
         // returns false unless bit 4 is already in `sites`, so every plan it lets through would pass
         // the mask test on bit 4 anyway. Rewriting it as `opens |= 1<<4` is a PROVABLE no-op -- built
@@ -29735,6 +29772,7 @@ static void AppendBreakpointVariants(const GameState& state, std::vector<TurnSol
                 v.bp_choice = k;
                 v.bp_at     = at;
                 v.bp_wave0  = false;   // the marker belongs to the base plan only
+                v.bp_base   = static_cast<int>(base_i);   // see Plan::bp_base / MTG_BP_WAVE_NSKIP
                 variants.push_back(std::move(v));
             }
         }
@@ -29910,6 +29948,51 @@ namespace
         std::atomic<uint64_t> slots{0};        // (base plan x bp_at) slots offered waves
         std::atomic<uint64_t> scored{0};       // wave candidates applied
         std::atomic<uint64_t> rolled{0};       // ... that survived dedup and got a rollout
+        // The scored-minus-rolled gap, split. It is the dominant cost on Snow (77.6% of all units
+        // are wave applies, of which 85% never reach a rollout), and the two halves want opposite
+        // fixes, so an unsplit gap cannot direct the work:
+        //   retired = the rank was PAST THE END of the continuation list, so the apply's only
+        //             product was learning `n`. One per slot, structural -- the walker cannot know
+        //             a list's length without applying into it.
+        //   dupstate = the apply landed on a post-apply state a sibling already reached
+        //             (bp_seen_states). Pure recomputation; the prize, if it can be seen earlier.
+        std::atomic<uint64_t> retired{0};
+        std::atomic<uint64_t> dupstate{0};
+        // ...and WHOSE state the duplicate repeats, which decides where a fix belongs:
+        //   dup_self  = an earlier RANK OF THE SAME SLOT (same base plan, same bp_at). The
+        //               continuation LIST is internally redundant -> fix in the continuation
+        //               enumerator, where it can be seen without applying.
+        //   dup_cross = a DIFFERENT wave slot reached it first -> needs a node-level mechanism,
+        //               and cannot be seen before the apply.
+        //   dup_w0    = the state was first reached OUTSIDE the wave entirely: by wave 0's own
+        //               ranks 0..W-1, or by an ordinary plan. This is the one that would say the
+        //               ranked continuation list has few DISTINCT outcomes and wave 0 already
+        //               covered them -- a statement about the list, not about the walker.
+        std::atomic<uint64_t> dup_self{0};
+        std::atomic<uint64_t> dup_cross{0};
+        std::atomic<uint64_t> dup_w0{0};
+        // BARREN SLOTS: a slot every one of whose applied ranks landed on an already-seen state, so
+        // the slot contributed NOTHING distinct to the node. `barren_applies` is what an early
+        // slot-retirement could have saved (minus one probe apply per slot); `fertile_applies` is
+        // the work that genuinely had to happen. This is the number that decides whether the fix
+        // belongs at the SLOT level rather than the candidate level.
+        std::atomic<uint64_t> slots_barren{0}, slots_fertile{0};
+        std::atomic<uint64_t> barren_applies{0}, fertile_applies{0};
+        // STILLBORN SLOTS: retired on their very FIRST wave apply, because a wave-0 plan's slot
+        // opens at rank W (BpSearchWidth) and the breakpoint's real continuation list is shorter
+        // than W. The apply's only product is learning `n` -- which an EARLIER apply of the same
+        // base plan already observed (g_bp_cands_last at wave 0). Avoidable losslessly.
+        std::atomic<uint64_t> slots_stillborn{0};
+        // ...and how many of them MTG_BP_WAVE_NSKIP actually declined to open. This is the lever's
+        // FIRING counter: a byte-identical A/B on a change you just added is a red flag, so the
+        // arm has to be able to say it did something. Counted whether or not the probe is on.
+        std::atomic<uint64_t> nskip_slots{0};
+        // ORDINARY base plans (bp_choice < 0) whose post-apply state duplicates an already-scored
+        // sibling. Today they are RECORDED and still searched in full -- the skip is deliberately
+        // scoped to bp_choice >= 0 variants so a deck with no variants stays byte-identical. The
+        // state-identity argument does not care about that distinction, so this counts what a
+        // label-scoped extension of the skip would collect (each is a whole subtree).
+        std::atomic<uint64_t> pre_dup{0}, pre_seen{0};
         std::atomic<uint64_t> improved{0};     // ... that beat the node's incumbent
         std::atomic<uint64_t> stopped{0};      // wave phases cut short by the budget
         std::atomic<int>      maxrank{0};      // deepest rank reached
@@ -29921,25 +30004,79 @@ namespace
             if (!EnvOn("MTG_BP_WAVE_PROBE")) { return; }
             std::fprintf(stderr,
                          "[bp-waves] nodes=%llu no-slots=%llu slots=%llu scored=%llu"
-                         " rolled=%llu improved=%llu budget-stopped=%llu max-rank=%d"
-                         " nested-slots=%llu nested-scored=%llu max-at=%d\n",
+                         " rolled=%llu retired=%llu dupstate=%llu(self=%llu cross=%llu w0=%llu)"
+                         " improved=%llu budget-stopped=%llu max-rank=%d"
+                         " nested-slots=%llu nested-scored=%llu max-at=%d"
+                         " | slots barren=%llu/%llu applies barren=%llu fertile=%llu"
+                         " stillborn=%llu nskip=%llu | pre-plans dup=%llu/%llu\n",
                          static_cast<unsigned long long>(nodes.load()),
                          static_cast<unsigned long long>(no_slots.load()),
                          static_cast<unsigned long long>(slots.load()),
                          static_cast<unsigned long long>(scored.load()),
                          static_cast<unsigned long long>(rolled.load()),
+                         static_cast<unsigned long long>(retired.load()),
+                         static_cast<unsigned long long>(dupstate.load()),
+                         static_cast<unsigned long long>(dup_self.load()),
+                         static_cast<unsigned long long>(dup_cross.load()),
+                         static_cast<unsigned long long>(dup_w0.load()),
                          static_cast<unsigned long long>(improved.load()),
                          static_cast<unsigned long long>(stopped.load()),
                          maxrank.load(),
                          static_cast<unsigned long long>(nested.load()),
                          static_cast<unsigned long long>(nested_scored.load()),
-                         maxat.load());
+                         maxat.load(),
+                         static_cast<unsigned long long>(slots_barren.load()),
+                         static_cast<unsigned long long>(slots_barren.load() + slots_fertile.load()),
+                         static_cast<unsigned long long>(barren_applies.load()),
+                         static_cast<unsigned long long>(fertile_applies.load()),
+                         static_cast<unsigned long long>(slots_stillborn.load()),
+                         static_cast<unsigned long long>(nskip_slots.load()),
+                         static_cast<unsigned long long>(pre_dup.load()),
+                         static_cast<unsigned long long>(pre_seen.load()));
         }
     };
     BpWaveProbe g_bp_wave_probe;
     inline bool BpWaveProbeOn()
     {
         static const bool on = EnvOn("MTG_BP_WAVE_PROBE");
+        return on;
+    }
+
+    // MTG_BP_WAVE_NSKIP (default OFF -> byte-identical) -- do not open a STILLBORN wave slot.
+    //
+    // A wave-0 base plan's slot opens at rank W (BpSearchWidth), because ranks 0..W-1 were already
+    // scored in the main loop. When the breakpoint's real continuation list is SHORTER than W there
+    // is nothing left to walk -- but the walker cannot know that, so it hands out rank W, pays a
+    // full ApplyPlanDirect, and is told by Report() that the rank is past the end. Measured on 18
+    // Snow label games: 72% of all slots retire on their very first hand-out, and those probes are
+    // ~15% of every wave apply in the run.
+    //
+    // The length is not unknowable -- it is merely unremembered. Wave 0's k=0 variant of that same
+    // (base plan, bp_at) already enumerated the list and wrote its size to g_bp_cands_last; the
+    // node just throws it away. Plan::bp_base carries the variant back to its base so the node can
+    // keep it, and the walker then declines to open a slot whose ranks are all past the end.
+    //
+    // LOSSLESS by construction, and in the strong sense: it removes no rank the walker would ever
+    // have SCORED -- only the probe that discovers the list is already exhausted. A miss (the k=0
+    // variant was beam-cut, or its apply never reached that breakpoint) records nothing and the
+    // slot opens exactly as it does today, so the fallback is current behaviour rather than a cut.
+    //
+    // *** NOT READY TO ADOPT -- KNOWN HAZARD, DO NOT FLIP THE DEFAULT (2026-09-15). ***
+    // Plan::bp_base is an INDEX into the plan vector, stamped inside AppendBreakpointVariants --
+    // but FSLineWin calls MoveOrderPlans(pre) AFTERWARDS, which SORTS that vector. So by the time
+    // the walker looks a base plan up, every stamped index may point at a different plan, and the
+    // skip can then decline a slot belonging to some other base. That is a LOSSY failure mode, not
+    // merely a missed saving. It did not show up in the 4-game smoke (rows identical) and that
+    // proves nothing -- this is the index-vs-content trap the repo has already paid for once
+    // (reference-replay anchoring: anchor on CONTENT, never on an INDEX).
+    // TO FIX: stamp each base plan with its own pre-sort index too, then after MoveOrderPlans
+    // rebuild old->new from the base plans and remap every variant's bp_base -- or drop the index
+    // entirely and key the map on the base plan's content.
+    // MEASURED WORTH, for whoever picks it up: 4 Snow label games, rows byte-identical,
+    // units 2,251,274 -> 2,212,481 (-1.7%); slots 228,213 -> 191,107; wave applies -3.6%.
+    inline bool BpWaveNSkipOn()
+    {
+        static const bool on = EnvOn("MTG_BP_WAVE_NSKIP");
         return on;
     }
 
@@ -29980,8 +30117,12 @@ public:
     // (BpWave0SiteMask) is a cost prune precisely because its plans are picked up here at rank 0.
     // (BpWaveSiteMask == BpSiteMask except under MTG_BP_NODE, where site 3 is the node's, not
     // the walker's -- its continuations were already searched in full at the node.)
+    // `known_n` (MTG_BP_WAVE_NSKIP; nullptr = off) maps (base plan index << 8 | bp_at) to the
+    // continuation list length wave 0's k=0 variant already measured there. See BpWaveNSkipOn.
+    using KnownLens = std::unordered_map<uint64_t, int>;
     BpWaveWalker(const GameState& state, const std::vector<TurnSolver::Plan>& plans,
-                 std::size_t limit)
+                 std::size_t limit, const KnownLens* known_n = nullptr)
+        : m_known_n(known_n)
     {
         const int  sites  = BpWaveSiteMask();
         const bool dig_bp = BpDigFanoutPending(state, sites);
@@ -30003,6 +30144,7 @@ public:
     // one (base plan, bp_at) slot shares its pre-continuation prefix state.
     std::size_t LastBase() const { return m_slots[m_last].base; }
     int         LastAt()   const { return m_slots[m_last].at; }
+    std::size_t LastSlot() const { return m_last; }   // MTG_BP_WAVE_PROBE slot attribution
 
     // Fills `out` with the next variant to score. False once every slot is retired.
     bool Next(const std::vector<TurnSolver::Plan>& plans, TurnSolver::Plan& out)
@@ -30045,7 +30187,14 @@ public:
         sl.n = n;
         const std::size_t bi = sl.base_slot;
         const bool past_end = (n <= m_last_k);
-        if (past_end) { sl.done = true; }
+        if (past_end)
+        {
+            sl.done = true;
+            // Retired on its FIRST hand-out: the list was already shorter than the rank this slot
+            // opened at, so the apply bought nothing but `n`. See slots_stillborn.
+            if (BpWaveProbeOn() && m_last_k == sl.k0)
+            { g_bp_wave_probe.slots_stillborn.fetch_add(1); }
+        }
         // Open slots for every nested breakpoint this apply proved exists.
         if (seen > 0 && BpNestDiscover()) { AddSlots(plans, bi, seen); }
         return past_end;
@@ -30057,6 +30206,7 @@ private:
         std::size_t base;       // index into the node's plan list
         std::size_t base_slot;  // index into m_bases / m_at_count (which base plan this belongs to)
         int         at;         // which breakpoint of the apply (Plan::bp_at)
+        int         k0;         // the rank this slot OPENED at (probe: stillborn detection)
         int         k_next;     // next rank to hand out
         int         n;          // the list's real length, -1 until an apply reports it
         bool        done;
@@ -30076,13 +30226,27 @@ private:
         for (int at = m_at_count[bi]; at < want; ++at)
         {
             const int k0 = (w0 && at < BpSearchDepth()) ? wid : 0;
-            m_slots.push_back(Slot{ idx, bi, at, k0, -1, false });
+            // STILLBORN SKIP (see BpWaveNSkipOn): wave 0 already measured this breakpoint's list,
+            // and every rank from k0 up is past its end -- so the slot has nothing to hand out and
+            // opening it buys only one apply's worth of rediscovery. A miss falls through.
+            if (m_known_n != nullptr && k0 > 0)
+            {
+                const auto it = m_known_n->find((static_cast<uint64_t>(idx) << 8)
+                                                | static_cast<uint64_t>(at & 0xFF));
+                if (it != m_known_n->end() && it->second <= k0)
+                {
+                    g_bp_wave_probe.nskip_slots.fetch_add(1, std::memory_order_relaxed);
+                    continue;
+                }
+            }
+            m_slots.push_back(Slot{ idx, bi, at, k0, k0, -1, false });
             if (at > 0 && BpWaveProbeOn())
             { g_bp_wave_probe.nested.fetch_add(1, std::memory_order_relaxed); }
         }
         if (want > m_at_count[bi]) { m_at_count[bi] = want; }
     }
 
+    const KnownLens*         m_known_n = nullptr;   // MTG_BP_WAVE_NSKIP; nullptr = off
     std::vector<Slot>        m_slots;
     std::vector<std::size_t> m_bases;      // node-plan index of each base plan, in slot-creation order
     std::vector<int>         m_at_count;   // how many bp_at slots each base already has
@@ -34968,10 +35132,106 @@ static bool FsHorizonExitOn()
     return (valuearm::t_arm.fs_horizon_exit >= 0) ? (valuearm::t_arm.fs_horizon_exit != 0) : on;
 }
 
+// ---- GENERAL EOT STATE CLOSURE (MTG_FSW_EOT_DEDUP, default OFF = byte-identical) -------------
+//
+// WinlessDevelopActive arms the end-of-turn state closure only where the provider can PROVE the
+// turn winless. That proof is the motivation for the mechanism, not its soundness argument: what
+// licenses the collapse is STATE IDENTITY (two siblings whose post-EOT BuildDedupKey agrees have
+// the same future, so searching the second re-runs the first), and a this-turn kill never reaches
+// the closure at all -- FSLineTail returns on `OpponentHasLost(s2)` several dozen lines above it,
+// and FSLineWin's own pre loop does the same. So the closure is available at EVERY node, not only
+// the proven-stuck ones.
+//
+// WHY IT IS AIMED HERE AND NOT AT THE CANDIDATE LOOP. MTG_CAND_DEDUP_UNBOUNDED tried the same
+// idea in SolveWithLookahead and measured INERT on the label path (94,481,425 units both arms) --
+// that site is PLAY-side and EnumerateEarliestWins never reaches it. This boundary is inside
+// FSLineWin/FSLineTail, which is exactly what the label ladder runs, and what a duplicate costs
+// here is not one rollout but the whole recursive subtree beneath the boundary.
+//
+// MODES (EnvInt, because this is a tri-state, not a boolean):
+//   0 / unset  off -- byte-identical, zero cost.
+//   1          CENSUS: build the set and count, but NEVER skip. An armed run stays byte-identical
+//              to a disarmed one, so the number is the size of the prize, not a claim about it.
+//              (Same discipline as MTG_DEDUP_CENSUS -- see the note at the top of this file.)
+//   2          COLLAPSE: skip a duplicate boundary.
+// Scope is UnbudgetedWorkScopeActive -- it drops no distinct line, but it does change which
+// equivalent plan gets recorded, and a budget reading the unit count would see the saving as
+// extra depth. Budgeted play is untouched at every mode.
+namespace fswdedup
+{
+inline int  Mode()        { static const int v = EnvInt("MTG_FSW_EOT_DEDUP", 0); return v; }
+inline bool Armed()       { return Mode() > 0 && UnbudgetedWorkScopeActive(); }
+inline bool CollapseOn()  { return Mode() >= 2; }
+inline std::atomic<unsigned long long> g_nodes{0}, g_distinct{0}, g_collapsed{0};
+// WHERE the duplicate sits, which is the whole question -- a duplicate is only worth collapsing if
+// the recursion it elides was going to DO something. Three classes, and only the last is a prize:
+//   free = the recursion's own first two lines refuse it (turn > max_turns, or turn > cutoff:
+//          "can't beat incumbent"). Collapsing it saves nothing at all.
+//   leaf = depth <= 0, so the recursion is one leaf evaluation -- and on the label path the leaf
+//          is the constant no-leaf (MTG_EVAL_ROWS_ROLLOUT=0), i.e. free and unit-free too.
+//   real = an actual subtree: enumeration, applies, recursion.
+inline std::atomic<unsigned long long> g_dup_free{0}, g_dup_leaf{0}, g_dup_real{0};
+inline std::atomic<unsigned long long> g_dis_free{0}, g_dis_leaf{0}, g_dis_real{0};
+struct Dumper
+{
+    ~Dumper()
+    {
+        const unsigned long long d = g_distinct.load(), c = g_collapsed.load();
+        if (d + c == 0) { return; }
+        std::fprintf(stderr,
+            "=== FSW EOT DEDUP (mode=%d): general nodes=%llu distinct end-states=%llu "
+            "duplicate=%llu (%.1f%% of boundaries) ===\n",
+            Mode(), g_nodes.load(), d, c,
+            100.0 * static_cast<double>(c) / static_cast<double>(d + c));
+        const unsigned long long dr = g_dup_real.load(), sr = g_dis_real.load();
+        std::fprintf(stderr,
+            "===   by elided work: duplicate free=%llu leaf=%llu REAL=%llu | "
+            "distinct free=%llu leaf=%llu real=%llu | real-dup share=%.1f%% ===\n",
+            g_dup_free.load(), g_dup_leaf.load(), dr,
+            g_dis_free.load(), g_dis_leaf.load(), sr,
+            (dr + sr) ? (100.0 * static_cast<double>(dr) / static_cast<double>(dr + sr)) : 0.0);
+    }
+};
+inline Dumper g_dumper;
+}
+
 // `eot_seen` (STUCK-TURN STATE CLOSURE, see WinlessDevelopActive): the caller's set of end-of-turn
 // states already searched at this decision. nullptr -- every caller but the stuck-node plan loop --
 // disables the collapse entirely.
-using EotStateSet = std::unordered_set<TranspositionTable::Key, TranspositionTable::KeyHash>;
+struct EotStateSet
+{
+    std::unordered_set<TranspositionTable::Key, TranspositionTable::KeyHash> seen;
+    bool collapse = true;    // false = census only: count the duplicate, still search it
+    bool general  = false;   // armed by MTG_FSW_EOT_DEDUP rather than by the winless proof
+
+    // Returns true when this boundary should be SEARCHED. A proven-stuck node keeps the winless
+    // counters (so the existing A/B reads unchanged); a generally-armed node keeps its own, which
+    // makes the census an INCREMENT over what the winless closure already collapses.
+    // `next`/`eff_cutoff`/`depth` describe the recursion this boundary is about to make, so the
+    // census can say what a collapse would actually have elided (see fswdedup's class split).
+    bool Visit(const TranspositionTable::Key& k, const GameState& next, int eff_cutoff,
+               int depth, int max_turns)
+    {
+        const bool fresh = seen.insert(k).second;
+        if (general)
+        {
+            const bool free_ret = next.turn_number > max_turns || next.turn_number > eff_cutoff;
+            std::atomic<unsigned long long>& bucket =
+                free_ret     ? (fresh ? fswdedup::g_dis_free : fswdedup::g_dup_free)
+                : (depth <= 0) ? (fresh ? fswdedup::g_dis_leaf : fswdedup::g_dup_leaf)
+                             : (fresh ? fswdedup::g_dis_real : fswdedup::g_dup_real);
+            bucket.fetch_add(1, std::memory_order_relaxed);
+            (fresh ? fswdedup::g_distinct
+                   : fswdedup::g_collapsed).fetch_add(1, std::memory_order_relaxed);
+        }
+        else if (winlesscert::StatsOn())
+        {
+            (fresh ? winlesscert::g_dev_distinct
+                   : winlesscert::g_dev_collapsed).fetch_add(1, std::memory_order_relaxed);
+        }
+        return fresh || !collapse;
+    }
+};
 static TurnSolver::SearchLine FSLineTail(const GameState& state, int depth, int max_turns,
                                          int cutoff, bool second_main, TranspositionTable* tt,
                                          FSLineCache* lc, SearchBudget* budget,
@@ -35431,18 +35691,12 @@ static TurnSolver::SearchLine FSLineTail(const GameState& state, int depth, int 
             }
             if (!SimulateEndAndStartNextTurn(s2)) { continue; }
             ExpireStagedCards(s2);
-            // STATE CLOSURE (WinlessDevelopActive): a sibling already searched this exact
-            // end-of-turn state, so this line's future IS that line's future.
-            if (eot_seen != nullptr)
-            {
-                const bool fresh = eot_seen->insert(BuildDedupKey(s2)).second;
-                if (winlesscert::StatsOn())
-                {
-                    (fresh ? winlesscert::g_dev_distinct
-                           : winlesscert::g_dev_collapsed).fetch_add(1, std::memory_order_relaxed);
-                }
-                if (!fresh) { continue; }
-            }
+            // STATE CLOSURE (WinlessDevelopActive / fswdedup): a sibling already searched this
+            // exact end-of-turn state, so this line's future IS that line's future.
+            if (eot_seen != nullptr
+                && !eot_seen->Visit(BuildDedupKey(s2), s2, std::min(cutoff, best.win_turn),
+                                    depth, max_turns))
+            { continue; }
             // EOT dominance on the caller's frontier. Every (pre-combat x second-main) combination
             // reaching here came from the SAME node with the SAME draws consumed, so they are all
             // siblings in the sense the comparability argument needs.
@@ -35721,16 +35975,8 @@ static TurnSolver::SearchLine FSLineTail(const GameState& state, int depth, int 
     if (!SimulateEndAndStartNextTurn(s)) { return { max_turns + 1, {} }; }
     ExpireStagedCards(s);
     // STATE CLOSURE -- the SINGLE-MAIN boundary, which is the one EldraziDisplacerFlicker uses.
-    if (eot_seen != nullptr)
-    {
-        const bool fresh = eot_seen->insert(BuildDedupKey(s)).second;
-        if (winlesscert::StatsOn())
-        {
-            (fresh ? winlesscert::g_dev_distinct
-                   : winlesscert::g_dev_collapsed).fetch_add(1, std::memory_order_relaxed);
-        }
-        if (!fresh) { return { max_turns + 1, {} }; }
-    }
+    if (eot_seen != nullptr && !eot_seen->Visit(BuildDedupKey(s), s, cutoff, depth, max_turns))
+    { return { max_turns + 1, {} }; }
     // Single-main decks reach the boundary here instead of the `post` loop above; this is where
     // their pre-combat siblings actually become comparable.
     domin::Probe dprobe;
@@ -36378,6 +36624,12 @@ static TurnSolver::SearchLine FSLineWin(const GameState& state, int depth, int m
     bool bp_variants_here = false;
     for (const TurnSolver::Plan& p : pre) { if (p.bp_choice >= 0) { bp_variants_here = true; break; } }
     std::unordered_set<TranspositionTable::Key, TranspositionTable::KeyHash> bp_seen_states;
+    // MTG_BP_WAVE_PROBE only: which wave SLOT first reached each key, for the dup_self/dup_cross
+    // split. Left empty (never inserted into) when the probe is off.
+    std::unordered_map<TranspositionTable::Key, uint64_t, TranspositionTable::KeyHash> wave_key_slot;
+    // MTG_BP_WAVE_NSKIP only: continuation-list lengths this node's wave-0 variants measured, keyed
+    // (base plan index << 8 | bp_at). Left empty when the flag is off, so the walker sees nullptr.
+    BpWaveWalker::KnownLens bp_known_n;
     // MTG_BP_DUPE_TRACE origin map for THIS host (see the m2 host's node_key_origin). This set has
     // more claimants than the m2 one -- ordinary plans, breakpoint VARIANTS, wave entries -- so an
     // unattributed dupe here is itself informative: it came from a claimant not traced.
@@ -36428,7 +36680,17 @@ static TurnSolver::SearchLine FSLineWin(const GameState& state, int depth, int m
     // each distinct state once. `nullptr` -- every node not proven stuck, and every run outside the
     // unbounded label/matrix scope -- leaves this loop byte-identical.
     EotStateSet  eot_seen;
-    EotStateSet* eot_ptr = WinlessDevelopActive(state) ? &eot_seen : nullptr;
+    EotStateSet* eot_ptr = nullptr;
+    if (WinlessDevelopActive(state)) { eot_ptr = &eot_seen; }
+    else if (fswdedup::Armed())
+    {
+        // GENERAL arm (see fswdedup): the same closure at a node the provider could NOT prove
+        // stuck. `collapse=false` at mode 1 keeps the run byte-identical while it counts.
+        eot_seen.collapse = fswdedup::CollapseOn();
+        eot_seen.general  = true;
+        eot_ptr = &eot_seen;
+        fswdedup::g_nodes.fetch_add(1, std::memory_order_relaxed);
+    }
     // EXACT EDGE-TAIL ELISION (MTG_LABEL_EDGE_TAIL). On a SINGLE-MAIN deck FSLineTail is nothing
     // but "simulate end of turn, then FSLineWin at turn+1" -- and at `turn >= cutoff` that call's
     // very first line refuses `turn > cutoff`. So every plan of every horizon-edge node pays a
@@ -36508,7 +36770,21 @@ static TurnSolver::SearchLine FSLineWin(const GameState& state, int depth, int m
         GameState& s = s_buf;
         std::vector<Action> bp;
         BpPrefixSnap node_snap;
+        // See BpWaveNSkipOn: the reset makes g_bp_cands_last describe THIS apply (the wave loop
+        // does the same for the same reason), so a stale length from an earlier plan can never be
+        // attributed to this breakpoint. Both reset and read are behind the flag => off is
+        // byte-identical.
+        const bool nskip_here = BpWaveNSkipOn();
+        if (nskip_here) { g_bp_cands_last = 0; }
         ApplyPlanDirect(s, p, true, &bp, node_host_here ? &node_snap : nullptr);
+        // ZERO IS THE COMMON CASE AND MUST BE RECORDED. g_bp_cands_last == 0 means this apply
+        // reached no eligible breakpoint of the searchable class (or found an empty list) at
+        // bp_at -- and the wave slot's rank-W apply walks the IDENTICAL prefix (the two plans
+        // differ only in what they do AT that breakpoint), so it will be told the same thing.
+        // An earlier draft required `> 0` here and caught only 3.5% of the stillborn slots.
+        if (nskip_here && p.bp_choice == 0 && !p.bp_all && p.bp_base >= 0)
+        { bp_known_n[(static_cast<uint64_t>(p.bp_base) << 8)
+                     | static_cast<uint64_t>(p.bp_at & 0xFF)] = g_bp_cands_last; }
         if (node_snap.pending)
         {
             // ---- THE BREAKPOINT NODE (MTG_BP_NODE) -------------------------------------------
@@ -36684,6 +36960,11 @@ static TurnSolver::SearchLine FSLineWin(const GameState& state, int depth, int m
         {
             const TranspositionTable::Key mk = BuildDedupKey(s);
             const bool fresh = bp_seen_states.insert(mk).second;
+            if (BpWaveProbeOn() && p.bp_choice < 0)
+            {
+                g_bp_wave_probe.pre_seen.fetch_add(1);
+                if (!fresh) { g_bp_wave_probe.pre_dup.fetch_add(1); }
+            }
             if (dupe_trace_pre && fresh)
             { pre_key_origin.emplace(mk, std::make_pair(uint8_t(p.bp_choice >= 0 ? 2 : 0), DupeSig(p))); }
             if (!fresh && p.bp_choice >= 0)
@@ -36925,7 +37206,7 @@ static TurnSolver::SearchLine FSLineWin(const GameState& state, int depth, int m
     // silent-mis-ordering hazard). Off under a budget by default => byte-identical there.
     if (BpWavesHere(budget) && !gdom_no_waves)
     {
-        BpWaveWalker walker(state, pre, scanned);
+        BpWaveWalker walker(state, pre, scanned, bp_known_n.empty() ? nullptr : &bp_known_n);
         if (walker.Empty())
         {
             if (BpWaveProbeOn()) { g_bp_wave_probe.no_slots.fetch_add(1); }
@@ -36938,6 +37219,8 @@ static TurnSolver::SearchLine FSLineWin(const GameState& state, int depth, int m
                 g_bp_wave_probe.slots.fetch_add(walker.SlotCount());
             }
             TurnSolver::Plan v;
+            // MTG_BP_WAVE_PROBE only: per-slot (applied, fresh) tally for the barren-slot census.
+            std::vector<std::pair<uint32_t, uint32_t>> slot_tally;
             // Prefix-resume cache: (base plan, bp_at) -> snapshot at the deferred re-solve. The
             // walker round-robins ranks across slots, so the cache is keyed, not single-entry;
             // capped so a pathological node cannot hold hundreds of GameState copies.
@@ -36977,12 +37260,38 @@ static TurnSolver::SearchLine FSLineWin(const GameState& state, int depth, int m
                 // Past the end of the list: the continuation fell back to greedy, so this variant is
                 // a copy of its own base plan (already scored) and the slot retires. The apply's
                 // breakpoint COUNT is reported alongside so nested indices open their own slots.
-                if (walker.Report(pre, g_bp_cands_last, g_bp_seen_last)) { continue; }
+                if (walker.Report(pre, g_bp_cands_last, g_bp_seen_last))
+                {
+                    if (BpWaveProbeOn()) { g_bp_wave_probe.retired.fetch_add(1); }
+                    continue;
+                }
                 // Same post-apply state as an already-scored candidate -- the loop's own dedup set,
                 // so a wave candidate is also checked against every wave-0 one.
                 {
                     const TranspositionTable::Key wk = BuildDedupKey(s);
-                    if (!bp_seen_states.insert(wk).second) { continue; }
+                    const bool fresh_wk = bp_seen_states.insert(wk).second;
+                    if (BpWaveProbeOn())
+                    {
+                        const std::size_t si = walker.LastSlot();
+                        if (slot_tally.size() <= si) { slot_tally.resize(si + 1, { 0u, 0u }); }
+                        ++slot_tally[si].first;
+                        if (fresh_wk) { ++slot_tally[si].second; }
+                        // Probe-only slot attribution (see dup_self/dup_cross). Costs one map
+                        // insert per wave candidate, so it is NEVER built with the probe off.
+                        const uint64_t slot_id = (static_cast<uint64_t>(walker.LastBase()) << 8)
+                                               | static_cast<uint64_t>(walker.LastAt() & 0xFF);
+                        auto it = wave_key_slot.find(wk);
+                        if (!fresh_wk)
+                        {
+                            g_bp_wave_probe.dupstate.fetch_add(1);
+                            (it == wave_key_slot.end()   ? g_bp_wave_probe.dup_w0
+                             : it->second == slot_id     ? g_bp_wave_probe.dup_self
+                                                         : g_bp_wave_probe.dup_cross)
+                                .fetch_add(1);
+                        }
+                        else { wave_key_slot.emplace(wk, slot_id); }
+                    }
+                    if (!fresh_wk) { continue; }
                 }
                 if (BpWaveProbeOn()) { g_bp_wave_probe.rolled.fetch_add(1); }
                 if (s.ActivePlayer().life <= 0) { continue; }   // self-kill guard, as above
@@ -37021,6 +37330,17 @@ static TurnSolver::SearchLine FSLineWin(const GameState& state, int depth, int m
                         return best;
                     }
                 }
+            }
+            // Barren-slot census (probe only): fold this node's per-slot tally into the totals.
+            for (const auto& [applied, fresh] : slot_tally)
+            {
+                if (applied == 0) { continue; }
+                if (fresh == 0)
+                { g_bp_wave_probe.slots_barren.fetch_add(1);
+                  g_bp_wave_probe.barren_applies.fetch_add(applied); }
+                else
+                { g_bp_wave_probe.slots_fertile.fetch_add(1);
+                  g_bp_wave_probe.fertile_applies.fetch_add(applied); }
             }
         }
     }
