@@ -738,6 +738,81 @@ decision — it is an accepted approximation here, not a new one.
    the confirm reads the same names. The new `starting_life` fingerprint field is what made the
    collision visible rather than a silently wrong comparison.
 
+## The Auriok Champion slot, and the FINAL list (2026-09-15)
+
+> USER: *"If needed, it might be okay to remove one Auriok Champion."*
+
+That loosens the one constraint that had been blocking the best simple arm: `serra4_auriok2` led in
+BOTH formats but leaned on cutting **two** Auriok Champions, whose protection from black and red is
+inert on all four DEBT axes against this opponent — so the sim flatters that cut. Cutting **one** is
+a far smaller lean on un-modelled upside. Everything else is now fixed by prior measurement or user
+ruling, so the only open question was where the freed slot goes.
+
+Run in BOTH formats (`critter_2hg_auriok.json` / `critter_20life_auriok.json`), same arms, same
+apparatus, disjoint seeds — because the Serra answer inverted by format and transfer cannot be
+assumed:
+
+| arm | the freed Auriok slot goes to | 2HG (base 5.1078) | 20 life (base 4.7710) |
+|---|---|---|---|
+| **auriok3_voice4** | Voice of the Blessed 3->4 | **-0.4187** | **-0.2677** |
+| auriok3_pm3 | Ajani's Pridemate 2->3 | -0.4166 | -0.2676 |
+| auriok3_pm4 | Ajani's Pridemate 2->4 (Voice 3) | -0.4142 | -0.2666 |
+| auriok3_land25 | a 25th land | -0.3864 | -0.2319 |
+| *best_serra4* | *(reference: keep Auriok 4)* | *-0.3740* | *-0.2296* |
+
+**The ordering is IDENTICAL in both formats** — unlike the Serra question, this one transfers. Three
+readings:
+
+1. **Cutting the 4th Auriok Champion for a spell is worth ~0.045 (2HG) / ~0.038 (20 life).**
+2. **WHICH spell is a dead tie** — the top three are within 0.005 of each other in both formats
+   (paired: voice4 vs pm3 = -0.0021, pm3 vs pm4 = -0.0024). The measurement does not choose; pick on
+   real-game grounds. **Voice of the Blessed 4 is the tie-break I'd take**, because its counter
+   thresholds (flying + vigilance at 4, indestructible at 10) are modelled but *outcome-inert* here —
+   a non-blocking opponent cannot be evaded and nothing can destroy our creatures — so its real-game
+   value is strictly larger than the screen can score, and it is the only one of the three with
+   un-modelled upside pointing UP.
+3. **The 25th land is the wrong home for the slot** in both formats (0.028-0.035 behind a spell),
+   though still better than keeping the 4th Auriok.
+
+Held-out confirm of `auriok3_voice4` at 2HG (seed 1510000): -0.4258 +-0.0051 vs the screen's
+-0.4187 +-0.0050, shrinkage -0.0071 +-0.0071 (t = -0.99) — reproduces; pooled **-0.4222 over 40,000
+games**.
+
+### FINAL LIST — 60 cards, 24 lands (NOT adopted; the user's call)
+
+```
+4 Soul Warden               4 Voice of the Blessed        2 Heliod, Sun-Crowned
+4 Soul's Attendant          1 Daxos, Blessed by the Sun   3 Auriok Champion
+4 Serra Ascendant           2 Ajani, Strength of the Pride  1 Ranger-Captain of Eos
+2 Ajani's Pridemate         2 Archangel of Thune          3 Unexpectedly Absent
+4 Ocelot Pride             20 Plains                      4 Remote Farm
+```
+
+| change from the shipped list | why |
+|---|---|
+| **+4 Ocelot Pride** | the new card; -0.17 beyond the value of the slots it takes (control screen) |
+| **+4 Remote Farm, -3 Orzhov Basilica, -1 Plains** | -0.090 for the Basilica swap, -0.009 for the 4th; land count unchanged at 24 |
+| **Serra Ascendant 2 -> 4** | the 2HG finding: a 6/6 lifelink for `{W}` at 30 starting life. Worth -0.23 in 2HG, costs ~0.05 at 20 life |
+| **Archangel of Thune 4 -> 2** | user ruling (stalled boards are invisible to this harness); with these slots it costs only ~0.015 |
+| **Ajani's Pridemate 4 -> 2, Ajani walker 3 -> 2, Auriok Champion 4 -> 3** | the funding; Ocelot Pride is NOT an upgrade on Pridemate (+0.009 head to head), so the slots come from breadth |
+| **Heliod 2, Ranger-Captain 1 KEPT** | cutting them measured **+0.034** — they earn their slots |
+| **No Sol Ring** | colourlessness costs +0.090 against the rock's -0.087 power: a wash, and worse at 2 copies |
+
+**Measured: -0.4222t in 2HG (held-out confirmed, 40,000 games) and -0.2677t at 20 life.**
+
+### Still NOT done, and deliberately so
+
+- **NOT ADOPTED.** The list on disk is unchanged. An adopted list owes its own value leaf and
+  mulligan artifacts (`value-leaf.md` then `mulligan-profile.md`), and its own regression GT — the
+  screen's number is a RANKING, not that deck's measured strength.
+- **The apparatus bias floor is unmeasured throughout** (the approved alias route forbids the
+  generation `--floor` needs). Margins here are 10-40x a typical floor, so the ranking is safe, but
+  no individual delta under ~0.01 should be read as resolved — which is exactly why the three-way
+  tie in this screen is reported as a tie.
+- **Both keep table and value leaf are fitted at 20 life / 1 head.** Symmetric across arms so every
+  DELTA holds, but 2HG LEVELS are not comparable to 20-life ones, and a format-native apparatus
+  would be a separate build.
+
 <!-- verify_deck:begin (generated -- do not edit inside) -->
 ## Last verification (2026-09-08)
 
