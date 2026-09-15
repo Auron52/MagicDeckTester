@@ -4,13 +4,26 @@
 needed). **Companion to** `docs/design/analysis-CritterLifegain.md`, which is the deck's running
 ledger; this file is the format comparison it did not have.
 
-Everything here comes from **two pooled batches** and one small probe, all on one frozen binary:
+Everything here comes from **five pooled batches on ONE frozen binary** (verified: every run's
+apparatus fingerprint records the same engine image, 6,934,080 bytes — the driver skips the sha for
+binaries over 4 MB, so size is the available proxy):
 
 | run | spec | seed block | cells | games |
 |---|---|---|---|---|
 | the breakdown | `logs/deckcmp/critter_breakdown.json` | 1,100,000 | 19 arms x 2 formats = 38 | 1,520,000 |
 | the Serra funding screen | `logs/deckcmp/critter_serra_2hg.json` | 1,800,000 | 8 arms x 2 formats = 16 | 640,000 |
+| its held-out confirmation | `--confirm serra4_ajani1_auriok2` | 2,300,000 | 2 arms x 2 formats = 4 | 160,000 |
 | the second-head probe | `logs/deckcmp/critter_heads_inert.json` | 1,700,000 | 2 arms x 2 formats = 4 | 40,000 |
+| Sol Ring, both formats (§7a) | `logs/deckcmp/critter_solring_2fmt.json` | 2,000,000 | 3 arms x 2 formats = 6 | 240,000 |
+
+**2.6M games.** A sixth run — a first attempt at the Sol Ring spec, seed 1,900,000 — is **discarded
+and not used anywhere in this document**; it silently lost the keep table on every arm, which §7a
+records in full because the failure mode is worth knowing.
+
+*(A note on commit stamps: the results files record `065fec8a` for the first four runs and `5a9cd6dd`
+for the Sol Ring one. `5a9cd6dd` is a docs-only commit — no rebuild happened between them, which the
+matching engine size confirms. What decides play is the binary, and it never changed. HEAD has since
+moved past both as other work landed; these numbers belong to the engine state above.)*
 
 ---
 
@@ -189,14 +202,20 @@ the same copy converts half a percent.
 
 ### The marginal is still almost FLAT at four copies
 
-| copy | 2HG worth | 20-life worth |
-|---|---:|---:|
-| 2nd | +0.1099 | +0.0118 |
-| 3rd | +0.0977 | +0.0100 |
-| 4th | +0.0825 | +0.0109 |
+| copy | 2HG worth | 20-life worth | source |
+|---|---:|---:|---|
+| 2nd | +0.1099 | +0.0118 | breakdown (seed 1.1M), direct |
+| 3rd | +0.0977 | +0.0100 | breakdown (seed 1.1M), direct |
+| 4th | +0.0825 | +0.0109 | funding screen (seed 1.8M), **derived**: `serra4_plains − serra3_plains` |
 
 A card whose 4th copy is still worth 75% of its 2nd copy is **nowhere near its optimum count** in
 that format. (Diminishing returns are real but mild: 0.110 -> 0.098 -> 0.083.)
+
+*Two caveats on that last row.* It is a **difference of two deltas**, so its error is larger than a
+directly-measured marginal (~0.004 rather than ~0.002); and it comes from a **different seed block**
+than the rows above it, which is why the funding screen's own figure for the 3rd copy is +0.0941
+against the breakdown's +0.0977. Those two independent estimates agreeing to 0.004 is itself the
+reassurance — the shape of the curve does not depend on which block you ask.
 
 ---
 
@@ -433,6 +452,10 @@ harness is most clearly blind, and both are already covered by your rulings. **A
 stays at exactly 2** — §8a shows that is an access floor (a singleton is seen by turn 8 in only 23% of
 games; two copies, 42%), and the 4→2 cut the settled list already makes is right.
 
+**Sol Ring: CLOSED, not running it** (user decision, 2026-09-15: *"We'll skip the Sol Ring"*). §7a is
+the evidence — break-even at best, in the better of the two formats, and clearly bad at two copies.
+No further measurement is wanted on it.
+
 **Nothing here is adopted.** The decklist on disk is unchanged. An adopted list owes its own value
 leaf, then its own mulligan table (strictly that order, alone on the box), then its own regression GT
 — a screen's number is a *ranking*, not that deck's measured strength.
@@ -443,8 +466,14 @@ leaf, then its own mulligan table (strictly that order, alone on the box), then 
 
 - **One shared apparatus on every arm and every format**: the shipped R=40 / K=13 keep table with the
   two standing aliases (Ocelot Pride into Ajani's Pridemate's bucket, Remote Farm into Orzhov
-  Basilica's), plus the deck's play profile and value leaf. Composition fall-through 0.13% (breakdown)
-  and 0.41% (funding screen), both inside the 1% limit, so the table was live on every cell.
+  Basilica's), plus the deck's play profile and value leaf, in
+  `logs/deckcmp/critter_op_apparatus/`. **The Sol Ring run (§7a) uses a third alias chained onto that
+  one** — Sol Ring into the Plains bucket, in `critter_op_apparatus_sr/` — because an introduced card
+  the table does not bucket would otherwise drop the table from every arm. K stays 13 in both.
+- **The table was live on every cell of every run**, which is asserted rather than assumed:
+  composition fall-through 0.13% (breakdown), 0.41% (funding screen), 0.03% (Sol Ring) — all inside
+  the 1% limit. The discarded sixth run is the counter-example, and it is what this bullet exists to
+  catch.
 - **The apparatus is fitted at 20 life / 1 head.** It is symmetric across arms, so every delta in this
   document holds; the 2HG *levels* are not comparable to 20-life ones, and a format-native table and
   leaf would be a separate build. This is the same accepted approximation the regression suite's
@@ -454,18 +483,28 @@ leaf, then its own mulligan table (strictly that order, alone on the box), then 
   over the same composition space*, so the asymmetry the floor exists to bracket is far smaller by
   construction — but that is an argument, not a measurement. **Treat anything under ~0.006 as
   unresolved.**
-- **Utilisation:** 32/32 workers busy (100%) throughout both batches.
+- **Utilisation:** 32/32 workers busy (100%) on every batch, checked inside the first ten minutes as
+  CLAUDE.md requires.
 
 ### Reproducing
 
 ```bash
+# the apparatus: two standing aliases, plus a third only for the Sol Ring run
+python3 scripts/alias_card_into_bucket.py \
+    logs/deckcmp/critter_op_apparatus/CritterLifegain.keepmodel.exhaustive.profile.json.gz \
+    "Sol Ring" "Plains" logs/deckcmp/critter_op_apparatus_sr
+cp logs/deckcmp/critter_op_apparatus/CritterLifegain.{profile,value}.json \
+   logs/deckcmp/critter_op_apparatus_sr/          # the leaf resolves directory-relative -- copy it
+
 python3 scripts/deck_compare.py logs/deckcmp/critter_breakdown.json      # 38 cells, 1.52M games
 python3 scripts/deck_compare.py logs/deckcmp/critter_serra_2hg.json      # 16 cells, 640k games
+python3 scripts/deck_compare.py logs/deckcmp/critter_serra_2hg.json --confirm serra4_ajani1_auriok2
 python3 scripts/deck_compare.py logs/deckcmp/critter_heads_inert.json    # the digest probe
+python3 scripts/deck_compare.py logs/deckcmp/critter_solring_2fmt.json   # 6 cells, 240k games
 python3 scripts/screen_marginals.py logs/deckcmp/critter_breakdown.json --ref final --dist base,final
 ```
 
-**`logs/` is gitignored scratch, so those three specs are not in the repo** — the tables above are the
+**`logs/` is gitignored scratch, so those specs are not in the repo** — the tables above are the
 durable record. Each is reconstructible without them: take the settled list from
 `analysis-CritterLifegain.md`, express it as counts relative to the shipped `.cod`
 (`Archangel of Thune 2, Ajani Strength of the Pride 2, Auriok Champion 3, Ocelot Pride 4,
