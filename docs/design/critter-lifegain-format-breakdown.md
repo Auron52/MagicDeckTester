@@ -299,13 +299,61 @@ This is the part no measurement can supply, and it points **against** four of th
 
 | card | measured | what the sim cannot model | direction |
 |---|---|---|---|
-| **Archangel of Thune** | −0.0160 / −0.0119 (worse than a land) | **0.03% / 0.09% of games are unwon by turn 8.** The stalled, grindy board where a 5-drop that pumps the team every lifegain event takes over is ~1-in-1000 here and common in reality. Your ruling — *"in games that drag out and the board is stuck the Archangels are key"* — is about a game state this harness produces roughly never. | **strongly up** |
+| **Archangel of Thune** | −0.0160 / −0.0119 (worse than a land) | **0.03% / 0.09% of games are unwon by turn 8.** The stalled, grindy board where a 5-drop that pumps the team every lifegain event takes over is ~1-in-1000 here and common in reality. And the marginal is measuring the wrong thing entirely — see §8a. | **strongly up** |
 | **Unexpectedly Absent** | −0.025 (the worst card in the deck) | The passive opponent has no permanent worth answering. Its whole real-game function — removing a blocker, a hatebear, an enchantment — is unreachable against a goldfish. This is the standing ruling not to re-propose cutting it; the measurement is exactly the artefact that ruling exists to override. | **strongly up** |
 | **Auriok Champion** *(a §6 funding cut)* | −0.0056 / −0.0071 | Protection from black and red is inert on all four DEBT axes against this opponent (nothing deals damage, nothing enchants/equips, nothing blocks, nothing targets). Against a real red or black deck it is a house. | **up** |
 | **Ajani, Strength of the Pride** *(the other §6 funding cut)* | −0.0121 / −0.0086 | Its `0` ability (exile Ajani and each artifact and creature your opponents control, at +15 life) is a one-sided wrath in reality and is **deliberately not enumerated** here, because against a passive opponent whose only permanents are inert spawn tokens it is strictly negative. | **up** |
 | **Serra Ascendant** | +0.11 in 2HG | The granted **flying** is inert — this opponent never blocks. A 6/6 flier for `{W}` is better in reality than a 6/6 ground creature. | **up** (so 2HG is *under*-stated) |
 | **Voice of the Blessed** | +0.021 to +0.026 | Flying/vigilance at 4 counters and indestructible at 10 are modelled but outcome-inert (no blockers, nothing that destroys). | **up** |
 | **Ocelot Pride** | +0.029 / +0.033 | Nothing significant — the token engine is the card and it is fully modelled. A 200-game probe found 71.5% of games reach the 10 permanents ascend needs, with the copy half (a ≥2-token single-phase jump) firing in 22.5%. | neutral |
+
+### 8a. The Archangel count is an ACCESS floor, not a marginal — and a per-copy table cannot express it
+
+> USER, 2026-09-15: *"you probably don't want 2 Archangels, but having only one means you almost
+> never get it when you need it"* ... *"the odds of getting 2 in a way that matters is relatively
+> low"* ... *"I do think it is probably correct to drop the 2 as we did here."*
+
+**This reframes row 1 of the table above, and the correction is mine to make: §3 prices "the 2nd
+Archangel" as if it were an independent card, and it is not.** Its job is to make the *first* one
+findable. Those are different questions, and only one of them is a speed marginal.
+
+The access question is exact — hypergeometric, no simulation needed (60 cards, on the play, cards
+seen by turn T = 7 + (T−1)):
+
+| copies | P(≥1 seen) by turn 5 | turn 7 | turn 8 | turn 10 | turn 12 |
+|---|---:|---:|---:|---:|---:|
+| **1** | 18.3% | 21.7% | **23.3%** | 26.7% | 30.0% |
+| **2** | 33.6% | 38.9% | **41.5%** | 46.6% | 51.4% |
+| 3 | 46.2% | 52.6% | 55.6% | 61.3% | 66.5% |
+| 4 | 56.6% | 63.4% | 66.5% | 72.2% | 77.0% |
+
+**One copy is a card you do not have.** In the long games that are the Archangel's entire reason for
+being in the deck, a singleton shows up less than a quarter of the time by turn 8 and barely 30% by
+turn 12. The 1→2 step is also the largest available: **+18.2 points, a 1.78x improvement**, against
++14.1 for the 3rd and +10.9 for the 4th.
+
+And the second half of your point is equally measurable — **you almost never get to use both**:
+
+| with exactly 2 in the deck, by turn… | neither | exactly one | **both** |
+|---|---:|---:|---:|
+| 8 | 58.5% | 36.4% | **5.1%** |
+| 12 | 48.6% | 42.7% | **8.6%** |
+
+**Drawing both is a 5% case.** So the second copy is almost never a second threat you cast; it is
+redundancy that converts "I have an Archangel" from a 23% event into a 42% event. That is exactly
+why the per-copy marginal misreads it: the harness charges the slot its full cost (−0.016t of speed)
+and credits it with nothing, because the thing it buys — *reaching* the first copy in a game type
+this harness produces once in a thousand — is invisible here on both counts.
+
+**Two is therefore the floor, not a compromise, and 4→2 is right.** Above two you would be paying
+for copies whose access gain is smaller and whose redundancy is mostly wasted; at one you do not
+reliably have the card at all. The measured price of holding that floor is **0.016t at 20 life and
+0.012t in 2HG** — which, next to the settled list's −0.30 / −0.27, is cheap insurance.
+
+**The general rule this is an instance of:** a card kept for a *rare* game state is bought in copies,
+not in marginal value, and a one-slot-at-a-time screen structurally cannot price it. Check the
+hypergeometric access curve instead, and let the speed marginal only tell you what the insurance
+*costs*.
 
 **The net of this table:** §6's proposal spends two slots whose true value is higher than measured,
 to buy Serras whose true value is also higher than measured. In 2HG the gain (+0.20) is an order of
@@ -333,7 +381,9 @@ that the remaining gains are small and partly inside the floor. The one clean, r
 is **the 2nd Ajani walker → anything**, worth +0.012.
 
 **What I would not do:** act on the Archangel or Unexpectedly Absent rows. They are the two places the
-harness is most clearly blind, and both are already covered by your rulings.
+harness is most clearly blind, and both are already covered by your rulings. **Archangel of Thune
+stays at exactly 2** — §8a shows that is an access floor (a singleton is seen by turn 8 in only 23% of
+games; two copies, 42%), and the 4→2 cut the settled list already makes is right.
 
 **Nothing here is adopted.** The decklist on disk is unchanged. An adopted list owes its own value
 leaf, then its own mulligan table (strictly that order, alone on the box), then its own regression GT
