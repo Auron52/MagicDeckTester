@@ -246,6 +246,14 @@ struct GameState
     // unconditionally at PerformTutor's to-top placement; every reader is lever-gated, so the
     // field is inert (byte-identical) with the lever off.
     int                      top_stacked_turn             = -1;
+    // WHICH card the deliberate stack put on top (Card::m_number). Paired with top_stacked_turn so
+    // a reader can verify the stack SURVIVED -- the turn stamp alone says "a tutor resolved", not
+    // "its card is still there", and a stack consumed later that turn (a Call activation, a
+    // Turntimber put) would otherwise let a coincidental creature on top re-qualify. That identity
+    // check is what keeps the upkeep window (UpkeepRevealTopCandidate) on the right side of the
+    // USER's intentionality gate rather than reading a known top. Same inertness property as the
+    // turn stamp: written unconditionally at the to-top placement, read only under a lever.
+    int                      top_stacked_card_number      = -1;
     // Turn-scoped RESERVE mana: mana produced by a ritual (Reality Spasm untap-retap, Irencrag
     // Feat) that has not yet been spent. Payment (TapForCost / TapForCostDirect) drains this
     // BEFORE tapping any permanent, so a ritual cast earlier in a turn funds a bigger X-spell

@@ -1,10 +1,11 @@
 # Stompy: top-of-library consumers vs library-writing tutors (deferred design)
 
-**Status (updated 2026-09-03):** Item 1 IS BUILT — `MTG_TOP_RESOLVE` (aa1aabef, 2026-08-21),
-default OFF pending its adoption A/B, measured in stompy-order-and-top-resolve.md. Items 2 and 3
-remain deferred.
+**Status (updated 2026-09-15):** Item 1 IS BUILT — `MTG_TOP_RESOLVE` (aa1aabef, 2026-08-21),
+default OFF pending its adoption A/B, measured in stompy-order-and-top-resolve.md. **Item 2 IS BUILT
+— `MTG_UPKEEP_CALL` (2026-09-15), default OFF, measured (−0.0019 on the shipped deck, 39 games
+faster and 0 slower), NOT adopted: human play still needs a chooser.** Item 3 remains deferred.
 
-**Status: DEFERRED — not being built yet.** Recorded per the deferred-work rule after the
+**Status of the ITEMS BELOW that are still deferred: not being built yet.** Recorded per the deferred-work rule after the
 StompySurprise cast-order review (USER, 2026-08-21; the order itself is implemented behind
 `MTG_STOMPY_ORDER`, see `cast-order-rankings.md`). This doc holds the three modeling items the
 cast-order rank *cannot* express, with the user's rulings verbatim.
@@ -67,6 +68,12 @@ other lever.
 
 ## Item 2 — upkeep Call of the Wild activation (pre-draw window)
 
+> **STATUS: BUILT 2026-09-15, behind `MTG_UPKEEP_CALL` (DEFAULT OFF). Measured; NOT adopted.**
+> Raised again by the USER: *"we probably should double check we are using Call of the Wild
+> correctly. It is important that we allow its activation in the upkeep."* The verification below
+> confirmed the gap was real, and the patch closes it. See **Measurement** and **Adoption blocker**
+> at the end of this item.
+
 The USER, verbatim:
 
 > Note that Call of the Wild Activation in Upkeep is a real play that we may need to model.
@@ -98,6 +105,84 @@ of the search, acknowledged above, not something this window should add to.) Imp
 shape when picked up: an upkeep decision point in the vial-charge mold (heuristic default:
 activate iff a stacked-known creature is on top and the mana doesn't strand the turn's plan;
 human play surfaces it as a modal; state tracks "top stacked by <source> since last draw").
+
+### What was verified first (400 logged games, before any code changed)
+
+The gap was confirmed rather than assumed, and the *other* half was confirmed WORKING — which is
+what bounded the scope:
+
+| pattern | count |
+|---|---|
+| Worldly Tutor searches | 234 |
+| **same-turn** compose (tutor, then a Call activation later that turn) | 36 — **36/36 revealed the tutored card** |
+| tutored card left on top into the draw step | 187 |
+| …with a Call of the Wild already on the battlefield | 8 |
+| …and the stranded card MV >= 5, with mana to pay next upkeep | **6 (1.5% of games)** |
+
+So the main-phase compose the cast-order rank was built for is sound; only the cross-turn line was
+missing. 1.5% was flagged at the time as a **lower bound**, because the engine had no upkeep payoff
+to plan toward — with the window built the real rate is **5%** (20 upkeep puts in the same 400
+games), confirming the search does set the line up deliberately once it can.
+
+### How it is built
+
+| piece | where | precedent it follows |
+|---|---|---|
+| the window's gate | `UpkeepRevealTopCandidate`, `core/SpellEffects.h` | — (one definition, shared by both worlds) |
+| stacked-top identity | `GameState::top_stacked_card_number`, stamped in `PerformTutor` | pairs with the existing `top_stacked_turn` |
+| the lever | `UpkeepRevealTopEnabled()`, `ai/EngineFlags.h` | `Main2DropEnabled()` (shared-reader rule) |
+| pay/decline judgement | `DecisionProvider::ActivateRevealTopAtUpkeep` | `PayEchoToKeep` |
+| executor | `AIEngine::ResolveUpkeepRevealTop` <- `GameEngine::UpkeepTail` | `ResolveEchoUpkeep` (pays mana at upkeep) |
+| rollout | `TurnSolver::SimulateEndAndStartNextTurn`, before the draw | the echo block directly above it |
+| the put | `ApplyRevealTopDeploy` | **already shared — no new code** |
+| dominance | `top_stacked_turn` + `_card_number` folded as a gated pair | `scripted_vial_charge` (also live across the turn boundary) |
+
+**The gate is the USER's ruling, implemented literally.** Two conditions, not one: the stack must
+have been made on the PREVIOUS turn (`top_stacked_turn == turn_number - 1`), and the library front
+must STILL be that exact card. The identity half is what separates this from reading a known top —
+a clairvoyant engine always knows its top card, so "the top is a creature" is not a legitimate
+trigger, and without the identity check a stack already eaten by another consumer would let a
+coincidental creature re-qualify. A same-turn stack is deliberately rejected: that is the
+main-phase compose, which already works.
+
+**The heuristic is narrower than the doc proposed**, and deliberately so: the doc's "the mana
+doesn't strand the turn's plan" cannot be evaluated here, because the upkeep runs BEFORE plan
+enumeration. What replaced it is a static trade test — activate only when the stacked body costs
+MORE than the activation does. Declining is not "lose the card": the draw step hands it over for
+free and it then costs its mana cost, so the activation only gains on a discount. For this deck
+every tutor target qualifies (Craterhoof 8, Worldspine 11, Terastodon 8, Hornet Queen 7, Apex
+Altisaur 9, against a cost of 4) while a tutored dork (Priest of Titania 2) correctly declines and
+is simply drawn. Making the "strand the plan" half searchable is the follow-up: a `Plan` axis in
+the `vial_charge_choice` mold, which is precisely the mechanism for pinning a next-upkeep answer
+from this turn's plan.
+
+### Measurement (20,000 paired games per deck, same seeds, d6/b20)
+
+| deck | delta | se | t | identical | faster / slower |
+|---|---|---|---|---|---|
+| shipped StompySurprise (4 Call of the Wild) | **−0.0019** | 0.0003 | −6.25 | 99.81% | 39 / **0** |
+| the 2026-09-15 recommended list (2 Call of the Wild) | **−0.0005** | 0.0002 | −2.67 | 99.93% | 12 / 2 |
+
+On the shipped deck it is **strictly one-sided** — 39 games faster, not one slower. The effect is
+small because the line, while real, is rare (5% of games) and often redundant with a Natural Order
+that would have deployed the same body anyway.
+
+**Why this number mattered beyond the card.** The same evening's deck screening
+(`analysis-StompySurprise.md`) cut Call of the Wild 4 -> 2 in favour of World War Hulk, which is a
+comparison where the engine modelled one side less completely — exactly the judgement the
+deck-screening skill says no guard can make. The bias is the DIFFERENCE of the two rows above,
+**0.0014 turns**, against a measured per-copy value of ~0.015–0.02. Under a tenth of one copy: the
+screening conclusions are unaffected. Recording it because the check, not the outcome, is the point.
+
+### Adoption blocker — human play has no chooser
+
+Echo surfaces its pay-vs-decline to a human (`m_external_echo_chooser`); this window does not, so
+with the lever ON it would fire autonomously mid-viewer-session and record an activation the player
+never chose. Harmless while the default is OFF. **Wire a chooser (and the viewer protocol entry)
+before flipping it on**, along with the usual stompy-tier GT rebaseline, since play changes.
+Stamping `PerformUpkeepReorder` (Mirri's Guile) into the same marker so a Guile arrangement can open
+the window is the other loose end; it was left out because Guile is cut from the list this was built
+for.
 
 ## Item 3 — Call-activation position within the turn (the [6] tier)
 

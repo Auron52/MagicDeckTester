@@ -396,6 +396,11 @@ void GameEngine::UpkeepTail(GameState& state)
     // modelled it). Param-gated on echo_cost -> byte-identical for every non-echo deck.
     m_ai.ResolveEchoUpkeep(state);
 
+    // Upkeep Call of the Wild (MTG_UPKEEP_CALL, default OFF -> byte-identical): put a fatty stacked
+    // by LAST turn's tutor into play before the draw step pulls it into hand. After echo so the
+    // obligation claims mana first; lockstep twin in TurnSolver::SimulateEndAndStartNextTurn.
+    m_ai.ResolveUpkeepRevealTop(state);
+
     ResolveStack(state);
 }
 

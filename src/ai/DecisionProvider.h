@@ -1217,6 +1217,27 @@ public:
         return !self_token;
     }
 
+    // ActivateRevealTopAtUpkeep -- the upkeep Call of the Wild window is OPEN (the engine has
+    // already checked legality, the intentionality gate and affordability via
+    // UpkeepRevealTopCandidate + the mana API); should we spend the mana NOW, before the draw?
+    // Provider-owned for the same reason PayEchoToKeep is: the executor and the rollout must share
+    // ONE decision function or the search scores an upkeep the executor will not play.
+    //
+    // DEFAULT YES. The gate has already established that the stacked body costs more than the
+    // activation, which is the whole trade, and the alternative is strictly worse: decline and the
+    // draw step puts that body in hand where it must be hard-cast. The cost of being wrong is
+    // bounded (the mana would otherwise fund this turn's main phase), and the design doc's stated
+    // default -- "activate iff a stacked-known creature is on top and the mana doesn't strand the
+    // turn's plan" -- cannot consult "the turn's plan" here: the upkeep runs BEFORE plan
+    // enumeration. Making that half searchable is the follow-up (a Plan axis in the
+    // vial_charge_choice mold, which pins a next-upkeep answer from this turn's plan).
+    virtual bool ActivateRevealTopAtUpkeep(const GameState& s, const CardDefinition& top,
+                                           const CardDefinition& source) const
+    {
+        (void)s; (void)top; (void)source;
+        return true;
+    }
+
     // DominanceAxisDirection -- EOT dominance: which way is this resource axis monotone?
     //
     // The DEFAULT table below is the GENERIC truth -- an axis is listed monotone here only when

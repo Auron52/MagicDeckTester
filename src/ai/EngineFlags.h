@@ -30,6 +30,29 @@ inline bool Main2DropEnabled()
     return heurarm::Flag(heurarm::MAIN2_DROP, env_on);
 }
 
+// MTG_UPKEEP_CALL=1 -- measurement lever (DEFAULT OFF until its adoption A/B is accepted): allow a
+// Call of the Wild activation in the UPKEEP, before the draw step, on a top the controller stacked
+// last turn (docs/design/stompy-top-of-library-consumers.md Item 2, recorded DEFERRED since
+// 2026-08-21 with the USER's ruling verbatim). Without it the end-of-turn-tutor -> upkeep-activation
+// line cannot be represented at all: by the main phase the draw has already pulled the stacked fatty
+// into hand, where a 7-11 MV body must be hard-cast instead of put into play for the activation cost.
+//
+// Read by BOTH the executor (AIEngine::ResolveUpkeepRevealTop, via GameEngine::UpkeepTail) and the
+// rollout (TurnSolver::SimulateEndAndStartNextTurn's upkeep block) -- shared reader per the lockstep
+// rule, because a window one world opens and the other does not is a rollout scoring a line the
+// executor cannot play. The gate itself (UpkeepRevealTopCandidate) lives in core/SpellEffects.h so
+// there is exactly one definition of "is this window open"; this flag only decides whether to ask.
+//
+// INERT BY CONSTRUCTION elsewhere: Call of the Wild is the ONLY card in cards.json carrying
+// activated_reveal_top_cost, and only StompySurprise plays it, so no other deck can reach the block
+// even with the lever on. On adoption this flips to default-ON with an MTG_NO_UPKEEP_CALL hatch plus
+// a stompy-tier GT rebaseline.
+inline bool UpkeepRevealTopEnabled()
+{
+    static const bool env_on = EnvOn("MTG_UPKEEP_CALL");
+    return env_on;
+}
+
 // MTG_M2_FIXPOINT (DEFAULT OFF -> byte-identical; heurarm slot for per-job pooling): restore the
 // FREE INTER-MAIN RE-SOLVE the second main never had -- after an m2 plan whose apply/execution
 // FIRED a breakpoint (cards may have entered hand mid-plan), solve m2 AGAIN on the post-draw

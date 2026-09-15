@@ -279,7 +279,8 @@ void PerformTutor(GameState& state, int controller_index, const CardParams& pp,
         ap.library.insert(ap.library.begin(), std::move(c));
         // Intentional top-stack marker (see GameState::top_stacked_turn): the USER's gate for
         // every top-consumer model -- deliberate stacks only, never a coincidental known top.
-        state.top_stacked_turn = state.turn_number;
+        state.top_stacked_turn        = state.turn_number;
+        state.top_stacked_card_number = fetched_num;   // identity, so a consumed stack self-invalidates
     }
 
     // Record WHAT was searched up so the replay viewer shows it (real play only -- the reveal

@@ -6869,6 +6869,65 @@ inline bool ApplyRevealTopDeploy(GameState& state, int controller)
     return true;
 }
 
+// UPKEEP Call of the Wild -- the pre-draw window (docs/design/stompy-top-of-library-consumers.md
+// Item 2). Returns the SOURCE definition when an upkeep activation is both legal and gated-in,
+// else null. Pure predicate: no mutation, no flag read (the lever lives in ai/EngineFlags.h, and
+// core must not depend on ai), so both worlds call this and then pay through their own mana API.
+//
+// THE LINE IT EXISTS FOR (USER, verbatim): "If you have just the mana to cast Worldly Tutor at the
+// end of turn this can be important. Since you often don't want to draw the card, but dump it into
+// play for 4." End-of-turn tutor stacks a fatty; the NEXT upkeep puts it into play for the
+// activation cost -- before the draw step would pull a 7-11 MV body into hand where it must be
+// hard-cast. Main-phase activations cannot express this: by the main phase the draw has eaten it.
+//
+// THE GATE IS A RULING, NOT AN OPTIMISATION (USER, verbatim): "I'm not particularly interested in
+// having it take advantage of clairvoyance to do the same when it was not put there
+// intentionally." A clairvoyant engine always knows its top card, so "the top is a creature" is
+// NOT a legitimate trigger. Two conditions make it one:
+//   (a) top_stacked_turn == turn_number - 1 -- a tutor_to_top resolved on the PREVIOUS turn. The
+//       draw that would have consumed it has not run yet (upkeep precedes the draw step), so the
+//       stack is exactly the one the controller built, and
+//   (b) the library front is STILL that same card (top_stacked_card_number) -- so a stack already
+//       eaten later that turn by another consumer cannot let a coincidental creature re-qualify.
+// A same-turn stack (top_stacked_turn == turn_number) is deliberately NOT accepted here: that is
+// the main-phase compose, which already works (measured 36/36 on the tutored card).
+//
+// NOT COVERED, deliberately: a Mirri's Guile arrangement at THIS upkeep. The doc's gate names it,
+// but PerformUpkeepReorder does not stamp the marker and Guile is cut from the list this was built
+// for -- so it stays out rather than grow the change. Stamping it there is the follow-up.
+inline const CardDefinition* UpkeepRevealTopCandidate(const GameState& state, int controller)
+{
+    if (state.top_stacked_turn != state.turn_number - 1) { return nullptr; }
+    if (state.top_stacked_card_number < 0) { return nullptr; }
+    if (controller < 0 || controller >= static_cast<int>(state.players.size())) { return nullptr; }
+    const Player& ap = state.players[controller];
+    if (ap.library.empty()) { return nullptr; }
+    const Card& top = ap.library.front();
+    if (top.m_number != state.top_stacked_card_number) { return nullptr; }
+    // TYPE AND COST COME FROM THE DATABASE CARD, never the zone copy: a library/hand Card keeps
+    // only m_number and m_name (PutCardOntoBattlefield rebuilds from the definition), so
+    // top.IsCreature() and top.m_mana_cost are empty out here. This is the exact trap that made
+    // the first Saga chapter silently never fire -- see saga-world-war-hulk.md.
+    const CardDefinition* td = CardDatabase::Instance().LookupCached(top);
+    if (!td || !td->card.IsCreature()) { return nullptr; }
+    for (const Permanent& perm : state.battlefield)
+    {
+        if (perm.controller_index != controller) { continue; }
+        const CardDefinition* sd = CardDatabase::Instance().LookupCached(perm.card);
+        if (!sd || !sd->params.activated_reveal_top_cost) { continue; }
+        // Only when PUTTING beats DRAWING. Declining is not "lose the card": the draw step hands it
+        // over for free, and it then costs its mana cost. So the activation gains only when the body
+        // costs MORE than the activation does -- for this deck every tutor target does (Craterhoof 8,
+        // Worldspine 11, Terastodon 8, Hornet Queen 7, Apex Altisaur 9 vs a cost of 4), while a
+        // tutored dork (Priest of Titania 2) correctly declines and is simply drawn.
+        if (td->card.m_mana_cost.ManaValue()
+            <= sd->params.activated_reveal_top_cost->ManaValue())
+        { continue; }
+        return sd;
+    }
+    return nullptr;
+}
+
 // Turntimber Symbiosis front face: "Look at the top N cards of your library. You may put a
 // creature card from among them onto the battlefield. If that card has mana value <= max_mv, it
 // enters with +bonus +1/+1 counters. Put the rest on the bottom of your library in a random

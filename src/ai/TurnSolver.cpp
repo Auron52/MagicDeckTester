@@ -26057,6 +26057,36 @@ static bool SimulateEndAndStartNextTurn(GameState& state)
     // UpkeepFloatClearEnabled (viewer issue #6).
     if (echo_processed && UpkeepFloatClearEnabled()) { state.floating_mana = ManaPool{}; }
 
+    // UPKEEP Call of the Wild (MTG_UPKEEP_CALL, default OFF -> byte-identical) -- the rollout half,
+    // lockstep twin of AIEngine::ResolveUpkeepRevealTop. Position is load-bearing twice over: AFTER
+    // echo (the obligation claims mana first, matching the executor's UpkeepTail ordering) and
+    // BEFORE the draw below, which is the entire point -- the draw is what would otherwise pull
+    // last turn's stacked fatty into hand, where a 7-11 MV body must be hard-cast.
+    //
+    // The window is opened by the SHARED gate (UpkeepRevealTopCandidate, core/SpellEffects.h) and
+    // the judgement by the SHARED provider, so the only thing that differs from the executor is the
+    // mana call: TapForCostDirect here, the byte-identical mirror of AIEngine::TapForCost. Gated on
+    // activated_reveal_top_cost, which only Call of the Wild carries -> no-op for every other deck
+    // even with the lever on.
+    if (UpkeepRevealTopEnabled())
+    {
+        const int rt_ctrl = state.active_player_index;
+        if (const CardDefinition* rt_src = UpkeepRevealTopCandidate(state, rt_ctrl))
+        {
+            const CardDefinition* rt_top =
+                CardDatabase::Instance().LookupCached(state.players[rt_ctrl].library.front());
+            if (rt_top
+                && ResolveProvider(state).ActivateRevealTopAtUpkeep(state, *rt_top, *rt_src)
+                && TapForCostDirect(state, *rt_src->params.activated_reveal_top_cost,
+                                    /*for_creature=*/false))
+            {
+                ApplyRevealTopDeploy(state, rt_ctrl);
+                // CR 500.4, same clear as echo's above and as the executor's twin.
+                if (UpkeepFloatClearEnabled()) { state.floating_mana = ManaPool{}; }
+            }
+        }
+    }
+
     // Draw
     if (ap.library.empty()) { return false; }
     ap.hand.push_back(ap.library.DrawTop());

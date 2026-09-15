@@ -47,6 +47,8 @@ public:
     // death trigger consumes library cards (Mogg -> Rundvelt Hordemaster impulse exile)
     // resolved one card later than the rollout modelled, transposing the draw (goblins gi=149).
     void ResolveEchoUpkeep(GameState& state);
+    // Upkeep Call of the Wild window (MTG_UPKEEP_CALL, default OFF) -- see the definition.
+    void ResolveUpkeepRevealTop(GameState& state);
 
     // Returns the card names of the hand kept after the most recent HandleMulligan call.
     const std::vector<std::string>& GetKeptOpeningHand() const { return m_kept_opening_hand; }

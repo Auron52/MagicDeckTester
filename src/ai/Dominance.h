@@ -144,7 +144,21 @@ static_assert(sizeof(Player) == 200,
 // 792 -> 800 (2026-09-16): GameState gained `next_opp_spawn_number` (per-copy ids for the passive
 // opponent's scheduled spawns, which used to share id 0). Classified NOT folded in Build() beside
 // next_token_number, for the same reason.
-static_assert(sizeof(GameState) == 800,
+// 792 -> 800 (2026-09-15): GameState gained `top_stacked_card_number` (int, the identity of a
+// deliberately stacked library top) + padding. Classification: an EXACT-MATCH field, folded in
+// Build() as a PAIR with the pre-existing `top_stacked_turn` and gated on that stamp being set.
+// Rationale is identical to scripted_vial_charge's: both are written during a turn's apply and read
+// at the NEXT turn's upkeep, so they are live across precisely the end-of-turn boundary this
+// comparator runs on. NOTE this also folds `top_stacked_turn`, which had been unfolded since it was
+// introduced -- harmless while nothing read it across the boundary, but the MTG_UPKEEP_CALL window
+// now does, and an unfolded stamp would merge a state whose window opens with one whose does not.
+// 800 -> 808 (2026-09-17, REBASE): the two entries above were developed in parallel on two branches
+// and BOTH claimed 792 -> 800 -- `next_opp_spawn_number` on one side, `top_stacked_card_number` on
+// the other. Rebasing puts both fields in the struct, so the real size is one int-plus-padding
+// larger than either branch measured alone. Each field keeps the classification its own entry gives
+// it; nothing about either is changed by the other's presence. This is exactly the collision the
+// static_assert below exists to catch, and it caught it.
+static_assert(sizeof(GameState) == 808,
               "GameState changed size -- fold any new field into dominance::Build() (see the "
               "MAINTENANCE HAZARD note at the top of Dominance.h) before updating this number.");
 
@@ -423,6 +437,29 @@ inline DomSnap Build(const GameState& s, const DecisionProvider& prov,
     // turn's apply, consumed at the NEXT turn's upkeep -- see its GameState note), so a pending
     // searched charge is future-determining and must fold exact-match like its sibling pins.
     fold(static_cast<std::uint64_t>(s.scripted_vial_charge));
+    // Deliberate top-stack marker + the identity of what was stacked. SAME CLASSIFICATION AS
+    // scripted_vial_charge directly above, and for the same structural reason: written during a
+    // turn's apply (PerformTutor's to-top placement) and READ AT THE NEXT TURN'S UPKEEP
+    // (UpkeepRevealTopCandidate, the MTG_UPKEEP_CALL window), so it is live across exactly the
+    // end-of-turn boundary this comparator runs on and is therefore future-determining. Two EOT
+    // states alike but for which card sits stacked genuinely diverge next upkeep -- one puts a
+    // Craterhoof into play for 4, the other draws it -- so they must not merge.
+    //
+    // Folded as a PAIR and gated on the stamp being set, so every deck that never stacks a top
+    // (no tutor_to_top card at all) keeps its exact prior key -- the same guard rationale as
+    // deck_reads_mv_cast above. The stamp is folded too, not just the identity: the turn number is
+    // what separates "stacked LAST turn" (the window opens) from "stacked THIS turn" (the
+    // main-phase compose, already handled), and those play differently.
+    //
+    // NOT MEASURED, deliberately, and stated plainly: the dominance path is not enabled in shipped
+    // play, so this fold changes nothing today. It exists so that turning dominance on later cannot
+    // silently merge two states this window would play apart. Same treatment, same reason, as the
+    // DomAxis::LoreCounters guard added with the Sagas.
+    if (s.top_stacked_turn >= 0)
+    {
+        fold(static_cast<std::uint64_t>(s.top_stacked_turn));
+        fold(static_cast<std::uint64_t>(s.top_stacked_card_number));
+    }
     // Post-combat productivity markers (GameState::hand_size_at_combat). Turn-scoped scratch: reset
     // to -1 at turn start, stamped by SimulateCombat, and read ONLY by the post-combat main -- so at
     // a clean END-OF-TURN boundary they carry no future value and could defensibly be ignored.

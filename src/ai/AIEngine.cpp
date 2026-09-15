@@ -1302,6 +1302,43 @@ void AIEngine::ResolveEchoUpkeep(GameState& state)
     if (echo_processed && UpkeepFloatClearEnabled()) { state.floating_mana = ManaPool{}; }
 }
 
+// UPKEEP Call of the Wild (MTG_UPKEEP_CALL, default OFF) -- the executor half. Runs from
+// GameEngine::UpkeepTail AFTER ResolveEchoUpkeep: echo is an obligation (pay or lose the body) and
+// this is optional, so the obligation gets first claim on the mana. Lockstep partner: the block of
+// the same name in TurnSolver::SimulateEndAndStartNextTurn, immediately before the draw.
+//
+// The whole window is UpkeepRevealTopCandidate's to open (core/SpellEffects.h) -- one definition of
+// the intentionality gate, shared with the rollout. Here we only add the two things that are
+// world-specific: the provider's judgement and this world's mana API.
+//
+// NOT YET DONE, and it is an ADOPTION BLOCKER rather than a nicety: human play gets no chooser here.
+// Echo surfaces one (m_external_echo_chooser) so a human owns the pay-vs-decline; this window would
+// fire autonomously mid-viewer-session and record an activation the player never chose, which is
+// exactly the kind of un-surfaced decision the viewer protocol check exists to catch. Harmless while
+// the lever is default-OFF; wire a chooser before flipping it on.
+void AIEngine::ResolveUpkeepRevealTop(GameState& state)
+{
+    if (!UpkeepRevealTopEnabled()) { return; }
+    const int controller = state.active_player_index;
+    const CardDefinition* src = UpkeepRevealTopCandidate(state, controller);
+    if (!src) { return; }
+    const CardDefinition* top =
+        CardDatabase::Instance().LookupCached(state.players[controller].library.front());
+    if (!top) { return; }
+    if (!ResolveProvider(state).ActivateRevealTopAtUpkeep(state, *top, *src)) { return; }
+    // Affordability is checked by TapForCost itself (it returns false and taps nothing when it
+    // cannot pay), so an unaffordable window simply declines -- same shape as an unaffordable echo.
+    ManaPool avail = AvailableManaPool(state);
+    if (!TapForCost(state, *src->params.activated_reveal_top_cost, avail, /*for_creature=*/false))
+    { return; }
+    ApplyRevealTopDeploy(state, controller);
+    // END OF THE UPKEEP STEP (CR 500.4), same reasoning as echo's clear directly above: mana
+    // over-produced by a lumpy source paying {2}{G}{G} must not survive into this main phase, or the
+    // rollout scores a turn the executor cannot pay. Unconditional here (unlike echo's
+    // echo_processed latch) because reaching this line means we DID just pay at upkeep.
+    if (UpkeepFloatClearEnabled()) { state.floating_mana = ManaPool{}; }
+}
+
 void AIEngine::FlagNonConvergence(const GameState& state, const TurnSolver::Plan& plan,
                                   int committed_win, int committed_sub_depth)
 {
