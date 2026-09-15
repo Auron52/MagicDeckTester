@@ -88,10 +88,18 @@ a `fast`/R30 run); omitting it silently re-admits floor-R cells the generation e
 zcat decks/<D>/<D>.keepmodel.exhaustive.raw.json.gz > /tmp/<D>.raw.json
 MTG_KEEP_MERGE=1 MTG_MERGE_INPUTS=/tmp/<D>.raw.json \
   MTG_MERGE_BOTTOM_FLOOR=2 \
-  MTG_KEEP_BOTTOM_REFINE=1 MTG_KEEP_BOTTOM_SHRINK=1 MTG_KEEP_BOTTOM_GATE_K=0 \
+  MTG_KEEP_BOTTOM_SHRINK=1 \
   MTG_MERGE_OUT_PROFILE=/tmp/<D>.profile.json MTG_MERGE_OUT_RAW=/tmp/<D>.raw.out.json \
   build/Release/mtg-analyze decks/<D>/<D>.cod --cards-json src/cards/data/cards.json
 ```
+
+> **Flags changed 2026-09-15.** `MTG_KEEP_BOTTOM_SHRINK` is now the *only* knob;
+> `MTG_KEEP_BOTTOM_REFINE` and `MTG_KEEP_BOTTOM_GATE_K` are **retired and no longer exist**. The gate
+> was deleted from `BuildPolicyFromTables` outright rather than left switchable, so the
+> non-compliant configuration this document warns about — `REFINE=1` alone defaulting `gate_k` to
+> 1.0 — is now *unrepresentable* rather than merely off. The shrunk argmin always emits a
+> full-length target, so **deferral is zero by construction** and the verification below cannot fail
+> for a profile built by this path. Run it anyway on anything you did not build yourself.
 
 Verify compliance before shipping — this check is the point of the whole document:
 
