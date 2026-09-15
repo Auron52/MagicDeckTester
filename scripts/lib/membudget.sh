@@ -1,27 +1,23 @@
-# Shared memory-budget derivation for every long-running generation driver (source this file).
-# Extracted from valueleaf.sh 2026-09-06 after mullgen.sh was found exporting NO caps at all --
-# i.e. Sunday's mulligan generation would have run every cache unbounded, the exact configuration
-# that OOM'd the 23 GB box six times over 2026-09-05/06.
+# Memory-budget hook for the long-running generation drivers (sourced by valueleaf.sh and mullgen.sh).
 #
-# Every bound here is a RESULT-NEUTRAL memo cap (a refused insert/store just recomputes; play is
-# byte-identical -- see TranspositionTable::Cap, the FSL byte pool, and plancache in
-# src/ai/TurnSolver.cpp). Capping costs only tail-game wall clock, never a row or a decision.
+# THE DERIVATION NOW LIVES IN THE ENGINE (src/core/MemBudget.h, 2026-09-15). Every result-neutral
+# cache -- the transposition table (MTG_TT_CAP), the line cache (MTG_FSL_POOL / MTG_FSL_CAP) and the
+# plan caches (MTG_PLAN_CACHE_KB) -- defaults to a bound derived from the machine's RAM inside the
+# binary itself, so a launcher that forgets to source this file no longer runs unbounded (that is
+# how mullgen.sh ran every mulligan generation with NO caps until 2026-09-06, and how the reference
+# bench / regression harness / deck-average scripts ran until 2026-09-15, when one 500 ms EDF game
+# reached 30.5 GB and the kernel killed the pooled batch around it).
 #
-# Derivation (see valueleaf.sh's MEMORY BOUNDS block for the measured history):
-#   budget    = MemTotal - 5 GB (system: VSCode server, agent session, containerd, page cache)
-#   reserve   = nproc x 250 MB  (per-thread consumers the caches don't cover: the plan-cache
-#               budget below, solvememo, and the transient per-game search floor)
-#   TT        = 1/3 of the remainder at 64 B/entry, split per worker
-#   FSL pool  = 2/5 of the remainder, in REAL KB (byte-accurate accounting)
-#   plancache = 100 MB/thread (inside the reserve): byte bound over the two whole-vector<Plan>
-#               caches (enummemo promotions + the bp-enum continuation cache)
-_mem_mb=$(awk '/MemTotal/{print int($2/1024)}' /proc/meminfo)
-_nw=$(nproc)
-_budget_mb=$(( _mem_mb - 5120 )); [ "$_budget_mb" -lt 2048 ] && _budget_mb=2048
-_reserve_mb=$(( _nw * 250 ))
-_cache_mb=$(( _budget_mb - _reserve_mb )); [ "$_cache_mb" -lt 2048 ] && _cache_mb=2048
-_pw_kb=$(( _cache_mb * 1024 / _nw ))
-export MTG_TT_CAP=$((  _pw_kb * 1024 / 3 / 64   ))
-export MTG_FSL_POOL=$(( _cache_mb * 1024 * 2 / 5 ))
-export MTG_FSL_CAP=2000000
-export MTG_PLAN_CACHE_KB=102400
+# Engine defaults (each honours its own env var first; `=0` keeps meaning unbounded/off):
+#   budget     = MTG_MEM_BUDGET_MB, else MemTotal / 2
+#   reserve    = workers x 250 MB;  cache = max(2 GB, budget - reserve)
+#   TT cap     = (cache / workers) / 3 / 64 B per table;  FSL pool = 2/5 cache (global KB);
+#   FSL cap    = 2,000,000 entries per decision;  plan cache = workers x 100 MB (global)
+#   RSS cap    = MTG_RSS_CAP_GB, else 3/4 of MemTotal -- the engine's watchdog aborts the process
+#                past it (before the host is starved), printing the in-flight jobs and pool usage.
+# The measured history behind those shares is in valueleaf.sh's MEMORY BOUNDS block.
+#
+# This file therefore exports nothing by default. To give a machine a different budget, export
+# MTG_MEM_BUDGET_MB (and/or MTG_RSS_CAP_GB) in the environment before launching -- the user's
+# numbers are machine-specific (2026-09-15: ~30 GB soft / ~36 GB hard on the 47 GB shared box).
+:

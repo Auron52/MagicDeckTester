@@ -8,6 +8,7 @@
 #include "KeepModelTrainer.h"
 #include "../core/HeuristicDefaults.h"
 #include "../core/FlagRegistry.h"
+#include "../core/MemBudget.h"
 #include "EquivalenceDiscovery.h"
 #include "ExhaustiveKeep.h"
 #include "BucketPolicy.h"
@@ -916,6 +917,7 @@ int main(int argc, char* argv[])
     ApplyHeuristicDefaults();
     // Warn on MTG_* env vars this binary does not read (typo / deleted flag = silent no-op).
     WarnUnknownMtgFlags();
+    membudget::StartRssWatchdog("mtg-analyze");   // hard memory cap, see src/core/MemBudget.h
     if (argc < 2)
     {
         PrintUsage(argv[0]);

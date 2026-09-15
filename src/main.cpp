@@ -18,6 +18,7 @@
 #include "cards/CardDatabase.h"
 #include "core/HeuristicDefaults.h"
 #include "core/FlagRegistry.h"
+#include "core/MemBudget.h"
 #include "runner/GoldFishRunner.h"
 #include "runner/BatchRunner.h"
 #include "ai/AIEngine.h"
@@ -6231,6 +6232,9 @@ int main(int argc, char* argv[])
     // Warn on MTG_* env vars this binary does not read (typo / deleted flag = silent no-op).
     WarnUnknownMtgFlags();
     ValidateHeuristicArmNames();
+    // Hard memory cap (MTG_RSS_CAP_GB, default 3/4 of RAM): abort THIS process before the host is
+    // starved, naming the games in flight. See src/core/MemBudget.h.
+    membudget::StartRssWatchdog("mtg");
     if (argc >= 2 && std::string(argv[1]) == "--list-flags") { PrintFlagRegistry(std::cout); return 0; }
     // Arm the colored_creature_only legality audit's exit dump (MTG_CCO_AUDIT); no-op when unset.
     CcoAuditDumper();

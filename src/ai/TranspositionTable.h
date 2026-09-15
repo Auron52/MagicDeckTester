@@ -1,5 +1,6 @@
 #pragma once
 #include "../core/EnvFlags.h"
+#include "../core/MemBudget.h"
 #include <atomic>
 #include <cstdint>
 #include <cstdio>
@@ -90,7 +91,9 @@ public:
     static std::atomic<unsigned long long>& NoWinHits()    { static std::atomic<unsigned long long> v{0}; return v; }
     static std::atomic<unsigned long long>& NoWinStores()  { static std::atomic<unsigned long long> v{0}; return v; }
 
-    // Result-NEUTRAL store cap (MTG_TT_CAP = max entries per table; 0/unset = unlimited = byte-identical).
+    // Result-NEUTRAL store cap (MTG_TT_CAP = max entries per table; =0 = unlimited = byte-identical;
+    // UNSET = the RAM-derived default from src/core/MemBudget.h since 2026-09-15, so a launcher that
+    // sets nothing no longer runs the table unbounded).
     // The table is a pure memoization of SimulateToEnd (a miss just recomputes the same value), so refusing
     // to store past the cap only trades recompute time for bounded memory -- decisions are unchanged. Early
     // (shallow, high-reuse) leaves are stored first and kept; only the deep long-tail is dropped. This bounds
@@ -99,7 +102,8 @@ public:
     {
         static const std::size_t cap = []{
             const char* e = std::getenv("MTG_TT_CAP");
-            return e ? static_cast<std::size_t>(std::strtoull(e, nullptr, 10)) : std::size_t{0};
+            return e ? static_cast<std::size_t>(std::strtoull(e, nullptr, 10))
+                     : membudget::DefaultTtCapEntries();
         }();
         return cap;
     }

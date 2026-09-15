@@ -7461,10 +7461,30 @@ is a deck-setting decision for the user (see Open).
 with the hand go-off **`offered 4/92, verified 4 (100%), FALSE FIRE 0, MISSED FIRE 12`**. The 12:
 mostly MAIN_2 frames whose win is next turn, no live loop on the board -- a different shape.
 
-**Deck average (paired 200 games, off/exec/both) and the `--stats` cost:** PENDING at the time of
-writing -- the first attempt was killed to relieve host memory (see §6); re-run serially after the
-gate chain. The wip's own measurement of the lift alone: 5.46 -> 4.70, 10/10 chunks better,
-wall -43.6%.
+**Deck average (paired, 100 games/arm, off/exec/both, max_turns 12, seeds 3001/3061 in 10-game
+chunks; `scripts/deck_avg_arms.py --stats`, run ALONE on the RAM-bounded binary after the gate
+chain -- the first attempt had been killed to relieve host memory, see §6):**
+
+| arm | mean win turn | paired vs off | chunks better/worse | paired t | wall |
+|---|---|---|---|---|---|
+| off (both levers 0) | 5.3400 | -- | -- | -- | 19647 s |
+| exec (lift only) | 4.6800 | **-0.6600** | 10 / 0 | -6.66 | 2525 s (-87.1%) |
+| both (lift + hand go-off) | 4.6900 | **-0.6500** | 10 / 0 | -6.87 | 2736 s (-86.1%) |
+
+The lift carries the whole deck-average gain; the hand go-off is neutral on it (both vs exec
++0.01, three chunks +0.1 / two -0.1) -- it was built for the references' hand-held go-offs, and the
+bench is where it shows (s9 no longer LOST). The `[rollout-stats]` counters are pooled over the
+three arms by the batch (calls=9,751,826, turn_steps=21,007,822, id_depth mean 1.70 over 4609
+solves), so per-arm cost is only separable by wall here. That wall is dominated by ONE off-arm
+game: `off__s3061_c40 gi=45` took **10,143 s (2.82 h)** alone -- 52% of the off arm's total, on a
+turn whose flicker-line probes simulate to game end and enumerate plans at every draw breakpoint
+(`FSLineWin -> SimulateToEnd -> SolveWithLookahead -> ApplyPlanDirect -> BpEnumEntryFor`) -- while
+the exec and both arms play that same 10-game chunk in 142 s and 302 s. The batch heartbeat showed
+its plan-cache pool cycling at its cap the whole time (`plan=187M..2312M/2399M(of 2400M)`, the
+FSL pool unused) with RSS held at 3.4-4.4 GB; the unbounded binary had reached 17.3 GB and was
+still climbing on the same tail when it was killed. Excluding that one job the off arm's wall is
+~9,350 s, still -71% vs both. The old path's pathology is exactly what the executor lift removed
+(repro `--seed 3106 --game-index 45 --games 1`, lever off); not chased further.
 
 ### 5. Gates (final binary = this tree)
 
@@ -7476,14 +7496,39 @@ wall -43.6%.
 * viewer strict: **0 play-drift** over 328 refs; the step is red on **7 Snow validate-line
   REGRESSIONs + Snow s4_gi3 board-diverged**, the pre-existing upstream set (s4_gi3 reproduces with
   the lift OFF).
-* Every non-EDF deck is green on `ref_bench` (mirrorwing's last shortfall closed under origin's
-  work; the stamp had been stale).
+* A second full chain on the FINAL tree (hand go-off in; `logs/gate_handgoff_*.log`) reproduced
+  the lift chain exactly: the same six FiveColour FAIL lines byte-for-byte (digests identical), the
+  same viewer set (0 play-drift, 7 Snow validate-line REGRESSION + s4_gi3 board-diverged), sweep
+  `offered 4/92 verified 4, FALSE FIRE 0, MISSED 12`. The change touched nothing else in the suite.
+* Fleet `ref_bench.py --stale-only` at the committed tree (361 games, one pool): EDF 4.786/5 short
+  (s6 s8 s9 s12 s14); every other deck 0 short EXCEPT **melira_pod 1/10 (s10_gi9: search 5, human
+  4)**. NOT this work: it reproduces with `MTG_EDF_EXACT_EXECUTOR=0 MTG_EDF_HAND_GOFF=0` on this
+  binary, and under the clean `38842e3f` snapshot (2026-09-11 push), while the `72fe64e6` snapshot
+  (2026-09-08) still matched the human (4). The committed stamp (src cc810c43, shortfall s8_gi7)
+  had been stale for weeks and hid the move; the 2026-09-11 esc/FIT Melira commits (804c1fd9,
+  98024032 -- "relaxing it closes Melira") are the suspects. Carried to §7.
 
 ### 6. Incident: the 500 ms budget ladder OOM-killed the box
 
 A 56-job pool (14 refs x {off, exec} x {100, 500 ms}) was killed by the kernel at 23:23 after 53
 jobs: ONE 500 ms game (`off500 s12_gi11`, 40 min in) held **30.5 GB** anon RSS. Rule recorded:
 ladder at <= 100 ms in a pool; 500 ms only as a lone single-game probe.
+
+**Closed in the engine (2026-09-15, `src/core/MemBudget.h`):** the three result-neutral memos
+(TT / FSL line cache / plan caches) used to default to UNBOUNDED and only the generation drivers
+capped them; now every launcher gets a RAM-derived default (budget = MemTotal/2 unless
+`MTG_MEM_BUDGET_MB`; same TT 1/3 / FSL 2/5 / plan 100 MB-per-worker split as membudget.sh) and an
+RSS watchdog (`MTG_RSS_CAP_GB`, default 3/4 of RAM) aborts the process past the cap, printing the
+in-flight jobs and the pools' used/hiwater. The user's rule for THIS box: under ~30 GB (lean to
+20), one batch or test at a time, default threads; the figures are machine-specific, hence
+fractions. The first deck-average attempt on the unbounded binary (alone, default threads) was at
+17.3 GB RSS and climbing after 7 min and was stopped for that rule; the deck average in §4 ran on
+the bounded binary (result-neutral by the pools' contract; smoke digests are the check, plus an
+A/B of the four smoke reds with every pool explicitly `=0` -- identical digests). What the bound
+did on that run: the off arm's 2.82 h game cycled its plan-cache pool at the 2.4 GB cap for hours
+(heartbeat `plan=187M..2312M/2399M(of 2400M)`) with RSS held at 3.4-4.4 GB -- the same tail the
+unbounded binary had taken to 17.3 GB in 7 min. The pool bound cost that game recomputation, not
+correctness; it is the old path (both levers off) and is not what ships.
 
 ### 7. Open, carried forward
 
@@ -7501,3 +7546,6 @@ ladder at <= 100 ms in a pool; 500 ms only as a lone single-game probe.
    `wip/exec-lift-2026-09-11` (landed here), `wip/speed-pass-2026-09-11`, `wip/missed-fire-2026-09-11`
    still to land or delete.
 7. FiveColour GT stale at the tip; Snow's 8 viewer reds -- upstream's.
+8. **melira_pod s10_gi9 regressed 4 -> 5 upstream between 72fe64e6 (09-08) and 38842e3f (09-11)**
+   (see §5); a reference the search no longer matches, outside this session's EDF scope -- bisect
+   the two esc/FIT Melira commits first.

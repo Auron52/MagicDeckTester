@@ -1,6 +1,7 @@
 #include "HeuristicArm.h"
 #include "ValueArm.h"
 #include "../core/EnvFlags.h"
+#include "../core/MemBudget.h"
 #include "TurnSolver.h"
 #include "ManaPayment.h"
 #include "PlanContext.h"
@@ -31528,8 +31529,9 @@ inline std::size_t ApproxPlanBytes(const TurnSolver::Plan& p)
     b += p.land_to_play.capacity() + p.fetch_target.capacity() + p.land_face.capacity();
     return b;
 }
-// Shared per-THREAD byte budget for the two whole-plan-vector caches (MTG_PLAN_CACHE_KB;
-// 0/unset = off = byte-identical). Both caches are count-capped (8192 entries) but their entries
+// Shared byte budget for the two whole-plan-vector caches (MTG_PLAN_CACHE_KB; =0 = off =
+// byte-identical; UNSET = the RAM-derived default from src/core/MemBudget.h since 2026-09-15;
+// a GLOBAL pool since 2026-09-11, see below). Both caches are count-capped (8192 entries) but their entries
 // are ENTIRE vector<Plan> enumeration results, so the count bounds nothing in bytes: one Melira
 // combo-turn decision promoting such entries spiked a 12-worker phase A from 5 GB to 23 GB in
 // ~2 minutes and the kernel shot it (2026-09-06; the fifth OOM of that generation). The same
@@ -31540,8 +31542,10 @@ namespace plancache
 {
     inline long long BudgetBytes()
     {
-        static const long long v =
-            static_cast<long long>(EnvInt("MTG_PLAN_CACHE_KB", 0)) * 1024LL;
+        static const long long v = []{
+            if (std::getenv("MTG_PLAN_CACHE_KB") == nullptr)
+            { return membudget::DefaultPlanCacheKb() * 1024LL; }   // UNSET = derived from RAM
+            return static_cast<long long>(EnvInt("MTG_PLAN_CACHE_KB", 0)) * 1024LL; }();
         return v;
     }
     // GLOBAL POOL (2026-09-11, user-approved). The budget used to be thread_local, so
@@ -33234,7 +33238,8 @@ namespace domin
     }
 }
 // GLOBAL byte pool shared by every live line cache in the process (MTG_FSL_POOL, in KB;
-// 0/unset = off = byte-identical). The per-cache cap (MTG_FSL_CAP) bounds ONE decision's cache;
+// =0 = off = byte-identical; UNSET = the RAM-derived default from src/core/MemBudget.h since
+// 2026-09-15). The per-cache cap (MTG_FSL_CAP) bounds ONE decision's cache;
 // this bounds their SUM -- in approximate real KB since 2026-09-05 (see ApproxFslKb below), so
 // the bound holds regardless of a deck's per-entry size. Rationale (Mirrorwing, 2026-08-14): line-cache appetite is heavily
 // skewed -- a typical game peaks ~100 MB, a monster ~900 MB at ~600 B/entry -- so slicing the
@@ -33247,11 +33252,14 @@ namespace domin
 // atomics: the counter guards memory, not results, and insert rate is far below lookup rate.
 inline std::atomic<long long>& FslPoolUsed()
 { static std::atomic<long long> v{ 0 }; return v; }
+inline std::atomic<long long>& FslPoolHiwater()   // peak of Used (heartbeat / rss-cap report)
+{ static std::atomic<long long> v{ 0 }; return v; }
 inline long long FslPool()
 {
     static const long long v = []{
         const char* e = std::getenv("MTG_FSL_POOL");
-        return e ? static_cast<long long>(std::strtoll(e, nullptr, 10)) : 0LL; }();
+        return e ? static_cast<long long>(std::strtoll(e, nullptr, 10))
+                 : membudget::DefaultFslPoolKb(); }();
     return v;
 }
 // BYTE-ACCURATE accounting (2026-09-05): the pool used to charge 1 UNIT PER ENTRY and the caller
@@ -33277,10 +33285,32 @@ inline bool FslPoolAcquire(long long kb)
 {
     const long long pool = FslPool();
     if (pool <= 0) { return true; }   // pool off: only the per-cache cap applies
-    if (FslPoolUsed().fetch_add(kb, std::memory_order_relaxed) + kb <= pool) { return true; }
+    const long long now = FslPoolUsed().fetch_add(kb, std::memory_order_relaxed) + kb;
+    if (now <= pool)
+    {
+        long long hi = FslPoolHiwater().load(std::memory_order_relaxed);
+        while (now > hi
+               && !FslPoolHiwater().compare_exchange_weak(hi, now, std::memory_order_relaxed)) {}
+        return true;
+    }
     FslPoolUsed().fetch_sub(kb, std::memory_order_relaxed);
     return false;
 }
+// The two pools' used/hiwater tokens for the batch heartbeat line and the rss-cap abort report
+// (src/core/MemBudget.h). Registered once at static init; read from the watchdog/heartbeat threads
+// (relaxed atomics -- these are gauges, not results).
+[[maybe_unused]] static const bool g_mem_reporters_registered = []{
+    membudget::RegisterMemReporter([]{
+        char b[96];
+        std::snprintf(b, sizeof(b), "fsl=%lldM/%lldM(of %lldM)", FslPoolUsed().load() >> 10,
+                      FslPoolHiwater().load() >> 10, FslPool() >> 10);
+        return std::string(b); });
+    membudget::RegisterMemReporter([]{
+        char b[96];
+        std::snprintf(b, sizeof(b), "plan=%lldM/%lldM(of %lldM)", plancache::PoolUsed().load() >> 20,
+                      plancache::PoolHiwater().load() >> 20, plancache::BudgetBytes() >> 20);
+        return std::string(b); });
+    return true; }();
 // In-place UPDATES (win supersede / bound widen) never fail -- identical to the pre-pool
 // behaviour -- so their size delta adjusts the counter unconditionally. The transient overshoot
 // this allows is one entry's delta per updating worker: bounded and tiny against a GB-scale pool.
@@ -33904,8 +33934,9 @@ static bool WinlessSeedWins(const GameState& state, TurnSolver::Plan& out)
 // Store a WIN: final and cutoff-independent, so it supersedes any bounded no-win a looser earlier
 // query left behind. With the no-win cache off no such entry can exist, so only the emplace branch
 // is ever reached == the old `lc->emplace(key, line)` exactly.
-// Result-NEUTRAL insert cap for the per-decision line cache (MTG_FSL_CAP, entries; 0/unset =
-// unlimited = byte-identical). Same contract as TranspositionTable's MTG_TT_CAP: the cache is a
+// Result-NEUTRAL insert cap for the per-decision line cache (MTG_FSL_CAP, entries; =0 =
+// unlimited = byte-identical; UNSET = 2,000,000 via src/core/MemBudget.h since 2026-09-15). Same
+// contract as TranspositionTable's MTG_TT_CAP: the cache is a
 // pure memo (a refused insert just recomputes), but its entries are HEAVY (a full SearchLine of
 // per-phase plans), and a mass-draw deck's single decision was measured at ~28 GB of line cache
 // (Mirrorwing analyzer, 2026-08-11) -- 24 concurrent workers stack such peaks into an OOM.
@@ -33914,7 +33945,8 @@ inline std::size_t FslCap()
 {
     static const std::size_t cap = []{
         const char* e = std::getenv("MTG_FSL_CAP");
-        return e ? static_cast<std::size_t>(std::strtoull(e, nullptr, 10)) : std::size_t{0};
+        return e ? static_cast<std::size_t>(std::strtoull(e, nullptr, 10))
+                 : membudget::DefaultFslCapEntries();
     }();
     return cap;
 }

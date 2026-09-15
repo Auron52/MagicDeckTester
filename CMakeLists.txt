@@ -151,6 +151,7 @@ add_library(mtg-core STATIC
     src/core/NameRegistry.cpp
     src/core/PoolAllocator.cpp
     src/core/FlagRegistry.cpp
+    src/core/MemBudget.cpp
 )
 target_include_directories(mtg-core PUBLIC src "${MTG_GENERATED_DIR}")
 target_link_libraries(mtg-core PUBLIC pugixml::pugixml nlohmann_json::nlohmann_json)

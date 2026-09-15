@@ -6,6 +6,7 @@
 #include "../core/EnvFlags.h"
 #include "../core/GameSetup.h"
 #include "../core/HardwareConcurrency.h"
+#include "../core/MemBudget.h"
 #include "../ai/AIEngine.h"
 #include "../ai/MulliganProfile.h"
 #include "../ai/Profiler.h"
@@ -398,9 +399,27 @@ public:
         }
     }
 
+    // The in-flight games, one per line, for the rss-cap abort report: when the watchdog kills the
+    // process for memory, THESE are the suspects (the OOM incident of 2026-09-14 never said which).
+    std::string InFlightReport()
+    {
+        std::string out;
+        const long long now = NowMs();
+        for (Slot& s : running_)
+        {
+            if (s.active.load(std::memory_order_acquire) == 0) { continue; }
+            const long long st = s.start_ms.load(std::memory_order_relaxed);
+            std::lock_guard<std::mutex> lk(s.mtx);
+            out += "[rss-cap]   in flight: " + s.job + " gi=" + std::to_string(s.gi) + " "
+                 + std::to_string((now - st) / 1000) + "s\n";
+        }
+        return out;
+    }
+
     void Start()
     {
         if (!enabled_) { return; }
+        membudget::SetCapContext([this] { return InFlightReport(); });
         stop_ = false;
         thread_ = std::thread([this] {
             // A condition_variable, not a poll loop: the thread sleeps for the WHOLE period and is
@@ -425,6 +444,7 @@ public:
         { std::lock_guard<std::mutex> lk(wake_mtx_); stop_ = true; }
         wake_cv_.notify_all();
         if (thread_.joinable()) { thread_.join(); }
+        membudget::SetCapContext(std::function<std::string()>());
     }
 
 private:
@@ -488,6 +508,14 @@ private:
                 std::fprintf(stderr, "  slowest %.2fh %s gi=%d",
                              static_cast<double>(rows.front().ms) / 3600000.0,
                              rows.front().job.c_str(), rows.front().gi);
+            }
+            // Resident set + the pools' used/hiwater (src/core/MemBudget.h): the memory driver on the
+            // same line as utilisation, so a run growing toward the cap is visible before it trips.
+            if (const long long rss = membudget::CurrentRssBytes(); rss > 0)
+            {
+                std::fprintf(stderr, "  rss=%.1fG", static_cast<double>(rss) / (1024.0 * 1024.0 * 1024.0));
+                const std::string pools = membudget::MemReport();
+                if (!pools.empty()) { std::fprintf(stderr, " %s", pools.c_str()); }
             }
             if (!path_.empty()) { std::fprintf(stderr, "  -> %s", path_.c_str()); }
             std::fprintf(stderr, "\n");
@@ -1185,6 +1213,9 @@ std::vector<BatchJobResult> BatchRunner::RunManifest(
     num_threads = concurrency_util::ResolveWorkerThreads(num_threads);
     num_threads = std::min<int>(num_threads, std::max<std::size_t>(1, items.size()));
     concurrency_util::LogWorkerThreads(std::cerr, "batch", requested, num_threads);
+    // The RAM-derived cache bounds and the RSS cap this run is under (src/core/MemBudget.h), so a
+    // log always says what the box was protected by.
+    std::cerr << "[batch] " << membudget::Describe() << "\n";
 
     // Progress of the game each worker slot is running, published by the meter but ONLY while that
     // game belongs to a cell's calibration sample (ai/GameWorkMeter.h). The freeze reads it to prove
