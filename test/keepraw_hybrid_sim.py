@@ -34,10 +34,11 @@ the real confounded A/B remains the gate.
 """
 import re
 import random
-import sys
+import os, sys
 from collections import defaultdict
 
-RAW = 'decks/FiveColour/FiveColour.keepmodel.exhaustive.raw.json'
+RAW = os.environ.get('KEEPRAW_PATH',
+                     'decks/FiveColour/FiveColour.keepmodel.exhaustive.raw.json')
 SAMPLE = int(sys.argv[1]) if len(sys.argv) > 1 else 3000
 TRIALS = int(sys.argv[2]) if len(sys.argv) > 2 else 200
 BOTTOM_FLOOR = 2

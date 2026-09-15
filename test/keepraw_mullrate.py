@@ -23,10 +23,11 @@ per-depth keep probabilities, and the resulting distribution of final mulligan c
 """
 import re
 import random
-import sys
+import os, sys
 from collections import defaultdict, Counter
 
-RAW = 'decks/FiveColour/FiveColour.keepmodel.exhaustive.raw.json'
+RAW = os.environ.get('KEEPRAW_PATH',
+                     'decks/FiveColour/FiveColour.keepmodel.exhaustive.raw.json')
 COD = 'decks/FiveColour/FiveColour.cod'
 N = int(sys.argv[1]) if len(sys.argv) > 1 else 120000
 HAND = 7

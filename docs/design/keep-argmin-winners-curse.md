@@ -1,8 +1,11 @@
 # The KEEP side carries the same winner's curse — unfiltered, 3x larger, and unexamined
 
-**Status: diagnosed offline, NOT yet measured in play (2026-09-14).** This is a lead with strong
-evidence behind it, not an adopted result. Everything below comes from the raw sidecar and the
-source; no A/B has been run.
+**Status: LARGELY REFUTED 2026-09-15 — see §7, read it first.** The bias described below is real and
+the regret numbers are correct, but it is **inert in the shipped policy**: the hands it corrupts are
+already being mulliganed, so `min(KeepVal, Dopt[m+1])` clips the corruption away before it reaches
+`D_opt` or any keep decision. The §3 prediction was tested and **failed**. Do not implement the
+§5b/§6 filter expecting a gain. The document is kept because the measurements and the refutation are
+both worth having.
 
 Companion to [keepgen-bottoming-winners-curse.md](keepgen-bottoming-winners-curse.md), which fixed
 the **bottoming** argmin and explicitly set the keep half aside:
@@ -149,3 +152,53 @@ over too.
    incumbents — §3's prediction says the debiased build should mulligan **less**.
 3. `KM_MODE=keep` A/B, exhaustive-vs-exhaustive (debiased vs incumbent).
 4. Only then consider whether it closes the +0.0142 t that deferral was buying on FiveColour.
+
+
+## 7. REFUTED: the bias is real but inert (2026-09-15)
+
+`test/keepraw_keepfilter_dopt.py` implements §3's falsifiable prediction — give `KeepVal` the
+refined-only filter, recompute `D_opt` by the engine's own recursion, and compare the mull-from-7
+rate. Result on FiveColour (20,000 sampled hands, and reproduced independently at 4,000):
+
+```
+  pd   variant   Dopt[0]   Dopt[1]   Dopt[2]   Dopt[3]   Dopt[4]   Dopt[5]   Dopt[6]   mull7%
+play     plain    5.0130    5.1975    5.4866    5.9969    6.7252    7.6734    8.6855   56.16%
+play  FILTERED    5.0130    5.1975    5.4866    5.9969    6.7252    7.6734    8.6855   56.16%
+draw     plain    4.7754    4.9194    5.1312    5.4977    6.0802    6.8936    7.7246   60.53%
+draw  FILTERED    4.7754    4.9194    5.1312    5.4977    6.0802    6.8936    7.7246   60.53%
+```
+
+**Zero change, to four decimals, on every threshold and both mulligan rates.** §3 predicted the
+filtered policy would mulligan measurably less. It does not move at all.
+
+The filter is not a no-op — it binds, and the raw effect on `KeepVal` is in the predicted direction
+(mean `KeepVal(.,1)` rises 5.4262 -> 5.4316, i.e. the unfiltered value was indeed optimistically low).
+The reason it vanishes:
+
+```
+m=1: filter binds on 122/6000 hands (2.03%)
+  of those, 0 (0.0%) have BOTH values below Dopt[2]
+  i.e. 122 (100.0%) are clipped by the mulligan alternative
+```
+
+**The curse is self-limiting.** A floor cell can only win the argmin when *every* subcomposition of
+the hand is poor — a good hand always has a refined subcomp that no 2-rollout fluctuation can beat.
+So the hands whose value gets corrupted are exactly the hands that are worse than `Dopt[m+1]` anyway,
+and `min(KeepVal, Dopt[m+1])` returns the mulligan alternative on both arms. The error is confined to
+hands where the answer is already "mulligan".
+
+**What survives, and what does not:**
+
+* **Survives:** the per-decision regret figures (keep 0.1766 t vs bottoming 0.0593 t, and the 2.7–3.3x
+  ratio across all four `fast` decks) are correct as *subcomposition-selection* regret.
+* **Does not survive:** the inference that this translates into policy error. `KeepVal`'s *argmin
+  identity* is never shipped — bottoming targets come from `best_sub`, which is filtered. `KeepVal`
+  contributes only its *value*, and that value is clipped. §5b's "worth ~3x, one condition" is wrong:
+  measured, it is worth **zero**.
+* **Also does not survive:** §3's predicted direction of the mulligan-rate distortion. There is no
+  distortion to have a direction.
+
+**The general lesson**, which is the part worth carrying to the next deck: *regret in an estimator is
+only worth fixing where the estimate is pivotal.* An argmin can be badly biased and still cost
+nothing if a downstream `min`/threshold discards exactly the cases it corrupts. Check pivotality
+before optimising an estimator — it is one cheap offline experiment and it was skipped here.
