@@ -120,6 +120,13 @@ Read it first.
 
 ## 4. The adoption question is settled and does not depend on any of this
 
+**ADOPTED 2026-09-15 (`53e0ff57`, pushed).** The shrunk table is installed at
+`decks/FiveColour/FiveColour.keepmodel.exhaustive.profile.json(.gz)`; the generated (`plain`) table is
+kept beside it as `...profile.DISABLED.json`. GT rebaseline for the three tiers is **still owed** —
+it runs after the labeller-depth diagnostic frees the box (`logs/fc_repolicy/adopt_finish.sh`), on the
+binary rebased onto `origin/909e781d`, which brought 63 changed `src` files.
+
+
 Per [no-lookahead-bottoming.md](no-lookahead-bottoming.md) §2 the confounded A/B is a **diagnostic,
 not a gate**: neither "ship bottoming off" nor "defer to lookahead" is available, so losing to a
 lookahead we will not ship cannot veto adoption. Measured directly — 3 arms, one manifest, 32 fresh
