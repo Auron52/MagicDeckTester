@@ -26714,6 +26714,17 @@ static bool HumanEnumSaturated(const GameState& state,
     return sat;
 }
 
+// The enumeration branch whose land drop is a DEFERRED KAROO (EnumeratePlansWithLand's
+// add_for_land): true only while EnumeratePlans runs for that branch. Read by the autonomous plan
+// signature to keep land-Aura host variants distinct exactly there (MTG_EDF_AURA_HOST_SIG_KAROO).
+static thread_local bool g_enum_karoo_drop = false;
+struct KarooDropEnumScope
+{
+    bool prev;
+    explicit KarooDropEnumScope(bool on) : prev(g_enum_karoo_drop) { g_enum_karoo_drop = on; }
+    ~KarooDropEnumScope() { g_enum_karoo_drop = prev; }
+};
+
 static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool is_pre_combat)
 {
     // Enumeration SCORES candidate plans by applying them on copies (ApplyPlanDirect resolves their
@@ -28795,7 +28806,27 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
     static const bool s_legacy_bestow_sig = EnvOn("MTG_LEGACY_BESTOW_SIG");
     static const bool s_aura_host_sig_env = EnvOn("MTG_EDF_AURA_HOST_SIG", true);
     const bool s_aura_host_sig = heurarm::Flag(heurarm::EDF_AURA_HOST_SIG, s_aura_host_sig_env);
-    auto plan_signature = [s_human_play_sig, s_aura_host_sig](const TurnSolver::Plan& p) -> std::string
+    // NARROWED TO THE KAROO-DROP BRANCH (MTG_EDF_AURA_HOST_SIG_KAROO, default ON; 2026-09-15, the
+    // perf half of the host signature). Keeping every host variant distinct doubled every land-Aura
+    // plan at every ply and cost +13.7% wall on the EDF deck average (Session 28 §5). The fold is
+    // only WRONG when this plan's land drop is a karoo -- the bounce is what takes the folded host
+    // (s12 T3) -- so the variants are kept distinct exactly on that enumeration branch and folded
+    // as before on every other. The branch announces itself (g_enum_karoo_drop, set by
+    // EnumeratePlansWithLand's add_for_land around the deferred-karoo call) because nothing in
+    // the STATE says so here: the land axis is applied after this dedup, p.land_to_play is still
+    // empty (a first cut keyed on it folded s12's host again), and the deferred-karoo branch
+    // removes the karoo from `copy`'s hand (a second cut scanning the hand folded it on exactly
+    // that branch). Human play and the UN-PRUNED enumeration (MTG_UNPRUNED: the viewer's / the
+    // claude-play oracle's plan list, and the validate_line fixtures' -- edf_land_aura_multicast_
+    // offered reads choose/3 there) keep every host distinct regardless: the host is the human's
+    // decision to make, un-pruning exists to show the searched axes, and neither is where the
+    // wall is. =0 restores the unconditional signature.
+    static const bool s_aura_host_karoo_env = EnvOn("MTG_EDF_AURA_HOST_SIG_KAROO", true);
+    const bool s_aura_host_karoo = heurarm::Flag(heurarm::EDF_AURA_HOST_SIG_KAROO, s_aura_host_karoo_env);
+    const bool host_sig = s_aura_host_sig
+                       && (!s_aura_host_karoo || g_enum_karoo_drop || s_human_play_sig
+                           || DecisionUnpruned());
+    auto plan_signature = [s_human_play_sig, host_sig](const TurnSolver::Plan& p) -> std::string
     {
         std::vector<std::string> v, s, a, g, l, u, msf;
         for (const Action& act : p.actions)
@@ -28880,7 +28911,7 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
                         // variants distinct at most doubles the Aura plans. Gated on the param, so no
                         // deck without land Auras moves; =0 restores the name-only fold.
                         + ((act.def && act.def->params.is_land_aura && act.enchant_target > 0
-                            && s_aura_host_sig)
+                            && host_sig)
                            ? ("#H" + std::to_string(act.enchant_target)) : "")); break;
                 case Action::Kind::CastFromGraveyard: g.push_back(act.card_name); break;
                 case Action::Kind::DiscardToLandsEdge:
@@ -31227,12 +31258,14 @@ static std::vector<TurnSolver::Plan> EnumeratePlansWithLandUncached(const GameSt
         // (committed to the drop) so hand-land accounting (Land's Edge ammo) can't double-count
         // it. Rides the apply's MTG_NO_KAROO_DEFER hatch: with the hatch set both sides play
         // land-first again, byte-identically.
+        bool karoo_drop = false;   // this branch's drop is a deferred karoo (see g_enum_karoo_drop)
         {
             static const bool s_karoo_defer_enum = !EnvOn("MTG_NO_KAROO_DEFER");
             const CardDefinition* fold_ld =
                 land_name.empty() ? nullptr : CardDatabase::Instance().Lookup(land_name);
             if (s_karoo_defer_enum && fold_ld && fold_ld->params.etb_bounce_land)
             {
+                karoo_drop = true;
                 copy = state;   // the PlayLandByName above was the legality probe only
                 std::vector<Card>& h = copy.ActivePlayer().hand;
                 for (auto it = h.begin(); it != h.end(); ++it)
@@ -31253,7 +31286,11 @@ static std::vector<TurnSolver::Plan> EnumeratePlansWithLandUncached(const GameSt
             all.push_back(std::move(idle));
         }
 
-        std::vector<TurnSolver::Plan> plans = EnumeratePlans(copy, is_pre_combat);
+        std::vector<TurnSolver::Plan> plans;
+        {
+            KarooDropEnumScope _kd(karoo_drop);   // the host signature reads it (EnumeratePlans)
+            plans = EnumeratePlans(copy, is_pre_combat);
+        }
         for (TurnSolver::Plan& p : plans)
         {
             p.land_decided = true;

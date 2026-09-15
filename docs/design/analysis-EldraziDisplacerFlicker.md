@@ -7842,3 +7842,46 @@ reservation is parked with its s10 counter-example (§6.1 narrows to the float s
 `MTG_HOLD_C_FOR_LINE` waits on the draw sink's crank reservation, §6.2); s9 / s14 = the budget
 decision (§6.5, cost measured).
 
+### 8. Performance, first item: the host signature's wall, given back (09:45-10:45 UTC)
+
+`MTG_EDF_AURA_HOST_SIG` closes s12 and doubles every land-Aura plan at every ply: +13.7% wall on
+the deck average (§5). The fold it prevents is only wrong when the same turn's land drop is a
+karoo -- the bounce is what takes the folded host -- so **`MTG_EDF_AURA_HOST_SIG_KAROO`** (heurarm,
+default ON) keeps host variants distinct exactly then and folds them as before otherwise. Three
+cuts to get the condition right, each wrong in an instructive way:
+
+1. **Keyed on `p.land_to_play`**: folded s12's Kitchen host again (bench 4 -> 5). The land axis is
+   applied by `EnumeratePlansWithLand` AFTER `EnumeratePlans`' dedup, so the field is empty at
+   dedup time.
+2. **Read off the state -- a karoo in hand with the land drop open**: passed the BENCH (s12 = 4)
+   and the deck average (+0.03 t, t = 0.82; wall -14.6%), then FAILED the scenario gate: the s12
+   FIXTURE lost (5). The deferred-karoo branch REMOVES the karoo from `copy`'s hand ("committed to
+   the drop"), so the hand scan was false on exactly the branch that plays it; the real s12 game
+   had won through the no-land branch's plans, where the karoo is still in hand -- a bench cell
+   that passed for the wrong reason, which is what the fixture is for.
+3. **The branch announces itself**: `g_enum_karoo_drop`, a thread-local set by `add_for_land`
+   around the deferred-karoo `EnumeratePlans(copy)` call, read by the signature. Human play and
+   the un-pruned enumeration (`MTG_UNPRUNED`: the viewer, the claude-play oracle, the
+   `validate_line` fixtures) keep every host distinct regardless -- the host is the human's
+   decision, un-pruning exists to show the searched axes, and neither is where the wall is
+   (`edf_land_aura_multicast_offered` reads choose/3 there and accept/1 without the exemption).
+
+**Measured, cut 2 (one pool each; `hostkaroo2`, `deckavg_hostkaroo2`):** bench identical (s12 4,
+3 short), paired deck average unconditional 4.65 -> narrowed 4.68 (+0.03 t, 2 better / 3 worse /
+5 tied, t = 0.82), wall 2750 -> 2348 s (**-14.6%**, the levers-off arm's wall).
+
+**Measured, cut 3 (the shipped one; `hostkaroo3`, `deckavg_hostkaroo3`):** both fixtures pass
+(s12 at 4; the multicast line choose/3), scenarios **88/88**, smoke **76/4** with every line
+identical to the committed tree; bench identical (s12 4, 3 short, digests move on five references
+and every one lands on the same turn); paired deck average, the SAME 100 games per arm:
+
+| arm | mean win turn | paired vs unconditional | chunks better / worse / tied | paired t | wall (sum of job ms) |
+|---|---|---|---|---|---|
+| host signature everywhere | 4.6500 | -- | -- | -- | 2661 s |
+| narrowed to the karoo-drop branch | 4.6800 | +0.0300 | 2 / 3 / 5 | 0.82 | 2257 s (**-15.2%**) |
+
+The same chunk pattern as cut 2 (one chunk, 3061+0, carries the +0.03; five tied), not
+significant; the wall is the levers-off arm's again. Shipped ON on that reading -- the user's
+brief put the references first and performance next, and this is the cost of the references' own
+lever -- with both sides here and the flag to flip.
+
