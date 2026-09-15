@@ -7865,6 +7865,27 @@
     "saga_ch2_counters_on_target": 3,
     "saga_ch3_double_pt_target": true
    }
+  },
+  {
+   "name": "Fyndhorn Elves",
+   "mana_cost": "{G}",
+   "types": [
+    "Creature"
+   ],
+   "subtypes": [
+    "Elf",
+    "Druid"
+   ],
+   "keywords": [],
+   "power": 1,
+   "toughness": 1,
+   "oracle_text": "{T}: Add {G}.",
+   "template": "mana_dork",
+   "parameters": {
+    "produces": [
+     "G"
+    ]
+   }
   }
  ]
 }

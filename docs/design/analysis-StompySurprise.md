@@ -660,5 +660,77 @@ One apparatus note: the keep table buckets **Elderscale Wurm, Hornet Queen and V
 together**, so "cut Elderscale" and "cut a Vaultborn" are *identical to the mulligan model* — the
 0.0009 between them (Screen D) is pure play difference, and neither is favoured by the table.
 
-Specs and raw output: `logs/stompy_screen/screen{D,E,F,G,H}.json` + `.out`,
-`confirmH{1,2,3}.out` (gitignored).
+### The marginal-cut ladder (Screen I) — THE DECK HAS NO FAT
+
+The user pinned the threat suite ("2 wurms 2 terastodon + toolbox seems okay for creatures") and
+asked the obvious follow-up: *"it's not clear whether we need as many other pieces"* — specifically,
+could a 1-mana elf go? Screen I answers it exhaustively. Hold the list fixed, add a 4th World War
+Hulk, and pay for it with **one** further card, one arm per candidate. Any arm that beats the
+do-nothing baseline means that card is worth less than a 4th Hulk.
+
+| cut | delta | cost vs keeping the list |
+|---|---|---|
+| Wirewood Lodge | −0.1701 | **+0.0019 — a tie** |
+| a Forest (14→13) | −0.1620 | +0.0100 |
+| a Worldly Tutor (4→3) | −0.1595 | +0.0126 |
+| a Turntimber Symbiosis (4→3) | −0.1577 | +0.0144 |
+| an Elvish Archdruid (4→3) | −0.1525 | +0.0196 |
+| a Priest of Titania (4→3) | −0.1464 | +0.0257 |
+| an Arbor Elf (2→1) | −0.1391 | +0.0330 |
+| a Fyndhorn Elves (2→1) | −0.1376 | +0.0345 |
+| an Elvish Mystic (4→3) | −0.1368 | +0.0352 |
+| a Llanowar Elves (4→3) | −0.1331 | +0.0390 |
+| Sol Ring | −0.1303 | +0.0418 |
+| *baseline — cut nothing, stay at 3 Hulks* | *−0.1721* | — |
+
+**Not one cut pays.** The support half is correctly sized, and the **1-mana elves are the second
+most expensive cards in the deck to cut, behind only Sol Ring** — 0.033–0.039 each, about 3x what
+the 4th Hulk gains. This is a ramp deck whose plan is an 11-mana Wurm on turn 4; the dorks are the
+engine, not filler. **Wirewood Lodge is the only genuinely free slot** (0.0019) — tradeable for a
+4th Hulk at no cost and no gain.
+
+One trap this closes: the shipped profile's *second-copy opening-hand* scores are negative for
+Priest of Titania (−0.171), Elvish Archdruid (−0.124) and Llanowar Elves (−0.054), which reads like
+an invitation to trim them. It is not. Those measure awkwardness in an opening hand, not deck value;
+cutting those cards still costs 0.020–0.039. **Do not use `card_scores` as a cut list.**
+
+### Arbor Elf → Fyndhorn Elves
+
+The user planned this swap independently ("I definitely plan to drop Arbor elf for Fyndhorn even if
+it is kept"). Fyndhorn Elves was added to `cards.json` for it — a functional twin of Llanowar Elves
+(`mana_dork`, `produces: ["G"]`, no bracket note; nothing about it is unmodelled) — and aliased into
+Arbor Elf's keep bucket, which leaves that bucket at exactly 10 and so is apparatus-neutral.
+
+Measured **−0.1742 vs −0.1721, a 0.0021 gain**. That is below any plausible bias floor, so the
+honest reading is **"strictly not a downgrade, and free"**, not a measurable upgrade — which is what
+the model predicts, since Arbor Elf's Forest condition (`mana_requires_land_subtype`) is live off 14
+basic Forests nearly always. Turntimber's back face is a plain Land, not a Forest, so Arbor Elf has
+14 live targets, not 18. The ladder corroborates the direction from the other side: cutting a
+Fyndhorn costs *more* than cutting an Arbor Elf (0.0345 vs 0.0330).
+
+### THE RECOMMENDED LIST
+
+Confirmed **−0.1748 over 40,000 games** (held-out shrinkage t = −0.21), and reproduced in four
+independent 20,000-game blocks within 0.004 of each other (−0.1733 / −0.1721 / −0.1764 / −0.1754).
+
+```
+4  Natural Order            (2 -> 4)      4  Worldly Tutor
+3  World War Hulk           (new)         4  Turntimber Symbiosis
+1  Apex Altisaur            (new)         1  Sol Ring
+2  Call of the Wild         (4 -> 2)      1  Wirewood Lodge
+2  Worldspine Wurm          (4 -> 2)      4  Llanowar Elves
+2  Terastodon                             4  Elvish Mystic
+1  Vaultborn Tyrant         (2 -> 1)      2  Fyndhorn Elves   (was 2 Arbor Elf)
+1  Hornet Queen                           4  Priest of Titania
+1  Craterhoof Behemoth                    4  Elvish Archdruid
+1  Elderscale Wurm                       14  Forest
+                                          0  Mirri's Guile    (1 -> 0)
+```
+
+Free variations, all inside the measured noise: **Wirewood Lodge → a 4th World War Hulk** (0.0019),
+and **Worldspine Wurm 2 / Terastodon 2 → Worldspine 3 / Terastodon 1** (0.0027). Dropping the Apex
+Altisaur and restoring the 3rd Worldspine Wurm gives `noalt_wwh3_wurm3` at **−0.2139** — 0.039
+faster, which is the Altisaur's price and is bought deliberately for removal this sim cannot model.
+
+Specs and raw output: `logs/stompy_screen/screen{D,E,F,G,H,I}.json` + `.out`,
+`confirmH{1,2,3}.out`, `confirmI1.out` (gitignored).
