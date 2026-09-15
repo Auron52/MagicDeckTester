@@ -19898,12 +19898,21 @@ PlanTraits TurnSolver::ComputePlanTraits(const GameState& state, const std::vect
     // Board scan: copy magnet + the untapped subtype scalers (whose subtype the food test needs).
     const CardDefinition* scalers[4];
     int n_scalers = 0;
+    // Line {C} hold: a blink OUTLET already on the board whose activation carries a {C} pip
+    // (Eldrazi Displacer {2}{C}). A plan that casts an ETB-untap payload beside it assembles a
+    // loop the apply-side go-off (EdfAutoGoOffAfterCasts) will try to crank right after the casts
+    // -- with no ActivateBlink in the plan to announce it (claude_s8_gi7 T3: the hand go-off
+    // candidate was gated out on its mana floor, the casts went through as a plain plan, and the
+    // recogniser then counted a 221-iteration loop whose first crank found `avail c0`).
+    int board_outlet_c = 0;
     for (const Permanent& p : state.battlefield)
     {
         if (p.controller_index != active) { continue; }
         const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
         if (!d) { continue; }
         if (d->params.copies_solo_targeted_spells) { t.copy_magnet_live = true; }
+        if (d->params.blink_cost.has_value() && d->params.blink_cost->colorless > board_outlet_c)
+        { board_outlet_c = d->params.blink_cost->colorless; }
         // MTG_HEROISM_MAGNET_TRAIT (see HeroismMagnetTraitOn): a live copy-token enchantment's
         // trick turns have a magnet's go-off shape (each trick mints a hasted body; the copy
         // doubles a Gold Rush's mint), so it counts as one for the one-shot spend bias and the
@@ -19920,6 +19929,10 @@ PlanTraits TurnSolver::ComputePlanTraits(const GameState& state, const std::vect
     for (const Action& a : acts)
     {
         if (a.kind == Action::Kind::DigDraw) { t.mid_turn_casts = true; }
+        // Line {C} hold input: the largest colourless pip count among the plan's own blink
+        // activations (one crank; see PlanTraits::act_c_pips).
+        if (a.kind == Action::Kind::ActivateBlink && a.cost.colorless > t.act_c_pips)
+        { t.act_c_pips = a.cost.colorless; }
         if (a.kind != Action::Kind::CastFromHand
             && a.kind != Action::Kind::CastFromGraveyard) { continue; }
         const CardDefinition* d = a.def ? a.def : CardDatabase::Instance().Lookup(a.card_name);
@@ -19928,6 +19941,15 @@ PlanTraits TurnSolver::ComputePlanTraits(const GameState& state, const std::vect
         // draws new castables -- either can add a cast this plan's lists cannot see.
         if (d->params.creates_treasures > 0 || d->tmpl == CardTemplate::DrawUntilNonland)
         { t.mid_turn_casts = true; }
+        // Line {C} hold, the "assembles a loop" triggers (see board_outlet_c above): the plan
+        // casts a blink outlet with a {C} activation, or casts an ETB-untap payload while such an
+        // outlet is already out. Either way the apply-side go-off cranks {C} right after the
+        // casts. Only cards with a blink_cost / etb_untap_lands param reach here -> every other
+        // deck's traits are unchanged.
+        if (d->params.blink_cost.has_value() && d->params.blink_cost->colorless > t.act_c_pips)
+        { t.act_c_pips = d->params.blink_cost->colorless; }
+        if (d->params.etb_untap_lands > 0 && board_outlet_c > t.act_c_pips)
+        { t.act_c_pips = board_outlet_c; }
         if (d->params.solo_target_trick
             || (d->params.target_own_creature
                 && (d->params.power_bonus > 0 || d->params.tough_bonus > 0)))
@@ -20239,6 +20261,12 @@ bool TurnSolver::BatchPrepayMainCasts(GameState& state, const std::vector<Action
         }
     }
     reserved = reserved_depl | reserved_crea | reserved_shot;
+    // LINE {C} HOLD (MTG_LINE_C_HOLD): the {C} providers the plan's own blink activation still
+    // needs after these casts (LineColorlessHoldMask; 0 unless the lever is on and the plan carries
+    // an ActivateBlink with a {C} pip). Tried WITH everything else held first, then alone, before
+    // the historical ladder -- so on a board with nothing else reservable (EDF: no dorks) it is one
+    // extra solve, and the unrestricted fallback below is unchanged when it cannot be afforded.
+    const std::uint64_t reserved_c = LineColorlessHoldMask(state, ManaCost{});
 
     // Solve the combined cost, HOLDING as much as the turn can spare. First try with everything
     // reservable held: if it pays wild-free, those sources are preserved for free. If holding them
@@ -20269,6 +20297,7 @@ bool TurnSolver::BatchPrepayMainCasts(GameState& state, const std::vector<Action
         for (int i = 0; i < n_rungs; ++i) { if (rungs[i] == m) { return; } }
         rungs[n_rungs++] = m;
     };
+    if (reserved_c) { push(reserved | reserved_c); push(reserved_c); }   // line {C} hold rungs
     push(reserved);                                    // hold everything reservable
     if (DorkReserveEnabled())
     {

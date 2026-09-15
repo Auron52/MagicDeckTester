@@ -17344,7 +17344,23 @@ EldraziFlickerProvider::HandGoOffCandidates(const GameState& s, int me) const
                          econ.net, econ.refund, econ.cost_mv, have_total, cast_mv);
         }
         if (econ.net <= 0) { return; }                              // cheap arithmetic first
-        if (have_total < cast_mv + econ.cost_mv) { return; }        // cannot START the loop
+        // MANA FLOOR: the board must cover the cast(s) PLUS one activation, or the loop cannot
+        // start. HAND-PAYLOAD REFUND (MTG_EDF_HAND_GOFF_REFUND, heurarm slot, default OFF until
+        // measured; 2026-09-15): a payload CAST from hand fires its ETB untap on the way in, so
+        // its refund (econ.refund: the untap's mana, enchanted lands counted) is available to the
+        // outlet's cast and the first crank -- not optimism, the same untap the loop is priced on.
+        // claude_s8_gi7 T3: Displacer(hand) x Cloud(hand) read have=5 < cast 5 + crank 3 and was
+        // gated out, though Cloud's untap of two enchanted lands (refund 4) is what paid the
+        // human's line; the plan then went through as plain casts and the apply-side go-off's
+        // first crank found no {C}. The probe below (recogniser + count) remains the arbiter.
+        // MEASURED, DEFAULT OFF (2026-09-15, logs/ref_bench_edf/levers2): with the credit the s8
+        // pair reads count=288 and is enumerated, but the 14-reference bench does not move a
+        // single digest -- the ranking never prefers the plan (its loop cannot convert without the
+        // library route). Inert until that lands; =1 opts in.
+        static const bool s_refund_env = EnvOn("MTG_EDF_HAND_GOFF_REFUND", false);
+        const bool credit_refund = heurarm::Flag(heurarm::EDF_HAND_GOFF_REFUND, s_refund_env);
+        const int  hand_refund   = (credit_refund && p_hand) ? econ.refund : 0;
+        if (have_total + hand_refund < cast_mv + econ.cost_mv) { return; }   // cannot START the loop
 
         GameState probe = s;
         RevealLogPause _pause;                                      // no viewer events off a probe

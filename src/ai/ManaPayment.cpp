@@ -2603,6 +2603,61 @@ bool TapForCostShared(GameState& state, const ManaCost& cost_in, bool for_creatu
 static bool PayBoundEnabled()
 { static const bool v = EnvOn("MTG_PAY_BOUND", true); return v; }
 
+// LINE {C} HOLD (MTG_LINE_C_HOLD -- see LineCHoldEnabled in SpellEffects.h for the s8 trace).
+// While a plan apply is paying, hold as many untapped {C} PROVIDERS as the plan's own activation
+// still needs beyond this payment's colourless pips and the {C} already floating, NARROWEST
+// provider first (a {C}-only Mariposa before a painland whose coloured mode a later cast may want;
+// tie: lower battlefield index -- deterministic). Unlike ScarceColorHoldMask this holds a COUNT,
+// not "every provider when scarce": generic pips can be paid by any source, so the payer needs no
+// {C} at all and the only question is how many providers to keep out of its reach. Same
+// reserved-first / unrestricted-retry contract as the other masks (a cast that needs them gets
+// them back). Public: BatchPrepayMainCasts adds the same mask as a rung of the whole-turn ladder.
+std::uint64_t LineColorlessHoldMask(const GameState& state, const ManaCost& cost)
+{
+    if (!LineCHoldEnabled()) { return 0; }
+    // HUMAN PLAY: stand down. The human's line is paid as recorded (their --tap-pref, else the
+    // shipped payer): a new hold here changes WHICH lands a replayed reference taps, and every
+    // later frame of that reference then enumerates a different board -- the replay drifts off
+    // its recorded picks (scripts/ref_handoff.py walked straight past its frame the first time
+    // this mask ran unguarded). Autonomous play only, like the search's other tap heuristics.
+    if (HumanPlayActive()) { return 0; }
+    const PlanTraits* pt = CurrentPlanTraits();
+    if (!pt || pt->act_c_pips <= 0) { return 0; }
+    const int n = static_cast<int>(state.battlefield.size());
+    if (n > 64) { return 0; }                    // bitmask limit, matching ReservableSpecialMask
+    int need = pt->act_c_pips - cost.colorless - state.floating_mana.colorless;
+    if (need <= 0) { return 0; }
+    const int active = state.active_player_index;
+    struct Prov { int idx; int breadth; };
+    Prov prov[64]; int np = 0;
+    for (int i = 0; i < n; ++i)
+    {
+        const Permanent& p = state.battlefield[i];
+        if (p.controller_index != active || p.tapped) { continue; }
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+        if (!d) { continue; }
+        const bool dork = d->tmpl == CardTemplate::ManaDork && CanTapNow(p, state.battlefield)
+                          && GraveyardFuelLive(state, active, *d);
+        if (!dork && !p.card.IsLand() && !d->params.mana_rock) { continue; }
+        bool makes_c = false; int seen = 0;
+        for (Color c : EffectiveProducesFor(state, active, *d, &p))
+        {
+            if (c == Color::Colorless) { makes_c = true; continue; }
+            seen |= (1 << static_cast<int>(c));
+        }
+        if (!makes_c) { continue; }
+        int breadth = 0;
+        for (int b = 0; b < 5; ++b) { if (seen & (1 << b)) { ++breadth; } }
+        prov[np++] = { i, breadth };
+    }
+    if (np == 0) { return 0; }
+    std::sort(prov, prov + np, [](const Prov& a, const Prov& b)
+    { return a.breadth != b.breadth ? a.breadth < b.breadth : a.idx < b.idx; });
+    std::uint64_t mask = 0;
+    for (int k = 0; k < np && k < need; ++k) { mask |= (1ull << prov[k].idx); }
+    return mask;
+}
+
 static bool TapForCostSharedImpl(GameState& state, const ManaCost& cost_in, bool for_creature,
                                  ManaPool* available, bool honor_legacy_cco)
 {
@@ -2679,7 +2734,8 @@ static bool TapForCostSharedImpl(GameState& state, const ManaCost& cost_in, bool
 
     const std::uint64_t rmask = ReservableSpecialMask(state) | PlanReserveMask(state)
                               | OneShotHoldMask(state) | PayloadReserveMask(state)
-                              | ScarceColorHoldMask(state, cost_in);
+                              | ScarceColorHoldMask(state, cost_in)
+                              | LineColorlessHoldMask(state, cost_in);
     if (rmask != 0)
     {
         const int a = state.active_player_index;

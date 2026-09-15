@@ -120,6 +120,12 @@ struct PlanTraits
     // stranding Mirrorwing's {R}{R}. ScarceColorHoldMask (ManaPayment.cpp) uses these totals to
     // hold scarce providers of colours the plan's OTHER casts still need.
     int  cast_pips[5]          = {};
+    // --- LINE {C} HOLD input (MTG_LINE_C_HOLD; EDF claude_s8_gi7 T3) ---
+    // Colourless pips of ONE activation the plan itself carries (a hand go-off's ActivateBlink:
+    // {2}{C}, the loop's first crank -- the loop funds the later ones). The casts' payer is
+    // otherwise blind to it and spends the {C} sources on generic pips; LineColorlessHoldMask
+    // (ManaPayment.cpp) holds that many {C} providers, narrowest first, while the casts pay.
+    int  act_c_pips            = 0;
     // The plan casts something that can INTRODUCE a new cast mid-turn -- a Treasure mint
     // (creates_treasures opens the deferred breakpoint) or a flood-engine draw (DigDraw /
     // DrawUntilNonland, the batch-pay drawsafe class). Those follow-on casts are invisible to

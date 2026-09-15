@@ -179,6 +179,8 @@ enum Slot : int
     EDF_AURA_HOST_SIG,        // MTG_EDF_AURA_HOST_SIG   autonomous plan dedup keeps land-Aura HOST variants distinct
     BOUNCE_SPARE_AURA,        // MTG_BOUNCE_SPARE_AURA   a karoo bounce ranks a land carrying an Aura last
     HOLD_C_FOR_LINE,          // MTG_HOLD_C_FOR_LINE     a blink activation's {C} pip joins the line hold -> float keeps {C} (default OFF)
+    LINE_C_HOLD,              // MTG_LINE_C_HOLD         the casts' payer holds the {C} SOURCES the plan's own activation still needs (default OFF)
+    EDF_HAND_GOFF_REFUND,     // MTG_EDF_HAND_GOFF_REFUND the hand go-off's mana floor credits a hand PAYLOAD's own ETB untap (default OFF)
     COUNT
 };
 
@@ -335,6 +337,8 @@ inline const char* Name(int slot)
         "MTG_EDF_AURA_HOST_SIG",
         "MTG_BOUNCE_SPARE_AURA",
         "MTG_HOLD_C_FOR_LINE",
+        "MTG_LINE_C_HOLD",
+        "MTG_EDF_HAND_GOFF_REFUND",
     };
     // The enum and this table are ONE mapping split across two lists: a slot added to one and not
     // the other silently shifts every lever after it (a manifest asking for lever X would set Y).

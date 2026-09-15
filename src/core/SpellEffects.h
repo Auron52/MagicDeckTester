@@ -16915,6 +16915,35 @@ inline bool ScarceColorHoldEnabled()
     return v;
 }
 
+// LINE {C} HOLD (MTG_LINE_C_HOLD, heurarm slot LINE_C_HOLD, DEFAULT OFF until measured; 2026-09-15).
+// While a plan apply pays its CASTS, hold the colourless SOURCES the plan's own ACTIVATION still
+// needs -- the source-side twin of the float-side MTG_HOLD_C_FOR_LINE. claude_s8_gi7 T3: the hand
+// go-off [Fertile Ground, Cloud of Faeries, Eldrazi Displacer -> blink] paid its three casts by
+// tapping Mariposa Military Base and Yavimaya Coast -- the board's {C} sources -- for GENERIC pips
+// while other lands could have paid them, so the first {2}{C} crank read `avail c0` and the loop
+// the recogniser had counted never started (914 of that trace's stops are k=0). Read through
+// LineColorlessHoldMask (ManaPayment.cpp: the per-cast reserved-first / unrestricted-retry mask)
+// and as a rung of the whole-turn prepay ladder (BatchPrepayMainCasts). Same soundness contract as
+// every other hold there: a payment that genuinely needs the held source gets it back on the retry,
+// so no cast is ever lost -- the hold only picks WHICH legal payment is committed. Null traits or
+// a plan without an activation -> 0 -> byte-identical. NOT cached in a static (per-job arm).
+//
+// MEASURED, DEFAULT OFF (14-reference bench, d5/20 ms, one pooled batch, 2026-09-15,
+// logs/ref_bench_edf/levers2): the hold does start s8's T3 loop (the first crank finds its {C}
+// and the loop cranks 74 times, digging with Conservatory) but the turn still does not convert --
+// the finisher is 17 cards deep and the loop never casts what it digs (the library route, the
+// construct s8 actually needs) -- and it LOSES claude_s10_gi9 (4 -> 5): on that T4 the hold keeps
+// the {C} land out of the casts' payment, so the casts tap the Aura-laden Brushland instead, and
+// the Drake loop's refund -- an ETB untap is worth only what the TAPPED lands make -- shrinks
+// until the real apply's loop dies at its second crank where the unheld payment ran 40/40. For an
+// untap loop a source hold is not free: WHICH lands are tapped when the loop starts IS the loop's
+// economics. Kept as a lever for the library-route work; =1 opts in.
+inline bool LineCHoldEnabled()
+{
+    static const bool env = EnvOn("MTG_LINE_C_HOLD", false);
+    return heurarm::Flag(heurarm::LINE_C_HOLD, env);
+}
+
 // Should the apply paths compute PlanTraits at all? One check so the builder costs nothing while
 // every consumer lever is off (and the scope then installs nullptr = today's behaviour).
 inline bool PlanTraitsWanted()
@@ -16923,7 +16952,7 @@ inline bool PlanTraitsWanted()
                        || OneShotReserveEnabled() || ScalerPlanBiasEnabled()
                        || ScarceColorHoldEnabled()   // ScarceColorHoldMask (ManaPayment.cpp)
                        || EnvOn("MTG_M2_PAYLOAD_RESERVE", true);   // PayloadReserveMask (ManaPayment.cpp)
-    return v;
+    return v || LineCHoldEnabled();   // per-job (not cached): a pooled arm must build the traits
 }
 
 // ATTACKER-ONLY RUNG on the prepay reservation ladder (MTG_TAP_ATTACKER_RUNG, default ON, adopted 2026-08-26; =0 disables).

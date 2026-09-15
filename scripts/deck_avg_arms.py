@@ -4,6 +4,7 @@
     scripts/deck_avg_arms.py --deck decks/X/X.cod --log-root logs/x/avg \
         --seeds 3001 3061 --games 50 --chunk 10 --max-turns 12 \
         --arm off MTG_LEVER=0 --arm on MTG_LEVER=1
+        --arm b20 --arm b100 budget_ms=100          # a budget ladder (per-arm virtual ms)
 
 Every arm plays the SAME games (seed s+c, game_index c, games=chunk for each chunk offset c), so the
 per-chunk delta is paired and draw-order luck cancels. Chunks are interleaved arm-minor in the
@@ -34,8 +35,21 @@ def main():
     ap.add_argument("--log-root", required=True)
     ap.add_argument("--stats", action="store_true")
     args = ap.parse_args()
-    arms = [(a[0], dict((kv.partition("=")[0], kv.partition("=")[2] == "1") for kv in a[1:]))
-            for a in args.arm]
+    # An arm is NAME LEVER=0/1 ...; it may also carry `budget_ms=N` -- a per-arm search budget
+    # (virtual ms) rather than a lever, so a budget ladder pairs against the levers in ONE pool
+    # (the same token scripts/ref_bench_arms.py accepts). Any other value must be =0 or =1.
+    arms = []
+    for a in args.arm:
+        name, flags, budget = a[0], {}, None
+        for kv in a[1:]:
+            k, _, v = kv.partition("=")
+            if k == "budget_ms":
+                budget = int(v)
+                continue
+            if v not in ("0", "1"):
+                sys.exit("arm %s: lever %s must be =0 or =1 (got %r)" % (name, k, v))
+            flags[k] = (v == "1")
+        arms.append((name, flags, budget))
     names = [a[0] for a in arms]
     profile = args.profile
     if profile is None:
@@ -47,11 +61,13 @@ def main():
     chunks = [(s, c) for s in args.seeds for c in range(0, args.games, args.chunk)]
     jobs = []
     for s, c in chunks:
-        for name, flags in arms:
+        for name, flags, budget in arms:
             j = {"name": "%s__s%d_c%d" % (name, s, c), "deck": args.deck, "profile": profile,
                  "games": args.chunk, "seed": s + c, "game_index": c, "max_turns": args.max_turns}
             if flags:
                 j["flags"] = flags
+            if budget is not None:
+                j["budget_ms"] = budget
             jobs.append(j)
     os.makedirs(args.log_root, exist_ok=True)
     mpath = os.path.join(args.log_root, "manifest.json")

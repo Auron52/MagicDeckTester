@@ -259,6 +259,11 @@ ManaPool PoolCredit(const ManaPool& base, const ManaPool& eff);
 // Empty for every other plan -> byte-identical. Set/cleared by PlanSourceReserveScope.
 extern thread_local std::vector<int> g_plan_reserved_sources;
 
+// LINE {C} HOLD mask (MTG_LINE_C_HOLD): the untapped {C} providers the current plan's own blink
+// activation still needs beyond `cost`'s colourless pips (0 unless the lever is on, a plan apply is
+// in scope and PlanTraits::act_c_pips > 0). Defined in ManaPayment.cpp; also a prepay-ladder rung.
+std::uint64_t LineColorlessHoldMask(const GameState& state, const ManaCost& cost);
+
 // RAII for g_plan_reserved_sources: sets it for the plan's cast section and restores the previous
 // value on scope exit (nested plan applications -- a rollout inside an apply -- restore correctly).
 // Release() drops the reservation early, which the unlock hoist calls the moment the dork is hasted:

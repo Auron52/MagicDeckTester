@@ -7770,10 +7770,75 @@ worse. So the residual after this session is **s8 (construct, +1 at every budget
    library) is itself the open question -- the reason the hand-off, not the fixture, is the
    instrument of record.
 5. **s9 / s14 are budget-bound at 20 ms** (both match at 100 ms in both arms). EDF has no
-   `value_play`; a budget is a deck-setting decision for the user -- the 100 ms deck-average cost
-   is the number to put in front of them before anything is adopted.
+   `value_play`; a budget is a deck-setting decision for the user. **The cost, measured** (paired
+   deck average, the SAME 100 games per arm, one pool of 20 jobs, `deckavg_b100/run.log`;
+   `scripts/deck_avg_arms.py` now takes `budget_ms=N` per arm):
+
+   | arm | mean win turn | paired vs 20 ms | chunks better / worse / tied | paired t | wall (sum of job ms) |
+   |---|---|---|---|---|---|
+   | d5 / 20 ms (shipped) | 4.6500 | -- | -- | -- | 3169 s |
+   | d5 / 100 ms | 4.5600 | **-0.0900** | 6 / 0 / 4 | -3.25 | 10777 s (**+240%**) |
+
+   So 100 ms buys 0.09 turns on the deck average (a real effect, every chunk equal or better) and
+   two more references matched (s9, s14: 3 short -> 1 short), for 3.4x the wall -- single games up
+   to 693 s (`--seed 3024 --game-index 23`) against 106 s at 20 ms. The 20 ms arm's digests are
+   the nohold arm's from §5 exactly (16d2151086167ceb etc.), so the two batches are one measurement.
+   Whether EDF gets a `value_play` budget (or the value leaf the user declined on 09-11, which is
+   what makes 100 ms cheap on the decks that have one) is the user's call; nothing adopted here.
 6. The sweep's 12 missed offers (MAIN_2 frames, next-turn wins, no live loop) -- re-run
    `test/combo_off_sweep.py` after (1)-(3).
 7. Carried from Session 27: `ProjectsAlternateWin`'s up-front mana demand; `MTG_EDF_CO_ROOT` /
    `MTG_EDF_CO_LOOK` OFF; FiveColour GT stale at the tip and Snow's 8 viewer reds (upstream's);
    melira_pod s10_gi9 4 -> 5 between 72fe64e6 and 38842e3f (bisect the esc/FIT Melira commits).
+
+### 7. Two more levers, measured and parked (09:00-09:40 UTC)
+
+The remaining construct is s8 (the T3 hand go-off), and its first defect had a shape the payment
+layer already knows how to hold: the casts' payer taps the {C} sources for generic pips. Two
+levers, both `EnvOn` + heurarm, both DEFAULT OFF after measurement:
+
+* **`MTG_LINE_C_HOLD`** -- `PlanTraits::act_c_pips` (the colourless pips of the plan's own
+  ActivateBlink, of a blink OUTLET the plan casts, or of a board outlet when the plan casts an
+  ETB-untap payload: "the plan assembles a loop"); `LineColorlessHoldMask` (ManaPayment.cpp) holds
+  that many untapped {C} providers, narrowest provider first, in the per-cast reserved-first /
+  unrestricted-retry mask, and as a rung of `BatchPrepayMainCasts`' ladder. Autonomous only: the
+  first build ran it under human play too and `ref_handoff.py`'s replay walked straight past its
+  frame (the human prefix's taps had changed), so `HumanPlayActive()` -> 0.
+* **`MTG_EDF_HAND_GOFF_REFUND`** -- `HandGoOffCandidates`' mana floor credits a HAND payload's
+  own ETB untap (`econ.refund`): s8 T3's Displacer(hand) x Cloud(hand) read have 5 < casts 5 +
+  crank 3 and was gated out, though Cloud's untap of two enchanted lands (refund 4) is what paid
+  the human's line. With it the pair reads count=288 and the plan is enumerated.
+
+**On the s8 fixture (all four arms: 5)** the levers do what they were built for and it is not
+enough: with both on, the T3 loop STARTS -- the first crank finds `avail c1`, the loop cranks 74
+times with Conservatory's Investigate firing every other crank -- and never converts: the finisher
+(Living Wish -> Essence Depleter) is 17 cards deep and nothing in the executor's loop casts what
+the dig turns up. That is the **library route**, the construct s8 actually needs, and it is a
+plan-shape (bank -> dig -> wish -> cast -> drain, all inside one go-off) that neither the
+recogniser's count (which prices the dig, `dig=17 -> count=221`) nor the loop executor expresses.
+The s8 hand-off with both levers: 5 (unchanged).
+
+**Bench, four arms, one pool (`levers2/run.log`, d5 / 20 ms):** off 4.643 / 3 short;
+**`chold` 4.714 / 4 -- s10_gi9 LOST (4 -> 5)**; `refund` 4.643 / 3 with no digest moved (inert);
+`both` = `chold`. Neither ships.
+
+**s10's loss, bisected** (`ref_handoff.py --turn 2/3/4`, all 5 with the hold; the T4 hand-off
+alone is 4 off / 5 on): on the human's go-off turn (T4: Displacer out, hand Displacer + Mariposa +
+Drake + Training Grounds, two Brushlands one of which carries both Auras) the hold keeps the {C}
+land out of the casts' payment, so the casts tap the Aura-laden Brushland instead -- and the Drake
+loop's refund shrinks, because an ETB untap is worth only what the TAPPED lands make. The real
+apply's loop dies at its second crank where the unheld payment ran 40/40 to the kill. The lesson
+generalises: **for an untap loop a source hold is not free -- which lands are tapped when the loop
+starts IS the loop's economics.** A {C} reservation that is right for a Displacer/Cloud loop on
+s8's board is wrong for a Displacer/Drake loop on s10's, and the payer cannot tell them apart
+without pricing the loop itself.
+
+Tool note: `ref_handoff.py` pays `vpc.check_reference`'s stateless per-pick validation up front
+(O(picks^2)); on a 57-pick reference (s8) that is ~15 minutes per hand-off, seconds on a 17-pick
+one. Cache the resolved stream per reference when this becomes the routine instrument.
+
+**Open after this section:** s8 = the library route (§6.3, now the whole of it); the {C}
+reservation is parked with its s10 counter-example (§6.1 narrows to the float side, where
+`MTG_HOLD_C_FOR_LINE` waits on the draw sink's crank reservation, §6.2); s9 / s14 = the budget
+decision (§6.5, cost measured).
+
