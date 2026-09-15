@@ -107,6 +107,48 @@ print(f'slots={tot} deferred={defer} ({100.0*defer/tot:.2f}%)   MUST BE 0.00%')
 PY
 ```
 
+## The `fast` recipe is what creates the hazard — `complete` does not (surveyed 2026-09-15)
+
+`test/keepraw_pool_survey.py` over all 22 committed raw sidecars. Only four decks have any cells at
+the refinement floor, and they are **exactly the four generated with `--gen-mulligan fast`** (cap
+R=30, adaptive bottoming). Every `complete` deck (R=40, `sub_target:40`) refines every sub-cell, so
+it has no floor cells and none of this hazard:
+
+```
+deck                    K   R     cells  floor%      dV   corr  se(fl)  sigma
+Creature Giving        21  30    438322   35.8%  +1.186  -0.67   0.363   3.27
+FiveColour             27  30   1317366   41.2%  +1.237  -0.70   0.464   2.66
+Goblins                21  30    359376   58.2%  +1.628  -0.69   0.558   2.92
+Melira Pod             23  30    600866   45.4%  +1.446  -0.72   0.472   3.06
+```
+
+`dV` = meanV(floor) − meanV(refined), positive meaning floor cells are genuinely worse. It is
+**+1.19 to +1.63 turns on 4 of 4 fast decks and absent on 18 of 18 complete decks**, with
+`corr(cnt,V)` between −0.67 and −0.72 throughout.
+
+**So `fast` is not merely "less R".** It buys its ~22–38 % saving by leaving the *worst* cells
+unrefined, which creates a candidate pool where the noisiest options are also the bad ones. That is
+a different kind of cost from uniform imprecision and it is not mentioned in the recipe study. Weigh
+it when choosing a recipe: `complete` is the safer artifact, not just the more precise one.
+
+(What this hazard does **not** do is corrupt the keep policy — see
+[keep-argmin-winners-curse.md](keep-argmin-winners-curse.md) §7, where it was tested and found inert
+because the affected hands are clipped by the mulligan alternative. `best_sub` already filters it out
+of the bottoming targets. So the measured harm is confined to the ~6 % of bottoming decisions where
+no candidate is refined and the filter falls back to the unfiltered set.)
+
+## The offline gate sweep does NOT generalise across decks
+
+`test/keepraw_hybrid_sim.py` hard-codes `L_LOOK = 0.0185` (line 46) — the confounded-lookahead regret
+**back-solved from FiveColour's own A/B**. It prints that constant as "vs lookahead" for whatever raw
+it is pointed at. Run on Melira it predicts the table *loses* by +0.0161 t; Melira's actual confounded
+bottoming A/B measured **−0.091 t**, the table winning 16/16 seeds. Sign wrong, magnitude out ~6x.
+
+Because `delta(k) = F · (reg(k) − L)`, the constant **cancels when two gate settings are
+differenced** — which is the only way it has been used successfully (predicted k=0-vs-k=1 gap
+0.0171 t against a measured 0.0142 t). Use it to rank table variants against each other; do **not**
+read its PASS/reject verdicts against lookahead on any deck but FiveColour.
+
 ## Status
 
 - **Melira Pod** — compliant. Generated before the gate existed; artifact check reported
