@@ -159,6 +159,16 @@ wwh4_no4_altisaur  (the same, with Apex Altisaur -- -0.1927 over 40,000 games)
   as above, plus:  Apex Altisaur 0 -> 1,  Worldspine Wurm 4 -> 3
 ```
 
+> **SUPERSEDED for deckbuilding purposes by screens D–H the same evening.** The user then set three
+> constraints — Call of the Wild ≥ 2, Elderscale Wurm stays, Vaultborn Tyrant 2→1 only (cut a
+> Worldspine Wurm instead), and above all **the deck is a toolbox: every important piece stays at
+> ≥ 1**. Under those, the recommended lists are `alt_wwh4_wurm1` (**−0.1879**) with the Altisaur and
+> `noalt_wwh3_wurm3` (**−0.2139**) without it; both are confirmed over 40,000 games. The slot ladder,
+> the count evidence and the reasoning are in
+> **`docs/design/analysis-StompySurprise.md` → "Constrained re-screen"**. The two lists below remain
+> the correct *unconstrained* answer and the anchor every later screen reproduced (five independent
+> seed blocks: −0.2255 / −0.2276 / −0.2308 / −0.2323 / −0.2339).
+
 **Apex Altisaur costs 0.0345 turns** (−0.2272 → −0.1927). That is the price of the slot, and it is
 a **floor, not a verdict**: its ETB fight and Enrage are both provably inert against this sim's
 passive opponent, which never controls a creature (Terastodon destroys *our* noncreature permanents

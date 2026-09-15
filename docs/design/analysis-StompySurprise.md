@@ -595,3 +595,70 @@ Findings that constrain future edits to this list:
 
 Not yet done for these lists: mulligan profile, value leaf, regression GT. The numbers are a
 ranking, not an adopted deck's strength.
+
+### Constrained re-screen, same evening (screens D–H)
+
+The user set three deckbuilding constraints after seeing the above, and they change the answer:
+
+1. **Call of the Wild ≥ 2** and **Elderscale Wurm stays** — "I don't think I want to drop more than
+   2 Call of the Wild or Elderscale Wurm."
+2. **Vaultborn Tyrant 2→1 only; cut a Worldspine Wurm instead.** The user accepts Apex Altisaur's
+   measured cost here because "it doesn't [cost] so much in a real game, because the Altisaur's
+   upside becomes apparent" — the creature removal this sim cannot model.
+3. **THE DECK IS A TOOLBOX: every important piece stays at ≥ 1.** This is the governing rule, and it
+   retires arms the measurement liked: `wwh3_no4_vault0` (−0.2219) and `wwh4_no4_vault0_wurm3`
+   (−0.2258) both zero out Vaultborn Tyrant and are simply not legal lists, whatever they score.
+
+**Recommended lists** (40,000 games each, held-out confirmed, base ≈ 4.54):
+
+| list | delta | shrinkage t |
+|---|---|---|
+| `alt_wwh4_wurm1` — WWH **4**, NO 4, CotW 2, −Guile, Vaultborn 1, Worldspine **1**, **Altisaur 1** | **−0.1879** | −0.68 |
+| `alt_wwh3_wurm2` — WWH 3, Worldspine 2, otherwise identical | **−0.1748** | −0.55 |
+| `noalt_wwh3_wurm3` — WWH 3, Worldspine 3, **no Altisaur** | **−0.2139** | +0.86 |
+
+`alt_wwh4_wurm2_tera1` (WWH 4, Worldspine 2, Terastodon 1) measured −0.1844, tied with
+`alt_wwh4_wurm1` at 0.0015 — pick on deck-design grounds, not on these numbers.
+
+**The slot ladder — what each card is worth as the marginal cut** (Screen D/F, holding Call of the
+Wild at 2; the cheapest slot is the one to spend):
+
+| cut | cost vs the best available cut |
+|---|---|
+| Mirri's Guile | free (always the first cut) |
+| a redundant Worldspine Wurm | **cheapest** |
+| the 2nd Vaultborn Tyrant | +0.001 |
+| the 2nd Terastodon | +0.007 |
+| Wirewood Lodge | +0.007 |
+| a Forest (14→13) | +0.024 |
+| a Turntimber Symbiosis (4→3) | +0.029 |
+| an Arbor Elf (2→1) | +0.044 |
+| **Sol Ring** | **+0.048 — do not cut** |
+
+**World War Hulk is monotone in count across all five screens.** Every extra copy is worth
+0.011–0.016 *provided a redundant copy pays for it*; the count is never limited by the Hulk, only by
+what is left to spend. That is why the constrained best still wants 4. The user's prior ("I doubt we
+want 4 World War Hulk") was tested directly and not supported — but note the mechanism, because it is
+the toolbox rule applied to the one card that was not following it: **Worldspine Wurm is a 4-of in a
+toolbox deck.** Its copies measure bad to *draw* (−0.275 per copy in the shipped profile) because it
+exists to be fetched by Natural Order or freed by a Hulk chapter I, and one copy in the library serves
+that. Trimming it toward 1 and spending the slots on Hulks is the toolbox principle, not a departure
+from it.
+
+**Apex Altisaur's price is stable at 0.037–0.048** depending on what pays: the 2nd Vaultborn Tyrant
++0.0374, a Worldspine Wurm +0.0432, a Terastodon +0.0466–0.0478; in the user's final shell it is
+**0.0423**. Still a floor, for the reason above.
+
+Other constrained findings: Natural Order 4 is non-negotiable (`alt_wwh3_no3` was the worst arm in
+its screen, and `wwh3_no2` the worst in Screen D — the 3rd/4th Natural Order is worth ~5x an extra
+Hulk); 2 Hulks beat 1 even when a Call of the Wild pays. Holding Call of the Wild at 2 and keeping
+Elderscale Wurm costs about **0.017 turns** against the unconstrained `wwh4_no4` (−0.2276 in the
+same apparatus); keeping the 2nd Vaultborn as well and adding the Altisaur brings the total to
+about 0.040.
+
+One apparatus note: the keep table buckets **Elderscale Wurm, Hornet Queen and Vaultborn Tyrant
+together**, so "cut Elderscale" and "cut a Vaultborn" are *identical to the mulligan model* — the
+0.0009 between them (Screen D) is pure play difference, and neither is favoured by the table.
+
+Specs and raw output: `logs/stompy_screen/screen{D,E,F,G,H}.json` + `.out`,
+`confirmH{1,2,3}.out` (gitignored).
