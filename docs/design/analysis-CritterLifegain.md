@@ -813,6 +813,72 @@ games**.
   DELTA holds, but 2HG LEVELS are not comparable to 20-life ones, and a format-native apparatus
   would be a separate build.
 
+## SERRA PINNED AT 2 — the settled list (2026-09-15)
+
+> USER: *"I don't want 4 Serra Ascendant for this list unless we have easy cuts (and I don't think we
+> do). Obviously it is insane in 2HG, but I don't believe it is as good in regular games, since you
+> have to gain 10 life before it is active. However, that doesn't mean I want to reduce it below 2."*
+
+Right on both counts, and pinning it at 2 **removes the need for any breadth cut**: with Serra 2 the
+four Ocelot Pride slots come entirely from Archangel of Thune 4->2, the Ajani walker 3->2 and one
+Auriok Champion, so **Ajani's Pridemate and Voice of the Blessed both stay at 4**. Earlier lists only
+cut them to fund a 3rd/4th Serra.
+
+`critter_final_2hg.json` / `critter_final_20life.json`, same arms, same apparatus, disjoint seeds:
+
+| arm | 20 life (base 4.7636) | 2HG (base 5.1134) |
+|---|---|---|
+| **`final`** — Serra 2, Pridemate 4, Voice 4, Auriok 3 | **-0.2909** | -0.2666 |
+| `final_serra3_pm3` — Serra 3 (Pridemate 4->3) | -0.2789 | **-0.3487** |
+| `final_auriok4_pm3` — keep Auriok 4 (Pridemate 4->3) | -0.2586 | -0.2402 |
+
+Three readings:
+
+1. **`final` is the BEST 20-life list measured in this whole investigation** (-0.2909, ahead of the
+   earlier `best_serra1` -0.2848 and `best_serra4` -0.2367). The user's reasoning — Serra needs +10
+   life first in a normal game — is confirmed: a 3rd copy costs **0.012** at 20 life.
+2. **It costs 0.082 in 2HG** versus running a 3rd Serra. That is the price of one list for both
+   formats, and it is far smaller than the 0.23 that going to FOUR would have swung — the balanced
+   choice the user described is also the cheap one.
+3. **The Auriok Champion cut holds at Serra 2, in both formats** (`final` beats `final_auriok4_pm3`
+   by 0.032 at 20 life and 0.026 at 2HG) — so that slot is confirmed independently of the Serra
+   count it was originally measured alongside.
+
+### THE LIST (settled; NOT adopted — adoption is a separate, hours-long stage)
+
+```
+4 Soul Warden          4 Voice of the Blessed          2 Heliod, Sun-Crowned
+4 Soul's Attendant     1 Daxos, Blessed by the Sun     3 Auriok Champion
+2 Serra Ascendant      2 Ajani, Strength of the Pride  1 Ranger-Captain of Eos
+4 Ajani's Pridemate    2 Archangel of Thune            3 Unexpectedly Absent
+4 Ocelot Pride        20 Plains                        4 Remote Farm
+```
+60 cards, 24 lands. **-0.2909t at 20 life, -0.2666t in 2HG.**
+
+Changes from the shipped list, and the evidence for each:
+
+| change | evidence |
+|---|---|
+| +4 Ocelot Pride | -0.17 beyond the value of the slots it takes (same-cut/different-fill control) |
+| -3 Orzhov Basilica, -1 Plains, +4 Remote Farm | -0.090 for the Basilica swap, -0.009 for the 4th Farm; 24 lands throughout |
+| Archangel of Thune 4->2 | USER RULING (stalled boards are invisible to this harness); costs ~0.015 with these slots |
+| Ajani walker 3->2 | USER RULING; screen 4 measured the cut as a gain |
+| Auriok Champion 4->3 | USER-PERMITTED; worth 0.032 (20 life) / 0.026 (2HG), and only ONE copy leans on its un-modelled protection |
+| Serra Ascendant 2 (unchanged) | USER RULING, confirmed: a 3rd costs 0.012 at 20 life and gains 0.082 in 2HG |
+| Heliod 2, Ranger-Captain 1, Pridemate 4, Voice 4 (all unchanged) | cutting Heliod/RC measured **+0.034**; Pridemate/Voice no longer need cutting once Serra is pinned |
+| no Sol Ring | colourlessness costs +0.090 against the rock's -0.087 power — a wash, worse at 2 copies |
+
+### If this list is adopted, the remaining work (none of it done)
+
+1. Its own **value leaf** (`value-leaf.md`), then its own **mulligan table** (`mulligan-profile.md`),
+   strictly in that order and alone on the box — the mulligan generator reads its settings from what
+   the value leaf writes.
+2. Its own **regression ground truth**, and a decision about whether it replaces or sits beside the
+   shipped CritterLifegain.
+3. Every delta above is measured on the SHIPPED deck's 20-life-fitted apparatus via the alias route,
+   so the **bias floor is unmeasured** and 2HG levels are not comparable to 20-life ones. The margins
+   are 10-40x a typical floor, but no individual delta under ~0.01 is resolved.
+
 <!-- verify_deck:begin (generated -- do not edit inside) -->
 ## Last verification (2026-09-08)
 
