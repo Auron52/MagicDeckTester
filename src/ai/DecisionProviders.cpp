@@ -18658,7 +18658,8 @@ int EldraziFlickerProvider::CastOrderRank(const GameState& s, const CardDefiniti
     return GenericProvider::CastOrderRank(s, def);
 }
 
-// PLAN VALUE IN MANA-EQUIVALENTS -- A/B SCAFFOLDING, BOTH HALVES DEFAULT OFF.
+// PLAN VALUE IN MANA-EQUIVALENTS -- the COMBO half ships DEFAULT ON (adopted 2026-09-15), the RAMP
+// half stays DEFAULT OFF and is REJECTED (measurements in the ADOPTED block below).
 //
 // THE DEFECT THIS ARM TESTS. `TurnSolver::EvalCard` is the plan-ordering heuristic, and it prices a
 // creature as `power x ExpectedAttacks x DMG` -- a COMBAT CLOCK. This deck has no combat plan: it
@@ -18700,15 +18701,33 @@ int EldraziFlickerProvider::CastOrderRank(const GameState& s, const CardDefiniti
 // price for an outlet sinks below the 100 floor a land Aura gets today. The mis-pricing is a
 // mismatch between the two sides, so only the pair can correct it. Predicted, then measured.
 //
+// ADOPTED 2026-09-15 (Session 29 of docs/design/analysis-EldraziDisplacerFlicker.md): the COMBO half
+// ships DEFAULT ON; the RAMP half stays OFF and is REJECTED. Measured on top of the honest draw-sink
+// guard (MTG_EDF_DRAW_SINK_HONEST), d5 / 20 ms, one pooled batch per table:
+//
+//   14 references (leafpol2):  off 4.429 / 0 short   combo 4.429 / 0 short (no win turn moves)
+//                              ramp 4.500 / 1 short (s6 4->5)   both 4.500 / 1 short (s6 4->5)
+//   deck average #1, seeds 3001/3061, 10 chunks x 100 games x 2 arms, max_turns 12:
+//                              off 4.460  combo 4.430   -0.03 t, chunks 3 better / 0 worse / 7 tied, t=-1.96, wall -1.0%
+//   deck average #2, HELD OUT, seeds 3121/3181, same shape:
+//                              off 4.430  combo 4.410   -0.02 t, chunks 2 better / 0 worse / 8 tied, t=-1.50, wall -9.8%
+//
+// Equal budget, same sign on both samples, nothing worse on 20 chunks or 14 references, under a rule
+// fixed before the held-out sample was drawn (adopt only if #2 is also <= 0 with zero chunks worse).
+// The 2026-09-10 pass (docs/design/edf-plan-value-mana-equivalents.md) could only offer the PAIR,
+// which was faster on average and broke a reference (s3 then, s6 now); every bench it ran scored
+// rollout tails through a loop that died at crank three on any dig, and on the repaired tails COMBO
+// alone carries no such tension. MTG_EDF_VAL_COMBO=0 restores the combat-clock valuation.
+//
 // GENERIC BY CONSTRUCTION: every tier is read from card PARAMS, never a name, so this is correct for
 // any flicker deck this provider covers. Returns false for anything it does not own (lands, tutors,
-// Training Grounds) and false outright when neither half is selected, which is what makes the whole
-// change byte-identical with the levers unset.
+// Training Grounds) and false outright when neither half is selected (MTG_EDF_VAL_COMBO=0 with RAMP
+// unset restores the pre-2026-09-15 valuation byte-for-byte).
 bool EldraziFlickerProvider::ComboCardValue(const GameState& s, const CardDefinition& def,
                                             int dmg_unit, int& out) const
 {
     static const bool s_ramp_env  = EnvOn("MTG_EDF_VAL_RAMP");    // DEFAULT OFF; =1 enables
-    static const bool s_combo_env = EnvOn("MTG_EDF_VAL_COMBO");   // DEFAULT OFF; =1 enables
+    static const bool s_combo_env = EnvOn("MTG_EDF_VAL_COMBO", true);   // DEFAULT ON (adopted 2026-09-15, ADOPTED block above); =0 restores the clock
     const bool ramp  = heurarm::Flag(heurarm::EDF_VAL_RAMP,  s_ramp_env);
     const bool combo = heurarm::Flag(heurarm::EDF_VAL_COMBO, s_combo_env);
     if (!ramp && !combo) { return false; }

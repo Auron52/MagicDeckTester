@@ -1431,9 +1431,9 @@ public:
 
     int  CastOrderRank(const GameState& s, const CardDefinition& def) const override;
 
-    // PLAN VALUE = MANA-EQUIVALENTS, NOT A COMBAT CLOCK (MTG_EDF_VAL_RAMP / MTG_EDF_VAL_COMBO,
-    // both default OFF -- A/B scaffolding for the heuristic-optimization loop, see the
-    // implementation's contract block). This deck never wins by attacking, yet EvalCard prices its
+    // PLAN VALUE = MANA-EQUIVALENTS, NOT A COMBAT CLOCK (MTG_EDF_VAL_COMBO default ON since
+    // 2026-09-15; MTG_EDF_VAL_RAMP default OFF, rejected -- measurements in the implementation's
+    // ADOPTED block). This deck never wins by attacking, yet EvalCard prices its
     // creatures as attackers and its land Auras at the generic one-unit floor, so at a tied searched
     // tail `plan.value` picks the body over the ramp. Both halves are separately selectable so the
     // 2x2 attributes which one (if either) is load-bearing.

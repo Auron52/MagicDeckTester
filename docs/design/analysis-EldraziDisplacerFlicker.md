@@ -8018,3 +8018,134 @@ Session 29.
   new default (9.5); closed by the same construct.
 * The two s6 fixtures in `test/scenarios/open/` still read 5 under the guard.
 * Cost: the per-ply price is unchanged; §8's candidates (A/B) stand for when the user says so.
+
+## Session 29 -- overnight follow-ups on the adopted guard, and the COMBO adoption (2026-09-15, from 12:05 UTC)
+
+Autonomous, one batch at a time, on the pushed tree (`2174b589` fix + `3de50b39` stamp). CI for
+the push: ubuntu **success**, windows **success**, Linux/Windows determinism parity **success**
+(run 34966791327). Fleet stamp: **1 / 361 short** (EDF 0/14; melira_pod s10_gi9, upstream's).
+
+**10.1 The greedy valuation halves, re-benched on the new default (`leafpol2`, 14 refs x 4 arms,
+one pool, d5 / 20 ms).** §9.6 asked whether `MTG_EDF_VAL_RAMP` / `MTG_EDF_VAL_COMBO` had only
+lost on the bench because that bench scored tails through the dead loop. Answer: no.
+
+| arm | mean | short | what moved |
+|---|---|---|---|
+| off (the default) | **4.429** | **0** | -- |
+| val (ramp + combo) | 4.500 | 1 | s6 4 -> **5**; digests on 9/14 |
+| ramp | 4.500 | 1 | s6 4 -> **5**; digests on 5/14 |
+| combo | 4.429 | 0 | no win turn moves; digests on 6/14 |
+
+RAMP is rejected outright (it loses s6 with or without the guard). COMBO is neutral on the
+references, which under the work order earns a paired deck average -- two,
+in the end, because the first was run under a pre-registered rule ("adopt only if a held-out second
+sample is also <= 0 with zero chunks worse"). Both are 10 chunks x 100 games x 2 arms in one pool,
+max_turns 12, d5 / 20 ms (`deckavg_valcombo`, `deckavg_valcombo2`).
+
+| chunk | off | combo | | chunk (held out) | off | combo |
+|---|---|---|---|---|---|---|
+| 3001+0 | 4.60 | 4.60 | | 3121+0 | 4.10 | 4.10 |
+| 3001+10 | 5.50 | 5.40 | | 3121+10 | 4.90 | 4.90 |
+| 3001+20 | 4.90 | 4.80 | | 3121+20 | 5.00 | 5.00 |
+| 3001+30 | 4.00 | 4.00 | | 3121+30 | 4.60 | 4.60 |
+| 3001+40 | 4.40 | 4.40 | | 3121+40 | 4.40 | 4.30 |
+| 3061+0 | 4.50 | 4.40 | | 3181+0 | 4.60 | 4.60 |
+| 3061+10 | 4.50 | 4.50 | | 3181+10 | 4.10 | 4.00 |
+| 3061+20 | 4.20 | 4.20 | | 3181+20 | 4.30 | 4.30 |
+| 3061+30 | 3.90 | 3.90 | | 3181+30 | 4.00 | 4.00 |
+| 3061+40 | 4.10 | 4.10 | | 3181+40 | 4.30 | 4.30 |
+| **MEAN** | 4.4600 | **4.4300** | | **MEAN** | 4.4300 | **4.4100** |
+| wall s | 2101 | 2081 | | wall s | 2184 | 1970 |
+
+**#1: -0.03 t paired, chunks better 3 / worse 0 / tied 7, t = -1.96, wall -1.0%. #2: -0.02 t,
+better 2 / worse 0 / tied 8, t = -1.50, wall -9.8%.** Same sign on both samples, nothing worse on
+20 chunks or 14 references, equal budget. The 2026-09-10 verdict's tension (faster on average, worse
+on the references) belonged to the PAIR; the guard repaired the tails that pass was scoring, and on
+them COMBO alone carries none, so the open ruling "which objective governs when they disagree" is
+not needed for it.
+
+**Decision: `MTG_EDF_VAL_COMBO` adopted at default ON** (commit "feat(EDF): adopt the COMBO half of
+the plan-value re-pricing"); `=0` restores the combat clock. RAMP stays OFF and is rejected. This is
+an adoption made under the never-block rule while the user was away, on a rule fixed before the
+deciding sample was drawn; it is surfaced for the user's ruling in the closing message and is one
+line to revert. `docs/design/edf-plan-value-mana-equivalents.md` carries the same update.
+
+**10.2 The missed-offer sweep on the SAME 12 games (`combo_off_sweep.sh --quick --reuse-games`,
+194 states, before = `results.before_sinkhonest.json`).**
+
+| class | before | after |
+|---|---|---|
+| a offered + wins | 63 | 63 |
+| b offered + does not win | 1 | 1 (the same synthetic state, trace byte-identical) |
+| c missed offer | 12 | **17** |
+| c missed offer (combat) | 2 | 2 |
+| e absent + unwinnable | 116 | 111 |
+| FALSE FIRE | 0 | 0 |
+
+The five that moved are all e -> c: boards the autonomous engine could NOT win before the guard
+and wins now (game_3 T4/T6, game_4 T3, game_8 T4, game_9 T4). All 17 share one signature --
+`arith.unwinnable = true` (the button's own arithmetic finds no loop) while the engine wins that
+turn -- so the rise is the engine improving under a display rule that did not move. Class (c) is
+the display path's business (phase 2 of the sweep catalogue), not the search's; nothing here
+touches the references. The one class-(b) state (`A-c2d08ef901`: Emiel + Cloud, Living Wish on
+top of the library, Conservatory dig; offered as NOT PROVEN, 27 blinks, `finish-fired-short`) is
+the catalogue's C5 shape and is unchanged by the guard.
+
+**10.3 The s6 open fixtures, by real-frame hand-off on the new default.** Frame 2 (3rd main frame,
+before the Drakes): **4** = the human. Frame 4 (5th frame: every land tapped, `{W}{G}{G}{C}`
+floating, both Drakes + Training Grounds down, Displacer in hand): **5** -- the search casts
+nothing at T4 and wins T5 with a 50-blink Displacer/Drake loop into Emiel -> Living Wish -> Essence
+Depleter. The fixture's own note names the construct: the root HOLDS the winning plan
+("Eldrazi Displacer + blink x189") and the trial apply pays the Displacer's generic pips from the
+floating {C} first (`SpendFloatingTowardCost`), so the first crank cannot be paid.
+`MTG_HOLD_C_FOR_LINE` (default OFF) is that fix's float half; its own comment records why it
+was parked: the first crank then paid, and two cranks later *the draw sink spent the float and
+every {C} land on an Investigate + Clue crack* -- "the hold is right; the sink's reservation is
+the missing half". That missing half is exactly §9.4's guard. Probed here with
+`MTG_HOLD_C_FOR_LINE=1` on the same frame (`s6_t4_f4_holdc`, `f4_holdc_loop.err`,
+`f4_holdc_root.err`): the root's trial loop now runs to its end -- 181/181 cranks, 47 Investigate
+digs, the outlet switch to Emiel after k=72 -- and the root STILL reads win=-1 for that plan
+("Eldrazi Displacer + blink x181"); the executor's apply then reads `done=0/181` twice (pay-failed at
+k=0, as on the default) and the game goes T4 no-cast, T5 win with a 173-crank loop. So the hold lets
+the loop RUN and something after the loop stops it CASHING. Two hypotheses, neither started (code
+reading only once the value leaf owns the box): (a) the finisher is never cast at the trial's end
+(`MTG_EDF_FINISH_STATS=1` would say); (b) the drain's `{1}{C}` is unpayable because the tap-ahead
+floats Adarkar Wastes / Brushland as WILD and `SpendFloatingTowardCost` pays a {C} pip only from
+typed colourless -- the fix shape would be to commit typed {C} in `EtbUntapTapAheadIntoFloat` while a
+{C}-pip sink is live. Both s6 fixtures stay in `test/scenarios/open/`; the real frame reads 5 under
+the new default too.
+
+**10.4 Cost attribution, analysis only (`./build.sh profile` + callgrind of ONE s14 game at 60 ms,
+`scripts/perf/cgg_edf_s14.json`, `logs/edf_perf/cg60`; 14.07 G Ir, win turn 5).**
+
+| where the instructions go | inclusive |
+|---|---|
+| `SimulateToEnd` (the greedy rollouts under the search) | **99.4%** |
+| `TurnSolver::Solve` / `SolveUncached` (the greedy's per-turn plan pick inside a rollout) | 51.7% / 50.6% |
+| `TapForCostShared` (mana payability inside those solves) | **52.0%** |
+| `ApplyPlanDirect` | 42.0% |
+| `SubsetPayableWithFilters` | 36.9% |
+| `BuildSimKey` | 1.0% |
+
+| self cost | share |
+|---|---|
+| `TapForCostBacktrack` | 5.05% |
+| `memcpy` (state copies) + `GameState(const GameState&)` | 3.9% + 4.2% |
+| `UntappedManaUpperBound` | 3.8% |
+| `TapForCostSharedOnce` + its lambdas | ~9% |
+| `CardDatabase::LookupCached` | 4.5% |
+| `EffectiveProduces` | 2.5% |
+| `SnapPayFields` / `RestorePayFields` | 2.2% / 1.4% |
+
+So the d3 pass's price on this deck is not the enumeration or the sim key: it is MANA PAYABILITY
+walked inside every greedy rollout turn (half of all instructions under `TapForCostShared`, a
+fifth under the backtracking payer and its snapshot/restore). §8's candidates A/B stand; nothing
+is changed here, per the user's ruling that perf is parked.
+
+
+**10.5 Shipped from this session.** `MTG_EDF_VAL_COMBO` default ON (10.1), with the ledger and
+`scripts/perf/cgg_edf_s14.json` in the same commit; fleet stamp and CI in 10.6. Then the FIRST
+EDF value leaf is launched on that commit (`bash scripts/valueleaf.sh run decks/EldraziDisplacerFlicker`,
+`MTG_MEM_BUDGET_MB=16384`, default threads), after the stale 2026-09-09 queue (2053 phase-A rows
+labelled under superseded play, frozen at `2a913b0b`) was moved aside by hand per the driver's
+KNOWN LIMIT. Nothing is adopted by the run; its artifacts land staged.

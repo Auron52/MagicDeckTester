@@ -2,7 +2,7 @@
 
 Heuristic-optimization pass (`.claude/skills/heuristic-optimization.md`) on item 3 of
 `docs/design/edf-shortfall-classification.md`. Branch `phase-1-2-deck-analyzer`, 2026-09-10.
-**Built and measured, NOT adopted** — both levers ship default OFF and the selector stays in place.
+**Built and measured; the COMBO half ADOPTED 2026-09-15, the RAMP half rejected** — see the update at the end. The selector stays in place.
 
 ## What the classification asked for, and the one thing it got wrong
 
@@ -233,3 +233,27 @@ place. What the evidence supports, stated as a recommendation rather than an act
 
 Open question for the user, recorded rather than blocking: **when the deck average and the
 reference corpus disagree, which is the objective?** This pass assumed neither and reported both.
+
+## Update 2026-09-15: COMBO adopted alone, RAMP rejected
+
+The Status above stood until the loop's draw-sink guard shipped (`MTG_EDF_DRAW_SINK_HONEST`,
+Sessions 28-29 of `analysis-EldraziDisplacerFlicker.md`). Every bench in this doc scored rollout tails
+through a loop that died at crank three on any dig, so the 2x2 was re-run on the repaired default,
+one pooled batch per table, d5 / 20 ms:
+
+| arm | 14 references | deck average #1 (seeds 3001/3061, 10 chunks x 100 x 2, max_turns 12) | deck average #2, held out (seeds 3121/3181, same shape) |
+|---|---|---|---|
+| off | 4.429 / 0 short | 4.460 | 4.430 |
+| combo | 4.429 / 0 short, no win turn moves | **4.430** (−0.03 t; better 3 / worse 0 / tied 7; t=−1.96; wall −1.0%) | **4.410** (−0.02 t; better 2 / worse 0 / tied 8; t=−1.50; wall −9.8%) |
+| ramp | 4.500 / 1 short (s6 4 -> 5) | not run | not run |
+| both | 4.500 / 1 short (s6 4 -> 5) | not run | not run |
+
+The tension in the verdict above was the PAIR's: faster on average, worse on the references. COMBO
+alone has no such tension on the repaired tails — equal on the references, ahead on both deck
+averages, nothing worse on 20 chunks, equal budget — so the open question ("which objective governs
+when they disagree") is not needed for it. Adopted at default ON under the rule set before the
+held-out sample was drawn (adopt only if #2 is also <= 0 with zero chunks worse);
+`MTG_EDF_VAL_COMBO=0` restores the combat-clock valuation. RAMP (and therefore `both`) is rejected:
+it loses s6 with or without the guard. Item 3 of the Status (root-vs-rollout scoping) is moot for the
+shipped half and stays a note. The adoption was made while the user was away, under the repo's
+never-block rule, and is surfaced for their ruling; it is one line to revert.
