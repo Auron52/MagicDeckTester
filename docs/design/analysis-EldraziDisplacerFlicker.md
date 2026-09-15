@@ -7542,9 +7542,14 @@ correctness; it is the old path (both levers off) and is not what ships.
    COMPOSITION of what it floats (untapped lands stay flexible); the fix shape is a bounded
    re-choice of THIS main phase's tap colours against the next segment's demand, invoked only when
    the next segment fails -- `TapForCostBacktrack` + the reserved-retry wrapper are that shape.
-6. `MTG_EDF_CO_ROOT` / `MTG_EDF_CO_LOOK` remain OFF (bench-identical); origin wip branches
-   `wip/exec-lift-2026-09-11` (landed here), `wip/speed-pass-2026-09-11`, `wip/missed-fire-2026-09-11`
-   still to land or delete.
+6. `MTG_EDF_CO_ROOT` / `MTG_EDF_CO_LOOK` remain OFF (bench-identical). The three origin wip
+   branches are CLOSED (2026-09-15): `wip/exec-lift-2026-09-11` was patch-identical to the landed
+   lift; `wip/speed-pass-2026-09-11`'s three perf commits and `wip/missed-fire-2026-09-11`'s
+   `MTG_EDF_CO_WHY` diagnostic were cherry-picked and re-gated here (smoke 76/4, full 102/6, every
+   red digest byte-identical to the tree without them; `docs/design/perf-pass-2026-09-11.md` has
+   the landing note). Their ungated "uncommitted work" commits (a `ComputeLordBonus` guard; the
+   missed-fire sweep-script edits and a duplicate fixture-33) did NOT land; all three branches are
+   deleted from origin, kept locally under `archive/wip-*-2026-09-11` tags.
 7. FiveColour GT stale at the tip; Snow's 8 viewer reds -- upstream's.
 8. **melira_pod s10_gi9 regressed 4 -> 5 upstream between 72fe64e6 (09-08) and 38842e3f (09-11)**
    (see §5); a reference the search no longer matches, outside this session's EDF scope -- bisect
