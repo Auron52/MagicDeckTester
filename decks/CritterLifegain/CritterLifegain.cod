@@ -5,16 +5,17 @@
     <zone name="main">
         <card number="4" name="Soul Warden"/>
         <card number="4" name="Soul's Attendant"/>
-        <card number="2" name="Serra Ascendant"/>
+        <card number="4" name="Serra Ascendant"/>
         <card number="4" name="Ajani's Pridemate"/>
         <card number="4" name="Voice of the Blessed"/>
+        <card number="4" name="Ocelot Pride"/>
         <card number="1" name="Daxos, Blessed by the Sun"/>
-        <card number="21" name="Plains"/>
-        <card number="3" name="Orzhov Basilica"/>
-        <card number="3" name="Ajani, Strength of the Pride"/>
-        <card number="4" name="Archangel of Thune"/>
+        <card number="19" name="Plains"/>
+        <card number="4" name="Remote Farm"/>
+        <card number="1" name="Ajani, Strength of the Pride"/>
+        <card number="2" name="Archangel of Thune"/>
         <card number="2" name="Heliod, Sun-Crowned"/>
-        <card number="4" name="Auriok Champion"/>
+        <card number="3" name="Auriok Champion"/>
         <card number="1" name="Ranger-Captain of Eos"/>
         <card number="3" name="Unexpectedly Absent"/>
     </zone>
