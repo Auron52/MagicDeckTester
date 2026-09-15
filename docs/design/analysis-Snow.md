@@ -1328,6 +1328,65 @@ unit move that also adds uncounted `BuildDedupKey` hashing leaves the shipped "t
 RESOLVED" verdict precisely where it already was. **If this is re-raised, aim at the enumerator, and
 measure units on the LABEL path first — that is the arm that decides it.**
 
+### 10. THE CLEAN LABEL-PATH NUMBER: 10.4x wall, 7.1x units (2026-09-15)
+
+This replaces the **≥19.1x** in `36dcbf86`'s message, which paired a 16-worker run against phase A's
+24-worker log and is not usable. Same box, sequential, idle, 8 Snow label games, and
+`MTG_WINLESS_SEED=0` pinned in **both** arms so the certificate is the only variable:
+
+| arm | wall | `units_total` | rows |
+|---|---|---|---|
+| `MTG_WINLESS_CERT=0` | 550 s | 126,320,032 | 55 |
+| `MTG_WINLESS_CERT=1` | **53 s** | **17,821,457** | 55 |
+| ratio | **10.4x** | **7.1x** | — |
+
+**55/55 rows byte-identical with an identical key set** — so on these games the certificate is
+demonstrably answer-preserving, not merely faster. Pinning the seed off in both arms is what makes
+this an isolation rather than a flag comparison; `MTG_WINLESS_CERT` gates both mechanisms, and
+conflating them is what produced the wrong story in §8.
+
+### 11. The GO-OFF SEED is a net negative for Snow's unbudgeted play (measured 2026-09-15)
+
+Paired, same box, sequential, `h5ab.manifest.json` (12 games, d5/budget 0, 12 workers):
+
+| arm | wall | avg win turn | digest |
+|---|---|---|---|
+| `MTG_WINLESS_SEED=1` (shipped) | 1,422 s | 5.8333 | `ab40d5632e3f98a6` |
+| `MTG_WINLESS_SEED=0` | **1,345 s** | **5.7500** | `2690c1b12041b318` |
+
+**Worse on both axes** — it costs a turn (deterministic, gi6) and buys no speed. Its cost/benefit on
+this deck is visible in the counters: on one label game the seed ran **52,659 executions for 24
+wins (0.0%)**.
+
+Two things this settles beyond the seed itself:
+
+* **The `seed=1` arm reproduces the old "cert ON" arm exactly** (same 5.8333, same digest
+  `ab40d5632e3f98a6`), confirming §8's attribution end-to-end.
+* **A 32% wall swing on byte-identical work.** The old "cert OFF" arm ran 1,976 s; the new `seed=0`
+  arm ran 1,345 s with the **same digest `2690c1b12041b318`**, i.e. the identical game, identical
+  play. The only difference is that the old one shared the box. This is the third time this document
+  has had to say it, now with a controlled demonstration attached: **on this deck, wall is only
+  meaningful with the box to yourself.**
+
+**NOT changed — this one is the user's call, and here is the case.** `seed_scope` still carries
+`budget->Unlimited()`. What tightening it onto the latches would and would not touch:
+
+* **Shipped play is unaffected either way.** Measured at Snow's shipped `d5/b20`: `seed tries=0`,
+  `cert checks=0`. Neither mechanism reaches budgeted play, which is also why the suite has always
+  been green. The change is invisible to every regression case.
+* **The only regime affected is unbudgeted play** — the phase-C H arm / value-leaf matrix. For Snow
+  that is a measured improvement on both axes.
+* **The argument that generalises:** a mechanism that fires *only* when unbudgeted makes the H arm
+  unrepresentative of the play it is supposed to be a proxy for. Phase C exists to ask "what would
+  the search do with more time?", not "what does a different algorithm do?".
+* **Eldrazi evidence is inconclusive, not favourable.** On 3 of its 6 unbudgeted games the seed is
+  wholly inert — `units_total` 3,714,456 in *both* arms, identical wins — so those games say
+  nothing. The games that would exercise it are Eldrazi's own 30-minute-plus monsters at budget 0,
+  which is a substantial measurement in its own right.
+
+Left as found because it is a **shared** mechanism and one deck's evidence should not rescope it —
+consistent with the standing rule that a deck-owner ruling outranks a favourable A/B.
+
 ## Open questions for the user (surfaced, not blocking)
 
 1. ~~`{S}` modelled as generic `{1}`~~ — **CLOSED 2026-09-06** by the real snow-mana model
