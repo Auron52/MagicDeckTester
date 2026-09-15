@@ -879,6 +879,42 @@ Changes from the shipped list, and the evidence for each:
    so the **bias floor is unmeasured** and 2HG levels are not comparable to 20-life ones. The margins
    are 10-40x a typical floor, but no individual delta under ~0.01 is resolved.
 
+## FULL FORMAT BREAKDOWN -> `docs/design/critter-lifegain-format-breakdown.md` (2026-09-15)
+
+> USER: *"I would like a serious breakdown of both regular and 2HG for this analysis."*
+
+The screens above settled a LIST; they could not say what any single card is worth, and all but two
+of them ran at 20 life only. The breakdown measures **every card in the settled list, one slot at a
+time, under BOTH formats in one pooled batch** (38 cells / 1.52M games, plus a 16-cell funding screen
+and a digest probe). Read that file for the full argument; the four results that change what this
+ledger says:
+
+1. **`opponent_heads: 2` is PROVABLY INERT for this deck** — byte-identical per-block digests at 30
+   life with 1 head vs 2. Both heads share one life pool (`core/GameSetup.h`) and this deck has no
+   player-targeting and no "each opponent" effect, so **"2HG" here means exactly "both players start
+   at 30"**. Every 2HG number in this ledger is a life-total result, not a multiplayer one.
+2. **Serra Ascendant is the ONLY card whose rank changes between the formats.** Every other card's
+   cross-format difference is <= 0.018; Serra's 2nd copy is worth +0.0118 at 20 life and **+0.1099**
+   in 2HG. Fifty-eight of 60 slots want the same thing in both formats — one list can serve both.
+3. **The Serra-at-2 ruling's own condition is now met.** It was *"unless we have easy cuts (and I
+   don't think we do)"*. Two slots measure NEGATIVE — cutting them for a Plains already gains: the
+   2nd Ajani walker (-0.0121 / -0.0086) and the 3rd Auriok Champion (-0.0056 / -0.0071). Every
+   earlier screen funded Serras out of Ajani's Pridemate and Voice (+0.025 cards), which is why 4
+   Serra always looked like it cost ~0.05 at 20 life; it was paying the wrong price.
+   **`serra4_ajani1_auriok2` is the best arm in BOTH formats** and is held-out confirmed:
+   **-0.3356 at 20 life and -0.4739 in 2HG over 80,000 games each** (vs the shipped list; the settled
+   list is -0.30 / -0.27). Still the user's call -- see the caveat below.
+4. **Both funding cuts are slots the harness FLATTERS.** Auriok's protection and the walker's `0`
+   (a one-sided wrath at +15 life, deliberately not enumerated vs a passive opponent) are both
+   un-modelled upside pointing UP. In 2HG the +0.20 gain dwarfs any plausible correction; at 20 life
+   the +0.037 gain does not, so `serra4_ajani1_rc0` (+0.0355) and `serra3_ajani1` (+0.0216) are
+   reasonable, more conservative versions of the same finding.
+
+Also recorded there: the win-turn distributions (the deck is a turn-4/5 kill in both formats, and
+**only 0.03%/0.09% of games are unwon by turn 8** -- the sharpest available statement of why the
+Archangel ruling has to override the measurement), the mana-curve reading, and the per-card table of
+what the harness cannot see.
+
 <!-- verify_deck:begin (generated -- do not edit inside) -->
 ## Last verification (2026-09-08)
 

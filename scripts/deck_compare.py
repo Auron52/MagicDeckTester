@@ -529,6 +529,40 @@ class Spec:
         # comparable to a 20-life screen's, and a format-native apparatus would be a separate build.
         self.starting_life  = s.get("starting_life")
         self.opponent_heads = s.get("opponent_heads")
+        # ... and "formats" makes the format a per-ARM axis instead of a property of the whole spec:
+        #
+        #   "formats": {"std": {"starting_life": 20, "opponent_heads": 1},
+        #               "2hg": {"starting_life": 30, "opponent_heads": 2}}
+        #
+        # Every combination is then instantiated ONCE PER FORMAT -- job `2hg::final` -- and each one's
+        # delta is taken against its OWN format's base, since a 20-life base and a 2HG base are not the
+        # same measurement and pairing across them would be meaningless.
+        #
+        # WHY IT EXISTS: the alternative is one invocation per format, which is precisely the
+        # "one batch per arm/variant" shape CLAUDE.md's pooling rule forbids -- two queues, two
+        # load-imbalance tails, and no shared apparatus fingerprint. Here both formats' games sit in
+        # ONE `mtg --batch`, so the box drains to a single tail and the two formats are guaranteed to
+        # have run under the same table, the same value leaf and the same binary.
+        #
+        # It does NOT fix the caveat above (the apparatus is still fitted at one format) -- it makes
+        # the asymmetry impossible to forget, because both formats are in one output.
+        self.formats = s.get("formats")
+        if self.formats:
+            if self.starting_life is not None or self.opponent_heads is not None:
+                raise SystemExit("\"formats\" replaces the spec-level starting_life/opponent_heads; "
+                                 "setting both would leave it ambiguous which one a job ran under")
+            for lbl, f in self.formats.items():
+                if "::" in lbl:
+                    raise SystemExit(f"format label {lbl!r} may not contain '::' (the job separator)")
+                bad = set(f) - {"starting_life", "opponent_heads"}
+                if bad:
+                    raise SystemExit(f"format {lbl!r}: unknown key(s) {', '.join(sorted(bad))}")
+        else:
+            # One unnamed format carrying whatever the spec set -- job names, manifests and every
+            # downstream key stay byte-identical to a spec that never heard of this axis.
+            self.formats = {"": {k: v for k, v in
+                                 (("starting_life", self.starting_life),
+                                  ("opponent_heads", self.opponent_heads)) if v is not None}}
         self.threads = int(s.get("threads", 0))
         self.base_path = s["base"] if os.path.isabs(s["base"]) else os.path.join(ROOT, s["base"])
         self.deck  = read_decklist(self.base_path)
@@ -652,13 +686,20 @@ class Spec:
         json.dump(nums, open(np_, "w"), indent=0)
         return dp, np_
 
-    def job(self, name, deck, numbering, profile, seed=None):
+    def jname(self, fmt, tag):
+        """Job name for one (format, combination) cell. The unnamed format keeps the bare tag, so a
+        single-format spec's manifest, logs and `--confirm` bookkeeping are unchanged."""
+        return tag if not fmt else f"{fmt}::{tag}"
+
+    def job(self, name, deck, numbering, profile, seed=None, fmt=""):
         j = {"name": name, "deck": deck, "deck_numbering": numbering,
              "games": self.games, "seed": self.seed if seed is None else seed,
              "max_turns": self.maxturn}
-        # Format keys, when set, go on EVERY job (see the Spec note) -- never per arm.
-        if self.starting_life  is not None: j["starting_life"]  = int(self.starting_life)
-        if self.opponent_heads is not None: j["opponent_heads"] = int(self.opponent_heads)
+        # The format's keys. With one (unnamed) format these are the spec-level values and land on
+        # every job identically, as before; with several, each job carries its own -- which is the
+        # only per-arm asymmetry the driver permits, and it is declared, not inferred.
+        for k, v in self.formats[fmt].items():
+            j[k] = int(v)
         if self.pin_play:
             # ResolvePlaySettings THROWS on an explicit depth while value_play drives, so a pinned
             # depth must say so. Omitting both is what lets the engine resolve the deck's own policy
@@ -1084,9 +1125,19 @@ def screen(spec, dry_run, only=None, seed=None, label="screen", with_floor=None)
     print("\napparatus:")
     print(f"  play profile   {os.path.relpath(spec.profile, ROOT) if spec.profile else 'NONE (deliberate)'}")
     print(f"  play settings  d{spec.depth} / {spec.budget}ms   <- {spec.play_source}")
-    if spec.starting_life is not None or spec.opponent_heads is not None:
-        print(f"  FORMAT         starting_life={spec.starting_life} opponent_heads={spec.opponent_heads}"
-              f"  (identical on every arm)")
+    # Print the format block whenever the format is not simply the default: either several of them, or
+    # a single spec-level override. `any(spec.formats)` is NOT the test -- the sole unnamed format is
+    # the empty-string key, which is falsey even when it carries starting_life=30.
+    if len(spec.formats) > 1 or spec.starting_life is not None or spec.opponent_heads is not None:
+        if len(spec.formats) > 1:
+            print(f"  FORMATS        {len(spec.formats)}, every combination run under each and compared"
+                  f" to ITS OWN base")
+            for lbl, f in spec.formats.items():
+                print(f"                   {lbl:12s} starting_life={f.get('starting_life', 20)}"
+                      f" opponent_heads={f.get('opponent_heads', 1)}")
+        else:
+            print(f"  FORMAT         starting_life={spec.starting_life} opponent_heads={spec.opponent_heads}"
+                  f"  (identical on every arm)")
         print( "                 NOTE: the keep table and value leaf below were fitted at the deck's"
                " OWN format.\n"
                "                 Symmetric across arms, so the DELTA holds; the absolute level is NOT"
@@ -1094,6 +1145,16 @@ def screen(spec, dry_run, only=None, seed=None, label="screen", with_floor=None)
                "                 to a single-opponent screen, and card thresholds keyed on a life"
                " total (Serra\n"
                "                 Ascendant's 30) can change state entirely.")
+        if len(spec.formats) > 1:
+            print("                 So compare DELTAS across the formats below, never LEVELS: a base"
+                  " at a higher\n"
+                  "                 starting life is slower for a reason that has nothing to do with"
+                  " any card under\n"
+                  "                 test. (Note what `opponent_heads` does and does not do -- both"
+                  " heads share ONE\n"
+                  "                 life pool (core/GameSetup.h), so it changes TARGETING and 'each"
+                  " opponent'\n"
+                  "                 arithmetic, never the amount of damage needed.)")
     print(f"  value model    {os.path.relpath(spec.value_profile, ROOT) if spec.value_profile else 'none'}"
           + ("" if not spec.value_profile else
              "  (LEGACY ladder rig: attached but never decides -- plays 0.079t below shipped)"
@@ -1185,9 +1246,14 @@ def screen(spec, dry_run, only=None, seed=None, label="screen", with_floor=None)
     run_arms = [t for t in spec.arms if only is None or t in only]
     jobs, decks = [], {}
     for tag in run_arms:
+        # ONE decklist and ONE numbering per combination, shared by every format it runs under: the
+        # format changes the game, never the cards, so a per-format decklist would be the same bytes
+        # under a second name -- and two numbering.json files for one arm is the collision the
+        # per-deck scratch directories exist to prevent.
         dp, np_ = spec.write_arm(tag, os.path.join(spec.out, tag))
         decks[tag] = (dp, np_)
-        jobs.append(spec.job(tag, dp, np_, profile, seed=seed))
+        for fmt in spec.formats:
+            jobs.append(spec.job(spec.jname(fmt, tag), dp, np_, profile, seed=seed, fmt=fmt))
     # --with-floor: the bracket's SHARED cells are the screen's own arms, so run the bracket's own
     # cells in the SAME batch instead of re-running base and the variant in a second invocation. That
     # is not an approximation -- a separate --floor produced per-job digests identical to the screen's
@@ -1196,6 +1262,14 @@ def screen(spec, dry_run, only=None, seed=None, label="screen", with_floor=None)
     bad = [t for t in ftags if t not in run_arms or t == "base"]
     if bad:
         raise SystemExit(f"--with-floor wants arms this screen runs: {', '.join(bad)} is not one")
+    if ftags and spec.raw.get("formats"):
+        # The bracket's cells are (deck x table) pairs named per ARM; under several formats each would
+        # need a per-format cell AND a per-format reading of the nulls, and a floor measured at one
+        # format does not bound the other's. Refuse rather than report a bracket that silently covers
+        # one format's arms only.
+        raise SystemExit("--with-floor does not span a multi-format spec: a bias floor is measured at "
+                         "one format.\n  Split the format out into its own single-format spec to "
+                         "bracket it.")
     fmeta = None
     if ftags:
         R = int(spec.raw.get("floor_R", 10))
@@ -1232,6 +1306,7 @@ def screen(spec, dry_run, only=None, seed=None, label="screen", with_floor=None)
                # game. Recorded here so the comparison is refused rather than silently reported as
                # shrinkage.
                "starting_life": spec.starting_life, "opponent_heads": spec.opponent_heads,
+               "formats": spec.formats,
                "seed": spec.seed if seed is None else seed},
               open(os.path.join(spec.out, f"{spec.stem}.{label}.fingerprint.json"), "w"), indent=1)
     print(f"\n{len(jobs)} arms x {spec.games:,} games -> ONE pooled batch"
@@ -1249,24 +1324,78 @@ def screen(spec, dry_run, only=None, seed=None, label="screen", with_floor=None)
                 [j["name"] for j in jobs],
                 spec.maxturn, expect=spec.games)
     common = sorted(set.intersection(*[set(v) for v in got.values()]))
-    print(f"\n{len(common):,} paired games, d{spec.depth} budget {spec.budget}ms   (negative delta = FASTER)\n")
-    cost = {k: v for k, v in job_costs(os.path.join(spec.out, f"{spec.stem}.{label}.err")).items()
-            if k in run_arms}
-    print(f"  {'combination':22s} {'avg':>8s} {'delta':>9s} {'se':>8s} {'t':>7s} {'ident':>7s} "
-          f"{'n@3sig/0.03t':>13s} {'ms/game':>9s}")
-    print(f"  {'base':22s} {st.mean([got['base'][g] for g in common]):8.4f}"
-          + " " * 49 + f"{cost.get('base', float('nan')):9.1f}")
+    print(f"\n{len(common):,} paired games, d{spec.depth} budget {spec.budget}ms   (negative delta = FASTER)")
+    cost = job_costs(os.path.join(spec.out, f"{spec.stem}.{label}.err"))
+    cost = {k: v for k, v in cost.items() if k in {j["name"] for j in jobs}}
+    others = [t for t in run_arms if t != "base"]
     results = {}
-    for tag in run_arms:
-        if tag == "base":
-            continue
-        d, se, n, ident = paired(got, "base", tag)
-        need = 9 * (se * math.sqrt(n)) ** 2 / 0.03 ** 2
-        results[tag] = {"delta": d, "se": se, "n": n, "identical_pct": ident,
-                        "avg": st.mean([got[tag][g] for g in common]), "ms_per_game": cost.get(tag)}
-        print(f"  {tag:22s} {st.mean([got[tag][g] for g in common]):8.4f} {d:+9.4f} {se:8.4f} "
-              f"{d/se if se else float('nan'):+7.2f} {ident:6.1f}% {need:13,.0f} "
-              f"{cost.get(tag, float('nan')):9.1f}")
+    for fmt in spec.formats:
+        jn = lambda t: spec.jname(fmt, t)
+        if len(spec.formats) > 1:
+            f = spec.formats[fmt]
+            print(f"\n=== {fmt}  (starting_life={f.get('starting_life', 20)},"
+                  f" opponent_heads={f.get('opponent_heads', 1)}) ===")
+        print()
+        print(f"  {'combination':22s} {'avg':>8s} {'delta':>9s} {'se':>8s} {'t':>7s} {'ident':>7s} "
+              f"{'n@3sig/0.03t':>13s} {'ms/game':>9s}")
+        print(f"  {'base':22s} {st.mean([got[jn('base')][g] for g in common]):8.4f}"
+              + " " * 49 + f"{cost.get(jn('base'), float('nan')):9.1f}")
+        res = results[fmt] = {}
+        for tag in others:
+            d, se, n, ident = paired(got, jn("base"), jn(tag))
+            need = 9 * (se * math.sqrt(n)) ** 2 / 0.03 ** 2
+            res[tag] = {"delta": d, "se": se, "n": n, "identical_pct": ident,
+                        "avg": st.mean([got[jn(tag)][g] for g in common]),
+                        "ms_per_game": cost.get(jn(tag))}
+            print(f"  {tag:22s} {st.mean([got[jn(tag)][g] for g in common]):8.4f} {d:+9.4f} {se:8.4f} "
+                  f"{d/se if se else float('nan'):+7.2f} {ident:6.1f}% {need:13,.0f} "
+                  f"{cost.get(jn(tag), float('nan')):9.1f}")
+
+        # The apparatus's ROLLOUT half, reported beside the result rather than left to a later audit.
+        # Reweighting bounds the weighting half at ~0.001t; what stayed unbounded is that the shared
+        # table's cell values were fit to the BASE deck's library. Printed as the scatter d* that would
+        # be needed to fake each effect, because that is directly comparable to a measured scatter.
+        raw_p = raw_sidecar(spec.profile)
+        if use_table and raw_p and not raw_profile_mismatch(spec.profile) \
+                and spec.raw.get("misfit_bound", True) and res:
+            try:
+                _, ek_m = table_meta(shipped_table(spec.profile))
+                rows = []
+                for tag, r in res.items():
+                    cnt, dsz = __import__("keep_margin").deck_counts(decks[tag][0], ek_m["buckets"])
+                    rows.append((tag, r["delta"], misfit_delta_star(raw_p, cnt, dsz, r["delta"])))
+            except Exception as e:                        # never let an audit line kill a measurement
+                print(f"\n  apparatus bound unavailable ({e})")
+                rows = []
+            if rows:
+                print(f"\n  apparatus (rollout half): the cell-value SCATTER that could fake each effect")
+                for tag, d, ds in rows:
+                    if ds is None:
+                        print(f"    {tag:20s} delta {d:+.4f}   d* > {MISFIT_GRID[-1]:.2f}t "
+                              f"(off the grid -- misfit cannot reach this effect)")
+                    else:
+                        print(f"    {tag:20s} delta {d:+.4f}   d* = {ds:.3f}t")
+                print("    Compare d* against a MEASURED scatter: scripts/keep_delta.py --arm ... "
+                      "(burn's\n    Skullcrack->Bolt measured 0.054t). d* far above it => the effect is"
+                      " not apparatus.\n    Sign is one-way too: misfit falls on the arm alone, so it"
+                      " can only make an edit look SLOWER.")
+        # Ranking is what a multi-arm spec is FOR, and every arm was measured against base rather than
+        # against each other -- so the interesting comparison (the top two) was the one not printed.
+        # The data is already there and paired on the same game indices; only the subtraction was
+        # missing.
+        if len(others) > 1:
+            rank = sorted(others, key=lambda t: res[t]["delta"])
+            print(f"\n  ranked, and each pair compared directly (negative = the ROW is faster):\n")
+            print("  " + " " * 22 + "".join(f"{t:>12.12s}" for t in rank))
+            for a in rank:
+                row = "".join(f"{'--':>12s}" if a == b else f"{paired(got, jn(b), jn(a))[0]:+12.4f}"
+                              for b in rank)
+                print(f"  {a:22s}{row}")
+            top, second = rank[0], rank[1]
+            d, se, _, _ = paired(got, jn(second), jn(top))
+            print(f"\n  best two: {top} vs {second} = {d:+.4f} +-{se:.4f} "
+                  f"(t = {d/se if se else float('nan'):+.2f})")
+
     # ms/game is a SUM OF PER-GAME WALL TIMES, so it inflates when the box is busy -- including with
     # this run's own other arms. It is a sizing aid, not a benchmark; say so where it is printed.
     if cost and max(cost.values()) > 2 * min(cost.values()):
@@ -1275,63 +1404,59 @@ def screen(spec, dry_run, only=None, seed=None, label="screen", with_floor=None)
               f" ({cost[hi]:.0f} vs {cost[lo]:.0f} ms).\n  A screen's wall clock is set by its"
               " priciest arm; ms/game is wall, so it inflates under load.")
 
-    # The apparatus's ROLLOUT half, reported beside the result rather than left to a later audit.
-    # Reweighting bounds the weighting half at ~0.001t; what stayed unbounded is that the shared
-    # table's cell values were fit to the BASE deck's library. Printed as the scatter d* that would be
-    # needed to fake each effect, because that is directly comparable to a measured scatter.
-    raw_p = raw_sidecar(spec.profile)
-    if use_table and raw_p and not raw_profile_mismatch(spec.profile) \
-            and spec.raw.get("misfit_bound", True) and results:
-        try:
-            _, ek_m = table_meta(shipped_table(spec.profile))
-            rows = []
-            for tag, r in results.items():
-                cnt, dsz = __import__("keep_margin").deck_counts(decks[tag][0], ek_m["buckets"])
-                rows.append((tag, r["delta"], misfit_delta_star(raw_p, cnt, dsz, r["delta"])))
-        except Exception as e:                            # never let an audit line kill a measurement
-            print(f"\n  apparatus bound unavailable ({e})")
-            rows = []
-        if rows:
-            print(f"\n  apparatus (rollout half): the cell-value SCATTER that could fake each effect")
-            for tag, d, ds in rows:
-                if ds is None:
-                    print(f"    {tag:20s} delta {d:+.4f}   d* > {MISFIT_GRID[-1]:.2f}t "
-                          f"(off the grid -- misfit cannot reach this effect)")
-                else:
-                    print(f"    {tag:20s} delta {d:+.4f}   d* = {ds:.3f}t")
-            print("    Compare d* against a MEASURED scatter: scripts/keep_delta.py --arm ... "
-                  "(burn's\n    Skullcrack->Bolt measured 0.054t). d* far above it => the effect is"
-                  " not apparatus.\n    Sign is one-way too: misfit falls on the arm alone, so it can"
-                  " only make an edit look SLOWER.")
-    # Ranking is what a multi-arm spec is FOR, and every arm was measured against base rather than
-    # against each other -- so the interesting comparison (the top two) was the one not printed. The
-    # data is already there and paired on the same game indices; only the subtraction was missing.
-    others = [t for t in run_arms if t != "base"]
+    # THE CROSS-FORMAT COMPARISON, which is the whole reason the axis is per-arm. It is a
+    # difference-of-differences, and it is PAIRED: a game index carries the same seed and the same
+    # `deck_numbering` in both formats, so the two worlds open on the SAME seven cards and diverge only
+    # because the format did. Pairing it is therefore not an approximation, and it removes the opening-
+    # hand variance that dominates an unpaired comparison of two 20,000-game blocks.
+    #
+    #   D_g = [arm(f2)_g - base(f2)_g] - [arm(f1)_g - base(f1)_g]
+    #
+    # Negative = the combination is worth MORE in f2 than in f1. The LEVELS are not comparable across
+    # formats (a 2HG base is slower because it must deal 60 damage across two heads) but this
+    # difference is, because each format's base is subtracted off inside its own world.
+    if len(spec.formats) > 1 and others:
+        fl = list(spec.formats)
+        print(f"\n  SAME combination, the two formats compared (difference-of-differences, paired on"
+              f" the\n  game index -- both formats open on the same hand). Negative = worth MORE in"
+              f" the later format:\n")
+        print(f"  {'combination':22s}" + "".join(f"{f:>11.11s}" for f in fl)
+              + f"{'  ' + fl[-1] + '-' + fl[0]:>16.16s} {'se':>8s} {'t':>7s}")
+        for tag in others:
+            ds = [results[f][tag]["delta"] for f in fl]
+            D = [(got[spec.jname(fl[-1], tag)][g] - got[spec.jname(fl[-1], "base")][g])
+                 - (got[spec.jname(fl[0], tag)][g] - got[spec.jname(fl[0], "base")][g])
+                 for g in common]
+            gap = st.mean(D)
+            se_g = st.pstdev(D) / math.sqrt(len(D)) if D else float("nan")
+            print(f"  {tag:22s}" + "".join(f"{d:+11.4f}" for d in ds)
+                  + f"{gap:+16.4f} {se_g:8.4f} {gap/se_g if se_g else float('nan'):+7.2f}")
+        print("\n  A sign flip in this column is a real deckbuilding fact, not noise to average away:"
+              "\n  the two formats want different cards. Report BOTH, and say which one a list is for.")
+    # results.json keeps its historical FLAT shape for a single-format spec (`results[tag]`), and goes
+    # one level deeper only when there is more than one format to keep apart (`results[fmt][tag]`).
+    single = list(spec.formats)[0] if len(spec.formats) == 1 else None
+    results_out = results[single] if single is not None else results
+    base_avg = {f: st.mean([got[spec.jname(f, "base")][g] for g in common]) for f in spec.formats}
+    # Selecting the max over N arms on ONE seed block is optimistic even when every individual delta
+    # is honest -- the winner is the arm whose noise pointed the right way. `--confirm` re-runs it on
+    # disjoint seeds, which is the same train/held-out discipline
+    # .claude/skills/heuristic-optimization.md applies to a swept heuristic. Under several formats the
+    # winner is picked per format, and they need not be the same arm -- which is itself a result.
     if len(others) > 1:
-        rank = sorted(others, key=lambda t: paired(got, "base", t)[0])
-        print(f"\n  ranked, and each pair compared directly (negative = the ROW is faster):\n")
-        print("  " + " " * 22 + "".join(f"{t:>12.12s}" for t in rank))
-        for a in rank:
-            row = "".join(f"{'--':>12s}" if a == b else f"{paired(got, b, a)[0]:+12.4f}" for b in rank)
-            print(f"  {a:22s}{row}")
-        top, second = rank[0], rank[1]
-        d, se, _, _ = paired(got, second, top)
-        print(f"\n  best two: {top} vs {second} = {d:+.4f} +-{se:.4f} "
-              f"(t = {d/se if se else float('nan'):+.2f})")
-        # Selecting the max over N arms on ONE seed block is optimistic even when every individual
-        # delta is honest -- the winner is the arm whose noise pointed the right way. `--confirm`
-        # re-runs it on disjoint seeds, which is the same train/held-out discipline
-        # .claude/skills/heuristic-optimization.md applies to a swept heuristic.
-        print(f"  the winner of a {len(others)}-combination screen is selection-biased: confirm it on"
-              f" disjoint"
-              f" seeds with\n    python3 scripts/deck_compare.py <spec> --confirm {top}")
+        wins = {f: min(others, key=lambda t: results[f][t]["delta"]) for f in spec.formats}
+        for f, w in wins.items():
+            print(f"\n  the winner of a {len(others)}-combination screen is selection-biased"
+                  + (f" ({f}: {w})" if f else f": {w}") + "; confirm on disjoint seeds with"
+                  f"\n    python3 scripts/deck_compare.py <spec> --confirm {w}")
     # Results have been stdout-only, so nothing accumulated and nothing could be re-read: the
     # "numbers do not carry across spec edits" hazard stayed a warning instead of a check. This is the
     # same object the fingerprint describes, with the measurements attached.
     json.dump({"spec": os.path.relpath(spec.raw_path, ROOT), "label": label,
                "engine_commit": head_commit(), "seed": spec.seed if seed is None else seed,
-               "games": spec.games, "n_paired": len(common), "base_avg":
-                   st.mean([got["base"][g] for g in common]), "results": results},
+               "games": spec.games, "n_paired": len(common),
+               "base_avg": base_avg[single] if single is not None else base_avg,
+               "formats": spec.formats, "results": results_out},
               open(os.path.join(spec.out, f"{spec.stem}.{label}.results.json"), "w"), indent=1)
     if fmeta:
         ftags, route, per_arm, base_key, R, cell_name = fmeta
@@ -1918,28 +2043,34 @@ def confirm(spec, tag, dry_run):
         print("\n  (no earlier screen log beside this spec, so there is nothing to compare against --"
               "\n   this run stands on its own)")
         return 0
-    a = score(prev, list(spec.arms), spec.maxturn)
-    b = score(os.path.join(spec.out, f"{spec.stem}.confirm.err"), ["base", tag], spec.maxturn)
-    if not (a.get("base") and a.get(tag)):
-        print("\n  (the earlier screen log does not carry this combination -- nothing to compare)")
-        return 0
-    d0, se0, n0, _ = paired(a, "base", tag)
-    d1, se1, n1, _ = paired(b, "base", tag)
-    print(f"\n  {'block':24s} {'games':>8s} {'delta':>9s} {'se':>8s}")
-    print(f"  {'screen (seed %d)' % spec.seed:24s} {n0:8,} {d0:+9.4f} {se0:8.4f}")
-    print(f"  {'held out (seed %d)' % seed:24s} {n1:8,} {d1:+9.4f} {se1:8.4f}")
-    # Independent blocks, so the difference's se is the root of the sum -- these are NOT paired with
-    # each other (different games), which is exactly the point.
-    gap = d1 - d0
-    se_g = math.sqrt(se0 ** 2 + se1 ** 2)
-    print(f"  {'shrinkage':24s} {'':8s} {gap:+9.4f} {se_g:8.4f}  "
-          f"(t = {gap/se_g if se_g else float('nan'):+.2f})")
-    if abs(gap) > 2 * se_g:
-        print("\n  The held-out block does NOT reproduce the screen's effect. Report the held-out"
-              "\n  number, not the screen's -- the screen's is the one that was selected on.")
-    else:
-        print("\n  The held-out block reproduces the screen's effect within noise. Pool them for the"
-              f"\n  point estimate: {(d0*n0 + d1*n1)/(n0+n1):+.4f} over {n0+n1:,} games.")
+    a = score(prev, [spec.jname(f, t) for f in spec.formats for t in spec.arms], spec.maxturn)
+    b = score(os.path.join(spec.out, f"{spec.stem}.confirm.err"),
+              [spec.jname(f, t) for f in spec.formats for t in ("base", tag)], spec.maxturn)
+    # Each format is its own held-out test: the combination can reproduce in one and shrink in the
+    # other, and averaging them would hide exactly that.
+    for fmt in spec.formats:
+        bn, an = spec.jname(fmt, "base"), spec.jname(fmt, tag)
+        if not (a.get(bn) and a.get(an)):
+            print(f"\n  (the earlier screen log does not carry {an} -- nothing to compare)")
+            continue
+        d0, se0, n0, _ = paired(a, bn, an)
+        d1, se1, n1, _ = paired(b, bn, an)
+        print(f"\n  {('block' if not fmt else 'block [' + fmt + ']'):24s} {'games':>8s} {'delta':>9s}"
+              f" {'se':>8s}")
+        print(f"  {'screen (seed %d)' % spec.seed:24s} {n0:8,} {d0:+9.4f} {se0:8.4f}")
+        print(f"  {'held out (seed %d)' % seed:24s} {n1:8,} {d1:+9.4f} {se1:8.4f}")
+        # Independent blocks, so the difference's se is the root of the sum -- these are NOT paired
+        # with each other (different games), which is exactly the point.
+        gap = d1 - d0
+        se_g = math.sqrt(se0 ** 2 + se1 ** 2)
+        print(f"  {'shrinkage':24s} {'':8s} {gap:+9.4f} {se_g:8.4f}  "
+              f"(t = {gap/se_g if se_g else float('nan'):+.2f})")
+        if abs(gap) > 2 * se_g:
+            print("  The held-out block does NOT reproduce the screen's effect. Report the held-out"
+                  "\n  number, not the screen's -- the screen's is the one that was selected on.")
+        else:
+            print("  The held-out block reproduces the screen's effect within noise. Pool them for the"
+                  f"\n  point estimate: {(d0*n0 + d1*n1)/(n0+n1):+.4f} over {n0+n1:,} games.")
     return 0
 
 
