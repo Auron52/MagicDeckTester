@@ -1,0 +1,127 @@
+{
+  "_comment": [
+    "THE SEARCH'S OWN T5 UNDER MTG_EDF_EXACT_EXECUTOR on claude_s9_gi8 (2026-09-14): the board the",
+    "autonomous arm reached after its T4 put BOTH Auras on one Conservatory. Seven mana on the board",
+    "(Mariposa {C}, Kitchen, Conservatory+Wild Growth+Overgrowth = 4, a bare Conservatory), Cloud of",
+    "Faeries already in play and unsick, and the hand holds the outlet (two Emiels), a Living Wish",
+    "and a Displacer. Cast Emiel for {2}{W}{W} and exactly {3} is left for the first blink; Cloud's",
+    "untap refunds 5 (the enchanted Conservatory + one more land) against a {3} activation, so the",
+    "loop is net +2 and unbounded; untapping Mariposa each pass banks the {C} that either wishable",
+    "finisher's {1}{C} activation needs. The recorded game (the search at d5/20 ms) cast Emiel AND the",
+    "Living Wish -- six of the seven -- and the real apply's own recogniser then read `ok=1 count=50`",
+    "on a board that could not pay the first {3}. So the frame asks the exact question the user put:",
+    "does the engine see that THIS board plus THIS hand goes off, and does its line actually kill?",
+    "library_top is the deck minus battlefield/hand in canonical order (48 cards, as in the game)."
+  ],
+  "deck": "decks/EldraziDisplacerFlicker/EldraziDisplacerFlicker.cod",
+  "env": {
+    "MTG_HUMAN_PLAY": "1"
+  },
+  "turn": 5,
+  "on_the_play": false,
+  "active_life": 20,
+  "opponent_life": 19,
+  "opponent_library_size": 50,
+  "library_filler": "Forest",
+  "library_top": [
+    "Eldrazi Displacer",
+    "Eldrazi Displacer",
+    "Emiel the Blessed",
+    "Emiel the Blessed",
+    "Cloud of Faeries",
+    "Cloud of Faeries",
+    "Peregrine Drake",
+    "Peregrine Drake",
+    "Peregrine Drake",
+    "Peregrine Drake",
+    "Wild Growth",
+    "Wild Growth",
+    "Wild Growth",
+    "Overgrowth",
+    "Overgrowth",
+    "Fertile Ground",
+    "Fertile Ground",
+    "Fertile Ground",
+    "Fertile Ground",
+    "Brushland",
+    "Brushland",
+    "Brushland",
+    "Brushland",
+    "Yavimaya Coast",
+    "Yavimaya Coast",
+    "Yavimaya Coast",
+    "Yavimaya Coast",
+    "Adarkar Wastes",
+    "Adarkar Wastes",
+    "Mariposa Military Base",
+    "Mariposa Military Base",
+    "Trace of Abundance",
+    "Trace of Abundance",
+    "Trace of Abundance",
+    "Trace of Abundance",
+    "Conservatory",
+    "Conservatory",
+    "Kitchen",
+    "Shivan Gorge",
+    "Training Grounds",
+    "Training Grounds",
+    "Living Wish",
+    "Living Wish",
+    "Living Wish",
+    "Eladamri's Call",
+    "Aether Hub",
+    "Aether Hub",
+    "Aether Hub"
+  ],
+  "library_size": 0,
+  "depth": 3,
+  "budget_ms": 20,
+  "battlefield": [
+    {
+      "name": "Mariposa Military Base",
+      "controller": 0,
+      "tapped": false
+    },
+    {
+      "name": "Kitchen",
+      "controller": 0,
+      "tapped": false
+    },
+    {
+      "name": "Conservatory",
+      "controller": 0,
+      "tapped": false
+    },
+    {
+      "name": "Wild Growth",
+      "controller": 0,
+      "tapped": false,
+      "equips": "Conservatory"
+    },
+    {
+      "name": "Overgrowth",
+      "controller": 0,
+      "tapped": false,
+      "equips": "Conservatory"
+    },
+    {
+      "name": "Conservatory",
+      "controller": 0,
+      "tapped": false
+    },
+    {
+      "name": "Cloud of Faeries",
+      "controller": 0,
+      "tapped": false
+    }
+  ],
+  "hand": [
+    "Emiel the Blessed",
+    "Emiel the Blessed",
+    "Overgrowth",
+    "Eldrazi Displacer",
+    "Living Wish"
+  ],
+  "expect_combo_off": true,
+  "combo_off_verify": true
+}

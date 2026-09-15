@@ -7364,3 +7364,140 @@ value leaf or keep table, so lifting them re-prices nothing frozen.
    harness until the pod enumeration-wall work restores them.
 6. Value-leaf generation for EDF: the residual 0.86t is horizon; still awaiting the user's word.
 7. Inert levers `MTG_COMBO_OFF_FLOAT_ING` / viewer `MTG_COMBO_OFF_PROSPECTIVE`: keep or delete.
+
+## Session 27 (2026-09-14/15): the hand go-off -- "board + hand can go off" becomes one plan
+
+**USER brief:** *"pick up EDF correctness again... matching references first, performance only once
+these are done... a lot of the issues are to do with detecting when our current board + hand can
+go off."* Mid-session: *"for mana-related issues I'm wondering if we need a more full-turn centric
+(or at least multi-segment) approach to colour generation... we could only fall back on this
+approach when we fail to have the right colours floated... lands on board can be left as-is; this
+problem only seriously impacts floating mana."*
+
+Base: origin tip **f935285e** (fast-forwarded; local had nothing unpushed). Re-measured, not
+assumed: `ref_bench` at the tip reads 5.143, **7/14 short** (s6 +1, s8 +3, s9 +1, s10 +1, s11 +1,
+s12 +2, s14 +1) -- cell-identical to the committed stamp.
+
+### 1. The executor lift lands (cherry-picks 42cfb30d, 6f3e8ab6 = wip/exec-lift b679d265)
+
+Applied clean onto the tip. Four-arm pooled bench (`scripts/ref_bench_arms.py`, new: N heurarm
+arms x 14 references in ONE batch, per-job `flags`): **off 5.143/7 -> exec 4.857/5** (s8 6->4,
+s10 5->4, s11 7->6, s12 6->5) -- but **s9 5->6**, a reference LOST, which the wip's own
+pre-rebase measurement (s9 5->4) did not show. `MTG_EDF_CO_ROOT/LOOK` stay inert on the tip.
+
+**s9 under the lift, root-caused by replay (Profile binary, `MTG_FS_ROOT_DUMP` now prints the
+land / rad-mode / scry half of a plan):**
+* T1 root, off: Kitchen 6, Conservatory 9, Mariposa 9, defer 9, **Mariposa[rad] 5** -> rad mode,
+  whose T2 mill surfaces a Living Wish on T3 -> T5. Under the lift the tails read Kitchen 7,
+  Conservatory 7, **Mariposa 5, defer 5, Mariposa[rad] 5**: a three-way tie, broken to plain
+  Mariposa, no mill, a different T3 draw -> T6. The human's T1 (Conservatory, which is what makes
+  the T2 Wild Growth castable) projects 9/7 in both arms: nobody sees the T4 line from T1 at 20 ms.
+* Budget ladder on s9: off 5/5/5 at 20/100/500 ms; **exec 6/4/4**. The lift is what makes the T4
+  line exist; at 20 ms the root is starved.
+* T5 under the lift, from the executor's own trace (`[goff] t5 real=1 ok=1 net=2 refund=5 cost=3
+  exile=2 setup=2 -> count=50`): the committed plan `Emiel + Living Wish` spent 6 of the 7 mana,
+  the recogniser then read a live 50-iteration loop, and the first `{3}` crank was unpayable. The
+  plain `Emiel` plan (which leaves exactly `{3}`) scored 6 too -- because its loop can only be
+  reached through the apply-side `EdfAutoGoOffAfterCasts`, never as a plan the ranking can see.
+
+### 2. The gap, pinned: multi-activation go-offs existed only for an outlet ON THE BATTLEFIELD
+
+Fixture **`edf_co_33_s9_gi8_t5_exec_outlet_in_hand`** stages that T5 board (both Auras on one
+Conservatory, Cloud in play, Emiel x2 + Living Wish + Displacer + Overgrowth in hand, 7 mana,
+48-card library in canonical order). On the pre-change binary it reads `plans=334 offered=0
+verified=0` in BOTH lever positions and on the VIEWER path: `BlinkActivationCounts` takes a
+`Permanent`, so "cast the outlet, then loop" was not a plan anywhere -- the button could never
+offer it (human play is excluded from the auto go-off), and the search could only stumble into it
+after its other casts had spent the crank.
+
+### 3. `MTG_EDF_HAND_GOFF` (heurarm slot, default ON) -- the hand go-off is ONE enumerated plan
+
+* `DecisionProvider::HandGoOffCandidates` (flicker provider only): for each (outlet, payload) pair
+  with at least one piece in hand -- `FlickerEconomics` first (microseconds, net > 0), then a mana
+  floor (board must cover the cast(s) PLUS one activation, or the loop cannot start: the exact
+  defect above) -- the hand piece enters a PROBE copy (unpaid) and the SAME on-board recogniser and
+  count run on it (`RecogniseFlickerLoop` + `FlickerGoOffCount`: exact ceiling, {C} reservation,
+  sink scans). Emitted as an `ActivateBlink` with `needs_cast_mask` / `victim_name`.
+* `SubsetHasStrandedHandBlink`: a subset carrying the activation must also cast the piece(s), by
+  name (the hand-Pod pairing). Both apply sites re-resolve the pieces BY NAME
+  (`ResolveBlinkPieceId`) because the cast may take another copy of the same name.
+* The COMBO OFF fold: the casts a hand go-off requires are the go-off, not "extra" (so it ranks as
+  a standalone), plausibility is projected with the plan's OWN casts, and under the rule-only path
+  every hand go-off candidate is trialled within `MTG_COMBO_OFF_TRIES` (Displacer's `{2}{C}` loop
+  x156 sorts first and is refuted; Emiel's x150 wins).
+* Fixture 33: **offered + VERIFIED** (`cast Emiel, blink Cloud x150 -- COMBO OFF: wins this
+  turn`; the harness's re-apply confirms the kill). Fixtures 1-32 unchanged in both positions.
+* `ProjectsAlternateWin` still under-projects a hand go-off (it demands crank + sink + setup mana
+  UP FRONT, which a net-positive loop funds itself) -- recorded, not fixed; the trial is the arbiter.
+
+### 4. Measured
+
+**Bench, four arms, one pooled batch (14 refs, exact hands, d5/20 ms):**
+
+| reference | human | off | exec | hand | both |
+|---|---|---|---|---|---|
+| s1 3 / s2 4 / s3 4 / s4 6 / s5 4 / s7 5 / s15 6 | -- | = | = | = | = |
+| s6_gi5 | 4 | 5 | 5 | 5 | 5 |
+| s8_gi7 | 3 | 6 | **4** | 6 | **4** |
+| s9_gi8 | 4 | 5 | **6** | 5 | **5** |
+| s10_gi9 | 4 | 5 | 4 | 5 | 4 |
+| s11_gi10 | 6 | 7 | 6 | (tail) | 6 |
+| s12_gi11 | 4 | 6 | 5 | 6 | 5 |
+| s14_gi13 | 5 | 6 | 6 | 6 | 6 |
+| **mean / short** | 4.429 | 5.143 / 7 | 4.857 / 5 | -- | **4.786 / 5** |
+
+`both` vs `off`: five references better, **none worse** -- the adoption bar. `both` vs `exec`:
+s9 6->5 (the lost reference restored), nothing worse. `hand` without the lift buys nothing and
+its s11 game ran >20 min (a plan the pre-lift executor cannot walk, re-tried in every rollout):
+the two levers ship together. s9 under `both`: T5 `cast Emiel -> blink x45 (bank) -> Overgrowth +
+Displacer mid-loop -> Mariposa draw / investigates -> blink x49 -> Infiltrator exiles`.
+
+**`both` at 100 ms (14 refs, one pool): 4.643, 3 short** -- s6 +1, s8 +1, s12 +1; **s9 and s14
+land on the human's turn.** So the residual splits: two budget-bound (s9 T1, s14 wish target) and
+three construct-bound (+1 even at 500 ms on the earlier ladder). EDF has no `value_play`; a budget
+is a deck-setting decision for the user (see Open).
+
+**Quick sweep (display path):** lift-only binary `offered 1/94, verified 0, MISSED FIRE 16`;
+with the hand go-off **`offered 4/92, verified 4 (100%), FALSE FIRE 0, MISSED FIRE 12`**. The 12:
+mostly MAIN_2 frames whose win is next turn, no live loop on the board -- a different shape.
+
+**Deck average (paired 200 games, off/exec/both) and the `--stats` cost:** PENDING at the time of
+writing -- the first attempt was killed to relieve host memory (see §6); re-run serially after the
+gate chain. The wip's own measurement of the lift alone: 5.46 -> 4.70, 10/10 chunks better,
+wall -43.6%.
+
+### 5. Gates (final binary = this tree)
+
+* scenarios **85/85**; combo_off fixtures **33/33** (32/32 + 1 expected red with the lever OFF).
+* FULL regression: **102 passed, 6 failed -- all six FiveColour (d0/d3/d5, s2002/s3003), all
+  FASTER than GT, and reproduced number-for-number with `MTG_EDF_EXACT_EXECUTOR=0`**: the
+  FiveColour keep-profile adoption (9feb6bf2, 2026-09-13) never re-accepted GT (last GT touch for
+  those keys is ce973431). The tip's, not ours; not rebaselined here.
+* viewer strict: **0 play-drift** over 328 refs; the step is red on **7 Snow validate-line
+  REGRESSIONs + Snow s4_gi3 board-diverged**, the pre-existing upstream set (s4_gi3 reproduces with
+  the lift OFF).
+* Every non-EDF deck is green on `ref_bench` (mirrorwing's last shortfall closed under origin's
+  work; the stamp had been stale).
+
+### 6. Incident: the 500 ms budget ladder OOM-killed the box
+
+A 56-job pool (14 refs x {off, exec} x {100, 500 ms}) was killed by the kernel at 23:23 after 53
+jobs: ONE 500 ms game (`off500 s12_gi11`, 40 min in) held **30.5 GB** anon RSS. Rule recorded:
+ladder at <= 100 ms in a pool; 500 ms only as a lone single-game probe.
+
+### 7. Open, carried forward
+
+1. **s9 / s14 are budget-bound at 20 ms** (100 ms matches the human on both). EDF has no
+   `value_play`; whether to give it a budget (or the value leaf the user declined on 09-11) is the
+   user's call -- the T1 three-way tie on s9 is the concrete symptom.
+2. **s6 / s8 / s12 +1 at 500 ms** -- construct (Session 23's evaluation/H-construct classes).
+3. `ProjectsAlternateWin`'s up-front mana demand under-projects a net-positive hand go-off.
+4. The sweep's 12 missed offers (MAIN_2 frames, next-turn wins, no live loop).
+5. The colour-floating question the user raised: the greedy per-segment payer can only commit the
+   COMPOSITION of what it floats (untapped lands stay flexible); the fix shape is a bounded
+   re-choice of THIS main phase's tap colours against the next segment's demand, invoked only when
+   the next segment fails -- `TapForCostBacktrack` + the reserved-retry wrapper are that shape.
+6. `MTG_EDF_CO_ROOT` / `MTG_EDF_CO_LOOK` remain OFF (bench-identical); origin wip branches
+   `wip/exec-lift-2026-09-11` (landed here), `wip/speed-pass-2026-09-11`, `wip/missed-fire-2026-09-11`
+   still to land or delete.
+7. FiveColour GT stale at the tip; Snow's 8 viewer reds -- upstream's.

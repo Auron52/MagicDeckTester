@@ -3862,8 +3862,15 @@ static void FsDumpPlan(const char* tag, const TurnSolver::Plan& p, int win)
         if (a.chosen_x > 0)   { s += "(x" + std::to_string(a.chosen_x) + ")"; }
         if (a.ponder_keep >= 0) { s += a.ponder_keep ? "[keep]" : "[shuf]"; }
     }
-    std::fprintf(stderr, "[fs-root] %s win=%d bp=%d pc=%d val=%d: %s\n",
-                 tag, win, p.bp_choice, p.ponder_choice, p.value, s.c_str());
+    // The LAND half of the plan is not in `actions` (land_to_play + its searched sub-decisions),
+    // so print it too -- a T1/T2 root on a land-only turn is otherwise five identical blank lines.
+    std::string land = p.land_decided ? (p.land_to_play.empty() ? "(defer)" : p.land_to_play)
+                                      : "(heuristic)";
+    if (!p.land_face.empty()) { land += "/" + p.land_face; }
+    if (p.rad_mode >= 0)      { land += p.rad_mode ? "[rad]" : "[no-rad]"; }
+    if (p.scry_choice >= 0)   { land += "[scry" + std::to_string(p.scry_choice) + "]"; }
+    std::fprintf(stderr, "[fs-root] %s win=%d bp=%d pc=%d val=%d land=%s: %s\n",
+                 tag, win, p.bp_choice, p.ponder_choice, p.value, land.c_str(), s.c_str());
 }
 
 struct SeqChainTrace
@@ -5257,6 +5264,54 @@ static bool SubsetHasStrandedPodActivation(const GameState& state,
                 && d.card_name == c.card_name) { cast_here = true; break; }
         }
         if (!cast_here) { return true; }
+    }
+    return false;
+}
+
+// Reject a HAND go-off (MTG_EDF_HAND_GOFF: an ActivateBlink whose needs_cast_mask names a piece
+// still in hand) in a subset that does not also cast that piece -- the SubsetHasStrandedPodActivation
+// pattern, by NAME for the same reason. Without this the activation would strand: the apply finds
+// no outlet (or no payload) on the battlefield and no-ops. Inert unless a hand go-off was emitted.
+static bool SubsetHasStrandedHandBlink(const std::vector<Action>& cands,
+                                       const std::vector<int>& sel)
+{
+    for (int idx : sel)
+    {
+        const Action& c = cands[idx];
+        if (c.kind != Action::Kind::ActivateBlink || c.needs_cast_mask == 0) { continue; }
+        bool have_outlet = (c.needs_cast_mask & 1) == 0;
+        bool have_payload = (c.needs_cast_mask & 2) == 0;
+        for (int jdx : sel)
+        {
+            const Action& d = cands[jdx];
+            if (d.kind != Action::Kind::CastFromHand) { continue; }
+            if (!have_outlet && d.card_name == c.card_name)     { have_outlet = true; }
+            if (!have_payload && d.card_name == c.victim_name)  { have_payload = true; }
+        }
+        {
+            static const bool s_hg_dbg_ok = EnvOn("MTG_EDF_HAND_GOFF_DEBUG");
+            static std::atomic<int> s_hg_ok_n{0};
+            if (s_hg_dbg_ok && have_outlet && have_payload
+                && s_hg_ok_n.fetch_add(1, std::memory_order_relaxed) < 20)
+            {
+                std::string cs;
+                for (int jdx : sel) { cs += cands[jdx].card_name.str() + ","; }
+                std::fprintf(stderr, "[hand-goff] PASS subset [%s]\n", cs.c_str());
+            }
+        }
+        if (!have_outlet || !have_payload)
+        {
+            static const bool s_hg_dbg = EnvOn("MTG_EDF_HAND_GOFF_DEBUG");
+            static std::atomic<int> s_hg_n{0};
+            if (s_hg_dbg && s_hg_n.fetch_add(1, std::memory_order_relaxed) < 20)
+            {
+                std::string cs;
+                for (int jdx : sel) { cs += cands[jdx].card_name.str() + ","; }
+                std::fprintf(stderr, "[hand-goff] reject subset [%s] (outlet %d payload %d)\n",
+                             cs.c_str(), have_outlet ? 1 : 0, have_payload ? 1 : 0);
+            }
+            return true;
+        }
     }
     return false;
 }
@@ -15035,6 +15090,52 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
             }
         }
 
+        // HAND GO-OFF (MTG_EDF_HAND_GOFF, USER 2026-09-14: "detecting when our current board + hand
+        // can go off"). The blink loop above is enumerated per OUTLET ON THE BATTLEFIELD, so a
+        // board whose outlet (or whose ETB-untap payload) is still in hand has no go-off plan at
+        // all: the only route was the apply-side EdfAutoGoOffAfterCasts, which the button never
+        // sees (human play is excluded there) and which the search reaches only AFTER the plan's
+        // other casts have spent the mana the first crank needs (claude_s9_gi8 T5: Emiel + Living
+        // Wish cast, 6 of 7, and the loop that was live on paper could not pay its first {3}).
+        // The provider sizes the loop on a probe where the hand piece has entered, through the
+        // SAME recogniser and count the on-board loop uses, and this emits it as ONE ActivateBlink
+        // whose needs_cast_mask says which cast the subset must also carry (the hand-Pod pairing,
+        // SubsetHasStrandedHandBlink). Inert for every provider without a blink engine.
+        {
+            static const bool s_finish_plan_h = EnvOn("MTG_PLAY_FINISH_PLAN", true);
+            if (!HumanPlayActive() || s_finish_plan_h)
+            {
+                const DecisionProvider& hprov = ResolveProvider(state);
+                for (const DecisionProvider::HandGoOff& h :
+                     hprov.HandGoOffCandidates(state, state.active_player_index))
+                {
+                    Action a;
+                    a.kind            = Action::Kind::ActivateBlink;
+                    a.card_name       = h.outlet_name;
+                    a.def             = h.outlet_def;
+                    a.hand_index      = -1;
+                    a.sac_source_id   = h.outlet_id;
+                    a.sac_victim_id   = h.payload_id;
+                    a.victim_name     = h.payload_name;
+                    a.chosen_x        = h.count;
+                    a.cost            = h.per;   // ONE activation -- the loop is self-funding
+                    a.eval            = h.count;
+                    a.is_noncreature  = true;
+                    a.needs_cast_mask = h.need_mask;
+                    static const bool s_hg_dbg = EnvOn("MTG_EDF_HAND_GOFF_DEBUG");
+                    if (s_hg_dbg)
+                    {
+                        std::fprintf(stderr, "[hand-goff] t%d emit outlet=%s(%d) payload=%s(%d) x%d "
+                                     "per=%s mask=%d cands=%zu\n", state.turn_number,
+                                     h.outlet_name.c_str(), h.outlet_id, h.payload_name.c_str(),
+                                     h.payload_id, h.count, h.per.ToString().c_str(), h.need_mask,
+                                     actions.size());
+                    }
+                    actions.push_back(std::move(a));
+                }
+            }
+        }
+
         // Scavenging Ooze ("{G}: Exile target card from a graveyard. If it was a creature card,
         // put a +1/+1 counter on this creature and you gain 1 life."): REPEATABLE (no {T}), so
         // actions are independent (no option group) and a plan may take several -- each pays
@@ -18101,6 +18202,7 @@ TurnSolver::Plan TurnSolver::SolveUncached(const GameState& state, bool is_pre_c
         // Reject a hand-Pod activation without its cast, and a persist loop with no closer active
         // or cast (the cast-and-activate / cast-and-loop pairings). Lockstep twins below.
         if (SubsetHasStrandedPodActivation(state, cands, sel)) { return; }
+        if (SubsetHasStrandedHandBlink(cands, sel)) { return; }
         if (SubsetHasUnclosedPersistLoop(state, cands, sel)) { return; }
         // Reject an equip onto a shrouded host without the co-selected Greaves-off move (rules,
         // CR 702.18b; shroud fix 2026-08-14). Lockstep twin in eval_and_push.
@@ -24241,7 +24343,11 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
                 static const StateManaPayer probe =
                     [](GameState& s, const ManaCost& c)
                     { return TapForCostDirect(s, c, /*for_creature=*/false); };
-                ApplyBlinkLoop(state, state.active_player_index, a.sac_source_id, a.sac_victim_id,
+                ApplyBlinkLoop(state, state.active_player_index,
+                               ResolveBlinkPieceId(state, state.active_player_index,
+                                                   a.sac_source_id, a.card_name, /*outlet=*/true),
+                               ResolveBlinkPieceId(state, state.active_player_index,
+                                                   a.sac_victim_id, a.victim_name, /*outlet=*/false),
                                a.def->params, std::max(1, a.chosen_x),
                                [&state](const ManaCost& c)
                                { return TapForCostDirect(state, c, /*for_creature=*/false); },
@@ -27146,6 +27252,19 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
             if (has_untap && (has_reducer || HinataInPlay(state)))
             { _ct.armed = true; _ct.st = &state; _ct.cands = &cands; _ct.sel = &sel; }
         }
+        // MTG_EDF_HAND_GOFF_DEBUG: arm the same tracer for every subset carrying a HAND go-off
+        // (Action::needs_cast_mask != 0), so the first gate that rejects it is named.
+        {
+            static const bool s_hg_dbg = EnvOn("MTG_EDF_HAND_GOFF_DEBUG");
+            if (s_hg_dbg && !_ct.armed)
+            {
+                for (int j : sel)
+                {
+                    if (cands[j].needs_cast_mask != 0)
+                    { _ct.armed = true; _ct.st = &state; _ct.cands = &cands; _ct.sel = &sel; break; }
+                }
+            }
+        }
         // Group-wave tranche filter FIRST (cheapest reject): a selection not touching the
         // tranche's required (rank-R) group was already emitted by wave 0 or an earlier tranche
         // -- the highest-ranked-used group assigns every plan to exactly one tranche, which is
@@ -27179,6 +27298,7 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
         // Reject a hand-Pod activation without its cast, and a persist loop with no closer active
         // or cast -- lockstep twins of Solve::consider's calls (see the helpers).
         if (SubsetHasStrandedPodActivation(state, cands, sel)) { return; }
+        if (SubsetHasStrandedHandBlink(cands, sel)) { return; }
         if (SubsetHasUnclosedPersistLoop(state, cands, sel)) { return; }
         // Reject an equip onto a shrouded host without the co-selected Greaves-off move (rules,
         // CR 702.18b; shroud fix 2026-08-14). Lockstep twin in Solve::consider.
@@ -41070,7 +41190,23 @@ std::vector<TurnSolver::Plan> TurnSolver::EnumerateMainPlans(const GameState& st
             const int k = goff_of(plans[i]);
             if (k == 0) { continue; }
             best_any = i;   // a go-off exists -> the non-winning ones still get dropped below
-            const int extra = static_cast<int>(plans[i].actions.size()) - 1
+            // HAND GO-OFF (MTG_EDF_HAND_GOFF): the cast(s) a hand go-off REQUIRES (needs_cast_mask)
+            // are the go-off, not activity beside it -- "cast Emiel + blink x150" is the same shape
+            // as "blink x150" on a board where Emiel already sits, and ranks as such here.
+            int required = 0;
+            for (const Action& a : plans[i].actions)
+            {
+                if (a.kind != Action::Kind::ActivateBlink || a.needs_cast_mask == 0) { continue; }
+                bool got_o = (a.needs_cast_mask & 1) == 0, got_p = (a.needs_cast_mask & 2) == 0;
+                for (const Action& c : plans[i].actions)
+                {
+                    if (c.kind != Action::Kind::CastFromHand) { continue; }
+                    if (!got_o && c.card_name == a.card_name)   { got_o = true; ++required; }
+                    else if (!got_p && c.card_name == a.victim_name) { got_p = true; ++required; }
+                }
+                break;
+            }
+            const int extra = static_cast<int>(plans[i].actions.size()) - 1 - required
                             + (plans[i].land_to_play.empty() ? 0 : 1);
             cands.push_back(GoffCand{ i, k, extra });
             if (extra == 0 && k > best_alone_k) { best_alone = i; best_alone_k = k; }
@@ -41132,6 +41268,22 @@ std::vector<TurnSolver::Plan> TurnSolver::EnumerateMainPlans(const GameState& st
                 const int opp_life = state.players[1 - state.active_player_index].life;
                 plausible = prov.ExtraLethalDamage(state, casting) >= opp_life
                          || prov.ProjectsAlternateWin(state, casting);
+                // HAND GO-OFF: a plan that casts its own outlet/payload is projected WITH those
+                // casts -- the prospective recogniser's whole purpose -- or a board whose loop is
+                // still in hand reads as implausible and is never trialled.
+                for (const GoffCand& gc : cands)
+                {
+                    if (plausible) { break; }
+                    bool hand_goff = false;
+                    for (const Action& a : plans[gc.idx].actions)
+                    { if (a.kind == Action::Kind::ActivateBlink && a.needs_cast_mask != 0) { hand_goff = true; break; } }
+                    if (!hand_goff) { continue; }
+                    std::vector<const CardDefinition*> cast_defs;
+                    for (const Action& a : plans[gc.idx].actions)
+                    { if (a.kind == Action::Kind::CastFromHand && a.def != nullptr) { cast_defs.push_back(a.def); } }
+                    plausible = prov.ExtraLethalDamage(state, cast_defs) >= opp_life
+                             || prov.ProjectsAlternateWin(state, cast_defs);
+                }
             }
         }
         // NOTE the two halves are gated DIFFERENTLY, and that is load-bearing. The expensive VERIFY
@@ -41156,7 +41308,32 @@ std::vector<TurnSolver::Plan> TurnSolver::EnumerateMainPlans(const GameState& st
             if (plausible)
             { for (const GoffCand& gc : cands) { to_try.push_back(gc.idx); } }
             else if (rules_ok && !cands.empty())
-            { to_try.push_back(cands.front().idx); }
+            {
+                to_try.push_back(cands.front().idx);
+                // HAND GO-OFF: two hand go-offs can differ only in which outlet they cast (Displacer's
+                // {2}{C} loop vs Emiel's {3}), and the count that sorted them first is the sizer's,
+                // not the trial's. Try the others too, within the same cap; boards whose candidates
+                // are all on-board keep the single trial (byte-identical by construction).
+                for (std::size_t ci = 1; ci < cands.size()
+                                         && static_cast<int>(to_try.size()) < s_co_tries; ++ci)
+                {
+                    bool hand_goff = false;
+                    for (const Action& a : plans[cands[ci].idx].actions)
+                    { if (a.kind == Action::Kind::ActivateBlink && a.needs_cast_mask != 0) { hand_goff = true; break; } }
+                    if (hand_goff) { to_try.push_back(cands[ci].idx); }
+                }
+            }
+            {
+                static const bool s_hg_dbg = EnvOn("MTG_EDF_HAND_GOFF_DEBUG");
+                if (s_hg_dbg)
+                {
+                    std::string cl;
+                    for (const GoffCand& gc : cands)
+                    { cl += std::to_string(gc.idx) + "(k" + std::to_string(gc.k) + ",e" + std::to_string(gc.extra) + ") "; }
+                    std::fprintf(stderr, "[hand-goff] fold cands=[%s] rules_ok=%d(%s) plausible=%d to_try=%zu\n",
+                                 cl.c_str(), rules_ok ? 1 : 0, co_rule.c_str(), plausible ? 1 : 0, to_try.size());
+                }
+            }
             for (int cand : to_try)
             {
                 if (cand < 0) { continue; }
@@ -41188,6 +41365,16 @@ std::vector<TurnSolver::Plan> TurnSolver::EnumerateMainPlans(const GameState& st
                 g_scripted_tapmode        = sv_tapmode;
                 g_scripted_freshmode      = sv_fresh;
                 g_scripted_sac_cursor     = sv_saccur;
+                {
+                    static const bool s_hg_dbg = EnvOn("MTG_EDF_HAND_GOFF_DEBUG");
+                    if (s_hg_dbg)
+                    {
+                        std::fprintf(stderr, "[hand-goff] fold trial plan %d k=%d actions=%zu -> opp_life=%d %s\n",
+                                     cand, goff_of(plans[cand]), plans[cand].actions.size(),
+                                     copy.players[1 - state.active_player_index].life,
+                                     OpponentHasLost(copy) ? "WIN" : "no");
+                    }
+                }
                 if (OpponentHasLost(copy)) { best = cand; verified = true; break; }
                 best = cand;               // remember it only to skip re-verifying the same index
             }

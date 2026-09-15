@@ -7529,6 +7529,32 @@ inline int ResolvePodSourceId(const GameState& state, int controller, int pod_id
     return pod_id;
 }
 
+// The blink-loop twin of ResolvePodSourceId (MTG_EDF_HAND_GOFF). A hand go-off's ActivateBlink
+// names the copy that sat in hand at enumeration; the cast applies BY NAME, so the copy that
+// entered may carry another number. Number first (the on-board case, byte-identical), then the
+// first own creature of that name -- for the outlet, one that actually carries a blink ability.
+inline int ResolveBlinkPieceId(const GameState& state, int controller, int id,
+                               const InternedName& name, bool outlet)
+{
+    for (const Permanent& p : state.battlefield)
+    {
+        if (p.controller_index == controller && p.card.m_number == id) { return id; }
+    }
+    if (name.str().empty()) { return id; }
+    for (const Permanent& p : state.battlefield)
+    {
+        if (p.controller_index != controller || p.card.m_name != name || !p.card.IsCreature())
+        { continue; }
+        if (outlet)
+        {
+            const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+            if (d == nullptr || !d->params.blink_cost.has_value()) { continue; }
+        }
+        return p.card.m_number;
+    }
+    return id;
+}
+
 inline bool PerformPodActivate(GameState& state, int controller, int pod_id, int victim_id,
                                const std::string& target_name)
 {

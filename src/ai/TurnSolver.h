@@ -287,6 +287,14 @@ struct Action
                                        // (Krenko / Skirk / Siege-Gang / Pashalik).
     int         sac_victim_id  = 0;    // SacCreatureOutlet: the sacrificed creature's card.m_number
                                        // (the chosen Goblin fed to the outlet). 0 for every other kind.
+    // HAND GO-OFF (MTG_EDF_HAND_GOFF): an ActivateBlink whose source and/or target is a card the
+    // SAME PLAN casts. bit0 = the outlet (card_name / sac_source_id) must be cast in this plan,
+    // bit1 = the payload (victim_name / sac_victim_id) must be. Zero for every other action, so the
+    // subset rule that reads it (SubsetHasStrandedHandBlink) is inert unless a hand go-off was
+    // emitted. The apply re-resolves either piece BY NAME when its number is not on the battlefield
+    // (the cast may have taken a different copy of the same name -- the hand-Pod precedent).
+    int         needs_cast_mask = 0;
+    InternedName victim_name;           // ActivateBlink: the payload's name (for the re-resolve)
     int         sac_count      = 1;    // SacCreatureOutlet: how many creatures this activation sacs.
                                        // 1 (default) = the single-victim action (uses sac_victim_id).
                                        // >1 = the multi-sac BURST (Siege-Gang saccing the swarm for

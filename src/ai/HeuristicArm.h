@@ -174,6 +174,7 @@ enum Slot : int
     EDF_CO_ROOT,              // MTG_EDF_CO_ROOT         the ROOT decision queries ComboOffPossible + VERIFIES -> skip the rollouts
     EDF_CO_LOOK,              // MTG_EDF_CO_LOOK         a LOOKAHEAD ply queries the same rule, no trial (~1.5us vs 0.3-0.8ms)
     EDF_EXACT_EXECUTOR,       // MTG_EDF_EXACT_EXECUTOR  the AUTONOMOUS go-off apply gets the button's finish machinery
+    EDF_HAND_GOFF,            // MTG_EDF_HAND_GOFF       a go-off whose outlet/payload is CAST THIS PLAN is one enumerated plan
     COUNT
 };
 
@@ -325,6 +326,7 @@ inline const char* Name(int slot)
         "MTG_EDF_CO_ROOT",
         "MTG_EDF_CO_LOOK",
         "MTG_EDF_EXACT_EXECUTOR",
+        "MTG_EDF_HAND_GOFF",
     };
     // The enum and this table are ONE mapping split across two lists: a slot added to one and not
     // the other silently shifts every lever after it (a manifest asking for lever X would set Y).

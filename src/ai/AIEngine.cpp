@@ -4630,7 +4630,11 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
                         return TapForCost(st, c, avail, /*for_creature=*/false);
                     };
                 const int done = ApplyBlinkLoop(
-                    state, state.active_player_index, a.sac_source_id, a.sac_victim_id,
+                    state, state.active_player_index,
+                    ResolveBlinkPieceId(state, state.active_player_index,
+                                        a.sac_source_id, a.card_name, /*outlet=*/true),
+                    ResolveBlinkPieceId(state, state.active_player_index,
+                                        a.sac_victim_id, a.victim_name, /*outlet=*/false),
                     a.def->params, std::max(1, a.chosen_x),
                     [&state, this](const ManaCost& c)
                     {

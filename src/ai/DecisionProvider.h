@@ -888,6 +888,28 @@ public:
         return out;
     }
 
+    // HandGoOffCandidates -- a multi-activation blink go-off whose outlet and/or ETB-untap payload
+    // is still IN HAND and castable this turn, so "cast the piece(s), then loop" is ONE enumerable
+    // plan (Action::needs_cast_mask says which piece the plan must also cast). Empty for every
+    // provider without a blink engine; the flicker provider sizes it on a probe copy where the
+    // hand piece has entered, through the SAME recogniser and count the on-board loop uses.
+    struct HandGoOff
+    {
+        int                   outlet_id   = 0;      // card.m_number of the outlet (hand or board)
+        InternedName          outlet_name;
+        const CardDefinition* outlet_def  = nullptr;
+        int                   payload_id  = 0;      // card.m_number of the ETB-untap creature
+        InternedName          payload_name;
+        int                   count       = 0;      // the go-off iteration count (> 3)
+        int                   need_mask   = 0;      // bit0 outlet from hand, bit1 payload from hand
+        ManaCost              per;                  // ONE activation, priced on the probe
+    };
+    virtual std::vector<HandGoOff> HandGoOffCandidates(const GameState& s, int controller) const
+    {
+        (void)s; (void)controller;
+        return {};
+    }
+
     // ManaSinkActivationCounts -- how many times to activate a REPEATABLE, {T}-less permanent
     // ability ("{1}{C}: target opponent loses 1 life" / "... exiles the top card of their library")
     // on `source` this turn. Exactly the BlinkActivationCounts contract, and it exists for exactly

@@ -15072,8 +15072,9 @@ FlickerLoop RecogniseFlickerLoopProspective(const GameState& s, int controller,
     // MTG_EDF_PROSPECTIVE_DEBUG: why a candidate plan did or did not read as a go-off. Bounded
     // output -- this is called on every scored plan.
     static const bool s_dbg = EnvOn("MTG_EDF_PROSPECTIVE_DEBUG");
+    static const int  s_dbg_bound = EnvInt("MTG_EDF_GOFF_TRACE_N", 40);   // shared line bound
     static std::atomic<int> s_dbg_n{0};
-    if (s_dbg && s_dbg_n.fetch_add(1, std::memory_order_relaxed) < 40)
+    if (s_dbg && s_dbg_n.fetch_add(1, std::memory_order_relaxed) < s_dbg_bound)
     {
         std::string cs;
         for (const CardDefinition* d : casting) { cs += d->card.m_name.str() + ","; }
@@ -15917,14 +15918,15 @@ bool EdfAutoGoOffAfterCasts(GameState& s, int controller)
     // ROUND 7 (MTG_EDF_GOFF_TRACE): where does the go-off chain break on a board the certificate
     // could not refute? Bounded output; diagnosis only, never branches game logic.
     static const bool s_gtrace = EnvOn("MTG_EDF_GOFF_TRACE");
+    static const int  s_gtrace_n = EnvInt("MTG_EDF_GOFF_TRACE_N", 40);   // line bound (rollouts fire it too)
     static std::atomic<int> s_gt_n{0};
-    const bool gt = s_gtrace && s_gt_n.fetch_add(1, std::memory_order_relaxed) < 40;
+    const bool gt = s_gtrace && s_gt_n.fetch_add(1, std::memory_order_relaxed) < s_gtrace_n;
     if (gt)
     {
         std::fprintf(stderr,
-            "[goff] t%d ok=%d net=%d refund=%d cost=%d untaps=%d net_c=%d(c_ref=%d c_cost=%d) "
+            "[goff] t%d real=%d ok=%d net=%d refund=%d cost=%d untaps=%d net_c=%d(c_ref=%d c_cost=%d) "
             "gorge=%d/%d drain=%d/%d exile=%d setup=%d dig=%d -> count=%d\n",
-            s.turn_number, loop.ok ? 1 : 0, loop.net, loop.refund, loop.cost_mv, loop.untaps,
+            s.turn_number, g_real_resolution ? 1 : 0, loop.ok ? 1 : 0, loop.net, loop.refund, loop.cost_mv, loop.untaps,
             loop.net_c, loop.c_refund, loop.c_cost, loop.gorge_dmg, loop.gorge_cost_mv,
             loop.drain_amount, loop.drain_cost_mv, loop.exile_cost_mv, loop.hand_setup_mv,
             loop.dig_draws, loop.ok ? FlickerGoOffCount(s, loop) : 0);
@@ -17246,6 +17248,144 @@ std::vector<int> EldraziFlickerProvider::BlinkActivationCounts(const GameState& 
         if (n2 > kmax) { out.push_back(n2); }
     }
     return out;   // n == 0 (nothing to cash the mana on) falls through to the generic counts
+}
+
+// ---- HAND GO-OFF (MTG_EDF_HAND_GOFF) ------------------------------------------------------------
+// A go-off whose outlet and/or ETB-untap payload is still IN HAND, sized so the enumerator can emit
+// "cast the piece(s) + blink xN" as ONE plan. See TurnSolver's emission site for why it exists; the
+// short form is that BlinkActivationCounts above takes a Permanent, so an outlet in hand has no
+// go-off plan at all and the search could only stumble into the loop through the apply-side
+// EdfAutoGoOffAfterCasts -- after the plan's other casts had spent the mana the first crank needs.
+//
+// SIZED ON A PROBE, NOT BY NEW ARITHMETIC. The hand piece(s) are put onto a COPY of the board
+// (unpaid -- the subset walk's own mana math arbitrates the real payment, and it now sees the cast
+// AND one activation on the same books), and then the SAME recogniser and count the on-board loop
+// uses run on that copy: RecogniseFlickerLoop + FlickerGoOffCount, exact ceiling, {C} reservation,
+// sink scans and all. Two recognisers that could disagree about a board is the failure the
+// prospective one's header warns about; this reuses the board one outright.
+//
+// COST. Reached only when a hand creature carries blink_cost or etb_untap_lands (never on any other
+// deck), and the copy is paid for only after FlickerEconomics (microseconds) says the pair nets
+// positive AND the board's mana covers the cast(s) plus one activation. The floor is not a
+// refinement: a loop the board cannot START is exactly the mis-sized line this lever exists to stop.
+inline bool EdfHandGoffOn()
+{
+    static const bool env_on = EnvOn("MTG_EDF_HAND_GOFF", true);   // DEFAULT ON; =0 disables
+    return heurarm::Flag(heurarm::EDF_HAND_GOFF, env_on);
+}
+
+std::vector<DecisionProvider::HandGoOff>
+EldraziFlickerProvider::HandGoOffCandidates(const GameState& s, int me) const
+{
+    std::vector<HandGoOff> out;
+    if (!s_edf_goff || !EdfHandGoffOn()) { return out; }
+    if (s.players[1 - me].life <= 0) { return out; }
+    struct Piece { int id; const CardDefinition* def; };
+    std::vector<Piece> h_out, h_pay;
+    {
+        // One per NAME: the cast applies by name, so a second copy's plan would be the same plan.
+        std::unordered_set<std::string> seen_o, seen_p;
+        for (const Card& hc : s.players[me].hand)
+        {
+            const CardDefinition* d = CardDatabase::Instance().LookupCached(hc);
+            if (d == nullptr || !d->card.IsCreature()) { continue; }
+            if (d->params.blink_cost.has_value() && seen_o.insert(hc.m_name.str()).second)
+            { h_out.push_back({hc.m_number, d}); }
+            if (d->params.etb_untap_lands > 0 && seen_p.insert(hc.m_name.str()).second)
+            { h_pay.push_back({hc.m_number, d}); }
+        }
+    }
+    if (h_out.empty() && h_pay.empty()) { return out; }
+    std::vector<Piece> b_out, b_pay;
+    for (const Permanent& p : s.battlefield)
+    {
+        if (p.controller_index != me) { continue; }
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+        if (d == nullptr) { continue; }
+        if (d->params.blink_cost.has_value())                         { b_out.push_back({p.card.m_number, d}); }
+        if (p.card.IsCreature() && d->params.etb_untap_lands > 0)     { b_pay.push_back({p.card.m_number, d}); }
+    }
+    ManaPool have = AvailableManaPool(s);
+    have.AddPool(s.floating_mana);
+    const int have_total = static_cast<int>(have.Total());
+
+    auto consider = [&](const Piece& o, bool o_hand, const Piece& p, bool p_hand)
+    {
+        if (o.id == p.id) { return; }
+        FlickerLoop econ;
+        FlickerEconomics(s, me, o.def, p.def, &econ);
+        // MTG_EDF_HAND_GOFF_DEBUG: why a hand pair did or did not become a plan (bounded output).
+        static const bool s_hdbg = EnvOn("MTG_EDF_HAND_GOFF_DEBUG");
+        static std::atomic<int> s_hdbg_n{0};
+        const bool hdbg = s_hdbg && s_hdbg_n.fetch_add(1, std::memory_order_relaxed) < 200;
+        int cast_mv = 0;
+        if (o_hand) { cast_mv += o.def->card.m_mana_cost.ManaValue(); }
+        if (p_hand) { cast_mv += p.def->card.m_mana_cost.ManaValue(); }
+        if (hdbg)
+        {
+            std::fprintf(stderr, "[edf-hand-goff] t%d %s(%d,%s) x %s(%d,%s) net=%d refund=%d cost=%d "
+                         "have=%d cast_mv=%d\n", s.turn_number,
+                         o.def->card.m_name.c_str(), o.id, o_hand ? "hand" : "bf",
+                         p.def->card.m_name.c_str(), p.id, p_hand ? "hand" : "bf",
+                         econ.net, econ.refund, econ.cost_mv, have_total, cast_mv);
+        }
+        if (econ.net <= 0) { return; }                              // cheap arithmetic first
+        if (have_total < cast_mv + econ.cost_mv) { return; }        // cannot START the loop
+
+        GameState probe = s;
+        RevealLogPause _pause;                                      // no viewer events off a probe
+        auto enter = [&](int id) -> bool
+        {
+            Player& pp = probe.players[me];
+            for (std::size_t i = 0; i < pp.hand.size(); ++i)
+            {
+                if (pp.hand[i].m_number != id) { continue; }
+                const Card c = pp.hand[i];
+                pp.hand.erase(pp.hand.begin() + static_cast<std::ptrdiff_t>(i));
+                PutCardOntoBattlefield(probe, me, c, "hand go-off probe");
+                return true;
+            }
+            return false;
+        };
+        if (o_hand && !enter(o.id)) { return; }
+        if (p_hand && !enter(p.id)) { return; }
+        const FlickerLoop loop = RecogniseFlickerLoop(probe, me);
+        // The probe's best pair must be THIS pair: if the board already runs a better loop on its
+        // own, the on-board enumeration carries it and this plan would be a duplicate.
+        if (hdbg)
+        {
+            std::fprintf(stderr, "[edf-hand-goff]   probe ok=%d outlet=%d payload=%d net=%d "
+                         "gorge=%d drain=%d exile=%d\n", loop.ok ? 1 : 0, loop.outlet_id,
+                         loop.payload_id, loop.net, loop.gorge_dmg, loop.drain_amount,
+                         loop.exile_cost_mv);
+        }
+        if (!loop.ok || loop.outlet_id != o.id || loop.payload_id != p.id) { return; }
+        int n = FlickerGoOffCount(probe, loop);
+        if (n == 0 && HumanPlayActive() && loop.net > 0)
+        {
+            // The button's bank count (BlinkActivationCounts' human branch), for the same board.
+            FlickerLoop sized = loop;
+            ScanHandSinks(probe, me, &sized, /*for_human_count_sizing=*/true);
+            n = FlickerGoOffCount(probe, sized);
+        }
+        if (hdbg) { std::fprintf(stderr, "[edf-hand-goff]   count=%d\n", n); }
+        if (n <= 3) { return; }                                     // > 3 == a go-off was recognised
+        HandGoOff h;
+        h.outlet_id    = o.id;
+        h.outlet_name  = o.def->card.m_name;
+        h.outlet_def   = o.def;
+        h.payload_id   = p.id;
+        h.payload_name = p.def->card.m_name;
+        h.count        = n;
+        h.need_mask    = (o_hand ? 1 : 0) | (p_hand ? 2 : 0);
+        h.per          = EffectiveActivationCost(probe, me, o.def->card,
+                                                 o.def->params.blink_cost.value());
+        out.push_back(std::move(h));
+    };
+    for (const Piece& o : h_out) { for (const Piece& p : b_pay) { consider(o, true,  p, false); } }
+    for (const Piece& o : b_out) { for (const Piece& p : h_pay) { consider(o, false, p, true);  } }
+    for (const Piece& o : h_out) { for (const Piece& p : h_pay) { consider(o, true,  p, true);  } }
+    return out;
 }
 
 // How many times to fire a {T}-less mana sink. Generic caps at 3, which is right for a value

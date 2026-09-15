@@ -1363,6 +1363,7 @@ public:
     std::vector<int> BlinkActivationCounts(const GameState& s, const Permanent& source,
                                            const Permanent& target,
                                            int max_affordable) const override;
+    std::vector<HandGoOff> HandGoOffCandidates(const GameState& s, int controller) const override;
     std::vector<int> BlinkTargetCandidates(const GameState& s,
                                            const Permanent& source) const override;
     std::vector<int> LandAuraHostCandidates(const GameState& s, int controller) const override;
