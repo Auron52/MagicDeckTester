@@ -656,6 +656,21 @@ the wrong way. **Recommendation: do not run Sol Ring in this deck.** Not because
 the twin proves the slot is worth 0.087t if the mana were white — but because this specific mana
 base cannot use colourless.
 
+**2HG follow-up (2026-09-15), because this screen was 20-life only.** Re-measured on the SETTLED
+list in both formats (`critter_solring_2fmt.json`, 40,000 paired games per cell, Sol Ring aliased
+into the Plains bucket as here):
+
+| arm | 20 life | 2HG |
+|---|---|---|
+| 1 Sol Ring over a Plains | **+0.0076 +-0.0021** | **+0.0003 +-0.0023** |
+| 2 Sol Rings over 2 Plains | +0.0261 +-0.0025 | +0.0128 +-0.0027 |
+
+It DOES improve in 2HG (+0.0073 cross-format, t = +3.48 — longer games give the ramp more to do) but
+only from "a small loss" to "exactly break-even", and the second copy stays clearly bad in both.
+**Verdict unchanged in both formats.** Full context: `docs/design/critter-lifegain-format-breakdown.md`
+section 7a, which also records the apparatus trap this hit (an introduced card silently drops the
+keep table from EVERY arm under `pool_table: false`; the tell was the base level moving 0.16t).
+
 ### Current best list (NOT adopted — the user's call)
 
 ```

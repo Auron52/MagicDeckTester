@@ -291,6 +291,54 @@ un-modelled upside points up.
   A deck that wants three lands and never wants a sixth is exactly the deck where the 25th land is
   near-worthless and the top of the curve is the first thing to cut.
 
+### 7a. Sol Ring, re-asked in both formats
+
+Screen 5 answered the original question — *"is the colourless-only a notable cost, or does it make it
+back on pure power?"* — at 20 life, and answered it by **decomposition**: a measurement-only twin
+(`Test White Ring`, Sol Ring producing `{W}`, added to the working tree and reverted before any
+commit) separated the two halves.
+
+```
+power of a one-mana two-mana rock here   = -0.0865      (the white twin)
+what colourlessness costs                = +0.0901      (solring1 - whitering1, paired)
+------------------------------------------------------------
+net for one Sol Ring                     = +0.0036 +-0.0024      a wash, pointing the wrong way
+```
+
+**The colourless restriction eats the entire power advantage, almost exactly.** The second copy is
+worse still, because the two halves scale differently: the colour cost is nearly **linear**
+(+0.0901 -> +0.1796) while the rock's power is **sublinear** (-0.0865 -> -0.1582). With 14 of 36
+spells costing `{W}` and most of the rest `{W}{W}`, there is nothing for a second Ring's colourless
+mana to do.
+
+What was never checked is whether the **net** flips at 30 life, where games run about a turn longer
+and a turn-one rock has more turns to pay off. Measured on the settled list, both formats, one batch
+(`critter_solring_2fmt.json`, 40,000 paired games per cell):
+
+| arm | 20 life | 2HG |
+|---|---:|---:|
+| `solring1` — 1 Sol Ring over a Plains | **+0.0076** ±0.0021 | **+0.0003** ±0.0023 |
+| `solring2` — 2 Sol Rings over 2 Plains | +0.0261 ±0.0025 | +0.0128 ±0.0027 |
+
+**It does get better in 2HG — and it still never gets good.** The cross-format difference is real
+(+0.0073, t = +3.48: longer games do give the ramp more to do) but it takes one Sol Ring only from
+"a small loss" to "exactly break-even", and the second copy stays clearly bad in both formats.
+**Verdict unchanged: do not run Sol Ring in this deck** — not because the card is weak (the twin
+proves the slot would be worth 0.087t if the mana were white) but because this mana base cannot spend
+colourless.
+
+> **Trap, hit and fixed while measuring this.** Sol Ring is an *introduced* card that the two-alias
+> table does not bucket, so with `"pool_table": false` the driver correctly **dropped the keep table
+> from every arm**. That is symmetric and therefore still a valid comparison — but it cost **~0.16t of
+> play quality on both arms** (base 4.7688 -> 4.9306) and 4.4x the per-game wall, and it measured the
+> swap under a mulligan policy we do not ship. The tell was the base LEVEL moving 0.16 between seed
+> blocks that had previously agreed to within 0.007; that is ~50 se, so it cannot be sampling. Screen
+> 5 had already solved it by aliasing Sol Ring into the **Plains** bucket (21 copies >= 7, so that
+> bucket can never overflow, and a Plains-for-rock swap keeps the composition exact). The numbers
+> above are from the re-run with that third alias chained on, on a fresh seed block; the first attempt
+> is discarded. **Check the `keep table` line of the apparatus block on any spec that introduces a
+> card** — the run completes and prints a perfectly ordinary-looking number either way.
+
 ---
 
 ## 8. What the harness cannot see — read this before acting on §3
