@@ -8736,3 +8736,62 @@ claude_s9_gi8                    4 |     54  54      0      0 |
 TOTAL SHORT FRAMES: 0 of 631
 ```
  Smoke: **75/5, all 80 job lines byte-identical** to `logs/edf_followups/head_smoke.log` (clean HEAD 4d8199c4); the 5 are the baseline's own stale GT lines; scenarios inside the smoke 90/90.
+
+**12.12 The route on the deck average, and the "blink #0" plans removed (08:40-10:25 UTC).**
+
+*Deck average, route on vs off.* The three route commits had every reference frame, the gates and the smoke
+behind them but no deck-average measurement. One pooled batch (`deckavg_route`: 40 chunks x 2 arms,
+400 games per arm, seeds 3121 / 3181, max_turns 12, the heurarm lever `MTG_EDF_COMBO_ROUTE` per job):
+
+| sample | off | route | paired delta | chunks better / worse / tied | wall |
+|---|---|---|---|---|---|
+| held-out, seeds 3121 / 3181, 400 games per arm (`deckavg_route`) | 4.2825 | **4.2125** | **-0.0700** (t=-5.38) | **19 / 0 / 21** | +15.2% |
+
+The off arm reproduces `deckavg31b`'s 4.2825 to the digit. Nineteen chunks move by 0.1-0.2 t, none moves
+the other way. The wall cost is the route's trial in the rollouts (memoised per board key per thread);
+quality before performance (the user's order), and the cost is recorded here for the performance pass.
+
+*"Blink #0", root-caused and removed.* The plans read "Eldrazi Displacer: blink #0" because their victim is
+an OPPONENT PSEUDO-SPAWN: the passive opponent's scheduled "1/1 Creature" / "2/2 Creature" permanents
+(GameEngine turn-start and its rollout twin) carry card number 0, and the label resolver only searches the
+active player's battlefield and hand. `GameState.h` documents the id: "Opponent pseudo-spawns stay id 0
+(never targeted, never our sac sources)" -- but the blink enumerator iterates every creature on the
+battlefield (Displacer's `blink_own_only` is false), so it targeted them anyway. Three defects in one:
+(1) the goldfish model has no blocking, so blinking one is mana spent for nothing; (2) the shared id made
+every such plan APPLY to the first spawn whatever the fold key promised -- `ApplyBlink` finds the first
+creature whose number matches -- so a "blink 2/2" blinked the 1/1; (3) the viewer's menu showed the
+indistinguishable "blink #0" entries, 9,672 such actions across the fourteen references' recorded menus,
+and one was picked (s5_gi4 T4, mid-bank: three mana for nothing). Fix, scoped to the AUTONOMOUS enumeration: the search's blink target loop skips id-0 targets
+(`TurnSolver.cpp`, `!fold_fanout`) -- unless the active player controls a watcher that reacts to a creature
+entering under the opponent's control (`opp_creature_enters_life_loss`, Suture Priest): a returned opponent
+creature does enter, and the universal enter cascade (`ApplyBlink` -> `FireEtbWatchers` ->
+`FireCreatureEnterWatchers`) drains through such a watcher, so that line stays reachable. Lossless in
+reachable lines, the standard the enumerator's own folds hold themselves to. Deck-agnostic, but only EDF
+holds a blink outlet, so every other deck is byte-identical by construction. Real tokens carry ids >= 1000
+and stay targetable. The EDF provider's `BlinkTargetCandidates` returns the empty "no narrowing" set on a
+board without an untapper, so these plans reached the autonomous search too.
+
+*Why the human menu keeps them (the first attempt, measured and reversed).* The first build skipped the
+spawns everywhere. Replays stayed `ok` at the recorded win turns, but s8's stateless replay took seventeen minutes
+instead of its usual ten: the recorded picks include SIX such blinks (s5_gi4 T4 #17 and #42; s8_gi7 T3 #40, #43,
+#58, #62 -- three of them "Conservatory: investigate, Mariposa: draw a card, Eldrazi Displacer: blink #0"),
+and with those plans absent the resolver's (land, casts) fallback took the same-shaped plan that blinks the
+Drake instead. The replay then floated mana the human never had, its unpruned menus grew past 100k plans,
+and the boards handed to the search stopped being the human's (references: repair the tool, never the
+file; and a legal target is the viewer's to offer). Scoping the skip to `!fold_fanout` keeps the human and
+unpruned menus as recorded, so every reference replays byte-for-byte. Follow-up (a decision, not a fact):
+the shared id's wrong-victim apply in human play needs unique spawn ids AND a resolver that maps a recorded
+`blink_target` of 0 onto them.
+
+Two checks on the way: (a) s4_gi3's replay reports 15 content repairs where the 07:00 log said 7 -- the HEAD binary (23b7a1d8, built in a worktree) reports the same 15, so the shift is 2acadd4f's DEVELOP plans widening the menus, not this change; (b) s5_gi4 T4 #17 resolves to its recorded "Eldrazi Displacer: blink #0" on the final binary (the human menu there still carries 8 plans with that blink), so the recorded line replays as played.
+
+Gates on this binary: combo_off 33 / 33, scenarios 90 / 90, references replay 14 / 14 ok at the recorded win turns (s6 exact, the rest content-repaired; s8 with the same 17 repairs as before the change), sweep 0 of 631 frames short (`logs/ref_sweep/edf_route6.log`),
+smoke 75 / 5 with all 80 job lines byte-identical to `logs/edf_followups/head_smoke.log` (the 5 are the baseline's own stale GT lines; scenarios inside the smoke 90 / 90).
+
+*post_main hand-off and the route (item 12.9 (3)).* Settled by reading, not a decision. The executor plays a searched second main only where `GoldFishRunner::DeckUsesSecondMain` says the deck needs one; for flicker-combo decks that is the lever `MTG_EDF_M2` (heurarm `EDF_M2`), default OFF -- the measured "no searched second main" doctrine, so an autonomous EDF turn never reaches a post-combat decision at all (`play_this_phase = is_pre_combat_main || m_search_post_combat`, AIEngine.cpp). A HUMAN at the viewer does reach one: the external-chooser path enumerates the post_main menu through the same `EnumerateMainPlans`, and the route's emission in `CollectActions` is phase-agnostic, so the Combo Off button is offered in the second main whenever the trial wins there. `TrySecondMainStrandedKill` runs only under `MTG_M2_FIXPOINT` (default OFF) and also goes through `EnumerateMainPlans`, so it too sees the route. Nothing to add; the item closes.
+
+**12.9 revised again.** (3) closed by reading (above); (4) closed: the autonomous search no longer blinks the
+opponent's pseudo-spawns, the human menu keeps the legal target as recorded. Still open: (5) Shivan Gorge's
+untap-and-ping line beyond `Fin::Gorge`; (6) DEVELOP casts creatures only; (7, new, a decision) unique ids for
+opponent pseudo-spawns plus a resolver mapping for a recorded `blink_target` of 0, so a human's "blink the 2/2"
+blinks the 2/2 and the menu can name it.

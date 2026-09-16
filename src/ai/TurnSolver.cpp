@@ -14539,9 +14539,45 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
                     const bool fold_fanout =
                         HumanPlayActive() || DecisionUnpruned(UnprunedGate::BlinkTarget);
                     std::vector<std::string> seen_targets;   // equivalence keys, fold (b)
+                    // An OPPONENT PSEUDO-SPAWN is not a target. The passive opponent's scheduled
+                    // creatures share id 0 (GameState.h: "never targeted, never our sac sources"),
+                    // and nothing in the goldfish model reads their tapped state -- there is no
+                    // blocking -- so blinking one is mana spent for nothing. Worse, the shared id
+                    // made every such plan APPLY to the first spawn whatever the fold key promised
+                    // (ApplyBlink resolves the victim by number: a "blink 2/2" blinked the 1/1), and
+                    // it read "blink #0" in the viewer's menu, where EDF's fourteen references carry
+                    // 9,672 of these actions (one was even picked, s5_gi4 T4 -- three mana for
+                    // nothing). Real tokens carry ids >= 1000 and stay targetable.
+                    //
+                    // The ONE thing a returned opponent creature does is ENTER under the opponent's
+                    // control, and the universal enter cascade (ApplyBlink -> FireEtbWatchers ->
+                    // FireCreatureEnterWatchers) drains through a Suture Priest exactly like a cast
+                    // creature. So the spawn stays a target while the active player controls such a
+                    // watcher (opp_creature_enters_life_loss): lossless in reachable lines, which is
+                    // the standard the folds below hold themselves to.
+                    //
+                    // AUTONOMOUS ENUMERATION ONLY (`!fold_fanout`). The spawn IS a legal target under
+                    // the rules, and the human / unpruned menus are the contract the recorded
+                    // references replay against: six recorded picks (s5_gi4 x2, s8_gi7 x4) ARE such
+                    // blinks, and a menu without them resolves each to the same-shaped plan that
+                    // blinks the Drake instead -- the replay then floats mana the human never had,
+                    // its unpruned menus grow past 100k plans (s8's stateless replay took seventeen
+                    // minutes instead of ten) and the boards handed to the search stop being the human's. So the
+                    // menu keeps the option and the recorded line replays byte-for-byte; only the
+                    // search stops paying for it. (The shared id's wrong-victim apply in human play
+                    // is a follow-up: unique spawn ids AND a resolver that maps recorded id 0.)
+                    bool opp_enter_watcher = false;
+                    for (const Permanent& w : state.battlefield)
+                    {
+                        if (w.controller_index != state.active_player_index) { continue; }
+                        const CardDefinition* wd = CardDatabase::Instance().LookupCached(w.card);
+                        if (wd && wd->params.opp_creature_enters_life_loss > 0)
+                        { opp_enter_watcher = true; break; }
+                    }
                     for (const Permanent& tgt : state.battlefield)
                     {
                         if (!tgt.card.IsCreature()) { continue; }
+                        if (tgt.card.m_number == 0 && !opp_enter_watcher && !fold_fanout) { continue; }
                         if (tgt.card.m_number == src.card.m_number) { continue; }   // "another"
                         if (sd->params.blink_own_only
                             && tgt.controller_index != state.active_player_index) { continue; }
