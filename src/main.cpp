@@ -564,8 +564,12 @@ static std::string SummarizePlan(const TurnSolver::Plan& plan, const GameState& 
                 // The mechanical route is emitted only when its trial on this board won, and the
                 // human gate stamps that verify onto the plan; say so in the words the blink macro
                 // used, so the viewer and the replay tool read one label for one thing.
-                tag = "Combo Off route";
-                if (plan.combo_off_verified) { tag += " -- COMBO OFF: wins this turn"; }
+                if (a.chosen_x > 3)
+                {
+                    tag = "Combo Off route";
+                    if (plan.combo_off_verified) { tag += " -- COMBO OFF: wins this turn"; }
+                }
+                else { tag = "Loop: bank the blinks into every castable creature"; }
                 break;
             default:                              tag = a.card_name + " (other)"; break;
         }

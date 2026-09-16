@@ -15478,17 +15478,21 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
         // that wins this turn. The provider gate keeps every other deck byte-identical (no scan).
         {
             const DecisionProvider& rprov = ResolveProvider(state);
-            if (rprov.ComboRouteEnabled()
-                && EdfComboRoutePiecesInPlace(state, state.active_player_index)
-                && EdfComboRouteTrial(state, state.active_player_index))
+            const int route = (rprov.ComboRouteEnabled()
+                               && EdfComboRoutePiecesInPlace(state, state.active_player_index))
+                            ? EdfComboRouteTrial(state, state.active_player_index) : 0;
+            if (route != 0)
             {
                 Action a;
                 a.kind           = Action::Kind::ComboRoute;
                 a.card_name      = InternedName("Combo Off");
                 a.def            = nullptr;
                 a.hand_index     = -1;
-                a.chosen_x       = 999;   // a go-off, for every reader that sizes one by chosen_x
-                a.eval           = 999;   // verified: wins this turn
+                // WIN: a go-off for every reader that sizes one by chosen_x, verified this turn.
+                // DEVELOP (bank the loop's mana into the hand's creatures): an ORDINARY plan, valued
+                // by the search like any cast -- chosen_x 1 keeps it out of the go-off fold.
+                a.chosen_x       = (route == 1) ? 999 : 1;
+                a.eval           = (route == 1) ? 999 : 50;
                 a.is_noncreature = true;
                 actions.push_back(std::move(a));
             }
@@ -35343,7 +35347,7 @@ inline int GoffCount(const TurnSolver::Plan& p)
     for (const Action& a : p.actions)
     {
         if (a.kind == Action::Kind::ActivateBlink && a.chosen_x > 3) { k = std::max(k, a.chosen_x); }
-        if (a.kind == Action::Kind::ComboRoute) { k = std::max(k, a.chosen_x); }
+        if (a.kind == Action::Kind::ComboRoute && a.chosen_x > 3)   { k = std::max(k, a.chosen_x); }
     }
     return k;
 }
@@ -42232,7 +42236,7 @@ std::vector<TurnSolver::Plan> TurnSolver::EnumerateMainPlans(const GameState& st
             {
                 if (a.kind == Action::Kind::ActivateBlink && a.chosen_x > 3)
                 { k = std::max(k, a.chosen_x); }
-                if (a.kind == Action::Kind::ComboRoute) { k = std::max(k, a.chosen_x); }
+                if (a.kind == Action::Kind::ComboRoute && a.chosen_x > 3) { k = std::max(k, a.chosen_x); }
             }
             return k;
         };
@@ -43197,7 +43201,7 @@ static std::string LineSummaryOfPlan(const TurnSolver::Plan& p, const GameState*
         // Eldrazi Displacer"). Same defect the loyalty/equip labels above fixed; this summary is
         // what the viewer writes into its history on an accepted line (matched_summary).
         else if (a.kind == Action::Kind::ComboRoute)
-        { cast_names.push_back("COMBO OFF route"); }
+        { cast_names.push_back(a.chosen_x > 3 ? "COMBO OFF route" : "loop: bank and deploy"); }
         else if (a.kind == Action::Kind::ActivateBlink)
         {
             const std::string tn = st ? SubChoiceHostLabel(*st, a.sac_victim_id) : std::string();

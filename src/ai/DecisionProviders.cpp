@@ -16171,6 +16171,12 @@ struct Ctx
     // iteration (B: have 1, demanded 1 -> no surplus -> taken as "any pool" before the 4 spare {C}),
     // so Living Wish + Essence Depleter ({3}{B}{G}) never became payable while {C} piled up to 600.
     ManaCost    reserve;
+    // The cost being paid RIGHT NOW (set by Pay around its tapping loop): a land's face and an
+    // any-colour Aura bonus serve this first, the standing demand second. Without it, Trace of
+    // Abundance's bonus went to Emiel's pending {W}{W} (deficit 2) while the Drake being paid
+    // wanted {U} (deficit 1), the Drake failed, and claude_s1_gi0's T3 was a mana short of its
+    // first blink.
+    ManaCost    paying;
     int         iters = 0, deploys = 0, draws = 0, acts = 0;
     bool        emit = false;           // the LIVE apply narrates every step into the play history
     int         blink_run = 0;          // blinks since the last narrated step (flushed as one entry)
@@ -16242,16 +16248,35 @@ static void TapLand(Ctx& cx, int bf_idx)
                         || cx.s.players[cx.me].energy_counters >= d->params.energy_per_colored_tap;
     bool makes_c = false;
     for (Color c : prod) { if (c == Color::Colorless) { makes_c = true; } }
+    // What is short: the payment in progress first (see Ctx::paying), then the standing demand --
+    // counting the mana this land's own FIXED-colour Auras will add as already there (Wild Growth's
+    // {G} covers a {G} pip, so the face goes to the OTHER short colour: claude_s1_gi0 T3's Trace of
+    // Abundance needs {W}{G} off a Wild-Growth Conservatory, and "Green" there lost the cast).
+    ManaPool eff = cx.s.floating_mana;
+    for (const Permanent& a : cx.s.battlefield)
+    {
+        if (a.aura_attached_to != p.card.m_number || a.controller_index != cx.me) { continue; }
+        const CardDefinition* ad = DefOf(a.card);
+        if (!ad || !ad->params.is_land_aura || ad->params.land_aura_extra_mana <= 0) { continue; }
+        if (ad->params.land_aura_produces.size() == 1)
+        { eff.Add(ad->params.land_aura_produces[0], ad->params.land_aura_extra_mana); }
+    }
+    auto want = [&](Color c) -> int
+    {
+        const int now = Deficit(cx.paying, eff, c);
+        if (now > 0) { return 1000 + 8 * now + std::max(0, Deficit(cx.demand, eff, c)); }
+        return Deficit(cx.demand, eff, c);
+    };
     Color best = prod.front();
     int   best_def = 0;
     bool  have = false;
     for (Color c : prod)
     {
         if (c == Color::Colorless || !energy_ok) { continue; }
-        const int df = Deficit(cx.demand, cx.s.floating_mana, c);
+        const int df = want(c);
         if (df > best_def) { best = c; best_def = df; have = true; }
     }
-    if (!have && makes_c && Deficit(cx.demand, cx.s.floating_mana, Color::Colorless) > 0)
+    if (!have && makes_c && want(Color::Colorless) > 0)
     { best = Color::Colorless; have = true; }
     if (!have)
     {
@@ -16277,7 +16302,7 @@ static void TapLand(Ctx& cx, int bf_idx)
         for (int ci = 0; ci < 5; ++ci)
         {
             const Color c  = static_cast<Color>(ci);
-            const int   df = Deficit(cx.demand, cx.s.floating_mana, c) - (c == best ? 1 : 0);
+            const int   df = want(c) - (c == best ? 1 : 0);
             if (df > bd) { bd = df; pick = ci; }
         }
         aura_colors.push_back(pick);
@@ -16372,7 +16397,9 @@ static bool Pay(Ctx& cx, const ManaCost& cost)
     // ATOMIC: a payment that cannot be completed taps nothing. See the note above `Rollback`.
     const GameState snapshot = cx.s;
     const ManaCost saved = cx.demand;
-    cx.demand = AddManaCosts(ResolveHybrids(cx, cost), cx.demand);
+    const ManaCost saved_paying = cx.paying;
+    cx.paying = ResolveHybrids(cx, cost);
+    cx.demand = AddManaCosts(cx.paying, cx.demand);
     // THE TAP ORDER IS BIGGEST-FIRST, and the two "smarter" orders were MEASURED AND REJECTED
     // (2026-09-16, the four hand-off boards at true fidelity):
     //   * RESERVE THE FLEXIBLE LAND (least distinct colours first, so an any-colour Aura is kept
@@ -16409,6 +16436,7 @@ static bool Pay(Ctx& cx, const ManaCost& cost)
         if (PayFromFloat(cx.s.floating_mana, cost, cx.reserve)) { ok = true; break; }
     }
     cx.demand = saved;
+    cx.paying = saved_paying;
     if (!ok)
     {
         const ManaPool& f = cx.s.floating_mana;
@@ -16491,10 +16519,11 @@ static bool Blink(Ctx& cx, int outlet_id, int payload_id, const std::vector<int>
                                                   od->params.blink_cost.value());
     const GameState pre_blink = cx.s;
     {
-        const ManaCost saved = cx.demand;
+        const ManaCost saved = cx.demand, saved_paying = cx.paying;
         cx.demand = AddManaCosts(cx.demand, cost);   // the tap-ahead makes what THIS blink needs
+        cx.paying = cost;                            // ...and its faces serve this blink first
         TapAhead(cx, untaps);
-        cx.demand = saved;
+        cx.demand = saved; cx.paying = saved_paying;
     }
     if (!Pay(cx, cost)) { cx.Dbg("blink: cannot pay " + cost.ToString()); cx.s = pre_blink; return false; }
     const std::string label = cx.s.battlefield[oi].card.m_name.str() + ": blink "
@@ -16528,8 +16557,9 @@ static bool CastCreature(Ctx& cx, int hand_idx, const std::vector<int>* tap_ahea
     {
         const ManaCost saved = cx.demand;
         cx.demand = AddManaCosts(cx.demand, d->card.m_mana_cost);   // the tap-ahead makes this cast's colours
+        cx.paying = ResolveHybrids(cx, d->card.m_mana_cost);         // ...and serves THIS cast's pips first
         TapAhead(cx, *tap_ahead);
-        cx.demand = saved;
+        cx.demand = saved; cx.paying = ManaCost();
     }
     const GameState pre_cast = cx.s;
     if (!Pay(cx, d->card.m_mana_cost)) { cx.Dbg("cast " + name + ": cannot pay " + d->card.m_mana_cost.ToString()); cx.s = pre_cast; return false; }
@@ -17176,9 +17206,51 @@ static bool SameSnap(const Snap& a, const Snap& b)
     return a.f == b.f && a.hand == b.hand && a.bf == b.bf && a.life == b.life && a.lib == b.lib
         && a.draws == b.draws && a.iters == b.iters && a.acts == b.acts && a.deploys == b.deploys;
 }
-static bool Run(Ctx& cx)
+// DEVELOP -- the route's second outcome. No finisher is reachable (nothing on board, in hand,
+// wishable or callable, and no draw sink to dig for one), but the loop is LIVE and the hand holds
+// creatures: the user's own line on such a board is beatdown off the loop's mana (claude_s4_gi3
+// T4: ten Displacer blinks banked W/U/G/C, then Emiel + the second Drake in one cast, then four
+// attackers for two turns -- the kill on T6; one searched plan per main cannot say "bank, then
+// cast", and the search shipped T7). Bank until the float pays the most expensive castable
+// creature, cast it, repeat; stop when the hand has none. The plan this becomes is an ORDINARY
+// one (chosen_x 1, not a go-off): the search values the board it leaves like any other cast.
+static bool Develop(Ctx& cx)
 {
-    if (RouteWon(cx)) { return true; }
+    int  casts = 0, stall = 0;
+    Snap prev  = TakeSnap(cx);
+    for (int guard = 0; guard < MaxIter(); ++guard)
+    {
+        if (cx.s.players[cx.me].life <= 0) { break; }
+        const Board b = ScanBoard(cx);
+        if (b.outlet == 0 || b.payload == 0) { break; }
+        const Player& ap = cx.s.players[cx.me];
+        int best = -1, best_mv = -1;
+        for (int i = 0; i < static_cast<int>(ap.hand.size()); ++i)
+        {
+            const CardDefinition* d = DefOf(ap.hand[i]);
+            if (!d || !d->card.IsCreature()) { continue; }
+            const int mv = d->card.m_mana_cost.ManaValue();
+            if (mv > best_mv) { best = i; best_mv = mv; }
+        }
+        if (best < 0) { break; }
+        const ManaCost cost = ResolveHybrids(cx, DefOf(ap.hand[best])->card.m_mana_cost);
+        cx.demand  = AddManaCosts(cost, b.blink);
+        cx.reserve = cost;
+        if (FloatPays(cx, cost) && CastCreature(cx, best, nullptr, /*float_only=*/true))
+        { ++casts; stall = 0; prev = TakeSnap(cx); continue; }
+        const int n_untap = std::min(b.payload_untaps, std::max(1, b.lands));
+        const std::vector<int> set = ChooseUntaps(cx, n_untap, b.outlet_needs_c ? 1 : 0, 0);
+        if (!Blink(cx, b.outlet, b.payload, set)) { break; }
+        const Snap now = TakeSnap(cx);
+        if (SameSnap(now, prev) || ++stall > 40) { break; }
+        prev = now;
+    }
+    if (casts > 0) { cx.Note("developed: " + std::to_string(casts) + " creature(s) cast off the loop"); }
+    return casts > 0;
+}
+static int Run(Ctx& cx)
+{
+    if (RouteWon(cx)) { return 1; }
     {
         Board b0 = ScanBoard(cx);
         if (b0.outlet == 0 || b0.payload == 0)
@@ -17189,7 +17261,7 @@ static bool Run(Ctx& cx)
             {
                 cx.s = snapshot; cx.demand = cx_saved.demand; cx.reserve = cx_saved.reserve; cx.iters = cx_saved.iters;
                 cx.deploys = cx_saved.deploys; cx.draws = cx_saved.draws; cx.acts = cx_saved.acts; cx.log = cx_saved.log;
-                if (!DeployPieces(cx, /*auras_first=*/false)) { cx.Note("no loop: pieces not deployable"); return false; }
+                if (!DeployPieces(cx, /*auras_first=*/false)) { cx.Note("no loop: pieces not deployable"); return 0; }
             }
         }
     }
@@ -17201,13 +17273,17 @@ static bool Run(Ctx& cx)
     int stall = 0, last_target = 0;
     for (int guard = 0; guard < MaxIter(); ++guard)
     {
-        if (RouteWon(cx)) { return true; }
-        if (cx.s.players[cx.me].life <= 0) { cx.Note("route would kill us"); return false; }
+        if (RouteWon(cx)) { return 1; }
+        if (cx.s.players[cx.me].life <= 0) { cx.Note("route would kill us"); return 0; }
         Board b = ScanBoard(cx);
         Hand  h = ScanHand(cx);
-        if (b.outlet == 0 || b.payload == 0) { cx.Note("loop broke"); return false; }
+        if (b.outlet == 0 || b.payload == 0) { cx.Note("loop broke"); return 0; }
         Fin f = Decide(cx, b, h);
-        if (f.k == Fin::None) { cx.Note("no finisher route"); return false; }
+        if (f.k == Fin::None)
+        {
+            if (guard == 0 && Develop(cx)) { return 2; }
+            cx.Note("no finisher route"); return 0;
+        }
         SetDemand(cx, f, h);
         const int n_untap = std::min(b.payload_untaps, std::max(1, b.lands));
         if (TraceOn())
@@ -17243,8 +17319,8 @@ static bool Run(Ctx& cx)
         {
             int fired = 0;
             while (!OpponentHasLost(cx.s) && Activate(cx, f)) { ++fired; }
-            if (RouteWon(cx)) { cx.Note("finisher x" + std::to_string(cx.acts) + " -- the opponent is dead", nullptr); return true; }
-            if (OpponentHasLost(cx.s)) { cx.Note("lethal but we are dead"); return false; }
+            if (RouteWon(cx)) { cx.Note("finisher x" + std::to_string(cx.acts) + " -- the opponent is dead", nullptr); return 1; }
+            if (OpponentHasLost(cx.s)) { cx.Note("lethal but we are dead"); return 0; }
             if (fired > 0) { prev = TakeSnap(cx); stall = 0; continue; }
             cx.Dbg("finish: " + f.act.ToString() + " not payable from float " + cx.Float());
         }
@@ -17301,15 +17377,15 @@ static bool Run(Ctx& cx)
                        + " per_iter=" + std::to_string(per_iter) + " n_untap=" + std::to_string(n_untap));
             }
         }
-        if (!Blink(cx, b.outlet, b.payload, set)) { cx.Note("blink unpayable"); return false; }
+        if (!Blink(cx, b.outlet, b.payload, set)) { cx.Note("blink unpayable"); return 0; }
         const Snap now = TakeSnap(cx);
-        if (SameSnap(now, prev)) { cx.Note("no progress"); return false; }
+        if (SameSnap(now, prev)) { cx.Note("no progress"); return 0; }
         prev = now;
         if (++stall > std::max(60, last_target + 20))
-        { cx.Note("stalled: " + std::to_string(stall) + " blinks without a step firing"); return false; }
+        { cx.Note("stalled: " + std::to_string(stall) + " blinks without a step firing"); return 0; }
     }
     cx.Note("iteration cap");
-    return RouteWon(cx);
+    return RouteWon(cx) ? 1 : 0;
 }
 }   // namespace comboroute
 
@@ -17366,7 +17442,7 @@ namespace comboroute
 {
 struct TrialMemo
 {
-    std::unordered_map<std::uint64_t, bool> m;
+    std::unordered_map<std::uint64_t, int> m;   // 0 no, 1 WIN, 2 DEVELOP (see Run)
     std::uint64_t hits = 0, misses = 0;
 };
 inline TrialMemo& Memo() { static thread_local TrialMemo m; return m; }
@@ -17405,9 +17481,9 @@ static std::uint64_t BoardKey(const GameState& s, int me)
 }
 }   // namespace comboroute
 
-bool EdfComboRouteTrial(const GameState& s, int me)
+int EdfComboRouteTrial(const GameState& s, int me)
 {
-    if (!comboroute::On()) { return false; }
+    if (!comboroute::On()) { return 0; }
     comboroute::TrialMemo& memo = comboroute::Memo();
     const std::uint64_t key = comboroute::BoardKey(s, me);
     // MTG_EDF_COMBO_ROUTE_MEMO=0 bypasses the memo (diagnosis: a root's own trial is otherwise a
@@ -17422,7 +17498,8 @@ bool EdfComboRouteTrial(const GameState& s, int me)
             if (comboroute::TraceOn())
             {
                 std::fprintf(stderr, "[combo-route] t%d TRIAL memo-hit %s (key %016llx)\n", s.turn_number,
-                             it->second ? "WIN" : "no", static_cast<unsigned long long>(key));
+                             it->second == 1 ? "WIN" : it->second == 2 ? "DEVELOP" : "no",
+                             static_cast<unsigned long long>(key));
             }
             return it->second;
         }
@@ -17433,40 +17510,41 @@ bool EdfComboRouteTrial(const GameState& s, int me)
     RevealLogPause     _quiet;
     ComboOffApplyPause _nochoosers;
     comboroute::Ctx cx(copy, me);
-    const bool win = comboroute::Run(cx);
+    const int r = comboroute::Run(cx);
     if (comboroute::TraceOn())
     {
         std::fprintf(stderr, "[combo-route] t%d TRIAL %s: deploys=%d iters=%d draws=%d acts=%d life=%d opp=%d | %s\n",
-                     s.turn_number, win ? "WIN" : "no", cx.deploys, cx.iters, cx.draws, cx.acts,
+                     s.turn_number, r == 1 ? "WIN" : r == 2 ? "DEVELOP" : "no", cx.deploys, cx.iters, cx.draws, cx.acts,
                      copy.players[me].life, copy.players[1 - me].life, cx.log.c_str());
     }
-    if (s_memo) { memo.m[key] = win; }
-    return win;
+    if (s_memo) { memo.m[key] = r; }
+    return r;
 }
 
-bool EdfComboRouteApply(GameState& s, int me)
+int EdfComboRouteApply(GameState& s, int me)
 {
-    if (!comboroute::On()) { return false; }
-    // ALL-OR-NOTHING: the silent trial on a copy decides; only a kill is played on the real state,
-    // and that live run narrates each step into the play history (the same deterministic route).
+    if (!comboroute::On()) { return 0; }
+    // ALL-OR-NOTHING: the silent trial on a copy decides; only a kill (or a develop) is played on
+    // the real state, and that live run narrates each step into the play history (the same
+    // deterministic route).
     {
         GameState copy = s;
         RevealLogPause     _quiet;
         ComboOffApplyPause _nochoosers;
         comboroute::Ctx cx(copy, me);
-        if (!comboroute::Run(cx)) { return false; }
+        if (comboroute::Run(cx) == 0) { return 0; }
     }
     ComboOffApplyPause _nochoosers;
     comboroute::Ctx cx(s, me);
     cx.emit = true;
-    const bool win = comboroute::Run(cx);
+    const int r = comboroute::Run(cx);
     cx.FlushBlinks();
     if (comboroute::TraceOn())
     {
         std::fprintf(stderr, "[combo-route] t%d APPLY %s: deploys=%d iters=%d draws=%d acts=%d\n",
-                     s.turn_number, win ? "WIN" : "no", cx.deploys, cx.iters, cx.draws, cx.acts);
+                     s.turn_number, r == 1 ? "WIN" : r == 2 ? "DEVELOP" : "no", cx.deploys, cx.iters, cx.draws, cx.acts);
     }
-    return win;
+    return r;
 }
 
 

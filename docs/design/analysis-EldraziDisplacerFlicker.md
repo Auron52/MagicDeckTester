@@ -8627,3 +8627,63 @@ second main runs no CollectActions; `TrySecondMainStrandedKill` could call `EdfC
 moot for the references now that the drift frames are gone, live for a human who passes to combat first.
 (4) "blink #0" plans in the menu (pre-existing). (5) The route does not yet model Shivan Gorge's
 untap-and-ping line beyond `Fin::Gorge` on a Gorge already in play or wishable as the land drop.
+
+**12.10 The last two shorts, closed (07:10-07:55 UTC).** Both were diagnosed from the route's own step
+trace and the human's replayed line, and both fixes are the route's, not the search's.
+
+*s1 T3 (4 vs 3) -- two colour-steering defects, one tap each.* The human's T3: land Mariposa, Trace -> Aether
+Hub, Living Wish -> Cloud of Faeries, cast Cloud, then Drake + Drake + Emiel as one cast (each Drake's ETB
+refunds the lands), then Emiel blinks the Drake for mana, Mariposa's {5} draw digs five cards to a second
+Living Wish -> Essence Depleter, kill. The route's trial reached "cast Emiel" and was ONE mana short of the
+first {3} blink because the second Drake never landed: paying its {4}{U}, Trace's any-colour bonus went
+WHITE -- TapLand steered every face by the STANDING demand, in which Emiel's pending {W}{W} (deficit 2)
+outranked the {U} of the cast actually being paid (deficit 1). Fix: `Ctx::paying` -- the cost in progress,
+set by `Pay` around its tap loop and by the tap-ahead in `CastCreature`/`Blink` -- and TapLand's face and
+Aura picks serve it first (1000 + 8 x its deficit, the standing demand as tie-break). That alone regressed
+the same frame one step EARLIER: with the payment's own {W}{G} now ranking W and G equally, Conservatory
+(Wild Growth attached) tapped for GREEN, its Aura added a second {G}, the {W} went unpaid, Trace never
+landed, and with no any-colour source there was no {U} for anything -- "no loop: pieces not deployable".
+Fix: the face choice counts the land's own FIXED-colour Aura mana as already present (`land_aura_produces`
+of size one), so Wild Growth's {G} covers the {G} pip and the face goes to {W}. Hand-off T3#0 -> **3**, T2#1
+-> **3** (= the human).
+
+*s4 T4#2 (7 vs 6) -- not a combo, a race, and the route grows a second outcome.* From this frame (Displacer
+and one Drake on board, Emiel and a Drake in hand, no finisher, no wish, no draw sink) the human banked TEN
+Displacer blinks (float W2 U8 G8 C9), cast Emiel + the second Drake in one plan, and attacked with four
+creatures on T5 and T6 (11 a turn, 22 >= 20). The engine's menu at the frame holds two plans -- one blink
+and a pass -- because a multi-blink is sized only to a kill (`FlickerGoOffCount`), so "bank, then cast" is
+inexpressible in one main; it cast Emiel on T6 and won on T7. `Run` now returns 0 / 1 (kill) / 2 (DEVELOP):
+when `Decide` finds no finisher on the FIRST iteration and the loop is live, `Develop` banks blinks until
+the float pays the most expensive castable creature in hand, casts it, and repeats until the hand has
+none. It is emitted as an ORDINARY plan (chosen_x 1, eval 50, "Loop: bank the blinks into every castable
+creature"), valued by the search like any cast -- `goff_of` / `GoffCount` count a ComboRoute action as a
+go-off only at chosen_x > 3, so the human gate's fold never sees it. Hand-off T4#2 -> **6** (= the human).
+
+Probes on the final binary, all equal to the human: s1 T2#1 3, s1 T3#0 3, s3 T4#0 4, s4 T4#1 6, s4 T4#2 6,
+s5 T4#1 4, s6 T2#1 4, s6 T4#0 4, s9 T1#1 4, s9 T4#0 4, s14 T5#0 5. Gates: combo_off **33/33**, scenarios
+**90/90**. Sweep (`edf_route4`): **0 of 631 SHORT** -- every reference matched at every hand-off frame (a9da232d: 27 of 631; 120c3969: 6 of 631). s4's 7 and s7's 4 "early" frames are the engine winning before the human. Log `logs/ref_sweep/edf_route4.log`.
+
+```
+reference                    human | frames  ok  early  SHORT | short frames
+claude_s10_gi9                   4 |     41  41      0      0 | 
+claude_s11_gi10                  6 |     59  59      0      0 | 
+claude_s12_gi11                  4 |     55  55      0      0 | 
+claude_s14_gi13                  5 |     14  14      0      0 | 
+claude_s15_gi14                  6 |     17  17      0      0 | 
+claude_s1_gi0                    3 |     45  45      0      0 | 
+claude_s2_gi1                    4 |     15  15      0      0 | 
+claude_s3_gi2                    4 |     41  41      0      0 | 
+claude_s4_gi3                    6 |     30  23      7      0 | 
+claude_s5_gi4                    4 |     72  72      0      0 | 
+claude_s6_gi5                    4 |     67  67      0      0 | 
+claude_s7_gi6                    5 |     53  49      4      0 | 
+claude_s8_gi7                    3 |     68  68      0      0 | 
+claude_s9_gi8                    4 |     54  54      0      0 | 
+TOTAL SHORT FRAMES: 0 of 631
+```
+ Smoke: **75/5, all 80 job lines byte-identical** to `logs/edf_followups/head_smoke.log` (clean HEAD 4d8199c4); the 5 are the baseline's own stale GT lines. Scenarios inside the smoke 90/90.
+
+**12.9 revised.** (1) and (2) above are closed. Still open: (3) a post_main hand-off does not consult the
+route; (4) the pre-existing "blink #0" menu plans; (5) Shivan Gorge's untap-and-ping line beyond
+`Fin::Gorge`; (6) DEVELOP casts creatures only -- land Auras and the land drop in hand are left to the
+search's own plans.

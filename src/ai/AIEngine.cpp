@@ -4813,8 +4813,12 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
         else if (a.kind == Action::Kind::ComboRoute)
         {
             // THE MECHANICAL COMBO OFF ROUTE (lockstep with ApplyPlanDirect): all-or-nothing.
-            const bool won = EdfComboRouteApply(state, state.active_player_index);
-            if (m_logger) { m_logger->LogAbility(0, "Combo Off", won ? "combo route: win" : "combo route: no-op"); }
+            const int r = EdfComboRouteApply(state, state.active_player_index);
+            if (m_logger)
+            {
+                m_logger->LogAbility(0, "Combo Off", r == 1 ? "combo route: win"
+                                                    : r == 2 ? "loop: banked and deployed" : "combo route: no-op");
+            }
         }
         else if (a.kind == Action::Kind::ActivateBlink)
         {

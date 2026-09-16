@@ -1703,5 +1703,5 @@ bool EdfAutoGoOffAfterCasts(GameState& s, int controller);
 //   Apply         -- run it on a copy and commit ONLY on a kill (all-or-nothing) -- the apply half
 //                    of Action::Kind::ComboRoute in ApplyPlanDirect and the executor.
 bool EdfComboRoutePiecesInPlace(const GameState& s, int controller);
-bool EdfComboRouteTrial(const GameState& s, int controller);
-bool EdfComboRouteApply(GameState& s, int controller);
+int  EdfComboRouteTrial(const GameState& s, int controller);   // 0 no, 1 WIN (kills), 2 DEVELOP (bank + cast)
+int  EdfComboRouteApply(GameState& s, int controller);        // same codes; live run on `s`
