@@ -1348,3 +1348,93 @@ then re-ask the Worldspine/Terastodon question on a **Craterhoof-2** shell, sinc
 forces the table drop anyway and the extra arms are free once it is paid for.
 
 **`stack_all` is therefore NO LONGER a freeze candidate** — the list is re-opened on the fat counts.
+
+## THE APPARATUS LIMIT: coverage is not calibration (2026-09-16)
+
+The user named the binding constraint on this entire exercise:
+
+> *"I don't believe it can be fully made without a regeneration of the mulligan profile. This is
+> particularly true when we want to change mana sources into threats/enablers or vice-versa."*
+> …*"the accuracy is limited because of the type change. Though there still can be some level of
+> useful information from our tests."*
+
+That is correct, and it is graded rather than binary. Recording it precisely because it changes how
+every number above should be read.
+
+### What the shared table actually is
+
+`logs/stompy_screen/aliasI/StompySurprise.keepmodel.exhaustive.profile.json.gz` — K=15, 67,819 cells,
+R=40. Its **bucket structure**:
+
+```
+bucket  0: Arbor Elf, Elvish Mystic, Fyndhorn Elves, Llanowar Elves
+bucket  2: Call of the Wild, World War Hulk
+bucket 14: Apex Altisaur, Worldspine Wurm
+```
+
+The structure is *right* for the elf question — all four one-mana dorks share one bucket, so they are
+treated as interchangeable, which they functionally are. But the **cell values** were computed
+against the original composition: **10 one-mana dorks, 18 mana creatures, 14 Forests, 4 Worldspine
+Wurm, 4 Call of the Wild, Wirewood Lodge and Mirri's Guile in**. Every list screened since departs
+from that.
+
+### The misreading to stop making
+
+Every screen prints `composition fall-through 0.39%`, and that was quietly read as reassurance that
+the table still fits. **It is a COVERAGE statistic — what fraction of hands fall outside the
+enumerated count vectors — not a CALIBRATION one.** A hand can be perfectly covered by a cell whose
+keep/mull decision was fitted to a different deck's win rate. Nothing in the output reports
+calibration, so the reassuring number was answering a different question than the one that matters.
+
+### A fixed table is a hidden prior on the mana:spell ratio
+
+The table encodes an optimal mulligan *policy* for one composition. Lists near that composition get
+near-correct mulligans; lists far from it get mulligans optimised for something else. Pairing does
+not cancel this — it is not a per-game noise term, it is the same wrong policy applied to every arm.
+So the shared apparatus systematically pulls results toward the ratio it was fitted to.
+
+**Exposure is graded by how much a swap changes a hand's type composition:**
+
+| swap | type change | confidence |
+|---|---|---|
+| Worldspine ↔ Terastodon ↔ Craterhoof | none (threat↔threat) | screening settles it |
+| elf ↔ Forest | same role, different castability | usable; magnitude softer than se implies |
+| elf ↔ fatty; anything ↔ Symbiosis / Sol Ring | mana ↔ threat/enabler | direction usable, magnitude weak |
+
+**Sign is far more robust than magnitude**, and a 0.04 effect survives plausible table bias where a
+0.005 effect does not.
+
+### The aliases are not equally good, and one of them is load-bearing
+
+* **Fyndhorn Elves → dork bucket: EXACT.** Functionally identical to Llanowar/Mystic.
+* **Apex Altisaur → Worldspine bucket: close.** Both huge green fatties (9 vs 11 mana).
+* **World War Hulk → Call of the Wild bucket: WEAKEST.** A saga that free-casts a creature from hand,
+  bucketed as a repeatable top-deck activator at a different cost. They are not alike in hand.
+
+So **every Hulk-count result in this document carries an extra approximation on top of the
+staleness** — `hulk2_tutor4`, `hulk4_tutor2`, and the sweeper trade-off that turned on keeping Hulk
+at 3. Those are softer than they were reported.
+
+### The plan this forces
+
+Screening now produces a **shortlist**, not a settled list. The deck-screening skill already draws
+this line — screening a combination is minutes on shared artifacts, *adopting* one is hours through
+the value-leaf and mulligan pipelines — and the mana:threat ratio decision belongs on the adopting
+side of it.
+
+1. Settle the threat↔threat counts on the shared apparatus (legitimate; least exposed tier).
+2. **Measure the table's influence instead of guessing it.** `elves.json` and `elves_notable.json`
+   run the SAME nine arms on the SAME seed block (81000000) under two very different mulligan
+   policies — the stale table, and no table at all (`"max_fallback": 0`). Their difference *is* the
+   table's influence on each comparison, and the two bracket the policy a regeneration would give.
+   Where they agree on sign and rough magnitude, that decision is robust and needs no generation.
+3. **Generate two full pipelines** (profile → value leaf → mulligan, strictly serial, alone on the
+   box) for two shortlisted lists chosen to *bracket the mana:threat ratio*, then run the final
+   head-to-head with **each list under its own table** — the only comparison in which neither deck
+   is handicapped by the other's mulligan policy. (User-endorsed: *"Having two profiles that have a
+   different composition that are closer to what we believe is the ideal should help test this more
+   accurately at the end."*)
+
+A cost note in favour of this being affordable: this deck's value leaf is **`leaf: "none"`**, adopted
+2026-09-11 because the leaf measured a net negative here. The value-leaf stage is therefore a shape
+*decision* to re-verify rather than a full fit to re-run.
