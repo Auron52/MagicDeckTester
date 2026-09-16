@@ -1321,10 +1321,36 @@ public:
     //     scored). The search now binds the twin, and the executor's snapshot is the PRE-ACTIVATION
     //     hand rather than the hand before the turn's last cast.
     //
+    // ADOPTED 2026-09-16, DEFAULT ON. 2,000 paired games at play settings (d5/b20, seed block
+    // 930000): 2 games better, ZERO worse, -0.0010 avg turn-to-win, and cost-neutral (-0.03% units
+    // once the soundness guard is in; see below). USER: *"if performance is not better, but quality
+    // is that is still a positive"* -- and with no game made worse the direction is unambiguous even
+    // though the magnitude is small and not significant. Zero regressions also means there is no
+    // candidate unrecoverable loss to adjudicate at the budget-0/depth-8 bar.
+    //
+    // This required BpSiteAddedAPayableOption. Condemnation WITHOUT it regressed gi=487, 1357 and
+    // 1553; gi=1357 is the exact mechanism (a goldfish-inert Skred occupying the exclusive
+    // continuation slot so a freshly-drawn Rimefeather Owl cannot tap a Druid out of a 7-damage
+    // exact-lethal attack). Do not enable this hook on a build that lacks that guard.
+    //
+    // WHY THE COST WIN IS ~NOTHING ON THIS DECK, measured so it is not re-derived a third time (it
+    // has been mis-read twice). Three multiplicative limits, 200 games at play settings:
+    //   * REACH -- the breakpoint sites (la_bp_wave + fs_bp_wave) are 17.4% of all units, and the
+    //     filter cannot touch the other 82.6% (la_cand 35%, rollout_step 24%, greedy_fallback 23%).
+    //     Structural, not a depth artefact: the share is 16.3/17.2/15.8% at d3/d5/d7.
+    //   * YIELD -- of 3,335,374 consultations only 24% reach the dominance test at all; the largest
+    //     blocker is "the plan cast nothing, so it declined nothing" at 38%, which is soundness and
+    //     not slack. 46% of those that do reach are unpayable anyway.
+    //   * THE GUARD -- on Snow it spares 85% of drops (280,095 -> 40,618), because site 8 IS a
+    //     tap-draw: "the site put a new payable card in hand" is true almost every time it fires.
+    // And PEER=0 with a census ceiling of 1x today, so the filter is already extracting everything
+    // available to it here -- a finer cast order would add nothing, because an ACTIVATED site ranks
+    // after every card in hand and nothing is ever peer-blocked.
+    //
     // Per-JOB overridable (heurarm) so base and condemned arms pool into ONE batch.
     bool CondemnsConsideredAtBreakpoint() const override
     {
-        static const bool v = EnvOn("MTG_SNOW_CONDEMN");
+        static const bool v = EnvOn("MTG_SNOW_CONDEMN", true);
         return heurarm::Flag(heurarm::SNOW_CONDEMN, v);
     }
 };

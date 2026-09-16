@@ -2138,9 +2138,21 @@ static bool BpCardWasInHandBefore(int card_number)
 // It is card-agnostic and route-agnostic -- no type exemption, no per-card clause (USER 2026-08-28:
 // "I don't want any general exemptions"). When the site draws nothing, or draws something we cannot
 // cast, the slot really does fall back to "cast nothing" and the premise holds, so we still drop.
+//
+// DEFAULT ON, following the split this file already uses: the FILTER is opt-in per deck
+// (CondemnsConsideredAtBreakpoint) while every SOUNDNESS guard defaults ON -- the same arrangement
+// as BpTurnManaSettled, BpSnapshotOnItsTurn and BpCondemnPlanCastEnabled. The premise hole is not
+// Snow-specific (it is a property of the continuation slot, which every breakpoint has), so a deck
+// that opts into condemnation later must not silently get the PRE-FIX filter. That exact mistake is
+// recorded in docs/design/breakpoint-condemnation-status.md: bugs 1, 4 and 5 shipped behind
+// default-OFF fixes, so flipping a per-deck hook quietly enabled the broken version.
+//
+// Inert for the suite as it stands -- global MTG_BP_CLASSIFY is off and the only three provider
+// overrides (Snow, Kitty, AntiLifegain) gate on their own env flags -- so turning this on moves no
+// deck's GT by itself. It bites exactly when a deck's filter is live, which is the point.
 static bool BpCondemnNewOptionEnabled()
 {
-    static const bool on = EnvOn("MTG_BP_CONDEMN_NEW_OPTION");
+    static const bool on = EnvOn("MTG_BP_CONDEMN_NEW_OPTION", true);
     return heurarm::Flag(heurarm::BP_CONDEMN_NEW_OPTION, on);
 }
 
