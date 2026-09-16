@@ -1132,6 +1132,27 @@ public:
     static constexpr int kBpChainChoice = 1 << 21;
     static int BpChainCandIndex(const GameState& state, const std::vector<Plan>& cands, int j);
 
+    // EMPTY ARM. bp_choice == kBpEmptyChoice is not a rank either: it resolves to "cast nothing
+    // more, play no land, let the trailing passes run" -- i.e. I AM DONE ACTING IN THIS PHASE.
+    //
+    // Public for the same reason kBpChainChoice is, and the reason is not theoretical: until this
+    // was exposed, AIEngine had NO handling for the sentinel at all. Its resolver does
+    // `bp_idx_resolved = plan.bp_choice` and then tests `< cands.size()`, which 1<<20 fails, so the
+    // executor fell through to its re-solve and ACTED where the search had scored "done". That made
+    // the existing MTG_BP_NODE empty arm a latent lockstep break; it never surfaced only because
+    // MTG_BP_NODE ships off.
+    //
+    // WHY IT HAS TO EXIST AT ALL (USER 2026-09-16: *"Empty needs to be a valid option"*, *"for every
+    // segment"*). EnumeratePlans drops the empty combination by contract -- correct at the ROOT,
+    // where "cast nothing" IS the base plan, and wrong at a BREAKPOINT, where the base plan means
+    // "the subset I already cast" and its honest continuation may be nothing more. Nobody re-derived
+    // that contract for the breakpoint case; it was inherited. The consequence is that every
+    // continuation route is lossy in the same place: a greedy Solve picks one line and the rest are
+    // unreachable at any budget, and NGC's cands[0] can never BE the empty one. An arm in the
+    // wave-0 fan-out makes "done" a scored candidate like any other, at every segment, rather than
+    // a special choice only node-hosted sites can reach.
+    static constexpr int kBpEmptyChoice = 1 << 20;
+
     // BREAKPOINT SITE 7 -- the Birthing Pod CHAIN (bit 7 of MTG_BP_SITES, default ON). A Pod
     // activation's fetch is a mid-phase event that creates a NEW actionable object: the fetched
     // creature is a legal sac victim for a SECOND untapped Pod (and outlet fodder) in the SAME

@@ -3776,7 +3776,20 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
                     ? TurnSolver::BpChainCandIndex(state, cands,
                                                    plan.bp_choice - TurnSolver::kBpChainChoice)
                     : plan.bp_choice;
-            if (bp_idx_resolved >= 0 && bp_idx_resolved < static_cast<int>(cands.size()))
+            // EMPTY ARM lockstep (TurnSolver::kBpEmptyChoice). The search scored this turn with the
+            // continuation deliberately EMPTY -- "done acting in this phase" -- so the executor must
+            // realise nothing here. Without this the sentinel (1<<20) simply fails the
+            // `< cands.size()` test below, bp_searched_here stays false, and the re-solve underneath
+            // ACTS: the realised line is not the line that was ranked. Mirrors bp_searched_plan's
+            // own special-case, which likewise runs BEFORE the cands walk, so neither world pays an
+            // enumeration for it.
+            if (plan.bp_choice == TurnSolver::kBpEmptyChoice)
+            {
+                extra              = TurnSolver::Plan{};
+                extra.land_decided = true;   // nothing downstream greedy-plays a drop we declined
+                bp_searched_here   = true;
+            }
+            else if (bp_idx_resolved >= 0 && bp_idx_resolved < static_cast<int>(cands.size()))
             {
                 extra            = cands[bp_idx_resolved];
                 bp_searched_here = true;
@@ -4622,7 +4635,16 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
                     {
                         const std::vector<TurnSolver::Plan> cands =
                             TurnSolver::EnumerateBreakpointPlans(state, is_pre_combat_main);
-                        if (plan.bp_choice < static_cast<int>(cands.size()))
+                        // EMPTY ARM lockstep -- the pod twin of the main site's special-case. Same
+                        // reason, same shape: the sentinel is not an index and must not fall through
+                        // to the re-solve, which would act where the search scored "done".
+                        if (plan.bp_choice == TurnSolver::kBpEmptyChoice)
+                        {
+                            extra              = TurnSolver::Plan{};
+                            extra.land_decided = true;
+                            pod_bp_searched    = true;
+                        }
+                        else if (plan.bp_choice < static_cast<int>(cands.size()))
                         {
                             extra           = cands[plan.bp_choice];
                             pod_bp_searched = true;
