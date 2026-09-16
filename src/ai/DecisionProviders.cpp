@@ -20,6 +20,7 @@
 
 #include "../core/SpellEffects.h"   // shared rules helpers + the archetype heuristic free fns
 #include "../deck/DeckLoader.h"     // Decklist
+#include "LandPlay.h"               // PlayLandFromHand (the combo route's land drop)
 #include "TurnSolver.h"             // Action (PlanContext walks the plan's action list)
 #include "PlanContext.h"            // CurrentPlanContext / PlanContextRest
 #include "EngineFlags.h"            // TutorAxisResolveEnabled (capacity-anchored deploy read)
@@ -16037,6 +16038,1437 @@ inline bool GoffStatsOn() { static const bool v = EnvOn("MTG_WINLESS_STATS"); re
 // RecogniseFlickerLoop and the FlickerLoop type, both file-local); this is the only symbol
 // AIEngine::TakeTurn links against.
 void EdfTurnTrace(const GameState& s, int controller) { EdfTurnTraceImpl(s, controller); }
+// =================================================================================================
+// THE MECHANICAL COMBO OFF ROUTE (Session 31, 2026-09-16).
+//
+// USER, 2026-09-16 -- the whole specification, verbatim:
+//   "The idea in general is not to have the search cast all of those spells in one turn. We want a
+//    good go-off heuristic to do most of that. Otherwise, the branching factor is astronomical due
+//    to infinite mana and too many options."
+//   "It should be good at determining 'I have the pieces in place' and at finding the route to the
+//    win. The process is pretty mechanical. I would like it to be able to Combo Off once the combo
+//    (and other required lands etc.) is on board. Going off is pretty mechanical: Produce all of the
+//    mana you need for the whole thing -> draw loops as needed -> Living Wish -> Essence
+//    Depleter/Dimensional Infiltrator loops."
+//   "If you only have one colourless you might need to add play Emiel after the draw loops."
+//   "The most difficult part so far for the engine has been that we don't control the allocation of
+//    mana. We may need to take greater control of this... we 100% need to be able to ensure that we
+//    can grow our pool of all colours + colourless."
+//   "If we don't have draw lands in play there is a bit more creativity required to win with Shivan
+//    Gorge (untap + ping multiple times) or Living Wish on its own."
+//
+// WHAT THIS IS. One procedure that plays the go-off turn on a GameState step by step, with the mana
+// allocation under ITS control rather than the payment ladder's: every land it taps is tapped by
+// name for a colour chosen against the route's DEMAND (the colours of what it still intends to
+// cast, plus one {C} per finisher activation), and every ETB untap names the lands it wants back
+// (EtbUntapPriorityScope). It is verified by execution -- the trial on a copy either kills the
+// opponent or it does not -- and it reaches the search as ONE standalone plan action
+// (Action::Kind::ComboRoute), emitted only when that trial wins. The search never enumerates the
+// casts, the blinks, the digs or the activations: it decides "go off now" or not.
+//
+// THE STAGES, in the user's order:
+//   0. PIECES IN PLACE -- a blink outlet (Displacer / Emiel) and an ETB-untapper (Cloud / Drake),
+//      each on the battlefield, in hand, or one Living Wish / Eladamri's Call away.
+//   1. DEPLOY -- the land drop (a {C} source first, a draw land second; a spare Wish fetches one
+//      when the hand has none), the land Auras in hand, then the untappers cheapest-first with
+//      TAP-AHEAD (the lands the ETB is about to refresh are tapped into the float first, so each
+//      untapper's refund pays the next cast: Cloud -> Drake -> Drake -> Emiel is claude_s1_gi0's
+//      T3), then the outlet -- Emiel preferred when the board has one {C} source.
+//   2. BANK -- "produce all of the mana you need for the whole thing": blink with the highest-yield
+//      untap set until the float covers the finisher route's whole price.
+//   3. DIG -- draw loops as needed: crack a Clue, Mariposa's draw, an investigate; the draw land
+//      rides in the untap set so it fires again next iteration.
+//   4. WISH -- Living Wish -> Essence Depleter when the board can make black (an any-colour Aura
+//      counts), else Dimensional Infiltrator, else Shivan Gorge as the land drop.
+//   5. SWITCH -- one {C} source and a {C}-pip finisher: the outlet must be pip-free, so Emiel is
+//      cast (from hand, or as dug) before the finish -- exactly the user's rule.
+//   6. FINISH -- every iteration untaps the {C} source(s) first and taps them FOR {C}; the finisher
+//      fires while the float pays it; a Gorge rides the untap set and pings.
+// Nothing here is projected: every stage is the same trial that the button and the search verify.
+//
+// MTG_EDF_COMBO_ROUTE=0 (heurarm EDF_COMBO_ROUTE) removes the action; MTG_EDF_COMBO_ROUTE_TRACE=1
+// narrates every step on stderr; MTG_EDF_COMBO_ROUTE_MAX_ITER bounds the loop (default 600).
+// Byte-identical for every other deck: the provider's ComboRouteEnabled() is false there and the
+// emission site never scans.
+// =================================================================================================
+namespace comboroute
+{
+inline bool On()
+{
+    static const bool v = EnvOn("MTG_EDF_COMBO_ROUTE", true);
+    return heurarm::Flag(heurarm::EDF_COMBO_ROUTE, v);
+}
+inline bool TraceOn() { static const bool v = EnvOn("MTG_EDF_COMBO_ROUTE_TRACE"); return v; }
+inline int  MaxIter() { static const int v = EnvInt("MTG_EDF_COMBO_ROUTE_MAX_ITER", 600); return v; }
+
+static const CardDefinition* DefOf(const Card& c) { return CardDatabase::Instance().LookupCached(c); }
+static bool IsOutlet(const CardDefinition* d)
+{ return d && d->card.IsCreature() && d->params.blink_cost.has_value(); }
+static bool IsUntapper(const CardDefinition* d)
+{ return d && d->card.IsCreature() && d->params.etb_untap_lands > 0; }
+static bool IsDrainer(const CardDefinition* d)
+{ return d && d->params.drain_cost.has_value() && d->params.drain_amount > 0; }
+static bool IsExiler(const CardDefinition* d)
+{ return d && d->params.exile_opponent_top_cost.has_value(); }
+static bool IsWish(const CardDefinition* d)
+{ return d && d->params.tutor_to_hand && d->params.wish_from_sideboard; }
+static bool IsCall(const CardDefinition* d)
+{
+    return d && d->params.tutor_to_hand && !d->params.wish_from_sideboard
+        && !d->card.IsCreature() && !d->card.IsLand();
+}
+static bool IsLandAura(const CardDefinition* d)
+{ return d && d->params.is_land_aura && d->params.land_aura_extra_mana > 0; }
+static bool IsReducer(const CardDefinition* d)
+{ return d && d->params.reduces_creature_activation > 0 && !d->card.IsCreature() && !d->card.IsLand(); }
+static bool IsTapDrawLand(const CardDefinition* d)
+{ return d && d->card.IsLand() && d->params.tap_draw_cost.has_value(); }
+static bool IsInvestigateLand(const CardDefinition* d)
+{ return d && d->card.IsLand() && d->params.tap_investigate_cost.has_value(); }
+static bool IsClue(const CardDefinition* d) { return d && d->params.sac_draw_cost.has_value(); }
+static bool IsGorge(const CardDefinition* d)
+{
+    return d && d->card.IsLand() && d->params.tap_damage_cost.has_value()
+        && d->params.tap_damage_each_opponent > 0;
+}
+static bool MakesC(const CardDefinition* d)
+{
+    if (!d) { return false; }
+    for (Color c : d->params.produces) { if (c == Color::Colorless) { return true; } }
+    return false;
+}
+static int PipOf(const ManaCost& c, Color col)
+{
+    switch (col)
+    {
+        case Color::White: return c.white;  case Color::Blue:  return c.blue;
+        case Color::Black: return c.black;  case Color::Red:   return c.red;
+        case Color::Green: return c.green;  default:           return c.colorless;
+    }
+}
+static int PoolOf(const ManaPool& p, Color col)
+{
+    switch (col)
+    {
+        case Color::White: return p.white;  case Color::Blue:  return p.blue;
+        case Color::Black: return p.black;  case Color::Red:   return p.red;
+        case Color::Green: return p.green;  default:           return p.colorless;
+    }
+}
+static int Deficit(const ManaCost& demand, const ManaPool& f, Color col)
+{ return PipOf(demand, col) - PoolOf(f, col); }
+static int CeilDiv(int a, int b) { return b <= 0 ? a : (a + b - 1) / b; }
+
+struct Ctx
+{
+    GameState&  s;
+    int         me;
+    ManaCost    demand;                 // what the route still intends to pay from the float
+    // The IMMEDIATE part of that demand -- the next blocking cast(s) plus ONE finisher activation.
+    // `demand` steers which FACE a land is tapped for (a twenty-activation {C} term rightly pulls
+    // every painland to {C}); `reserve` decides which pool a GENERIC pip may dip into. Paying
+    // generic against the full demand let the blink's {2} eat the one {B} the Trace aura made each
+    // iteration (B: have 1, demanded 1 -> no surplus -> taken as "any pool" before the 4 spare {C}),
+    // so Living Wish + Essence Depleter ({3}{B}{G}) never became payable while {C} piled up to 600.
+    ManaCost    reserve;
+    int         iters = 0, deploys = 0, draws = 0, acts = 0;
+    bool        emit = false;           // the LIVE apply narrates every step into the play history
+    int         blink_run = 0;          // blinks since the last narrated step (flushed as one entry)
+    std::string blink_label;
+    std::string log;
+    Ctx(GameState& st, int m) : s(st), me(m) {}
+    void FlushBlinks()
+    {
+        if (blink_run <= 0) { return; }
+        const std::string t = blink_label + " x" + std::to_string(blink_run);
+        if (log.size() < 4000) { log += t; log += "; "; }   // ApplyBlink narrates each blink itself
+        blink_run = 0;
+    }
+    // A narrated step: the trace line, the route's log, and (live) a history entry of `kind`.
+    void Note(const std::string& t, const char* kind = "cast")
+    {
+        FlushBlinks();
+        if (TraceOn()) { std::fprintf(stderr, "[combo-route] t%d %s\n", s.turn_number, t.c_str()); }
+        if (log.size() < 4000) { log += t; log += "; "; }
+        if (emit && g_play_event_sink && kind != nullptr) { EmitPlayEvent(s.turn_number, kind, "\xE2\x9A\xA1 " + t); }
+    }
+    // Diagnosis only (why a step was skipped): the trace, never the history.
+    void Dbg(const std::string& t) const
+    { if (TraceOn()) { std::fprintf(stderr, "[combo-route]   t%d %s\n", s.turn_number, t.c_str()); } }
+    std::string Float() const
+    {
+        const ManaPool& f = s.floating_mana;
+        char b[96];
+        std::snprintf(b, sizeof b, "w%d u%d b%d r%d g%d c%d *%d(c%d)", f.white, f.blue, f.black, f.red,
+                      f.green, f.colorless, f.wild, f.wild_c);
+        return b;
+    }
+};
+static int FindPerm(const GameState& s, int me, int id)
+{
+    for (int i = 0; i < static_cast<int>(s.battlefield.size()); ++i)
+    {
+        if (s.battlefield[i].card.m_number == id && s.battlefield[i].controller_index == me)
+        { return i; }
+    }
+    return -1;
+}
+static const std::function<bool(const ManaCost&)>& DeclinePayer()
+{
+    static const std::function<bool(const ManaCost&)> f = [](const ManaCost&) { return false; };
+    return f;
+}
+
+// ---- mana: explicit allocation ------------------------------------------------------------------
+// ROLLBACK DOCTRINE. Every primitive below is ATOMIC: it either completes or leaves the state
+// exactly as it found it. Tapping is not free -- a painland pays life, an energy land spends {E},
+// and the float it produced is spent on nothing -- so a step that tries a cast, a host or a blink
+// and cannot finish must undo it, or a later step inherits a board that is poorer for the attempt.
+// This is not defensive coding: claude_s1_gi0's T3 lost the human's turn to exactly that (a land
+// Aura host trial that could not pay left two lands tapped for {C}, and the host that WOULD have
+// worked was then two mana short). The snapshot is a whole GameState copy, which the route can
+// afford because it takes one per FAILED step, not per iteration.
+// Tap ONE land for the colour the demand wants most: coloured pips before {C}, {C} when a finisher
+// activation wants it, a painland or an energy land makes {C} unless a colour is actually short,
+// and an any-colour Aura bonus goes to the largest coloured deficit (else it floats wild).
+static void TapLand(Ctx& cx, int bf_idx)
+{
+    Permanent& p = cx.s.battlefield[bf_idx];
+    const CardDefinition* d = DefOf(p.card);
+    if (!d || p.tapped) { return; }
+    const std::vector<Color>& prod = EffectiveProducesFor(cx.s, cx.me, *d, &p);
+    if (prod.empty()) { return; }
+    const bool energy_ok = d->params.energy_per_colored_tap <= 0
+                        || cx.s.players[cx.me].energy_counters >= d->params.energy_per_colored_tap;
+    bool makes_c = false;
+    for (Color c : prod) { if (c == Color::Colorless) { makes_c = true; } }
+    Color best = prod.front();
+    int   best_def = 0;
+    bool  have = false;
+    for (Color c : prod)
+    {
+        if (c == Color::Colorless || !energy_ok) { continue; }
+        const int df = Deficit(cx.demand, cx.s.floating_mana, c);
+        if (df > best_def) { best = c; best_def = df; have = true; }
+    }
+    if (!have && makes_c && Deficit(cx.demand, cx.s.floating_mana, Color::Colorless) > 0)
+    { best = Color::Colorless; have = true; }
+    if (!have)
+    {
+        // Nothing is short: a painland / energy land keeps its life and energy and makes {C};
+        // any other land makes its first colour (generic is paid from colours, never from {C}).
+        const bool costly = d->params.tap_self_damage > 0 || d->params.energy_per_colored_tap > 0;
+        if (makes_c && (costly || prod.size() == 1)) { best = Color::Colorless; }
+        else
+        {
+            for (Color c : prod)
+            {
+                if (c == Color::Colorless) { continue; }
+                if (d->params.energy_per_colored_tap > 0 && !energy_ok) { continue; }
+                best = c; break;
+            }
+        }
+    }
+    std::vector<int> aura_colors;
+    for (const Permanent* a : AnyColorLandAuras(cx.s, p))
+    {
+        (void)a;
+        int pick = -1, bd = 0;
+        for (int ci = 0; ci < 5; ++ci)
+        {
+            const Color c  = static_cast<Color>(ci);
+            const int   df = Deficit(cx.demand, cx.s.floating_mana, c) - (c == best ? 1 : 0);
+            if (df > bd) { bd = df; pick = ci; }
+        }
+        aura_colors.push_back(pick);
+    }
+    if (TraceOn())
+    {
+        std::string a;
+        for (int c : aura_colors) { a += (c < 0 ? "*" : ColorName(static_cast<Color>(c))); a += ","; }
+        std::fprintf(stderr, "[combo-route]     t%d tap %s -> %s%s%s\n", cx.s.turn_number,
+                     d->card.m_name.str().c_str(), ColorName(best), a.empty() ? "" : " +aura ", a.c_str());
+    }
+    TapSourceIntoFloat(cx.s, cx.me, p, *d, best, cx.s.floating_mana, nullptr,
+                       /*for_creature=*/false, aura_colors.empty() ? nullptr : &aura_colors);
+}
+
+// Pay a FLAT cost out of the float: coloured pips from their colour then from wild, {C} pips from
+// {C} (or a wild unit a {C} source made), and generic LAST from the least precious pool -- colours
+// the demand does not want, then surplus over the demand, then any colour, then wild, then {C}.
+static bool PayFromFloatFlat(ManaPool& f, const ManaCost& c, const ManaCost& demand)
+{
+    ManaPool w = f;
+    ManaCost k = c;
+    auto drain = [](int& pip, int& pool) { const int n = std::min(pip, pool); pip -= n; pool -= n; };
+    drain(k.white, w.white); drain(k.blue, w.blue); drain(k.black, w.black);
+    drain(k.red, w.red);     drain(k.green, w.green);
+    drain(k.white, w.wild);  drain(k.blue, w.wild);  drain(k.black, w.wild);
+    drain(k.red, w.wild);    drain(k.green, w.wild);
+    drain(k.colorless, w.colorless);
+    {
+        const int n = std::min(k.colorless, std::min(w.wild, w.wild_c));
+        k.colorless -= n; w.wild -= n; w.wild_c -= n;
+    }
+    if (k.white + k.blue + k.black + k.red + k.green + k.colorless > 0) { return false; }
+    int* pools[5] = { &w.white, &w.blue, &w.black, &w.red, &w.green };
+    const int dem[5] = { demand.white, demand.blue, demand.black, demand.red, demand.green };
+    auto take = [&](int& pool, int limit)
+    { const int n = std::min(k.generic, std::min(pool, limit)); k.generic -= n; pool -= n; };
+    for (int i = 0; i < 5 && k.generic > 0; ++i) { if (dem[i] == 0) { take(*pools[i], *pools[i]); } }
+    for (int i = 0; i < 5 && k.generic > 0; ++i) { take(*pools[i], std::max(0, *pools[i] - dem[i])); }
+    // {C} ABOVE ITS OWN RESERVE comes before any colour the reserve still wants (see Ctx::reserve):
+    // a colour only an Aura makes is the scarce mana here, spare {C} is not.
+    if (k.generic > 0)
+    {
+        const int n = std::min(k.generic, std::max(0, w.colorless - demand.colorless));
+        k.generic -= n; w.colorless -= n;
+    }
+    for (int i = 0; i < 5 && k.generic > 0; ++i) { take(*pools[i], *pools[i]); }
+    if (k.generic > 0)
+    {
+        const int n = std::min(k.generic, w.wild);
+        k.generic -= n; w.wild -= n; w.wild_c = std::min(w.wild_c, w.wild);
+    }
+    if (k.generic > 0) { const int n = std::min(k.generic, w.colorless); k.generic -= n; w.colorless -= n; }
+    if (k.generic > 0) { return false; }
+    w.wild_phantom = std::min(w.wild_phantom, w.wild);
+    f = w;
+    return true;
+}
+static bool PayFromFloat(ManaPool& f, const ManaCost& c, const ManaCost& demand)
+{
+    const unsigned n = c.hybrid_count;
+    for (unsigned bits = 0; bits < (1u << n); ++bits)
+    {
+        const ManaCost alt = (n > 0) ? c.ExpandHybrids(bits) : c;
+        if (PayFromFloatFlat(f, alt, demand)) { return true; }
+    }
+    return false;
+}
+static bool FloatPays(const Ctx& cx, const ManaCost& c)
+{ ManaPool f = cx.s.floating_mana; return PayFromFloat(f, c, cx.reserve); }
+
+// Pay `cost`: the float first, then untapped lands highest-yield-first, each tapped for what the
+// cost (and the standing demand) wants, until the float covers it.
+static bool CanMakeColor(const Ctx& cx, Color col);
+// A hybrid pip is DEMANDED as the colour the board can make (Trace of Abundance's {R/W} is white
+// on a Conservatory board); PayFromFloat still accepts either assignment.
+static ManaCost ResolveHybrids(const Ctx& cx, const ManaCost& cost)
+{
+    if (cost.hybrid_count == 0) { return cost; }
+    unsigned bits = 0;
+    for (unsigned i = 0; i < cost.hybrid_count && i < 4; ++i)
+    {
+        const Color first  = static_cast<Color>(cost.hybrid_pair[i] >> 4);
+        const Color second = static_cast<Color>(cost.hybrid_pair[i] & 0xF);
+        if (!CanMakeColor(cx, first) && CanMakeColor(cx, second)) { bits |= (1u << i); }
+    }
+    return cost.ExpandHybrids(bits);
+}
+static bool Pay(Ctx& cx, const ManaCost& cost)
+{
+    if (PayFromFloat(cx.s.floating_mana, cost, cx.reserve)) { return true; }
+    // ATOMIC: a payment that cannot be completed taps nothing. See the note above `Rollback`.
+    const GameState snapshot = cx.s;
+    const ManaCost saved = cx.demand;
+    cx.demand = AddManaCosts(ResolveHybrids(cx, cost), cx.demand);
+    // THE TAP ORDER IS BIGGEST-FIRST, and the two "smarter" orders were MEASURED AND REJECTED
+    // (2026-09-16, the four hand-off boards at true fidelity):
+    //   * RESERVE THE FLEXIBLE LAND (least distinct colours first, so an any-colour Aura is kept
+    //     for the colour only it can make) -- claude_s6_gi5 T4 and T2#1 both 4 -> 5. In this deck
+    //     the scarcest mana is {C}: a Mariposa tapped early for "just generic" is the pip the
+    //     Displacer blink and the Essence Depleter each need every iteration, and flexibility
+    //     cannot see that.
+    //   * DEMAND OVERLAP (a land whose colours the route still wants is tapped last, {C} protected
+    //     by the demand's own {C} term) -- same two frames, same 4 -> 5.
+    // Both are principled and both lose, which is the lesson worth keeping: the colour a payment
+    // should preserve is not decided by the land, it is decided by WHICH mana the untap set hands
+    // back next iteration -- a loop refunds the lands it chose, so "scarce" is a property of the
+    // schedule, not of the board. The colour steering that DOES pay is per-tap (TapLand picks the
+    // face against the demand) and the tutor-target demand; the ORDER stays yield-first.
+    // `want` and `sink` are kept as fields so the rejected orders are one edit away, not a rewrite.
+    struct PayCand { int want; int sink; int yield; int idx; };
+    std::vector<PayCand> lands;
+    for (int i = 0; i < static_cast<int>(cx.s.battlefield.size()); ++i)
+    {
+        const Permanent& p = cx.s.battlefield[i];
+        if (p.controller_index != cx.me || p.tapped || !p.card.IsLand()) { continue; }
+        const CardDefinition* d = DefOf(p.card);
+        if (!d) { continue; }
+        const std::vector<Color>& prod = EffectiveProducesFor(cx.s, cx.me, *d, &p);
+        if (prod.empty()) { continue; }
+        lands.push_back(PayCand{ 0, 0, PermanentManaYield(cx.s, p, *d), i });
+    }
+    std::stable_sort(lands.begin(), lands.end(), [](const PayCand& a, const PayCand& b)
+                     { return a.yield > b.yield; });
+    bool ok = false;
+    for (const PayCand& l : lands)
+    {
+        TapLand(cx, l.idx);
+        if (PayFromFloat(cx.s.floating_mana, cost, cx.reserve)) { ok = true; break; }
+    }
+    cx.demand = saved;
+    if (!ok)
+    {
+        const ManaPool& f = cx.s.floating_mana;
+        cx.Dbg("pay " + cost.ToString() + " FAILED (rolled back); float w" + std::to_string(f.white) + " u" + std::to_string(f.blue)
+               + " b" + std::to_string(f.black) + " r" + std::to_string(f.red) + " g" + std::to_string(f.green)
+               + " c" + std::to_string(f.colorless) + " *" + std::to_string(f.wild) + " lands available=" + std::to_string(lands.size()));
+        cx.s = snapshot;
+    }
+    return ok;
+}
+static bool CanMakeColor(const Ctx& cx, Color col)
+{
+    if (PoolOf(cx.s.floating_mana, col) > 0 || cx.s.floating_mana.wild > 0) { return true; }
+    for (const Permanent& p : cx.s.battlefield)
+    {
+        if (p.controller_index != cx.me || !p.card.IsLand()) { continue; }
+        const CardDefinition* d = DefOf(p.card);
+        if (!d) { continue; }
+        if (!AnyColorLandAuras(cx.s, p).empty()) { return true; }
+        if (d->params.energy_per_colored_tap > 0
+            && cx.s.players[cx.me].energy_counters < d->params.energy_per_colored_tap) { continue; }
+        for (Color c : EffectiveProducesFor(cx.s, cx.me, *d, &p)) { if (c == col) { return true; } }
+    }
+    return false;
+}
+
+// The lands the next ETB should hand back, in priority order: `want_c` {C} sources first (the
+// finish), a `must` land (the draw land / the Gorge) first of all, then the highest yields.
+static std::vector<int> ChooseUntaps(const Ctx& cx, int n, int want_c, int must)
+{
+    struct L { int id; int score; bool c; };
+    std::vector<L> v;
+    for (const Permanent& p : cx.s.battlefield)
+    {
+        if (p.controller_index != cx.me || !p.card.IsLand()) { continue; }
+        const CardDefinition* d = DefOf(p.card);
+        if (!d || EffectiveProducesFor(cx.s, cx.me, *d, &p).empty()) { continue; }
+        L l{ p.card.m_number, PermanentManaYield(cx.s, p, *d) * 4, MakesC(d) };
+        if (p.card.m_number == must) { l.score += 100000; }
+        v.push_back(l);
+    }
+    std::stable_sort(v.begin(), v.end(), [](const L& a, const L& b) { return a.score > b.score; });
+    int promoted = 0;
+    for (L& l : v) { if (promoted < want_c && l.c) { l.score += 10000; ++promoted; } }
+    std::stable_sort(v.begin(), v.end(), [](const L& a, const L& b) { return a.score > b.score; });
+    std::vector<int> out;
+    for (const L& l : v) { if (static_cast<int>(out.size()) >= n) { break; } out.push_back(l.id); }
+    return out;
+}
+static int YieldOfSet(const Ctx& cx, const std::vector<int>& ids)
+{
+    int y = 0;
+    for (int id : ids)
+    {
+        const int i = FindPerm(cx.s, cx.me, id);
+        if (i < 0) { continue; }
+        const CardDefinition* d = DefOf(cx.s.battlefield[i].card);
+        if (d) { y += PermanentManaYield(cx.s, cx.s.battlefield[i], *d); }
+    }
+    return y;
+}
+static void TapAhead(Ctx& cx, const std::vector<int>& ids)
+{
+    for (int id : ids)
+    {
+        const int i = FindPerm(cx.s, cx.me, id);
+        if (i >= 0 && !cx.s.battlefield[i].tapped) { TapLand(cx, i); }
+    }
+}
+
+// ---- the primitives -----------------------------------------------------------------------------
+static bool Blink(Ctx& cx, int outlet_id, int payload_id, const std::vector<int>& untaps)
+{
+    const int oi = FindPerm(cx.s, cx.me, outlet_id), pi = FindPerm(cx.s, cx.me, payload_id);
+    if (oi < 0 || pi < 0) { return false; }
+    const CardDefinition* od = DefOf(cx.s.battlefield[oi].card);
+    if (!od || !od->params.blink_cost.has_value()) { return false; }
+    if (!CanApplyBlink(cx.s, cx.me, outlet_id, payload_id, od->params.blink_own_only)) { return false; }
+    const ManaCost cost = EffectiveActivationCost(cx.s, cx.me, cx.s.battlefield[oi].card,
+                                                  od->params.blink_cost.value());
+    const GameState pre_blink = cx.s;
+    {
+        const ManaCost saved = cx.demand;
+        cx.demand = AddManaCosts(cx.demand, cost);   // the tap-ahead makes what THIS blink needs
+        TapAhead(cx, untaps);
+        cx.demand = saved;
+    }
+    if (!Pay(cx, cost)) { cx.Dbg("blink: cannot pay " + cost.ToString()); cx.s = pre_blink; return false; }
+    const std::string label = cx.s.battlefield[oi].card.m_name.str() + ": blink "
+                            + cx.s.battlefield[pi].card.m_name.str();
+    if (label != cx.blink_label) { cx.FlushBlinks(); cx.blink_label = label; }
+    EtbOptionalPayerScope _eops(&DeclinePayer());   // Emiel's {G/W} counter never comes out of the bank
+    EtbUntapPriorityScope _prio(&untaps);
+    ApplyBlink(cx.s, cx.me, outlet_id, payload_id, od->params.blink_returns_tapped);
+    ++cx.iters;
+    ++cx.blink_run;
+    return true;
+}
+static int HandIndexByName(const Ctx& cx, const std::string& name)
+{
+    const Player& ap = cx.s.players[cx.me];
+    for (int i = 0; i < static_cast<int>(ap.hand.size()); ++i)
+    { if (ap.hand[i].m_name.str() == name) { return i; } }
+    return -1;
+}
+// Cast a creature from hand. `tap_ahead`: for an untapper, the lands its ETB should refresh (tapped
+// into the float first so the refund is spendable). `float_only`: never tap a land for the cost.
+static bool CastCreature(Ctx& cx, int hand_idx, const std::vector<int>* tap_ahead, bool float_only)
+{
+    Player& ap = cx.s.players[cx.me];
+    if (hand_idx < 0 || hand_idx >= static_cast<int>(ap.hand.size())) { return false; }
+    const CardDefinition* d = DefOf(ap.hand[hand_idx]);
+    if (!d || !d->card.IsCreature()) { return false; }
+    const std::string name = ap.hand[hand_idx].m_name.str();
+    if (float_only && !FloatPays(cx, d->card.m_mana_cost)) { return false; }
+    if (tap_ahead)
+    {
+        const ManaCost saved = cx.demand;
+        cx.demand = AddManaCosts(cx.demand, d->card.m_mana_cost);   // the tap-ahead makes this cast's colours
+        TapAhead(cx, *tap_ahead);
+        cx.demand = saved;
+    }
+    const GameState pre_cast = cx.s;
+    if (!Pay(cx, d->card.m_mana_cost)) { cx.Dbg("cast " + name + ": cannot pay " + d->card.m_mana_cost.ToString()); cx.s = pre_cast; return false; }
+    const int idx = HandIndexByName(cx, name);
+    if (idx < 0) { cx.s = pre_cast; return false; }
+    EtbOptionalPayerScope _eops(&DeclinePayer());
+    EtbUntapPriorityScope _prio(tap_ahead);
+    if (!DeployCreatureFromHand(cx.s, cx.me, idx)) { cx.s = pre_cast; return false; }
+    ++cx.deploys;
+    cx.Note("cast " + name);
+    return true;
+}
+// Cast an enchantment from hand: a land Aura onto `host` (0 = none / not an Aura).
+static bool CastEnchantment(Ctx& cx, int hand_idx, int host, bool float_only)
+{
+    Player& ap = cx.s.players[cx.me];
+    if (hand_idx < 0 || hand_idx >= static_cast<int>(ap.hand.size())) { return false; }
+    const CardDefinition* d = DefOf(ap.hand[hand_idx]);
+    if (!d) { return false; }
+    const std::string name = ap.hand[hand_idx].m_name.str();
+    if (float_only && !FloatPays(cx, d->card.m_mana_cost)) { return false; }
+    const GameState pre_cast = cx.s;
+    bool paid = false;
+    {
+        // the host never pays for its own Aura: reserve it (claude_s1_gi0 T3 -- Trace of Abundance
+        // is paid by Conservatory and lands on Aether Hub, which then taps for three)
+        const int hi = host != 0 ? FindPerm(cx.s, cx.me, host) : -1;
+        const bool reserve = hi >= 0 && !cx.s.battlefield[hi].tapped;
+        if (reserve) { cx.s.battlefield[hi].tapped = true; }
+        paid = Pay(cx, d->card.m_mana_cost);
+        if (reserve) { cx.s.battlefield[hi].tapped = false; }
+    }
+    if (!paid) { cx.Dbg("cast " + name + ": cannot pay " + d->card.m_mana_cost.ToString()); cx.s = pre_cast; return false; }
+    const int idx = HandIndexByName(cx, name);
+    if (idx < 0) { cx.s = pre_cast; return false; }
+    Permanent perm;
+    perm.card              = d->card;
+    perm.card.m_number     = cx.s.players[cx.me].hand[idx].m_number;
+    perm.controller_index  = cx.me;
+    perm.owner_index       = cx.me;
+    perm.entered_this_turn = true;
+    cx.s.players[cx.me].hand.erase(cx.s.players[cx.me].hand.begin() + static_cast<std::ptrdiff_t>(idx));
+    cx.s.battlefield.push_back(perm);
+    const int slot = static_cast<int>(cx.s.battlefield.size()) - 1;
+    if (host != 0) { cx.s.battlefield[slot].aura_attached_to = host; }
+    FireEtbWatchers(cx.s, cx.me, slot);
+    FireOwnEtbTriggers(cx.s, cx.me, slot, std::string(), kEtbKxHeuristic);
+    ++cx.deploys;
+    cx.Note("cast " + name + (host != 0 ? " -> land" : ""));
+    return true;
+}
+// Living Wish / Eladamri's Call for a named card.
+static bool CastTutor(Ctx& cx, int hand_idx, const std::string& target)
+{
+    Player& ap = cx.s.players[cx.me];
+    if (hand_idx < 0 || hand_idx >= static_cast<int>(ap.hand.size())) { return false; }
+    const CardDefinition* d = DefOf(ap.hand[hand_idx]);
+    if (!d || !d->params.tutor_to_hand) { return false; }
+    const std::string name = ap.hand[hand_idx].m_name.str();
+    const GameState pre_cast = cx.s;
+    // THE TARGET IS PART OF THE DEMAND. A tutor is never the point -- the card it fetches is -- so
+    // the payment for the tutor must leave that card's colours makeable.
+    const ManaCost saved_demand = cx.demand;
+    {
+        const CardDefinition* td = CardDatabase::Instance().Lookup(target);
+        if (td != nullptr) { cx.demand = AddManaCosts(cx.demand, ResolveHybrids(cx, td->card.m_mana_cost)); }
+    }
+    const bool paid = Pay(cx, d->card.m_mana_cost);
+    cx.demand = saved_demand;
+    if (!paid) { return false; }
+    const int idx = HandIndexByName(cx, name);
+    if (idx < 0) { cx.s = pre_cast; return false; }
+    const Card spell = cx.s.players[cx.me].hand[idx];
+    ap.hand.erase(ap.hand.begin() + static_cast<std::ptrdiff_t>(idx));
+    if (d->params.exiles_self_on_resolve) { cx.s.exile.push_back(spell); }
+    else                                  { ap.graveyard.push_back(spell); }
+    PerformTutor(cx.s, cx.me, d->params, target, d->card.m_name.str());
+    if (HandIndexByName(cx, target) < 0) { cx.s = pre_cast; return false; }   // not found: undo the cast
+    ++cx.deploys;
+    cx.Note("combo finish: " + name + " \xE2\x86\x92 " + target);   // the finish machinery's own wording
+    return true;
+}
+static bool PlayLandDrop(Ctx& cx, int hand_idx)
+{
+    Player& ap = cx.s.players[cx.me];
+    if (hand_idx < 0 || hand_idx >= static_cast<int>(ap.hand.size())) { return false; }
+    if (ap.lands_played_this_turn >= ap.LandDropsAvailable()) { return false; }
+    const CardDefinition* d = DefOf(ap.hand[hand_idx]);
+    if (!d || !d->card.IsLand()) { return false; }
+    const std::string name = ap.hand[hand_idx].m_name.str();
+    LandPlayOptions o;
+    o.honor_entry_chooser = false;
+    o.rad_mode            = -1;
+    if (!PlayLandFromHand(cx.s, static_cast<std::size_t>(hand_idx), *d, o)) { return false; }
+    cx.Note("land " + name, "land");
+    return true;
+}
+// A tap ability of a permanent ({T} plus mana), paid from the float only.
+static bool TapAbility(Ctx& cx, int id, const ManaCost& cost, PermAbilityMode mode)
+{
+    const int i = FindPerm(cx.s, cx.me, id);
+    if (i < 0 || cx.s.battlefield[i].tapped) { return false; }
+    if (!PayFromFloat(cx.s.floating_mana, cost, cx.demand)) { return false; }
+    cx.s.battlefield[i].tapped = true;
+    ApplyPermAbility(cx.s, cx.me, id, mode);
+    return true;
+}
+// One card: a Clue first, then a tap-draw land, then an investigate land (its Clue cracked at once
+// when the engine did not fuse it). Float only.
+static bool Draw(Ctx& cx)
+{
+    const Player& ap = cx.s.players[cx.me];
+    if (ap.library.size() <= 1) { return false; }
+    const std::size_t hand_before = ap.hand.size();
+    auto crack_clue = [&]() -> bool
+    {
+        for (const Permanent& p : cx.s.battlefield)
+        {
+            if (p.controller_index != cx.me) { continue; }
+            const CardDefinition* d = DefOf(p.card);
+            if (!IsClue(d)) { continue; }
+            const int id = p.card.m_number;
+            if (!PayFromFloat(cx.s.floating_mana, d->params.sac_draw_cost.value(), cx.reserve)) { return false; }
+            ApplyPermAbility(cx.s, cx.me, id, PermAbilityMode::SacDraw);
+            return true;
+        }
+        return false;
+    };
+    if (crack_clue()) { ++cx.draws; cx.Note("Clue -> draw", nullptr); return true; }
+    for (const Permanent& p : cx.s.battlefield)
+    {
+        if (p.controller_index != cx.me || p.tapped) { continue; }
+        const CardDefinition* d = DefOf(p.card);
+        if (!IsTapDrawLand(d)) { continue; }
+        if (TapAbility(cx, p.card.m_number, d->params.tap_draw_cost.value(), PermAbilityMode::TapDraw))
+        { ++cx.draws; cx.Note(p.card.m_name.str() + " -> draw", nullptr); return true; }
+    }
+    for (const Permanent& p : cx.s.battlefield)
+    {
+        if (p.controller_index != cx.me || p.tapped) { continue; }
+        const CardDefinition* d = DefOf(p.card);
+        if (!IsInvestigateLand(d)) { continue; }
+        const std::string nm = p.card.m_name.str();
+        ManaCost crack; crack.generic = 2;
+        if (!FloatPays(cx, AddManaCosts(d->params.tap_investigate_cost.value(), crack)))
+        { cx.Dbg("draw: " + nm + " investigate+crack unaffordable from float " + cx.Float()); continue; }
+        if (!TapAbility(cx, p.card.m_number, d->params.tap_investigate_cost.value(),
+                        PermAbilityMode::TapInvestigate)) { cx.Dbg("draw: " + nm + " TapAbility failed"); continue; }
+        if (cx.s.players[cx.me].hand.size() == hand_before) { crack_clue(); }   // not fused: crack it
+        ++cx.draws; cx.Note(nm + " -> investigate -> draw", nullptr);
+        return true;
+    }
+    cx.Dbg("draw: no untapped draw source (or library too small)");
+    return false;
+}
+
+// ---- inventory ----------------------------------------------------------------------------------
+struct Board
+{
+    int  outlet = 0;  bool outlet_needs_c = false;  ManaCost blink;
+    int  pipfree_outlet = 0;
+    int  payload = 0; int payload_untaps = 0;
+    int  drainer = 0, exiler = 0, gorge = 0;
+    int  draw_land = 0, clue = 0;
+    int  lands = 0, c_sources = 0;
+    bool any_draw_sink = false;
+};
+static Board ScanBoard(const Ctx& cx)
+{
+    Board b;
+    int best_blink_mv = 1 << 20;
+    for (const Permanent& p : cx.s.battlefield)
+    {
+        if (p.controller_index != cx.me) { continue; }
+        const CardDefinition* d = DefOf(p.card);
+        if (!d) { continue; }
+        if (p.card.IsLand())
+        {
+            if (!EffectiveProducesFor(cx.s, cx.me, *d, &p).empty()) { ++b.lands; }
+            if (MakesC(d)) { ++b.c_sources; }
+            if (IsGorge(d) && b.gorge == 0) { b.gorge = p.card.m_number; }
+            if ((IsTapDrawLand(d) || IsInvestigateLand(d)) && (b.draw_land == 0 || IsTapDrawLand(d)))
+            { b.draw_land = p.card.m_number; }
+            continue;
+        }
+        if (IsClue(d) && b.clue == 0) { b.clue = p.card.m_number; }
+        if (IsUntapper(d) && d->params.etb_untap_lands > b.payload_untaps)
+        { b.payload = p.card.m_number; b.payload_untaps = d->params.etb_untap_lands; }
+        if (IsOutlet(d))
+        {
+            const ManaCost c = EffectiveActivationCost(cx.s, cx.me, p.card, d->params.blink_cost.value());
+            if (c.colorless == 0 && b.pipfree_outlet == 0) { b.pipfree_outlet = p.card.m_number; }
+            if (c.ManaValue() < best_blink_mv)
+            { best_blink_mv = c.ManaValue(); b.outlet = p.card.m_number; b.blink = c; b.outlet_needs_c = c.colorless > 0; }
+        }
+        if (IsDrainer(d) && b.drainer == 0) { b.drainer = p.card.m_number; }
+        if (IsExiler(d) && b.exiler == 0)   { b.exiler = p.card.m_number; }
+    }
+    // One {C} source cannot feed a {C} blink AND a {C} finisher: a pip-free outlet is preferred.
+    if (b.pipfree_outlet != 0 && b.outlet_needs_c && b.c_sources <= 1)
+    {
+        const int i = FindPerm(cx.s, cx.me, b.pipfree_outlet);
+        const CardDefinition* d = i >= 0 ? DefOf(cx.s.battlefield[i].card) : nullptr;
+        if (d)
+        {
+            b.outlet = b.pipfree_outlet;
+            b.blink  = EffectiveActivationCost(cx.s, cx.me, cx.s.battlefield[i].card, d->params.blink_cost.value());
+            b.outlet_needs_c = false;
+        }
+    }
+    b.any_draw_sink = b.draw_land != 0 || b.clue != 0;
+    return b;
+}
+struct Hand
+{
+    std::vector<int> outlets, untappers, finishers, wishes, calls, auras, lands, reducers;
+    int pipfree_outlet = -1;
+};
+static Hand ScanHand(const Ctx& cx)
+{
+    Hand h;
+    const Player& ap = cx.s.players[cx.me];
+    for (int i = 0; i < static_cast<int>(ap.hand.size()); ++i)
+    {
+        const CardDefinition* d = DefOf(ap.hand[i]);
+        if (!d) { continue; }
+        if (d->card.IsLand()) { h.lands.push_back(i); continue; }
+        if (IsOutlet(d))
+        {
+            h.outlets.push_back(i);
+            if (d->params.blink_cost.value().colorless == 0 && h.pipfree_outlet < 0) { h.pipfree_outlet = i; }
+        }
+        if (IsUntapper(d))              { h.untappers.push_back(i); }
+        if (IsDrainer(d) || IsExiler(d)) { h.finishers.push_back(i); }
+        if (IsWish(d))                  { h.wishes.push_back(i); }
+        if (IsCall(d))                  { h.calls.push_back(i); }
+        if (IsLandAura(d))              { h.auras.push_back(i); }
+        if (IsReducer(d))               { h.reducers.push_back(i); }
+    }
+    return h;
+}
+static int HandMv(const Ctx& cx, int idx)
+{
+    const CardDefinition* d = DefOf(cx.s.players[cx.me].hand[idx]);
+    return d ? d->card.m_mana_cost.ManaValue() : 0;
+}
+static const CardDefinition* SideboardFind(const Ctx& cx, bool (*pred)(const CardDefinition*),
+                                           std::string* name)
+{
+    for (const Card& c : cx.s.players[cx.me].sideboard)
+    {
+        const CardDefinition* d = DefOf(c);
+        if (pred(d)) { if (name) { *name = c.m_name.str(); } return d; }
+    }
+    return nullptr;
+}
+static const CardDefinition* LibraryFind(const Ctx& cx, bool (*pred)(const CardDefinition*),
+                                         std::string* name)
+{
+    for (const Card& c : cx.s.players[cx.me].library)
+    {
+        const CardDefinition* d = DefOf(c);
+        if (pred(d)) { if (name) { *name = c.m_name.str(); } return d; }
+    }
+    return nullptr;
+}
+
+// ---- the finisher route -------------------------------------------------------------------------
+struct Fin
+{
+    enum K { None, Drain, Exile, Gorge, Dig } k = None;
+    int         id = 0;          // on the battlefield
+    int         hand = -1;       // in hand (creature to cast)
+    int         wish = -1;       // hand index of the Wish / Call that fetches it
+    bool        wish_is_land = false;
+    std::string target;
+    ManaCost    cast, act;
+    int         acts = 0;
+    bool        act_c = false;
+    bool        need_switch = false;
+};
+static bool LibOk(const Ctx& cx)
+{
+    return cx.s.opponent_library_dealt && !cx.s.opponent_decked
+        && !cx.s.players[1 - cx.me].library.empty();
+}
+static Fin Decide(const Ctx& cx, const Board& b, const Hand& h)
+{
+    Fin f;
+    const int  life = std::max(1, cx.s.players[1 - cx.me].life);
+    const int  lib  = static_cast<int>(cx.s.players[1 - cx.me].library.size());
+    auto set_drain = [&](const CardDefinition* d, const Card* card)
+    {
+        f.k = Fin::Drain;
+        f.act  = card ? EffectiveActivationCost(cx.s, cx.me, *card, d->params.drain_cost.value())
+                      : d->params.drain_cost.value();
+        f.acts = CeilDiv(life, d->params.drain_amount);
+    };
+    auto set_exile = [&](const CardDefinition* d, const Card* card)
+    {
+        f.k = Fin::Exile;
+        f.act  = card ? EffectiveActivationCost(cx.s, cx.me, *card, d->params.exile_opponent_top_cost.value())
+                      : d->params.exile_opponent_top_cost.value();
+        f.acts = lib;
+    };
+    if (b.drainer != 0)
+    {
+        const int i = FindPerm(cx.s, cx.me, b.drainer);
+        set_drain(DefOf(cx.s.battlefield[i].card), &cx.s.battlefield[i].card); f.id = b.drainer;
+    }
+    else if (b.gorge != 0)
+    {
+        const int i = FindPerm(cx.s, cx.me, b.gorge);
+        const CardDefinition* d = DefOf(cx.s.battlefield[i].card);
+        f.k = Fin::Gorge; f.id = b.gorge; f.act = d->params.tap_damage_cost.value();
+        f.acts = CeilDiv(life, d->params.tap_damage_each_opponent);
+    }
+    else if (b.exiler != 0 && LibOk(cx))
+    {
+        const int i = FindPerm(cx.s, cx.me, b.exiler);
+        set_exile(DefOf(cx.s.battlefield[i].card), &cx.s.battlefield[i].card); f.id = b.exiler;
+    }
+    else
+    {
+        // in hand: a drainer first, an exiler when the library is known
+        for (int idx : h.finishers)
+        {
+            const CardDefinition* d = DefOf(cx.s.players[cx.me].hand[idx]);
+            if (IsDrainer(d)) { set_drain(d, nullptr); f.hand = idx; f.cast = d->card.m_mana_cost; break; }
+        }
+        if (f.k == Fin::None)
+        {
+            for (int idx : h.finishers)
+            {
+                const CardDefinition* d = DefOf(cx.s.players[cx.me].hand[idx]);
+                if (IsExiler(d) && LibOk(cx)) { set_exile(d, nullptr); f.hand = idx; f.cast = d->card.m_mana_cost; break; }
+            }
+        }
+        if (f.k == Fin::None && !h.wishes.empty())
+        {
+            std::string nm;
+            const CardDefinition* d = nullptr;
+            if ((d = SideboardFind(cx, IsDrainer, &nm)) != nullptr && CanMakeColor(cx, Color::Black))
+            { set_drain(d, nullptr); f.wish = h.wishes.front(); f.target = nm; f.cast = d->card.m_mana_cost; }
+            else if ((d = SideboardFind(cx, IsExiler, &nm)) != nullptr && LibOk(cx) && CanMakeColor(cx, Color::Blue))
+            { set_exile(d, nullptr); f.wish = h.wishes.front(); f.target = nm; f.cast = d->card.m_mana_cost; }
+            else if ((d = SideboardFind(cx, IsGorge, &nm)) != nullptr && CanMakeColor(cx, Color::Red)
+                     && cx.s.players[cx.me].lands_played_this_turn < cx.s.players[cx.me].LandDropsAvailable())
+            {
+                f.k = Fin::Gorge; f.wish = h.wishes.front(); f.wish_is_land = true; f.target = nm;
+                f.act = d->params.tap_damage_cost.value();
+                f.acts = CeilDiv(life, d->params.tap_damage_each_opponent);
+            }
+        }
+        if (f.k == Fin::None && !h.calls.empty())
+        {
+            std::string nm;
+            const CardDefinition* d = nullptr;
+            if ((d = LibraryFind(cx, IsDrainer, &nm)) != nullptr && CanMakeColor(cx, Color::Black))
+            { set_drain(d, nullptr); f.wish = h.calls.front(); f.target = nm; f.cast = d->card.m_mana_cost; }
+            else if ((d = LibraryFind(cx, IsExiler, &nm)) != nullptr && LibOk(cx) && CanMakeColor(cx, Color::Blue))
+            { set_exile(d, nullptr); f.wish = h.calls.front(); f.target = nm; f.cast = d->card.m_mana_cost; }
+        }
+        if (f.k == Fin::None && b.any_draw_sink && cx.s.players[cx.me].library.size() > 1)
+        { f.k = Fin::Dig; }
+    }
+    f.act_c       = f.act.colorless > 0;
+    f.need_switch = f.act_c && b.outlet_needs_c && b.c_sources <= 1;
+    return f;
+}
+// What the route still intends to pay from the float: the casts ahead (their colours), one {C}
+// per finisher activation, the activations' generic, Emiel's cast if the switch is needed.
+static void SetDemand(Ctx& cx, const Fin& f, const Hand& h)
+{
+    ManaCost d;
+    if (f.wish >= 0) { d = AddManaCosts(d, DefOf(cx.s.players[cx.me].hand[f.wish])->card.m_mana_cost); }
+    if (f.hand >= 0 || f.wish >= 0) { d = AddManaCosts(d, f.cast); }
+    if (f.need_switch && h.pipfree_outlet >= 0)
+    { d = AddManaCosts(d, DefOf(cx.s.players[cx.me].hand[h.pipfree_outlet])->card.m_mana_cost); }
+    cx.reserve = (f.k == Fin::Drain || f.k == Fin::Exile || f.k == Fin::Gorge) ? AddManaCosts(d, f.act) : d;
+    if (f.k == Fin::Drain || f.k == Fin::Exile || f.k == Fin::Gorge)
+    {
+        d.colorless += f.act.colorless * f.acts;
+        d.generic   += f.act.generic   * f.acts;
+        d.red       += f.act.red       * f.acts;
+        d.white += f.act.white * f.acts; d.blue += f.act.blue * f.acts;
+        d.black += f.act.black * f.acts; d.green += f.act.green * f.acts;
+    }
+    cx.demand = d;
+}
+static bool Activate(Ctx& cx, const Fin& f)
+{
+    if (f.k == Fin::Drain)
+    { const int i = FindPerm(cx.s, cx.me, f.id); if (i < 0) { return false; }
+      if (!PayFromFloat(cx.s.floating_mana, f.act, cx.reserve)) { return false; }
+      ApplyPermAbility(cx.s, cx.me, f.id, PermAbilityMode::Drain); ++cx.acts; return true; }
+    if (f.k == Fin::Exile)
+    { if (!LibOk(cx)) { return false; }
+      const int i = FindPerm(cx.s, cx.me, f.id); if (i < 0) { return false; }
+      if (!PayFromFloat(cx.s.floating_mana, f.act, cx.reserve)) { return false; }
+      ApplyPermAbility(cx.s, cx.me, f.id, PermAbilityMode::ExileTop); ++cx.acts; return true; }
+    if (f.k == Fin::Gorge)
+    { if (!TapAbility(cx, f.id, f.act, PermAbilityMode::TapDamage)) { return false; }
+      ++cx.acts; return true; }
+    return false;
+}
+
+// ---- DEPLOY -------------------------------------------------------------------------------------
+static int ScoreLandDrop(const Ctx& cx, const CardDefinition* d, const Board& b)
+{
+    if (!d) { return -1; }
+    int s = 0;
+    if (MakesC(d) && b.c_sources == 0)                            { s += 100; }
+    if ((IsTapDrawLand(d) || IsInvestigateLand(d)) && b.draw_land == 0) { s += 50; }
+    if (!d->params.enters_tapped)                                 { s += 10 + ManaProducedPerTap(*d); }
+    return s;
+}
+// While deploying, the float is steered by everything still to be cast (the untappers, the outlet,
+// a reducer, the Auras, the tutors) plus the first blink, so the leftover of each payment is the
+// colour the next cast -- and the first activation -- needs (claude_s6_gi5 T4: the last mana must
+// be {C}).
+static void DeployDemand(Ctx& cx)
+{
+    ManaCost d;
+    const Player& ap = cx.s.players[cx.me];
+    int cheapest_blink = 1 << 20; ManaCost blink;
+    for (const Card& c : ap.hand)
+    {
+        const CardDefinition* cd = DefOf(c);
+        if (!cd || cd->card.IsLand()) { continue; }
+        if (IsUntapper(cd) || IsOutlet(cd) || IsReducer(cd) || IsLandAura(cd) || IsWish(cd) || IsCall(cd))
+        { d = AddManaCosts(d, ResolveHybrids(cx, cd->card.m_mana_cost)); }
+        if (IsOutlet(cd) && cd->params.blink_cost.value().ManaValue() < cheapest_blink)
+        { cheapest_blink = cd->params.blink_cost.value().ManaValue(); blink = cd->params.blink_cost.value(); }
+    }
+    for (const Permanent& p : cx.s.battlefield)
+    {
+        if (p.controller_index != cx.me) { continue; }
+        const CardDefinition* cd = DefOf(p.card);
+        if (IsOutlet(cd))
+        {
+            const ManaCost c = EffectiveActivationCost(cx.s, cx.me, p.card, cd->params.blink_cost.value());
+            if (c.ManaValue() < cheapest_blink) { cheapest_blink = c.ManaValue(); blink = c; }
+        }
+    }
+    if (cheapest_blink < (1 << 20)) { d = AddManaCosts(d, blink); }
+    cx.demand  = d;
+    cx.reserve = d;
+}
+static int AvailableTotal(const Ctx& cx)
+{
+    int avail = cx.s.floating_mana.Total();
+    for (const Permanent& p : cx.s.battlefield)
+    {
+        if (p.controller_index != cx.me || p.tapped || !p.card.IsLand()) { continue; }
+        const CardDefinition* ld = DefOf(p.card);
+        if (ld) { avail += PermanentManaYield(cx.s, p, *ld); }
+    }
+    return avail;
+}
+static bool DeployPieces(Ctx& cx, bool auras_first)
+{
+    Player& ap = cx.s.players[cx.me];
+    DeployDemand(cx);
+    // 1. the land drop
+    {
+        Board b = ScanBoard(cx); Hand h = ScanHand(cx);
+        if (ap.lands_played_this_turn < ap.LandDropsAvailable())
+        {
+            int best = -1, bs = -1;
+            for (int i : h.lands) { const int sc = ScoreLandDrop(cx, DefOf(ap.hand[i]), b); if (sc > bs) { bs = sc; best = i; } }
+            if (best >= 0) { PlayLandDrop(cx, best); }
+            else if (!h.wishes.empty())
+            {
+                // no land in hand: a spare Wish fetches one (the finisher's Wish is kept)
+                const bool spare = h.wishes.size() >= 2 || !h.finishers.empty() || b.drainer != 0
+                                || b.exiler != 0 || b.gorge != 0 || b.any_draw_sink;
+                if (spare)
+                {
+                    std::string best_nm; int bsc = -1;
+                    for (const Card& c : ap.sideboard)
+                    {
+                        const CardDefinition* d = DefOf(c);
+                        if (!d || !d->card.IsLand()) { continue; }
+                        const int sc = ScoreLandDrop(cx, d, b);
+                        if (sc > bsc) { bsc = sc; best_nm = c.m_name.str(); }
+                    }
+                    if (!best_nm.empty() && CastTutor(cx, h.wishes.front(), best_nm))
+                    { PlayLandDrop(cx, HandIndexByName(cx, best_nm)); }
+                }
+            }
+        }
+    }
+    // 2. the land Auras in hand (any-colour ones first: they are the colours), onto the best host
+    if (auras_first)
+    {
+        for (int round = 0; round < 4; ++round)
+        {
+            Hand h = ScanHand(cx);
+            if (h.auras.empty()) { break; }
+            int pick = h.auras.front();
+            for (int i : h.auras)
+            {
+                const CardDefinition* d = DefOf(ap.hand[i]);
+                if (d && d->params.land_aura_produces.empty()) { pick = i; break; }
+            }
+            const CardDefinition* ad = DefOf(ap.hand[pick]);
+            if (!ad) { break; }
+            DeployDemand(cx);
+            // hosts highest-yield-first (untapped preferred: the bonus is spendable this turn);
+            // the first host that leaves the Aura payable by the OTHER lands takes it
+            std::vector<std::pair<int, int>> hosts;   // (score, id)
+            for (const Permanent& p : cx.s.battlefield)
+            {
+                if (p.controller_index != cx.me || !p.card.IsLand() || LandHasShroud(p, cx.s)) { continue; }
+                const CardDefinition* ld = DefOf(p.card);
+                if (!ld || EffectiveProducesFor(cx.s, cx.me, *ld, &p).empty()) { continue; }
+                hosts.push_back({ PermanentManaYield(cx.s, p, *ld) * 2 + (p.tapped ? 0 : 1), p.card.m_number });
+            }
+            std::stable_sort(hosts.begin(), hosts.end(),
+                             [](const std::pair<int, int>& a, const std::pair<int, int>& b) { return a.first > b.first; });
+            bool cast = false;
+            for (const std::pair<int, int>& hh : hosts)
+            {
+                if (CastEnchantment(cx, pick, hh.second, /*float_only=*/false)) { cast = true; break; }
+                if (HandIndexByName(cx, ad->card.m_name.str()) < 0) { break; }
+            }
+            if (!cast) { break; }
+        }
+    }
+    // 3. the untappers, cheapest first, each with tap-ahead; a Wish / Call fetches one when the hand
+    //    has none it can pay for
+    for (int round = 0; round < 6; ++round)
+    {
+        Board b = ScanBoard(cx); Hand h = ScanHand(cx);
+        DeployDemand(cx);
+        std::vector<int> cands = h.untappers;
+        std::stable_sort(cands.begin(), cands.end(), [&](int a, int c) { return HandMv(cx, a) < HandMv(cx, c); });
+        bool did = false;
+        for (int idx : cands)
+        {
+            const CardDefinition* d = DefOf(ap.hand[idx]);
+            const int n = std::min(d->params.etb_untap_lands, std::max(1, b.lands));
+            const std::vector<int> set = ChooseUntaps(cx, n, b.outlet_needs_c ? 1 : 0, 0);
+            // worth it: the refund covers the cast (an untapper never loses mana then)
+            const int refund = YieldOfSet(cx, set);
+            if (b.payload != 0 && refund < d->card.m_mana_cost.ManaValue())
+            { cx.Dbg("skip " + d->card.m_name.str() + ": refund " + std::to_string(refund) + " < cost"); continue; }
+            const int avail = AvailableTotal(cx);
+            if (avail < d->card.m_mana_cost.ManaValue())
+            { cx.Dbg("skip " + d->card.m_name.str() + ": avail " + std::to_string(avail) + " < cost"); continue; }
+            if (CastCreature(cx, idx, &set, /*float_only=*/false)) { did = true; break; }
+        }
+        if (did) { continue; }
+        if (b.payload != 0) { break; }
+        // nothing castable and no untapper on board: fetch the cheapest one
+        std::string nm;
+        if (!h.wishes.empty() && SideboardFind(cx, IsUntapper, &nm) != nullptr)
+        {
+            std::string best = nm; int bmv = 1 << 20;
+            for (const Card& c : ap.sideboard)
+            { const CardDefinition* d = DefOf(c); if (IsUntapper(d) && d->card.m_mana_cost.ManaValue() < bmv) { bmv = d->card.m_mana_cost.ManaValue(); best = c.m_name.str(); } }
+            if (CastTutor(cx, h.wishes.front(), best)) { continue; }
+        }
+        if (!h.calls.empty() && LibraryFind(cx, IsUntapper, &nm) != nullptr)
+        {
+            std::string best = nm; int bmv = 1 << 20;
+            for (const Card& c : ap.library)
+            { const CardDefinition* d = DefOf(c); if (IsUntapper(d) && d->card.m_mana_cost.ManaValue() < bmv) { bmv = d->card.m_mana_cost.ManaValue(); best = c.m_name.str(); } }
+            if (CastTutor(cx, h.calls.front(), best)) { continue; }
+        }
+        break;
+    }
+    // 4. a reducer (Training Grounds) when the board can pay it AND the outlet after it: the first
+    //    blink is what the deploy has to leave payable
+    {
+        Board b = ScanBoard(cx); Hand h = ScanHand(cx);
+        DeployDemand(cx);
+        if (!h.reducers.empty())
+        {
+            int outlet_mv = 0;
+            if (b.outlet == 0 && !h.outlets.empty())
+            { outlet_mv = 1 << 20; for (int i : h.outlets) { outlet_mv = std::min(outlet_mv, HandMv(cx, i)); } }
+            if (AvailableTotal(cx) >= HandMv(cx, h.reducers.front()) + outlet_mv)
+            { CastEnchantment(cx, h.reducers.front(), 0, /*float_only=*/false); }
+        }
+    }
+    // 5. the outlet: Emiel when the board has one {C} source, else the cheapest; fetched if absent
+    for (int round = 0; round < 3; ++round)
+    {
+        Board b = ScanBoard(cx); Hand h = ScanHand(cx);
+        DeployDemand(cx);
+        if (b.outlet != 0) { break; }
+        std::vector<int> cands = h.outlets;
+        std::stable_sort(cands.begin(), cands.end(), [&](int a, int c) { return HandMv(cx, a) < HandMv(cx, c); });
+        // ONE {C} SOURCE -> THE PIP-FREE OUTLET (the user's rule: "if you only have one colourless
+        // you might need to add play Emiel"). A {C}-pip blink would spend the only {C} source the
+        // finisher needs every iteration, so Emiel is cast first whenever the board can pay for it;
+        // when it cannot, the cheaper outlet still beats no loop at all.
+        if (b.c_sources <= 1 && h.pipfree_outlet >= 0
+            && AvailableTotal(cx) >= HandMv(cx, h.pipfree_outlet))
+        { cands.erase(std::remove(cands.begin(), cands.end(), h.pipfree_outlet), cands.end()); cands.insert(cands.begin(), h.pipfree_outlet); }
+        bool did = false;
+        for (int idx : cands)
+        {
+            const CardDefinition* d = DefOf(ap.hand[idx]);
+            if (AvailableTotal(cx) < d->card.m_mana_cost.ManaValue())
+            { cx.Dbg("skip outlet " + d->card.m_name.str() + ": avail < cost"); continue; }
+            if (CastCreature(cx, idx, nullptr, /*float_only=*/false)) { did = true; break; }
+        }
+        if (did) { break; }
+        std::string nm;
+        if (!h.wishes.empty() && SideboardFind(cx, IsOutlet, &nm) != nullptr && CastTutor(cx, h.wishes.front(), nm)) { continue; }
+        if (!h.calls.empty()  && LibraryFind(cx, IsOutlet, &nm) != nullptr   && CastTutor(cx, h.calls.front(), nm))  { continue; }
+        break;
+    }
+    const Board b = ScanBoard(cx);
+    if (b.outlet == 0)  { cx.Dbg("deploy: no outlet on the battlefield"); }
+    if (b.payload == 0) { cx.Dbg("deploy: no untapper on the battlefield"); }
+    return b.outlet != 0 && b.payload != 0;
+}
+
+// ---- the loop -----------------------------------------------------------------------------------
+// A ROUTE THAT KILLS US IS NOT A WIN. The painlands (Brushland, Adarkar Wastes, Yavimaya Coast)
+// charge a life per COLOURED tap, and a go-off taps a great many times, so a line can reach lethal
+// with the active player at or below zero. The executor already refuses such a plan
+// (`AIEngine::TrySecondMainStrandedKill` requires `probe.ActivePlayer().life > 0`), so a route that
+// called it a win handed the search a plan it would then decline -- and the plan it DISPLACED was
+// the one that used to win. That is exactly how claude_s3_gi2 T4/post_main and claude_s9_gi8
+// T4/post_main went 4 -> 5 on the 2026-09-16 sweep.
+static bool RouteWon(const Ctx& cx)
+{ return OpponentHasLost(cx.s) && cx.s.players[cx.me].life > 0; }
+
+struct Snap { int f, hand, bf, life, lib, draws, iters, acts, deploys; };
+static Snap TakeSnap(const Ctx& cx)
+{
+    return Snap{ cx.s.floating_mana.Total(), static_cast<int>(cx.s.players[cx.me].hand.size()),
+                 static_cast<int>(cx.s.battlefield.size()), cx.s.players[1 - cx.me].life,
+                 static_cast<int>(cx.s.players[1 - cx.me].library.size()),
+                 cx.draws, cx.iters, cx.acts, cx.deploys };
+}
+static bool SameSnap(const Snap& a, const Snap& b)
+{
+    return a.f == b.f && a.hand == b.hand && a.bf == b.bf && a.life == b.life && a.lib == b.lib
+        && a.draws == b.draws && a.iters == b.iters && a.acts == b.acts && a.deploys == b.deploys;
+}
+static bool Run(Ctx& cx)
+{
+    if (RouteWon(cx)) { return true; }
+    {
+        Board b0 = ScanBoard(cx);
+        if (b0.outlet == 0 || b0.payload == 0)
+        {
+            const GameState snapshot = cx.s;
+            const Ctx cx_saved = cx;
+            if (!DeployPieces(cx, /*auras_first=*/true))
+            {
+                cx.s = snapshot; cx.demand = cx_saved.demand; cx.reserve = cx_saved.reserve; cx.iters = cx_saved.iters;
+                cx.deploys = cx_saved.deploys; cx.draws = cx_saved.draws; cx.acts = cx_saved.acts; cx.log = cx_saved.log;
+                if (!DeployPieces(cx, /*auras_first=*/false)) { cx.Note("no loop: pieces not deployable"); return false; }
+            }
+        }
+    }
+    Snap prev = TakeSnap(cx);
+    // A blink that changes the float is "progress" to the snapshot guard, so a line whose next step
+    // can never fire (a colour no land makes, a draw that never pays) used to bank until MaxIter.
+    // The banking phase of a REAL line is bounded by its own target, so: that many blinks past the
+    // target without a step firing, and the route says so.
+    int stall = 0, last_target = 0;
+    for (int guard = 0; guard < MaxIter(); ++guard)
+    {
+        if (RouteWon(cx)) { return true; }
+        if (cx.s.players[cx.me].life <= 0) { cx.Note("route would kill us"); return false; }
+        Board b = ScanBoard(cx);
+        Hand  h = ScanHand(cx);
+        if (b.outlet == 0 || b.payload == 0) { cx.Note("loop broke"); return false; }
+        Fin f = Decide(cx, b, h);
+        if (f.k == Fin::None) { cx.Note("no finisher route"); return false; }
+        SetDemand(cx, f, h);
+        const int n_untap = std::min(b.payload_untaps, std::max(1, b.lands));
+        if (TraceOn())
+        {
+            cx.Dbg("fin k=" + std::to_string(static_cast<int>(f.k)) + " id=" + std::to_string(f.id)
+                   + " hand=" + std::to_string(f.hand) + " wish=" + std::to_string(f.wish)
+                   + (f.target.empty() ? std::string() : " -> " + f.target)
+                   + " act=" + f.act.ToString() + " x" + std::to_string(f.acts)
+                   + " switch=" + std::to_string(f.need_switch ? 1 : 0)
+                   + " demand=" + cx.demand.ToString() + " float=" + cx.Float());
+        }
+
+        // float-only improvements to the loop itself: cheaper blinks, a bigger untapper, the switch
+        bool did = false;
+        if (!h.reducers.empty() && CastEnchantment(cx, h.reducers.front(), 0, /*float_only=*/true)) { did = true; }
+        if (!did)
+        {
+            for (int idx : h.untappers)
+            {
+                const CardDefinition* d = DefOf(cx.s.players[cx.me].hand[idx]);
+                if (d->params.etb_untap_lands <= b.payload_untaps) { continue; }
+                if (!FloatPays(cx, d->card.m_mana_cost)) { continue; }
+                const std::vector<int> set = ChooseUntaps(cx, std::min(d->params.etb_untap_lands, b.lands), b.outlet_needs_c ? 1 : 0, 0);
+                if (CastCreature(cx, idx, &set, /*float_only=*/true)) { did = true; break; }
+            }
+        }
+        if (!did && f.need_switch && h.pipfree_outlet >= 0
+            && CastCreature(cx, h.pipfree_outlet, nullptr, /*float_only=*/true)) { did = true; cx.Note("outlet switch"); }
+        if (did) { prev = TakeSnap(cx); stall = 0; continue; }
+
+        // the finish, whenever the float pays it
+        if (f.id != 0)
+        {
+            int fired = 0;
+            while (!OpponentHasLost(cx.s) && Activate(cx, f)) { ++fired; }
+            if (RouteWon(cx)) { cx.Note("finisher x" + std::to_string(cx.acts) + " -- the opponent is dead", nullptr); return true; }
+            if (OpponentHasLost(cx.s)) { cx.Note("lethal but we are dead"); return false; }
+            if (fired > 0) { prev = TakeSnap(cx); stall = 0; continue; }
+            cx.Dbg("finish: " + f.act.ToString() + " not payable from float " + cx.Float());
+        }
+        // the finisher in hand, then the Wish that fetches it (Wish plus finisher both from the float)
+        if (f.hand >= 0 && CastCreature(cx, f.hand, nullptr, /*float_only=*/true)) { prev = TakeSnap(cx); stall = 0; continue; }
+        if (f.wish >= 0)
+        {
+            const ManaCost both = AddManaCosts(DefOf(cx.s.players[cx.me].hand[f.wish])->card.m_mana_cost, f.cast);
+            const bool pays = FloatPays(cx, both);
+            if (pays && CastTutor(cx, f.wish, f.target))
+            {
+                if (f.wish_is_land) { PlayLandDrop(cx, HandIndexByName(cx, f.target)); }
+                prev = TakeSnap(cx); stall = 0; continue;
+            }
+            cx.Dbg(std::string("wish: ") + (pays ? "CastTutor failed" : "float does not pay wish+cast ")
+                   + both.ToString() + " float " + cx.Float());
+        }
+        // the dig, when the float carries the draw and the next blink
+        if (f.k == Fin::Dig)
+        {
+            // Keep the NEXT blink's mana value plus the dig's own {4}+{2} -- as GENERIC. The blink's
+            // {C} pip is made by its tap-ahead (the {C} land is in the dig's untap set), and a
+            // one-{C}-source board can never hold a spare {C} in the float: requiring one here left
+            // claude_s9_gi8's Conservatory dig unfired for 600 iterations while {G} piled up.
+            ManaCost reserve;
+            reserve.generic = b.blink.ManaValue() + 6;
+            const bool pays = FloatPays(cx, reserve);
+            if (pays && Draw(cx)) { prev = TakeSnap(cx); stall = 0; continue; }
+            cx.Dbg(std::string("dig: ") + (pays ? "Draw() failed" : "float below blink+6") + " float " + cx.Float());
+        }
+
+        // otherwise blink: BANK until the float carries the whole finish, then the FINISH set
+        int bank_target = 0;
+        std::vector<int> set;
+        if (f.k == Fin::Dig) { set = ChooseUntaps(cx, n_untap, b.outlet_needs_c ? 1 : 0, b.draw_land); }
+        else
+        {
+            const int  want_c   = (b.outlet_needs_c ? 1 : 0) + (f.act_c ? 1 : 0);
+            const int  must     = (f.k == Fin::Gorge && f.id != 0) ? f.id : 0;
+            const std::vector<int> fin_set = ChooseUntaps(cx, n_untap, want_c, must);
+            const int  income   = YieldOfSet(cx, fin_set);
+            const int  per_iter = std::max(0, b.blink.ManaValue() + f.act.ManaValue() - income);
+            bank_target = f.cast.ManaValue() + (f.wish >= 0 ? HandMv(cx, f.wish) : 0)
+                        + (f.need_switch && h.pipfree_outlet >= 0 ? HandMv(cx, h.pipfree_outlet) : 0)
+                        + per_iter * f.acts + b.blink.ManaValue() + f.act.ManaValue();
+            const bool ready = (f.id != 0 || f.hand >= 0 || f.wish >= 0)
+                            && cx.s.floating_mana.Total() >= bank_target;
+            set = ready ? fin_set : ChooseUntaps(cx, n_untap, b.outlet_needs_c ? 1 : 0, 0);
+            last_target = bank_target;
+            if (TraceOn())
+            {
+                cx.Dbg("bank: float=" + std::to_string(cx.s.floating_mana.Total()) + " target=" + std::to_string(bank_target)
+                       + " ready=" + std::to_string(ready ? 1 : 0) + " income=" + std::to_string(income)
+                       + " per_iter=" + std::to_string(per_iter) + " n_untap=" + std::to_string(n_untap));
+            }
+        }
+        if (!Blink(cx, b.outlet, b.payload, set)) { cx.Note("blink unpayable"); return false; }
+        const Snap now = TakeSnap(cx);
+        if (SameSnap(now, prev)) { cx.Note("no progress"); return false; }
+        prev = now;
+        if (++stall > std::max(60, last_target + 20))
+        { cx.Note("stalled: " + std::to_string(stall) + " blinks without a step firing"); return false; }
+    }
+    cx.Note("iteration cap");
+    return RouteWon(cx);
+}
+}   // namespace comboroute
+
+bool EdfComboRoutePiecesInPlace(const GameState& s, int me)
+{
+    if (!comboroute::On()) { return false; }
+    if (s.players[1 - me].life <= 0) { return false; }
+    using namespace comboroute;
+    bool outlet = false, untapper = false, wish = false, call = false;
+    int lands = 0;
+    for (const Permanent& p : s.battlefield)
+    {
+        if (p.controller_index != me) { continue; }
+        const CardDefinition* d = DefOf(p.card);
+        if (p.card.IsLand()) { ++lands; continue; }
+        if (IsOutlet(d))   { outlet = true; }
+        if (IsUntapper(d)) { untapper = true; }
+    }
+    for (const Card& c : s.players[me].hand)
+    {
+        const CardDefinition* d = DefOf(c);
+        if (!d) { continue; }
+        if (d->card.IsLand()) { ++lands; continue; }
+        if (IsOutlet(d))   { outlet = true; }
+        if (IsUntapper(d)) { untapper = true; }
+        if (IsWish(d))     { wish = true; }
+        if (IsCall(d))     { call = true; }
+    }
+    if (lands < 2) { return false; }
+    if (!outlet || !untapper)
+    {
+        if (wish)
+        {
+            for (const Card& c : s.players[me].sideboard)
+            { const CardDefinition* d = DefOf(c); if (IsOutlet(d)) { outlet = true; } if (IsUntapper(d)) { untapper = true; } }
+        }
+        if (call && (!outlet || !untapper))
+        {
+            for (const Card& c : s.players[me].library)
+            { const CardDefinition* d = DefOf(c); if (IsOutlet(d)) { outlet = true; } if (IsUntapper(d)) { untapper = true; } }
+        }
+    }
+    return outlet && untapper;
+}
+
+// THE TRIAL IS MEMOISED ON THE BOARD, and that is not an optimisation -- it is a CORRECTNESS
+// requirement for a budgeted search. The emission site sits in CollectActions, which a single
+// decision re-enters thousands of times over boards that are mostly identical, and one trial runs
+// the whole go-off (tens to hundreds of blinks). Unmemoised it ate the 20 ms budget and the search
+// got WORSE where the route did not fire: claude_s3_gi2 T4/post_main and claude_s9_gi8
+// T4/post_main both went 4 -> 5, and claude_s14_gi13 T5 5 -> 6, on the 2026-09-16 sweep. The key is
+// every input the route reads; a miss costs one trial, a hit costs a hash.
+namespace comboroute
+{
+struct TrialMemo
+{
+    std::unordered_map<std::uint64_t, bool> m;
+    std::uint64_t hits = 0, misses = 0;
+};
+inline TrialMemo& Memo() { static thread_local TrialMemo m; return m; }
+inline void Mix(std::uint64_t& h, std::uint64_t v)
+{ h ^= v + 0x9e3779b97f4a7c15ULL + (h << 6) + (h >> 2); }
+static std::uint64_t BoardKey(const GameState& s, int me)
+{
+    std::uint64_t h = 1469598103934665603ULL;
+    Mix(h, static_cast<std::uint64_t>(s.turn_number));
+    Mix(h, static_cast<std::uint64_t>(me));
+    Mix(h, static_cast<std::uint64_t>(s.players[1 - me].life));
+    Mix(h, static_cast<std::uint64_t>(s.players[1 - me].library.size()));
+    Mix(h, static_cast<std::uint64_t>(s.opponent_decked ? 1 : 0));
+    const Player& ap = s.players[me];
+    Mix(h, static_cast<std::uint64_t>(ap.life));
+    Mix(h, static_cast<std::uint64_t>(ap.library.size()));
+    Mix(h, static_cast<std::uint64_t>(ap.energy_counters));
+    Mix(h, static_cast<std::uint64_t>(ap.lands_played_this_turn));
+    Mix(h, static_cast<std::uint64_t>(ap.bonus_land_drops_this_turn));
+    for (const Card& c : ap.hand)      { Mix(h, static_cast<std::uint64_t>(c.m_number) * 3 + 1); }
+    for (const Card& c : ap.sideboard) { Mix(h, static_cast<std::uint64_t>(c.m_number) * 5 + 2); }
+    // the library ORDER matters (the dig draws off the top) -- the top few cards are enough to
+    // separate boards a draw has moved, and the size above catches the rest
+    for (std::size_t i = 0; i < ap.library.size() && i < 8; ++i)
+    { Mix(h, static_cast<std::uint64_t>(ap.library[i].m_number) * 7 + 3); }
+    for (const Permanent& p : s.battlefield)
+    {
+        if (p.controller_index != me) { continue; }
+        Mix(h, static_cast<std::uint64_t>(p.card.m_number) * 11
+               + (p.tapped ? 1 : 0) + (p.aura_attached_to != 0 ? 64ULL * static_cast<std::uint64_t>(p.aura_attached_to) : 0));
+    }
+    const ManaPool& f = s.floating_mana;
+    Mix(h, static_cast<std::uint64_t>(f.white + 31 * f.blue + 961 * f.black));
+    Mix(h, static_cast<std::uint64_t>(f.red + 31 * f.green + 961 * f.colorless + 29791 * f.wild));
+    return h;
+}
+}   // namespace comboroute
+
+bool EdfComboRouteTrial(const GameState& s, int me)
+{
+    if (!comboroute::On()) { return false; }
+    comboroute::TrialMemo& memo = comboroute::Memo();
+    const std::uint64_t key = comboroute::BoardKey(s, me);
+    // MTG_EDF_COMBO_ROUTE_MEMO=0 bypasses the memo (diagnosis: a root's own trial is otherwise a
+    // silent hit on a rollout's earlier verdict for the same board, and the trace shows nothing).
+    static const bool s_memo = EnvOn("MTG_EDF_COMBO_ROUTE_MEMO", true);
+    if (s_memo)
+    {
+        const auto it = memo.m.find(key);
+        if (it != memo.m.end())
+        {
+            ++memo.hits;
+            if (comboroute::TraceOn())
+            {
+                std::fprintf(stderr, "[combo-route] t%d TRIAL memo-hit %s (key %016llx)\n", s.turn_number,
+                             it->second ? "WIN" : "no", static_cast<unsigned long long>(key));
+            }
+            return it->second;
+        }
+    }
+    ++memo.misses;
+    if (memo.m.size() > 65536) { memo.m.clear(); }   // bounded; a go-off turn never needs more
+    GameState copy = s;
+    RevealLogPause     _quiet;
+    ComboOffApplyPause _nochoosers;
+    comboroute::Ctx cx(copy, me);
+    const bool win = comboroute::Run(cx);
+    if (comboroute::TraceOn())
+    {
+        std::fprintf(stderr, "[combo-route] t%d TRIAL %s: deploys=%d iters=%d draws=%d acts=%d life=%d opp=%d | %s\n",
+                     s.turn_number, win ? "WIN" : "no", cx.deploys, cx.iters, cx.draws, cx.acts,
+                     copy.players[me].life, copy.players[1 - me].life, cx.log.c_str());
+    }
+    if (s_memo) { memo.m[key] = win; }
+    return win;
+}
+
+bool EdfComboRouteApply(GameState& s, int me)
+{
+    if (!comboroute::On()) { return false; }
+    // ALL-OR-NOTHING: the silent trial on a copy decides; only a kill is played on the real state,
+    // and that live run narrates each step into the play history (the same deterministic route).
+    {
+        GameState copy = s;
+        RevealLogPause     _quiet;
+        ComboOffApplyPause _nochoosers;
+        comboroute::Ctx cx(copy, me);
+        if (!comboroute::Run(cx)) { return false; }
+    }
+    ComboOffApplyPause _nochoosers;
+    comboroute::Ctx cx(s, me);
+    cx.emit = true;
+    const bool win = comboroute::Run(cx);
+    cx.FlushBlinks();
+    if (comboroute::TraceOn())
+    {
+        std::fprintf(stderr, "[combo-route] t%d APPLY %s: deploys=%d iters=%d draws=%d acts=%d\n",
+                     s.turn_number, win ? "WIN" : "no", cx.deploys, cx.iters, cx.draws, cx.acts);
+    }
+    return win;
+}
+
 
 // SAME-MAIN GO-OFF (USER directive, 2026-09-08: "There should be no need to use multiple mains"
 // ... "The more important thing is that we don't have extra mains to search").

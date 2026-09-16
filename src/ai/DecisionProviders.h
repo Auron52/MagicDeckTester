@@ -1508,6 +1508,8 @@ public:
     // THE COMBO OFF RULE TABLE (the viewer button's DISPLAY gate). Five named rules over board
     // inventory -- see the table in DecisionProviders.cpp. Two of them are the user's own words.
     bool ComboOffPossible(const GameState& s, int controller, std::string* rule) const override;
+    // The mechanical COMBO OFF route is emitted for this deck only (EdfComboRouteTrial).
+    bool ComboRouteEnabled() const override { return true; }
 
     // "STUCK -- PASS THE TURN" CERTIFICATE (USER, 2026-09-08: "we have the combo for infinite
     // mana, but no sink or sufficient sources of colourless. In those cases we need to be able to
@@ -1693,3 +1695,13 @@ void EdfCertClearGoOffFlag();
 // ApplyPlanDirect's tail and the autonomous executor's matching point (lockstep). Search only
 // (no-op under human play); inert for decks without a blink outlet. Returns true if it blinked.
 bool EdfAutoGoOffAfterCasts(GameState& s, int controller);
+
+// THE MECHANICAL COMBO OFF ROUTE (Session 31, 2026-09-16; the user's own go-off procedure, see the
+// header above the implementation). Three entry points:
+//   PiecesInPlace -- the cheap inventory gate (outlet + untapper reachable, two lands);
+//   Trial         -- run the route on a COPY: does it kill the opponent?  (the emission gate)
+//   Apply         -- run it on a copy and commit ONLY on a kill (all-or-nothing) -- the apply half
+//                    of Action::Kind::ComboRoute in ApplyPlanDirect and the executor.
+bool EdfComboRoutePiecesInPlace(const GameState& s, int controller);
+bool EdfComboRouteTrial(const GameState& s, int controller);
+bool EdfComboRouteApply(GameState& s, int controller);

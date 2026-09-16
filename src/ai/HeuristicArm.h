@@ -205,6 +205,7 @@ enum Slot : int
     EDF_DIG_BANK_FIRST,       // MTG_COMBO_OFF_DIG_BANK_FIRST   ONE cheapest draw land is promoted, and only once the float already pays it (default ON since 2026-09-16)
     EDF_CYCLE_SET,            // MTG_TAPAHEAD_CYCLE_SET         the autonomous loop's tap-ahead budget is over the top-`untaps` yield lands, not every tapped land (built 2026-09-16, default OFF: deck average +0.03 / 0 better 3 worse)
     FS_IDLE_NODE,             // MTG_FS_IDLE_NODE               a full-search node with NOTHING to do searches the idle continuation instead of answering "no win" (default ON since 2026-09-16)
+    EDF_COMBO_ROUTE,          // MTG_EDF_COMBO_ROUTE            the mechanical COMBO OFF route as one searched plan action (built 2026-09-16)
     COUNT
 };
 
@@ -380,6 +381,7 @@ inline const char* Name(int slot)
         "MTG_COMBO_OFF_DIG_BANK_FIRST",
         "MTG_TAPAHEAD_CYCLE_SET",
         "MTG_FS_IDLE_NODE",
+        "MTG_EDF_COMBO_ROUTE",
     };
     // The enum and this table are ONE mapping split across two lists: a slot added to one and not
     // the other silently shifts every lever after it (a manifest asking for lever X would set Y).

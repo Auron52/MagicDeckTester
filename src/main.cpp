@@ -560,6 +560,13 @@ static std::string SummarizePlan(const TurnSolver::Plan& plan, const GameState& 
             // creature -- the exact ambiguity the `channel=` verb exists to remove.
             case Action::Kind::Channel:
                 tag = a.card_name + ": channel (discard)"; break;
+            case Action::Kind::ComboRoute:
+                // The mechanical route is emitted only when its trial on this board won, and the
+                // human gate stamps that verify onto the plan; say so in the words the blink macro
+                // used, so the viewer and the replay tool read one label for one thing.
+                tag = "Combo Off route";
+                if (plan.combo_off_verified) { tag += " -- COMBO OFF: wins this turn"; }
+                break;
             default:                              tag = a.card_name + " (other)"; break;
         }
         if (a.sacrifice_land) { tag += " +sac-land"; }

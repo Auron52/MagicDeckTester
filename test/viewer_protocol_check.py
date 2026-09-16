@@ -467,6 +467,23 @@ def find_plan(recorded, plans, recorded_index=None, prefer=None):
         want = plan_key_sans_pay_sac(recorded)
         if want is not None:
             hits = [i for i, p in enumerate(plans) if plan_key(p) == want]
+    # COMBO-OFF CONTENT ANCHOR, WIDENED (2026-09-16, EDF s3_gi2 / s14_gi13 and ten more): the
+    # engine's verified finisher is now ONE standalone plan whose casts read ["Combo Off"] (the
+    # mechanical COMBO OFF route), so a macro recorded as "blink Peregrine Drake x60 -- COMBO OFF"
+    # (casts ["Eldrazi Displacer"]) matches it by neither summary nor (land, casts) key. The
+    # (land, casts) fallback then matched the frame's SINGLE blinks, hits[0] executed "blink #0",
+    # the go-off mana was floated away, and twelve of fourteen references drifted (631 -> 677
+    # frames, each drifted pass adding a board the human never faced). A recorded combo_off pick
+    # is the intent "execute the verified finish"; the frame's combo_off plan(s) ARE that, whatever
+    # they are called today -- so anchor to them over the WHOLE menu, not only inside `hits`.
+    if recorded.get("combo_off"):
+        co_all = [i for i, p in enumerate(plans) if p.get("combo_off")]
+        if co_all:
+            want_t = next((a.get("blink_target_name") for a in (recorded.get("actions") or [])
+                           if a.get("blink_target_name")), None)
+            same_t = [i for i in co_all if want_t and any(
+                a.get("blink_target_name") == want_t for a in (plans[i].get("actions") or []))]
+            hits = same_t or co_all
     if not hits:
         return None
     # COMBO-OFF CONTENT ANCHOR (USER ruling 2026-09-09, EDF s1_gi0: "T3 is still correct... repair

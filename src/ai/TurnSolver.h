@@ -186,6 +186,8 @@ struct Action
                              // NAME (a searched choice -- exiling own creatures strips Reveillark
                              // targets, so it is not fungible; one action per distinct name).
                              // cost = gy_exile_grow_cost per activation.
+        ComboRoute,          // THE MECHANICAL COMBO OFF ROUTE (EdfComboRouteApply): one standalone action,
+                             // emitted only when its trial on this board kills; the apply is all-or-nothing.
     };
 
     // ActivatePermAbility sub-mode. Defined in the CORE layer (core/Permanent.h) because the shared

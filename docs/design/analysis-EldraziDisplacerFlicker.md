@@ -8468,3 +8468,162 @@ the environment (it was reachable only from main.cpp's --trace paths, never from
   deckavg31b}`, `logs/ref_sweep/edf_honest2` (not committed).
 
 **11.12 Gates at the commit.** scenarios 90/90 (the s6 T4 float fixture promoted from open/); combo_off 33/33; smoke IDENTICAL: 80 job lines against a fresh smoke of clean HEAD 4d8199c4 built in a throwaway worktree (logs/edf_followups/head_smoke.log). The older ac_smoke.log baseline predates the critter v2 GT rebaseline 7f7ad8a6; that rebaseline skipped the critter 2HG case, which is red at HEAD itself (4.7600/4aaade4204c60879 on both binaries) -- pre-existing, not this commit. Scenarios: 90 passed, 0 failed, 0 error (90 total).
+
+## Session 31 -- the mechanical COMBO OFF route: the user's own go-off procedure as ONE searched plan action (2026-09-16, 04:10-07:10 UTC)
+
+The user's direction after Session 30 (verbatim gist): *"The idea in general is not to have the search cast
+all of those spells in one turn. We want a good go-off heuristic to do most of that. Otherwise, the
+branching factor is astronomical due to infinite mana and too many options."* ... *"It should be good at
+determining 'I have the pieces in place' and at finding the route to the win. The process is pretty
+mechanical: produce all of the mana you need for the whole thing -> draw loops as needed -> Living Wish ->
+Essence Depleter / Dimensional Infiltrator loops."* ... *"If you only have one colourless you might need to
+add play Emiel after the draw loops."* ... *"the most difficult part so far for the engine has been that we
+don't control the allocation of mana. We may need to take greater control of this... we 100% need to be
+able to ensure that we can grow our pool of all colours + colourless."* Everything below is a LOCAL commit
+(push hold still on). Priority quality (including references) over performance.
+
+**12.1 The shape: one action, verified by execution, memoised on the board.** `Action::Kind::ComboRoute`
+("Combo Off", chosen_x = eval = 999) is emitted in `CollectActions` when the deck's provider says
+`ComboRouteEnabled()` (EDF only; every other deck byte-identical, no scan), `EdfComboRoutePiecesInPlace`
+(an outlet + an untapper on board/in hand/wishable/callable, two lands) and `EdfComboRouteTrial` -- the
+whole route run on a COPY of this board under `RevealLogPause` + `ComboOffApplyPause`, true only if the
+opponent is dead and we are alive. So wherever it is read -- the greedy, a rollout, the full search, the
+viewer's menu -- it is one pre-verified "wins this turn" plan, never a projection. The apply
+(`EdfComboRouteApply`) is all-or-nothing: a silent trial on a copy decides, then the LIVE run narrates each
+step into the history (ApplyPlanDirect's `apply_trailing_activations` and the executor's TakeTurn call the
+same function -- lockstep by construction). `SubsetHasComboRouteWithOthers` keeps it standalone; the human
+gate's `goff_of` counts it (k = 999) so it wins the fold and is stamped `combo_off_verified` (rule badge from
+the table, "TRIAL" when only the trial fired); the projection's `plausible` veto is bypassed for a plan that
+carries it (the route is its own proof). Levers: `MTG_EDF_COMBO_ROUTE` (heurarm slot `EDF_COMBO_ROUTE`,
+default ON), `MTG_EDF_COMBO_ROUTE_TRACE`, `MTG_EDF_COMBO_ROUTE_MAX_ITER` (600), `MTG_EDF_COMBO_ROUTE_MEMO`
+(default ON; =0 is diagnosis only -- see 12.5).
+
+The memo is a CORRECTNESS requirement, not an optimisation: `CollectActions` re-enters thousands of times
+per decision over near-identical boards and one trial is a whole go-off. Unmemoised, it ate the 20 ms budget
+and the search got WORSE where the route did not fire. The key (`BoardKey`) hashes every input the route
+reads: turn, both life totals, both library sizes, decked flag, energy, land drops, hand and sideboard
+numbers, the top 8 of the library (the dig draws), every own permanent with tapped/aura state, the float.
+
+**12.2 The route (`namespace comboroute`, DecisionProviders.cpp).** Classifiers over card params
+(`IsOutlet/IsUntapper/IsDrainer/IsExiler/IsWish/IsCall/IsLandAura/IsReducer/IsTapDrawLand/
+IsInvestigateLand/IsClue/IsGorge/MakesC`). `ScanBoard` picks the cheapest effective blink as the outlet
+(pip-free preferred when the board has <= 1 {C} source -- one Mariposa cannot feed a {C} blink AND a {C}
+finisher), the biggest untapper as the payload, the drainer/exiler/Gorge/draw land/Clue. `Decide` ranks the
+finish: drainer on board -> Gorge -> exiler (library dealt, not decked) -> finisher in hand -> Living Wish
+(Depleter if {B} makeable, Infiltrator if {U} and the library is known, Gorge as a land drop if {R}) -> a
+Call from the library -> Dig (any draw sink, library > 1). `Run`: deploy the pieces (auras first, then
+untappers cheapest-first with a tap-ahead and a refund check, reducer if affordable, the outlet -- pip-free
+first when {C} is scarce, Wish/Call fetch what is missing, the land drop scored {C}-source / draw land /
+untapped); then loop: float-only improvements (reducer, bigger untapper, the Emiel switch when a {C}
+finisher meets a {C} outlet on one {C} source), FINISH whenever the float pays an activation, finisher from
+hand, Wish + finisher both from the float, the dig when the float carries draw + next blink, else BLINK with
+the BANK set (yield-first) until `bank_target = cast + wish + switch + per_iter x acts + blink + act`, then
+the FINISH set (the {C} sources promoted). The user's mana-control ask is answered per tap: `TapLand` picks
+each land's face against the DEMAND deficit (coloured before {C}; a painland/energy land makes {C} unless a
+colour is actually short; an any-colour Aura bonus goes to the largest coloured deficit); `Pay` is ATOMIC
+(whole-GameState rollback on failure -- a failed Aura host trial once left two lands tapped and cost s1's T3).
+
+**12.3 Two tap orders, measured and REJECTED (recorded in the code so nobody re-derives them).** Against
+the four true-fidelity hand-offs: RESERVE THE FLEXIBLE LAND (least distinct colours first) -- s6 T4 and
+T2#1 both 4 -> 5; DEMAND OVERLAP (a land whose colours the route still wants tapped last) -- same two
+frames, same 4 -> 5. Both principled, both lose: the colour a payment should preserve is decided by WHICH
+mana the untap set hands back next iteration, not by the land. The order stays yield-first; the steering
+that pays is per-tap (TapLand's face) and the tutor-target demand.
+
+**12.4 Bugs found while building (each fixed the same hour).** (i) `test/combo_off_check.sh`: 20 of 33
+fixtures failed on "MACRO entry" -- the route's history text said "combo off"; blinks are now narrated by
+ApplyBlink and the wish reads "combo finish: Living Wish -> X" (fixture co_9 expects it). (ii) offered=0 on
+s9 despite TRIAL WIN -- the `plausible` projection vetoed a plan it cannot see; bypassed for ComboRoute.
+(iii) s1's Cloud "unpayable" in a fixture -- the fixture lacked Aether Hub's energy (frames record `energy`
+only when > 0); true-fidelity hand-offs are the measure, fixtures are lower bounds. (iv) a tap-ahead with an
+EMPTY demand wasted mana -- the demand now includes the cast being paid (`DeployDemand` for the deploy
+phase). (v) a failed Aura host trial left lands tapped -- every Pay/Cast/Blink/Tutor is atomic. (vi)
+`RouteWon` requires our life > 0 and the loop stops at life <= 0 (painland lines that kill both players were
+counted as wins). (vi) moved nothing on the sweep -- see 12.5 for what did.
+
+**12.5 The confirming sweep's 10/677 shorts were the REPLAY TOOL's, not the engine's.** Two sweeps on the
+route binary read the same 10 short frames (s1 x5, s14 x2, s3, s4, s9). Three of them (s3 T4/post_main,
+s9 T4/post_main, s14 T5#2) I had recorded as "fixed by the life fix"; they were not (probes: 5, 6, 5). The
+chain: the memo hides the ROOT's own trial (a rollout's earlier verdict for the same board) -- so
+`MTG_EDF_COMBO_ROUTE_MEMO=0` and a "TRIAL memo-hit" trace line; with the memo off, the post_main roots
+never trial at t4 at all (the executor's second main does not run CollectActions) and s14#2's root trial is
+"blink unpayable" -- {R}{G} floating, BOTH {C} lands tapped: a board the human NEVER FACED. Root cause: the
+human's recorded final pick in every reference is the old macro plan `blink Peregrine Drake x60 -- COMBO OFF:
+wins this turn` (`combo_off: true`, casts ["Eldrazi Displacer"]). The route REPLACES that macro in the menu
+(the gate keeps one combo entry; the route wins the fold at k = 999) with `Combo Off route` (casts
+["Combo Off"]). The replay resolver (`viewer_protocol_check.py`) matched by summary (miss), then by
+(land, casts) -- which hit the frame's SINGLE blinks -- and its combo_off anchor searched only INSIDE those
+hits, so hits[0] = "blink #0" executed, the go-off mana floated away at the pass, and the line drifted:
+12 of 14 references were play-drift under the route binary (s8 "unresolvable"), the sweep's frame count
+grew 631 -> 677, and every added frame was a post-drift board with the mana gone -- unwinnable by anyone.
+Fix in the TOOL, per the user's ruling (2026-09-09, "repair the TOOL"): a recorded `combo_off` pick anchors
+to the frame's combo_off plan(s) over the WHOLE menu (target-name narrowing kept). Result: all 14
+references replay to their recorded turn (`logs/edf_followups/replay_verdicts_after_vpcfix.log`; s6 "ok",
+the rest "repaired"). The route plan's tag now also reads "-- COMBO OFF: wins this turn" when verified.
+Noted, not mine: "Eldrazi Displacer: blink #0" plans (an ActivateBlink whose victim id is 0) are in the
+RECORDED menus too -- pre-existing, worth a look.
+
+**12.6 Two real route bugs, found by step-level diagnostics (each burned 600 iterations per distinct
+rollout board -- the budget hog behind "the search got worse").** The trace now prints, per iteration, the
+finish decision, the bank state, and WHY the finish/wish/dig/draw did not fire. (a) s3 T4 rollout boards:
+the blink's generic {2} ate the one {B} the Trace aura made each iteration (B: have 1, demanded 1 -> no
+surplus -> taken as "any pool" before four spare {C}), so Living Wish + Essence Depleter ({3}{B}{G}) never
+became payable while {C} piled to 600. Fix: `Ctx::reserve` -- the IMMEDIATE part of the demand (wish + cast
++ switch + ONE activation) -- is what every `PayFromFloat` reasons against; the full demand (acts x
+activation) still steers TapLand's faces. `PayFromFloatFlat` pays generic from {C} above `reserve.colorless`
+BEFORE any colour the reserve still wants. (b) s9 T4 rollout boards: the dig gate `FloatPays(blink + 6)`
+demanded a spare {C} in the float; a one-{C}-source board can never hold one (Mariposa's {C} is spent by the
+blink itself), so the Conservatory dig never fired while {G} piled up. Fix: the dig reserve is GENERIC-ONLY
+(blink mana value + 6; the blink's {C} is made by its tap-ahead, whose untap set holds the {C} land).
+(c) A stall guard: more than max(60, bank_target + 20) blinks without a step firing ends the trial
+("stalled"), where MaxIter (600) used to.
+
+**12.7 Measured.** Hand-offs at true fidelity (`scripts/ref_handoff.py`), before (a9da232d) -> after:
+
+| frame | human | a9da232d | route |
+|---|---|---|---|
+| s9 T1#1 | 4 | 6 | **4** |
+| s9 T4#0 | 4 | 6 | **4** |
+| s6 T4#0 | 4 | 5 | **4** |
+| s6 T2#1 | 4 | 5 | **4** |
+| s4 T4#1 | 6 | 7 | **6** |
+| s5 T4#1 | 4 | 4 | 4 |
+| s3 T4#0 | 4 | 4 | 4 |
+| s14 T5#0, #1 | 5 | 5 | 5 |
+| s1 T3#0 | 3 | 4 | 4 (open) |
+| s4 T4#2 | 6 | 7 | 7 (open) |
+
+Full sweep (`scripts/ref_handoff_sweep.py --deck EldraziDisplacerFlicker --jobs 6`, replays repaired):
+**6 of 631 SHORT** (a9da232d: 27 of 631; the route binary BEFORE the resolver fix read 10 of 677 -- the 46 extra frames were the drift). Short: s1 T2#1, T2/post_main#0, T3#0, #1, #2 (all 4 vs 3) and s4 T4#2 (7 vs 6); the other twelve references match at EVERY hand-off frame (s7's 4 and s4's 7 "early" frames are the engine winning before the human). Log `logs/ref_sweep/edf_route3.log`.
+
+```
+reference                    human | frames  ok  early  SHORT | short frames
+claude_s10_gi9                   4 |     41  41      0      0 | 
+claude_s11_gi10                  6 |     59  59      0      0 | 
+claude_s12_gi11                  4 |     55  55      0      0 | 
+claude_s14_gi13                  5 |     14  14      0      0 | 
+claude_s15_gi14                  6 |     17  17      0      0 | 
+claude_s1_gi0                    3 |     45  40      0      5 | T2#1->4, T2/post_main#0->4, T3#0->4, T3#1->4, T3#2->4
+claude_s2_gi1                    4 |     15  15      0      0 | 
+claude_s3_gi2                    4 |     41  41      0      0 | 
+claude_s4_gi3                    6 |     30  22      7      1 | T4#2->7
+claude_s5_gi4                    4 |     72  72      0      0 | 
+claude_s6_gi5                    4 |     67  67      0      0 | 
+claude_s7_gi6                    5 |     53  49      4      0 | 
+claude_s8_gi7                    3 |     68  68      0      0 | 
+claude_s9_gi8                    4 |     54  54      0      0 | 
+TOTAL SHORT FRAMES: 6 of 631
+```
+
+**12.8 Gates (final binary = this tree).** scenarios **90/90**; combo_off **33/33**; smoke **75/5 -- all 80 job lines byte-identical** (played / avg / digest) to `logs/edf_followups/head_smoke.log`, the fresh smoke of clean HEAD 4d8199c4 (a9da232d is identical to it under the shipped flags, 11.12); the 5 failed are the same 5 stale GT lines the baseline itself fails (4 FiveColour + critter2hg, upstream's). EDF is not in the smoke -- the sweep above is its measurement.
+Two EDF scenario fixtures changed OUTCOME and still PASS: `edf_wish_first_keeps_trace` win_turn none -> **4**
+and `edf_blink_loop_cashes_gorge` opponent_life -5 -> -4 (the route finishes exactly, the old loop
+over-killed).
+
+**12.9 Open, carried forward.** (1) s1 T3 (4 vs 3): a SCHEDULE question -- the human keeps Trace of
+Abundance's any-colour for Cloud of Faeries' {U} and pays Living Wish from Mariposa's {C}; the route pays
+the Wish first. (2) s4 T4#2 (7 vs 6). (3) A post_main hand-off does not consult the route (the executor's
+second main runs no CollectActions; `TrySecondMainStrandedKill` could call `EdfComboRouteTrial/Apply`) --
+moot for the references now that the drift frames are gone, live for a human who passes to combat first.
+(4) "blink #0" plans in the menu (pre-existing). (5) The route does not yet model Shivan Gorge's
+untap-and-ping line beyond `Fin::Gorge` on a Gorge already in play or wishable as the land drop.

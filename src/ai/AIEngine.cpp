@@ -4810,6 +4810,12 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
                                         a.tutor_target.str());
             }
         }
+        else if (a.kind == Action::Kind::ComboRoute)
+        {
+            // THE MECHANICAL COMBO OFF ROUTE (lockstep with ApplyPlanDirect): all-or-nothing.
+            const bool won = EdfComboRouteApply(state, state.active_player_index);
+            if (m_logger) { m_logger->LogAbility(0, "Combo Off", won ? "combo route: win" : "combo route: no-op"); }
+        }
         else if (a.kind == Action::Kind::ActivateBlink)
         {
             // Eldrazi Displacer / Emiel (executor mirror): the SAME ApplyBlinkLoop the rollout

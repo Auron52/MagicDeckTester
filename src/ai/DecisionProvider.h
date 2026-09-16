@@ -585,6 +585,11 @@ public:
     virtual bool ComboOffPossible(const GameState& s, int controller, std::string* rule) const
     { (void)s; (void)controller; (void)rule; return false; }
 
+    // ComboRouteEnabled -- does this deck get the MECHANICAL COMBO OFF ROUTE as a searched plan
+    // action (Action::Kind::ComboRoute; EdfComboRouteTrial / EdfComboRouteApply)? The emission
+    // site in CollectActions consults this first, so a deck without it never scans. Generic = false.
+    virtual bool ComboRouteEnabled() const { return false; }
+
     // ProvenWinlessThisTurn -- an ADMISSIBLE PRUNING CERTIFICATE, and the only hook on this
     // interface whose contract is a PROOF rather than a judgement.
     //

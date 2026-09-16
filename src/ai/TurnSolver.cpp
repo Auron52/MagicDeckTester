@@ -5538,6 +5538,15 @@ static bool SubsetHasStrandedPodActivation(const GameState& state,
 // still in hand) in a subset that does not also cast that piece -- the SubsetHasStrandedPodActivation
 // pattern, by NAME for the same reason. Without this the activation would strand: the apply finds
 // no outlet (or no payload) on the battlefield and no-ops. Inert unless a hand go-off was emitted.
+// The COMBO OFF ROUTE action stands alone: it plays the whole turn itself (land drop, casts, loop,
+// finish), so a subset pairing it with any other action would double-play the board.
+static bool SubsetHasComboRouteWithOthers(const std::vector<Action>& cands, const std::vector<int>& sel)
+{
+    if (sel.size() < 2) { return false; }
+    for (int idx : sel) { if (cands[idx].kind == Action::Kind::ComboRoute) { return true; } }
+    return false;
+}
+
 static bool SubsetHasStrandedHandBlink(const std::vector<Action>& cands,
                                        const std::vector<int>& sel)
 {
@@ -15462,6 +15471,29 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
             }
         }
 
+        // THE MECHANICAL COMBO OFF ROUTE (Session 31, 2026-09-16; EdfComboRouteTrial / Apply in
+        // DecisionProviders.cpp, the user's own procedure). ONE standalone action, emitted only when
+        // the route's trial on a copy of THIS board kills the opponent -- so it is honest wherever
+        // it is read: the greedy, the rollouts, the full search and the viewer's menu all see a plan
+        // that wins this turn. The provider gate keeps every other deck byte-identical (no scan).
+        {
+            const DecisionProvider& rprov = ResolveProvider(state);
+            if (rprov.ComboRouteEnabled()
+                && EdfComboRoutePiecesInPlace(state, state.active_player_index)
+                && EdfComboRouteTrial(state, state.active_player_index))
+            {
+                Action a;
+                a.kind           = Action::Kind::ComboRoute;
+                a.card_name      = InternedName("Combo Off");
+                a.def            = nullptr;
+                a.hand_index     = -1;
+                a.chosen_x       = 999;   // a go-off, for every reader that sizes one by chosen_x
+                a.eval           = 999;   // verified: wins this turn
+                a.is_noncreature = true;
+                actions.push_back(std::move(a));
+            }
+        }
+
         // Scavenging Ooze ("{G}: Exile target card from a graveyard. If it was a creature card,
         // put a +1/+1 counter on this creature and you gain 1 life."): REPEATABLE (no {T}), so
         // actions are independent (no option group) and a plan may take several -- each pays
@@ -18529,6 +18561,7 @@ TurnSolver::Plan TurnSolver::SolveUncached(const GameState& state, bool is_pre_c
         // or cast (the cast-and-activate / cast-and-loop pairings). Lockstep twins below.
         if (SubsetHasStrandedPodActivation(state, cands, sel)) { return; }
         if (SubsetHasStrandedHandBlink(cands, sel)) { return; }
+        if (SubsetHasComboRouteWithOthers(cands, sel)) { return; }
         if (SubsetHasUnclosedPersistLoop(state, cands, sel)) { return; }
         // Reject an equip onto a shrouded host without the co-selected Greaves-off move (rules,
         // CR 702.18b; shroud fix 2026-08-14). Lockstep twin in eval_and_push.
@@ -24802,6 +24835,11 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
                                         a.tutor_target.str());
             }
         }
+        else if (a.kind == Action::Kind::ComboRoute)
+        {
+            // THE MECHANICAL COMBO OFF ROUTE: all-or-nothing on a copy (see EdfComboRouteApply).
+            EdfComboRouteApply(state, state.active_player_index);
+        }
         else if (a.kind == Action::Kind::ActivateBlink)
         {
             // Eldrazi Displacer / Emiel: run the shared loop driver, which pays ONE activation per
@@ -27823,6 +27861,7 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
         // or cast -- lockstep twins of Solve::consider's calls (see the helpers).
         if (SubsetHasStrandedPodActivation(state, cands, sel)) { return; }
         if (SubsetHasStrandedHandBlink(cands, sel)) { return; }
+        if (SubsetHasComboRouteWithOthers(cands, sel)) { return; }
         if (SubsetHasUnclosedPersistLoop(state, cands, sel)) { return; }
         // Reject an equip onto a shrouded host without the co-selected Greaves-off move (rules,
         // CR 702.18b; shroud fix 2026-08-14). Lockstep twin in Solve::consider.
@@ -35302,7 +35341,10 @@ inline int GoffCount(const TurnSolver::Plan& p)
 {
     int k = 0;
     for (const Action& a : p.actions)
-    { if (a.kind == Action::Kind::ActivateBlink && a.chosen_x > 3) { k = std::max(k, a.chosen_x); } }
+    {
+        if (a.kind == Action::Kind::ActivateBlink && a.chosen_x > 3) { k = std::max(k, a.chosen_x); }
+        if (a.kind == Action::Kind::ComboRoute) { k = std::max(k, a.chosen_x); }
+    }
     return k;
 }
 }   // namespace edfco
@@ -42190,6 +42232,7 @@ std::vector<TurnSolver::Plan> TurnSolver::EnumerateMainPlans(const GameState& st
             {
                 if (a.kind == Action::Kind::ActivateBlink && a.chosen_x > 3)
                 { k = std::max(k, a.chosen_x); }
+                if (a.kind == Action::Kind::ComboRoute) { k = std::max(k, a.chosen_x); }
             }
             return k;
         };
@@ -42334,6 +42377,16 @@ std::vector<TurnSolver::Plan> TurnSolver::EnumerateMainPlans(const GameState& st
                     plausible = prov.ExtraLethalDamage(state, cast_defs) >= opp_life
                              || prov.ProjectsAlternateWin(state, cast_defs);
                 }
+            }
+        }
+        // THE MECHANICAL COMBO OFF ROUTE is emitted only after its own trial won on this very
+        // board, so a plan carrying it is plausible by construction (no projection sees it).
+        if (!plausible)
+        {
+            for (const GoffCand& gc : cands)
+            {
+                for (const Action& a : plans[gc.idx].actions)
+                { if (a.kind == Action::Kind::ComboRoute) { plausible = true; } }
             }
         }
         // NOTE the two halves are gated DIFFERENTLY, and that is load-bearing. The expensive VERIFY
@@ -43143,6 +43196,8 @@ static std::string LineSummaryOfPlan(const TurnSolver::Plan& p, const GameState*
         // iteration of a go-off (USER, EDF seed 5: seventeen history rows all saying "cast:
         // Eldrazi Displacer"). Same defect the loyalty/equip labels above fixed; this summary is
         // what the viewer writes into its history on an accepted line (matched_summary).
+        else if (a.kind == Action::Kind::ComboRoute)
+        { cast_names.push_back("COMBO OFF route"); }
         else if (a.kind == Action::Kind::ActivateBlink)
         {
             const std::string tn = st ? SubChoiceHostLabel(*st, a.sac_victim_id) : std::string();
