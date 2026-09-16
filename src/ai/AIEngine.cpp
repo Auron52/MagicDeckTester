@@ -195,6 +195,23 @@ static const bool s_full_depth = !EnvOn("MTG_LEGACY_SEARCH");
 // its predicted win — a rollout/real-execution divergence. Flag the seed + turn so it
 // can be traced. Only meaningful with s_full_depth.
 static const bool s_fd_oracle = EnvOn("MTG_FD_ORACLE");
+// MTG_FD_TRACE=1 (print-only, default off): narrate the commit-the-line executor -- the line each
+// pre-combat main computes (win, searched depth, verified / refuted, phases kept), every phase that
+// POPS a committed plan instead of searching, the fallback searches, and the --choices-then-auto
+// hand-back's inherited line. Added for the Session 30 hand-off audit (claude_s11_gi10 T4 frame 1:
+// no search ran after the hand-back at all).
+static const bool s_fd_trace = EnvOn("MTG_FD_TRACE");
+static std::string FdPlanText(const TurnSolver::Plan& p)
+{
+    std::string s = p.land_decided ? (p.land_to_play.empty() ? "land=(defer)" : "land=" + p.land_to_play)
+                                   : "land=(heuristic)";
+    for (const Action& a : p.actions)
+    {
+        s += " + " + a.card_name.str();
+        if (a.chosen_x > 0) { s += "(x" + std::to_string(a.chosen_x) + ")"; }
+    }
+    return s;
+}
 
 // Breakpoint lockstep trace: BpTraceEnabled() in EngineFlags.h (shared with TurnSolver).
 
@@ -2547,8 +2564,28 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
         // in a game that never had a chooser. Re-derive the phase gate without the human term.
         m_external_chooser = nullptr;
         play_this_phase = is_pre_combat_main || m_search_post_combat;
+        // ...AND PLAY THE SHIPPED SEARCH FROM HERE (2026-09-15, Session 30). The harness set
+        // MTG_UNPRUNED for the replay's menu; without this the search that takes over is the
+        // viewer's unpruned one, and a hand-off reads better than the autonomous engine ever
+        // would (see g_unpruned_suppressed). The ordinal-keyed --tap-pref channel is reset for
+        // the same reason: the last human frame's ordinal must not key the search's payments.
+        g_unpruned_suppressed   = true;
+        g_play_cur_main_ordinal = -1;
+        // ...AND WITHOUT THE HUMAN-PLAY LEVERS. HumanPlayActive() is the MTG_HUMAN_PLAY env the
+        // harness set for the replay, and only RolloutWinTurnFrom suppressed it -- so the ROOT
+        // search and the EXECUTOR that took over kept every human-only widening (the untapper-
+        // hoisted cast order, the surplus-first generic order, the sink holds...). The tool's
+        // contract is "the autonomous search, from the human's board"; this is what makes it so.
+        // Same thread_local the rollout guard flips, left set for the rest of the game.
+        g_human_play_suppressed = true;
         std::cerr << "[then-auto] search takes over: turn " << state.turn_number
                   << (is_pre_combat_main ? " pre-combat main" : " post-combat main") << "\n";
+        if (s_fd_trace)
+        {
+            std::fprintf(stderr, "[fd] hand-back T%d pre=%d inherited committed_line=%zu refuted_follow=%d\n",
+                         state.turn_number, is_pre_combat_main ? 1 : 0, m_committed_line.size(),
+                         m_refuted_follow ? 1 : 0);
+        }
     }
 
     TurnSolver::Plan plan;  // empty plan == do nothing this phase
@@ -2905,6 +2942,14 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
                         && state.turn_number + searched_depth - 1 >= m_max_turns
                         && TurnSolver::TruncEvents() == rf_trunc_before;
                     if (refuted_full) { m_refuted_follow = true; }
+                    if (s_fd_trace)
+                    {
+                        std::fprintf(stderr, "[fd] T%d line win=%d searched_depth=%d verified=%d refuted_full=%d phases=%zu\n",
+                                     state.turn_number, line.win_turn, searched_depth, verified_win ? 1 : 0,
+                                     refuted_full ? 1 : 0, line.phases.size());
+                        for (const TurnSolver::PhasePlan& pp : line.phases)
+                        { std::fprintf(stderr, "[fd]   phase pre=%d %s\n", pp.is_pre_combat ? 1 : 0, FdPlanText(pp.plan).c_str()); }
+                    }
                     if (!verified_win && !refuted_full && !line.phases.empty())
                     {
                         // Keep the current turn only: its pre-combat phase plus any
@@ -2927,6 +2972,9 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
                     plan = m_committed_line.front().plan;
                     m_committed_line.pop_front();
                     fd_plan_committed = true;
+                    if (s_fd_trace)
+                    { std::fprintf(stderr, "[fd] T%d pre=%d POP committed %s (left %zu)\n", state.turn_number,
+                                   is_pre_combat_main ? 1 : 0, FdPlanText(plan).c_str(), m_committed_line.size()); }
                 }
                 else
                 {
@@ -2950,9 +2998,14 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
                     if (s_refuted_follow && m_refuted_follow && !m_in_rollout)
                     {
                         plan = TurnSolver::Solve(state, is_pre_combat_main);
+                        if (s_fd_trace)
+                        { std::fprintf(stderr, "[fd] T%d pre=%d GREEDY (refuted-follow) %s\n", state.turn_number,
+                                       is_pre_combat_main ? 1 : 0, FdPlanText(plan).c_str()); }
                     }
                     else
                     {
+                    if (s_fd_trace)
+                    { std::fprintf(stderr, "[fd] T%d pre=%d FALLBACK lookahead\n", state.turn_number, is_pre_combat_main ? 1 : 0); }
                     SearchBudget fallback_budget = SearchBudget::FromVirtualMs(m_budget_ms);
                     plan = TurnSolver::SolveWithLookahead(state, is_pre_combat_main,
                                                           m_lookahead_depth, m_max_turns,
@@ -3140,16 +3193,18 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
                                         s_condemn_trace && !m_in_rollout);
             }
 
-            // What this line still owes, seeded at the SAME point ApplyPlanDirect seeds it -- plan
-            // chosen, nothing executed -- so the executor's mid-line replicate gate and the rollout's
-            // ask the identical question. Each cast decrements it as it pays (CastSpellFromHand).
-            // Zero for every plan with no hand cast, and inert for every deck with no mid-line sink.
-            LineUnpaidCostScope _luc(LineCastCostTotal(plan.actions));
+            // (The line's unpaid-cost hold -- LineUnpaidCostScope -- used to be bound HERE, inside
+            // this search branch, and died at the branch's closing brace before a single cast paid:
+            // every executor payment below ran with g_line_unpaid_cost == 0 while the rollout's
+            // ApplyPlanDirect paid the same plan under the full hold. It is now bound once at
+            // function scope, just before the prepay -- see the note there. 2026-09-15, EDF
+            // claude_s6_gi5 T4 frame 4: the executor's Eldrazi Displacer cast spent the floating
+            // {C} that its own blink loop needed, one line after the search had held it.)
             // (No HumanUntapNeedScope here, deliberately: this is the AUTONOMOUS executor branch,
             // and a human-pinned plan never reaches it -- the external-chooser path above applies
             // `chosen` through TurnSolver::ApplyPlan -> ApplyPlanDirect, which binds the demand at
-            // the point it binds the hold above. Binding a provably-zero mask on the autonomous
-            // path would be dead code on the one path that must stay byte-identical.)
+            // the point it binds the hold. Binding a provably-zero mask on the autonomous path
+            // would be dead code on the one path that must stay byte-identical.)
 
             // MTG_LANDDROP_STATS (diagnostic): does the COMMITTED plan carry a searched land drop?
             // TurnSolver's counter cannot answer this -- every land play it sees is search-internal
@@ -4117,6 +4172,16 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
                  && (a.convoke_green > 0 || a.convoke_other > 0))
         { ApplyConvokeTaps(state, state.active_player_index, a.convoke_green, a.convoke_other); }
     }
+    // What this line still owes, seeded at the SAME point ApplyPlanDirect seeds it -- plan chosen,
+    // nothing paid -- so the executor's payments and the rollout's read the identical hold. Each
+    // cast decrements it as it pays (CastSpellFromHand). Zero for every plan with no hand cast.
+    // FUNCTION SCOPE, deliberately: it must outlive the prepay and every cast below. Its first
+    // home was inside the lookahead branch above, where the RAII scope closed before any payment
+    // ran, so the executor paid every line with an empty hold (2026-09-15; see the note there).
+    // Under the shipped flags no autonomous payment reads the hold -- its readers are human-play
+    // gated or behind MTG_HOLD_C_FOR_LINE -- so this move is byte-identical by construction for
+    // every default-flag game; it is what makes that lever's executor half exist at all.
+    LineUnpaidCostScope _luc(LineCastCostTotal(plan.actions));
     // PLAN TRAITS -- executor mirror of ApplyPlanDirect (lockstep, same builder): in scope over the
     // prepay and every cast payment below. Null scope (levers off) changes nothing.
     PlanTraits _plan_traits;

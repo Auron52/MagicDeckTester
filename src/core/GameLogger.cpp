@@ -66,6 +66,7 @@ thread_local std::vector<std::pair<int, std::string>>* g_play_draw_sink = nullpt
 thread_local std::vector<PlayEvent>* g_play_event_sink = nullptr;
 thread_local std::vector<std::string>* g_play_dropped_cast_sink = nullptr;
 thread_local bool g_human_play_suppressed = false;
+thread_local bool g_unpruned_suppressed   = false;   // see GameLogger.h (hand-back pruning switch)
 // Live only inside the COMBO OFF verify / apply -- see ComboOffFinishScope in GameLogger.h.
 thread_local bool g_combo_off_finish = false;
 // See GameLogger.h. STICKY: set when a human-play hook is installed, NEVER cleared. Sticky rather

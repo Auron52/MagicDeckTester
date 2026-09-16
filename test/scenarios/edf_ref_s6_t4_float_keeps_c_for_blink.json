@@ -16,7 +16,8 @@
   "'Eldrazi Displacer + Eldrazi Displacer(x189)' (hand go-off recognised, count 189): the trial apply spends",
   "the floating {C} on the Displacer's generic pip (SpendFloatingTowardCost drains colourless before colours",
   "unless the cost itself carries {C}), so the first blink cannot be paid. From the NEXT frame (Displacer",
-  "resolved, {C} floating) the search wins T4."
+  "resolved, {C} floating) the search wins T4.",
+  "RESOLVED 2026-09-15 (Session 30): two halves. (1) AIEngine::TakeTurn's LineUnpaidCostScope was bound inside the lookahead branch and died before any cast paid, so the executor's real Displacer cast never saw the hold the search's trial had paid under; moved to function scope. (2) MTG_HOLD_C_FOR_LINE (the blink activation's {C} pip joins the line hold) is DEFAULT ON. From this frame the search now casts Displacer off W+G+G, keeps the {C}, and wins T4 = the human. MTG_HOLD_C_FOR_LINE=0 reproduces the old T5."
  ],
  "turn": 4,
  "on_the_play": true,

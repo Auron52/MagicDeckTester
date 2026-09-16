@@ -21091,7 +21091,7 @@ struct BpPrefixSnap
 ManaCost LineCastCostTotal(const std::vector<Action>& acts)
 {
     ManaCost total;
-    // A BLINK ACTIVATION'S {C} PIP JOINS THE HOLD (MTG_HOLD_C_FOR_LINE, default OFF; 2026-09-15).
+    // A BLINK ACTIVATION'S {C} PIP JOINS THE HOLD (MTG_HOLD_C_FOR_LINE, DEFAULT ON since 2026-09-15; built default OFF the same day).
     // The hold exists so an earlier payment does not spend what a later one in the SAME line
     // needs, and a blink loop's first crank is exactly such a payment: on claude_s6_gi5 T4 the
     // plan "cast Eldrazi Displacer, blink x189" paid the Displacer's generic {2} out of a
@@ -21107,7 +21107,20 @@ ManaCost LineCastCostTotal(const std::vector<Action>& acts)
     // passes on a pool that the sequential payer then strands), so the turn ends with the board
     // tapped out where the un-held line at least kept its mana for the next turn. The hold is
     // right; the sink's reservation is the missing half. Kept as a lever for that fix.
-    static const bool s_hold_c_line_env = EnvOn("MTG_HOLD_C_FOR_LINE", false);
+    //
+    // ADOPTED 2026-09-15 (later the same day), once BOTH missing halves existed: the sink's
+    // reservation shipped as MTG_EDF_DRAW_SINK_HONEST (2174b589), and the EXECUTOR's copy of
+    // this hold turned out to be dead code -- AIEngine::TakeTurn bound its LineUnpaidCostScope
+    // inside the lookahead branch, where the RAII scope closed before any cast paid, so the
+    // real Displacer cast spent the {C} the search's trial had held (BpTraceCast `line=`
+    // showed W0..C0 at the executor cast while the rollout apply read C1). With the scope moved
+    // to function scope, the s6 T4 frame-4 hand-off (scripts/ref_handoff.py --turn 4 --frame 4)
+    // wins T4 = the human, and test/scenarios/edf_ref_s6_t4_float_keeps_c_for_blink passes.
+    // Measured before flipping: 14-reference bench off/on 4.429/4.429, 0 short both arms
+    // (logs/ref_bench_edf/holdc_luc); paired deck averages in the ADOPTION table in
+    // docs/design/analysis-EldraziDisplacerFlicker.md Session 30. MTG_HOLD_C_FOR_LINE=0 is the
+    // one-binary A/B back to the unheld float.
+    static const bool s_hold_c_line_env = EnvOn("MTG_HOLD_C_FOR_LINE", true);   // DEFAULT ON (adopted 2026-09-15, see the ADOPTED block above); =0 restores the unheld float
     const bool hold_blink = heurarm::Flag(heurarm::HOLD_C_FOR_LINE, s_hold_c_line_env);
     for (const Action& a : acts)
     {
@@ -26402,8 +26415,16 @@ static const bool g_order_drop_label = EnvOn("MTG_ORDER_DROP_LABEL", true);
 
 static bool OrderingSearchEnabled(const GameState& state)
 {
-    // Global A/B knob (env / MTG_UNPRUNED), cached once.
-    static const bool global = (EnvOn("MTG_SEARCH_ORDER")) || DecisionUnpruned(UnprunedGate::SearchOrder);
+    // Global A/B knob: the env half is cached once; the UNPRUNED half is re-read per call. It used to be
+    // one cached static, which froze whatever DecisionUnpruned said at the FIRST enumeration -- and under
+    // --claude-play that first enumeration is the viewer's (unpruned) menu, so the search that took over
+    // at a --choices-then-auto hand-back kept applying up to 5! cast orderings per plan on a GameState copy
+    // for the rest of the game. Measured 2026-09-15 (Session 30): claude_s9_gi8 handed off at T1 with no
+    // picks ran 361 s against 12 s for the same game in the bench, and read T6 instead of T4 from the
+    // post-T2 board. DecisionUnpruned(gate) is a few predictable branches; autonomous runs (env unset,
+    // gate closed either way) and the viewer (gate open throughout) are unchanged.
+    static const bool s_env = EnvOn("MTG_SEARCH_ORDER");
+    const bool global = s_env || DecisionUnpruned(UnprunedGate::SearchOrder);
     // Archetype opt-in (WantsCastOrderingSearch): Dragonstorm searches its combo cast order by default.
     // Provider-scoped so every other deck stays byte-identical (base hook returns false). Cheap per-call
     // vtable check -- the real cost is the k! applies below, gated behind this.
@@ -36939,6 +36960,27 @@ static TurnSolver::SearchLine FSLineWin(const GameState& state, int depth, int m
                           ? remap[p.bp_base] : -1;
             }
         }
+        // THE IDLE CONTINUATION (Session 30, 2026-09-16; MTG_FS_IDLE_NODE=0 restores). A main with
+        // NOTHING to do -- drop used or no land in hand, nothing castable, no affordable activation
+        // -- enumerates ZERO plans, and this loop then never ran: `best` stayed at max_turns+1 and
+        // the node answered "no win" for its WHOLE subtree, with nothing truncated, so the answer
+        // was even cached as a bound-qualified no-win. But passing the turn is a line, and the
+        // game goes on: claude_s11_gi10 handed to the search one frame after the human's T4 plan
+        // (lands tapped, hand = two lands) read win=9 at searched depth 5 -- a "full-coverage"
+        // refutation that switched the executor to the greedy follow-out for the rest of the game
+        // (MTG_REFUTED_FOLLOW), which won T7; the same board searched from the T5 root wins T6
+        // (Mariposa's draw, then Cloud + Emiel), as the human did. FSLineTail already seeds its
+        // idle option; the pre-combat node did not. One empty plan, land decided (there is no drop
+        // to take), so ApplyPlanDirect changes nothing and the recursion advances the turn.
+        // Byte-identical wherever the node had any plan at all.
+        static const bool s_fs_idle_node_env = EnvOn("MTG_FS_IDLE_NODE", true);
+        const bool s_fs_idle_node = heurarm::Flag(heurarm::FS_IDLE_NODE, s_fs_idle_node_env);
+        if (pre.empty() && s_fs_idle_node)
+        {
+            TurnSolver::Plan idle;
+            idle.land_decided = true;   // no drop to take -> "(defer)": never a greedy land play
+            pre.push_back(std::move(idle));
+        }
         if (winlesscert::StatsOn())
         {
             const unsigned long long np = pre.size();
@@ -41443,10 +41485,16 @@ TurnSolver::Plan TurnSolver::SolveWithLookahead(const GameState& state, bool is_
         // TOP-LEVEL decision of turn n -- the movable aim the fixed T1/T2 hooks lack
         // (diagnosis only; unset = 0 = off, byte-identical).
         static const int s_trace_turn = EnvInt("MTG_TRACE_SOLVE_TURN", 0);
+        // MTG_TRACE_SOLVE=1 arms the turn-n trace from the ENVIRONMENT (print-only, default off):
+        // SetTraceSolve is only ever called by main.cpp's --trace / bottoming-trace paths, so a
+        // --claude-play hand-off (scripts/ref_handoff.py) had no way to print the root's
+        // per-candidate win turns -- the one read that says why a castless turn passed on a draw
+        // (claude_s11_gi10 T5, Session 30).
+        static const bool s_trace_env = EnvOn("MTG_TRACE_SOLVE");
         // Not gated on is_pre_combat OR enforce_budget: under MTG_HINATA_ALL_MAIN2 the decision
         // that matters is the POST-combat main, and a diagnostic that cannot see it traces
         // nothing (gi=22). Top-level-ness is printed instead of filtered on.
-        const bool trace_tn = s_trace_solve && s_trace_turn > 0
+        const bool trace_tn = (s_trace_solve || s_trace_env) && s_trace_turn > 0
                               && state.turn_number == s_trace_turn;
         const bool trace_this = trace_t1 || trace_t2 || trace_tn;
         if (trace_this)

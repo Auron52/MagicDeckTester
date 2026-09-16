@@ -7671,7 +7671,7 @@ Frozen as `test/scenarios/open/edf_ref_s8_t3_bank_dig_wish_drain.json` (expects 
   variant contains the Trace).
 * **`MTG_BOUNCE_SPARE_AURA` (ON)** -- base `DecisionProvider::BounceLandCandidates`: -500 for a land
   carrying an Aura (`aura_attached_to == land number`); every deck with a karoo.
-* **`MTG_HOLD_C_FOR_LINE` (OFF)** -- `LineCastCostTotal` adds the line's `ActivateBlink` pips
+* **`MTG_HOLD_C_FOR_LINE` (OFF here; DEFAULT ON since Session 30, 11.2)** -- `LineCastCostTotal` adds the line's `ActivateBlink` pips
   (generic zeroed) to `g_line_unpaid_cost`, so `SpendFloatingTowardCost` holds {C} across the
   casts. Bench-neutral at 20 and 100 ms and WORSE on the float fixture (5 -> 6, §2) until the draw
   sink reserves the next crank; ships OFF, the measurement is in the reader's comment.
@@ -8169,3 +8169,302 @@ pips from the floating {C} (the frame floats {W}{G}{G}{C}), leaving {G} for a {C
 `MTG_HOLD_C_FOR_LINE` (the root's line accounting) nor `MTG_LINE_C_HOLD` governs THAT payment, which is
 why neither flipped the fixture (chain3). The fix, if pursued, is the executor's cast payer reserving a
 {C} the same-main go-off plan is about to need; it is not started, and both s6 fixtures stay open.
+
+
+## Session 30 -- the references, frame by frame: the executor's dead line hold, the outlet tie, an honest hand-off tool (2026-09-15, from 19:28 UTC)
+
+The user cancelled the value leaf at 19:28 UTC ("not a good time to run it"; it was still in phase 0's
+smoke; the queue directory stays at freeze `4d8199c4`), asked for the references to be fully
+addressed -- priority quality (including references) over performance -- and at 20:12 UTC put a hold
+on pushing ("let's get EDF working independently"). Everything below is a LOCAL commit. Deck average
+on the shipped default, asked and answered: 4.43 / 4.41 on the two 100-game samples
+(`deckavg_valcombo`, `deckavg_valcombo2`), references 4.43 = the human.
+
+**11.1 The s6 frame-4 loss was the EXECUTOR's, and the reason is a scope brace.** `BpTraceCast`
+(MTG_BP_TRACE) now prints `line=` -- the `g_line_unpaid_cost` hold the payment is about to read. On
+the frame-4 hand-off it read `line=0/W0..C0` at the executor's Eldrazi Displacer cast even with
+`MTG_HOLD_C_FOR_LINE=1`, while the search's trial of the same plan had held the {C} (its loop entered
+k=0 with `float{c1}` and ran 189/189; the executor's entered with `float{g1}` and stopped at k=0,
+`f4_holdc_loop_full.err`). `AIEngine::TakeTurn` bound `LineUnpaidCostScope _luc(LineCastCostTotal
+(plan.actions))` INSIDE the `if (m_lookahead_depth > 0) { ... }` branch that picks the plan, so the
+RAII hold died at that branch's closing brace -- before `BatchPrepayMainCasts`, before any
+`CastSpellFromHand`. Every executor cast has paid with an empty hold since the scope was written;
+the rollout's `ApplyPlanDirect` binds the same hold over its whole apply. Moved to function scope,
+just before the plan traits and the prepay. Byte-identical under the shipped flags by construction
+(every autonomous reader of the hold is human-play gated or behind `MTG_HOLD_C_FOR_LINE`), and
+measured: the paired deck average's "off" arm in 11.2 reproduces Session 29's shipped arm chunk for
+chunk.
+
+With the scope fixed, `MTG_HOLD_C_FOR_LINE=1` alone flips the frame: hand-off T4 frame 4 -> **4**
+(= the human; default 5), `test/scenarios/open/edf_ref_s6_t4_float_keeps_c_for_blink` **PASS**
+(default FAIL 5). The executor's cast now pays `{2}{W}` off W+G+G and keeps the {C}; the lever's own
+comment had named exactly this ("the hold is right; the sink's reservation is the missing half") --
+the sink half shipped this morning as `MTG_EDF_DRAW_SINK_HONEST`, and the executor half turned out
+never to have existed.
+
+**11.2 `MTG_HOLD_C_FOR_LINE` DEFAULT ON, under the pre-registered rule (both deck-average samples
+<= 0 with zero chunks worse; references unmoved).** One pooled batch each.
+
+| measurement | off | on | delta | chunks better / worse / tied |
+|---|---|---|---|---|
+| 14-reference bench, d5 / 20 ms (`holdc_luc`) | 4.429 / 0 short | 4.429 / 0 short | 0 | -- |
+| deck average, seeds 3001 / 3061, 100 games per arm (`deckavg_holdc_luc`) | 4.4300 | 4.4300 | +0.0000 | 0 / 0 / 10 |
+| held-out, seeds 3121 / 3181, 400 games per arm (`deckavg_holdc_luc2`) | 4.3600 | 4.3600 | +0.0000 | 0 / 0 / 40 |
+
+Five hundred autonomous games, every chunk identical: the hold fires only where a plan casts from a
+mixed float and then activates a blink in the same line, and on the one recorded board of that shape
+it is the difference between T4 and T5. The fixture is promoted to `test/scenarios/`.
+`MTG_HOLD_C_FOR_LINE=0` restores the unheld float in one binary; `MTG_LINE_C_HOLD` (the SOURCE hold,
+which lost s10) stays OFF.
+
+**11.3 Every frame of every reference, handed to the search (`scripts/ref_handoff_sweep.py`, new).**
+The bench hands off at turn 1; the fixtures cover three frames. This sweeps the whole game: each
+reference validated once, its resolved pick stream walked once (one persistent child) to enumerate
+every main-phase decision frame, and every frame with turn <= the recorded win turn handed to the
+autonomous search at the deck's shipped settings, `--jobs` games at a time. SHORT = the search's win
+turn from that frame is later than the human's. The first sweep (`logs/ref_sweep/edf_default`, on
+the 11.2 binary, 631 frames) read **64 short**, and two of its findings changed the engine and the
+tool before the honest one below could be run.
+
+*The outlet tie (s12).* Handed claude_s12_gi11's T4 one frame after the human cast Emiel (both
+outlets on the battlefield, Training Grounds out, one {C} source, a 110-mana float), the search ran
+317 Displacer cranks, its own digs fetched Living Wish twice and put BOTH finishers on the
+battlefield, and not one drain fired -- T5. Eldrazi Displacer's `{2}{C}` and Emiel's `{3}` tie
+EXACTLY on net (same mana value under Training Grounds, same payload), and `RecogniseFlickerLoop`'s
+tie-break for the outlet that banks more colourless was human-play only, so the autonomous arm fell
+to battlefield insertion order and picked the Displacer, whose pip took the board's only {C} every
+pass. The mid-loop switch (`ComboOffSwitchOutlet`) could not rescue it either: it knew only how to
+DEPLOY a pip-free outlet from hand, never to use one already in play -- 95 "real trial" declines
+from an Emiel that was standing there. Two changes: the tie-break now also applies under the exact
+executor's sizing predicate (`HumanPlayActive() || ComboOffExactSizingActive()`), and the switch
+tries an on-board pip-free outlet first (`PipFreeOutletOnBoard`; no cast, the trial is the new
+outlet's own first activation; `MTG_COMBO_OFF_SWITCH_ONBOARD=0` restores). s12 T4 frames 32-45 all
+read **4**; three of them (43-45: 160-200 enumerated plans) had run **68 minutes each** without a
+result and now finish in 2 s -- the trial kills, so the root returns at its first plan.
+combo_off 33/33 and scenarios 90/90 unchanged.
+
+*The tool was optimistic.* The claude-play harness sets `MTG_UNPRUNED=1` and `MTG_HUMAN_PLAY=1`
+for the replay, and after `--choices-then-auto`'s hand-back the search that took over kept both:
+unpruned, and with every human-only lever (the untapper-hoisted cast order, the surplus-first
+generic order, the sink holds) live at the root and in the executor. Only rollouts suppressed
+human play. So a hand-off could read better than the autonomous engine ever would -- and the
+"real frame wins, its fixture loses" puzzle of Session 29 §10.3 was partly that. The hand-back now
+sets `g_unpruned_suppressed` (new thread_local, read by both `DecisionUnpruned` forms),
+`g_human_play_suppressed`, and resets the `--tap-pref` ordinal; the prefix still replays unpruned
+(its picks must resolve against the viewer's menu), the search plays shipped. T1 hand-offs still
+equal the bench (s6 T1 -> 4).
+
+*The honest sweep* (`logs/ref_sweep/edf_honest`, this binary) was killed by me at frame 587 of 631 (my own run, superseded): **43 short**, and every one
+of them the same shape -- frame #0 of a turn matched the human and frame #1, the board right after
+the human's whole-turn plan, did not (s1, s2, s4, s5, s6, s7, s9, s11, s14; s3, s8, s10, s12, s15
+clean throughout). That shape had one common cause, 11.5, so the sweep was re-run on the fixed
+binary instead (11.8).
+
+**11.4 The frame-2 fixture, settled: battlefield insertion order.** Both the real frame and its
+frozen copy cast [Drake, Drake, Training Grounds, Eladamri's Call] (`MTG_EDF_PAYLOAD_FIRST`; with it
+off the frame reads 5 too). They diverge at the Call's payment: the payer's tie-break between Adarkar
+Wastes and Brushland follows battlefield order, so the real frame (Kitchen, Brushland, Adarkar)
+leaves Adarkar -- the {C} source -- up and the Displacer's first blink pays, while the fixture
+(Adarkar, Brushland, Kitchen) leaves Brushland up and the Displacer's `{W}` taps the only {C} source
+(`f2_frame_bp.err` / `f2_fixture_bp.err`, `untapped=[Adarkar Wastes]` vs `[Brushland]` at the
+Displacer cast). Hand order, budget, pruning and the harness env were all excluded by direct probes.
+So the fixture documents an order-dependent PAYMENT: the autonomous payer does not reserve a {C}
+source for the line's coming blink. `MTG_LINE_C_HOLD` is the hard form (lost s10, §9); the
+human-play `HOLD_C_IN_PAYMENT` tie-break is the soft form and unmeasured autonomously. The fixture
+stays in `test/scenarios/open/` with its row rewritten.
+
+**11.5 The hand-off tool's cast-ordering search never turned off.** The first honest sweep read
+43 short frames and every one of them was the same shape: frame #0 of a turn matched the human and
+frame #1 -- the board right after the human's whole-turn plan -- did not. It also read
+claude_s9_gi8's turn-1 hand-off (zero picks, i.e. the bench game) at **361 s against 12 s** in the
+bench, and s2 / s7 / s14 one turn late where the optimistic sweep had them on time. One cause:
+`OrderingSearchEnabled` (TurnSolver.cpp) cached `EnvOn("MTG_SEARCH_ORDER") ||
+DecisionUnpruned(UnprunedGate::SearchOrder)` in a function static "once", and under `--claude-play`
+the first enumeration is the viewer's unpruned menu -- so the static froze TRUE and the search that
+took over at the hand-back applied up to 5! cast orderings per plan on a `GameState` copy for the
+rest of the game (the "ApplyPlanDirect-inside-enumeration" the Session 4 gdb samples had landed
+in). The env half stays cached; the gate half is re-read per call (a few predictable branches).
+Autonomous runs (env unset, gate closed) and the viewer (gate open throughout) are unchanged by
+construction. s9 T1 hand-off 361 s -> 27 s, T2 post-plan 197 s -> 25 s and 6 -> 5; s2, s7, s14
+now match the human from their first short board (s2's T2 wish-vs-Call tie of 22:30 UTC was this).
+
+**11.6 What the remaining short boards were: the autonomous loop's mana economics.** Six references
+stayed short from the board right after the human's play, and `MTG_EDF_LOOP_TRACE` on the executor's
+own loop (the trace cap is a process-wide count -- `MTG_EDF_LOOP_TRACE_N=100000000`, then read the
+loop after the last `[fs-root]` line) said what each one was. Four changes in `SpellEffects.h`, all
+autonomous-arm economics, all under one adoption measurement (11.7):
+
+*(a) Painlands never entered the loop's tap-ahead.* claude_s5_gi4 handed off after its own T4 plan
+(Brushland + Yavimaya Coast both Trace-stacked, Conservatory, Mariposa: 7 yield): 21 Displacer cranks,
+and every pass the tap-ahead banked Conservatory + Mariposa (3), the `{2}{C}` activation ate exactly
+3, the two painlands were never tapped, the float sat at 1 and every draw-sink admission was refused.
+The exclusion was `HumanPlayActive()`-scoped in Session 4 (issue 5) because the loop-only scope had
+then broken `edf_blink_loop_cashes_gorge` (T4 -> T6). That loss predates the exact executor, the {C}
+holds and the sink trials, and it does not reproduce: the fixture passes with the eligibility live in
+autonomous loops (`MTG_PAINLAND_TAPAHEAD_LOOP_AUTO`, default ON; the CAST-site half keeps its
+human-only scope and the seed-1 ENUM-GAP reasoning). s5 from the human's post-T3 board: 5 -> **4**.
+
+*(b) A mid-loop deploy paid Emiel's counter with the loop's last mana.* Same reference, one frame
+later: with the painlands banked the loop dug (Mariposa k=1, Conservatory k=3), the mid-loop switch
+cast a drawn Emiel at k=3, the early deploy cast Living Wish -> Essence Depleter at k=4 with the
+"keeps the loop" trial passing by exactly zero margin -- and the Depleter's ENTRY fired Emiel's
+optional `{G/W}` trigger with no payer installed (the `_eops` scope ends with ApplyBlink), so
+`PayOptionalTriggerCost` fell through to the float and paid for a counter on a creature that will
+never attack. `k=5: pay-failed`; a drain on the battlefield with nothing to drain; T5. The three
+mid-loop deploys now run under a declining payer (`MTG_COMBO_OFF_DEPLOY_NO_COUNTER`, default ON),
+the same rule the loop already applies to every non-final pass. s5 post-T4 board 5 -> **4**.
+
+*(c) The draw-land promotion outranked every yield.* claude_s9_gi8's T4 (Cloud of Faeries untaps
+TWO; all four lands are draw lands): the untap priority put two bare Conservatories -- battlefield
+order among promoted lands -- ahead of the Overgrowth'd Kitchen every pass, the exact sizing read a
+two-crank loop, and the search took T6 where the human's sixty single blinks (ordinary human play
+never promotes: `LoopDrawSinkOn` is off there) won T4. The user's policy is on record (Session 4:
+*"generate maximum mana when possible and then once we have some floating ensure all lands are
+untapped"*), so the promotion now waits until the FLOAT already pays the cheapest promoted draw
+activation (its fused Clue crack priced in) and then promotes that ONE land; until then the slots
+go by yield (`MTG_COMBO_OFF_DIG_BANK_FIRST`, default ON; COMBO OFF and the exact executor).
+
+*(d) The tap-ahead's budget counted lands the untap would never reach.* Same board, the deeper
+cause: `EtbUntapTapAheadIntoFloat` stops once `count` lands are tapped -- ANY lands -- so with a
+bare Conservatory and Mariposa already tapped from the turn's casts it banked nothing and the `{3}`
+was paid straight off Kitchen; the untap then refunded a payment instead of banking a surplus, and
+each draw the loop did manage tapped the board out for six passes. The lands the untap gives back
+are the top-`count` by yield (the cycling set), so in autonomous combo mode the budget is over that
+set: its tapped members consume slots, the rest are banked, lands outside it are left to the plain
+payer (`MTG_TAPAHEAD_CYCLE_SET`, built as a lever and shipped OFF -- 11.7; human play keeps the
+whole-board budget because the viewer concretises float at the frame boundary and a wider bank there
+can strand a recorded pick).
+With (c) + (d) the s9 loop banks +2 a pass and digs every fifth (trace `s9_t4_f2_cycle.err`); a
+first cut of (b) + (c) without (d) had made the same board chaotic -- 6 and 555 s on one frame, 5
+and 83 s on the next, flipping with the counter lever -- which is what pointed at the budget rule.
+
+**11.7 Measured, under the pre-registered rule.** One pooled batch each; the four levers are heurarm
+slots so `off` and `on` ran as arms of ONE batch.
+
+| measurement | off | on | delta | chunks better / worse / tied |
+|---|---|---|---|---|
+| 14-reference bench, d5 / 20 ms (`loops30`, all four) | 4.429 / 0 short | **4.357 / 0 short** (s4 6 -> 5, a turn AHEAD of the human) | -0.071 | digests moved on 13 of 14 |
+| 14-reference bench per subset (`arms31`, with 11.11's idle node in every arm but `off`): i alone 4.429, p 4.357, p+n 4.357, p+n+b 4.357, all four 4.357; 0 short everywhere -- the s4 gain is the painland lever's alone | | | | |
+| per-lever bisect, seeds 3001 / 3061, 100 games per arm, ONE pooled batch of ten arms (`bisect_loops30`, per-game `.wins`): painland alone **-0.07** (5 / 0 / 5, wall -12.6%); no-counter alone 0.00 (0 / 0 / 10, no game moved); bank-first alone 0.00 (1 / 1 / 8); cycle-set alone **+0.03** (0 / 3 / 7, wall +10%); all but cycle-set **-0.07** (5 / 0 / 5, wall -21.9%, the same seven games as painland alone) | | | | |
+| deck average, seeds 3001 / 3061, 100 games per arm (`deckavg_loops30`) | 4.4300 | 4.3800 | -0.0500 (t=-1.63) | 4 / 1 / 5 |
+
+**Decision.** The cycling set (d) is the lever that loses games: alone 0 better / 3 worse, and it
+cancels one of the painland lever's gains in the four-lever arm (the one worse chunk of the first
+sample). What it buys is speed on claude_s9_gi8's mid-loop boards (its T3/T4 frames search in ~30 s
+with it and take minutes without -- the loop nets ~0 and runs to its ceiling in every trial -- and T4
+frame 2 reads 5 against 6), but the bench is 0 short either way and s9 stays short of the human's 4
+in both. Under the pre-registered rule the shipped set is painland + no-counter + bank-first (+ the
+idle node of 11.11): sample 1 -0.07 with 5 / 0 / 5 (t=-2.69), wall -19%; held-out below. The cycling
+set ships as a built lever, default OFF, its measurement in the reader's comment.
+
+| measurement | off | painland + no-counter + bank-first + idle node | delta | chunks better / worse / tied |
+|---|---|---|---|---|
+| deck average, seeds 3001 / 3061, 100 games per arm (`deckavg31`) | 4.4300 | 4.3600 | -0.0700 (t=-2.69) | 5 / 0 / 5 |
+| held-out, seeds 3121 / 3181, 400 games per arm (`deckavg31b`) | 4.3600 | **4.2825** | **-0.0775** (t=-5.69) | **21 / 0 / 19** |
+
+Scenarios 90/90, combo_off 33/33 (both after every change). Hand-offs on this binary, first short
+board per reference: s2 T2 **4**, s5 T3/T4 **4**/**4**, s7 T3 **5**, s11 T4 **6**, s14 T2 **5** (= the
+human); still short: s1 T3 4 (human 3), s4 T4 7 (6), s6 T3 5 (4), s9 T2-T4 5/5/6 (4).
+
+**11.8 The honest sweep on this binary** (`logs/ref_sweep/edf_honest2`):
+
+```
+reference                    human | frames  ok  early  SHORT | short frames
+claude_s10_gi9                   4 |     41  41      0      0 | 
+claude_s11_gi10                  6 |     59  59      0      0 | 
+claude_s12_gi11                  4 |     55  55      0      0 | 
+claude_s14_gi13                  5 |     14  14      0      0 | 
+claude_s15_gi14                  6 |     17  17      0      0 | 
+claude_s1_gi0                    3 |     45  40      0      5 | T2#1->4, T2/post_main#0->4, T3#0->4, T3#1->4, T3#2->4
+claude_s2_gi1                    4 |     15  15      0      0 | 
+claude_s3_gi2                    4 |     41  41      0      0 | 
+claude_s4_gi3                    6 |     30  21      7      2 | T4#1->7, T4#2->7
+claude_s5_gi4                    4 |     72  72      0      0 | 
+claude_s6_gi5                    4 |     67  60      0      7 | T2#1->5, T2/post_main#0->5, T3#0->5, T3#1->5, T3/post_main#0->5, T4#0->5, T4#1->5
+claude_s7_gi6                    5 |     53  53      0      0 | 
+claude_s8_gi7                    3 |     68  68      0      0 | 
+claude_s9_gi8                    4 |     54  41      0     13 | T1#1->6, T1/post_main#0->6, T2#0->6, T2#1->6, T2/post_main#0->6, T3#0->6, T3#1->6, T3/post_main#0->6, T4#0->6, T4#1->5, T4#2->5, T4#6->5, T4#7->5
+TOTAL SHORT FRAMES: 27 of 631
+```
+
+**11.9 What is still short, and what each one is.** Read from the human's picks and the engine's root
+dumps and traces (`logs/edf_followups/triage2.log`, `s9_t4_f3_cycle.err`, `s11_t4_f1_dump5.err`):
+
+* *s1, T3 from the post-T2 board (human 3, engine 4).* The human's T3 is a nine-cast chain --
+  Mariposa, Trace -> Aether Hub, Living Wish -> Cloud of Faeries, Cloud, Drake, Drake, Emiel, then
+  the Emiel/Drake loop with Mariposa draws into a second Living Wish -> Essence Depleter. Every root
+  tail at T3 reads 4 (64 scanned); the chain's mid-turn untaps are beyond what the plan space
+  expresses from that board. Search capacity, not economics.
+* *s4, T4 after the human's plan (human 6, engine 7).* The human cast Displacer, cranked Drake nine
+  times FOR MANA with no finisher anywhere, then cast Emiel + a second Drake off the float, and won
+  T6 by combat with the whole board deployed a turn early. Every T4 tail reads 7 ("Displacer +
+  Drake", "Emiel + Drake"): the loop as a mana engine for DEPLOYMENT is not a plan the enumerator
+  emits -- it sizes a blink count only toward a sink. (From T1 the engine now wins this game T5.)
+* *s6, T3/T4 from the post-T2 board (human 4, engine 5).* The human's T4 is Living Wish x2 ->
+  Azorius Chancery, Adarkar Wastes, Cloud, Drake, Drake, Eladamri's Call -> Displacer, Training
+  Grounds, Displacer, then the Displacer/Drake loop with Kitchen investigates. Same class as s1.
+* *s9, T4 (human 4, engine 5).* The loop now runs (126 cranks at T4) and the wish fetches the only
+  castable finisher -- Dimensional Infiltrator, there is no black source -- whose kill is one `{C}`
+  per card of a 49-card library, which this board (Mariposa is the only `{C}` source) cannot produce
+  in one turn; the deck-out lands at T5. The viewer's COMBO OFF verify won the same board for the
+  human, which points at the human-only `{C}` handling family (`MTG_UNTAP_C_FIRST` / starved swap,
+  the payment-side `{C}` holds, `BoardHasColorlessPipSink` tie-breaks) and at finisher choice
+  (dig for a Trace of Abundance -> black -> Depleter instead). Open.
+* *s11, T5 (human 6, engine 7).* One card of tempo. On the T5 board (Conservatory carrying
+  Overgrowth + two Fertile Grounds, Mariposa, two Brushlands, Emiel; hand = three lands) the human
+  paid Mariposa's `{5},{T}: draw` off Conservatory's five, drew the Conservatory, and the T6 draw
+  was Cloud of Faeries: Cloud + Emiel untapping Conservatory is the loop, Mariposa digs, T6. The
+  engine casts nothing at T5 and attacks for four; its T6 draw is that Conservatory, its T7 draw
+  is the Cloud, and it wins T7 with the identical loop (`s11_t4_f1_dump5/claude_s11_gi10.json`).
+  The draw activation IS in the autonomous plan space (`ActivatePermAbility` / `TapDraw`, eval 1)
+  and the search is clairvoyant, so the T5 root should read 6 for the draw and 7 for passing;
+  `MTG_FS_ROOT_DUMP=5` prints nothing because that root never enters `FSLineWin` (no breakpoint
+  plan). Probed with the per-candidate solve trace (`MTG_TRACE_SOLVE=1 MTG_TRACE_SOLVE_TURN=5`,
+  armed from the environment as of this session) -- the answer is 11.11: a false refutation, fixed.
+
+**11.11 The empty node: a main with nothing to do was a searched dead end.** Handed off one frame
+after the human's T4 plan, claude_s11_gi10 ran NO search for the rest of the game -- no root dump,
+no candidate trace, memo counters at zero -- and still went off at T7; from the start of T5 the same
+engine searches, prices Mariposa's draw at 6 against 9 for passing, and wins T6 like the human. The
+commit-the-line trace (`MTG_FD_TRACE=1`, now also narrating the executor: the inherited line at the
+hand-back, every popped phase, every fallback) read the reason at the hand-back turn: `T4 line win=9
+searched_depth=5 verified=0 refuted_full=1 phases=0`, then `GREEDY (refuted-follow)` at T4, T5, T6
+and T7. The greedy follow-out investigated with Conservatory at T5 instead of drawing with Mariposa,
+so the Cloud came a turn later. The "refutation" was false: with the drop used, the lands tapped and
+two lands in hand, `EnumeratePlansWithLand` returned ZERO plans, so `FSLineWin`'s plan loop never
+ran and the node returned max_turns+1 for its whole subtree with nothing truncated -- a bound-
+qualified no-win that the refuted-follow rule (`MTG_REFUTED_FOLLOW`, default ON since 2026-09-03)
+read as full coverage. Passing the turn is a line; `FSLineTail` already seeds its idle option and
+the pre-combat node did not. It does now (`MTG_FS_IDLE_NODE`, default ON, heurarm slot
+`FS_IDLE_NODE`): an empty node gets one empty plan with the land decided, so `ApplyPlanDirect`
+changes nothing and the recursion advances the turn. Byte-identical wherever a node had any plan.
+s11 T4 frame 1: 7 -> **6** (= the human), with `refuted_full=0` at every turn. The same trace on
+every other first-short board shows no refutation, so s1, s4, s6 and s9 are what 11.9 says they are.
+Also added: `MTG_TRACE_SOLVE=1` arms the per-candidate solve trace (`MTG_TRACE_SOLVE_TURN=n`) from
+the environment (it was reachable only from main.cpp's --trace paths, never from a hand-off).
+
+**11.10 Shipped (local commit, not pushed).** Local commit only (user hold on pushing).
+* `src/ai/AIEngine.cpp`: the executor's `LineUnpaidCostScope` at function scope (11.1); the honest
+  hand-back (`g_unpruned_suppressed`, `g_human_play_suppressed`, ordinal reset; 11.3); `MTG_FD_TRACE`
+  now narrates the executor (inherited line at the hand-back, popped phases, fallbacks, refuted-follow
+  greedy; 11.11).
+* `src/ai/TurnSolver.cpp`: `MTG_HOLD_C_FOR_LINE` default ON (11.2); `OrderingSearchEnabled` re-reads
+  the unpruned gate per call (11.5); `FSLineWin`'s idle continuation for an empty node
+  (`MTG_FS_IDLE_NODE`, default ON, slot `FS_IDLE_NODE`; 11.11); `MTG_TRACE_SOLVE=1` arms the
+  per-candidate solve trace from the environment.
+* `src/ai/DecisionProviders.cpp`: the outlet tie-break under the exact executor's sizing predicate
+  (11.3).
+* `src/core/SpellEffects.h`: `PipFreeOutletOnBoard` + the on-board branch of `ComboOffSwitchOutlet`
+  (11.3); `MTG_PAINLAND_TAPAHEAD_LOOP_AUTO` ON, `MTG_COMBO_OFF_DEPLOY_NO_COUNTER` ON,
+  `MTG_COMBO_OFF_DIG_BANK_FIRST` ON, `MTG_TAPAHEAD_CYCLE_SET` built and OFF (11.6, 11.7).
+* `src/ai/HeuristicArm.h`: slots `HOLD_C_FOR_LINE`, `EDF_PAIN_LOOP_AUTO`, `EDF_DEPLOY_NO_COUNTER`,
+  `EDF_DIG_BANK_FIRST`, `EDF_CYCLE_SET`, `FS_IDLE_NODE` (per-job arms in one pooled batch).
+* `src/core/GameLogger.h/.cpp`: `g_unpruned_suppressed`.
+* `scripts/ref_handoff_sweep.py` (new): every main-phase frame of every reference handed to the search.
+* `test/scenarios/edf_ref_s6_t4_float_keeps_c_for_blink.json` promoted from `open/`; the frame-2
+  fixture's README row rewritten (11.4).
+* Measurement scripts and traces under `logs/edf_followups/` (`bisect_loops.py`, `gate_loops.sh`,
+  `idle_handoffs.sh`, `subset2.sh`) and `logs/ref_bench_edf/{loops30,bisect_loops30,arms31,deckavg31,
+  deckavg31b}`, `logs/ref_sweep/edf_honest2` (not committed).
+
+**11.12 Gates at the commit.** scenarios 90/90 (the s6 T4 float fixture promoted from open/); combo_off 33/33; smoke IDENTICAL: 80 job lines against a fresh smoke of clean HEAD 4d8199c4 built in a throwaway worktree (logs/edf_followups/head_smoke.log). The older ac_smoke.log baseline predates the critter v2 GT rebaseline 7f7ad8a6; that rebaseline skipped the critter 2HG case, which is red at HEAD itself (4.7600/4aaade4204c60879 on both binaries) -- pre-existing, not this commit. Scenarios: 90 passed, 0 failed, 0 error (90 total).

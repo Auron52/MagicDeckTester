@@ -139,6 +139,7 @@ bool DecisionUnpruned()
 {
     static const bool v = EnvOn("MTG_UNPRUNED");
     if (!v) { return false; }
+    if (g_unpruned_suppressed) { return false; }     // the hand-back plays the SHIPPED search (GameLogger.h)
     if (UnpruneHumanSuppressed()) { return false; }
     return true;
 }
@@ -172,6 +173,7 @@ bool DecisionUnpruned(UnprunedGate g)
     if (g_gate_probe.load(std::memory_order_relaxed))
     { g_gates_queried.fetch_or(1u << static_cast<int>(g), std::memory_order_relaxed); }
     if (UnpruneHumanExempt(g)) { return false; }     // human play never opens this gate (see above)
+    if (g_unpruned_suppressed) { return false; }     // hand-back: shipped gates, mask included
     if (DecisionUnpruned()) { return true; }         // global MTG_UNPRUNED opens every gate
     if (UnpruneHumanSuppressed()) { return false; }  // selective mode honours the same suppression
     return (UnpruneMask() >> static_cast<int>(g)) & 1u;
@@ -15070,6 +15072,17 @@ FlickerLoop RecogniseFlickerLoop(const GameState& s, int controller)
             // Emiel keeps it positive, and both lethal projections then refuse a kill that is
             // genuinely there. On an EXACT net+untaps tie, prefer the outlet that banks more
             // colourless; everything above it is untouched, so this can never trade mana for pips.
+            //
+            // ...AND THE AUTONOMOUS ARM GETS THE SAME TIE-BREAK UNDER MTG_EDF_EXACT_EXECUTOR
+            // (2026-09-15, Session 30; `ComboOffExactSizingActive()` is the lever's sizing-side
+            // predicate, true on every human frame as before). The human-only gate dated from before
+            // the exact executor existed: the autonomous apply could not run the button's finish
+            // machinery, so which outlet it recognised the loop on did not matter. It matters now.
+            // claude_s12_gi11 T4, handed to the search one frame after the human cast Emiel (both
+            // outlets on the battlefield, Training Grounds out, one {C} source): the tie fell to
+            // insertion order, the loop ran 317 Displacer cranks, its own digs fetched BOTH finishers
+            // onto the battlefield, and not one drain ever fired -- the Displacer's pip took the
+            // board's only colourless every pass. The human, cranking Emiel, drained out on T4.
             static const bool s_outlet_netc = EnvOn("MTG_EDF_OUTLET_NETC", true);
             const int cand_net_c = c_refund - cost_c;
             if (best.ok)
@@ -15077,7 +15090,8 @@ FlickerLoop RecogniseFlickerLoop(const GameState& s, int controller)
                 bool take;
                 if      (net != best.net)     { take = net > best.net; }
                 else if (n   != best.untaps)  { take = n > best.untaps; }
-                else                          { take = s_outlet_netc && HumanPlayActive()
+                else                          { take = s_outlet_netc
+                                                       && (HumanPlayActive() || ComboOffExactSizingActive())
                                                        && cand_net_c > best.net_c; }
                 if (!take) { continue; }
             }

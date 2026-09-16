@@ -178,7 +178,7 @@ enum Slot : int
     EDF_PAYLOAD_FIRST,        // MTG_EDF_PAYLOAD_FIRST   cast order: the ETB-untap payload BEFORE the activation reducer
     EDF_AURA_HOST_SIG,        // MTG_EDF_AURA_HOST_SIG   autonomous plan dedup keeps land-Aura HOST variants distinct
     BOUNCE_SPARE_AURA,        // MTG_BOUNCE_SPARE_AURA   a karoo bounce ranks a land carrying an Aura last
-    HOLD_C_FOR_LINE,          // MTG_HOLD_C_FOR_LINE     a blink activation's {C} pip joins the line hold -> float keeps {C} (default OFF)
+    HOLD_C_FOR_LINE,          // MTG_HOLD_C_FOR_LINE     a blink activation's {C} pip joins the line hold -> float keeps {C} (default ON since 2026-09-15)
     LINE_C_HOLD,              // MTG_LINE_C_HOLD         the casts' payer holds the {C} SOURCES the plan's own activation still needs (default OFF)
     EDF_HAND_GOFF_REFUND,     // MTG_EDF_HAND_GOFF_REFUND the hand go-off's mana floor credits a hand PAYLOAD's own ETB untap (default OFF)
     EDF_AURA_HOST_SIG_KAROO,  // MTG_EDF_AURA_HOST_SIG_KAROO the host signature applies only to plans whose land drop is a karoo (perf)
@@ -200,6 +200,11 @@ enum Slot : int
     BP_DROP_GREEDY,           // MTG_BP_DROP_GREEDY      delete the greedy continuation outright
     BP_CONDEMN_NEW_OPTION,    // MTG_BP_CONDEMN_NEW_OPTION  spare when the site drew a payable card
     BP_CONDEMN_PLAN_CAST,     // MTG_BP_CONDEMN_PLAN_CAST  a plan that cast NOTHING declined nothing
+    EDF_PAIN_LOOP_AUTO,       // MTG_PAINLAND_TAPAHEAD_LOOP_AUTO the AUTONOMOUS loop's tap-ahead banks a painland's painless {C} too (default ON since 2026-09-16)
+    EDF_DEPLOY_NO_COUNTER,    // MTG_COMBO_OFF_DEPLOY_NO_COUNTER a mid-loop deploy never pays Emiel's {G/W} counter trigger (default ON since 2026-09-16)
+    EDF_DIG_BANK_FIRST,       // MTG_COMBO_OFF_DIG_BANK_FIRST   ONE cheapest draw land is promoted, and only once the float already pays it (default ON since 2026-09-16)
+    EDF_CYCLE_SET,            // MTG_TAPAHEAD_CYCLE_SET         the autonomous loop's tap-ahead budget is over the top-`untaps` yield lands, not every tapped land (built 2026-09-16, default OFF: deck average +0.03 / 0 better 3 worse)
+    FS_IDLE_NODE,             // MTG_FS_IDLE_NODE               a full-search node with NOTHING to do searches the idle continuation instead of answering "no win" (default ON since 2026-09-16)
     COUNT
 };
 
@@ -370,6 +375,11 @@ inline const char* Name(int slot)
         "MTG_BP_DROP_GREEDY",
         "MTG_BP_CONDEMN_NEW_OPTION",
         "MTG_BP_CONDEMN_PLAN_CAST",
+        "MTG_PAINLAND_TAPAHEAD_LOOP_AUTO",
+        "MTG_COMBO_OFF_DEPLOY_NO_COUNTER",
+        "MTG_COMBO_OFF_DIG_BANK_FIRST",
+        "MTG_TAPAHEAD_CYCLE_SET",
+        "MTG_FS_IDLE_NODE",
     };
     // The enum and this table are ONE mapping split across two lists: a slot added to one and not
     // the other silently shifts every lever after it (a manifest asking for lever X would set Y).

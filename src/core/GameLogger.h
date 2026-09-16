@@ -1108,6 +1108,15 @@ struct ComboOffApplyPause
 // where it returns false so the rollout plays autonomously. Non-human-play runs are byte-identical
 // (env is false either way). thread_local so parallel keep-model rollouts don't race.
 extern thread_local bool g_human_play_suppressed;
+// THE HAND-BACK'S PRUNING SWITCH (--choices-then-auto). The claude-play harness sets MTG_UNPRUNED
+// so the human's recorded picks resolve against the viewer's full menu; that static stays true
+// for the rest of the process, so the search that took over after the hand-back was UNPRUNED --
+// wider than the shipped autonomous search every reference is benched against. Measured
+// 2026-09-15 (Session 30): claude_s6_gi5 T4 frame 2 read 4 handed off and 5 as an autonomous
+// fixture of the same board, and the shipped-pruning arm of the hand-off read 5. Set true at the
+// hand-back (AIEngine::TakeTurn) and read by DecisionUnpruned, so the prefix replays unpruned and
+// the search plays shipped. thread_local like the flag above.
+extern thread_local bool g_unpruned_suppressed;
 
 inline bool HumanPlayActive()
 {

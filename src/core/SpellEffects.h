@@ -13480,6 +13480,30 @@ inline int DeployLandAuraFromHand(GameState& state, int controller,
     return num;
 }
 
+// A PIP-FREE OUTLET ALREADY ON THE BATTLEFIELD -- the swap's free case (2026-09-15, Session 30).
+// `DeployPipFreeOutletFromHand` iterates the HAND: an Emiel the dig turns up is cast and the loop
+// moves onto it. An Emiel that is already in play -- cast earlier in the same plan, or by the human
+// a frame before the hand-off -- was never a candidate, so the swap's real trial "deployed" nothing
+// and declined every iteration (claude_s12_gi11 T4 frame 32: 95 declines, 317 Displacer cranks,
+// both finishers fetched and deployed, zero drains, the kill a turn late). Returns the outlet's
+// card number (0 = none), excluding the loop's current source; `def_out` receives its params.
+// Nothing is paid and nothing moves: the caller only re-points the loop.
+inline int PipFreeOutletOnBoard(const GameState& state, int controller, int exclude_id,
+                                const CardParams** def_out)
+{
+    for (const Permanent& p : state.battlefield)
+    {
+        if (p.controller_index != controller || p.card.m_number == exclude_id) { continue; }
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+        if (d == nullptr || !d->card.IsCreature() || !d->params.blink_cost.has_value()) { continue; }
+        if (EffectiveActivationCost(state, controller, p.card,
+                                    d->params.blink_cost.value()).colorless > 0) { continue; }
+        if (def_out) { *def_out = &d->params; }
+        return p.card.m_number;
+    }
+    return 0;
+}
+
 // THE PIP-FREE OUTLET SWAP, AS ONE ROUTINE -- so the loop can run it MID-FLIGHT as well as before
 // iteration 0 (MTG_COMBO_OFF_MIDLOOP_OUTLET, default ON, COMBO OFF only).
 //
@@ -13541,6 +13565,40 @@ inline bool ComboOffSwitchOutlet(GameState& state, int controller, int* cur_sour
     if (!pip_sink) { return false; }                    // condition 3
 
     static const bool s_switch_trial = EnvOn("MTG_COMBO_OFF_SWITCH_TRIAL", true);
+    // CONDITION 4, FREE FORM FIRST: a pip-free outlet ALREADY ON THE BATTLEFIELD (see
+    // PipFreeOutletOnBoard). No cast to pay, so the only trial is the new outlet's own first
+    // activation. MTG_COMBO_OFF_SWITCH_ONBOARD=0 restores the hand-only swap.
+    static const bool s_switch_onboard = EnvOn("MTG_COMBO_OFF_SWITCH_ONBOARD", true);
+    if (s_switch_onboard)
+    {
+        const CardParams* bdef = nullptr;
+        const int bid = PipFreeOutletOnBoard(state, controller, *cur_source, &bdef);
+        if (bid != 0 && bdef != nullptr && bdef->blink_cost.has_value())
+        {
+            bool ok = true;
+            if (s_switch_trial && probe_pay != nullptr)
+            {
+                GameState probe = state;
+                const Card* np = nullptr;
+                for (const Permanent& p : probe.battlefield)
+                { if (p.card.m_number == bid) { np = &p.card; break; } }
+                ok = np != nullptr
+                  && (*probe_pay)(probe, EffectiveActivationCost(probe, controller, *np,
+                                                                 bdef->blink_cost.value()));
+            }
+            if (ok)
+            {
+                if (lt)
+                {
+                    std::fprintf(stderr, "[edf-loop] OUTLET SWITCH -> id=%d (pip-free, already on "
+                                         "the battlefield, {C} sink live)\n", bid);
+                }
+                *cur_source = bid;
+                *cur_outlet = bdef;
+                return true;
+            }
+        }
+    }
     if (s_switch_trial && probe_pay != nullptr)
     {
         GameState probe = state;
@@ -14082,7 +14140,70 @@ inline int ApplyBlinkLoop(GameState& state, int controller, int source_id, int t
             static const bool s_unpromote = EnvOn("MTG_COMBO_OFF_DRAW_UNPROMOTE", true);
             const bool draw_promo_live =
                 !(s_unpromote && ComboOffExactApplyActive() && promote_draw_lands && !want_draw);
-            const std::vector<int>& prio = draw_promo_live ? sinks : sinks_damage_only;
+            // BANK FIRST, THEN DIG (MTG_COMBO_OFF_DIG_BANK_FIRST, default ON; Session 30,
+            // 2026-09-15). The promotion ranks EVERY draw land above EVERY yield, so on a board
+            // where the untap count is small and the draw lands are the cheap ones the slots go to
+            // the wrong lands forever. The user's own claude_s9_gi8 turn-4 board is the extreme
+            // case: Cloud of Faeries untaps TWO, all four lands are draw lands, and battlefield
+            // order put two bare Conservatories ahead of the Overgrowth'd Kitchen -- the loop
+            // banked nothing, the exact sizing read it as a two-blink loop, and the search took
+            // turn 6 where the human's sixty blinks won turn 4 (ordinary human play never promotes:
+            // LoopDrawSinkOn is off there, so the human's single blinks untapped by yield).
+            //
+            // The user's stated policy (Session 4, issue 5): *"generate maximum mana when possible
+            // and then once we have some floating ensure all lands are untapped; then once all are
+            // untapped continue generating maximum mana."* So: the untap goes by yield until the
+            // FLOAT can already pay the cheapest promoted draw activation (its fused Clue crack
+            // priced in), and then ONE draw land -- that cheapest one -- takes a slot so the next
+            // iteration's guard can fire. One, not every copy: with a bounded untap count a second
+            // draw land is a second yield slot lost for a draw the guard cannot fund yet, and the
+            // land comes back the moment its turn arrives. The guard itself is unchanged and stays
+            // the arbiter; a refused draw simply leaves the promotion standing while the float
+            // grows. Damage sinks keep their place at the front regardless.
+            static const bool s_bank_first_env = EnvOn("MTG_COMBO_OFF_DIG_BANK_FIRST", true);
+            const bool s_bank_first = heurarm::Flag(heurarm::EDF_DIG_BANK_FIRST, s_bank_first_env);
+            std::vector<int> prio_dig;
+            const std::vector<int>* prio_p = &sinks_damage_only;
+            if (draw_promo_live && promote_draw_lands)
+            {
+                if (!s_bank_first || !ComboOffExactApplyActive()) { prio_p = &sinks; }
+                else
+                {
+                    int best_id = 0, best_mv = std::numeric_limits<int>::max();
+                    for (std::size_t si = sinks_damage_only.size(); si < sinks.size(); ++si)
+                    {
+                        const int id = sinks[si];
+                        for (const Permanent& p : state.battlefield)
+                        {
+                            if (p.card.m_number != id || p.controller_index != controller) { continue; }
+                            const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+                            if (d == nullptr) { break; }
+                            int mv = 0;
+                            if (d->params.tap_draw_cost.has_value())
+                            {
+                                mv = EffectiveActivationCost(state, controller, p.card,
+                                                             d->params.tap_draw_cost.value()).ManaValue();
+                            }
+                            else if (d->params.tap_investigate_cost.has_value())
+                            {
+                                mv = EffectiveActivationCost(state, controller, p.card,
+                                                             d->params.tap_investigate_cost.value()).ManaValue()
+                                   + FusedClueCrackCost(state, controller).ManaValue();
+                            }
+                            else { break; }
+                            if (mv < best_mv) { best_mv = mv; best_id = id; }
+                            break;
+                        }
+                    }
+                    if (best_id != 0 && state.floating_mana.Total() >= best_mv)
+                    {
+                        prio_dig = sinks_damage_only;
+                        prio_dig.push_back(best_id);
+                        prio_p = &prio_dig;
+                    }
+                }
+            }
+            const std::vector<int>& prio = *prio_p;
             if (lt && !draw_promo_live && promote_draw_lands)
             {
                 static thread_local int s_said = 0;
@@ -14176,6 +14297,23 @@ inline int ApplyBlinkLoop(GameState& state, int controller, int source_id, int t
         // returns at its first line once the kill's colour is producible (which the aura it just
         // cast makes true), and `ComboOffSwitchOutlet` returns at its first condition once the
         // outlet no longer prints a `{C}` pip. After one success each, both are two board scans.
+        // ...AND NONE OF THE THREE MAY PAY A COUNTER TRIGGER (MTG_COMBO_OFF_DEPLOY_NO_COUNTER,
+        // default ON; Session 30, 2026-09-15). The `_eops` scope above ends with ApplyBlink, so a
+        // creature these deploys put onto the battlefield fires Emiel's optional {G/W} trigger with
+        // NO payer installed -- and PayOptionalTriggerCost's fallback is the turn-scoped float,
+        // "which is the same bug wearing a different hat" (the comment on the declining payer,
+        // above). Measured on claude_s5_gi4's post-T4 board (hand-off sweep): the early deploy
+        // cast Living Wish -> Essence Depleter at k=4 with the trial passing by exactly zero
+        // margin, the Depleter's entry paid {G/W} for a counter it will never attack with, and
+        // `k=5: pay-failed` left a drain on the battlefield with nothing to drain -- turn 5 instead
+        // of the human's turn 4. The last-iteration payer stays as it is; these deploys are
+        // mid-loop by construction (`k + 1 < iterations`).
+        static const bool s_deploy_no_counter_env = EnvOn("MTG_COMBO_OFF_DEPLOY_NO_COUNTER", true);
+        const bool s_deploy_no_counter = heurarm::Flag(heurarm::EDF_DEPLOY_NO_COUNTER, s_deploy_no_counter_env);
+        const std::function<bool(const ManaCost&)> decline_deploy =
+            [](const ManaCost&) { return false; };
+        EtbOptionalPayerScope _eops_deploy(s_deploy_no_counter ? &decline_deploy
+                                                                : g_etb_optional_payer);
         static const bool s_midloop_aura = EnvOn("MTG_COMBO_OFF_LAND_AURA", true);
         if (cash_sinks && s_midloop_aura && ComboOffExactApplyActive() && k + 1 < iterations)
         { DeployLandAuraFromHand(state, controller, pay, &c, probe_pay); }
@@ -15314,6 +15452,69 @@ inline void EtbUntapTapAheadIntoFloat(GameState& state, int controller, int coun
     const int n_perm = static_cast<int>(state.battlefield.size());
     std::vector<int> order(static_cast<std::size_t>(n_perm));
     for (int i = 0; i < n_perm; ++i) { order[static_cast<std::size_t>(i)] = i; }
+    // THE CYCLING SET (MTG_TAPAHEAD_CYCLE_SET, default OFF -- see the measurement note at the end;
+    // AUTONOMOUS combo mode only; Session 30, 2026-09-15). The budget rule below -- stop once `count` lands are tapped -- exists so that
+    // every land tapped ahead is a land the ETB untap gives back. It counts EVERY tapped land toward
+    // that budget, including the low-yield ones the untap will never reach, and inside a loop that
+    // is exactly wrong: on the user's claude_s9_gi8 turn-4 board (Cloud of Faeries untaps TWO; a bare
+    // Conservatory and Mariposa already tapped from the turn's casts) the tap-ahead saw two tapped
+    // lands, banked nothing, and the {3} activation was paid straight off the Overgrowth'd Kitchen
+    // -- so the untap refunded a payment instead of banking a surplus, and every draw the loop did
+    // manage tapped the board out for the next six iterations. Net ~0 on a board whose two best
+    // lands yield 5 against a 3-mana blink.
+    //
+    // The untap picks by YIELD (EtbUntapLands), so the lands that come back are the top-`count`
+    // by yield -- the CYCLING SET. Those are the lands worth tapping ahead, and the ONLY ones: a
+    // land outside the set will not be untapped, so tapping it is a one-time bank that the plain
+    // payer can make whenever it is actually needed. The budget is therefore over the set: the
+    // set's already-tapped members consume slots (they are untapped first), and the rest of the
+    // set is banked. A promoted draw land (bank-first, ApplyBlinkLoop) taking one slot leaves one
+    // set member tapped for a pass; it is counted here and comes back on the next.
+    //
+    // Human play keeps the whole-board budget: the viewer's single blinks concretise their float
+    // at the frame boundary, and a wider bank there can commit a colour a recorded next pick
+    // needed (the seed-1 ENUM-GAP class). Rollouts and the autonomous executor are the arm this
+    // is for. The recognizer's `net` already prices the loop as (top-`untaps` yields - cost), so
+    // the executor finally runs the loop the sizer priced.
+    //
+    // MEASURED AND NOT ADOPTED (2026-09-16, docs/design/analysis-EldraziDisplacerFlicker.md
+    // Session 30 11.7): a ten-arm per-lever bisect on the paired deck average (seeds 3001/3061,
+    // 100 games per arm, per-game .wins) read this lever ALONE at +0.03 t with 0 chunks better /
+    // 3 worse (three games 4 -> 5) and wall +10%, and it cancelled one of the painland lever's
+    // gains in combination (the "all four" arm: -0.05 with one chunk worse; "all but this one":
+    // -0.07 with none worse and wall -22%). What it buys is the s9 mid-loop hand-off boards: with
+    // it claude_s9_gi8 T3/T4 frames search in ~30 s and T4 frame 2 reads 5; without it those
+    // frames take minutes (the loop nets ~0 and runs to its ceiling in every trial) and frame 2
+    // reads 6. The reference bench (T1 hand-offs) is 0 short either way. Ships OFF under the
+    // pre-registered rule (both deck-average samples <= 0 with zero chunks worse); =1 restores.
+    static const bool s_cycle_set_env = EnvOn("MTG_TAPAHEAD_CYCLE_SET", false);
+    const bool s_cycle_set = heurarm::Flag(heurarm::EDF_CYCLE_SET, s_cycle_set_env);
+    const bool cycle_set = combo && s_cycle_set && !HumanPlayActive();
+    std::vector<char> in_cycle;
+    if (cycle_set)
+    {
+        std::vector<std::pair<int, int>> ranked;   // (yield, battlefield index) over ALL own lands
+        for (int i = 0; i < n_perm; ++i)
+        {
+            const Permanent& p = state.battlefield[static_cast<std::size_t>(i)];
+            if (p.controller_index != controller || !p.card.IsLand()) { continue; }
+            const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+            if (d == nullptr) { continue; }
+            ranked.emplace_back(PermanentManaYield(state, p, *d), i);
+        }
+        std::stable_sort(ranked.begin(), ranked.end(),
+                         [](const std::pair<int, int>& a, const std::pair<int, int>& b)
+                         { return a.first > b.first; });
+        in_cycle.assign(static_cast<std::size_t>(n_perm), 0);
+        tapped_n = 0;
+        const int n_set = std::min<int>(count, static_cast<int>(ranked.size()));
+        for (int r = 0; r < n_set; ++r)
+        {
+            const int bi = ranked[static_cast<std::size_t>(r)].second;
+            in_cycle[static_cast<std::size_t>(bi)] = 1;
+            if (state.battlefield[static_cast<std::size_t>(bi)].tapped) { ++tapped_n; }
+        }
+    }
     // "We should also untap the highest yield lands as a priority until we have 100 total."
     // The yield ordering already exists (MTG_ETB_TAP_YIELD, default OFF -- measured below this
     // deck's noise floor as a global default). Combo mode turns it on for the window where it
@@ -15366,6 +15567,7 @@ inline void EtbUntapTapAheadIntoFloat(GameState& state, int controller, int coun
         Permanent& p = state.battlefield[static_cast<std::size_t>(idx)];
         if (tapped_n >= count) { break; }
         if (p.controller_index != controller || p.tapped || !p.card.IsLand()) { continue; }
+        if (cycle_set && !in_cycle[static_cast<std::size_t>(idx)]) { continue; }   // outside the set
         const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
         if (d == nullptr) { continue; }
         const CardParams& q = d->params;
@@ -15434,6 +15636,20 @@ inline void EtbUntapTapAheadIntoFloat(GameState& state, int controller, int coun
         static const bool s_pain_tapahead = EnvOn("MTG_PAINLAND_TAPAHEAD", true);
         static const bool s_pain_cast     = EnvOn("MTG_PAINLAND_TAPAHEAD_CAST", true);
         static const bool s_pain_reserve  = EnvOn("MTG_PAINLAND_CAST_RESERVE", true);
+        // ...AND INSIDE A LIVE LOOP THE AUTONOMOUS ARM BANKS THEM TOO (MTG_PAINLAND_TAPAHEAD_LOOP_AUTO,
+        // default ON; Session 30, 2026-09-15). The human-only scope above left the SEARCH's loop
+        // netting zero on every painland-heavy board: the reference hand-off sweep read
+        // claude_s5_gi4 at T5 from the human's own post-T4 board (Brushland + Yavimaya Coast, both
+        // Trace-stacked, plus Conservatory and Mariposa: 8 yield), and the executor's trace showed
+        // why -- 21 blinks, the tap-ahead banking Conservatory + Mariposa (3) every pass, the
+        // `{2}{C}` activation eating exactly 3, the two painlands never tapped, the float pinned at
+        // 1 and every draw-sink admission refused. The human's line from the same board investigates
+        // four times, draws twice off Mariposa, wishes for Essence Depleter and wins the turn. The
+        // Session 4 loss that fixed the human-only scope predates the exact executor, the {C} holds
+        // and the switch/draw trials; re-measured under the adoption rule (below) before shipping.
+        // The CAST-site half keeps its human-only scope (the seed-1 ENUM-GAP reasoning is unchanged).
+        static const bool s_pain_loop_auto_env = EnvOn("MTG_PAINLAND_TAPAHEAD_LOOP_AUTO", true);
+        const bool s_pain_loop_auto = heurarm::Flag(heurarm::EDF_PAIN_LOOP_AUTO, s_pain_loop_auto_env);
         bool reserve_overlap = false;
         if (s_pain_reserve && reserve_color_mask != 0)
         {
@@ -15450,8 +15666,8 @@ inline void EtbUntapTapAheadIntoFloat(GameState& state, int controller, int coun
         }
         bool pain_c = false;
         if (q.tap_self_damage > 0 && PainlandCModeEnabled() && s_pain_tapahead
-            && HumanPlayActive()
-            && (g_in_blink_loop || (s_pain_cast && count >= tapped_n + 1 && !reserve_overlap)))
+            && ((g_in_blink_loop && (HumanPlayActive() || s_pain_loop_auto))
+                || (HumanPlayActive() && s_pain_cast && count >= tapped_n + 1 && !reserve_overlap)))
         {
             for (Color c : q.produces)
             { if (c == Color::Colorless) { pain_c = true; break; } }
@@ -16691,13 +16907,19 @@ inline void BpTraceCast(const char* side, const GameState& state, const std::str
         dorks += p.card.m_name.str();
         dorks += "#" + std::to_string(p.card.m_number);
     }
+    // `line=` is the mid-line hold (g_line_unpaid_cost) the payment below will read: what the
+    // rest of this plan still owes. Printed because the s6 T4 frame-4 executor/rollout split
+    // (2026-09-15) was exactly a hold present on one side and empty on the other.
+    const ManaCost& lu = g_line_unpaid_cost;
     std::fprintf(stderr,
                  "[bp-pay] %-5s T%-2d cast=%-24s cost=%d/W%d U%d B%d R%d G%d C%d creature=%d"
-                 " float=W%d U%d B%d R%d G%d C%d wild%d untapped=[%s] dorks=[%s]\n",
+                 " float=W%d U%d B%d R%d G%d C%d wild%d line=%d/W%d U%d B%d R%d G%d C%d"
+                 " untapped=[%s] dorks=[%s]\n",
                  side, state.turn_number, name.c_str(),
                  cost.generic, cost.white, cost.blue, cost.black, cost.red,
                  cost.green, cost.colorless, for_creature ? 1 : 0,
                  f.white, f.blue, f.black, f.red, f.green, f.colorless, f.wild,
+                 lu.generic, lu.white, lu.blue, lu.black, lu.red, lu.green, lu.colorless,
                  untapped.c_str(), dorks.c_str());
 }
 
