@@ -9,18 +9,18 @@
         <card number="1" name="Elderscale Wurm"/>
         <card number="4" name="Elvish Archdruid"/>
         <card number="4" name="Elvish Mystic"/>
-        <card number="17" name="Forest"/>
-        <card number="2" name="Fyndhorn Elves"/>
+        <card number="13" name="Forest"/>
+        <card number="4" name="Fyndhorn Elves"/>
         <card number="1" name="Hornet Queen"/>
         <card number="4" name="Llanowar Elves"/>
         <card number="4" name="Natural Order"/>
         <card number="4" name="Priest of Titania"/>
         <card number="1" name="Sol Ring"/>
-        <card number="1" name="Terastodon"/>
+        <card number="2" name="Terastodon"/>
         <card number="3" name="Turntimber Symbiosis"/>
         <card number="1" name="Vaultborn Tyrant"/>
         <card number="3" name="World War Hulk"/>
         <card number="4" name="Worldly Tutor"/>
-        <card number="1" name="Worldspine Wurm"/>
+        <card number="2" name="Worldspine Wurm"/>
     </zone>
 </cockatrice_deck>
