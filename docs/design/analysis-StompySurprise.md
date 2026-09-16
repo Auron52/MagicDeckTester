@@ -1236,3 +1236,63 @@ unchanged.
 winner and cannot be taken at face value. A fourth disjoint block (`confirm2.json`, seed 41000000) is
 re-measuring it, alongside two arms asking whether the direction continues past it (Forest 16 paid by
 a Hulk, and Forest 16 paid by a Turntimber Symbiosis).
+
+### The fourth block: confirmed, and the legal space is exhausted
+
+`confirm2.json`, seed 41000000, 100,000 paired games, both formats.
+
+| | block 3 (31M) 1v1 / 2HG | block 4 (41M) 1v1 / 2HG |
+|---|---|---|
+| `stack_all` vs `G14_tutor3` | −0.0364 / −0.0421 | **−0.0379 / −0.0434** |
+| `stack_all` vs `combo_tutor_f15` | −0.0058 / −0.0152 | −0.0062 / −0.0159 |
+
+Replicated on independent seeds, if anything slightly stronger. **`stack_all` is adopted as the
+list.**
+
+Both attempts to push the direction further **failed**, which is what makes this a stopping point
+rather than a waypoint:
+
+| pushing past `stack_all` | 1v1 | 2HG | verdict |
+|---|---|---|---|
+| `stack_f16_hulk2` — Forest 16, Hulk 3→2 | −0.0019 (t = −1.33) | −0.0009 (t = −0.53) | **flat** — and it sells the Hulk |
+| `stack_sym3_f16` — Forest 16, Symbiosis 4→3 | +0.0053 | +0.0083 | **worse** |
+
+The first is statistically indistinguishable from `stack_all` in both formats *and* costs the 3rd
+World War Hulk, so it is a strict loss once the sweeper axis is counted. The second re-confirms
+Turntimber Symbiosis at 4 for the third time. The land count wants to stop at 15 and the fat count
+wants to stop at 7.
+
+## THE SETTLED LIST (`stack_all`)
+
+```
+4  Natural Order          4  Worldly Tutor          4  Llanowar Elves
+3  World War Hulk         4  Turntimber Symbiosis   4  Elvish Mystic
+1  Apex Altisaur          1  Sol Ring               4  Fyndhorn Elves
+2  Call of the Wild                                 4  Priest of Titania
+1  Worldspine Wurm                                  4  Elvish Archdruid
+1  Terastodon                                      15  Forest
+1  Vaultborn Tyrant
+1  Hornet Queen           0  Mirri's Guile
+1  Craterhoof Behemoth    0  Wirewood Lodge
+1  Elderscale Wurm        0  Arbor Elf
+```
+
+**−0.0379 (1v1) / −0.0434 (2HG) faster than `G14_tutor3`**, itself ~0.045/0.050 faster than the
+earlier recommendation — confirmed across four disjoint seed blocks totalling 5.8M games.
+
+It satisfies every constraint: Call of the Wild at 2, Natural Order at 4, Apex Altisaur kept, and
+all seven distinct fat payoffs plus Sol Ring at ≥ 1 (the toolbox rule). World War Hulk stays at 3,
+so the sweeper-proof engine is intact, and the elf count is untouched at 20.
+
+### Caveats that survive the freeze
+
+* **The keep table and value leaf were fitted to the OLD deck** (10 dorks, Wirewood Lodge in). The
+  user's directive was explicitly to finish measuring on the existing apparatus, so this is a known
+  and accepted limitation, not an oversight — but the *magnitude* of every delta above is measured
+  under a table that does not match the shipped list. Direction survived a no-table control; size
+  did not get one.
+* **The apparatus bias floor is UNMEASURED** (Rule 0a bars `--floor` on the alias route). The
+  substitute is a one-axis ladder that put per-card bias at 0.00050 ± 0.00020, which the headline
+  0.038–0.043 clears by ~80x.
+* **Apex Altisaur ships as a vanilla 10/10** — both fight abilities are provably inert against a
+  passive opponent. Its measured value is a floor, as the user signed off before implementation.
