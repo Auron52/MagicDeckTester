@@ -836,3 +836,86 @@ card is expensive to cut, test adding another copy before concluding the list is
 Cutting the 14th Forest is cheap here specifically *because* Arbor Elf is already gone: Arbor needed
 a Forest to be live (`mana_requires_land_subtype`), Fyndhorn does not. Twelve one-mana dorks now back
 the same land count the two-Fyndhorn list ran on 14.
+
+## 1v1 AND 2HG: the final-list screen (2026-09-16)
+
+USER asked for significant testing of both formats to settle the list. `logs/stompy_screen/final_both.json`
+— 12 arms x 50,000 paired games x 2 formats, **one pooled batch** (1.3M games, 32/32 workers
+throughout), `max_turns` 10.
+
+### First, two things that had to be established before any 2HG number could be read
+
+**`opponent_heads` is INERT for this deck — proven, not assumed.** 30 life at heads=1 vs heads=2 gives
+the **identical digest `9d17fc14ab81909b`** over 3,000 games. This 60 has no "each opponent" effect and
+no multi-target damage spell; 2HG's two faces share one life pool, which is what `players[1]` already
+models. **So "2HG" here means exactly one thing: a goldfish at 30 life.** That is worth stating plainly
+because it makes the 2HG column readable as a life-total sensitivity test rather than a new format.
+
+**The horizon is not censoring.** A probe put only 0.03% of 2HG games past turn 8 (1v1: zero), so
+`max_turns` 10 leaves the mean uncensored in both formats.
+
+### The result: the two formats want the SAME list
+
+| arm | 1v1 | 2HG | 2HG − 1v1 |
+|---|---|---|---|
+| **`F4_arbor2` — Hulk 1, Arbor Elf 2** | **−0.2538** | **−0.3708** | −0.1170 |
+| `F4_call1` — Call of the Wild 1, Hulk 4 | −0.2381 | −0.3573 | −0.1193 |
+| `F4_arbor1` — Hulk 2, Arbor Elf 1 | −0.2399 | −0.3546 | −0.1147 |
+| `F4_forest14` — Hulk 2, Forest 14 | −0.2262 | −0.3395 | −0.1133 |
+| `F4` — the 4-Fyndhorn list | −0.2234 | −0.3368 | −0.1135 |
+| `F4_hulk4` — Hulk 4, Fyndhorn 3 | −0.1973 | −0.3099 | −0.1125 |
+| `REC` — the previous recommendation | −0.1768 | −0.2871 | −0.1103 |
+
+**No sign flips in the difference-of-differences column** — every arm is worth more at 30 life, and the
+ranking is the same top three in both formats. One list serves both, which is the answer to the
+question that was asked.
+
+### WORLD WAR HULK LOSES TO ELVES, ALL THE WAY DOWN
+
+The Saga this whole analysis was built around ends at **one copy**:
+
+| step | 1v1 | 2HG |
+|---|---|---|
+| Hulk 4 -> 3 | +0.0260 gain | +0.0270 |
+| Hulk 3 -> 2, +1 Arbor Elf | +0.0165 | +0.0177 |
+| Hulk 2 -> 1, +2 Arbor Elf | +0.0139 | +0.0162 |
+
+Arbor Elf — a strictly *worse* Llanowar Elves (it needs a Forest) that this deck had already cut —
+beats a second and third World War Hulk. **Read that as the warning it is**, see the caveat below.
+
+### The USER's heuristic note, answered
+
+USER: *"our heuristic for searching critters should take the new life total into account."* It does:
+`StompyProvider::TutorCandidates` reads `opp_life = s.players[1-controller].life` and tests
+`swing >= opp_life`; the "robust kill" collapse gate at DecisionProviders.cpp:13117 is the same. There
+is no hardcoded 20 anywhere in that path. What *was* worth testing is whether the NO-DOCTRINE ORDERING
+(Craterhoof > Worldspine > Terastodon > Hornet Queen > Vaultborn), adopted at 20 life, is stale at 30.
+It is not — it is worth **4.6x MORE** there:
+
+| | doctrine ON | OFF | worth |
+|---|---|---|---|
+| 1v1 | 4.3185 | 4.3273 | 0.0088 |
+| 2HG | 4.6570 | 4.6973 | **0.0403** |
+
+At 30 life the kill needs the biggest/fastest body more, so fetching blind costs more. No
+recalibration needed. (One genuine 2HG side-effect: the collapse gate fires less often at 30 life, so
+the tutor contender list stays wider and the search branches more for the same 20 ms budget — 2HG
+games cost ~2.4x 1v1. Not wrong, but it means 2HG play is effectively shallower per candidate.)
+
+### THE CAVEAT THAT MATTERS MORE THAN ANY NUMBER ABOVE
+
+Every screen in this section says the same thing: **add mana dorks, cut payoffs.** That is the one
+axis a goldfish is structurally guaranteed to overvalue — no removal, no sweepers, no flood
+punishment, and the game ends before a surplus dork becomes a dead draw. The win-turn histogram
+confirms the mechanism is pure acceleration: the 4-Fyndhorn list converts turn-5 kills into turn-4
+kills (63.95% -> 67.94% at turn 4) and does nothing else.
+
+Two things argue it is not *only* an artifact: the advantage GROWS at 30 life (0.0770 -> 0.0837 vs
+REC), where longer games should punish a dork-flood if the model could see it at all; and the
+improvement is uniform across every win-turn bucket, so it is not buying speed with tail risk. And one
+thing argues it is: the ladder's gains are decelerating but have not turned over, and the direction
+keeps recommending a strictly worse mana elf over the deck's marquee card.
+
+**This is the Apex Altisaur decision again, and it is the USER's.** There it was a measured cost
+accepted for unmodelled upside; here it is a measured gain sitting on unmodelled downside. The
+engine cannot price a sweeper, so it cannot price the 22nd mana source.
