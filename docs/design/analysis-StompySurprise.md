@@ -1404,16 +1404,43 @@ So the shared apparatus systematically pulls results toward the ratio it was fit
 **Sign is far more robust than magnitude**, and a 0.04 effect survives plausible table bias where a
 0.005 effect does not.
 
-### The aliases are not equally good, and one of them is load-bearing
+### The aliases, corrected — all three are WITHIN-category
+
+An earlier draft of this section called the Hulk→Call alias "the weakest" and implied it undermined
+every Hulk-count result. **The user corrected that and was right:**
+
+> *"Hulk and Call of the Wild are at least somewhat connected in that they are enablers, but you are
+> right that they differ in how they work. Still more likely a fit then changing from a mana source
+> or a threat, though."*
+
+That is also what this document's own exposure tiering says — enabler↔enabler is the *safe* tier —
+so calling the alias a weak link contradicted the framework two paragraphs above it. The card data
+makes the fit stronger still:
+
+| | cost | type | role |
+|---|---|---|---|
+| Call of the Wild | `{2}{G}{G}` | Enchantment | enabler — cheats creatures into play |
+| World War Hulk | `{3}{G}{G}` | Enchantment | enabler — cheats creatures into play |
+
+Same type, same colour requirement, adjacent cost, same functional role. So:
 
 * **Fyndhorn Elves → dork bucket: EXACT.** Functionally identical to Llanowar/Mystic.
 * **Apex Altisaur → Worldspine bucket: close.** Both huge green fatties (9 vs 11 mana).
-* **World War Hulk → Call of the Wild bucket: WEAKEST.** A saga that free-casts a creature from hand,
-  bucketed as a repeatable top-deck activator at a different cost. They are not alike in hand.
+* **World War Hulk → Call of the Wild bucket: good.** Both `GG` green enchantment enablers one mana
+  apart.
 
-So **every Hulk-count result in this document carries an extra approximation on top of the
-staleness** — `hulk2_tutor4`, `hulk4_tutor2`, and the sweeper trade-off that turned on keeping Hulk
-at 3. Those are softer than they were reported.
+**The residual is narrow, specific, and DIRECTIONAL.** Hulk's chapter I free-casts a creature from
+**hand**; Call of the Wild reads the top of the **library**. Hulk is therefore the one card in the
+deck that *wants* a fatty stranded in hand — the same mechanism the user identified for Craterhoof,
+with the sign flipped. Bucket 2's cell values were fitted when the bucket held **4 Call and 0 Hulk**,
+so "bucket-2 card + a fatty in hand" was priced as *Call* + a fatty, a hand where the fatty does
+nothing for the enabler. The shipped list runs **3 Hulk to 2 Call**, where that same hand is often
+excellent.
+
+So the table should be **systematically undervaluing Hulk-plus-fatty hands — the Hulk count is
+biased DOWNWARD, not merely soft.** That cuts in a helpful direction: the screens found Hulk 3→2
+fine-to-good, and if the mulligan policy undervalues Hulk, holding it at 3 is *better* supported than
+the numbers showed, reinforcing the sweeper-grounds decision rather than undermining it.
 
 ### The plan this forces
 
