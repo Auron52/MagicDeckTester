@@ -958,7 +958,7 @@ here means keeping the action.
 |---|---|---|---|---|
 | `cond` | +0.0000 | 3 / 3 | **0.9940** | 487, **1357**, 1553 |
 | `condno` (`cond` + new-option) | −0.0010 | **2 / 0** | 1.0017 | **none** |
-| `be` (empty arm) | −0.0135 | 29 / 2 | 1.0098 | 237, 1384 |
+| `be` (`MTG_BP_BASE_EMPTY`) | −0.0135 | 29 / 2 | 1.0098 | 237, 1384 |
 | `be_cond` | **−0.0155** | 33 / 2 | **1.0031** | **1357**, 1384 |
 | `be_condno` | −0.0145 | 31 / 2 | 1.0113 | 237, 1384 |
 
@@ -967,6 +967,13 @@ standalone) and about a third of its quality gain. What it buys is that `condno`
 2,000**, and `be_condno`'s regressions are exactly `be`'s own. Note also that these units figures are
 budgeted, and a budgeted number says how the budget was SPENT, not what the prune costs -- see the
 cost section above. An unbudgeted read is still owed.
+
+**`be` here is `MTG_BP_BASE_EMPTY`, the PRE-EXISTING lever, and not `MTG_BP_EMPTY_ARM`.** The two are
+easy to conflate and were conflated once already in this arc: base-empty deletes the greedy
+continuation for BASE plans only, while the empty ARM emits "done acting in this phase" as a scored
+wave-0 candidate at every breakpoint index. **`MTG_BP_EMPTY_ARM` carries NO measurement** -- it was
+added after this batch ran and appears in none of these rows. Do not read the `be`/`be_cond`/
+`be_condno` numbers as evidence for it.
 
 ### Two corrections to the record
 
