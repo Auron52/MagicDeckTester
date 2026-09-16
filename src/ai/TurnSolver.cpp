@@ -377,6 +377,7 @@ static std::atomic<long long> g_wn_peer{0};          // rank >= site -- THE ORDE
 static std::atomic<long long> g_wn_reached{0};       // passed all gates; dominance/payability next
 static std::atomic<long long> g_wn_notdominated{0};  // no earlier copy declined it
 static std::atomic<long long> g_wn_unpayable{0};     // could not have been cast anyway
+static std::atomic<long long> g_wn_newoption{0};     // site drew a payable card -> slot contested
 // Per-plan state REUSE (DEFAULT ON; MTG_NO_STATE_REUSE=1 restores per-plan construction).
 // Every plan loop applies its plan to a COPY of the SAME parent state. Copy-CONSTRUCTING that copy
 // inside the loop frees the previous plan's buffers and mallocs new ones of nearly identical size,
@@ -760,6 +761,7 @@ namespace
                           << " reached="     << g_wn_reached.load()
                           << " notdominated=" << g_wn_notdominated.load()
                           << " unpayable="   << g_wn_unpayable.load()
+                          << " newoption="   << g_wn_newoption.load()
                           << "\n";
                 // Two ceilings, because drops + peer is an OVERSTATEMENT and saying so is the
                 // point. A peer-blocked consultation that the order admitted would still have to
@@ -1759,9 +1761,25 @@ static bool BpSnapshotOnItsTurn(const GameState& state)
 // so "this card was declined" is not a description of anything the plan did.
 //
 // MEASURED, and this is why it exists rather than being an argument: the two games the escalation
-// census found UNRECOVERABLE under condemnation (930000-block gi=1357 8->9 and gi=1847 6->7, both
-// still worse at 100x budget AND at 100x budget + 1 ply) are dominated by exactly this shape --
+// census flagged under condemnation (930000-block gi=1357 8->9 and gi=1847 6->7, both still worse at
+// the census cells -- 100x budget, and 100x budget + 1 ply) are dominated by exactly this shape --
 // 1,253 of 1,663 drops in gi=1357 (95%) and 1,253 of 2,091 in gi=1847 (60%) carry plan_n=0.
+//
+// SAY "STILL WORSE AT THE CENSUS CELLS", NOT "UNRECOVERABLE" -- an earlier version of this comment
+// said the latter and it claimed more than the measurement supports. USER 2026-09-16: *"To be clear
+// unrecoverable means not recoverable at unlimited budget (0) and depth 8."* The cells in
+// gen_condemn_escalate_manifest.py are 100x budget and +1 ply, which is a WEAKER bar; a game still
+// worse there is a candidate for the label, not the label itself. Only a d8/--budget-ms 0 cell
+// settles it, and a cell that never completed settles nothing in either direction.
+//
+// WHAT IT ACTUALLY FIXED, re-measured 2026-09-16 (the paragraph above states the drop census that
+// motivated the rule, which is NOT the same claim as the rule repairing those games -- do not read
+// it as one). Of condemnation's five 2,000-game regressions, this guard repairs THREE outright:
+// gi=206 8->7, gi=1847 7->6, gi=1935 6->5, each confirmed by toggling MTG_BP_CONDEMN_PLAN_CAST=0
+// and watching the old loss come back. It does NOT repair gi=1357, even though plan_n=0 was 95% of
+// that game's drops: the guard cuts it from 1,663 drops to 79, and the four that survive are
+// plan_n=1 -- a real cast preceded them. So volume was not harm there either (a fifth time), and
+// the residue needed a different rule; see BpSiteAddedAPayableOption.
 //
 // Do NOT weaken this to "the plan had mana it did not spend". That is the same reasoning the four
 // deleted type exemptions used, and it answers a different question: whether a cast was AFFORDABLE,
@@ -1919,6 +1937,23 @@ struct CanonVerdict { int8_t v[4] = { -1, -1, -1, -1 }; };
 // relocate it. A VARIANT sitting at a breakpoint it is not targeting keeps its greedy continuation
 // too -- it has to reach its own bp_at, and stopping early would make the nested slot unreachable
 // (the deliberate L*W-not-W^L trade).
+// MTG_BP_EMPTY_ARM -- emit the EMPTY continuation as a wave-0 arm at every breakpoint index.
+// See the emission site in the wave-0 fan-out for the full argument. DEFAULT OFF: it changes play
+// wherever a breakpoint fires, so it is a GT-moving change that has to be measured, not assumed.
+static bool BpEmptyArmEnabled()
+{
+    static const bool on = EnvOn("MTG_BP_EMPTY_ARM");
+    return heurarm::Flag(heurarm::BP_EMPTY_ARM, on);
+}
+
+// MTG_BP_DROP_GREEDY -- see the application site in bp_searched_plan. DEFAULT OFF: it changes play
+// wherever a breakpoint fires, so it is GT-moving for every deck and has to be measured per deck.
+static bool BpDropGreedyContinuation()
+{
+    static const bool on = EnvOn("MTG_BP_DROP_GREEDY");
+    return heurarm::Flag(heurarm::BP_DROP_GREEDY, on);
+}
+
 static bool BpBaseEmptyContinuation()
 {
     static const bool on = EnvOn("MTG_BP_BASE_EMPTY");
@@ -2074,6 +2109,56 @@ static bool BpCardWasInHandBefore(int card_number)
     if (g_bp_hand_before == nullptr) { return true; }
     return std::find(g_bp_hand_before->begin(), g_bp_hand_before->end(), card_number)
            != g_bp_hand_before->end();
+}
+
+// THE SITE HANDED US AN OPTION THE PLAN NEVER SAW (MTG_BP_CONDEMN_NEW_OPTION).
+//
+// Condemnation's premise is REDUNDANCY: a card the cast order already passed is safe to drop from
+// the continuation because a sibling plan casts it at its own slot. That premise has a hole no
+// cast-order rule can see, because it compares the wrong two things.
+//
+// THE CONTINUATION SLOT IS EXCLUSIVE. Casting C in the continuation also declines everything else
+// the continuation could cast; casting C as a PLAN cast does not -- the trailing pass still runs
+// afterwards and still offers the rest. So "a sibling plan casts C" is NOT an equivalent line, and
+// dropping C does not fall back to "cast nothing". It hands the slot to whatever outranks C, which
+// for a tap-draw site is typically the card the site just drew -- a card the plan never saw when it
+// declined C, so the decline says nothing about the comparison now being made.
+//
+// gi=1357 (930000 block) is the case, and it is exact. T8, hand is four Skreds; Scrying Sheets'
+// {1}{S} tap-draw puts Rimefeather Owl into hand. Condemnation drops Skred (in hand before, not a
+// plan cast, whole cast order precedes an activated site) and the continuation casts the Owl
+// instead. The Owl's {5}{U}{U} taps a Boreal Druid for mana, so 2 Druids + Rimescale Dragon
+// (1+1+5 = 7, exact lethal against 7 life) becomes 1 Druid + Dragon = 6, and the game is never won.
+// Skred itself is goldfish-inert -- it does not win the game, it OCCUPIES THE SLOT so the Owl
+// cannot, which is precisely the exclusion the redundancy premise misses. MTG_BP_CLASSIFY=0 loses
+// the same game the same way (greedy casts the Owl), so this is not an artefact of the search.
+//
+// The rule therefore spares the drop exactly when the site put a new PAYABLE card in hand: that is
+// the condition under which the slot is contested by an option the plan could not have weighed.
+// It is card-agnostic and route-agnostic -- no type exemption, no per-card clause (USER 2026-08-28:
+// "I don't want any general exemptions"). When the site draws nothing, or draws something we cannot
+// cast, the slot really does fall back to "cast nothing" and the premise holds, so we still drop.
+static bool BpCondemnNewOptionEnabled()
+{
+    static const bool on = EnvOn("MTG_BP_CONDEMN_NEW_OPTION");
+    return heurarm::Flag(heurarm::BP_CONDEMN_NEW_OPTION, on);
+}
+
+// Payability is passed in because EffectiveCost is an AIEngine member and this is a free function;
+// the caller hands over the same pool-and-cost test the drop itself uses, so the two cannot drift.
+template <typename PayableFn>
+static bool BpSiteAddedAPayableOption(const Player& ap, PayableFn payable)
+{
+    if (!BpCondemnNewOptionEnabled())  { return false; }
+    if (g_bp_hand_before == nullptr)   { return false; }
+    for (const Card& c : ap.hand)
+    {
+        if (BpCardWasInHandBefore(c.m_number)) { continue; }      // not new: the plan saw it
+        const CardDefinition* cd = CardDatabase::Instance().LookupCached(c);
+        if (cd == nullptr) { continue; }
+        if (payable(*cd)) { return true; }
+    }
+    return false;
 }
 
 // MTG_BP_CLASSIFY -- breakpoint-phase classification (USER 2026-08-17: "Just as we do for main 1
@@ -8469,7 +8554,9 @@ static int BpNodeWaveDrop()
 // casts -- the trailing passes still run). bp_choice >= 0 keeps the bp_seen counting/eligibility
 // machinery identical to a ranked resume; bp_searched_plan special-cases the value BEFORE the
 // cands enumeration, so the empty arm costs no enumeration at all.
-static constexpr int kBpEmptyChoice = 1 << 20;
+// Now declared in the header (TurnSolver::kBpEmptyChoice) because the EXECUTOR has to resolve the
+// sentinel exactly as the rollout does -- see the header note for the lockstep break that was.
+static constexpr int kBpEmptyChoice = TurnSolver::kBpEmptyChoice;
 
 // ---- The CHAIN SLOT (kBpChainChoice) ---------------------------------------------------------
 // `bp_choice = k` indexes cands[k] of a HEURISTICALLY RANKED list, so wave 0 reaches ranks 0..W-1
@@ -11093,8 +11180,17 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
             {
                 ManaPool now = AvailableManaPool(state);
                 now.AddPool(state.floating_mana);
-                if (s_bp_whynot && !now.CanPay(EffectiveCost(def, state))) { ++g_wn_unpayable; }
-                if (now.CanPay(EffectiveCost(def, state)))
+                const bool payable_cand = now.CanPay(EffectiveCost(def, state));
+                if (s_bp_whynot && !payable_cand) { ++g_wn_unpayable; }
+                // The site's draw contests the (exclusive) continuation slot with an option the
+                // plan never weighed => the decline is uninformative here. Short-circuited on
+                // payability so the hand scan never runs for a candidate that was not going to be
+                // dropped anyway. See BpSiteAddedAPayableOption; default off until measured.
+                const bool new_option = payable_cand && BpSiteAddedAPayableOption(
+                    ap, [&](const CardDefinition& d)
+                    { return now.CanPay(EffectiveCost(d, state)); });
+                if (s_bp_whynot && new_option) { ++g_wn_newoption; }
+                if (payable_cand && !new_option)
                 {
                     // TEMPORARY DIAGNOSTIC (MTG_CONDEMN_WHO): name the card each condemnation
                     // actually drops, and the ranks that justified it. Inference from the two game
@@ -11111,10 +11207,19 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
                         // slot and the condemnation has no premise at all. plan_n>1 means the plan
                         // did cast something first, which is a materially different (arguable)
                         // case -- the point of separating them is that "no tail" alone lumps both.
+                        // WHERE the drop lands is the question a deleted line turns on: a drop under
+                        // g_search_candidate_enum prunes a branch the ranker would have expanded
+                        // (recoverable -- a sibling covers it), while a drop at g_condemn_root_turn
+                        // < 0 is the EXECUTOR deleting a cast from the committed continuation, which
+                        // no sibling can cover because there is no sibling left. Without this the
+                        // two are indistinguishable in the dump.
+                        const char* where = (g_condemn_root_turn < 0) ? "EXEC"
+                                          : (g_search_candidate_enum ? "srch" : "leaf");
                         std::fprintf(stderr,
-                                     "[condemn-who] plan_n=%d tail=%d "
+                                     "[condemn-who] where=%s plan_n=%d tail=%d "
                                      "turn=%d drop=%s rank=%d site=%s site_rank=%d"
                                      " site_net=%d\n",
+                                     where,
                                      g_bp_plan_casts ? static_cast<int>(g_bp_plan_casts->size()) : -1,
                                      BpPlanHasTail(ap) ? 1 : 0,
                                      state.turn_number,
@@ -21864,6 +21969,34 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
         // MTG_BP_BASE_EMPTY -- see BpBaseEmptyContinuation. Ahead of the NGC block on purpose: when
         // both are on this claims the base plan (the dominant greedy site) and NGC is left covering
         // only the non-targeting variants, so the two compose instead of racing for the same plan.
+        // MTG_BP_DROP_GREEDY -- the greedy continuation is DELETED, not replaced (USER 2026-09-16:
+        // *"Can we try dropping greedy?"*). Every unresolved continuation at an OPEN class answers
+        // EMPTY: "I am done acting in this phase."
+        //
+        // This is the difference between deleting greedy and swapping it. NGC swapped it for
+        // cands[0], which measured WORSE than the greedy it replaced because the empty combination
+        // is dropped from EnumeratePlans by contract, so the replacement could not express the one
+        // answer that is always legal. MTG_BP_BASE_EMPTY deletes it for BASE plans only, which is
+        // where most of it lives but not all: a VARIANT sitting at a breakpoint it is not targeting
+        // keeps greedy under that lever. This takes the remainder.
+        //
+        // COST, stated up front: a variant that stops early may not reach its own bp_at, which makes
+        // it a duplicate of its base plan -- a wasted node, never a wrong answer. Whether that
+        // matters is deck-shaped: where the later breakpoints come from the TRAILING PASS (Snow's
+        // site 8 -- each Sheets/Augur activation fires one regardless of what the continuation did)
+        // the nested slot is still reached and nothing is lost. Where they come from the
+        // continuation's own casts, the deeper slots go unreachable and the L*W fan-out degenerates.
+        // So this is measured per deck, not adopted globally on an argument.
+        //
+        // class_on is retained from the base-empty scope and is not optional: with the class closed
+        // no variants are emitted at all, so answering empty would delete the continuation outright
+        // rather than relocate it to the variants.
+        if (!resolved && class_on && BpDropGreedyContinuation())
+        {
+            out              = TurnSolver::Plan{};
+            out.land_decided = true;
+            resolved         = true;
+        }
         if (!resolved && class_on && plan.bp_choice < 0 && BpBaseEmptyContinuation())
         {
             out              = TurnSolver::Plan{};
@@ -29961,6 +30094,40 @@ static void AppendBreakpointVariants(const GameState& state, std::vector<TurnSol
                 v.bp_at     = at;
                 v.bp_wave0  = false;   // the marker belongs to the base plan only
                 v.bp_base   = static_cast<int>(base_i);   // see Plan::bp_base / MTG_BP_WAVE_NSKIP
+                variants.push_back(std::move(v));
+            }
+        }
+        // ...plus the EMPTY ARM at each index (MTG_BP_EMPTY_ARM): "I am done acting in this phase".
+        //
+        // This is the option every continuation route was missing, and its absence is why they are
+        // ALL lossy rather than one of them being. A greedy Solve commits to one line and leaves the
+        // rest unreachable at any budget; NGC's cands[0] is at least searched-ranked but can never
+        // BE the empty one, because EnumeratePlans drops the empty combination by contract (right at
+        // the root, where "cast nothing" IS the base plan -- wrong at a breakpoint, where the base
+        // plan means "the subset I already cast"). MTG_BP_BASE_EMPTY answers empty for BASE plans
+        // only, so a variant sitting at a breakpoint it is not targeting still falls to greedy.
+        //
+        // Emitting it HERE, as a sibling of the k ranks, is what makes "stop" a scored candidate at
+        // EVERY segment (USER 2026-09-16: *"Empty needs to be a valid option"* / *"for every
+        // segment"* / *"empty generally means I'm done doing anything in this phase"*). It costs no
+        // enumeration -- bp_searched_plan special-cases the sentinel BEFORE the cands walk -- so the
+        // price is one extra apply per (base plan x at), not a wider list.
+        //
+        // NOT a cure for the other two reachability holes, and it must not be sold as one: ranks
+        // past W stay unreachable in wave 0, and a variant that has to reach its own bp_at still
+        // cannot stop early (the deliberate L*W-not-W^L trade). Those are separate.
+        //
+        // DEFAULT OFF pending measurement: it adds a bp_choice value the executor must resolve, and
+        // it shifts nothing else, but it changes play wherever a breakpoint fires -- every deck's GT.
+        if (BpEmptyArmEnabled())
+        {
+            for (int at = 0; at < BpSearchDepth(); ++at)
+            {
+                TurnSolver::Plan v = p;
+                v.bp_choice = kBpEmptyChoice;
+                v.bp_at     = at;
+                v.bp_wave0  = false;
+                v.bp_base   = static_cast<int>(base_i);
                 variants.push_back(std::move(v));
             }
         }
@@ -42737,6 +42904,42 @@ static bool BpEnumBuildKey(const GameState& state, bool is_pre_combat,
     // Same reason as the reservation: two continuations identical mid-turn but snapshotted at
     // DIFFERENT mana-source counts condemn different sets, so they must not share a cache entry.
     if (g_bp_mana_sources_before >= 0) { Fold(key, 0x2B71ull + static_cast<unsigned long long>(g_bp_mana_sources_before)); }
+    // THE PLAN'S OWN CAST SET, for the third time the same reason (2026-09-16). The two folds above
+    // exist because a fact the FILTER reads was invisible in the state; this is the biggest such
+    // fact and it was missed. The classifier keeps a card THIS PLAN CASTS -- "a card the plan casts
+    // is not declined" -- so two plans that reach the same breakpoint state with DIFFERENT cast sets
+    // emit DIFFERENT continuation lists. Without this fold they share one entry and the second is
+    // served the first's list: a plan that should have had card X spared gets a list in which X was
+    // already condemned, and the line that needed X is unreachable at any budget.
+    //
+    // THE FOLD STANDS ON SOUNDNESS ALONE, AND THAT IS THE ONLY CLAIM MADE FOR IT. An earlier version
+    // of this comment went further and named it the mechanism behind the surviving unrecoverable
+    // loss in the condemnation census (930000-block gi=1357): a continuation casting Skred off a
+    // plan that cast nothing, supposedly served a sibling's already-condemned list. THAT WAS WRONG,
+    // and it is recorded rather than deleted because the fold was already in the binary when the
+    // claim was disproved -- gi=1357 still regressed 8->9 across a 2,000-game paired run with this
+    // fold live, so a cache collision cannot have been what caused it. The real mechanism is the
+    // exclusive continuation slot (see BpSiteAddedAPayableOption): Skred is not needed for its own
+    // sake, it is needed to OCCUPY the slot so the freshly-drawn Rimefeather Owl cannot take it and
+    // tap a Druid out of the lethal attack. No cache key could have expressed that.
+    //
+    // Order-sensitive fold is fine: plan_cast_names is built by walking plan.actions in plan order
+    // in both worlds, from the same plan.
+    if (g_bp_plan_casts != nullptr)
+    {
+        Fold(key, 0xC0A5ull);
+        for (std::uint64_t h : *g_bp_plan_casts) { Fold(key, h); }
+    }
+    // ...and the SITE, which the order-aware peer test compares every candidate against
+    // (CastOrderRank of the site). Two breakpoints at the same state opened by different cards rank
+    // differently -- on Snow, Scrying Sheets 103 vs Frost Augur 111 -- so they condemn different
+    // sets. g_cantrip_order_site above is NOT this: it is bound only under MTG_CANTRIP_ORDER and is
+    // cleared for a site outside the ordered class, so it covers neither case here.
+    if (g_bp_site_def != nullptr) { Fold(key, g_bp_site_def->card.m_name_hash); }
+    // ...and HOW the site was reached, which decides the peer test outright (an ACTIVATED site sits
+    // after every cast, so nothing is a peer). Same state, same site card, cast vs activated => two
+    // different lists.
+    if (g_bp_site_activated) { Fold(key, 0xE7D1ull); }
     *out = key;
     return true;
 }

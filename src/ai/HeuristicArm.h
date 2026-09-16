@@ -196,6 +196,9 @@ enum Slot : int
     // the BROKEN arm, kept to reproduce the finding, not a neutral one.
     BP_CONDEMN_SAME_TURN,     // MTG_BP_CONDEMN_SAME_TURN  a breakpoint snapshot describes ONE turn
     SNOW_CONDEMN,             // MTG_SNOW_CONDEMN        Snow opts into breakpoint condemnation
+    BP_EMPTY_ARM,             // MTG_BP_EMPTY_ARM        "done with this phase" as a scored arm
+    BP_DROP_GREEDY,           // MTG_BP_DROP_GREEDY      delete the greedy continuation outright
+    BP_CONDEMN_NEW_OPTION,    // MTG_BP_CONDEMN_NEW_OPTION  spare when the site drew a payable card
     BP_CONDEMN_PLAN_CAST,     // MTG_BP_CONDEMN_PLAN_CAST  a plan that cast NOTHING declined nothing
     COUNT
 };
@@ -363,6 +366,9 @@ inline const char* Name(int slot)
         "MTG_SNOW_ACT_ORDER",
         "MTG_BP_CONDEMN_SAME_TURN",
         "MTG_SNOW_CONDEMN",
+        "MTG_BP_EMPTY_ARM",
+        "MTG_BP_DROP_GREEDY",
+        "MTG_BP_CONDEMN_NEW_OPTION",
         "MTG_BP_CONDEMN_PLAN_CAST",
     };
     // The enum and this table are ONE mapping split across two lists: a slot added to one and not

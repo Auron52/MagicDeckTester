@@ -6,15 +6,29 @@ mirrors for Snow): a game that a test arm plays WORSE is only evidence of a dele
 still worse after escalating BOTH budget and depth, and after escalating BOTH ARMS. A budget-only
 escalation has proved nothing twice in this repo, and one extra depth ply has fixed games outright.
 
-What survives 100x budget AND +1 ply is a line the arm cannot reach at any budget -- the class the
-no-lossy-truncation bar rejects outright. Condemnation FIRE COUNTS are not the scorer: "volume is
-not harm" has been the wrong predictor four times in this arc.
+THESE CELLS SCREEN; THEY DO NOT ADJUDICATE. USER 2026-09-16: *"To be clear unrecoverable means not
+recoverable at unlimited budget (0) and depth 8."* So what survives 100x budget AND +1 ply is a
+CANDIDATE for the unrecoverable label -- cheap enough to run over every disagreeing game, which is
+what this tool is for -- and the verdict needs its own `--budget-ms 0 --depth 8` cell per survivor.
+Do not report a survivor here as unrecoverable; that overclaims, and it has been done in this arc.
+
+The converse trap is worse and is the reason the screen exists at all: A MISSING CELL NEVER READS AS
+SURVIVAL. A d8/b0 Snow game can run for hours (44 h repros are on record), so an adjudication run
+will have cells that never land. Report the strongest bound actually measured for those; never let
+an absent result stand in for a recovery.
+
+Condemnation FIRE COUNTS are not the scorer: "volume is not harm" has been the wrong predictor four
+times in this arc.
 
 Snow ships depth=5 budget=20ms, so the cells are 100x budget and 100x budget + 1 ply. Every arm is
 escalated at every disagreeing game, in ONE pooled queue, so the box sees a single tail.
 
 Usage: gen_condemn_escalate_manifest.py <wins-dir> <seed-base> <arm> <arm> [<arm>...] > m.json
+       gen_condemn_escalate_manifest.py <wins-dir> <seed-base> --from <play.manifest.json> <arm>...
        (arm names are the `<deck>__<arm>` suffixes the play batch used)
+
+PREFER `--from`: it reads each arm's flags out of the play manifest that produced the wins files,
+so the escalation cannot run an arm under different levers than the run it is adjudicating.
 """
 import json
 import pathlib
@@ -38,12 +52,38 @@ def load(path):
     return out
 
 
+def arms_from_play_manifest(path):
+    """Arm -> flags, read from the PLAY manifest that produced the wins files.
+
+    The census must escalate each arm under the flags it actually played, and a hand-maintained
+    table drifts silently: nothing downstream can tell "cond escalated without its lever" from
+    "cond recovered", so a drift reads as a clean recovery and retires a real deleted line. Reading
+    the play manifest makes that class of mistake unrepresentable.
+    """
+    spec = json.loads(pathlib.Path(path).read_text())
+    out = {}
+    for j in spec["jobs"]:
+        name = j["name"]
+        out[name[len("snow__"):] if name.startswith("snow__") else name] = j.get("flags", {})
+    return out
+
+
 def main():
     if len(sys.argv) < 5:
         sys.exit(__doc__)
     root = pathlib.Path(sys.argv[1])
     seed_base = int(sys.argv[2])
     arms = sys.argv[3:]
+
+    # `--from <play-manifest.json>` anywhere in the arm list replaces the static ARMS table.
+    if "--from" in arms:
+        k = arms.index("--from")
+        ARMS.clear()
+        ARMS.update(arms_from_play_manifest(arms[k + 1]))
+        del arms[k:k + 2]
+    missing = [a for a in arms if a not in ARMS]
+    if missing:
+        sys.exit(f"no flag block for arm(s) {missing}; known: {sorted(ARMS)}")
 
     wins = {a: load(root / f"snow__{a}.wins") for a in arms}
     common = set.intersection(*(set(w) for w in wins.values()))
@@ -88,6 +128,14 @@ ARMS = {
     "condnost": {"MTG_SNOW_CAST_ORDER": True, "MTG_SNOW_CONDEMN": True,
                  "MTG_BP_CONDEMN_SAME_TURN": False},
 }
+# Budget-sweep arm names (`b<ms>_<arm>`) resolve to the same flag blocks, plus the cell's budget.
+# The escalation cells override budget_ms anyway -- the point of an escalation is that it is NOT
+# the shipped budget -- so only the flags carry over.
+for _b in (5, 10, 20, 40):
+    for _a in ("base", "cond", "condraw"):
+        ARMS[f"b{_b}_{_a}"] = dict(ARMS["base"] if _a == "base" else ARMS["cond"])
+        if _a == "condraw":
+            ARMS[f"b{_b}_{_a}"]["MTG_BP_CONDEMN_PLAN_CAST"] = False
 
 
 if __name__ == "__main__":
