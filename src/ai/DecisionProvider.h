@@ -793,6 +793,22 @@ public:
     // byte-identical. See docs/design/equipment-etb-draw-breakpoint.md.
     virtual bool CondemnsConsideredAtBreakpoint() const { return false; }
 
+    // ActivationOrderRank -- relative order of this card's BOARD ACTIVATION within the trailing
+    // activation pass (LOWER = activated earlier). 0 = no opinion.
+    //
+    // Board activations have never had an order: they run in whatever sequence the enumerator
+    // emitted them, which is battlefield-INDEX order -- the order those permanents happened to
+    // enter play, which is a fact about the past and not about this turn (AIEngine.cpp's note says
+    // so outright). That is harmless where activations commute and wrong where they do not: two
+    // tap-DRAWS do not commute, because whichever resolves first changes what the second sees on
+    // top of the library.
+    //
+    // Consumed by TurnSolver::OrderTrailingActivations, which is called from BOTH trailing passes
+    // (the search's ApplyPlanDirect and AIEngine's executor twin) so the played line matches the
+    // scored one. Default 0 everywhere means the stable sort is skipped entirely -> byte-identical
+    // for every deck that does not override this.
+    virtual int ActivationOrderRank(const GameState&, const CardDefinition&) const { return 0; }
+
     // CastOrderFallbackRanks -- the FUNDING ladder for a cast whose ideal position is LATE but
     // whose output (Treasures, ritual float) may be needed earlier to pay for the line. Returns
     // the ranks to try in preference order (first = preferred); the range ladder walks down the

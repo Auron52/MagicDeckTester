@@ -1250,22 +1250,82 @@ public:
     // See the implementation's contract block in DecisionProviders.cpp.
     bool ProvenWinlessThisTurn(const GameState& s, int controller) const override;
 
-    // MTG_SNOW_CONDEMN -- DEFAULT OFF, and the measurement is the point of it existing.
+    // ---- CAST ORDER (USER 2026-09-15) --------------------------------------------------------
     //
-    // Condemnation is completely inert on this deck today (MTG_ROLLOUT_STATS reports
-    // bp_condemn_seen=0 drops=0 across the 18-game label manifest) because nothing opts in, so
-    // "would condemnation help Snow?" had no measured answer. This gives it one.
+    //   *"We can make a really basic ordering like land -> cheapest to most expensive -> draw."*
+    //   *"The idea in this deck would be to put other spells before our draw. That way, new spells
+    //     that are drawn can be played, but existing ones cannot after the breakpoint."*
     //
-    // The recorded doctrine argues AGAINST it, and specifically: the base hook's comment says the
-    // filter is "safe only on a deck whose breakpoints do not have [the cantrip/staging chain]
-    // property", because after a dig a declined card really is worth reconsidering. Snow's
-    // breakpoints are exactly that -- Scrying Sheets, Frost Augur, and the Astrolabe / Ice-Fang
-    // Coatl ETB draws are the deck's whole breakpoint population. So the prior is that this is a
-    // QUALITY prune here, not a free one, which is why it ships off.
+    // DRAW LAST IS THE LOAD-BEARING HALF, and it is what makes condemnation MEAN something here.
+    // Condemnation's premise is that a card was offered at its slot in the order and declined; put
+    // the draw last and that premise is true by construction -- everything else in hand reached its
+    // slot before the breakpoint, so declining it is a real decision, while the card the draw
+    // PRODUCES is new and stays playable (the drawn-card exemption). Put the draw first and nothing
+    // has been offered yet, so there is nothing to condemn.
+    //
+    // The generic order does the OPPOSITE of that, which is why condemnation measured inert on this
+    // deck (12,857 consultations, 19 drops). GenericProvider ranks a noncreature mana_rock 5 and a
+    // creature 10, so Arcum's Astrolabe -- a DRAW source -- casts FIRST of all, and Ice-Fang Coatl
+    // (the other draw) ties with the real threats, while Slumber / Kaldring / Skred sit at 20,
+    // AFTER both draws.
+    //
+    // Ranking Astrolabe late costs no mana, which is the one thing that could have argued against
+    // it: it is `any_color_filter` + `filter_no_free_colorless` ({1},{T}: add one of any colour), a
+    // FIXER and not ramp, so holding it back strands nothing the rest of the line needed.
+    //
+    // Cheapest-first among the commitments is the USER's stated rule and suits the deck: every snow
+    // permanent that lands feeds the Treefolk CDA and the Slumber threshold, so more-permanents is
+    // the right greedy, and a cheap one never blocks an expensive one it could have funded.
+    int CastOrderRank(const GameState& s, const CardDefinition& def) const override;
+
+    // ...and the LAND DROP declared FIRST (generic default is -1 = "no declared slot", which is
+    // itself why the land half of condemnation could never fire). See the definition.
+    int LandDropCastOrderRank() const override;
+
+    // SCRYING SHEETS BEFORE FROST AUGUR (USER 2026-09-15). Both are {T} tap-draws gated on a SNOW
+    // card being on top, so they do NOT commute -- whichever resolves first changes what the second
+    // sees. Until now nothing decided it: the trailing pass ran them in battlefield-index order.
+    // See the definition for the param-derived discriminator.
+    int ActivationOrderRank(const GameState& s, const CardDefinition& def) const override;
+
+    // MTG_SNOW_CONDEMN -- the other half of the cast-order design above.
+    //
+    // THE ZERO-DROP MEASUREMENT WAS A BUG, NOT A VERDICT. Observed on the 18-game label manifest
+    // with the order on (MTG_BP_CONDEMN_WHYNOT):
+    //     bp_condemn_seen=13490  drops=0
+    //     notdecision=10101  managrew=2678  PEER=711  reached=0
+    // notdecision removes the rollout-leaf consultations (BY DESIGN -- a drop in the leaf prunes
+    // nothing), leaving 3,389 in the decision space, and managrew + PEER = 3,389 EXACTLY. Every
+    // decision-space consultation blocked, `reached` a clean zero: the shape of a mechanism that
+    // CANNOT fire, not one that fires and finds nothing. USER 2026-09-15: *"I disagree on
+    // condemnation. That sounds like a bug."* Two earlier conclusions here -- "dig chains make this
+    // a quality prune" and "condemnation is a dead lever on this deck" -- were both wrong, and are
+    // named only so neither gets re-derived.
+    //
+    // Three defects were found and fixed, all in the breakpoint apparatus rather than in this deck:
+    //
+    //  1. PEER (711) -- BpSlotIsAfterSite positioned an ACTIVATION-sourced site by its CAST rank.
+    //     Snow's breakpoints are site 8, the tap-draw of Scrying Sheets / Frost Augur, activated
+    //     from the battlefield in the TRAILING PASS, after every cast. They compared at ~103 and
+    //     111, near the FRONT of the commit band, so nearly every card in hand ranked at-or-after
+    //     the site and was exempted as a peer -- the exact inverse of the design, which puts the
+    //     draw LAST so everything else is genuinely offered-and-declined. The scope now records the
+    //     ROUTE (cast vs activation), because a permanent can be both in one turn.
+    //  2. MANAGREW (2,678) -- these were not this turn's decisions at all. The scope is RAII over
+    //     the continuation's whole Solve, so nodes at LATER simulated turns were being asked "was
+    //     this card declined?" against turn T's hand and order; BpTurnManaSettled happened to
+    //     re-admit them because a projected turn usually plays a land. A turn that makes no drop
+    //     had no such accident, which is the hole. Closed by BpCondemnSameTurnEnabled.
+    //  3. LOCKSTEP -- the executor bound a CantripOrderScope at site 8 and the search bound none,
+    //     so with the filter live the two worlds enumerated different continuations (played !=
+    //     scored). The search now binds the twin, and the executor's snapshot is the PRE-ACTIVATION
+    //     hand rather than the hand before the turn's last cast.
+    //
+    // Per-JOB overridable (heurarm) so base and condemned arms pool into ONE batch.
     bool CondemnsConsideredAtBreakpoint() const override
     {
         static const bool v = EnvOn("MTG_SNOW_CONDEMN");
-        return v;
+        return heurarm::Flag(heurarm::SNOW_CONDEMN, v);
     }
 };
 

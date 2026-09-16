@@ -3722,6 +3722,11 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
     // binding in ApplyPlanDirect -- both worlds must enumerate the continuation under the same
     // watermark or the searched bp_choice indexes a different list. Inert when the lever is off.
     const CardDefinition* rdb_site = nullptr;
+    // ...and HOW that site is reached. Every arming point below is a CAST except site 8, whose
+    // {T} tap-draw is ACTIVATED off the battlefield in the trailing pass -- after every cast of the
+    // turn. Order-aware condemnation has to place the site in the cast order and the card alone
+    // cannot say which route opened it, so the route is recorded here (see BpSlotIsAfterSite).
+    bool rdb_site_activated = false;
     std::function<void(int)> resolve_draw_breakpoint = [&](int bp_depth)
     {
         if (bp_depth >= kMaxDrawBreakpointDepth || ++rdb_calls > kMaxDrawBreakpointCalls) { return; }
@@ -3731,7 +3736,8 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
         TurnSolver::CantripOrderScope _cos(rdb_site, &rdb_hand, &rdb_plan_casts,
                                            ResolveProvider(state).CondemnsConsideredAtBreakpoint(),
                                            karoo_deferred,
-                                           TurnSolver::ManaSourceCount(state));
+                                           TurnSolver::ManaSourceCount(state),
+                                           rdb_site_activated, state.turn_number);
         // Executor twin of the rollout's marker (MTG_CONDEMN_M1_BP) -- the lockstep pair. Without
         // it the executor would re-offer at a breakpoint what the rollout condemned there.
         TurnSolver::BpContinuationScope _cbs;
@@ -3917,6 +3923,7 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
                 if (is_draw_engine(a.card_name))
                 {
                     rdb_site = CardDatabase::Instance().Lookup(a.card_name);
+                    rdb_site_activated = false;   // a CAST-armed site
                     if (TurnSolver::BreakpointHandSnapshotWanted(state))
                     {
                         rdb_plan_casts.clear();
@@ -4141,6 +4148,7 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
                 else
                 {
                     rdb_site = CardDatabase::Instance().Lookup(a.card_name);
+                    rdb_site_activated = false;   // a CAST-armed site
                     if (TurnSolver::BreakpointHandSnapshotWanted(state))
                     {
                         rdb_plan_casts.clear();
@@ -4286,6 +4294,7 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
                 else
                 {
                     rdb_site = CardDatabase::Instance().Lookup(a.card_name);
+                    rdb_site_activated = false;   // a CAST-armed site
                     if (TurnSolver::BreakpointHandSnapshotWanted(state))
                     {
                         rdb_plan_casts.clear();
@@ -4368,6 +4377,7 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
             else
             {
                 rdb_site = CardDatabase::Instance().Lookup(a.card_name);
+                rdb_site_activated = false;   // a CAST-armed site
                 if (TurnSolver::BreakpointHandSnapshotWanted(state))
                 {
                     rdb_plan_casts.clear();
@@ -4482,8 +4492,31 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
     // (bounded: every activation taps a Pod). Called with plan.actions exactly where the loop
     // stood -- byte-identical for every plan that opens no pod site.
     std::function<void(const std::vector<Action>&)> exec_trailing_activations =
-        [&](const std::vector<Action>& trailing_acts)
+        [&](const std::vector<Action>& trailing_acts_in)
     {
+    // EXECUTOR TWIN of ApplyPlanDirect's provider-declared activation order. This MUST mirror the
+    // search side: the search scores a line with the activations in this order, and if the executor
+    // ran them in a different one the played turn would not be the turn that was scored. No deck
+    // opinion -> no copy, no sort, byte-identical.
+    std::vector<Action>        _ord_buf;
+    const std::vector<Action>* _acts = &trailing_acts_in;
+    {
+        const DecisionProvider& _p = ResolveProvider(state);
+        bool _any = false;
+        for (const Action& a : trailing_acts_in)
+        {
+            if (!TurnSolver::IsTrailingActivation(a.kind)) { continue; }
+            const CardDefinition* d = a.def ? a.def : CardDatabase::Instance().Lookup(a.card_name);
+            if (d != nullptr && _p.ActivationOrderRank(state, *d) != 0) { _any = true; break; }
+        }
+        if (_any)
+        {
+            _ord_buf = trailing_acts_in;
+            TurnSolver::OrderTrailingActivations(state, _ord_buf);
+            _acts = &_ord_buf;
+        }
+    }
+    const std::vector<Action>& trailing_acts = *_acts;
     for (const Action& a : trailing_acts)
     {
         if (a.kind == Action::Kind::SacCreatureOutlet)
@@ -4749,6 +4782,14 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
                         && !a.def->params.tap_draw_requires_top_supertype.empty();
                     const std::size_t hand_before = snow_look
                         ? state.players[state.active_player_index].hand.size() : 0;
+                    // PRE-DRAW hand for site 8's condemnation snapshot -- the rollout's twin takes
+                    // it at the same point. rdb_hand is otherwise written by cast_by_name, i.e. the
+                    // hand before the turn's LAST CAST, which at a trailing activation is neither
+                    // this moment nor this decision: the card the look finds would read as already
+                    // in hand and be condemned as declined, the exact case the exemption exists for.
+                    std::vector<int> snow_hand_before;
+                    if (snow_look && TurnSolver::BreakpointHandSnapshotWanted(state))
+                    { snow_hand_before = TurnSolver::HandCardNumbers(state); }
                     ApplyPermAbility(state, state.active_player_index, a.sac_source_id,
                                      a.ability_mode);
                     if (m_logger)
@@ -4810,7 +4851,21 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
                     }
                     if (snow_look_worth)
                     {
-                        rdb_site = a.def;
+                        rdb_site           = a.def;
+                        rdb_site_activated = true;    // TRAILING PASS -- after every cast this turn
+                        if (TurnSolver::BreakpointHandSnapshotWanted(state))
+                        {
+                            rdb_hand = snow_hand_before;
+                            // The committed plan's hand casts, so a card THIS PLAN cast is not read
+                            // as declined -- the twin of the rollout's plan_cast_names, which its
+                            // site-8 scope passes for the same reason.
+                            rdb_plan_casts.clear();
+                            for (const Action& pa : plan.actions)
+                            {
+                                if (pa.kind != Action::Kind::CastFromHand) { continue; }
+                                rdb_plan_casts.push_back(std::hash<std::string>{}(pa.card_name));
+                            }
+                        }
                         resolve_draw_breakpoint(0);
                     }
                 }

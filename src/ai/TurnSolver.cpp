@@ -35,6 +35,7 @@
 #include <map>
 #include <set>
 #include <mutex>
+#include <optional>
 #include <cmath>
 #include <unordered_map>
 #include <unordered_set>
@@ -366,6 +367,8 @@ static std::atomic<long long> g_bp_condemn_drops_exec{0};
 // rank are mutually un-condemnable), while the soundness gates above it are unavailable at any
 // order. g_wn_reached passed every gate and was then rejected by the dominance/payability tests.
 static std::atomic<long long> g_wn_notdecision{0};   // rollout leaf (correctly excluded)
+static std::atomic<long long> g_wn_notturn{0};       // a LATER turn of the lookahead (not this decision)
+static std::atomic<long long> g_wn_noplancast{0};    // the plan cast NOTHING -> it declined nothing
 static std::atomic<long long> g_wn_managrew{0};      // mana base grew -> decline is stale
 static std::atomic<long long> g_wn_plancasts{0};     // the plan casts it -> never declined
 static std::atomic<long long> g_wn_notail{0};        // tail exemption (diagnostic lever, off)
@@ -747,6 +750,8 @@ namespace
                 const long long peer = g_wn_peer.load();
                 std::cerr << "[rollout-stats] bp_whynot"
                           << " notdecision=" << g_wn_notdecision.load()
+                          << " notturn="     << g_wn_notturn.load()
+                          << " noplancast=" << g_wn_noplancast.load()
                           << " managrew="    << g_wn_managrew.load()
                           << " plancasts="   << g_wn_plancasts.load()
                           << " notail="      << g_wn_notail.load()
@@ -1701,6 +1706,79 @@ static bool BpCondemnSearchedOnlyEnabled()
 // only under CantripOrderEnabled() and cleared for a site outside the ordered class.
 static thread_local const CardDefinition* g_bp_site_def = nullptr;
 
+// ...and HOW that site was reached: false = CAST from hand, true = an ability ACTIVATED off the
+// battlefield. See CantripOrderScope for why the card itself cannot answer this.
+static thread_local bool g_bp_site_activated = false;
+
+// ...and the TURN the snapshot was taken on (-1 = no snapshot).
+static thread_local int g_bp_site_turn = -1;
+
+// A BREAKPOINT SNAPSHOT DESCRIBES ONE TURN, AND MUST NOT OUTLIVE IT (MTG_BP_CONDEMN_SAME_TURN,
+// DEFAULT ON). Soundness guard, in the same class as BpTurnManaSettled, and like it this conjunct
+// can only ever RE-ADMIT a candidate.
+//
+// The scope is RAII over the whole continuation -- which includes the continuation's own
+// TurnSolver::Solve, i.e. a full lookahead through later simulated turns. The thread_locals stay
+// bound for that entire subtree, so without this guard a node at turn T+2 is asked "was this card
+// declined?" against the hand and the cast order of turn T. That premise does not survive the turn
+// boundary: at T+2 the hand is different, the untapped mana is different, and above all the card was
+// never offered at T+2 to be declined. Condemning on it deletes a line no sibling branch covers,
+// which is the unrecoverable class the no-lossy-truncation bar rejects outright.
+//
+// BpTurnManaSettled was masking most of this by accident -- a projected turn usually plays a land,
+// the source count grows, and the candidate is re-admitted. Measured on the Snow label manifest:
+// 2,678 of the 3,389 decision-space consultations were blocked by managrew, and every one of those
+// was a FUTURE-TURN consultation that had no business being asked. A turn that makes no land drop
+// has no such accident, and that is the hole. The two rules are kept separate because they answer
+// different questions (managrew is about mana growing WITHIN the turn) and neither implies the other.
+//
+// g_condemn_root_turn is deliberately NOT reused: it names the outermost solve's root turn, which is
+// the breakpoint's turn only by coincidence of nesting. The snapshot knows its own turn; ask it.
+static bool BpCondemnSameTurnEnabled()
+{
+    static const bool on = EnvOn("MTG_BP_CONDEMN_SAME_TURN", true);
+    return heurarm::Flag(heurarm::BP_CONDEMN_SAME_TURN, on);
+}
+
+static bool BpSnapshotOnItsTurn(const GameState& state)
+{
+    if (!BpCondemnSameTurnEnabled()) { return true; }
+    if (g_bp_site_turn < 0)          { return true; }   // no snapshot turn -> rule does not apply
+    return state.turn_number == g_bp_site_turn;
+}
+
+// A PLAN THAT CAST NOTHING DECLINED NOTHING (MTG_BP_CONDEMN_PLAN_CAST, DEFAULT ON). Third member of
+// the soundness set, alongside BpTurnManaSettled and BpSnapshotOnItsTurn, and like both it can only
+// ever RE-ADMIT a candidate.
+//
+// This generalises an observation the MTG_CONDEMN_WHO diagnostic already carries in its own comment:
+// "plan_n==1 with no tail means the plan was the site alone, so nothing was considered-and-declined
+// at its slot and the condemnation has no premise at all". At an ACTIVATED site the degenerate case
+// is plan_n == 0 -- the plan made NO cast this turn, it only activated a permanent already on the
+// battlefield. There is then no cast slot at which anything was reached, offered and passed over,
+// so "this card was declined" is not a description of anything the plan did.
+//
+// MEASURED, and this is why it exists rather than being an argument: the two games the escalation
+// census found UNRECOVERABLE under condemnation (930000-block gi=1357 8->9 and gi=1847 6->7, both
+// still worse at 100x budget AND at 100x budget + 1 ply) are dominated by exactly this shape --
+// 1,253 of 1,663 drops in gi=1357 (95%) and 1,253 of 2,091 in gi=1847 (60%) carry plan_n=0.
+//
+// Do NOT weaken this to "the plan had mana it did not spend". That is the same reasoning the four
+// deleted type exemptions used, and it answers a different question: whether a cast was AFFORDABLE,
+// not whether the order ever reached a decision about it.
+static bool BpCondemnPlanCastEnabled()
+{
+    static const bool on = EnvOn("MTG_BP_CONDEMN_PLAN_CAST", true);
+    return heurarm::Flag(heurarm::BP_CONDEMN_PLAN_CAST, on);
+}
+
+static bool BpPlanMadeACast()
+{
+    if (!BpCondemnPlanCastEnabled()) { return true; }
+    if (g_bp_plan_casts == nullptr)  { return true; }   // no snapshot -> rule does not apply
+    return !g_bp_plan_casts->empty();
+}
+
 // ORDER-AWARE CONDEMNATION (MTG_BP_CONDEMN_ORDER_AWARE). USER, 2026-08-25, on why the six
 // KittyEquipment losses are NOT evidence against condemnation: "If the card was in hand and earlier
 // in the order then it should be rejected even if it was drawn... It just shouldn't be played until
@@ -1966,6 +2044,25 @@ static bool BpSlotIsAfterSite(const GameState& state, const Card& cand)
     // errs toward re-admitting. Evidence for the range form: the 5 deleted-line games of 2026-08-30
     // (hold gi1124/1132/1178, train gi53/1035), where the winning turn casts Sol Ring / Reality
     // Spasm / Ponder AFTER higher-ranked breakpoint sites because each draw re-prices the chain.
+    //
+    // AN ACTIVATED SITE SITS AT THE END OF THE ORDER, NOT AT ITS CARD'S CAST RANK (fixed 2026-09-15;
+    // USER: "I disagree on condemnation. That sounds like a bug.").
+    //
+    // A site reached by ACTIVATION runs in ApplyPlanDirect's TRAILING PASS, after every cast of the
+    // turn -- site 8's {T} tap-draw (Scrying Sheets, Frost Augur) is the case. Comparing it at the
+    // rank it would have had IF CAST put it near the front of the commit band (on Snow ~103 for
+    // Sheets, a land, and 111 for the Augur, a 1-mana creature), so nearly every card in hand ranked
+    // at-or-after it and was exempted as a peer. That inverts the design exactly: the draw is placed
+    // LAST so everything else is genuinely offered-and-declined, and this read it as though it had
+    // happened FIRST. Measured before the fix, 18-game Snow label manifest, condemnation on: 13,490
+    // consultations, 3,389 in the decision space, ALL blocked (managrew 2,678 + peer 711), reached=0,
+    // drops=0 -- a clean zero, which is what made it look like a dead lever twice.
+    //
+    // Every cast precedes the trailing pass, so no candidate can be a peer of an activated site: the
+    // whole cast order is strictly before it. Note this is keyed on the ROUTE, not on the card --
+    // g_bp_site_activated is recorded where the breakpoint fires, because a permanent can be cast
+    // AND activated in the same turn and its params cannot tell you which one opened this site.
+    if (g_bp_site_activated) { return false; }
     return prov.CastOrderRankLatest(state, *cd) >= prov.CastOrderRank(state, *g_bp_site_def);
 }
 
@@ -2067,6 +2164,9 @@ static bool BpLandDropSlotPassed(const GameState& state)
     const DecisionProvider& prov = ResolveProvider(state);
     const int drop_rank = prov.LandDropCastOrderRank();
     if (drop_rank < 0) { return false; }                  // no declared slot -> no rule
+    // An ACTIVATED site runs after every cast, so the drop's slot -- wherever the deck put it -- is
+    // behind us by construction (the same law as BpSlotIsAfterSite, read from the other side).
+    if (g_bp_site_activated) { return true; }
     return drop_rank < prov.CastOrderRank(state, *g_bp_site_def);
 }
 
@@ -9756,12 +9856,21 @@ TurnSolver::CantripOrderScope::CantripOrderScope(const CardDefinition* site,
                                                  const std::vector<std::uint64_t>* plan_casts,
                                                  bool classify_active,
                                                  bool land_drop_reserved,
-                                                 int mana_sources_before)
+                                                 int mana_sources_before,
+                                                 bool site_activated,
+                                                 int site_turn)
     : m_saved(g_cantrip_order_site), m_saved_hand(g_bp_hand_before),
       m_saved_casts(g_bp_plan_casts), m_saved_site(g_bp_site_def),
       m_saved_reserved(g_land_drop_reserved),
-      m_saved_mana_before(g_bp_mana_sources_before)
+      m_saved_mana_before(g_bp_mana_sources_before),
+      m_saved_activated(g_bp_site_activated),
+      m_saved_turn(g_bp_site_turn)
 {
+    // HOW the site was reached, and WHEN. Bound unconditionally for the same reason as the
+    // reservation and the mana count: both are read only while condemnation is live, so this is two
+    // thread_local stores off that path and no observable change.
+    g_bp_site_activated = site_activated;
+    g_bp_site_turn      = site_turn;
     // Mana sources at the moment of the cast, so a later land drop or rock can re-admit a declined
     // card (BpTurnManaSettled). Bound unconditionally for the same reason as the reservation: it is
     // read only while condemnation is live, so this is one thread_local store off that path.
@@ -9795,6 +9904,8 @@ TurnSolver::CantripOrderScope::~CantripOrderScope()
     g_bp_site_def        = m_saved_site;
     g_land_drop_reserved = m_saved_reserved;
     g_bp_mana_sources_before = m_saved_mana_before;
+    g_bp_site_activated  = m_saved_activated;
+    g_bp_site_turn       = m_saved_turn;
 }
 
 bool TurnSolver::BreakpointHandSnapshotWanted()
@@ -10947,6 +11058,8 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
         if (s_bp_whynot && BpClassifyActive(state) && g_bp_hand_before != nullptr)
         {
             if      (BpCondemnSearchedOnlyEnabled() && !bp_decision_space) { ++g_wn_notdecision; }
+            else if (!BpSnapshotOnItsTurn(state))                          { ++g_wn_notturn; }
+            else if (!BpPlanMadeACast())                                  { ++g_wn_noplancast; }
             else if (!BpTurnManaSettled(state))                            { ++g_wn_managrew; }
             else if (BpPlanCasts(ap.hand[i].m_name_hash))                  { ++g_wn_plancasts; }
             else if (BpCondemnTailExemptEnabled() && !BpPlanHasTail(ap))   { ++g_wn_notail; }
@@ -10956,6 +11069,8 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
         }
         if (BpClassifyActive(state) && g_bp_hand_before != nullptr
             && (!BpCondemnSearchedOnlyEnabled() || bp_decision_space)
+            && BpSnapshotOnItsTurn(state)
+            && BpPlanMadeACast()
             && BpTurnManaSettled(state)
             && !BpPlanCasts(ap.hand[i].m_name_hash)
             && !(BpCondemnTailExemptEnabled() && !BpPlanHasTail(ap))
@@ -21063,6 +21178,25 @@ bool TurnSolver::IsTrailingActivation(Action::Kind k)
     }
 }
 
+// See the header. Stable so that equal ranks keep the emitted order exactly as today, and an
+// early-out so a deck declaring no order copies nothing and sorts nothing.
+void TurnSolver::OrderTrailingActivations(const GameState& state, std::vector<Action>& acts)
+{
+    if (acts.size() < 2) { return; }
+    const DecisionProvider& prov = ResolveProvider(state);
+    auto rank_of = [&](const Action& a) -> int
+    {
+        if (!TurnSolver::IsTrailingActivation(a.kind)) { return 0; }
+        const CardDefinition* d = a.def ? a.def : CardDatabase::Instance().Lookup(a.card_name);
+        return d != nullptr ? prov.ActivationOrderRank(state, *d) : 0;
+    };
+    bool any = false;
+    for (const Action& a : acts) { if (rank_of(a) != 0) { any = true; break; } }
+    if (!any) { return; }   // no deck opinion -> byte-identical to the historical emission order
+    std::stable_sort(acts.begin(), acts.end(),
+                     [&](const Action& x, const Action& y) { return rank_of(x) < rank_of(y); });
+}
+
 static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool is_pre_combat,
                             std::vector<Action>* out_breakpoint,   // default args on the fwd decl
                             BpPrefixSnap* bp_capture, const BpPrefixSnap* bp_resume)
@@ -23791,7 +23925,9 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
                     {
                         TurnSolver::CantripOrderScope _cos(&def, &hand_at_cast, &plan_cast_names,
                                                           BpClassifyActive(state), karoo_deferred,
-                                                          TurnSolver::ManaSourceCount(state));
+                                                          TurnSolver::ManaSourceCount(state),
+                                                          /*site_activated=*/false,
+                                                          state.turn_number);
                         TurnSolver::Plan extra;
                         if (!bp_searched_plan(6, extra))
                         {
@@ -24386,8 +24522,30 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
     // be assigned by then. A lambda definition executes nothing, so the realised sequence -- casts,
     // Krenko taps, trailing activations -- is exactly what it was.
     apply_trailing_activations =
-        [&](const std::vector<Action>& trailing_acts)
+        [&](const std::vector<Action>& trailing_acts_in)
     {
+    // Provider-declared activation order (see TurnSolver::OrderTrailingActivations). No deck
+    // opinion -> the helper returns without touching anything and this copy is the only cost, so
+    // it is taken only when a rank actually exists.
+    std::vector<Action>        _ord_buf;
+    const std::vector<Action>* _acts = &trailing_acts_in;
+    {
+        const DecisionProvider& _p = ResolveProvider(state);
+        bool _any = false;
+        for (const Action& a : trailing_acts_in)
+        {
+            if (!TurnSolver::IsTrailingActivation(a.kind)) { continue; }
+            const CardDefinition* d = a.def ? a.def : CardDatabase::Instance().Lookup(a.card_name);
+            if (d != nullptr && _p.ActivationOrderRank(state, *d) != 0) { _any = true; break; }
+        }
+        if (_any)
+        {
+            _ord_buf = trailing_acts_in;
+            TurnSolver::OrderTrailingActivations(state, _ord_buf);
+            _acts = &_ord_buf;
+        }
+    }
+    const std::vector<Action>& trailing_acts = *_acts;
     for (const Action& a : trailing_acts)
     {
         if (a.kind == Action::Kind::SacCreatureOutlet)
@@ -24533,6 +24691,13 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
                         && !a.def->params.tap_draw_requires_top_supertype.empty();
                     const std::size_t hand_before = snow_look
                         ? state.players[state.active_player_index].hand.size() : 0;
+                    // PRE-DRAW hand for site 8's condemnation snapshot -- taken HERE because the
+                    // draw is one line below, and a card the activation itself found must read as
+                    // NEW (a duplicate of nothing). Same discipline as the cast sites' hand_at_cast
+                    // and the executor's rdb_hand; gated so a ship config builds nothing.
+                    std::vector<int> snow_hand_before;
+                    if (snow_look && TurnSolver::BreakpointHandSnapshotWanted(state))
+                    { snow_hand_before = TurnSolver::HandCardNumbers(state); }
                     ApplyPermAbility(state, state.active_player_index, a.sac_source_id, a.ability_mode);
                     // Repeatable {T}-less sinks: the plan asked for K activations and only the FIRST
                     // is on the subset's books, so pay the rest here out of what the turn actually
@@ -24590,6 +24755,28 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
                     static thread_local int s_snow_look_depth = 0;
                     if (snow_look_worth && !s_human_play)
                     {
+                        // CONDEMNATION SCOPE -- THE EXECUTOR'S LOCKSTEP TWIN. AIEngine's site-8 arm
+                        // binds a CantripOrderScope around its resolve_draw_breakpoint, and this
+                        // side bound NOTHING, so with the filter live the executor condemned at the
+                        // continuation and the search did not: two different candidate lists, i.e.
+                        // played != scored. Bound with the pre-draw hand taken above, the plan's own
+                        // casts (a card the plan casts was never declined), and -- the part only
+                        // this route knows -- site_activated=true: the tap-draw runs in the trailing
+                        // pass, AFTER every cast (see BpSlotIsAfterSite).
+                        //
+                        // Constructed only when the filter is live. Unlike the cast sites this one
+                        // is HOT (playouts activate a look nearly every simulated turn), and the
+                        // ctor's ManaSourceCount is a battlefield scan -- so a ship config, where
+                        // BpClassifyActive is false for every deck, pays nothing at all and stays
+                        // byte-identical.
+                        std::optional<TurnSolver::CantripOrderScope> _cos8;
+                        if (BpClassifyActive(state))
+                        {
+                            _cos8.emplace(a.def, &snow_hand_before, &plan_cast_names,
+                                          /*classify_active=*/true, karoo_deferred,
+                                          TurnSolver::ManaSourceCount(state),
+                                          /*site_activated=*/true, state.turn_number);
+                        }
                         // bp_searched_plan runs UNCONDITIONALLY so the occurrence is COUNTED even
                         // when the greedy resolve below is narrowed -- the executor twin counts
                         // every occurrence, and a skipped count would shift every later bp_at
@@ -25060,7 +25247,8 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
         TurnSolver::CantripOrderScope _cos(deferred_cantrip_site, &deferred_hand_before,
                                            &plan_cast_names, BpClassifyActive(state),
                                            karoo_deferred,
-                                           TurnSolver::ManaSourceCount(state));
+                                           TurnSolver::ManaSourceCount(state),
+                                           /*site_activated=*/false, state.turn_number);
         // Mark the continuation for the condemnation filter (MTG_CONDEMN_M1_BP). Same extent as
         // _cos: the searched list, the greedy Solve fallback, and the continuation's application.
         TurnSolver::BpContinuationScope _cbs;

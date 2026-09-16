@@ -183,6 +183,20 @@ enum Slot : int
     EDF_HAND_GOFF_REFUND,     // MTG_EDF_HAND_GOFF_REFUND the hand go-off's mana floor credits a hand PAYLOAD's own ETB untap (default OFF)
     EDF_AURA_HOST_SIG_KAROO,  // MTG_EDF_AURA_HOST_SIG_KAROO the host signature applies only to plans whose land drop is a karoo (perf)
     EDF_DRAW_SINK_HONEST,     // MTG_EDF_DRAW_SINK_HONEST the loop's draw-sink guard prices the fused Clue crack + the source's own lost yield (default ON)
+    SNOW_CAST_ORDER,          // MTG_SNOW_CAST_ORDER     USER-reviewed Snow cast order: land -> cheapest..dearest -> draw
+    // ...and its three independent halves, so the gain can be ATTRIBUTED instead of guessed. All
+    // three arrived in one revision and the revision moved the result; which of them did it is a
+    // separate question, and this file's own history says a multi-site flag hands you a plausible
+    // cause for free and has been wrong about it twice. Each defaults ON with the order.
+    SNOW_ORDER_FIXER,         // MTG_SNOW_ORDER_FIXER    the fixer (Astrolabe) sits right AFTER the land drop
+    SNOW_ORDER_SPLIT,         // MTG_SNOW_ORDER_SPLIT    split every within-cost tie (mana -> permanent -> non-perm)
+    SNOW_ACT_ORDER,           // MTG_SNOW_ACT_ORDER      Scrying Sheets activates before Frost Augur
+    // Breakpoint-condemnation SOUNDNESS guard: the snapshot binds only on the turn it was taken.
+    // Overridable per job so "what does the hole cost?" is measurable without a rebuild; `false` is
+    // the BROKEN arm, kept to reproduce the finding, not a neutral one.
+    BP_CONDEMN_SAME_TURN,     // MTG_BP_CONDEMN_SAME_TURN  a breakpoint snapshot describes ONE turn
+    SNOW_CONDEMN,             // MTG_SNOW_CONDEMN        Snow opts into breakpoint condemnation
+    BP_CONDEMN_PLAN_CAST,     // MTG_BP_CONDEMN_PLAN_CAST  a plan that cast NOTHING declined nothing
     COUNT
 };
 
@@ -343,6 +357,13 @@ inline const char* Name(int slot)
         "MTG_EDF_HAND_GOFF_REFUND",
         "MTG_EDF_AURA_HOST_SIG_KAROO",
         "MTG_EDF_DRAW_SINK_HONEST",
+        "MTG_SNOW_CAST_ORDER",
+        "MTG_SNOW_ORDER_FIXER",
+        "MTG_SNOW_ORDER_SPLIT",
+        "MTG_SNOW_ACT_ORDER",
+        "MTG_BP_CONDEMN_SAME_TURN",
+        "MTG_SNOW_CONDEMN",
+        "MTG_BP_CONDEMN_PLAN_CAST",
     };
     // The enum and this table are ONE mapping split across two lists: a slot added to one and not
     // the other silently shifts every lever after it (a manifest asking for lever X would set Y).

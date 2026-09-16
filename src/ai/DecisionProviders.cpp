@@ -12,6 +12,7 @@
 #include <cstdint>
 #include <algorithm>   // std::stable_sort (OrderEntriesByEtbValue payoff-ordering primitive)
 #include <tuple>       // std::make_tuple (CombatCheatCandidates ranking key)
+#include <mutex>
 #include <set>         // MTG_TUTOR_RANK_DUMP situation dedupe (diagnostic only)
 #include <chrono>
 #include <unordered_map>  // ProvenWinlessThisTurn's per-definition pool memo
@@ -2352,6 +2353,152 @@ int SnowProvider::ManaSourceRank(const GameState& s, const CardDefinition& def) 
     const int need  = def.params.tap_draw_cost->ManaValue();
     const int spare = SpareUntappedMana(s, s.active_player_index) - ManaProducedPerTap(def);
     return (spare >= need) ? 60 : base;
+}
+
+// USER 2026-09-15: "a really basic ordering like land -> cheapest to most expensive -> draw",
+// because "new spells that are drawn can be played, but existing ones cannot after the breakpoint".
+// See the header for why DRAW LAST is what makes condemnation mean anything on this deck.
+//
+// The scheme is deliberately self-contained rather than a tweak of the generic tiers: those tiers
+// encode "get the rock down early, creatures before noncreatures", which is precisely the shape
+// that casts Arcum's Astrolabe -- a draw -- first. Two bands, mana value ordering inside each:
+//
+//   10 + MV   everything that does NOT draw, cheapest first
+//   50 + MV   everything that DOES, so every commitment reaches its slot before the breakpoint
+//
+// The gap is wide enough that no MV in this deck (max 7) can cross it. The LAND DROP sits ahead of
+// both at rank 0 (LandDropCastOrderRank below).
+//
+// "Draws" means draws AS PART OF THE CAST -- an ETB draw (Arcum's Astrolabe, Ice-Fang Coatl) or a
+// cast-trigger draw. It deliberately does NOT include Scrying Sheets or Frost Augur, whose draws
+// are ACTIVATED from the battlefield: those are not cast-order decisions at all, and the breakpoint
+// they open is reached by activating, not by casting.
+// MTG_SNOW_CAST_ORDER -- DEFAULT OFF. Built to the USER's specification, MEASURED NEUTRAL, and the
+// argument that motivated it is refuted. Kept because it is cheap to keep and the measurement is
+// worth more than the code.
+//
+// MEASURED at PLAY settings (d5/b20), both arms in ONE pooled batch via heurarm, paired per game
+// (test/paired_arms.py; an unwon game scores 9):
+//
+//   n= 400 seeds 910000+  delta -0.0100 +/-0.0050   better  4  worse  0   units 0.9931
+//   n=2000 seeds 920000+  delta -0.0025 +/-0.0025   better 15  worse 10   units 1.0021
+//                                                   95% CI [-0.0074,+0.0024], sign p=0.42
+//
+// The 400-game read looked clean -- four games moved and all four improved -- and it did NOT
+// replicate. Four moved games out of four hundred is noise, and at 5x the sample the effect is a
+// wash on quality and very slightly WORSE on cost. Read the 2000 as the result; the 400 is the
+// cautionary tale about a small paired sample with a one-sided tail.
+//
+// AND THE PURPOSE IS GONE. The order exists to make breakpoint condemnation mean something (put the
+// draw last and everything else has genuinely been offered and declined by the time the breakpoint
+// arrives). Measured with this order ON, condemnation is consulted 13,490 times across the 18-game
+// label manifest and drops ZERO. MTG_BP_CONDEMN_WHYNOT attributes it: 74.9% notdecision (not in a
+// decision space at all -- structural to where the label search calls the filter, no order affects
+// it), 19.9% managrew (BpTurnManaSettled false: the turn's mana GREW, so the earlier pass was
+// unaffordability, not a decline -- this deck adds a land plus Astrolabe/Coldsteel/Druid nearly
+// every turn), 5.3% peer. The probe's own ceiling line reads "realistic max ~0, hard upper bound
+// 711". So the premise condemnation needs is rarely TRUE here, whatever the order.
+//
+// It also gives up something real for that nothing: the ideal-order doctrine's principle 1 is
+// "draw before playing land or rituals" -- a cantrip resolves into INFORMATION, and the land drop
+// and the expensive cast are commitments better made once you have it. Draw-last inverts that.
+//
+// This is a cast ORDER, and cast order is user-reviewed per deck (docs/design/
+// cast-order-ideal-with-ranges.md), so the decision is not the agent's to take. It ships off.
+// Routed through heurarm so ONE pooled batch can carry BOTH arms as separate jobs -- the per-job
+// override the repo requires for a lever sweep (a function-local `static const bool` makes a
+// process one arm forever, which forces one batch per arm and starves the box on the tail).
+inline bool SnowCastOrderOn()
+{
+    static const bool env = EnvOn("MTG_SNOW_CAST_ORDER");
+    return heurarm::Flag(heurarm::SNOW_CAST_ORDER, env);
+}
+// The three halves, each default ON with the order, each separately switchable so one pooled batch
+// can run full / full-minus-one and attribute the gain. Inert unless the order itself is on.
+inline bool SnowOrderFixerOn()
+{
+    static const bool env = EnvOn("MTG_SNOW_ORDER_FIXER", true);
+    return heurarm::Flag(heurarm::SNOW_ORDER_FIXER, env);
+}
+inline bool SnowOrderSplitOn()
+{
+    static const bool env = EnvOn("MTG_SNOW_ORDER_SPLIT", true);
+    return heurarm::Flag(heurarm::SNOW_ORDER_SPLIT, env);
+}
+inline bool SnowActOrderOn()
+{
+    static const bool env = EnvOn("MTG_SNOW_ACT_ORDER", true);
+    return heurarm::Flag(heurarm::SNOW_ACT_ORDER, env);
+}
+
+int SnowProvider::CastOrderRank(const GameState& s, const CardDefinition& def) const
+{
+    if (!SnowCastOrderOn()) { return GenericProvider::CastOrderRank(s, def); }
+    const CardParams& p  = def.params;
+    const int         mv = def.card.m_mana_cost.ManaValue();
+
+    // [1] THE FIXER, immediately after the land drop. USER 2026-09-15: *"Arcum's Astrolabe is the
+    // one card that has to go after the land drop, because it fixes."* It is the one exception to
+    // draw-last, and the exception is forced: a filter has to be ON THE BATTLEFIELD before the
+    // colours it fixes are demanded, so banishing it to the draw band with the other cantrip would
+    // strand the very casts it exists to enable. Param-derived (any_color_filter), not named.
+    if (p.any_color_filter && SnowOrderFixerOn()) { return 1; }
+
+    // [3] THE DRAWS, last -- everything else has reached its slot by the time they resolve.
+    // Cast-time draw only (ETB / on-cast): Frost Augur and Scrying Sheets draw from an ACTIVATED
+    // {T} ability on the battlefield, which is not a cast-order decision at all, so they stay in
+    // the commit band and get deployed early to tap on a later turn.
+    if (p.etb_self_draw > 0 || p.cast_draw > 0) { return 300 + mv; }
+
+    // [2] THE COMMITMENTS, cheapest to most expensive (the USER's rule), with EVERY TIE SPLIT
+    // (USER: *"let's split them up in any order"*). Ties are not free here: two cards sharing a
+    // slot are PEERS, and the order-aware condemnation rule refuses to condemn a peer -- 711 of
+    // the 13,490 consultations on the 18-game manifest are blocked exactly that way. A total order
+    // is what makes those reachable at all.
+    //
+    // The within-cost key is arbitrary by permission, so it is spent on the most defensible reading
+    // rather than left to chance:
+    //   0  a MANA SOURCE -- it funds the rest of the same turn, so it can only help to be first.
+    //   1  any other PERMANENT -- the deck's actual currency: every one is a snow permanent feeding
+    //      the Treefolk CDA and the Slumber threshold.
+    //   2  a NON-PERMANENT -- leaves no snow permanent behind. On this deck that is Skred, which is
+    //      goldfish-INERT (no blocking is modelled, the opponent never attacks), so mana spent on
+    //      it is mana not spent developing. Last within its cost is the least-harm slot an ordering
+    //      can give it.
+    // The final split is printed power, which separates the two seven-drops; it is a tiebreak and
+    // nothing more.
+    if (!SnowOrderSplitOn()) { return 100 + mv * 8; }   // ties left in place, for the attribution arm
+    int role = 1;
+    if (p.mana_rock || def.tmpl == CardTemplate::ManaDork)  { role = 0; }
+    else if (def.card.IsInstant() || def.card.IsSorcery())  { role = 2; }
+    const int big = (def.card.m_power >= 5) ? 0 : 1;
+    return 100 + mv * 8 + role * 2 + big;
+}
+
+// The land drop FIRST, and declaring it at all is half the point. The generic default is -1 = "no
+// declared slot", and the land half of condemnation is gated on the drop's slot having been passed
+// (BpLandDropSlotPassed) -- so with no declared slot it can never fire, which is one reason
+// condemnation had nothing to bite on here. 0 puts it ahead of both cast bands above.
+//
+// The land is free and is never a reason to hold a spell, so there is no tension with cheapest-
+// first: playing it first only ever widens what the rest of the turn can pay for.
+int SnowProvider::LandDropCastOrderRank() const { return SnowCastOrderOn() ? 0 : -1; }
+
+// Scrying Sheets before Frost Augur. Both carry the SAME two params (tap_draw_cost and
+// tap_draw_requires_top_supertype = "Snow"), so the discriminator is what they ARE: Sheets is a
+// LAND (basic_land, produces {C}), the Augur is a CREATURE. Land tap-draw first.
+//
+// They genuinely do not commute -- each only draws when the top card is snow, so resolving one
+// changes what the other sees -- which is why leaving this to battlefield-index order was a real
+// hole rather than a cosmetic one. Both sit at the very END of the turn regardless: the trailing
+// activation pass runs after every cast, which is what puts the breakpoint they open after every
+// other decision of the turn.
+int SnowProvider::ActivationOrderRank(const GameState& s, const CardDefinition& def) const
+{
+    (void)s;
+    if (!SnowCastOrderOn() || !SnowActOrderOn()) { return 0; }
+    if (!def.params.tap_draw_cost)               { return 0; }   // not a tap-draw: no opinion
+    return def.card.IsLand() ? 10 : 20;
 }
 
 bool GenericProvider::ShouldStageSpectacleDraw(const GameState&, int,
@@ -17340,7 +17487,45 @@ bool SnowCertKnownDef(const CardDefinition* d)
         // reachable does not silently widen what the argument covers.
         "Into the North", "Spirit of the Aldergard", "On Thin Ice", "Search for Glory",
     };
-    const bool ok = kPool.count(d->card.m_name.str()) != 0;
+    bool ok = kPool.count(d->card.m_name.str()) != 0;
+
+    // "NOTHING UNTAPS" IS A CHECKED PRECONDITION, not just a sentence in the header.
+    //
+    // The whole mana bound is `untapped_perms` -- at most one mana per permanent we control,
+    // "because nothing in this pool untaps a permanent or produces two mana from one tap". Let one
+    // untapper into the pool and that stops being an upper bound: a permanent can tap twice, mana
+    // is under-counted, `snow_gain` is under-counted, and the certificate can call a WINNABLE turn
+    // winless -- unsound in the direction that silently deletes a win.
+    //
+    // This deck is one card away from exactly that. Kaldring, the Rimestaff is the BACK face of
+    // `Jorn, God of Winter // Kaldring, the Rimestaff`, and Jorn is *"Whenever Jorn attacks, untap
+    // each snow permanent you control"*. The header's argument holds today ONLY because the Jorn
+    // face is not modelled -- and USER 2026-09-15 notes that in a goldfish Jorn is generally the
+    // face you would want, since a 3/3 snow attacker that untaps the board beats a graveyard
+    // replay that enters tapped. So this is a live direction, not a hypothetical.
+    //
+    // A name-keyed pool cannot defend against it (whoever models Jorn adds the name and the gate
+    // opens), so the untap test is applied to the DEFINITION, after the pool test and regardless of
+    // it. A NEW param for Jorn's attack trigger would still need adding to this list -- which is
+    // why the list is here, at the gate every reachable card passes through, rather than in a
+    // comment somewhere else.
+    if (ok)
+    {
+        const CardParams& p = d->params;
+        if (p.untap_x_mana_sources || p.etb_untap_lands > 0 || p.etb_pay_life_to_untap > 0
+            || p.untap_creature_cost.has_value() || !p.etb_untap_reveal_subtypes.empty())
+        {
+            static std::once_flag once;
+            std::call_once(once, [&]{
+                std::fprintf(stderr,
+                    "[winless] SNOW CERT DISARMED: '%s' can UNTAP a permanent, which breaks the "
+                    "one-mana-per-permanent bound. Fix the bound before re-admitting it.\n",
+                    d->card.m_name.str().c_str());
+            });
+            ok = false;
+        }
+    }
+
     if (!ok)
     {
         static const bool s_dbg = EnvOn("MTG_WINLESS_DEBUG");

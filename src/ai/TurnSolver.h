@@ -949,12 +949,22 @@ public:
     // land -- and MTG_BP_CONDEMN_LAND would condemn every other held land on that false premise.
     // Bound on the SCOPE rather than around the whole apply so the executor's live fallback binds
     // the same fact at the same place: the lockstep-pair discipline this class already exists for.
+    // `site_activated` says HOW the breakpoint was reached: false = the site was CAST from hand,
+    // true = it was an ability ACTIVATED off the battlefield (site 8's {T} tap-draw). The order-aware
+    // condemnation rule has to place the site in the turn's cast order, and a CardDefinition alone
+    // cannot tell the two apart -- an activation runs in ApplyPlanDirect's TRAILING PASS, after every
+    // cast, so its CAST rank is not where it happened. Do NOT re-derive this from the card's params:
+    // a permanent can be cast AND activated in the same turn, so the discriminator is the route, not
+    // the card. `site_turn` is the turn the snapshot was taken on -- the snapshot is a statement
+    // about ONE turn's decisions and must not survive into the lookahead's later turns.
         explicit CantripOrderScope(const CardDefinition* site,
                                    const std::vector<int>* hand_before = nullptr,
                                    const std::vector<std::uint64_t>* plan_casts = nullptr,
                                    bool classify_active = false,
                                    bool land_drop_reserved = false,
-                                   int mana_sources_before = -1);
+                                   int mana_sources_before = -1,
+                                   bool site_activated = false,
+                                   int site_turn = -1);
         ~CantripOrderScope();
         CantripOrderScope(const CantripOrderScope&) = delete;
         CantripOrderScope& operator=(const CantripOrderScope&) = delete;
@@ -965,6 +975,8 @@ public:
         const CardDefinition*   m_saved_site;   // order-aware condemnation: the breakpoint's site
         bool                    m_saved_reserved;   // ...and whether the drop was RESERVED, not passed
         int                     m_saved_mana_before;   // ...and the mana-source count at the cast
+        bool                    m_saved_activated;    // ...and whether the site was ACTIVATED, not cast
+        int                     m_saved_turn;         // ...and the turn the snapshot describes
     };
 
     // Card numbers in the active player's hand, for the breakpoint snapshot above. Cheap (one
@@ -1246,6 +1258,24 @@ public:
     // canonical pass -- so the failure mode is "the viewer can't sequence it", never a double
     // apply or a dropped action.
     static bool IsTrailingActivation(Action::Kind k);
+
+    // ORDER THE TRAILING ACTIVATIONS by the provider's declared rank, in place and stably.
+    //
+    // Board activations have always run "in whatever order the ENUMERATOR emitted them -- which is
+    // battlefield-index order, i.e. the order those permanents happened to enter play, a fact about
+    // the past with no bearing on the turn" (AIEngine.cpp's note). That is a real ordering hole:
+    // on Snow, Scrying Sheets and Frost Augur are two tap-draws whose relative order changes what
+    // each one sees on top, and nothing decided it.
+    //
+    // MUST BE CALLED FROM BOTH TRAILING PASSES -- ApplyPlanDirect's (what the SEARCH scores) and
+    // AIEngine's executor twin (what actually gets PLAYED). Ordering one and not the other makes
+    // the realised line differ from the scored one, which is the divergence class this file's
+    // rollout-vs-executor map exists to prevent.
+    //
+    // DecisionProvider::ActivationOrderRank returns 0 for every card unless a deck says otherwise,
+    // and this returns immediately when every rank is 0 -- so no list is copied, no sort runs, and
+    // every deck that declares no order is byte-identical.
+    static void OrderTrailingActivations(const GameState& state, std::vector<Action>& acts);
 
     // COLOUR-CRITICAL reserve (MTG_COLOR_RESERVE, default off). The batch pre-pay solves the turn's
     // mana JOINTLY, but it declines on most interesting turns -- producers, {X} spells, per-target
