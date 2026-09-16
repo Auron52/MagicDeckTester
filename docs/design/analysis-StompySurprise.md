@@ -919,3 +919,123 @@ keeps recommending a strictly worse mana elf over the deck's marquee card.
 **This is the Apex Altisaur decision again, and it is the USER's.** There it was a measured cost
 accepted for unmodelled upside; here it is a measured gain sitting on unmodelled downside. The
 engine cannot price a sweeper, so it cannot price the 22nd mana source.
+
+## The in-between list, and three corrections the USER forced (2026-09-16)
+
+USER, on the all-elf direction: *"I'm a bit concerned about completely going all-in on the elves.
+The reason would be something we can't model which is sweepers. Even worse are cards like pyroclasm."*
+Then: *"We may have to find an in-between option to avoid any slowness, but also avoid high exposure
+to sweepers."* This section is that search, plus three places the user caught me being wrong.
+
+### CORRECTION 1 — "more dorks, fewer payoffs" was FALSE
+
+USER: *"Hulk is also not really a payoff. It is used to cheat things out, so it is somewhat fair to
+compare against more acceleration."* Correct. The payoff count is IDENTICAL across every list in this
+analysis — Worldspine 2, Terastodon 2, Craterhoof 1, Hornet Queen 1, Vaultborn 1, Elderscale 1,
+Altisaur 1 = **nine fatties in all of them**. The deck was never trading payoffs for mana; it was
+trading ONE acceleration engine (World War Hulk) for ANOTHER (mana elves). The only arm that cuts a
+real payoff is `X_arbor4` (Worldspine 2 -> 1), and it sits at the end of the ladder.
+
+### CORRECTION 2 — the elf-scaling mechanism is NOT demonstrated
+
+I hypothesised that an extra Elf beats an extra land because Priest of Titania ({G} per Elf on the
+battlefield) and Elvish Archdruid ({G} per Elf you control) make elves scale quadratically. The
+difference-in-differences test (`logs/stompy_screen/mechanism.json`) **refutes the test, not the
+idea**: the elf-over-land premium is 0.0125 WITH the scalers and 0.0523 WITHOUT them — 4x larger in
+the shell that has no scaling at all. The test is confounded: removing Priest/Archdruid also removes
+8 mana sources, so shell B is mana-starved (4.78 vs 4.30) and any mana source is worth more there.
+
+What survives is the USER's own explanation, which is the larger half anyway: *"Lands are not
+acceleration and they don't scale our mana more than 1, whereas an elf can do so with titania or
+archdruid."* A land is just your land drop; a dork is a source ON TOP of the drop. In the
+scaler-rich deck that premium is only 0.0125 because the deck is already mana-saturated. **The Elf
+synergy may well be real and is NOT measured here** — the clean test needs a non-Elf one-mana dork,
+which this deck does not contain.
+
+### CORRECTION 3 — the Wirewood Lodge analysis, twice wrong
+
+USER asked: *"Is the lodge cut because it can't play a T1 dork?"* The card data supports the premise —
+Wirewood Lodge `produces: ["C"]` while every one-drop in the deck costs {G} (Forest and Turntimber's
+back face are the only {G} sources). But the measurements corrected the story twice:
+
+* I claimed the Lodge's untap "never fires", from 0 `UntapCreature` actions in 800 logged games.
+  **That was a LOGGING GAP, not a play fact** — `AIEngine.cpp`'s `UntapCreature` branch pays and
+  untaps but never calls `m_logger`, unlike every sibling branch around it. USER: *"Why does it never
+  fire? That's quite suspect."* A digest probe settled it: `MTG_UNTAP_BURST` on vs off gives
+  DIFFERENT digests (`103fd87ba7b57197` vs `0aaa5e6545711a7c`) and 4.3604 vs 4.3636. **The ability
+  fires and is worth 0.0032.** (USER also corrected the mechanics: the Lodge does not need a Forest
+  to function — *"The dorks can feed the lodge"* — only to cast the dorks in the first place.)
+* The "can't play a T1 dork" case is real but rare POST-mulligan (0.4% of kept openers). USER saw
+  why: *"There are, in fact, hands where you need Wirewood Lodge to tap for green, but we would
+  consistently mulligan them."* Measured on the PRE-mulligan seven: **1.0% of opening hands have the
+  Lodge as their only land, and 25 of 25 are mulliganed — 100%, against a 48.4% baseline.** The
+  Lodge's cost is paid as mulligans, not as missed turns, which is why looking for it in turn-1 plays
+  found nothing. ~1% of hands auto-mulliganing at ~0.4 turns each is ~0.004, about two thirds of the
+  cost; the rest is colorless mana mid-game.
+
+**And the comparison itself was mis-paired.** USER: *"do we count those hands as having a forest
+properly in the comparison?"* NO — in `F4_lodge` the Lodge is card #46 and `F4` holds NATURAL ORDER at
+#46, so the arms were never matched at that slot. Redone with `replace {"Wirewood Lodge": "Forest"}`
+so the 15th Forest INHERITS the Lodge's number and the same shuffle deals a Forest exactly where the
+other arm deals the Lodge (`logs/stompy_screen/lodge_swap.json`, assertion verified in the output):
+
+| arm, matched hands | avg |
+|---|---|
+| Wirewood Lodge + 14 Forest | 4.3680 |
+| 15 Forest, in the Lodge's slot | 4.3618 |
+| **cost of the Lodge** | **0.0062 +- 0.0009 (t = -7.22)** |
+
+The mis-paired version said 0.0101 — **it overstated the cost by ~60%.** Use 0.0062.
+
+### Sweeper exposure, and the list that answers it
+
+`scripts/board_exposure.py` (built for this exact question in 2026-08) over the ladder:
+
+| list | faster than REC | peak board exposed | "nowhere" kills | Hulk | payoffs |
+|---|---|---|---|---|---|
+| REC | — | 4.13 | 2.7% | 3 | 9 |
+| F4 | 0.0466 | 4.26 | 0.8% | 3 | 9 |
+| F4_arbor1 | 0.0631 | 4.36 | 0.9% | 2 | 9 |
+| F4_arbor2 | 0.0770 | 4.43 | 1.3% | 1 | 9 |
+| X_arbor4 | 0.1152 | **4.66** | **0.7%** | **0** | **8** |
+
+Peak board grows and out-of-nowhere kills fall — both bad against a sweeper. (`nowhere_kill` at 1,500
+games is 10-40 events; read it as directional.) **The engine cannot see that World War Hulk is
+SWEEPER-PROOF acceleration**: an enchantment Pyroclasm does not touch, that rebuilds by cheating a
+fatty in from hand precisely when the board has been wiped. Hulk and the elves are anti-correlated
+along exactly the axis the model is blind to, which is why the measurement keeps saying to cut it.
+
+Then `logs/stompy_screen/greensources.json` answered the last objection (USER: *"I can see the
+argument for more forests when we are this low on them"*) — F4 reached 4 Fyndhorn by cutting the Lodge
+AND a Forest, leaving 17 green sources. Buying the Forest back out of a SPELL is nearly free:
+
+| list | 1v1 | vs G13 | 2HG | vs G13 | green sources |
+|---|---|---|---|---|---|
+| G13 (= F4) | 4.3153 | — | 4.6485 | — | 17 |
+| **G14_tutor3 (Forest 14, Worldly Tutor 3)** | 4.3195 | +0.0042 | **4.6486** | **+0.0001** | **18** |
+| G14_sym3 (Forest 14, Symbiosis 3) | 4.3198 | +0.0045 | 4.6553 | +0.0068 | 17 |
+| G15_tut3_sym3 (Forest 15) | 4.3228 | +0.0075 | 4.6609 | +0.0124 | 18 |
+
+**In 2HG it is a dead heat (0.0001).** So the 14th Forest is free and 15 starts to cost.
+
+### THE IN-BETWEEN LIST (`G14_tutor3`)
+
+```
+4  Natural Order          3  Worldly Tutor          4  Llanowar Elves
+3  World War Hulk         4  Turntimber Symbiosis   4  Elvish Mystic
+1  Apex Altisaur          1  Sol Ring               4  Fyndhorn Elves
+2  Call of the Wild                                 4  Priest of Titania
+2  Worldspine Wurm                                  4  Elvish Archdruid
+2  Terastodon                                      14  Forest
+1  Vaultborn Tyrant
+1  Hornet Queen           0  Mirri's Guile
+1  Craterhoof Behemoth    0  Wirewood Lodge
+1  Elderscale Wurm        0  Arbor Elf
+```
+
+0.0445 faster than REC in 1v1 and 0.0501 in 2HG — ~95% of the available gain — while keeping
+**18 green sources, 9 payoffs, World War Hulk at 3 and Call of the Wild at 2**. Every list below it
+on the exposure table buys speed by selling the deck's only sweeper-proof engine.
+
+NOT ADOPTED: no mulligan profile or value leaf of its own. Both must be regenerated against a
+12-dork deck before this margin is trusted at face value.
