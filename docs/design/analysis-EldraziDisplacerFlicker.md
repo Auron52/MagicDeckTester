@@ -8939,7 +8939,8 @@ engine default or a per-deck provider setting. Nothing pushed; the cancelled run
 (`logs/vlq_eldrazidisplacerflicker/rows/all.rows`, 6,261 rows) are kept as the exact reference.
 
 **12.16 The two earlier rows are certificate holes: the enters-tapped dig land fixed (900045) and the fix
-moves 17 MORE samples earlier than the exact reference; a second branch (900193) open (22:50-23:45 UTC).** Bisect on 900045: every label-path lever reproduces the exact arm except
+moves 17 MORE samples earlier than the exact reference; the second branch (900193: the {C} bound omitted
+the land drop) fixed too (22:50-23:59 UTC).** Bisect on 900045: every label-path lever reproduces the exact arm except
 `MTG_WINLESS_CERT=0`, which labels t1 6.000 (the ladder finds the turn-5 win in 2 ms). The line in
 `ProvenWinlessThisTurn`'s dig-land scan excluded a land that ENTERS TAPPED from the repeatable digs
 whenever it was not yet on the battlefield -- but on that turn-5 board (Emiel + Peregrine Drake +
@@ -8955,11 +8956,23 @@ than the EXACT reference -- 19 of 1,067 samples in 15 of 250 games. So the exact
 over-labelled on at least 1.8% of samples by this one certificate branch, the "earlier" rows of 12.15
 were the reference's defect, not the horizon's, and the cancelled run's kept rows carry the same hole:
 the value-leaf re-run must be a fresh queue on the fixed commit, not a resume against those rows.
-**900193 is a SECOND certificate branch and is OPEN**: the fix leaves it at 6.667, the certificate off
-gives 6.333, and the traced win is a turn-6 line of eight Essence Depleter drains at {C} each on a
-board with four {C}-capable lands -- either the search pays {C} with the Auras' any-colour mana (an
-engine rules bug, live in play) or the certificate under-credits the land drop's {C}; a turn-6 fixture
-under play settings decides it (6b has the detail). The play search never used the
+**900193 was a SECOND certificate branch, also fixed**: fix #1 left it at 6.667, the certificate off
+gave 6.333. The trace's plan text ("Essence Depleter(x8)") overstates what is paid -- the opponent's
+life delta in the traced turns is exactly one drain per {C} land plus combat, so the search's line is
+legal and there was no engine rules question. The drain route bounded the drains by `c_ub = c_now`, the
+{C} of the lands untapped now, and the land drop's {C} entered only the untap arithmetic (`c_total`),
+never the bound; the sample's turn-6 line drains for exactly `c_now + 1`. Fix #2: `c_ub = c_now +
+drop_c`. 900193 t2 reads 6.333 in 16 s (1 m 49 s before), every other label identical; 900045 unchanged
+(6b has the code and numbers). The play search never used the
 certificate (a fixture of the turn-4 board wins at turn 4 under play settings). Gates on the fix tree (`logs/edf_longtail/gate2_*.log`): scenarios 99/99, combo-off 34/34, smoke
 byte-identical to the 12.14 baseline (80 job lines IDENTICAL, scenario lines 179/179, the same 75/5 as
-12.15's run). Committed locally; nothing pushed.
+12.15's run). Fix #1 committed locally as 8a8d8190. Fix #2 gates (`logs/edf_longtail/gate3_*.log`):
+scenarios 99/99, combo-off 34/34, smoke byte-identical to the 12.14 baseline (80 job lines IDENTICAL, scenario lines 179/179, 75/5 as before). Committed locally; nothing pushed.
+
+**12.17 Job 0 at H=4 re-labelled with BOTH certificate fixes (launched 23:59 UTC, running at parking).**
+`logs/edf_longtail/hz_batch/job0_h4fix2.{log,rows,start,end}`, the same 250-game manifest as 12.15/12.16.
+Read it with `python3 logs/edf_longtail/hz_batch/join_report.py logs/edf_longtail/hz_batch/job0_h4fix2.rows`
+(the join against the exact reference) and a row diff against `job0_h4fix.rows` (fix #1 alone): the rows
+that move earlier between the two are the samples the {C} branch had over-labelled in the exact reference,
+on top of the 19 of 12.16. Expected: 900193 t2 6.333, nothing later than before. The result is not in this
+ledger yet; whoever reads it first records it here.

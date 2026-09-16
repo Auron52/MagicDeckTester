@@ -333,7 +333,7 @@ affordability of that deploy at the interior node. Open: bisect with `MTG_LABEL_
 `MTG_LABEL_LADDER_DEDUP=0`, `MTG_LABEL_GOFF=0`, `MTG_WINLESS_DEVELOP=0`, `MTG_WINLESS_CERT=0` on
 900045 (a 20 s game), then read the interior node at turn 4.
 
-### 6b. The EARLIER rows are certificate holes: an enters-tapped dig land (fixed; it moves 17 MORE rows earlier than the exact reference), and a second branch in 900193 (open)
+### 6b. The EARLIER rows are certificate holes: an enters-tapped dig land (fixed; it moves 17 MORE rows earlier than the exact reference), and a {C} bound that omitted the land drop (900193; fixed)
 
 The bisect on 900045 (`logs/edf_longtail/bisect_summary.txt`): `MTG_LABEL_EDGE_TAIL=0`,
 `MTG_LABEL_LADDER_DEDUP=0`, `MTG_LABEL_GOFF=0` and `MTG_WINLESS_DEVELOP=0` all reproduce the exact
@@ -381,17 +381,24 @@ the search finds once the certificate stops refusing a turn (the ladder's exact 
 that fires less can only let the search find more). The value-leaf's kept rows (`logs/vlq_eldrazidisplacerflicker/rows/
 all.rows`) carry the same hole: a fresh queue on the fixed commit is the reference, not those rows.
 
-**The second branch (900193 t2, OPEN).** With the fix it still reads 6.667; `MTG_WINLESS_CERT=0`
-reads 6.333. The trace under `MTG_WINLESS_STATS=1 MTG_WINLESS_WINDUMP=1`
-(`logs/edf_longtail/trace_h4_900193.log`, `p193_summary.txt`): the win is at turn 6 -- turn 5 casts
-Essence Depleter and drains (20 -> 12), turn 6 lands Yavimaya Coast, casts Trace of Abundance and
-drains eight more times ("Essence Depleter(x8)") to 4, combat finishes. Under Training Grounds the
-drain costs {C} (the {2} reduction takes the generic {1} and cannot touch the {C}), and that board has
-four {C}-capable lands (three Yavimaya Coast + Aether Hub). Either the search's eight drains pay {C}
-with the Auras' any-colour mana -- an engine rules bug, live in play as well -- or the certificate
-under-credits {C} (`c_ub = c_now` omits the land drop's {C}; `drop_c` only enters `c_total`). A
-turn-6 fixture of that board (opponent at 12) under play settings decides which; not resolved in this
-window. Until it is, an "earlier" row is a certificate finding to chase before it is anything else.
+**The second branch (900193 t2): the {C} bound omitted the land drop.** With fix #1 it still read
+6.667; `MTG_WINLESS_CERT=0` reads 6.333. First the legality question, because the trace's plan text
+("Essence Depleter(x8)", "(x11)") looked like more {C} than the board had: the plan text overstates what
+is paid. In the traced turns checked, a five-{C}-land board (three Yavimaya Coast + two Aether Hub) with
+Drake and Depleter takes the opponent from 10 to 1 and from 15 to 6 -- nine each time, five drains plus
+four combat -- so the payer pays exactly one drain per {C} land and the search's line is legal. It was
+never an engine rules question. The certificate's drain route bounds the drains by `c_ub / c_pips` with
+`c_ub = c_now`, the {C} of the lands untapped NOW; the land drop's {C} (`drop_c`) entered only `c_total`,
+the untap arithmetic, never the bound itself. A Yavimaya Coast played this turn is a {C} source at once,
+and the sample's turn-6 line drains for exactly `c_now + 1`. Fix #2: `c_ub = c_now + drop_c`,
+unconditionally (an enters-tapped drop over-credits, which the bound may do). Measured
+(`logs/edf_longtail/fix2_probes_summary.txt`): 900193 exact ladder t2 6.667 -> **6.333**, the
+certificate-off label, every other turn identical, in 16 s against 1 m 49 s with fix #1 alone and 7 m 33 s
+with the certificate off -- the ladder now finds the turn-6 win instead of exhausting the deeper passes.
+900045 unchanged at 6.000 with identical certificate counters. Gates: scenarios 99/99, combo-off 34/34, smoke byte-identical to the 12.14 baseline (80 job lines IDENTICAL, scenario lines 179/179, 75/5 as before).
+Committed locally; nothing pushed. Both earlier rows are
+closed; the exact reference's residual over-labelling from this branch across job 0 is measured by the
+H=4 re-run noted in 12.17.
 
 The play search does not use the certificate and never had this hole: the same turn-4 board as a
 fixture (`logs/edf_longtail/fixtures/edf_t4_deploy_drake_emiel.json`, Conservatory in hand) wins

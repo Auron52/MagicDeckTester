@@ -18756,7 +18756,12 @@ bool EldraziFlickerProvider::ProvenWinlessThisTurn(const GameState& s, int me) c
         // refresh more {C} per iteration than an outlet's own {C} pips consume.
         const int c_total = c_lands + drop_c;
         bool      c_inf   = false;
-        long long c_ub    = c_now;
+        // The land drop's own {C} tap counts THIS turn (a Yavimaya Coast played untapped is a {C}
+        // source at once), so it belongs in the bound, not only in c_total's untap arithmetic.
+        // Leaving it out was an UNDER-credit: seed 900193 t2 sample, the turn-6 line drains for
+        // exactly c_now + 1 and the certificate refused the turn (label 7, truth 6). Added
+        // unconditionally -- an enters-tapped drop over-credits, which the bound may do.
+        long long c_ub    = c_now + drop_c;
         if (best_untaps > 0 && c_total > 0)
         {
             const int per_iter = std::min(best_untaps, c_total)
