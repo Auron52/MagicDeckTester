@@ -1184,3 +1184,55 @@ enchantment Pyroclasm ignores, that rebuilds from hand after a wipe. `tutor4_wur
 and is within noise of the same speed. A 1.77-sigma edge is not a reason to sell the one card that
 covers the model's blind spot, so this goes to a held-out confirm on a third seed block
 (`confirm.json`, seed 31000000) before anything is adopted.
+
+## The held-out confirm: `stack_all`, and the sweeper trade-off dissolves (2026-09-16)
+
+`logs/stompy_screen/confirm.json` — third disjoint seed block (31000000), 7 arms, both formats,
+100,000 paired games. Six arms were re-measurements; one, `stack_all`, was new: it stacks *every*
+direction the previous screens liked at once — **Worldspine Wurm 2→1, Terastodon 2→1, Worldly Tutor
+3→4, Forest 14→15**, net zero, and critically **World War Hulk stays at 3**.
+
+### Everything replicated
+
+| arm | legal (seed 21M) 1v1 / 2HG | confirm (seed 31M) 1v1 / 2HG |
+|---|---|---|
+| `combo_tutor_f15` | −0.0304 / −0.0270 | **−0.0306 / −0.0269** |
+| `tutor4_wurm1` | −0.0279 / −0.0256 | −0.0261 / −0.0249 |
+| `tutor4_tera1` | −0.0198 / −0.0262 | −0.0192 / −0.0248 |
+| `f15_wurm1` | −0.0191 / −0.0190 | −0.0184 / −0.0194 |
+| `hulk2_tutor4` | −0.0097 / −0.0063 | −0.0098 / −0.0053 |
+
+Three seed blocks, no shrinkage worth naming. The apparatus is measuring something stable.
+
+### The new arm won, and won big
+
+| vs `G14_tutor3` | 1v1 | 2HG |
+|---|---|---|
+| **`stack_all`** | **−0.0364** (t = −24.4) | **−0.0421** (t = −24.7) |
+| `combo_tutor_f15` | −0.0306 | −0.0269 |
+| `tutor4_wurm1` | −0.0261 | −0.0249 |
+
+Head-to-head, `stack_all` beats `combo_tutor_f15` by 0.0058 (t = −4.17) in 1v1 and 0.0152
+(t = −9.45) in 2HG — decisively, not by a hair.
+
+**This dissolves the trade-off flagged in the previous section.** `combo_tutor_f15` bought its speed
+partly by cutting the 3rd World War Hulk — the deck's only sweeper-proof acceleration. `stack_all` is
+*faster than it in both formats while keeping the Hulk at 3*, because it pays with the second
+Worldspine Wurm and the second Terastodon instead. There is no longer any reason to sell the card
+that covers the model's blind spot: the measurement and the unmodellable consideration now point the
+same way.
+
+### Why it works: the deck was over-stocked on redundant fat
+
+Every screen in this document has said the same thing from a different angle — the marginal Worldspine
+Wurm is the cheapest card in the deck, the 3rd is actively bad, and the 4th Worldly Tutor is good
+whoever pays for it. `stack_all` is just that sentence applied twice. The deck goes from **9 fat
+payoffs to 7** while keeping all seven *distinct* (the toolbox rule holds: every piece is still at
+≥ 1) and spends the two freed slots on a tutor and a land. It trades redundancy it could not use for
+consistency it can — and it does so without touching the elf count, so board exposure to a sweeper is
+unchanged.
+
+**NOT YET ADOPTED.** `stack_all` was a new arm on the screen it won, so it is the selection-biased
+winner and cannot be taken at face value. A fourth disjoint block (`confirm2.json`, seed 41000000) is
+re-measuring it, alongside two arms asking whether the direction continues past it (Forest 16 paid by
+a Hulk, and Forest 16 paid by a Turntimber Symbiosis).
