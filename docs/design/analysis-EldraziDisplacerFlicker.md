@@ -8687,3 +8687,44 @@ TOTAL SHORT FRAMES: 0 of 631
 route; (4) the pre-existing "blink #0" menu plans; (5) Shivan Gorge's untap-and-ping line beyond
 `Fin::Gorge`; (6) DEVELOP casts creatures only -- land Auras and the land drop in hand are left to the
 search's own plans.
+
+**12.11 A deploy is judged by the loop it reaches; the fixtures re-derived (08:00-08:25 UTC).** The three
+lower-bound fixtures under `logs/edf_followups/co_fixtures/` re-checked on 2acadd4f: s1 PASS, s6 and s9
+ABSENT. s9's trace: the "Auras first" deploy order cast Overgrowth off both Conservatories' {W}, Emiel became
+unpayable, the {C}-pip Displacer went down instead, and the loop then died when the dig tapped Mariposa --
+the board's only {C} source -- so the next blink could not be paid before the untap refunded it. A deploy that
+"succeeded" (an outlet and a payload on the table) into a loop that cannot finish. Three changes: (1) `Run`
+carries EACH deploy order through the loop and returns the first that kills or develops (order B -- Auras
+last -- casts Cloud, untaps, and Emiel is affordable: the human's own line); (2) the LIVE apply replays only
+the order its silent trial found (`Ctx::attempt_used`), because the history sink is global and a rollback
+cannot un-write a narration; (3) `Draw` never taps the sole {C} source when the outlet's blink needs it. s6's
+fixture was UNWINNABLE BY CONSTRUCTION: its six-card `library_top` came from the drifted replay and the rest
+is Forest filler, while the board's mana needs both Living Wishes as enablers (a {C} land and Cloud) exactly
+as the human played it, with the finisher coming from Kitchen draws deep in the real library. It is kept,
+re-labelled `expect_combo_off: false` (no plan may promise a win there), and `s6_t4_f0_true.json` /
+`s9_t4_f0_true.json` carry the references' true 30-card library order (`ref_reveal.py`). Route verdicts on
+the final binary: s1 WIN (T3), s6_true WIN (Wish -> Adarkar Wastes, Wish -> Cloud, Cloud, Drake, Drake,
+Call -> Displacer, Training Grounds, 32 draws to the finisher), s9 WIN (Displacer + Kitchen investigate),
+s9_true WIN (Cloud, Emiel, Emiel blinks Cloud, Mariposa draw -> Living Wish -> finisher -- the human's line),
+s6 (filler) correctly ABSENT. combo_off **33/33**, scenarios **90/90**, the eleven probes all equal to the
+human. Sweep (`edf_route5`): **0 of 631 SHORT** (unchanged from 2acadd4f). Log `logs/ref_sweep/edf_route5.log`.
+
+```
+reference                    human | frames  ok  early  SHORT | short frames
+claude_s10_gi9                   4 |     41  41      0      0 | 
+claude_s11_gi10                  6 |     59  59      0      0 | 
+claude_s12_gi11                  4 |     55  55      0      0 | 
+claude_s14_gi13                  5 |     14  14      0      0 | 
+claude_s15_gi14                  6 |     17  17      0      0 | 
+claude_s1_gi0                    3 |     45  45      0      0 | 
+claude_s2_gi1                    4 |     15  15      0      0 | 
+claude_s3_gi2                    4 |     41  41      0      0 | 
+claude_s4_gi3                    6 |     30  23      7      0 | 
+claude_s5_gi4                    4 |     72  72      0      0 | 
+claude_s6_gi5                    4 |     67  67      0      0 | 
+claude_s7_gi6                    5 |     53  49      4      0 | 
+claude_s8_gi7                    3 |     68  68      0      0 | 
+claude_s9_gi8                    4 |     54  54      0      0 | 
+TOTAL SHORT FRAMES: 0 of 631
+```
+ Smoke: **75/5, all 80 job lines byte-identical** to `logs/edf_followups/head_smoke.log` (clean HEAD 4d8199c4); the 5 are the baseline's own stale GT lines; scenarios inside the smoke 90/90.

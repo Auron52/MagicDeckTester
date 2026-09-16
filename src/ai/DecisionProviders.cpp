@@ -16177,6 +16177,7 @@ struct Ctx
     // wanted {U} (deficit 1), the Drake failed, and claude_s1_gi0's T3 was a mana short of its
     // first blink.
     ManaCost    paying;
+    int         attempt_used = -1;      // which deploy order Run carried to its result (see Run)
     int         iters = 0, deploys = 0, draws = 0, acts = 0;
     bool        emit = false;           // the LIVE apply narrates every step into the play history
     int         blink_run = 0;          // blinks since the last narrated step (flushed as one entry)
@@ -16669,7 +16670,7 @@ static bool TapAbility(Ctx& cx, int id, const ManaCost& cost, PermAbilityMode mo
 }
 // One card: a Clue first, then a tap-draw land, then an investigate land (its Clue cracked at once
 // when the engine did not fuse it). Float only.
-static bool Draw(Ctx& cx)
+static bool Draw(Ctx& cx, bool keep_c)
 {
     const Player& ap = cx.s.players[cx.me];
     if (ap.library.size() <= 1) { return false; }
@@ -16694,6 +16695,9 @@ static bool Draw(Ctx& cx)
         if (p.controller_index != cx.me || p.tapped) { continue; }
         const CardDefinition* d = DefOf(p.card);
         if (!IsTapDrawLand(d)) { continue; }
+        // The only {C} source feeds a {C} blink every iteration: tapping it to draw leaves the next
+        // blink unpayable before the untap can refund it (claude_s9_gi8's Mariposa under Displacer).
+        if (keep_c && MakesC(d)) { cx.Dbg("draw: keep " + p.card.m_name.str() + " -- the only {C} source"); continue; }
         if (TapAbility(cx, p.card.m_number, d->params.tap_draw_cost.value(), PermAbilityMode::TapDraw))
         { ++cx.draws; cx.Note(p.card.m_name.str() + " -> draw", nullptr); return true; }
     }
@@ -17248,23 +17252,10 @@ static bool Develop(Ctx& cx)
     if (casts > 0) { cx.Note("developed: " + std::to_string(casts) + " creature(s) cast off the loop"); }
     return casts > 0;
 }
-static int Run(Ctx& cx)
+// THE LOOP, from a board that already holds the outlet and the payload: 0 no, 1 kill, 2 develop.
+static int Loop(Ctx& cx)
 {
     if (RouteWon(cx)) { return 1; }
-    {
-        Board b0 = ScanBoard(cx);
-        if (b0.outlet == 0 || b0.payload == 0)
-        {
-            const GameState snapshot = cx.s;
-            const Ctx cx_saved = cx;
-            if (!DeployPieces(cx, /*auras_first=*/true))
-            {
-                cx.s = snapshot; cx.demand = cx_saved.demand; cx.reserve = cx_saved.reserve; cx.iters = cx_saved.iters;
-                cx.deploys = cx_saved.deploys; cx.draws = cx_saved.draws; cx.acts = cx_saved.acts; cx.log = cx_saved.log;
-                if (!DeployPieces(cx, /*auras_first=*/false)) { cx.Note("no loop: pieces not deployable"); return 0; }
-            }
-        }
-    }
     Snap prev = TakeSnap(cx);
     // A blink that changes the float is "progress" to the snapshot guard, so a line whose next step
     // can never fire (a colour no land makes, a draw that never pays) used to bank until MaxIter.
@@ -17348,7 +17339,7 @@ static int Run(Ctx& cx)
             ManaCost reserve;
             reserve.generic = b.blink.ManaValue() + 6;
             const bool pays = FloatPays(cx, reserve);
-            if (pays && Draw(cx)) { prev = TakeSnap(cx); stall = 0; continue; }
+            if (pays && Draw(cx, b.outlet_needs_c && b.c_sources <= 1)) { prev = TakeSnap(cx); stall = 0; continue; }
             cx.Dbg(std::string("dig: ") + (pays ? "Draw() failed" : "float below blink+6") + " float " + cx.Float());
         }
 
@@ -17386,6 +17377,42 @@ static int Run(Ctx& cx)
     }
     cx.Note("iteration cap");
     return RouteWon(cx) ? 1 : 0;
+}
+static void RestoreCtx(Ctx& cx, const GameState& snapshot, const Ctx& saved)
+{
+    cx.s = snapshot;
+    cx.demand = saved.demand; cx.reserve = saved.reserve; cx.paying = saved.paying;
+    cx.iters = saved.iters; cx.deploys = saved.deploys; cx.draws = saved.draws; cx.acts = saved.acts;
+    cx.log = saved.log; cx.blink_run = saved.blink_run; cx.blink_label = saved.blink_label;
+}
+// TWO DEPLOY ORDERS, EACH CARRIED THROUGH THE LOOP. "Auras first" spends the board's colours on the
+// Auras before the outlet is chosen: on claude_s9_gi8's T4 board Overgrowth took both Conservatories'
+// {W}, Emiel became unpayable, the {C}-pip Displacer went down instead, and the loop then died on
+// its single {C} source -- a deploy that "succeeded" into a loop that cannot finish. Order B (Auras
+// last) casts Cloud, untaps, and Emiel is affordable. So a deploy is judged by the LOOP it leads to,
+// not by whether it put an outlet and a payload on the table. `forced` replays one order only: the
+// LIVE apply narrates into a global event sink that a rollback cannot un-write, so it runs the order
+// its silent trial already found (Ctx::attempt_used).
+static int Run(Ctx& cx, int forced = -1)
+{
+    if (RouteWon(cx)) { return 1; }
+    const Board b0 = ScanBoard(cx);
+    if (b0.outlet != 0 && b0.payload != 0) { cx.attempt_used = -1; return Loop(cx); }
+    const GameState snapshot = cx.s;
+    const Ctx saved = cx;
+    for (int attempt = 0; attempt < 2; ++attempt)
+    {
+        if (forced >= 0 && attempt != forced) { continue; }
+        if (attempt > 0) { RestoreCtx(cx, snapshot, saved); }
+        if (DeployPieces(cx, /*auras_first=*/attempt == 0))
+        {
+            const int r = Loop(cx);
+            if (r != 0) { cx.attempt_used = attempt; return r; }
+        }
+        else { cx.Dbg(std::string("deploy order ") + (attempt == 0 ? "A (auras first)" : "B (auras last)") + " leaves no loop"); }
+    }
+    cx.Note("no loop: neither deploy order reaches a finish");
+    return 0;
 }
 }   // namespace comboroute
 
@@ -17527,17 +17554,19 @@ int EdfComboRouteApply(GameState& s, int me)
     // ALL-OR-NOTHING: the silent trial on a copy decides; only a kill (or a develop) is played on
     // the real state, and that live run narrates each step into the play history (the same
     // deterministic route).
+    int attempt = -1;
     {
         GameState copy = s;
         RevealLogPause     _quiet;
         ComboOffApplyPause _nochoosers;
         comboroute::Ctx cx(copy, me);
         if (comboroute::Run(cx) == 0) { return 0; }
+        attempt = cx.attempt_used;
     }
     ComboOffApplyPause _nochoosers;
     comboroute::Ctx cx(s, me);
     cx.emit = true;
-    const int r = comboroute::Run(cx);
+    const int r = comboroute::Run(cx, attempt);
     cx.FlushBlinks();
     if (comboroute::TraceOn())
     {
