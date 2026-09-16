@@ -1,6 +1,14 @@
 # FiveColour's bottoming table loses the confounded A/B — state of the investigation
 
-**Status 2026-09-15: the cause is UNEXPLAINED. Six hypotheses tested, five refuted, one in flight.**
+**Status 2026-09-16: EXPLAINED — two separate causes, neither of them the sampling budget.** (1) The
+bottoming argmin selects for cells the generator's own rollout model flatters (an optimizer's curse
+against the simulator, ~0.08t per disagreement game) — a bias no amount of re-generation can remove,
+because a fresh re-measurement inherits it. (2) `MTG_CONFOUND_BOTTOM` does not fully blind the
+lookahead, so the A/B the table "loses" still rewards a peek worth 6× its blind value. Against a
+genuinely blind bottomer the table is 0.064t/game FASTER. A third, real but minor defect (argmin-only
+sub-refinement, ~0.01t) is fixed in the generator. See §7, which supersedes the 2026-09-15 status below.
+
+**Status 2026-09-15 (superseded): the cause is UNEXPLAINED. Six hypotheses tested, five refuted, one in flight.**
 This document is the running record so nobody re-tests a dead one. It supersedes the "still live"
 item in [keepgen-bottoming-HANDOFF.md](keepgen-bottoming-HANDOFF.md) §5.
 
@@ -247,9 +255,85 @@ target's upper bound.** Those contenders are only **~29k distinct cell-sides**.
 
 ### 7d. Truth (fresh rollouts)
 
-RESULTS_PLACEHOLDER
+**At the labeller's depth (d2/b3, R=64 fresh rollouts per candidate, 274 m=1 disagreement hands,
+`logs/fc_audit/regret_d2.txt`) the table's picks are the better ones, by a wide margin:**
 
-### 7e. The mechanism
+| policy | regret vs truth argmin (per disagreement game) | 95 % |
+|---|---|---|
+| table | **+0.041t** | [+0.031, +0.051] |
+| lookahead (heuristic + 1-sample veto) | +0.163t | [+0.143, +0.185] |
+| heuristic alone | +0.183t | [+0.163, +0.203] |
+
+V(table pick) − V(lookahead pick) = **−0.122t** (table better); the table's pick *is* the truth argmin
+on 62 % of games, the heuristic's on 15 %. Mean candidate spread 0.89t, scorer se 0.06t per cell.
+
+**The §7c signature is real but small.** Split by how well-sampled the lookahead's pick was in the raw:
+
+| lookahead's pick sampled at | n | truth V(table)−V(look) | believed (raw) | regret table / look |
+|---|---|---|---|---|
+| R=2 — never refined | 45 | −0.068t | −0.818t | +0.088 / +0.156 |
+| R=18 | 13 | −0.214t | −0.490t | +0.034 / +0.248 |
+| R=30 | 216 | −0.128t | −0.185t | +0.032 / +0.159 |
+
+So the never-refined alternatives *were* grossly over-estimated by the raw (believed 0.82t worse, truly
+0.07t worse) — that is the winner's curse on the losers' two rollouts, exactly as §7e describes — and
+the table's regret on those hands is nearly 3× its regret elsewhere (0.088 vs 0.032). But the table's
+pick is still the better one on average even there. Weighted over the 274 hands the screening defect
+costs about **0.01t per disagreement game**, i.e. ~0.003t per game overall: an order of magnitude too
+small for the +0.018t confounded loss.
+
+**Play depth says the same thing** (d6/b20, R=24, one side per cell, `regret_both.txt`): table regret
++0.056t, lookahead +0.186t, heuristic +0.202t; V(table) − V(lookahead) = −0.130t. So the ranking is
+not an artifact of the labeller's depth — §3f is closed for good, and so is the "the labels value
+bottoming a spell where play does not" reading this section carried for an hour.
+
+### 7d-bis. The join that actually settles it: prediction vs the same games
+
+Fresh rollouts and real games were then compared **per game**, on the very decisions the arms made
+(`predicted_vs_realized.py`, `calibrate.py`, `level_check.py`):
+
+| pair (m=1 disagreements) | n | scorer @ d6 predicts | the games deliver | gap |
+|---|---|---|---|---|
+| table − heuristic | 266 | −0.150t | −0.083t (se 0.031) | +0.067 |
+| table − lookahead | 251 | −0.142t | **+0.020t** (se 0.028) | +0.162 |
+| lookahead − heuristic (veto only) | 60 | −0.070t | **−0.417t** (se 0.083) | −0.347 |
+
+And the levels, which is where the mechanism is visible (same 283 m=1 games, scorer @ d6):
+
+| arm's kept comps | scorer V | realized win turn | V − realized |
+|---|---|---|---|
+| chosen by the **table** (argmin of the model) | 4.7465 | 4.8233 | **−0.077** |
+| chosen by the **heuristic** (a domain rule, no model) | 4.8871 | 4.9011 | −0.014 |
+| chosen by the **lookahead** (selected using the real game) | 4.8722 | 4.8057 | **+0.067** |
+
+The model is *calibrated* on cells nobody selected with it (the heuristic's, −0.014t) and biased in
+opposite directions on the two selected sets. That is the shape of an **optimizer's curse against the
+simulator itself**, and it is a different defect from §7e:
+
+* Each cell's rollout value carries a per-cell systematic error b(cell) — the gap between the
+  generator's rollout model and the shipped game — on top of sampling noise.
+* The table's target is `argmin` over a hand's removals, so it selects for **low b as well as low true
+  value**: it lands on the cells its own simulator flatters. Measured at 0.077t.
+* A fresh, high-R re-measurement **cannot detect this**, because it uses the same simulator: the scorer
+  averages away the noise and reproduces the bias. That is exactly why §7d's fresh rollouts "confirmed"
+  the table while the games did not.
+* More rollouts — raising R, or racing the contenders (§7f) — converge to the *biased* value. The
+  sampling half of the curse is worth ~0.01t per disagreement game (§7d); the model-bias half is ~0.08t.
+  **No amount of generation fixes the larger half.**
+* The lookahead's veto shows the mirror image: it selects on the real game, so it lands on cells the
+  model is pessimistic about (+0.067t) — and the confound does not take that away. Its vetoed picks are
+  worth **0.417t** in real games while a blind evaluation of the same hands prices them at 0.070t. Six
+  times. **`MTG_CONFOUND_BOTTOM` reshuffles the library after the decision, which destroys the ORDER the
+  lookahead peeked at but not the order-independent part of what its rollout learned.** The confounded
+  A/B is therefore still not a blind-vs-blind test, and "the table loses it by +0.018t" is not evidence
+  that the table is worse than a blind bottomer.
+
+**Against a genuinely blind opponent the table wins.** On the audit seed the pure heuristic (no
+rollouts at all, nothing to confound) finishes at 4.9340 and the table at 4.8700 — the table is
+**0.064t per game better**, while costing ~nothing: lookahead bottoming is 90.4 % of this deck's
+runtime with no table.
+
+### 7e. The mechanism (real; measured in 7d as a minor contributor)
 
 `compute_sub_wave_tasks` (the adaptive sub-refine) marks **only the current argmin** of each needed
 hand for more rollouts. The generator's own comment names the consequence — *"a true-argmin cell
@@ -288,10 +372,79 @@ lookahead **+0.0034t** worse than play-depth (8/9 seeds) — a fifth of the defi
    play_digest `b79a1414`, d2/b1/t8) resumes it in a scratch deck folder (`logs/fc_contend/deck/`):
    nothing is re-rolled except the contenders. Then MTG_KEEP_MERGE with shrink + floor 2 → candidate
    profile → `versus` A/B against the shipped table and the confounded A/B against the lookahead.
-   REFINE_PLACEHOLDER
+   **NOT RUN, deliberately (2026-09-16).** The burn tests above show the re-refinement route works —
+   an argmin-only journal resumed by the racing binary runs its waves and the resulting table wins its
+   A/B. But 7d-bis prices this deck's *sampling* defect at ~0.01t against a ~0.08t model bias, so a
+   10–28 h FiveColour re-refinement would buy a better table on the generator's own objective and
+   would not move the confounded A/B it was started to fix. The journal is preserved
+   (`logs/FiveColour_gen/journal.BACKUP.20260911`, 535 MB) and the scratch deck folder
+   (`logs/fc_contend/deck/`) is ready, so the run remains one command away if the test is fixed first
+   (7h) and the table is then judged on its merits.
+3. **Resume path** — the first re-refinement attempt ran **0 waves, 0 rollouts** and wrote the shipped
+   table back out. `sub_refine_step()` was only called from the floor branch of the producer loop;
+   a journal resume that restores the REFS record enters the loop already in the refine phase, so the
+   sub-refine was never stepped. That was harmless under the argmin-only rule (refs are fixed only after
+   the sub-refine has converged, so a same-binary resume has nothing left to mark) and fatal for
+   re-refining an argmin-only journal under the racing rule. Fix: the refine branch now runs the
+   change-detect classification and `sub_refine_step()` too, and the refine exit additionally requires
+   `sub_converged`. Fresh runs never reach the new call (refine is never true before convergence) and
+   same-binary resumes converge on the first step, so neither path moves. Also learnt: the completion
+   path deletes the journal, so a no-op resume *consumes* the journal — keep the backup.
+4. **Generator tests (burn, K=10, 10,945 size-7 cells, fast recipe at d1/b3, 12 threads;
+   `logs/gen_test/`).** Old binary = `0225469c` (argmin-only), new = HEAD with racing + the resume fix.
+   * *Fresh old vs fresh new:* structural check `SAME-COUNT-DIFFERENT-VALUE: 0` over 37,706 cell-sides
+     (a rollout is a pure function of its seed; nothing moved a value). Racing spent 319,540 sub-table
+     rollouts against 209,016 (+53 %), total +27 % (524,777 vs 413,564), 4 waves vs 5; wall 82 vs 67 min.
+     Size-6 cell-sides left at the R=2 floor: 3,953 → 1,840 (mean R 15.1 → 21.7); size-5 1,748 → 661.
+     Decisions: 1.2 % of keep flags moved (Dopt shifted with the sub-tables), and **21–24 % of m=1/m=2
+     bottoming targets changed** — burn's removals are near ties, so the shipped argmin was largely
+     "whichever candidate the floor liked", and the racing re-decides most of those. Whether the
+     re-decided targets are better is the `versus` A/B's question (below).
+   * *Resume exactness (new binary killed at the refine transition, resumed by the same binary):* the
+     resume reloads 37,706 cell-sides, reports "resuming refine (0s)", and runs **0 waves** — the
+     reloaded sub-tables yield no marks, which is the invariant the fix must not break. Against the
+     uninterrupted run: every sub-table cell-side identical (H=6..1 differ on 0 cells), 260 of 21,890
+     size-7 cell-sides differ in COUNT only (the documented in-flight schedule drift),
+     same-count-different-value 0, and the two profiles differ by **1 keep flag in 153,230 and 0
+     bottoming targets**.
+   * *Re-refinement (OLD binary killed at the refine transition, resumed by the NEW one)* — the
+     FiveColour scenario: the resume runs **4 waves / 79,236 extra rollouts** where the old binary
+     would have run none. Against the old table it adds samples to 4,573 cell-sides and removes them
+     from 7, same-count-different-value 0. It does NOT reproduce a fresh racing run (5.9 % fewer
+     rollouts than `burn_new`): the journal's refs — Dopt and the pooled vg — were fixed by the old
+     run, so a re-refinement recovers most of the racing, not all of it.
+   * *In-game A/B, old table vs new, both in the shipping condition* (16 seeds × 1000 games/arm,
+     `KM_MODE=versus`): **−0.0077t, new wins on 15 of 16 seeds** (4.3516 → 4.3439; sd 0.0066, se
+     0.0017, mean/se −4.6). The racing is worth a real, if small, improvement in actual play on a deck
+     where it re-decides ~21 % of the bottoming targets.
+
+### 7h. What to do about it (2026-09-16)
+
+1. **Do not re-generate to fix the A/B.** The re-refinement described in 7f addresses ~0.01t of a
+   ~0.09t problem. It is still worth having (it re-decides 21–24 % of burn's bottoming targets and
+   removes a real winner's-curse), but it is not a remedy for the confounded loss and must not be sold
+   as one.
+2. **Fix the test before re-judging the table.** Either blind the lookahead arm properly (reshuffle
+   *before* its evaluation rollouts, not after the decision) or make the blind **heuristic** the control
+   arm. `KM_MODE=bottom` currently pits blind-table against peeking-lookahead and calls the table's loss
+   a defect.
+3. **Attack the bias, not the variance.** The lever that matters is the gap between the generator's
+   rollout and shipped play, and a selection correction on the argmin (an optimizer's-curse / empirical-
+   Bayes shrink toward the hand's mean, which `MTG_KEEP_BOTTOM_SHRINK` already does in a mild form).
+   Both can be explored on the EXISTING raw with `test/keep_reconstruct_ab.sh` — no rollouts at all.
+4. **Generalise the check.** Any deck whose table was validated by "fresh rollouts agree with the
+   table" has been validated by the biased instrument. The level check in 7d-bis (model V vs realized
+   win turn, split by which policy chose the cell) is cheap and is the honest calibration test.
 
 ### 7g. Method notes added
 
+* **A fresh re-measurement with the same simulator is not an independent check.** It averages away the
+  noise and reproduces the bias, so it will confirm a pick that the selection biased into existence.
+  The only independent instrument is the shipped game. Six hypotheses were tested against rollouts
+  before anyone joined the prediction to the outcome of the very same games — which took one script
+  and no compute, and settled it immediately.
+* **Calibrate on cells nobody selected.** The heuristic's picks were the control that made the bias
+  legible: the model is right on them and wrong, in opposite directions, on the two selected sets.
 * **"Passes with a worse pool" refutes only a linear story.** A mechanism whose effect scales with a
   deck-specific ratio (spread/noise) needs that ratio measured on the failing deck, not a pass elsewhere.
 * **Read the arm you are losing to.** The confounded lookahead is not a one-sample argmin; it is a

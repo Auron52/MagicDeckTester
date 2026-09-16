@@ -3212,7 +3212,12 @@ void RunExhaustiveKeep(std::ostream& os, const Decklist& deck, const MulliganPro
                     // two-rollout screening between near-tie removals was close to a coin flip -- and
                     // 42% of the hand mass kept at mull 1 had such a never-refined candidate. The table
                     // believed those candidates were 0.8t worse than its pick (raw sidecar, 2026-09-16
-                    // audit); fresh rollouts say otherwise (docs/design/fivecolour-bottoming-unexplained.md).
+                    // audit); fresh rollouts say otherwise (docs/design/fivecolour-bottoming-cause.md).
+                    // SCOPE (2026-09-16): this fixes the SAMPLING half of the curse, worth ~0.01t per
+                    // disagreement game on FiveColour. The larger half -- the argmin selecting cells this
+                    // rollout model FLATTERS relative to shipped play, ~0.08t -- is a model bias that more
+                    // rollouts converge to rather than remove. See §7d-bis of that doc before expecting a
+                    // re-generation to move a confounded-bottoming A/B.
                     //
                     // The rule: every other subcomposition of a NEEDED hand that could still be the true
                     // argmin -- P(V_c < V_arg) > flip_eps under the two cells' shrunk standard errors --
@@ -3911,6 +3916,36 @@ void RunExhaustiveKeep(std::ostream& os, const Decklist& deck, const MulliganPro
                 // past the last refresh (cheap pre-check; recompute_vg re-checks + does the O(NC) pool under
                 // fold_mtx). any_live guards the all-frozen tail (min_live_c stays r_max -> harmless).
                 if (any_live) { recompute_vg(min_live_c); }
+                // KEEP STEPPING THE SUB-REFINE IN THE REFINE PHASE TOO (2026-09-16). Until now the only
+                // call site was the floor branch above, which was sufficient because refs are fixed --
+                // and the phase flips -- only once compute_sub_wave_tasks has yielded no marks. A JOURNAL
+                // RESUME breaks that invariant: refs_ready is restored from the REFS record, so the loop
+                // enters here on its first iteration with `sub_converged` still false and no path that
+                // could ever set it. Under the old marking rule that was harmless (the journal's refs
+                // were fixed only after its own sub-refine had converged, so the reloaded sub-tables
+                // yield no marks either way); under the contender-racing rule it is not -- a journal
+                // written by the argmin-only binary holds sub-tables that are NOT converged under the new
+                // rule, and the resume must be allowed to finish the job. That is also the deliberate
+                // "re-refine without regenerating" route: FiveColour's 55.7M banked rollouts stay, and
+                // only the contenders are sampled (measured: the resume without this line ran 0 waves
+                // and wrote the shipped table back out unchanged).
+                //
+                // For a same-binary resume this is a no-op (the reloaded state yields no marks -> converged
+                // on the first step), so resume exactness is untouched. In a fresh run `refine` never
+                // becomes true before sub_converged, so this line is never reached and the fresh path is
+                // byte-identical. Change-detection has to be classified here as well, for the same reason
+                // (its only site was the floor branch): a resumed change-detect run otherwise never sets
+                // cd_classified, the step never runs, and the sub_converged exit below would spin forever.
+                // The size-7 workers never touch the sub-tables the step reads (recompute_sub holds acc_mtx;
+                // ComputeDopt reads sub-table V only), so this is as race-free here as in the floor branch.
+                if (!cd_classified && sub_remaining.load() == 0)
+                {
+                    recompute_sub();
+                    classify_change_detect();
+                    apply_prior_override_sub();
+                    cd_classified = true;
+                }
+                if (cd_classified) { sub_refine_step(); }
             }
             // Floor complete = every size-7 cell folded to >= r0 AND every sub-cap batch done AND the fused
             // sub-refine converged (Dopt reads sub-table V, so refs cannot be fixed until the sub-tables are
@@ -3984,7 +4019,11 @@ void RunExhaustiveKeep(std::ostream& os, const Decklist& deck, const MulliganPro
             // "successfully" with sub_remaining still at its full 142464 and wrote the profile. The
             // matching sub_remaining==0 test at the floor-complete branch lives inside `!refine`, so
             // on a resume nothing checked the sub-tables at any point.
-            if (refine && !any_live && in_flight.load() == 0 && sub_remaining.load() == 0) { break; }
+            // ... and the fused sub-REFINE converged, not just the fused sub-floor drained: a resume that
+            // restored refs (see the refine-branch sub_refine_step above) may still be racing contenders
+            // when every size-7 cell is already frozen. Without this the run exits with a wave in flight
+            // and the last wave's samples land in the journal but not in the raw.
+            if (refine && !any_live && in_flight.load() == 0 && sub_remaining.load() == 0 && sub_converged) { break; }
             if (!any_fed)
             { std::unique_lock<std::mutex> pk(prod_mtx);
               prod_cv.wait_for(pk, std::chrono::milliseconds(100)); }
