@@ -8892,3 +8892,48 @@ of a long reference cost more than early ones; the two numbers were not the same
 **12.9 revised once more.** (5) closed by 12.13 (the route wins with a Gorge on the battlefield, in hand, or dug from
 the library, whenever its ping is sustained); (7) closed by 12.14 (stable spawn ids, the recorded target 0 mapped by
 the tool). Still open: (6) DEVELOP casts creatures only.
+
+**12.15 The value-leaf long tail is the labeller's deep passes; the bounded label (21:06-22:51 UTC).**
+USER, on the phase-A run that had every game's first row after an hour and 15 games over two hours
+in flight at 7 h 24 min: *"let's cancel. It doesn't seem to make sense to go through with this until
+we have addressed the huge long tail."* The diagnosis and the numbers are section 6 of
+`label-goff-tractability.md`; the ledger keeps the shape.
+
+* NOT play (900157 plays in 4.6 s, labels in 10 m 17 s), NOT worker contention (eight side-by-side
+  solo runs, 1.05x), NOT the transposition-table cap (9 m 33 s without it). The per-pass instrument
+  (`[ladder]` under `MTG_WINLESS_STATS=1`: ms and applies per horizon pass, per K-sample) puts it
+  on ONE sample of ONE position: 900157 t1, dd6 = 515 s and 17 M applies refuting "by turn 7", then
+  the turn-8 win at dd7 in 2 ms; 900043 spends 17 of its 19 m 53 s on t1. Pass cost grows 15-70x per
+  horizon turn; `perf` is flat (enumeration 50%, applies, `BuildSimKey`, the mana backtrack). The
+  node count is the lever, and the node count is the ladder's depth.
+* `MTG_LABEL_HORIZON=H` (DEFAULT 0 = off; earliest_only path only): the ladder runs exactly to pass
+  H; a sample still unsettled is labelled by a searched playout (`SimulateToEnd`, depth 2, first 8
+  candidates, 20,000 virtual ms) -- an observed line, an upper bound, so beyond H a label can only
+  move later, and the K-sample mean keeps its shape. Solo: 900157 10 m 17 s -> **58 s**, 900043
+  19 m 53 s -> **12.6 s**, labels identical at H=4 (H=3 costs one row +0.33 on 900043).
+* THE BATCH (job 0, 250 games, 24 workers, `logs/edf_longtail/hz_batch/`): **16 m 06 s** for all
+  250 at H=4, none dropped, against a run that had not finished them in 7 h. Joined on (seed, turn)
+  with the exact rows: 1,058 of 1,067 identical, 7 LATER (+0.33), 2 EARLIER (-0.33), mean +0.0016;
+  plus the five rows of 900097, which the exact run never finished (6.98 h in flight; 234 s here).
+* THE TWO EARLIER ROWS ARE A LADDER FINDING. Both reproduce solo, deterministically, and neither
+  lossy cut is involved (`MTG_LABEL_GOFF_DOM=0`, `MTG_LABEL_WAVES=1`: byte-identical applies). The
+  playout trace (`[hz-playout]` + `[fs-sim]` under `MTG_WINLESS_WINDUMP`) on 900045 t1: all eight
+  candidates win at turn 5 through the route -- `Combo Off(x1)` DEPLOY at turn 4 (Drake + Emiel off
+  eight mana, the Drake's untap paying for Emiel), `Combo Off(x999)` at turn 5. The exact pass at
+  cut 5 refutes that from the same candidates: the ladder's enumeration does not reach the deploy.
+  Open, with the bisect listed in the doc; a quality lead, and the route's own step.
+* Cross-deck (`test/label_horizon_ab.sh`, 8 games/deck): six of eight decks identical; burn one row
+  +0.33; Hinata2 four later, one EARLIER (the same class), and one position the exact ladder DROPPED
+  at its budget ceiling now labelled.
+* Batch/solo under H=4 is still 4-5x per game (900157 245 s vs 58 s) with the line-cache pool's
+  high-water at 303 MB of 4,153 MB: that is 24 workers on 12 cores beside another container, a
+  throughput question, not the pool. In the EXACT run the pool sat at its cap throughout and 900157
+  took 109 min in the batch against 10 min solo; a solo run at the per-worker pool share was 3.6x
+  slower and climbing when stopped (contaminated by the batch overlap). Moot at H=4.
+
+*Gates (this tree, flag OFF by default so play is untouched).* Scenarios 99 / 99 and combo-off fixtures 34 / 34, both with PASS lines identical to 12.14's; smoke 75 passed, 5 failed, 0 new (the same five upstream reds), all 80 job result lines byte-identical to the 12.14 baseline (`logs/gate_sink/smoke_identity.sh`), scenario lines 179 / 179 identical.
+
+*Adoption is the user's call* (quality vs performance, both sides counted above): H=4 for EDF only,
+for every deck, or not at all; and where it lives -- `valueleaf.sh` adds no knobs by design, so an
+engine default or a per-deck provider setting. Nothing pushed; the cancelled run's rows
+(`logs/vlq_eldrazidisplacerflicker/rows/all.rows`, 6,261 rows) are kept as the exact reference.

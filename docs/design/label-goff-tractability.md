@@ -247,3 +247,127 @@ to better than a factor of 1.5.
   label-scoped, so it would have to carry a byte-identity proof against play and GT. Out of scope
   here; see `unbudgeted-leaf-memo-and-edf-cost.md`, which reaches the same conclusion from the
   depth-matrix side.
+
+## 6. The long tail is the DEEP passes — and the bounded label (`MTG_LABEL_HORIZON`, default OFF)
+
+**Where this came from.** The EDF value-leaf phase A of 2026-09-16 (1,465 games, 24 workers,
+`MTG_MEM_BUDGET_MB=16384`, commit 6c74fc87) had every game's first row after an hour and was then
+cancelled by the user at 7 h 24 min with 20 games still in flight, 15 of them over two hours, the
+longest (seed 900097) at 6.98 h. 509 of the 1,465 games ran over 30 s; the slowest FINISHED ones
+were 900463 at 338 min, 900552 at 258 min, 900725 at 249 min, 900324 at 233 min. The cuts of
+sections 2–3b are all in force; this is the residue they leave.
+
+**It is not play, not contention, not the transposition table.** Seed 900157 plays in 4.6 s; its
+value rows take 10 m 17 s solo. Eight copies of that solo run side by side cost 1.05x. Removing
+the per-worker TT cap (`MTG_TT_CAP`) changes nothing (9 m 33 s). The cost is the LABELLER, and the
+per-pass instrument added here (`[ladder]` line under `MTG_WINLESS_STATS=1`: wall ms and
+`ApplyPlanDirect` calls per horizon pass, per K-sample) says exactly which part. 900157, position
+t1, its three reshuffled futures:
+
+```
+[ladder] t1 cands=5 result=5 | dd0=0ms/4 dd1=0ms/4 dd2=10ms/391 dd3=181ms/11945 dd4=393ms/24145
+[ladder] t1 cands=5 result=8 | dd0=0ms/4 dd1=0ms/4 dd2=1ms/72 dd3=30ms/1193 dd4=489ms/19328 dd5=7317ms/410304 dd6=515425ms/17252625 dd7=2ms/54
+[ladder] t1 cands=5 result=3 | dd0=0ms/4 dd1=0ms/18 dd2=2ms/69
+```
+
+One sample of one position spent 515 s and 17 million applies in pass dd6 — refuting "a win by
+turn 7" — and then found its turn-8 win in 2 ms at dd7. Every other sample of the game costs
+between 2 ms and 3 s. Seed 900043 is the same shape: 17 of its 19 m 53 s are position t1. **The pass
+cost grows 15–70x per horizon turn**, so the exact tail of a slow future is bought at an exponential
+price, for a label (8 versus 9) the model can barely use. `perf` on 900043 is flat — plan enumeration
+50%, the applies, `BuildSimKey`, the mana backtrack — so there is no hot spot to shave; the node count
+is the only lever, and the node count is the ladder's depth.
+
+**The bounded label.** `MTG_LABEL_HORIZON=H` (default 0 = off = the full ladder; active only on the
+`earliest_only` value-row path). The ladder climbs EXACTLY to pass H, so a sample whose earliest win
+lies within H turns keeps its exact label. A sample still unsettled after pass H is labelled by a
+SEARCHED PLAYOUT instead of passes H+1..depth-1: the first `MTG_LABEL_HORIZON_WIDTH` (8)
+`MoveOrderPlans`-ordered candidates are each applied and played out by `SimulateToEnd` at
+`MTG_LABEL_HORIZON_PLAYOUT_DEPTH` (2) under a `MTG_LABEL_HORIZON_PLAYOUT_MS` (20,000) virtual budget,
+and the best playout is the label. An observed searched line is an upper bound on the exact earliest,
+so beyond H a label can only move LATER — never earlier and never past `max_turns+1`, which is what a
+loss reads anyway. The K-sample mean keeps its shape (a swingy position stays labelled swingy), which
+a plain censor at turn+H+1 would not. A playout that exhausts its budget bumps `g_fs_trunc_events`
+like any budget abort, so the position is DROPPED rather than labelled with a fabricated no-win.
+Stats line: `=== LABEL HORIZON: H= samples-cut= playouts= ... playout-wins= ===`.
+
+**Measured, solo (idle box, `MTG_MEM_BUDGET_MB=8192`).** Identical labels at H=4 on both slow games:
+
+| game | exact ladder | H=4 | H=3 |
+|---|---|---|---|
+| 900157 gi=157 | 10 m 17 s | **58 s**, labels identical | 22 s, labels identical |
+| 900043 gi=43 | 19 m 53 s | **12.6 s**, labels identical | 12.1 s, one row +0.33 (t4 6.67 → 7.00) |
+
+**Measured, the batch (job 0 of the cancelled run: 250 games, seeds 900000–900249, 24 workers,
+`MTG_MEM_BUDGET_MB=16384`, `logs/edf_longtail/hz_batch/`).** Wall **16 m 06 s** for all 250 games at
+H=4, 1,072 rows, none dropped; 135 samples cut, 812 playouts, 116 of them wins. Joined on
+(seed, turn) against the exact run's rows (`logs/vlq_eldrazidisplacerflicker/rows/all.rows`):
+
+| rows joined | same | LATER (+0.33 each) | EARLIER (−0.33 each) | mean shift |
+|---|---|---|---|---|
+| 1,067 | **1,058** | 7 | 2 | +0.0016 |
+
+plus the 5 rows of seed 900097, the game the exact run never finished (6.98 h in flight at the
+cancel; 234 s here). Ninety games still run over 30 s in the batch, the longest 613 s (900236) —
+that is the deck, not a tail.
+
+**The two EARLIER rows are the ladder missing wins, not the horizon.** Both reproduce solo and
+deterministically. 900045 t1, sample 3: the exact ladder refutes "win by turn 5" at dd4 (12,633
+applies) and settles at 6 from dd5; the H=4 playout from the same candidates finds a turn-5 line.
+900193 t2, sample 1: dd4 refutes turn 6 (66.6 s, 1.2 M applies), the ladder settles at 7; the playout
+finds turn 6. It is NOT either lossy cut of this document: `MTG_LABEL_GOFF_DOM=0` and
+`MTG_LABEL_WAVES=1` each reproduce the exact arm's answer with byte-identical apply counts per pass.
+So the "exact" ladder's enumeration has a hole the depth-2 per-turn lookahead does not, of the same
+class as the pessimism `label-horizon-ladder.md` fixed — and the playout beyond H is therefore not
+only cheaper but a second, independent oracle. `[hz-playout]` (with `MTG_WINLESS_WINDUMP=n` under
+the stats flag) prints the playout's lines so such a case can be read against the ladder's.
+The trace on 900045 t1 sample 3 (`logs/edf_longtail/trace_h4_900045.log`): all eight playout
+candidates win at turn 5, every one through the deck's mechanical route -- `Combo Off(x1)`, the
+route's DEVELOP variant, at turn 4 (Peregrine Drake and Emiel the Blessed both deployed off eight
+mana, the Drake's untap paying for Emiel) and `Combo Off(x999)` at turn 5 after the Conservatory
+drop. The ladder's exact pass at cut 5 refutes that line from the same candidates, so its enumeration
+does not reach "deploy the two pieces on the turn they become affordable together, go off next
+turn". Not the lossy cuts (measured above), and not the stuck-turn closure (lossless by state
+identity); the suspects are the enumerator's view of the route's develop action and the
+affordability of that deploy at the interior node. Open: bisect with `MTG_LABEL_EDGE_TAIL=0`,
+`MTG_LABEL_LADDER_DEDUP=0`, `MTG_LABEL_GOFF=0`, `MTG_WINLESS_DEVELOP=0`, `MTG_WINLESS_CERT=0` on
+900045 (a 20 s game), then read the interior node at turn 4.
+
+**What the batch/solo ratio says, and what it does not.** Under H=4 the batch still pays 4–5x per
+game against solo (900157: 245 s vs 58 s; 900043: 63 s vs 12.6 s), but the shared line-cache pool's
+high-water mark is 303 MB of its 4,153 MB — under H=4 the pool is not the pressure. Twenty-four
+workers on twelve physical cores, sharing the host with another container, is. That is a throughput
+question, not a tail. In the EXACT run the pool sat at its cap in every heartbeat
+(`fsl=4153M/4153M`) and 900157 took 109 min in the batch against 10 min solo, so the per-worker
+share of the pool (173 MB at 24 workers) IS a second lever for the exact ladder — a solo re-run at
+`MTG_FSL_POOL=177152` (that share, in KB) was at 37 min and still on t1 when it was stopped, 3.6x the
+default-pool solo and climbing, though contaminated by a 16-min overlap with the batch above. Not
+quantified further: at H=4 it does not arise.
+
+**Cross-deck.** `H=4 bash test/label_horizon_ab.sh <tag> [games] [seed]` runs both arms per deck over
+the same games (one pooled batch per arm) and reports rows, wall, and the earlier/later split.
+Run at 8 games/deck, K=3, seed 555000, 8 threads (`logs/labelhorizon/hz4/`):
+
+| deck | rows off/on | sec off | sec on | movement (joined on seed, turn) |
+|---|---|---|---|---|
+| burn | 37 / 37 | 4.2 | 0.5 | 1 LATER (555007 t1 5.33 → 5.67), 36 same |
+| Goblins | 24 / 24 | 3.0 | 2.4 | identical |
+| Anti-Lifegain | 22 / 22 | 3.2 | 2.4 | identical |
+| Dragonstorm | 40 / 40 | 0.9 | 0.7 | identical |
+| slivers_vial | 33 / 33 | 0.2 | 0.2 | identical |
+| treasure_hunt | 35 / 35 | 0.7 | 0.9 | identical |
+| Knights | 34 / 34 | 0.4 | 0.3 | identical |
+| Hinata2 | 50 / **51** | 17.2 | 8.8 | 4 LATER (+0.33, +0.33, +0.33, +0.67), 1 EARLIER (555006 t1 6.33 → 6.00), 45 same; one position the exact ladder DROPPED at the budget ceiling (555005 t2) is labelled 8.67 |
+
+Six of the eight decks label identically -- their earliest wins lie within four turns of every
+position -- and the two that move are the two whose ladders climb: burn's one losing-side sample
+and Hinata's slow futures. Hinata's EARLIER row is the same class as EDF's (a searched line the
+ladder's pass did not reach), and its recovered row is the drop-on-doubt doctrine meeting a playout
+that answers where the ladder ran out of budget. Eight games per deck is a direction check, not a
+cost measurement (see `label-horizon-ladder.md` on the same trap).
+
+**Adoption is the user's call**, and it is a quality-versus-performance trade with both sides now
+counted: at H=4 on EDF, 9 of 1,067 rows move by a third of a turn (7 later, 2 earlier, the latter
+the ladder's miss) for a phase A that finishes in under half an hour instead of not finishing. The
+flag is OFF by default; `valueleaf.sh` adds no knobs by design, so adoption would be an engine
+default (global, or per deck through the provider) rather than a driver setting.

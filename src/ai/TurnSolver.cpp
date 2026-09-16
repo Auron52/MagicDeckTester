@@ -34345,6 +34345,26 @@ inline std::atomic<unsigned long long> g_lgoff_roots{0}, g_lgoff_seedwins{0}, g_
 // Lossless by state identity. DEFAULT ON; =0 searches every candidate.
 inline bool LadderDedupOn() { static const bool v = EnvOn("MTG_LABEL_LADDER_DEDUP", true); return v; }
 inline std::atomic<unsigned long long> g_ldd_searched{0}, g_ldd_inherited{0};
+// MTG_LABEL_HORIZON=H -- the BOUNDED label (2026-09-16), DEFAULT 0 = off = the full ladder. Active
+// only on the earliest_only (value-row) path. The ladder climbs EXACTLY to pass H: a sample whose
+// earliest win lies within H turns of the position keeps its exact label. A sample still unsettled
+// after pass H is labelled by a SEARCHED PLAYOUT (SimulateToEnd at MTG_LABEL_HORIZON_PLAYOUT_DEPTH,
+// default 2, over the first MTG_LABEL_HORIZON_WIDTH candidates, default 8, each under a
+// MTG_LABEL_HORIZON_PLAYOUT_MS virtual budget, default 20000) instead of passes H+1..depth-1.
+// WHY: the value-leaf phase A long tail on EldraziDisplacerFlicker is the DEEP passes of the few
+// reshuffled futures with no early win -- seed 900157, position t1, one of its three samples:
+// dd4=0.5 s, dd5=7.3 s, dd6=515 s (refuting "win by turn 7"), then the turn-8 win in 2 ms; every
+// other sample of that game cost 2 ms .. 3 s. The pass cost grows 15-70x per horizon turn, so the
+// exact tail of a slow future is bought at an exponential price for a label the model can barely
+// use (8 vs 9). HOW IT IS LOSSY: exact within H; beyond H the playout is an UPPER bound (a searched
+// line, never a fabricated win), so a deep label can only move LATER, never earlier -- and never
+// past max_turns+1, which is what a loss reads anyway. The K-sample mean therefore keeps its
+// shape (a swingy position stays labelled swingy), unlike a plain censor at turn+H+1.
+inline int LabelHorizon()      { static const int v = EnvInt("MTG_LABEL_HORIZON", 0); return v; }
+inline int LabelHorizonDepth() { static const int v = EnvInt("MTG_LABEL_HORIZON_PLAYOUT_DEPTH", 2); return v; }
+inline int LabelHorizonWidth() { static const int v = EnvInt("MTG_LABEL_HORIZON_WIDTH", 8); return v; }
+inline int LabelHorizonMs()    { static const int v = EnvInt("MTG_LABEL_HORIZON_PLAYOUT_MS", 20000); return v; }
+inline std::atomic<unsigned long long> g_lhz_cut{0}, g_lhz_playouts{0}, g_lhz_playout_wins{0};
 // MTG_LABEL_GOFF_DOM / MTG_LABEL_GOFF_WIDTH -- GO-OFF DOMINANCE at the horizon edge. THE ONE
 // APPROXIMATION on this path (everything else here is exact); DEFAULT ON, MTG_LABEL_GOFF_DOM=0
 // restores the full search. User-directed, 2026-09-09: "Technically we could even dominance prune
@@ -34573,6 +34593,14 @@ struct DumperBody
             std::fprintf(stderr,
                 "=== LABEL LADDER DEDUP: searched=%llu inherited=%llu (%.1f%% of pass-candidates) ===\n",
                 ls, li, (ls + li) ? (100.0 * static_cast<double>(li) / static_cast<double>(ls + li)) : 0.0);
+        }
+        if (g_lhz_cut.load() != 0)
+        {
+            std::fprintf(stderr,
+                "=== LABEL HORIZON: H=%d samples-cut=%llu playouts=%llu (depth %d, width %d, %d virtual ms) "
+                "playout-wins=%llu ===\n",
+                LabelHorizon(), g_lhz_cut.load(), g_lhz_playouts.load(), LabelHorizonDepth(),
+                LabelHorizonWidth(), LabelHorizonMs(), g_lhz_playout_wins.load());
         }
         const unsigned long long dd = g_dev_distinct.load(), dc = g_dev_collapsed.load();
         std::fprintf(stderr,
@@ -40955,10 +40983,26 @@ TurnSolver::EarliestWinReport TurnSolver::EnumerateEarliestWins(const GameState&
         // ever moved LATER.
         // Hoisted across BOTH loops -- see LoadPlanState (capacity reuse across plans/passes).
         GameState pass_buf;
+        // PER-PASS LADDER COST (MTG_WINLESS_STATS, off = no cost): wall ms and ApplyPlanDirect
+        // calls per horizon pass, one "[ladder]" line per call. The value-leaf long tail on EDF
+        // (2026-09-16) is the DEEP passes -- a reshuffled future with no win before the game limit
+        // pays an exhaustive refutation of every horizon -- and this is what splits a run's cost by
+        // how far the ladder had to climb.
+        struct PassCost { int dd; double ms; unsigned long long applies; };
+        std::vector<PassCost> pass_costs;
+        const bool pstats = winlesscert::StatsOn();
+        // The bounded label (MTG_LABEL_HORIZON): see winlesscert::LabelHorizon.
+        const bool hz_on = earliest_only && winlesscert::LabelHorizon() > 0;
+        bool horizon_cut = false;
+        int  hz_playout_wt = -1, hz_tried = 0;
         for (int dd = 0; dd <= depth - 1 && unsettled > 0; ++dd)
         {
+            if (hz_on && dd > winlesscert::LabelHorizon()) { horizon_cut = true; break; }
             const int cut = state.turn_number + dd;
             bool any_new = false;
+            const auto pass_t0 = std::chrono::steady_clock::now();
+            const unsigned long long pass_a0 =
+                pstats ? g_lp_applies.load(std::memory_order_relaxed) : 0ULL;
             // Distinct end states already refuted AT THIS HORIZON: a same-key candidate inherits
             // the refutation without paying for its own FSLineTail. Per-pass, because a deeper
             // pass genuinely re-asks the question.
@@ -41012,10 +41056,97 @@ TurnSolver::EarliestWinReport TurnSolver::EnumerateEarliestWins(const GameState&
                     }
                 }
             }
+            if (pstats)
+            {
+                const double ms = std::chrono::duration<double, std::milli>(
+                                      std::chrono::steady_clock::now() - pass_t0).count();
+                pass_costs.push_back({dd, ms,
+                                      g_lp_applies.load(std::memory_order_relaxed) - pass_a0});
+            }
             // earliest_only: the caller reads report.earliest alone, and the first pass to produce
             // ANY win has produced the minimum over all candidates. Everything still unsettled is a
             // bound from here on, which is exactly what bounded_candidates advertises.
             if (earliest_only && any_new) { break; }
+        }
+        if (horizon_cut && unsettled > 0)
+        {
+            // PLAYOUT LABEL for a sample the horizon left unsettled (no win within H turns): the
+            // first W candidates in MoveOrderPlans order (the same order the residual wins rank
+            // first in -- see label-goff-tractability.md), each applied and played out by
+            // SimulateToEnd's per-turn lookahead. The best playout is this sample's label: an
+            // observed searched line, an UPPER bound on the exact earliest. Its own virtual
+            // budget; an exhausted playout bumps g_fs_trunc_events like any budget abort, so the
+            // position is then DROPPED rather than labelled with a fabricated no-win.
+            winlesscert::g_lhz_cut.fetch_add(1, std::memory_order_relaxed);
+            SearchBudget pbudget = SearchBudget::FromVirtualMs(winlesscert::LabelHorizonMs());
+            pbudget.SetOverrunLimit(pbudget.Limit());
+            int best = max_turns + 1;
+            std::size_t best_i = pre.size();
+            for (std::size_t i = 0; i < pre.size() && hz_tried < winlesscert::LabelHorizonWidth(); ++i)
+            {
+                if (settled[i]) { continue; }
+                ++hz_tried;
+                LpSite _lps(1);
+                LoadPlanState(pass_buf, state, s_state_reuse);
+                GameState& s = pass_buf;
+                std::vector<Action> bp;
+                ApplyPlanDirect(s, pre[i], true, &bp);
+                int wt = max_turns + 1;
+                if (s.ActivePlayer().life > 0)
+                {
+                    AnimateLandsShared(s, nullptr);
+                    ActivateTapTokensShared(s, nullptr);
+                    SimulateCombat(s);
+                    if (OpponentHasLost(s)) { wt = state.turn_number; }
+                    else
+                    {
+                        GameState r = s;
+                        if (SimulateEndAndStartNextTurn(r))
+                        {
+                            ExpireStagedCards(r);
+                            winlesscert::g_lhz_playouts.fetch_add(1, std::memory_order_relaxed);
+                            // MTG_WINLESS_STATS=1 MTG_WINLESS_WINDUMP=n: the playout's per-turn
+                            // lines ([fs-sim]), so a playout label can be read against the ladder's.
+                            FsSimTraceScope _fst(pstats && winlesscert::WinDumpN() > 0);
+                            wt = SimulateToEnd(std::move(r), winlesscert::LabelHorizonDepth(),
+                                               max_turns, &pbudget, max_turns + 1, second_main, &tt);
+                        }
+                    }
+                }
+                if (pstats && winlesscert::WinDumpN() > 0)
+                {
+                    std::fprintf(stderr, "[hz-playout] t%d cand %zu/%zu wt=%d land=%s %s\n",
+                                 state.turn_number, i, pre.size(), wt,
+                                 pre[i].land_to_play.empty() ? "-" : pre[i].land_to_play.c_str(),
+                                 FsPlanText(pre[i]).c_str());
+                }
+                if (wt < best) { best = wt; best_i = i; }
+            }
+            if (best <= max_turns) { winlesscert::g_lhz_playout_wins.fetch_add(1, std::memory_order_relaxed); }
+            if (best_i < pre.size()) { ladder_wt[best_i] = best; settled[best_i] = 1; --unsettled; }
+            hz_playout_wt = best;
+        }
+        if (pstats && !pass_costs.empty())
+        {
+            int best = max_turns + 1;
+            for (std::size_t i = 0; i < pre.size(); ++i)
+            { if (settled[i] && ladder_wt[i] < best) { best = ladder_wt[i]; } }
+            std::string line = "[ladder] t" + std::to_string(state.turn_number)
+                             + " cands=" + std::to_string(pre.size())
+                             + " result=" + std::to_string(best) + " |";
+            if (horizon_cut)
+            {
+                line += " CUT@H" + std::to_string(winlesscert::LabelHorizon())
+                      + " playout=" + std::to_string(hz_playout_wt)
+                      + "(tried " + std::to_string(hz_tried) + ") |";
+            }
+            for (const PassCost& pc : pass_costs)
+            {
+                char b[64];
+                std::snprintf(b, sizeof b, " dd%d=%.0fms/%llu", pc.dd, pc.ms, pc.applies);
+                line += b;
+            }
+            std::fprintf(stderr, "%s\n", line.c_str());
         }
     }
 
