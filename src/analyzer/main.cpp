@@ -450,21 +450,19 @@ static int RunScoreCompsMode(const AnalyzerArgs& a)
     // on discovery, bucketing, or a prior profile.
     const int nhands = EnvInt("MTG_SCORE_HANDS", 0);
 
-    std::filesystem::path in_path =
-        a.deck_path.parent_path() / (a.deck_path.stem().string() + ".keepmodel.exhaustive.profile.json");
-    if (!std::filesystem::exists(in_path) && std::filesystem::exists(in_path.string() + ".gz"))
-    { in_path = in_path.string() + ".gz"; }
-    MulliganProfile profile;
-    if (std::filesystem::exists(in_path)) { profile = LoadDeckProfile(in_path); }
-    else if (nhands > 0)
-    {
-        // No exhaustive sidecar (the new-deck case): fall back to the deck's PLAY profile so rollouts
-        // still see required_pieces / vial_target_mv / the value sidecar.
-        std::filesystem::path pp =
-            a.deck_path.parent_path() / (a.deck_path.stem().string() + ".profile.json");
-        profile = std::filesystem::exists(pp) ? LoadDeckProfile(pp) : MulliganProfile::DefaultProfile();
-    }
-    else { profile = LoadDeckProfile(in_path); }
+    // The deck's PLAY profile (required_pieces / vial_target_mv / card_scores for the rollouts --
+    // what generation's rollout_profile is), with the shipped exhaustive sidecar attached through the
+    // play-time loader for its BUCKET MAP. That loader resolves `.gz` first and serves the sidecar
+    // from the on-disk keep table (ai/KeepTable.h), so a bucket list no longer costs the whole table
+    // as std::maps (5.3 GB for FiveColour -- more than this box could give a scorer). Honours
+    // MTG_EXHAUSTIVE_PROFILE like play does. No sidecar => no buckets => comp mode refuses below;
+    // hand mode (MTG_SCORE_HANDS) never needed them.
+    const std::filesystem::path pp =
+        a.deck_path.parent_path() / (a.deck_path.stem().string() + ".profile.json");
+    MulliganProfile profile = std::filesystem::exists(pp) ? LoadDeckProfile(pp) : MulliganProfile::DefaultProfile();
+    AttachExhaustiveSidecar(profile, pp);
+    const std::filesystem::path in_path =
+        a.deck_path.parent_path() / (a.deck_path.stem().string() + ".keepmodel.exhaustive.profile.json[.gz]");
 
     // Attach the deck's learned leaf VALUE sidecar, exactly as the keep-GENERATION path does.
     //
@@ -506,6 +504,7 @@ static int RunScoreCompsMode(const AnalyzerArgs& a)
     // behind budget-vs-R as a generation cost lever. Default is unchanged, so existing runs are
     // byte-identical.
     const int budget_ms = EnvInt("MTG_SCORE_BUDGET_MS", 20);
+    const int score_pd  = EnvInt("MTG_SCORE_PD", -1);   // -1 = both sides (default)
     MulliganProfile rp = profile; rp.keep_model = KeepModel{};
     const bool second_main = GoldFishRunner::DeckUsesSecondMain(a.deck);
 
@@ -580,6 +579,10 @@ static int RunScoreCompsMode(const AnalyzerArgs& a)
             const std::vector<std::string>& want = items[w].names;
             for (int pd = 0; pd < 2; ++pd)
             {
+                // MTG_SCORE_PD=0|1 scores ONE side only (the other prints as 0 0): a cell that only ever
+                // arises on the play does not need its on-the-draw label, and at play depth each rollout
+                // costs a second. Unset => both, byte-identical.
+                if (score_pd >= 0 && pd != score_pd) { continue; }
                 double sum = 0, sumsq = 0;
                 for (int r = 0; r < R; ++r)
                 {

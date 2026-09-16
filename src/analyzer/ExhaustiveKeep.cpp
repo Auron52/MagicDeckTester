@@ -3167,24 +3167,72 @@ void RunExhaustiveKeep(std::ostream& os, const Decklist& deck, const MulliganPro
             for (int pd = 0; pd < 2; ++pd) { if (ng[pd] > 0) { vg[HAND - H][pd] /= ng[pd]; } }
         }
         std::set<std::array<int, 3>> mark;
+        std::vector<std::vector<int>> subs;
+        std::vector<int> cur(K, 0);
         for (int pd = 0; pd < 2; ++pd)
             for (std::size_t i = 0; i < H7.comps.size(); ++i)
                 for (int m = 1; m <= cfg.max_mull; ++m)
                 {
-                    const int arg = ArgminSub(tables, K, H7.comps[i], m, pd);
-                    if (arg < 0) { continue; }
-                    if (pc.resolved[m][arg][pd]) { continue; }
+                    // One enumeration of the hand's (HAND-m)-subcompositions serves both the argmin and
+                    // the contender test below (ArgminSub would walk it a second time).
                     const SizeTable& t = tables[m];
-                    if (t.cnt[arg][pd] >= r_max) { continue; }
-                    if (m == cfg.max_mull) { mark.insert({ m, arg, pd }); continue; }
-                    const double kv  = t.V[arg][pd];
-                    const double thr = Dopt[pd][m + 1];
-                    const double se  = gate_se(t, arg, pd, vg[m][pd]);
-                    const double flip = (se > 0) ? 0.5 * std::erfc(std::abs(kv - thr) / (se * SQRT2))
-                                                 : (kv == thr ? 0.5 : 0.0);
-                    const bool confident_mull = (!cfg.bottoming_enabled || cfg.adaptive_bottom)
-                                              && (kv - thr > 0.0) && (flip <= cfg.flip_eps);
-                    if (!confident_mull) { mark.insert({ m, arg, pd }); }
+                    subs.clear(); std::fill(cur.begin(), cur.end(), 0);
+                    EnumComps(0, HAND - m, cur, H7.comps[i], subs);
+                    int arg = -1; double best = 1e9;
+                    std::vector<int> cand;
+                    for (const std::vector<int>& s : subs)
+                    {
+                        auto it = t.index.find(s);
+                        if (it == t.index.end()) { continue; }
+                        cand.push_back(it->second);
+                        if (t.V[it->second][pd] < best) { best = t.V[it->second][pd]; arg = it->second; }
+                    }
+                    if (arg < 0) { continue; }
+                    // A hand settled as a confident MULLIGAN at this level never reads its sub-cells
+                    // (min(KeepVal, Dopt) takes the mull branch), so none of them needs another rollout.
+                    // The terminal level is a forced keep and is always needed.
+                    if (m != cfg.max_mull)
+                    {
+                        const double kv  = t.V[arg][pd];
+                        const double thr = Dopt[pd][m + 1];
+                        const double se  = gate_se(t, arg, pd, vg[m][pd]);
+                        const double flip = (se > 0) ? 0.5 * std::erfc(std::abs(kv - thr) / (se * SQRT2))
+                                                     : (kv == thr ? 0.5 : 0.0);
+                        const bool confident_mull = (!cfg.bottoming_enabled || cfg.adaptive_bottom)
+                                                  && (kv - thr > 0.0) && (flip <= cfg.flip_eps);
+                        if (confident_mull) { continue; }
+                    }
+                    if (!pc.resolved[m][arg][pd] && t.cnt[arg][pd] < r_max) { mark.insert({ m, arg, pd }); }
+                    // RACE THE CONTENDERS (2026-09-16). Marking only the current argmin is the
+                    // "winner's-curse-of-omission" the adaptive_bottom note above warns about, and it is
+                    // exactly what broke FiveColour's bottoming: a candidate whose two floor rollouts came
+                    // out HIGH is never the argmin, so it is never refined, and the bottom_floor filter
+                    // (or its own inflated estimate) then keeps it out of the shipped argmin for good. At
+                    // this deck's pooled per-rollout sd of ~1.0 turn, a floor estimate is +-0.7t, so the
+                    // two-rollout screening between near-tie removals was close to a coin flip -- and
+                    // 42% of the hand mass kept at mull 1 had such a never-refined candidate. The table
+                    // believed those candidates were 0.8t worse than its pick (raw sidecar, 2026-09-16
+                    // audit); fresh rollouts say otherwise (docs/design/fivecolour-bottoming-unexplained.md).
+                    //
+                    // The rule: every other subcomposition of a NEEDED hand that could still be the true
+                    // argmin -- P(V_c < V_arg) > flip_eps under the two cells' shrunk standard errors --
+                    // is sampled too, until the cap separates them or the race is decided. The same
+                    // flip_eps that stops the keep gate stops this one, so "confident" means the same
+                    // thing on both halves. Refined contenders also clear the bottom_floor filter, which
+                    // is what turns that filter from an exclusion of the unlucky into a guard against
+                    // the merely unsampled. Cost: more sub-cell rollouts on decks with near-tie removals
+                    // (the decks where they matter); decisive candidates still stop at the floor.
+                    const double se_a = gate_se(t, arg, pd, vg[m][pd]);
+                    for (const int c : cand)
+                    {
+                        if (c == arg || pc.resolved[m][c][pd] || t.cnt[c][pd] >= r_max) { continue; }
+                        const double d    = t.V[c][pd] - t.V[arg][pd];          // >= 0: arg is the argmin
+                        const double se_c = gate_se(t, c, pd, vg[m][pd]);
+                        const double sd   = std::sqrt(se_a * se_a + se_c * se_c);
+                        const double p_better = (sd > 0) ? 0.5 * std::erfc(d / (sd * SQRT2))
+                                                         : (d == 0.0 ? 0.5 : 0.0);
+                        if (p_better > cfg.flip_eps) { mark.insert({ m, c, pd }); }
+                    }
                 }
         for (const std::array<int, 3>& mk : mark)
         {

@@ -183,3 +183,118 @@ independent of win-turn, and this deck is in the regression suite.
   fingerprints (3d's screen would have supported the wrong conclusion; the causal test settled it).
 * **Build the kill-switch into the experiment** — a calibration arm that can declare the instrument
   blind (3f).
+
+---
+
+## 7. 2026-09-16 — the direct audit, and the cause
+
+**Status: EXPLAINED (mechanism), fix built, FiveColour re-refinement in progress.** §3b/§3c below were
+closed by "refuted by control"; that inference was wrong (see 7e). This section supersedes §5's
+"ideas not yet tested" and the status line at the top.
+
+### 7a. Instrument
+
+The §5 *direct argmin audit*, built on real decisions rather than sampled hands:
+
+1. **Three arms on one confounded seed** (1004004, 1000 games, `MTG_CONFOUND_BOTTOM=1`, per-game
+   JSON logs, `logs/fc_audit/arms.sh`): the shrunk table (`MTG_EXHAUSTIVE_BOTTOM=1`), the pure
+   heuristic (`MTG_EXHAUSTIVE_BOTTOM=0 MTG_BOTTOM_ROLLOUTS=0`), and the lookahead. Keep is the shipped
+   table in every arm, and the shuffles before bottoming do not depend on the decision, so **every game
+   sees identical hands at every mulligan level in all three arms** (verified: 0 of 1000 differ) — the
+   arms differ only in which cards leave the hand. A fourth arm ran the *plain* (unshrunk) table.
+2. **The raw sidecar** (`decks/FiveColour/FiveColour.keepmodel.exhaustive.raw.json`): per-cell sum /
+   sumsq / count, i.e. what the table *believed* about every candidate and how many rollouts backed it.
+3. **Fresh blind rollouts** of every size-6 candidate of every m=1 disagreement hand with the comp
+   scorer (`MTG_SCORE_COMPS`, now served from the on-disk table so it costs 0.02 GB instead of 5 GB), at
+   the labeller's depth (d2/b3, R=64) and at play depth (d6/b20, R=24, `MTG_SCORE_PD` one side per
+   cell). `logs/fc_audit/{analyze,regret}.py`.
+
+### 7b. What the arms showed
+
+* **58.9 % of games mulligan** (352 at m=1, 186 at m=2, 46 at m=3). Bottoming decides most games.
+* Win turn on the seed: **table 4.8700, heuristic 4.9340, lookahead 4.8640** (r1 had 4.869 / 4.863
+  for table / lookahead on this seed). So *heuristic ≪ table ≈ lookahead*.
+* **Under the confound the "lookahead" is the heuristic with a rare veto.** Win turns are integers,
+  so most candidates tie at the single rollout's best value and `HeuristicBottomPick` decides among
+  them: heuristic and lookahead disagree on only **17 %** of m=1 decisions (33 % at m=2). When the veto
+  fires it is worth **+0.42 turns per game** (60 games × 0.42 ≈ the whole heuristic→lookahead gap).
+* **The table disagrees with the lookahead on ~72 % of decisions.** Structurally: the table bottoms a
+  *spell* 72 % of the time (Nicol Bolas, Progenitus, Hellkite, Mana Cannons, Archangel …); the
+  heuristic/lookahead bottom a *land* ~60 % of the time (the excess-land rule fires at 3+ lands).
+  Paired on disagreement games the table beats the pure heuristic clearly (−0.083/game at m=1,
+  −0.243 at m=2) and ties the veto-corrected one within one seed's noise.
+* Shrink vs plain differ on only 5 % of m=1 picks: the shrinkage is not where the behaviour is.
+
+### 7c. What the raw sidecar showed — the signature
+
+On the 274 m=1 disagreement hands, **the table's pick is an R=30 cell 274/274 times**, and its
+believed margin over the lookahead's pick depends on how well-sampled the *alternative* was:
+
+| lookahead's pick sampled at | n | table's believed margin (raw V) |
+|---|---|---|
+| R=2 — never refined | 45 | **−0.818t** (V 4.96 vs 5.78) |
+| R=18 | 13 | −0.490t |
+| R=30 | 216 | −0.185t |
+
+Cells one card apart from the same 7-card hand do not truly differ by 0.8 turns. The pooled
+per-rollout sd of this table is **~1.0t**, so a two-rollout estimate is ±0.7t; the never-refined
+cells are exactly the ones whose two rollouts came out high. Meanwhile 41 % of the table's believed
+margins are inside one standard error of zero, 71 % inside two.
+
+Population view (table + raw, all hands kept at m=1, hypergeometric-weighted): **42 % of kept-hand
+mass has a never-refined candidate; 16–24 % has one whose lower bound (z=1) undercuts the chosen
+target's upper bound.** Those contenders are only **~29k distinct cell-sides**.
+
+### 7d. Truth (fresh rollouts)
+
+RESULTS_PLACEHOLDER
+
+### 7e. The mechanism
+
+`compute_sub_wave_tasks` (the adaptive sub-refine) marks **only the current argmin** of each needed
+hand for more rollouts. The generator's own comment names the consequence — *"a true-argmin cell
+noisily-high at the floor would never be marked"* — and `RunAdaptiveBottomRegretSim` models it as the
+"winner's-curse-of-omission". The fast recipe (`adaptive_bottom`, floor R=2, cap R=30) runs a
+two-rollout screening between the removals of a hand; the loser is never looked at again, and the
+`bottom_floor` filter then bars it from the argmin for good (the plain table reaches the same pick
+95 % of the time through the loser's inflated estimate). With ±0.7t of floor noise and removals that
+are genuinely near ties, that screening is close to a coin flip, so the shipped argmin is
+systematically "whichever near-tie candidate had the luckier first two rollouts".
+
+Why the *controls* did not refute this: the regret is ∝ P(the true best loses the screening), which
+depends on the spread between a hand's removals relative to the floor noise. Goblins and Melira have
+larger spreads (their good removal is obvious) and pass; FiveColour's fifteen singleton lands, four
+mana creatures and a top end of 6–10-drops make most removals near ties. A control that *passes* shows
+the effect is small there, not that the mechanism is absent. §3b/§3c drew the stronger conclusion.
+
+Why keep is immune: the keep decision reads `min(KeepVal, Dopt)`, and the min of noisy estimates is
+biased *downward*, so an under-sampled good cell only ever makes a hand look *more* keepable — the
+"curse-SAFE by construction" the code relies on. Bottoming needs the argmin's **identity**, and that
+is precisely what a coin-flip screening corrupts. Same table, one half exposed.
+
+Depth (§3f) is a minor component at most: the killed calibration arm had 9 paired seeds, label-depth
+lookahead **+0.0034t** worse than play-depth (8/9 seeds) — a fifth of the deficit.
+
+### 7f. The fix
+
+1. **Generator** — race the contenders. `compute_sub_wave_tasks` now also marks every other
+   subcomposition of a needed hand with P(V_c < V_arg) > flip_eps under the two cells' shrunk standard
+   errors, until the cap or the race separates them. Same flip_eps as the keep gate. Refined contenders
+   also clear the `bottom_floor` filter, which turns that filter from an exclusion of the unlucky into a
+   guard against the merely unsampled.
+2. **FiveColour** — re-refine on the frozen commit. The gen's per-cell journal survived
+   (`logs/FiveColour_gen/journal.BACKUP.20260911`, 3,955,796 terminal size-7 records = every size-7
+   cell-side frozen), so the patched generator at `2f7822a2` (worktree `/tmp/fc-gen-wt`, same
+   play_digest `b79a1414`, d2/b1/t8) resumes it in a scratch deck folder (`logs/fc_contend/deck/`):
+   nothing is re-rolled except the contenders. Then MTG_KEEP_MERGE with shrink + floor 2 → candidate
+   profile → `versus` A/B against the shipped table and the confounded A/B against the lookahead.
+   REFINE_PLACEHOLDER
+
+### 7g. Method notes added
+
+* **"Passes with a worse pool" refutes only a linear story.** A mechanism whose effect scales with a
+  deck-specific ratio (spread/noise) needs that ratio measured on the failing deck, not a pass elsewhere.
+* **Read the arm you are losing to.** The confounded lookahead is not a one-sample argmin; it is a
+  domain heuristic with a rare veto. Two hours of logs showed that; two weeks of theory did not.
+* **The raw sidecar is an instrument.** Believed margin vs the alternative's R gave the signature
+  before a single fresh rollout ran.
