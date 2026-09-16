@@ -750,12 +750,89 @@ both lever states): `logs/stompy_screen/callrecheck.json`, `callrecheck_{off,on}
 | 3 / 2 | 4.3810 | 4.3804 |
 | 4 / 1 | 4.3972 | 4.3963 |
 
-Each Call of the Wild traded in for a World War Hulk costs **+0.016 turns** (+0.0144 / +0.0172 /
-+0.0162 OFF; +0.0142 / +0.0170 / +0.0159 ON, adjacent-pair se ±0.0007). Modelling the card fully
-moves the 4 → 2 decision by 0.0005 of the 0.0334 turns it is worth — **1.5%** — and changes neither
-the ordering nor, materially, the slope. **The cut stands, and it is now measured rather than
-argued.** Full derivation in `stompy-top-of-library-consumers.md`.
+The modelling half of this holds and is the part worth keeping: fully modelling the card moves the
+4 → 2 decision by 0.0005 of the 0.0334 turns it is worth — **1.5%** — and changes neither the
+ordering nor, materially, the slope. Full derivation in `stompy-top-of-library-consumers.md`.
 
-Read the ladder in the other direction and it also prices the user's constraint: holding Call of the
-Wild at 2 rather than 1 costs 0.0144 turns. That is the measured price of the toolbox rule on this
-axis, and it is small.
+**But the AXIS was wrong, and the USER caught it** (2026-09-16: *"Call is not really comparing
+against Hulk."*). Pinning Call + Hulk = 5 forces every cut Call to be spent on a Hulk, so the 0.016
+slope is mostly a statement about **Hulk's** marginal value, not Call's — and Hulk's count is set by
+its own margin (the 4th Hulk is worth only 0.0019 against the Lodge). The live question is Call
+against *whatever the slot would otherwise hold*. See the next section, which is the answer.
+
+### What the Call of the Wild slot actually competes with (2026-09-16)
+
+`logs/stompy_screen/callslot.json` prices the 2nd Call of the Wild in the currency the rest of the
+deck was priced in — the marginal-cut ladder, where **every arm buys the same 4th World War Hulk
+with exactly one card**, so the rungs are directly comparable. This is the rung screen I never had:
+the toolbox rule excluded it, making Call of the Wild the one card never priced this way.
+
+| what pays for the 4th Hulk | cost vs the recommended list |
+|---|---|
+| **a Call of the Wild (2nd copy)** | **−0.0160 — cutting it GAINS** |
+| Wirewood Lodge | +0.0015 (reproduces screen I's 0.0019) |
+| a Forest (14th) | +0.0092 |
+| a Worldly Tutor (4th) | +0.0134 |
+| Sol Ring | +0.0425 |
+
+**Family B settles the attribution.** On the 4-Hulk list, cutting the 2nd Call gains *whatever*
+replaces it: +0.0216 for a 15th Forest, +0.0052 for a 3rd Worldspine Wurm, **+0.0479 for a 3rd
+Fyndhorn Elves**. So this is not Hulk being good — the 2nd Call of the Wild is simply the worst card
+in the deck, and the Call↔Hulk framing hid that behind Hulk's own margin.
+
+The obvious objection does not rescue it: the upkeep modelling gap is worth 0.00043 at Call 2 against
+0.00018 at Call 1, a 0.00025 difference against effects of 0.016–0.048. Under 2%.
+
+**This does not overturn the toolbox rule — and as it turns out, it does not have to.** See below:
+once the deck takes the Fyndhorn upgrade the slot is paid for elsewhere and holding Call at 2 costs
+nothing measurable.
+
+### THE DECK DID HAVE FAT — it was a missing card, not a cuttable one (2026-09-16)
+
+Chasing Family B's best filler turned up something an order of magnitude larger than the question
+that started it. `logs/stompy_screen/fynd3.json` + `fynd4_h2h.json`, 40,000 paired games/arm:
+
+| arm | vs the recommended list | honours Call ≥ 2? |
+|---|---|---|
+| **`C_fynd4` — Wirewood Lodge + a Forest → 4 Fyndhorn Elves** | **−0.0448 / −0.0507** | **yes** |
+| `C_call_fynd` — cut the 2nd Call → 3rd Fyndhorn | −0.0454 | no |
+| `B_fynd` — Call 1, Hulk 4, no Lodge, Fyndhorn 3 | −0.0464 / −0.0432 | no |
+| `C_hulk_fynd` — 3rd Hulk → 3rd Fyndhorn | −0.0288 | yes |
+| `C_lodge_fynd` — Lodge → 3rd Fyndhorn | −0.0283 / −0.0306 | yes |
+
+Reproduced across three independent seed blocks (4000000 / 5000000 / 6000000); `C_fynd4`'s own
+held-out confirm came back **better** than the screen (−0.2314 vs −0.2147 against the shipped base),
+so the effect is not selection-inflated.
+
+**And the toolbox rule comes out free.** The best constraint-LEGAL list (`C_fynd4`, Call at 2) ties
+the best constraint-BREAKING list (`C_call_fynd`, Call at 1) at 0.0006 ± 0.0023 — a dead heat. Those
+two lists differ in more than the Call count, so this is a claim about the two lists and not about an
+isolated axis; but within everything measured, keeping the 2nd Call of the Wild costs nothing once
+the slot is paid for out of the Lodge and a Forest instead.
+
+**THE METHODOLOGICAL MISS, which is the real lesson.** Screen I's "THE DECK HAS NO FAT" was a
+conclusion about **cutting**: every arm removed a card, and every removal cost something. A cut
+ladder answers "what is cheapest to remove" and never asks "what is best to ADD" — they are
+different questions, and the deck's answer differed by 0.05 turns. The signal was sitting in screen I
+the whole time: `cut_fyndhorn` cost 0.0345, one of the most expensive cuts on the board, which is
+exactly what an *underweighted* card looks like. Nobody tested adding one. **When a cut ladder says a
+card is expensive to cut, test adding another copy before concluding the list is tight.**
+
+### THE REVISED LIST (supersedes the one above)
+
+```
+4  Natural Order            4  Worldly Tutor           4  Llanowar Elves
+3  World War Hulk           4  Turntimber Symbiosis    4  Elvish Mystic
+1  Apex Altisaur            1  Sol Ring                4  Fyndhorn Elves   (2 -> 4)
+2  Call of the Wild         0  Wirewood Lodge (1 -> 0) 4  Priest of Titania
+2  Worldspine Wurm                                     4  Elvish Archdruid
+2  Terastodon                                         13  Forest           (14 -> 13)
+1  Vaultborn Tyrant
+1  Hornet Queen             0  Mirri's Guile
+1  Craterhoof Behemoth
+1  Elderscale Wurm
+```
+
+Cutting the 14th Forest is cheap here specifically *because* Arbor Elf is already gone: Arbor needed
+a Forest to be live (`mana_requires_land_subtype`), Fyndhorn does not. Twelve one-mana dorks now back
+the same land count the two-Fyndhorn list ran on 14.
