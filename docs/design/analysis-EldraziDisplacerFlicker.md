@@ -8848,3 +8848,47 @@ the Infiltrator and WINS the trial (iters 51, acts 50) -- the intended improveme
 the route, the recorded x50 resolved onto the single blink (the (land, casts) key's first hit), and the replay
 slid T4 -> T7 (`gs_replay.log`: 8 predated decisions answered by default instead of 2). The fourth bullet is the
 repair; the reference is untouched. After it, s2_gi1 replays repaired, win turn 4 (the recorded turn).
+
+**12.14 Stable ids for the opponent's spawns, with the references repaired by the tool (10:40-13:17 UTC).**
+USER: *"The spawns should also have ids, but in a way that doesn't break existing references (they must be
+repaired as needed)."* 12.12 had left the shared id 0 in place and scoped the search's skip to it.
+
+* `GameState::next_opp_spawn_number` (base 500000): both spawn sites -- GameEngine's turn start and the
+  rollout's twin in TurnSolver -- stamp `token.m_number` from it in the same order (lockstep). A base of its
+  own so `next_token_number`'s ids (Clues, Treasures, Orchard Spirits, which were never the problem) are
+  untouched. Dominance.h's size tripwire fired (792 -> 800); the counter is classified NOT folded beside
+  `next_token_number`, for the same reason (ids for FUTURE spawns; the scheduled spawns are identical across
+  siblings at a boundary; those on the board fold via `card.m_number` like every permanent).
+* `EnchantTargetName` (main.cpp) resolves the opponent's permanents last, so the plan reads "Eldrazi Displacer:
+  blink 1/1 Creature" and the viewer's `blink_target` names a specific creature -- a board click on it now
+  reaches `blinkAtTarget(num)`; with every spawn at 0 there was no `data-num` to click.
+* The autonomous skip keys on the CONTROLLER, not the id (`tgt.controller_index != active`), still lifted by an
+  opponent-enter watcher and still absent from human / unpruned menus.
+* THE REPAIR IS THE TOOL'S. `test/viewer_protocol_check.py`: a recorded blink whose `blink_target` is 0 (or whose
+  name is "#0") is a legacy pseudo-spawn target; when the current menu carries the same-shaped plan (the
+  (land, casts) key) targeting a spawn id, the resolver takes the one with the LOWEST spawn id -- the first
+  spawn, which is what the shared id applied to (ApplyBlink resolved 0 to the first creature carrying it). Six
+  recorded picks are of that kind (s5_gi4 T4 #17 and #42; s8_gi7 T3 #40, #43, #58, #62). No reference file is
+  touched.
+
+*Measured.* References replay with 0 of 14 bad (all fourteen at their recorded win turns). s5_gi4 T4 #17 resolves to "Eldrazi Displacer: blink 1/1 Creature" (was "blink #0"). Sweep 0 of 631 short. Smoke
+75 passed, 5 failed, 0 new, job lines identical to the baseline with ONE fingerprint moved, and it is worth the paragraph: `fivecolour_smoke_d0_s1001` keeps its average to the
+fourth place (5.5690) but its play digest changes. A/B of the job under the committed binary and this one (`logs/fc_d0_ab/`):
+1000 of 1000 win turns identical, three games (gi 75, 193, 834) play-changed. The per-game trace of gi 75 says what: FiveColour
+takes the opponent's 2/2 with Oko's -5 on T14, and on T16 Oko's +1 turns it into an Elk -- on this binary. On the committed one
+the stolen creature stays a "2/2 Creature": the +1 targets by card number, the spawn's number was 0, and the effect found
+nothing to change. The Elk hits for one more (16 -> 17 on the final swing), the kill turn is the same. So the shared id was
+not only unclickable in the viewer: an opponent creature that changed hands could not be addressed by anything that names its
+target by number. A stable id fixes that class; the digest churn it costs is confined to games where a spawn's number is
+folded into an event, one job of eighty in smoke. (The tier's GT already fails on the upstream drift, so the accept that
+absorbs this is the one already owed.) The two scenario PASS lines that also differ from the 03:50 UTC baseline (`edf_blink_loop_cashes_gorge` -5 -> -4; `edf_wish_first_keeps_trace` now wins T4 through the route's drain) read the same on the committed HEAD binary: they are 12.10-12.12's, not this change's.
+
+*Not a slowdown.* The chain's s8_gi7 replay ran at ~65 s per step over its last steps, against a ~35 s all-step average on the
+previous chain; timed clean on a quiet box at step 58 (`logs/edf_followups/post_build_ab.log`, `MTG_PLAY_STEP_TIMING=1`),
+this binary and the committed one are the same: 61.6 / 61.6 s vs 62.4 / 61.1 s (two reps each, alternating), 98% of it the plan fan itself (`enum base`), the
+route trials 14 ms, and the route's own traces byte-identical (29 gate trials, all route wins, 4014 plans, both). Late steps
+of a long reference cost more than early ones; the two numbers were not the same quantity.
+
+**12.9 revised once more.** (5) closed by 12.13 (the route wins with a Gorge on the battlefield, in hand, or dug from
+the library, whenever its ping is sustained); (7) closed by 12.14 (stable spawn ids, the recorded target 0 mapped by
+the tool). Still open: (6) DEVELOP casts creatures only.

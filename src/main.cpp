@@ -279,6 +279,12 @@ static std::string EnchantTargetName(const GameState& s, int m_number)
     for (const Card& c : s.ActivePlayer().hand)
         if (c.m_number == m_number)
         { return c.m_name.str(); }
+    // The opponent's permanents last (a blink outlet targets "another creature", theirs included):
+    // the passive opponent's spawns carry ids now (GameState.h next_opp_spawn_number), and
+    // "blink 2/2 Creature" is the choice the viewer is actually offering.
+    for (const Permanent& p : s.battlefield)
+        if (p.card.m_number == m_number)
+        { return p.card.m_name.str(); }
     return "#" + std::to_string(m_number);
 }
 

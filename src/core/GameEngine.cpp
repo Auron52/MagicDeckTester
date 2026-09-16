@@ -267,6 +267,7 @@ void GameEngine::UntapStep(GameState& state)
         token.AddType(CardType::Creature);
         token.m_power     = spawn.power;
         token.m_toughness = spawn.toughness;
+        token.m_number    = state.next_opp_spawn_number++;   // stable per-copy id (GameState.h)
 
         Permanent perm;
         perm.card             = token;

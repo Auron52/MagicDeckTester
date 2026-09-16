@@ -196,9 +196,15 @@ struct GameState
     // (enchant_target rides m_number), a distinct sac source (multiple Treasures crackable in one
     // plan -- the old shared id 0 collapsed them to one), and an addressable viewer choice. The
     // counter lives on the state so search branches fork it: the same line assigns the same ids in
-    // the rollout and the executor (lockstep by construction). Opponent pseudo-spawns stay id 0
-    // (never targeted, never our sac sources).
+    // the rollout and the executor (lockstep by construction).
     int                      next_token_number     = 1000;
+    // Per-copy id for the passive opponent's SCHEDULED SPAWNS (the "1/1 Creature" bodies made at
+    // GameEngine's turn start and by the rollout's twin), from this base up (2026-09-16). They used
+    // to share id 0 -- "never targeted" -- but a blink outlet targets ANY creature: with a shared id
+    // every such plan applied to the FIRST spawn whatever it promised, and the viewer printed them
+    // all as "#0". A base of their own so the token ids above are untouched; both spawn sites draw
+    // from it in the same order (lockstep). Orchard Spirits are real tokens and use the counter above.
+    int                      next_opp_spawn_number = 500000;
     int                      consecutive_passes           = 0;
     int                      turn_number                  = 0;
     bool                     player_lost_on_draw          = false;

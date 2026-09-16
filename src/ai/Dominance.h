@@ -141,7 +141,10 @@ static_assert(sizeof(Player) == 200,
 // once padding settles), folded above. GameState itself gained `deck_reads_endstep_lifegain`, which
 // is a DECK CONSTANT (stamped once at SetupGame) -- identical across every pair of states Build()
 // could ever compare, so nothing to fold, exactly like deck_reads_mv_cast above it.
-static_assert(sizeof(GameState) == 792,
+// 792 -> 800 (2026-09-16): GameState gained `next_opp_spawn_number` (per-copy ids for the passive
+// opponent's scheduled spawns, which used to share id 0). Classified NOT folded in Build() beside
+// next_token_number, for the same reason.
+static_assert(sizeof(GameState) == 800,
               "GameState changed size -- fold any new field into dominance::Build() (see the "
               "MAINTENANCE HAZARD note at the top of Dominance.h) before updating this number.");
 
@@ -475,6 +478,11 @@ inline DomSnap Build(const GameState& s, const DecisionProvider& prov,
     // id decides nothing about an outcome -- two siblings that made different numbers of tokens
     // reach the same position with different counters. (Where an id DOES matter -- attachment
     // wiring -- the board fold below picks it up via card.m_number, and fails closed.)
+    // NOT folded, deliberately: next_opp_spawn_number (2026-09-16). Same classification as
+    // next_token_number: it hands out ids to FUTURE opponent spawns, and the spawns themselves are
+    // scheduled (opponent_spawns, by turn), so two siblings at one end-of-turn boundary have made
+    // the SAME spawns and hold the same counter anyway; the spawns already on the board are folded
+    // below via card.m_number like every other permanent.
     // NOT folded, deliberately: m1_hand / m1_hand_n / m1_hand_turn (the order-condemnation
     // snapshot). Per-turn SCRATCH: its only consumer (the post-combat CollectActions
     // condemnation filter) guards on m1_hand_turn == turn_number, and the pre-combat entry of

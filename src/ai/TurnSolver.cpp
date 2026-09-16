@@ -14539,15 +14539,15 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
                     const bool fold_fanout =
                         HumanPlayActive() || DecisionUnpruned(UnprunedGate::BlinkTarget);
                     std::vector<std::string> seen_targets;   // equivalence keys, fold (b)
-                    // An OPPONENT PSEUDO-SPAWN is not a target. The passive opponent's scheduled
-                    // creatures share id 0 (GameState.h: "never targeted, never our sac sources"),
-                    // and nothing in the goldfish model reads their tapped state -- there is no
-                    // blocking -- so blinking one is mana spent for nothing. Worse, the shared id
-                    // made every such plan APPLY to the first spawn whatever the fold key promised
-                    // (ApplyBlink resolves the victim by number: a "blink 2/2" blinked the 1/1), and
-                    // it read "blink #0" in the viewer's menu, where EDF's fourteen references carry
-                    // 9,672 of these actions (one was even picked, s5_gi4 T4 -- three mana for
-                    // nothing). Real tokens carry ids >= 1000 and stay targetable.
+                    // THE OPPONENT'S CREATURES are not targets for the autonomous search. Nothing
+                    // in the goldfish model reads their state -- there is no blocking -- so blinking
+                    // one is mana spent for nothing; EDF's fourteen references carry 9,672 such
+                    // "blink #0" actions in their recorded menus (one was even picked, s5_gi4 T4 --
+                    // three mana for nothing). Until 2026-09-16 the passive opponent's scheduled
+                    // spawns also shared card number 0, so every such plan APPLIED to the first
+                    // spawn whatever the fold key promised (ApplyBlink resolves the victim by
+                    // number); they now carry ids (GameState.h next_opp_spawn_number) and print by
+                    // name, and this skip keys on the controller, not on the id.
                     //
                     // The ONE thing a returned opponent creature does is ENTER under the opponent's
                     // control, and the universal enter cascade (ApplyBlink -> FireEtbWatchers ->
@@ -14564,8 +14564,8 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
                     // its unpruned menus grow past 100k plans (s8's stateless replay took seventeen
                     // minutes instead of ten) and the boards handed to the search stop being the human's. So the
                     // menu keeps the option and the recorded line replays byte-for-byte; only the
-                    // search stops paying for it. (The shared id's wrong-victim apply in human play
-                    // is a follow-up: unique spawn ids AND a resolver that maps recorded id 0.)
+                    // search stops paying for it. (The replay tool maps a recorded target of 0 onto
+                    // the lowest spawn id -- the first spawn, which is what the shared id applied to.)
                     bool opp_enter_watcher = false;
                     for (const Permanent& w : state.battlefield)
                     {
@@ -14577,7 +14577,7 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
                     for (const Permanent& tgt : state.battlefield)
                     {
                         if (!tgt.card.IsCreature()) { continue; }
-                        if (tgt.card.m_number == 0 && !opp_enter_watcher && !fold_fanout) { continue; }
+                        if (tgt.controller_index != state.active_player_index && !opp_enter_watcher && !fold_fanout) { continue; }
                         if (tgt.card.m_number == src.card.m_number) { continue; }   // "another"
                         if (sd->params.blink_own_only
                             && tgt.controller_index != state.active_player_index) { continue; }
@@ -26144,6 +26144,7 @@ static bool SimulateEndAndStartNextTurn(GameState& state)
             token.AddType(CardType::Creature);
             token.m_power     = spawn.power;
             token.m_toughness = spawn.toughness;
+            token.m_number    = state.next_opp_spawn_number++;   // lockstep with GameEngine's site
             Permanent perm;
             perm.card             = token;
             perm.controller_index = opp_index;

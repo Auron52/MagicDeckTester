@@ -46,6 +46,11 @@ thing (VPC_ALWAYS=1 forces it in any mode, VPC_SKIP=1 skips it).
 import json, os, re, subprocess, sys, glob
 
 MTG = os.environ.get("MTG_BIN", "./build/Release/mtg")
+# The passive opponent's scheduled creatures ("1/1 Creature" spawns) carry card numbers from this
+# base up (GameState.h next_opp_spawn_number). Before 2026-09-16 they all carried 0, which is how a
+# recorded blink of one reads (blink_target 0, summary "blink #0"); find_plan maps that legacy
+# target onto today's ids.
+OPP_SPAWN_BASE = 500000
 STRICT = "--strict" in sys.argv[1:]
 
 # §2a REPLAY COMPAT (MTG_TREASURE_PAY_SOURCE -- lump-mana-sources-as-payment-sources.md §2a, and
@@ -467,6 +472,25 @@ def find_plan(recorded, plans, recorded_index=None, prefer=None):
         want = plan_key_sans_pay_sac(recorded)
         if want is not None:
             hits = [i for i, p in enumerate(plans) if plan_key(p) == want]
+    # LEGACY PSEUDO-SPAWN TARGET (2026-09-16). Until this date the passive opponent's scheduled
+    # creatures all carried card number 0, so a recorded blink of one reads blink_target 0 and its
+    # summary says "blink #0" (EDF s5_gi4 x2, s8_gi7 x4). They now carry ids from OPP_SPAWN_BASE
+    # up and print by name, so the summary tier misses and the (land, casts) tier returns every
+    # blink of the same outlet with the same shape. The recorded apply always hit the FIRST spawn
+    # (ApplyBlink resolved id 0 to the first creature carrying it), so the faithful current plan
+    # is the one whose blink targets the LOWEST spawn id; ids are assigned in creation order, which
+    # is battlefield order. References are never rewritten; this is the tool carrying the intent.
+    legacy = any(a.get("verb") == "blink"
+                 and (a.get("blink_target", 0) == 0 or a.get("blink_target_name") == "#0")
+                 for a in (recorded.get("actions") or []))
+    if legacy and hits:
+        def spawn_target(pl):
+            ts = [a.get("blink_target") for a in (pl.get("actions") or [])
+                  if a.get("verb") == "blink" and (a.get("blink_target") or 0) >= OPP_SPAWN_BASE]
+            return min(ts) if ts else None
+        spawned = [(spawn_target(plans[i]), i) for i in hits if spawn_target(plans[i]) is not None]
+        if spawned:
+            hits = [min(spawned)[1]]
     # COMBO-OFF CONTENT ANCHOR, WIDENED (2026-09-16, EDF s3_gi2 / s14_gi13 and ten more): the
     # engine's verified finisher is now ONE standalone plan whose casts read ["Combo Off"] (the
     # mechanical COMBO OFF route), so a macro recorded as "blink Peregrine Drake x60 -- COMBO OFF"
