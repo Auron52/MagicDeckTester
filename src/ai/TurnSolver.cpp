@@ -42532,11 +42532,28 @@ std::vector<TurnSolver::Plan> TurnSolver::EnumerateMainPlans(const GameState& st
             // single blinks on the menu its replay banked too little and slid T4 -> T7. What stays
             // deleted is every COMBINED goff plan and every smaller banking variant -- the menu
             // gains at most ONE banking entry, and only the verified winner ever says COMBO OFF.
+            //
+            // ...AND BESIDE A VERIFIED ROUTE (2026-09-16). The mechanical COMBO OFF route is a plan of
+            // its own (one ComboRoute action, casts ["Combo Off"]), not a Displacer multi-activate --
+            // so when IT is the verified winner, "only one goff plan survives" deleted the user's
+            // sized blink outright, which is the very entry this block exists to keep. Measured on
+            // EDF s2_gi1: the Gorge-sustainability fix made the route WIN a T4 frame where it used
+            // to stall (61 blinks on an unpayable {2}{R}), the x50 blink vanished with the win, the
+            // reference's recorded "blink Peregrine Drake x50" resolved onto the single blink, and
+            // the replay slid T4 -> T7. The route and the multi-activate are different offers: the
+            // menu keeps both, the bank is never flagged, and only the route says COMBO OFF.
+            auto is_route_plan = [](const Plan& p) {
+                for (const Action& a : p.actions)
+                { if (a.kind == Action::Kind::ComboRoute) { return true; } }
+                return false;
+            };
             int best_bank = -1, best_bank_k = 0;
-            if (!verified)
+            const bool best_is_route = verified && best >= 0 && is_route_plan(plans[best]);
+            if (!verified || best_is_route)
             {
                 for (int i = 0; i < static_cast<int>(plans.size()); ++i)
                 {
+                    if (best_is_route && (i == best || is_route_plan(plans[i]))) { continue; }
                     const int k = goff_of(plans[i]);
                     if (k > best_bank_k && plans[i].actions.size() == 1
                         && plans[i].land_to_play.empty())
@@ -42554,11 +42571,21 @@ std::vector<TurnSolver::Plan> TurnSolver::EnumerateMainPlans(const GameState& st
                                         : -1;
             std::vector<Plan> kept;
             kept.reserve(plans.size());
-            Plan combo;
-            bool have_combo = false;
+            Plan combo, bank;
+            bool have_combo = false, have_bank = false;
             for (int i = 0; i < static_cast<int>(plans.size()); ++i)
             {
                 if (goff_of(plans[i]) == 0)          { kept.push_back(std::move(plans[i])); }
+                else if (best_is_route && i == best_bank)
+                {
+                    // The multi-activate kept beside a verified route: a plain menu entry, never a
+                    // claim. (When the verified winner IS a blink, best_bank is -1 and this arm is
+                    // dead; when nothing verified, the bank goes through the arm below as before.)
+                    bank = std::move(plans[i]); have_bank = true;
+                    bank.combo_off_verified = false;
+                    bank.combo_off_offered  = false;
+                    bank.combo_off_rule.clear();
+                }
                 else if ((i == best && verified) || i == best_bank || i == offered_idx)
                 {
                     combo = std::move(plans[i]); have_combo = true;
@@ -42587,6 +42614,7 @@ std::vector<TurnSolver::Plan> TurnSolver::EnumerateMainPlans(const GameState& st
                     { combo.combo_off_rule = co_rule.empty() ? std::string("TRIAL") : co_rule; }
                 }
             }
+            if (have_bank)  { kept.push_back(std::move(bank)); }
             if (have_combo) { kept.push_back(std::move(combo)); }
             plans = std::move(kept);
         }

@@ -1,0 +1,65 @@
+{
+ "_comment": [
+  "Shivan Gorge ON the battlefield as the only finisher; Displacer + Drake loop; red only from Trace of Abundance (any colour). Per finish iteration: blink {2}{C} + ping {2}{R} against five untaps (Gorge's own untap is the ping's), so the route must BANK first, then finish.",
+  "BUTTON half: the viewer's Combo Off must be offered AND verified on this board (human-play gate)."
+ ],
+ "deck": "decks/EldraziDisplacerFlicker/EldraziDisplacerFlicker.cod",
+ "turn": 4,
+ "on_the_play": false,
+ "active_life": 20,
+ "opponent_life": 20,
+ "energy_counters": 0,
+ "library_filler": "Forest",
+ "library_size": 40,
+ "depth": 5,
+ "budget_ms": 20,
+ "battlefield": [
+  {
+   "name": "Shivan Gorge",
+   "controller": 0,
+   "tapped": false
+  },
+  {
+   "name": "Mariposa Military Base",
+   "controller": 0,
+   "tapped": false
+  },
+  {
+   "name": "Conservatory",
+   "controller": 0,
+   "tapped": false
+  },
+  {
+   "name": "Trace of Abundance",
+   "controller": 0,
+   "tapped": false,
+   "equips": "Conservatory"
+  },
+  {
+   "name": "Brushland",
+   "controller": 0,
+   "tapped": false
+  },
+  {
+   "name": "Yavimaya Coast",
+   "controller": 0,
+   "tapped": false
+  },
+  {
+   "name": "Eldrazi Displacer",
+   "controller": 0,
+   "tapped": false
+  },
+  {
+   "name": "Peregrine Drake",
+   "controller": 0,
+   "tapped": false
+  }
+ ],
+ "hand": [],
+ "expect_combo_off": true,
+ "env": {
+  "MTG_HUMAN_PLAY": "1"
+ },
+ "combo_off_verify": true
+}

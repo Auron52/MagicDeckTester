@@ -1,0 +1,62 @@
+{
+ "_comment": [
+  "Shivan Gorge on the battlefield but NO red source at all (no Aura, no Hub): the on-board Gorge must be passed over, and the Living Wish fetches Dimensional Infiltrator (blue from Yavimaya Coast) to exile the opponent's library. Before the sustainability check the route picked the Gorge, could not pay {R}, and found nothing.",
+  "BUTTON half: the viewer's Combo Off must be offered AND verified on this board (human-play gate)."
+ ],
+ "deck": "decks/EldraziDisplacerFlicker/EldraziDisplacerFlicker.cod",
+ "turn": 4,
+ "on_the_play": false,
+ "active_life": 20,
+ "opponent_life": 20,
+ "energy_counters": 0,
+ "opponent_library_size": 20,
+ "library_filler": "Forest",
+ "library_size": 40,
+ "depth": 5,
+ "budget_ms": 20,
+ "battlefield": [
+  {
+   "name": "Shivan Gorge",
+   "controller": 0,
+   "tapped": false
+  },
+  {
+   "name": "Mariposa Military Base",
+   "controller": 0,
+   "tapped": false
+  },
+  {
+   "name": "Yavimaya Coast",
+   "controller": 0,
+   "tapped": false
+  },
+  {
+   "name": "Yavimaya Coast",
+   "controller": 0,
+   "tapped": false
+  },
+  {
+   "name": "Brushland",
+   "controller": 0,
+   "tapped": false
+  },
+  {
+   "name": "Eldrazi Displacer",
+   "controller": 0,
+   "tapped": false
+  },
+  {
+   "name": "Peregrine Drake",
+   "controller": 0,
+   "tapped": false
+  }
+ ],
+ "hand": [
+  "Living Wish"
+ ],
+ "expect_combo_off": true,
+ "env": {
+  "MTG_HUMAN_PLAY": "1"
+ },
+ "combo_off_verify": true
+}

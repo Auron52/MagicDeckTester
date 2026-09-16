@@ -1,0 +1,18 @@
+{
+  "_comment": ["Shivan Gorge with CLOUD OF FAERIES as the only untapper (two lands per blink). Two Aura'd lands make the Cloud loop mana-positive by one; the finish set must hand the Gorge one of the two untaps, so every ping costs four from the bank. ~100 iterations, well inside the route's cap. Red from Trace of Abundance."],
+  "deck": "decks/EldraziDisplacerFlicker/EldraziDisplacerFlicker.cod",
+  "turn": 4, "on_the_play": false, "active_life": 20, "opponent_life": 20, "energy_counters": 0,
+  "library_filler": "Forest", "library_size": 40, "depth": 5, "budget_ms": 20, "max_turns": 8,
+  "battlefield": [
+    { "name": "Shivan Gorge",           "controller": 0, "tapped": false },
+    { "name": "Mariposa Military Base", "controller": 0, "tapped": false },
+    { "name": "Wild Growth",            "controller": 0, "tapped": false, "equips": "Mariposa Military Base" },
+    { "name": "Conservatory",           "controller": 0, "tapped": false },
+    { "name": "Trace of Abundance",     "controller": 0, "tapped": false, "equips": "Conservatory" },
+    { "name": "Brushland",              "controller": 0, "tapped": false },
+    { "name": "Eldrazi Displacer",      "controller": 0, "tapped": false },
+    { "name": "Cloud of Faeries",       "controller": 0, "tapped": false }
+  ],
+  "hand": [],
+  "expect_win_turn": 4
+}

@@ -1,0 +1,18 @@
+{
+  "_comment": ["Shivan Gorge AND Kitchen in hand, one land drop, no Wish and no finisher anywhere else: the Gorge is the only kill, so it must be the land drop (the draw land digs into a library of Forests). Red from Trace of Abundance."],
+  "deck": "decks/EldraziDisplacerFlicker/EldraziDisplacerFlicker.cod",
+  "turn": 4, "on_the_play": false, "active_life": 20, "opponent_life": 20, "energy_counters": 1,
+  "library_filler": "Forest", "library_size": 40, "depth": 5, "budget_ms": 20, "max_turns": 8,
+  "battlefield": [
+    { "name": "Mariposa Military Base", "controller": 0, "tapped": false },
+    { "name": "Conservatory",           "controller": 0, "tapped": false },
+    { "name": "Trace of Abundance",     "controller": 0, "tapped": false, "equips": "Conservatory" },
+    { "name": "Brushland",              "controller": 0, "tapped": false },
+    { "name": "Yavimaya Coast",         "controller": 0, "tapped": false },
+    { "name": "Aether Hub",             "controller": 0, "tapped": false },
+    { "name": "Eldrazi Displacer",      "controller": 0, "tapped": false },
+    { "name": "Peregrine Drake",        "controller": 0, "tapped": false }
+  ],
+  "hand": ["Kitchen", "Shivan Gorge"],
+  "expect_win_turn": 4
+}

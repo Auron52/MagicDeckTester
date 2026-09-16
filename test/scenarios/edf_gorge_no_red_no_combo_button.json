@@ -1,0 +1,62 @@
+{
+ "_comment": [
+  "Shivan Gorge on the battlefield, loop live, but no red anywhere and no other finisher: no Combo Off may be offered at T4 (the pings cannot be paid). Combat may still win later; only the T4 combo claim is asserted."
+ ],
+ "deck": "decks/EldraziDisplacerFlicker/EldraziDisplacerFlicker.cod",
+ "turn": 4,
+ "on_the_play": false,
+ "active_life": 20,
+ "opponent_life": 20,
+ "energy_counters": 0,
+ "library_filler": "Forest",
+ "library_size": 40,
+ "depth": 5,
+ "budget_ms": 20,
+ "battlefield": [
+  {
+   "name": "Shivan Gorge",
+   "controller": 0,
+   "tapped": false
+  },
+  {
+   "name": "Mariposa Military Base",
+   "controller": 0,
+   "tapped": false
+  },
+  {
+   "name": "Brushland",
+   "controller": 0,
+   "tapped": false
+  },
+  {
+   "name": "Brushland",
+   "controller": 0,
+   "tapped": false
+  },
+  {
+   "name": "Yavimaya Coast",
+   "controller": 0,
+   "tapped": false
+  },
+  {
+   "name": "Yavimaya Coast",
+   "controller": 0,
+   "tapped": false
+  },
+  {
+   "name": "Eldrazi Displacer",
+   "controller": 0,
+   "tapped": false
+  },
+  {
+   "name": "Peregrine Drake",
+   "controller": 0,
+   "tapped": false
+  }
+ ],
+ "hand": [],
+ "expect_combo_off": false,
+ "env": {
+  "MTG_HUMAN_PLAY": "1"
+ }
+}

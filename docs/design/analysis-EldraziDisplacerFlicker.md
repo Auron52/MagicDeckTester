@@ -8795,3 +8795,56 @@ opponent's pseudo-spawns, the human menu keeps the legal target as recorded. Sti
 untap-and-ping line beyond `Fin::Gorge`; (6) DEVELOP casts creatures only; (7, new, a decision) unique ids for
 opponent pseudo-spawns plus a resolver mapping for a recorded `blink_target` of 0, so a human's "blink the 2/2"
 blinks the 2/2 and the menu can name it.
+
+**12.13 Winning with Shivan Gorge (10:35-13:17 UTC).** USER: *"let's ensure we can win with Shivan Gorge."*
+The route already had a `Fin::Gorge` for a Gorge on the battlefield and for one wished as the land drop; three
+gaps closed, all in `DecisionProviders.cpp`:
+
+* *Sustained colour, not makeable colour.* A Gorge ping wants {R} once per activation, twenty times over, and
+  `CanMakeColor` only asked whether the board makes one -- an Aether Hub with one energy counter makes exactly
+  one. `SustainsColor(cx, col, n)` answers the real question (an any-colour land Aura or a land that simply
+  produces the colour is unbounded; energy lands count energy over the per-tap price; the float counts), and
+  `GorgeSustained` gates all three Gorge paths on it. An on-board Gorge whose ping the board cannot sustain is now
+  PASSED OVER and the next finisher tried (Wish -> Infiltrator, say) instead of the route dying on the ping.
+* *A Gorge in HAND is the finisher.* Decide gained `f.land`: a Gorge in hand with the land drop open and its
+  colour sustained is chosen ahead of spending a Wish (the free finisher; claude_s2_gi1's T4 led with
+  "land=Shivan Gorge"), the loop plays it on the next pass, and Decide reads it from the board from then on.
+  `ScoreLandDrop` gives a sustained Gorge +80 so the deploy's land drop prefers it to a draw land (the dig is
+  speculative, the pings are not).
+* *The ping's untap is not income.* The finish set carried the Gorge as `must`, and `YieldOfSet` counted its
+  {C} as income though its untap is spent on the ping ({T} is in the cost); the bank target was one mana per
+  activation short and the finish fell back to banking mid-way. Subtracted.
+* *The multi-activate survives beside a verified route* (`TurnSolver.cpp`, the human combo-off gate). The gate
+  keeps ONE go-off plan: the verified winner, else the biggest standalone banking blink (kept since 2026-09-08 for
+  the user's sized multi-activate and for claude_s2_gi1's recorded "blink x50"). The route plan is a plan of its
+  own (casts ["Combo Off"]), not a Displacer activation, so when IT verifies, that rule deleted the blink
+  outright. Now a verified route keeps the biggest standalone blink beside it, unflagged: two entries, one claim.
+
+*Measured.* Nine constructed boards under `test/scenarios/edf_gorge_*.json` (Gorge on board with Displacer +
+Drake; Gorge in hand; Gorge in hand beside Kitchen with one drop; Gorge with Cloud of Faeries as the only
+untapper and two Aura'd lands; no red at all with a Wish -> Infiltrator fallback; each as an autonomous win-turn
+fixture and as a human-play button fixture; plus a no-red / no-finisher board that must offer nothing). All nine
+PASS on this binary -- and, measured on the committed HEAD binary in a worktree, all nine already passed there
+too: the constructed boards were won before, by the older macro or by the route's on-board branch, and the
+change moved the route's OWN line onto them (HEAD's in-hand button plan was "land=Shivan Gorge; Combo Off
+route", now the route plays the land itself; HEAD's no-red board won through the old "blink x22 -- COMBO OFF"
+macro, now through the route). The one outcome that changed is an EXISTING fixture: `edf_co_23_no_wish_in_
+library_absent`, the negative control for the library-depth widening, whose library holds the deck's single
+Shivan Gorge thirty cards down with Kitchen on the battlefield. The route digs (blink Drake, Kitchen
+investigate, crack the Clue) to the Gorge, plays it, and pings sixteen times -- 70 blinks, 30 draws, 16
+activations, execution-verified. Until the in-hand path existed the drawn Gorge sat in hand and the dig ran
+the library out. The fixture now expects the offer; `edf_co_23b` (the same board with the Gorge removed too) is
+the negative control from here: a dig that finds nothing still claims nothing. combo_off fixtures 34 / 34,
+scenarios 99 / 99.
+
+Reference note -- and the one replay this change broke, then fixed. claude_s2_gi1's T4 is the human's own Gorge
+turn: Gorge as the land drop for its {C} and Drake, 23 Drake blinks banked, Living Wish -> Dimensional
+Infiltrator, cast it, 50 more blinks (the deck-out). Its final frame (T4 #15, board: Gorge, two Conservatories,
+Yavimaya Coast, Displacer, Drake, Infiltrator; no red source) is where the two binaries part. At HEAD the route's
+Decide took the on-board Gorge on `CanMakeColor(Red)`, the ping was never payable ("{2}{R} not payable from
+g47 c47"), it blinked 61 times and stalled -- TRIAL no -- so the gate's verified entry was the x50 blink macro
+and the recorded pick resolved onto it. On this binary `GorgeSustained` passes the Gorge over, the route takes
+the Infiltrator and WINS the trial (iters 51, acts 50) -- the intended improvement -- but the gate then kept only
+the route, the recorded x50 resolved onto the single blink (the (land, casts) key's first hit), and the replay
+slid T4 -> T7 (`gs_replay.log`: 8 predated decisions answered by default instead of 2). The fourth bullet is the
+repair; the reference is untouched. After it, s2_gi1 replays repaired, win turn 4 (the recorded turn).

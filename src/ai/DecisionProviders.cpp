@@ -16463,6 +16463,48 @@ static bool CanMakeColor(const Ctx& cx, Color col)
     }
     return false;
 }
+// A colour the finisher needs ONCE PER ACTIVATION, `n` times over. CanMakeColor answers "can the
+// board make one"; a Shivan Gorge ping wants {R} twenty times, and an Aether Hub with one energy
+// counter makes exactly one -- a route decided on CanMakeColor died at the second ping with no
+// other finisher tried. Unbounded: an any-colour land Aura, or a land that simply produces the
+// colour every untap. Counted: the energy lands (the shared energy pool over the per-tap price,
+// once) and the float's own pool.
+static bool SustainsColor(const Ctx& cx, Color col, int n)
+{
+    int  reps = PoolOf(cx.s.floating_mana, col) + cx.s.floating_mana.wild;
+    int  energy_per_tap = 0;
+    for (const Permanent& p : cx.s.battlefield)
+    {
+        if (p.controller_index != cx.me || !p.card.IsLand()) { continue; }
+        const CardDefinition* d = DefOf(p.card);
+        if (!d) { continue; }
+        if (!AnyColorLandAuras(cx.s, p).empty()) { return true; }
+        bool makes = false;
+        for (Color c : EffectiveProducesFor(cx.s, cx.me, *d, &p)) { if (c == col) { makes = true; break; } }
+        if (!makes) { continue; }
+        if (d->params.energy_per_colored_tap > 0) { energy_per_tap = d->params.energy_per_colored_tap; continue; }
+        return true;
+    }
+    if (energy_per_tap > 0) { reps += cx.s.players[cx.me].energy_counters / energy_per_tap; }
+    return reps >= n;
+}
+static bool SustainsCost(const Ctx& cx, const ManaCost& cost, int n)
+{
+    if (cost.white > 0 && !SustainsColor(cx, Color::White, n)) { return false; }
+    if (cost.blue  > 0 && !SustainsColor(cx, Color::Blue,  n)) { return false; }
+    if (cost.black > 0 && !SustainsColor(cx, Color::Black, n)) { return false; }
+    if (cost.red   > 0 && !SustainsColor(cx, Color::Red,   n)) { return false; }
+    if (cost.green > 0 && !SustainsColor(cx, Color::Green, n)) { return false; }
+    return true;
+}
+// A Shivan Gorge is a finisher only while its ping's colour comes back every untap, for as many
+// pings as the opponent's life needs.
+static bool GorgeSustained(const Ctx& cx, const CardDefinition* d, int life)
+{
+    if (!d || !d->params.tap_damage_cost.has_value() || d->params.tap_damage_each_opponent <= 0) { return false; }
+    return SustainsCost(cx, d->params.tap_damage_cost.value(),
+                        CeilDiv(std::max(1, life), d->params.tap_damage_each_opponent));
+}
 
 // The lands the next ETB should hand back, in priority order: `want_c` {C} sources first (the
 // finish), a `must` land (the draw land / the Gorge) first of all, then the highest yields.
@@ -16838,6 +16880,7 @@ struct Fin
     int         id = 0;          // on the battlefield
     int         hand = -1;       // in hand (creature to cast)
     int         wish = -1;       // hand index of the Wish / Call that fetches it
+    int         land = -1;       // in hand: a Shivan Gorge to play as the land drop (free)
     bool        wish_is_land = false;
     std::string target;
     ManaCost    cast, act;
@@ -16874,7 +16917,7 @@ static Fin Decide(const Ctx& cx, const Board& b, const Hand& h)
         const int i = FindPerm(cx.s, cx.me, b.drainer);
         set_drain(DefOf(cx.s.battlefield[i].card), &cx.s.battlefield[i].card); f.id = b.drainer;
     }
-    else if (b.gorge != 0)
+    else if (b.gorge != 0 && GorgeSustained(cx, DefOf(cx.s.battlefield[FindPerm(cx.s, cx.me, b.gorge)].card), life))
     {
         const int i = FindPerm(cx.s, cx.me, b.gorge);
         const CardDefinition* d = DefOf(cx.s.battlefield[i].card);
@@ -16902,6 +16945,21 @@ static Fin Decide(const Ctx& cx, const Board& b, const Hand& h)
                 if (IsExiler(d) && LibOk(cx)) { set_exile(d, nullptr); f.hand = idx; f.cast = d->card.m_mana_cost; break; }
             }
         }
+        // a Shivan Gorge in HAND is the land drop -- the free finisher, ahead of spending a Wish
+        // (claude_s2_gi1 T4: the human led with "land=Shivan Gorge"); Decide reads it from the board
+        // on the next pass, once the loop has played it.
+        if (f.k == Fin::None
+            && cx.s.players[cx.me].lands_played_this_turn < cx.s.players[cx.me].LandDropsAvailable())
+        {
+            for (int idx : h.lands)
+            {
+                const CardDefinition* d = DefOf(cx.s.players[cx.me].hand[idx]);
+                if (!IsGorge(d) || !GorgeSustained(cx, d, life)) { continue; }
+                f.k = Fin::Gorge; f.land = idx; f.act = d->params.tap_damage_cost.value();
+                f.acts = CeilDiv(life, d->params.tap_damage_each_opponent);
+                break;
+            }
+        }
         if (f.k == Fin::None && !h.wishes.empty())
         {
             std::string nm;
@@ -16910,7 +16968,7 @@ static Fin Decide(const Ctx& cx, const Board& b, const Hand& h)
             { set_drain(d, nullptr); f.wish = h.wishes.front(); f.target = nm; f.cast = d->card.m_mana_cost; }
             else if ((d = SideboardFind(cx, IsExiler, &nm)) != nullptr && LibOk(cx) && CanMakeColor(cx, Color::Blue))
             { set_exile(d, nullptr); f.wish = h.wishes.front(); f.target = nm; f.cast = d->card.m_mana_cost; }
-            else if ((d = SideboardFind(cx, IsGorge, &nm)) != nullptr && CanMakeColor(cx, Color::Red)
+            else if ((d = SideboardFind(cx, IsGorge, &nm)) != nullptr && GorgeSustained(cx, d, life)
                      && cx.s.players[cx.me].lands_played_this_turn < cx.s.players[cx.me].LandDropsAvailable())
             {
                 f.k = Fin::Gorge; f.wish = h.wishes.front(); f.wish_is_land = true; f.target = nm;
@@ -16978,6 +17036,9 @@ static int ScoreLandDrop(const Ctx& cx, const CardDefinition* d, const Board& b)
     int s = 0;
     if (MakesC(d) && b.c_sources == 0)                            { s += 100; }
     if ((IsTapDrawLand(d) || IsInvestigateLand(d)) && b.draw_land == 0) { s += 50; }
+    // a Shivan Gorge whose ping colour the board sustains is a finisher on its own -- worth more
+    // than a land that digs for one (the dig is speculative, the pings are not)
+    if (IsGorge(d) && b.gorge == 0 && GorgeSustained(cx, d, cx.s.players[1 - cx.me].life)) { s += 80; }
     if (!d->params.enters_tapped)                                 { s += 10 + ManaProducedPerTap(*d); }
     return s;
 }
@@ -17287,6 +17348,13 @@ static int Loop(Ctx& cx)
                    + " demand=" + cx.demand.ToString() + " float=" + cx.Float());
         }
 
+        // the Gorge in hand IS the land drop: free, and the board carries it from here
+        if (f.k == Fin::Gorge && f.id == 0 && f.land >= 0)
+        {
+            if (PlayLandDrop(cx, f.land)) { prev = TakeSnap(cx); stall = 0; continue; }
+            cx.Note("Gorge land drop failed"); return 0;
+        }
+
         // float-only improvements to the loop itself: cheaper blinks, a bigger untapper, the switch
         bool did = false;
         if (!h.reducers.empty() && CastEnchantment(cx, h.reducers.front(), 0, /*float_only=*/true)) { did = true; }
@@ -17352,7 +17420,11 @@ static int Loop(Ctx& cx)
             const int  want_c   = (b.outlet_needs_c ? 1 : 0) + (f.act_c ? 1 : 0);
             const int  must     = (f.k == Fin::Gorge && f.id != 0) ? f.id : 0;
             const std::vector<int> fin_set = ChooseUntaps(cx, n_untap, want_c, must);
-            const int  income   = YieldOfSet(cx, fin_set);
+            int        income   = YieldOfSet(cx, fin_set);
+            // the Gorge's untap is spent on the ping ({T} is in its cost), not on mana
+            if (f.k == Fin::Gorge && f.id != 0
+                && std::find(fin_set.begin(), fin_set.end(), f.id) != fin_set.end())
+            { income -= YieldOfSet(cx, std::vector<int>{ f.id }); }
             const int  per_iter = std::max(0, b.blink.ManaValue() + f.act.ManaValue() - income);
             bank_target = f.cast.ManaValue() + (f.wish >= 0 ? HandMv(cx, f.wish) : 0)
                         + (f.need_switch && h.pipfree_outlet >= 0 ? HandMv(cx, h.pipfree_outlet) : 0)

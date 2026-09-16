@@ -1,0 +1,67 @@
+{
+ "_comment": [
+  "Shivan Gorge in HAND with the land drop open, no other finisher anywhere: the route must play it as the land drop and ping it out. Red from Trace of Abundance.",
+  "BUTTON half: the viewer's Combo Off must be offered AND verified on this board (human-play gate)."
+ ],
+ "deck": "decks/EldraziDisplacerFlicker/EldraziDisplacerFlicker.cod",
+ "turn": 4,
+ "on_the_play": false,
+ "active_life": 20,
+ "opponent_life": 20,
+ "energy_counters": 1,
+ "library_filler": "Forest",
+ "library_size": 40,
+ "depth": 5,
+ "budget_ms": 20,
+ "battlefield": [
+  {
+   "name": "Mariposa Military Base",
+   "controller": 0,
+   "tapped": false
+  },
+  {
+   "name": "Conservatory",
+   "controller": 0,
+   "tapped": false
+  },
+  {
+   "name": "Trace of Abundance",
+   "controller": 0,
+   "tapped": false,
+   "equips": "Conservatory"
+  },
+  {
+   "name": "Brushland",
+   "controller": 0,
+   "tapped": false
+  },
+  {
+   "name": "Yavimaya Coast",
+   "controller": 0,
+   "tapped": false
+  },
+  {
+   "name": "Aether Hub",
+   "controller": 0,
+   "tapped": false
+  },
+  {
+   "name": "Eldrazi Displacer",
+   "controller": 0,
+   "tapped": false
+  },
+  {
+   "name": "Peregrine Drake",
+   "controller": 0,
+   "tapped": false
+  }
+ ],
+ "hand": [
+  "Shivan Gorge"
+ ],
+ "expect_combo_off": true,
+ "env": {
+  "MTG_HUMAN_PLAY": "1"
+ },
+ "combo_off_verify": true
+}
