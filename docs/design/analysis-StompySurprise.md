@@ -1296,3 +1296,55 @@ so the sweeper-proof engine is intact, and the elf count is untouched at 20.
   0.038–0.043 clears by ~80x.
 * **Apex Altisaur ships as a vanilla 10/10** — both fight abilities are provably inert against a
   passive opponent. Its measured value is a floor, as the user signed off before implementation.
+
+## THE STRANDING EFFECT IS REAL — a 2nd Craterhoof (2026-09-16)
+
+The user proposed this and was right, against my expectation:
+
+> *"I wouldn't really consider more Hornet Queen, but Craterhoof might actually make sense, given
+> that one can be stranded in your hand and be removed from being a search target."*
+
+The mechanism is modelled: **Natural Order and Worldly Tutor both search the LIBRARY**, so a drawn
+Craterhoof is dead as a fetch target and the deck's best Natural Order line disappears with it.
+World War Hulk is the sole exception — its chapter I free-casts from *hand*, so it is the only card
+in the deck that likes a stranded Craterhoof.
+
+`logs/stompy_screen/hoof.json`, seed 51000000, 20,000 paired games, both formats, on the `stack_all`
+shell. **Table-dropped** and unavoidably so: the keep table enumerates at most one Craterhoof in an
+opening hand, so any 2nd copy raises composition fall-through to 1.57%, over the 1% limit, and the
+screen then drops the table from every arm. Pairwise se ≈ 0.0033 (1v1) / 0.0037 (2HG).
+
+| 2nd Craterhoof, paid by | 1v1 | 2HG |
+|---|---|---|
+| Turntimber Symbiosis 4→3 | **−0.0317** (t ≈ −9.6) | **−0.0522** (t ≈ −14.1) |
+| Forest 15→14 | −0.0288 | −0.0452 |
+| World War Hulk 3→2 | −0.0222 | −0.0429 |
+
+**Every payer agrees**, which is the same signature that made the 4th Worldly Tutor convincing: the
+effect belongs to the card added, not to the card cut. And it is worth roughly **twice as much at 30
+life**, where games run longer and the odds of having drawn the lone copy are higher — exactly what
+the stranding story predicts.
+
+> **These deltas are NOT comparable with the table-retained screens** (settle / legal / confirm /
+> confirm2). The baseline itself moves — 4.79 here versus 4.54 there — because mulligans are worse
+> without the keep table. Compare rows *within* this table only.
+
+### What this costs my earlier reasoning
+
+I had argued the deck's **14 library-finders** (4 Natural Order, 4 Worldly Tutor, 4 Turntimber
+Symbiosis, 2 Call of the Wild, plus 3 World War Hulk from hand) made a second copy of any specific
+fatty close to worthless — redundancy in *finding* substituting for redundancy in *copies*. That
+story predicts a 2nd Craterhoof is worth ~nothing. It measured 0.03–0.05.
+
+So the story is wrong, or at least badly incomplete, and **it was the story underwriting the
+Worldspine Wurm 2→1 and Terastodon 2→1 cuts in `stack_all`.** The stranding argument does not care
+which fatty it is about. The user's reluctance to accept those two cuts now has mechanistic support
+that the measurement had not been asked to test: every both-at-2 arm ever screened paid for the 4th
+Worldly Tutor with a Hulk or a Forest, and **no screen has ever tried paying with a dork** — the
+only legal payer that keeps Worldspine 2, Terastodon 2 and World War Hulk 3 intact together.
+
+`keep22.json` (seed 61000000, table-retained, 100,000 games) is closing that gap. A follow-up must
+then re-ask the Worldspine/Terastodon question on a **Craterhoof-2** shell, since a 2nd Craterhoof
+forces the table drop anyway and the extra arms are free once it is paid for.
+
+**`stack_all` is therefore NO LONGER a freeze candidate** — the list is re-opened on the fat counts.
