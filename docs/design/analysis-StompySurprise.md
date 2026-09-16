@@ -1107,3 +1107,80 @@ measurable half of the trade is nearly free. Nothing here argues against keeping
 **Hornet Queen flips sign the other way:** cutting it is mildly *good* in 1v1 (−0.0057) and clearly
 *bad* at 30 life (+0.0330). Longer games reward five bodies. It is protected by the toolbox rule in
 any case, but the 2HG number means the rule is not costing anything here either.
+
+## The legal-space screen: the 4th Worldly Tutor, and one fewer Worldspine Wurm (2026-09-16)
+
+`logs/stompy_screen/legal.json` — 10 arms, **every one constraint-legal**, both formats, **100,000**
+paired games (pairwise se ≈ 0.0014), seed 21000000, disjoint from settle's block. It exists because
+settle left two things genuinely unresolved and one thing untested.
+
+Three Craterhoof-2 arms were **cut on preflight**: a 1-of going to 2 raises composition fall-through
+to 1.57%, and the screen drops the keep table from *every* arm above 1% — symmetric, but ~22x per
+game and not comparable with settle. Every arm below sits at settle's own 0.39%.
+
+### `hulk2_tutor4` replicated on held-out seeds
+
+| | settle (seed 16M) | legal (seed 21M) |
+|---|---|---|
+| 1v1 | −0.0098 | **−0.0097** |
+| 2HG | −0.0040 (t ≈ −1.6, n.s.) | **−0.0063** (t ≈ −4.5) |
+
+The 1v1 figure reproduced to within 0.0001 on disjoint seeds. The 2HG effect was real and simply
+under-powered at 30,000 games.
+
+### It is the 4th Worldly Tutor that is good, not the 3rd Hulk that is bad
+
+Settle could not tell those apart, because the only arm that reached Worldly Tutor 4 paid for it with
+a Hulk. Four independent payers settle it — **all four are negative in both formats**:
+
+| the 4th Worldly Tutor, paid by | 1v1 | 2HG |
+|---|---|---|
+| Worldspine Wurm 2→1 (`tutor4_wurm1`) | **−0.0279** | −0.0256 |
+| Terastodon 2→1 (`tutor4_tera1`) | −0.0198 | **−0.0262** |
+| World War Hulk 3→2 (`hulk2_tutor4`) | −0.0097 | −0.0063 |
+| Forest 14→13 (`tutor4_f13`) | −0.0061 | −0.0037 |
+
+The Tutor is worth having whatever pays for it. The *spread* across payers (0.0061 → 0.0279) is the
+price of the slot spent, not of the Tutor — and it says the cheapest thing in this deck is the
+second Worldspine Wurm.
+
+### Worldspine Wurm is monotone-down — and the 3rd copy is a trap
+
+Sorting all ten arms by their Worldspine count separates them almost perfectly:
+
+| Worldspine Wurm | arms | 1v1 range vs FINAL |
+|---|---|---|
+| **1** | `tutor4_wurm1`, `f15_wurm1`, `combo_tutor_f15` | −0.0191 … **−0.0304** (all good) |
+| 2 | `FINAL`, `hulk2_tutor4`, `tutor4_f13`, `tutor4_tera1` | 0 … −0.0198 |
+| **3** | `f13_wurm3`, `hulk2_wurm3`, `combo_tutor_f13` | **+0.0123 … +0.0204** (all bad) |
+
+This closes the loop on settle's `alt0_wurm3` result: that arm looked like "a 3rd Worldspine Wurm is
+great" and it was nothing of the kind — the 3rd Wurm is *bad*, and the whole effect was the Apex
+Altisaur being cut. Every screen that has ever tried a 3rd Worldspine Wurm has measured it as a loss.
+
+### Forest 13 is wrong; 15 is fine but loses the slot to the Tutor
+
+`f15_wurm1` and `tutor4_wurm1` both cut a Worldspine Wurm and differ only in what they buy with it:
+
+| the freed slot buys | 1v1 | 2HG |
+|---|---|---|
+| a 4th Worldly Tutor | −0.0279 | −0.0256 |
+| a 15th Forest | −0.0191 | −0.0190 |
+| **Tutor over Forest** | **0.0088** | **0.0066** |
+
+Forest 13 is clearly wrong (`tutor4_f13` is the weakest of the four Tutor arms, and `f13_wurm3` is
+among the worst arms on the board). So the land count is right at 14–15 and the marginal slot goes
+to the Tutor.
+
+### The winner, and why it is not yet the answer
+
+`combo_tutor_f15` (Hulk 2, Worldspine 1, Tutor 4, Forest 15) leads both formats at **−0.0304 / −0.0270**
+— and it is a **statistical dead heat** with `tutor4_wurm1`: 0.0025 ± 0.0014 (t = −1.77) in 1v1 and
+0.0008 ± 0.0017 (t = −0.46) in 2HG. That is nowhere near enough to adopt a selection-biased winner.
+
+It matters which of the two wins, because **they differ on the sweeper axis**: `combo_tutor_f15`
+cuts the 3rd World War Hulk, and the Hulk is this deck's only sweeper-proof acceleration — an
+enchantment Pyroclasm ignores, that rebuilds from hand after a wipe. `tutor4_wurm1` keeps Hulk at 3
+and is within noise of the same speed. A 1.77-sigma edge is not a reason to sell the one card that
+covers the model's blind spot, so this goes to a held-out confirm on a third seed block
+(`confirm.json`, seed 31000000) before anything is adopted.
