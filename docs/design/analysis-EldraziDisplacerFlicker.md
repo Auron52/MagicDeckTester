@@ -8698,11 +8698,19 @@ carries EACH deploy order through the loop and returns the first that kills or d
 last -- casts Cloud, untaps, and Emiel is affordable: the human's own line); (2) the LIVE apply replays only
 the order its silent trial found (`Ctx::attempt_used`), because the history sink is global and a rollback
 cannot un-write a narration; (3) `Draw` never taps the sole {C} source when the outlet's blink needs it. s6's
-fixture was UNWINNABLE BY CONSTRUCTION: its six-card `library_top` came from the drifted replay and the rest
-is Forest filler, while the board's mana needs both Living Wishes as enablers (a {C} land and Cloud) exactly
-as the human played it, with the finisher coming from Kitchen draws deep in the real library. It is kept,
+fixture was UNWINNABLE BY CONSTRUCTION -- and NOT for the reason first written here ("the drifted replay"; that
+was an unverified inference, retracted). Its six-card `library_top` is the human's REAL post-Eladamri's-Call
+draw order (the Call shuffles: CR 701.19; the reference's own `drew` entries read Aether Hub, Wild Growth,
+Eldrazi Displacer, Trace of Abundance, Mariposa, behind the Call's Displacer), so the six were right; what
+made it unwinnable is the FILLER: 44 Forests where the real library held the Living Wishes the human's
+"WISH-DRAW" macro dug into (decision 70: hand of five drawn cards, pool W14 G124 C46, macro -> Living Wish ->
+Essence Depleter). The board's mana needs both in-hand Wishes as enablers (a {C} land and Cloud) exactly as
+the human played it, so with no Wish in the library there is no finisher; the engine's full enumeration of the
+frame (316 plans) verified none. It is kept,
 re-labelled `expect_combo_off: false` (no plan may promise a win there), and `s6_t4_f0_true.json` /
-`s9_t4_f0_true.json` carry the references' true 30-card library order (`ref_reveal.py`). Route verdicts on
+`s9_t4_f0_true.json` carry the references' 30-card library order at frame 0 as `ref_reveal.py` reports it
+(pre-shuffle for s6 -- a tutor's shuffle inside the harness will not reproduce the human's later order, but the
+two Living Wishes are in the library and the route's dig finds one). Route verdicts on
 the final binary: s1 WIN (T3), s6_true WIN (Wish -> Adarkar Wastes, Wish -> Cloud, Cloud, Drake, Drake,
 Call -> Displacer, Training Grounds, 32 draws to the finisher), s9 WIN (Displacer + Kitchen investigate),
 s9_true WIN (Cloud, Emiel, Emiel blinks Cloud, Mariposa draw -> Living Wish -> finisher -- the human's line),
