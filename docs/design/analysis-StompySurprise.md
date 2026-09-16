@@ -1465,3 +1465,104 @@ side of it.
 A cost note in favour of this being affordable: this deck's value leaf is **`leaf: "none"`**, adopted
 2026-09-11 because the leaf measured a net negative here. The value-leaf stage is therefore a shape
 *decision* to re-verify rather than a full fit to re-run.
+
+## THE FREEZE AND THE OVERNIGHT BUDGET (2026-09-16)
+
+User directive, superseding the measure-only one: *"Please continue overnight. You can do value-leaf
+and mulligan profiles as needed. I suspect overnight would probably not be quite enough for both,
+though, if we are doing 2 lists."*
+
+The suspicion was right on the default recipe and wrong on the reason, so both are worth writing down.
+
+### Two screens were CANCELLED on purpose
+
+`elves.json` (100,000 games) and `elves_notable.json` (`max_fallback: 0`) were queued behind `fat` and
+killed before they started. `elves_notable` existed for exactly one question — *is one shared keep
+table good enough, or do we need two?* — and authorising both generations **answers** it. A two-hour
+measurement of how wrong the shared table is has no consumer once each list carries its own. `elves`
+was buying se 0.0014 on the one axis this model is structurally unqualified to orient. That reclaimed
+~3.5 h of box time for generation, which is where the night's value actually is.
+
+(Kill queued waiters **youngest-first**. Each waits on its predecessor's PID, so killing a waiter's
+predecessor *fires* it instead of cancelling it.)
+
+### The value leaf is not merely a decision to re-verify — it is INERT, and that is now proven
+
+`AttachValueSidecar` (`src/ai/MulliganProfileIO.h:1211`): with `value_play.leaf == "none"` and
+`commit != "model"` it overwrites the parsed model with `MidGameEvaluator::Constant()` and forces
+`value_trust_depth = 0`. This deck runs exactly that shape, so its 120 fitted trees are **discarded at
+load**.
+
+Verified rather than argued. Three sidecars — the real one, one with `trees: []` and
+`intercept: -999999`, one with `intercept: +999999` — over 200 games at a fixed seed:
+
+```
+real       sorted-md5 7362c4684a28f2882c96e60d9c783016  n=200
+wrecked    sorted-md5 7362c4684a28f2882c96e60d9c783016  n=200
+intercept  sorted-md5 7362c4684a28f2882c96e60d9c783016  n=200
+```
+
+Byte-identical. **Value-leaf generation for these lists would fit an object the engine throws away.**
+The FILE must still exist (presence gates the H-cell ladder) and carries the `mull_gen_depth: 3` /
+`mull_gen_budget_ms: 3` that mulligan generation reads, so the `value_play` block is carried forward
+verbatim into each candidate folder. This is what makes two lists fit in one night at all.
+
+*Methodological note:* the first run of this probe showed three DIFFERENT digests and appeared to
+refute the code. It was digesting `[win]` lines in thread-completion order, which is nondeterministic
+under `--threads 2`. Sorting first made the runs reproducible. A digest over an unordered stream is
+not a digest.
+
+### K is DISCOVERED per list, and it is bigger than the shared table — not smaller
+
+The first projection here was wrong and in the cheap direction: it assumed the candidates inherit the
+screening apparatus's K=15. They do not. **aliasI's K=15 was manufactured** — `alias_card_into_bucket.py`
+forced Hulk→Call, Altisaur→Worldspine and Fyndhorn→dorks so that one table could serve every screening
+arm. That was a convenience, never a claim of equivalence.
+
+Natural discovery at the documented 0.01 threshold merges far less, and **USER RULING 2026-09-16**
+confirms it should: *"We shouldn't merge Hulk and call. Altisaur is more arguable, but we can leave it
+separate for now."* No threshold change, and **do not reach for forced aliases to buy back generation
+time** — that would ship a table asserting an equivalence the user has rejected.
+
+| list | shape | discovered K | merges found |
+|---|---|---|---|
+| A | 20 mana creatures, 15 Forest | **16** | Mystic+Fyndhorn+Llanowar; Elderscale+Hornet |
+| B | 18 mana creatures, 17 Forest | **17** | Mystic+Fyndhorn+Llanowar only |
+
+Elderscale/Hornet merge on A (distance 0.025) and separate on B — a real reminder that the table is
+fitted to the list, which is the entire reason each candidate needs its own.
+
+### The cost model, calibrated against the known 3.9 h run
+
+The table is not just size-7 cells: it covers hand sizes H=1..7, and the raw sidecar shows H≤6 running
+at the full cap (~80 rollouts/cell = 2 × R40 for play/draw) while H=7 is adaptive (~17.6). With
+`cells(H) = #{vectors 0 ≤ cᵢ ≤ capᵢ, Σ = H}` this reproduces the August table **within 3% at every
+hand size** (4.34 M modelled vs 4.23 M actual rollouts, 3.9 h).
+
+| | H=7 cells | rollouts | `complete` | `fast` |
+|---|---|---|---|---|
+| August table (K=15) | 67,819 | 4.23 M | 3.9 h *(actual)* | — |
+| A (K=16) | 89,464 | 5.49 M | ~4.9 h | ~3.5 h |
+| B (K=17) | 112,615 | 6.80 M | ~6.1 h | ~4.3 h |
+| **both** | | | **~11.0 h** | **~7.7 h** |
+
+### Decision: `fast` for both, `complete` later on the winner
+
+`complete` on two lists is ~11 h of generation plus validation and the head-to-head — the whole window
+with no slack, and projections slip. `fast` (R30, adaptive bottoming) costs ≤ ~0.02t of quality, and
+applying it to **both arms** means it largely cancels in what is a *paired* comparison. The deliverable
+that matters by morning is which list wins; `complete` risks delivering one finished table and no
+answer. So: **`fast` tonight to decide, `complete` later on the winner alone (~5-6 h) to ship.** A
+`fast` table is not a shipping artifact.
+
+### The head-to-head needs a hand-written manifest
+
+`deck_compare.py` gives every arm ONE apparatus by design (its Rule 0 — sharing a table halves the se).
+That is right for screening and *exactly wrong* here, since the shared table's bias on the mana:threat
+ratio is the thing two generations exist to remove. `scripts/stompy_h2h.py` therefore writes the
+manifest directly: still ONE pooled batch, four jobs ({A,B} × {1v1, 2hg}), each with its own per-job
+`profile` + `value_profile` (the format supports it; deck_compare simply does not expose it). B's
+numbering is inherited from A through deck_compare's own `inherit_numbering`, preserving the
+load-bearing invariant that both lists carry the number set {1..60} so a seed deals the same positions
+and only the CARD at a number differs. It refuses to run against a list whose keep table is missing —
+that arm would silently fall back to `DefaultProfile` and lose on apparatus rather than on cards.
