@@ -1566,3 +1566,63 @@ numbering is inherited from A through deck_compare's own `inherit_numbering`, pr
 load-bearing invariant that both lists carry the number set {1..60} so a seed deals the same positions
 and only the CARD at a number differs. It refuses to run against a list whose keep table is missing —
 that arm would silently fall back to `DefaultProfile` and lose on apparatus rather than on cards.
+
+## THE HEAD-TO-HEAD UNDER OWN TABLES (2026-09-16) — the apparatus bias, finally measured
+
+Two `complete` keep tables were generated, one per candidate, strictly serial and alone on the box,
+then compared in ONE pooled batch of 800,000 games (4 jobs, seed 91000000, `scripts/stompy_h2h.py`).
+This is the first comparison in the whole exercise where neither list is handicapped by the other's
+mulligan policy.
+
+The lists differ by exactly two slots — a pure **mana-source → threat** conversion, the axis the user
+named as un-decidable without regenerating the profile:
+
+| | A | B |
+|---|---|---|
+| Forest | 15 | 13 |
+| Worldspine Wurm | 1 | 2 |
+| Terastodon | 1 | 2 |
+
+Both generations passed their gates with near-identical margins, which matters: neither list wins
+because its apparatus happened to fit better.
+
+| | keep vs static | bottoming (confounded) | K | H=7 cells |
+|---|---|---|---|---|
+| A | −0.2263t (16/16 seeds) | −0.0384t (16/16) | 16 | 89,464 |
+| B | −0.2379t (16/16 seeds) | −0.0388t (16/16) | 15 | 80,100 |
+
+### Result: A wins both formats, and the shared table WAS biased — by ~20-28%
+
+| format | B − A (own tables) | se | t | shared-table screen | overstated by |
+|---|---|---|---|---|---|
+| 1v1 | **+0.0389** | 0.0010 | 40.3 | +0.0461 | 19% |
+| 2HG | **+0.0532** | 0.0011 | 48.9 | +0.0681 | 28% |
+
+**The user's methodological objection was correct and is now quantified.** A table fitted to a deck
+running 4 Worldspine Wurm / 18 mana creatures / 14 Forest systematically *overstated* the penalty for
+going back up to 2 Worldspine + 2 Terastodon, by roughly a fifth to a quarter of the effect. That is
+a real, signed, systematic bias of exactly the kind predicted for a mana↔threat conversion — not
+noise, and not something pairing cancels.
+
+It was not, however, large enough to flip the decision. **A holds: 1 Worldspine / 1 Terastodon /
+15 Forest.** Both the direction and the practical conclusion survive regeneration.
+
+This is the useful general lesson, and it cuts both ways: the shared-apparatus screens were
+*directionally* trustworthy here but *quantitatively* off by ~25% on a mana↔threat swap. Treat a
+screened margin under 0.02t on that axis as unresolved until each candidate carries its own table;
+treat one above ~0.04t as safe.
+
+### Apparatus notes
+
+* The batch-heartbeat defect struck again: line 738616 emitted
+  `[batch] heartbeat: 31/32 workers busy (97%)[win] job=2hg::StompySurpriseB gi=138623 wt=5`, gluing a
+  heartbeat onto the front of a win record. `score()` anchors its regex at line start, so that record
+  vanished and the job read 199,999 of 200,000 — and `score()` correctly REFUSED to report rather
+  than quietly returning a smaller `n`. Recovered by splitting glued lines into a COPY
+  (`h2h.repaired.out`); the original log is untouched. See
+  `docs/design/batch-heartbeat-corrupts-win-records.md`.
+* Both decks loaded their own sidecar and `source=value_play` in all four jobs, confirming the
+  carried-forward (unfitted) value block drives play identically on both sides.
+* The cost model predicted B at exactly 80,100 H=7 cells and A at exactly 89,464 — both to the digit,
+  as did every sub-table size. Generation took 4 h 53 m for both against a ~9.3 h projection, because
+  adaptive keep trims far below the scout's stated upper bound.
