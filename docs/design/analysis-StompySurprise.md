@@ -1039,3 +1039,71 @@ on the exposure table buys speed by selling the deck's only sweeper-proof engine
 
 NOT ADOPTED: no mulligan profile or value leaf of its own. Both must be regenerated against a
 12-dork deck before this margin is trusted at face value.
+
+## The settle screen: every slot re-priced on the final shell (2026-09-16)
+
+Most of this deck's counts were decided on the **old** shell — 2 Fyndhorn Elves, Wirewood Lodge in,
+13 Forests — and never re-tested after the shell changed. `logs/stompy_screen/settle.json` re-screens
+all of them against `G14_tutor3`: 13 arms, each ONE change paid by a named partner, **both formats**,
+30,000 paired games, seed 16000000, `max_turns` 10. Pairwise se ≈ 0.0023 (1v1) / 0.0025 (2HG).
+
+| arm (change vs `G14_tutor3`) | 1v1 vs FINAL | 2HG vs FINAL | legal? |
+|---|---|---|---|
+| `alt0_wurm3` — Apex Altisaur 1→**0**, Worldspine 2→3 | **−0.0349** | **−0.0060** | **NO** — zeroes Altisaur |
+| `call1_hulk4` — Call 2→**1**, Hulk 3→4 | **−0.0148** | **−0.0183** | **NO** — Call < 2 |
+| `hulk2_tutor4` — Hulk 3→2, Worldly Tutor 3→4 | **−0.0098** | −0.0040 | **yes** |
+| `wurm1_tera3` — Worldspine 2→1, Terastodon 2→3 | −0.0062 | +0.0035 | yes (sign flip) |
+| `hornet0_hulk4` — Hornet Queen 1→**0**, Hulk 3→4 | −0.0057 | +0.0330 | **NO** — zeroes Hornet |
+| `sym3_f15` — Symbiosis 4→3, Forest 14→15 | +0.0036 | +0.0026 | yes |
+| `wurm3_tera1` — Worldspine 2→3, Terastodon 2→1 | +0.0081 | +0.0017 | yes |
+| `hulk4_tutor2` — Hulk 3→4, Worldly Tutor 3→2 | +0.0167 | +0.0137 | yes |
+| `vault2_hulk2` — Vaultborn 1→2, Hulk 3→2 | +0.0167 | +0.0187 | yes |
+| `call3_hulk2` — Call 2→3, Hulk 3→2 | +0.0168 | +0.0224 | yes |
+| `solring0_f15` — Sol Ring 1→**0**, Forest 14→15 | +0.0315 | +0.0383 | **NO** — zeroes Sol Ring |
+| `no3_hulk4` — Natural Order 4→**3**, Hulk 3→4 | +0.0436 | +0.0737 | **NO** — NO 4 is fixed |
+
+### The headline is a legality result, not a speed result
+
+**The top arm in each format is an illegal list.** `alt0_wurm3` wins 1v1 and `call1_hulk4` wins 2HG,
+and both are retired by constraints the user set *before* these numbers existed — the toolbox rule
+(every important piece stays at ≥ 1), the explicit Apex Altisaur ruling, and Call of the Wild ≥ 2.
+Ranking the table without that filter would have proposed a list the user had already rejected.
+
+**Exactly one legal arm beat `G14_tutor3` in both formats: `hulk2_tutor4`** (Hulk 3→2 for a 4th
+Worldly Tutor) — and its 2HG margin is **t ≈ −1.6, not significant**. On this evidence the current
+list is either right or within noise of right.
+
+### What the screen settled, by not moving
+
+Eight counts were re-confirmed on the new shell, several of them decisively:
+
+* **Natural Order 4 is the most load-bearing count in the deck.** `no3_hulk4` is the worst arm in
+  both formats by a wide margin (+0.0436 / +0.0737) — cutting the 4th costs 2–4x what any other
+  single change is worth.
+* **Sol Ring stays** (+0.0315 / +0.0383 to cut it for a Forest), **Turntimber Symbiosis stays at 4**,
+  **Vaultborn Tyrant stays at 1**, **Terastodon stays at 2**, and **Call of the Wild 3 is worse than
+  2** — so the user's ≥ 2 constraint costs nothing on the upside, only on the downside.
+* **Forest 14 was NOT confirmed.** Both arms that tried 15 Forests paid for it with a card that is
+  independently good (Sol Ring, Symbiosis), so they cannot separate "15 Forests is wrong" from
+  "cutting Sol Ring is wrong." That gap is what `legal.json` exists to close.
+
+### The Altisaur price, isolated — and it is a 1v1 problem only
+
+Two arms end at **Worldspine Wurm 3** and differ only in which slot paid for it:
+
+| paid by | 1v1 | 2HG |
+|---|---|---|
+| `alt0_wurm3` — the Apex Altisaur | −0.0349 | −0.0060 |
+| `wurm3_tera1` — a Terastodon | +0.0081 | +0.0017 |
+| **gap = Altisaur vs a 2nd Terastodon** | **0.0430** | **0.0077** |
+
+So the 3rd Worldspine Wurm is *not* good — it measures **worse** when a Terastodon pays for it. The
+whole `alt0_wurm3` result is the Altisaur being cut, nothing else. That is the cleanest price yet put
+on the toolbox slot, and it carries a genuine update for the user's ruling: **at 30 life the Altisaur
+costs 0.0077, roughly a sixth of its 1v1 price.** The ruling was made for an unmodellable reason
+(the creature removal a passive goldfish cannot present), and in the format with the longer clock the
+measurable half of the trade is nearly free. Nothing here argues against keeping it.
+
+**Hornet Queen flips sign the other way:** cutting it is mildly *good* in 1v1 (−0.0057) and clearly
+*bad* at 30 life (+0.0330). Longer games reward five bodies. It is protected by the toolbox rule in
+any case, but the 2HG number means the rule is not costing anything here either.
