@@ -51,9 +51,10 @@ def require(stem):
 
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("--a", required=True); ap.add_argument("--b", required=True)
+    ap.add_argument("--decks", nargs="+", required=True,
+                    help="stems; the FIRST is the numbering base every other inherits from")
     ap.add_argument("--replace", action="append", default=[],
-                    help="'<removed in B>=<added in B>', repeatable")
+                    help="'<Stem>:<removed>=<added>', repeatable (per-deck replace map vs the base)")
     ap.add_argument("--games", type=int, default=100000)
     ap.add_argument("--seed", type=int, default=91000000)
     ap.add_argument("--max-turns", type=int, default=10)
@@ -62,37 +63,44 @@ def main():
     a = ap.parse_args()
 
     os.makedirs(OUT, exist_ok=True)
-    cod_a, prof_a, val_a = require(a.a)
-    cod_b, prof_b, val_b = require(a.b)
+    paths = {s: require(s) for s in a.decks}
+    decks = {s: dc.read_decklist(paths[s][0]) for s in a.decks}
+    counts = {s: {n: c for c, n in decks[s]} for s in a.decks}
 
-    deck_a = dc.read_decklist(cod_a)
-    deck_b = dc.read_decklist(cod_b)
-    counts_a = {n: c for c, n in deck_a}
-    counts_b = {n: c for c, n in deck_b}
-    pairs = dict(p.split("=", 1) for p in a.replace)
+    # per-deck replace map vs the base: '<Stem>:<removed>=<added>'
+    pairs = {s: {} for s in a.decks}
+    for p in a.replace:
+        stem, rule = p.split(":", 1)
+        src, dst = rule.split("=", 1)
+        pairs.setdefault(stem, {})[src] = dst
 
-    nums_a = dc.base_numbering(deck_a)
-    nums_b = dc.inherit_numbering(nums_a, counts_a, counts_b, pairs)
+    base = a.decks[0]
+    nums = {base: dc.base_numbering(decks[base])}
+    for s in a.decks[1:]:
+        nums[s] = dc.inherit_numbering(nums[base], counts[base], counts[s], pairs.get(s))
 
-    set_a = sorted(n for v in nums_a.values() for n in v)
-    set_b = sorted(n for v in nums_b.values() for n in v)
-    if set_a != set_b:
-        raise SystemExit(f"number sets differ ({len(set_a)} vs {len(set_b)}) -- pairing would be broken")
-    print(f"pairing OK: both lists carry the number set 1..{len(set_a)}")
-    for name in sorted(set(counts_a) | set(counts_b)):
-        ca, cb = counts_a.get(name, 0), counts_b.get(name, 0)
-        if ca != cb: print(f"   DIFFERS  {name:24s} {a.a}={ca}  {a.b}={cb}")
+    ref = sorted(n for v in nums[base].values() for n in v)
+    for s in a.decks[1:]:
+        got = sorted(n for v in nums[s].values() for n in v)
+        if got != ref:
+            raise SystemExit(f"{s}: number set differs from {base} -- pairing would be broken")
+    print(f"pairing OK: all {len(a.decks)} lists carry the number set 1..{len(ref)} (base {base})")
+    allnames = sorted(set().union(*(set(counts[s]) for s in a.decks)))
+    for name in allnames:
+        row = [counts[s].get(name, 0) for s in a.decks]
+        if len(set(row)) > 1:
+            print("   DIFFERS  " + f"{name:24s}" + "  ".join(f"{s}={c}" for s, c in zip(a.decks, row)))
 
-    np_a = os.path.join(OUT, f"{a.a}.numbering.json")
-    np_b = os.path.join(OUT, f"{a.b}.numbering.json")
-    json.dump(nums_a, open(np_a, "w"), indent=1)
-    json.dump(nums_b, open(np_b, "w"), indent=1)
+    npaths = {}
+    for s in a.decks:
+        npaths[s] = os.path.join(OUT, f"{s}.numbering.json")
+        json.dump(nums[s], open(npaths[s], "w"), indent=1)
 
     jobs = []
     for fmt, (life, heads) in FORMATS.items():
-        for stem, cod, prof, val, npath in ((a.a, cod_a, prof_a, val_a, np_a),
-                                            (a.b, cod_b, prof_b, val_b, np_b)):
-            jobs.append({"name": f"{fmt}::{stem}", "deck": cod, "deck_numbering": npath,
+        for s in a.decks:
+            cod, prof, val = paths[s]
+            jobs.append({"name": f"{fmt}::{s}", "deck": cod, "deck_numbering": npaths[s],
                          "games": a.games, "seed": a.seed, "max_turns": a.max_turns,
                          "starting_life": life, "opponent_heads": heads,
                          "profile": prof, "value_profile": val})

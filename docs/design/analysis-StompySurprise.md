@@ -1626,3 +1626,74 @@ treat one above ~0.04t as safe.
 * The cost model predicted B at exactly 80,100 H=7 cells and A at exactly 89,464 — both to the digit,
   as did every sub-table size. Generation took 4 h 53 m for both against a ~9.3 h projection, because
   adaptive keep trims far below the scout's stated upper bound.
+
+## THE THREE-WAY, EACH UNDER ITS OWN TABLE (2026-09-16) — the final answer
+
+Three `complete` keep tables, generated strictly serially and alone on the box, then compared in ONE
+pooled batch of 1,200,000 games (6 jobs, seed **92000000** — disjoint from the A/B run's 91000000).
+
+| list | shape | K | keep vs static | bottoming (confounded) |
+|---|---|---|---|---|
+| **A** | 20 mana creatures, 15 Forest, WS 1, Tera 1 | 16 | −0.2263t (16/16) | −0.0384t (16/16) |
+| **B** | 20 mana creatures, 13 Forest, **WS 2, Tera 2** | 15 | −0.2379t (16/16) | −0.0388t (16/16) |
+| **C** | **18 mana creatures**, 17 Forest, WS 1, Tera 1 | 16 | −0.2425t (16/16) | −0.0442t (16/16) |
+
+### A wins both formats against both challengers
+
+| | 1v1 avg | vs A | t | 2HG avg | vs A | t |
+|---|---|---|---|---|---|---|
+| **A** | **4.2403** | — | — | **4.5726** | — | — |
+| B | 4.2799 | +0.0396 | 40.9 | 4.6255 | +0.0530 | 48.4 |
+| C | 4.2823 | +0.0419 | 46.1 | 4.6218 | +0.0493 | 47.4 |
+
+**A vs B REPRODUCED on a held-out seed block**: +0.0389 / +0.0532 (seed 91000000) vs +0.0396 / +0.0530
+(seed 92000000) — agreement to 0.0007, so the headline is not selection bias.
+
+### What C actually settles, and what it cannot
+
+C is the user's long-standing suspicion — *"I've always been a bit suspicious of the extra elves
+beyond the original list"* — tested properly for the first time. It holds total mana sources at 35
+(Fyndhorn 4→2, Forest 15→17), so it is a clean **mana↔mana** swap, and it pins World War Hulk at 3.
+
+That pin is the point. `dorkladder.json` had ramped 18→24 mana creatures improving monotonically at
+every step, but **every step also cut a Hulk (3→2→1→0)**, so it could never apportion the gain and is
+not evidence about elves at all. C can: the extra two elves are worth **0.042t (1v1) / 0.049t (2HG)**.
+
+**So the elves do earn their keep — but the margin is the price of insurance, not a refutation.**
+0.042t is about what the 2nd Craterhoof was worth, and ~1/6 of what the keep table itself is worth
+(0.24t). More importantly the model **cannot price the thing the user is insuring against**: this
+opponent never blocks, never removes and never sweeps, so there is no state in which a board of dorks
+is punished. A monotone, non-saturating preference for mana creatures is the signature of a missing
+constraint. The honest reading is *"coming down to 18 costs ~0.04t of goldfish speed, and whether a
+real Pyroclasm is worth more than 0.04t is outside what this simulation can say."* That is the number
+the user asked for — the cost of the insurance, not a verdict on whether to buy it.
+
+### Both of the user's instincts cost about the same
+
+B (+0.040/+0.053) and C (+0.042/+0.049) are within noise of each other. Two independent departures
+from the screen's answer — more fat, fewer elves — each cost ~0.04-0.05t. Neither is free, and
+neither is catastrophic.
+
+### THE RECOMMENDED LIST (A)
+
+```
+4 Natural Order      4 Worldly Tutor        4 Llanowar Elves     15 Forest
+3 World War Hulk     3 Turntimber Symbiosis 4 Elvish Mystic
+2 Call of the Wild   1 Sol Ring             4 Fyndhorn Elves
+2 Craterhoof Behemoth                       4 Elvish Archdruid
+1 Worldspine Wurm    1 Apex Altisaur        4 Priest of Titania
+1 Terastodon         1 Vaultborn Tyrant
+1 Hornet Queen       1 Elderscale Wurm
+```
+60 cards; 20 mana creatures; K=16; table `decks/StompySurpriseA/`.
+
+**NOT promoted to `decks/StompySurprise/`** — that is the user's call, and doing it would invalidate
+the regression suite's StompySurprise ground truth. A, B and C stay as sibling folders until then.
+
+### Open, deliberately
+
+* **The Symbiosis slot is a coin flip.** `Symbiosis 4→3` vs `Forest 15→14` measured t −1.40 / −1.59 on
+  the Craterhoof-2 shell — not distinguishable. A ships Symbiosis 3 because it won both formats, but
+  swapping back is free by the measurement.
+* The elf count was tested at 18 vs 20 only. 19 is unmeasured.
+* The tables are `complete` and shippable; no `fast` artifact was produced.
