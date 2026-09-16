@@ -8937,3 +8937,29 @@ we have addressed the huge long tail."* The diagnosis and the numbers are sectio
 for every deck, or not at all; and where it lives -- `valueleaf.sh` adds no knobs by design, so an
 engine default or a per-deck provider setting. Nothing pushed; the cancelled run's rows
 (`logs/vlq_eldrazidisplacerflicker/rows/all.rows`, 6,261 rows) are kept as the exact reference.
+
+**12.16 The two earlier rows are certificate holes: the enters-tapped dig land fixed (900045) and the fix
+moves 17 MORE samples earlier than the exact reference; a second branch (900193) open (22:50-23:45 UTC).** Bisect on 900045: every label-path lever reproduces the exact arm except
+`MTG_WINLESS_CERT=0`, which labels t1 6.000 (the ladder finds the turn-5 win in 2 ms). The line in
+`ProvenWinlessThisTurn`'s dig-land scan excluded a land that ENTERS TAPPED from the repeatable digs
+whenever it was not yet on the battlefield -- but on that turn-5 board (Emiel + Peregrine Drake +
+Training Grounds, three Aura'd lands, Conservatory in hand) the loop is unbounded, the Drake's ETB
+untaps the Conservatory, and its Investigate digs the deck to the finisher. An UNDER-credit in a
+bound whose header forbids exactly that. Fixed to exclude only when nothing can untap the land this
+turn (`!mana_inf && untap_events == 0`); 6b of `label-goff-tractability.md` has the code and the
+numbers. 900045 t1 reads 6.000 at the same cost; 900193 exact ladder: **unchanged**, t2 6.667 -- the fix does not touch it, while `MTG_WINLESS_CERT=0` labels 6.333 (`logs/edf_longtail/cert0_900193.*`), so 900193 is a SECOND certificate branch (below); the slow games at H=4: 900157 t1..t5 = 5.333 / 5 / 5.667 / 6.667 / 5 and the certificate counters (fired=20115, dig-inf=105790) identical to the unfixed run, 2 m 23 s against 58 s solo-clean; and
+900043 6.667 / 5.333 / 7 / 6.667 / 5, counters (fired=54030, dig-inf=4233) identical, 32 s against 12.6 s -- both timings perturbed by the 250-game batch running alongside, the labels and counters not. Job 0 at H=4 re-labelled with the fix: 250 games in 17 m 38 s; joined against the exact reference
+1,041 same / 7 later / **19 earlier** (mean -0.0044), and against the unfixed H=4 rows 17 changed, ALL
+earlier, none later, the 7 later rows unchanged. The fix moved 17 further samples (13 games) earlier
+than the EXACT reference -- 19 of 1,067 samples in 15 of 250 games. So the exact reference is itself
+over-labelled on at least 1.8% of samples by this one certificate branch, the "earlier" rows of 12.15
+were the reference's defect, not the horizon's, and the cancelled run's kept rows carry the same hole:
+the value-leaf re-run must be a fresh queue on the fixed commit, not a resume against those rows.
+**900193 is a SECOND certificate branch and is OPEN**: the fix leaves it at 6.667, the certificate off
+gives 6.333, and the traced win is a turn-6 line of eight Essence Depleter drains at {C} each on a
+board with four {C}-capable lands -- either the search pays {C} with the Auras' any-colour mana (an
+engine rules bug, live in play) or the certificate under-credits the land drop's {C}; a turn-6 fixture
+under play settings decides it (6b has the detail). The play search never used the
+certificate (a fixture of the turn-4 board wins at turn 4 under play settings). Gates on the fix tree (`logs/edf_longtail/gate2_*.log`): scenarios 99/99, combo-off 34/34, smoke
+byte-identical to the 12.14 baseline (80 job lines IDENTICAL, scenario lines 179/179, the same 75/5 as
+12.15's run). Committed locally; nothing pushed.

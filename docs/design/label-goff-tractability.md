@@ -333,6 +333,70 @@ affordability of that deploy at the interior node. Open: bisect with `MTG_LABEL_
 `MTG_LABEL_LADDER_DEDUP=0`, `MTG_LABEL_GOFF=0`, `MTG_WINLESS_DEVELOP=0`, `MTG_WINLESS_CERT=0` on
 900045 (a 20 s game), then read the interior node at turn 4.
 
+### 6b. The EARLIER rows are certificate holes: an enters-tapped dig land (fixed; it moves 17 MORE rows earlier than the exact reference), and a second branch in 900193 (open)
+
+The bisect on 900045 (`logs/edf_longtail/bisect_summary.txt`): `MTG_LABEL_EDGE_TAIL=0`,
+`MTG_LABEL_LADDER_DEDUP=0`, `MTG_LABEL_GOFF=0` and `MTG_WINLESS_DEVELOP=0` all reproduce the exact
+arm to the apply; **`MTG_WINLESS_CERT=0` labels t1 6.000** -- the ladder finds sample 3's turn-5
+win at dd4 in 2 ms and 8 applies -- at 2 m 34 s against 20 s. So the "provably winless this turn"
+certificate (section 0's admissible bound) certified a turn the route wins.
+
+The line, in `ProvenWinlessThisTurn`'s dig-land scan:
+
+```
+// A {T} ability needs the source untapped, so a land that ENTERS TAPPED is not a draw
+// source on the turn it is played.
+if (repeatable && !cc.on_board && cc.d->params.enters_tapped) { act = INT_MAX; }
+```
+
+On the turn-5 board -- Emiel + Peregrine Drake + Training Grounds on three Aura'd lands, a
+Conservatory in hand -- the loop is unbounded (`mana_inf`), and the route's dig is the
+Conservatory: it enters tapped, the Drake's ETB untaps it, and its `{4},{T}` Investigate then
+draws the deck. The line excluded it regardless, `dig_lands` stayed 0, the `DigInf` decline never
+fired, and the certificate went on to prove the turn winless. That is an UNDER-credit in a bound
+whose every other quantity is deliberately an over-credit -- exactly the one direction the file's
+own header forbids. The fix keeps the exclusion only where nothing can untap the land this turn:
+
+```
+if (repeatable && !cc.on_board && cc.d->params.enters_tapped
+    && !mana_inf && untap_events == 0) { act = INT_MAX; }
+```
+
+(`untap_events` is this round's count of affordable ETB untaps, computed just above the scan; it is
+0 under `mana_inf`, where the loop itself untaps.) Over-crediting an enters-tapped dig land is safe:
+the certificate may only refuse to certify.
+
+**Measured.** 900045 exact ladder: t1 6.333 -> **6.000** at the same cost (20.9 s vs 20.5 s).
+900193 exact ladder: **unchanged**, t2 6.667 -- the fix does not touch it, while `MTG_WINLESS_CERT=0` labels 6.333 (`logs/edf_longtail/cert0_900193.*`), so 900193 is a SECOND certificate branch (below). The two slow games at H=4, labels and cost: 900157 t1..t5 = 5.333 / 5 / 5.667 / 6.667 / 5 and the certificate counters (fired=20115, dig-inf=105790) identical to the unfixed run, 2 m 23 s against 58 s solo-clean; 900043 6.667 / 5.333 / 7 / 6.667 / 5, counters (fired=54030, dig-inf=4233) identical, 32 s against 12.6 s -- both timings perturbed by the 250-game batch running alongside, the labels and counters not.
+Job 0 at H=4 with the fix (`logs/edf_longtail/hz_batch/job0_h4fix.*`): 250 games in 17 m 38 s (the unfixed H=4 run: 16 m 06 s).
+Joined against the exact reference (`join_report.py`): 1,067 rows matched, **1,041 same / 7 later /
+19 earlier**, mean shift -0.0044 (histogram -0.67: 2, -0.33: 17, +0.33: 7). Against the unfixed H=4
+rows: **17 rows changed, all 17 earlier, none later**, and the 7 later rows are the same 7. So the
+fix moved 17 further samples (13 games) EARLIER THAN THE EXACT REFERENCE, on top of 900045 and
+900193 -- 19 of 1,067 samples in 15 of 250 games. Read plainly: the exact reference itself is
+over-labelled on at least 1.8% of its samples by this one certificate branch, and every "earlier"
+row in section 6's table was a defect of the reference, not of the horizon. Each of the 17 is a win
+the search finds once the certificate stops refusing a turn (the ladder's exact passes or, past pass
+4, the playout -- this join does not separate the two, and the direction is what matters: a bound
+that fires less can only let the search find more). The value-leaf's kept rows (`logs/vlq_eldrazidisplacerflicker/rows/
+all.rows`) carry the same hole: a fresh queue on the fixed commit is the reference, not those rows.
+
+**The second branch (900193 t2, OPEN).** With the fix it still reads 6.667; `MTG_WINLESS_CERT=0`
+reads 6.333. The trace under `MTG_WINLESS_STATS=1 MTG_WINLESS_WINDUMP=1`
+(`logs/edf_longtail/trace_h4_900193.log`, `p193_summary.txt`): the win is at turn 6 -- turn 5 casts
+Essence Depleter and drains (20 -> 12), turn 6 lands Yavimaya Coast, casts Trace of Abundance and
+drains eight more times ("Essence Depleter(x8)") to 4, combat finishes. Under Training Grounds the
+drain costs {C} (the {2} reduction takes the generic {1} and cannot touch the {C}), and that board has
+four {C}-capable lands (three Yavimaya Coast + Aether Hub). Either the search's eight drains pay {C}
+with the Auras' any-colour mana -- an engine rules bug, live in play as well -- or the certificate
+under-credits {C} (`c_ub = c_now` omits the land drop's {C}; `drop_c` only enters `c_total`). A
+turn-6 fixture of that board (opponent at 12) under play settings decides which; not resolved in this
+window. Until it is, an "earlier" row is a certificate finding to chase before it is anything else.
+
+The play search does not use the certificate and never had this hole: the same turn-4 board as a
+fixture (`logs/edf_longtail/fixtures/edf_t4_deploy_drake_emiel.json`, Conservatory in hand) wins
+at turn 4 under the shipped play settings.
+
 **What the batch/solo ratio says, and what it does not.** Under H=4 the batch still pays 4–5x per
 game against solo (900157: 245 s vs 58 s; 900043: 63 s vs 12.6 s), but the shared line-cache pool's
 high-water mark is 303 MB of its 4,153 MB — under H=4 the pool is not the pressure. Twenty-four

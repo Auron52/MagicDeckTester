@@ -18572,8 +18572,16 @@ bool EldraziFlickerProvider::ProvenWinlessThisTurn(const GameState& s, int me) c
             else if (pp.cycling_cost.has_value())
             { act = pp.cycling_cost.value().ManaValue(); }               // one draw, from hand
             // A {T} ability needs the source untapped, so a land that ENTERS TAPPED is not a draw
-            // source on the turn it is played.
-            if (repeatable && !cc.on_board && cc.d->params.enters_tapped) { act = INT_MAX; }
+            // source on the turn it is played -- UNLESS something untaps it: a payload's ETB
+            // (Peregrine Drake untaps five lands) refreshes a land however it entered, and under an
+            // unbounded loop it does so without limit. Excluding it regardless was an UNDER-credit
+            // in a bound that may only ever over-credit (2026-09-16, seed 900045 t1 sample 3: the
+            // turn-5 board was Emiel + Drake + Training Grounds with a Conservatory in hand, the
+            // route wins through the Conservatory dig, and this line certified the turn winless --
+            // the label read 6, the truth 5). `untap_events` is this round's count of affordable
+            // ETB untaps (0 under mana_inf, where the loop itself untaps).
+            if (repeatable && !cc.on_board && cc.d->params.enters_tapped
+                && !mana_inf && untap_events == 0) { act = INT_MAX; }
             if (act != INT_MAX)
             {
                 const long long total = pay + act;
