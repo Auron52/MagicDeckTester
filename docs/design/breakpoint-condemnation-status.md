@@ -1,4 +1,17 @@
-# Breakpoint condemnation: EIGHT bugs; bug 8 was the big one -- the rank test infers a decline that never happened
+# Breakpoint condemnation: NINE bugs; bug 9 is the one that is not a bug in the filter at all
+
+**Status (updated 2026-09-16): BUG 9 is the headline and it is a different KIND of defect from 1-8.**
+Those were all the filter inferring a decline that never happened, and each was fixed by making its
+picture of "considered and passed over" more accurate. Bug 9 is a case where the decline is
+completely real and condemning is STILL wrong, because **the continuation slot is exclusive**: a
+cast can be worth making purely to deny the slot to something else, and such a cast has no sibling
+line by construction. See the 2026-09-16 section at the end for the mechanism, the exact repro
+(gi=1357 -- Skred is goldfish-inert and occupies the slot so a freshly-drawn Rimefeather Owl cannot
+tap a Druid out of an exact-lethal attack), the fix (`MTG_BP_CONDEMN_NEW_OPTION`, 0 regressions in
+2,000 paired games), and two corrections to the record -- including that the widely-quoted
+"+0.0000, 5 better / 5 worse" condemnation A/B is STALE. Note also that "unrecoverable" now has a
+fixed meaning here at USER direction: **not recoverable at budget 0 AND depth 8**, which the census
+cells do not establish.
 
 **Status (updated 2026-09-03):** the four type-exemptions named below (`_MANA_EXEMPT`,
 `_RITUAL_EXEMPT`, `_TUTOR_EXEMPT`, `_REDUCER_EXEMPT`) were DELETED outright at USER direction
@@ -874,3 +887,105 @@ in the deferred wave phase -- a design change, not a flag.
 `BpDigFanoutPending` returns false unless bit 4 is already in `sites`, so rewriting it as
 `opens |= 1<<4` is a PROVABLE no-op -- confirmed byte-identical, then reverted rather than left in
 the tree as dormant code. A comment at the site records this so it is not re-derived.
+
+## 2026-09-16: BUG 9 -- THE CONTINUATION SLOT IS EXCLUSIVE, so the redundancy premise is false
+
+Bugs 1-8 were all the same shape: the filter condemned a card it had no right to condemn, because
+the *decline* it inferred never happened (no order awareness, a tie read as earlier, an accelerant,
+a rank test reading a slot the plan never reached). Every one of them was repaired by making the
+filter's picture of "was this considered and passed over?" more accurate.
+
+Bug 9 is not that. Here the decline is real -- the card was in hand, its slot precedes the site, the
+plan reached it and did not cast it -- and condemning it **still** deletes the win. The premise
+itself is wrong.
+
+### The premise, and what it actually compares
+
+Condemnation's soundness argument is REDUNDANCY, in the USER's own words: *"there is a line that
+plays it and we want to make that the line."* Dropping X from the continuation costs nothing because
+a SIBLING plan casts X at its proper position.
+
+That compares the wrong two things. **Casting X in the CONTINUATION also declines everything else
+the continuation could cast. Casting X as a PLAN cast does not** -- the trailing pass still runs
+afterwards and still offers the rest. The continuation slot is *exclusive*; a plan slot is not. So
+the sibling line is not equivalent to the condemned line, and dropping X does not fall back to "cast
+nothing". It hands the slot to whatever outranks X.
+
+At a tap-draw site, what outranks X is very often **the card the site just drew** -- a card that was
+not in hand when the plan declined X, so the decline says nothing whatever about the comparison that
+is now being made.
+
+### gi=1357 (930000 block), exact
+
+Turn 8. Hand is four Skreds. Scrying Sheets' `{1}{S}`, `{T}` tap-draw puts Rimefeather Owl into hand.
+
+* Condemnation drops Skred. Every gate passes legitimately: Skred was in hand before, it is not a
+  plan cast, and the whole cast order precedes an ACTIVATED site (site 8 runs in the trailing pass,
+  so `BpSlotIsAfterSite` is false for every card in hand).
+* The continuation casts the Owl instead. The Owl's `{5}{U}{U}` taps a Boreal Druid **(1/1)** for
+  mana.
+* Base attack: 2 Boreal Druids + Rimescale Dragon (5/5) = 1+1+5 = **7, exact lethal against 7 life**.
+  Condemned attack: 1 Druid + Dragon = **6**. The game is never won.
+
+**Skred is goldfish-inert.** It does not win the game and casting it changes no board total. Its
+entire function in the winning line is to OCCUPY THE SLOT so the Owl cannot -- which is precisely
+the exclusion the redundancy premise cannot see. A cast whose value is that it *denies the slot to
+something else* has no sibling line, by construction.
+
+Not a search artefact: `MTG_BP_CLASSIFY=0` and `MTG_BP_NODE=0` lose the same game the same way
+(greedy casts the Owl), and `MTG_BP_EMPTY_ARM=1` -- which makes "cast nothing" a scored candidate --
+still loses it. The hypothesis that an empty continuation would recover it was tested and **refuted**.
+
+### The fix: `MTG_BP_CONDEMN_NEW_OPTION` (`BpSiteAddedAPayableOption`)
+
+Spare the drop exactly when the site put a new **payable** card in hand. That is the condition under
+which the slot is contested by an option the plan could not have weighed. When the site draws
+nothing, or draws something we cannot cast, the slot really does fall back to "cast nothing" and the
+premise holds -- so we still drop, and the prune keeps most of its volume.
+
+Card-agnostic and route-agnostic. No type exemption, no per-card clause (USER 2026-08-28: *"I don't
+want any general exemptions"*).
+
+**Do not "tighten" it with a cast-order rank gate.** The obvious refinement -- spare only when the
+new card OUTRANKS the candidate -- looks like it would recover more of the prune's saving. It is
+unsound: the continuation is SEARCHED, not rank-ordered, so a lower-ranked new card can still take
+the slot whenever the alternatives are worse. The broad test is the conservative one and conservative
+here means keeping the action.
+
+### Measured (2,000 paired games, Snow, play settings d5/b20, one pooled 8-arm batch)
+
+| arm | Δ vs base | better/worse | units | regressions |
+|---|---|---|---|---|
+| `cond` | +0.0000 | 3 / 3 | **0.9940** | 487, **1357**, 1553 |
+| `condno` (`cond` + new-option) | −0.0010 | **2 / 0** | 1.0017 | **none** |
+| `be` (empty arm) | −0.0135 | 29 / 2 | 1.0098 | 237, 1384 |
+| `be_cond` | **−0.0155** | 33 / 2 | **1.0031** | **1357**, 1384 |
+| `be_condno` | −0.0145 | 31 / 2 | 1.0113 | 237, 1384 |
+
+**State the trade honestly: the rule gives the prune's units saving back** (0.9940 → 1.0017
+standalone) and about a third of its quality gain. What it buys is that `condno` regresses **0 of
+2,000**, and `be_condno`'s regressions are exactly `be`'s own. Note also that these units figures are
+budgeted, and a budgeted number says how the budget was SPENT, not what the prune costs -- see the
+cost section above. An unbudgeted read is still owed.
+
+### Two corrections to the record
+
+1. **The pre-2026-09-16 condemnation A/B was stale.** The often-quoted "+0.0000, 5 better / 5 worse"
+   predates `MTG_BP_CONDEMN_PLAN_CAST` becoming default-on. That guard alone repairs gi=206 (8→7),
+   gi=1847 (7→6) and gi=1935 (6→5), each confirmed by toggling it off and watching the loss return.
+   It does NOT repair gi=1357: it cuts that game from 1,663 drops to 79, and the four survivors are
+   `plan_n=1`. **"Volume is not harm" has now been the wrong predictor five times in this arc.**
+2. **`plan_n=1` is not a discriminator.** It is 78% of the regressions' drops but 75% of the whole
+   population. Gating on it would disable condemnation, not target the harm.
+
+### Terminology, fixed at USER direction
+
+USER 2026-09-16: *"To be clear unrecoverable means not recoverable at unlimited budget (0) and depth
+8."* The census cells in `test/tools/snow_ab/gen_condemn_escalate_manifest.py` are 100x budget and
+100x budget + 1 ply. Those **SCREEN** for the label cheaply across every disagreeing game; they do
+not confer it. A survivor there is a candidate needing its own `--depth 8 --budget-ms 0` cell.
+
+The converse trap is the more dangerous one, because it fails silently in the direction of a false
+clearance: **a d8/b0 Snow game can run for many hours (44 h repros are on record) and a cell that
+never completes settles nothing.** Report the strongest bound actually measured; never let a missing
+cell read as a recovery.
