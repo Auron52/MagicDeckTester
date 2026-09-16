@@ -996,3 +996,95 @@ The converse trap is the more dangerous one, because it fails silently in the di
 clearance: **a d8/b0 Snow game can run for many hours (44 h repros are on record) and a cell that
 never completes settles nothing.** Report the strongest bound actually measured; never let a missing
 cell read as a recovery.
+
+## 2026-09-16: WHY THE COST WIN IS ~NOTHING ON SNOW -- three multiplicative limits, and a ceiling
+
+Condemnation is a PRUNE, so "how much does it save?" is the question it lives or dies by, and the
+answer on Snow is *almost nothing* -- **0.60% unsound, 0.03% sound**. That has now been mis-read
+twice in this arc (once as "it buys nothing, +0.72% dearer", once as "dead lever"), so this section
+records the decomposition rather than the headline. 200 games, d5/b20, same seeds, `MTG_ROLLOUT_STATS`.
+
+### Limit 1 -- REACH: the filter can only touch 17.4% of the work
+
+| site | share of all units |
+|---|---|
+| `la_cand` (root candidate loop) | 35.1% |
+| `rollout_step` | 23.7% |
+| `greedy_fallback` | 22.9% |
+| **`la_bp_wave` + `fs_bp_wave`** | **17.4%** |
+| `fs_pre` | 0.8% |
+
+Condemnation only fires inside breakpoint continuations. **82.6% of Snow's search cost is somewhere
+the filter does not run at all.** This is structural rather than an artefact of the shipped depth:
+the breakpoint share measures 16.3% / 17.2% / 15.8% at d3 / d5 / d7. It does not grow with depth --
+`la_cand` grows faster.
+
+### Limit 2 -- YIELD: only 24% of consultations even reach the test
+
+Of 3,335,374 consultations (`MTG_BP_CONDEMN_WHYNOT`):
+
+| gate | count | share |
+|---|---|---|
+| `noplancast` -- the plan cast nothing, so it declined nothing | 1,267,205 | **38.0%** |
+| `notdecision` -- a rollout leaf (a drop there prunes nothing, by design) | 644,998 | 19.3% |
+| `managrew` | 539,804 | 16.2% |
+| `plancasts` -- the plan casts it itself | 75,967 | 2.3% |
+| **reached the dominance test** | 803,344 | 24.1% |
+
+Of those that reach, **46% are unpayable anyway** (366,344) -- dropping them removes a candidate the
+search was never going to cast -- and 156,905 more are not dominated. 280,095 real drops remain, an
+8.4% drop rate, which cuts the breakpoint sites by 5.5%.
+
+**The largest blocker is soundness, not slack.** `noplancast` is the plan_n=0 rule. The bulk of what
+condemnation cannot prune, it cannot prune because pruning it would be wrong.
+
+### Limit 3 -- REINVESTMENT: 38% of the saving is spent before it is banked
+
+| | gross saving at bp sites | spent elsewhere | net |
+|---|---|---|---|
+| `cond` | −320,235 | **+121,661** (`la_cand` +103,476) | −198,574 = **−0.60%** |
+| `condno` | −28,308 | +19,518 (69%) | −8,790 = **−0.03%** |
+
+0.174 reach x 0.055 cut = 0.96% gross, x 0.62 retained = **0.60% net**. That is the whole number.
+
+### ...and raising the budget does NOT recover it
+
+The obvious next move -- "measure it at a higher budget, where there is slack" -- was tested and
+fails. Ladder at d5, 300/300/250 games:
+
+| budget | base units/game | growth vs prev | budget step | `cond` | `condno` |
+|---|---|---|---|---|---|
+| 20 ms | 166,610 | -- | -- | 0.9948 | 1.0003 |
+| 50 ms | 363,593 | **2.18x** | 2.50x | 1.0012 | 1.0011 |
+| 120 ms | 828,156 | **2.28x** | 2.40x | 1.0011 | 1.0023 |
+
+**Units grow in proportion to the budget**, so the budget is fully binding at every rung: the search
+never completes depth 5, it spends whatever it is given, and freed work is immediately reinvested.
+The ratio sits at ~1.00 regardless. `cond` stays cheaper on most GAMES (202/61 at b50) while being
+dearer in TOTAL -- the tail sets the sign, exactly as the cost section above warns.
+
+**A prune only returns real work where the search would otherwise FINISH.** Under any shipped budget,
+condemnation's only available benefit is QUALITY -- spending the same units better. Cost-neutrality
+here is structural, not a defect to engineer away. The corollary is that the regime where it *can*
+pay is UNBOUNDED search -- which is what value-leaf label generation runs, and is worth measuring
+separately (`NEVER_CONDEMN` in `scripts/valueleaf.sh` is CELL condemnation, an unrelated mechanism;
+it does not gate this filter, so a deck that opts in gets the prune during generation automatically).
+
+### The ceiling: there is no headroom to chase
+
+`PEER=0`, and the census's own ceiling line reads
+`realistic max ~280,095 (1x today), hard upper bound 280,095 (1x)`.
+
+**Condemnation is already extracting 100% of what is available to it on Snow.** A finer cast order
+recovers nothing, because site 8 is an ACTIVATED site: every card in hand ranks before it, so nothing
+is ever peer-blocked. Do not open "tune the Snow cast order to feed condemnation" as a work item --
+it is provably worth zero.
+
+### Why the SOUND version gives even that back
+
+`condno` drops 40,618 where `cond` drops 280,095: the new-option guard spares **231,351, i.e. 85% of
+all drops**. That is a fact about this deck, not about the rule. Snow's only breakpoint class is site
+8, the `{T}` tap-draw of Scrying Sheets / Frost Augur -- the site's whole purpose is to draw a card,
+and Snow's curve is cheap, so "the site put a new payable card in hand" is true nearly every time it
+fires. **On a deck whose only breakpoint is a draw, condemnation and its soundness guard are close to
+mutually exclusive.**
