@@ -56,7 +56,9 @@ bottom prompt (`promptPanelHtml`). Line numbers are hints — anchor on the symb
 | `target` | `g_play_target_chooser` (`TargetChooser`) | `EffectHandler` damage/removal | `WriteTargetDecisionJson` | `promptPanelHtml` | board |
 | `divide` | (target/divide path) | `EffectHandler` divided damage | `WriteDivideDecisionJson` | `promptPanelHtml` | board |
 | `bounce` | `g_play_bounce_chooser` (`BounceChooser`) | `SpellEffects.h` ETB bounce | `WriteBounceDecisionJson` | `promptPanelHtml` | board |
-| `sacrifice` | `g_play_sacrifice_chooser` (`BounceChooser`) | sac-land cost **+ creature-sac outlets** (`ChooseSacOutletVictimIndex`, SpellEffects.h) | `WriteBounceDecisionJson` | `promptPanelHtml` | board |
+| `sacrifice` | `g_play_sacrifice_chooser` (`BounceChooser`) | sac-land cost **+ creature-sac outlets** (`ChooseSacOutletVictimIndex`, SpellEffects.h) **+ Natural Order's "sacrifice a green creature" ADDITIONAL COST** (`PerformSacrificeCreatureCost`) | `WriteBounceDecisionJson` | `promptPanelHtml` | board |
+| `target` (reuse: **Saga chapter targets** -- World War Hulk II "three +1/+1 counters on target creature you control" and III "double its power and toughness") | `g_play_loyalty_chooser` (`LoyaltyTargetChooser`) | `FireSagaChapter` -> `ChooseSagaChapterTargetIndex` (SpellEffects.h, shared) | `WriteTargetDecisionJson` with a `loyalty` prompt | `promptPanelHtml` (`d.loyalty` branch) | board |
+| `free_cast` (**`zone:"hand"`** variant) | `g_play_free_cast_chooser` (`FreeCastChooser`) | Maelstrom Archangel's banked charge (AIEngine) **+ World War Hulk chapter I** (`PerformSagaFreeCast`) | `WriteFreeCastDecisionJson` (emits `zone` when every candidate is in hand) | `freeCastPanelHtml` `d.zone==='hand'` branch | **hand** |
 | `dig` | `g_play_dig_chooser` (`DigChooser`) | `SpellEffects.h` ETB dig | `WriteDigDecisionJson` | `digPanelHtml` | modal |
 | `discard` | `g_play_discard_chooser` (`DiscardChooser`) | cleanup discard; **non-cleanup discards via `ChooseNonCleanupDiscardIndex`** (Burning-Fist Minotaur's `{1}{R}, Discard a card:` activation cost in `ApplyActivatePump`; Neheb, the Worthy's combat-damage trigger in `ResolveCombatDamage`) | `WriteDiscardDecisionJson` | `discardPanelHtml` | modal |
 | `expressive_iteration` | `g_play_ei_chooser` (`EIChooser`) | Expressive Iteration resolution | `WriteEIDecisionJson` | `eiPanelHtml` | modal |
@@ -343,6 +345,40 @@ the VICTIM reuses `sacrifice`.** Two halves, deliberately split (2026-08-08, vie
 Also: `DeferSacOutletPreCombat` (a measured-neutral *perf* prune that hides the value outlets from
 the pre-combat main) is skipped under `HumanPlayActive()` — to a human the outlet just vanished from
 main 1 and reappeared in main 2.
+
+**World War Hulk (Saga) and Natural Order — every choice happens IN ITS ZONE (2026-09-17).** A user
+hand-playing the promoted Stompy list found four decisions the viewer never offered. All four are now
+surfaced, and none of them uses a dialog for an object that is already on screen:
+
+| decision | mechanic | chooser | where you click |
+|---|---|---|---|
+| Hulk ch. I — which creature to free-cast | additional permission ("**can** be cast") | `g_play_free_cast_chooser`, `zone:"hand"` | **HAND** |
+| Hulk ch. I — decline | — | same frame, reply `-1` | a Decline button, no modal |
+| Hulk ch. II — three +1/+1 counters | **targets** | `g_play_loyalty_chooser` | **BATTLEFIELD** |
+| Hulk ch. III — double P/T | **targets** | `g_play_loyalty_chooser` | **BATTLEFIELD** |
+| Natural Order — sacrifice victim | **additional COST** (CR 601.2h) | `g_play_sacrifice_chooser` | **BATTLEFIELD** |
+
+Three points worth keeping:
+
+- **Chapter I prompts even with ONE candidate**, unlike every board chooser here (which skip a forced
+  pick). Declining is itself a legal line — the card grants a permission, not an obligation — so with
+  one candidate the choice is still real. Before this the engine simply could not express "keep it".
+- **The Natural Order victim moved from a QUEUE-TIME sub to this resolution frame**, and that is what
+  widened it. The searched victim is baked during action collection, *before any plan exists*, so it
+  was a snapshot of the pre-plan board: a creature the same plan casts could never be sacrificed.
+  Measured on seed 16 — the declared line `land=Forest;cast=Fyndhorn Elves;cast=Natural Order` used to
+  fan 26 variants offering only `{Llanowar Elves, Elvish Archdruid}` as victims (the board *before* the
+  line), and now fans 13 (fetch targets only) with the victim asked at resolution off a board that
+  holds the freshly-cast Fyndhorn Elves. The queue dialog halved and stopped lying.
+- **The `sacrifice` sub's old ordering rationale was wrong and is retired.** It claimed the victim had
+  to be asked before the fetch because "a sacrificed Worldspine Wurm shuffles itself back in and is
+  then a legal target". `CollectActions` computes the tutor candidate list ONCE and crosses it with
+  the victim list, so the fetch options are identical for every victim — the coupling never existed.
+
+All five are **human-play only**: every chooser is nulled by `RevealLogPause` in search and rollouts,
+and the paths are param-gated on `saga_chapters` / `sac_additional_creature_color`, which only this
+deck's two cards carry. Verified rather than assumed — 5,600 autonomous games (d0/d3/d5/2HG) produce
+byte-identical batch digests before and after.
 
 **Soulfire Eruption / Crackle with Power full-board targeting** does NOT use a distinct type:
 the `g_play_soulfire_chooser` (`SoulfireTargetChooser`) lambda in `main.cpp` **reuses the generic

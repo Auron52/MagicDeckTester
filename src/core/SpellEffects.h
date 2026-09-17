@@ -19064,6 +19064,51 @@ inline int DefaultSagaChapterTarget(const GameState& state, int controller)
     return best;
 }
 
+// HUMAN-PLAY target override for a Saga chapter that targets (World War Hulk's II and III).
+// USER 2026-09-17, hand-playing the new Stompy list: *"Hulk gave me no Targeting decisions"* /
+// *"Hulk didn't ask for the creature to be played or the target of the 3 counters."*
+// DefaultSagaChapterTarget is "the biggest creature that can attack right now", which is a fine
+// autonomous rule and a NARROWING of a legal choice for a human -- and the two chapters do not even
+// want the same body: chapter III doubles power (so it wants the biggest), while chapter II's three
+// +1/+1 counters are PERMANENT (so the right home can be a creature that is about to be sacrificed
+// to Natural Order, or one that is not attacking at all).
+//
+// Reuses g_play_loyalty_chooser -- the generic board-click "pick one of these permanents" decision,
+// which already serves a TRIGGERED ability's target as well as a loyalty one (main.cpp's chooser
+// comment: "Worded as 'this ability', not 'this loyalty ability'"). So no new decision type is
+// introduced, and the pick is made BY CLICKING THE BOARD, which is what the user asked for
+// (*"All of these decisions should be done on the board or hand"*, *"(not in a separate dialog)"*).
+//
+// Offers the full RULES-legal set ("target creature you control"), not the heuristic's shortlist --
+// the same rule the loyalty chooser follows. Returns a battlefield index; with no chooser installed
+// (autonomous play, search, every rollout -- the pointer is nulled by RevealLogPause) it returns
+// `heuristic_idx` untouched, so every non-human run is byte-identical.
+inline int ChooseSagaChapterTargetIndex(const GameState& state, int controller,
+                                        const std::string& source_name, int chapter,
+                                        const std::string& prompt, int heuristic_idx)
+{
+    if (!g_play_loyalty_chooser) { return heuristic_idx; }
+    std::vector<int> cands;
+    for (int i = 0; i < static_cast<int>(state.battlefield.size()); ++i)
+    {
+        const Permanent& q = state.battlefield[i];
+        if (q.controller_index != controller || !q.card.IsCreature()) { continue; }
+        cands.push_back(i);
+    }
+    // A single legal target is FORCED (CR 601.2c) -- prompting for a non-choice is the noise the
+    // sac-outlet chooser avoids the same way.
+    if (cands.size() <= 1) { return heuristic_idx; }
+    int def_opt = 0;
+    for (int k = 0; k < static_cast<int>(cands.size()); ++k)
+    { if (cands[k] == heuristic_idx) { def_opt = k; break; } }
+    // Parenthesised, not em-dashed: the viewer's prompt is already "Choose a target -- <source>",
+    // so "World War Hulk -- Chapter II" would put two dashes in one sentence.
+    const std::string src = source_name + (chapter == 2 ? " (Chapter II)" : " (Chapter III)");
+    const int chosen = (*g_play_loyalty_chooser)(state, controller, src, prompt, cands, def_opt);
+    if (chosen >= 0 && chosen < static_cast<int>(cands.size())) { return cands[chosen]; }
+    return heuristic_idx;
+}
+
 // Total power our side can actually swing with right now -- the quantity a goldfish race is
 // maximising. Used to SCORE the chapter-I free-cast candidates below.
 inline int OwnAttackingPower(const GameState& state, int controller)
@@ -19177,6 +19222,35 @@ inline void PerformSagaFreeCast(GameState& state, int controller, const CardPara
         }
     }
 
+    // HUMAN-PLAY override (USER 2026-09-17: *"Hulk didn't ask for the creature to be played"*).
+    // Two distinct narrowings closed at once, and the SECOND is a rules one:
+    //   * WHICH creature. The trial-on-a-copy score above is a good autonomous rule, but it is a
+    //     fixed rule, and the human could not override it.
+    //   * DECLINING. The card says the next creature spell *CAN* be cast without paying -- a
+    //     permission, not an obligation (CR 601.2b: casting is always optional). The code only
+    //     declined when there was no candidate at all, so a player who wanted to keep a green
+    //     creature in hand -- for a later Natural Order victim, a Ghalta deploy, or simply to cast
+    //     it on their own terms with its ETB in a better spot -- had no way to say so.
+    //
+    // Reuses g_play_free_cast_chooser, whose question is already exactly this one ("cast which
+    // spell for free, or -1 to decline") and which four mechanics share; `source` keys the wording.
+    // Deliberately NOT gated on cand_slots.size() > 1 the way the board choosers are: with one
+    // candidate the CHOICE IS STILL REAL, because declining is a legal line. Nulled by
+    // RevealLogPause for every search/rollout scope -> autonomous play is byte-identical.
+    if (g_play_free_cast_chooser)
+    {
+        std::vector<Card> cand_cards;
+        cand_cards.reserve(cand_slots.size());
+        for (int slot : cand_slots) { cand_cards.push_back(pl.hand[slot]); }
+        int heur = 0;
+        for (int k = 0; k < static_cast<int>(cand_slots.size()); ++k)
+        { if (cand_slots[k] == pick) { heur = k; break; } }
+        const int picked = (*g_play_free_cast_chooser)(state, controller, source_name,
+                                                       cand_cards, heur, /*walked=*/{});
+        if (picked < 0) { return; }               // declined -- the permission goes unused
+        if (picked < static_cast<int>(cand_slots.size())) { pick = cand_slots[picked]; }
+    }
+
     const Card chosen = pl.hand[pick];
     pl.hand.erase(pl.hand.begin() + pick);
     PutCardOntoBattlefield(state, controller, chosen, source_name);
@@ -19194,8 +19268,15 @@ inline void FireSagaChapter(GameState& state, int controller, const CardDefiniti
     const bool wants_target = (chapter == 2 && pp.saga_ch2_counters_on_target > 0)
                            || (chapter == 3 && pp.saga_ch3_double_pt_target);
     if (!wants_target) { return; }
-    const int ti = DefaultSagaChapterTarget(state, controller);
+    int ti = DefaultSagaChapterTarget(state, controller);
     if (ti < 0) { return; }                       // no legal target (CR 608.2b)
+    // Human play re-asks WHICH creature off the real resolution board (board click); with no
+    // chooser installed this returns `ti` unchanged and the autonomous path is byte-identical.
+    ti = ChooseSagaChapterTargetIndex(
+             state, controller, def.card.m_name.str(), chapter,
+             chapter == 2 ? "given three +1/+1 counters (permanently)"
+                          : "its power and toughness doubled until end of turn",
+             ti);
     Permanent& tgt = state.battlefield[ti];
 
     static const bool s_ch_trace = EnvOn("MTG_SAGA_TRACE");   // DIAGNOSTIC only, no play change
@@ -19518,6 +19599,37 @@ inline void PerformSacrificeCreatureCost(GameState& state, const std::string& sp
     {
         std::vector<int> cands = SacCreatureCandidateIndices(state, active, color);
         if (!cands.empty()) { idx = cands.front(); }
+    }
+    // HUMAN-PLAY victim override (USER 2026-09-17). The searched `victim_id` is baked during ACTION
+    // COLLECTION -- "before any plan exists", as the enumerator's own comment says -- so the victim
+    // set is a snapshot of the PRE-PLAN board. A creature cast EARLIER IN THE SAME PLAN was
+    // therefore never offered: *"I was able to choose a victim if I put Fyndhorn Elves + Natural
+    // Order as the plan, I just wasn't able to choose Fyndhorn Elves."* Confirmed on the seed-1
+    // reference -- 130 plans casting Fyndhorn + Natural Order offered victims {4, 11, 42}, byte-
+    // identical to Natural Order alone. That is a legal and real line (eat the dork you just
+    // deployed, keep the better body, and every creature still counts toward a Craterhoof X).
+    //
+    // Asking HERE fixes it for free: an additional cost is paid at CAST time (CR 601.2h), which is
+    // after the rest of the plan's earlier casts have resolved, so the live battlefield already
+    // holds them. Reuses the existing `sacrifice` BOARD-CLICK decision (g_play_sacrifice_chooser),
+    // the same route ChooseSacOutletVictimIndex takes -- the user's other requirement:
+    // *"sacrifice is not targeting, but it deserves the same treatment"* (correct: it is an
+    // additional cost, chosen as the spell is cast, never using the word "target").
+    //
+    // The plan's bake is the PRESELECTED DEFAULT, so committing without touching the board
+    // reproduces the searched line exactly. Nulled by RevealLogPause for every search/rollout
+    // scope, so autonomous play and the rollouts are byte-identical.
+    if (g_play_sacrifice_chooser && idx >= 0)
+    {
+        const std::vector<int> cands = SacCreatureCandidateIndices(state, active, color);
+        if (cands.size() > 1)   // a single legal victim is forced -- do not prompt for a non-choice
+        {
+            int def_opt = 0;
+            for (int k = 0; k < static_cast<int>(cands.size()); ++k)
+            { if (cands[k] == idx) { def_opt = k; break; } }
+            const int chosen = (*g_play_sacrifice_chooser)(state, active, spell_name, cands, def_opt);
+            if (chosen >= 0 && chosen < static_cast<int>(cands.size())) { idx = cands[chosen]; }
+        }
     }
     if (idx < 0) { return; }   // no legal victim (enumeration should have gated the cast)
     const Card dead    = state.battlefield[idx].card;

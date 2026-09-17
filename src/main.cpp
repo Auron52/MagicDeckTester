@@ -1626,7 +1626,25 @@ static void WriteDecisionJson(std::ostream& os, const GameState& s,
             if (!ac.tutor_target.empty()) { os << ", \"tutor_target\": "; JsonStr(os, ac.tutor_target); }
             if (ac.chosen_x > 0)          { os << ", \"x\": " << ac.chosen_x; }
             if (ac.ponder_keep >= 0)      { os << ", \"ponder_keep\": " << ac.ponder_keep; }
-            if (ac.soulfire_own_targets > 0) { os << ", \"soulfire_targets\": " << ac.soulfire_own_targets; }
+            // `soulfire_own_targets` is an OVERLOADED int (TurnSolver.h:335). For Soulfire Eruption it
+            // is what its name says -- a COUNT of own creatures targeted; for Natural Order it carries
+            // the sacrifice victim's CARD NUMBER, and for a strive spell the extra-target count.
+            // Emitting the victim under the soulfire name was simply wrong on the wire: a *count* of 42
+            // is impossible on a nine-permanent board, and both the viewer and a claude-play agent read
+            // the frame at face value. Split by what the card actually does, and name the victim while
+            // we are here (`sac_victim_name`), so the four per-victim plans stop rendering identically.
+            if (ac.soulfire_own_targets > 0)
+            {
+                const CardDefinition* sd = ac.def ? ac.def
+                                                  : CardDatabase::Instance().Lookup(ac.card_name);
+                if (sd && !sd->params.sac_additional_creature_color.empty())
+                {
+                    os << ", \"sac_victim\": " << ac.soulfire_own_targets
+                       << ", \"sac_victim_name\": ";
+                    JsonStr(os, EnchantTargetName(s, ac.soulfire_own_targets));
+                }
+                else { os << ", \"soulfire_targets\": " << ac.soulfire_own_targets; }
+            }
             if (ac.splice_count > 0)      { os << ", \"splice_count\": " << ac.splice_count; }
             // Replicate: how many EXTRA token copies this cast pays for (CR 702.56). Emitted from
             // >= 0, not > 0 -- "replicate zero times" is a real declared line whose whole point is
@@ -2392,6 +2410,23 @@ static void WriteFreeCastDecisionJson(std::ostream& os, const GameState& s,
     d.Type("free_cast").Source(source).Turn(s.turn_number).Board(s)
      .HeuristicDefault(source == "Maelstrom Archangel" ? -1 : heuristic_default);
     d.Int("ai_pick", heuristic_default);
+    // WHERE THE CANDIDATES LIVE, so the viewer can offer the choice IN THAT ZONE rather than in a
+    // modal (USER 2026-09-17: *"All of these decisions should be done on the board or hand"*,
+    // *"(not in a separate dialog)"*). Four mechanics share this decision and they do NOT share a
+    // zone: Maelstrom Archangel's banked charge and World War Hulk's chapter I offer cards that are
+    // IN YOUR HAND and can simply be clicked there, while cascade / Breaching Dragonstorm / Creative
+    // Technique offer a card their library walk just turned up, which is in no visible zone at all
+    // and necessarily needs a dialog. DERIVED from the state rather than passed per-site, so a new
+    // free-cast site cannot forget it. Absent key => modal, which is every walk-based site today.
+    bool all_in_hand = !candidates.empty();
+    for (const Card& c : candidates)
+    {
+        bool found = false;
+        for (const Card& h : s.players[s.active_player_index].hand)
+        { if (h.m_number == c.m_number) { found = true; break; } }
+        if (!found) { all_in_hand = false; break; }
+    }
+    if (all_in_hand) { d.Word("zone", "hand"); }
     d.Array("candidates", candidates.size(), [&](std::size_t i)
     {
         os << "{ \"index\": " << i << ", \"name\": "; JsonStr(os, candidates[i].m_name.str()); os << " }";

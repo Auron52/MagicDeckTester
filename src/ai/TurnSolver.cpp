@@ -44643,34 +44643,30 @@ TurnSolver::LineCheck TurnSolver::CheckLine(const GameState& state_in, bool is_p
         for (const Action& a : p.actions)
         {
             // Natural Order's "As an additional cost to cast this spell, sacrifice a green creature":
-            // WHICH of your creatures dies is the player's call -- and an irreversible one -- but the
-            // enumerated victim rode Action::soulfire_own_targets (a card m_number) with NO sub, so the
-            // per-victim plans shared a signature, the dedup kept the first-enumerated one, and the
-            // viewer silently sacrificed the engine's pick with no dialog at all (user-reported: "no
-            // choice was given for what to sacrifice to Natural Order" -- it ate the Arbor Elf).
-            // Emitted BEFORE the tutor sub of the same action so the label reads in cost-then-effect
-            // order, and asked before it too (linebuild.js SUBKIND_PRI): the victim GATES the fetch --
-            // a sacrificed Worldspine Wurm shuffles itself back into the library and is then a legal
-            // target -- so the coupling only reads correctly in that direction.
-            {
-                const CardDefinition* vdef = CardDatabase::Instance().Lookup(a.card_name);
-                if (vdef && !vdef->params.sac_additional_creature_color.empty()
-                    && a.soulfire_own_targets > 0)
-                {
-                    // Disambiguated (" #k") for the same reason the equip host is: two same-named
-                    // creatures would otherwise share a choice string and the dedup would silently
-                    // decide WHICH ONE dies.
-                    const std::string vn = SubChoiceHostLabel(state, a.soulfire_own_targets);
-                    std::string art;
-                    for (const Permanent& perm : state.battlefield)
-                    { if (perm.card.m_number == a.soulfire_own_targets) { art = perm.card.m_name.str(); break; } }
-                    if (!vn.empty())
-                    {
-                        addSub(a.card_name + " sacrifices " + vn, a.card_name + " sacrifices",
-                               vn, art, "sacrifice", a.soulfire_own_targets);
-                    }
-                }
-            }
+            // WHICH of your creatures dies is the player's call -- and an irreversible one. It used to
+            // be a QUEUE-TIME sub here ("<card> sacrifices <victim>", kind "sacrifice"), added when the
+            // victim rode Action::soulfire_own_targets with no sub at all and the viewer silently ate
+            // the engine's pick ("no choice was given for what to sacrifice to Natural Order" -- it ate
+            // the Arbor Elf). That sub is now GONE, and the victim is a RESOLUTION-TIME BOARD CLICK
+            // (PerformSacrificeCreatureCost -> g_play_sacrifice_chooser). Same move, same reasons, as
+            // the Pod victim / Chord fetch / loyalty target right below -- plus one this dimension has
+            // uniquely:
+            //
+            //   * IT WAS A NARROWED SET. The victim is baked during ACTION COLLECTION, before any plan
+            //     exists, so it is a snapshot of the PRE-PLAN board and a creature cast earlier in the
+            //     same plan could never be offered (USER 2026-09-17: "I was able to choose a victim if I
+            //     put Fyndhorn Elves + Natural Order as the plan, I just wasn't able to choose Fyndhorn
+            //     Elves"). Asking at resolution reads the LIVE board, which has them.
+            //   * IT WAS A DIALOG. USER: "sacrifice is not targeting, but it deserves the same
+            //     treatment" -- i.e. click the creature where it already is.
+            //
+            // THE FETCH COUPLING THAT ORDERED IT FIRST IS NOT REAL. The old comment (and linebuild.js's
+            // SUBKIND_PRI note) justified asking the victim before `tutor` because "a sacrificed
+            // Worldspine Wurm shuffles itself back into the library and is then a legal target". The
+            // enumerator does not actually do that: CollectActions computes `cands` ONCE from the
+            // pre-cast state and then takes the cross product `cands x sac_victims`, so the fetch list
+            // is IDENTICAL for every victim. Dropping this sub therefore costs no fetch option.
+            //
             // RESOLUTION-PICKED dimensions stay OUT of the choose fan (USER 2026-09-05, round 4:
             // "it popped up two dialogs rather than one"): the Pod's victim+fetch and the
             // Chord-class (tutor_mv_max_is_x) fetch are re-asked at RESOLUTION -- board-click +

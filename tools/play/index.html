@@ -487,6 +487,9 @@
   .thumb.selected::after { content:'✓'; position:absolute; top:-8px; right:-8px; background:var(--bad); color:#fff;
       width:20px; height:20px; border-radius:11px; font-size:13px; font-weight:700; display:flex; align-items:center;
       justify-content:center; box-shadow:0 0 0 2px var(--bg); z-index:4; }
+  /* An ILLEGAL card during a hand-click decision (free_cast zone:"hand"): dimmed so the legal set
+     reads at a glance, the hand's answer to leaving a non-target board thumb unhighlighted. */
+  .thumb.handdim { opacity:.32; filter:grayscale(.7); }
   /* clickable life totals as face targets */
   .life b.facetgt { cursor:pointer; padding:0 8px; border-radius:6px; box-shadow:0 0 0 2px var(--acc); }
   .life b.facetgt.selected { box-shadow:0 0 0 3px var(--bad); background:rgba(230,105,90,.18); }
@@ -1771,6 +1774,15 @@ function renderBoard() {
   const dec = (!S.over && SUBDECISIONS.includes(d.type)) ? d.type : null;
   const boardClick = dec==='target' || dec==='bounce' || dec==='sacrifice' || dec==='vial_charge' || dec==='attach_host' || dec==='flicker';
   if (boardClick && S._selFor !== d.decision_index) initBoardSel(d);
+  // HAND-CLICK decisions -- the hand's answer to boardClick. The objects being chosen among are
+  // cards sitting in YOUR HAND, so they are picked by clicking them where they already are, not in a
+  // modal (USER 2026-09-17: "All of these decisions should be done on the board or hand",
+  // "(not in a separate dialog)"). The engine emits `zone` per free-cast SITE, because the four
+  // mechanics sharing this decision do not share a zone: World War Hulk's chapter I and Maelstrom
+  // Archangel's banked charge offer cards in hand, while a cascade / Breaching Dragonstorm /
+  // Creative Technique walk offers a card that is in no visible zone at all and keeps the modal.
+  const handClick = dec==='free_cast' && d.zone==='hand';
+  if (handClick && S._fcFor !== d.decision_index) initHandSel(d);
   if (dec==='divide' && S._divFor !== d.decision_index) initDivAlloc(d);   // board-edit damage allocation
   // At game end, prefer the FINAL board carried on the result (permanents in play after the winning
   // turn) over the last decision's board, so the win screen reflects what actually resolved.
@@ -1958,20 +1970,46 @@ function renderBoard() {
     // with real hand cards (else e.g. a real + a staged Lightning Bolt read as "2 in hand").
     const hnorm = me.hand.filter(c=>!(c&&c.is_staged));
     const hstg  = me.hand.filter(c=>c&&c.is_staged);
-    let hrow = hnorm.map(c=>bfThumb({name:typeof c==='string'?c:c.name,is_land:(c&&c.kind==='land')})).join('');
+    // A hand-click decision makes this row LIVE: the candidate cards get .selectable (and .selected
+    // for the current pick), everything else is dimmed so the legal set reads at a glance -- exactly
+    // how the board reads during a `target`/`sacrifice` decision. One entry per distinct NAME,
+    // matching how the row itself collapses duplicates (same-named copies are fungible for a free
+    // cast, and the engine's Hulk candidates are already one-per-name).
+    const fcByName = {};
+    if (handClick) (d.candidates||[]).forEach(c=>{ if (!(c.name in fcByName)) fcByName[c.name]=c.index; });
+    let hrow = hnorm.map(c=>{
+      const nm = typeof c==='string' ? c : c.name;
+      const t  = bfThumb({name:nm, is_land:(c&&c.kind==='land')});
+      if (!handClick) return t;
+      const oi = fcByName[nm];
+      if (oi===undefined) return t.replace('class="thumb ', 'class="thumb handdim ');
+      const sel = (S.handSel===oi) ? ' selected' : '';
+      return t.replace('class="thumb ', `data-hpick="${oi}" class="thumb selectable${sel} `);
+    }).join('');
     if (hstg.length) {
       const seen=new Set(); let stg='';
       for (const c of hstg) {
         const k=c.name+'@'+c.staged_until; if(seen.has(k)) continue; seen.add(k);
         const n=hstg.filter(x=>x.name+'@'+x.staged_until===k).length;
-        stg += `<span class="thumb staged ${c.kind==='land'?'land':'spell'}" data-name="${esc(c.name)}">`+
+        // STAGED cards are candidates too, and must stay clickable. An exiled-but-playable card
+        // lives in Player::hand with m_is_staged set, so the engine's "every candidate is in hand"
+        // test passes for it -- but this row is drawn apart from the normal one, so without the
+        // same data-hpick a Maelstrom Archangel charge offering a staged spell would be visible and
+        // UNPICKABLE, leaving decline as the only reachable answer.
+        const soi = handClick ? fcByName[c.name] : undefined;
+        const ssel = (soi!==undefined && S.handSel===soi) ? ' selected' : '';
+        const scls = !handClick ? '' : (soi===undefined ? ' handdim' : ` selectable${ssel}`);
+        const satt = (soi===undefined) ? '' : ` data-hpick="${soi}"`;
+        stg += `<span${satt} class="thumb staged${scls} ${c.kind==='land'?'land':'spell'}" data-name="${esc(c.name)}">`+
           `<img loading="lazy" src="${scryImg(c.name,'small')}" onerror="this.style.opacity=.15"/>`+
           `<span class="stagedbadge" title="exiled — playable through turn ${c.staged_until}">▸T${c.staged_until}</span>`+
           (n>1?`<span class="pip">×${n}</span>`:'')+`<em>${esc(c.name)}</em></span>`;
       }
       hrow += `<span class="stagedsep">⟂ exiled<br>playable</span>`+stg;
     }
-    h += `<div class="zone hand"><h3>Hand (${hnorm.length})</h3><div class="row">`+(hrow||'<span class="hint">none</span>')+`</div></div>`;
+    h += `<div class="zone hand"><h3>Hand (${hnorm.length})`+
+         (handClick?` <span class="help">click a highlighted card to cast it for free — ✓ marks your pick</span>`:'')+
+         `</h3><div class="row">`+(hrow||'<span class="hint">none</span>')+`</div></div>`;
   }
   if (me.graveyard && me.graveyard.length) {
     const rset = new Set(me.retrace_gy||[]);   // graveyard spells castable via Retrace
@@ -3070,6 +3108,17 @@ function initBoardSel(d){
   }
   S._selFor = d.decision_index;
 }
+// Seed the HAND selection from the engine's suggestion, the same way initBoardSel seeds the board.
+// `ai_pick` (not heuristic_default) is the engine's actual choice -- for a "may" trigger
+// heuristic_default can be -1/decline, which is the PREDATES answer, not a recommendation.
+function initHandSel(d){
+  const ai = (d.ai_pick===undefined ? d.heuristic_default : d.ai_pick);
+  const legal = new Set((d.candidates||[]).map(c=>c.index));
+  S.handSel = legal.has(ai) ? ai : ((d.candidates||[])[0]||{}).index;
+  if (S.handSel===undefined) S.handSel=null;
+  S._fcFor = d.decision_index;
+}
+function toggleHandSel(oi){ S.handSel = (S.handSel===oi) ? null : oi; renderBoard(); }
 function legalTargetKeys(d){
   if (d.type==='target') return new Set((d.legal_targets||[]).map(tgtKey));
   if (d.type==='bounce' || d.type==='sacrifice' || d.type==='attach_host' || d.type==='flicker') return new Set((d.options||[]).map(o=>'m:'+o.perm_index));
@@ -3084,6 +3133,14 @@ function toggleSel(d, key, max){
 // Add highlight classes + click handlers to the real board for an active target/bounce/vial decision.
 function wireDecisionBoard(d, dec){
   const board=$('board');
+  // Hand-click decisions (free_cast with zone:"hand"): the read-only hand row rendered its candidate
+  // thumbs with data-hpick, so clicking one IS the pick. Clicking the current pick again clears it,
+  // which is the same gesture as declining -- the Decline button in the prompt says so explicitly.
+  if (dec==='free_cast' && d.zone==='hand'){
+    board.querySelectorAll('.thumb[data-hpick]').forEach(t=>{
+      t.onclick=e=>{ e.stopPropagation(); toggleHandSel(+t.dataset.hpick); };
+    });
+  }
   if (dec==='target' || dec==='bounce' || dec==='sacrifice' || dec==='soulfire_targets' || dec==='attach_host' || dec==='flicker'){
     const legal=legalTargetKeys(d);
     const max = (dec==='bounce'||dec==='sacrifice'||dec==='attach_host'||dec==='flicker')?1:(dec==='soulfire_targets'?(d.count||1):(d.max_targets||1));
@@ -3167,7 +3224,13 @@ function renderDecisionPanel(d, dec){
   const isModal = isLook || dec==='dig' || dec==='discard' || dec==='expressive_iteration' || dec==='retrace_discard'
                 || dec==='replicate' || dec==='mulligan' || dec==='bottom' || dec==='land_entry' || dec==='dragon' || dec==='sac_tutor' || dec==='revive' || dec==='rummage'
                 || dec==='lightpaws' || dec==='firebreathe' || dec==='storage_hold' || dec==='jitte' || dec==='choose_color'
-                || dec==='lackey_put' || dec==='free_cast' || dec==='demonstrate' || dec==='echo' || dec==='tutor_etb'; // centered card-image modals
+                || dec==='lackey_put' || dec==='demonstrate' || dec==='echo' || dec==='tutor_etb' // centered card-image modals
+                // free_cast is a modal ONLY for the walk-based sites (cascade / Breaching
+                // Dragonstorm / Creative Technique), whose card is in no visible zone. A from-hand
+                // charge (zone:"hand" -- World War Hulk chapter I, Maelstrom Archangel) is a bottom
+                // PROMPT with the hand left clickable underneath, the same shape board-click
+                // decisions use.
+                || (dec==='free_cast' && d.zone!=='hand');
   back.className = isModal ? 'modal' : '';                // dim+block only for modal decisions
   back.style.display = isModal ? 'block' : 'none';
   panel.className = 'show ' + (isModal?'modal':'prompt');
@@ -3357,6 +3420,25 @@ function freeCastPanelHtml(d){
   // bottomed; Breaching Dragonstorm: to hand; Creative Technique: stays exiled).
   const src=d.source||'Maelstrom Archangel';
   const isArch=src.indexOf('Archangel')>=0;
+  // FROM-HAND charge: a bottom prompt over a clickable hand, not a card grid in a modal. The cards
+  // are already on screen in the zone they live in, so re-drawing them inside a dialog is both
+  // redundant and the affordance the user rejected ("not in a separate dialog"). Declining is a
+  // first-class button because the card grants a PERMISSION, not an obligation -- World War Hulk's
+  // chapter I reads "CAN be cast without paying its mana cost".
+  if (d.zone==='hand'){
+    const cands=d.candidates||[];
+    const pickName=(cands.find(c=>c.index===S.handSel)||{}).name;
+    const aiName=(cands.find(c=>c.index===aiPick)||{}).name;
+    return `<h3>${esc(src)} — cast a creature from your hand for free</h3>`+
+      `<div class="sub">${isArch
+        ? `<b>${esc(src)}</b> dealt combat damage — you may cast one spell from your hand <b>without paying its mana cost</b>.`
+        : `<b>${esc(src)}</b> — the next red or green creature spell you cast this turn <b>can</b> be cast without paying its mana cost.`}`+
+      ` Click a highlighted card in your hand to cast it, or decline and keep your hand as it is.`+
+      (aiName?` The AI would cast <b>${esc(aiName)}</b>.`:'')+`</div>`+
+      `<div class="pbtns"><span class="pcount">Casting for free: <b>${pickName?esc(pickName):'(nothing — declining)'}</b></span>`+
+      `<span class="spacer"></span><button id="fcdecline" class="ghost">Decline</button>`+
+      `<button id="decconfirm" class="primary" ${pickName?'':'disabled'}>Confirm</button></div>`;
+  }
   let h=`<h3>${esc(src)} — cast a spell for free</h3>`;
   h+=isArch
     ? `<div class="sub"><b>${esc(src)}</b> dealt combat damage — you may cast one spell from your hand <b>without paying its mana cost</b>. This is a one-time trigger: click a spell, or decline.</div>`
@@ -3767,8 +3849,13 @@ function promptPanelHtml(d, dec){
   // opponent's FACE is not in it. This is the board click the player asked for ("use targeting on
   // the board if a targeted ability (like Oko's +1) is chosen", 2026-09-02).
   if (d.loyalty){
+    // "Either side of the table" is true of a loyalty ability (Bolas's +3 hits any noncreature
+    // permanent) but FALSE of the other abilities that share this chooser -- a Saga chapter reads
+    // "target creature YOU CONTROL", and Heliod's counter is own-only too. Word it off the legal set
+    // the engine actually sent rather than asserting the widest case.
+    const anyOpp=(d.legal_targets||[]).some(t=>/opponent/i.test(t.label||''));
     return `<h3>Choose a target — ${esc(d.source||'')}</h3>`+
-      `<div class="sub">The chosen permanent is <b>${esc(d.loyalty)}</b> · pick 1. Click one of the highlighted permanents on the board (either side of the table, tapped or not). The AI's pick is preselected.</div>`+
+      `<div class="sub">The chosen permanent is <b>${esc(d.loyalty)}</b> · pick 1. Click one of the highlighted permanents ${anyOpp?'on the board (either side of the table, tapped or not)':'on YOUR side of the board (tapped or not)'}. The AI's pick is preselected.</div>`+
       `<div class="pbtns"><span class="pcount">${n} / 1 selected</span><span class="spacer"></span>`+
       `<button id="decconfirm" class="primary" ${n?'':'disabled'}>Confirm</button></div>`;
   }
@@ -3821,8 +3908,17 @@ function wireDecisionPanel(d, dec){
     panel.querySelectorAll('[data-opt]').forEach(b=>b.onclick=()=>commitLightPaws(d, +b.dataset.opt));
   else if (dec==='lackey_put')
     panel.querySelectorAll('[data-opt]').forEach(b=>b.onclick=()=>commitLackey(d, +b.dataset.opt));
-  else if (dec==='free_cast')
-    panel.querySelectorAll('[data-opt]').forEach(b=>b.onclick=()=>commitFreeCast(d, +b.dataset.opt));
+  else if (dec==='free_cast'){
+    if (d.zone==='hand'){
+      // The pick itself is made by clicking the HAND (wireDecisionBoard); the prompt only confirms
+      // it or declines. Confirm is disabled with nothing picked, so the reply is never ambiguous.
+      const cb=panel.querySelector('#decconfirm');
+      if (cb) cb.onclick=()=>{ if (S.handSel!=null) commitFreeCast(d, S.handSel); };
+      const db=panel.querySelector('#fcdecline'); if (db) db.onclick=()=>commitFreeCast(d, -1);
+    } else {
+      panel.querySelectorAll('[data-opt]').forEach(b=>b.onclick=()=>commitFreeCast(d, +b.dataset.opt));
+    }
+  }
   else if (dec==='demonstrate')
     panel.querySelectorAll('[data-demo]').forEach(b=>b.onclick=()=>commitDemonstrate(d, +b.dataset.demo));
   else if (dec==='tutor_etb')

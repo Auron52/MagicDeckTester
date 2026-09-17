@@ -486,16 +486,21 @@
   // `free` (Maelstrom Archangel pay-vs-bank) is asked FIRST among the per-spell dimensions: it
   // decides how much mana the rest of the line has, so every later sub-decision reads in that
   // context. `modal` (Unite the Coalition's mode split) sits where the old generic `x` sub used to.
-  // `sacrifice` (Natural Order's additional cost) is asked BEFORE `tutor`: the victim gates the fetch
-  // — a sacrificed Worldspine Wurm shuffles itself back into the library and only then is a legal
-  // target — so asking the target first would offer a card whose availability isn't decided yet.
+  // `sacrifice` (Natural Order's additional cost) is NO LONGER EMITTED as a sub (2026-09-17) — the
+  // victim is a RESOLUTION-time board click now, like a loyalty ability's target below. It used to
+  // sit at 0.75, ahead of `tutor`, on the theory that the victim gates the fetch ("a sacrificed
+  // Worldspine Wurm shuffles itself back into the library and only then is a legal target"). That
+  // coupling was never real: CollectActions builds the tutor candidate list ONCE and crosses it with
+  // the victim list, so every victim sees the same fetch options. Asking at resolution instead is
+  // what lets you sacrifice a creature THE SAME LINE CAST — the queue-time set was a snapshot of the
+  // pre-plan board. The key stays in the table below only so a stale saved line does not reorder.
   // `activations` (Call of the Wild / a Minotaur pump's repeat count) sits where the old generic `x`
   // sub did; it is that action's own count, coupled to nothing.
   // `equip` (which creature an Equipment attaches to) and `jitte` (which counter mode) sit with the
   // other per-action target picks.
   // `bestow` sits just ahead of `enchant`: the mode decides whether an enchant target is asked at
   // all (the creature mode has none), so asking the host first would offer a dimension that the
-  // other mode does not have -- the same gating reason `sacrifice` is asked before `tutor`.
+  // other mode does not have (the gating reason `sacrifice` USED to be asked before `tutor`).
   // `replicate` (how many extra token copies a Sliver spell pays for) is asked LAST among the
   // per-spell dimensions for the same reason `free` is asked first: it is the one that consumes
   // whatever mana the rest of the line left, so every earlier pick reads in a fixed context and the

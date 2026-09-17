@@ -9,6 +9,51 @@ for the SEARCH as well, so it is not merely a viewer problem.
 
 ---
 
+## STATUS 2026-09-17 — all four FIXED for the human; the search half of 1 and 2 stays open
+
+Every decision below is now offered, and each one in the zone the user asked for. The sections that
+follow are the original diagnosis, kept verbatim as the record of what was wrong; **read this block
+for what the engine does today.**
+
+| # | what was missing | how it is offered now | zone |
+|---|---|---|---|
+| 1a | Hulk ch. I — which creature, and whether to decline | `free_cast` frame with `zone:"hand"` (`PerformSagaFreeCast` -> `g_play_free_cast_chooser`) | HAND |
+| 1b | Hulk ch. II / III — the target | `target` frame with a `loyalty` prompt (`ChooseSagaChapterTargetIndex` -> `g_play_loyalty_chooser`) | BATTLEFIELD |
+| 2 | Natural Order — victim, incl. a creature cast in the same plan | `sacrifice` frame at RESOLUTION (`PerformSacrificeCreatureCost` -> `g_play_sacrifice_chooser`); the queue-time sub is deleted | BATTLEFIELD |
+| 3 | the victim serialized as `soulfire_targets` | split into `sac_victim` + `sac_victim_name` (`src/main.cpp`), keyed on `sac_additional_creature_color` | — |
+| 4 | everything asked in a dialog | 1a is a bottom prompt over a clickable hand; 1b and 2 are board clicks | — |
+
+**What was verified, not assumed.**
+
+* **Autonomous play is byte-identical.** 5,600 games of StompySurprise across four configurations
+  (d0 4000, d3 800, d5 400, 2HG-d3 400) produce identical `--batch` digests before and after:
+  `836b8fdb5b184efc` / `d63523fcc2be1059` / `ed84bd4d21d4a254` / `f62445436da48ea8`. Every chooser is
+  nulled by `RevealLogPause` in search and rollouts, and `saga_chapters` /
+  `sac_additional_creature_color` are carried by exactly two cards, both in this deck alone.
+  **So these fixes do NOT move ground truth** — contradicting this doc's original Sequencing note,
+  which predicted fixes 1 and 2 would. The 21 stale `stompy`/`stompy2hg` GT keys are stale from the
+  LIST PROMOTION only, and this work neither adds to that debt nor depends on it.
+* **The reference corpus still replays.** `test/viewer_protocol_check.py` over 318 references:
+  0 play-drift, 0 enum-gap, 0 contract-fail, and the one board-diverged / ten mull-drift entries are
+  present on the baseline binary too. The only change anywhere in the corpus is the user's own
+  `StompySurprise/claude_s1_gi0.json` moving `ok` -> `repaired`: it now meets three decisions it
+  predates (the Hulk chapters), answers them from `heuristic_default`, and **reproduces its T4 win**.
+  It is left untouched on disk — re-saving it is the user's call.
+* **Defect 2 reproduces and is closed.** On seed 16 the declared line
+  `land=Forest;cast=Fyndhorn Elves;cast=Natural Order` used to fan **26** queue variants whose victim
+  set was `{Llanowar Elves, Elvish Archdruid}` — the board *before* the line, with the Fyndhorn Elves
+  the line itself casts absent, exactly as reported. It now fans **13** (fetch targets only) and the
+  resolution frame offers Fyndhorn Elves.
+
+**Still open (search, not viewer).** The plan enumerator still bakes the victim from the pre-plan
+board, so the SEARCH cannot find "deploy the worst creature, then eat it" as a single turn; and the
+Hulk chapters still have no searched axis (chapters II/III fire at the draw step, before any plan
+exists, so a plan axis is not the right shape for them anyway — a searched resolution-time choice
+would be). Both are engine-quality items that WOULD move GT, and neither is what the user asked for
+here.
+
+---
+
 ## 1. World War Hulk offers NO decision at ANY chapter (SEARCH + HUMAN)
 
 USER: *"Hulk gave me no Targeting decisions."* and *"Hulk didn't ask for the creature to be played or
@@ -145,6 +190,12 @@ Applies to `tools/play/index.html` (the `target`/`sacrifice` decision rendering 
 ---
 
 ## Sequencing
+
+> **SUPERSEDED — see the STATUS block at the top.** The prediction below (that fixes 1 and 2 would
+> move GT, so they had to land before the rebaseline) turned out to be wrong, and measurably so:
+> all four were implementable as human-play-only overrides behind choosers that `RevealLogPause`
+> nulls, and 5,600 games produce byte-identical digests. The GT rebaseline and this work are
+> independent; either can go first. Kept for the record.
 
 Fixes 1–3 touch `src/`, so they change the binary. **The 21 stale `stompy`/`stompy2hg` GT keys have
 not been rebaselined yet — land these fixes FIRST**, so the rebaseline measures the engine we intend
