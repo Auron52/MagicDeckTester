@@ -400,6 +400,105 @@ the Karoo correctly taps for mana *before* its ETB bounce resolves.
 * **Multi-depth:** d0 **5.99** → d3 **5.61** — monotone. (These ran on the pre-fix binary; re-run
   on the shipped binary below.)
 
+## Stage 6a — Encoded heuristics & assumptions disclosure
+
+### 1. Global engine assumptions in force
+
+| assumption | effect on this deck |
+|---|---|
+| Single **passive** opponent — never blocks, casts, gains or prevents life | Large. Every attacker connects every turn, so Beastmaster Ascension's threshold is reached just by attacking wide, and the +5/+5 is pure clock. It also means Thallid Shell-Dweller's 5 toughness is inert and **Tukatongue Thallid's death trigger can only ever fire off Mycoloth's devour** — nothing else in the deck kills a Fungus. |
+| Clairvoyant search over a known library (deterministic shuffle) | Standard. |
+| **First main only** — `DeckUsesSecondMain` does not fire for Fungus | See Q1: the attack-then-sacrifice double-dip is unrepresentable. Measured below. |
+| Depth / budget the results were produced at | d0/d3/d5, budget 200 ms, `--lookahead-bottoming`. |
+
+### 2. Card-modeling simplifications (every bracket note in this deck)
+
+| card | deferral | why inert | status |
+|---|---|---|---|
+| All five spore cards | activation enumerated main-phase only, though printed instant-speed | The enabling counter arrives at the controller's own upkeep; the passive opponent offers nothing to respond to; a token made anywhere between turn N and N+1 first attacks on N+1 either way. Main-phase is in fact weakly *dominant* (the Saproling is then available to devour, the lord, and the sac outlets that same turn). | **PROVISIONAL** |
+| Beastmaster Ascension | "you **may** put a quest counter" modelled as always-take | Strictly dominated: no counter cap, no sacrifice-at-N clause, no cost, and no state where fewer counters is better. | **PROVISIONAL** |
+| Mycoloth | attack-then-devour post-combat sequencing unrepresentable | NOT inert — a real under-rating (see §4). Bounded to one decision per copy per game. | **PROVISIONAL** |
+| Mycoloth | `devour` absent from the `keywords` array | Fully modelled via the `devour` param; the engine's `Keyword` enum carries only keywords some code path reads, and the loader rejects unknown strings. Allowlisted in `scryfall_divergences.json`. | disclosed |
+| Simic Growth Chamber | — | No deferral. The `{U}` is unusable for coloured pips (no blue cards) but **pays generic**, so it is a true 2-mana land for the deck's seven generic-pip spells. | — |
+
+### 3. Deck / archetype DecisionProvider heuristics
+
+**Fungus routes to `GenericProvider` and therefore overrides NOTHING** — no deck-specific
+narrowing at all, pure search within the global assumptions above. This is deliberate: a new deck
+earns its own provider only once it has a *measured* hook to hold.
+
+Getting there took **two** routing fixes, both recorded above — the `sac_creature_outlet` → Goblins
+misroute and the `is_land_aura` → EldraziFlicker misroute. Verified across all 25 decks.
+
+### 4. Play-viewer auto-resolved decisions
+
+| card / choice | status |
+|---|---|
+| Karoo bounce target | **Surfaced** (`bounce` decision, confirmed live by 5 sweep agents). |
+| Spore activation (whether, and how many times) | **Surfaced** as `main_phase` board activations; K folds to 1 under human play and the main re-prompts, so K=2 is reached by choosing twice (gi14 confirmed). |
+| Which Saproling a sac outlet eats | **Surfaced** — reuses the existing `sacrifice` decision. |
+| Devour **count** | **Surfaced** — a real searched plan variant, keyed into `plan_signature`. |
+| Devour **which creatures** | **NOT surfaced** — auto-resolved by the shared expendability ranking. Wiring it needs a multi-select sacrifice the registry has no shape for. Bounded: devour fires ≤2× per game, the fodder is overwhelmingly fungible 1/1 tokens, and the ranking already prefers the one correct special case (Tukatongue, whose death refunds a Saproling). **PROVISIONAL — needs sign-off.** |
+
+Everything else: no card choice is silently heuristic-resolved. The auditor's oracle-text
+cross-check reports *"No oracle-text choice phrase is left unmodeled by params. Clean."*
+
+
+## Stage 5c2 — horizon-honest tie-break (`GradesNoWinLeaf`)
+
+`python3 scripts/leaf_tiebreak_check.py decks/Fungus/Fungus.cod` — 24,000 games (12,000 paired),
+both arms in ONE pooled batch, 1 h 48 m, `[batch] heartbeat` at 24/24 throughout.
+
+```
+split         games  net turns  worse  better   (negative = the tie-break HELPS)
+half A         6000         +0      4       4
+half B         6000         -4      3       7
+ALL           12000         -4      7      11
+binding: 18 changed games of 12000 paired (0.150%)
+VERDICT: NO SIGN AT THIS SAMPLE
+```
+
+**Decision: keep the default (ON).** Per the skill, "NO SIGN" is *not* a pass — but there is a
+mechanistic reason the binding rate is this low rather than it being pure under-sampling: the
+tie-break only fires when a rollout reaches the horizon **without** a win, and this deck wins on
+turn 5-7, comfortably inside it. The measured direction is mildly negative (−4 net turns, i.e.
+helping). The skill's own fallback applies: *"If it stays unbindable at a large sample, the default
+(ON) is fine by default: a lever that never fires costs the deck nothing."*
+
+**Open (non-blocking):** the script suggests `--blocks 24` for a decisive sample. That is ~3.5 h on
+this deck. Not run — the performance finding below is the higher-value use of the box, and the
+default is already the safe side. Re-run if you want the direction pinned down.
+
+## ⚠ PERFORMANCE — the deck has pathological games
+
+Surfaced by the batch runner's own `SLOW-GAME` reporting during the run above (>30 s per game),
+which is exactly the signal CLAUDE.md says to check:
+
+| metric | value |
+|---|---|
+| games over 30 s | **526** of 24,000 (~2.2%) |
+| median slow game | 53.8 s |
+| p90 | 195.8 s |
+| **worst single game** | **1,446 s — 24 minutes** |
+| total wall time inside slow games | **14.6 hours** |
+
+Shape of it:
+* Slow games concentrate at **win turns 6-7** (444 of 526) — the longer the game runs, the wider
+  the token board, the slower each node.
+* The `base` and `leaf` arms are hit about **equally**, so this is **the deck, not the tie-break
+  lever**.
+* Worst repros (both arms agree on the same games, which is itself confirmation it is board-driven):
+  * `--seed 1100235 --game-index 235` (wt 8) — 1446 s / 1239 s
+  * `--seed 1600607 --game-index 607` (wt 6) — 924 s / 870 s
+  * `--seed 2100009 --game-index 9` (wt 7) — 843 s
+
+This is the board-size scaling the Doubling Season research predicted, and it matches the repo's
+own clue-fusion precedent (67-69 permanent boards → 807 s/game; *"token floods, not units, ate the
+wall"*). It is a **performance** problem, not a correctness one — every correctness gate is green.
+
+**Consequence for sequencing:** a value-leaf generation is described as tens of hours on a normal
+deck. On a deck with 24-minute games it could be far worse, so profiling this comes first.
+
 ## Stage log
 
 * **2026-09-17** — Stage 1 coverage run; 11 missing cards; four engine mechanics absent
