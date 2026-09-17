@@ -1890,8 +1890,8 @@ question from whether it earns a slot, and the claude-play sweep below is still 
 
 ## Still open (NOT part of the approval)
 
-* **`decks/StompySurprise/` is NOT updated.** Promoting H would invalidate the regression suite's
-  StompySurprise ground truth. That is a separate, explicit user call.
+* ~~`decks/StompySurprise/` is NOT updated~~ — **DONE 2026-09-17 (b9997851)**, at the user's direction.
+  The list is promoted and the old build archived at `v1-arborelf-worldspine4/`.
 * ~~Ghalta vs no Ghalta~~ -- **CLOSED by user ruling** (see the ruling section above). F's keep table
   was never built and must NOT be: ~4h of box time for a number the user has said would not move them.
 * **Ghalta has never had a claude-play sweep.** New card, novel ETB, two-phase resolution; validated
