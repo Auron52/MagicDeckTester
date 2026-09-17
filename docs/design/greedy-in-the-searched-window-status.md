@@ -1,5 +1,12 @@
 # Greedy inside the search: what we found, and what it means
 
+**Status (updated 2026-09-17): the "greedy-free searched window" evidence below covered the ROOT
+TURN ONLY.** The apply-kind ROOT bit is `g_fsline_nest == 0`; every searched lookahead turn
+T1..T(d-1) read as "[rollout+rec]" and kept greedy breakpoint continuations (measured with a new
+PLAYOUT bit: hinata 1.85M lookahead-turn fallbacks vs 410k playout). The deletion route, the
+corrected census and the lever that gives acted = 0 everywhere (`MTG_BP_DROP_GREEDY`) are in
+`greedy-continuation-deletion-route.md` — read THAT first.
+
 **GOVERNING DOCTRINE (USER, 2026-09-05, verbatim):** *"The only exception to the no greedy rule
 will be things outside of the search window, combo go off heuristics that win this turn, mana
 allocation and attack decisions for non-dork creatures. Everything else should be

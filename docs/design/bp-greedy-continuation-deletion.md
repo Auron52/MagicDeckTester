@@ -1,5 +1,12 @@
 # Deleting the greedy breakpoint continuation (MTG_BP_NO_GREEDY_CONT)
 
+**Status (updated 2026-09-17): the "greedy-free searched window" evidence below covered the ROOT
+TURN ONLY.** The apply-kind ROOT bit is `g_fsline_nest == 0`; every searched lookahead turn
+T1..T(d-1) read as "[rollout+rec]" and kept greedy breakpoint continuations (measured with a new
+PLAYOUT bit: hinata 1.85M lookahead-turn fallbacks vs 410k playout). The deletion route, the
+corrected census and the lever that gives acted = 0 everywhere (`MTG_BP_DROP_GREEDY`) are in
+`greedy-continuation-deletion-route.md` — read THAT first.
+
 **Status (updated 2026-09-03): the TIGHT sound recipe is ADOPTED** (ebfb5f74, 2026-09-02 — five
 recipe defaults ON incl. `MTG_BP_CANON_CONT`; see "ADOPTED: the TIGHT sound recipe" at the end of
 this doc). `MTG_BP_NO_GREEDY_CONT` itself stays default OFF — the header below is the
