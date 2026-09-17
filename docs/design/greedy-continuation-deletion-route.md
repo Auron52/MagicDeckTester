@@ -921,3 +921,112 @@ That is the honest headline, and it is a materially different statement from "be
 
 There is therefore **no work-unit surplus to reinvest**. Any quality work from here has to either
 find its own budget or be paid for deliberately.
+
+## Addendum I — cost mitigation after the rebaseline (plan, not results)
+
+USER 2026-09-17: *"go ahead and shoot for a full rebaseline with this change, but keep the old state
+in mind and look for ways to mitigate the costs after"*, and *"there is no need to overoptimize for
+the regression tests -- if larger A/B tests on other seeds show that there is an improvement overall,
+that could be good enough."*
+
+### I.1 Keeping the old state
+
+The pre-deletion engine is commit **63dd9ce3**. To measure against it again:
+
+```
+git worktree add /tmp/pre63 63dd9ce3 --detach && cd /tmp/pre63 && ./build.sh
+```
+
+Do NOT reuse a stale `build/Release/mtg` as "the old binary" — integrating overwrites it, and that
+is exactly how the 0.930x figure ended up measured against the wrong denominator (H.2). The
+reference measurement, 20 decks x 300 games, seed 5500001, single thread, each deck's own play
+settings, shipped/GT units:
+
+| deck | GT units | shipped | ratio | share of suite |
+|---|---:|---:|---:|---:|
+| hinata | 10,103,891 | 10,510,161 | 1.040 | 21.0% |
+| kitty | 2,140,203 | 2,191,876 | 1.024 | 4.4% |
+| auras | 552,542 | 560,837 | 1.015 | 1.1% |
+| burn | 1,285,413 | 1,298,754 | 1.010 | 2.7% |
+| dragons | 1,580,031 | 1,594,161 | 1.009 | 3.3% |
+| goblins | 453,233 | 457,221 | 1.009 | 0.9% |
+| critter | 460,753 | 463,393 | 1.006 | 1.0% |
+| dragonstorm | 954,039 | 958,819 | 1.005 | 2.0% |
+| antilife | 989,726 | 991,372 | 1.002 | 2.1% |
+| fivecolour / breaching / knights / minotaur / slivers / stompy | — | — | 1.000 | 18.4% |
+| creature_giving | 2,507,202 | 2,504,940 | 0.999 | 5.2% |
+| mirrorwing | 2,101,817 | 2,097,784 | 0.998 | 4.4% |
+| th | 1,706,526 | 1,696,405 | 0.994 | 3.5% |
+| melira | 13,370,170 | 13,267,242 | 0.992 | 27.8% |
+| fluctuator | 1,103,089 | 895,905 | 0.812 | 2.3% |
+| **TOTAL** | **48,145,348** | **48,325,827** | **1.004** | |
+
+**melira and hinata are 49% of the suite's cost between them.** Any mitigation that does not touch
+one of those two cannot move the total by much, whatever it does to the other eighteen decks.
+hinata is also the only deck with a material regression (+4.0%).
+
+### I.2 The leading candidate: the k=0 variant is now a DUPLICATE of its base plan
+
+**Hypothesis, derived from reading the code and NOT yet measured.** With `MTG_BP_NESTED_CANON` and
+`MTG_BP_BASE_CANON=1` both on, these two plans resolve to the same line:
+
+* the **base plan** (`bp_choice < 0`): BASE_CANON gives it the value-best entry at *every* breakpoint
+  it reaches;
+* its **wave-0 variant at k=0, at=0**: rank 0 IS the value-best entry at the targeted index, and
+  NESTED_CANON gives it the value-best entry at every other index.
+
+`EnumerateBreakpointPlans` is memoised per state and both read the same list, so `cands[0]` and
+`ncands.front()` are the same object. The plan dedup cannot catch it: `AppendBreakpointVariants`
+runs AFTER `BuildDedupKey`, and the variants differ from the base plan only in `bp_choice` /
+`bp_at` / `bp_base` / `bp_wave0`, which are not part of the played line.
+
+If it holds, every base plan that gets variants is being applied twice — one wasted apply per base
+plan per turn, up to `MTG_BP_MAXBASE` (16) of them. At W=2 that is half the wave-0 variant budget.
+
+**The test is cheap and decisive:** with BASE_CANON on, suppress the `k == 0` variant and check the
+smoke tier for BYTE IDENTITY. Identical digests prove the duplication; any difference falsifies the
+hypothesis and says where. If it is confirmed, the freed slot is worth more than the saving: giving
+it to `MTG_BP_EMPTY_ARM` would close the doctrine gap in G.10 ("stop here" unreachable at a
+base-plan slot) at ZERO net budget, instead of the 2.1 points the arm costs today.
+
+### I.3 Measurement protocol for this phase
+
+Per the user's direction, **do not tune against the regression suite**. The suite's seeds are now
+the rebaselined GT; treating them as the objective fits the apparatus, not the engine. Instead:
+
+1. Work-unit probes at each deck's own play settings on seeds disjoint from every tier (the
+   `units_gt` probe uses 5500001), reported as a ratio against a 63dd9ce3 build.
+2. Quality confirmed by a larger A/B on held-out seeds, reported as **game-weighted turns**, with
+   wins lost/gained counted separately. Not the per-cell SUM, which inverted the sign once already.
+3. A tier run only as the final gate before adopting, never as the search signal.
+
+### I.4 The budget ladder — does the searched solution pull ahead as budget rises?
+
+USER 2026-09-17: *"see how the numbers look at a higher budget. My hope is that the new solution
+will win out more as the budget rises."*
+
+This is the sharpest test available, and the mechanism argues for it. A greedy continuation is
+**budget-insensitive**: it returns the same line whether the search has 10 ms or 10 s, so extra
+budget buys nothing at that slot. A searched continuation is budget-*elastic*: more budget means
+more of the deferred waves land, more ranks past W become reachable, and more breakpoints get
+branched rather than defaulted. If that is right, the two curves should diverge — parity at the
+tier budgets (which is what H.1 measured, +0.00016 turns/game) widening into a real gain as budget
+climbs. If they do NOT diverge, that is important too: it would say the deletion's remaining losses
+are reachability holes rather than budget shortfalls, which is a different repair.
+
+Design, so it is not re-derived later:
+
+* **Arms:** a binary built at 63dd9ce3 against the shipped binary. Paired — same decks, same seeds,
+  same games per rung.
+* **Rungs:** each deck's own play budget x {1, 2, 4, 8}, **capped at 100 ms pooled**. A 500 ms rung
+  must run alone: one 500 ms EDF game has hit ~30 GB RSS and OOM-killed the box.
+* **Shape:** ONE `mtg --batch` manifest over every (deck x rung x arm) cell. Not one batch per rung
+  and not one per arm — a per-rung split is the wave pattern that has twice starved the box to 3 of
+  24 cores.
+* **Seeds:** disjoint from every tier, and from 5500001 (the units probe), so nothing measured here
+  is a seed the engine has been tuned against.
+* **Metric:** game-weighted mean win turn per rung for each arm, and their delta; wins lost/gained
+  counted separately; work units per rung alongside, because a rung where the new arm wins by
+  spending 2x the units is a different result from one where it wins at parity.
+* **Read:** the quantity of interest is the SLOPE of delta(new - old) against budget, not any single
+  rung. One rung's t-stat settles nothing (a prior lever gave +2.36 then -2.07 on the same binary).
