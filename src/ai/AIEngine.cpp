@@ -3511,6 +3511,8 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
     // would score one Knight and the real game would put a different one into hand. Scoped to the
     // rest of the phase; the first dig consumes it. -1 (no variant chosen) is inert.
     ScriptedEtbDig _sed_exec(plan.etbdig_choice);
+    // Same for the Saga chapter I pick, so the realised free cast is the one that was scored.
+    ScriptedSagaCh1 _ssc1_exec(plan.saga_ch1_choice);
     ScriptedReorder _sr_exec(plan.ponder_choice);   // executor/rollout lockstep for the Ponder disposition
     ScriptedTutor _stut_exec(plan.tutor_choice);    // executor/rollout lockstep for the searched tutor
                                                     // pick (index resolved at the true state); -1 inert

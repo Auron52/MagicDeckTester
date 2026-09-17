@@ -826,6 +826,24 @@ public:
         // so a body about to be eaten by Natural Order is the wrong home) is reachable.
         int saga_target_choice = -1;
 
+        // SEARCHED SAGA CHAPTER I FREE CAST (World War Hulk I: "the next red or green creature
+        // spell you cast this turn can be cast without paying its mana cost"). A RANK into
+        // PerformSagaFreeCast's cand_slots, or kSagaCh1Decline. -1 (default) == that function's
+        // trial-on-a-copy scoring, byte-identical to no branch.
+        //
+        // Pinned by a scoped guard (ScriptedSagaCh1), NOT a GameState field like its sibling
+        // saga_target_choice, because chapter I resolves INSIDE this plan's apply -- it fires on
+        // the Saga's own enter -- so the guard is still standing. That difference between the two
+        // chapters is the whole reason they are two pins.
+        //
+        // What the axis buys over an already-decent heuristic: the scoring does a REAL put on a
+        // copy (so a Craterhoof team-pump or a Hornet Queen token wave is measured, not guessed),
+        // but it is blind to the REST of the plan -- and the Saga is an enchantment, cast at
+        // CastOrderRank 20, so a Natural Order in the same plan resolves AFTER it and its victim
+        // and fetch are invisible to that trial. DECLINING is included because the card grants
+        // permission, not an obligation (CR 601.2b) -- the Turntimber TURNTIMBER_NONE precedent.
+        int saga_ch1_choice = -1;
+
         // SEARCHED CYCLE/SAC-DRAW DIG (Horizon Canopy class; USER 2026-08-28: "we want that
         // decision to be searched to some degree... searched with heuristics is the way to go").
         // -1 (default) == the provider's dig heuristic decides, exactly as before -- and the

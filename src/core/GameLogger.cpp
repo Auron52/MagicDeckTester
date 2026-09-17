@@ -18,6 +18,8 @@ thread_local int            g_scripted_top_choice = -1;
 thread_local bool           g_real_resolution = true;   // cleared by RevealLogPause (diagnostic only)
 thread_local bool           g_le_pitch_ranking = false; // set by LandsEdgePitchOrder (diagnostic only)
 thread_local int            g_scripted_etbdig_choice = -1;
+// Searched Saga chapter I free cast (Plan::saga_ch1_choice); -1 = the heuristic, -2 = decline.
+thread_local int            g_scripted_saga_ch1 = -1;
 thread_local int            g_scripted_tutor_choice  = -1;
 thread_local int            g_scripted_reorder_choice = -1;
 // Searched sac-land pin list + consumption cursor (Plan::sac_pins, MTG_SAC_AXIS); null = the

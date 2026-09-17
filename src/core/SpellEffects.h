@@ -18938,6 +18938,32 @@ struct ScriptedEtbDig
     int saved;
 };
 
+// Searched SAGA CHAPTER I free cast (Plan::saga_ch1_choice, MTG_SAGA_CH1_AXIS): WHICH red/green
+// creature the Hulk's chapter I puts onto the battlefield, or whether to DECLINE it.
+//
+// A RANK into PerformSagaFreeCast's own cand_slots, resolved there, with the usual clamp -- the
+// list is built at the chapter's resolution, by which point the plan's own creature casts have
+// already left the hand (creatures rank 10, the Saga's enchantment 20), so it is a SUBSET of the
+// hand this pin was sized against. Unlike the chapter II/III pin this one is a scoped RAII guard
+// rather than a GameState field, because chapter I resolves INSIDE this plan's apply -- the Saga's
+// own enter -- so the guard is still standing when it fires.
+//
+// DECLINE is a real option, not paranoia: the card says the next spell *can* be cast without
+// paying, which is permission, not obligation (the Turntimber TURNTIMBER_NONE precedent). It needs
+// its own sentinel because a rank of 0 already means "the heuristic's top pick".
+inline constexpr int kSagaCh1Heuristic = -1;   // no pin: the trial-on-a-copy scoring decides
+inline constexpr int kSagaCh1Decline   = -2;   // the permission goes deliberately unused
+extern thread_local int g_scripted_saga_ch1;
+
+struct ScriptedSagaCh1
+{
+    explicit ScriptedSagaCh1(int k) : saved(g_scripted_saga_ch1) { g_scripted_saga_ch1 = k; }
+    ~ScriptedSagaCh1() { g_scripted_saga_ch1 = saved; }
+    ScriptedSagaCh1(const ScriptedSagaCh1&) = delete;
+    ScriptedSagaCh1& operator=(const ScriptedSagaCh1&) = delete;
+    int saved;
+};
+
 // Searched HOLD-vs-TAP of the mana creatures (Plan::tapmode_choice, UnprunedGate::TapReserve).
 // 0 (default) == the shipped heuristic: reserve every mana creature for the whole turn and sort
 // them to the back of the tap backtracker's candidate list. 1 == spend them like any other source.
@@ -19632,6 +19658,22 @@ inline void PerformSagaFreeCast(GameState& state, int controller, const CardPara
                                       * 1000LL + board;
             if (key > best_key) { best_key = key; pick = slot; }
         }
+    }
+
+    // SEARCHED chapter I (Plan::saga_ch1_choice -> ScriptedSagaCh1). Consumed ONCE and cleared, so
+    // a second Saga entering in the same plan falls back to the heuristic above -- the one-per-plan
+    // convention shared with the ETB dig, Lackey put, cleanup discard and Vial charge.
+    //
+    // The RANK indexes cand_slots, which was just built from the LIVE hand, so it is inherently a
+    // resolution-state pick; out of range clamps to the last candidate (duplicate-not-whiff) since
+    // the plan's own creature casts shrink this list between pinning and reading.
+    if (g_scripted_saga_ch1 != kSagaCh1Heuristic)
+    {
+        const int k = g_scripted_saga_ch1;
+        g_scripted_saga_ch1 = kSagaCh1Heuristic;
+        if (k == kSagaCh1Decline) { return; }   // permission deliberately unused (CR 601.2b)
+        if (k >= 0)
+        { pick = cand_slots[std::min<std::size_t>(static_cast<std::size_t>(k), cand_slots.size() - 1)]; }
     }
 
     // HUMAN-PLAY override (USER 2026-09-17: *"Hulk didn't ask for the creature to be played"*).

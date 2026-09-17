@@ -8136,6 +8136,14 @@ static bool SagaTargetAxisEnabled()
     static const bool on = EnvOn("MTG_SAGA_TARGET_AXIS", true);
     return on;
 }
+// MTG_SAGA_CH1_AXIS (default ON; =0 disables): the searched pick for a Saga chapter that grants a
+// free cast (World War Hulk I). Sibling of the target axis above, but a SCOPED pin rather than a
+// state one, because chapter I resolves inside the plan's own apply. See Plan::saga_ch1_choice.
+static bool SagaCh1AxisEnabled()
+{
+    static const bool on = EnvOn("MTG_SAGA_CH1_AXIS", true);
+    return on;
+}
 // MTG_TUTOR_AXIS_RESOLVE=1 (default off): bind the searched tutor pick by INDEX resolved at the
 // TRUE per-plan state, instead of by NAME ranked at the shared pre-land turn-start state. This is
 // the honest form of the located axis defect (see the fan-out note in EnumeratePlansWithLand):
@@ -8769,6 +8777,7 @@ static uint64_t BpCandFingerprint(const TurnSolver::Plan& p)
     fold(static_cast<uint64_t>(p.freshmode_choice + 2) * 43 + static_cast<uint64_t>(p.lackey_choice + 2));
     fold(static_cast<uint64_t>(p.ponder_choice + 2) * 47 + static_cast<uint64_t>(p.discard_choice + 2));
     fold(static_cast<uint64_t>(p.saga_target_choice + 2) * 59);
+    fold(static_cast<uint64_t>(p.saga_ch1_choice + 3) * 61);
     fold(static_cast<uint64_t>(p.vial_charge_choice + 2) * 53
          + static_cast<uint64_t>(p.searched_order ? 1 : 0));
     return h;
@@ -8819,6 +8828,7 @@ static bool IsApplyEmptyPlan(const TurnSolver::Plan& p)
         && p.sac_pins.empty() && p.tapmode_choice == 0 && p.freshmode_choice == 0
         && p.lackey_choice == -1 && p.ponder_choice == -1 && p.discard_choice == -1
         && p.vial_charge_choice == -1 && p.saga_target_choice == -1
+        && p.saga_ch1_choice == -1
         && !p.searched_order && p.atk_dork_release == -1
         && p.bp_choice == -1 && p.bp_at == 0 && !p.bp_all && !p.bp_wave0;
 }
@@ -18422,6 +18432,7 @@ namespace solvememo
             || a.lackey_choice != b.lackey_choice || a.ponder_choice != b.ponder_choice
             || a.discard_choice != b.discard_choice || a.vial_charge_choice != b.vial_charge_choice
             || a.saga_target_choice != b.saga_target_choice
+            || a.saga_ch1_choice != b.saga_ch1_choice
             || a.dig_choice != b.dig_choice || a.bp_choice != b.bp_choice
             || a.bp_at != b.bp_at || a.bp_wave0 != b.bp_wave0)
         { return false; }
@@ -21394,6 +21405,7 @@ struct BpPrefixSnap
                                      // full apply did, or its ranks index a different list
     bool cascade_free = false;       // one-shot free-cast marker, captured for exactness
     int  pin_top = -1, pin_etbdig = -1, pin_tutor = -1, pin_reorder = -1;   // scripted-pin state
+    int  pin_sagach1 = -1;                                                  // ... incl. chapter I
     int  pin_sac_cursor = 0;         // sac-pin consumption point (the LIST is the plan's own
                                      // sac_pins, re-installed by the resumed apply's entry guard;
                                      // only the cursor is prefix state)
@@ -21705,6 +21717,9 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
     // first dig consumes it and any later dig falls back to the provider's ranked default. Scoped,
     // so a nested breakpoint re-solve restores the outer pin if it has not fired yet. -1 is inert.
     ScriptedEtbDig _sed(plan.etbdig_choice);
+    // Searched Saga chapter I free cast (Plan::saga_ch1_choice); -1 inert. Scoped like the dig
+    // pin because chapter I fires inside this apply, on the Saga's own enter.
+    ScriptedSagaCh1 _ssc1(plan.saga_ch1_choice);
     ScriptedReorder _sr(plan.ponder_choice);   // searched Ponder disposition (own pin; see ScriptedReorder)
     ScriptedTutor _stut(plan.tutor_choice);    // searched tutor pick by index, resolved at the true
                                                // mid-plan state (MTG_TUTOR_AXIS_RESOLVE); -1 inert
@@ -24619,6 +24634,7 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
         cascade_free             = bp_resume->cascade_free;
         g_bp_seen_last           = bp_resume->bp_seen;    // as a full apply would have left it
         g_scripted_top_choice    = bp_resume->pin_top;    // pins as the prefix left them (a
+        g_scripted_saga_ch1      = bp_resume->pin_sagach1;
         g_scripted_etbdig_choice = bp_resume->pin_etbdig; // consumed pin stays consumed; the
         g_scripted_tutor_choice  = bp_resume->pin_tutor;  // entry guards' dtors still restore
         g_scripted_reorder_choice= bp_resume->pin_reorder;// the outer values on exit)
@@ -25390,6 +25406,7 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
             bp_capture->cascade_free = cascade_free;
             bp_capture->pin_top      = g_scripted_top_choice;
             bp_capture->pin_etbdig   = g_scripted_etbdig_choice;
+            bp_capture->pin_sagach1  = g_scripted_saga_ch1;
             bp_capture->pin_tutor    = g_scripted_tutor_choice;
             bp_capture->pin_reorder  = g_scripted_reorder_choice;
             bp_capture->pin_sac_cursor = g_scripted_sac_cursor;
@@ -25418,6 +25435,7 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
             bp_capture->cascade_free = cascade_free;
             bp_capture->pin_top      = g_scripted_top_choice;
             bp_capture->pin_etbdig   = g_scripted_etbdig_choice;
+            bp_capture->pin_sagach1  = g_scripted_saga_ch1;
             bp_capture->pin_tutor    = g_scripted_tutor_choice;
             bp_capture->pin_reorder  = g_scripted_reorder_choice;
             bp_capture->pin_sac_cursor = g_scripted_sac_cursor;
@@ -31340,6 +31358,82 @@ static void AppendSubdecisionAxes(const GameState& state, bool is_pre_combat,
         }
     }
 
+    // SEARCHED SAGA CHAPTER I FREE CAST (MTG_SAGA_CH1_AXIS) -- which red/green creature the
+    // chapter puts onto the battlefield, or DECLINE. Unlike its chapter II/III sibling below this
+    // one resolves INSIDE this plan's apply, so it is an ordinary scoped pin (ScriptedSagaCh1).
+    //
+    // Gated on this plan actually CASTING such a Saga: chapter I fires on the enter, so a Saga
+    // already on the battlefield has had its chapter I on a previous turn and nothing here would
+    // consume the pin.
+    //
+    // WIDTH is the distinct red/green creature NAMES in hand -- the same equivalence
+    // PerformSagaFreeCast enumerates (copies are fungible; the first is cast) -- capped at 3, plus
+    // the decline. Sized off the CURRENT hand, which OVERSTATES the list the chapter will see: the
+    // plan's own creature casts leave the hand first (creatures rank 10, the Saga's enchantment
+    // 20). Overshoot is safe -- the rank clamps to the last candidate -- and undershoot is not
+    // possible, since nothing ADDS a castable creature to hand between here and the chapter.
+    if (SagaCh1AxisEnabled() && !HumanPlayActive())
+    {
+        const Player& s1_ap = state.ActivePlayer();
+        auto ch1_colors = [](const CardDefinition* d) -> std::string
+        { return d ? d->params.saga_ch1_free_cast_creature_colors : std::string{}; };
+        std::string colors;
+        for (const TurnSolver::Plan& p : all)
+        {
+            for (const Action& a : p.actions)
+            {
+                if (a.kind != Action::Kind::CastFromHand) { continue; }
+                const std::string c = ch1_colors(a.def ? a.def
+                                                       : CardDatabase::Instance().Lookup(a.card_name.str()));
+                if (!c.empty()) { colors = c; break; }
+            }
+            if (!colors.empty()) { break; }
+        }
+        if (!colors.empty())
+        {
+            std::unordered_set<std::string> names;
+            for (const Card& c : s1_ap.hand)
+            {
+                const CardDefinition* d = CardDatabase::Instance().LookupCached(c);
+                if (d == nullptr || !d->card.IsCreature()) { continue; }
+                bool ok = false;
+                for (char ch : colors)
+                { if (CardHasColorNamed(d->card, std::string(1, ch))) { ok = true; break; } }
+                if (ok) { names.insert(c.m_name.str()); }
+            }
+            // One candidate means PerformSagaFreeCast skips its scoring entirely, so the only real
+            // decision left is take-it-or-decline -- still worth the one variant.
+            const int W = std::min<int>(3, static_cast<int>(names.size()));
+            if (W >= 1)
+            {
+                std::vector<TurnSolver::Plan> extra;
+                for (const TurnSolver::Plan& p : all)
+                {
+                    // Base plans only -- one axis at a time, so cost stays additive.
+                    if (p.scry_choice >= 0 || p.bp_choice >= 0 || p.tutor_choice >= 0
+                        || p.etbdig_choice >= 0 || p.lackey_choice >= 0 || p.ponder_choice >= 0
+                        || p.discard_choice >= 0 || p.vial_charge_choice >= 0
+                        || p.saga_target_choice >= 0 || p.saga_ch1_choice != -1
+                        || !p.sac_pins.empty()) { continue; }
+                    // k = 0 is the heuristic's own pick, which the base plan already carries.
+                    for (int k = 1; k < W; ++k)
+                    {
+                        TurnSolver::Plan v = p;
+                        v.saga_ch1_choice = k;
+                        extra.push_back(std::move(v));
+                    }
+                    TurnSolver::Plan d = p;
+                    d.saga_ch1_choice = kSagaCh1Decline;
+                    extra.push_back(std::move(d));
+                }
+                TRACE("sagach1", "T%d %zu plan(s) -> %zu chapter-I variant(s) (W=%d)",
+                      state.turn_number, all.size(), extra.size(), W);
+                all.insert(all.end(), std::make_move_iterator(extra.begin()),
+                                      std::make_move_iterator(extra.end()));
+            }
+        }
+    }
+
     // SEARCHED SAGA CHAPTER TARGET (MTG_SAGA_TARGET_AXIS) -- the post-dedup fan-out for a chapter
     // that resolves at NEXT turn's draw step. Structurally the Aether Vial charge axis directly
     // above: the decision does not happen during this plan at all, which is why the pick rides the
@@ -31410,7 +31504,8 @@ static void AppendSubdecisionAxes(const GameState& state, bool is_pre_combat,
                     if (p.scry_choice >= 0 || p.bp_choice >= 0 || p.tutor_choice >= 0
                         || p.etbdig_choice >= 0 || p.lackey_choice >= 0 || p.ponder_choice >= 0
                         || p.discard_choice >= 0 || p.vial_charge_choice >= 0
-                        || p.saga_target_choice >= 0 || !p.sac_pins.empty()) { continue; }
+                        || p.saga_target_choice >= 0 || p.saga_ch1_choice != -1
+                        || !p.sac_pins.empty()) { continue; }
                     // k = 0 is the heuristic's own pick, which the base plan already carries.
                     for (int k = 1; k < W; ++k)
                     {
@@ -31522,7 +31617,7 @@ static void AppendSubdecisionAxes(const GameState& state, bool is_pre_combat,
             // Base plans only -- one axis at a time, so cost stays additive (the tutor axis's rule).
             if (p.scry_choice >= 0 || p.bp_choice >= 0 || p.tutor_choice >= 0
                 || p.etbdig_choice >= 0 || p.lackey_choice >= 0
-                || p.saga_target_choice >= 0
+                || p.saga_target_choice >= 0 || p.saga_ch1_choice != -1
                 || !p.sac_pins.empty()) { continue; }
             // This plan's sac-cost casts, plus the family-representative test (every one of them
             // carrying its colour's collection front).
@@ -31643,7 +31738,7 @@ static void AppendSubdecisionAxes(const GameState& state, bool is_pre_combat,
                 if (p.scry_choice >= 0 || p.bp_choice >= 0 || p.tutor_choice >= 0
                     || p.etbdig_choice >= 0 || p.lackey_choice >= 0 || p.ponder_choice >= 0
                     || p.discard_choice >= 0 || p.vial_charge_choice >= 0
-                    || p.saga_target_choice >= 0
+                    || p.saga_target_choice >= 0 || p.saga_ch1_choice != -1
                     || !p.sac_pins.empty() || p.tapmode_choice != 0
                     || p.freshmode_choice != 0) { continue; }
                 for (int k = 0; k <= 1; ++k)
@@ -42894,6 +42989,7 @@ std::vector<TurnSolver::Plan> TurnSolver::EnumerateMainPlans(const GameState& st
                 // apply would silently fall back to the heuristic. Save/restore around the trial.
                 const int   sv_top     = g_scripted_top_choice;
                 const int   sv_etbdig  = g_scripted_etbdig_choice;
+                const int   sv_sagach1 = g_scripted_saga_ch1;
                 const int   sv_tutor   = g_scripted_tutor_choice;
                 const int   sv_reorder = g_scripted_reorder_choice;
                 const int   sv_tapmode = g_scripted_tapmode;
@@ -42903,6 +42999,7 @@ std::vector<TurnSolver::Plan> TurnSolver::EnumerateMainPlans(const GameState& st
                 ApplyPlanDirect(copy, plans[cand], is_pre_combat);
                 g_scripted_top_choice     = sv_top;
                 g_scripted_etbdig_choice  = sv_etbdig;
+                g_scripted_saga_ch1       = sv_sagach1;
                 g_scripted_tutor_choice   = sv_tutor;
                 g_scripted_reorder_choice = sv_reorder;
                 g_scripted_tapmode        = sv_tapmode;
@@ -43126,11 +43223,15 @@ static TranspositionTable::Key BuildBreakpointKey(const GameState& state, bool i
         && g_scripted_sac_cursor < static_cast<int>(g_scripted_sac_pins->size());
     if (g_scripted_top_choice >= 0 || g_scripted_etbdig_choice >= 0
         || g_scripted_tutor_choice >= 0 || g_scripted_reorder_choice >= 0
-        || g_scripted_tapmode != 0 || g_scripted_freshmode != 0 || sac_pins_live)
+        || g_scripted_tapmode != 0 || g_scripted_freshmode != 0 || sac_pins_live
+        // NB `!= kSagaCh1Heuristic`, not `>= 0`: a pending DECLINE is -2 and is every bit as
+        // future-determining as a rank, so a `>= 0` gate would let two different states collide.
+        || g_scripted_saga_ch1 != kSagaCh1Heuristic)
     {
         Fold(k, 0x5C21);
         Fold(k, static_cast<uint64_t>(g_scripted_top_choice + 1));
         Fold(k, static_cast<uint64_t>(g_scripted_etbdig_choice + 1));
+        Fold(k, static_cast<uint64_t>(g_scripted_saga_ch1 + 2));   // +2: -2 decline, -1 none, 0 rank0
         Fold(k, static_cast<uint64_t>(g_scripted_tutor_choice + 1));
         Fold(k, static_cast<uint64_t>(g_scripted_reorder_choice + 1));
         Fold(k, static_cast<uint64_t>(g_scripted_tapmode));
