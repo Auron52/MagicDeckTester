@@ -1848,6 +1848,46 @@ fetch into a free Craterhoof plus whatever else was stranded*. That is exactly w
 to be taught to rank it (`MTG_STOMPY_GHALTA_RANK`) — by raw power 12 it was indistinguishable from
 Worldspine Wurm. See `ghalta-stampede-tyrant.md`.
 
+## ADOPTED: old vs new, measured
+
+`decks/StompySurprise/` now ships the approved list; the previous build is preserved at
+`decks/StompySurprise/v1-arborelf-worldspine4/`. Both measured on the SAME binary, each under its
+own keep table, 200,000 games per arm, seed 94000000:
+
+| | old | new | improvement |
+|---|---|---|---|
+| 1v1 | 4.5423 | **4.1094** | **-0.4329t** |
+| 2HG | 4.9898 | **4.3998** | **-0.5900t** |
+
+The old list is also **~2.8x more expensive to search** (1v1 11.64M vs 4.12M ms; 2HG 30.04M vs
+10.59M ms) -- it wins later AND costs more to find those wins.
+
+**Caveat, stated and then dismissed on magnitude:** the old list's keep table is Aug-29 vintage while
+the new one is Sep-17, so this blends the decklist change with ~3 weeks of apparatus. That confound is
+second-order here -- 0.43-0.59t is 7-10x the Craterhoof-vs-Hulk margin and ~2x the ENTIRE exhaustive
+keep table's gain over static keeps (0.259t). A stale table cannot be worth more than the whole keep
+model. USER: *"I doubt we will see a minor improvement, so it should be fine."*
+
+Not attributable to any one card: 11 slots moved. The likely drivers are 4 Natural Order (from 2) and
+2 World War Hulk (from 0) -- both routes that put a fatty onto the battlefield without paying full
+cost -- against Worldspine 4 -> 1, which was the stranding problem that started this line of work.
+
+## GHALTA'S SLOT IS SETTLED BY RULING, NOT PENDING MEASUREMENT
+
+**USER 2026-09-17:** *"I think the number of big creatures in the new list is perfect at 10. I
+probably would also not remove Ghalta even if numbers said it wasn't good, but honestly I would be
+shocked if they did. The card is huge and can pull a Craterhoof and other critters from hand. It
+deserves a spot."*
+
+This **CLOSES** the "is Ghalta worth a slot at all" item. It was never a blocker on the approval, and
+it is now explicitly not decision-relevant: the user has ruled the slot on card argument and stated
+that a contrary measurement would not move them. **Do not build list F's keep table to answer it** --
+~4h of box time for a number that changes nothing. The threat count (10) is likewise ruled, not
+measured.
+
+**This does NOT close Ghalta's CORRECTNESS.** Whether the card is implemented faithfully is a separate
+question from whether it earns a slot, and the claude-play sweep below is still owed.
+
 ## Still open (NOT part of the approval)
 
 * **`decks/StompySurprise/` is NOT updated.** Promoting H would invalidate the regression suite's
