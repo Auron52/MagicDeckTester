@@ -25,39 +25,49 @@ Every chosen card enters SIMULTANEOUSLY; the resulting ETB triggers only then go
 second pass. One-at-a-time would make a deployed **Craterhoof's X depend on hand order** — the
 difference between a lethal alpha strike and a damp one.
 
-## THE SIMPLIFICATION, AND IT IS NOT FREE
+## THE SIMPLIFICATION — RULED CORRECT BY THE USER, 2026-09-17
 
 "Any number" is modelled as **ALL creature cards in hand**.
 
-*Why it is defensible here:* against a passive opponent that never blocks, removes or sweeps, an extra
+**USER RULING (2026-09-17):** *"The Ghalta simplification is fine. Put all is correct in this
+environment."* This closes what had been written up here as an unpaid debt. The subset chooser
+described below is **not** outstanding work; it is a Phase-2 item, live only if this engine ever grows
+an opponent that can punish an empty hand.
+
+*Why it is correct here:* against a passive opponent that never blocks, removes or sweeps, an extra
 body is never a liability. The one card that could punish a free deploy — Terastodon, whose live mode
-in this sim destroys OUR OWN noncreature permanents — picks its K at resolution and may pick 0. So in
-the goldfish, "all" is weakly dominant and the arithmetic is not distorted.
+in this sim destroys OUR OWN noncreature permanents — picks its K at resolution and may pick 0. So
+"all" is not an approximation of the choice, it **is** the choice: every other subset is weakly
+dominated, and a chooser offered to a human here would be a menu with one correct entry.
 
-*What it costs, and the USER found this independently from the strategy side.* Discussing whether
-Ghalta should displace a World War Hulk, the user argued a creature is the better card to hold in that
-slot: *"you could choose not to deploy it and hold it in case there is a sweeper"*, whereas
-*"the Hulk would have nothing to drop."* **That decision does not exist in this model.** A creature you
-mean to hold back is force-deployed by your own Ghalta. Consequences:
+### Keep these two statements apart — they look contradictory and are not
 
-1. **The sim OVERSTATES Ghalta.** Emptying your hand is exactly what a sweeper punishes, and no
-   sweeper exists here. Any measured Ghalta win is an UPPER bound on its real-game value.
-2. **It narrows a legal choice for HUMAN play**, which this repo forbids outright (the rule that keeps
-   the Jitte's pruned modes and the Turntimber put open to a human). **This is a known, unpaid debt.**
-3. It is the mirror of the Terastodon problem: there the sim cannot see a card's upside; here it
-   cannot see a card's downside.
+1. **Within this environment, put-all is optimal play** (the ruling above). There is no decision being
+   narrowed, because there is no live alternative.
+2. **The environment itself prices all-in deployment too generously.** No sweeper exists, so emptying
+   your hand costs nothing here and something real in a constructed game.
 
-**Deliberately NOT a searched subset axis.** `2^|creatures in hand|` plan variants is precisely the
-multiplicative explosion removed from Turntimber the same night
-(`turntimber-multi-copy-plan-explosion.md`). The fix is a human chooser, not a search fan.
+(2) is not a defect in Ghalta's implementation — it is the same passive-opponent property that makes
+(1) true, seen from the other side. It is the mirror of the Terastodon problem: there the sim cannot
+see a card's upside; here it cannot see an archetype's downside. **It therefore does not license a
+correction to Ghalta's code, but it does bear on how far to trust a Ghalta-vs-Hulk margin** — see the
+Hulk section below, and treat any measured Ghalta win as an upper bound on its constructed value.
 
-### The outstanding fix
+The user reached (2) independently from the strategy side, arguing a creature is the better card to
+hold in a Hulk slot — *"you could choose not to deploy it and hold it in case there is a sweeper"*,
+whereas *"the Hulk would have nothing to drop"* — and then ruled, correctly, that the sim should not
+try to model a risk its opponent cannot pose.
 
-Offer the subset at the HUMAN-play path only (the `g_play_dig_chooser` / Turntimber put precedent:
-autonomous keeps the dominant "all", the viewer gets the real decision). Held back on 2026-09-17
-because two keep tables (lists G and H) were mid-generation and **rebuilding between them would fit
-the two tables under different play logic** — the exact skew Rule 0 of `mulligan-profile.md` exists to
-prevent.
+**Deliberately NOT a searched subset axis, and this part stands regardless of the ruling.**
+`2^|creatures in hand|` plan variants is precisely the multiplicative explosion removed from Turntimber
+the same night (`turntimber-multi-copy-plan-explosion.md`). Searching a set of weakly-dominated
+options would buy nothing and cost the plan space.
+
+### If a real opponent ever lands (Phase 2 only)
+
+Offer the subset at the HUMAN-play path (the `g_play_dig_chooser` / Turntimber put precedent:
+autonomous keeps the dominant "all", the viewer gets the real decision). Nothing to do until then —
+against an opponent that cannot sweep, that chooser has no second option worth showing.
 
 ## Ranking: the card had to be taught, not just implemented
 
@@ -93,8 +103,29 @@ turn can be cast without paying its mana cost."*
 
 ## Open
 
-* The human subset chooser (above) — the only known rules-narrowing this card introduces.
 * Whether Ghalta's slot comes from the 2nd Craterhoof (list G) or the 3rd Hulk (list H): both tables
   generating 2026-09-17, to be compared each under its own table.
 * Whether Ghalta wants a 2nd copy (untested; it is Legendary, so the second is insurance against
   stranding-of-the-stranding-fix, not a second effect).
+
+## Audit note: G and H record DIFFERENT commit strings and are still comparable
+
+The two keep tables fingerprint themselves differently:
+
+| list | recorded `commit` | gen window |
+|---|---|---|
+| H | `7d1057f6` | 01:08:48 → 05:06:46 UTC |
+| G | `eb29dfc4+dirty` | 05:06:50 → … |
+
+**This is cosmetic. Proof the play logic is identical across both:**
+
+* `git rev-parse eb29dfc4:src` == `git rev-parse 7d1057f6:src` == `a7d6a2930c0f63b8448c54d3b08c28f998839f52`.
+  `eb29dfc4` is a DOCS-ONLY commit, so the src tree never moved.
+* `git status --porcelain -- src/` was empty at G's launch; the `+dirty` came solely from an
+  uncommitted edit to this very file.
+* `build/Release/mtg-analyze` mtime `01:04`, predating BOTH runs — one binary, never rebuilt.
+* `src/cards/data/cards.json` mtime `00:57`, predating both. Ghalta's bracket-note rewrite was
+  deliberately HELD until G finished precisely so this stayed true.
+
+Do not read the differing commit strings as an engine skew. The freeze keys on `HEAD:src`, and that
+is what held.
