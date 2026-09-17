@@ -102,6 +102,15 @@ static const bool             s_rollout_stats = EnvOn("MTG_ROLLOUT_STATS");
 // consultation (BpTurnManaSettled, BpSlotIsAfterSite -> a provider CastOrderRank lookup), which is
 // far too expensive to carry on every stats run. Diagnostic only; counters, no behaviour.
 static const bool             s_bp_whynot     = EnvOn("MTG_BP_CONDEMN_WHYNOT");
+// Path-dependence probe (see the g_pd_* counters). Cheaper than whynot -- a hand walk, no provider
+// rank lookups -- but still off the default stats path. Counters, no behaviour.
+static const bool             s_bp_pathdep    = EnvOn("MTG_BP_PATHDEP_PROBE");
+// Cast-set collision probe (see the g_cs_* counters): re-enters BpEnumBuildKey once per key build,
+// so it roughly doubles key-walk cost. Diagnostic only; counters, no behaviour.
+static const bool             s_bp_castset_probe = EnvOn("MTG_BP_CASTSET_PROBE");
+// Set while the probe's re-entrant call is in flight, to suppress the plan-cast fold in it (and to
+// stop the probe recursing into itself).
+static thread_local bool      t_bp_castset_probing = false;
 static std::atomic<long long> g_rollout_calls{0};
 static std::atomic<long long> g_rollout_steps{0};
 // Two-stage-split fallback telemetry (MTG_ODO_FALLBACK_STATS). EnumeratePlanPositions abandons the
@@ -378,6 +387,75 @@ static std::atomic<long long> g_wn_reached{0};       // passed all gates; domina
 static std::atomic<long long> g_wn_notdominated{0};  // no earlier copy declined it
 static std::atomic<long long> g_wn_unpayable{0};     // could not have been cast anyway
 static std::atomic<long long> g_wn_newoption{0};     // site drew a payable card -> slot contested
+
+// PATH-DEPENDENCE PROBE (MTG_BP_PATHDEP_PROBE, default off, counters only).
+//
+// THE QUESTION IT ANSWERS. The condemn verdict is computed from the ONE arriving plan's cast set
+// (g_bp_plan_casts). The USER's proposal is to condemn only where EVERY line reaching the state
+// condemns -- which is a different rule ONLY IF two lines reaching the same breakpoint state can
+// disagree. This counts the disagreements directly instead of arguing about them.
+//
+// WHERE THE DISAGREEMENT CAN LIVE, and it is one place. All lines reaching one breakpoint state have
+// cast the same cards so far (casting differs the zones, so a different cast prefix is a different
+// state). What CAN differ is the plan's PENDING casts -- cards it intends to cast after the site,
+// which are still in hand at the breakpoint and therefore invisible in the state. Exactly two reads
+// of g_bp_plan_casts reach play, and pending casts are the only way either can vary:
+//   * BpPlanCasts(X)      -- true for a pending X, so today's rule KEEPS X; a line that did not plan
+//                            X would condemn it. g_pd_pending counts exactly these.
+//   * BpPlanMadeACast()   -- cannot vary: a CAST site is in its own set, and an ACTIVATED site runs
+//                            in the trailing pass so the set is the whole turn's casts either way.
+// (BpPlanHasTail is the third reader and is default-off diagnostic; counted separately as it is the
+// one rule that is inherently path-dependent -- see g_pd_tail.)
+//
+// SO g_pd_pending == 0 OVER A LARGE SAMPLE IS THE WHOLE RESULT: it means the cast set is already a
+// function of the state, the verdict is already path-independent, "all lines condemn" is the rule we
+// already run, and the key's plan-cast fold is carrying no information the state hash lacks.
+// Non-zero is the case that needs the accumulating cache.
+//
+// It is an UPPER bound, deliberately. A candidate whose name the plan cast BEFORE the site and also
+// holds a second copy of in hand is counted here though the truncated set would still say "cast".
+// An upper bound of zero settles the question; an upper bound above zero needs the split below.
+// PENDING IS AN UPPER BOUND AND IT IS LOOSE IN ONE KNOWN WAY, so it is split. If plans execute in
+// cast order then a cast scheduled AFTER the site has rank >= the site's -- which is exactly what
+// BpSlotIsAfterSite already exempts. Such a candidate is kept by BOTH rules, so the plan-cast fact
+// changed no verdict and it must not be counted as path-dependence. g_pd_pending_real is the
+// residue: a pending cast that the peer test does NOT exempt and that every state conjunct admits,
+// i.e. a consultation where today's answer genuinely turns on which line arrived.
+// CAST-SET COLLISION PROBE (MTG_BP_CASTSET_PROBE, default off, counters only). THE EXACT FORM of the
+// path-dependence question, with no proxy in it.
+//
+// The g_pd_* counters above approach it through the drop gate and are an UPPER bound (a name test
+// matches a second copy in hand). The key verifier approaches it through re-derivation and drowns in
+// a 21.9% pre-existing baseline. This asks the thing itself: build the bp-enum key TWICE, once
+// normally and once with the plan-cast fold suppressed, and remember what cast set each
+// cast-less key was last seen with. A key that turns up twice with DIFFERENT cast sets is two lines
+// reaching one breakpoint state that condemn different things -- which is exactly and only what
+// "condemn where all lines condemn" would change.
+//
+//   mismatch == 0  => the cast set is a function of the state. The fold is keying on nothing the
+//                     state hash lacks, and the all-paths rule is already the rule.
+//   mismatch >  0  => that count IS the path-dependence, measured with no over- or under-counting.
+// ATTRIBUTED BY SITE KIND, because that decides which fix applies. An ACTIVATED site runs in the
+// trailing pass after every cast, so its cast set should be the whole turn's casts and a mismatch
+// there cannot be a pending cast -- it would mean the cast-less key is merging two genuinely
+// different states, i.e. a pre-existing key-precision issue and not path-dependence at all. A
+// mismatch at a CAST site is the real thing: a plan with a tail.
+static std::atomic<long long> g_cs_checked{0};      // cast-less keys looked up
+static std::atomic<long long> g_cs_mismatch{0};     // ...seen before with a DIFFERENT cast set
+static std::atomic<long long> g_cs_mm_act{0};       // ...of those, at an ACTIVATED site
+static std::atomic<long long> g_cs_mm_nosnap{0};    // ...of those, with NO site bound at all
+// ...and the discriminator that decides which fix applies: did an INDEPENDENT state fingerprint
+// agree? same_state => genuine path-dependence. !same_state => the cast-less key merged two
+// different states, which is key imprecision and NOT what the all-paths rule addresses.
+static std::atomic<long long> g_cs_mm_samestate{0};
+static std::atomic<long long> g_cs_clears{0};       // probe map wiped (cap); a wipe hides mismatches
+static std::atomic<long long> g_pd_consult{0};      // consultations with the snapshot bound
+static std::atomic<long long> g_pd_pending{0};      // ...where the CANDIDATE is a pending plan cast
+static std::atomic<long long> g_pd_pending_peer{0}; // ...of those, ones the peer test exempts anyway
+static std::atomic<long long> g_pd_pending_real{0}; // ...of those, ones where the VERDICT differs
+static std::atomic<long long> g_pd_tail{0};         // ...where the plan has ANY pending cast in hand
+static std::atomic<long long> g_pd_site_act{0};     // ...at an ACTIVATED site (trailing: no tail)
+static std::atomic<long long> g_pd_nocast{0};       // ...where the plan cast nothing at all (n=0)
 // Per-plan state REUSE (DEFAULT ON; MTG_NO_STATE_REUSE=1 restores per-plan construction).
 // Every plan loop applies its plan to a COPY of the SAME parent state. Copy-CONSTRUCTING that copy
 // inside the loop frees the previous plan's buffers and mallocs new ones of nearly identical size,
@@ -746,6 +824,64 @@ namespace
                       << " rollout=" << (bg - be)
                       << " rollout_frac=" << (bd ? static_cast<double>(bg - be) / bd : 0.0)
                       << ")\n";
+            if (s_bp_castset_probe)
+            {
+                const long long ck = g_cs_checked.load();
+                const long long mm = g_cs_mismatch.load();
+                const long long cl = g_cs_clears.load();
+                std::cerr << "[rollout-stats] bp_castset checked=" << ck
+                          << " MISMATCH=" << mm
+                          << " (activated_site=" << g_cs_mm_act.load()
+                          << " no_site=" << g_cs_mm_nosnap.load()
+                          << " cast_site=" << (mm - g_cs_mm_act.load() - g_cs_mm_nosnap.load())
+                          << " SAME_STATE=" << g_cs_mm_samestate.load()
+                          << " diff_state=" << (mm - g_cs_mm_samestate.load()) << ")"
+                          << " rate=" << (ck ? static_cast<double>(mm) / ck : 0.0)
+                          << " map_clears=" << cl << "\n";
+                if (ck == 0)
+                {
+                    std::cerr << "[rollout-stats] bp_castset: 0 keys probed -- the snapshot was "
+                                 "never bound, so this run proves nothing.\n";
+                }
+                else if (mm == 0)
+                {
+                    std::cerr << "[rollout-stats] bp_castset: NO two lines reached one breakpoint "
+                                 "state with different cast sets"
+                              << (cl ? " (but the map was CLEARED -- a wipe can only hide a "
+                                       "mismatch, so treat this as weaker evidence)"
+                                     : " (map never cleared -- no arrival was forgotten)")
+                              << ".\n";
+                }
+            }
+            if (s_bp_pathdep)
+            {
+                const long long pc = g_pd_consult.load();
+                const long long pp = g_pd_pending.load();
+                const long long pr = g_pd_pending_real.load();
+                std::cerr << "[rollout-stats] bp_pathdep consult=" << pc
+                          << " pending=" << pp
+                          << " (peer_exempt=" << g_pd_pending_peer.load()
+                          << " VERDICT_DIFFERS=" << pr << ")"
+                          << " differ_rate=" << (pc ? static_cast<double>(pr) / pc : 0.0)
+                          << " tail=" << g_pd_tail.load()
+                          << " site_activated=" << g_pd_site_act.load()
+                          << " plan_nocast=" << g_pd_nocast.load()
+                          << "\n";
+                // Say what the number MEANS here, so the reading cannot drift from the argument.
+                // PENDING=0 is the strong result: the arriving plan's cast set then carries nothing
+                // the breakpoint state does not, every line reaching this state condemns the same
+                // set, and "condemn only where all lines condemn" is already what runs.
+                if (pc == 0)
+                {
+                    std::cerr << "[rollout-stats] bp_pathdep: 0 consultations -- the filter was "
+                                 "NEVER CONSULTED, so this run proves nothing.\n";
+                }
+                else if (pr == 0)
+                {
+                    std::cerr << "[rollout-stats] bp_pathdep: NO path-dependence observed -- the "
+                                 "condemn verdict is a function of the STATE over this sample.\n";
+                }
+            }
             if (s_bp_whynot)
             {
                 const long long peer = g_wn_peer.load();
@@ -10905,6 +11041,34 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
         { g_bp_condemn_seen.fetch_add(1, std::memory_order_relaxed); }
         // Decision space: a SEARCHED collect, or the executor (outside any solve). Not the leaf.
         const bool bp_decision_space = g_search_candidate_enum || g_condemn_root_turn < 0;
+        // PATH-DEPENDENCE PROBE (counters only). A candidate is a PENDING plan cast when the plan
+        // casts its name, it is still in hand, and it was in hand before the draw -- i.e. the plan
+        // means to cast it AFTER the site. That is the only input to the condemn verdict that the
+        // breakpoint STATE does not already determine, so it is the only way two lines reaching this
+        // state can disagree about what to condemn. See the g_pd_* block for the full argument.
+        if (s_bp_pathdep && BpClassifyActive(state) && g_bp_hand_before != nullptr)
+        {
+            g_pd_consult.fetch_add(1, std::memory_order_relaxed);
+            if (g_bp_site_activated) { g_pd_site_act.fetch_add(1, std::memory_order_relaxed); }
+            if (g_bp_plan_casts != nullptr && g_bp_plan_casts->empty())
+            { g_pd_nocast.fetch_add(1, std::memory_order_relaxed); }
+            if (BpPlanCasts(ap.hand[i].m_name_hash)
+                && BpCardWasInHandBefore(ap.hand[i].m_number))
+            {
+                g_pd_pending.fetch_add(1, std::memory_order_relaxed);
+                // Does the pending-cast fact actually decide anything here? Only if every other
+                // conjunct would have admitted the drop. The peer test is checked LAST because it
+                // is the expensive one (a provider CastOrderRank lookup per call).
+                if (!(BpCondemnSearchedOnlyEnabled() && !bp_decision_space)
+                    && BpSnapshotOnItsTurn(state)
+                    && BpTurnManaSettled(state)
+                    && !BpSlotIsAfterSite(state, ap.hand[i]))
+                { g_pd_pending_real.fetch_add(1, std::memory_order_relaxed); }
+                else
+                { g_pd_pending_peer.fetch_add(1, std::memory_order_relaxed); }
+            }
+            if (BpPlanHasTail(ap)) { g_pd_tail.fetch_add(1, std::memory_order_relaxed); }
+        }
         // WHY-NOT HISTOGRAM (MTG_BP_CONDEMN_WHYNOT, default off, counters only).
         // "What is the MAXIMUM for condemnation?" (USER 2026-08-29) is a ceiling question, and
         // trying rank splits one at a time answers it only by exhaustion. Attributing every
@@ -42621,6 +42785,27 @@ static bool BpEnumBuildKey(const GameState& state, bool is_pre_combat,
 {
     if (!BpEnumCacheOn()) { return false; }
     TranspositionTable::Key key = BuildBreakpointKey(state, is_pre_combat);
+    // THE TRUE CEILING PROBE (MTG_BP_KEY_SNAPSHOT_NONE=1) -- MEASUREMENT ONLY, DELIBERATELY UNSOUND.
+    //
+    // Turning condemnation on does not add ONE fold to this key, it adds FIVE, because the whole
+    // CantripOrderScope binds with it: the pre-draw hand snapshot (every card NUMBER in it), the
+    // deferred-Karoo reservation, the mana-source count, the plan's cast set, and the site (plus how
+    // it was reached). Condemnation-OFF binds none of them -- on Snow the scope is not even
+    // constructed (`if (BpClassifyActive(state))` at the site-8 binding).
+    //
+    // WHY THIS FLAG EXISTS AND MTG_BP_KEY_CASTS_NONE DID NOT SUFFICE. That flag dropped the cast set
+    // alone and was reported here as "the filter on base's key". It was not: the other four folds
+    // still split the key, and fold #1 is self-documented above as worth +10.0% derivations on
+    // Hinata by itself. So its 649,295 misses against base's 537,091 measured a PARTIALLY merged key
+    // and could not bound what a path-independent verdict could recover. USER 2026-09-17: *"The
+    // misses should be the same as no condemnation. I sense a bug."* -- correct, and this is it.
+    //
+    // WHAT THIS ONE CLAIMS. With it set, the key is byte-for-byte what the condemnation-off arm
+    // computes, so misses MUST land on base's if the cache is the mechanism. That makes it a
+    // self-checking arm: misses != base's means the extra derivations come from the search visiting
+    // different states (the filter changes the candidate lists, hence the tree), NOT from key width,
+    // and no key-merging scheme of any kind can recover them.
+    static const bool s_snapshot_none = EnvOn("MTG_BP_KEY_SNAPSHOT_NONE");
     // BATCH-ARM FOLD (recoverability audit 2026-09-03). This cache and the canon verdict memo are
     // thread_local and survive the batch runner's job switches, and ClearPerGameCaches does not
     // clear them -- so in a MIXED-ARM pooled batch, two jobs whose heurarm levers change
@@ -42642,7 +42827,7 @@ static bool BpEnumBuildKey(const GameState& state, bool is_pre_combat,
     // so the same state under a different snapshot emits a different list and must not share
     // an entry. Order-sensitive fold is fine: the snapshot is built in hand order in both
     // worlds, from the same hand.
-    if (g_bp_hand_before != nullptr)
+    if (g_bp_hand_before != nullptr && !s_snapshot_none)
     {
         Fold(key, 0xB17Full);
         // NARROWED TO THE INTERSECTION WITH THE CURRENT HAND (MTG_BP_KEY_WIDE=1 restores the
@@ -42698,10 +42883,10 @@ static bool BpEnumBuildKey(const GameState& state, bool is_pre_combat,
     // committed Gruul Turf and a plan that passed on its drop both reach the breakpoint with the
     // Karoo still in hand and lands_played_this_turn == 0. Without this fold they would share a
     // cache entry and the second would be served the first's plan list.
-    if (g_land_drop_reserved) { Fold(key, 0x1A4Dull); }
+    if (g_land_drop_reserved && !s_snapshot_none) { Fold(key, 0x1A4Dull); }
     // Same reason as the reservation: two continuations identical mid-turn but snapshotted at
     // DIFFERENT mana-source counts condemn different sets, so they must not share a cache entry.
-    if (g_bp_mana_sources_before >= 0) { Fold(key, 0x2B71ull + static_cast<unsigned long long>(g_bp_mana_sources_before)); }
+    if (g_bp_mana_sources_before >= 0 && !s_snapshot_none) { Fold(key, 0x2B71ull + static_cast<unsigned long long>(g_bp_mana_sources_before)); }
     // THE PLAN'S OWN CAST SET, for the third time the same reason (2026-09-16). The two folds above
     // exist because a fact the FILTER reads was invisible in the state; this is the biggest such
     // fact and it was missed. The classifier keeps a card THIS PLAN CASTS -- "a card the plan casts
@@ -42766,7 +42951,25 @@ static bool BpEnumBuildKey(const GameState& state, bool is_pre_combat,
     // std::hash is implementation-defined: libstdc++ and MSVC produce different key VALUES but the
     // same PARTITION, since on either one the key is a function of the cast-name set, and it is the
     // partition that decides what shares a cache entry. Determinism parity is therefore unaffected.)
-    if (g_bp_plan_casts != nullptr)
+    // PLAN-CAST FOLD OFF (MTG_BP_KEY_CASTS_NONE=1): omit this fold alone. MEASUREMENT LEVER, and
+    // deliberately UNSOUND while the verdict stays path-dependent -- one plan's condemned list gets
+    // served to a sibling that condemns differently, which is the arrival-order dependence the
+    // accumulating-cache design exists to fix.
+    //
+    // IT IS NOT A CEILING, AND AN EARLIER VERSION OF THIS COMMENT CLAIMED IT WAS -- "the filter runs
+    // with exactly the key base uses ... no key can be coarser than base's". FALSE. Condemnation
+    // binds the whole CantripOrderScope, so it adds FIVE folds to this key (pre-draw hand, Karoo
+    // reservation, mana-source count, this cast set, and the site); dropping one leaves four. The arm
+    // measured 649,295 misses against base's 537,091 and was reported as a ceiling; it was a
+    // partially-merged key. USER 2026-09-17: *"The misses should be the same as no condemnation. I
+    // sense a bug."* Use MTG_BP_KEY_SNAPSHOT_NONE at the top of this function for the real ceiling --
+    // it drops all five, so misses MUST equal base's if key width is the mechanism at all.
+    //
+    // WHAT THIS ONE IS STILL GOOD FOR: isolating the cast fold's own contribution, which is the fold
+    // the path-independence work would remove. Narrowing it (CANON / NARROW below) recovered 1.3% of
+    // the filter's penalty; removing it recovers 2.3%.
+    static const bool s_casts_none = EnvOn("MTG_BP_KEY_CASTS_NONE");
+    if (g_bp_plan_casts != nullptr && !s_casts_none && !s_snapshot_none && !t_bp_castset_probing)
     {
         Fold(key, 0xC0A5ull);
         // THE EMPTY BIT, FOLDED SEPARATELY, because it is a distinct question from membership:
@@ -42857,11 +43060,120 @@ static bool BpEnumBuildKey(const GameState& state, bool is_pre_combat,
     // differently -- on Snow, Scrying Sheets 103 vs Frost Augur 111 -- so they condemn different
     // sets. g_cantrip_order_site above is NOT this: it is bound only under MTG_CANTRIP_ORDER and is
     // cleared for a site outside the ordered class, so it covers neither case here.
-    if (g_bp_site_def != nullptr) { Fold(key, g_bp_site_def->card.m_name_hash); }
+    // (Both of the next two are snapshot-bound, so MTG_BP_KEY_SNAPSHOT_NONE drops them with the rest.
+    // The first version of that flag guarded the other four folds and MISSED these -- the ceiling arm
+    // then still split Scrying Sheets from Frost Augur at the same state, which on Snow is the split
+    // that matters, and it reported 647,466 misses as though the key were base's. Caught by the arm's
+    // own self-check: base binds no site, so misses HAD to equal base's and did not.)
+    if (g_bp_site_def != nullptr && !s_snapshot_none) { Fold(key, g_bp_site_def->card.m_name_hash); }
     // ...and HOW the site was reached, which decides the peer test outright (an ACTIVATED site sits
     // after every cast, so nothing is a peer). Same state, same site card, cast vs activated => two
     // different lists.
-    if (g_bp_site_activated) { Fold(key, 0xE7D1ull); }
+    if (g_bp_site_activated && !s_snapshot_none) { Fold(key, 0xE7D1ull); }
+    // CAST-SET COLLISION PROBE. Re-enters this function with the plan-cast fold suppressed to get the
+    // cast-LESS key, then records which cast set that key arrived with. A second arrival with a
+    // different set is path-dependence, exactly. Diagnostic only; nothing here touches `key`.
+    if (s_bp_castset_probe && !t_bp_castset_probing && g_bp_plan_casts != nullptr)
+    {
+        t_bp_castset_probing = true;
+        TranspositionTable::Key nokey;
+        const bool got = BpEnumBuildKey(state, is_pre_combat, &nokey);
+        t_bp_castset_probing = false;
+        if (got)
+        {
+            // The cast set's observable projection: sorted-unique name hashes plus the empty bit.
+            // Order and multiplicity are unobservable to every consumer (see the fold's comment), so
+            // canonicalising here is what stops a mere reordering counting as a mismatch.
+            std::uint64_t sig = g_bp_plan_casts->empty() ? 0x9E37ull : 0x1ull;
+            {
+                constexpr std::size_t kMax = 24;
+                std::uint64_t buf[kMax];
+                std::size_t n = 0;
+                for (std::uint64_t h : *g_bp_plan_casts)
+                {
+                    std::size_t p = 0;
+                    while (p < n && buf[p] < h) { ++p; }
+                    if (p < n && buf[p] == h) { continue; }
+                    if (n >= kMax) { break; }
+                    for (std::size_t q = n; q > p; --q) { buf[q] = buf[q - 1]; }
+                    buf[p] = h;
+                    ++n;
+                }
+                for (std::size_t i = 0; i < n; ++i) { sig = sig * 1000003ull + buf[i]; }
+            }
+            // AN INDEPENDENT STATE FINGERPRINT, stored alongside the cast set, because the count
+            // alone cannot tell the two possible causes apart and they need OPPOSITE fixes:
+            //   * same key, same state, different cast set  => genuine path-dependence (the plan has
+            //     a tail). The all-paths rule is about exactly this.
+            //   * same key, DIFFERENT state                 => the cast-less key is merging two
+            //     states, i.e. key imprecision. The all-paths rule does not apply at all -- these are
+            //     not two lines reaching one state, and removing the fold would be unsound.
+            // Deliberately NOT derived from BuildBreakpointKey: reusing the key under test to check
+            // the key under test would agree with itself by construction.
+            std::uint64_t sfp = 1469598103934665603ull;
+            auto mix = [&sfp](std::uint64_t v) { sfp = (sfp ^ v) * 1099511628211ull; };
+            mix(static_cast<std::uint64_t>(state.turn_number));
+            mix(is_pre_combat ? 3ull : 5ull);
+            mix(static_cast<std::uint64_t>(state.active_player_index));
+            {
+                const Player& p = state.ActivePlayer();
+                mix(0xA1ull); for (const Card& c : p.hand)       { mix(static_cast<std::uint64_t>(c.m_number)); }
+                mix(0xB2ull); for (const Card& c : p.graveyard)  { mix(static_cast<std::uint64_t>(c.m_number)); }
+                mix(0xC3ull); mix(static_cast<std::uint64_t>(p.lands_played_this_turn));
+                mix(0xD4ull); mix(static_cast<std::uint64_t>(p.library.size()));
+            }
+            mix(0xE5ull);
+            for (const Permanent& pm : state.battlefield)
+            {
+                mix(static_cast<std::uint64_t>(pm.card.m_number));
+                mix(pm.tapped ? 7ull : 11ull);
+            }
+            mix(0xF6ull); mix(static_cast<std::uint64_t>(state.floating_mana.Total()));
+            // EXILE and both LIFE TOTALS, because a fingerprint that omits a zone cannot tell
+            // "genuine path-dependence" from "my fingerprint is blind to the difference" -- and a
+            // cast that resolves to exile, or one whose only trace is life paid, would land exactly
+            // in that blind spot. The whole value of this discriminator is that it is independently
+            // complete, so every zone a cast can reach has to be in it.
+            mix(0xA7ull); for (const Card& c : state.exile) { mix(static_cast<std::uint64_t>(c.m_number)); }
+            mix(0xB8ull);
+            for (const Player& pl : state.players)
+            {
+                mix(static_cast<std::uint64_t>(pl.life));
+                mix(static_cast<std::uint64_t>(pl.hand.size()));
+                mix(static_cast<std::uint64_t>(pl.graveyard.size()));
+            }
+            struct SeenVal { std::uint64_t sig; std::uint64_t sfp; };
+            using SeenMap = std::unordered_map<TranspositionTable::Key, SeenVal,
+                                               TranspositionTable::KeyHash>;
+            static thread_local SeenMap seen;
+            // Capped like the enum cache, and the wipe is COUNTED: a cleared map forgets prior
+            // arrivals, so it can only ever hide a mismatch. A run reporting clears>0 with
+            // mismatch==0 is therefore weaker evidence than one with clears==0, and must say so.
+            if (seen.size() >= 400000u)
+            { seen.clear(); g_cs_clears.fetch_add(1, std::memory_order_relaxed); }
+            g_cs_checked.fetch_add(1, std::memory_order_relaxed);
+            auto ins = seen.emplace(nokey, SeenVal{ sig, sfp });
+            if (!ins.second && ins.first->second.sig != sig)
+            {
+                const bool same_state = (ins.first->second.sfp == sfp);
+                const long long n = g_cs_mismatch.fetch_add(1, std::memory_order_relaxed);
+                if (g_bp_site_activated)      { g_cs_mm_act.fetch_add(1, std::memory_order_relaxed); }
+                if (g_bp_site_def == nullptr) { g_cs_mm_nosnap.fetch_add(1, std::memory_order_relaxed); }
+                if (same_state) { g_cs_mm_samestate.fetch_add(1, std::memory_order_relaxed); }
+                if (n < 12)
+                {
+                    std::fprintf(stderr,
+                                 "[bp-castset] MISMATCH turn=%d site=%s activated=%d casts=%d"
+                                 " depth=%d same_state=%d\n",
+                                 state.turn_number,
+                                 g_bp_site_def ? g_bp_site_def->card.m_name.c_str() : "(none)",
+                                 g_bp_site_activated ? 1 : 0,
+                                 static_cast<int>(g_bp_plan_casts->size()),
+                                 g_bp_enum_depth, same_state ? 1 : 0);
+                }
+            }
+        }
+    }
     *out = key;
     return true;
 }

@@ -1217,3 +1217,121 @@ all drops**. That is a fact about this deck, not about the rule. Snow's only bre
 and Snow's curve is cheap, so "the site put a new payable card in hand" is true nearly every time it
 fires. **On a deck whose only breakpoint is a draw, condemnation and its soundness guard are close to
 mutually exclusive.**
+
+## 2026-09-17: THE ALL-PATHS RULE -- measured. The COST case is dead; the SOUNDNESS case is real, small, and needs a design decision
+
+USER's proposal (2026-09-16, restated 2026-09-17): *"only condemn in cases where all of the lines
+that reach that state condemn"*, with the cost argument *"It should be a cost lever vs no
+condemnation assuming we can make it work, since it has the same or fewer distinct states."*
+
+The rule is: condemn X at breakpoint state S only if EVERY line reaching S would condemn X --
+i.e. intersect the condemn sets, equivalently keep the union of the kept sets. It makes the verdict
+path-independent, so the bp-enum key would no longer need the plan-cast fold.
+
+### The cost case is refuted, and the refutation is not about the cast fold
+
+The argument is valid but does not cash out: distinct states are not where the filter's cost is.
+Snow, 10 games, seed 930000, d2/`--budget-ms 0`, one pooled batch per arm at 5 threads
+(`logs/snow_perf/ceiling.sh`, run `c4`):
+
+| arm | units | vs base | bp-enum misses | vs base |
+|---|---|---|---|---|
+| base (`MTG_SNOW_CONDEMN=0`) | 34,414,324 | — | 537,091 | — |
+| `wide` (shipping fold) | 39,424,071 | +14.56% | 768,814 | +43.1% |
+| `casts` (`MTG_BP_KEY_CASTS_NONE=1`) | 39,309,220 | +14.22% | 649,295 | +20.9% |
+| `snapnone` (`MTG_BP_KEY_SNAPSHOT_NONE=1`, all five folds) | 39,403,885 | **+14.50%** | 645,923 | +20.3% |
+
+**Key merging recovers 0.06 of 14.56 points (0.4%).** All four digests identical
+(`1922378d4c0c`), so this cell has NO POWER as a play test -- units and misses only.
+
+**AND THE SELF-CHECK IS THE REAL RESULT.** With `MTG_BP_KEY_SNAPSHOT_NONE=1` the key is byte-for-byte
+what the condemnation-off arm computes, so misses HAD to land on base's 537,091. They land on
+645,923 -- still +20.3%. Those ~109k extra derivations are therefore **the search visiting more
+distinct breakpoint states**, not cache fragmentation: the filter changes candidate lists, hence the
+tree. No key-merging scheme of any kind recovers them. (`units.la_bp_wave` +17.9% keeps the bp wave's
+width backfill as the leading suspect for the mechanism.)
+
+**METHOD NOTE, because this took three attempts.** Condemnation does not add ONE fold to the
+bp-enum key; binding `CantripOrderScope` adds FIVE: the pre-draw hand snapshot (every card NUMBER in
+it), the deferred-Karoo reservation, the mana-source count, the plan cast set, and the site plus how
+it was reached. Condemnation-OFF binds none of them. The first "ceiling" arm dropped the cast set
+alone and was reported as "the filter on base's key" -- it was a partially-merged key and bounded
+nothing. USER: *"The misses should be the same as no condemnation. I sense a bug."* The second
+attempt guarded four of the five and missed the SITE fold, which on Snow is the split that matters
+(Scrying Sheets 103 vs Frost Augur 111 at the same state). That one was caught by the arm's own
+self-check. **An arm that claims to reproduce another arm's key must assert the miss count, not the
+units.**
+
+### The soundness case is real: two lines DO reach one state with different cast sets
+
+`MTG_BP_CASTSET_PROBE` builds the key twice -- once normally, once with the plan-cast fold suppressed
+-- and records which cast set each cast-LESS key arrived with. A repeat arrival with a different set
+is path-dependence, counted exactly, with no name test and no re-derivation. A second, INDEPENDENT
+and zone-complete state fingerprint (hand/graveyard/battlefield card numbers + tapped, exile, both
+life totals, lands played, library size, floating mana, turn, phase) says whether the two arrivals
+were at the SAME state, which is what separates path-dependence from key imprecision.
+
+| deck | cell | keys probed | mismatch | same state | diff state | site kind | map clears |
+|---|---|---|---|---|---|---|---|
+| Snow | 6 games d2 b200 | 331,245 | 299 (0.09%) | **290** | 9 | activated, `casts=0` | 0 |
+| kitty | 60 games d3 b10 | 184,212 | 7,388 (4.0%) | **7,388** | 0 | cast site, `casts=1` | 0 |
+
+`map_clears=0` on both, so no arrival was forgotten (a wipe can only HIDE a mismatch).
+
+**SNOW HAS PATH-DEPENDENCE AND THE OBVIOUS ARGUMENT SAYS IT SHOULD NOT.** All 8.3M consultations are
+at an ACTIVATED site, and an activated site fires only in `ApplyPlanDirect`'s trailing pass, after
+every cast (verified in code, not from a comment: the mid-loop activation dispatch needs
+`inline_acts` = `plan.human_action_order && plan.searched_order && s_human_play`, and the site-8
+block is itself gated `!s_human_play` -- mutually exclusive). With no tail, identical states must
+produce identical cast sets. They do not, 290 times in 6 games.
+
+**LEADING HYPOTHESIS, NOT YET CONFIRMED:** `plan_cast_names` is built from `plan.actions` BEFORE
+application, while `apply_one` silently drops a cast it cannot pay for ("checks its precondition and
+its payment FIRST and no-ops without mutating anything when either fails"). So `g_bp_plan_casts`
+records the plan's INTENT, not the turn's history -- and two lines can reach an identical state with
+different intents. Every printed Snow mismatch has `casts=0` on the arriving line, i.e. the
+disagreement is about `BpPlanMadeACast()`, which gates the drop entirely. Confirm by dumping both
+cast sets at a mismatch before building on this.
+
+### The design fork -- three coherent options, and only one is what the USER asked for
+
+All-paths = keep the UNION of the kept sets over arriving lines. Online, that union is only ever
+partial, which is the whole difficulty.
+
+* **(A) Accumulating union cache** (the USER's construction, 2026-09-17: *"safe to run any lines not
+  condemned by the current line and only run lines that were condemned in the cache if the new
+  approach to reach that state does not condemn them"*, *"we skip lines that might be fully condemned
+  until it is proven otherwise"*). Store the weakest condemn set seen; a line that condemns less
+  triggers a re-derivation and the entry grows. Exact in the limit and strictly safer than today.
+  **BLOCKER: the served list depends on arrival order**, so play would vary with thread shape and the
+  Linux/Windows determinism-parity job would go red. Needs a rule that makes the served value a
+  function of (state, that line's condemn set) alone.
+* **(B) State-determined over-approximation.** Condemn only what is condemned under the weakest
+  assumption the state can support. Deterministic and strictly safer. **But on Snow it disarms the
+  filter**: at an activated site a line that cast nothing is always possible (the source is already
+  in play and needs no cast), so "some line reaching S condemns nothing" is always true and nothing
+  is ever condemned. All-paths on Snow then EQUALS condemnation-off -- which, per the table above, is
+  14.5% CHEAPER. That is decision-relevant on its own: it would settle the standing three-way ship
+  decision for Snow as **ship nothing**.
+* **(C) Derive-uncondemned-once, filter per arriver.** Deterministic, one derivation per state
+  instead of one per cast set, play identical to today. But it is today's PER-PATH semantics, not the
+  all-paths rule, so it carries no soundness gain -- and it gives up the prune's derivation saving,
+  which the table above says was only ~0.4% anyway.
+
+**Do not sell any of these on cost.** The cost case died with the `snapnone` arm.
+
+### Instruments added (all default OFF, counters only)
+
+* `MTG_BP_PATHDEP_PROBE` -- drop-gate census: consultations, pending plan casts, peer-exempt split,
+  tail, site kind, `plan_nocast`. An UPPER bound: `BpPlanCasts` is a NAME test, so a plan that cast
+  one Boreal Druid and holds a second copy from before the draw reads as pending (Snow: inflated to
+  143,677 of 8,296,920).
+* `MTG_BP_CASTSET_PROBE` -- the exact measurement above, with the independent state fingerprint.
+* `MTG_BP_KEY_CASTS_NONE` / `MTG_BP_KEY_SNAPSHOT_NONE` -- key-width arms. Both deliberately UNSOUND
+  as play; units and misses only.
+
+**A DEAD END, RECORDED SO IT IS NOT RETRIED:** `MTG_BP_ENUM_VERIFY` cannot answer "does the cast fold
+carry information on Snow". Its baseline is 21.9% pre-existing, and the arms do not check identical
+populations because the verifier itself perturbs cache residency: fold on 59,416/271,539 (21.883%),
+fold off 59,496/271,698 (21.898%), all folds off 59,496/271,796 (21.890%). 80 counts against a
+59,416 baseline settles nothing in either direction.
