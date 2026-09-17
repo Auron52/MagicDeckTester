@@ -76,19 +76,57 @@ Per CLAUDE.md "AGENT FAN-OUT IS EXPECTED" and the model-on-difficulty rule (card
 classification + 2c-ter viewer bucket, returning a compact draft. Integration is serial (the
 skill forbids parallel writes to `cards.json` / shared C++).
 
-| card | status |
-|---|---|
-| Thallid | research launched |
-| Thallid Shell-Dweller | **draft in** — Tier 3 |
-| Sporesower Thallid | research launched |
-| Utopia Mycon | research launched |
-| Doubling Season | research launched |
-| Mycoloth | research launched |
-| Beastmaster Ascension | research launched |
-| Sporecrown Thallid | research launched |
-| Tukatongue Thallid | research launched |
-| Psychotrope Thallid | research launched |
-| Simic Growth Chamber | research launched |
+| card | cost (Scryfall, verbatim) | tier | what it needs |
+|---|---|---|---|
+| Sporecrown Thallid | `{1}{G}` | **1** | cards.json only — `lord_effect`, `subtypes_affected: [Fungus, Saproling]` |
+| Tukatongue Thallid | `{G}` | **1** | cards.json only — `dies_watch_includes_self` + `dies_trigger_creates_tokens` |
+| Simic Growth Chamber | *(land)* | **1** | cards.json only — copy Azorius Chancery (7th Karoo) |
+| Thallid | `{G}` | 3 | spore family |
+| Thallid Shell-Dweller | `{1}{G}` | 3 | spore family + **first `Defender` in cards.json** |
+| Sporesower Thallid | `{2}{G}{G}` | 3 | spore family + each-Fungus variant |
+| Utopia Mycon | `{G}` | 3 | spore family + any-colour sac-for-mana |
+| Psychotrope Thallid | `{2}{G}` | 3 | spore family + **new `sac_outlet_draw` payload** |
+| Beastmaster Ascension | `{2}{G}` | 3 | quest counters + conditional anthem + lethal projection |
+| Doubling Season | `{4}{G}` | 3 | the two doubling chokepoints |
+| Mycoloth | *(pending)* | — | devour (research still running) |
+
+**⚠ Card-data correction — I got this wrong, Scryfall settled it.** My research brief described
+Beastmaster Ascension from memory as a *mandatory* trigger granting **+2/+2**. The real card is
+"**you may** put a quest counter" and **+5/+5**. Verified by direct curl. Every downstream number
+changes: seven attackers deal **42**, not 21, and with one Sporecrown out **three** 2/2 bodies are
+already lethal from 20. This is exactly the claude-play Rule 0 failure mode (card recall is
+unreliable) — recorded here so no later stage re-derives the wrong figure.
+
+### New engine work, consolidated
+
+**New `CardParams`** — spore family (`spore_upkeep_self`, `spore_upkeep_each_fungus`,
+`spore_saproling_cost`, `spore_token_*`), quest family (`quest_counter_per_attacker`,
+`quest_anthem_threshold/_power/_tough`), `doubles_tokens` + `doubles_counters` (two independent
+flags: Parallel Lives is tokens-only, Corpsejack Menace counters-only), `sac_outlet_draw`,
+`sac_outlet_add_mana_any_color`, and Mycoloth's devour params.
+
+**Three defects the drafts found that would each silently weaken the deck** (all verified by me
+in-tree, not taken on trust):
+
+1. **The Goblins misroute** (flagged independently by three agents) — see the section above.
+2. **A draw payload scores zero.** `TurnSolver.cpp:15144` sets
+   `a.eval = (sac_outlet_damage + sac_outlet_creates_tokens) * DMG`. There is no `sac_outlet_draw`
+   term, so Psychotrope's draw activation evaluates as *pure loss* (it gives up a body for
+   nothing) and the search would never take it. The repo's convention is 1 card = 1 `DMG`.
+3. **`PendingAttackDamage` cannot see Beastmaster Ascension's kill.** It is a `const` projection
+   over the *current* state, so it calls `ComputeLordBonus` on the quest counters as they are
+   *before* this combat's own attack triggers. A board at 6 counters with 7 attackers projects
+   **7** damage where the real combat deals **42** — so the generic win-check
+   (TurnSolver.cpp:19150) is blind to the deck's win condition on precisely the turn it matters.
+   The `d>=1` search is correct for free (it mutates state then reads power), but the plan-level
+   lethal recognizer is not. Fix belongs beside the existing `CountAttackTriggerLifeLoss` /
+   `CountExalted` / Adeline-token terms, which solve the identical "attack triggers change *this*
+   combat's damage" problem — plus its mirror in `CollectAttackingManaSources`.
+
+**A missing draw breakpoint (quality, measured precedent).** `PlanOpensBreakpoint` has no site for
+a draw off a sac-outlet activation, so the drawn card is dead until the next turn. The measured
+cost of the identical omission for equipment draws: over 150 logged games, ~109 main-1 draws, and
+a card not already in hand at turn start was cast in main 1 **exactly zero times**.
 
 ### Shared architecture (INTEGRATOR-BINDING — decided from the drafts, do not re-derive)
 
@@ -134,6 +172,33 @@ mana, so K is bounded by `spore_counters / 3` instead.
 one DS a Thallid gains 2 spores/upkeep and makes 2 Saprolings per 3 spores = **4× throughput**.
 That is precisely why the counters must be modelled for real and the card cannot be collapsed to
 `upkeep_creates_tokens`.
+
+**3b. Counter STORAGE: scalar ints, not `Counter::Type` enum values.** The drafts split on this
+and it is the pivotal call, so here is the evidence and the reasoning.
+
+*Both* routes have a key hole; they are just in different places:
+- `BuildSimKey` folds the counters vector generically (`for (const Counter& ctr : perm.counters)`
+  — type *and* count), so `Counter::Type` would be correct there for free. Scalars must be folded
+  by hand (and `verse_counters` / `ice_counters` are in fact **not** folded today — latent holes).
+- But `BoardSignature` (TurnSolver.cpp:1387) folds only `counters.size()`, **not** the per-type
+  counts. So as a `Counter::Type`, a Thallid with 2 spores and one with 5 both read `/c1` and
+  **collide**. Fixing that generically would change the signature for every existing counter deck
+  and churn GT for no reason.
+
+**Decision: scalar `int spore_counters` / `int quest_counters`.** Three reasons:
+1. **The hot path.** `EffectivePower()`/`EffectiveToughness()` iterate `counters` and are called
+   constantly. Putting a Spore entry on every Thallid adds an iteration to the hottest function in
+   the engine — on *the* deck with 40-token boards. Scalars leave that path untouched.
+2. **Byte-identity is trivial and well-understood.** Every read is nonzero-gated, so no other deck
+   can observe the field. The `Counter::Type` route needs a `BoardSignature` change that has to be
+   gated anyway to avoid perturbing existing decks — so it buys no simplicity.
+3. It matches five existing precedents (`charge_/verse_/storage_/ice_/age_counters`).
+
+The counter-doubling chokepoint therefore takes a counter **kind** covering both vector-backed and
+scalar-backed counters and dispatches internally — one helper, all kinds, doubler applied once.
+
+The cost of this choice is that the key sites must be handled by hand. That is the documented
+failure mode, so it is a **checklist**, not a memory test — see 4 below.
 
 **4. Engine hazards every new counter field must satisfy** (verified in-tree, not assumed):
 - `BuildSimKey` (TurnSolver.cpp ~32951) — fold `spore_counters` under a `> 0` gate. Spore counters
@@ -227,6 +292,25 @@ an unanswered deferral is PROVISIONAL, never approved)*
 ## Open questions surfaced to the user (non-blocking)
 
 *(per CLAUDE.md: questions are surfaced and the documented default is taken; work never halts)*
+
+### Q1 — Should Fungus get a searched SECOND MAIN? (Stage 2c-bis)
+
+`GoldFishRunner::DeckUsesSecondMain` keys on `spectacle_cost`, `pod_mv_delta`, `convoke`,
+`lifegain_to_loss`, `hinata_cost_reducer` and the Goblin-Lackey combat cheat. **None fire for
+Fungus**, so it is first-main-only by default.
+
+But the deck has a genuine post-combat line, and it is *exactly* the pattern the repo already
+whitelisted Birthing Pod for: **attack with Saprolings, then sacrifice the attackers post-combat**
+to Utopia Mycon (mana) or Psychotrope Thallid (a card). In a goldfish the opponent never blocks,
+so the attackers always survive — the body banks its combat damage *and* its sacrifice value off
+one card. With only a first main the search is forced to trade one for the other.
+
+**Decision taken (default, non-blocking): ship first-main-only, then MEASURE it in Stage 5.**
+The repo ships `MTG_FORCE_USES_M2=1` as a default-off measurement lever built for precisely this
+question ("A/B whether a non-whitelisted deck's skipped m2 ever has value"). So this is settled by
+measurement, not by my judgement: if the m2 arm measures better, add a Fungus signature to
+`DeckUsesSecondMain`; if it is neutral, the whitelist is confirmed for this deck and the absence
+is disclosed in Stage 6a. Recorded here so the result lands either way.
 
 ---
 
