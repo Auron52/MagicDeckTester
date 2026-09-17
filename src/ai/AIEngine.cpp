@@ -305,7 +305,40 @@ static const bool  s_searched_discard = EnvOn("MTG_SEARCHED_DISCARD", true);
 // wall: hinata -19% / th -33% / mw -46%). Unwon-game digests move (a followed line differs in
 // actions from a re-searched one) => GT rebaselined at adoption. Also bounds DEEP (d8 b0)
 // instrument runs: refutation fires as early as the horizon allows.
-static const bool  s_refuted_follow    = EnvOn("MTG_REFUTED_FOLLOW", true);
+// MTG_REFUTED_FOLLOW -- DEFAULT OFF since 2026-09-17 (=1 hatch). This was the LAST real-play greedy
+// DECISION at depth > 0: once the search reports refuted_full the executor stopped searching and played
+// TurnSolver::Solve() every remaining turn, on the premise that the game was PROVEN unwinnable. With
+// breakpoint continuations EMPTY rather than a greedy tail that premise no longer holds -- a refutation
+// is partly an artifact of the search declining to look. Turning it off is EXACTLY neutral on both tiers
+// (same SUM, same faster/slower, same win set, 64 cells' play changed) for 0.4% more work units, and it
+// takes "REAL main-phase decisions" to NONE on all 20 decks (MTG_M2_YIELD_STATS).
+static const bool  s_refuted_follow    = EnvOn("MTG_REFUTED_FOLLOW");
+// MTG_BP_RESOLVE_LAND (default ON, =0 hatch; adopted 2026-09-17) -- a RE-SOLVED breakpoint continuation's
+// LAND DROP. The plan-carried branch plays `extra.land_to_play` (see the TryPlaySpecificLand call
+// under bp_searched_here); the re-solve branch underneath never did, because it used to call the
+// greedy TurnSolver::Solve(), which never sets land_decided at all. Since the greedy deletion that
+// branch calls SolveWithLookahead, whose plans DO carry a drop -- and the executor threw it away
+// while still casting the spells the re-solve funded WITH it. Measured signature (hinata
+// regression d3 s3003 gi=111, T7): the continuation declares Soulfire Eruption at {6}{R}{R}{R},
+// the pool comes up exactly one mana short with the Mountain still in hand and the drop unused,
+// and TapForCost DROPS the cast whole. Same fix at the pod trailing-pass twin.
+static bool BpResolveLandEnabled()
+{
+    static const bool on = EnvOn("MTG_BP_RESOLVE_LAND", true);
+    return on;
+}
+// MTG_REFUTED_LAND (default ON, =0 hatch; adopted 2026-09-17) -- the refuted-follow greedy plan's LAND DROP.
+// At depth > 0 the land drop is FOLDED INTO the search (fold_land), so the executor plays exactly
+// plan.land_to_play and nothing else. TurnSolver::Solve() never sets land_decided, so a
+// refuted-follow turn plays NO LAND AT ALL, every turn, for the rest of the game -- measured on
+// hinata regression d3 s3003 gi=111, which sits on an unplayed Mountain for three turns and then
+// misses a cost by exactly one mana. Mirror what depth 0 does for the same greedy plan: take the
+// drop with the executor's own greedy chooser BEFORE solving, so the plan can spend it.
+static bool RefutedLandEnabled()
+{
+    static const bool on = EnvOn("MTG_REFUTED_LAND", true);
+    return on;
+}
 // Drop the committed line when the searched discard deviates from the heuristic pick (the line was
 // searched assuming the heuristic shed). MTG_DISCARD_RELINE=0 keeps replaying the stale line.
 static const bool  s_discard_reline    = EnvOn("MTG_DISCARD_RELINE", true);
@@ -1982,6 +2015,24 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
         if (resolve_stack && !state.stack.empty()) { resolve_stack(state); }
     };
     bool cast_draw_engine = false;
+    // MTG_EXEC_DROP_REPLAN (LEVER, default OFF, 2026-09-17): a REAL-play cast of this pass was
+    // dropped as unpayable, so the rest of the committed line was priced on a board that did not
+    // happen (hinata s1001 gi392 d5 T5: Crackle with Power declared at X=4 for 12 mana with 11
+    // tappable -- dropped whole, where X=2 was lethal; the turn ended with seven red floating).
+    // Discard the stale line and take the caller's ONE extra pass (GameEngine calls TakeTurn a
+    // second time on `true`): a fresh full-depth solve on the realised board, which can cast the
+    // same card at a payable X or hold it. Search only (depth > 0, not a rollout, no external
+    // chooser). Same reline shape as MTG_DISCARD_RELINE / MTG_LE_RELINE.
+    static const bool s_drop_replan = EnvOn("MTG_EXEC_DROP_REPLAN");
+    m_real_drop_this_pass = false;
+    auto replan_after_drop = [&]() -> bool
+    {
+        if (!s_drop_replan || !m_real_drop_this_pass || m_in_rollout
+            || m_lookahead_depth <= 0 || m_external_chooser) { return false; }
+        m_real_drop_this_pass = false;
+        m_committed_line.clear();
+        return true;
+    };
     // BREAKPOINT SITE 9 input (lockstep twin of ApplyPlanDirect's capture): the permanents this
     // phase's plan starts from. Empty when the class is off.
     const std::vector<int> pre_plan_numbers = TurnSolver::OwnPermanentNumbers(state);
@@ -2585,7 +2636,9 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
             else { regular_hand.push_back(c); }
         }
         ap_after.hand = std::move(regular_hand);
-        return false;  // ApplyPlan resolved draw-engine re-solves inline; no second pass
+        // ApplyPlan resolved draw-engine re-solves inline; no second pass -- unless a real cast
+        // was dropped (MTG_EXEC_DROP_REPLAN).
+        return replan_after_drop();
         }
         // HAND-BACK (--choices-then-auto): uninstall the chooser AFTER its call returned (it is
         // the lambda that just ran -- destroying it from inside would be UB) and fall through to
@@ -3032,6 +3085,12 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
                         // refutation (the 2026-09-16 empty-node bug) plays the rest of the
                         // game through exactly this branch.
                         execgreedy::Record(m_lookahead_depth, m_in_rollout);
+                        // The drop first (MTG_REFUTED_LAND), exactly as the depth-0 route does, so
+                        // the greedy plan below is solved on a board that HAS the land.
+                        if (RefutedLandEnabled() && is_pre_combat_main
+                            && state.ActivePlayer().lands_played_this_turn
+                               < state.ActivePlayer().LandDropsAvailable())
+                        { TryPlayLand(state); }
                         plan = TurnSolver::Solve(state, is_pre_combat_main);
                         if (s_fd_trace)
                         { std::fprintf(stderr, "[fd] T%d pre=%d GREEDY (refuted-follow) %s\n", state.turn_number,
@@ -3926,6 +3985,17 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
                 execgreedy::Record(-1, m_in_rollout);
                 extra = TurnSolver::Solve(state, is_pre_combat_main);
             }
+            // The re-solve's own LAND DROP (MTG_BP_RESOLVE_LAND) -- same rule, same karoo guard as
+            // the plan-carried branch above, and played BEFORE the continuation's casts so its mana
+            // funds them. Without it the re-solve's projection counts a land the executor never
+            // plays and the cast is dropped one mana short.
+            if (BpResolveLandEnabled())
+            {
+                static const bool s_karoo_lockstep2 = EnvOn("MTG_KAROO_BP_LOCKSTEP", true);
+                if (extra.land_decided && !extra.land_to_play.empty()
+                    && !(s_karoo_lockstep2 && karoo_deferred))
+                { TryPlaySpecificLand(state, extra.land_to_play, extra.fetch_target, extra.land_face); }
+            }
         }
         // Lockstep trace (MTG_BP_TRACE): the EXECUTOR's breakpoint sequence, to be diffed against
         // ApplyPlanDirect's [bp-apply] lines for the same committed line. Diagnosis only.
@@ -4775,6 +4845,10 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
                             execgreedy::Record(-1, m_in_rollout);
                             extra = TurnSolver::Solve(state, is_pre_combat_main);
                         }
+                        // The re-solve's LAND DROP -- twin of the main site (MTG_BP_RESOLVE_LAND).
+                        if (BpResolveLandEnabled() && extra.land_decided
+                            && !extra.land_to_play.empty())
+                        { TryPlaySpecificLand(state, extra.land_to_play, extra.fetch_target, extra.land_face); }
                     }
                     // Precasts (SacForMana / Suspend / convoke taps) exactly as
                     // resolve_draw_breakpoint's pre-pass, then the casts in the executor's clean
@@ -5347,6 +5421,7 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
     // depth 0 there is no search, so we must still request the legacy second pass or
     // the draw engine never gets cast (TH d0 collapses). Gate the suppression on a
     // live search.
+    if (replan_after_drop()) { return true; }   // MTG_EXEC_DROP_REPLAN: see the lambda
     return (s_full_depth && m_lookahead_depth > 0) ? false : cast_draw_engine;
 }
 
@@ -5971,6 +6046,7 @@ void AIEngine::CastSpellFromHand(GameState& state, Card& hand_card, ManaPool& av
         if (!paid_ok)
         {
             if (BpTraceEnabled() && !m_in_rollout) { std::fprintf(stderr, "[bp-pay]    -> FAILED\n"); }
+            if (!m_in_rollout) { m_real_drop_this_pass = true; }   // MTG_EXEC_DROP_REPLAN input
             // SERVER-TRUTH RESOLUTION: a declared cast that cannot be paid is dropped (left in hand).
             // Mirrors ApplyPlanDirect::apply_one's drop in the rollout. Audit-only bookkeeping; see the
             // stranded-accelerant detector in GameLogger.h for why the ACCELERANT drops are the ones

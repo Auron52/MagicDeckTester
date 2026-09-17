@@ -202,6 +202,9 @@ enum Slot : int
     BP_CANDS_ORDER,           // MTG_BP_CANDS_ORDER        value-order the breakpoint continuation list (MoveOrderPlans)
     BP_W4,                    // MTG_BP_W4                 wave-0 width 4 (per-job twin of MTG_BP_SEARCH=4)
     BP_NODE_HOST2,            // MTG_BP_NODE_HOST2         ROOTTURN hosting also hosts the node on root+1
+    BP_NESTED_CANON,          // MTG_BP_NESTED_CANON       an un-branched NESTED slot defaults to the value-best entry, not EMPTY
+    BP_VARIANT_FIRST,         // MTG_BP_VARIANT_FIRST      schedule a base plan's breakpoint variants BEFORE the base (equal value)
+    BP_NESTED_CANON_PLAYOUT,  // MTG_BP_NESTED_CANON_PLAYOUT  ...the nested default fires inside PLAYOUT applies too (uncharged wall)
     COUNT
 };
 
@@ -374,6 +377,9 @@ inline const char* Name(int slot)
         "MTG_BP_CANDS_ORDER",
         "MTG_BP_W4",
         "MTG_BP_NODE_HOST2",
+        "MTG_BP_NESTED_CANON",
+        "MTG_BP_VARIANT_FIRST",
+        "MTG_BP_NESTED_CANON_PLAYOUT",
     };
     // The enum and this table are ONE mapping split across two lists: a slot added to one and not
     // the other silently shifts every lever after it (a manifest asking for lever X would set Y).

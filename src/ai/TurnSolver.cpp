@@ -1109,7 +1109,8 @@ static void MoveOrderPlans(std::vector<TurnSolver::Plan>& plans)
             // OFF): same shape one tier down -- a plan whose payment must tap the best own
             // attacker sorts after siblings that keep the attack live.
             if (a.atk_forfeit != b.atk_forfeit) { return b.atk_forfeit; }
-            return a.value > b.value;
+            if (a.value != b.value) { return a.value > b.value; }
+            return a.bp_sched > b.bp_sched;   // MTG_BP_VARIANT_FIRST: exact tie -> the variant first
         });
 }
 
@@ -1866,8 +1867,72 @@ static bool BpCandsOrderEnabled()
 // the greedy deletion at a wall cost the record puts at 1.2-1.5x). Default OFF.
 static bool BpNodeHost2()
 {
-    static const bool on = EnvOn("MTG_BP_NODE_HOST2");
+    static const bool on = EnvOn("MTG_BP_NODE_HOST2", true);   // ADOPTED 2026-09-17 with the greedy deletion (=0 hatch)
     return heurarm::Flag(heurarm::BP_NODE_HOST2, on);
+}
+
+// MTG_BP_NESTED_CANON -- at a NESTED breakpoint (a variant sitting at an index it is not targeting:
+// the L*W-not-W^L trade leaves that slot un-branched in wave 0), the default continuation is the
+// VALUE-BEST enumerated entry (cands[0] -- the same object rank 0 indexes) instead of EMPTY.
+//
+// Under the greedy regime this slot was continued by a greedy Solve, i.e. a strong line for free;
+// the deletion made it EMPTY, which is where a cantrip CHAIN (Ponder -> draw -> Preordain -> ...)
+// loses: the variant that acts at index 0 stops dead at index 1. This is a heuristic DEFAULT for
+// a slot the search still branches through the deferred waves and Plan::bp_all -- not a decision
+// and not a Solve(); it uses the list the search itself ranks. Stands down inside a derivation
+// (g_bp_enum_depth > 0, the uncharged-recursion wall NGC hit). Default OFF; measured as an arm.
+static bool BpNestedCanon()
+{
+    static const bool on = EnvOn("MTG_BP_NESTED_CANON", true);   // ADOPTED 2026-09-17 with the greedy deletion (=0 hatch)
+    return heurarm::Flag(heurarm::BP_NESTED_CANON, on);
+}
+
+// MTG_BP_VARIANT_FIRST -- see Plan::bp_sched. Default OFF.
+static bool BpVariantFirst()
+{
+    static const bool on = EnvOn("MTG_BP_VARIANT_FIRST");   // REJECTED 2026-09-17: melira +0.36 in every arm carrying it
+    return heurarm::Flag(heurarm::BP_VARIANT_FIRST, on);
+}
+
+// MTG_BP_NESTED_CANON_PLAYOUT -- let the nested default fire inside PLAYOUT applies too. DEFAULT
+// OFF: the enumeration it pays is UNCHARGED (no ConsumeAt), playouts visit nested breakpoints
+// constantly, and the unscoped form stalled a smoke batch at 3 of 80 jobs in 11 minutes at LOWER
+// units (0.988) -- the canon lever's "+50.7% wall on dragonstorm" shape exactly. In a playout the
+// nested slot is leaf policy (EMPTY), which the doctrine allows; the searched turns keep the
+// value-best default.
+static bool BpNestedCanonPlayout()
+{
+    static const bool on = EnvOn("MTG_BP_NESTED_CANON_PLAYOUT");
+    return heurarm::Flag(heurarm::BP_NESTED_CANON_PLAYOUT, on);
+}
+
+// MTG_BP_ENUM_CANON -- LEVER (default OFF, 2026-09-17). Inside a continuation-list DERIVATION
+// (g_bp_enum_depth == 1: the applies that value-sort the candidates of a breakpoint), an
+// unresolved breakpoint's default is the value-best entry of ITS OWN list, one level only (the
+// derivation that produces it runs at depth 2, whose applies stay EMPTY). What it changes is the
+// RANKING the search branches over: with EMPTY at this slot a cantrip candidate is scored as
+// "draw, then stop", so a chain's second step ranks below any permanent and never reaches the
+// W-wide window or the nested default. Bounded by construction (no recursion past depth 2) and
+// memoised by BpEnumEntryFor, unlike the unbounded NGC cascade the ENUM probe recorded.
+static bool BpEnumCanon()
+{
+    static const bool on = EnvOn("MTG_BP_ENUM_CANON");
+    return on;
+}
+
+// MTG_BP_BASE_CANON=<0|1|2> -- LEVER (default 0 = off, 2026-09-17). A BASE plan (bp_choice < 0)
+// at a breakpoint in a searched (non-playout, non-derivation) apply takes the value-best entry
+// instead of EMPTY. =1: every searched turn (at a hosted turn the base line then duplicates
+// child 0, and the node's explicit EMPTY child keeps "stop" reachable; at an un-hosted turn pair
+// it with MTG_BP_EMPTY_ARM so EMPTY stays a scored option). =2: only turns beyond root+1, i.e.
+// the lookahead turns no node hosts under ROOTTURN+HOST2 -- where every base plan's
+// continuation was the greedy Solve and is EMPTY now (82% of hinata's old greedy load by the
+// 2026-09-17 census). The executor re-solves a base plan's breakpoint with the full search
+// either way, so no lockstep contract is touched.
+static int BpBaseCanon()
+{
+    static const int v = EnvInt("MTG_BP_BASE_CANON", 1);
+    return v;
 }
 
 static bool BpCondemnOrderAwareEnabled()
@@ -7665,7 +7730,8 @@ static int BpSearchWidth()
     // MTG_BP_W4: the per-job boolean twin of MTG_BP_SEARCH=4 (heurarm carries booleans only, and
     // a value-carrying env cannot vary per job inside one pooled batch). An explicit env wins.
     static const bool env_set = (std::getenv("MTG_BP_SEARCH") != nullptr && *std::getenv("MTG_BP_SEARCH") != '\0');
-    if (!env_set && heurarm::Flag(heurarm::BP_W4, false)) { return 4; }
+    static const bool w4_env  = EnvOn("MTG_BP_W4");   // env form for non-batch runs (the harness)
+    if (!env_set && heurarm::Flag(heurarm::BP_W4, w4_env)) { return 4; }
     return w;
 }
 
@@ -21649,6 +21715,34 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
         // root turn only). The USER's rule: a red measurement is a budget / reachability problem
         // to remedy (EMPTY arm, node hosting, rank scheduling, budget) -- never a reason to keep
         // or re-introduce a greedy decision. docs/design/greedy-continuation-deletion-route.md.
+        // MTG_BP_NESTED_CANON (see the flag): the un-branched nested slot's default is the value-best
+        // entry. seen_before >= 0 only for a class-on plan that carries a choice; != bp_at is "not
+        // the index this variant targets".
+        if (!resolved && BpNestedCanon() && g_bp_enum_depth == 0 && class_on
+            && (g_rollout_nest == 0 || BpNestedCanonPlayout())
+            && plan.bp_choice >= 0 && !plan.bp_all && seen_before >= 0 && seen_before != plan.bp_at)
+        {
+            const std::vector<TurnSolver::Plan> ncands =
+                TurnSolver::EnumerateBreakpointPlans(state, is_pre_combat);
+            if (!ncands.empty()) { out = ncands.front(); resolved = true; }
+        }
+        // MTG_BP_ENUM_CANON / MTG_BP_BASE_CANON (levers; see the flags): two further un-branched
+        // slot kinds take the value-best entry rather than EMPTY. Never inside a playout.
+        if (!resolved && class_on && g_rollout_nest == 0)
+        {
+            const int  bc        = BpBaseCanon();
+            const bool enum_slot = BpEnumCanon() && g_bp_enum_depth == 1;
+            const bool base_slot = bc > 0 && g_bp_enum_depth == 0 && plan.bp_choice < 0
+                                && (bc == 1
+                                    || (g_condemn_root_turn >= 0
+                                        && state.turn_number > g_condemn_root_turn + 1));
+            if (enum_slot || base_slot)
+            {
+                const std::vector<TurnSolver::Plan> ncands =
+                    TurnSolver::EnumerateBreakpointPlans(state, is_pre_combat);
+                if (!ncands.empty()) { out = ncands.front(); resolved = true; }
+            }
+        }
         if (!resolved)
         {
             out              = TurnSolver::Plan{};
@@ -29533,6 +29627,7 @@ static void AppendBreakpointVariants(const GameState& state, std::vector<TurnSol
                 v.bp_at     = at;
                 v.bp_wave0  = false;   // the marker belongs to the base plan only
                 v.bp_base   = static_cast<int>(base_i);   // see Plan::bp_base / MTG_BP_WAVE_NSKIP
+                v.bp_sched  = BpVariantFirst() ? 1 : 0;   // scheduling tag only (Plan::bp_sched)
                 variants.push_back(std::move(v));
             }
         }

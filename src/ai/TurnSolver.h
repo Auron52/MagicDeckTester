@@ -883,6 +883,10 @@ public:
         // uncovered plan at rank 0 instead of rank W, which demotes MAXBASE to a cost prune: it
         // decides who waits, not who is reachable. Meaningless once the plan is applied.
         bool bp_wave0 = false;
+        // MTG_BP_VARIANT_FIRST: scheduling-only tag (1 on a wave-0 variant). MoveOrderPlans breaks an
+        // EXACT value tie in its favour, so a base plan's searched continuations are scored before the
+        // base's own EMPTY-continued line. Never read by anything that decides; ordering only.
+        int8_t bp_sched = 0;
 
         // Index of the BASE plan this wave-0 variant was fanned out from (-1 on a base plan and on
         // anything not produced by AppendBreakpointVariants). Purely an back-pointer for

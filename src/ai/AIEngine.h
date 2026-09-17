@@ -276,6 +276,9 @@ private:
     int                      m_max_turns         = 20;  // rollout horizon; kept in sync by SetMaxTurns
     bool                     m_search_post_combat  = false;
     bool                     m_in_rollout          = false; // prevents recursive LE search in rollouts
+    // MTG_EXEC_DROP_REPLAN: a REAL-play cast of this TakeTurn pass could not be paid and was
+    // dropped (CastSpellFromHand's !paid_ok branch). Read once at the end of TakeTurn.
+    bool                     m_real_drop_this_pass = false;
     const std::map<std::string, int>* m_touch_index = nullptr;  // execution-trace card index (non-owning)
     std::vector<std::string> m_kept_opening_hand;
     // Mulligan reproducibility (see the public accessors above).
