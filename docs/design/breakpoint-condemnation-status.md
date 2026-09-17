@@ -1636,7 +1636,9 @@ probe applies only**. A per-decision re-solve for all-paths is the same shape th
 #### AUDIT OF (D), FIRST PASS DONE 2026-09-17 -- one real leak found, and it is a one-line fix
 
 The premise is that the continuation list is a *menu* and nothing reads it as semantics. Checked, not
-assumed. The list source is `TurnSolver::EnumerateBreakpointPlans` (`TurnSolver.cpp:21953`), and
+assumed. **READ THE SECOND PASS BELOW BEFORE ACTING ON THIS ONE:** it locates the drop in
+`CollectActions`, not in the function named here, and it retracts the wave-0 item at the end.
+The list source is `TurnSolver::EnumerateBreakpointPlans` (`TurnSolver.cpp:21953`), and
 **the executor indexes the same list** (`AIEngine.cpp:3918`, `resolve_draw_breakpoint`) -- so the
 condemned flag must be stamped *inside* that function, where both sides get it by construction. That is
 the existing lockstep rule, and it makes (D) cheaper rather than harder: full-length in both sides means
@@ -1669,10 +1671,235 @@ and it would not show up as a crash or a counter -- only as a missing line.
 ("exact by construction") is precisely the invariant to preserve, and it names its own repair.
 
 This is the pattern to expect for the rest of the audit: membership read as semantics, in a spot whose
-comment already states the invariant. The remaining item to check before building is `bp_seen_states` /
-the dedup set, and whether wave 0 should decline to emit a variant for a condemned index (it should --
-the variant would be a no-op, and skipping emission does not disturb `bp_choice`, which indexes `cands`,
-not the variant list).
+comment already states the invariant.
+
+#### AUDIT OF (D), SECOND PASS DONE 2026-09-17 -- `bp_seen_states` is SAFE, and TWO CLAIMS ABOVE ARE WRONG
+
+**`bp_seen_states` is safe, and the reason generalises.** It keys on the POST-APPLY STATE
+(`BuildDedupKey(copy)`, e.g. `TurnSolver.cpp:37275`, `:37188`, `:37745`), never on a list index, so
+restoring the list to baseline's length cannot disturb it. Every one of its sites performs a real
+`insert(...).second` check rather than inferring presence. So `g_bp_cands_has_empty` is the ONLY
+membership-as-semantics reader on this path, and the one-line fix is confirmed to be literally one
+line: one write site (`:21985-21987`) feeding two read sites (`:35722`, `:37148`) that need no change.
+
+**CORRECTION 1 -- the drop is NOT in `EnumerateBreakpointPlans`; it is in `CollectActions`.** The
+`continue` is at `TurnSolver.cpp:11337`, inside `CollectActions` (`:11087`), which emits the ACTION
+list. `EnumerateBreakpointPlans` (`:43000`) is a one-line wrapper over `BpEnumEntryFor`, whose miss
+path calls `EnumeratePlansWithLand` -> `CollectActions`. So the condemned candidate is absent from the
+CACHED plan list, which is exactly why the arriving line's cast set had to be folded into the key. The
+first-pass audit's instruction to "stamp the condemned flag inside that function" was written against
+the wrong function, and taking it literally would have stamped the cached entry.
+
+**AND THIS IS THE ONE DISCIPLINE THAT DECIDES WHETHER (D) WORKS AT ALL.** If the condemned bit is
+baked into the cached plans, the entry is again a function of the arriving line's condemn set, the
+five folds come straight back, and every defect this document has chased returns intact. So:
+
+> **The cache must store baseline's list, unstamped. The condemned bit is evaluated PER ARRIVAL, at
+> consumption.** `EnumerateBreakpointPlans` returns `std::vector<Plan>` BY VALUE (`:43003` --
+> `return BpEnumEntryFor(...)->plans;` copies), so stamping the copy is already safe and the entry
+> stays baseline's. The executor's twin (`AIEngine.cpp:3918`) calls the same function and therefore
+> gets the same stamping from the same predicate -- lockstep by construction.
+
+The USER's spec sanctions exactly this and no more: *"Our only extra work is checking condemnation
+status and deciding what we need to implement."* That is a per-arrival check over a full-length list.
+
+**CORRECTION 2 -- wave 0 CANNOT decline to emit a variant for a condemned index.** Retract that line.
+The wave-0 fan-out (`:29936-29944`) emits `bp_choice = 0..W-1` for each base plan **blind**, before any
+apply: the comment at `:21953` says so ("the caller can only emit `bp_choice = 0..W-1` blind"), and
+condemned-ness is a property of a breakpoint state that emission has not reached yet. There is nothing
+to decline.
+
+**What happens instead is better than the retracted plan, and it needs no new code.** An unresolved
+`bp_choice` already falls through to the EMPTY continuation, and that fallback is deliberately
+unconditional (`:22017-22023`: *"A continuation the plan did not carry is EMPTY ... so there is no scope
+predicate for a future change to widen or misread"*). A condemned index is an unresolved index, so the
+slot degrades to **EMPTY** -- a continuation the USER explicitly asked to be available at every segment
+(*"Empty needs to be a valid option"*, *"for every segment"*) -- and a duplicate EMPTY arrival is caught
+by the variant dedup at `:37275`. So the slot is not wasted; worst case it is a deduped repeat.
+
+**THE REAL TRADE (D) MAKES, WHICH THE FIRST PASS DID NOT PRICE: it gives up RANK COMPACTION.** Today's
+emission-time drop compacts the list, so surviving candidates are pulled DOWN into the low ranks the
+W-wide wave-0 window can reach. Under (D) the ranks are baseline's, so a survivor at baseline rank >= W
+stays out of wave 0's reach. Note the direction carefully:
+
+* **Versus condemnation-OFF baseline this is not a loss** -- baseline cannot reach that rank either. So
+  the no-lossy-truncation bar is not engaged.
+* **Versus TODAY's condemnation it is a loss**, and an unmeasured one. It is also the mirror image of
+  the stillborn/retired accounting: today's filter buys reach by shortening lists, and that shortening
+  is precisely what manufactures the short-list wave symptom and forces the key folds. (D) declines the
+  bargain in both directions at once.
+
+**AND THAT SPLITS (D) INTO TWO OPTIONS. THEY ARE NOT INTERCHANGEABLE.**
+
+* **(D1) Full-length indexing; a condemned slot resolves to EMPTY.** `bp_choice = k` denotes
+  `cands[k]` of baseline's list regardless of anyone's condemn set. Keys need no folds, the executor
+  agrees by construction, a widening is a bit flip at a stable index, and the spec is satisfied
+  STRUCTURALLY. Cost: baseline's wave-0 reach, i.e. no compaction.
+* **(D2) Full-length list, but `bp_choice = k` denotes the k-th NON-CONDEMNED entry.** Keeps
+  compaction and today's reach. **But it forfeits (D)'s entire headline gain:** the meaning of `k`
+  becomes a function of the condemn set again, so the executor must reproduce that set exactly to
+  index the same candidate -- and "the search binding no scope where the executor did" is already one
+  of the three apparatus bugs this document records. The cached LIST would stay baseline's, but the
+  served MEANING would not.
+
+**(D1) is the option that matches the USER's spec.** (D2) is today's problem wearing a longer list.
+
+**WHAT TO MEASURE BEFORE BUILDING (D1), and the instrument already exists.** Compaction can only have
+bought something on a list LONGER than `W`: at `len <= W` wave 0 indexes every survivor anyway, so
+deleting an entry and marking it are indistinguishable for reach. `MTG_BP_CANDS_PROBE` already reports
+exactly that -- `capped[site]` is "breakpoints with `cands.size() > W`", alongside `reach` /
+`unreachable` and a length histogram (`TurnSolver.cpp:20216-20275`). A small `capped%` on the FILTERED
+arm prices (D1)'s only real cost at ~nothing. **Added to `logs/snow_perf/wavebackfill.sh`, which is
+where it belongs, because it is THE SAME QUESTION AS THE BACKFILL HYPOTHESIS FROM THE OTHER SIDE:**
+`stillborn` requires the list to be SHORTER than `W`, so a confirmed backfill result simultaneously
+proves compaction was buying nothing, and exonerates (D1). If instead `capped%` is large AND stillborn
+is rare, (D1) has a real quality cost to weigh and the (D1)/(D2) choice is live.
+
+#### HOW (D1) IS ACTUALLY BUILT -- and the one hard part is a SCOPE SPLIT, not the flag
+
+Worked out 2026-09-17 before writing any code, because the naive version reintroduces the fold.
+
+**The flag itself is trivial.** `Plan` already carries a dozen booleans and no digest keys on any of
+them; `bool bp_condemned = false` is free. The skip is ~3 lines at `TurnSolver.cpp:22008-22012`: if
+`cands[plan.bp_choice].bp_condemned`, leave `resolved == false` and let the existing unconditional
+EMPTY fallback take the slot. Plus the `g_bp_cands_has_empty` one-liner. That is the whole change --
+*if* the flag is computed in the right place.
+
+**WHY THE FLAG CANNOT BE SET DURING THE DERIVATION, which is the tempting cheap route.** Marking the
+`Action` in `CollectActions` and OR-ing it into the plan as the odometer builds would be one field and
+one line. But plans are built *inside the derivation*, and the derivation is what the bp-enum cache
+STORES -- so the entry becomes a function of the arriving line's condemn set again, the five folds come
+straight back, and every defect in this document returns. **Cheap-and-wrong; do not build it.**
+
+**So the predicate is re-run at CONSUMPTION, over the returned copy.** For each candidate, for each of
+its cast actions, run the existing conjunction on the corresponding hand card; any condemned cast
+condemns the plan. Cost is O(list x casts) per lookup with the same predicate the emission gate already
+uses -- which is exactly, and only, what the USER's spec budgets for: *"our only extra work is checking
+condemnation status."*
+
+**AND HERE IS THE HARD PART.** The `CollectActions` drop site serves THREE contexts, distinguished in
+its own `[condemn-who]` dump by `where=EXEC | srch | leaf`:
+
+| context | reaches the cands list? | under (D1) |
+|---|---|---|
+| searched continuation enum (`srch`) | yes, via `EnumerateBreakpointPlans` | condemnation must be **scoped OFF** here so the cached list is baseline's; the consumption stamp replaces it |
+| executor (`EXEC`, `g_condemn_root_turn < 0`) | yes -- `AIEngine::resolve_draw_breakpoint` calls the same function | covered by the same stamp, and this is where (D1) *gains*: `bp_choice` finally denotes the same candidate on both sides |
+| rollout / leaf (`leaf`, `!g_search_candidate_enum`) | **no** -- greedy playout plan building, no `cands` indexing | the test must **STAY** in `CollectActions`, or condemnation silently vanishes from the playout layer |
+
+So (D1) is not "move the filter"; it is **a scope split**: off in the bp-enum derivation, unchanged in
+the playout layer, replaced by a stamp on the searched/executor list. **Treat that as the risk item.**
+The three apparatus bugs this document already records include exactly this failure --
+*"the search binding no scope where the executor did"* -- and a clean zero or a clean no-change on one
+side of a split is this feature's established bug signature, not a pass. **Put a firing counter on each
+of the three contexts and assert all three move in the expected direction before believing any
+measurement.**
+
+### MEASURED 2026-09-17 (runs `wb1`, `d1a`): the lookup delta IS wave apply work -- but NOT by the mechanism proposed
+
+`logs/snow_perf/wavebackfill.sh`. Same Snow cell as the census (seed 930000, d2/`--budget-ms 0`,
+`MTG_BP_KEY_SNAPSHOT_NONE=1` on both arms, `MTG_BP_CONDEMN_NEW_OPTION=1`, condemn set in the
+ENVIRONMENT). `wb1` = 10 games; `d1a` = 8 games (gi=0..7, i.e. the same cell with the two monster games
+excluded -- 16 seconds instead of ~30 minutes). Play **identical on both arms of both cells**
+(`wb1` digest `7916f1f572f914e7` avg 5.9000; `d1a` digest `bd3f8a9af6ff6cee` avg 5.6250), so both are
+pure work measurements with no power as play tests.
+
+| metric | base (10g) | filtered (10g) | Δ | base (8g) | filtered (8g) | Δ |
+|---|---|---|---|---|---|---|
+| lookups (`hits+misses`) | 27,274,268 | 32,082,910 | **+17.63%** | 437,955 | 447,213 | +2.11% |
+| wave `slots` | 2,517,447 | 2,976,767 | **+18.24%** | 99,540 | 100,857 | +1.32% |
+| wave `scored` (applies) | 28,019,861 | 33,046,727 | **+17.94%** | 365,400 | 372,944 | +2.06% |
+| `rolled` | 3,139,778 | 3,806,620 | +21.24% | 105,229 | 106,309 | +1.03% |
+| `stillborn` | 1,680,277 | 2,012,074 | +19.75% | 70,620 | 71,407 | +1.11% |
+| **`retired`** | 3,280 | 3,290 | **+0.30%** | 157 | 157 | **+0.00%** |
+| `dupstate` | 59,486 | 59,159 | −0.55% | 1,792 | 1,792 | +0.00% |
+| `nskip` | 3,423 | 3,433 | +0.29% | 1,385 | 1,385 | +0.00% |
+| wave host `nodes` | 22,757 | 25,240 | +10.91% | 5,931 | 5,971 | +0.67% |
+| `units_total` | 40,143,167 | 46,043,691 | **+14.70%** | 1,647,283 | 1,665,044 | +1.08% |
+| drops | 0 | 125,164 | — | 0 | 762 | — |
+
+**CONFIRMED: the lookup delta is wave apply work.** `+17.63%` lookups against `+17.94%` scored applies
+is a match to a third of a point, and every wave apply runs a full `ApplyPlanDirect` that walks
+breakpoints and consults the bp-enum cache. Combined with the census (states **−0.45%**), the shape is
+settled: the filter consults the same states more often -- **lookups/state 67.30 -> 79.52** -- rather
+than reaching new ones.
+
+**REFUTED: the proposed MECHANISM. `retired` is FLAT (+0.30%), so it is NOT "shortened lists push more
+ranks past the end".** That was the hypothesis the script was written to test and it is wrong. Nor is
+it stillborn *rate*: `stillborn/slots` moves only 66.75% -> 67.59%. What actually happens is that the
+wave opens **+18.24% more slots across +10.91% more host nodes**, with every downstream wave counter
+scaling along at ~the same ratio. So the filter is not wasting a fixed amount of wave capacity more
+often -- **it is causing the search to open more wave capacity.** The leading explanation, and it is
+the same root the census already identified for the 715 interior-only states: removing a candidate
+removes the cutoffs it was producing, so enclosing bounds fail to fire and more siblings expand.
+**The fix therefore does NOT belong at the slot level, and the previous version of this section's
+verdict text ("the fix belongs at the SLOT level ... condemnation itself is exonerated") is retracted.**
+
+**THE CLEANEST STATEMENT OF THE DEFECT: each drop costs work.** 5,900,524 extra units over 125,164
+drops = **~47 units per drop** (10g); 17,761 over 762 = ~23 (8g). A prune that charges per removal is
+the whole finding in one number, and it is the number to watch any fix against.
+
+**AND THE COST IS A TAIL PHENOMENON, WHICH IS NEW.** On gi=0..7 the filter costs **+1.08% units**; the
+full cell costs +14.70%. 124,402 of the 125,164 drops (99.4%) and ~99.7% of the extra work are in
+gi=8 and gi=9 alone -- the two degenerate games. Any future A/B on this feature that excludes those
+two games will measure a filter that looks nearly free, and any cell that includes them is really
+measuring two games. Say which.
+
+#### THE DIAGNOSTIC PROBES WERE WRITING OUT OF BOUNDS -- every past `MTG_BP_PROBE` / `MTG_BP_CANDS_PROBE` number on Snow is VOID
+
+Found while reading `wb1`'s `[bp-cands]` block, because it was internally impossible:
+`capped=24,557,301` against `n=57,573` for a counter that increments at most once per call,
+`max=1,408,102` on a list whose reported mean was 28, and an **empty length histogram on every site at
+once**.
+
+**Root cause:** `kBpSites` was **8**, while `bp_searched_plan` is called with site **8** (snow
+look-at-top put-into-hand) and site **9** (post-entry activation) -- and `BpSiteMask` returns
+`... | 0x100 | 0x200`, i.e. both are **unconditionally ON**. `BpCandsProbe` stores `hist` first, so
+`hist[8][b]` landed exactly on `n[b]`, `n[8]` on `total[0]`, and so on across every array in both
+probe structs. The printed rows for sites 0-7 were a mixture of real data and smear, and on Snow --
+where **every** consultation is at site 8 -- the site that mattered was never reported at all.
+
+**Blast radius is diagnostic-only:** both `BpHit` and `BpCands` early-return when their env flag is
+off, so no measured play, no digest and no shipped run was ever affected, and nothing in the census /
+`[bp-waves]` / `[bp-enum]` / `units_total` numbers above comes from these structs. But **no number
+previously quoted from either probe on a deck that reaches site 8 or 9 can be trusted.**
+
+**Fixed 2026-09-17:** `kBpSites = 10` with both names added, the `MTG_BP_SITES` comment block brought
+back into step, and -- the durable half -- a `BpSiteInRange` guard in both writers that prints a loud
+one-time out-of-range warning instead of smearing, so adding site 10 cannot repeat this silently. The
+post-fix run reports Snow's real sites with coherent numbers and populated histograms, which is itself
+the confirmation.
+
+#### THE (D1) COMPACTION NUMBER, MEASURED ON THE FIXED PROBE (run `d1a`)
+
+Snow's site 8, 8 games, filtered arm:
+
+| quantity | value |
+|---|---|
+| lists enumerated (`n`) | 71,045 (site 8) + 1,784 (site 9) |
+| mean list length | **6.69** |
+| implied wave width | `reach/n = 1.86`, i.e. **W = 2** |
+| lists LONGER than W (`capped`) | **73.9%** |
+| continuations rank-gated OUT (`unreachable`) | 343,270 of 475,217 = **72.2%** |
+| length histogram | 1=10,143 2=8,365 3=10,418 4=6,762 5-8=17,273 9-16=12,336 17-32=5,002 33-64=686 65+=60 |
+
+**So rank compaction is structurally LIVE, and that is the honest reading of the number.** With W=2 and
+a mean length of 6.69, deleting a front-rank candidate really does promote a rank-2 entry into wave 0's
+window on three lists in four. (It is also an independent re-measurement of the known W=2 reachability
+hole -- 72.2% here against the 45-90% recorded in `in-tree-greedy-reachability-hole`.)
+
+**BUT IT HAS NEVER BEEN OBSERVED TO DELIVER ANYTHING ON SNOW, AND THAT IS DECISIVE FOR THE BUILD.**
+125,164 drops across `wb1` and 762 across `d1a` produce **byte-identical play on every arm**, and the
+standing 2,000-game paired measurement is **0 regressions and 0 improvements**. If compaction were
+converting rank promotion into decisions, play would move. So:
+
+* **Build (D1).** Its cost is a structural possibility that this deck has never cashed.
+* **Carry `capped%` as the warning for the decks where condemnation DOES move play** (Hinata, and
+  kitty's 7,388 cast-site cases). There, giving up compaction is a real risk and must be measured
+  rather than argued -- same instrument, same one number.
+* **And note the third option the number suggests:** if compaction turns out to be where the value is,
+  the lever it points at is **W**, not condemnation. A filter that earns its keep by promoting rank-2
+  entries into a width-2 window is a re-ranker wearing a prune's clothes, and the honest form of that
+  is a wider window or a better ranking -- both of which are available without any path-dependence.
 
 ### Instruments added (all default OFF, counters only)
 

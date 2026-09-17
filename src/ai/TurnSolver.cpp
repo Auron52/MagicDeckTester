@@ -8410,7 +8410,11 @@ static int BpSearchDepth()
 //   0 stages/EI (Light Up the Stage, Expressive Iteration)   1 DrawUntilNonland (Treasure Hunt)
 //   2 impulse_exile (Apex of Power)                          3 plain cantrip (Ponder / Preordain)
 //   4 dig-through-lands (cycle / sacrifice)                  5 trick payload (Gold Rush / Expedite)
-//   6 equipment-ETB draw (Puresteel Paladin)
+//   6 equipment-ETB draw (Puresteel Paladin)                 7 pod chain (Birthing Pod, default ON)
+//   8 snow look-at-top put-into-hand (Scrying Sheets / Frost Augur)  -- UNCONDITIONAL, see below
+//   9 post-entry activation pending                                  -- UNCONDITIONAL, see below
+// Keep this list, kBpSiteName and kBpSites in step: sites 8 and 9 were added here without extending
+// kBpSites (8 at the time) and both diagnostic probes indexed their arrays out of bounds as a result.
 //
 // This mask is the SEARCHABILITY of a class and therefore also its NUMBERING: it decides which
 // breakpoints `bp_at` counts, in the apply (ApplyPlanDirect) and in the executor's replay
@@ -20119,7 +20123,19 @@ static std::string ForcedLandForTurn(int turn)
 // See docs/design/post-breakpoint-search.md.
 namespace
 {
-    constexpr int kBpSites = 8;
+    // MUST cover every literal passed to bp_searched_plan / BpHit / BpCands. It was 8 while sites 8
+    // and 9 existed and were UNCONDITIONALLY ON (BpSiteMask's `| 0x100 | 0x200`), so every site-8 and
+    // site-9 call wrote PAST THE END of each array below -- and since `hist` is the first member of
+    // BpCandsProbe, `hist[8][b]` landed exactly on `n[b]`, `n[8]` on `total[0]`, and so on. The
+    // printed per-site rows were then a mixture of real site-0..7 data and smear, which is why a
+    // 2026-09-17 Snow run reported the arithmetically impossible `capped=24,557,301` against
+    // `n=57,573` (capped increments at most once per call), `max=1,408,102` on a list whose mean was
+    // 28, and an EMPTY length histogram on every site at once. Diagnostic-only -- both writers
+    // early-return when their env flag is off, so no measured run or shipped play was ever affected --
+    // but any number previously quoted from MTG_BP_PROBE or MTG_BP_CANDS_PROBE on a deck that reaches
+    // site 8 or 9 (Snow reaches site 8 on every consultation) is void.
+    // THE GUARD below is the durable half of the fix: adding site 10 must not silently smear again.
+    constexpr int kBpSites = 10;
     const char* const kBpSiteName[kBpSites] = {
         "stages_cards/EI  (Light Up the Stage, Expressive Iteration)",
         "DrawUntilNonland (Treasure Hunt)",
@@ -20129,7 +20145,24 @@ namespace
         "trick_payload    (Gold Rush / Expedite deferred)",
         "equipment_etb_dr (Puresteel Paladin deferred)",
         "pod_fetch        (Birthing Pod same-phase chain)",
+        "snow_look_top    (Scrying Sheets / Frost Augur put-into-hand)",
+        "post_entry_act   (activation pending after a permanent entered)",
     };
+    // One-time, loud, and it names the constant to change. A silent out-of-range drop would read
+    // downstream as "that site never fires", which is this file's established bug signature.
+    inline bool BpSiteInRange(int site, const char* who)
+    {
+        if (site >= 0 && site < kBpSites) { return true; }
+        static std::atomic<bool> said{false};
+        bool expected = false;
+        if (said.compare_exchange_strong(expected, true))
+        {
+            std::fprintf(stderr, "[%s] SITE %d IS OUT OF RANGE (kBpSites=%d) -- this probe's output"
+                                 " is INCOMPLETE. Raise kBpSites and add the site name.\n",
+                         who, site, kBpSites);
+        }
+        return false;
+    }
     struct BpProbe
     {
         std::atomic<uint64_t> hit[kBpSites]{};       // all invocations (incl. rollout evaluation)
@@ -20182,6 +20215,7 @@ namespace
     {
         static const bool on = EnvOn("MTG_BP_PROBE");
         if (!on) { return; }
+        if (!BpSiteInRange(i, "bp-probe")) { return; }
         g_bp_probe.hit[i].fetch_add(1, std::memory_order_relaxed);
         if (on_committed_line)   { g_bp_probe.committed[i].fetch_add(1, std::memory_order_relaxed); }
         if (resolved_by_search)  { g_bp_probe.searched[i].fetch_add(1, std::memory_order_relaxed); }
@@ -20260,6 +20294,7 @@ namespace
     {
         static const bool on = EnvOn("MTG_BP_CANDS_PROBE");
         if (!on || len <= 0) { return; }
+        if (!BpSiteInRange(site, "bp-cands")) { return; }
         const int reachable = len < width ? len : width;
         g_bp_cands_probe.n[site].fetch_add(1, std::memory_order_relaxed);
         g_bp_cands_probe.total[site].fetch_add(static_cast<uint64_t>(len), std::memory_order_relaxed);
