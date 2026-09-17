@@ -116,19 +116,31 @@ summary, e.g. `cast: Natural Order (sac Fyndhorn Elves) → Ghalta, Stampede Tyr
 
 ---
 
-## 4. UX: selection belongs on the BOARD, not in a dialog
+## 4. UX: EVERY one of these selections is made IN ITS ZONE, never in a dialog
 
-USER: *"targeting should be on the board, not in a dialog"*, and — correcting my wording —
-*"(sacrifice is not targeting, but it deserves the same treatment)"*.
+USER: *"targeting should be on the board, not in a dialog"*; *"(sacrifice is not targeting, but it
+deserves the same treatment)"*; and, generalising it: ***"All of these decisions should be done on the
+board or hand"*, *"(not in a separate dialog)"***.
 
-**The user is right on the rules point.** Natural Order's sacrifice is an ADDITIONAL COST
-(CR 601.2h), not targeting: it is chosen as the spell is cast, it does not use the word "target",
-and it is therefore unaffected by shroud/hexproof and not checked again on resolution. Hulk's
-chapters II/III genuinely do target. The two are different mechanics that happen to want the same
-interaction: **click the permanent on the battlefield.**
+This is a requirement on ALL of 1–3, not a separate nice-to-have. You pick the object by clicking it
+where it already lives:
+
+| decision | mechanic | zone to click |
+|---|---|---|
+| Hulk ch. I — which creature to free-cast | additional permission (CR: *can* be cast) | **HAND** |
+| Hulk ch. I — decline | — | a plain "no" affordance, not a modal |
+| Hulk ch. II — three +1/+1 counters | **targets** | **BATTLEFIELD** |
+| Hulk ch. III — double P/T | **targets** | **BATTLEFIELD** |
+| Natural Order — sacrifice victim | **additional COST** (CR 601.2h) | **BATTLEFIELD** |
+
+**The user's rules correction is right and worth preserving:** Natural Order's sacrifice is an
+additional cost, not targeting — chosen as the spell is cast, never using the word "target", so it is
+unaffected by shroud/hexproof and not rechecked on resolution. Hulk's chapters II/III genuinely do
+target. Three different mechanics (cost, target, permission) that all want the same interaction:
+**click the object in its zone.** The dialog is the wrong affordance for every one of them.
 
 Applies to `tools/play/index.html` (the `target`/`sacrifice` decision rendering path around lines
-3087 and 3707).
+3087 and 3707), which must also learn a HAND-click selection mode for chapter I.
 
 ---
 
