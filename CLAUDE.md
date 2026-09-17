@@ -234,6 +234,26 @@ optimized); the regression harness expects a pre-built binary at `build/Release/
   `logs_*` directory. This keeps the repo root uncluttered. Both `logs/` and
   `logs_*/` are gitignored, so this is purely about tidiness, not tracking.
 
+- **NEVER COMMIT SCREENING / CANDIDATE LISTS — they are not final lists (user directive, 2026-09-17).**
+  A deck-screening or list-settling run produces many trial decklists (`<Deck>A`, `<Deck>B`, …). These
+  are *scaffolding*, not decks. Do **not** create `decks/<Deck>X/` folders for them and do not commit
+  their artifacts. `decks/` is for **shipping lists only**.
+  * The user's words: *"we don't need the other versions anymore. Only the original and the new list
+    should be present"*, and *"We shouldn't generally commit these lists as part of the process
+    either. Because they are not final lists."*
+  * **Why it matters beyond tidiness:** `tools/play/server.js` `listDecks()` enumerates EVERY
+    directory under `decks/` as a selectable deck, so eight screening candidates become eight bogus
+    entries in the play viewer's dropdown, indistinguishable from real decks. It cost a cleanup and a
+    1.1 GB disk reclaim on 2026-09-17.
+  * **Where trial lists DO belong:** keep them under `logs/` (gitignored) for the duration of the
+    screen — `scripts/deck_compare.py` already pools its apparatus under `logs/deckcmp/<Deck>/`.
+  * **When a list IS adopted**, it lands in `decks/<Deck>/` and its predecessor is archived as
+    `decks/<Deck>/v<N>-<slug>/` (the `CritterLifegain/v1-thune4-basilica`, `Mirrorwing Dragon/
+    v1-twinflame-anger` convention). **Move that list's references too** —
+    `references/<Deck>/v<N>-<slug>/` — because a reference belongs to the list it was played on
+    (server.js: `refsOnArchivedList`). Leaving them at top level silently credits the OLD list's
+    hand-played games to the NEW one and lends it a green bench it never earned.
+
 - **Each deck lives in its own folder under `decks/`, not the repo root.** The
   per-deck folder layout is `decks/<name>/` holding the decklist
   (`decks/<name>/<name>.txt` or `.cod`) plus its generated profile
