@@ -524,6 +524,33 @@ on a 100-game sample (1.2% faster, slightly worse average).
   `bash scripts/valueleaf.sh status decks/Fungus` for progress.
   *Rationale beyond the user's request: the perf finding is a ROLLOUT-cost problem, and the value
   leaf replaces the horizon rollout with an O(1) evaluator, so it is also the natural remedy.*
+* **2026-09-17 21:44Z — value-leaf progress check at +3h35m (still Phase A, rows).**
+  Measured, not estimated: **1,241 of 2,500 games have dumped rows (49.6%)**, 6,885 labelled rows
+  on disk, seed blocks `900000`-`901000` each 247-249/250 complete and `901250` just started.
+  Freeze intact (`64464c25` / `8d6d07f7b81e`). Utilisation **24/24 workers at every one of the 21
+  heartbeats**; RSS 5.1 GB, far inside the 30 GB budget. Phases B-F not started.
+
+  **The perf finding is dominating this run, and it is worse here than at play settings.**
+  143 of the 1,241 finished games (**11.5%**, vs 2.2% in the 5c2 sweep) crossed the 30 s
+  `SLOW-GAME` line — the rows phase pays it harder because `ROW_K=3` re-solves each turn for
+  searched labels. Median slow game 133 s, p90 1,375 s, **max 8,929 s (2 h 29 m in one game)**;
+  together they account for **22.4 of the ~85 core-hours spent (26% of all compute in 11.5% of
+  games)**. One worker has held job 0 `gi=193` (`--seed 900193 --game-index 193`) across eight
+  consecutive heartbeats, i.e. 80+ minutes and still running. This is the same rollout board-size
+  scaling documented in [fungus-token-search-cost.md](fungus-token-search-cost.md), seen from the
+  other end.
+
+  **Estimate (labelled as such):** Phase A finishes around **01:20Z (~7 h total)** at the observed
+  steady 5.8 games/min, plus whatever tail the 2 h+ monsters add. Later phases are far larger
+  (`AB_GAMES` 1000 x 8 seeds, `TRUST_GAMES` 1000 x 8, `MATRIX_TARGET` 400/cell), so the whole
+  five-phase run on this deck is plausibly multi-day. The harness has its own defences for exactly
+  this shape — `INTRACTABLE_MEDIAN_SPG=30` caps a cell at `MATRIX_REF=50` games and `ABANDON_K=25`
+  truncates catastrophic tails — so Phase C should degrade gracefully rather than stall.
+
+  **Escape hatch if the clock matters more than the sample size:** `valueleaf.sh` documents
+  `bash scripts/valueleaf.sh finish decks/Fungus`, which accepts the rows already on disk as final
+  and runs B..E on them. That is the script's own supported route, not a hand-roll. **Not taken** —
+  the run is user-requested and past the 10-minute mark, so only the user cancels or shortens it.
 
 ## Open questions for the user (all non-blocking; defaults taken, work never halted)
 
@@ -540,6 +567,11 @@ on a 100-game sample (1.2% faster, slightly worse average).
    smoke/regression time budgets.
 6. **Q6 — the `is_land_aura` misroute is GENERAL.** Any deck with Wild Growth / Fertile Ground /
    Utopia Sprawl inherits EldraziFlickerProvider. Fixed for Fungus only.
+7. **Q7 — how long should the value leaf be allowed to run?** At the measured rate Phase A alone
+   is ~7 h and the full five phases are plausibly multi-day, because ~26% of compute goes into the
+   11.5% of games that the token-board pathology makes pathological. The default taken is **let it
+   run**; `valueleaf.sh finish` is the supported way to cut it short if the answer is "not that
+   long". Only the user makes that call.
 
 **Not pushed.** Engine changes are substantial and CI (Linux + Windows) has not run; MSVC is
 unverified from this container. `git push` when you want the Windows/determinism-parity signal.
