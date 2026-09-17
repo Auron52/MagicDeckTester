@@ -702,6 +702,33 @@ void AIEngine::HandleMulligan(GameState& state, int max_turns)
     }
 
     m_last_mulligan_count = mulligan_count;
+
+    // DOUBLE CONFOUND (MTG_CONFOUND_BOTTOM=2 only): reshuffle BEFORE the decision as well, so the
+    // lookahead bottomer's evaluation rollouts run against an order independent of the one the
+    // post-decision reshuffle below will deal.
+    //
+    // WHY IT EXISTS, AND WHAT IT ANSWERED (docs/design/fivecolour-bottoming-cause.md 7i). The doc used
+    // to claim mode 1 leaves the lookahead residual sight -- its vetoed picks realise 0.417t while a
+    // blind scorer prices the same hands at 0.070t, and that 6x was read as a leak. If it were a leak
+    // it would have to COLLAPSE under mode 2. It does not: the veto measures -0.417t at mode 1 and
+    // -0.492t at mode 2 (se 0.074), against -1.017t with no confound at all. So mode 1 already removes
+    // the entire peek, what survives is order-INDEPENDENT hand quality (a legitimate blind signal),
+    // and **the confounded A/B is a fair blind-vs-blind test** -- which matters because it is this
+    // repo's adoption gate for EVERY deck's bottoming. The claim is retracted in the doc.
+    //
+    // KEEP THIS LEVER: it is the only way to re-check that conclusion when the bottomer or the
+    // shuffle changes, and re-deriving it from scratch cost a night. Mode 2 changes both arms' games
+    // (the post-shuffle permutes a differently-ordered array), so it is not paired against mode 1;
+    // the statistic to compare is the WITHIN-run veto value. Two structural checks guard the
+    // plumbing (logs/fc_confound2/veto.py): mode 0 and mode 1 must pick IDENTICALLY (both decide
+    // before any reshuffle -- measured 589/589), and mode 2 must DIVERGE (measured 458/589).
+    // Unset/"0"/"1" leave this unreachable => byte-identical to every measurement taken so far.
+    static const int confound_mode = EnvInt("MTG_CONFOUND_BOTTOM", 0);
+    if (confound_mode >= 2 && mulligan_count > 0)
+    {
+        ap.library.Shuffle(state.game_seed + 0xD1B54A32D192ED03ULL);   // distinct from the post seed
+    }
+
     if (mulligan_count > 0) { BottomCards(state, mulligan_count, max_turns); }
 
     // Confounded-bottoming A/B (MTG_CONFOUND_BOTTOM): after the bottoming DECISION is made, reshuffle the
@@ -713,6 +740,8 @@ void AIEngine::HandleMulligan(GameState& state, int max_turns)
     // distribution) is unaffected; a clairvoyant pick becomes miscalibrated. Reshuffling the whole
     // remaining library mirrors how the exhaustive V labels were built (fresh continuations). OFF (unset
     // or "0") => no reshuffle => byte-identical to the normal path. Only meaningful when mulligan>0.
+    // The on/off read stays EnvOn so "1" and any other truthy value behave exactly as before; the mode
+    // above is a separate EnvInt read because only the literal "2" selects the double confound.
     static const bool confound_bottom = EnvOn("MTG_CONFOUND_BOTTOM");
     if (confound_bottom && mulligan_count > 0)
     {

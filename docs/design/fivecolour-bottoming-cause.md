@@ -1,12 +1,20 @@
 # FiveColour's bottoming table loses the confounded A/B — state of the investigation
 
-**Status 2026-09-16: EXPLAINED — two separate causes, neither of them the sampling budget.** (1) The
-bottoming argmin selects for cells the generator's own rollout model flatters (an optimizer's curse
-against the simulator, ~0.08t per disagreement game) — a bias no amount of re-generation can remove,
-because a fresh re-measurement inherits it. (2) `MTG_CONFOUND_BOTTOM` does not fully blind the
-lookahead, so the A/B the table "loses" still rewards a peek worth 6× its blind value. Against a
-genuinely blind bottomer the table is 0.064t/game FASTER. A third, real but minor defect (argmin-only
-sub-refinement, ~0.01t) is fixed in the generator. See §7, which supersedes the 2026-09-15 status below.
+**Status 2026-09-17: EXPLAINED — ONE cause, and it is not the sampling budget.** The bottoming argmin
+selects for cells the generator's own rollout model flatters (an optimizer's curse against the
+simulator, ~0.08t per disagreement game) — a bias no amount of re-generation can remove, because a
+fresh re-measurement inherits it. Against a genuinely blind bottomer the table is 0.064t/game FASTER.
+A second, real but minor defect (argmin-only sub-refinement, ~0.01t) is fixed in the generator.
+See §7, which supersedes the 2026-09-15 status below.
+
+> **CORRECTION 2026-09-17.** This status previously claimed a *second* cause: that
+> `MTG_CONFOUND_BOTTOM` fails to blind the lookahead, so the A/B the table loses still rewards a peek
+> worth 6× its blind value. **That is wrong and is now measured to be wrong** (§7i). Reshuffling
+> *before* the decision as well as after leaves the veto's value unchanged, so mode 1 already removes
+> the entire peek. The 6× gap is the same model bias as the one cause above, seen on the lookahead's
+> selected set instead of the table's. Consequence: **the confounded A/B is a fair blind-vs-blind test
+> and remains this repo's valid adoption gate for bottoming** — every deck that passed it still passes.
+> The cost of the correction is that FiveColour's loss is fair too, rather than an artefact of the test.
 
 **Status 2026-09-15 (superseded): the cause is UNEXPLAINED. Six hypotheses tested, five refuted, one in flight.**
 This document is the running record so nobody re-tests a dead one. It supersedes the "still live"
@@ -323,10 +331,14 @@ simulator itself**, and it is a different defect from §7e:
 * The lookahead's veto shows the mirror image: it selects on the real game, so it lands on cells the
   model is pessimistic about (+0.067t) — and the confound does not take that away. Its vetoed picks are
   worth **0.417t** in real games while a blind evaluation of the same hands prices them at 0.070t. Six
-  times. **`MTG_CONFOUND_BOTTOM` reshuffles the library after the decision, which destroys the ORDER the
-  lookahead peeked at but not the order-independent part of what its rollout learned.** The confounded
-  A/B is therefore still not a blind-vs-blind test, and "the table loses it by +0.018t" is not evidence
-  that the table is worse than a blind bottomer.
+  times. ~~`MTG_CONFOUND_BOTTOM` reshuffles the library after the decision, which destroys the ORDER
+  the lookahead peeked at but not the order-independent part of what its rollout learned, so the
+  confounded A/B is still not a blind-vs-blind test.~~ **WRONG — retracted 2026-09-17, see §7i.** The
+  6× gap is not residual sight. Mode 1's reshuffle happens before a single card is drawn, and blinding
+  the lookahead *harder* (reshuffling before its evaluation rollouts too) leaves the veto's value
+  unchanged. What survives the confound is order-INDEPENDENT hand quality, which is a legitimate blind
+  signal, not a peek — and the 6× is this same model bias measured on the lookahead's selected set.
+  The confounded A/B **is** blind-vs-blind, so "the table loses it by +0.018t" is a fair result.
 
 **Against a genuinely blind opponent the table wins.** On the audit seed the pure heuristic (no
 rollouts at all, nothing to confound) finishes at 4.9340 and the table at 4.8700 — the table is
@@ -417,6 +429,11 @@ lookahead **+0.0034t** worse than play-depth (8/9 seeds) — a fifth of the defi
      `KM_MODE=versus`): **−0.0077t, new wins on 15 of 16 seeds** (4.3516 → 4.3439; sd 0.0066, se
      0.0017, mean/se −4.6). The racing is worth a real, if small, improvement in actual play on a deck
      where it re-decides ~21 % of the bottoming targets.
+   * *Confounded bottoming (blind table vs lookahead), both tables, same 16 seeds:* old
+     **−0.0425t** (mean/se −12.80), new **−0.0483t** (mean/se −13.56). Both beat the lookahead
+     decisively; racing widens the margin by **−0.0058t**, which agrees with the −0.0077t the
+     `versus` A/B measured directly. So the racing's value shows up on the gate axis too, and burn's
+     bottoming table is not close to the boundary on either binary.
 
 ### 7h. What to do about it (2026-09-16)
 
@@ -424,10 +441,14 @@ lookahead **+0.0034t** worse than play-depth (8/9 seeds) — a fifth of the defi
    ~0.09t problem. It is still worth having (it re-decides 21–24 % of burn's bottoming targets and
    removes a real winner's-curse), but it is not a remedy for the confounded loss and must not be sold
    as one.
-2. **Fix the test before re-judging the table.** Either blind the lookahead arm properly (reshuffle
+2. ~~**Fix the test before re-judging the table.** Either blind the lookahead arm properly (reshuffle
    *before* its evaluation rollouts, not after the decision) or make the blind **heuristic** the control
    arm. `KM_MODE=bottom` currently pits blind-table against peeking-lookahead and calls the table's loss
-   a defect.
+   a defect.~~ **DONE and the premise was wrong (§7i).** The lookahead arm was blinded properly —
+   `MTG_CONFOUND_BOTTOM=2` reshuffles before its evaluation rollouts — and the veto's value did not
+   move. `KM_MODE=bottom` is already blind-vs-blind and needs no fix. Reporting the blind **heuristic**
+   as a second control is still worth doing, because it is the arm that shows the table's *positive*
+   value (0.064t/game on FiveColour) where the lookahead comparison shows only parity.
 3. **Attack the bias, not the variance.** The lever that matters is the gap between the generator's
    rollout and shipped play, and a selection correction on the argmin (an optimizer's-curse / empirical-
    Bayes shrink toward the hand's mean, which `MTG_KEEP_BOTTOM_SHRINK` already does in a mild form).
@@ -451,3 +472,79 @@ lookahead **+0.0034t** worse than play-depth (8/9 seeds) — a fifth of the defi
   domain heuristic with a rare veto. Two hours of logs showed that; two weeks of theory did not.
 * **The raw sidecar is an instrument.** Believed margin vs the alternative's R gave the signature
   before a single fresh rollout ran.
+
+### 7i. 2026-09-17 — is the confounded A/B actually blind? (it is)
+
+§7d-bis asserted a second cause: that `MTG_CONFOUND_BOTTOM` leaves the lookahead some residual sight,
+because its vetoed picks realise 0.417t while a blind scorer prices the same hands at 0.070t. That
+assertion does not survive the obvious test, and it mattered enough to run — the confounded A/B is the
+adoption gate for **every** deck's bottoming in this repo, so "the gate leaks" would have put Hinata,
+Auras, Melira, Dragonstorm and burn all in question.
+
+The argument against it is structural. Mode 1 reshuffles the whole remaining library *after* the
+decision but *before* a single card is drawn, so the order the lookahead peeked at is gone by the time
+it matters. What its rollout can still carry forward is the **order-independent** part of what it
+learned — how good the hand is in general — and that is a legitimate blind signal, not a peek.
+
+**The test.** `MTG_CONFOUND_BOTTOM=2` (new, `AIEngine::HandleMulligan`) reshuffles *before* the
+decision as well, so the lookahead's evaluation rollouts run against an order independent of the one
+the playout will deal. Modes 0/1 cannot reach the new code, so every prior measurement is unchanged.
+Three bottoming policies × three modes, one binary, 1000 games on the audit seed (`logs/fc_confound2/`).
+
+Two structural checks first, because they must hold or the experiment is meaningless:
+
+| check | result |
+|---|---|
+| m0 vs m1 lookahead picks — must be IDENTICAL (both decide pre-reshuffle) | 589/589 (100 %) |
+| m2 vs m1 lookahead picks — must DIVERGE (m2 decides on a decorrelated order) | 458/589 (77.8 %) |
+
+And the answer, the m=1 veto (lookahead − heuristic on the games where they disagree):
+
+| confound mode | veto value | se |
+|---|---|---|
+| 0 — none (full clairvoyance) | **−1.017t** | 0.017 |
+| 1 — shipped gate (reshuffle after the decision) | **−0.417t** | 0.083 |
+| 2 — reshuffle before AND after | **−0.492t** | 0.074 |
+
+**Mode 2 does not collapse the veto** — it is if anything marginally larger, about 0.7 se away from
+mode 1. Mode 1 already removes the entire peek (0.60t of the 1.02t that clairvoyance is worth). So:
+
+* **There is no leak, and `KM_MODE=bottom` is a fair blind-vs-blind test.** Every bottoming adoption
+  that passed it stands. The gate needs no repair.
+* **The 6× gap is the ONE cause, seen from the other side.** The blind scorer under-prices the
+  lookahead's picks for the same reason it over-prices the table's: a per-cell model bias b(cell),
+  and the two policies select on opposite sides of it.
+* **FiveColour's +0.018t loss is therefore a fair result, not an artefact.** It is also a small one:
+  on the audit seed the table is 4.8700 against the lookahead's 4.8640 and the blind heuristic's
+  4.9340, so the table is at rough parity with lookahead bottoming while costing ~nothing, against a
+  bottomer that is 90.4 % of this deck's runtime.
+
+### 7j. 2026-09-17 — the shrink is already in the shipped FiveColour table
+
+§7h item 3 proposed an optimizer's-curse shrink on the argmin as a zero-rollout lever, noting that
+`MTG_KEEP_BOTTOM_SHRINK` "already does in a mild form". Worth stating plainly, because an agent
+re-derived the opposite from the code and wasted a night on it: **generation does pass
+`refine = nullptr` (`ExhaustiveKeep.cpp:1176`), so a table built by the generation path has no
+shrink — but FiveColour's shipped table was not built that way.** It came from a merge, and
+`logs/FiveColour_gen/adopt_chain.sh` (lines 69–76) ran that merge with `MTG_KEEP_BOTTOM_SHRINK=1` and
+`MTG_MERGE_BOTTOM_FLOOR=2`. Reproducing that recipe from the existing raw gives a profile whose play
+is **identical to the shipped table on all 1000 audit-seed games**; dropping only the shrink changes
+56 of 589 mulliganed games' bottoming. So the shrink is in, and re-applying it buys nothing.
+
+Traps this walked into, all of which cost a run each:
+
+* **A merge of this deck needs ~10 GB.** Peak RSS 9.8–10.0 GB, against a default `MTG_RSS_CAP_GB` of
+  3/4 of RAM (8.02 GB on a 10.7 GB box). Both first-attempt merges aborted on the cap and wrote
+  nothing. The write path is already streamed (the Creature-Giving OOM fix); the peak is the load and
+  the size-7 keep/`bottom_keep` maps.
+* **`MTG_EXHAUSTIVE_PROFILE` pointing at a MISSING file is not an error** — `AttachExhaustiveSidecar`
+  falls through and the deck plays with whatever else resolves. The two arms then "measured" 4.9790,
+  *worse than the blind heuristic*, which is the tell. Guard the path's existence in the harness.
+* **`D_opt` does not discriminate shrink from no-shrink.** Both rebuilds print
+  D_opt(draw)=4.77341 / D_opt(play)=5.01141, matching the original merge log, because the keep
+  decision ranks on raw `V` and only the bottoming target ranks on the shrunk `Z`. (This is a second
+  reason not to read `D_opt` as a quality metric — cf. `mulligan-reconstruct-lower-r.md`.)
+* **Comparing arm MEANS is not a validity check; compare DECISIONS.** The no-shrink control and the
+  shipped table both average exactly 4.8700 on 1000 games while differing on 56 of them — the effects
+  cancel in the mean. A "the control reproduces the baseline" gate that reads the mean will pass on a
+  profile that plays differently in one game in eighteen.
