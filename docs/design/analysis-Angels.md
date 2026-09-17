@@ -465,6 +465,35 @@ profile for which a value leaf is a net negative (cf. Stompy).
 **Practical consequence:** the 2.3x CPU saving is exactly what makes the deferred, user-kicked-off
 mulligan generation cheaper when you want it.
 
+## Performance profile (with the leafless shape adopted)
+
+One pooled `mtg --batch` over 1600 games (3 x 400 at d5 + 400 at d3, budget 200 ms), 32 cores:
+
+* **wall 22.66 s, CPU 508.58 s** — about **0.32 s of CPU per game**.
+* **Slow tail: 50 of 1600 games (3.1%) exceed 2 s**; median slow game 3.1 s, worst 12.5 s.
+* The worst game (`--seed 9126 --game-index 26`) re-runs at **6.3 s single-threaded**, so roughly
+  half of its batch cost was contention, not the game.
+* Per-job averages agree across seeds (5.405 / 5.360 / 5.360 at d5; 5.383 at d3).
+
+### What the slow tail is NOT (two hypotheses I tested and dropped)
+
+1. **Lightning Greaves' free re-equip.** The single worst game shows `ABILITY: Lightning Greaves` on
+   *every* turn with a growing board, which looks exactly like an equip-enumeration blowup — Equip {0}
+   emits one action per (Equipment, creature) pair each turn, and shroud/haste are near-inert here.
+   **The data refutes it:** across 300 logged games, Greaves was equipped in 18% of slow games vs 12%
+   of fast ones (n=11 slow), 0.45 vs 0.26 equips per game. That is nothing.
+2. **Board complexity.** Slow and fast games are statistically indistinguishable on every metric the
+   log exposes: win turn 6.18 vs 6.33, peak creatures 4.91 vs 4.66, casts 4.55 vs 4.27, peak hand
+   6.27 vs 7.17.
+
+So **the slow tail is not board-shaped**, and I am not going to invent a mechanism for it. It is most
+likely search-internal (how long the budget runs before a win is proven; `enum-memo` on the worst game
+was 97 hits / 21,097 misses, i.e. an almost entirely non-repeating plan space). Nailing that down is a
+profiling task, not an analysis one — and at 3.1% of games with the batch runner absorbing them into a
+single tail, it is not currently costing anything worth fixing.
+
+**No action taken.** Recorded so the next person does not re-run the same two dead ends.
+
 ## PENDING YOUR SIGN-OFF (provisional; nothing here blocked the work)
 
 1. **`card_fields` gate is RED on two cards that are not in this deck** — `Apex Altisaur`
