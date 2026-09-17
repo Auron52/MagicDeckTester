@@ -9655,9 +9655,26 @@ const DecisionProvider& DetectDecisionProvider(const Decklist& deck)
     // check: Eladamri's Call carries tutor_to_hand, which is the anti-lifegain signature, and this
     // deck would otherwise inherit AntiLifegainProvider's narrowing wholesale -- the recorded
     // misroute class (Goblin Matron, Stoneforge, Sylvan Scrying, the FiveColour fetchlands).
-    // OR-ed across THREE different cards' params (the blink outlets, the untap payloads, the land
-    // auras) so no single deckbuilding swap can silently lose the signature, and every one of them
-    // is new + gated (0/false/nullopt inert), so no existing deck can set it.
+    // OR-ed across the blink outlets and the untap payloads so no single deckbuilding swap can
+    // silently lose the signature, and both are new + gated (0/nullopt inert).
+    //
+    // `is_land_aura` USED TO BE A THIRD TERM HERE AND WAS REMOVED (2026-09-17, user-directed
+    // generalisation). It is ARCHETYPE-NEUTRAL: Wild Growth / Fertile Ground / Overgrowth /
+    // Utopia Sprawl are generic ramp that any green deck may run, so on its own it routed every
+    // such deck into EldraziFlickerProvider's narrowing. That is the misroute class this file
+    // keeps rediscovering (Goblin Matron's tutor_to_hand, Stoneforge, Sylvan Scrying, the
+    // FiveColour fetchlands, Ranger-Captain's sac outlet...) and this was its broadest instance.
+    // Found by RUNNING Fungus, not by reading: 2 Wild Growth were enough.
+    //
+    // Nothing is lost. Measured over every deck in `decks/` (2026-09-17): EDF carries `blink_cost`
+    // on Eldrazi Displacer AND Emiel the Blessed, and `etb_untap_lands` on Cloud of Faeries AND
+    // Peregrine Drake -- FOUR cards across TWO archetype-specific params, which is a more redundant
+    // signature than most decks here have. Those cards ARE the deck; a list without them is not
+    // this archetype. Fungus was the only other deck carrying `is_land_aura` at all.
+    //
+    // THE RULE THIS ENCODES: a term in an archetype signature must be a param no OTHER archetype
+    // would plausibly run. OR-ing for robustness is right, but OR-ing in a generic param buys
+    // robustness for one deck by mis-routing every future deck that happens to share it.
     bool eldrazi = false;
     bool snow = false;   // Snow midrange -- SnowProvider (Generic + the 5c2 tie-break opt-out)
     bool critter = false; // CritterLifegain -- routes ABOVE goblin (Ranger-Captain's sac outlet) and anti (its tutor)
@@ -9676,7 +9693,8 @@ const DecisionProvider& DetectDecisionProvider(const Decklist& deck)
         if (!def) { continue; }
         const CardParams& p = def->params;
 
-        if (p.blink_cost.has_value() || p.etb_untap_lands > 0 || p.is_land_aura) { eldrazi = true; }
+        // NOTE: `is_land_aura` is deliberately NOT a term here -- see the flag's declaration.
+        if (p.blink_cost.has_value() || p.etb_untap_lands > 0) { eldrazi = true; }
 
         // CritterLifegain: OR-ed across three different payoff cards' params (Ajani's Pridemate /
         // Voice of the Blessed, Archangel of Thune, Heliod) so a deckbuilding swap cannot lose it;
@@ -9957,15 +9975,15 @@ const DecisionProvider& DetectDecisionProvider(const Decklist& deck)
     // ABOVE everything: this deck's own signature is unambiguous, and its tutor_to_hand would
     // otherwise be read as anti-lifegain (see the flag's comment).
     if (critter)     { return g_critter; }
-    // Fungus: Generic, and it must sit ABOVE BOTH of the next two checks, for two independent
-    // reasons found by measurement rather than reading:
-    //   * eldrazi -- Wild Growth is a LAND AURA, and `is_land_aura` alone sets that signature. This
-    //     is the SEVENTH instance of the archetype-neutral-param misroute class, and the broadest
-    //     yet: any deck playing Wild Growth / Fertile Ground / Utopia Sprawl would inherit
-    //     EldraziFlickerProvider's narrowing wholesale.
-    //   * goblin -- Utopia Mycon and Psychotrope Thallid carry sac_creature_outlet, and
-    //     GoblinsProvider's default-on DeferSacOutletPreCombat would DELETE both outlets from a
-    //     deck that has no second main to defer them to.
+    // Fungus: Generic, and it must sit ABOVE the goblin check -- Utopia Mycon and Psychotrope
+    // Thallid carry sac_creature_outlet, and GoblinsProvider's default-on DeferSacOutletPreCombat
+    // would DELETE both outlets from a deck that has no second main to defer them to. Found by
+    // measurement rather than reading.
+    //
+    // It ALSO used to have to sit above `eldrazi`, because Wild Growth's `is_land_aura` alone set
+    // that signature. That is no longer true -- the term was removed from the signature rather
+    // than worked around here (see the eldrazi flag above), which fixes it for every deck instead
+    // of this one. The ordering is kept because the goblin reason stands on its own.
     if (fungus)      { return g_generic; }
     if (eldrazi)     { return g_eldrazi_flicker; }
     if (dragonstorm) { return g_dragonstorm; }

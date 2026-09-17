@@ -567,9 +567,14 @@ and gate nothing**. Both are written up in the perf doc.
 
 ## Open questions for the user (all non-blocking; defaults taken, work never halted)
 
-1. **Q1 — searched second main?** Fungus can attack with Saprolings then sacrifice the spent
-   attackers post-combat (the Birthing Pod double-dip). Shipped first-main-only (the default);
-   settle by measurement with `MTG_FORCE_USES_M2=1` rather than judgement. Not yet run.
+1. **Q1 — searched second main? USER STEER RECEIVED 2026-09-17, still to be measured.** The user
+   agrees a second main is wanted, and named the split: **devour (Mycoloth) wants main 2**, while
+   **Beastmaster Ascension and Sporecrown Thallid want main 1**, with per-card placement acceptable
+   if needed. Sporecrown is already Main1 (`LordEffect`); Beastmaster is a genuine classifier gap;
+   placement needs a `FungusProvider` that does not yet exist. Full plan, including why the
+   measurement must come before the `DeckUsesSecondMain` trigger, in
+   [fungus-second-main-and-devour.md](fungus-second-main-and-devour.md). **Still shipped
+   first-main-only until the `MTG_FORCE_USES_M2` A/B says otherwise.**
 2. **Q2 — devour victim selection** is auto-resolved (count IS searched). PROVISIONAL.
 3. **Q3 — the five instant-speed / "you may" deferrals** listed in §2 of the 6a disclosure.
    PROVISIONAL — an unanswered deferral is never "approved".
@@ -578,8 +583,12 @@ and gate nothing**. Both are written up in the perf doc.
 5. **Q5 — should Fungus join the regression suite?** `verify_deck.py` warns that nothing tracks
    its play digest otherwise. Blocked today by the perf finding: a 24-minute game would blow the
    smoke/regression time budgets.
-6. **Q6 — the `is_land_aura` misroute is GENERAL.** Any deck with Wild Growth / Fertile Ground /
-   Utopia Sprawl inherits EldraziFlickerProvider. Fixed for Fungus only.
+6. **Q6 — the `is_land_aura` misroute: GENERALISED 2026-09-17 (user-directed), CLOSED.** The term
+   was removed from the eldrazi signature outright rather than worked around per-deck, so every
+   land-aura ramp deck is fixed, not just Fungus. Nothing was lost: EDF carries `blink_cost` on
+   two cards and `etb_untap_lands` on two more — four cards across two archetype-specific params.
+   Fungus was the only other deck carrying `is_land_aura` at all. The rule it encodes: **a term in
+   an archetype signature must be a param no other archetype would plausibly run.**
 7. **Q7 — how long should the value leaf be allowed to run?** At the measured rate Phase A alone
    is ~7 h and the full five phases are plausibly multi-day, because ~26% of compute goes into the
    11.5% of games that the token-board pathology makes pathological. The default taken is **let it
