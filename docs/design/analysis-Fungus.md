@@ -497,7 +497,14 @@ own clue-fusion precedent (67-69 permanent boards → 807 s/game; *"token floods
 wall"*). It is a **performance** problem, not a correctness one — every correctness gate is green.
 
 **Consequence for sequencing:** a value-leaf generation is described as tens of hours on a normal
-deck. On a deck with 24-minute games it could be far worse, so profiling this comes first.
+deck. On a deck with 24-minute games it could be far worse, so profiling this came first.
+
+**Profiled — full write-up in [fungus-token-search-cost.md](fungus-token-search-cost.md).** Summary:
+it is **not** a plan explosion (avg 15.7 plans/enumeration), **not** memory (128 MB peak) and
+**not** the real board (15 permanents at d0). It is **58x the cost PER NODE** on top of 78x the
+nodes — board-size scaling inside ROLLOUTS, which explore token-engine lines real play never
+reaches. `MTG_BP_SEARCH=0` looked like a 1.88x win on the worst single game and was **rejected**
+on a 100-game sample (1.2% faster, slightly worse average).
 
 ## Stage log
 
