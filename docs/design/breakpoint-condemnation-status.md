@@ -1065,10 +1065,48 @@ dearer in TOTAL -- the tail sets the sign, exactly as the cost section above war
 
 **A prune only returns real work where the search would otherwise FINISH.** Under any shipped budget,
 condemnation's only available benefit is QUALITY -- spending the same units better. Cost-neutrality
-here is structural, not a defect to engineer away. The corollary is that the regime where it *can*
-pay is UNBOUNDED search -- which is what value-leaf label generation runs, and is worth measuring
-separately (`NEVER_CONDEMN` in `scripts/valueleaf.sh` is CELL condemnation, an unrelated mechanism;
-it does not gate this filter, so a deck that opts in gets the prune during generation automatically).
+here is structural, not a defect to engineer away.
+
+### ...and UNBOUNDED is WORSE, not better -- the intuitive follow-up, measured and REFUTED
+
+The obvious corollary of the paragraph above is that the regime where a prune *can* pay is UNBOUNDED
+search, which is exactly what value-leaf label generation runs (USER 2026-09-16: *"it could help with
+cost for parts of the value-leaf generation"*). **That was measured and it is false, by a wide
+margin.** An earlier revision of this section recommended it as worth trying; it is corrected here
+rather than deleted, because the reasoning behind it is sound and someone will re-derive it.
+
+Snow, 10 games, depth 2, `--budget-ms 0` (the only unbounded depth that terminates on this deck):
+
+| arm | units | vs base |
+|---|---|---|
+| base (`MTG_SNOW_CONDEMN=0`) | 34,413,950 | -- |
+| condemnation, default cache (8192) | 39,400,239 | **+14.5%** |
+| condemnation, 32x cache (262144) | 37,914,466 | **+10.2%** |
+
+**THE REACH INVERTS.** `la_bp_wave` is 17.4% of units at d5/b20 but **68% at d2/b0** -- unbounded, the
+breakpoint enumeration IS the search. That is why the filter backfires rather than paying off:
+soundness requires the enumeration cache to be keyed on the plan's own cast set whenever the filter
+is live (`g_bp_plan_casts` is bound `if (CantripOrderEnabled() || classify)`), or a plan is served a
+sibling's already-condemned list. Finer keys mean fewer hits, and when enumeration is 68% of all
+work the lost hits cost far more than the pruning saves. A 32x cache recovers only 30% of the
+penalty (consultations 8,308,740 -> 7,070,001), so the rest is intrinsic.
+
+**The drops are not the cost, the APPARATUS is.** `condno` drops 85% fewer candidates than `cond` and
+costs the same (ratio 1.1415 vs 1.1406 on 40 games). Anything that scales with drop count is
+therefore ruled out as the mechanism.
+
+Two consequences worth stating plainly:
+  * A deck that opts into condemnation pays ~10-15% MORE for its value-leaf generation, because
+    `NEVER_CONDEMN` in `scripts/valueleaf.sh` is CELL condemnation -- an unrelated mechanism -- and
+    does not gate this filter.
+  * **The fix is NOT to pin the filter off for generation.** The value leaf must be fitted to the
+    play the deck actually ships; generating without a filter that play uses fits the model to a
+    deck we do not ship, which is the same class of error as a profile-less generation. The choice
+    is between paying the generation cost and not shipping the filter -- not between them.
+
+Caveat on the magnitude: depth 2 was forced by tractability, and while the MECHANISM is
+depth-independent (it is `budget->Unlimited()` plus cache-key width), the 14% figure is not verified
+at generation depth.
 
 ### The ceiling: there is no headroom to chase
 
