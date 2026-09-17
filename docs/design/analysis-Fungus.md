@@ -348,6 +348,58 @@ card. That is a deckbuilding observation for the user, not a modelling problem.
 
 First real game: wins **turn 5** at depth 0.
 
+## Claude-play sweep
+
+- commit: `bf3306a1`
+- seeds: 9101 games: 16 (game-indices 0-15, disjoint from the suite's 1001-7007)
+- flags: 0 unresolved
+
+**Result: all 16 games matched the search exactly at turn 5.** Zero misplay candidates, which
+is the expected healthy outcome for a guided Claude against a clairvoyant search (the sweep's value
+is bug-finding, not beating the AI).
+
+**One real bug, found independently by FOUR agents (gi0, gi1, gi11, gi15) — fixed in `bf3306a1`.**
+Two Saproling-gated sac outlets (Utopia Mycon's mana, Psychotrope Thallid's draw) were offered in a
+single plan while only ONE Saproling was on board; at apply the first consumed it and the second
+silently no-opped — no draw, the `{1}` never paid, no error. Fixed at the enumerator with a
+fodder-supply reject; verified over 204 decision frames / 96 sac-outlet plans, 0 remaining.
+
+*Severity note worth keeping:* gi15 read the apply path and found the degradation is deliberate and
+documented in `ApplySacCreatureOutlet`, and that path is **shared executor+rollout** — so both
+worlds degrade identically and the search was probably not misvalued. The defect is that the
+ENUMERATOR advertised a plan it could not perform, which misleads a human or claude-play driver.
+
+**Dismissed (not a defect): plan-list duplication.** Many agents flagged 38-76 plans collapsing to
+~16-24 distinct summaries. gi9 found the cause — `main.cpp` sets `MTG_UNPRUNED=1` for the whole
+claude-play session, so this is the viewer's deliberately-widened enumeration (the human-play
+must-not-narrow invariant), **not** the shipped search's plan width. Autonomous play is unaffected.
+
+**Doc gap (not a defect):** the `bounce` decision type is not in `claude-play.md`'s documented
+decision-type list. It self-documents via its `note` field. Five agents noticed it.
+
+### Mechanic verification — all four now confirmed IN REAL PLAY
+
+The sweep games all end on turn 5, so **Doubling Season and Mycoloth/devour were never drawn** in
+any of the 16. That coverage gap was closed separately by mining 40 logged games at `--max-turns 14`:
+
+| mechanic | evidence |
+|---|---|
+| **Spore counters** | Sweep: accrue exactly 1/upkeep, activation offered at exactly 3 (not at 1 or 2), removes exactly 3, no mana and no `{T}`, legal while summoning-sick. gi14 probed to 6 counters and confirmed two activations in one turn (the enumerator offers `x:1` per plan and re-enumerates within the same main). |
+| **Doubling Season** | Logged games: spore gain per upkeep is **1** with no Doubling Season (82 obs), **2** with one (8 obs), **4** with two (2 obs) — 2^N stacking confirmed empirically. Token half confirmed below. |
+| **Devour** | Game 11: Mycoloth enters T5 with **2 ×+1/+1** (devour 2 × 1 creature); Saprolings 0→1 the same turn = **Tukatongue's death trigger refunding a Saproling**, i.e. the deferred-death-trigger ordering works. T6 upkeep: 2 counters → **2** Saprolings (1→3). T7 with a Doubling Season out: the same 2 become **4** (3→7) — token doubling confirmed. |
+| **Beastmaster Ascension** | Sweep, many independent confirmations: exactly one counter per **declared** attacker (summoning-sick creatures correctly contribute none), and the **+5/+5 applies to the same combat** that crosses 7. Agents recomputed the 40 damage from card text exactly (1/1 +2 from two Sporecrowns +5 = 8, ×5). |
+
+Also confirmed incidentally: Sporecrown's two-subtype lord stacks across copies with
+`lord_excludes_self` per-source and pumps Saproling **tokens** (so the subtype strings line up), and
+the Karoo correctly taps for mana *before* its ETB bounce resolves.
+
+## Stage 5a/5b results
+
+* **nonconv: 0 flags** (60 games, d3, b200).
+* **fd-diverge: 0 flags** (40 games, d5, b200, `MTG_FULL_DEPTH=1`).
+* **Multi-depth:** d0 **5.99** → d3 **5.61** — monotone. (These ran on the pre-fix binary; re-run
+  on the shipped binary below.)
+
 ## Stage log
 
 * **2026-09-17** — Stage 1 coverage run; 11 missing cards; four engine mechanics absent
