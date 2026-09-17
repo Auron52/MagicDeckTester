@@ -1783,6 +1783,18 @@ the pre-Ghalta composition. The one change: **the 3rd World War Hulk becomes Gha
 Call of the Wild are ENABLERS, not threats — Hulk has no power/toughness at all (it is a Saga) and
 Call of the Wild is a repeatable deployment engine.
 
+**Turntimber Symbiosis is counted under lands but is DUAL-ROLE** (user: *"in a pinch the Turntimber
+Symbiosis can be an enabler"*). The front face is a {4}{G}{G}{G} sorcery that digs seven and puts a
+creature card straight onto the battlefield — a deployment effect, i.e. a fifth Natural-Order-like
+route to a fatty; the back face is a shock land. It is filed under lands because that is what it is
+on almost every turn, not because the spell half is negligible.
+
+**The keep table independently agrees.** Bucket discovery on this deck merged only cards with the
+IDENTICAL card definition (the three one-mana elves) — and it kept **Forest and Turntimber Symbiosis
+in SEPARATE buckets**. The mulligan model therefore refuses to treat Symbiosis as just another land,
+which is the measurement reaching the user's conclusion on its own. (This is the same card whose 4th
+copy was kept by OVERRULING a null, t −1.40, on a card-dominance argument.)
+
 ## The decisive measurement: which slot pays for Ghalta
 
 Both candidates carried Ghalta 1; the question was only which card funded it. Each list ran under
