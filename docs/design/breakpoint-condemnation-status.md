@@ -1089,33 +1089,93 @@ Snow, 10 games, depth 2, `--budget-ms 0` (the only unbounded depth that terminat
 | condemnation **UNFIXED** | 817,461 | 28,832,176 | **-16.2%** | 23,103,744 | 97.40% |
 | condemnation **FIXED** (shipped) | 159,178 | 39,400,239 | **+14.5%** | 32,590,957 | 97.64% |
 
-**THE COST IS LOST MEMOISATION SHARING, NOT THE PRUNE.** Reducing possibilities does reduce work --
-that is the -16.2%. What costs is a side effect: the filter's answer is not a property of the STATE,
-it depends on WHICH CARDS THE PLAN ALREADY CAST, so the bp-enum cache must be keyed on the arrival
-path. Base answers "what continuations exist here?" once per state and reuses it -- 27.7M lookups
-served by only 538,605 enumerations, 98% sharing. With the filter live the same state must be
-enumerated per distinct cast set: misses go 538,605 -> 768,333 (+42.7%) while hits rise only +17%, and
-`la_bp_wave` rises +4,186,112, i.e. **~18 units per lost share** (each fresh enumeration's plans are
-then searched). Note the hit RATE barely moves (98.06 -> 97.64) -- a hit-rate test does NOT reveal
-this, and reading one as exoneration was a mistake made here. Confirmation: the UNFIXED arm has FEWER
-misses than the fixed one, because heavy pruning collapses cast-set diversity and restores sharing.
+**IT IS NOT LOST MEMOISATION SHARING. THAT WAS TESTED DIRECTLY AND REFUTED (2026-09-17).** This
+section previously asserted the cost was cache-key width: the filter's answer depends on WHICH CARDS
+THE PLAN ALREADY CAST, so `BpEnumBuildKey` folds the plan's cast set, so sibling plans reaching one
+breakpoint state cannot share an enumeration. The reasoning is real -- the fold is required for
+soundness, and it does cost misses -- but it is nowhere near the magnitude of the penalty.
+
+The test (USER's idea, 2026-09-16: *"Is there a way we can reduce what we cache on to be less than
+the full plan?"*). There are exactly three reads of `g_bp_plan_casts` and all three are order- and
+multiplicity-blind: `BpPlanCasts(h)` is only ever called with a name hash taken from a card in the
+CURRENT hand, `BpPlanHasTail(ap)` walks `ap.hand` and asks that per card, and `BpPlanMadeACast()` is
+`!empty()`. So the minimal sound key is `(cast set n hand name-hashes, is-the-set-empty)`, and the
+verbatim plan-order fold was far finer than anything observable. Both narrowings were built and
+measured (`MTG_BP_KEY_CASTS_WIDE` restores the old fold, so the A/B is one binary), Snow 10 games
+d2/`--budget-ms 0`, one pooled batch per arm at 4 threads:
+
+| arm | key folds | units | vs base | misses | lookups |
+|---|---|---|---|---|---|
+| base (`MTG_SNOW_CONDEMN=0`) | -- | 34,414,522 | -- | 539,191 | 27,745,176 |
+| `wide` -- verbatim plan order (old) | list, ordered | 39,412,487 | **+14.52%** | 768,804 | 32,590,437 |
+| `cond` -- canonical set | sorted unique + empty bit | 39,376,994 | **+14.42%** | 762,710 | 32,573,177 |
+| `condN` -- + hand intersection | minimal sound key | 39,346,154 | **+14.33%** | 735,914 | 32,543,489 |
+| `condNH` -- + `MTG_BP_KEY_NARROW` | " + snapshot narrowed | 39,346,154 | +14.33% | 735,914 | 32,543,489 |
+
+**The provably-minimal key recovers 0.19 of the 14.52 points -- 1.3% of the penalty.** Misses do fall
+(-4.3%), so the narrowing works as designed; it simply is not the mechanism. `condNH` is
+byte-identical to `condN`, so the pre-draw-hand narrowing adds nothing once the cast set is narrowed.
+**Do not re-open "narrow the enum cache key" as a cost item -- it is measured and it is worth ~1%.**
+
+**WHAT THE DATA DOES SAY, and it is a different mechanism: the filter raises the number of
+enumerations DEMANDED, with the play unchanged.** Lookups go 27,745,176 -> 32,590,437 (**+17.5%**)
+while units go +14.5%, i.e. units track lookups (units/lookup 1.240 base vs 1.209 wide) and the hit
+rate barely moves (98.06% -> 97.64%). `la_bp_wave` +17.9% and `la_cand` +14.8% are both SEARCH-work
+counters, so the search really is doing more scoring and more wave work -- it is not cache overhead
+and not the guard's own arithmetic. And it does all of it for nothing: on this cell **all five arms,
+`base` included, emit one identical per-game digest**, so 158,860 drops changed not a single
+decision.
+
+That reframes the question from "why are hits lost?" to "why does pruning options make the search
+REQUEST more enumerations?". The leading hypothesis, NOT yet measured, is the breakpoint wave's WIDTH
+mechanism (the W variants / deferred waves): if the wave backfills toward a width TARGET, then
+removing options from each continuation makes it issue more requests to hit the same width, which
+would produce exactly this signature -- more lookups, same decisions. The test is to sweep the wave
+width and see whether the +17.5% moves with it. See `docs/design/breakpoint-width-deferred-waves`
+material and the `la_bp_wave` partition.
+
+Method notes worth keeping, both learned the hard way here:
+  * **A hit-RATE test does not reveal lost sharing** (98.06 -> 97.64 looks like nothing); miss COUNT
+    and lookup COUNT do. Reading a flat hit rate as exoneration was a mistake made in this file.
+  * **`units_total` is deterministic only for a FIXED thread/pool shape.** It counts re-derivation
+    work, and cache residency is per-thread, so the same config measured at a different worker count
+    gives slightly different units (base here is 34,414,522 at 4 threads vs 34,413,950 on the earlier
+    1-worker direct-CLI run). Arms must share the thread count; cross-run absolute comparisons do not.
 
 So there are two independent effects: **pruning subtracts work and scales with drop count**, while
 **lost sharing adds work and is a FIXED toll for having the filter on at all**. Unfixed drops 817,461
 and the prune wins (-16.2%); the new-option guard spares 81% of those, gutting the benefit while the
 toll is unchanged (+14.5%). A 30-point swing caused entirely by the soundness guard.
 
-**THE REACH INVERTS.** `la_bp_wave` is 17.4% of units at d5/b20 but **68% at d2/b0** -- unbounded, the
-breakpoint enumeration IS the search. That is why the filter backfires rather than paying off:
-soundness requires the enumeration cache to be keyed on the plan's own cast set whenever the filter
-is live (`g_bp_plan_casts` is bound `if (CantripOrderEnabled() || classify)`), or a plan is served a
-sibling's already-condemned list. Finer keys mean fewer hits, and when enumeration is 68% of all
-work the lost hits cost far more than the pruning saves. A 32x cache recovers only 30% of the
-penalty (consultations 8,308,740 -> 7,070,001), so the rest is intrinsic.
+**THE REACH INVERTS, and that part stands.** `la_bp_wave` is 17.4% of units at d5/b20 but **68% at
+d2/b0** -- unbounded, the breakpoint enumeration IS the search, which is why anything that perturbs
+enumeration dominates the unbounded cost. The cache-key fold is still REQUIRED for soundness
+(`g_bp_plan_casts` is bound `if (CantripOrderEnabled() || classify)`, and without the fold a plan is
+served a sibling's already-condemned list) -- it is just not where the cost lives.
 
-**The drops are not the cost, the APPARATUS is.** `condno` drops 85% fewer candidates than `cond` and
-costs the same (ratio 1.1415 vs 1.1406 on 40 games). Anything that scales with drop count is
-therefore ruled out as the mechanism.
+The two sentences that used to end this paragraph -- *"Finer keys mean fewer hits, and when
+enumeration is 68% of all work the lost hits cost far more than the pruning saves. A 32x cache
+recovers only 30% of the penalty (consultations 8,308,740 -> 7,070,001), so the rest is intrinsic."*
+-- are **withdrawn**. The first is refuted by the fold table above (the minimal key recovers 1.3% of
+the penalty, not most of it). The second measured CONSULTATIONS, which is not a cost: consultations
+fall whenever re-derivations fall, so it moves with cache residency while saying nothing about units.
+
+**RETRACTED 2026-09-17 -- this paragraph compared a config with ITSELF.** It used to read: *"The
+drops are not the cost, the APPARATUS is. `condno` drops 85% fewer candidates than `cond` and costs
+the same (ratio 1.1415 vs 1.1406 on 40 games). Anything that scales with drop count is therefore
+ruled out as the mechanism."* In that 40-game manifest (`logs/snow_perf/unb2.manifest.json`) the
+`cond` job set only `MTG_SNOW_CONDEMN`, and `condno` set `MTG_SNOW_CONDEMN` +
+`MTG_BP_CONDEMN_NEW_OPTION` -- but `MTG_BP_CONDEMN_NEW_OPTION` had already been flipped DEFAULT ON,
+so both jobs ran the FIXED filter. The proof is in the run's own output: the two jobs report the
+**same play digest** `f56c993276c7d5c8` (base is `080b11af41bf9ff9`). Two arms that cost the same
+because they ARE the same arm rule nothing out, and the conclusion drawn from it -- that cost does
+not scale with drop count -- is exactly BACKWARDS: the corrected table above shows the drop count is
+what separates -16.2% from +14.5%.
+
+Generalise the trap, because it has now cost three measurements in this file: **once a lever is
+flipped default ON, an arm that names it is no longer distinguishable from an arm that omits it.**
+Every arm must set every lever it depends on EXPLICITLY to `0` or `1`, and the cheap tell is the play
+digest -- two arms meant to differ that report one digest are one arm.
 
 Two consequences worth stating plainly:
   * A deck that opts into condemnation pays ~10-15% MORE for its value-leaf generation, because
@@ -1129,6 +1189,15 @@ Two consequences worth stating plainly:
 Caveat on the magnitude: depth 2 was forced by tractability, and while the MECHANISM is
 depth-independent (it is `budget->Unlimited()` plus cache-key width), the 14% figure is not verified
 at generation depth.
+
+Second caveat, on the SAMPLE rather than the mechanism: these are 10-game sums on a deck with
+extreme per-game cost variance, and they are not evenly sourced. The unfixed arm's own log
+(`logs/snow_perf/d2b0_cond_unfixed.log`) reports `SLOW-GAME 501891ms gi=8` and `129173ms gi=9`
+against a ~10-minute total, so **two of the ten games are most of the measurement** and gi=8 alone
+could carry the -16.2% by itself. `units_total` is a sum with no per-game breakdown, so this cannot
+be decomposed from the existing logs -- it needs one process per game. Treat -16.2% as "the prune
+wins on the games that dominate unbounded cost", which is the operative claim for generation anyway,
+rather than as a per-game expectation.
 
 ### The ceiling: there is no headroom to chase
 

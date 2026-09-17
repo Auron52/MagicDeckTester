@@ -43071,6 +43071,68 @@ namespace
         static const bool on = EnvOn("MTG_BP_ENUM_PROBE");
         return on;
     }
+
+    // THE KEY VERIFIER (MTG_BP_ENUM_VERIFY=1, default off, expensive).
+    //
+    // Every fold in BpEnumBuildKey is a SOUNDNESS claim of the form "two states that agree on
+    // everything I fold emit the same continuation list". Until now the only evidence for such a
+    // claim was statistical -- run a sample, compare play digests -- and that evidence is weak in a
+    // way this file has already been bitten by twice:
+    //   * it proves nothing when the changed code never executes (Snow is the ONLY deck with
+    //     condemnation on by default, and Snow is not in the suite, so a clean-env smoke is
+    //     byte-identical because the fold is not reached);
+    //   * it proves nothing when the sample cannot see the difference (measured 2026-09-17: on the
+    //     10-game Snow d2/b0 cell ALL FIVE key widths AND the condemnation-OFF arm emit one
+    //     identical per-game digest file, so that cell cannot distinguish a sound narrowing from no
+    //     condemnation at all).
+    // This checks the claim DIRECTLY instead: on every cache HIT, re-derive the list from scratch
+    // and compare it to what the cache served. A key that merges two states emitting different
+    // lists is caught on the first such hit, on any deck, at any sample size -- no digest, no
+    // statistics. It is the tool the default-off MTG_BP_KEY_NARROW has been waiting for.
+    //
+    // Compared by BpCandFingerprint, which folds every apply-relevant Plan/Action field, in order.
+    // Re-entrant by construction: the re-derivation runs with verification suppressed, or each hit
+    // inside it would verify recursively.
+    // IT COMPARES THE LIST AS A MULTISET, AND THAT DISTINCTION IS THE WHOLE TOOL (measured
+    // 2026-09-17). The first version compared the two lists as SEQUENCES and reported 59,416
+    // "mismatches" in 271,549 Snow hits -- 21.9%, every one of them equal-length with the first
+    // difference at index 1. That is not unsoundness, it is the continuation list's ORDER beyond
+    // element 0 depending on search state that has moved on between the MISS that filled the entry
+    // and the HIT being checked (element 0 is pinned -- see the cands[0] rule). The repo's own
+    // invariant settles it: with MTG_NO_BP_ENUM_CACHE the play digest is IDENTICAL (Snow, 12 games
+    // d2/b200, digest 89623ac3d96862bd either way, and the no-cache side is 2.8x slower in ms so the
+    // comparison has power). A sequence test therefore reports a 22% false-positive rate and would
+    // condemn a cache the engine is documented to be indifferent to.
+    // So: ORDER differences are counted and reported separately, and only a CONTENT difference --
+    // the sorted fingerprint multisets disagree, i.e. the served list offers genuinely different
+    // plans -- is a soundness failure.
+    struct BpEnumVerify
+    {
+        std::atomic<uint64_t> checked{0}, content_bad{0}, order_only{0};
+        ~BpEnumVerify()
+        {
+            if (!EnvOn("MTG_BP_ENUM_VERIFY")) { return; }
+            const uint64_t c = checked.load(), m = content_bad.load(), o = order_only.load();
+            std::fprintf(stderr,
+                         "=== BP ENUM KEY VERIFY: %llu hits re-derived | CONTENT-DIFF %llu%s"
+                         " | order-only %llu (benign, see BpEnumVerify) ===\n",
+                         (unsigned long long)c, (unsigned long long)m,
+                         m == 0 ? "" : "  <-- THE KEY IS UNSOUND, DO NOT SHIP IT",
+                         (unsigned long long)o);
+            if (c == 0)
+            {
+                std::fprintf(stderr, "=== BP ENUM KEY VERIFY: 0 hits re-derived -- the fold was"
+                                     " NEVER EXERCISED, this run proves nothing ===\n");
+            }
+        }
+    };
+    BpEnumVerify g_bp_enum_verify;
+    inline bool BpEnumVerifyOn()
+    {
+        static const bool on = EnvOn("MTG_BP_ENUM_VERIFY");
+        return on;
+    }
+    thread_local bool t_bp_enum_verifying = false;
 }
 
 // IS THE CONTINUATION IN LINE WITH THE DESIGN? (USER 2026-08-26: "we should not be rechecking most
@@ -43236,12 +43298,136 @@ static bool BpEnumBuildKey(const GameState& state, bool is_pre_combat,
     // sake, it is needed to OCCUPY the slot so the freshly-drawn Rimefeather Owl cannot take it and
     // tap a Druid out of the lethal attack. No cache key could have expressed that.
     //
-    // Order-sensitive fold is fine: plan_cast_names is built by walking plan.actions in plan order
-    // in both worlds, from the same plan.
+    // WHAT THE FOLD HAS TO CARRY IS NOT THE LIST, IT IS WHAT THE FILTER CAN ASK (2026-09-17). The
+    // fold above was the plan's cast list verbatim, in plan order -- which is far finer than any
+    // consumer can observe, and the difference is pure lost sharing. There are exactly three reads of
+    // g_bp_plan_casts in the whole file and every one of them is order-blind:
+    //   * BpPlanCasts(h)    -- membership, and it is ONLY ever called as
+    //                          BpPlanCasts(ap.hand[i].m_name_hash) (the drop at the gate stack and
+    //                          the whynot census) or from BpPlanHasTail below.
+    //   * BpPlanHasTail(ap) -- walks ap.hand and asks BpPlanCasts per card.
+    //   * BpPlanMadeACast() -- !empty(), nothing more.
+    // So the observable projection is (SET of name hashes, is-the-set-empty). ORDER is invisible and
+    // so is MULTIPLICITY: a plan casting two Boreal Druids is indistinguishable from one casting one,
+    // because every read is a membership test. Canonicalising to a sorted unique set therefore merges
+    // entries that were provably always going to emit the SAME continuation list.
+    // (Two further sites read g_bp_plan_casts->size(), which multiplicity DOES move -- both are
+    // fprintf bodies under MTG_CONDEMN_WHO, so neither reaches play. Note for anyone diffing those
+    // dumps across arms: a cache HIT suppresses the re-derivation and hence the dump, so the
+    // diagnostic has always been sensitive to key width; that is the memo's nature, not this fold's.)
+    //
+    // WHAT IT IS WORTH, MEASURED -- and it is NOT the cost mechanism it was proposed as. The fold is
+    // armed only when the snapshot is bound, i.e. only when condemnation is live, so turning the
+    // filter ON does fragment this cache: over 10 Snow games at d2/budget 0 the base arm serves
+    // 27.7M lookups from 539,191 derivations, and with the filter on the derivations go to 768,804
+    // (+42.6%). That made key width the obvious suspect for the filter's +14.5% unbounded cost. It
+    // is not: canonicalising cuts misses 0.8% and the FULL minimal key (with the intersection below)
+    // cuts them 4.3%, but units move only 39,412,487 -> 39,346,154, i.e. **1.3% of the penalty**.
+    // The real signature is that the filter raises LOOKUPS +17.5% with the play digest unchanged, so
+    // the search is demanding more enumerations rather than losing hits on the ones it demands. See
+    // docs/design/breakpoint-condemnation-status.md; the leading unmeasured suspect is the bp wave's
+    // width backfill. KEEP THIS CHANGE FOR WHAT IT IS: a key that matches what the consumer can
+    // observe, worth ~0.1% -- not a fix for the filter's cost.
+    //
+    // SOUND BY ARGUMENT, OPT-IN BY EVIDENCE. Order and multiplicity are unobservable no matter what
+    // the continuation does, so unlike the intersection narrowing below (whose soundness depends on
+    // what can re-enter the hand) this one needs no per-deck assumption. It is still default OFF --
+    // see the MTG_BP_KEY_CASTS_CANON block below for why a sound-by-argument 0.1% change does not
+    // move a default here.
+    //
+    // The dedup keys on the name HASH, which is deliberately the same identity notion the consumer
+    // uses: BpPlanCasts compares Card::m_name_hash, so two distinct names that collide in
+    // std::hash<std::string> are ALREADY one card as far as the filter can tell. Folding them
+    // separately, as the old fold did, made the key finer than anything observable -- the mismatch
+    // this change removes. (Sorting by hash value is likewise safe across platforms even though
+    // std::hash is implementation-defined: libstdc++ and MSVC produce different key VALUES but the
+    // same PARTITION, since on either one the key is a function of the cast-name set, and it is the
+    // partition that decides what shares a cache entry. Determinism parity is therefore unaffected.)
     if (g_bp_plan_casts != nullptr)
     {
         Fold(key, 0xC0A5ull);
-        for (std::uint64_t h : *g_bp_plan_casts) { Fold(key, h); }
+        // THE EMPTY BIT, FOLDED SEPARATELY, because it is a distinct question from membership:
+        // BpPlanMadeACast() gates the drop entirely ("a plan that cast nothing declined nothing"),
+        // and under the intersection narrowing below a non-empty set can PROJECT to empty. Without
+        // this, a plan that cast only cards no longer in hand would key identically to a plan that
+        // cast nothing, and the second would be served a list built with the drop disarmed.
+        if (!g_bp_plan_casts->empty()) { Fold(key, 0x0E27ull); }
+        // NARROWED TO THE INTERSECTION WITH THE CURRENT HAND (MTG_BP_KEY_CASTS_NARROW=1), the exact
+        // twin of MTG_BP_KEY_NARROW above and gated for the exact same reason. Every consumer only
+        // ever asks BpPlanCasts about a card that is IN HAND AT THIS ENUMERATION, so a cast set entry
+        // with no hand copy is unreachable by all of them -- except that "not in hand now" is not
+        // "unreachable": a continuation plan that BOUNCES a permanent back to hand makes that name
+        // askable again, and then two states identical now but differing in that entry would share
+        // one cache entry and emit different lists. That is a per-deck question this fold has no
+        // business answering, so it stays opt-in until digest-identity over a large sample says
+        // otherwise -- the standard MTG_NO_BP_ENUM_CACHE and MTG_BP_KEY_NARROW are held to.
+        static const bool s_casts_narrow = EnvOn("MTG_BP_KEY_CASTS_NARROW");
+        // ESCAPE HATCH (default off; =1 restores the pre-2026-09-17 verbatim plan-order fold).
+        // Kept for two reasons: it is the adopted-change hatch the conventions require, and it is
+        // what makes the fold width an A/B INSIDE ONE BINARY -- otherwise measuring the
+        // canonicalisation means keeping a stale binary around, and a stale binary is how a
+        // measurement ends up comparing two things that differ in more than the lever.
+        // DEFAULT: THE VERBATIM PLAN-ORDER FOLD. The canonical set fold is OPT-IN
+        // (MTG_BP_KEY_CASTS_CANON=1) even though the argument above says it is sound, and the reason
+        // is evidence, not doubt about the argument:
+        //   * it is worth ~0.1% of units and 0.8% of misses on the Snow cell (the full table is in
+        //     docs/design/breakpoint-condemnation-status.md) -- it does NOT fix the filter's cost,
+        //     which was the hypothesis that motivated it;
+        //   * and nothing available can currently DEMONSTRATE the soundness at that price. Play
+        //     digests have no power here (Snow is the only deck with condemnation on by default and
+        //     is not in the suite; forcing it on for kitty/antilife and running the whole smoke tier
+        //     at three settings gave 80/80 identical files on all three, including the control), and
+        //     MTG_BP_ENUM_VERIFY has a large PRE-EXISTING baseline -- 21.9% of Snow hits already
+        //     differ from a fresh derivation with an EMPTY cast set, where this fold is a no-op.
+        // A 0.1% win does not justify moving a default whose soundness cannot be shown, so the
+        // default stays byte-identical to the pre-change engine and the lever carries the finding.
+        // To retire it: use the verifier DIFFERENTIALLY (canon vs wide content-diff counts must
+        // match) rather than absolutely, since the baseline is not zero.
+        static const bool s_casts_wide = !EnvOn("MTG_BP_KEY_CASTS_CANON");
+        if (s_casts_wide)
+        {
+            Fold(key, 0x5F1Dull);
+            for (std::uint64_t h : *g_bp_plan_casts) { Fold(key, h); }
+        }
+        else
+        {
+            // Insertion sort with dedup into a stack buffer: this runs tens of millions of times
+            // per game, so a std::vector here would be a heap allocation on the key walk. Cast sets
+            // are hand-sized; an overflow falls back to the verbatim plan-order fold, which is
+            // STRICTLY FINER and therefore still sound (a finer key loses sharing, it never merges
+            // two answers) -- and it folds the same tag as the hatch above, because it is the same
+            // policy, so the two can never disagree about one input.
+            constexpr std::size_t kMaxCasts = 16;
+            std::uint64_t buf[kMaxCasts];
+            std::size_t n = 0;
+            bool overflow = false;
+            for (std::uint64_t h : *g_bp_plan_casts)
+            {
+                if (s_casts_narrow)
+                {
+                    bool in_hand = false;
+                    for (const Card& c : state.ActivePlayer().hand)
+                    { if (c.m_name_hash == h) { in_hand = true; break; } }
+                    if (!in_hand) { continue; }
+                }
+                std::size_t p = 0;
+                while (p < n && buf[p] < h) { ++p; }
+                if (p < n && buf[p] == h) { continue; }            // already have this name
+                if (n >= kMaxCasts) { overflow = true; break; }
+                for (std::size_t q = n; q > p; --q) { buf[q] = buf[q - 1]; }
+                buf[p] = h;
+                ++n;
+            }
+            if (overflow)
+            {
+                Fold(key, 0x5F1Dull);
+                for (std::uint64_t h : *g_bp_plan_casts) { Fold(key, h); }
+            }
+            else
+            {
+                for (std::size_t i = 0; i < n; ++i) { Fold(key, buf[i]); }
+            }
+        }
     }
     // ...and the SITE, which the order-aware peer test compares every candidate against
     // (CastOrderRank of the site). Two breakpoints at the same state opened by different cards rank
@@ -43299,6 +43485,44 @@ static BpEnumEntry* BpEnumEntryFor(const GameState& state, bool is_pre_combat,
                 g_bp_enum_probe.hits.fetch_add(1, std::memory_order_relaxed);
                 if (g_bp_enum_depth > 0)
                 { g_bp_enum_probe.nested_hits.fetch_add(1, std::memory_order_relaxed); }
+            }
+            // KEY VERIFIER: does the cached list actually equal a fresh derivation at this state?
+            // See BpEnumVerify. Suppressed during its own re-derivation, so hits reached from
+            // inside the check do not verify recursively.
+            if (BpEnumVerifyOn() && !t_bp_enum_verifying)
+            {
+                t_bp_enum_verifying = true;
+                ++g_bp_enum_depth;
+                std::vector<TurnSolver::Plan> fresh = EnumeratePlansWithLand(state, is_pre_combat);
+                --g_bp_enum_depth;
+                t_bp_enum_verifying = false;
+                const std::vector<TurnSolver::Plan>& served = it->second.plans;
+                std::vector<std::uint64_t> fa, sa;
+                fa.reserve(fresh.size()); sa.reserve(served.size());
+                for (const TurnSolver::Plan& p : fresh)  { fa.push_back(BpCandFingerprint(p)); }
+                for (const TurnSolver::Plan& p : served) { sa.push_back(BpCandFingerprint(p)); }
+                const bool same_seq = (fa == sa);
+                std::sort(fa.begin(), fa.end());
+                std::sort(sa.begin(), sa.end());
+                const bool same_set = (fa == sa);   // multiset: what soundness actually requires
+                g_bp_enum_verify.checked.fetch_add(1, std::memory_order_relaxed);
+                if (!same_set)
+                {
+                    const uint64_t n =
+                        g_bp_enum_verify.content_bad.fetch_add(1, std::memory_order_relaxed);
+                    if (n < 20)   // one is already a disproof
+                    {
+                        std::fprintf(stderr,
+                                     "[bp-enum-verify] CONTENT-DIFF turn=%d served=%zu fresh=%zu"
+                                     " casts=%d site=%s\n",
+                                     state.turn_number, served.size(), fresh.size(),
+                                     g_bp_plan_casts
+                                         ? static_cast<int>(g_bp_plan_casts->size()) : -1,
+                                     g_bp_site_def ? g_bp_site_def->card.m_name.c_str() : "(none)");
+                    }
+                }
+                else if (!same_seq)
+                { g_bp_enum_verify.order_only.fetch_add(1, std::memory_order_relaxed); }
             }
             return &it->second;
         }
