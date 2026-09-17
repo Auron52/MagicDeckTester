@@ -449,6 +449,19 @@ static std::atomic<long long> g_cs_mm_nosnap{0};    // ...of those, with NO site
 // different states, which is key imprecision and NOT what the all-paths rule addresses.
 static std::atomic<long long> g_cs_mm_samestate{0};
 static std::atomic<long long> g_cs_clears{0};       // probe map wiped (cap); a wipe hides mismatches
+// ALL-PATHS CONDEMNATION telemetry (MTG_BP_CONDEMN_ALLPATHS; see BpCondemnAllPathsEnabled). Declared
+// up here with the other counters rather than beside the rule, because the rollout-stats dump is
+// above it in this file.
+// NOT "drops prevented" -- this counts GATE CALLS where the accumulated bit answered, and
+// BpPlanMadeACast() is consulted for every candidate at every consultation, so it overstates the
+// behavioural effect by orders of magnitude. Measured 2026-09-17 on the Snow 10-game cell: 2,043,020
+// calls against a real effect of 647 fewer drops (159,792 -> 159,145). THE BEHAVIOURAL EFFECT IS THE
+// DROPS DELTA against an otherwise-identical arm; this counter is only good for "did it fire at all".
+// Kept, and named for what it is, because the first version was called g_ap_applied and read as
+// though 2 million drops had been disarmed.
+static std::atomic<long long> g_ap_gate_calls{0};
+static std::atomic<long long> g_ap_deferred{0};   // widenings seen mid-decision (a fixpoint's worth)
+static std::atomic<long long> g_ap_clears{0};     // accumulator wiped (cap) -- can only hide a widening
 static std::atomic<long long> g_pd_consult{0};      // consultations with the snapshot bound
 static std::atomic<long long> g_pd_pending{0};      // ...where the CANDIDATE is a pending plan cast
 static std::atomic<long long> g_pd_pending_peer{0}; // ...of those, ones the peer test exempts anyway
@@ -824,6 +837,31 @@ namespace
                       << " rollout=" << (bg - be)
                       << " rollout_frac=" << (bd ? static_cast<double>(bg - be) / bd : 0.0)
                       << ")\n";
+            // Gated on the env read OR on any observed activity, so a per-job heurarm arm that turns
+            // the rule on inside a pooled batch still reports.
+            static const bool s_ap_dump = EnvOn("MTG_BP_CONDEMN_ALLPATHS");
+            if (s_ap_dump || g_ap_deferred.load() > 0 || g_ap_gate_calls.load() > 0)
+            {
+                const long long ap = g_ap_gate_calls.load();
+                std::cerr << "[rollout-stats] bp_allpaths gate_calls=" << ap
+                          << " (NOT drops prevented -- read the DROPS DELTA vs an allpaths=0 arm)"
+                          << " deferred_widenings=" << g_ap_deferred.load()
+                          << " acc_clears=" << g_ap_clears.load() << "\n";
+                // A lever with no firing counter reads as "no effect" when it is really a no-op --
+                // the silent-noop trap. Say which one this run was.
+                if (ap == 0)
+                {
+                    std::cerr << "[rollout-stats] bp_allpaths: NEVER FIRED -- the gate was never "
+                                 "answered by the accumulator, so an identical result here proves "
+                                 "nothing about the rule.\n";
+                }
+                if (g_ap_clears.load() > 0)
+                {
+                    std::cerr << "[rollout-stats] bp_allpaths: the accumulator was CLEARED "
+                                 "(MTG_BP_ALLPATHS_CAP) -- frozen bits were forgotten, so the rule "
+                                 "ran WEAKER than specified. Raise the cap before concluding.\n";
+                }
+            }
             if (s_bp_castset_probe)
             {
                 const long long ck = g_cs_checked.load();
@@ -1927,10 +1965,123 @@ static bool BpCondemnPlanCastEnabled()
     return heurarm::Flag(heurarm::BP_CONDEMN_PLAN_CAST, on);
 }
 
+// ALL-PATHS CONDEMNATION (MTG_BP_CONDEMN_ALLPATHS), stage 1. USER 2026-09-16/17: *"only condemn in
+// cases where all of the lines that reach that state condemn."*
+//
+// WHY THIS IS THE RIGHT FIRST INCREMENT. Measured 2026-09-17 with MTG_BP_CASTSET_PROBE, the condemn
+// verdict genuinely does vary between lines reaching ONE breakpoint state -- Snow 290 of 331,245 key
+// builds, kitty 7,388 of 184,212, all confirmed same-state against an independent zone-complete
+// fingerprint. And on Snow EVERY observed case is this one: a line arriving with an EMPTY cast set at
+// a state a non-empty line had already reached. The disagreement is therefore about
+// BpPlanMadeACast(), which gates the drop entirely, so one accumulated BIT per state captures 100% of
+// Snow's path-dependence. The cast-set UNION (which kitty's cast-site cases need) is stage 2.
+//
+// THE RULE: condemn only if EVERY line reaching this state made a cast. So if any line arrived here
+// having cast nothing, nothing is condemned here for anybody. That is strictly safer than today --
+// it only ever RE-ADMITS -- which is the direction of the no-lossy-truncation bar.
+//
+// WHY THE ACCUMULATOR IS FROZEN PER DECISION BUT ALWAYS UNIONED WITH THE ARRIVING LINE. Freezing
+// alone is UNSOUND: a line whose own cast set is not yet in the frozen bit could be served a list in
+// which a card IT casts was condemned, which deletes the plan's own line -- the exact hazard the
+// plan-cast fold's comment warns about. So the effective bit is always
+// `frozen_bit || this line cast nothing`, which contains the arriving line by construction.
+// Freezing the OTHER half (widenings observed during a decision apply from the next decision) is what
+// keeps `bp_choice` valid: it is a positional index (`out = cands[plan.bp_choice]`), so a list that
+// changed between scoring and replay would make the executor play a candidate the search never
+// scored. A per-decision fixpoint -- re-run the decision on a widening -- would close that gap and is
+// the remaining step; g_ap_deferred counts what it would be worth.
+//
+// DETERMINISM. USER 2026-09-17: *"Accumulating construction is deterministic in my understanding, as
+// long as we traverse the inputs in the same order each time?"* -- correct, and traversal is
+// deterministic (one game per worker, deterministic search). What is NOT a function of traversal is
+// cache RESIDENCY, and that is where an accumulator in the bp-enum cache would have broken: that
+// cache survives batch job switches (ClearPerGameCaches does not clear it), wipes entirely on
+// overflow, and carries a documented "results identical at any cap" invariant. So this accumulator
+// lives in its OWN map, is cleared per game with the other per-game memos, and is not subject to the
+// plan cache's byte budget -- making it a function of (seed, game index, engine) alone, identical
+// across thread counts and platforms, and reproducible from a single-game --game-index repro.
+static bool BpCondemnAllPathsEnabled()
+{
+    static const bool on = EnvOn("MTG_BP_CONDEMN_ALLPATHS");   // DEFAULT OFF until measured
+    return heurarm::Flag(heurarm::BP_CONDEMN_ALLPATHS, on);
+}
+// The effective "some line reaching this state cast nothing" bit for the enumeration in flight.
+// Bound by BpEnumEntryFor around the derivation (and folded into the key by BpEnumBuildKey, so a
+// state served under a set bit never shares an entry with one served under a clear bit). False
+// outside a derivation => every existing caller's behaviour stands.
+static thread_local bool g_bp_allpaths_empty = false;
+// THE ACCUMULATOR STORE. One bit per breakpoint state: "a line reaching here cast nothing". Monotone
+// -- it only ever gets SET -- which is what makes the construction terminate and what makes it
+// strictly safer than the per-path filter (setting the bit only re-admits candidates).
+//
+// TWO HALVES PER ENTRY, AND THE SPLIT IS THE WHOLE DESIGN:
+//   * `frozen` is what SERVING may use. It changes only at a decision boundary.
+//   * `live` is what THIS decision has observed. It is promoted into `frozen` at the next decision.
+// Serving from `frozen` alone would be UNSOUND -- a line whose own emptiness is not yet frozen could
+// be served a list in which a card it casts was condemned -- so the caller unions in the arriving
+// line and the effective bit is `frozen || this line is empty`. Serving from `live` instead would
+// mutate a state's answer mid-decision, and `bp_choice` is a POSITIONAL INDEX into the continuation
+// list (`out = cands[plan.bp_choice]`), so the executor would then replay a candidate the search
+// never scored. Deferring the promotion is exactly what buys index stability, and `g_ap_deferred`
+// counts how often a widening had to wait -- i.e. what a per-decision fixpoint would add on top.
+//
+// Epoch-promoted LAZILY on access (the same discipline the Solve/enum memos use), so no pass over the
+// map is ever needed.
+namespace bpallpaths
+{
+    struct Entry
+    {
+        std::uint64_t epoch = 0;
+        bool frozen = false;
+        bool live   = false;
+    };
+    using Map = std::unordered_map<TranspositionTable::Key, Entry, TranspositionTable::KeyHash>;
+    inline thread_local Map t_acc;
+}
+
+static bool BpAllPathsEmptyBit(const TranspositionTable::Key& state_key, bool this_line_empty)
+{
+    // Capped, and a wipe is COUNTED rather than silent: clearing forgets frozen bits, so it can only
+    // ever make the filter condemn MORE (back toward per-path). A run reporting clears > 0 has not
+    // measured the rule at full strength and has to say so.
+    static const std::size_t s_cap =
+        // 262,144 OVERFLOWED on a 10-game Snow cell (acc_clears=1, measured 2026-09-17), and an
+        // overflow silently weakens the rule back toward per-path. Entries are ~56 B, so 1 Mi is
+        // ~59 MB per worker thread -- affordable against this box's caps, and it is the accumulation
+        // that is the whole point of the lever.
+        static_cast<std::size_t>(std::max(1, EnvInt("MTG_BP_ALLPATHS_CAP", 1048576)));
+    if (bpallpaths::t_acc.size() >= s_cap)
+    {
+        bpallpaths::t_acc.clear();
+        g_ap_clears.fetch_add(1, std::memory_order_relaxed);
+    }
+    bpallpaths::Entry& e = bpallpaths::t_acc[state_key];
+    if (e.epoch != g_decision_epoch)
+    {
+        e.frozen = e.frozen || e.live;   // new decision: last decision's observation becomes usable
+        e.live   = false;
+        e.epoch  = g_decision_epoch;
+    }
+    if (this_line_empty && !e.frozen && !e.live)
+    {
+        e.live = true;                   // a widening; applies from the next decision
+        g_ap_deferred.fetch_add(1, std::memory_order_relaxed);
+    }
+    return e.frozen || this_line_empty;
+}
+
+static void BpAllPathsClear() { bpallpaths::t_acc.clear(); }
+
 static bool BpPlanMadeACast()
 {
     if (!BpCondemnPlanCastEnabled()) { return true; }
     if (g_bp_plan_casts == nullptr)  { return true; }   // no snapshot -> rule does not apply
+    // All-paths: a single line that cast nothing disarms the drop for every line at this state.
+    if (BpCondemnAllPathsEnabled() && g_bp_allpaths_empty)
+    {
+        if (s_rollout_stats) { g_ap_gate_calls.fetch_add(1, std::memory_order_relaxed); }
+        return false;
+    }
     return !g_bp_plan_casts->empty();
 }
 
@@ -32422,6 +32573,12 @@ void TurnSolver::ClearPerGameCaches()
     solvememo::t_m2cache.clear();
     enummemo::t_cache.clear();
     plancache::Release(plancache::t_enum_bytes);
+    // The all-paths accumulator (MTG_BP_CONDEMN_ALLPATHS) belongs here and NOT in the bp-enum cache,
+    // and the reason is this function's own: a thread_local that survives a batch worker's job switch
+    // makes a game's answer depend on which games shared the worker. For the plan memos that cost
+    // only the work METER's determinism ("Play was never affected"); for an accumulator that decides
+    // what is condemned it would cost PLAY determinism, which no thread-shape-dependent input may do.
+    BpAllPathsClear();
 }
 
 
@@ -42969,6 +43126,9 @@ static bool BpEnumBuildKey(const GameState& state, bool is_pre_combat,
     // the path-independence work would remove. Narrowing it (CANON / NARROW below) recovered 1.3% of
     // the filter's penalty; removing it recovers 2.3%.
     static const bool s_casts_none = EnvOn("MTG_BP_KEY_CASTS_NONE");
+    // Snapshotted for the all-paths accumulator below, which must be indexed by the STATE and so
+    // cannot include the arriving line's cast set.
+    const TranspositionTable::Key key_before_casts = key;
     if (g_bp_plan_casts != nullptr && !s_casts_none && !s_snapshot_none && !t_bp_castset_probing)
     {
         Fold(key, 0xC0A5ull);
@@ -43065,6 +43225,24 @@ static bool BpEnumBuildKey(const GameState& state, bool is_pre_combat,
     // then still split Scrying Sheets from Frost Augur at the same state, which on Snow is the split
     // that matters, and it reported 647,466 misses as though the key were base's. Caught by the arm's
     // own self-check: base binds no site, so misses HAD to equal base's and did not.)
+    // ALL-PATHS ACCUMULATOR (stage 1 -- see BpCondemnAllPathsEnabled). `nocasts` is this key WITHOUT
+    // the plan-cast fold, i.e. an identity for the breakpoint STATE rather than for the state plus
+    // the arriving line. That is what the accumulator has to be indexed by: the whole question is
+    // which lines reach ONE state. The two site folds are replayed into it so it stays as precise as
+    // the real key about WHICH breakpoint this is (Scrying Sheets and Frost Augur condemn different
+    // sets at one state, so merging them would disarm more than the rule asks).
+    if (BpCondemnAllPathsEnabled() && g_bp_plan_casts != nullptr && !t_bp_castset_probing)
+    {
+        TranspositionTable::Key nocasts = key_before_casts;
+        if (g_bp_site_def != nullptr && !s_snapshot_none) { Fold(nocasts, g_bp_site_def->card.m_name_hash); }
+        if (g_bp_site_activated && !s_snapshot_none)      { Fold(nocasts, 0xE7D1ull); }
+        g_bp_allpaths_empty = BpAllPathsEmptyBit(nocasts, g_bp_plan_casts->empty());
+        // Folded so a list built with the drop DISARMED can never be served to a state whose bit is
+        // clear. Without this the accumulator would silently reuse pre-widening entries, which is the
+        // same class of bug as the plan-cast fold existing at all.
+        if (g_bp_allpaths_empty) { Fold(key, 0x3D19ull); }
+    }
+    else { g_bp_allpaths_empty = false; }
     if (g_bp_site_def != nullptr && !s_snapshot_none) { Fold(key, g_bp_site_def->card.m_name_hash); }
     // ...and HOW the site was reached, which decides the peer test outright (an ACTIVATED site sits
     // after every cast, so nothing is a peer). Same state, same site card, cast vs activated => two

@@ -1228,9 +1228,11 @@ The rule is: condemn X at breakpoint state S only if EVERY line reaching S would
 i.e. intersect the condemn sets, equivalently keep the union of the kept sets. It makes the verdict
 path-independent, so the bp-enum key would no longer need the plan-cast fold.
 
-### The cost case is refuted, and the refutation is not about the cast fold
+### KEY WIDTH is not the filter's cost -- but the cost itself is still UNEXPLAINED
 
-The argument is valid but does not cash out: distinct states are not where the filter's cost is.
+Read this subsection as "the cache is not the mechanism", NOT as "the cost is real and intrinsic".
+The USER's acceptance spec below says a correct implementation adds no misses at all, and the
+measured work increase is therefore a defect that is still at large.
 Snow, 10 games, seed 930000, d2/`--budget-ms 0`, one pooled batch per arm at 5 threads
 (`logs/snow_perf/ceiling.sh`, run `c4`):
 
@@ -1244,12 +1246,75 @@ Snow, 10 games, seed 930000, d2/`--budget-ms 0`, one pooled batch per arm at 5 t
 **Key merging recovers 0.06 of 14.56 points (0.4%).** All four digests identical
 (`1922378d4c0c`), so this cell has NO POWER as a play test -- units and misses only.
 
-**AND THE SELF-CHECK IS THE REAL RESULT.** With `MTG_BP_KEY_SNAPSHOT_NONE=1` the key is byte-for-byte
-what the condemnation-off arm computes, so misses HAD to land on base's 537,091. They land on
-645,923 -- still +20.3%. Those ~109k extra derivations are therefore **the search visiting more
-distinct breakpoint states**, not cache fragmentation: the filter changes candidate lists, hence the
-tree. No key-merging scheme of any kind recovers them. (`units.la_bp_wave` +17.9% keeps the bp wave's
-width backfill as the leading suspect for the mechanism.)
+### THE SPEC, AND WHY THE PARAGRAPH THAT USED TO BE HERE WAS WRONG
+
+**USER, 2026-09-17, and this is the acceptance criterion for the whole feature:** *"There should be no
+additional misses if implemented correctly."* … *"We should miss exactly where baseline misses and hit
+otherwise. Our only extra work is checking condemnation status and deciding what we need to
+implement."*
+
+So a correct condemnation has, against the condemnation-OFF arm:
+* **misses identical** -- the same key, therefore the same distinct-state set, therefore the same
+  miss set. Not "similar": identical.
+* **hits identical** -- every lookup base hit, this hits.
+* **the only extra work is the condemn check itself** (a per-candidate predicate), plus whatever the
+  smaller candidate lists SAVE downstream.
+
+Measured against that spec, with `MTG_BP_KEY_SNAPSHOT_NONE=1` (key byte-for-byte base's):
+
+| quantity | base | filter on, base's key | vs base |
+|---|---|---|---|
+| bp-enum misses | 537,091 | 645,923 | **+20.3%** |
+| bp-enum lookups | 27,745,046 | 32,580,099 | **+17.4%** |
+| cache clears | 64 | 78 | **+21.9%** |
+
+**ALL THREE ARE BUG SIGNATURES, NOT COSTS, AND THE PRIOR VERSION OF THIS SECTION RECORDED THEM AS
+PHYSICS.** It said the extra derivations "are therefore the search visiting more distinct breakpoint
+states … No key-merging scheme of any kind recovers them." That was an inference presented as a
+measurement, and it contradicts the USER's standing doctrine on this exact feature (2026-08-28: *"No
+matter what the result of condemnation on Hinata it should reduce the overall work significantly. If
+it's not doing that, we already have a bug."* -- the doctrine that found bug 8). **A prune cannot
+raise lookups.** Removing candidates from a continuation list can only shrink the tree, so +17.4%
+lookups is something re-expanding work the prune removed.
+
+**THE TWO CANDIDATE EXPLANATIONS, SEPARATED (`logs/snow_perf/missspec.sh`, run `ms1`).** The cache is
+**clear-on-full at 8192 entries, not LRU** (`if (cache.size() >= cap || !Fits(psz)) cache.clear();`),
+so each wipe forces up to 8192 re-derivations. The cap is documented result-neutral, which is what
+makes eviction separable from distinct-state growth. Snow, 10 games d2/b0, `MTG_BP_ENUM_CACHE_CAP`
+raised 8192 -> 400,000:
+
+| arm | misses | clears | units | vs base |
+|---|---|---|---|---|
+| base | 505,795 | 3 | 34,410,386 | — |
+| **base_rep** (deliberate replicate) | 509,193 | 4 | 34,411,512 | noise floor |
+| `snapnone` (filter on, base's key) | 536,242 | 4 | 37,838,450 | **+9.96%** |
+| `perpath` (filter on, full key) | 648,523 | 4 | 37,753,415 | +9.72% |
+
+**ABOUT A THIRD OF THE "COST" WAS EVICTION CHURN.** At the default cap the filter measured +14.5%
+units; at a cap where clears fall from 64 to 3-4 it measures **+9.96%**. Misses at equal key fall
+from +20.3% to **+6.0%** (30,447 over base, against a measured noise floor of 3,398 from the
+replicate). The +20.3% figure this document previously carried was mostly the 8192-entry wipe.
+
+**WHAT SURVIVES, AND IT STILL VIOLATES THE SPEC.** At equal key and matched clears the filter still
+costs +9.96% units, +6.0% misses and **+12.2% lookups** (27,742,138 -> 31,132,453). A prune cannot
+raise lookups. The leading suspect is unchanged and still **UNMEASURED: the bp wave's width
+backfill** -- `units.la_bp_wave` +17.9% and `units.la_cand` +14.8% move with it. Sweep the wave width
+and see whether the lookup delta follows.
+
+**AND NOTE THE UNITS/MISSES DISSOCIATION, which is itself a clue.** The five key folds cost 112,281
+misses (`perpath` 648,523 vs `snapnone` 536,242, +20.9%) while moving units by −0.2%. So misses are
+not the cost driver either; whatever is spending the units is not paid for per derivation. That is
+consistent with the backfill hypothesis and inconsistent with any cache explanation.
+
+**A CAVEAT ON THE ZERO: clears reach 3-4, not 0, and the count cap cannot drive them lower** -- the
+byte budget (`plancache::Fits`) also triggers a wipe and `MTG_BP_ENUM_CACHE_CAP` does not control it.
+The arms are matched at 3-4 so the comparison is clean, but a run claiming "misses ARE the
+distinct-key count" needs the byte budget raised too.
+
+**DO NOT RECORD +14.5% AS "THE FILTER'S COST".** It is an unexplained work increase in a prune, which
+by this project's own doctrine means a defect is still hiding. What IS established is narrower: **key
+width is not the explanation** (all five folds off recovers 0.4%), so whatever causes it is not cache
+fragmentation.
 
 **METHOD NOTE, because this took three attempts.** Condemnation does not add ONE fold to the
 bp-enum key; binding `CantripOrderScope` adds FIVE: the pre-draw hand snapshot (every card NUMBER in
@@ -1261,6 +1326,30 @@ attempt guarded four of the five and missed the SITE fold, which on Snow is the 
 (Scrying Sheets 103 vs Frost Augur 111 at the same state). That one was caught by the arm's own
 self-check. **An arm that claims to reproduce another arm's key must assert the miss count, not the
 units.**
+
+### THE MODEL, IN THE USER'S OWN TERMS (2026-09-17) -- read this before the numbers
+
+Four statements, and they define what this feature is for and how to judge it:
+
+1. **The asymmetry is the whole design.** *"It is possible for us to do less work if there are lines
+   we never run. That part is the upside of the condemnation design, but there should be none the
+   other way."* So the target is **misses <= baseline, lookups <= baseline**, with the savings coming
+   from lines never run. Fewer is the prize; more is a defect. Any table in this document showing the
+   filter above baseline on a work metric is describing a bug, not a price.
+2. **The cache is where path-dependence actually bites, and it is a WORK question, not only a
+   soundness one.** *"We may determine a line does condemn A and then later reprocess the same cache
+   entry from a case that doesn't condemn A. In that case where we run A is different."* The entry
+   was built under one line's condemn set; a later line with a weaker set needs A available. So the
+   entry is not wrong so much as INCOMPLETE for the second arrival, and the question is where the
+   work to cover A gets done.
+3. **The ideal case is the point of the rule.** *"In the ideal case, A is never accessed at all
+   because all lines condemn it."* That is the full upside: unanimous condemnation means the line is
+   never enumerated by anybody, which is strictly less work than baseline.
+4. **The deliverable is a FREQUENCY, not an argument.** *"The only real question is how often this
+   actually happens in practice."* Which is exactly what the cast-set collision probe measures, and
+   the answer is in the next subsection: **Snow 290 of 331,245 key builds (0.09%), kitty 7,388 of
+   184,212 (4.0%)**. Unanimity is the common case by a wide margin; disagreement is rare. That is the
+   number that should drive the design decision, and it is already measured.
 
 ### The soundness case is real: two lines DO reach one state with different cast sets
 
