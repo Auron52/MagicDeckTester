@@ -531,6 +531,22 @@ shrink — but FiveColour's shipped table was not built that way.** It came from
 is **identical to the shipped table on all 1000 audit-seed games**; dropping only the shrink changes
 56 of 589 mulliganed games' bottoming. So the shrink is in, and re-applying it buys nothing.
 
+What it was worth, measured the other way round — the no-shrink rebuild as baseline against the
+shipped table, 16 seeds × 1000 games, both in the shipping condition
+(`logs/fc_shrink/ab_shrink/`):
+
+```
+noshrink 4.8501   shrink 4.8456   delta -0.0046t   12/16 seeds
+sd 0.0038  se 0.0009  mean/se -4.86   (min -0.0100, median -0.0040, max +0.0010)
+```
+
+**−0.0046t, and it is already banked.** That lands almost exactly on the −0.0044t (mean/se −4.70)
+the shrink measured on Melira Pod, which is worth noting on its own: the effect size is stable across
+two decks with very different curves, so it behaves like a property of the correction rather than of
+a deck. It is also the right order of magnitude for what §7d-bis predicts — the shrink attacks the
+**sampling** half of the curse (~0.01t), and the model-bias half (~0.08t) is untouched by any
+re-policy. There is no free win left on this axis for FiveColour.
+
 Traps this walked into, all of which cost a run each:
 
 * **A merge of this deck needs ~10 GB.** Peak RSS 9.8–10.0 GB, against a default `MTG_RSS_CAP_GB` of
