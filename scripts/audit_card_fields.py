@@ -47,9 +47,25 @@ ORACLE_SIMILARITY_MIN = 0.80   # below this, the oracle text is flagged (advisor
 # genuinely-missing combat/evasion keyword (flying, trample, deathtouch, lifelink,
 # first strike, double strike, vigilance, reach, menace, hexproof, indestructible...).
 MODELED_ELSEWHERE_KEYWORDS = {
-    # Ability words -- never real keywords:
+    # Ability words -- never real keywords (CR 207.2c: italic, zero rules meaning; the
+    # ability they label is what has to be modelled, and the tag would say nothing):
     "landfall", "ferocious", "spectacle", "rot fly", "constellation", "addendum",
     "revolt", "raid", "delirium", "threshold", "hellbent", "morbid",
+    # Enrage (Apex Altisaur): ability word, same class as morbid/revolt above. Its ABILITY
+    # ("whenever this creature is dealt damage, it fights...") is separately recorded as
+    # provably inert in the card's oracle bracket note -- nothing in this sim deals damage
+    # to our creatures, and the passive opponent never controls a creature to fight. This
+    # strip is about the TAG being categorically wrong, NOT a sign-off on that ability.
+    "enrage",
+    # Keyword ACTIONS -- what an ability DOES, never an innate property of a permanent
+    # (CR 701). `scry` and `surveil` are the same class and already sit in the bucket
+    # below for historical reasons.
+    #   fight  (CR 701.12) -- Apex Altisaur; both its fights are no-ops here, see above.
+    #   double            -- World War Hulk chapter III "double its power and toughness",
+    #                        which IS modelled, via the saga_ch3_double_pt_target param.
+    # NB "double" is a DIFFERENT string from "double strike" (Scryfall spells that one out,
+    # cf. Lyra Dawnbringer's "First strike"), so this cannot mask a missing evasion keyword.
+    "fight", "double",
     # Keyword abilities this engine models via params / oracle logic, not a tag:
     "cycling", "scry", "surveil", "cascade", "retrace", "replicate",
     "affinity", "treasure",
