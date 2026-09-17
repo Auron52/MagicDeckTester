@@ -852,3 +852,72 @@ doctrine permits and which the same instrument reports separately as
 `GREEDY SITES inside search: s90=... [horizon leaf only; no breakpoint fallback exists]`.
 
 Tiers accepted in f2812fdf. Not pushed — that and the overnight tier are the user's call.
+
+## Addendum H — CORRECTION: the G.5-G.11 headline numbers were flattered by the metric
+
+Two errors in how Addendum G reported results. Both were caught by the user reading the tables, and
+both point the same way: **the shipped engine is at PARITY with the pre-deletion engine on quality
+and on cost — it is not ahead of it on either.**
+
+### H.1 The cell sum equal-weights cells; the tiers do not have equal cells
+
+`SUM` adds one `(got - exp)` per CELL, so a 75-game cell counts the same as a 1000-game one. On the
+regression tier that inverts the sign. Weighting each cell by its own game count and reporting TOTAL
+EXTRA TURNS over the whole tier:
+
+| | smoke, 27,215 games | regression, 42,380 games |
+|---|---|---|
+| adopted deletion set (start of the pass) | +11.0 turns (+0.00040/game) | +98.0 turns (+0.00231/game) |
+| **shipped** | **+5.0 turns (+0.00018/game)** | **+6.0 turns (+0.00014/game)** |
+
+So the pass cut the regression cost by 94% and the smoke cost by 55%, which is the real result. But
+both totals stay POSITIVE: the engine is a few turns slower across tens of thousands of games, not
+faster. The regression tier's `-0.0391` cell sum is carried almost entirely by fluctuator, whose
+five cells hold 1,450 games and gain 14 turns, against hinata (+11 over 1,600) and th (+9 over
+2,600) losing them back.
+
+**And more games get slower than faster on both tiers** — 17 faster / 24 slower on smoke, 51 / 57 on
+regression (plus, separately, 2 wins lost and 1 gained on regression; 0 and 1 on smoke). The
+`faster/slower` row in `perdeck.py` silently DROPS those: its regex is `gi=(\d+): (\d+) -> (\d+)`,
+which cannot match `-> -1`, so a game that stops winning appears in neither column. Read the lost/
+gained counts separately, always.
+
+### H.2 The 0.930x work units were measured against the BROKEN intermediate, not against GT
+
+`units9`/`units10` used the adopted deletion set as the denominator. That set was itself ~1.075x the
+pre-deletion engine, so "0.930x" meant "gives back the deletion's own overhead", not "cheaper than
+before". Measured directly against a binary built at 63dd9ce3 (20 decks x 300 games, seed 5500001,
+single-thread, each deck's own play settings):
+
+```
+GT total   48,145,348 units
+NEW total  48,325,827 units      ->  1.004x
+```
+
+Per deck, the spread is what matters, not the total:
+
+| deck | new/GT | avg-turn delta |
+|---|---|---|
+| hinata | 1.040 | -0.0300 |
+| kitty | 1.024 | 0.0000 |
+| auras | 1.015 | 0.0000 |
+| burn, dragons, goblins | 1.009-1.010 | 0.0000 |
+| breaching, knights, minotaur, slivers, stompy, fivecolour | 1.000 | 0.0000 |
+| melira | 0.992 | +0.0034 |
+| th | 0.994 | -0.0067 |
+| fluctuator | 0.812 | -0.0200 |
+
+fluctuator is 19% cheaper because its GAMES GOT SHORTER (-0.02 turns), which is the confounder the
+repo already knows about: per-game unit totals are not a per-decision cost, they are a per-decision
+cost times a game length. hinata, the most expensive deck in the suite by a factor of five, is the
+one that costs 4% MORE.
+
+### H.3 What this changes
+
+Nothing about the deletion, the two execution bug fixes, or the counter evidence in G.8/G.11 — those
+stand. What it changes is the claim to make about the trade: **greedy is gone from the searched
+window and from real play, at the same quality and the same cost as the engine that still had it.**
+That is the honest headline, and it is a materially different statement from "better on both axes".
+
+There is therefore **no work-unit surplus to reinvest**. Any quality work from here has to either
+find its own budget or be paid for deliberately.
