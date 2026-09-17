@@ -12032,6 +12032,41 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
                 // top N (clairvoyant), plus the explicit decline. Named variants survive the
                 // autonomous dedup via the #T signature term (core invariant: every legal put is a
                 // distinct plan the search scores).
+                //
+                // ...but ONLY for the copy that resolves FIRST. A SECOND copy in hand gets one
+                // empty-target put instead (decided at resolution), exactly like the human branch
+                // above, for the same reason that branch gives: the fan is built from a look this
+                // copy will never have. PerformLookTopPutCreature DrawN's the looked cards and
+                // push_back's the non-chosen ones to the BOTTOM, so by the time a second copy
+                // resolves every card this fan was built from has left the top. Its named picks
+                // miss and fall through to the highest-MV fallback -- ONE board, enumerated ~N
+                // times -- except when a 4-of's NAME happens to recur in the fresh look, which is
+                // worse than waste: it is clairvoyance about a look the plan has not had.
+                //
+                // This is the multiplication the branch stats charged to this deck (avg 117-133x,
+                // max 6144x, "two castable copies multiply TOGETHER"), and under a saturated budget
+                // that width is paid in search QUALITY. Note a plan casting ONLY the later copy
+                // loses nothing: the copies are identical, so the equivalent plan casting the first
+                // copy carries the full fan and is enumerated alongside it.
+                // DEFAULT ON; =0 restores the old cross-product. Gated on the param, so every deck
+                // without this card is byte-identical. docs/design/turntimber-multi-copy-plan-explosion.md
+                static const bool s_tt_multi_dedup = EnvOn("MTG_TT_MULTI_DEDUP", true);
+                int earlier_tt_copies = 0;
+                if (s_tt_multi_dedup)
+                {
+                    for (int j = 0; j < i; ++j)
+                    {
+                        const CardDefinition* jd = CardDatabase::Instance().LookupCached(ap.hand[j]);
+                        if (jd && jd->params.look_top_put_creature_count > 0) { ++earlier_tt_copies; }
+                    }
+                }
+                if (earlier_tt_copies > 0)
+                {
+                    // The put itself stays a real decision (put vs decline); only the naming goes.
+                    cands.push_back(std::string{});
+                }
+                else
+                {
                 const int lookn = std::min(def.params.look_top_put_creature_count,
                                            static_cast<int>(ap.library.size()));
                 std::unordered_set<std::string> seen_tt;
@@ -12069,6 +12104,7 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
                     });
                     cands.resize(static_cast<std::size_t>(s_tt_width));
                 }
+                }   // end: first-copy named fan
                 cands.push_back("TURNTIMBER_NONE");   // "you MAY put" -- declining is legal
             }
             else
