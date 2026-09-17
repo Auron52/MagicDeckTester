@@ -97,40 +97,55 @@ heuristic"*, 2026-08-25); the off-switch is there because the measurement bought
   (`plan_signature`'s `#V`, `PaySacVictimScope`'s fodder-pays ordering, `main.cpp`'s
   `sac_victim`/`sac_victim_name`, `PerformSacrificeCreatureCost`'s lookup).
 
-### Still open: the Hulk chapters have no searched axis, and only chapter I can have one
+### PARKED: the Hulk chapters, to be designed searched-with-heuristics after the pause
 
-This was sized during the same session and deliberately not built. The finding is architectural:
+**USER's ruling, 2026-09-17b, and it is the design brief — not a decision to re-litigate:**
 
-* **Chapters II and III are a different shape from chapter I — but NOT out of reach.** USER,
-  2026-09-17b: *"Technically they are decisions like that of Aether Vial."* That is the right
-  reference and it corrects an earlier draft of this section, which claimed they "cannot be a plan
-  axis at all". The engine already pins decisions that resolve OUTSIDE the main phase:
-  `Plan::vial_charge_choice` (Vial charges on an upkeep trigger, activates at instant speed) and
-  `Plan::lackey_choice` — whose own comment is explicit that the trigger "belongs to a Lackey
-  already in play, not to anything in `actions`", and that only the pre-combat plan can carry it
-  "since the put resolves in that combat's damage step". A board-owned, later-resolving decision
-  carried on a plan is therefore an established pattern, not a missing one.
-  What is genuinely further than either precedent reaches: a Saga chapter fires in `AdvanceSagas`
-  at the **next turn's** draw step, so the decision and its resolution are separated by a turn
-  boundary — inside a rollout, where this engine does not branch. Vial and Lackey both resolve
-  within the turn their plan covers. So the open question is not "is this shape legal?" (it is) but
-  "what does a pin mean when the chapter belongs to a turn the current plan does not cover?" —
-  which is the thing to settle before building anything. Until then the target is a resolution-time
-  heuristic (`DefaultSagaChapterTarget` = "biggest body that can swing now"), improvable via
-  `.claude/skills/heuristic-optimization.md` independently of any axis work.
-* **Chapter I CAN be searched**, because it resolves inside the Saga's own resolution during the main
-  phase — i.e. inside the plan apply. The shape is the `ScriptedEtbDig` pin, and the full plumbing
-  checklist is: a `thread_local` + RAII scope in `SpellEffects.h`; a `Plan::saga_ch1_choice` field;
-  consumption in `PerformSagaFreeCast` (rank into `cand_slots`, duplicate-not-whiff clamp, plus a
-  distinct DECLINE value — "you MAY cast it", the Turntimber `TURNTIMBER_NONE` precedent); the fan-out
-  in `AppendSubdecisionAxes`; the scope in `ApplyPlanDirect` **and** in `AIEngine` (executor lockstep,
-  or the realised turn is not the one that was scored); and then the four places a new pin must be
-  registered or it is silently wrong — `SamePlan`, `BpCandFingerprint`, `IsApplyEmptyPlan`, and the
-  **TT key fold** (`TurnSolver.cpp` ~42019, or a transposition reuses a node scored under a different
-  pin), plus the breakpoint capture/resume pins (~24307 / ~25022 / ~25050).
-  Chapter I's current pick is not naive — it scores each candidate by doing a real put on a COPY of
-  the state, so a Craterhoof team-pump or a Hornet Queen wave is measured — but it is blind to the
-  REST of the plan, which is exactly what a searched axis would fix.
+> *"Technically they are decisions like that of Aether Vial."*
+> *"To be fair, they would be implemented as a heuristic anyway, in this case."*
+> *"The decision is quite easy for the search."*
+> ***"Only the human really needs the axis in general, but we should still design it as
+> searched-with-heuristics like everything else after the pause."***
+
+So the answer is not "heuristic, full stop" and not "axis, urgently". It is: **the engine keeps the
+house architecture** — `searched-choice-audit.md`'s branch-by-default-with-the-heuristic-as-prior —
+**for the Hulk chapters too, even though the search will almost never deviate**, because being the
+one decision in the engine that is a bare heuristic is itself the defect the audit exists to prevent.
+The urgency is low precisely because the decision is easy; the consistency is the point.
+
+What each half needs, and what is already true:
+
+* **The HUMAN half is DONE** (`9da37300`). All three chapters are offered in-zone — ch. I as a
+  `free_cast` frame over a clickable hand (including declining), ch. II/III as board-click `target`
+  frames. That was the half the user says actually needs the axis, and it does not depend on any of
+  the engine work below.
+* **Chapter I is the straightforward one.** It resolves inside the Saga's own resolution during the
+  main phase — i.e. inside the plan apply — so it is the `ScriptedEtbDig` pin shape exactly. Full
+  plumbing checklist: a `thread_local` + RAII scope in `SpellEffects.h`; a `Plan::saga_ch1_choice`
+  field; consumption in `PerformSagaFreeCast` (rank into `cand_slots`, duplicate-not-whiff clamp,
+  plus a distinct DECLINE value — "you MAY cast it", the Turntimber `TURNTIMBER_NONE` precedent);
+  the fan-out in `AppendSubdecisionAxes`; the scope in `ApplyPlanDirect` **and** in `AIEngine`
+  (executor lockstep, or the realised turn is not the one that was scored); and then the four places
+  a new pin must be registered or it is silently wrong — `SamePlan`, `BpCandFingerprint`,
+  `IsApplyEmptyPlan`, and the **TT key fold** (`TurnSolver.cpp` ~42019, or a transposition reuses a
+  node scored under a different pin), plus the breakpoint capture/resume pins (~24307 / ~25022 /
+  ~25050). Today's pick is not naive — it scores each candidate by doing a real put on a COPY of the
+  state, so a Craterhoof team-pump or a Hornet Queen wave is measured rather than guessed — but it is
+  blind to the REST of the plan, which is what the axis would fix.
+* **Chapters II and III are the interesting one, and the Vial/Lackey precedent is the reference.**
+  The engine already pins board-owned decisions that resolve outside the main phase:
+  `Plan::vial_charge_choice` and `Plan::lackey_choice`, the latter explicitly carried on the
+  pre-combat plan "since the put resolves in that combat's damage step". What is further than either
+  precedent reaches is the TURN BOUNDARY: a Saga chapter fires in `AdvanceSagas` at the **next**
+  turn's draw step, so on the committed turn it resolves before any main-phase solve exists, and
+  inside the search it resolves in rollouts — the paths the audit already assigns to the heuristic.
+  **That is the design problem to solve**, and it is the reason this is parked rather than built: it
+  needs a decision about what a pin means when the chapter belongs to a turn the current plan does
+  not cover, not just the plumbing above.
+  The heuristic that stays the prior either way is `DefaultSagaChapterTarget` ("biggest body that can
+  still swing"), which is right nearly always in a race against a passive opponent. Its one known
+  edge is recorded in §1b: chapter II's counters are PERMANENT, so a body about to be eaten by
+  Natural Order is the wrong home for them.
 
 ---
 
