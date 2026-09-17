@@ -199,6 +199,9 @@ enum Slot : int
     EDF_CYCLE_SET,            // MTG_TAPAHEAD_CYCLE_SET         the autonomous loop's tap-ahead budget is over the top-`untaps` yield lands, not every tapped land (built 2026-09-16, default OFF: deck average +0.03 / 0 better 3 worse)
     FS_IDLE_NODE,             // MTG_FS_IDLE_NODE               a full-search node with NOTHING to do searches the idle continuation instead of answering "no win" (default ON since 2026-09-16)
     EDF_COMBO_ROUTE,          // MTG_EDF_COMBO_ROUTE            the mechanical COMBO OFF route as one searched plan action (built 2026-09-16)
+    BP_CANDS_ORDER,           // MTG_BP_CANDS_ORDER        value-order the breakpoint continuation list (MoveOrderPlans)
+    BP_W4,                    // MTG_BP_W4                 wave-0 width 4 (per-job twin of MTG_BP_SEARCH=4)
+    BP_NODE_HOST2,            // MTG_BP_NODE_HOST2         ROOTTURN hosting also hosts the node on root+1
     COUNT
 };
 
@@ -368,6 +371,9 @@ inline const char* Name(int slot)
         "MTG_TAPAHEAD_CYCLE_SET",
         "MTG_FS_IDLE_NODE",
         "MTG_EDF_COMBO_ROUTE",
+        "MTG_BP_CANDS_ORDER",
+        "MTG_BP_W4",
+        "MTG_BP_NODE_HOST2",
     };
     // The enum and this table are ONE mapping split across two lists: a slot added to one and not
     // the other silently shifts every lever after it (a manifest asking for lever X would set Y).

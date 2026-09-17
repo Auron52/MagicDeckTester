@@ -1838,6 +1838,38 @@ static bool BpEmptyArmEnabled()
     return heurarm::Flag(heurarm::BP_EMPTY_ARM, on);
 }
 
+// MTG_BP_CANDS_ORDER -- VALUE-ORDER the breakpoint continuation list before anything indexes it.
+//
+// The list BpEnumEntryFor derives is in raw ENUMERATION order (the land fold pushes each land's
+// "play this land, cast nothing" idle plan first, then that land's subsets), and it never went
+// through MoveOrderPlans -- FSLineWin sorts its OWN plan list, not this one. Wave 0 indexes it
+// as cands[0..W-1], the node's child loop walks it in order under a budget cutoff, and the
+// deferred waves walk the ranks past W in order. So "rank" meant "position in the enumerator's
+// walk", and k=0 was typically an idle land-only plan. The deleted greedy fallback picked the
+// MAX-VALUE plan (Solve's comparator: wins, then total_eval, then smallest mask), which is why
+// deleting it read as a width hole: the value-best continuation sat at an unreachable index.
+//
+// This is a heuristic ORDER (search-with-heuristics), not a decision: the search still scores
+// what it reaches, it just reaches the value-best ranks first. Lockstep-safe by construction --
+// the executor's replay indexes the SAME function (EnumerateBreakpointPlans). The enum memo
+// folds the heurarm arm into its key, so mixed-arm batches never share a list. Default OFF for
+// the A/B (docs/design/greedy-continuation-deletion-route.md).
+static bool BpCandsOrderEnabled()
+{
+    static const bool on = EnvOn("MTG_BP_CANDS_ORDER");
+    return heurarm::Flag(heurarm::BP_CANDS_ORDER, on);
+}
+
+// MTG_BP_NODE_HOST2 -- under ROOTTURN hosting, also host the breakpoint node on the turn AFTER the
+// root turn. The middle rung between root-only (cheap, misses the lookahead turns' continuations)
+// and hosting on every searched turn (MTG_BP_NODE_ROOTTURN=0; measured to recover hinata under
+// the greedy deletion at a wall cost the record puts at 1.2-1.5x). Default OFF.
+static bool BpNodeHost2()
+{
+    static const bool on = EnvOn("MTG_BP_NODE_HOST2");
+    return heurarm::Flag(heurarm::BP_NODE_HOST2, on);
+}
+
 static bool BpCondemnOrderAwareEnabled()
 {
     // DEFAULT ON. This is the fix for bug 1 and condemnation is UNSOUND without it -- leaving it
@@ -7630,6 +7662,10 @@ static int BpSearchWidth()
         int n = std::atoi(v);
         return n < 0 ? 0 : n;
     }();
+    // MTG_BP_W4: the per-job boolean twin of MTG_BP_SEARCH=4 (heurarm carries booleans only, and
+    // a value-carrying env cannot vary per job inside one pooled batch). An explicit env wins.
+    static const bool env_set = (std::getenv("MTG_BP_SEARCH") != nullptr && *std::getenv("MTG_BP_SEARCH") != '\0');
+    if (!env_set && heurarm::Flag(heurarm::BP_W4, false)) { return 4; }
     return w;
 }
 
@@ -35145,7 +35181,8 @@ static TurnSolver::SearchLine FSLineTail(const GameState& state, int depth, int 
         bool node_host_here = false;
         if (BpNodeEnabled() && !(BpNodeD0Only() && depth > 0)
             && !(BpNodeRootTurnOnly() && g_condemn_root_turn >= 0
-                 && state.turn_number != g_condemn_root_turn))
+                 && state.turn_number != g_condemn_root_turn
+                 && !(BpNodeHost2() && state.turn_number == g_condemn_root_turn + 1)))
         {
             for (const TurnSolver::Plan& q : post)
             { if ((PlanOpensBreakpoint(state, q) & BpNodeSites()) != 0) { node_host_here = true; break; } }
@@ -36502,7 +36539,8 @@ static TurnSolver::SearchLine FSLineWin(const GameState& state, int depth, int m
     bool node_host_here = false;
     if (BpNodeEnabled() && !(BpNodeD0Only() && depth > 0)
         && !(BpNodeRootTurnOnly() && g_condemn_root_turn >= 0
-             && state.turn_number != g_condemn_root_turn))
+             && state.turn_number != g_condemn_root_turn
+             && !(BpNodeHost2() && state.turn_number == g_condemn_root_turn + 1)))
     {
         for (const TurnSolver::Plan& p : pre)
         { if ((PlanOpensBreakpoint(state, p) & BpNodeSites()) != 0) { node_host_here = true; break; } }
@@ -42821,6 +42859,9 @@ static BpEnumEntry* BpEnumEntryFor(const GameState& state, bool is_pre_combat,
     ++g_bp_enum_depth;   // suppress the fan-out: this IS the continuation list, not a new decision
     std::vector<TurnSolver::Plan> plans = EnumeratePlansWithLand(state, is_pre_combat);
     --g_bp_enum_depth;
+    // MTG_BP_CANDS_ORDER: value-best first (wins, then total_eval), so the rank window and the
+    // node's budget-cut child walk reach what the deleted greedy used to pick. See the flag.
+    if (BpCandsOrderEnabled()) { MoveOrderPlans(plans); }
     plancache::ReportHiwater("bp", state, plans);
 
     if (keyed)
