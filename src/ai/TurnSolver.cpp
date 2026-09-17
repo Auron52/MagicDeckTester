@@ -7061,6 +7061,65 @@ static void RenumberFoldOrds(std::vector<Action>& cands,
 // -> byte-identical.
 static const bool s_sac_waste_prune = !EnvOn("MTG_NO_SAC_WASTE_PRUNE");
 
+// Reject a selection whose sac-outlet activations demand MORE fodder than the board can supply.
+//
+// FOUND BY THE STAGE-5d CLAUDE-PLAY SWEEP (Fungus, 2026-09-17), independently by two agents. Each
+// sac outlet is enumerated as its own action and picks its victim through CanonicalSacVictim, which
+// reads the CURRENT board and knows nothing about the other actions in the same plan. Fungus is the
+// first deck to run TWO outlets gated on the same subtype -- Utopia Mycon ("Sacrifice a Saproling:
+// add one mana of any color") and Psychotrope Thallid ("{1}, Sacrifice a Saproling: draw a card") --
+// so with exactly ONE Saproling on board the enumerator happily offered a plan containing both.
+// At apply time the first one ate the Saproling and the second silently no-opped: no draw, the {1}
+// never paid, no error.
+//
+// That is an enumeration<->execution divergence, and it is not cosmetic: the plan is SCORED for a
+// card AND a floating {G} while it can only ever deliver one, so the search over-values it.
+//
+// This is a CORRECTNESS reject (the plan is physically impossible), not a heuristic narrowing -- it
+// removes a line the executor could never perform, which is exactly what the core invariant permits.
+// Demand is grouped by the outlet's victim FILTER, because two outlets requiring different subtypes
+// do not compete for the same bodies. A burst carries its count in sac_count.
+//
+// Inert for every deck without two co-selected creature-sac outlets -> byte-identical.
+static bool SubsetOversubscribesSacFodder(const GameState& state,
+                                          const std::vector<Action>& cands,
+                                          const std::vector<int>& sel)
+{
+    // (victim subtype filter, demand). Empty filter = "any creature you control".
+    std::vector<std::pair<std::string, int>> demand;
+    int outlets = 0;
+    for (int j : sel)
+    {
+        const Action& a = cands[j];
+        if (a.kind != Action::Kind::SacForMana && a.kind != Action::Kind::SacCreatureOutlet)
+        { continue; }
+        if (a.sac_source_id == 0) { continue; }
+        const CardDefinition* sd = ControlledDefByNumber(state, a.sac_source_id);
+        if (sd == nullptr || !sd->params.sac_creature_outlet) { continue; }   // not a creature-sac
+        ++outlets;
+        const int want = a.sac_count > 1 ? a.sac_count : 1;
+        const std::string& filt = sd->params.sac_creature_requires_subtype;
+        bool found = false;
+        for (auto& d : demand)
+        { if (d.first == filt) { d.second += want; found = true; break; } }
+        if (!found) { demand.emplace_back(filt, want); }
+    }
+    if (outlets < 2) { return false; }   // one outlet can never oversubscribe itself
+    const int me = state.active_player_index;
+    for (const auto& d : demand)
+    {
+        int supply = 0;
+        for (const Permanent& p : state.battlefield)
+        {
+            if (p.controller_index != me || !p.card.IsCreature()) { continue; }
+            if (!d.first.empty() && !CardHasSubtype(p.card, d.first)) { continue; }
+            ++supply;
+        }
+        if (supply < d.second) { return true; }   // physically impossible -> reject
+    }
+    return false;
+}
+
 static bool SubsetWastesCreatureSacMana(const GameState& state,
                                         const std::vector<Action>& cands,
                                         const std::vector<int>& sel)
@@ -19126,6 +19185,10 @@ TurnSolver::Plan TurnSolver::SolveUncached(const GameState& state, bool is_pre_c
         // the filter fallback, and keeps the rule identical on both sides. Inert without a creature
         // mana outlet -> byte-identical.
         if (SubsetWastesCreatureSacMana(state, cands, sel)) { return; }
+        // Reject a plan whose sac outlets together demand more fodder than the board has
+        // (found by the Fungus Stage-5d sweep: two Saproling-gated outlets, one Saproling --
+        // the second half silently no-opped at apply). Correctness, not a narrowing.
+        if (SubsetOversubscribesSacFodder(state, cands, sel)) { return; }
         // Reject a life-paid phyrexian variant whose full-mana twin is jointly payable (weak
         // dominance -- see the helper). Inert without a phyrexian card -> byte-identical.
         if (SubsetPhyrexianDominated(state, cands, sel)) { return; }
@@ -28261,6 +28324,10 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
         // above, declining an in-play outlet keeps BOTH the outlet and the body, so there is no
         // "hold it for a later turn" trade for the search to arbitrate. See the helper.
         if (SubsetWastesCreatureSacMana(state, cands, sel)) { return; }
+        // Reject a plan whose sac outlets together demand more fodder than the board has
+        // (found by the Fungus Stage-5d sweep: two Saproling-gated outlets, one Saproling --
+        // the second half silently no-opped at apply). Correctness, not a narrowing.
+        if (SubsetOversubscribesSacFodder(state, cands, sel)) { return; }
         // Reject a life-paid phyrexian variant whose full-mana twin is jointly payable (weak
         // dominance -- lockstep twin of Solve::consider's call; see the helper).
         if (SubsetPhyrexianDominated(state, cands, sel)) { return; }
