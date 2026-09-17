@@ -1125,3 +1125,91 @@ hold DIFFERENT DECK MIXES — only some decks have a d3/b80 or d5/b80 cell — s
 type against another is confounded. Neither caveat touches the d3/b10 result, which is the same
 sign and the same shape in all three tiers on disjoint seeds. The controlled version is still the
 ladder in I.4, where every rung runs the same decks.
+
+## Addendum K — d3/b10 is STARVATION, and the per-deck focus list
+
+USER 2026-09-17: *"depth 3 might not be able to use all of that budget ... At budget 10 we were
+likely unable to reach depth 3 at least without greedy"*, and *"I would actually like to see
+per-deck ... There may be some decks that are purely negative and I would like to focus on those."*
+
+### K.1 The cell types are DISJOINT DECK SETS, so J's cross-type comparison was confounded
+
+Budget in this suite is a per-deck tractability choice, not an experimental variable. Each deck
+appears at exactly one budget per depth:
+
+| cell type | decks |
+|---|---|
+| d3 b10 / d5 b20 | antilife, dragonstorm, fivecolour, hinata, melira, mirrorwing, slivers |
+| d3 b20 / d5 b40 | breaching, creature_giving, critter, dragons, fluctuator, goblins, kitty, knights, minotaur, stompy |
+| d3 b80 / d5 b80 | auras, burn, th |
+
+So "d3 b80 is worse than d5 b20" compares different decks and means nothing. What the layout DOES
+give is a clean **paired depth comparison** — the same decks at d3 and d5 — and on the overnight
+tier every group improves going from d3 to d5, with burn and th holding budget FIXED at b80 across
+the depth step. Whole suite, 2HG variants excluded: **d3 +0.00062/game, d5 -0.00081/game.**
+
+### K.2 The nominal depth is never reached, and the deletion costs plies
+
+`MTG_ROLLOUT_STATS=1`, `id_depth` mean (the depth iterative deepening actually reaches per solve),
+60 games, old = a 63dd9ce3 build:
+
+| deck | config | old | new | gap | that deck's delta |
+|---|---|---:|---:|---:|---:|
+| hinata | d3 b10 | 2.23 | **2.09** | **-0.13** | **+0.0219** |
+| hinata | d3 b20 | 2.44 | 2.32 | -0.12 | |
+| hinata | d3 b40 | 2.66 | 2.56 | -0.10 | |
+| hinata | d5 b20 | 3.76 | 3.56 | -0.20 | -0.0044 |
+| dragonstorm | d3 b10 | 2.80 | 2.75 | -0.05 | +0.0050 |
+| dragonstorm | d5 b20 | 4.20 | 4.15 | -0.05 | +0.0025 |
+| melira | d3 b10 | 2.667 | 2.661 | -0.006 | -0.0012 |
+| melira | d5 b20 | 3.211 | 3.219 | **+0.008** | +0.0017 |
+| dragons | d3 b20 | **3.000** | 2.996 | -0.004 | +0.0020 |
+| dragons | d5 b40 | 4.98 | 4.92 | -0.06 | +0.0005 |
+| fluctuator | d3 b20 | 2.753 | 2.753 | **0.000** | -0.0150 |
+| fluctuator | d5 b40 | 3.53 | 3.51 | -0.02 | -0.0265 |
+
+**The user's read is confirmed.** hinata at d3/b10 reaches depth **2.09**, not 3 — the configuration
+is budget-starved for BOTH engines, and the deletion makes it 0.13 plies shallower still because
+branching a continuation costs more per ply than a single greedy `Solve()` did. Even at b40 hinata
+only reaches 2.66. The ordering is the story: the two decks that lose most at d3 (hinata +0.0219,
+dragonstorm +0.0050) are exactly the two with the largest depth shortfall, and the decks whose
+depth is unchanged (fluctuator 0.000, melira -0.006) are neutral-or-better. **The d3/b10 regression
+is a depth-starvation artifact, not a quality defect** — which also means it is a COST problem, and
+the Addendum I.2 duplicate-plan hypothesis is the right lever for it rather than any quality work.
+
+At d5 the depth gaps stay small (melira actually goes DEEPER) and quality improves anyway: the
+extra per-ply cost is repaid by better continuations inside the depth reached.
+
+### K.3 Per-deck: which decks are negative at EVERY configuration
+
+Across smoke, regression, overnight (split by depth) and each deck's own play settings. A deck is
+listed as worse-everywhere only if it never improves anywhere it changes at all.
+
+| deck | tier d3 | tier d5 | overnight d3 | overnight d5 | play settings | verdict |
+|---|---:|---:|---:|---:|---:|---|
+| fluctuator | -0.0217 | -0.0267 | -0.0150 | -0.0265 | -0.0200 | better everywhere |
+| goblins | 0 | 0 | -0.0008 | -0.0002 | 0 | better everywhere |
+| hinata | +0.0144 | +0.0173 | +0.0219 | **-0.0044** | **-0.0300** | mixed (starved shallow, best deck deep) |
+| th | +0.0155 | -0.0017 | +0.0030 | -0.0018 | -0.0067 | mixed |
+| mirrorwing | +0.0087 | 0 | -0.0013 | -0.0033 | -0.0066 | mixed |
+| melira | -0.0133 | 0 | -0.0012 | +0.0017 | +0.0034 | mixed |
+| creature_giving | +0.0017 | -0.0020 | +0.0010 | 0 | 0 | mixed |
+| auras | +0.0005 | 0 | -0.0003 | -0.0003 | 0 | mixed |
+| dragonstorm | 0 | 0 | +0.0050 | +0.0025 | 0 | mixed |
+| **dragons** | 0 | 0 | **+0.0020** | **+0.0005** | 0 | **worse everywhere** |
+| **kitty** | 0 | 0 | +0.0012 | 0 | 0 | **worse everywhere** |
+| **critter** | 0 | 0 | +0.0007 | 0 | 0 | **worse everywhere** |
+| **burn** | 0 | 0 | +0.0003 | +0.0002 | 0 | **worse everywhere** |
+| **antilife** | 0 | 0 | 0 | +0.0002 | 0 | **worse everywhere** |
+| breaching, fivecolour, knights, minotaur, slivers, stompy | 0 | 0 | 0 | 0 | 0 | unchanged |
+
+**The focus target is dragons.** It is the only deck that is worse at every depth AND reaches its
+nominal depth (id_depth 3.000 at d3/b20), so its loss cannot be explained away as starvation — it is
+a genuine quality regression, and at +0.0020/game it is ten times any other worse-everywhere deck.
+kitty, critter, burn and antilife move by 0.0002-0.0012 in a single cell each and should be checked
+for significance before any effort goes into them; at that size they are candidates for ordinary
+run-to-run churn rather than signal.
+
+hinata should NOT be on the focus list despite having the largest single regression in the suite.
+It is the best deck in the suite at its own play settings (-0.0300) and at overnight d5 (-0.0044);
+its shallow-configuration loss is the starvation in K.2.
