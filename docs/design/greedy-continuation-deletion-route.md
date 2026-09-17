@@ -1093,3 +1093,35 @@ measured slope. The budget ladder in I.4 is the controlled version and should be
 claim is leaned on. If it confirms, the honest headline changes from "parity" to **"better at the
 settings the engine ships at, slightly worse only at a shallow configuration nothing ships"** — and
 the d3/b10 cells become a tractability proxy to keep an eye on rather than a target to optimise.
+
+### J.1 The overnight tier says the same thing, on 279,320 games and more cell types
+
+Full rebaseline, 268 cases. Split by cell type, against the overnight GT:
+
+| configuration | cells | games | extra turns | per game |
+|---|---:|---:|---:|---:|
+| d0 b0 | 80 | 160,000 | -6.0 | -0.00004 |
+| **d3 b10** | 28 | 15,600 | **+42.0** | **+0.00269** |
+| d3 b20 | 40 | 38,000 | -13.0 | -0.00034 |
+| d3 b80 | 12 | 12,000 | +12.0 | +0.00100 |
+| d5 b20 | 44 | 19,400 | -7.0 | -0.00036 |
+| **d5 b40** | 56 | 26,320 | **-35.0** | **-0.00133** |
+| d5 b80 | 8 | 8,000 | -6.0 | -0.00075 |
+| **TOTAL** | 268 | 279,320 | **-13.0** | **-0.00005** |
+
+237 games faster, 218 slower, 6 wins lost, 5 gained. **Every depth-5 cell type is better than the
+baseline, and d3/b10 is again the worst by a wide margin** — 2.7 times worse per game here than the
++0.00090 it showed on smoke and regression.
+
+The sharper observation is **d3/b80**: eight times d3/b10's budget, still worse than the baseline
+(+0.00100), while every d5 cell is better at a quarter of that budget. On this evidence the axis
+that flips the sign is **DEPTH, not budget** — which is consistent with the mechanism, because a
+shallow search cannot reach the turns where a breakpoint's payoff lands no matter how long it
+thinks.
+
+**Two caveats, both load-bearing.** The overnight GT was stale before this run, so these deltas
+include whatever else drifted since it was last accepted, not only this change. And the cell types
+hold DIFFERENT DECK MIXES — only some decks have a d3/b80 or d5/b80 cell — so comparing one cell
+type against another is confounded. Neither caveat touches the d3/b10 result, which is the same
+sign and the same shape in all three tiers on disjoint seeds. The controlled version is still the
+ladder in I.4, where every rung runs the same decks.
