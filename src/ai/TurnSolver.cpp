@@ -7106,8 +7106,62 @@ static bool SubsetOversubscribesSacFodder(const GameState& state,
     }
     if (outlets < 2) { return false; }   // one outlet can never oversubscribe itself
     const int me = state.active_player_index;
+
+    // BAIL OUT WHERE FODDER CAN BE REPLENISHED MID-PLAN. This guard counts the board as it is now,
+    // but a plan can legitimately sacrifice more bodies than it starts with:
+    //
+    //   * PERSIST (Melira Pod): a creature sacrificed to an outlet RETURNS and can be eaten again,
+    //     so the same body supplies many activations. Counting board creatures rejects the loop
+    //     outright. This is not hypothetical -- it changed Melira Pod's play digest on all four of
+    //     its smoke cases the first time this guard shipped, which is what caught it.
+    //   * A co-selected action that puts a MATCHING creature onto the battlefield (casting one,
+    //     or a token maker whose token carries the filter subtype) genuinely raises the supply.
+    //
+    // Being conservative here is the safe direction: a missed reject leaves the pre-existing
+    // (documented, executor/rollout-shared) apply-time degradation exactly as it was, whereas an
+    // over-reject would delete a line the deck can really play.
+    for (const Permanent& p : state.battlefield)
+    {
+        if (p.controller_index != me) { continue; }
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+        if (d != nullptr && d->params.persist) { return false; }
+    }
+    auto plan_can_add = [&](const std::string& filt) -> bool
+    {
+        for (int j : sel)
+        {
+            const Action& a = cands[j];
+            const CardDefinition* d = a.def;
+            if (d == nullptr && !static_cast<const std::string&>(a.card_name).empty())
+            { d = CardDatabase::Instance().Lookup(static_cast<const std::string&>(a.card_name)); }
+            if (d == nullptr) { return true; }   // unknown -> assume it can; do not reject
+            auto matches = [&](const std::vector<std::string>& subs)
+            {
+                if (filt.empty()) { return !subs.empty(); }
+                for (const std::string& s : subs) { if (s == filt) { return true; } }
+                return false;
+            };
+            // Casting a creature that itself matches the filter.
+            if (a.kind == Action::Kind::CastFromHand && d->card.IsCreature())
+            {
+                if (filt.empty() || CardHasSubtype(d->card, filt)) { return true; }
+            }
+            // Any token the action creates that carries the filter subtype.
+            if (matches(d->params.spore_token_subtypes)
+                || matches(d->params.upkeep_token_subtypes)
+                || matches(d->params.dies_token_subtypes)
+                || matches(d->params.sac_outlet_token_subtypes)
+                || matches(d->params.etb_created_token_subtypes)
+                || matches(d->params.tap_token_subtypes)
+                || matches(d->params.cast_token_subtypes)
+                || matches(d->params.attack_token_subtypes)) { return true; }
+        }
+        return false;
+    };
+
     for (const auto& d : demand)
     {
+        if (plan_can_add(d.first)) { continue; }   // supply is not fixed -> cannot judge, allow
         int supply = 0;
         for (const Permanent& p : state.battlefield)
         {
