@@ -429,6 +429,42 @@ Three known, disclosed gaps:
 * **Did not generate a mulligan profile or a value leaf.** Per the pipeline-ordering policy those are
   the LAST stages and you kick them off.
 
+## Search shape — ADOPTED (and the answer to "should we run a value leaf?")
+
+**No value leaf is needed for this deck, and running one would be wasted work.**
+
+`scripts/shape_probe.py` (3 seeds x 60 games, fresh seeds 880500+, d5b20), one pooled batch:
+
+| shape | units | ratio | d_avg | better | worse |
+|---|---|---|---|---|---|
+| `heur` (plain rollout ladder, the default) | 8,468,329 | 1.00 | — | — | — |
+| `esc_nl` | 4,169,040 | 0.49 | +0.0000 | 0 | 0 |
+| **`fit_nl`** | **3,122,382** | **0.37** | +0.0000 | 0 | 0 |
+
+The probe reported the shapes as UNRESOLVED on a z-test — but that is the *light-deck tie* case, and
+a sign test is the wrong instrument when the play is literally the same. **Digest-style per-game
+verification settles it:** 600 games (2 seeds x 300, d5 b200, `MTG_DUMP_WINS`) with the sidecar ON vs
+OFF differ in **0 games**. Identical play, not merely equal averages.
+
+What it buys, at d5 b2000 over 300 games: **wall 25.88s -> 14.08s (1.84x), CPU 199.24s -> 86.30s
+(2.31x)**, average unchanged at 5.3967. Re-verified with the sidecar in place: 0 `[fd-diverge]`,
+0 `[nonconv]`, and the depth sweep is unchanged (5.825 / 5.445 / 5.445).
+
+Adopted as `decks/Angels/Angels.value.json`:
+```json
+{"value_play": {"ladder": "single", "leaf": "none", "alpha": "relaxed"}}
+```
+(The file's PRESENCE is what activates it; `leaf: "none"` means there is no learned model to build.)
+
+Adopted without asking under the standing no-drawback rule (USER 2026-09-03): identical quality plus
+a large cost win is not a trade-off. **Why the deck proves everything inside the horizon:** it is a
+linear aggro curve-out — every game in the sweep was decided by turn 5-6 with no combo to project
+past, so the rollout's horizon evaluation was never the binding constraint. That is precisely the
+profile for which a value leaf is a net negative (cf. Stompy).
+
+**Practical consequence:** the 2.3x CPU saving is exactly what makes the deferred, user-kicked-off
+mulligan generation cheaper when you want it.
+
 ## PENDING YOUR SIGN-OFF (provisional; nothing here blocked the work)
 
 1. **`card_fields` gate is RED on two cards that are not in this deck** — `Apex Altisaur`
