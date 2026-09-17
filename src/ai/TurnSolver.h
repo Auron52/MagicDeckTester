@@ -805,6 +805,27 @@ public:
         // as discard_choice -- and one turn further out, since the upkeep is next turn's.
         int vial_charge_choice = -1;
 
+        // SEARCHED SAGA CHAPTER TARGET (World War Hulk's II and III, "target creature you
+        // control"): a RANK into SagaChapterTargetCandidates, resolved at the chapter's own
+        // resolution. -1 (default) == that list's front, i.e. DefaultSagaChapterTarget, byte-
+        // identical to no branch.
+        //
+        // USER 2026-09-17b: *"Technically they are decisions like that of Aether Vial"* and
+        // *"we should still design it as searched-with-heuristics like everything else"*. The Vial
+        // reference is exact, not an analogy: this is the SAME turn-boundary problem and takes the
+        // SAME answer -- the pick rides GameState::scripted_saga_target rather than a scoped guard,
+        // because the chapter fires at the NEXT turn's draw step, long after the plan apply
+        // returned. Sized off the CURRENT board plus one for headroom, since the board the chapter
+        // actually sees is next turn's and generally wider (the sac-land axis's rule).
+        //
+        // Worth stating plainly, because it is the reason this is a small axis and not a big one:
+        // the heuristic is right nearly always here (*"The decision is quite easy for the search"*)
+        // -- a race against a passive opponent wants the biggest body that can still swing. The
+        // axis exists so the choice is not the one bare heuristic in an engine whose doctrine is
+        // branch-by-default, and so the rare case it IS wrong (chapter II's counters are PERMANENT,
+        // so a body about to be eaten by Natural Order is the wrong home) is reachable.
+        int saga_target_choice = -1;
+
         // SEARCHED CYCLE/SAC-DRAW DIG (Horizon Canopy class; USER 2026-08-28: "we want that
         // decision to be searched to some degree... searched with heuristics is the way to go").
         // -1 (default) == the provider's dig heuristic decides, exactly as before -- and the

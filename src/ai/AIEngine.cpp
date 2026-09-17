@@ -3230,6 +3230,13 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
             // Vial-charge lockstep: same write-when->=0 rule, but consumed at NEXT turn's upkeep
             // (DecideVialCharge) rather than this turn's cleanup -- the pin rides across the boundary.
             if (plan.vial_charge_choice >= 0) { m_vial_choice_pin = plan.vial_charge_choice; }
+            // Saga chapter-target lockstep. Unlike the vial pin this needs NO AIEngine member: the
+            // consumer (AdvanceSagas -> FireSagaChapter) is genuinely SHARED code that reads
+            // GameState in both worlds, called from GameEngine::DrawStep here and from
+            // SimulateEndAndStartNextTurn in the rollout -- so writing the state field is the whole
+            // executor half, and the realised chapter is the one the scored line simulated.
+            // Write-when->=0, and it must survive to next turn's draw step (see the GameState note).
+            if (plan.saga_target_choice >= 0) { state.scripted_saga_target = plan.saga_target_choice; }
             // Searched dork attack/hold lockstep (MTG_DORK_ATK_SEARCH): the committed m1 plan's
             // combat-variant choice pins this turn's DeclareAttackers, so the realised combat is
             // the one the scored line simulated. Write-when->=0; m2 plans never carry the field.

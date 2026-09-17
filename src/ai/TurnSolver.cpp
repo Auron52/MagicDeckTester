@@ -8127,6 +8127,15 @@ static bool SacCreatureAxisEnabled()
     static const bool on = EnvOn("MTG_SAC_CREATURE_AXIS", true);
     return on;
 }
+// MTG_SAGA_TARGET_AXIS (default ON; =0 disables): the searched target for a Saga chapter that says
+// "target creature you control" (World War Hulk II and III). See Plan::saga_target_choice for the
+// user ruling this implements and why the Aether Vial charge is the exact precedent rather than a
+// loose analogy -- same turn boundary, same state-carried pin, same heuristic-as-branch-order.
+static bool SagaTargetAxisEnabled()
+{
+    static const bool on = EnvOn("MTG_SAGA_TARGET_AXIS", true);
+    return on;
+}
 // MTG_TUTOR_AXIS_RESOLVE=1 (default off): bind the searched tutor pick by INDEX resolved at the
 // TRUE per-plan state, instead of by NAME ranked at the shared pre-land turn-start state. This is
 // the honest form of the located axis defect (see the fan-out note in EnumeratePlansWithLand):
@@ -8759,6 +8768,7 @@ static uint64_t BpCandFingerprint(const TurnSolver::Plan& p)
     fold(static_cast<uint64_t>(p.tutor_choice + 2) * 41 + static_cast<uint64_t>(p.tapmode_choice + 2));
     fold(static_cast<uint64_t>(p.freshmode_choice + 2) * 43 + static_cast<uint64_t>(p.lackey_choice + 2));
     fold(static_cast<uint64_t>(p.ponder_choice + 2) * 47 + static_cast<uint64_t>(p.discard_choice + 2));
+    fold(static_cast<uint64_t>(p.saga_target_choice + 2) * 59);
     fold(static_cast<uint64_t>(p.vial_charge_choice + 2) * 53
          + static_cast<uint64_t>(p.searched_order ? 1 : 0));
     return h;
@@ -8808,7 +8818,8 @@ static bool IsApplyEmptyPlan(const TurnSolver::Plan& p)
         && p.scry_choice == -1 && p.etbdig_choice == -1 && p.tutor_choice == -1 && p.rad_mode == -1
         && p.sac_pins.empty() && p.tapmode_choice == 0 && p.freshmode_choice == 0
         && p.lackey_choice == -1 && p.ponder_choice == -1 && p.discard_choice == -1
-        && p.vial_charge_choice == -1 && !p.searched_order && p.atk_dork_release == -1
+        && p.vial_charge_choice == -1 && p.saga_target_choice == -1
+        && !p.searched_order && p.atk_dork_release == -1
         && p.bp_choice == -1 && p.bp_at == 0 && !p.bp_all && !p.bp_wave0;
 }
 // Companion channel (filled by the k=0 apply's in-scope enumeration, node site 3 only): the
@@ -18410,6 +18421,7 @@ namespace solvememo
             || a.tapmode_choice != b.tapmode_choice || a.freshmode_choice != b.freshmode_choice
             || a.lackey_choice != b.lackey_choice || a.ponder_choice != b.ponder_choice
             || a.discard_choice != b.discard_choice || a.vial_charge_choice != b.vial_charge_choice
+            || a.saga_target_choice != b.saga_target_choice
             || a.dig_choice != b.dig_choice || a.bp_choice != b.bp_choice
             || a.bp_at != b.bp_at || a.bp_wave0 != b.bp_wave0)
         { return false; }
@@ -21728,6 +21740,9 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
     // Searched Aether Vial charge: same reasoning again, one turn further out -- the upkeep that
     // reads this runs at the START OF NEXT TURN, so it must ride the state across the turn boundary.
     if (plan.vial_charge_choice >= 0) { state.scripted_vial_charge = plan.vial_charge_choice; }
+    // Searched Saga chapter target: same write-when->=0 state pin, read at the NEXT turn's draw
+    // step by AdvanceSagas (see GameState::scripted_saga_target).
+    if (plan.saga_target_choice >= 0) { state.scripted_saga_target = plan.saga_target_choice; }
 
     // Commit-the-line recording (out_breakpoint != null, set only when building the
     // committed line): capture the casts each draw-breakpoint re-solve makes so the
@@ -31325,6 +31340,93 @@ static void AppendSubdecisionAxes(const GameState& state, bool is_pre_combat,
         }
     }
 
+    // SEARCHED SAGA CHAPTER TARGET (MTG_SAGA_TARGET_AXIS) -- the post-dedup fan-out for a chapter
+    // that resolves at NEXT turn's draw step. Structurally the Aether Vial charge axis directly
+    // above: the decision does not happen during this plan at all, which is why the pick rides the
+    // STATE (GameState::scripted_saga_target) instead of a scoped guard, and why the pin is a RANK
+    // resolved at the chapter's own resolution rather than a permanent named a turn early.
+    //
+    // WIDTH is sized off the CURRENT board +1 for headroom and capped at 4 -- the sac-land axis's
+    // rule, and for its reason: the list the pin indexes is built NEXT turn, when the board is
+    // generally WIDER (this very plan deploys into it), so sizing to today's creature count alone
+    // would leave the extra bodies unreachable. Over-range pins clamp to the last candidate
+    // (duplicate-not-whiff), so headroom costs at most a duplicate world.
+    //
+    // GATED on something existing to consume the pin: a Saga we control that has chapters LEFT
+    // (lore_counters < saga_chapters, so next draw step advances it), or one this very plan casts
+    // -- a Saga entering now takes its chapter I on entry and its first TARGETING chapter next
+    // turn. A pin nothing consumes is a duplicate plan that costs a rollout to discover it changed
+    // nothing, which is exactly what the Vial axis's gate exists to avoid.
+    if (SagaTargetAxisEnabled() && !HumanPlayActive())
+    {
+        auto is_saga = [](const CardDefinition* d)
+        { return d != nullptr && d->params.saga_chapters > 0; };
+        // Does this Saga definition have a TARGETING chapter still ahead of it?
+        auto targets_ahead = [](const CardDefinition& d, int lore)
+        {
+            for (int ch = lore + 1; ch <= d.params.saga_chapters; ++ch)
+            {
+                if ((ch == 2 && d.params.saga_ch2_counters_on_target > 0)
+                    || (ch == 3 && d.params.saga_ch3_double_pt_target)) { return true; }
+            }
+            return false;
+        };
+        bool consumer = false;
+        for (const Permanent& p : state.battlefield)
+        {
+            if (p.controller_index != state.active_player_index) { continue; }
+            const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+            if (is_saga(d) && targets_ahead(*d, p.lore_counters)) { consumer = true; break; }
+        }
+        if (!consumer)
+        {
+            consumer = std::any_of(all.begin(), all.end(), [&](const TurnSolver::Plan& p)
+            {
+                return std::any_of(p.actions.begin(), p.actions.end(), [&](const Action& a)
+                {
+                    if (a.kind != Action::Kind::CastFromHand) { return false; }
+                    const CardDefinition* d = a.def ? a.def
+                                                    : CardDatabase::Instance().Lookup(a.card_name.str());
+                    // It enters and immediately takes chapter I, so it is on lore 1 next turn.
+                    return is_saga(d) && targets_ahead(*d, 1);
+                });
+            });
+        }
+        if (consumer)
+        {
+            int creatures = 0;
+            for (const Permanent& p : state.battlefield)
+            {
+                if (p.controller_index == state.active_player_index && p.card.IsCreature())
+                { ++creatures; }
+            }
+            const int W = std::min(4, creatures + 1);
+            if (W > 1)
+            {
+                std::vector<TurnSolver::Plan> extra;
+                for (const TurnSolver::Plan& p : all)
+                {
+                    // Base plans only -- one axis at a time, so cost stays additive.
+                    if (p.scry_choice >= 0 || p.bp_choice >= 0 || p.tutor_choice >= 0
+                        || p.etbdig_choice >= 0 || p.lackey_choice >= 0 || p.ponder_choice >= 0
+                        || p.discard_choice >= 0 || p.vial_charge_choice >= 0
+                        || p.saga_target_choice >= 0 || !p.sac_pins.empty()) { continue; }
+                    // k = 0 is the heuristic's own pick, which the base plan already carries.
+                    for (int k = 1; k < W; ++k)
+                    {
+                        TurnSolver::Plan v = p;
+                        v.saga_target_choice = k;
+                        extra.push_back(std::move(v));
+                    }
+                }
+                TRACE("sagaaxis", "T%d %zu plan(s) -> %zu chapter-target variant(s) (W=%d)",
+                      state.turn_number, all.size(), extra.size(), W);
+                all.insert(all.end(), std::make_move_iterator(extra.begin()),
+                                      std::make_move_iterator(extra.end()));
+            }
+        }
+    }
+
     // SEARCHED SAME-PLAN SAC VICTIM (MTG_SAC_CREATURE_AXIS; see SacCreatureAxisEnabled for the
     // defect and the user report). Same post-dedup additive fan-out as the tutor and sac-land axes:
     // one variant per base plan that casts a "sacrifice a <colour> creature" spell, re-pointing the
@@ -31420,6 +31522,7 @@ static void AppendSubdecisionAxes(const GameState& state, bool is_pre_combat,
             // Base plans only -- one axis at a time, so cost stays additive (the tutor axis's rule).
             if (p.scry_choice >= 0 || p.bp_choice >= 0 || p.tutor_choice >= 0
                 || p.etbdig_choice >= 0 || p.lackey_choice >= 0
+                || p.saga_target_choice >= 0
                 || !p.sac_pins.empty()) { continue; }
             // This plan's sac-cost casts, plus the family-representative test (every one of them
             // carrying its colour's collection front).
@@ -31540,6 +31643,7 @@ static void AppendSubdecisionAxes(const GameState& state, bool is_pre_combat,
                 if (p.scry_choice >= 0 || p.bp_choice >= 0 || p.tutor_choice >= 0
                     || p.etbdig_choice >= 0 || p.lackey_choice >= 0 || p.ponder_choice >= 0
                     || p.discard_choice >= 0 || p.vial_charge_choice >= 0
+                    || p.saga_target_choice >= 0
                     || !p.sac_pins.empty() || p.tapmode_choice != 0
                     || p.freshmode_choice != 0) { continue; }
                 for (int k = 0; k <= 1; ++k)

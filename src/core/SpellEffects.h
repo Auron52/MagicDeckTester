@@ -19437,18 +19437,43 @@ inline void SurveilTop(GameState& state, int n, const std::string& source = "Sur
 // highest EffectivePower, ties to the LOWEST battlefield index so executor and rollout agree.
 // Returns a battlefield index, or -1 when we control no creature -- in which case the chapter has
 // no legal target and is simply removed from the stack (CR 608.2b), which is a no-op here.
-inline int DefaultSagaChapterTarget(const GameState& state, int controller)
+// The RANKED candidate list behind the heuristic, best-first. Split out of
+// DefaultSagaChapterTarget so the searched axis (Plan::saga_target_choice) has something to index:
+// the heuristic keeps its two jobs from the searched-choice doctrine -- it is the BRANCH ORDER
+// (entry 0 is the front, so the base plan and a k=0 variant agree) and the ONLY decision on every
+// path with no plan (d0, rollout leaves, human play's preselected default).
+//
+// Ordering is EXACTLY the old scan's: key = (swings_now ? 1000 : 0) + EffectivePower, descending,
+// ties to the LOWEST battlefield index. The old loop took `key > best_key` over ascending indices,
+// i.e. the first index holding the strictly-greatest key -- which is what a stable sort by
+// descending key over ascending indices yields, so front() is byte-identical to the old return.
+inline std::vector<int> SagaChapterTargetCandidates(const GameState& state, int controller)
 {
-    int best = -1, best_key = -1;
+    std::vector<int> out;
     for (int i = 0; i < static_cast<int>(state.battlefield.size()); ++i)
     {
         const Permanent& q = state.battlefield[i];
         if (q.controller_index != controller || !q.card.IsCreature()) { continue; }
-        const bool swings_now = !q.tapped && CanAttackFull(q, state.battlefield, controller);
-        const int  key = (swings_now ? 1000 : 0) + q.EffectivePower();
-        if (key > best_key) { best_key = key; best = i; }
+        out.push_back(i);
     }
-    return best;
+    std::stable_sort(out.begin(), out.end(), [&](int a, int b)
+    {
+        const Permanent& pa = state.battlefield[a];
+        const Permanent& pb = state.battlefield[b];
+        auto key = [&](const Permanent& q)
+        {
+            const bool swings_now = !q.tapped && CanAttackFull(q, state.battlefield, controller);
+            return (swings_now ? 1000 : 0) + q.EffectivePower();
+        };
+        return key(pa) > key(pb);
+    });
+    return out;
+}
+
+inline int DefaultSagaChapterTarget(const GameState& state, int controller)
+{
+    const std::vector<int> cands = SagaChapterTargetCandidates(state, controller);
+    return cands.empty() ? -1 : cands.front();
 }
 
 // HUMAN-PLAY target override for a Saga chapter that targets (World War Hulk's II and III).
@@ -19655,10 +19680,32 @@ inline void FireSagaChapter(GameState& state, int controller, const CardDefiniti
     const bool wants_target = (chapter == 2 && pp.saga_ch2_counters_on_target > 0)
                            || (chapter == 3 && pp.saga_ch3_double_pt_target);
     if (!wants_target) { return; }
-    int ti = DefaultSagaChapterTarget(state, controller);
-    if (ti < 0) { return; }                       // no legal target (CR 608.2b)
+    const std::vector<int> ch_cands = SagaChapterTargetCandidates(state, controller);
+    if (ch_cands.empty()) { return; }             // no legal target (CR 608.2b)
+    int ti = ch_cands.front();                    // the heuristic == branch order entry 0
+    // SEARCHED chapter target (Plan::saga_target_choice -> GameState::scripted_saga_target).
+    //
+    // The pin is a RANK into the list above, resolved HERE at the true resolution state, not a
+    // permanent identity chosen when the plan was scored -- and that is forced, not stylistic: this
+    // chapter fires at the NEXT TURN'S DRAW STEP, so between the pin being set and being read we
+    // untap, draw, and (in the plan that set it) deployed a board. Naming a permanent a turn early
+    // would go stale constantly; a rank cannot. Out-of-range clamps to the last candidate rather
+    // than whiffing -- the duplicate-not-whiff rule the sac-land pins use, so a shrunken board
+    // costs a duplicate world, never a lost target.
+    //
+    // Consumed by the FIRST targeting chapter of this advance and cleared, so a second Saga in the
+    // same draw step falls back to the heuristic -- the one-per-plan convention shared with the
+    // Vial charge, cleanup discard, ETB dig and Lackey put.
+    if (state.scripted_saga_target >= 0)
+    {
+        const int k = state.scripted_saga_target;
+        state.scripted_saga_target = -1;
+        ti = ch_cands[std::min<std::size_t>(static_cast<std::size_t>(k), ch_cands.size() - 1)];
+    }
     // Human play re-asks WHICH creature off the real resolution board (board click); with no
     // chooser installed this returns `ti` unchanged and the autonomous path is byte-identical.
+    // Ordered AFTER the pin deliberately: the human is the decision-maker and outranks the search
+    // (in practice they never collide -- the axis is gated on !HumanPlayActive()).
     ti = ChooseSagaChapterTargetIndex(
              state, controller, def.card.m_name.str(), chapter,
              chapter == 2 ? "given three +1/+1 counters (permanently)"

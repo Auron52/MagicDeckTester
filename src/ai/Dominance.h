@@ -437,6 +437,13 @@ inline DomSnap Build(const GameState& s, const DecisionProvider& prov,
     // turn's apply, consumed at the NEXT turn's upkeep -- see its GameState note), so a pending
     // searched charge is future-determining and must fold exact-match like its sibling pins.
     fold(static_cast<std::uint64_t>(s.scripted_vial_charge));
+    // scripted_saga_target: same classification, same reason -- set during a turn's apply and read
+    // at the NEXT turn's draw step (AdvanceSagas), so a pending searched chapter target is
+    // future-determining across exactly this boundary. Folded value-gated rather than
+    // unconditionally so every deck without a Saga keeps its existing keys byte-for-byte; the +1
+    // keeps a pinned rank 0 distinguishable from "no pin".
+    if (s.scripted_saga_target >= 0)
+    { fold(static_cast<std::uint64_t>(s.scripted_saga_target) + 1u); }
     // Deliberate top-stack marker + the identity of what was stacked. SAME CLASSIFICATION AS
     // scripted_vial_charge directly above, and for the same structural reason: written during a
     // turn's apply (PerformTutor's to-top placement) and READ AT THE NEXT TURN'S UPKEEP

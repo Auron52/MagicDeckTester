@@ -427,6 +427,16 @@ struct GameState
     // leak into a later turn. NOTE it must survive the turn boundary -- do NOT clear it alongside
     // scripted_cheat_choice in SimulateEndAndStartNextTurn, which runs BEFORE the upkeep that reads it.
     int                      scripted_vial_charge    = -1;
+    // Searched SAGA CHAPTER TARGET (Plan::saga_target_choice): a RANK into
+    // SagaChapterTargetCandidates, resolved at the chapter's own resolution; -1 = the heuristic
+    // (that list's front). Exactly scripted_vial_charge's shape and lifetime -- written during a
+    // turn's apply, read at the NEXT turn's draw step by AdvanceSagas, in both worlds -- so the
+    // same two rules apply: it must survive the turn boundary (do NOT clear it alongside
+    // scripted_cheat_choice in SimulateEndAndStartNextTurn, which runs BEFORE the draw that reads
+    // it), and it is consumed + cleared by the FIRST targeting chapter so it cannot leak into a
+    // later turn. A rank rather than a permanent identity because a turn elapses in between: see
+    // FireSagaChapter for why naming a permanent a turn early goes stale.
+    int                      scripted_saga_target    = -1;
     // Maelstrom Archangel free-cast BANK (user-approved 2026-08-06): each copy that deals combat
     // damage to the player increments this (Combat.cpp ResolveCombatDamage, the shared combat
     // core), and the post-combat main may cast that many hand spells without paying mana (a
