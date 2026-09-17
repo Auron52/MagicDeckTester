@@ -4169,6 +4169,10 @@ inline void CreateTokenCopyOfCard(GameState& state, int controller, const Card& 
 // cached-lookup scan for a deck that runs one and a single loop-and-return for every other deck.
 inline void RefreshCityBlessing(GameState& state)
 {
+    // No ascend card can be in this game -> the two full battlefield walks below are provably a
+    // no-op. Defaults TRUE, so an unstamped GameState keeps the old behaviour. See the
+    // ETB-cascade presence-gate block on GameState.
+    if (!state.deck_has_ascend) { return; }
     for (int pi = 0; pi < 2; ++pi)
     {
         Player& pl = state.players[pi];
@@ -4686,6 +4690,10 @@ inline void FireEtbWatchers(GameState& state, int controller, int entered_index)
     // token created in step 1). Life loss to the opponent's face, the same sink combat / direct
     // damage use for the win projection -> a Dragonstorm/hard-cast wave shows up as lethal in the
     // rollout (opp.life <= 0). Multiple Scourges each ping.
+    // No Scourge-style enter ping can be in this game -> nothing below reads the count, so do not
+    // pay for it. THIS IS THE 45% (perf, Fungus 2026-09-17): the count ran on every enter, before
+    // anything checked whether a consumer existed. Defaults TRUE -> unstamped states are unchanged.
+    if (!state.deck_has_dragon_ping) { return; }
     const int dragon_count = CountControlledDragons(state, controller);
     if (dragon_count <= 0) { return; }
     const int opp = 1 - controller;
@@ -4832,6 +4840,9 @@ inline int DevotionTo(const GameState& state, int controller, const std::string&
 // scan, so every deck without a devotion-gated permanent pays that scan and nothing else.
 inline void RefreshDevotionCreatures(GameState& state)
 {
+    // Same presence gate as RefreshCityBlessing: without a devotion-gated creature in the game the
+    // walk below can only ever `continue`. Defaults TRUE -> unstamped states are unchanged.
+    if (!state.deck_has_devotion_creature) { return; }
     for (Permanent& p : state.battlefield)
     {
         const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);

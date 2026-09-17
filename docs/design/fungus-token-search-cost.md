@@ -169,33 +169,52 @@ with a single fungible class of **288**. Mean board is only 8.3 — the cost liv
 (`linear_work xN` / `quadratic_work xN`) and which cards carry the collapsible mass; on Fungus that
 is **Forest first, Saproling second**, which is itself a correction to the guess below.
 
-## What is left, and the general defect behind it
+## The second fix: per-GAME presence gates (and the general defect behind them)
 
-After the Dragon fix the remaining profile is still the same shape: `LookupCached` (14.9%) plus
+After the Dragon fix the remaining profile was the same shape: `LookupCached` (14.9%) plus
 `FireEtbWatchers` / `FireCreatureEnterWatchers` self time, all of it **repeated full-battlefield
-walks per ETB**. Per entering permanent the cascade currently walks the board about five times
+walks per ETB**. Per entering permanent the cascade walked the board about five times
 (`RefreshDevotionCreatures`, `RefreshCityBlessing` twice — once per player, `FireCreatureEnterWatchers`,
 the Lathliss pass, the Scourge pass), each with a `LookupCached` per permanent, for mechanics the
 deck does not contain.
 
-**The gates that were supposed to prevent this do not work.** `CardDatabase::HasQuestAnthem()`,
+**The gates that were supposed to prevent this DO NOT WORK.** `CardDatabase::HasQuestAnthem()`,
 `HasTokenDoubler()` and `HasCounterDoubler()` are computed over `m_cards`, which is the **entire
 387-card `cards.json`**, not the deck being played. Doubling Season and Beastmaster Ascension are
 in that file, so all three are **unconditionally true in every run** and gate nothing. The comment
 on `HasQuestAnthem` claiming "False for every deck but Fungus, so the scan is provably skipped" is
-wrong. (`MaxHandSizeAnthemMax` is different and is fine — it is a runtime *bound* on hand size, not
-a presence flag.)
+wrong, and should be corrected when those three are converted. (`MaxHandSizeAnthemMax` is different
+and is fine — it is a runtime *bound* on hand size, not a presence flag.)
 
-So the fix wants a **per-GAME** mechanic-presence summary, not a per-database one. The shape that
-looks right:
+**The gate has to be per-GAME, stamped from the decklist.** That mechanism already existed and was
+simply not used here: `GoldFishRunner::StampDeckTraits` computes `deck_reads_mv_cast` and
+`deck_reads_endstep_lifegain` exactly this way. Three siblings now join them —
+`deck_has_ascend`, `deck_has_devotion_creature`, `deck_has_dragon_ping` — each gating its scan.
 
-* a small bitmask on `GameState`, OR-ed with a permanent's mechanic bits as it ENTERS and
-  recomputed on the rarer leave events;
-* each cascade walk skips when its bit is clear;
-* **error in the permissive direction only** — a mask that is too inclusive is merely slow, one
-  that is too exclusive silently drops a trigger, so entering must only ever add bits.
+Three properties make this safe rather than merely fast:
 
-That attacks the remaining ~40% and, unlike token fusion, it helps every deck rather than this one.
+* **They default TRUE**, i.e. to the pre-existing behaviour. The scenario harness builds a
+  `GameState` *without* stamping traits (documented at the end of `StampDeckTraits`), and an
+  unstamped state must keep the old semantics. A flag wrongly true costs time; wrongly false
+  drops a trigger. **Only ever err true.**
+* **The scanned set is mainboard + sideboard** — the sideboard is reachable through a wish, and
+  every token is either vanilla or a copy of something that came from those two (the passive
+  opponent's scheduled spawns are plain 1/1s).
+* **Garth One-Eye is an explicit escape hatch.** He materialises specific cards that need not be
+  in any decklist, so a deck running him leaves all three gates open.
+
+Measured on the same game, cumulative with the subtype fix:
+
+| arm | wall | win turn |
+|---|---|---|
+| before both | 311.90 s | 6.0000 |
+| + subtype fix | 218.72 s | 6.0000 |
+| + presence gates | **120.84 s** | 6.0000 |
+
+**2.58x overall, play byte-identical** (smoke 80/0, regression 108/0, 0 play-changed on both).
+
+Unlike token fusion this helps every deck, not just this one, and it leaves a mechanism in place:
+**the next cascade scan added should get a `deck_has_*` stamp rather than a `CardDatabase::Has*()`.**
 
 ## The direction that was guessed, and is now NOT the priority
 

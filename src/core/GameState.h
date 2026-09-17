@@ -311,6 +311,29 @@ struct GameState
     // genuinely different futures and must not share a memo key. See the fold in TurnSolver's
     // BuildSimKey, which clamps the counter to this maximum.
     int                      deck_endstep_lifegain_max_threshold = 0;
+    // ---- ETB-cascade presence gates (GoldFishRunner::StampDeckTraits) -----------------------
+    // THEY DEFAULT TRUE, AND THAT DIRECTION IS THE WHOLE SAFETY ARGUMENT. `true` means "do the
+    // scan", i.e. the behaviour that existed before these flags, so any path that builds a
+    // GameState WITHOUT stamping traits -- the scenario harness is the documented one, see the
+    // note at the end of StampDeckTraits -- keeps the old semantics rather than silently skipping
+    // a trigger. A flag that is wrongly true costs time; one that is wrongly false drops a
+    // trigger. Only ever err true.
+    //
+    // WHY THEY EXIST: FireEtbWatchers runs on EVERY permanent that enters and walks the whole
+    // battlefield several times -- once for devotion, once per player for ascend, once to count
+    // Dragons -- each with a LookupCached per permanent, for mechanics most decks do not contain.
+    // The cost is O(enters x battlefield), which is quadratic for a deck that makes tokens in
+    // bulk. Measured with perf on Fungus (2026-09-17): the cascade was 89.9% of a slow game and
+    // CountControlledDragons alone 45.1%, in a deck with no Dragon in it.
+    //
+    // WHY NOT CardDatabase::Has*(): those predicates already exist (HasQuestAnthem,
+    // HasTokenDoubler, HasCounterDoubler) and they DO NOT WORK -- they are computed over m_cards,
+    // which is the whole 387-card cards.json, not the deck being played, so they are
+    // unconditionally true in every run and gate nothing. The gate has to be per-GAME, stamped
+    // from the decklist, which is exactly what deck_reads_mv_cast above already does.
+    bool                     deck_has_ascend            = true;   // RefreshCityBlessing
+    bool                     deck_has_devotion_creature = true;   // RefreshDevotionCreatures
+    bool                     deck_has_dragon_ping       = true;   // Scourge of Valkas' enter ping
     // "You can cast only one more spell this turn" (Irencrag Feat, CardParams::max_casts_after) enforced
     // at EXECUTION time: -1 = no restrictor active (unlimited); otherwise the number of ADDITIONAL spells
     // still castable this turn. Installed when a max_casts_after spell is cast, decremented at every later

@@ -917,6 +917,37 @@ void GoldFishRunner::StampDeckTraits(GameState& state, const Decklist& deck)
         }
         return mx;
     }();
+    // ETB-cascade presence gates (see the block on GameState). FireEtbWatchers walks the whole
+    // battlefield once for devotion, once per player for ascend and once to count Dragons, on
+    // EVERY permanent that enters -- O(enters x battlefield), quadratic for a token deck, and 45%
+    // of a Fungus slow game went into the Dragon count alone. These say whether the game can
+    // contain the mechanic at all.
+    //
+    // THE SET SCANNED IS mainboard + sideboard: the sideboard is reachable through a wish, and a
+    // token is either vanilla or a copy of something that came from one of those two (the passive
+    // opponent's scheduled spawns are plain 1/1s). The ONE exception is Garth One-Eye, who
+    // materialises specific cards that need not be in any decklist -- for a deck running him every
+    // gate stays open, which is merely the old behaviour.
+    {
+        bool garth = false, ascend = false, devotion = false, dragon_ping = false;
+        auto scan = [&](const std::vector<Card>& zone)
+        {
+            for (const Card& c : zone)
+            {
+                const CardDefinition* d = CardDatabase::Instance().LookupCached(c);
+                if (!d) { continue; }
+                if (d->params.garth_copy_ability)             { garth = true; }
+                if (d->params.ascend)                         { ascend = true; }
+                if (d->params.creature_requires_devotion > 0) { devotion = true; }
+                if (d->params.dragon_ping_on_enter)           { dragon_ping = true; }
+            }
+        };
+        scan(deck.mainboard);
+        scan(deck.sideboard);
+        state.deck_has_ascend            = garth || ascend;
+        state.deck_has_devotion_creature = garth || devotion;
+        state.deck_has_dragon_ping       = garth || dragon_ping;
+    }
     // NOTE: opponent_library_dealt is deliberately NOT stamped here. It means "a library was
     // actually dealt", and only opponentdeck::Deal may raise it -- see the comment there. Callers
     // that stamp traits without running SetupGame (the scenario harness) must otherwise get the
