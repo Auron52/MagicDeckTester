@@ -8242,6 +8242,203 @@
     "enters_tapped": true,
     "etb_bounce_land": true
    }
+  },
+  {
+   "name": "Psychotrope Thallid",
+   "mana_cost": "{2}{G}",
+   "types": [
+    "Creature"
+   ],
+   "subtypes": [
+    "Fungus"
+   ],
+   "keywords": [],
+   "power": 1,
+   "toughness": 1,
+   "oracle_text": "At the beginning of your upkeep, put a spore counter on this creature.\nRemove three spore counters from this creature: Create a 1/1 green Saproling creature token.\n{1}, Sacrifice a Saproling: Draw a card. [Spore family (shared with Thallid / Thallid Shell-Dweller / Sporesower Thallid / Utopia Mycon): spore_upkeep_self ticks the dedicated Permanent::spore_counters at each of the controller's upkeeps, and spore_saproling_cost 3 gates a free repeatable activation (PermAbilityMode::SporeSaproling -- no mana, no {T}, so it is legal on a summoning-sick body and its count K is bounded by counters/3, a searched axis). The counters are a COST (CR 601.2h/602.2b) so they are NOT doubled; the Saproling IS (CreateToken), and the upkeep tick is -- so under one Doubling Season this card's throughput is 4x, not 2x. THE DECK'S ONLY CARD-DRAW ENGINE: sac_outlet_draw is a new payload on the existing sac_creature_outlet template, with no {T} in the cost so it is repeatable within a turn, bounded by Saprolings and mana. sac_creature_requires_subtype Saproling makes self-sacrifice illegal by the filter alone (this card is a FUNGUS, not a Saproling), so no sac_outlet_excludes_self is needed. [PARTIAL: both activated abilities are instant-speed on the real card but the engine activates only in the main phases; WHY inert -- the passive goldfish opponent never blocks, removes or casts, so there is nothing to respond to, and holding priority can only delay a draw that is wanted before the main phase anyway.]]",
+   "template": "custom",
+   "parameters": {
+    "spore_upkeep_self": 1,
+    "spore_saproling_cost": 3,
+    "spore_creates_tokens": 1,
+    "spore_token_power": 1,
+    "spore_token_toughness": 1,
+    "spore_token_subtypes": [
+     "Saproling"
+    ],
+    "spore_token_color": "G",
+    "sac_creature_outlet": true,
+    "sac_creature_cost": "{1}",
+    "sac_creature_requires_subtype": "Saproling",
+    "sac_outlet_draw": 1
+   }
+  },
+  {
+   "name": "Doubling Season",
+   "mana_cost": "{4}{G}",
+   "types": [
+    "Enchantment"
+   ],
+   "subtypes": [],
+   "keywords": [],
+   "oracle_text": "If an effect would create one or more tokens under your control, it creates twice that many of those tokens instead.\nIf an effect would put one or more counters on a permanent you control, it puts twice that many of those counters on that permanent instead. [Two static REPLACEMENT effects (CR 614) -- never on the stack, never responded to -- modelled as two independent flags so a tokens-only doubler (Parallel Lives) or a counters-only one (Corpsejack Menace) can reuse the halves. The token half hooks inside CreateToken, already the single funnel every token in the engine goes through; the counter half hooks inside the PutPlusCounters / PutSporeCounters / PutQuestCounters chokepoints. Scope is per-CONTROLLER (\"under YOUR control\"), which is what keeps the engine's opponent-gifted tokens (Forbidden Orchard, Varchild's Survivors) correctly undoubled. N copies MULTIPLY: each replacement applies once and each sees the count the previous one already doubled (CR 614.5/616.1), so the multiplier is 2^N -- x16 with all four. Ordering multiple copies is technically a CR 616.1 choice but provably inert (every copy applies the same x2 to the same event), so it is not surfaced. Counters a permanent ENTERS WITH are doubled (CR 121.6/614.1c -- the planeswalker double-loyalty ruling), which is what makes Mycoloth's devour compound: devour 3 gives 6 counters, 12 under one Season, and the upkeep Saprolings are then doubled AGAIN at the token step. Counter REMOVAL is never doubled -- a cost is not a \"put\" -- so the Thallids' \"remove three spore counters\" is untouched.]",
+   "template": "custom",
+   "parameters": {
+    "doubles_tokens": true,
+    "doubles_counters": true
+   }
+  },
+  {
+   "name": "Beastmaster Ascension",
+   "mana_cost": "{2}{G}",
+   "types": [
+    "Enchantment"
+   ],
+   "subtypes": [],
+   "keywords": [],
+   "oracle_text": "Whenever a creature you control attacks, you may put a quest counter on this enchantment.\nAs long as this enchantment has seven or more quest counters on it, creatures you control get +5/+5. [THE DECK'S WIN CONDITION. quest_counter_per_attacker puts ONE counter per DECLARED attacker (CR 508.2 -- one separate trigger per attacking creature), fired from ApplyAttackQuestCounters in BOTH worlds at declare-attackers, BEFORE the Adeline-style token block (tokens PUT onto the battlefield attacking were never declared, CR 508.4, and must not trigger this). Because those triggers resolve in the declare-attackers step -- before blockers and before combat damage -- the anthem applies to the SAME combat that filled the counters: attacking with seven is lethal from 20 out of nowhere, and with one Sporecrown Thallid out three 2/2 bodies already are. The anthem is a CONDITIONAL STATIC (CR 604.3/611.3) evaluated inside ComputeLordBonus beside hand_size_anthem_max, so every combat/eval/SBA site picks it up and it switches back off if the counters ever leave; it reads the LIVE counter total, never an attacker count, which makes it automatically correct under Doubling Season and across turns. Each trigger is its own event, so Doubling Season doubles each separately -- accrual is 2 at a time, and four attackers under one Season cross the threshold. Not a P/T lord (noncreature, no static power_bonus), so IsLordPermanent is correctly false. [PARTIAL: the trigger's \"you may\" is modelled as always-take; WHY provably inert -- no counter cap, no sacrifice-at-N clause, no cost for taking it, and the passive goldfish opponent creates no state in which fewer counters is better, so declining can only delay the anthem.]]",
+   "template": "custom",
+   "parameters": {
+    "quest_counter_per_attacker": 1,
+    "quest_anthem_threshold": 7,
+    "quest_anthem_power": 5,
+    "quest_anthem_tough": 5
+   }
+  },
+  {
+   "name": "Thallid",
+   "mana_cost": "{G}",
+   "types": [
+    "Creature"
+   ],
+   "subtypes": [
+    "Fungus"
+   ],
+   "keywords": [],
+   "power": 1,
+   "toughness": 1,
+   "oracle_text": "At the beginning of your upkeep, put a spore counter on this creature.\nRemove three spore counters from this creature: Create a 1/1 green Saproling creature token. [Spore family (shared with Thallid / Thallid Shell-Dweller / Sporesower Thallid / Psychotrope Thallid / Utopia Mycon): spore_upkeep_self puts one spore counter on this creature at each of the controller's upkeeps, into the dedicated Permanent::spore_counters int (param-gated, so inert for every other deck). spore_saproling_cost 3 gates a free repeatable activation via PermAbilityMode::SporeSaproling -- NO mana and NO {T}, so it is legal on a summoning-sick or already-tapped body (CR 302.6 restricts only {T} abilities) and its activation count K is bounded by counters/3 rather than by mana. K is a REAL SEARCHED AXIS, not a greedy max: holding three counters until a Doubling Season resolves turns one Saproling into two, and Mycoloth's devour wants the bodies on board before it enters. The counters are a COST (CR 601.2h/602.2b), so they are NOT doubled by Doubling Season -- which doubles only counters being PUT ON -- while the upkeep tick and the created Saproling both are, making this card 4x under one Season rather than 2x. [PARTIAL: the activation is instant-speed on the real card but the engine enumerates activations only in the main phases; WHY inert -- the enabling counter arrives at the controller's own upkeep, the passive goldfish opponent offers nothing to respond to, and a token made anywhere between our turn N and turn N+1 first attacks on turn N+1 either way.]]",
+   "template": "custom",
+   "parameters": {
+    "spore_upkeep_self": 1,
+    "spore_saproling_cost": 3,
+    "spore_creates_tokens": 1,
+    "spore_token_power": 1,
+    "spore_token_toughness": 1,
+    "spore_token_subtypes": [
+     "Saproling"
+    ],
+    "spore_token_color": "G"
+   }
+  },
+  {
+   "name": "Thallid Shell-Dweller",
+   "mana_cost": "{1}{G}",
+   "types": [
+    "Creature"
+   ],
+   "subtypes": [
+    "Fungus"
+   ],
+   "keywords": [
+    "Defender"
+   ],
+   "power": 0,
+   "toughness": 5,
+   "oracle_text": "Defender\nAt the beginning of your upkeep, put a spore counter on this creature.\nRemove three spore counters from this creature: Create a 1/1 green Saproling creature token. [Defender is modelled via the card-level keywords array (Keyword::Defender, read by Permanent::CanAttack and CanAttackFull) -- this is the FIRST card in this file to carry it, so the path is real but previously unexercised. It is NOT an inert simplification to skip: with Sporecrown Thallid's Fungus lord out this body would otherwise attack for 1 every turn, a fake clock. The 5 toughness IS inert under the goldfish (the opponent never attacks or blocks), so this card's only real contributions are the Saproling engine and being a Fungus for Sporecrown's lord, Sporesower's each-Fungus trigger and Mycoloth's devour fodder. Spore family (shared with Thallid / Thallid Shell-Dweller / Sporesower Thallid / Psychotrope Thallid / Utopia Mycon): spore_upkeep_self puts one spore counter on this creature at each of the controller's upkeeps, into the dedicated Permanent::spore_counters int (param-gated, so inert for every other deck). spore_saproling_cost 3 gates a free repeatable activation via PermAbilityMode::SporeSaproling -- NO mana and NO {T}, so it is legal on a summoning-sick or already-tapped body (CR 302.6 restricts only {T} abilities) and its activation count K is bounded by counters/3 rather than by mana. K is a REAL SEARCHED AXIS, not a greedy max: holding three counters until a Doubling Season resolves turns one Saproling into two, and Mycoloth's devour wants the bodies on board before it enters. The counters are a COST (CR 601.2h/602.2b), so they are NOT doubled by Doubling Season -- which doubles only counters being PUT ON -- while the upkeep tick and the created Saproling both are, making this card 4x under one Season rather than 2x. [PARTIAL: the activation is instant-speed on the real card but the engine enumerates activations only in the main phases; WHY inert -- the enabling counter arrives at the controller's own upkeep, the passive goldfish opponent offers nothing to respond to, and a token made anywhere between our turn N and turn N+1 first attacks on turn N+1 either way.]]",
+   "template": "custom",
+   "parameters": {
+    "spore_upkeep_self": 1,
+    "spore_saproling_cost": 3,
+    "spore_creates_tokens": 1,
+    "spore_token_power": 1,
+    "spore_token_toughness": 1,
+    "spore_token_subtypes": [
+     "Saproling"
+    ],
+    "spore_token_color": "G"
+   }
+  },
+  {
+   "name": "Sporesower Thallid",
+   "mana_cost": "{2}{G}{G}",
+   "types": [
+    "Creature"
+   ],
+   "subtypes": [
+    "Fungus"
+   ],
+   "keywords": [],
+   "power": 4,
+   "toughness": 4,
+   "oracle_text": "At the beginning of your upkeep, put a spore counter on each Fungus you control.\nRemove three spore counters from this creature: Create a 1/1 green Saproling creature token. [spore_upkeep_each_fungus: at each of the controller's upkeeps, ONE spore counter on EVERY Fungus they control -- including Sporesower itself, which is a Fungus. It has NO separate self-trigger, so spore_upkeep_self stays 0 or it would double-count itself. This STACKS with each other Thallid's own self-trigger: with one Doubling Season out, a plain Thallid gains 2 from its own trigger plus 2 from Sporesower's. Mycoloth and Sporecrown Thallid are Fungi with no spore outlet, so they accumulate counters they can never spend -- faithful and free, and filtering them would be a lie in the board state. Saproling TOKENS are Saprolings, not Fungi, so they receive nothing, which is what keeps this trigger from scaling with the token count. The upkeep sweep counts sources against a SNAPSHOT and applies after, so two Sporesowers each spore every Fungus including each other; ordering is outcome-irrelevant (every trigger only ADDS counters and none reads a count), so no trigger-order decision is surfaced. Spore family (shared with Thallid / Thallid Shell-Dweller / Sporesower Thallid / Psychotrope Thallid / Utopia Mycon): spore_upkeep_self puts one spore counter on this creature at each of the controller's upkeeps, into the dedicated Permanent::spore_counters int (param-gated, so inert for every other deck). spore_saproling_cost 3 gates a free repeatable activation via PermAbilityMode::SporeSaproling -- NO mana and NO {T}, so it is legal on a summoning-sick or already-tapped body (CR 302.6 restricts only {T} abilities) and its activation count K is bounded by counters/3 rather than by mana. K is a REAL SEARCHED AXIS, not a greedy max: holding three counters until a Doubling Season resolves turns one Saproling into two, and Mycoloth's devour wants the bodies on board before it enters. The counters are a COST (CR 601.2h/602.2b), so they are NOT doubled by Doubling Season -- which doubles only counters being PUT ON -- while the upkeep tick and the created Saproling both are, making this card 4x under one Season rather than 2x. [PARTIAL: the activation is instant-speed on the real card but the engine enumerates activations only in the main phases; WHY inert -- the enabling counter arrives at the controller's own upkeep, the passive goldfish opponent offers nothing to respond to, and a token made anywhere between our turn N and turn N+1 first attacks on turn N+1 either way.]]",
+   "template": "custom",
+   "parameters": {
+    "spore_upkeep_each_fungus": true,
+    "spore_saproling_cost": 3,
+    "spore_creates_tokens": 1,
+    "spore_token_power": 1,
+    "spore_token_toughness": 1,
+    "spore_token_subtypes": [
+     "Saproling"
+    ],
+    "spore_token_color": "G"
+   }
+  },
+  {
+   "name": "Utopia Mycon",
+   "mana_cost": "{G}",
+   "types": [
+    "Creature"
+   ],
+   "subtypes": [
+    "Fungus"
+   ],
+   "keywords": [],
+   "power": 0,
+   "toughness": 2,
+   "oracle_text": "At the beginning of your upkeep, put a spore counter on this creature.\nRemove three spore counters from this creature: Create a 1/1 green Saproling creature token.\nSacrifice a Saproling: Add one mana of any color. [The mana outlet reuses the Skirk Prospector machinery (sac_creature_outlet + sac_creature_requires_subtype Saproling), emitted as Action::Kind::SacForMana so it inherits the full mana-solver coupling -- ritual_float credit, the demand-driven multi-sac burst that jumps straight to a Mycoloth, plan signature. Unlike Skirk it pins NO colour letter: sac_outlet_add_mana_any_color enumerates the shared ChosenFloatColorCandidates fan (the Lotus Bloom / Apex of Power precedent) and AddChosenColorFloat realises a CONCRETE letter at apply -- never a wild token in the pool, per the pools-hold-typed-mana-only doctrine, since floating mana is a truth claim later payments read. In this mono-green list that fan is the singleton {G}, so it costs exactly one action and no plan-space growth, while staying honest if the deck ever splashes. Because the colour string is empty, every site that asks \"is this a mana outlet\" must use the shared IsSacManaOutlet() reader -- the old `!sac_outlet_add_mana_color.empty()` test would route this card into the VALUE branch and sacrifice a Saproling for nothing. Mycon is a FUNGUS, not a Saproling, so the subtype filter alone forbids it sacrificing itself; sac_outlet_excludes_self is unnecessary. Power 0, so it never attacks -- its whole value is the engine. Fodder is CONTESTED: Psychotrope Thallid's draw outlet and Mycoloth's devour eat the same Saprolings, which is a real trade-off for the search rather than free value. Spore family (shared with Thallid / Thallid Shell-Dweller / Sporesower Thallid / Psychotrope Thallid / Utopia Mycon): spore_upkeep_self puts one spore counter on this creature at each of the controller's upkeeps, into the dedicated Permanent::spore_counters int (param-gated, so inert for every other deck). spore_saproling_cost 3 gates a free repeatable activation via PermAbilityMode::SporeSaproling -- NO mana and NO {T}, so it is legal on a summoning-sick or already-tapped body (CR 302.6 restricts only {T} abilities) and its activation count K is bounded by counters/3 rather than by mana. K is a REAL SEARCHED AXIS, not a greedy max: holding three counters until a Doubling Season resolves turns one Saproling into two, and Mycoloth's devour wants the bodies on board before it enters. The counters are a COST (CR 601.2h/602.2b), so they are NOT doubled by Doubling Season -- which doubles only counters being PUT ON -- while the upkeep tick and the created Saproling both are, making this card 4x under one Season rather than 2x. [PARTIAL: the activation is instant-speed on the real card but the engine enumerates activations only in the main phases; WHY inert -- the enabling counter arrives at the controller's own upkeep, the passive goldfish opponent offers nothing to respond to, and a token made anywhere between our turn N and turn N+1 first attacks on turn N+1 either way.]]",
+   "template": "custom",
+   "parameters": {
+    "spore_upkeep_self": 1,
+    "sac_creature_outlet": true,
+    "sac_creature_requires_subtype": "Saproling",
+    "sac_outlet_add_mana_any_color": true,
+    "sac_outlet_add_mana_amount": 1,
+    "spore_saproling_cost": 3,
+    "spore_creates_tokens": 1,
+    "spore_token_power": 1,
+    "spore_token_toughness": 1,
+    "spore_token_subtypes": [
+     "Saproling"
+    ],
+    "spore_token_color": "G"
+   }
+  },
+  {
+   "name": "Mycoloth",
+   "mana_cost": "{3}{G}{G}",
+   "types": [
+    "Creature"
+   ],
+   "subtypes": [
+    "Fungus"
+   ],
+   "keywords": [],
+   "power": 4,
+   "toughness": 4,
+   "oracle_text": "Devour 2 (As this creature enters, you may sacrifice any number of creatures. It enters with twice that many +1/+1 counters on it.)\nAt the beginning of your upkeep, create a 1/1 green Saproling creature token for each +1/+1 counter on this creature. [Devour is NOT listed in the keywords array: the engine's Keyword enum only carries keywords it actually reads, and devour is fully expressed by the devour param below. THE DECK'S ENGINE. Devour 2 is an AS-ENTERS REPLACEMENT (CR 702.81, 614.1c), not a trigger: it is applied in the PRE-PUSH window at both enter sites -- the same window loyalty_start uses -- which makes three CR requirements fall out by construction rather than needing filters (it cannot devour itself, cannot devour a co-entrant, and the fodder is gone before the ETB watchers see the body). Victims are removed SIMULTANEOUSLY (CR 702.81b) and their death triggers are DEFERRED until after Mycoloth has entered, so Tukatongue Thallid's replacement Saproling arrives too late to be devoured by the same devour. HOW MANY to devour is a REAL SEARCHED AXIS, not a heuristic: one cast variant per k = 0..(own creatures), keyed into plan_signature so the name-only dedup cannot collapse them, and k=0 stays enumerated because \"you MAY sacrifice any number\" and declining is frequently right. WHICH creatures uses the shared expendability ranking -- which already prefers Tukatongue Thallid, whose death REFUNDS a Saproling. The upkeep clause rides the existing dynamic token-count accumulator (the same `count +=` that serves Kemba's upkeep_tokens_per_equipment) and reads the permanent's LIVE +1/+1 counters, never a remembered devour count (WotC ruling: it does not matter where the counters came from) -- which is also what makes the Doubling Season interaction flow through for free. DOUBLING SEASON COMPOUNDS BOTH HALVES: devour 3 gives 6 counters and 6 Saprolings per upkeep; under one Season 12 counters and 24 Saprolings; the deck runs four. [PARTIAL: \"attack with the team, THEN cast Mycoloth post-combat and devour the spent attackers\" is unrepresentable -- the engine plays only a pre-combat main -- so the search will under-devour on the landing turn when an attack is live; WHY deferred -- fixing it needs a searched second main, which USER doctrine 2026-09-08 forbids for a pure expressibility hole, and it is bounded to one decision per copy per game and largely dissolved by devouring summoning-sick tokens first.]]",
+   "template": "custom",
+   "parameters": {
+    "devour": 2,
+    "upkeep_tokens_per_plus_one_counter": true,
+    "upkeep_token_power": 1,
+    "upkeep_token_toughness": 1,
+    "upkeep_token_subtypes": [
+     "Saproling"
+    ],
+    "upkeep_token_color": "G"
+   }
   }
  ]
 }

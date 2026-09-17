@@ -9957,6 +9957,16 @@ const DecisionProvider& DetectDecisionProvider(const Decklist& deck)
     // ABOVE everything: this deck's own signature is unambiguous, and its tutor_to_hand would
     // otherwise be read as anti-lifegain (see the flag's comment).
     if (critter)     { return g_critter; }
+    // Fungus: Generic, and it must sit ABOVE BOTH of the next two checks, for two independent
+    // reasons found by measurement rather than reading:
+    //   * eldrazi -- Wild Growth is a LAND AURA, and `is_land_aura` alone sets that signature. This
+    //     is the SEVENTH instance of the archetype-neutral-param misroute class, and the broadest
+    //     yet: any deck playing Wild Growth / Fertile Ground / Utopia Sprawl would inherit
+    //     EldraziFlickerProvider's narrowing wholesale.
+    //   * goblin -- Utopia Mycon and Psychotrope Thallid carry sac_creature_outlet, and
+    //     GoblinsProvider's default-on DeferSacOutletPreCombat would DELETE both outlets from a
+    //     deck that has no second main to defer them to.
+    if (fungus)      { return g_generic; }
     if (eldrazi)     { return g_eldrazi_flicker; }
     if (dragonstorm) { return g_dragonstorm; }
     if (hinata) { return g_hinata; }
@@ -10007,11 +10017,6 @@ const DecisionProvider& DetectDecisionProvider(const Decklist& deck)
     // Melira Pod: MeliraPodProvider (Generic-inheriting). Must WIN OVER goblin -- its free sac
     // outlets set that signature on their own (see the detection block note).
     if (melira_pod) { return g_melira_pod; }
-    // Fungus: Generic. Must WIN OVER goblin -- Utopia Mycon / Psychotrope Thallid's
-    // sac_creature_outlet sets that signature on its own, and GoblinsProvider's default-on
-    // pre-combat sac deferral would DELETE both outlets from a deck that has no second main to
-    // defer them to (see the detection block note).
-    if (fungus) { return g_generic; }
     if (goblin) { return g_goblins; }
     // Equipment aggro; must WIN OVER anti (Stoneforge Mystic's tutor_to_hand sets that signature
     // on its own -- see the equipment detection note above). No other deck carries the equipment
