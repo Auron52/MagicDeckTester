@@ -100,6 +100,8 @@ enum class DomAxis : std::uint8_t
     StorageCounters,     // Permanent::storage_counters  -- Dwarven Hold / Mercadian Bazaar
     VerseCounters,       // Permanent::verse_counters    -- Aria of Flame
     AgeCounters,         // Permanent::age_counters      -- cumulative upkeep (Varchild's)
+    SporeCounters,       // Permanent::spore_counters    -- the Thallid family
+    QuestCounters,       // Permanent::quest_counters    -- Beastmaster Ascension
     Loyalty,             // Permanent::loyalty           -- planeswalkers
     PlusOnePlusOne,      // Counter::Type::PlusOnePlusOne
     MinusOneMinusOne,    // Counter::Type::MinusOneMinusOne
@@ -1269,6 +1271,12 @@ public:
             // Depletion counters are the ones REMAINING (DecrementDepletionOnTap removes one per
             // tap and the land is sacrificed at zero), so more counters = more taps left.
             case DomAxis::DepletionCounter: return DomDir::MoreDominates;
+            // Spore counters have exactly ONE sink (remove three -> a Saproling), no upkeep cost and
+            // no aim-for-a-value shape, so unlike ChargeCounters more is never worse -- the extras
+            // simply buy the next Saproling sooner. Quest counters are the same: no cap, no cost,
+            // and the anthem is a >= threshold test, so more can only bring it on earlier.
+            case DomAxis::SporeCounters:    return DomDir::MoreDominates;
+            case DomAxis::QuestCounters:    return DomDir::MoreDominates;
             // Strictly better with FEWER.
             case DomAxis::MinusOneMinusOne: return DomDir::FewerDominates; // smaller creature
             // Deck-dependent or non-monotone -> exact match (see the note above). PoisonCounter is

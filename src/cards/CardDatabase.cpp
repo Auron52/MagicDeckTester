@@ -282,6 +282,20 @@ void CardDatabase::RebuildInternedIndex()
         if (!kv.second.params.mana_only_subtype.empty())
         { m_has_subtype_restricted_mana = true; break; }
     }
+
+    // Same shape, same purpose: does the loaded pool contain a quest anthem / a token doubler / a
+    // counter doubler at all? Each gates an O(battlefield) scan at a hot site, so a deck without
+    // the card pays one bool test instead. See HasQuestAnthem / HasTokenDoubler / HasCounterDoubler.
+    m_has_quest_anthem = false;
+    m_has_token_doubler = false;
+    m_has_counter_doubler = false;
+    for (const auto& kv : m_cards)
+    {
+        const CardParams& cp = kv.second.params;
+        if (cp.quest_anthem_threshold > 0) { m_has_quest_anthem = true; }
+        if (cp.doubles_tokens)             { m_has_token_doubler = true; }
+        if (cp.doubles_counters)           { m_has_counter_doubler = true; }
+    }
 }
 
 std::vector<std::string> CardDatabase::MdfcBackFaceNames() const
@@ -687,6 +701,28 @@ CardParams CardDatabase::BuildParamsFromJson(const json& params) const
     p.upkeep_token_toughness         = params.value("upkeep_token_toughness", 0);
     for (const std::string& s : params.value("upkeep_token_subtypes", json::array()))
         p.upkeep_token_subtypes.push_back(s);
+    p.upkeep_token_color             = params.value("upkeep_token_color", std::string());
+    p.upkeep_tokens_per_plus_one_counter =
+        params.value("upkeep_tokens_per_plus_one_counter", false);
+    // Spore counters (the Thallid family) -- see the CardParams block for the shared contract.
+    p.spore_upkeep_self       = params.value("spore_upkeep_self", 0);
+    p.spore_upkeep_each_fungus = params.value("spore_upkeep_each_fungus", false);
+    p.spore_saproling_cost    = params.value("spore_saproling_cost", 0);
+    p.spore_creates_tokens    = params.value("spore_creates_tokens", 0);
+    p.spore_token_power       = params.value("spore_token_power", 0);
+    p.spore_token_toughness   = params.value("spore_token_toughness", 0);
+    for (const std::string& s : params.value("spore_token_subtypes", json::array()))
+        p.spore_token_subtypes.push_back(s);
+    p.spore_token_color       = params.value("spore_token_color", std::string());
+    // Quest counters (Beastmaster Ascension).
+    p.quest_counter_per_attacker = params.value("quest_counter_per_attacker", 0);
+    p.quest_anthem_threshold     = params.value("quest_anthem_threshold", 0);
+    p.quest_anthem_power         = params.value("quest_anthem_power", 0);
+    p.quest_anthem_tough         = params.value("quest_anthem_tough", 0);
+    // Doubling Season's two independent replacement halves, and Mycoloth's devour.
+    p.doubles_tokens   = params.value("doubles_tokens", false);
+    p.doubles_counters = params.value("doubles_counters", false);
+    p.devour           = params.value("devour", 0);
     if (params.contains("tap_token_cost"))
         p.tap_token_cost = ManaCostFromString(params["tap_token_cost"].get<std::string>());
     p.tap_token_power     = params.value("tap_token_power", 0);
@@ -1043,7 +1079,9 @@ CardParams CardDatabase::BuildParamsFromJson(const json& params) const
         p.sac_creature_cost = ManaCostFromString(params["sac_creature_cost"].get<std::string>());
     p.sac_creature_requires_subtype = params.value("sac_creature_requires_subtype", std::string());
     p.sac_outlet_add_mana_color = params.value("sac_outlet_add_mana_color", std::string());
+    p.sac_outlet_add_mana_any_color = params.value("sac_outlet_add_mana_any_color", false);
     p.sac_outlet_add_mana_amount = params.value("sac_outlet_add_mana_amount", 0);
+    p.sac_outlet_draw           = params.value("sac_outlet_draw", 0);
     p.sac_outlet_damage         = params.value("sac_outlet_damage", 0);
     p.sac_outlet_creates_tokens = params.value("sac_outlet_creates_tokens", 0);
     p.sac_outlet_token_power    = params.value("sac_outlet_token_power", 0);

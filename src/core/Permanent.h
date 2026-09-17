@@ -41,6 +41,15 @@ enum class PermAbilityMode
     // a life-gain EVENT (a counter on every Pridemate/Voice, an Archangel team pump), which is the
     // whole reason to pay for it; the life itself is goldfish-inert.
     GrantLifelink,
+    // Remove three spore counters from this creature: create a 1/1 green Saproling  (the Thallid
+    // family -- Thallid, Thallid Shell-Dweller, Sporesower Thallid, Psychotrope Thallid, Utopia
+    // Mycon; CardParams::spore_saproling_cost). NO {T} and NO sacrifice, so like Drain/ExileTop it
+    // is REPEATABLE within a turn and legal on a summoning-sick body (CR 302.6 restricts only {T}
+    // abilities). It is the first mode whose cost is COUNTERS rather than mana, which is why the
+    // activation count K is bounded by spore_counters / cost and why it must NOT be routed through
+    // SpendRepeatActivations -- that helper bails on a zero mana-value cost precisely to stop a
+    // free repeatable sink from non-terminating.
+    SporeSaproling,
 };
 
 // Does this mode's cost include {T}? THE single source of truth, because three separate sites used
@@ -54,7 +63,8 @@ inline bool PermAbilityTaps(PermAbilityMode m)
         && m != PermAbilityMode::Drain
         && m != PermAbilityMode::ExileTop
         && m != PermAbilityMode::IceCounter
-        && m != PermAbilityMode::GrantLifelink;
+        && m != PermAbilityMode::GrantLifelink
+        && m != PermAbilityMode::SporeSaproling;
 }
 
 struct Permanent
@@ -155,6 +165,25 @@ struct Permanent
                                            // counter. Only read for a permanent whose card sets a
                                            // cumulative-upkeep param, so it is inert (never inspected)
                                            // for every other deck -> byte-identical.
+    int       spore_counters       = 0;    // Spore counters (the Thallid family: CardParams::
+                                           // spore_upkeep_self / spore_upkeep_each_fungus add them at
+                                           // upkeep, spore_saproling_cost removes three to make a
+                                           // Saproling). A DEDICATED int rather than a Counter{} entry,
+                                           // deliberately: EffectivePower/EffectiveToughness iterate the
+                                           // counters vector and are the hottest functions in the engine,
+                                           // and this is THE deck with 40-token boards -- a Spore entry on
+                                           // every Thallid would pay an extra iteration there for a value
+                                           // that never changes P/T. Read ONLY under a spore_* param, so
+                                           // it is inert (never inspected) for every other deck ->
+                                           // byte-identical. FUTURE-DETERMINING (it decides how many
+                                           // Saprolings a later turn yields), so it MUST be folded into
+                                           // BuildSimKey and BoardSignature under a nonzero gate -- see
+                                           // the storage-counter key-hole note in TurnSolver.cpp.
+    int       quest_counters       = 0;    // Quest counters (Beastmaster Ascension; CardParams::
+                                           // quest_counter_per_attacker adds one per DECLARED attacker,
+                                           // quest_anthem_threshold switches on the team pump at 7+).
+                                           // Same dedicated-int rationale and the same byte-identity and
+                                           // sim-key obligations as spore_counters above.
     bool      temp_haste           = false; // "gains haste until end of turn" (Expedite, incl. its
                                             // Zada/Mirrorwing copies). Read by CanAttackFull AND
                                             // CanTapNow (haste lifts the {T} restriction too, CR

@@ -92,7 +92,13 @@
 // until end of turn"). Classification: BOUNDARY ASSERTION -- until-EOT state that cleanup clears,
 // folded into AtCleanBoundary beside temp_haste (a state still carrying it is refused, never
 // compared).
-static_assert(sizeof(Permanent) == 280,
+// 280 -> 288 (2026-09-17): Permanent gained `spore_counters` and `quest_counters` (the Fungus
+// deck's Thallid family and Beastmaster Ascension). Classification: DIRECTIONAL AXES -- both are
+// stored resources that only ever buy something, so both are folded into Build() below as
+// DomAxis::SporeCounters / DomAxis::QuestCounters with MoreDominates. Unlike ChargeCounters they
+// have no aim-for-a-value shape (no cap, no upkeep cost, and the quest anthem is a >= test), so
+// more is never worse.
+static_assert(sizeof(Permanent) == 288,
               "Permanent changed size -- fold any new field into dominance::Build() (see the "
               "MAINTENANCE HAZARD note at the top of Dominance.h) before updating this number.");
 // 160 -> 184 (2026-09-02): Player gained `sideboard`, the OUTSIDE-THE-GAME zone a wish searches
@@ -756,6 +762,8 @@ inline DomSnap Build(const GameState& s, const DecisionProvider& prov,
         raw[static_cast<std::size_t>(DomAxis::VerseCounters)]   = p.verse_counters;
         raw[static_cast<std::size_t>(DomAxis::LoreCounters)]    = p.lore_counters;   // Sagas (0 elsewhere)
         raw[static_cast<std::size_t>(DomAxis::AgeCounters)]     = p.age_counters;
+        raw[static_cast<std::size_t>(DomAxis::SporeCounters)]   = p.spore_counters;
+        raw[static_cast<std::size_t>(DomAxis::QuestCounters)]   = p.quest_counters;
         raw[static_cast<std::size_t>(DomAxis::Loyalty)]         = p.loyalty;
         for (const Counter& c : p.counters)
         {

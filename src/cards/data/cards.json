@@ -8173,6 +8173,75 @@
     "other_subtype_enters_counters_subtype": "Angel",
     "other_subtype_enters_counters_per_each": 1
    }
+  },
+  {
+   "name": "Sporecrown Thallid",
+   "mana_cost": "{1}{G}",
+   "types": [
+    "Creature"
+   ],
+   "subtypes": [
+    "Fungus"
+   ],
+   "keywords": [],
+   "power": 2,
+   "toughness": 2,
+   "oracle_text": "Each other creature you control that's a Fungus or Saproling gets +1/+1. [Fully modelled. A TWO-subtype lord: subtypes_affected is a list and ComputeLordBonus matches ANY-OF, so one entry covers \"Fungus or Saproling\" (the first multi-entry subtypes_affected in this file). lord_excludes_self is per-SOURCE (address identity against the permanent being evaluated), so N copies stack correctly: two Sporecrowns give every other Fungus/Saproling +2/+2 and each other +1/+1. The lord matches on the literal subtype string, so every Saproling token in this deck spells its subtype exactly \"Saproling\".]",
+   "template": "lord_effect",
+   "parameters": {
+    "subtypes_affected": [
+     "Fungus",
+     "Saproling"
+    ],
+    "power_bonus": 1,
+    "tough_bonus": 1,
+    "lord_excludes_self": true
+   }
+  },
+  {
+   "name": "Tukatongue Thallid",
+   "mana_cost": "{G}",
+   "types": [
+    "Creature"
+   ],
+   "subtypes": [
+    "Fungus"
+   ],
+   "keywords": [],
+   "power": 1,
+   "toughness": 1,
+   "oracle_text": "When this creature dies, create a 1/1 green Saproling creature token. [Self-death Saproling: dies_watch_includes_self + dies_trigger_creates_tokens with an EMPTY dies_watch_subtype (= watch only its own death -- the Mogg War Marshal / Undercellar Myconid pattern). Mandatory and untargeted, so there is no choice to surface. The token's SUBTYPE is load-bearing twice: Sporecrown Thallid's Fungus/Saproling lord reads it, and Utopia Mycon / Psychotrope Thallid's \"Sacrifice a Saproling\" outlets gate on it -- so the TOKEN is legal fodder while Tukatongue itself, a FUNGUS, is not. GOLDFISH REACHABILITY, disclosed: the passive opponent never blocks, damages or removes, and nothing in this deck sacrifices a non-Saproling creature EXCEPT Mycoloth's devour -- so a devour sacrifice is the ONLY way this trigger can fire.]",
+   "template": "custom",
+   "parameters": {
+    "dies_watch_includes_self": true,
+    "dies_trigger_creates_tokens": 1,
+    "dies_token_power": 1,
+    "dies_token_toughness": 1,
+    "dies_token_subtypes": [
+     "Saproling"
+    ],
+    "created_token_color": "G"
+   }
+  },
+  {
+   "name": "Simic Growth Chamber",
+   "mana_cost": "",
+   "types": [
+    "Land"
+   ],
+   "subtypes": [],
+   "keywords": [],
+   "oracle_text": "This land enters tapped.\nWhen this land enters, return a land you control to its owner's hand.\n{T}: Add {G}{U}. [Karoo bounce land (the Izzet Boilerworks pattern): enters tapped, and one tap adds one mana of EACH colour -- {G} AND {U}, a fixed bundle, never two {G} (tap_source, the backtracker's bundle_src branch and BuildColorFeasibility all model it one-of-each; MTG_LEGACY_KAROO restores the old free-choice model). On ETB it returns one of your lands to hand; BounceKarooLand prefers an already-tapped, non-Karoo, non-enchanted land so no mana and no Aura is lost this turn, and the forced replay is the real tempo cost. Fungus runs no blue CARDS, so the {U} can never pay a coloured pip -- but it does pay GENERIC, so this is a true 2-mana land for the deck's seven generic-pip spells and a tapped bounce-Forest for its pure-{G} one-drops.]",
+   "template": "basic_land",
+   "parameters": {
+    "produces": [
+     "G",
+     "U"
+    ],
+    "produces_amount": 2,
+    "enters_tapped": true,
+    "etb_bounce_land": true
+   }
   }
  ]
 }

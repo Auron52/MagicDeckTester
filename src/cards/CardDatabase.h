@@ -208,6 +208,77 @@ struct CardParams
     int upkeep_token_power        = 0;
     int upkeep_token_toughness    = 0;
     std::vector<std::string> upkeep_token_subtypes;
+    // Colour of the upkeep token ("G"), passed through to CreateToken. Empty = the historical
+    // colourless token, so every existing upkeep-token card is byte-identical.
+    std::string upkeep_token_color;
+    // Mycoloth: "create a 1/1 green Saproling token FOR EACH +1/+1 counter on this creature."
+    // A DYNAMIC upkeep count -- it rides the same `count +=` accumulator that already serves
+    // Kemba's upkeep_tokens_per_equipment, so this is an existing precedented mode rather than a
+    // new one. The count is read from the PERMANENT's live +1/+1 counters at upkeep, never from a
+    // remembered devour count (WotC ruling: "It doesn't matter where the +1/+1 counters came
+    // from"), which is also what makes the Doubling Season interaction fall out for free.
+    bool upkeep_tokens_per_plus_one_counter = false;
+
+    // ---- SPORE COUNTERS (the Thallid family) --------------------------------------------------
+    // Shared by five cards in the Fungus deck: Thallid, Thallid Shell-Dweller, Sporesower Thallid,
+    // Psychotrope Thallid and Utopia Mycon. Counters live in the dedicated Permanent::spore_counters
+    // int (see the rationale there); every one of these is 0/false by default, so the whole family
+    // is inert -- never inspected -- for every other deck.
+    //
+    // "At the beginning of your upkeep, put a spore counter on THIS creature."
+    int  spore_upkeep_self = 0;
+    // Sporesower Thallid: "...put a spore counter on EACH FUNGUS you control" (itself included --
+    // it is a Fungus). This STACKS with each Fungus's own spore_upkeep_self trigger. Sporesower has
+    // no separate self-trigger, so it sets this and leaves spore_upkeep_self at 0.
+    bool spore_upkeep_each_fungus = false;
+    // "Remove three spore counters from this creature: Create a 1/1 green Saproling." The counters
+    // are a COST paid on activation (CR 601.2h/602.2b), so they are NOT doubled by Doubling Season
+    // -- which doubles only counters being PUT ON. 0 = this card has no spore outlet.
+    int  spore_saproling_cost = 0;
+    int  spore_creates_tokens = 0;
+    int  spore_token_power = 0;
+    int  spore_token_toughness = 0;
+    std::vector<std::string> spore_token_subtypes;
+    std::string spore_token_color;
+
+    // ---- QUEST COUNTERS (Beastmaster Ascension) -----------------------------------------------
+    // "Whenever a creature you control attacks, you may put a quest counter on this enchantment."
+    // ONE separate trigger per DECLARED attacker (CR 508.2), all resolving in the declare-attackers
+    // step BEFORE blockers and damage -- so the anthem below applies to the very combat that filled
+    // the counters. The "you may" is modelled as always-take: declining is strictly dominated (no
+    // counter cap, no sacrifice-at-N clause, no cost, and the passive goldfish opponent never makes
+    // fewer counters better).
+    int quest_counter_per_attacker = 0;
+    // "As long as this enchantment has seven or more quest counters on it, creatures you control
+    // get +5/+5." A CONDITIONAL STATIC (CR 604.3/611.3, continuously checked, no stack), evaluated
+    // inside ComputeLordBonus beside hand_size_anthem_max and life_threshold_pump_life so every
+    // combat/eval/SBA read site picks it up. Reads the LIVE counter total, never an attacker count,
+    // which is what makes it automatically correct under Doubling Season and across turns. The card
+    // is a noncreature with no static power_bonus, so IsLordPermanent stays correctly false and the
+    // bonus is never applied unconditionally. 0 threshold = not a quest anthem.
+    int quest_anthem_threshold = 0;
+    int quest_anthem_power = 0;
+    int quest_anthem_tough = 0;
+
+    // ---- DOUBLING SEASON ----------------------------------------------------------------------
+    // Two INDEPENDENT flags on purpose (the generic-cards rule): Parallel Lives / Anointed
+    // Procession are tokens-only, Corpsejack Menace is counters-only, Doubling Season is both.
+    // Both halves are static REPLACEMENT effects (CR 614) -- they never use the stack. N copies
+    // multiply, so the multiplier is 2^N and is computed by DoublerShift() in SpellEffects.h.
+    // Scope is per-CONTROLLER ("under YOUR control" / "a permanent YOU control"), which is what
+    // keeps the engine's opponent-gifted tokens (Forbidden Orchard, Varchild's) correctly undoubled.
+    bool doubles_tokens = false;
+    bool doubles_counters = false;
+
+    // ---- DEVOUR (Mycoloth) --------------------------------------------------------------------
+    // "Devour N (As this creature enters, you may sacrifice any number of creatures. It enters with
+    // N times that many +1/+1 counters on it.)" An AS-ENTERS REPLACEMENT (CR 702.81, 614.1c), not a
+    // trigger: it is applied in the PRE-PUSH window at both enter sites -- the same window
+    // loyalty_start uses -- so the creature is already the grown body when the ETB watchers run and
+    // the fodder is already gone. It therefore cannot devour itself or a co-entrant, which falls out
+    // by construction rather than needing a filter. The victims' dies-triggers are DEFERRED and fired
+    // after the entrant's own cascade, per CR. 0 = no devour.
+    int devour = 0;
 
     // Tap-and-pay activated token creation: {tap_token_cost}, {T} creates 1 token
     // with the given power/toughness/subtypes. Only activatable when at least one
@@ -1701,6 +1772,27 @@ struct CardParams
     //                                 on the outlet's OWN activation.
     int                      sac_outlet_self_pump_power = 0;
     int                      sac_outlet_self_pump_toughness = 0;
+    //   sac_outlet_draw            -- DRAW N cards per activation (Psychotrope Thallid "{1},
+    //                                 Sacrifice a Saproling: Draw a card"). No {T} in the cost, so
+    //                                 it is repeatable within a turn, bounded by fodder and mana.
+    //                                 NOTE the action's `eval` must include this term (1 card = 1
+    //                                 DMG, the repo's draw convention) -- without it a draw payload
+    //                                 scores ZERO and the search reads the activation as pure loss
+    //                                 (it gives up a body for nothing) and never takes it.
+    int                      sac_outlet_draw = 0;
+    //   sac_outlet_add_mana_any_color -- MANA ability that adds one mana of ANY colour (Utopia Mycon
+    //                                 "Sacrifice a Saproling: Add one mana of any color"). Distinct
+    //                                 from sac_outlet_add_mana_color, which pins a letter: this card
+    //                                 leaves that string EMPTY, so every site that infers "is a mana
+    //                                 outlet" from `!sac_outlet_add_mana_color.empty()` must instead
+    //                                 use the shared IsSacManaOutlet() reader below -- otherwise the
+    //                                 card falls into the VALUE-outlet branch and sacrifices a
+    //                                 Saproling for nothing. The concrete colour is resolved by the
+    //                                 existing ChosenFloatColorCandidates fan (the Lotus Bloom /
+    //                                 Apex of Power precedent) and realised at apply by
+    //                                 AddChosenColorFloat -- a TYPED letter in the pool, never a wild
+    //                                 token, per the pools-hold-typed-mana-only doctrine.
+    bool                     sac_outlet_add_mana_any_color = false;
 
     // --- Birthing Pod ("{1}{G/P}, {T}, Sacrifice a creature: Search your library for a creature
     // card with mana value equal to 1 plus the sacrificed creature's mana value, put that card onto
@@ -2391,6 +2483,16 @@ struct CardParams
 inline bool IsManaConversionSource(const CardParams& p)
 { return p.is_filter || p.ramp_filter || p.any_color_filter; }
 
+// A sac-creature outlet whose payload is MANA (as opposed to a VALUE payload: damage, tokens,
+// counters, pump, draw). THE single source of truth, for the same reason IsManaConversionSource
+// exists: four sites used to spell this as `!sac_outlet_add_mana_color.empty()`, which silently
+// assumes every mana outlet pins a colour letter. Utopia Mycon ("Sacrifice a Saproling: Add one
+// mana of any color") deliberately leaves that string empty, so each of those sites would have
+// routed it into the VALUE branch -- emitting an action that sacrifices a Saproling for NOTHING.
+inline bool IsSacManaOutlet(const CardParams& p)
+{ return p.sac_creature_outlet
+      && (!p.sac_outlet_add_mana_color.empty() || p.sac_outlet_add_mana_any_color); }
+
 // A fully resolved card definition: base Card data plus template + parameters.
 struct CardDefinition
 {
@@ -2517,6 +2619,18 @@ public:
     // entirely and every other deck's mana-cache keys are bit-for-bit unchanged.
     bool HasSubtypeRestrictedMana() const { return m_has_subtype_restricted_mana; }
 
+    // Does ANY loaded card carry a quest-counter anthem (Beastmaster Ascension)? Same purpose and
+    // same measured rationale as MaxHandSizeAnthemMax above: ComputeLordBonus's quest pass would
+    // otherwise walk the whole battlefield on every call for a clause one card carries. False for
+    // every deck but Fungus, so the scan is provably skipped and those decks stay byte-identical.
+    bool HasQuestAnthem() const { return m_has_quest_anthem; }
+
+    // Does ANY loaded card double tokens / counters (Doubling Season)? The doubling chokepoints
+    // (CreateToken, PutCounters) consult these before the O(battlefield) controller scan that
+    // computes 2^N, so a deck with no doubler pays one bool test per token/counter event.
+    bool HasTokenDoubler() const { return m_has_token_doubler; }
+    bool HasCounterDoubler() const { return m_has_counter_doubler; }
+
     bool IsImplemented(const std::string& name) const;
 
     // Returns all registered card names — used by the analyzer to check coverage.
@@ -2554,6 +2668,9 @@ private:
     // see MinLifeAboveStartAnthem(); maintained by RebuildInternedIndex. INT_MAX = no such card.
     int m_min_life_above_start_anthem = std::numeric_limits<int>::max();
     bool m_has_subtype_restricted_mana = false;   // see HasSubtypeRestrictedMana()
+    bool m_has_quest_anthem = false;    // see HasQuestAnthem();     ditto
+    bool m_has_token_doubler = false;   // see HasTokenDoubler();    ditto
+    bool m_has_counter_doubler = false; // see HasCounterDoubler();  ditto
     void RebuildInternedIndex();
 
     static CardDatabase s_instance;   // eager singleton storage (see Instance())
