@@ -8102,6 +8102,27 @@ static bool SacAxisEnabled()
     static const bool on = EnvOn("MTG_SAC_AXIS", true);
     return on;
 }
+// MTG_SAC_CREATURE_AXIS (default ON; =0 disables): the CREATURE twin of MTG_SAC_AXIS, for the
+// "sacrifice a <colour> creature" ADDITIONAL COST (Natural Order). CollectActions enumerates one
+// victim variant per distinct green creature name, but it does so during ACTION COLLECTION --
+// "before any plan exists", as its own comment says -- so the victim set is a snapshot of the
+// PRE-PLAN board and a creature the SAME PLAN casts is never offered. USER, hand-playing the
+// promoted Stompy list (2026-09-17): *"I was able to choose a victim if I put Fyndhorn Elves +
+// Natural Order as the plan, I just wasn't able to choose Fyndhorn Elves."* Measured on the
+// seed-1 reference: all 130 plans casting Fyndhorn + Natural Order offered victims {4, 11, 42},
+// byte-identical to Natural Order alone.
+//
+// The human half of that was fixed at resolution (PerformSacrificeCreatureCost -> the board-click
+// chooser), which is inert for the search because RevealLogPause nulls every chooser. THIS is the
+// search half: a post-dedup fan-out that re-points the victim at a creature the plan itself casts
+// earlier, so "deploy the worst body, then eat it" becomes one enumerable turn. Sacrificing the
+// dork you just played keeps the better body AND still counts toward a Craterhoof X, so it is a
+// real line, not a curiosity. See docs/design/stompy-decision-surfacing-gaps.md defect 2.
+static bool SacCreatureAxisEnabled()
+{
+    static const bool on = EnvOn("MTG_SAC_CREATURE_AXIS", true);
+    return on;
+}
 // MTG_TUTOR_AXIS_RESOLVE=1 (default off): bind the searched tutor pick by INDEX resolved at the
 // TRUE per-plan state, instead of by NAME ranked at the shared pre-land turn-start state. This is
 // the honest form of the located axis defect (see the fan-out note in EnumeratePlansWithLand):
@@ -31214,6 +31235,161 @@ static void AppendSubdecisionAxes(const GameState& state, bool is_pre_combat,
             all.insert(all.end(), std::make_move_iterator(extra.begin()),
                                   std::make_move_iterator(extra.end()));
         }
+    }
+
+    // SEARCHED SAME-PLAN SAC VICTIM (MTG_SAC_CREATURE_AXIS; see SacCreatureAxisEnabled for the
+    // defect and the user report). Same post-dedup additive fan-out as the tutor and sac-land axes:
+    // one variant per base plan that casts a "sacrifice a <colour> creature" spell, re-pointing the
+    // victim at a creature THAT PLAN ITSELF casts earlier in the turn -- the set CollectActions
+    // structurally cannot see, because it runs before any plan exists.
+    //
+    // WHY THIS AXIS RE-POINTS A FIELD INSTEAD OF PINNING A RANK. The sac-LAND axis pins an ordinal
+    // rank consumed at resolution, because a mid-plan land set can GROW in ways the enumerator
+    // cannot name (cg30's Forest exists only after Misty's crack). Here the growth is exactly this
+    // plan's own action list, so the victim can be named outright by card m_number -- which keeps
+    // the existing carrier working end to end (plan_signature's #V, PaySacVictimScope's
+    // sac-fodder-pays ordering, main.cpp's sac_victim/sac_victim_name emission,
+    // PerformSacrificeCreatureCost's lookup) instead of introducing a second way to pick a victim.
+    // No cursor either: each cast carries its own victim, so two Natural Orders in one plan are
+    // independently re-pointable.
+    //
+    // THE HAND INDICES ARE NOT THIS STATE'S. This runs in the POOLED post-dedup set, where each
+    // plan came from EnumeratePlans(copy) with `copy` = state AFTER its own land drop left the
+    // hand -- so act.hand_index is off by one for every action after the drop, and reading
+    // state.hand[act.hand_index] silently names the wrong card (measured: "Natural Order@4 =>
+    // Forest"). Reconstruct that plan's hand from p.land_to_play (PlayLandByName's own pick rule:
+    // first playable copy of the name, staged preferred) and then VERIFY every action's card_name
+    // against it. A plan whose mapping does not verify is skipped, never guessed at -- so a future
+    // enumeration branch that reshapes the hand some other way (a non-deferred karoo bounce) costs
+    // this axis its fan-out and nothing else.
+    //
+    // CANONICAL ORDER IS THE PRECONDITION, and it is checked rather than assumed: the body must be
+    // cast by an action the canonical cast order resolves STRICTLY BEFORE this one (creatures rank
+    // 10, Natural Order's sorcery ranks 20 -- GenericProvider::CastOrderRank). If a pin ever goes
+    // stale anyway, PerformSacrificeCreatureCost falls back to the most-expendable candidate, so
+    // the worst case is a duplicate world, never an unpaid cost.
+    //
+    // ONE BASE PER VICTIM FAMILY. CollectActions already emitted one plan per pre-plan victim name,
+    // and re-pointing any of them at the same new creature yields the SAME plan -- so fan out only
+    // from the family representative (every sac cast carrying the collection front's victim). Names
+    // already legal on the pre-plan board are skipped for the same reason: the collection axis owns
+    // them, and same-name victims are fungible (its rule, kept).
+    if (SacCreatureAxisEnabled() && !HumanPlayActive())
+    {
+        const Player& sc_ap = state.ActivePlayer();
+        // Front victim per colour filter, i.e. exactly what CollectActions put on the base plan.
+        std::unordered_map<std::string, int>                             front_victim;
+        std::unordered_map<std::string, std::unordered_set<std::string>> board_names;
+        auto colour_facts = [&](const std::string& col)
+        {
+            if (front_victim.count(col) != 0) { return; }
+            const std::vector<int> cand = SacCreatureCandidateIndices(
+                state, state.active_player_index, col);
+            front_victim[col] = cand.empty() ? 0 : state.battlefield[cand.front()].card.m_number;
+            std::unordered_set<std::string>& nm = board_names[col];
+            for (int bi : cand) { nm.insert(state.battlefield[bi].card.m_name.str()); }
+        };
+        auto sac_colour = [](const Action& act) -> std::string
+        {
+            if (act.kind != Action::Kind::CastFromHand) { return std::string{}; }
+            const CardDefinition* d = act.def ? act.def
+                                              : CardDatabase::Instance().Lookup(act.card_name.str());
+            return d ? d->params.sac_additional_creature_color : std::string{};
+        };
+        // This plan's enumeration hand, as indices into state's hand (see the note above).
+        std::vector<int> hmap;
+        auto build_hmap = [&](const TurnSolver::Plan& p) -> bool
+        {
+            int drop = -1;
+            if (!p.land_to_play.empty())
+            {
+                for (int i = 0; i < static_cast<int>(sc_ap.hand.size()); ++i)
+                {
+                    const Card& c = sc_ap.hand[i];
+                    if (c.m_name.str() != p.land_to_play || c.m_impulse_no_land) { continue; }
+                    if (!PlayableAsLand(CardDatabase::Instance().LookupCached(c))) { continue; }
+                    if (drop < 0)     { drop = i; }
+                    if (c.m_is_staged) { drop = i; break; }
+                }
+                if (drop < 0) { return false; }
+            }
+            hmap.clear();
+            for (int i = 0; i < static_cast<int>(sc_ap.hand.size()); ++i)
+            { if (i != drop) { hmap.push_back(i); } }
+            // VERIFY: every hand cast must land on a card of its own name, or we do not fan.
+            for (const Action& act : p.actions)
+            {
+                if (act.kind != Action::Kind::CastFromHand) { continue; }
+                if (act.hand_index < 0
+                    || act.hand_index >= static_cast<int>(hmap.size())) { return false; }
+                if (sc_ap.hand[hmap[act.hand_index]].m_name != act.card_name) { return false; }
+            }
+            return true;
+        };
+        std::vector<TurnSolver::Plan> extra;
+        for (const TurnSolver::Plan& p : all)
+        {
+            // Base plans only -- one axis at a time, so cost stays additive (the tutor axis's rule).
+            if (p.scry_choice >= 0 || p.bp_choice >= 0 || p.tutor_choice >= 0
+                || p.etbdig_choice >= 0 || p.lackey_choice >= 0
+                || !p.sac_pins.empty()) { continue; }
+            // This plan's sac-cost casts, plus the family-representative test (every one of them
+            // carrying its colour's collection front).
+            std::vector<std::size_t> sac_at;
+            bool is_front_family = true;
+            for (std::size_t k = 0; k < p.actions.size(); ++k)
+            {
+                const std::string col = sac_colour(p.actions[k]);
+                if (col.empty()) { continue; }
+                colour_facts(col);
+                if (p.actions[k].soulfire_own_targets != front_victim[col])
+                { is_front_family = false; break; }
+                sac_at.push_back(k);
+            }
+            if (!is_front_family || sac_at.empty()) { continue; }
+            if (!build_hmap(p)) { continue; }
+            for (std::size_t slot : sac_at)
+            {
+                const Action&         sac_act = p.actions[slot];
+                const std::string     col     = sac_colour(sac_act);
+                const CardDefinition* sd      = sac_act.def
+                    ? sac_act.def : CardDatabase::Instance().Lookup(sac_act.card_name.str());
+                if (sd == nullptr) { continue; }
+                const int sac_rank = ResolveProvider(state).CastOrderRank(state, *sd);
+                std::unordered_set<std::string> seen = board_names[col];   // pre-plan names: skip
+                for (const Action& act : p.actions)
+                {
+                    if (act.kind != Action::Kind::CastFromHand) { continue; }
+                    if (act.bestow) { continue; }   // cast as an Aura: no creature enters
+                    const Card& hc = sc_ap.hand[hmap[act.hand_index]];
+                    const CardDefinition* cd = act.def ? act.def
+                                                       : CardDatabase::Instance().Lookup(act.card_name.str());
+                    // Type and colour off the DEFINITION's card, never the hand card: a hand Card
+                    // carries IDENTITY (name, m_number -- which is all `hc` is used for) but not the
+                    // type/colour masks, which are filled when it becomes a permanent
+                    // (PutCardOntoBattlefield does `perm.card = d->card`). PerformSagaFreeCast
+                    // documents the same trap -- "testing the hand copy silently reports every card
+                    // colourless" -- and it bites identically here: reading IsCreature() off `hc`
+                    // answered false for every candidate and made this axis emit nothing at all.
+                    if (cd == nullptr) { continue; }
+                    if (!cd->card.IsCreature())                 { continue; }
+                    if (!CardHasColorNamed(cd->card, col))      { continue; }
+                    // Canonical order must resolve the body BEFORE the cost is paid.
+                    if (ResolveProvider(state).CastOrderRank(state, *cd) >= sac_rank) { continue; }
+                    if (!seen.insert(hc.m_name.str()).second)   { continue; }
+                    TurnSolver::Plan v = p;
+                    v.actions[slot].soulfire_own_targets = hc.m_number;
+                    extra.push_back(std::move(v));
+                }
+            }
+        }
+        if (!extra.empty())
+        {
+            TRACE("saccreat", "T%d %zu plan(s) -> %zu same-plan-victim variant(s)",
+                  state.turn_number, all.size(), extra.size());
+        }
+        all.insert(all.end(), std::make_move_iterator(extra.begin()),
+                              std::make_move_iterator(extra.end()));
     }
 
     // SEARCHED FRESH-MINT RELEASE (MTG_FRESH_SPEND_AXIS; overhaul ledger "Cluster C / mw136").

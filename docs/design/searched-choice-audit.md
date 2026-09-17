@@ -120,10 +120,24 @@ Ordered by suspicion (defects already traced to them, or same shape):
    winning path also routes around the [m2t]/[fsw] trace sites in BOTH arms; instrument the
    collapsed-main route). Not an axis per se, but the same class: a modelling hole no
    budget/depth can cross.
-3. **Sac-CREATURE victim** (`SacCreatureCandidateIndices`, SpellEffects.h ~8975): static
-   most-expendable-first + MTG_SAC_SPARE_ATTACKERS lever. Same shape as sac-land; Natural
-   Order victims already ride Action::soulfire_own_targets in some paths — check whether
-   the search actually branches victims everywhere or only at collection.
+3. **Sac-CREATURE victim** (`SacCreatureCandidateIndices`, SpellEffects.h ~8975) — **ANSWERED
+   AND FIXED 2026-09-17, `MTG_SAC_CREATURE_AXIS` (default ON, `=0` restores)**. The open
+   question here ("does the search branch victims everywhere or only at collection?") had the
+   bad answer: **only at collection**. `CollectActions` emits one variant per distinct victim
+   name and `plan_signature`'s `#V` keeps them distinct, so victims WERE searched — but the
+   candidate set is snapshotted from the board as it stands *before any plan exists*, so a
+   creature the same plan casts was never a candidate. Found by the USER hand-playing
+   StompySurprise (*"I just wasn't able to choose Fyndhorn Elves"*).
+   The fix is a post-dedup fan-out in `AppendSubdecisionAxes` that re-points the victim at a
+   creature the plan itself casts earlier, gated on the canonical cast order resolving that
+   body first. It does **not** use a rank pin: unlike a mid-plan land set, the new candidates
+   are exactly this plan's own action list, so naming the copy by `m_number` keeps the existing
+   `soulfire_own_targets` carrier (signature `#V`, `PaySacVictimScope`, the viewer's
+   `sac_victim`) working unchanged, and no executor pin / memo-key fold is needed at all.
+   Measured: play changes (all digests move, and "cast Vaultborn Tyrant, eat it to Natural
+   Order" is now findable), outcome does not — 13,000 held-out games move the average win turn
+   by ≤0.0004t and a 1500-game per-game diff moved zero games. Full record:
+   `stompy-decision-surfacing-gaps.md`.
 4. **Payment tap order** — rank-driven (ManaSourceRank), explicitly not a branch ("tap
    order is NOT a search branch", overhaul ledger band-D note). Known residuals: st993's
    Archdruid-over-ArborElf tap (Cluster B), the drip-land-vs-dork situational call (Grove

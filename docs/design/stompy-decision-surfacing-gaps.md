@@ -45,12 +45,82 @@ for what the engine does today.**
   the line itself casts absent, exactly as reported. It now fans **13** (fetch targets only) and the
   resolution frame offers Fyndhorn Elves.
 
-**Still open (search, not viewer).** The plan enumerator still bakes the victim from the pre-plan
-board, so the SEARCH cannot find "deploy the worst creature, then eat it" as a single turn; and the
-Hulk chapters still have no searched axis (chapters II/III fire at the draw step, before any plan
-exists, so a plan axis is not the right shape for them anyway — a searched resolution-time choice
-would be). Both are engine-quality items that WOULD move GT, and neither is what the user asked for
-here.
+---
+
+## STATUS 2026-09-17b — the SEARCH half of defect 2 is fixed; the Hulk chapters are sized, not built
+
+`MTG_SAC_CREATURE_AXIS` (default ON, `=0` restores the old behaviour exactly) adds a post-dedup plan
+axis in `AppendSubdecisionAxes` (`src/ai/TurnSolver.cpp`) that re-points a Natural Order cast's victim
+at a creature **the same plan casts earlier in the turn** — the set `CollectActions` structurally
+cannot see, because it runs before any plan exists. So "deploy the worst body, then eat it" is now one
+enumerable turn for the SEARCH, as it already was for the human.
+
+**What it does, shown rather than asserted.** Seed 1001 game 56, turn 4, d3:
+
+| arm | the turn | result |
+|---|---|---|
+| `=0` (old) | cast Elvish Archdruid; Natural Order eats **Llanowar Elves** → Craterhoof | won T4, 28 dmg |
+| default (new) | cast **Vaultborn Tyrant**; Natural Order eats **the Tyrant it just cast** → Craterhoof | won T4, 20 dmg |
+
+The new line keeps the Llanowar Elves *and* banks the Tyrant's dies-trigger token copy. It is exactly
+the shape the user described, and the old arm could not express it at any budget.
+
+**What it is worth, measured, and the answer is "nothing the goldfish can see".** 13,000 held-out
+games (d3 4000 x2 seeds, d5 2000, 2HG-d3 3000; seeds 770001/880002) move the average win turn by
+**−0.0004t on one cell and 0.0000 on the other three**, and a per-game diff over 1500 d3 games moved
+**zero** games' win turn. All four `--batch` digests DO change, so play genuinely differs — the lines
+change, the clock does not. Wall clock is inside run-to-run noise (one d3 cell faster, one slower).
+
+That null is a fact about the HARNESS, not about the line: against a passive opponent with no
+blockers and no removal, which body you eat almost never changes the turn you win on. The value here
+is that the search's legal space now matches the rules and matches what the viewer offers the human —
+not a win rate. Shipping it ON is the [searched-choice doctrine](searched-choice-audit.md) call the
+user already made for the sac-LAND axis (*"It should be a branch by default and be overridden by a
+heuristic"*, 2026-08-25); the off-switch is there because the measurement bought no quality.
+
+**Three implementation facts worth keeping** (each cost a debugging round trip):
+
+* **A hand `Card` carries identity, not type/colour.** `m_type_mask` / `m_color_mask` are filled when
+  the card becomes a permanent, so `hand[i].IsCreature()` is **false for every card in hand**. Read
+  both off `CardDatabase::LookupCached(c)->card`. `PerformSagaFreeCast` documents the same trap
+  ("testing the hand copy silently reports every card colourless") — it is a repo-wide rule, not a
+  Saga quirk. Getting it wrong made the axis silently emit zero variants.
+* **`Action::hand_index` is NOT an index into the state you are holding.** `AppendSubdecisionAxes`
+  runs over the POOLED post-dedup set, but each plan came from `EnumeratePlans(copy)` where `copy` is
+  the state *after that plan's own land drop left the hand*. Reading `state.hand[act.hand_index]`
+  names the wrong card (measured: `Natural Order@4 => Forest`). The axis reconstructs the per-plan
+  hand from `p.land_to_play` using `PlayLandByName`'s own pick rule and then **verifies every action's
+  `card_name` against it**, skipping any plan that fails to verify.
+* **The victim is named by `m_number`, not pinned by rank.** The sac-LAND axis pins a rank because a
+  mid-plan land set can grow in ways the enumerator cannot name; here the growth is exactly this
+  plan's own action list, so naming the copy keeps the entire existing carrier working
+  (`plan_signature`'s `#V`, `PaySacVictimScope`'s fodder-pays ordering, `main.cpp`'s
+  `sac_victim`/`sac_victim_name`, `PerformSacrificeCreatureCost`'s lookup).
+
+### Still open: the Hulk chapters have no searched axis, and only chapter I can have one
+
+This was sized during the same session and deliberately not built. The finding is architectural:
+
+* **Chapters II and III cannot be a plan axis at all.** They fire in `AdvanceSagas` at the DRAW STEP
+  of a later turn — inside a rollout, not inside any plan's apply — and this engine does not branch
+  inside rollouts. Their target is therefore a resolution-time HEURISTIC
+  (`DefaultSagaChapterTarget` = "biggest body that can swing now") and the honest route to improving
+  it is `.claude/skills/heuristic-optimization.md` (propose variants, sweep, adopt on approval), not
+  a searched axis. The doc's earlier claim that "a searched resolution-time choice would be" the
+  right shape overstated what the architecture supports.
+* **Chapter I CAN be searched**, because it resolves inside the Saga's own resolution during the main
+  phase — i.e. inside the plan apply. The shape is the `ScriptedEtbDig` pin, and the full plumbing
+  checklist is: a `thread_local` + RAII scope in `SpellEffects.h`; a `Plan::saga_ch1_choice` field;
+  consumption in `PerformSagaFreeCast` (rank into `cand_slots`, duplicate-not-whiff clamp, plus a
+  distinct DECLINE value — "you MAY cast it", the Turntimber `TURNTIMBER_NONE` precedent); the fan-out
+  in `AppendSubdecisionAxes`; the scope in `ApplyPlanDirect` **and** in `AIEngine` (executor lockstep,
+  or the realised turn is not the one that was scored); and then the four places a new pin must be
+  registered or it is silently wrong — `SamePlan`, `BpCandFingerprint`, `IsApplyEmptyPlan`, and the
+  **TT key fold** (`TurnSolver.cpp` ~42019, or a transposition reuses a node scored under a different
+  pin), plus the breakpoint capture/resume pins (~24307 / ~25022 / ~25050).
+  Chapter I's current pick is not naive — it scores each candidate by doing a real put on a COPY of
+  the state, so a Craterhoof team-pump or a Hornet Queen wave is measured — but it is blind to the
+  REST of the plan, which is exactly what a searched axis would fix.
 
 ---
 
