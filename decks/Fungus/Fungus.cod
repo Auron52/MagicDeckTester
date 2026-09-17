@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<cockatrice_deck version="1">
+    <deckname></deckname>
+    <comments></comments>
+    <zone name="main">
+        <card number="4" name="Thallid Shell-Dweller"/>
+        <card number="4" name="Sporesower Thallid"/>
+        <card number="4" name="Thallid"/>
+        <card number="4" name="Utopia Mycon"/>
+        <card number="4" name="Doubling Season"/>
+        <card number="19" name="Forest"/>
+        <card number="3" name="Simic Growth Chamber"/>
+        <card number="4" name="Beastmaster Ascension"/>
+        <card number="4" name="Sporecrown Thallid"/>
+        <card number="4" name="Tukatongue Thallid"/>
+        <card number="1" name="Psychotrope Thallid"/>
+        <card number="2" name="Mycoloth"/>
+        <card number="2" name="Wild Growth"/>
+        <card number="1" name="Essence Warden"/>
+    </zone>
+    <zone name="side">
+        <card number="1" name="Spore Flower"/>
+        <card number="3" name="Essence Warden"/>
+    </zone>
+</cockatrice_deck>
