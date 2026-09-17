@@ -1387,6 +1387,11 @@ static std::vector<std::string> PlanActionKeys(const TurnSolver::Plan& p)
         if (a.chosen_x)               { k += "/x" + std::to_string(a.chosen_x); }
         if (a.splice_count)           { k += "/s" + std::to_string(a.splice_count); }
         if (a.replicate_count >= 0)   { k += "/r" + std::to_string(a.replicate_count); }
+        // Mycoloth's devour count. WITHOUT THIS the name-only dedup collapses every k to the
+        // first-enumerated variant -- the documented tutor-target failure mode, where a generic
+        // limiter silently picks a winner among real alternatives. Gated on the sentinel, so no
+        // existing deck's signature moves.
+        if (a.devour_count >= 0)      { k += "/D" + std::to_string(a.devour_count); }
         if (a.discard_lands)          { k += "/d" + std::to_string(a.discard_lands); }
         if (a.alt_cost)               { k += "/alt"; }
         if (!a.tutor_target.empty())  { k += "/t" + a.tutor_target; }
@@ -1426,6 +1431,13 @@ static std::string BoardSignature(const GameState& s)
         e += "/c" + std::to_string(p.counters.size());
         e += "/ch" + std::to_string(p.charge_counters) + "," + std::to_string(p.storage_counters);
         if (p.age_counters > 0) { e += "/g" + std::to_string(p.age_counters); }   // cumulative upkeep
+        // Spore / quest counts. NOTE the `/c` entry above records only counters.SIZE, so a
+        // vector-backed counter would collide here at differing counts -- one of the reasons these
+        // two are dedicated ints. Both are future-determining (spores decide how many Saprolings a
+        // later turn yields; quest counters decide when the anthem switches on), so they must be
+        // distinguished. Nonzero-gated, so every other deck keeps the EXACT prior signature.
+        if (p.spore_counters > 0) { e += "/sp" + std::to_string(p.spore_counters); }
+        if (p.quest_counters > 0) { e += "/qu" + std::to_string(p.quest_counters); }
         e += "/p" + std::to_string(p.temp_power_bonus) + "," + std::to_string(p.temp_tough_bonus);
         if (p.temp_haste)   { e += "/h"; }    // Expedite until-EOT haste
         if (p.temp_lifelink){ e += "/ll"; }   // Heliod until-EOT lifelink grant
@@ -6222,6 +6234,10 @@ static bool PermIsPlainForFold(const GameState& state, const Permanent& p)
     if (p.colored_cast_lifegain_used_this_turn) { return false; }
     if (p.chosen_color != -1) { return false; }
     if (p.ice_counters != 0 || p.age_counters != 0) { return false; }
+    // Spore / quest counters differentiate two otherwise identical copies, and LOAD-BEARINGLY so:
+    // a Thallid holding 2 spores and one holding 5 are not interchangeable activation sources (one
+    // can pop, the other cannot), and folding them would pick a winner among real alternatives.
+    if (p.spore_counters != 0 || p.quest_counters != 0) { return false; }
     if (p.temp_haste || p.temp_lifelink || p.exile_at_end) { return false; }
     if (p.chosen_subtype_id != 0) { return false; }
     if (p.is_animated || p.is_token || p.echo_resolved) { return false; }
@@ -6451,6 +6467,7 @@ static std::uint64_t ActionFoldSig(const Action& a)
     FoldMix(h, a.bestow ? 1u : 0u);
     FoldMix(h, static_cast<std::uint64_t>(a.ponder_keep));
     FoldMix(h, static_cast<std::uint64_t>(a.replicate_count));
+    FoldMix(h, static_cast<std::uint64_t>(a.devour_count));   // Mycoloth: k is a searched axis
     FoldMix(h, static_cast<std::uint64_t>(a.eval));
     FoldMix(h, static_cast<std::uint64_t>(a.direct_damage));
     FoldMix(h, a.is_noncreature ? 1u : 0u);
@@ -7721,7 +7738,11 @@ static int BuildFungibleEquipClasses(const GameState& state,
         }
         if (!src || src->equipped_to != 0 || !src->counters.empty()
             || src->charge_counters != 0 || src->verse_counters != 0
-            || src->storage_counters != 0 || src->age_counters != 0)
+            || src->storage_counters != 0 || src->age_counters != 0
+            // Unreachable today (the is_equipment gate below excludes every Fungus card), but this
+            // list is "every field that can differentiate two copies" and an incomplete one is the
+            // documented failure mode -- keep it exhaustive rather than argue reachability.
+            || src->spore_counters != 0 || src->quest_counters != 0)
         { continue; }
         const CardDefinition* d = a0.def ? a0.def : CardDatabase::Instance().LookupCached(src->card);
         if (!d || !d->params.is_equipment || d->params.equip_sacrifices_prior_host) { continue; }
@@ -9333,6 +9354,12 @@ bool TurnSolver::PostEntryActivationPending(const GameState& state,
             if (PermAbilityTaps(m.mode) && (p.tapped || !p.CanTap())) { continue; }
             if (affordable(*m.cost, p.card)) { return true; }
         }
+        // Spore outlet (the Thallid family): the cost is COUNTERS, not mana, so it is not in the
+        // ModeSpec table above (which is keyed on an optional<ManaCost>) and `affordable` has
+        // nothing to say about it. It taps nothing and sacrifices nothing, so a summoning-sick or
+        // already-tapped body still qualifies -- the only gate is the counter supply.
+        if (pp.spore_saproling_cost > 0 && p.spore_counters >= pp.spore_saproling_cost)
+        { return true; }
         if (affordable(pp.blink_cost, p.card))     { return true; }
         if (affordable(pp.team_pump_cost, p.card)) { return true; }
         if (pp.pod_mv_delta != 0 && (!pp.pod_taps || (!p.tapped && p.CanTap()))
@@ -13102,6 +13129,42 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
         // falls back to the pre-2026-08-26 behaviour (greedy-max sink + the resolution dialog).
         // It exists because this moves the PAYMENT path for a replicate turn, and an A/B needs an
         // arm; it is not a play lever (autonomous play never fans a variant either way).
+        // ---- DEVOUR (CR 702.81, Mycoloth "Devour 2") ---------------------------------------------
+        // One cast variant per number of creatures devoured, k = 0 .. (own creatures on the
+        // battlefield). Unlike the replicate fan below, this is enumerated in AUTONOMOUS play too,
+        // because k is the deck's central decision rather than a viewer affordance: it trades this
+        // turn's board -- attackers, and sac fodder for Utopia Mycon / Psychotrope Thallid -- against
+        // a permanent engine that pays one Saproling per +1/+1 counter at EVERY later upkeep. A
+        // heuristic pick would steal exactly the decision the search exists to make.
+        //
+        // k = 0 STAYS ENUMERATED: the card says "you MAY sacrifice any number", and declining is
+        // frequently right (the bodies are usually worth more attacking).
+        //
+        // DELIBERATELY UNCAPPED. A generic cap here would be precisely the forbidden thing -- a
+        // non-provider limiter picking a winner among real alternatives -- so if this fan proves too
+        // wide on a 40-token board, the fix is a FungusProvider::DevourCountCandidates hook measured
+        // by the 5f unpruned A/B, not a constant in the enumerator.
+        if (def.params.devour > 0)
+        {
+            int own = 0;
+            for (const Permanent& q : state.battlefield)
+            {
+                if (q.controller_index == state.active_player_index && q.card.IsCreature())
+                { ++own; }
+            }
+            for (int k = 0; k <= own; ++k)
+            {
+                Action v = a;
+                v.devour_count = k;
+                // Ordering hint only: each devoured body becomes `devour` counters, so the NET
+                // board swing is k * (devour - 1). Monotone but small, so it orders the variants
+                // without pretending to know the answer -- the rollout decides.
+                v.eval += k * (def.params.devour - 1);
+                actions.push_back(std::move(v));
+            }
+            continue;
+        }
+
         static const bool s_replicate_dim = EnvOn("MTG_REPLICATE_DIM", true);
         if (s_replicate_dim
             && def.card.IsCreature()
@@ -15184,6 +15247,60 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
                 }
             }
 
+            // ---- Spore outlet: "Remove three spore counters: create a 1/1 green Saproling" --------
+            // Deliberately NOT in the ModeSpec table above: that table is keyed on an
+            // optional<ManaCost> and none of its affordability machinery applies here, because THE
+            // COST IS COUNTERS. No {T} and no sacrifice either, so a summoning-sick or already-tapped
+            // body may still activate (CR 302.6 restricts only {T} abilities), and it is REPEATABLE
+            // within a turn -- K is bounded by the counter supply rather than by mana.
+            //
+            // This is also why it must never reach SpendRepeatActivations: that helper bails at
+            // `per <= 0` precisely so a FREE repeatable sink cannot non-terminate. Here the whole
+            // K-block is emitted up front and each iteration re-checks the counter supply in
+            // ApplyPermAbility instead.
+            //
+            // K IS A REAL SEARCHED AXIS, not a greedy max. For this card in isolation popping at the
+            // first opportunity looks weakly dominant -- spore counters have one sink and no upkeep
+            // cost -- but it stops being dominant with the rest of the deck on the table: holding
+            // three counters until a Doubling Season resolves turns one Saproling into two, and
+            // Mycoloth's devour wants the bodies on the battlefield BEFORE it enters. So the search
+            // owns both K and the activation's position in the main-phase ordering. Folded to {1}
+            // under human play / unpruned for the same reason the mana sinks are: the main phase
+            // re-prompts after each activation, so "pop twice" is reached by choosing it twice.
+            if (sd->params.spore_saproling_cost > 0
+                && src.spore_counters >= sd->params.spore_saproling_cost)
+            {
+                const int max_k = src.spore_counters / sd->params.spore_saproling_cost;
+                std::vector<int> counts{ 1 };
+                if (max_k > 1 && !HumanPlayActive()
+                    && !DecisionUnpruned(UnprunedGate::BlinkTarget))
+                {
+                    counts.clear();
+                    for (int k = 1; k <= max_k; ++k) { counts.push_back(k); }
+                }
+                for (int k : counts)
+                {
+                    Action a;
+                    a.kind           = Action::Kind::ActivatePermAbility;
+                    a.card_name      = src.card.m_name;
+                    a.def            = sd;
+                    a.hand_index     = -1;
+                    a.sac_source_id  = src.card.m_number;
+                    a.ability_mode   = Action::AbilityMode::SporeSaproling;
+                    a.chosen_x       = k;
+                    // No equiv_tag fold: PermIsPlainForFold already refuses a permanent carrying
+                    // spore counters, so two Thallids on different counts can never be pooled.
+                    a.equiv_tag      = 0;
+                    a.cost           = ManaCost{};   // the cost is counters, not mana
+                    // Each Saproling is a 1/1 body; the repo's convention scores a created token at
+                    // its body value. No direct_damage -- a token is board, not face damage.
+                    a.eval           = k * std::max(1, sd->params.spore_creates_tokens);
+                    a.direct_damage  = 0;
+                    a.is_noncreature = true;
+                    actions.push_back(std::move(a));
+                }
+            }
+
             // ---- The two GREEDY post-cast mana sinks, as real actions -- HUMAN PLAY ONLY ----------
             // Mutavault's "{1}: becomes a 2/2" and Sliver Hive's "{5}, {T}: create a Sliver" are the
             // only activated abilities in the database with NO Action::Kind of their own: both are
@@ -15365,7 +15482,11 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
             if (src.controller_index != state.active_player_index) { continue; }
             const CardDefinition* sd = CardDatabase::Instance().LookupCached(src.card);
             if (!sd || !sd->params.sac_creature_outlet) { continue; }
-            const bool is_mana_outlet = !sd->params.sac_outlet_add_mana_color.empty();
+            // THE shared reader, not `!sac_outlet_add_mana_color.empty()`. Utopia Mycon adds mana of
+            // ANY colour and so leaves that string empty; spelling the test the old way routed it
+            // into the VALUE branch below, which emitted an action that sacrifices a Saproling for
+            // nothing at all.
+            const bool is_mana_outlet = IsSacManaOutlet(sd->params);
             // Sac-outlet pre-combat deferral (GoblinsProvider::DeferSacOutletPreCombat, ADOPTED default-ON,
             // off-switch MTG_NO_GOBLIN_SAC_2ND): defer the VALUE outlets (Siege-Gang / Pashalik / the multi-
             // sac burst) to the second main and haste-gate Skirk's mana outlet. Vs the passive opponent a
@@ -15421,14 +15542,40 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
                 a.ritual_float       = sd->params.sac_outlet_add_mana_amount;   // credited by Solve
                 a.chosen_float_color = sd->params.sac_outlet_add_mana_color;    // "R"
                 a.eval               = 0;
+                if (sd->params.sac_outlet_add_mana_any_color)
+                {
+                    // Utopia Mycon: "Sacrifice a Saproling: Add one mana of ANY COLOR." The colour
+                    // resolves to a CONCRETE letter through the shared candidate fan (the Lotus
+                    // Bloom / Apex of Power precedent) rather than becoming a wild token in the
+                    // pool: floating mana is a truth claim that later payments read, and a wild
+                    // could illegally pay a multicolour mix. That is the repo's pools-hold-typed-
+                    // mana-only doctrine, and it is why the colour is enumerated rather than pinned.
+                    // In this mono-green deck the fan returns the singleton {G}, so it costs exactly
+                    // one action and no plan-space growth -- but it stays honest if the deck splashes.
+                    for (const std::string& col : ChosenFloatColorCandidates(state))
+                    {
+                        Action v = a;
+                        v.chosen_float_color = col;
+                        actions.push_back(std::move(v));
+                    }
+                    // The per-colour variants above replace the single canonical push below -- but
+                    // do NOT `continue`: the demand-driven multi-sac BURST further down is exactly
+                    // the "sac three Saprolings to jump straight to Mycoloth" line this deck wants,
+                    // and skipping the rest of the loop body would silently drop it.
+                    emit_canonical = false;
+                }
             }
             else
             {
                 a.kind           = Action::Kind::SacCreatureOutlet;
                 a.cost           = sd->params.sac_creature_cost.value_or(ManaCost{});
                 a.direct_damage  = sd->params.sac_outlet_damage;
+                // A DRAW payload must contribute, or the search reads the activation as pure loss
+                // (it gives up a body for nothing) and never takes it. 1 card = 1 DMG is the repo's
+                // draw convention, matching the cast-draw valuation sites.
                 a.eval           = (sd->params.sac_outlet_damage
-                                    + sd->params.sac_outlet_creates_tokens) * DMG;
+                                    + sd->params.sac_outlet_creates_tokens
+                                    + sd->params.sac_outlet_draw) * DMG;
                 // Provider gate on the GENERIC fodder sac only (FodderSacUseful -- the Melira
                 // rule: no fodder to a self-payload outlet until the combo is active or the
                 // payload reaches lethal). The persist variants and bursts below are NOT gated,
@@ -15482,7 +15629,23 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
                     b.chosen_float_color = sd->params.sac_outlet_add_mana_color;
                     b.is_noncreature     = true;
                     b.eval               = 0;
-                    actions.push_back(std::move(b));
+                    if (sd->params.sac_outlet_add_mana_any_color)
+                    {
+                        // Same any-colour fan as the single-sac action above: the burst pins no
+                        // letter either, so enumerate one variant per candidate colour rather than
+                        // shipping an empty chosen_float_color (which ApplySacForMana would read as
+                        // "no colour" and float nothing).
+                        for (const std::string& col : ChosenFloatColorCandidates(state))
+                        {
+                            Action bv = b;
+                            bv.chosen_float_color = col;
+                            actions.push_back(std::move(bv));
+                        }
+                    }
+                    else
+                    {
+                        actions.push_back(std::move(b));
+                    }
                 }
             }
 
@@ -18569,7 +18732,7 @@ namespace solvememo
             const Action& y = b.actions[i];
             if (x.kind != y.kind || !(x.card_name == y.card_name) || x.hand_index != y.hand_index
                 || x.chosen_x != y.chosen_x || x.splice_count != y.splice_count
-                || x.replicate_count != y.replicate_count
+                || x.replicate_count != y.replicate_count || x.devour_count != y.devour_count
                 || !(x.tutor_target == y.tutor_target) || x.sacrifice_land != y.sacrifice_land
                 || x.discard_lands != y.discard_lands)
             { return false; }
@@ -21993,6 +22156,12 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
     // Action-based apply_one callers right before the call, consumed (and reset) at apply_one's
     // head; -1 = none. A captured local rather than a 21st apply_one parameter.
     int cast_loyalty_ability = -1;
+    // Devour count riding a CAST action (Action::devour_count, Mycoloth). Same idiom and same
+    // reason as cast_loyalty_ability directly above: set by the Action-based apply_one callers
+    // immediately before the call and consumed at apply_one's head, rather than becoming a 22nd
+    // positional parameter on a std::function that ten call sites already pass by position.
+    // -1 = not a devour cast.
+    int cast_devour_count = -1;
 
     // Karoo bounce-land play-at-end timing. A Karoo (Izzet Boilerworks: etb_bounce_land,
     // enters tapped) returns one of our lands to hand on ETB. Played land-FIRST it bounces a
@@ -22484,6 +22653,8 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
         if (bp_truncate) { return; }
         const int cast_loyalty = cast_loyalty_ability;   // consume the caller's same-cast activation
         cast_loyalty_ability = -1;
+        const int cast_devour = cast_devour_count;       // ditto, for Mycoloth's devour count
+        cast_devour_count = -1;
         // Find the card in its zone first, then resolve its definition via the card's cached
         // pointer -- avoids a by-name Lookup (string hash) on every cast (apply_one is per-cast,
         // ~200k/game). Byte-identical: it->m_name == name so LookupCached(*it) == Lookup(name),
@@ -23401,6 +23572,18 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
                     if (cd && cd->params.enters_tapped) { perm.tapped = true; }
                 }
             }
+            // DEVOUR (CR 702.81, Mycoloth): an AS-ENTERS replacement, applied in this pre-push
+            // window so the fodder is gone and the counters are on before the watchers see the body.
+            // Lockstep twin: EffectHandler::EnterBattlefield. The counters route through
+            // PutPlusCounters so Doubling Season doubles them (counters a permanent ENTERS WITH are
+            // doubled, CR 121.6/614.1c). Death triggers are deferred to after the cascade below.
+            std::vector<DevourDeath> devoured;
+            if (def.params.devour > 0 && cast_devour > 0)
+            {
+                const int ctrs = ApplyDevourAsEnters(state, state.active_player_index, def.params,
+                                                     cast_devour, devoured);
+                PutPlusCounters(state, perm, ctrs);
+            }
             state.battlefield.push_back(perm);
 
             // Dragonstorm kill-engine (rollout side): a Dragon entering fires the shared cascade
@@ -23415,6 +23598,12 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
             // non-Goblin creature -> other decks byte-identical.
             FireOwnEtbTriggers(state, state.active_player_index,
                            static_cast<int>(state.battlefield.size()) - 1, tutor_target, chosen_x);
+
+            // Devoured creatures' death triggers fire only now, with the devouring creature already
+            // on the battlefield (CR) -- so Tukatongue Thallid's replacement Saproling arrives too
+            // late to be devoured itself. No-op for every non-devour cast. Lockstep with
+            // EffectHandler::EnterBattlefield.
+            FireDeferredDevourDeaths(state, state.active_player_index, devoured);
 
             // ETB TUTOR-TO-HAND (Ranger-Captain of Eos / Goblin Matron / Ranger of Eos): the fetched
             // card competes for this turn's remaining mana exactly like a tutor SPELL's fetch, but
@@ -24417,7 +24606,7 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
                     if (inline_taps) { flush_pre_taps(pre_tap_slot++); }
                     line_order_trace("cast", a);
                     prep_free(a);
-                    cast_loyalty_ability = a.loyalty_ability; apply_one(a.card_name, false, false, 0, a.alt_cost, a.alt_lifegain, a.tutor_target, a.chosen_x, a.soulfire_own_targets, a.ponder_keep, a.crackle_targets, a.splice_count, a.chosen_float_color, a.enchant_target, a.bestow, a.replicate_count, a.convoke_green, a.convoke_other, a.phyrexian_life, a.evoke);
+                    cast_loyalty_ability = a.loyalty_ability; cast_devour_count = a.devour_count; apply_one(a.card_name, false, false, 0, a.alt_cost, a.alt_lifegain, a.tutor_target, a.chosen_x, a.soulfire_own_targets, a.ponder_keep, a.crackle_targets, a.splice_count, a.chosen_float_color, a.enchant_target, a.bestow, a.replicate_count, a.convoke_green, a.convoke_other, a.phyrexian_life, a.evoke);
                     fire_unlock();
                 }
                 // ...and the board activation the human put HERE fires here, not in the trailing
@@ -24515,7 +24704,7 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
                          < ResolveProvider(state).CastOrderRank(state, *dy);
                 });
                 for (int i : ena)
-                { const Action& a = acts[i]; prep_free(a); cast_loyalty_ability = a.loyalty_ability; apply_one(a.card_name, false, false, 0, a.alt_cost, a.alt_lifegain, a.tutor_target, a.chosen_x, a.soulfire_own_targets, a.ponder_keep, a.crackle_targets, a.splice_count, a.chosen_float_color, a.enchant_target, a.bestow, a.replicate_count, a.convoke_green, a.convoke_other, a.phyrexian_life, a.evoke); fire_unlock(); }
+                { const Action& a = acts[i]; prep_free(a); cast_loyalty_ability = a.loyalty_ability; cast_devour_count = a.devour_count; apply_one(a.card_name, false, false, 0, a.alt_cost, a.alt_lifegain, a.tutor_target, a.chosen_x, a.soulfire_own_targets, a.ponder_keep, a.crackle_targets, a.splice_count, a.chosen_float_color, a.enchant_target, a.bestow, a.replicate_count, a.convoke_green, a.convoke_other, a.phyrexian_life, a.evoke); fire_unlock(); }
                 // Spectacle hoist: a sac-land damage source (Shard Volley) is otherwise cast in the
                 // trailing sac loop -- AFTER the non-sac Spectacle spell (Light Up), leaving
                 // Spectacle un-triggered and Light Up paying full cost. When the set holds a
@@ -24539,7 +24728,7 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
                     if (a.kind == Action::Kind::CastFromHand && a.sacrifice_land && a.direct_damage > 0)
                     {
                         prep_free(a);
-                        cast_loyalty_ability = a.loyalty_ability; apply_one(a.card_name, true, false, 0, a.alt_cost, a.alt_lifegain, a.tutor_target, a.chosen_x, a.soulfire_own_targets, a.ponder_keep, a.crackle_targets, a.splice_count, a.chosen_float_color, a.enchant_target, a.bestow, a.replicate_count, a.convoke_green, a.convoke_other, a.phyrexian_life, a.evoke);
+                        cast_loyalty_ability = a.loyalty_ability; cast_devour_count = a.devour_count; apply_one(a.card_name, true, false, 0, a.alt_cost, a.alt_lifegain, a.tutor_target, a.chosen_x, a.soulfire_own_targets, a.ponder_keep, a.crackle_targets, a.splice_count, a.chosen_float_color, a.enchant_target, a.bestow, a.replicate_count, a.convoke_green, a.convoke_other, a.phyrexian_life, a.evoke);
                         spec_hoisted_sac.insert(ai);
                     }
                 }
@@ -24566,7 +24755,7 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
                 {
                     const Action& a = acts[i];
                     if (is_ordered_garth(a)) { apply_garth(a); continue; }
-                    prep_free(a); cast_loyalty_ability = a.loyalty_ability; apply_one(a.card_name, false, false, 0, a.alt_cost, a.alt_lifegain, a.tutor_target, a.chosen_x, a.soulfire_own_targets, a.ponder_keep, a.crackle_targets, a.splice_count, a.chosen_float_color, a.enchant_target, a.bestow, a.replicate_count, a.convoke_green, a.convoke_other, a.phyrexian_life, a.evoke); fire_unlock();
+                    prep_free(a); cast_loyalty_ability = a.loyalty_ability; cast_devour_count = a.devour_count; apply_one(a.card_name, false, false, 0, a.alt_cost, a.alt_lifegain, a.tutor_target, a.chosen_x, a.soulfire_own_targets, a.ponder_keep, a.crackle_targets, a.splice_count, a.chosen_float_color, a.enchant_target, a.bestow, a.replicate_count, a.convoke_green, a.convoke_other, a.phyrexian_life, a.evoke); fire_unlock();
                 }
             }
             else
@@ -24594,7 +24783,7 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
                     const Action& a = acts[i];
                     if (is_ordered_garth(a)) { apply_garth(a); continue; }
                     prep_free(a);
-                    cast_loyalty_ability = a.loyalty_ability; apply_one(a.card_name, false, false, 0, a.alt_cost, a.alt_lifegain, a.tutor_target, a.chosen_x, a.soulfire_own_targets, a.ponder_keep, a.crackle_targets, a.splice_count, a.chosen_float_color, a.enchant_target, a.bestow, a.replicate_count, a.convoke_green, a.convoke_other, a.phyrexian_life, a.evoke);
+                    cast_loyalty_ability = a.loyalty_ability; cast_devour_count = a.devour_count; apply_one(a.card_name, false, false, 0, a.alt_cost, a.alt_lifegain, a.tutor_target, a.chosen_x, a.soulfire_own_targets, a.ponder_keep, a.crackle_targets, a.splice_count, a.chosen_float_color, a.enchant_target, a.bestow, a.replicate_count, a.convoke_green, a.convoke_other, a.phyrexian_life, a.evoke);
                     fire_unlock();
                 }
             }
@@ -24606,14 +24795,14 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
             if (a.kind == Action::Kind::CastFromHand && a.sacrifice_land)
             {
                 prep_free(a);
-                cast_loyalty_ability = a.loyalty_ability; apply_one(a.card_name, true, false, 0, a.alt_cost, a.alt_lifegain, a.tutor_target, a.chosen_x, a.soulfire_own_targets, a.ponder_keep, a.crackle_targets, a.splice_count, a.chosen_float_color, a.enchant_target, a.bestow, a.replicate_count, a.convoke_green, a.convoke_other, a.phyrexian_life, a.evoke);
+                cast_loyalty_ability = a.loyalty_ability; cast_devour_count = a.devour_count; apply_one(a.card_name, true, false, 0, a.alt_cost, a.alt_lifegain, a.tutor_target, a.chosen_x, a.soulfire_own_targets, a.ponder_keep, a.crackle_targets, a.splice_count, a.chosen_float_color, a.enchant_target, a.bestow, a.replicate_count, a.convoke_green, a.convoke_other, a.phyrexian_life, a.evoke);
             }
         }
         for (const Action& a : acts)
         {
             if (a.kind == Action::Kind::CastFromGraveyard)
             {
-                cast_loyalty_ability = a.loyalty_ability; apply_one(a.card_name, false, true, a.discard_lands, false, 0, std::string{}, a.chosen_x, a.soulfire_own_targets, a.ponder_keep, a.crackle_targets, a.splice_count, a.chosen_float_color, a.enchant_target, a.bestow, a.replicate_count, a.convoke_green, a.convoke_other, a.phyrexian_life, a.evoke);
+                cast_loyalty_ability = a.loyalty_ability; cast_devour_count = a.devour_count; apply_one(a.card_name, false, true, a.discard_lands, false, 0, std::string{}, a.chosen_x, a.soulfire_own_targets, a.ponder_keep, a.crackle_targets, a.splice_count, a.chosen_float_color, a.enchant_target, a.bestow, a.replicate_count, a.convoke_green, a.convoke_other, a.phyrexian_life, a.evoke);
             }
         }
 
@@ -25047,8 +25236,19 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
                     // single game take 5-70 seconds.
                     if (!taps && a.chosen_x > 1)
                     {
-                        SpendRepeatActivations(state, state.active_player_index, a.sac_source_id,
-                                               a.ability_mode, *a.def, a.chosen_x - 1);
+                        // The spore outlet's cost is COUNTERS, so it takes the counter-bounded twin:
+                        // SpendRepeatActivations prices in mana and would bail at `per <= 0`,
+                        // firing zero extras with no error.
+                        if (a.ability_mode == Action::AbilityMode::SporeSaproling)
+                        {
+                            SpendSporeActivations(state, state.active_player_index, a.sac_source_id,
+                                                  *a.def, a.chosen_x - 1);
+                        }
+                        else
+                        {
+                            SpendRepeatActivations(state, state.active_player_index, a.sac_source_id,
+                                                   a.ability_mode, *a.def, a.chosen_x - 1);
+                        }
                     }
                     // BREAKPOINT SITE 8 -- the found snow card must be castable/playable THIS turn
                     // (USER 2026-09-06; the trailing-pass "next turn" collapse is rejected). Site-7
@@ -25913,6 +26113,12 @@ static void SimulateCombat(GameState& state)
     // Eligible attacker indices BEFORE any token creation (push_back keeps indices stable).
     std::vector<int> atk_idx = DeclareAttackerIndices(state);
 
+    // Beastmaster Ascension's quest counters: one trigger per DECLARED attacker, resolving in the
+    // declare-attackers step so the +5/+5 applies to this same combat. Fired BEFORE the Adeline
+    // token block below, because tokens PUT onto the battlefield attacking were never declared
+    // (CR 508.4) and must not trigger it. Mirrors GameEngine::CombatPhase (executor). Gated inert.
+    ApplyAttackQuestCounters(state, active, atk_idx);
+
     // Attack-trigger tokens (Adeline), tapped and attacking this combat, then persist.
     if (!atk_idx.empty())
     {
@@ -26309,15 +26515,26 @@ static bool SimulateEndAndStartNextTurn(GameState& state)
             count += CountEquipmentAttachedTo(state, state.battlefield[i].controller_index,
                                               state.battlefield[i].card.m_number);
         }
+        // Mycoloth: "create a 1/1 green Saproling token FOR EACH +1/+1 counter on this creature."
+        // Reads the LIVE counter total, never a remembered devour count (WotC ruling: it does not
+        // matter where the counters came from) -- which is also what makes Doubling Season's
+        // doubling of the devour counters flow through to the token count for free.
+        if (def->params.upkeep_tokens_per_plus_one_counter)
+        { count += PlusCountersOn(state.battlefield[i]); }
         if (count <= 0) { continue; }
         const int tok_p = def->params.upkeep_token_power;
         const int tok_t = def->params.upkeep_token_toughness;
         const std::vector<std::string> tok_subs = def->params.upkeep_token_subtypes;
+        const std::string tok_col = def->params.upkeep_token_color;
         for (int t = 0; t < count; ++t)
         {
-            CreateToken(state, state.active_player_index, tok_p, tok_t, tok_subs);
+            CreateToken(state, state.active_player_index, tok_p, tok_t, tok_subs, tok_col);
         }
     }
+
+    // Spore counters (the Thallid family), before the other upkeep triggers. Mirrors
+    // GameEngine::UpkeepStep (lockstep). Param-gated -> byte-identical elsewhere.
+    PerformUpkeepSporeCounters(state);
 
     // Creature Giving upkeep triggers, in controller-optimal order: Varchild's War-Riders
     // cumulative-upkeep gifts FIRST (the fresh Survivors count toward DotH's >= 3), then the
@@ -33718,6 +33935,16 @@ static TranspositionTable::Key BuildSimKey(const GameState& state, int depth, in
         // every deck without a Saga keeps the EXACT prior key (byte-identical).
         if (perm.lore_counters > 0)
         { Fold(tk, 0x5A6A); Fold(tk, static_cast<uint64_t>(perm.lore_counters)); }
+        // Spore / quest counters: FUTURE-DETERMINING by construction, so this is the storage-counter
+        // key-hole class documented above rather than a hypothetical one. Spore counts decide how
+        // many Saprolings a later turn yields; quest counts decide which turn Beastmaster Ascension
+        // switches on a +5/+5 team anthem. Two states differing only here evolve differently and
+        // must not share a TT entry. Folded ONLY when nonzero -> every other deck keeps the EXACT
+        // prior key (byte-identical).
+        if (perm.spore_counters > 0)
+        { Fold(tk, 0x5B07E); Fold(tk, static_cast<uint64_t>(perm.spore_counters)); }
+        if (perm.quest_counters > 0)
+        { Fold(tk, 0xC0E57); Fold(tk, static_cast<uint64_t>(perm.quest_counters)); }
         // Chosen creature type (Urza's Incubator): future-determining -- it decides WHICH spells the
         // permanent discounts. Today it is a deck-constant (DominantCreatureSubtypeId), so folding it
         // cannot actually split any state; it is folded anyway so that making the choice a real

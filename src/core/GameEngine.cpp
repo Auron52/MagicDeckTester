@@ -369,15 +369,26 @@ void GameEngine::UpkeepTail(GameState& state)
         int count = def->params.upkeep_creates_tokens;
         if (def->params.upkeep_tokens_per_equipment)
         { count += CountEquipmentAttachedTo(state, p.controller_index, p.card.m_number); }
+        // Mycoloth: "create a 1/1 green Saproling token FOR EACH +1/+1 counter on this creature."
+        // Reads the LIVE counter total, never a remembered devour count (WotC ruling: it does not
+        // matter where the counters came from) -- which is also what makes Doubling Season's
+        // doubling of the devour counters flow through to the token count for free.
+        if (def->params.upkeep_tokens_per_plus_one_counter)
+        { count += PlusCountersOn(p); }
         if (count <= 0) { continue; }
         const int tok_p = def->params.upkeep_token_power;
         const int tok_t = def->params.upkeep_token_toughness;
         const std::vector<std::string> tok_subs = def->params.upkeep_token_subtypes;
+        const std::string tok_col = def->params.upkeep_token_color;
         for (int t = 0; t < count; ++t)
         {
-            CreateToken(state, state.active_player_index, tok_p, tok_t, tok_subs);
+            CreateToken(state, state.active_player_index, tok_p, tok_t, tok_subs, tok_col);
         }
     }
+
+    // Spore counters (the Thallid family), before the other upkeep triggers. Mirrors
+    // TurnSolver::SimulateEndAndStartNextTurn (lockstep). Param-gated -> byte-identical elsewhere.
+    PerformUpkeepSporeCounters(state);
 
     // Creature Giving upkeep triggers, in controller-optimal order: Varchild's War-Riders
     // cumulative-upkeep gifts FIRST (the fresh Survivors count toward DotH's >= 3), then the
@@ -575,6 +586,12 @@ void GameEngine::CombatPhase(GameState& state)
     {
         atk_idx.push_back(static_cast<int>(p - state.battlefield.data()));
     }
+
+    // Beastmaster Ascension's quest counters: one trigger per DECLARED attacker, resolving in the
+    // declare-attackers step so the +5/+5 applies to this same combat. Fired BEFORE the Adeline
+    // token block below, because tokens PUT onto the battlefield attacking were never declared
+    // (CR 508.4) and must not trigger it. Mirrors TurnSolver::SimulateCombat (lockstep). Gated inert.
+    ApplyAttackQuestCounters(state, state.active_player_index, atk_idx);
 
     // Attack triggers that create tapped-and-attacking tokens (Adeline). Fire only when at
     // least one creature is attacking; the new tokens deal damage this combat too.

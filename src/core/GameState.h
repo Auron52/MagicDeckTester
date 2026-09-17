@@ -113,6 +113,13 @@ struct StackEntry
     int                 controller_index = 0;
     std::vector<Target> targets;
     std::optional<int>  chosen_x;
+    std::optional<int>  devour_count;          // Mycoloth (Devour 2): the SEARCHED number of creatures
+                                               // this cast sacrifices as it enters. Stamped by the
+                                               // executor's cast site from Action::devour_count and
+                                               // read by EnterBattlefield in the PRE-PUSH window, so
+                                               // the executor devours exactly what the scored line
+                                               // did (the rollout twin uses apply_one's consume-once
+                                               // cast_devour_count). Unset for every other spell.
     std::optional<int>  soulfire_own_targets;  // Soulfire Eruption: searched # of own creatures
                                                // added as extra targets (deeper dig). EffectHandler
                                                // passes it to SoulfireDig so the executor's dig

@@ -360,6 +360,11 @@ private:
     // mirrors the rollout semantics byte-for-byte. -1 = no pin (heuristic / probe as before).
     // Saved/restored around shared-engine rollouts alongside m_committed_line.
     // See docs/design/searched-discard-as-search-node.md (stage 1).
+    // Devour count (Mycoloth) riding a CAST action, set by the plan-execution sites immediately
+    // before cast_by_name and consumed at CastSpellFromHand's stack-entry stamp. A member rather
+    // than a 20th positional parameter on cast_by_name, matching TurnSolver's cast_devour_count
+    // idiom in the rollout twin. -1 = not a devour cast.
+    int m_pending_devour_count = -1;
     int m_discard_choice_pin = -1;
 
     // Searched AETHER VIAL CHARGE (Plan::vial_charge_choice, MTG_VIAL_AXIS): 0 = hold, 1 = charge,

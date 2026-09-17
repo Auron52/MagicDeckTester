@@ -58,6 +58,20 @@ void EffectHandler::EnterBattlefield(GameState& state, const StackEntry& entry,
         perm.loyalty = edef->params.loyalty_start;
         perm.counters.push_back(Counter{Counter::Type::Loyalty, edef->params.loyalty_start});
     }
+    // DEVOUR (CR 702.81, Mycoloth): an AS-ENTERS replacement, so it belongs in this pre-push window
+    // beside loyalty_start and NOT in FireOwnEtbTriggers below -- the fodder must be gone and the
+    // counters must be on before the watchers see the body. The victims' death triggers are held
+    // back and fired after the enter cascade (see FireDeferredDevourDeaths below). The counters go
+    // through PutPlusCounters, so Doubling Season doubles them (CR 121.6/614.1c -- counters a
+    // permanent ENTERS WITH are doubled, the planeswalker double-loyalty ruling). Lockstep with
+    // TurnSolver's apply_one creature-enter branch.
+    std::vector<DevourDeath> devoured;
+    if (edef->params.devour > 0 && entry.devour_count.value_or(0) > 0)
+    {
+        const int ctrs = ApplyDevourAsEnters(state, entry.controller_index, edef->params,
+                                             entry.devour_count.value_or(0), devoured);
+        PutPlusCounters(state, perm, ctrs);
+    }
     state.battlefield.push_back(perm);
 
     // Dragonstorm kill-engine (executor side): a Dragon entering fires the shared cascade --
@@ -70,6 +84,11 @@ void EffectHandler::EnterBattlefield(GameState& state, const StackEntry& entry,
     // Goblin Matron fetch target (empty -> the provider's pick).
     FireOwnEtbTriggers(state, entry.controller_index, static_cast<int>(state.battlefield.size()) - 1,
                    entry.tutor_target, entry.chosen_x.value_or(-1));
+    // Devoured creatures' death triggers, per CR: the sacrifices happen as part of the enter, but
+    // their triggers wait and resolve once the devouring creature is on the battlefield -- so
+    // Tukatongue Thallid's replacement Saproling arrives too late to be devoured itself. No-op for
+    // every non-devour cast. Lockstep with TurnSolver's apply_one.
+    FireDeferredDevourDeaths(state, entry.controller_index, devoured);
 
     // EVOKE (Reveillark, CR 702.75): the evoke-cost cast self-sacrifices once its enter cascade
     // has fired -- through the SHARED cascade, so the LTB (return two power<=2 creatures) fires

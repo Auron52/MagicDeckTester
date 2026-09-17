@@ -405,6 +405,23 @@ struct Action
                                        // hand_index -> mutually exclusive, so the search plays both
                                        // out and picks. -1 = not a reorder spell (legacy heuristic
                                        // path in ReorderTopOrShuffle).
+    int         devour_count     = -1;
+                                       // DEVOUR (CR 702.81, Mycoloth "Devour 2"): how many creatures
+                                       // this cast sacrifices AS IT ENTERS, giving it devour x k
+                                       // +1/+1 counters. A REAL SEARCHED AXIS rather than a heuristic,
+                                       // because k changes the board for the whole rest of the turn
+                                       // (fewer attackers, less sac fodder for Utopia Mycon and
+                                       // Psychotrope Thallid) and compounds at every later upkeep --
+                                       // Mycoloth pays one Saproling per +1/+1 counter, forever. So
+                                       // CollectActions emits one variant per k sharing hand_index ->
+                                       // mutually exclusive, exactly like splice_count/replicate_count,
+                                       // and plan_signature keys it (param-gated) so the name-only
+                                       // dedup cannot collapse every k to the first enumerated -- the
+                                       // documented tutor-target failure mode.
+                                       // k = 0 IS LEGAL AND MUST STAY ENUMERATED ("you MAY sacrifice
+                                       // any number"); declining is often right, since the bodies are
+                                       // usually worth more attacking.
+                                       // SENTINEL -1 = not a devour cast.
     int         replicate_count  = -1;
                                        // REPLICATE (CR 702.56, Hatchery Sliver + every Sliver spell it
                                        // grants it to): how many EXTRA token copies this cast pays for.

@@ -6840,7 +6840,9 @@ GoblinsProvider::TutorCandidates(const GameState& s, int controller, const CardP
             lackey_persist = true;
             if (CanAttackFull(p, s.battlefield, controller)) { lackey_now = true; }
         }
-        if (d->params.sac_creature_outlet && !d->params.sac_outlet_add_mana_color.empty()) { skirk_on = true; } // Skirk
+        if (IsSacManaOutlet(d->params)) { skirk_on = true; }   // Skirk (shared reader -- see the note
+                                                               // on IsSacManaOutlet: an any-colour
+                                                               // outlet pins no letter)
         // A Goblin lord granting haste (Warchief / Chieftain): whatever we fetch can attack the
         // turn it lands, which is the whole difference for an attack-triggered payoff.
         if (d->params.grants_haste && !d->params.subtypes_affected.empty()) { haste_source = true; }
@@ -9646,6 +9648,7 @@ const DecisionProvider& DetectDecisionProvider(const Decklist& deck)
     bool minotaur = false; // Minotaur tribal -- routes to Generic BEFORE the goblin check
     bool dragons = false;  // Mono-red Dragons ramp -- routes to Generic BEFORE the goblin check
     bool melira_pod = false; // Persist combo -- routes to MeliraPodProvider BEFORE the goblin check
+    bool fungus = false;   // Thallid/Saproling tokens -- routes to Generic BEFORE the goblin check
     bool aura = false;     // Bogle Auras -- Light-Paws' aura_cast_tutor_attach is unique to it
     bool fluctuator = false;  // Fluctuator cycling combo -- routes ABOVE anti (Enlightened Tutor)
     // Eldrazi Displacer / Emiel flicker combo. MUST be detected and MUST return ABOVE the `anti`
@@ -9801,6 +9804,37 @@ const DecisionProvider& DetectDecisionProvider(const Decklist& deck)
             || p.etb_blink_permanent)
         {
             melira_pod = true;
+        }
+
+        // FUNGUS (Thallid/Saproling tokens). MUST be detected and MUST win over the goblin check
+        // below -- Utopia Mycon and Psychotrope Thallid both carry sac_creature_outlet, which ALONE
+        // sets the Goblin signature. That is the SIXTH occurrence of this misroute class (after
+        // Mirrorwing, StompySurprise, Minotaur, Dragons and Melira Pod), and here the harm is
+        // specific and severe: GoblinsProvider::DeferSacOutletPreCombat is default-ON and, for a
+        // MANA outlet with no haste enabler in play or hand -- which Fungus never has -- returns
+        // true, deferring the ability to the SECOND MAIN. This deck has no second main
+        // (DeckUsesSecondMain does not fire for it), so the deferral does not move Utopia Mycon's
+        // mana ability, it DELETES it: ramping into Mycoloth or Doubling Season on curve becomes
+        // unreachable, with no error anywhere and the deck simply measuring weak. Psychotrope
+        // Thallid's draw outlet is dropped the same way (a value outlet with no token payload).
+        //
+        // Routes to GenericProvider: Fungus has no measured deck heuristic to hold yet, so per the
+        // rule applied to Minotaur and Dragons it gets no narrowing at all. The obvious first
+        // candidate if one is ever proposed and MEASURED is a devour victim/count hook.
+        //
+        // Signature = Fungus-only gated params, OR'd across SIX different cards (the Thallids'
+        // spore counters, Sporesower's each-Fungus sweep, Mycoloth's devour, Beastmaster Ascension's
+        // quest anthem, Doubling Season's two halves) so a deckbuilding swap that cuts one card
+        // cannot silently lose it. Every one is new and gated (0/false inert), so no existing deck
+        // can set them.
+        if (p.spore_upkeep_self > 0
+            || p.spore_upkeep_each_fungus
+            || p.spore_saproling_cost > 0
+            || p.devour > 0
+            || p.quest_anthem_threshold > 0
+            || p.doubles_tokens || p.doubles_counters)
+        {
+            fungus = true;
         }
 
         if (p.sac_creature_outlet
@@ -9973,6 +10007,11 @@ const DecisionProvider& DetectDecisionProvider(const Decklist& deck)
     // Melira Pod: MeliraPodProvider (Generic-inheriting). Must WIN OVER goblin -- its free sac
     // outlets set that signature on their own (see the detection block note).
     if (melira_pod) { return g_melira_pod; }
+    // Fungus: Generic. Must WIN OVER goblin -- Utopia Mycon / Psychotrope Thallid's
+    // sac_creature_outlet sets that signature on its own, and GoblinsProvider's default-on
+    // pre-combat sac deferral would DELETE both outlets from a deck that has no second main to
+    // defer them to (see the detection block note).
+    if (fungus) { return g_generic; }
     if (goblin) { return g_goblins; }
     // Equipment aggro; must WIN OVER anti (Stoneforge Mystic's tutor_to_hand sets that signature
     // on its own -- see the equipment detection note above). No other deck carries the equipment

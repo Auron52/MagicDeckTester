@@ -1746,6 +1746,12 @@ inline void GainLife(GameState& state, int player, int amount);
 inline void FireLifegainWatchers(GameState& state, int player);
 inline void FireCreatureDiesWatchers(GameState& state, int dead_controller);
 inline void RefreshDevotionCreatures(GameState& state);
+// Doubling Season's multiplier exponent; defined beside CreateToken (the token chokepoint) but
+// needed here by the counter-put chokepoint below.
+inline int DoublerShift(const GameState& state, int controller, bool for_tokens);
+// The shared draw primitive; defined further down but needed by the sac-outlet draw payload
+// (Psychotrope Thallid), which resolves above it.
+inline void TrickDraw(GameState& state, int controller, int n);
 
 // Add N +1/+1 counters to a permanent, MERGING into an existing +1/+1 entry rather than pushing a
 // new Counter each time. The sim key folds `counters` as an ORDERED list of (type, count) entries
@@ -1772,6 +1778,59 @@ inline int MinusCountersOn(const Permanent& p)
         if (c.type == Counter::Type::MinusOneMinusOne) { n += c.count; }
     }
     return n;
+}
+
+// Count of +1/+1 counters on a permanent -- the twin of MinusCountersOn. Mycoloth's upkeep reads
+// this ("create a Saproling FOR EACH +1/+1 counter on this creature"); per the WotC ruling it must
+// read the LIVE counter total rather than a remembered devour count, because it does not matter
+// where the counters came from.
+inline int PlusCountersOn(const Permanent& p)
+{
+    int n = 0;
+    for (const Counter& c : p.counters)
+    {
+        if (c.type == Counter::Type::PlusOnePlusOne) { n += c.count; }
+    }
+    return n;
+}
+
+// ---- THE COUNTER-PUT CHOKEPOINT (Doubling Season's second half) ----------------------------
+//
+// "If an effect would put one or more counters on a permanent you control, it puts twice that many
+// of those counters on that permanent instead." Unlike tokens -- where CreateToken was already the
+// one funnel every site called -- there is NO shared counter helper in this engine: ~12 sites
+// open-code `counters.push_back(...)` and five more counter kinds live as bare scalar ints on
+// Permanent. So the doubling has to be applied by the caller, through these.
+//
+// SCOPE, and why the legacy sites are deliberately NOT converted: doubling is observable only when
+// a doubler is on the battlefield, and Doubling Season is the only one in the card pool. No shipped
+// deck pairs it with any other counter source, so converting the legacy sites would be pure
+// byte-identical churn across every existing counter deck -- and their append-vs-merge distinction
+// is load-bearing for the sim key (see AddPlusCounters above), which makes a blanket refactor a
+// real regression risk for zero present benefit. The three sites that CAN observe doubling today
+// (spore counters, quest counters, devour's enters-with +1/+1) all route through here.
+// A future deck pairing a doubler with another counter source must convert that source's site.
+//
+// A counter placed as a permanent ENTERS is doubled too (CR 121.6 / 614.1c -- the same rule that
+// doubles a planeswalker's starting loyalty), which is exactly why devour's counters compound.
+// COUNTER REMOVAL is never doubled: a cost is not a "put" (CR 601.2h / 602.2b), so the Thallids'
+// "remove three spore counters" is untouched by this.
+inline void PutPlusCounters(GameState& state, Permanent& p, int n)
+{
+    if (n <= 0) { return; }
+    AddPlusCounters(p, n << DoublerShift(state, p.controller_index, /*for_tokens=*/false));
+}
+
+inline void PutSporeCounters(GameState& state, Permanent& p, int n)
+{
+    if (n <= 0) { return; }
+    p.spore_counters += n << DoublerShift(state, p.controller_index, /*for_tokens=*/false);
+}
+
+inline void PutQuestCounters(GameState& state, Permanent& p, int n)
+{
+    if (n <= 0) { return; }
+    p.quest_counters += n << DoublerShift(state, p.controller_index, /*for_tokens=*/false);
 }
 
 // True while candidates are being enumerated FOR THE SEARCH (variant fan); false on the greedy
@@ -3187,6 +3246,34 @@ inline std::pair<int,int> ComputeLordBonus(
             tb += sd->params.life_above_start_anthem_tough;
         }
     }
+
+    // QUEST-COUNTER ANTHEM (Beastmaster Ascension: "As long as this enchantment has seven or more
+    // quest counters on it, creatures you control get +5/+5"). A CONDITIONAL STATIC (CR 604.3 /
+    // 611.3) -- continuously checked, never on the stack -- so it lives here beside the hand-size
+    // and life-threshold conditionals rather than being a trigger. Putting it in ComputeLordBonus
+    // means every combat / eval / SBA read site picks it up with no further wiring, and it switches
+    // straight back off if the counters ever leave.
+    //
+    // It reads the LIVE counter total, never an attacker count. That is what makes it automatically
+    // correct under Doubling Season (which doubles the counters, so the threshold arrives in half
+    // the attacks) and across turns (counters accumulate).
+    //
+    // Guarded on the same derived-constant idiom as the hand-size scan above, for the same measured
+    // reason: without it this walks the battlefield on every call for a clause one card carries.
+    if (CardDatabase::Instance().HasQuestAnthem())
+    {
+        for (const Permanent& src : battlefield)
+        {
+            if (src.controller_index != controller_index) { continue; }
+            const CardDefinition* sd = CardDatabase::Instance().LookupCached(src.card);
+            if (!sd || sd->params.quest_anthem_threshold <= 0)                      { continue; }
+            if (src.quest_counters < sd->params.quest_anthem_threshold)             { continue; }
+            // "creatures you control" -- no subtype gate, and the source is a noncreature so there
+            // is no self-exclusion question. Multiple live Ascensions accumulate (+10/+10 for two).
+            pb += sd->params.quest_anthem_power;
+            tb += sd->params.quest_anthem_tough;
+        }
+    }
     return {pb, tb};
 }
 
@@ -3917,10 +4004,38 @@ inline void FireCreatureDiesWatchers(GameState& state, int dead_controller)
     }
 }
 
-// Creates a creature token with the given stats and adds it to the active battlefield.
-// The token enters with entered_this_turn = true (subject to summoning sickness unless
-// given haste by a lord). Tokens have no card number and an auto-generated name.
-inline void CreateToken(
+// DOUBLING SEASON: how many times a create-token / put-counters event is doubled for `controller`.
+// Returns N (the number of that player's doublers), so the multiplier is 1 << N -- each replacement
+// applies once and each sees the count the previous one already doubled (CR 614.5 / 616.1), giving
+// x2, x4, x8 for one, two, three copies.
+//
+// Scope is per-CONTROLLER, which is what makes the engine's opponent-gifted tokens (Forbidden
+// Orchard's Spirit, Varchild's Survivors, the upkeep gift -- all of which pass `1 - controller`)
+// correctly UNDOUBLED with no extra code: they simply ask about a different player.
+//
+// Guarded on the CardDatabase derived constant first, so a deck whose card pool contains no doubler
+// pays ONE bool test instead of an O(battlefield) walk -- the MaxHandSizeAnthemMax idiom, which
+// exists because the equivalent unguarded scan for Neheb measured ~1.8% of a whole run.
+inline int DoublerShift(const GameState& state, int controller, bool for_tokens)
+{
+    const CardDatabase& db = CardDatabase::Instance();
+    if (for_tokens ? !db.HasTokenDoubler() : !db.HasCounterDoubler()) { return 0; }
+    int n = 0;
+    for (const Permanent& p : state.battlefield)
+    {
+        if (p.controller_index != controller) { continue; }
+        const CardDefinition* d = db.LookupCached(p.card);
+        if (d == nullptr) { continue; }
+        if (for_tokens ? d->params.doubles_tokens : d->params.doubles_counters) { ++n; }
+    }
+    // A decklist caps this at 4 (x16), but clamp anyway: the shift is UB past the width of int, and
+    // a runaway multiplier would be a memory event rather than a wrong number.
+    return n > 16 ? 16 : n;
+}
+
+// Creates ONE creature token. Callers go through CreateToken below, which applies Doubling Season;
+// this is split out only so that doubling lives at exactly one place rather than at ~20 call sites.
+inline void CreateTokenOnce(
     GameState&                       state,
     int                              controller_index,
     int                              power,
@@ -3984,22 +4099,56 @@ inline void CreateToken(
     FireEtbWatchers(state, controller_index, static_cast<int>(state.battlefield.size()) - 1);
 }
 
+// Creates a creature token with the given stats and adds it to the active battlefield.
+// The token enters with entered_this_turn = true (subject to summoning sickness unless
+// given haste by a lord). Tokens have no card number and an auto-generated name.
+//
+// THE token chokepoint: every token in the engine is created here, which is why Doubling Season's
+// token half hooks at this one function and edits no call site. A site that loops
+// `for (k < n) CreateToken(...)` therefore yields n * 2^N, which is the arithmetically correct
+// total -- per-token doubling and per-event doubling agree.
+//
+// Each replica enters INDIVIDUALLY (its own push_back + FireEtbWatchers), which is required rather
+// than incidental: Essence Warden must gain life once per Saproling, and a lord must see each one.
+// Note FireEtbWatchers can itself call back into CreateToken (Lathliss); the inner call computes
+// its own shift from its own controller, so the recursion stays correct.
+inline void CreateToken(
+    GameState&                       state,
+    int                              controller_index,
+    int                              power,
+    int                              toughness,
+    const std::vector<std::string>&  subtypes,
+    const std::string&               color,
+    const std::vector<std::string>&  keywords)
+{
+    const int reps = 1 << DoublerShift(state, controller_index, /*for_tokens=*/true);
+    for (int i = 0; i < reps; ++i)
+    { CreateTokenOnce(state, controller_index, power, toughness, subtypes, color, keywords); }
+}
+
 // Token that is a COPY of a real card (Vaultborn Tyrant's "create a token that's a copy of it").
 // Copies the card wholesale (name, P/T, subtypes, keywords), so LookupCached resolves the REAL
 // definition and the copy's own abilities stay live (its enter fires the watchers; is_token gates
 // it out of "not a token" death triggers). Enters through the universal cascade like any token.
+// Doubled by Doubling Season exactly like CreateToken -- this is a SECOND, separate token funnel
+// (it does not route through CreateToken), so it needs its own shift or a copy-token deck would
+// silently miss the doubling.
 inline void CreateTokenCopyOfCard(GameState& state, int controller, const Card& src)
 {
-    Permanent token;
-    token.card              = src;
-    token.card.m_def        = nullptr;                       // re-resolve by name (same def)
-    token.card.m_number     = state.next_token_number++;     // fresh per-copy id
-    token.controller_index  = controller;
-    token.owner_index       = controller;
-    token.entered_this_turn = true;
-    token.is_token          = true;
-    state.battlefield.push_back(token);
-    FireEtbWatchers(state, controller, static_cast<int>(state.battlefield.size()) - 1);
+    const int reps = 1 << DoublerShift(state, controller, /*for_tokens=*/true);
+    for (int i = 0; i < reps; ++i)
+    {
+        Permanent token;
+        token.card              = src;
+        token.card.m_def        = nullptr;                       // re-resolve by name (same def)
+        token.card.m_number     = state.next_token_number++;     // fresh per-copy id
+        token.controller_index  = controller;
+        token.owner_index       = controller;
+        token.entered_this_turn = true;
+        token.is_token          = true;
+        state.battlefield.push_back(token);
+        FireEtbWatchers(state, controller, static_cast<int>(state.battlefield.size()) - 1);
+    }
 }
 
 // ---- ASCEND: the city's blessing (CR 702.131) ---------------------------------------
@@ -7176,6 +7325,77 @@ inline void SacrificePermanentAt(GameState& state, int controller, int idx)
     OnCreatureDies(state, controller, dead, was_tok, dead_m1);
 }
 
+// ---- DEVOUR (CR 702.81; Mycoloth "Devour 2") ----------------------------------------------------
+// One creature that died to a devour sacrifice, held so its death triggers can fire AFTER the
+// devouring creature has entered.
+struct DevourDeath { Card card; bool was_token; int minus_counters; };
+
+// Apply devour AS THE CREATURE ENTERS, returning how many +1/+1 counters it should enter with.
+//
+// Called from the PRE-PUSH window at both enter sites -- the same window loyalty_start uses -- which
+// is what makes three separate CR requirements fall out BY CONSTRUCTION instead of needing filters:
+//   * it cannot devour ITSELF (it is not on the battlefield yet);
+//   * it cannot devour a creature entering at the same time (nothing else is entering);
+//   * the fodder is already gone when the ETB watchers run, so a lord or an Essence Warden sees the
+//     board the rules say it should.
+//
+// TWO ORDERING RULES, both load-bearing rather than pedantic:
+//   1. The victims are chosen and removed SIMULTANEOUSLY (CR 702.81b, "all creatures devoured this
+//      way are sacrificed at the same time"). Doing it one-at-a-time with triggers firing in between
+//      would let Tukatongue Thallid's replacement Saproling be eaten by the SAME devour, which the
+//      rules forbid.
+//   2. The death triggers are DEFERRED to the caller, to fire once the devouring creature has
+//      entered -- so Tukatongue's Saproling arrives too late to be devoured, which is correct.
+//
+// Victim CHOICE is the shared expendability ranking (most expendable first: tokens and weak bodies
+// before lords and scaling creatures). For this deck that ordering is already the right one --
+// Tukatongue Thallid ranks as expendable because its death REFUNDS a Saproling, which is exactly
+// what you want to feed a Mycoloth.
+inline int ApplyDevourAsEnters(GameState& state, int controller, const CardParams& p, int k,
+                               std::vector<DevourDeath>& deferred)
+{
+    if (p.devour <= 0 || k <= 0) { return 0; }
+    // Phase 1 -- choose up to k distinct victims WITHOUT touching the board, so no death trigger can
+    // interleave with the selection.
+    std::vector<std::pair<int,int>> ranked;   // (expendability rank, battlefield index)
+    for (int i = 0; i < static_cast<int>(state.battlefield.size()); ++i)
+    {
+        const Permanent& v = state.battlefield[i];
+        if (v.controller_index != controller || !v.card.IsCreature()) { continue; }
+        ranked.emplace_back(SacExpendabilityRank(v, /*source_id=*/0), i);
+    }
+    std::sort(ranked.begin(), ranked.end());
+    if (static_cast<int>(ranked.size()) > k) { ranked.resize(static_cast<std::size_t>(k)); }
+    if (ranked.empty()) { return 0; }
+    // Phase 2 -- remove them all, recording each death for the caller to fire later. Erase from the
+    // HIGHEST index down so the earlier indices stay valid.
+    std::vector<int> idxs;
+    idxs.reserve(ranked.size());
+    for (const auto& r : ranked) { idxs.push_back(r.second); }
+    std::sort(idxs.begin(), idxs.end(), std::greater<int>());
+    for (int idx : idxs)
+    {
+        const Permanent& v = state.battlefield[static_cast<std::size_t>(idx)];
+        deferred.push_back(DevourDeath{ v.card, v.is_token, MinusCountersOn(v) });
+        state.players[controller].graveyard.push_back(v.card);
+        state.battlefield.erase(state.battlefield.begin() + idx);
+    }
+    // A sacrifice is a sacrifice, so the "whenever you sacrifice" watchers fire now; only the DEATH
+    // triggers wait for the entrant.
+    FireSacrificeWatchers(state, controller);
+    return p.devour * static_cast<int>(idxs.size());
+}
+
+// Fire the death triggers held back by ApplyDevourAsEnters, once the devouring creature is on the
+// battlefield. Separate function so both enter sites call the identical thing in the identical place.
+inline void FireDeferredDevourDeaths(GameState& state, int controller,
+                                     std::vector<DevourDeath>& deferred)
+{
+    for (const DevourDeath& d : deferred)
+    { OnCreatureDies(state, controller, d.card, d.was_token, d.minus_counters); }
+    deferred.clear();
+}
+
 // Call of the Wild -- ONE activation: "Reveal the top card of your library. If it's a creature
 // card, put it onto the battlefield. Otherwise, put it into your graveyard." The put creature
 // enters through the full cascade (its own ETB fires; watchers fire). Cost paid by the caller
@@ -7714,6 +7934,7 @@ inline void ApplySacCreatureOutlet(GameState& state, int controller, int source_
               tt = op->sac_outlet_token_toughness;
     const int self_ctr = op->sac_outlet_add_counter_to_self;
     const int self_pp  = op->sac_outlet_self_pump_power, self_pt = op->sac_outlet_self_pump_toughness;
+    const int ndraw = op->sac_outlet_draw;   // Psychotrope Thallid
     const std::vector<std::string> tsub = op->sac_outlet_token_subtypes;
     // History visibility (seed-6 play-test): without this the viewer showed only the persist
     // RETURN and the ETB ping per loop iteration -- returns stacking up with no cause. Emit the
@@ -7734,6 +7955,9 @@ inline void ApplySacCreatureOutlet(GameState& state, int controller, int source_
     if (!mana_color.empty()) { AddChosenColorFloat(state, mana_color, mana_amt); }
     if (dmg > 0) { state.players[1 - controller].life -= dmg; state.opponent_lost_life_this_turn = true; }
     for (int k = 0; k < ntok; ++k) { CreateToken(state, controller, tp, tt, tsub); }
+    // DRAW payload (Psychotrope Thallid "{1}, Sacrifice a Saproling: Draw a card") -- the same
+    // TrickDraw primitive PermAbilityMode::SacDraw uses, so the two draw outlets behave identically.
+    if (ndraw > 0) { TrickDraw(state, controller, ndraw); }
     // Self payloads (Carrion Feeder permanent +1/+1 counter; Bloodthrone Vampire +2/+2 UEOT).
     // Re-locate the SOURCE by id -- the victim erase shifted indices, and (rules-correct) the
     // outlet may have sacrificed ITSELF, in which case the payload fizzles (no target).
@@ -8211,6 +8435,53 @@ inline void FireUtvaraAttackTokens(GameState& state, int controller,
 //   * Muxus -- attack_self_pump_per_other_subtype/_power/_tough: base is other CONTROLLED permanents
 //     (not just attackers) whose subtype matches (self-excluded).
 // Gated: an attacker whose def sets neither param is untouched -> every other deck byte-identical.
+// ---- Quest-counter attack trigger (Beastmaster Ascension) ---------------------------------------
+// "Whenever a creature you control attacks, you may put a quest counter on this enchantment."
+//
+// ONE SEPARATE TRIGGER PER DECLARED ATTACKER (CR 508.2): declaring attackers is a single turn-based
+// action, and each attacking creature triggers the ability once. They all go on the stack and
+// resolve in the declare-attackers step, which is BEFORE the declare-blockers and combat-damage
+// steps -- so the +5/+5 the counters switch on applies to THIS combat. Attacking with seven is
+// lethal from 20 out of nowhere.
+//
+// Each trigger is its own event for replacement purposes, so Doubling Season doubles each one
+// separately (accrual is 2 at a time, not "attackers x 2 in one lump"). PutQuestCounters is where
+// that happens; the threshold test elsewhere reads the resulting total, so no caller does counter
+// arithmetic of its own.
+//
+// The "you may" is modelled as always-take, and that is a proof rather than a convenience: the card
+// has no counter cap, no sacrifice-at-N clause and no cost for taking it, and the passive goldfish
+// opponent creates no state in which fewer counters is better. Declining can only delay the anthem.
+//
+// Sited on the DECLARED attackers only. Attack-trigger tokens (Adeline's) are PUT onto the
+// battlefield already attacking and were never declared (CR 508.4), so they must not trigger this --
+// which is why both call sites invoke it BEFORE FireAttackCreateTokens widens the index list.
+// Gated on the param, so every other deck is untouched.
+inline void ApplyAttackQuestCounters(GameState& state, int controller,
+                                     const std::vector<int>& declared_attacker_indices)
+{
+    if (declared_attacker_indices.empty()) { return; }
+    // Count the declared attackers this player controls, then fire one trigger each. Counting first
+    // keeps the loop safe: PutQuestCounters takes a reference into the battlefield vector, which
+    // nothing here reallocates, but the attacker list is indices into that same vector.
+    int attackers = 0;
+    const int bf_size = static_cast<int>(state.battlefield.size());
+    for (int idx : declared_attacker_indices)
+    {
+        if (idx < 0 || idx >= bf_size) { continue; }
+        if (state.battlefield[idx].controller_index == controller) { ++attackers; }
+    }
+    if (attackers <= 0) { return; }
+    for (Permanent& src : state.battlefield)
+    {
+        if (src.controller_index != controller) { continue; }
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(src.card);
+        if (!d || d->params.quest_counter_per_attacker <= 0) { continue; }
+        for (int t = 0; t < attackers; ++t)
+        { PutQuestCounters(state, src, d->params.quest_counter_per_attacker); }
+    }
+}
+
 inline void ApplyAttackSelfPumps(GameState& state, int controller,
                                  const std::vector<int>& attacker_indices)
 {
@@ -9105,7 +9376,9 @@ inline void ApplySacForMana(GameState& state, int controller, int sac_source_id,
         const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
         if (!d) { continue; }
         const bool lotus = d->params.sac_for_mana_amount > 0;
-        const bool skirk = d->params.sac_creature_outlet && !d->params.sac_outlet_add_mana_color.empty();
+        // THE shared reader: a mana outlet need not pin a colour letter (Utopia Mycon adds ANY
+        // colour and leaves that string empty), and spelling this inline would skip it here.
+        const bool skirk = IsSacManaOutlet(d->params);
         if (!lotus && !skirk) { continue; }
         if (lotus && p.tapped)  { continue; }   // Lotus taps as part of the cost; a tapped one can't
         // Skirk MULTI-SAC BURST: the repeatable "Sacrifice a Goblin: Add {R}" can ramp in one turn.
@@ -9379,6 +9652,63 @@ inline int SnowPermanentCount(const GameState& state, int controller_index)
 // SimulateEndAndStartNextTurn), in this order: cumulative-upkeep gifts FIRST, then the Defense of
 // the Heart check -- the controller-optimal trigger ordering (the fresh Survivors count toward
 // DotH's "opponent controls three or more creatures"). Param-gated -> byte-identical elsewhere.
+
+// ---- Spore counters at upkeep (the Thallid family) ----------------------------------------------
+// Two DISTINCT abilities that stack, both "at the beginning of your upkeep":
+//   * spore_upkeep_self       -- "put a spore counter on THIS creature" (Thallid, Thallid
+//                                Shell-Dweller, Psychotrope Thallid, Utopia Mycon).
+//   * spore_upkeep_each_fungus -- "put a spore counter on EACH FUNGUS you control" (Sporesower
+//                                Thallid, itself included -- it is a Fungus). Sporesower has no
+//                                separate self-trigger, so it sets only this one.
+//
+// SNAPSHOT-THEN-APPLY, which is load-bearing rather than stylistic: two Sporesowers must each spore
+// every Fungus INCLUDING EACH OTHER, and a Fungus's own self-trigger stacks on top. Counting the
+// sweepers first against the pre-trigger board is what makes every ordering agree. (It also matches
+// the house pattern of the upkeep-token loops, which snapshot the battlefield size so tokens created
+// during the upkeep do not trigger their own abilities.)
+//
+// ORDERING IS OUTCOME-IRRELEVANT and is deliberately NOT surfaced as a decision. All of these are
+// your-upkeep triggers you control, so CR 603.3b makes the order yours -- but every one only ADDS
+// counters, none has an intervening-if, none reads a count, and no player acts between them in a
+// goldfish, so every ordering produces an identical board.
+//
+// Each trigger is its OWN event, so Doubling Season doubles each separately -- hence one
+// PutSporeCounters call per trigger rather than one call with the sum. Param-gated: a board with no
+// spore card does nothing here -> every other deck is byte-identical.
+inline void PerformUpkeepSporeCounters(GameState& state)
+{
+    const int active = state.active_player_index;
+    const int n = static_cast<int>(state.battlefield.size());
+    int sweepers = 0;
+    bool any_self = false;
+    for (int i = 0; i < n; ++i)
+    {
+        const Permanent& p = state.battlefield[i];
+        if (p.controller_index != active) { continue; }
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+        if (!d) { continue; }
+        if (d->params.spore_upkeep_each_fungus) { ++sweepers; }
+        if (d->params.spore_upkeep_self > 0)    { any_self = true; }
+    }
+    if (sweepers == 0 && !any_self) { return; }
+    for (int i = 0; i < n; ++i)
+    {
+        Permanent& p = state.battlefield[i];
+        if (p.controller_index != active) { continue; }
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+        if (!d) { continue; }
+        // The permanent's own self-trigger.
+        if (d->params.spore_upkeep_self > 0)
+        { PutSporeCounters(state, p, d->params.spore_upkeep_self); }
+        // One trigger from each Sporesower, on every Fungus we control. Mycoloth and Sporecrown
+        // Thallid are Fungi with no spore outlet, so they accumulate counters they can never spend:
+        // that is faithful and free (the count rises identically in every sibling state at a given
+        // turn, so it folds to a constant and splits no states), and filtering it would be a lie in
+        // the board state.
+        if (sweepers > 0 && CardHasSubtype(p.card, "Fungus"))
+        { for (int s = 0; s < sweepers; ++s) { PutSporeCounters(state, p, 1); } }
+    }
+}
 
 // Varchild's War-Riders cumulative upkeep: +1 age counter, then the OPPONENT creates age_counters
 // tokens (upkeep_token_* spec; 1/1 red Survivor). ALWAYS PAID -- weakly dominant vs the passive
@@ -13160,6 +13490,7 @@ inline const char* PermAbilityLabel(PermAbilityMode mode)
         case PermAbilityMode::ExileTop:       return "opponent exiles their top card";
         case PermAbilityMode::IceCounter:     return "put an ice counter on target permanent";
         case PermAbilityMode::GrantLifelink:  return "another target creature gains lifelink until end of turn";
+        case PermAbilityMode::SporeSaproling: return "remove three spore counters: create a Saproling";
         default:                              return "activate";
     }
 }
@@ -13487,8 +13818,71 @@ inline void ApplyPermAbility(GameState& state, int controller, int source_id, Pe
             TrickDraw(state, controller, 1);
             break;
         }
+        case PermAbilityMode::SporeSaproling:
+        {
+            // "Remove three spore counters from this creature: Create a 1/1 green Saproling."
+            //
+            // The counters are the COST (CR 601.2h / 602.2b), so they come off here and are NOT
+            // doubled -- Doubling Season doubles only counters being PUT ON. The Saproling itself
+            // goes through CreateToken, which is where the token half of the doubling applies, so
+            // under one Doubling Season this card's throughput is 4x: two spores per upkeep AND two
+            // Saprolings per activation.
+            //
+            // No target, no choice at resolution. Defensive re-check of the counter supply: the
+            // caller gates on it, but a K-block spends three per iteration and must stop when the
+            // supply runs out rather than going negative.
+            Permanent& self = state.battlefield[idx];
+            const int cost_ctrs = d->params.spore_saproling_cost;
+            if (cost_ctrs <= 0 || self.spore_counters < cost_ctrs) { break; }
+            self.spore_counters -= cost_ctrs;
+            const int ntok   = d->params.spore_creates_tokens > 0 ? d->params.spore_creates_tokens : 1;
+            const int tok_p  = d->params.spore_token_power;
+            const int tok_t  = d->params.spore_token_toughness;
+            const std::vector<std::string> tok_subs = d->params.spore_token_subtypes;
+            const std::string tok_col = d->params.spore_token_color;
+            for (int t = 0; t < ntok; ++t)
+            { CreateToken(state, controller, tok_p, tok_t, tok_subs, tok_col); }
+            if (g_play_event_sink)
+            {
+                EmitPlayEvent(state.turn_number, "token",
+                              "\xF0\x9F\x8D\x84 " + src_name + ": removes "
+                              + std::to_string(cost_ctrs) + " spore counters -> Saproling");
+            }
+            break;
+        }
         default: break;
     }
+}
+
+// Fire a spore outlet's remaining K-1 activations. This is the COUNTER-BOUNDED twin of
+// SpendRepeatActivations below, and it exists because that function cannot serve this mode: it
+// prices each activation in MANA and bails at `per <= 0` precisely so a free repeatable sink cannot
+// non-terminate. Routing SporeSaproling there would therefore silently fire zero extra activations
+// -- an under-application with no error, which is the worst shape of bug.
+//
+// The bound here is the counter supply instead. ApplyPermAbility re-checks and decrements it on
+// every call, so this simply stops when the counters run out. Returns how many actually fired.
+// Shared by the executor and the rollout so the two cannot drift.
+inline int SpendSporeActivations(GameState& state, int controller, int source_id,
+                                 const CardDefinition& def, int want)
+{
+    if (want <= 0 || def.params.spore_saproling_cost <= 0) { return 0; }
+    int fired = 0;
+    for (int i = 0; i < want; ++i)
+    {
+        // Re-locate the source every iteration: each activation calls CreateToken, which push_backs
+        // onto the battlefield and can reallocate it, so a pointer taken before the loop dangles.
+        const Permanent* src = nullptr;
+        for (const Permanent& p : state.battlefield)
+        {
+            if (p.card.m_number == source_id && p.controller_index == controller)
+            { src = &p; break; }
+        }
+        if (src == nullptr || src->spore_counters < def.params.spore_saproling_cost) { break; }
+        ApplyPermAbility(state, controller, source_id, PermAbilityMode::SporeSaproling);
+        ++fired;
+    }
+    return fired;
 }
 
 // Fire a repeatable {T}-less mana sink (Essence Depleter's drain, Dimensional Infiltrator's library
