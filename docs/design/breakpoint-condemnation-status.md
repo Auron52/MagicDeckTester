@@ -1901,6 +1901,86 @@ converting rank promotion into decisions, play would move. So:
   entries into a width-2 window is a re-ranker wearing a prune's clothes, and the honest form of that
   is a wider window or a better ranking -- both of which are available without any path-dependence.
 
+### 2026-09-17: "HOW DO WE MAKE IT NOT RE-EXPAND THE SAME GROUND?" (USER) -- DESIGN ONLY, nothing built
+
+Four levers. They are not alternatives -- they attack different halves of the measured overshoot, and
+**two of them are baseline defects that condemnation merely scales**, which is why the bar reads as a
+condemnation problem when part of it is not.
+
+**FIRST, THE ARITHMETIC OF THE TARGET.** `nodes` +10.91%, `slots` +18.24%, `scored` applies +17.94%,
+`lookups` +17.63%, on `distinct` states **−0.45%**. So no new ground is being found; the same ground is
+walked more times. `lookups/state` 67.30 -> 79.52. And of the 2,517,447 baseline wave slots,
+**1,680,277 (66.7%) are STILLBORN** -- and that is the residual *after* `MTG_BP_WAVE_NSKIP`, which is
+already on at b0 and already halves them (its own record: slots 4,618,573 -> 2,918,243, stillborn
+3,426,123 -> 1,724,192, −4.2% units, `improved` identical on both arms).
+
+**(1) MAKE THE CONTINUATION LENGTH A CROSS-NODE FACT. Biggest single number, and it is not about
+condemnation at all.** NSKIP's insight is right -- *"the length is not unknowable, it is merely
+unremembered"* -- but its memo is **per node and positional**: `bp_known_n` is a local in the node
+(`TurnSolver.cpp:36979`) keyed `(bp_base << 8 | bp_at)`, and it only populates when wave 0's own k=0
+variant reached that breakpoint in *this* node. Every other node that reaches the same breakpoint pays
+a full `ApplyPlanDirect` to re-learn a length some node already knew.
+* **Why it cannot simply key on the breakpoint state** (the obvious idea, and it does not work): the
+  walker must decide whether to open a slot *before* applying, and the apply is what produces the
+  breakpoint state. The state is not available at the decision point. That is exactly why NSKIP keys
+  on the plan position.
+* **What IS available before the apply: the node's state and the base plan.** Together they determine
+  the breakpoint state deterministically. So the memo can be keyed on
+  `(BuildDedupKey(node state), BpCandFingerprint(base plan), bp_at) -> n` and shared across nodes.
+  Both helpers already exist, and using the plan FINGERPRINT rather than `bp_base` structurally avoids
+  the stale-index hazard that made this lever lossy once already (`:30307-30318`).
+* Cost: one hash per candidate slot against a saved `ApplyPlanDirect`. Lossless on the same argument
+  NSKIP already carries: it removes no rank the walker would have SCORED, only the probe that
+  discovers an exhausted list. **Same soundness check applies -- `improved` must be identical.**
+
+**(2) MAKE THE POST-APPLY DEDUP CROSS-NODE.** `bp_seen_states` is a local set per node, and the probe's
+own labels say so: `dupstate` is *"a post-apply state a SIBLING already reached"*, split into `dup_self`
+/ `dup_cross` / `dup_w0` -- all within one node (`dup_cross`'s comment literally says it *"needs a
+node-level mechanism"*). Measured, it catches **59,486 of 28,019,861 applies (0.2%)**. A per-game memo
+keyed on the post-apply state would let a repeat arrival skip the rollout outright.
+* **THE SOUNDNESS CONSTRAINT IS ALREADY RECORDED AND IS NOT OPTIONAL.** A value computed at one
+  remaining depth / budget cannot be served to an arrival with a different one -- that is exactly the
+  order-free WIN-reuse defect, whose fix was **SPLIT KEYS plus a budget-gated reuse wave**. Any
+  cross-node memo here must carry the same split, and must be scoped with
+  `UnbudgetedWorkScopeActive()` rather than `budget->Unlimited()` (the `a54fdaff` scoping bug).
+* This is the lever with the largest headroom and the largest soundness risk. It should be measured
+  as a pure counter first (how many applies WOULD hit a cross-node memo) before anything is served
+  from one.
+
+**(3) THE MISSES CLAUSE IS SEPARABLE, AND IT IS A CACHE-POLICY BUG.** `misses` +17.92% tracks `clears`
++18.37%, on 0.45% FEWER distinct states -- so the extra derivations are **eviction**, not discovery.
+The bp-enum cache is **clear-on-full at 8192, not LRU** (`if (cache.size() >= cap || !Fits(psz))
+cache.clear();`). The census already measured what policy is worth: raising the cap cut the miss
+overshoot from +20.3% to **+6.0%**. So **an LRU (or larger) bp-enum cache can satisfy the USER's
+"no additional misses" clause even while lookups remain above baseline** -- the two clauses have
+different causes and should stop being reported as one number. Note `plancache::Fits` wipes on a BYTE
+budget that `MTG_BP_ENUM_CACHE_CAP` does not control, so a real fix needs both.
+
+**(4) THE ONLY LEVER THAT ADDRESSES THE EXTRA NODES AT SOURCE: STOP WEAKENING THE BOUND.** (1)-(3)
+make re-expansion cheaper or rarer; they do not stop the search from *opening* +10.91% more nodes. That
+comes from dropping a candidate that was carrying value: the node's best value falls, the bound
+weakens, and siblings expand that baseline cut off. Corroborated by the drop split --
+`drops=125,164 (searched=125,164 exec=0 rollout=0)`: **every Snow drop is in the searched space**, which
+is precisely where a bound exists to weaken. Two shapes:
+* **(4a) Condemn only where the drop is provably value-neutral.** This is what "redundant" was always
+  supposed to mean, and bug 9 refuted it for the general case. Proving it requires the sibling's value,
+  i.e. a search -- so it is expensive, and it is the honest form of the original premise.
+* **(4b) DEMOTE INSTEAD OF DELETE -- condemnation as a RANKING signal, not a prune.** Keep the
+  candidate in the list and rank it last. Then the candidate set is baseline's, no bound weakens, the
+  tree is baseline's, and **the bar is met on every work metric by construction** -- while the
+  practical effect is that a condemned line is scored only after everything else, and usually cut.
+  **The compaction measurement is independent evidence that this is what condemnation has really been
+  doing:** W = 2 against a mean list of 6.69, with 73.9% of lists longer than W, so deleting a
+  front-rank entry promotes a rank-2 entry into the window. A filter whose value comes from promoting
+  rank-2 entries into a width-2 window **is a re-ranker wearing a prune's clothes.** (4b) makes that
+  explicit and free, and it also gives up nothing that (D1) gave up.
+
+**WHAT THIS MEANS FOR THE THREE-WAY SHIP DECISION.** (4b) and (D1) are not both needed: (4b) subsumes
+the reason (D1) existed (no list shortening, so no key folds, no positional renumbering, so the
+all-paths fixpoint is free) **and** fixes the node growth that (D1) provably cannot. If (4b) measures
+neutral-or-better on play, it is strictly the better build. It should be priced against (1) rather than
+credited with (1)'s saving, since (1) helps both arms.
+
 ### Instruments added (all default OFF, counters only)
 
 * `MTG_BP_PATHDEP_PROBE` -- drop-gate census: consultations, pending plan casts, peer-exempt split,
