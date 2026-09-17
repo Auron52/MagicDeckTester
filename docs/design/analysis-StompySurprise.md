@@ -1892,8 +1892,11 @@ question from whether it earns a slot, and the claude-play sweep below is still 
 
 * **`decks/StompySurprise/` is NOT updated.** Promoting H would invalidate the regression suite's
   StompySurprise ground truth. That is a separate, explicit user call.
-* **Ghalta vs no Ghalta was never measured.** F (Craterhoof 2 / Hulk 3 / no Ghalta) differs from H by
-  exactly one card, so it is a clean one-card test, but F has no keep table — a generation was started
-  unasked on 2026-09-17 and killed at the user's direction after ~1 minute. Ghalta's inclusion rests on
-  the card argument (*"It solves my Worldspine Wurm cut concerns as well"*), not a measurement.
+* ~~Ghalta vs no Ghalta~~ -- **CLOSED by user ruling** (see the ruling section above). F's keep table
+  was never built and must NOT be: ~4h of box time for a number the user has said would not move them.
+* **Ghalta has never had a claude-play sweep.** New card, novel ETB, two-phase resolution; validated
+  only by a 40-game probe and a ranking check. This is the mandated Stage 5d verification and is the
+  one genuine correctness gap left -- separate from, and unaffected by, the slot ruling.
+* **GT is stale: all 21 stompy/stompy2hg keys** (smoke 4, regression 5, overnight 12) describe the old
+  deck and must be rebaselined via `regression.sh <mode> --accept`, never hand-edited.
 * Whether Ghalta wants a 2nd copy (it is Legendary; insurance against stranding, not a second effect).
