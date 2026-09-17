@@ -1079,6 +1079,7 @@ CardParams CardDatabase::BuildParamsFromJson(const json& params) const
     p.mana_per_creature_count_all  = params.value("mana_per_creature_count_all", false);
     p.mana_requires_land_subtype   = params.value("mana_requires_land_subtype", std::string{});
     p.etb_team_pump_per_creature   = params.value("etb_team_pump_per_creature", false);
+    p.etb_put_creature_cards_from_hand = params.value("etb_put_creature_cards_from_hand", false);
     p.upkeep_reorder               = params.value("upkeep_reorder", 0);
     // Saga (CR 714): scheduling + the three chapter effects. All default to inert.
     p.saga_chapters                = params.value("saga_chapters", 0);

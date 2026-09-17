@@ -7886,6 +7886,30 @@
      "G"
     ]
    }
+  },
+  {
+   "name": "Ghalta, Stampede Tyrant",
+   "mana_cost": "{5}{G}{G}{G}",
+   "types": [
+    "Creature"
+   ],
+   "supertypes": [
+    "Legendary"
+   ],
+   "subtypes": [
+    "Elder",
+    "Dinosaur"
+   ],
+   "power": 12,
+   "toughness": 12,
+   "keywords": [
+    "Trample"
+   ],
+   "oracle_text": "Trample\nWhen Ghalta enters, put any number of creature cards from your hand onto the battlefield. [ETB modelled as ALL creature cards in hand: weakly dominant against a passive opponent that never blocks, removes or sweeps, and Terastodon -- the one card that could punish a free deploy, since its live mode here destroys OUR OWN noncreature permanents -- chooses its K at resolution and may choose 0. Cards enter SIMULTANEOUSLY and their ETB triggers fire only afterwards (CR 603.3b), so a Craterhoof deployed this way counts the whole team. NOT a searched subset axis (2^n plan variants -- the Turntimber explosion). [bracket note] human play is not offered the subset choice; see docs/design/ghalta-stampede-tyrant.md]",
+   "template": "custom",
+   "parameters": {
+    "etb_put_creature_cards_from_hand": true
+   }
   }
  ]
 }

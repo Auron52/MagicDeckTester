@@ -1809,6 +1809,11 @@ struct CardParams
     // battlefield at resolution (later arrivals correctly excluded, CR 611.2c). The trample
     // grant is inert (passive opponent never blocks) and not modelled -- disclosed.
     bool etb_team_pump_per_creature = false;
+    // Ghalta, Stampede Tyrant: "When this creature enters, put any number of creature cards from
+    // your hand onto the battlefield." Modelled as ALL creature cards -- see the resolution site in
+    // SpellEffects.h for why that is weakly dominant against a passive opponent, and for the
+    // enter-then-trigger ordering that makes a deployed Craterhoof count the whole team.
+    bool etb_put_creature_cards_from_hand = false;
 
     // Mirri's Guile: "At the beginning of your upkeep, you may look at the top three cards of
     // your library, then put them back in any order." N = 3. NO bottoming, NO shuffle (the

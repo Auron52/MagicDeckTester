@@ -4884,6 +4884,69 @@ inline void FireOwnEtbTriggers(GameState& state, int controller, int entered_ind
         }
     }
 
+    // Ghalta, Stampede Tyrant: "When this creature enters, put any number of creature cards from
+    // your hand onto the battlefield."
+    //
+    // TWO PHASES, and the split is load-bearing rather than tidiness. In real Magic every chosen
+    // card enters SIMULTANEOUSLY and the resulting ETB triggers only then go on the stack, so a
+    // Craterhoof deployed this way counts the whole team when it RESOLVES (CR 603.3b). Entering and
+    // triggering one card at a time would instead make Craterhoof's X depend on where it happened
+    // to sit in hand order -- the difference between a lethal swing and a damp one.
+    //
+    // "ANY NUMBER" IS MODELLED AS ALL, and that is weakly dominant HERE rather than universally:
+    // the opponent never blocks, never removes and never sweeps, so an extra body is never a
+    // liability, and the one card that could punish a free deploy -- Terastodon, whose live mode in
+    // this sim destroys OUR OWN noncreature permanents -- picks its K at resolution and may pick 0.
+    // [bracket note] A real game absolutely can want a subset (holding a creature for a second
+    // Ghalta, playing around a sweeper), and HUMAN PLAY IS NOT OFFERED THE CHOICE here -- that is a
+    // known narrowing of a legal decision, recorded in docs/design/ rather than papered over.
+    // Deliberately NOT a searched subset axis: 2^|creatures in hand| plan variants is the exact
+    // multiplicative explosion just removed from Turntimber.
+    if (p.etb_put_creature_cards_from_hand)
+    {
+        Player& gp = state.players[controller];
+        std::vector<Card> deploy;
+        for (int hi = static_cast<int>(gp.hand.size()) - 1; hi >= 0; --hi)
+        {
+            if (gp.hand[hi].m_is_staged) { continue; }
+            const CardDefinition* hd = CardDatabase::Instance().LookupCached(gp.hand[hi]);
+            const Card& hc = hd ? hd->card : gp.hand[hi];
+            if (!hc.IsCreature()) { continue; }
+            Card moved = gp.hand[hi];
+            gp.hand.erase(gp.hand.begin() + hi);
+            deploy.push_back(std::move(moved));
+        }
+        // Phase 1: everything enters.
+        std::vector<int> entered_slots;
+        entered_slots.reserve(deploy.size());
+        for (const Card& dc : deploy)
+        {
+            const CardDefinition* dd = CardDatabase::Instance().LookupCached(dc);
+            Permanent perm;
+            perm.card              = dd ? dd->card : dc;
+            perm.card.m_number     = dc.m_number;
+            perm.controller_index  = controller;
+            perm.owner_index       = controller;
+            perm.entered_this_turn = true;
+            state.battlefield.push_back(perm);
+            entered_slots.push_back(static_cast<int>(state.battlefield.size()) - 1);
+        }
+        // Phase 2: only now do their triggers go on the stack. kEtbKxHeuristic: a PUT Terastodon
+        // has no searched destroy-K axis, exactly as on the Turntimber put path.
+        for (int slot : entered_slots)
+        {
+            FireEtbWatchers(state, controller, slot);
+            FireOwnEtbTriggers(state, controller, slot, std::string(), kEtbKxHeuristic);
+        }
+        if (!entered_slots.empty() && g_play_event_sink)
+        {
+            EmitPlayEvent(state.turn_number, "etb",
+                          "\xF0\x9F\xA6\x95 " + def->card.m_name.str() + ": put "
+                          + std::to_string(entered_slots.size())
+                          + " creature card(s) from hand onto the battlefield");
+        }
+    }
+
     // Craterhoof Behemoth: "creatures you control ... get +X/+X until end of turn, where X is the
     // number of creatures you control" (counted AFTER it enters -> includes itself). Temp bonuses
     // (cleared at cleanup); creatures entering later this turn correctly get nothing (CR 611.2c).

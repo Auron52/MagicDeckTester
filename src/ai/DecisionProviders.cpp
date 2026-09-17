@@ -13178,6 +13178,34 @@ StompyProvider::TutorCandidates(const GameState& s, int controller, const CardPa
         }
         auto doctrine_class = [&](const CardDefinition& d) -> int
         {
+            // Ghalta, Stampede Tyrant is NOT "a 12/12" -- it DEPLOYS THE HAND, so what it is worth
+            // is a function of what is stranded there, which no power/MV test can see. Without this
+            // it lands in the power>=10 class, indistinguishable from Worldspine Wurm, and the
+            // doctrine fetches it as a plain big body.
+            //   * team pump in hand -> ABOVE Craterhoof. Fetching the Hoof pumps the board we
+            //     already have; fetching Ghalta adds a 12/12, deploys every other stranded body,
+            //     and THEN the deployed Hoof's X counts all of it (the entered-then-triggered
+            //     ordering at its resolution site, CR 603.3b). Strictly the bigger swing.
+            //   * other creatures in hand -> a mass deploy; rank with the biggest bodies.
+            //   * empty hand -> genuinely just a 12/12.
+            // USER 2026-09-17: "we may be undercounting the effectiveness of the new cards".
+            // DEFAULT ON; =0 falls back to the power test. Param-gated, so every list WITHOUT
+            // Ghalta keeps its measured ordering byte-identical.
+            static const bool s_ghalta_rank = EnvOn("MTG_STOMPY_GHALTA_RANK", true);
+            if (s_ghalta_rank && d.params.etb_put_creature_cards_from_hand)
+            {
+                int  hand_creatures = 0;
+                bool hand_pump      = false;
+                for (const Card& hc : ap.hand)
+                {
+                    const CardDefinition* hd = CardDatabase::Instance().LookupCached(hc);
+                    if (!hd || !hd->card.IsCreature()) { continue; }
+                    ++hand_creatures;
+                    if (hd->params.etb_team_pump_per_creature) { hand_pump = true; }
+                }
+                if (hand_creatures == 0) { return 3; }
+                return hand_pump ? 7 : 5;
+            }
             if (d.params.etb_team_pump_per_creature)     { return 6; }
             if (d.params.etb_self_creates_tokens >= 2)   { return pump_follow_up ? 5 : 2; }
             if (d.card.m_power.value_or(0) >= 10)        { return 4; }
