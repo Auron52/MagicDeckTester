@@ -356,8 +356,16 @@ policy when you are blind to the shuffle — a real player can't peek at the lib
 lookahead bottomer does (it rolls out the game's actual library and picks the removal best FOR that
 library). The naive in-game bottoming A/B is **confounded**: it scores lookahead on the very library it
 peeked at, so lookahead "wins" for free. **Remove the peek and the table wins.** Two proofs:
-- **Confounded in-game A/B** (`MTG_CONFOUND_BOTTOM=1`, reshuffles the library *after* the bottoming
-  decision so the playout draws are decorrelated from the peek; `test/keepmodel_burn_confound.sh`): burn
+- **Confounded in-game A/B** — use **`MTG_CONFOUND_BOTTOM=3`**, which reshuffles the library *after*
+  the bottoming decision AND re-derives the mid-game shuffle salts (`test/keepmodel_burn_confound.sh`).
+  **Mode 1 is NOT sufficient and must not be used to fail a table** (2026-09-17): it decorrelates the
+  draw order only, leaving `shuffle_salt`/`shuffle_salt_search` pointing at the same mid-game shuffles
+  the real game resolves — which the lookahead's rollouts inherit. Worth **0.073t to the lookahead**,
+  enough to fail a good table: FiveColour read +0.018t ("loses", 0/16) under mode 1 and **−0.058t
+  (WINS, 16/16)** under mode 3, and nearly went back for a 20-day regeneration it did not need. Decks
+  that PASSED under mode 1 are still fine — the bar was simply too high. Run
+  `test/confound_gate_check.sh` if you touch the bottomer, the confound, the shuffle or the salts.
+  See [fivecolour-bottoming-cause.md](../../docs/design/fivecolour-bottoming-cause.md) §7k. Burn
   d5 flipped from blind **+0.076t (naive "loss")** to blind **−0.0098t (win), 11/16 seeds**.
 - **R=400 blind-EV probe** (`MTG_SCORE_COMPS`): the table's stored bottom pick IS the blind-argmin over
   fresh shuffles; lookahead's library-specific deviations are blind-*worse* by 0.5–1.9t.

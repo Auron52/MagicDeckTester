@@ -211,7 +211,9 @@ Artifact paths below predate the per-deck folder refactor (a2ba8712): they now l
 1. **Re-baseline Slivers *overnight* GT** for the bottoming-on win-turn shift (per-game audit → `--accept`).
    Smoke + regression GT already reflect bottoming-on (re-baselined at 4136cc6, after the bottoming-on
    profile shipped at 3960ca4); only the overnight seeds (s4004–7007) remain.
-   **Adoption gate for any new profile's bottoming = the confounded in-game A/B** (`MTG_CONFOUND_BOTTOM`,
+   **Adoption gate for any new profile's bottoming = the confounded in-game A/B**
+   (**`MTG_CONFOUND_BOTTOM=3`** — mode 1 leaks 0.073t to the lookahead and can fail a good table; see
+   [fivecolour-bottoming-cause.md](fivecolour-bottoming-cause.md) §7k and `test/confound_gate_check.sh`,
    `test/keepmodel_burn_confound.sh` shape): the *non-confounded* bottoming A/B is misleading because it
    scores clairvoyant lookahead on the very library it peeked at (burn: blind "lost" +0.076t naive → **won
    −0.0098t confounded**; R=400 blind-EV probe shows the table's picks ARE the blind-argmin and lookahead's

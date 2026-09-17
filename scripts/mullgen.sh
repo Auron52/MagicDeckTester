@@ -16,9 +16,18 @@
 #
 #   FIRST VERSION (no prior profile)   -- the question is "is this policy any good at all?"
 #     1. KM_MODE=keep    exhaustive keep vs the static profile (bottoming held identical)
-#     2. KM_MODE=bottom + MTG_CONFOUND_BOTTOM=1   blind exhaustive bottoming vs lookahead, with the
-#        library reshuffled AFTER the decision. The confound correction is not optional: the naive
-#        bottoming A/B scores lookahead on the very library it peeked at, so it "wins" for free.
+#     2. KM_MODE=bottom + MTG_CONFOUND_BOTTOM=3   blind exhaustive bottoming vs lookahead, with the
+#        library reshuffled AFTER the decision AND the mid-game shuffle salts re-derived. The confound
+#        correction is not optional: the naive bottoming A/B scores lookahead on the very library it
+#        peeked at, so it "wins" for free.
+#        MODE 3, NOT MODE 1 (2026-09-17). Mode 1 reshuffles the draw order and nothing else, leaving
+#        shuffle_salt/shuffle_salt_search pointing at the same mid-game shuffles the real game will
+#        resolve -- which the lookahead's rollouts inherit. That leak is worth 0.073t IN THE
+#        LOOKAHEAD'S FAVOUR and it failed FiveColour's perfectly good table (+0.018t "loses" under
+#        mode 1; -0.058t 16/16 WINS under mode 3). Decks that PASSED under mode 1 are still fine (the
+#        bar was too high); a deck that FAILS under mode 1 may be fine, which is the expensive
+#        direction -- it sends a good table back for days of regeneration. See
+#        docs/design/fivecolour-bottoming-cause.md 7k and test/confound_gate_check.sh.
 #
 #   REGENERATION (a profile already exists) -- the question is "is the new table better than the one
 #   we already ship?", which neither of the above can ask. One significant A/B, old vs new, both
@@ -356,7 +365,7 @@ PY
     dk=$(run_ab keep keep "$KEEP_BASE" "$KEEP_PER_ROUND" static exh) || { log "keep A/B failed to run"
       [ "$gated" = 1 ] && { quarantine "keep A/B failed to run"; return 1; }; return 1; }
     log "keep (exhaustive vs static) delta: ${dk}t  (negative = exhaustive wins)"
-    db=$(run_ab bottom bottom_confounded "$BOTTOM_BASE" "$KEEP_PER_ROUND" lookahead exhbottom MTG_CONFOUND_BOTTOM=1) || {
+    db=$(run_ab bottom bottom_confounded "$BOTTOM_BASE" "$KEEP_PER_ROUND" lookahead exhbottom MTG_CONFOUND_BOTTOM=3) || {
       log "confounded bottoming A/B failed to run"
       [ "$gated" = 1 ] && { quarantine "bottoming A/B failed to run"; return 1; }; return 1; }
     log "bottoming (blind vs lookahead, CONFOUNDED) delta: ${db}t  (negative = blind wins)"
