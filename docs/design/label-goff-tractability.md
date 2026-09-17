@@ -442,3 +442,10 @@ counted: at H=4 on EDF, 9 of 1,067 rows move by a third of a turn (7 later, 2 ea
 the ladder's miss) for a phase A that finishes in under half an hour instead of not finishing. The
 flag is OFF by default; `valueleaf.sh` adds no knobs by design, so adoption would be an engine
 default (global, or per deck through the provider) rather than a driver setting.
+
+## 7. Where this goes next (parked 2026-09-17)
+
+The user's direction, recorded in `label-work-bounding-by-reachable-states.md`: the horizon cut is
+not wanted; bound the expensive cases by reasoning over which STATES are reachable rather than
+enumerating plans; detect go-off positively; bound failed combos. The certificate work of 6b is the
+seed of it.
