@@ -1213,3 +1213,49 @@ run-to-run churn rather than signal.
 hinata should NOT be on the focus list despite having the largest single regression in the suite.
 It is the best deck in the suite at its own play settings (-0.0300) and at overnight d5 (-0.0044);
 its shallow-configuration loss is the starvation in K.2.
+
+### K.4 Every deck that moved, ranked — and a correction to K.3's focus call
+
+All three tiers pooled (smoke + regression + overnight, 349,000+ games). "cells moved" counts cells
+whose average changed at all, out of that deck's total.
+
+| deck | games | cells moved | extra turns | per game | faster | slower | wins lost/gained |
+|---|---:|---:|---:|---:|---:|---:|---|
+| hinata | 14,250 | 19/27 | +42.0 | +0.00295 | 101 | 129 | 4 / 2 |
+| th | 19,875 | 14/21 | +18.0 | +0.00090 | 45 | 65 | 4 / 3 |
+| **dragonstorm** | 14,575 | 9/21 | +13.0 | +0.00089 | **6** | **19** | — |
+| dragons | 17,550 | 4/21 | +9.0 | +0.00051 | **0** | **9** | — |
+| kitty | 17,550 | 3/21 | +5.0 | +0.00028 | **0** | **5** | — |
+| critter | 17,375 | 2/21 | +3.0 | +0.00017 | **0** | **3** | — |
+| creature_giving | 17,375 | 12/21 | +2.0 | +0.00012 | 20 | 22 | — |
+| burn | 20,600 | 2/21 | +2.0 | +0.00010 | **0** | **2** | — |
+| antilife | 20,950 | 1/26 | +1.0 | +0.00005 | **0** | **1** | — |
+| auras | 20,600 | 3/21 | -1.0 | -0.00005 | 2 | 1 | — |
+| mirrorwing | 13,675 | 10/21 | -1.0 | -0.00007 | 25 | 28 | 0 / 2 |
+| melira | 11,730 | 5/21 | -2.0 | -0.00017 | 3 | 2 | — |
+| goblins | 20,700 | 3/26 | -4.0 | -0.00019 | 4 | 0 | — |
+| fivecolour | 14,115 | 5/26 | -3.0 | -0.00021 | 4 | 1 | — |
+| **fluctuator** | 14,170 | 19/26 | **-86.0** | **-0.00607** | **95** | **12** | — |
+
+Five decks never move at all: breaching, knights, minotaur, slivers, stompy.
+
+**The faster/slower split separates churn from signal, and K.3's verdict column did not.**
+creature_giving (20 faster / 22 slower) and mirrorwing (25 / 28) are balanced — that is run-to-run
+churn from a changed line, and their near-zero totals say so. dragons, kitty, critter, burn and
+antilife have **zero** games faster: perfectly one-directional, which is a real if tiny systematic
+loss rather than noise. But the magnitudes are minute — antilife's entire "worse everywhere" verdict
+is **one game, one turn, in one cell out of 26**, and burn's is two games. Those four should not be
+worked on; they should be left as a watch item.
+
+**Revised focus call: dragonstorm, not dragons.** Dragonstorm carries the same per-game cost as th
+(+0.00089) but with a strongly one-directional split (6 faster / 19 slower) rather than th's mixed
+45/65, it moves 9 of its 21 cells rather than dragons' 4, all four of its overnight d3 cells are
+positive and three of four d5 cells are too, and its depth shortfall is only -0.05 plies — so
+starvation does not explain it either. Dragons remains second: perfectly one-directional (0/9) and
+it reaches its nominal depth exactly (3.000), but nine games is thin evidence to act on.
+
+hinata is the largest number in the table and still should not be worked on as a quality problem:
+its loss is the K.2 starvation, and at its own play settings it is the best deck in the suite
+(-0.0300/game). fluctuator is the mirror image and worth understanding for the same reason — at
+-0.00607/game over 95 games faster it is a larger effect than every regression in the suite
+combined, and whatever it is doing right is the thing to generalise.
