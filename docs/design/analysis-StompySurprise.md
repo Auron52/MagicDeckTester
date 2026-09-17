@@ -1697,3 +1697,69 @@ the regression suite's StompySurprise ground truth. A, B and C stay as sibling f
   swapping back is free by the measurement.
 * The elf count was tested at 18 vs 20 only. 19 is unmeasured.
 * The tables are `complete` and shippable; no `fast` artifact was produced.
+
+## THE APPROVED COMPOSITION (2026-09-17) — and where the sim was overruled, deliberately
+
+The user's ruling, after the three-way head-to-head. Two slots were decided AGAINST the measurement,
+on grounds the measurement is structurally incapable of seeing. Recording which is which matters more
+than the list itself, because it says what any future re-measurement may and may not overturn.
+
+### Turntimber Symbiosis 4 (measurement: null, OVERRULED on card dominance)
+
+`Symbiosis 4->3` vs `Forest 15->14` measured t = −1.40 / −1.59 — **no evidence either way**, which I
+initially mis-reported by letting the leading arm win a coin flip. The user: *"Why would a forest ever
+win over Symbiosis? That makes 0 sense unless we are playing Arbor Elf, which we should not be... It
+never enters tapped unless we choose not to pay the life."*
+
+Correct, and it is a DOMINANCE argument. The back face (Turntimber, Serpentine Wood) is a land with
+shock semantics, and `LandWouldEnterTapped` pays whenever `life > 3` — verified in a game log: life
+**20 -> 17 on the turn it was played**, entering `tapped: false`, spell face cast later the same game.
+Against a passive opponent life is nearly free, so Symbiosis is a Forest plus a 7-mana put-a-fatty
+mode. A null must not override that. See [[a-null-must-not-break-a-tie]] and
+`docs/design/turntimber-multi-copy-plan-explosion.md` (the enumeration defect that would bias this
+comparison AGAINST the 4-copy arm anyway).
+
+### Terastodon 2 (measurement: cut to 1, OVERRULED — three independent reasons)
+
+`cards.json` states the gap outright: *"The passive opponent controls no noncreature permanents in
+this sim, so the live mode destroys OUR OWN."* The card's real function is absent; what is modelled is
+a consolation mode detonating your own permanents for 3/3 Elephants.
+
+The user's three arguments, strongest last:
+1. **Role miscast.** *"In the goldfish Terastodon easily takes over the heavy hitter role. That's not
+   so practical in a real game."* The sim rates it as a 9/9 beater for 8 — a role six other fatties
+   fill — so it correctly finds the 2nd copy redundant FOR THAT ROLE, and wrongly for the real one.
+2. **Access.** *"Not being able to deploy it fast enough could easily spell defeat."*
+3. **Repeat use — the argument that forces the count.** *"There are also games where you literally
+   need the Terastodon effect twice."* This is not redundancy: **Terastodon does not recur**, so each
+   use consumes a copy and no amount of tutoring manufactures a second use from one card.
+
+### Worldspine Wurm 1 (measurement: 1, and the user AGREED — not an override)
+
+Going to 2 measured +0.0208 / +0.0253, and the card argument points the same way: Worldspine is the one
+fatty that **cannot be exhausted**. Its shuffle-back is a TRIGGER, not a replacement, so a Natural
+Order sacrifice yields three 5/5 tramplers AND returns it to the library *before the search resolves*
+— it is immediately re-fetchable. One copy supports repeated use; only a draw into hand strands it
+(~18% by turn 5), and the deck has six other fatties to fetch instead.
+
+**The general principle both rulings share: redundancy is worth most for a card with NO SUBSTITUTE and
+NO RECURSION.** Craterhoof (nothing else converts a board into a kill) and Terastodon (nothing else
+destroys three permanents; does not recur) earn 2. Worldspine (substitutable body, self-recurring)
+tolerates 1. That ordering also explains why the same stranding mechanism measured POSITIVE for
+Craterhoof and NEGATIVE for Worldspine on the identical shell.
+
+### The list
+
+```
+4 Natural Order      4 Worldly Tutor        4 Llanowar Elves     13 Forest
+3 World War Hulk     4 Turntimber Symbiosis 4 Elvish Mystic
+2 Call of the Wild   1 Sol Ring             4 Fyndhorn Elves
+2 Craterhoof Behemoth                       4 Elvish Archdruid
+2 Terastodon         1 Apex Altisaur        4 Priest of Titania
+1 Worldspine Wurm    1 Vaultborn Tyrant
+1 Hornet Queen       1 Elderscale Wurm
+```
+60 cards; 17 lands + 20 mana creatures + Sol Ring = 38 mana sources. `decks/StompySurpriseF/`.
+
+Measured-and-kept: Craterhoof 2, 20 mana creatures, Worldspine 1, Hulk 3, Natural Order 4, Tutor 4.
+Overruled: Turntimber 4 (null vs dominance), Terastodon 2 (unmodellable interaction).
