@@ -9,9 +9,32 @@ for the SEARCH as well, so it is not merely a viewer problem.
 
 ---
 
-## 1. World War Hulk chapters II and III never offer a target (SEARCH + HUMAN)
+## 1. World War Hulk offers NO decision at ANY chapter (SEARCH + HUMAN)
 
-USER: *"Hulk gave me no Targeting decisions."*
+USER: *"Hulk gave me no Targeting decisions."* and *"Hulk didn't ask for the creature to be played or
+the target of the 3 counters. I didn't get to test the last phase, but you should check it as well."*
+
+**All three chapters are affected. Chapter III is confirmed by code reading** (the user could not
+reach it): `wants_target` covers chapter 3, and `DefaultSagaChapterTarget` is its only selection path,
+identical to chapter II.
+
+### 1a. Chapter I — which creature to free-cast, and whether to do it at all
+
+*"The next red or green creature spell you cast this turn can be cast without paying its mana cost."*
+
+`PerformSagaFreeCast` (~18888) collects one candidate per distinct creature NAME in hand, then picks
+by simulating each on a copy of the state and scoring
+`(OwnAttackingPower delta) * 1000 + total board power` (~18935). No human chooser, no plan axis.
+
+Two distinct losses:
+* **WHICH creature is never asked.** The trial-on-a-copy scoring is genuinely good — it fires ETBs, so
+  it does see Ghalta deploying the hand — but it is still a fixed greedy rule the human cannot override.
+* **DECLINING IS IMPOSSIBLE, and that is a rules narrowing.** The card says the spell *can* be cast
+  without paying — permission, not obligation. The code only declines when `cand_slots.empty()`. A
+  human may legitimately want to keep a green creature in hand (for a later Ghalta deploy, or to cast
+  it on their own terms) and the engine will not let them.
+
+### 1b. Chapters II and III — the target
 
 Both chapters target:
 * **II** — *"Put three +1/+1 counters on target creature you control."*
