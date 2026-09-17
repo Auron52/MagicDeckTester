@@ -1259,3 +1259,77 @@ its loss is the K.2 starvation, and at its own play settings it is the best deck
 (-0.0300/game). fluctuator is the mirror image and worth understanding for the same reason — at
 -0.00607/game over 95 games faster it is a larger effect than every regression in the suite
 combined, and whatever it is doing right is the thing to generalise.
+
+## Addendum L — the depth/budget breakdown, and a SCOPE LEAK at d0
+
+All three tiers pooled. Budget is a per-deck property (K.1), so depth is the only variable that
+moves within a deck; the budgets each depth spans are noted per row in L.2.
+
+### L.1 By depth, whole suite
+
+| depth | cells moved | games | extra turns | per game | games faster | slower |
+|---|---:|---:|---:|---:|---:|---:|
+| d0 | 6/120 | 200,000 | -5.0 | -0.00003 | 4 | 1 |
+| **d3** | 60/167 | 83,365 | **+57.0** | **+0.00068** | 175 | 223 |
+| **d5** | 45/169 | 65,550 | **-54.0** | **-0.00082** | **126** | **75** |
+
+The game counts flip direction with the totals, which the cell sums never did: at d3, 223 games get
+slower against 175 faster; at d5, 126 get faster against 75 slower. Depth 5 is better on both the
+magnitude and the count.
+
+### L.2 By deck and depth
+
+Budget in brackets; a deck spanning two budgets at one depth has both listed.
+
+| deck | d0 b0 | d3 | d5 | deck total |
+|---|---:|---:|---:|---:|
+| fluctuator | 0 | **-0.01714** (b10/20) | **-0.02654** (b20/40) | **-0.00607** |
+| melira | 0 | -0.00293 (b10) | +0.00143 (b20) | -0.00017 |
+| mirrorwing | 0 | +0.00136 (b10) | -0.00271 (b20) | -0.00007 |
+| goblins | 0 | -0.00061 (b10/20) | -0.00017 (b20/40) | -0.00019 |
+| fivecolour | **-0.00030** (b0) | 0 | 0 | -0.00021 |
+| auras | 0 | 0 | -0.00019 (b20) | -0.00005 |
+| breaching, knights, minotaur, slivers, stompy | 0 | 0 | 0 | 0 |
+| antilife | 0 | 0 | +0.00017 (b20) | +0.00005 |
+| burn | 0 | +0.00019 (b10/80) | +0.00019 (b20/80) | +0.00010 |
+| creature_giving | 0 | +0.00084 (b10/20) | -0.00078 (b20/40) | +0.00012 |
+| critter | 0 | +0.00062 (b10/20) | 0 | +0.00017 |
+| kitty | 0 | +0.00102 (b10/20) | 0 | +0.00028 |
+| dragons | 0 | +0.00163 (b10/20) | +0.00038 (b20/40) | +0.00051 |
+| dragonstorm | 0 | +0.00357 (b10) | +0.00169 (b20) | +0.00089 |
+| th | 0 | +0.00519 (b10/80) | -0.00193 (b20/80) | +0.00090 |
+| hinata | **-0.00020** (b0) | **+0.02021** (b10) | **-0.00155** (b20) | +0.00295 |
+
+Eight of the sixteen decks that move are better at d5 than at d3, five are flat, and only burn
+(+0.00019 at both) and dragonstorm/dragons (positive at both, but smaller at d5) stay worse. hinata
+swings from +0.02021 to -0.00155 across the depth step — the whole suite's d3 total is one deck.
+
+### L.3 The leak: `MTG_BP_BASE_CANON` fires at d0, which has no search
+
+d0 should be untouched by this work — it is the greedy configuration by design, and the executor's
+breakpoint re-solve is already gated `depth > 0` with exactly that rationale written at the call
+site. It is not untouched: **6 of 120 d0 cells moved**, on fivecolour (-3.0 turns, 3 games faster)
+and hinata (-2.0, 1 faster 1 slower). Isolated on hinata d0, 1,000 games:
+
+```
+MTG_BP_BASE_CANON=1 (shipped)   6.9730
+MTG_BP_BASE_CANON=0             6.9780
+MTG_BP_NESTED_CANON=0           6.9730   (not this lever)
+63dd9ce3 build                  6.9720
+```
+
+So it is BASE_CANON specifically. The mechanism: the d0 chooser materialises candidate plans through
+`ApplyPlanDirect`, breakpoints fire during that materialisation, and the BASE_CANON branch is gated
+only on `g_rollout_nest == 0` and `g_bp_enum_depth == 0` — there is no depth gate, so it applies
+where there is no search to default for.
+
+**It is benign in magnitude** (-5 turns over 200,000 games, 4 games faster and 1 slower — net
+slightly better) and it is not a greedy `Solve()`, so it breaks no doctrine. The reason to care is
+that **d0 is a comparator**: the learned d0 policy work and the value-leaf depth matrices all read
+d0 as a fixed baseline, and a baseline that drifts under an unrelated search change is worth less.
+
+**Recommendation, not yet applied:** gate BASE_CANON on `depth > 0`. That is a categorical gate
+("there is no search here"), not the turn-keyed scope predicate G.3 argues against, and it matches
+the gate the executor already carries three lines from the analogous call. Cost of applying it: the
+d0 rows return to zero, i.e. the suite gives back 5 turns over 200,000 games. Worth it for a stable
+comparator; the user's call.
