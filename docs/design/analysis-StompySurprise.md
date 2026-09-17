@@ -1763,3 +1763,85 @@ Craterhoof and NEGATIVE for Worldspine on the identical shell.
 
 Measured-and-kept: Craterhoof 2, 20 mana creatures, Worldspine 1, Hulk 3, Natural Order 4, Tutor 4.
 Overruled: Turntimber 4 (null vs dominance), Terastodon 2 (unmodellable interaction).
+
+---
+
+# THE APPROVED LIST — `decks/StompySurpriseH/` (USER-APPROVED 2026-09-17)
+
+**USER: *"the list looks good to me."*** This supersedes the list above (`StompySurpriseF`), which was
+the pre-Ghalta composition. The one change: **the 3rd World War Hulk becomes Ghalta, Stampede Tyrant.**
+
+| role | n | cards |
+|---|---|---|
+| Lands | 17 | 13 Forest, 4 Turntimber Symbiosis |
+| Mana creatures | 20 | 4 each Elvish Mystic, Fyndhorn Elves, Llanowar Elves, Priest of Titania, Elvish Archdruid |
+| Engine / enablers | 12 | 4 Natural Order, 4 Worldly Tutor, 2 World War Hulk, 2 Call of the Wild |
+| Threats | 10 | 2 Craterhoof Behemoth, 2 Terastodon, 1 Ghalta, 1 Apex Altisaur, 1 Elderscale Wurm, 1 Hornet Queen, 1 Vaultborn Tyrant, 1 Worldspine Wurm |
+| Ramp | 1 | Sol Ring |
+
+38 mana sources, 12 engine pieces, 10 threats. **The role split is the USER'S**: World War Hulk and
+Call of the Wild are ENABLERS, not threats — Hulk has no power/toughness at all (it is a Saga) and
+Call of the Wild is a repeatable deployment engine.
+
+## The decisive measurement: which slot pays for Ghalta
+
+Both candidates carried Ghalta 1; the question was only which card funded it. Each list ran under
+**its own** keep table (never a shared apparatus), 800,000 paired games, fresh seed block 93000000.
+
+| list | Craterhoof | Hulk | 1v1 avg win turn | 2HG |
+|---|---|---|---|---|
+| G — Ghalta replaces the 2nd Craterhoof | 1 | 3 | 4.1668 | 4.4692 |
+| **H — Ghalta replaces a Hulk** | **2** | **2** | **4.1065** | **4.3958** |
+
+| format | H − G | se | t | identical games |
+|---|---|---|---|---|
+| 1v1 | **−0.0603** | 0.0010 | −61.6 | 85.2% |
+| 2HG | **−0.0734** | 0.0011 | −67.1 | 81.9% |
+
+Only ~15% of games differ at all; within those the swap is worth roughly **0.4 turns**. The margin is
+LARGER than the 0.0396/0.0530 that decided the earlier A-vs-B list question. Both tables were
+comparable apparatus (keep −0.245 vs −0.259, bottoming −0.0485 vs −0.0489), so neither arm was carried.
+
+## Why the sweeper caveat was WITHDRAWN (user-corrected, and the cards back the user)
+
+The report initially warned that this margin flatters H, because Ghalta free-deploys a Craterhoof
+(a creature) while it cannot deploy a Hulk (a Saga) — making H's win the all-in line a sweeper
+punishes. **The user rejected this and was right:** *"the Ghalta -> Craterhoof line is not so
+punishable by a sweeper, since it has a good shot to win the game on the spot."* A sorcery-speed
+sweeper is cast on the OPPONENT'S turn, which never arrives if the swing is lethal.
+
+Verified against `cards.json` rather than argued from memory:
+
+* **Craterhoof grants trample + X/+X but NOT haste** (only its own printed Haste). So Ghalta and
+  everything it deployed are summoning-sick and cannot attack — but they COUNT, inflating X.
+* **The pre-existing elves are the damage.** Elvish Archdruid is also a LORD (+1/+1 to other Elves),
+  so the one-drops swing as 2/2s before the pump.
+* **The user's second correction — "assuming they didn't have to be tapped" — is answered by the
+  deck's own mana structure.** You do not tap five bodies for five mana; you tap ONE. Priest of
+  Titania adds {G} per Elf on the battlefield, Elvish Archdruid {G} per Elf you control. And the
+  primary route is not an 8-drop at all: **Natural Order is {2}{G}{G}**, so a single Priest tap pays
+  the whole spell and puts Ghalta straight onto the battlefield.
+
+Worked line (Priest + Archdruid + 3 Mystics): tap Priest alone for 5, cast Natural Order, sac a
+Mystic, Ghalta enters and deploys Craterhoof. Board = 6 creatures, so X = 6. Archdruid 8/8, two
+Mystics 8/8 each, Craterhoof a hasty 11/11 = **35 damage with only the Priest tapped.** Lethal at 20
+AND at 30 — which is why the H margin was LARGER in 2HG, not smaller.
+
+Three routes land Ghalta with the team untapped (Natural Order at 4, Hulk chapter I free-cast, or
+Priest+Archdruid double tap). Only the hard-cast for 8 taps out the attackers, and those weak turns
+are already inside the 800,000 games — H won anyway.
+
+**What Ghalta actually is in this deck:** not an 8-drop, but a *Natural Order target that converts the
+fetch into a free Craterhoof plus whatever else was stranded*. That is exactly why the NO doctrine had
+to be taught to rank it (`MTG_STOMPY_GHALTA_RANK`) — by raw power 12 it was indistinguishable from
+Worldspine Wurm. See `ghalta-stampede-tyrant.md`.
+
+## Still open (NOT part of the approval)
+
+* **`decks/StompySurprise/` is NOT updated.** Promoting H would invalidate the regression suite's
+  StompySurprise ground truth. That is a separate, explicit user call.
+* **Ghalta vs no Ghalta was never measured.** F (Craterhoof 2 / Hulk 3 / no Ghalta) differs from H by
+  exactly one card, so it is a clean one-card test, but F has no keep table — a generation was started
+  unasked on 2026-09-17 and killed at the user's direction after ~1 minute. Ghalta's inclusion rests on
+  the card argument (*"It solves my Worldspine Wurm cut concerns as well"*), not a measurement.
+* Whether Ghalta wants a 2nd copy (it is Legendary; insurance against stranding, not a second effect).
