@@ -740,24 +740,24 @@ void AIEngine::HandleMulligan(GameState& state, int max_turns)
     // lookahead bottomer's evaluation rollouts run against an order independent of the one the
     // post-decision reshuffle below will deal.
     //
-    // WHY IT EXISTS, AND WHAT IT ANSWERED (docs/design/fivecolour-bottoming-cause.md 7i). The doc used
-    // to claim mode 1 leaves the lookahead residual sight -- its vetoed picks realise 0.417t while a
-    // blind scorer prices the same hands at 0.070t, and that 6x was read as a leak. If it were a leak
-    // it would have to COLLAPSE under mode 2. It does not: the veto measures -0.417t at mode 1 and
-    // -0.492t at mode 2 (se 0.074), against -1.017t with no confound at all. So mode 1 already removes
-    // the entire peek, what survives is order-INDEPENDENT hand quality (a legitimate blind signal),
-    // and **the confounded A/B is a fair blind-vs-blind test** -- which matters because it is this
-    // repo's adoption gate for EVERY deck's bottoming. The claim is retracted in the doc.
+    // WHY IT EXISTS (docs/design/fivecolour-bottoming-cause.md 7i). The doc claimed mode 1 leaves the
+    // lookahead residual sight. Mode 2 was built to test that and reported "no leak" -- the veto
+    // measuring -0.417t at mode 1 and -0.492t at mode 2 against -1.017t unconfounded.
     //
-    // KEEP THIS LEVER: it is the only way to re-check that conclusion when the bottomer or the
-    // shuffle changes, and re-deriving it from scratch cost a night. Mode 2 changes both arms' games
-    // (the post-shuffle permutes a differently-ordered array), so it is not paired against mode 1;
-    // the statistic to compare is the WITHIN-run veto value. Two structural checks guard the
-    // plumbing (logs/fc_confound2/veto.py): mode 0 and mode 1 must pick IDENTICALLY (both decide
-    // before any reshuffle -- measured 589/589), and mode 2 must DIVERGE (measured 458/589).
+    // THAT TEST WAS NOT DECISIVE, and 7k supersedes its conclusion. Mode 2 changes WHICH order the
+    // lookahead evaluates but preserves the RELATIONSHIP between what it evaluates and what is
+    // played -- in both modes it evaluates the immediate pre-image of the played order. A channel
+    // that rides that relationship survives mode 2 untouched, which is exactly what a sharper probe
+    // then found: at m=1, `lookahead` and a 1-sample blind bottomer are the SAME procedure at the
+    // SAME sample count and differ only in which future they evaluate, yet they sit 0.091t apart
+    // (logs/fc_cells) -- while the blind one is indistinguishable from the rollout-free heuristic.
+    // Two blind estimators cannot differ by that much. Structural checks still hold (mode 0 vs 1
+    // pick identically 589/589; mode 2 diverges 458/589), so the plumbing is right and the
+    // inference was wrong.
+    //
     // Unset/"0"/"1" leave this unreachable => byte-identical to every measurement taken so far.
     static const int confound_mode = EnvInt("MTG_CONFOUND_BOTTOM", 0);
-    if (confound_mode >= 2 && mulligan_count > 0)
+    if (confound_mode == 2 && mulligan_count > 0)
     {
         ap.library.Shuffle(state.game_seed + 0xD1B54A32D192ED03ULL);   // distinct from the post seed
     }
@@ -779,6 +779,30 @@ void AIEngine::HandleMulligan(GameState& state, int max_turns)
     if (confound_bottom && mulligan_count > 0)
     {
         ap.library.Shuffle(state.game_seed + 0x9E3779B97F4A7C15ULL);
+
+        // MODE 3 -- ALSO RE-SALT THE MID-GAME SHUFFLES. The reshuffle above decorrelates the DRAW
+        // ORDER, and nothing else. It does not touch shuffle_salt / shuffle_salt_search, which
+        // default EQUAL (GameState.h) -- so every mid-game shuffle the real game will resolve
+        // (fetchlands, tutors, Gamble) uses the SAME salt the lookahead's evaluation rollouts just
+        // used, because those rollouts inherit the state's salts wholesale. The blind bottomer
+        // decorrelates itself explicitly (`trial.shuffle_salt_search = rs`, below in BottomCards);
+        // the clairvoyant one never has. That asymmetry is a channel from the pre-decision
+        // evaluation into the post-decision game that survives a library reshuffle, and it is the
+        // leading candidate for the 0.091t two-blind-estimators-cannot-differ gap in 7k.
+        //
+        // FiveColour is the deck most exposed to it: five fetchlands, so it re-shuffles mid-game
+        // more than almost anything in the suite -- which would explain why it is the deck that
+        // fails this gate while decks with fewer shuffle effects pass.
+        //
+        // Mode 3 = mode 1 + this. Kept a separate mode so mode 1 stays byte-identical and every
+        // historical measurement remains reproducible; if mode 3 closes the gap it should become
+        // the gate (user sign-off + a documented rebaseline), not silently replace mode 1.
+        if (confound_mode >= 3)
+        {
+            const uint64_t resalt = SaltSeed(state.game_seed, 0xB07704B1E5ULL);
+            state.shuffle_salt        = resalt;
+            state.shuffle_salt_search = resalt;
+        }
     }
 
     m_kept_opening_hand.clear();
@@ -1655,6 +1679,18 @@ void AIEngine::BottomCards(GameState& state, int count, int max_turns)
             static const bool s_blind_bottom = EnvOn("MTG_NC_BLIND_BOTTOM");
             static const int  s_blind_k      = []{ const char* e = std::getenv("MTG_NC_BLIND_BOTTOM_K");
                                                    return (e && *e) ? std::max(1, std::atoi(e)) : 4; }();
+            // SEED DECORRELATION (MTG_NC_BLIND_BOTTOM_SALT, default 0 => byte-identical).
+            // The blind reshuffle below uses game_seed + 0x9E3779B97F4A7C15*(k+1) + ..., so at
+            // k=0,i=0,j=0 it is EXACTLY MTG_CONFOUND_BOTTOM's post-decision seed
+            // (game_seed + 0x9E3779B97F4A7C15, HandleMulligan). Under the confound that makes the
+            // FIRST candidate of each decision the only one evaluated against a future correlated
+            // with the one the game will actually deal -- a per-decision asymmetry that favours
+            // j=0, and at K=1 it fires on every decision. Harmless for the NC work this flag was
+            // built for (which does not run the confound), fatal for using the blind bottomer as a
+            // measuring instrument INSIDE a confounded A/B. Set a salt there to break it.
+            static const unsigned long long s_blind_salt =
+                []{ const char* e = std::getenv("MTG_NC_BLIND_BOTTOM_SALT");
+                    return (e && *e) ? std::strtoull(e, nullptr, 10) : 0ULL; }();
             std::vector<int> win_turn(hand_size, 0);
             int best_win = std::numeric_limits<int>::max();
             {
@@ -1693,7 +1729,8 @@ void AIEngine::BottomCards(GameState& state, int count, int max_turns)
                         const uint64_t rs = state.game_seed
                                           + 0x9E3779B97F4A7C15ULL * (static_cast<uint64_t>(k) + 1)
                                           + 1000003ULL * static_cast<uint64_t>(i)      // per bottom step
-                                          + 7919ULL   * static_cast<uint64_t>(j);      // per candidate
+                                          + 7919ULL   * static_cast<uint64_t>(j)       // per candidate
+                                          + s_blind_salt;                              // see above
                         trial_ap.library.Shuffle(rs);                   // unseen future draw order
                         trial_ap.library.push_back(std::move(bottomed)); // the removed card truly bottoms
                         trial.shuffle_salt_search = rs;   // rollout mid-game shuffles fold this too

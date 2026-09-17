@@ -1,20 +1,26 @@
 # FiveColour's bottoming table loses the confounded A/B — state of the investigation
 
-**Status 2026-09-17: EXPLAINED — ONE cause, and it is not the sampling budget.** The bottoming argmin
-selects for cells the generator's own rollout model flatters (an optimizer's curse against the
-simulator, ~0.08t per disagreement game) — a bias no amount of re-generation can remove, because a
-fresh re-measurement inherits it. Against a genuinely blind bottomer the table is 0.064t/game FASTER.
-A second, real but minor defect (argmin-only sub-refinement, ~0.01t) is fixed in the generator.
-See §7, which supersedes the 2026-09-15 status below.
+**Status 2026-09-17 (FINAL): THERE WAS NO DEFECT. The gate was broken, not the table.**
+`MTG_CONFOUND_BOTTOM` reshuffled the draw order but left `shuffle_salt`/`shuffle_salt_search`
+untouched, so the lookahead's evaluation rollouts kept resolving mid-game shuffles with the very salt
+the real game would use. That leak is worth **0.073t in the lookahead's favour** — four times the
+0.018t by which FiveColour's table "failed". Re-salting at confound time (mode 3) closes it to
+**+0.0000t ± 0.0135**, and under the fixed gate the shipped table **WINS**:
 
-> **CORRECTION 2026-09-17.** This status previously claimed a *second* cause: that
-> `MTG_CONFOUND_BOTTOM` fails to blind the lookahead, so the A/B the table loses still rewards a peek
-> worth 6× its blind value. **That is wrong and is now measured to be wrong** (§7i). Reshuffling
-> *before* the decision as well as after leaves the veto's value unchanged, so mode 1 already removes
-> the entire peek. The 6× gap is the same model bias as the one cause above, seen on the lookahead's
-> selected set instead of the table's. Consequence: **the confounded A/B is a fair blind-vs-blind test
-> and remains this repo's valid adoption gate for bottoming** — every deck that passed it still passes.
-> The cost of the correction is that FiveColour's loss is fair too, rather than an artefact of the test.
+```
+bottoming, MTG_CONFOUND_BOTTOM=1 (leaky gate):  +0.018375t    0/16 seeds   "loses"
+bottoming, MTG_CONFOUND_BOTTOM=3 (fixed gate):  -0.058200t   16/16 seeds   WINS, mean/se -21.0
+```
+
+The 0.076t swing matches the independently measured leak. **No regeneration is or ever was needed**;
+the 20-day artifact stands. See §7k, which supersedes everything below it. The generator's
+argmin-only sub-refinement defect (~0.01t) was real and is fixed regardless (§7f).
+
+> **RETRACTED 2026-09-17 — §7i.** An earlier revision of this status claimed the gate had been
+> *verified fair* by mode 2. That is wrong (§7k). Mode 2 changed which order the lookahead evaluates
+> but preserved the relationship between it and the played order, so it could not see this channel.
+> The status before that claimed a leak on different (also wrong) reasoning. Net: the leak is real,
+> both earlier arguments about it were unsound, and only the m=1 same-procedure probe settled it.
 
 **Status 2026-09-15 (superseded): the cause is UNEXPLAINED. Six hypotheses tested, five refuted, one in flight.**
 This document is the running record so nobody re-tests a dead one. It supersedes the "still live"
@@ -564,3 +570,100 @@ Traps this walked into, all of which cost a run each:
   shipped table both average exactly 4.8700 on 1000 games while differing on 56 of them — the effects
   cancel in the mean. A "the control reproduces the baseline" gate that reads the mean will pass on a
   profile that plays differently in one game in eighteen.
+
+### 7k. 2026-09-17 — THE ANSWER: the gate leaked, and the table was fine all along
+
+USER, on being shown that the table lost to the lookahead: *"I am very suspicious of the fact that
+the lookahead which plays [one] game is beating the profile which runs many."* That suspicion was
+correct, it is the only reason this was found, and the instinct generalises: **when a 1-sample
+estimator beats an 18-30-sample one, suspect the measurement before the estimate.**
+
+#### The probe that found it
+
+USER's design: don't recompute the table, regenerate only the cells the games actually need.
+`MTG_NC_BLIND_BOTTOM` already does exactly that — per candidate removal it reshuffles the trial
+library to an unseen future and averages K rollouts. The key property is structural:
+
+> **At m=1 the bottoming decision removes ONE card, so no legal-subset table is built
+> (`MTG_BOTTOM_LEGAL` needs `count>1`), and `lookahead` and `blindK1` are THE SAME PROCEDURE AT THE
+> SAME SAMPLE COUNT** — one rollout per candidate. They differ only in which future each rollout is
+> evaluated against: the real library order, versus a fresh reshuffle. Under a working confound the
+> game plays neither, so both are single draws from the same distribution. **They must perform
+> equally.** Any reproducible gap is a leak, and needs no theory to interpret.
+
+They did not perform equally (`logs/fc_cells`, `logs/fc_leak`, 1000 games, seed 1004004):
+
+| confound mode | lookahead | blindK1 | gap (all) | gap/se | gap (m=1) |
+|---|---|---|---|---|---|
+| 0 — none | 4.7790 | 4.9460 | −0.1670 | −12.2 | −0.1847 |
+| **1 — the shipped gate** | 4.8640 | 4.9370 | **−0.0730** | **−5.8** | **−0.0909** |
+| 2 — pre+post reshuffle | 4.8680 | 4.9540 | −0.0860 | −6.7 | −0.0767 |
+| **3 — post reshuffle + re-salt** | 4.9330 | 4.9330 | **+0.0000** | 0.0 | +0.0170 |
+
+Noise floor (same blind estimator, two salts): 0.0180 all / 0.0028 at m=1. Validity check: blindK1 is
+flat across modes 0/1/2 (spread 0.017), as it must be — it never looks at the real order.
+**The shipped gate removed 54 % of clairvoyance and kept the rest.**
+
+#### The channel
+
+`shuffle_salt` and `shuffle_salt_search` default EQUAL (`GameState.h`), and a rollout inherits the
+state's salts wholesale. So every mid-game shuffle the real game resolves — fetchlands, tutors,
+Gamble — uses the same salt the lookahead's evaluation rollouts just used. The confound reshuffled the
+**draw order and nothing else**, so this channel passed straight through it. The blind bottomer
+decorrelates itself explicitly (`trial.shuffle_salt_search = rs`); the clairvoyant one never did.
+
+**This is why FiveColour, specifically.** Five fetchlands: it re-shuffles mid-game more than almost
+anything in the suite, so it has the most bandwidth on the leaking channel. Decks with few shuffle
+effects leak little and passed their gates honestly.
+
+Mode 3 = mode 1 + re-salting both salts after the decision. Mode 1 is left byte-identical so every
+historical measurement stays reproducible.
+
+#### The verdict, under a fair gate
+
+16 seeds × 1000 games/arm, shipped table vs lookahead, `MTG_CONFOUND_BOTTOM=3`
+(`logs/fc_fix/verdict_m3/`):
+
+```
+lookahead 4.9074   exhbottom 4.8492   delta -0.0582t   16/16 seeds
+spread min -0.0740  median -0.0615  max -0.0350  sd 0.0111  se 0.0028  mean/se -21.00
+```
+
+**+0.018t / 0-of-16 becomes −0.058t / 16-of-16.** The 0.076t swing matches the 0.073t leak measured
+independently. §1's "fact to be explained" was an artefact of the instrument. Six hypotheses were
+tested against it, five refuted, a sixth ("optimizer's curse against the simulator") adopted — and
+the fact itself was never real.
+
+#### What this invalidates, and what it does not
+
+* **FiveColour needs no regeneration.** The 20-day artifact stands and ships as-is.
+* **Every deck that PASSED its confounded gate is still safe** — the bar was ~0.07t too high, so
+  passing it is a *stronger* result than advertised, not a weaker one. Nothing needs re-adopting.
+* **Only FAILURES are suspect**, and FiveColour was the failure. Any future "the table loses its
+  confounded A/B" must be re-measured under a fixed gate before anyone spends a day regenerating.
+* **§7d-bis is now doubtful and is NOT retired.** Its level check compared scorer V against realised
+  win turns from mode-1 games — i.e. through the leak. The lookahead-arm half (V "pessimistic" by
+  +0.067t on the lookahead's picks) is roughly the size of the leak and is probably just the leak.
+  The table-arm half (V flatters its own picks by 0.077t) involves a blind arm and may survive. It
+  needs re-measuring under mode 3 before any of it is quoted again.
+
+#### The guard, so this cannot recur
+
+`test/confound_gate_check.sh` — a property test of the INSTRUMENT, not of any deck. It runs the two
+m=1 same-procedure arms plus a second-salt blind arm for an empirical noise floor, and fails if
+seeing the real order buys anything. Not in smoke (~35 min, and it needs the game count for power):
+run it whenever the bottomer, the confound, the shuffle or the salts change, and before trusting a
+new "the table loses" verdict.
+
+#### Method notes, earned expensively
+
+* **A 1-sample estimator beating an N-sample one is an instrument bug until proven otherwise.** The
+  user said this in one sentence; the doc had spent two weeks building theory on top of the anomaly.
+* **Find a comparison where two arms are the SAME PROCEDURE and differ in ONE thing.** m=1 made
+  lookahead and blindK1 identical except for which future they saw, so the gap needed no model to
+  interpret. Every earlier probe compared things that differed in several ways at once.
+* **A structural check can confirm the plumbing and still leave the inference wrong.** §7i's checks
+  (mode 0 vs 1 pick identically; mode 2 diverges) both passed and were both true. They said nothing
+  about whether mode 2 severed the channel — which was the actual question.
+* **Measure the noise floor with the same estimator twice.** Two salts of blindK1 bounded luck at
+  0.003–0.018t, which is what made a 0.073t gap unarguable.
