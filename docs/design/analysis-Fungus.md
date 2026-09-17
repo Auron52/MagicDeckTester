@@ -502,9 +502,22 @@ deck. On a deck with 24-minute games it could be far worse, so profiling this ca
 **Profiled — full write-up in [fungus-token-search-cost.md](fungus-token-search-cost.md).** Summary:
 it is **not** a plan explosion (avg 15.7 plans/enumeration), **not** memory (128 MB peak) and
 **not** the real board (15 permanents at d0). It is **58x the cost PER NODE** on top of 78x the
-nodes — board-size scaling inside ROLLOUTS, which explore token-engine lines real play never
-reaches. `MTG_BP_SEARCH=0` looked like a 1.88x win on the worst single game and was **rejected**
+nodes. `MTG_BP_SEARCH=0` looked like a 1.88x win on the worst single game and was **rejected**
 on a 100-game sample (1.2% faster, slightly worse average).
+
+**ROOT-CAUSED 2026-09-17, and the first diagnosis was wrong.** The "58x per node" was read as
+board-size scaling in `GameState` deep copies, pointing at a Saproling-fusion rewrite. A `perf`
+profile of `--seed 1600607 --game-index 607` says otherwise: **45.1% of the game was
+`CountControlledDragons`**, which `FireEtbWatchers` calls on every permanent that enters, and which
+passed a string LITERAL to a `const std::string&` parameter — a heap temporary per permanent per
+ETB. A mono-green deck was spending nearly half its search counting Dragons. `CardHasSubtype` now
+takes `std::string_view` and the hot site compares an interned id: **311.90 s -> 218.72 s (1.43x)**
+on that game, win turn 6.0000 either way, smoke 80/0 with **0 play-changed**.
+
+Two side-findings worth carrying: **`perf` is not blocked here** (the "Bad address" dead end was
+the workspace mount — write the sample to `/tmp`), and the `CardDatabase::Has*()` presence gates
+are computed over the whole 387-card `cards.json` rather than the deck, so they are **always true
+and gate nothing**. Both are written up in the perf doc.
 
 ## Stage log
 

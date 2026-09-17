@@ -4263,10 +4263,33 @@ inline void PerformEndStepLifegainTokens(GameState& state)
 // executor (EffectHandler / GameEngine / AIEngine) and the rollout (TurnSolver) so the ETB ping
 // chain, token generation, and mana->power conversion stay lockstep (Stage-5 fd-diverge otherwise).
 
-inline bool CardHasSubtype(const Card& c, const std::string& sub)
+// TAKES string_view, NOT const std::string& -- and that is a PERFORMANCE FIX, not a style choice.
+// 15 of this function's ~61 call sites pass a STRING LITERAL, and with a `const std::string&`
+// parameter each of those constructed a temporary std::string per call: malloc + strlen + copy +
+// free, to answer a question about at most four interned ids. It is invisible to every correctness
+// gate (the answer is identical), so nothing caught it until a deck put 298 permanents on the
+// board: perf on the Fungus slow game `--seed 1600607 --game-index 607` (2026-09-17) attributed
+// **45.1% of the whole game** to CountControlledDragons below, of which the string temporaries were
+// the large majority -- string ctor 11.3%, strlen 5.9%, _M_dispose 3.1%, plus most of memmove's
+// 6.3%. A Fungus game spent nearly half its time counting Dragons it does not play.
+// See docs/design/fungus-token-search-cost.md.
+//
+// string_view from a literal is free (GCC constant-folds the length at -O3) and `std::string ==
+// std::string_view` allocates nothing, so every call site is fixed at once with no signature churn:
+// a `const std::string&` argument converts implicitly. For the hot sites prefer CardHasSubtypeId.
+inline bool CardHasSubtype(const Card& c, std::string_view sub)
 {
     for (const std::string& s : c.m_subtypes) { if (s == sub) { return true; } }
     return false;
+}
+
+// Interned-id form, for a site hot enough that even four short string compares matter. The id is
+// resolved ONCE by the caller (a function-local `static const uint16_t`, initialised after the DB
+// load) and this collapses to a scan of at most four uint16_t. Ids are assigned in first-seen order
+// at load and never change for an already-interned name, so caching one is safe across a Register().
+inline bool CardHasSubtypeId(const Card& c, uint16_t sub_id)
+{
+    return c.m_subtypes.HasId(sub_id);
 }
 
 // "As this permanent enters, choose a creature type" (Urza's Incubator). Returns the interned id of
@@ -4337,12 +4360,19 @@ inline uint16_t ReducerSubtypeId(const CardDefinition& def, const Permanent& per
 
 // Number of Dragons `controller` controls (by printed/token subtype "Dragon"). Counts tokens
 // (they carry subtype "Dragon"); animated lands are ignored (never Dragons in these decks).
+// THE SINGLE HOTTEST SITE IN THE ENGINE ON A WIDE BOARD. FireEtbWatchers calls this on EVERY
+// permanent entering the battlefield, so the cost is O(enters x battlefield) -- which is quadratic
+// for any deck that makes tokens in bulk. Measured on Fungus (perf, 2026-09-17): 45.1% of a slow
+// game, in a deck with no Dragon in it. Hence the interned id rather than a name compare; see the
+// note on CardHasSubtype above.
 inline int CountControlledDragons(const GameState& state, int controller)
 {
+    static const uint16_t kDragonId = SubtypeRegistry::Instance().Id("Dragon");
+    if (kDragonId == SubtypeRegistry::kNone) { return 0; }   // no Dragon card loaded at all
     int n = 0;
     for (const Permanent& p : state.battlefield)
     {
-        if (p.controller_index == controller && CardHasSubtype(p.card, "Dragon")) { ++n; }
+        if (p.controller_index == controller && CardHasSubtypeId(p.card, kDragonId)) { ++n; }
     }
     return n;
 }
@@ -10772,7 +10802,7 @@ inline bool ExileGraveyardLandForMana(GameState& state, int controller)
 // accounting site (BuildPool / BuildAvailableMana / greedy tap / backtracker) so the executor,
 // rollout, and planner all see the same variable burst. For non-storage sources this equals
 // ManaProducedPerTap(def), so passing it everywhere is byte-identical for every non-storage deck.
-inline bool CardHasSubtype(const Card& c, const std::string& sub);   // defined below (Dragonstorm helpers)
+inline bool CardHasSubtype(const Card& c, std::string_view sub);     // defined below (Dragonstorm helpers)
 
 // Scaled mana DORK (Priest of Titania / Elvish Archdruid): a CREATURE whose "{T}: Add {G} for
 // each <subtype>" yield is the live subtype count. Distinct from IsScaledManaLand (Three Tree

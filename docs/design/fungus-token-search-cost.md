@@ -1,7 +1,12 @@
 # Fungus: pathological per-game search cost on token boards
 
-**Status:** diagnosed, not fixed. Deferred here per the CLAUDE.md rule that deferred work lives in
-`docs/design/`, not private agent memory.
+**Status: ROOT-CAUSED AND PARTLY FIXED (2026-09-17).** The first diagnosis below (board-size
+scaling in `GameState` deep copies, remedy = fuse fungible Saproling tokens) was **WRONG**, and it
+is left in place because the reasoning that produced it was sound and someone will otherwise
+re-derive it. A `perf` profile — see **The actual cause**, further down — showed the deck was
+spending **45% of a slow game counting Dragons it does not play**. Fixing that is a
+one-signature change worth a measured **1.43x**. Read that section before acting on anything above
+it.
 
 **Found:** 2026-09-17, during the Fungus deck's Stage 5c2 `leaf_tiebreak_check` run. Surfaced by
 the batch runner's own `SLOW-GAME` reporting, which is exactly the signal CLAUDE.md says to watch.
@@ -84,7 +89,115 @@ Note also that disabling breakpoints did **not** reduce the decision count (stil
 decision inflation on slow games has a different cause and is still unexplained. That is the
 loose thread most worth pulling next.
 
-## The direction that remains
+## The actual cause (2026-09-17, `perf`)
+
+**FIRST: `perf` WORKS IN THIS CONTAINER.** The earlier note that it "failed with Bad address" was
+right about the symptom and wrong about the cause: it is the **workspace mount**, not the kernel.
+Write the sample file to `/tmp` and use a software event and it just works — `gdb` is still blocked
+by `ptrace_scope=1`, but nothing needed it.
+
+```
+perf record -e cpu-clock -F 499 --no-buildid -o /tmp/slow.perf.data -- \
+    ./build/Profile/mtg decks/Fungus/Fungus.cod --profile decks/Fungus/Fungus.profile.json \
+    --seed 1600607 --game-index 607 --games 1 --threads 1
+perf report -i /tmp/slow.perf.data --stdio --no-children          # flat
+# call graph: add  -g --call-graph dwarf,16384   (the Profile config is -O3 -g, no frame pointers)
+```
+
+Flat profile of the slow game (`--seed 1600607 --game-index 607`, 168K samples):
+
+| symbol | self |
+|---|---|
+| `FireEtbWatchers` | 16.93% |
+| `CardDatabase::LookupCached` | 14.75% |
+| `CardHasSubtype` | 12.63% |
+| `FireCreatureEnterWatchers` | 12.08% |
+| `std::string::string(char const*, allocator const&)` | 11.86% |
+| `__memmove_avx_unaligned_erms` | 6.38% |
+| `__strlen_avx2` | 6.32% |
+| `std::string::_M_dispose` | 3.09% |
+| `RefreshDevotionCreatures` | 2.15% |
+
+And with call graphs, the inclusive number that explains all of it:
+
+```
+SimulateEndAndStartNextTurn -> CreateToken -> CreateTokenOnce -> FireEtbWatchers   89.94%
+   └─ CountControlledDragons                                                       45.14%
+```
+
+**A mono-green Fungus deck spent 45% of its search counting Dragons.** `FireEtbWatchers` calls
+`CountControlledDragons` on EVERY permanent that enters the battlefield, unconditionally, before it
+checks whether any permanent even has `dragon_ping_on_enter`. That function was:
+
+```cpp
+if (p.controller_index == controller && CardHasSubtype(p.card, "Dragon")) { ++n; }
+```
+
+and `CardHasSubtype` took `const std::string&`, so the **string literal constructed a heap
+temporary per permanent per ETB** — malloc + strlen + copy + free, to answer a question about at
+most four interned uint16 ids. Cost is O(enters x battlefield), which on a deck that makes dozens
+of tokens a turn onto a 298-permanent rollout board is quadratic.
+
+**This is what the "58x cost per node" actually was.** It is not `GameState` deep-copy scaling.
+Note why no gate caught it: the answer is identical either way, so play is byte-identical and every
+correctness test passes. Only a profile can see it.
+
+### The fix, and what it bought
+
+`CardHasSubtype` now takes `std::string_view` (no allocation; fixes all ~61 call sites at once,
+since `const std::string&` converts implicitly), and `CountControlledDragons` compares a cached
+interned id via the new `CardHasSubtypeId`.
+
+Measured A/B, same game, single-threaded, idle box:
+
+| arm | wall | win turn |
+|---|---|---|
+| before | 311.90 s | 6.0000 |
+| after | **218.72 s** | 6.0000 |
+
+**1.43x, with play byte-identical** (smoke digests unchanged).
+
+### The rollout board census (`MTG_BOARD_CENSUS`)
+
+The "missing measurement" this doc asked for now exists, in `src/ai/TurnSolver.cpp`
+(`namespace boardcensus`), sampling the battlefield at the rollout turn-step. Counters only, so an
+armed run is byte-identical; `MTG_BOARD_CENSUS_STRIDE` (default 64) keeps it affordable.
+
+200 games at play settings: rollout boards reach **298 permanents** (real play tops out at 15),
+with a single fungible class of **288**. Mean board is only 8.3 — the cost lives entirely in the
+0.5% of steps above 25 permanents. It also reports the fusion prize in both cost currencies
+(`linear_work xN` / `quadratic_work xN`) and which cards carry the collapsible mass; on Fungus that
+is **Forest first, Saproling second**, which is itself a correction to the guess below.
+
+## What is left, and the general defect behind it
+
+After the Dragon fix the remaining profile is still the same shape: `LookupCached` (14.9%) plus
+`FireEtbWatchers` / `FireCreatureEnterWatchers` self time, all of it **repeated full-battlefield
+walks per ETB**. Per entering permanent the cascade currently walks the board about five times
+(`RefreshDevotionCreatures`, `RefreshCityBlessing` twice — once per player, `FireCreatureEnterWatchers`,
+the Lathliss pass, the Scourge pass), each with a `LookupCached` per permanent, for mechanics the
+deck does not contain.
+
+**The gates that were supposed to prevent this do not work.** `CardDatabase::HasQuestAnthem()`,
+`HasTokenDoubler()` and `HasCounterDoubler()` are computed over `m_cards`, which is the **entire
+387-card `cards.json`**, not the deck being played. Doubling Season and Beastmaster Ascension are
+in that file, so all three are **unconditionally true in every run** and gate nothing. The comment
+on `HasQuestAnthem` claiming "False for every deck but Fungus, so the scan is provably skipped" is
+wrong. (`MaxHandSizeAnthemMax` is different and is fine — it is a runtime *bound* on hand size, not
+a presence flag.)
+
+So the fix wants a **per-GAME** mechanic-presence summary, not a per-database one. The shape that
+looks right:
+
+* a small bitmask on `GameState`, OR-ed with a permanent's mechanic bits as it ENTERS and
+  recomputed on the rarer leave events;
+* each cascade walk skips when its bit is clear;
+* **error in the permissive direction only** — a mask that is too inclusive is merely slow, one
+  that is too exclusive silently drops a trigger, so entering must only ever add bits.
+
+That attacks the remaining ~40% and, unlike token fusion, it helps every deck rather than this one.
+
+## The direction that was guessed, and is now NOT the priority
 
 The repo already has a USER-blessed doctrine for exactly this shape: **fuse fungible tokens for the
 search** (`clue-fusion-search-shortcut`). Represent identical vanilla 1/1 Saproling tokens as one
