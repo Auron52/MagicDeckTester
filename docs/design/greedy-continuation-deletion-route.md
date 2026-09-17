@@ -1018,8 +1018,25 @@ Design, so it is not re-derived later:
 
 * **Arms:** a binary built at 63dd9ce3 against the shipped binary. Paired — same decks, same seeds,
   same games per rung.
-* **Rungs:** each deck's own play budget x {1, 2, 4, 8}, **capped at 100 ms pooled**. A 500 ms rung
-  must run alone: one 500 ms EDF game has hit ~30 GB RSS and OOM-killed the box.
+* **Rungs raise DEPTH AND BUDGET TOGETHER** (USER: *"higher budget + depth"*), because the tier
+  split in Addendum J shows depth carrying at least as much of the effect as budget — d3/b10 is the
+  only configuration where the new engine loses, and d5/b20 already wins. A ladder that raised
+  budget alone would hold the losing variable fixed and understate the trend. Suggested rungs,
+  anchored on configurations that already have a data point:
+
+  | rung | depth | budget | why |
+  |---|---|---|---|
+  | 0 | 3 | 10 ms | the one configuration where the new engine loses (+0.00090/game) |
+  | 1 | 5 | 20 ms | the suite's deepest cells; already -0.00051/game |
+  | 2 | 5 | 40 ms | budget step at fixed depth — isolates the budget axis |
+  | 3 | 6 | 40 ms | depth step at fixed budget — isolates the depth axis |
+  | 4 | 6 | 80 ms | both |
+
+  Rungs 2 and 3 exist so the two axes can be read apart rather than confounded. **Cap at 100 ms
+  pooled**: a 500 ms rung must run alone, because one 500 ms EDF game has hit ~30 GB RSS and
+  OOM-killed the box. Size games per cell DOWN as the rungs climb — d6/b80 on hinata or melira (49%
+  of suite cost between them) is orders of magnitude dearer than d3/b10, and an equal-games ladder
+  would spend nearly all its wall on the top rung.
 * **Shape:** ONE `mtg --batch` manifest over every (deck x rung x arm) cell. Not one batch per rung
   and not one per arm — a per-rung split is the wave pattern that has twice starved the box to 3 of
   24 cores.
