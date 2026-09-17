@@ -8974,5 +8974,8 @@ scenarios 99/99, combo-off 34/34, smoke byte-identical to the 12.14 baseline (80
 Read it with `python3 logs/edf_longtail/hz_batch/join_report.py logs/edf_longtail/hz_batch/job0_h4fix2.rows`
 (the join against the exact reference) and a row diff against `job0_h4fix.rows` (fix #1 alone): the rows
 that move earlier between the two are the samples the {C} branch had over-labelled in the exact reference,
-on top of the 19 of 12.16. Expected: 900193 t2 6.333, nothing later than before. The result is not in this
-ledger yet; whoever reads it first records it here.
+on top of the 19 of 12.16. Expected: 900193 t2 6.333, nothing later than before. Result (00:06 UTC): 250 games in 7 m 23 s on a quiet box; against the exact
+reference 1,041 same / 7 later / 19 earlier, mean -0.0044 -- and against the fix-#1 rows **0 rows changed**.
+At H=4 the playout had already labelled 900193 t2 6.333 in every run, so fix #2 changes the exact ladder's
+cost on that sample (16 s against 1 m 49 s), not any H=4 label, and the {C} branch over-labelled nothing
+else in job 0. The exact reference's known over-labelling stands at 19 of 1,067 samples.
