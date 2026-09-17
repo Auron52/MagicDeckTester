@@ -510,4 +510,36 @@ on a 100-game sample (1.2% faster, slightly worse average).
 
 * **2026-09-17** — Stage 1 coverage run; 11 missing cards; four engine mechanics absent
   (spore counters, devour, quest counters, Doubling Season). Ledger opened. Research fan-out
-  launched.
+  launched (11 Opus agents).
+* **2026-09-17** — Stages 2-4 complete. All 14 cards implemented and verified against Scryfall;
+  four new mechanics built; TWO provider misroutes found and fixed (Goblins via
+  `sac_creature_outlet`, EldraziFlicker via `is_land_aura`); profile generated.
+* **2026-09-17** — Stage 5 complete. nonconv 0, fd-diverge 0, multi-depth monotone
+  (5.99/5.61/5.60), 16-game claude-play sweep all matching the search with one real bug found and
+  fixed, viewer audit clean, 5c2 NO-SIGN (default kept). **smoke 80/0, regression 108/0,
+  `verify_deck.py` GATE PASS.**
+* **2026-09-17 18:08Z** — **Value-leaf generation LAUNCHED**, frozen at `64464c25`
+  (src tree `8d6d07f7b81e`), play fingerprint `8deac4f6131c`. Phase A: 10 jobs in one pooled
+  queue; utilisation checked at ~24/24 cores, 4.6 GB RSS. Expected to run for hours —
+  `bash scripts/valueleaf.sh status decks/Fungus` for progress.
+  *Rationale beyond the user's request: the perf finding is a ROLLOUT-cost problem, and the value
+  leaf replaces the horizon rollout with an O(1) evaluator, so it is also the natural remedy.*
+
+## Open questions for the user (all non-blocking; defaults taken, work never halted)
+
+1. **Q1 — searched second main?** Fungus can attack with Saprolings then sacrifice the spent
+   attackers post-combat (the Birthing Pod double-dip). Shipped first-main-only (the default);
+   settle by measurement with `MTG_FORCE_USES_M2=1` rather than judgement. Not yet run.
+2. **Q2 — devour victim selection** is auto-resolved (count IS searched). PROVISIONAL.
+3. **Q3 — the five instant-speed / "you may" deferrals** listed in §2 of the 6a disclosure.
+   PROVISIONAL — an unanswered deferral is never "approved".
+4. **Q4 — `--blocks 24` re-run of 5c2** to pin the tie-break direction (~3.5 h). Not run; the
+   default is already the safe side.
+5. **Q5 — should Fungus join the regression suite?** `verify_deck.py` warns that nothing tracks
+   its play digest otherwise. Blocked today by the perf finding: a 24-minute game would blow the
+   smoke/regression time budgets.
+6. **Q6 — the `is_land_aura` misroute is GENERAL.** Any deck with Wild Growth / Fertile Ground /
+   Utopia Sprawl inherits EldraziFlickerProvider. Fixed for Fungus only.
+
+**Not pushed.** Engine changes are substantial and CI (Linux + Windows) has not run; MSVC is
+unverified from this container. `git push` when you want the Windows/determinism-parity signal.
