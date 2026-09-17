@@ -1030,3 +1030,49 @@ Design, so it is not re-derived later:
   spending 2x the units is a different result from one where it wins at parity.
 * **Read:** the quantity of interest is the SLOPE of delta(new - old) against budget, not any single
   rung. One rung's t-stat settles nothing (a prior lever gave +2.36 then -2.07 on the same binary).
+
+## Addendum J — the regression is confined to d3/b10, which NO deck ships
+
+USER 2026-09-17: *"d3 b10 is not as important as play settings ... even if d3 b10 suffers a bit, if
+play settings are improved that is probably worth it"*, and *"play settings are the most commonly
+used and important. Less commonly we may aim for a higher budget. In those cases it will hopefully
+do better."*
+
+Splitting the SAME accepted tier runs by cell type instead of by deck settles this:
+
+| configuration | games | extra turns | per game | |
+|---|---:|---:|---:|---|
+| d0 b0 (both tiers) | 40,000 | +1.0 | +0.00003 | greedy by design; nothing to change |
+| **d3 b10 (both tiers)** | **17,765** | **+16.0** | **+0.00090** | **all of the damage is here** |
+| **d5 b20 (both tiers)** | **11,830** | **-6.0** | **-0.00051** | **better than the old engine** |
+| play settings, 20 decks x 300 | 6,000 | -18.0 | **-0.00300** | better again, by 6x |
+
+The last row is the `units_gt` probe: each deck at the depth and budget its own `value_play` sidecar
+specifies (mostly d5/b20, hinata d5/b30, burn and fivecolour and stompy d6/b20, goblins d6/b40),
+which is what the engine actually plays. Per deck there: hinata -0.0300, fluctuator -0.0200,
+th -0.0067, mirrorwing -0.0066, melira +0.0034, the other fifteen unchanged. **Four decks better,
+one worse.**
+
+So the trend across four independent configurations is monotone in how much search the configuration
+affords:
+
+```
+d0 b0        +0.00003   (no search)
+d3 b10       +0.00090   (shallow, 10 ms)
+d5 b20       -0.00051   (the suite's deepest cells)
+play settings -0.00300   (real depth, real budget, value-leaf sidecars)
+```
+
+That is exactly the shape the mechanism predicts, and it is the argument the earlier addenda missed
+by aggregating over cell types. A greedy continuation is **budget-insensitive** — it returns one
+line at any budget — so it is at its relatively strongest where there is least budget to lose, which
+is d3/b10. A searched continuation converts budget into reachability: deferred waves land, ranks
+past W open, more breakpoints get branched instead of defaulted. The deeper and richer the
+configuration, the more the deletion pays.
+
+**Caveat, because these are not a controlled ladder.** The four rows have different deck mixes,
+different sample sizes and different sidecar states, so this is a consistent direction rather than a
+measured slope. The budget ladder in I.4 is the controlled version and should be run before the
+claim is leaned on. If it confirms, the honest headline changes from "parity" to **"better at the
+settings the engine ships at, slightly worse only at a shallow configuration nothing ships"** — and
+the d3/b10 cells become a tractability proxy to keep an eye on rather than a target to optimise.
