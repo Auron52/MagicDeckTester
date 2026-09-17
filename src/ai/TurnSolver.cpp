@@ -238,6 +238,195 @@ static bool DedupCensusOn()
     return on;
 }
 
+// --- ROLLOUT BOARD CENSUS (MTG_BOARD_CENSUS, default OFF = zero cost) ------------------------
+// THE MISSING MEASUREMENT named at the end of docs/design/fungus-token-search-cost.md. That
+// diagnosis established that the Fungus slow games pay **58x the cost PER NODE** on top of 78x the
+// nodes -- the signature of board-size scaling (GameState deep copies + battlefield walks), not of
+// a plan explosion (avg 15.7 plans/enumeration) and not of memory (128 MB peak). It also showed the
+// REAL board tops out at 15 permanents, so the big boards exist only inside ROLLOUTS. No instrument
+// reported the rollout board size, so the fusion decision -- represent interchangeable vanilla
+// tokens as ONE Permanent carrying a stack count, per the clue-fusion doctrine -- had no number
+// behind it. MTG_ENUM_HIWATER_KB is not that instrument: it prints `bf=` only when a PLAN SET
+// crosses a size threshold, which never fires here.
+//
+// Two questions, one sample: how big does the rollout board get, and how much of it is FUNGIBLE?
+// "Fungible" = interchangeable in every field the engine reads, so swapping two members changes
+// nothing and a stack-count representation would collapse them.
+//
+// THE KEY IS DELIBERATELY OVER-INCLUSIVE. It folds every state-bearing field of Permanent and the
+// copiable half of Card, and it force-uniques any permanent that HOSTS an Aura or Equipment (those
+// reference their host by card.m_number, so the host's identity is load-bearing). An over-inclusive
+// key can only UNDER-count the prize; it can never overstate it. That is the right direction of
+// error for a number whose job is to justify building something.
+//
+// Counters only, no behaviour -> an armed run is byte-identical to a disarmed one, so this can be
+// left in permanently. Building the key is O(n) with a hash map per sampled step, far too expensive
+// to carry on every step of a 2.5-hour game: MTG_BOARD_CENSUS_STRIDE (default 64) samples one
+// rollout turn-step in N. The sample is thread-local and unsynchronised, which is fine -- this
+// estimates a distribution, it does not need to be deterministic.
+namespace boardcensus
+{
+inline bool On()     { static const bool on = EnvOn("MTG_BOARD_CENSUS"); return on; }
+inline int  Stride() { static const int s = std::max(1, EnvInt("MTG_BOARD_CENSUS_STRIDE", 64));
+                       return s; }
+
+enum { kBuckets = 9 };
+inline const char* kEdge[kBuckets] = {"0-4","5-8","9-16","17-24","25-32","33-48","49-64","65-96","97+"};
+inline int Bucket(size_t n)
+{
+    if (n <= 4)  { return 0; }
+    if (n <= 8)  { return 1; }
+    if (n <= 16) { return 2; }
+    if (n <= 24) { return 3; }
+    if (n <= 32) { return 4; }
+    if (n <= 48) { return 5; }
+    if (n <= 64) { return 6; }
+    if (n <= 96) { return 7; }
+    return 8;
+}
+
+inline std::atomic<long long> g_samples{0};
+inline std::atomic<long long> g_perms{0}, g_ours{0}, g_creatures{0}, g_tokens{0};
+inline std::atomic<long long> g_classes{0};          // fungibility classes among OUR permanents
+inline std::atomic<long long> g_hosts{0};            // ...force-uniqued as an Aura/Equipment host
+inline std::atomic<long long> g_max_perms{0}, g_max_ours{0}, g_max_group{0};
+inline std::atomic<long long> g_hist[kBuckets];      // sampled steps, by OUR permanent count
+inline std::atomic<long long> g_hist_fused[kBuckets];// ...and by class count (the post-fusion board)
+// COST WEIGHTING. A step's share of the STEPS is not its share of the WORK: a deep copy is O(n) in
+// the board and any per-creature scan that walks the battlefield (ComputeLordBonus, AuraBonusFor)
+// is O(n^2). The mean board size is therefore the wrong summary -- 99.5% of steps sit at n<=16
+// while the cost lives in the 0.5% that reach 298. These accumulate sum(n) and sum(n^2) per bucket
+// so the report can say what share of LINEAR and QUADRATIC work each board size actually carries.
+inline std::atomic<long long> g_hist_n[kBuckets], g_hist_nsq[kBuckets];
+inline std::atomic<long long> g_n_total{0}, g_nsq_total{0};
+inline std::atomic<long long> g_fused_n_total{0}, g_fused_nsq_total{0};
+inline std::atomic<long long> g_turn_perms[24];      // mean board size by simulated turn number
+inline std::atomic<long long> g_turn_n[24];
+inline std::mutex g_mu;
+inline std::map<std::string, long long> g_collapsible;  // card name -> permanents fusion would remove
+
+inline void Bump(std::atomic<long long>& a, long long v)
+{ long long cur = a.load(std::memory_order_relaxed);
+  while (v > cur && !a.compare_exchange_weak(cur, v, std::memory_order_relaxed)) {} }
+
+// FNV-1a over the fields that make two permanents distinguishable. m_def is excluded on purpose:
+// it is a heap address (non-deterministic across runs) and is derived from m_name anyway.
+inline void Mix(uint64_t& h, uint64_t v)
+{ h ^= v; h *= 1099511628211ull; }
+
+inline uint64_t FungibilityKey(const Permanent& p)
+{
+    uint64_t h = 1469598103934665603ull;
+    Mix(h, p.card.m_name_hash);
+    Mix(h, static_cast<uint64_t>(p.card.m_type_mask)      << 32 | p.card.m_supertype_mask);
+    Mix(h, static_cast<uint64_t>(p.card.m_color_mask)     << 32 | p.card.m_keyword_mask);
+    Mix(h, static_cast<uint64_t>(p.card.m_power.value_or(-99) + 100) << 32
+         | static_cast<uint64_t>(p.card.m_toughness.value_or(-99) + 100));
+    Mix(h, (p.card.m_is_staged ? 1ull : 0ull) | (p.card.m_impulse_no_land ? 2ull : 0ull)
+         | (static_cast<uint64_t>(p.card.m_staged_expiry) << 8));
+    Mix(h, static_cast<uint64_t>(p.controller_index) << 32 | static_cast<uint64_t>(p.owner_index));
+    Mix(h, (p.tapped ? 1ull : 0ull)
+         | (p.entered_this_turn ? 2ull : 0ull)
+         | (p.gained_control_this_turn ? 4ull : 0ull)
+         | (p.marked_for_destruction ? 8ull : 0ull)
+         | (p.storage_hold_this_turn ? 16ull : 0ull)
+         | (p.loyalty_activated_this_turn ? 32ull : 0ull)
+         | (p.colored_cast_lifegain_used_this_turn ? 64ull : 0ull)
+         | (p.temp_haste ? 128ull : 0ull)
+         | (p.temp_lifelink ? 256ull : 0ull)
+         | (p.exile_at_end ? 512ull : 0ull)
+         | (p.is_animated ? 1024ull : 0ull)
+         | (p.is_token ? 2048ull : 0ull)
+         | (p.echo_resolved ? 4096ull : 0ull));
+    Mix(h, static_cast<uint64_t>(p.damage) << 32 | static_cast<uint64_t>(p.pending_death_trigger));
+    Mix(h, static_cast<uint64_t>(p.temp_power_bonus) << 32 | static_cast<uint64_t>(p.temp_tough_bonus));
+    Mix(h, static_cast<uint64_t>(p.charge_counters) << 32 | static_cast<uint64_t>(p.verse_counters));
+    Mix(h, static_cast<uint64_t>(p.storage_counters) << 32 | static_cast<uint64_t>(p.ice_counters));
+    Mix(h, static_cast<uint64_t>(p.age_counters) << 32 | static_cast<uint64_t>(p.spore_counters));
+    Mix(h, static_cast<uint64_t>(p.quest_counters) << 32 | static_cast<uint64_t>(p.loyalty));
+    Mix(h, static_cast<uint64_t>(p.garth_chosen_mask) << 32 | static_cast<uint64_t>(p.chosen_subtype_id));
+    Mix(h, static_cast<uint64_t>(p.chosen_color + 1));
+    // An ATTACHED aura/equipment is keyed by what it is attached to, so two auras on different
+    // hosts never fuse. (Their hosts are force-uniqued separately, below.)
+    Mix(h, static_cast<uint64_t>(p.aura_attached_to) << 32 | static_cast<uint64_t>(p.equipped_to));
+    for (const Counter& c : p.counters)
+    { Mix(h, static_cast<uint64_t>(c.type) << 32 | static_cast<uint64_t>(c.count)); }
+    Mix(h, p.counters.size());
+    return h;
+}
+
+inline void Record(const GameState& state)
+{
+    static thread_local long long tick = 0;
+    if ((tick++ % Stride()) != 0) { return; }
+
+    const int me = state.active_player_index;
+    // Hosts first: anything an Aura or Equipment points at keeps its per-copy identity.
+    std::set<int> hosted;
+    for (const Permanent& p : state.battlefield)
+    {
+        if (p.aura_attached_to != 0) { hosted.insert(p.aura_attached_to); }
+        if (p.equipped_to != 0)      { hosted.insert(p.equipped_to); }
+    }
+
+    std::unordered_map<uint64_t, int> classes;
+    std::unordered_map<uint64_t, const Permanent*> exemplar;
+    long long ours = 0, creatures = 0, tokens = 0, hosts = 0;
+    for (const Permanent& p : state.battlefield)
+    {
+        if (p.controller_index != me) { continue; }
+        ++ours;
+        if (p.card.IsCreature() || p.is_animated) { ++creatures; }
+        if (p.is_token) { ++tokens; }
+        if (hosted.count(p.card.m_number) != 0) { ++hosts; continue; }   // force-unique
+        const uint64_t k = FungibilityKey(p);
+        ++classes[k];
+        exemplar.emplace(k, &p);
+    }
+
+    long long biggest = 0;
+    for (const auto& kv : classes) { if (kv.second > biggest) { biggest = kv.second; } }
+    const long long n_classes = static_cast<long long>(classes.size()) + hosts;
+
+    g_samples.fetch_add(1, std::memory_order_relaxed);
+    g_perms.fetch_add(static_cast<long long>(state.battlefield.size()), std::memory_order_relaxed);
+    g_ours.fetch_add(ours, std::memory_order_relaxed);
+    g_creatures.fetch_add(creatures, std::memory_order_relaxed);
+    g_tokens.fetch_add(tokens, std::memory_order_relaxed);
+    g_classes.fetch_add(n_classes, std::memory_order_relaxed);
+    g_hosts.fetch_add(hosts, std::memory_order_relaxed);
+    Bump(g_max_perms, static_cast<long long>(state.battlefield.size()));
+    Bump(g_max_ours, ours);
+    Bump(g_max_group, biggest);
+    const int b = Bucket(static_cast<size_t>(ours));
+    g_hist[b].fetch_add(1, std::memory_order_relaxed);
+    g_hist_fused[Bucket(static_cast<size_t>(n_classes))].fetch_add(1, std::memory_order_relaxed);
+    g_hist_n[b].fetch_add(ours, std::memory_order_relaxed);
+    g_hist_nsq[b].fetch_add(ours * ours, std::memory_order_relaxed);
+    g_n_total.fetch_add(ours, std::memory_order_relaxed);
+    g_nsq_total.fetch_add(ours * ours, std::memory_order_relaxed);
+    g_fused_n_total.fetch_add(n_classes, std::memory_order_relaxed);
+    g_fused_nsq_total.fetch_add(n_classes * n_classes, std::memory_order_relaxed);
+    const int t = state.turn_number;
+    if (t >= 0 && t < 24)
+    { g_turn_perms[t].fetch_add(ours, std::memory_order_relaxed);
+      g_turn_n[t].fetch_add(1, std::memory_order_relaxed); }
+
+    // Which CARDS carry the collapsible mass -- the actionable half, exactly as bf_census does for
+    // branching. A class of size k would collapse to 1, so it contributes k-1.
+    if (biggest > 1)
+    {
+        std::lock_guard<std::mutex> lk(g_mu);
+        for (const auto& kv : classes)
+        {
+            if (kv.second <= 1) { continue; }
+            const Permanent* ex = exemplar[kv.first];
+            g_collapsible[static_cast<const std::string&>(ex->card.m_name)] += kv.second - 1;
+        }
+    }
+}
+}   // namespace boardcensus
+
 // --- CANDIDATE DEDUP (MTG_CAND_DEDUP) --------------------------------------------------------
 // Skip a candidate whose post-apply state an EARLIER sibling of the same pass already reached.
 // Its rollout would recompute, step for step, a result already on the books, so this removes
@@ -1182,6 +1371,85 @@ namespace
         }
     };
     RolloutStatsReporter g_rollout_stats_reporter;
+
+    // Rollout board census (MTG_BOARD_CENSUS). Its OWN reporter rather than a section of
+    // [rollout-stats]: the two answer different questions and the board census must be runnable
+    // without paying for the units accounting, which is the heavier of the pair.
+    struct BoardCensusReporter
+    {
+        ~BoardCensusReporter()
+        {
+            if (!boardcensus::On()) { return; }
+            using namespace boardcensus;
+            const long long n = g_samples.load();
+            if (n == 0) { std::cerr << "[board-census] no rollout turn-steps sampled\n"; return; }
+            const double ours   = static_cast<double>(g_ours.load()) / static_cast<double>(n);
+            const double cls    = static_cast<double>(g_classes.load()) / static_cast<double>(n);
+            std::cerr << "[board-census] samples=" << n << " stride=" << Stride()
+                      << "  (rollout turn-steps)\n";
+            std::cerr << "[board-census] board: all_perms_mean="
+                      << static_cast<double>(g_perms.load()) / static_cast<double>(n)
+                      << " ours_mean=" << ours
+                      << " ours_max=" << g_max_ours.load()
+                      << " all_max=" << g_max_perms.load() << "\n";
+            std::cerr << "[board-census] ours: creatures_mean="
+                      << static_cast<double>(g_creatures.load()) / static_cast<double>(n)
+                      << " tokens_mean=" << static_cast<double>(g_tokens.load()) / static_cast<double>(n)
+                      << " token_share=" << (g_ours.load() ? static_cast<double>(g_tokens.load())
+                                                             / static_cast<double>(g_ours.load()) : 0.0)
+                      << "\n";
+            // THE FUSION PRIZE. `classes` already includes the force-uniqued Aura/Equipment hosts,
+            // so this is what a stack-count representation would actually leave behind.
+            std::cerr << "[board-census] FUSION: classes_mean=" << cls
+                      << " collapsed_mean=" << (ours - cls)
+                      << " shrink=" << (ours > 0.0 ? 1.0 - cls / ours : 0.0)
+                      << " biggest_group=" << g_max_group.load()
+                      << " hosts_uniqued=" << g_hosts.load() << "\n";
+            // THE COST-WEIGHTED VIEW. lin_share is each bucket's share of sum(n) (deep copies,
+            // single battlefield walks); quad_share is its share of sum(n^2) (any per-creature scan
+            // that itself walks the board). Read these, not the step shares -- they are what decides
+            // whether shrinking big boards is worth anything.
+            const double lin  = static_cast<double>(g_n_total.load());
+            const double quad = static_cast<double>(g_nsq_total.load());
+            for (int i = 0; i < kBuckets; ++i)
+            {
+                const long long a = g_hist[i].load(), b = g_hist_fused[i].load();
+                if (a == 0 && b == 0) { continue; }
+                std::cerr << "[board-census]   ours[" << kEdge[i] << "] steps=" << a
+                          << " step_share=" << static_cast<double>(a) / static_cast<double>(n)
+                          << " lin_share=" << (lin > 0.0 ? static_cast<double>(g_hist_n[i].load()) / lin : 0.0)
+                          << " quad_share=" << (quad > 0.0 ? static_cast<double>(g_hist_nsq[i].load()) / quad : 0.0)
+                          << "   after_fusion steps=" << b
+                          << " step_share=" << static_cast<double>(b) / static_cast<double>(n) << "\n";
+            }
+            // What fusion would actually buy, priced in the two cost currencies rather than in
+            // permanents: a board of k classes does k (or k^2) units of the work n (or n^2) did.
+            const double flin  = static_cast<double>(g_fused_n_total.load());
+            const double fquad = static_cast<double>(g_fused_nsq_total.load());
+            std::cerr << "[board-census] FUSION PRIZE: linear_work x"
+                      << (flin  > 0.0 ? lin  / flin  : 0.0)
+                      << "  quadratic_work x" << (fquad > 0.0 ? quad / fquad : 0.0)
+                      << "   (sum n=" << g_n_total.load() << " -> " << g_fused_n_total.load()
+                      << ", sum n^2=" << g_nsq_total.load() << " -> " << g_fused_nsq_total.load()
+                      << ")\n";
+            for (int t = 0; t < 24; ++t)
+            {
+                const long long c = g_turn_n[t].load();
+                if (c == 0) { continue; }
+                std::cerr << "[board-census]   turn" << t << " ours_mean="
+                          << static_cast<double>(g_turn_perms[t].load()) / static_cast<double>(c)
+                          << " steps=" << c << "\n";
+            }
+            std::lock_guard<std::mutex> lk(g_mu);
+            std::vector<std::pair<long long, std::string>> v;
+            for (const auto& kv : g_collapsible) { v.push_back({kv.second, kv.first}); }
+            std::sort(v.rbegin(), v.rend());
+            for (size_t i = 0; i < v.size() && i < 10; ++i)
+            { std::cerr << "[board-census]   collapsible_by_card " << v[i].second
+                        << "=" << v[i].first << "\n"; }
+        }
+    };
+    BoardCensusReporter g_board_census_reporter;
 
     struct OdoFallbackReporter
     {
@@ -34375,6 +34643,9 @@ static int SimulateToEndImpl(GameState& state, int depth, int max_turns,
         // is byte-identical for every non-pathological rollout.
         ConsumeAt(budget, unitsite::kRolloutStep);
         if (s_rollout_stats) { g_rollout_steps.fetch_add(1, std::memory_order_relaxed); }   // one simulated turn-step
+        // Rollout board census (MTG_BOARD_CENSUS). THIS is the step the 58x-per-node cost is paid
+        // on, so it is where the board that causes it has to be sampled. Off = one static load.
+        if (boardcensus::On()) { boardcensus::Record(state); }
         if (budget && budget->Overrun())
         { ++g_fs_trunc_events; leafeval::Publish(leafeval::kInvalid); return max_turns + 1; }
         // Per-decision ceiling for the UNBUDGETED rollouts (the search's plan-scoring samples
