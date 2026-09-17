@@ -97,9 +97,9 @@ heuristic"*, 2026-08-25); the off-switch is there because the measurement bought
   (`plan_signature`'s `#V`, `PaySacVictimScope`'s fodder-pays ordering, `main.cpp`'s
   `sac_victim`/`sac_victim_name`, `PerformSacrificeCreatureCost`'s lookup).
 
-### PARKED: the Hulk chapters, to be designed searched-with-heuristics after the pause
+### DONE 2026-09-17c: all three Hulk chapters are searched-with-heuristics
 
-**USER's ruling, 2026-09-17b, and it is the design brief — not a decision to re-litigate:**
+**USER's brief, which this implements:**
 
 > *"Technically they are decisions like that of Aether Vial."*
 > *"To be fair, they would be implemented as a heuristic anyway, in this case."*
@@ -107,45 +107,63 @@ heuristic"*, 2026-08-25); the off-switch is there because the measurement bought
 > ***"Only the human really needs the axis in general, but we should still design it as
 > searched-with-heuristics like everything else after the pause."***
 
-So the answer is not "heuristic, full stop" and not "axis, urgently". It is: **the engine keeps the
-house architecture** — `searched-choice-audit.md`'s branch-by-default-with-the-heuristic-as-prior —
-**for the Hulk chapters too, even though the search will almost never deviate**, because being the
-one decision in the engine that is a bare heuristic is itself the defect the audit exists to prevent.
-The urgency is low precisely because the decision is easy; the consistency is the point.
+**The Aether Vial reference was exact, not an analogy, and it dissolved the objection this item was
+parked on.** I had recorded the turn boundary as an open design problem: chapters II/III fire in
+`AdvanceSagas` at the NEXT turn's draw step, so on the committed turn they resolve before any
+main-phase solve exists. The Vial CHARGE axis already solves precisely that — it decides something
+that fires at the next turn's UPKEEP — and its answer is to let the pick ride **`GameState`** rather
+than a scoped guard. Chapters II/III are that problem one step over and take the same answer.
 
-What each half needs, and what is already true:
+| chapter | fires | pin | carrier | flag |
+|---|---|---|---|---|
+| I | this plan's apply (the Saga's own enter) | rank into `cand_slots`, or DECLINE | `ScriptedSagaCh1` (RAII) | `MTG_SAGA_CH1_AXIS` |
+| II / III | NEXT turn's draw step | rank into `SagaChapterTargetCandidates` | `GameState::scripted_saga_target` | `MTG_SAGA_TARGET_AXIS` |
 
-* **The HUMAN half is DONE** (`9da37300`). All three chapters are offered in-zone — ch. I as a
-  `free_cast` frame over a clickable hand (including declining), ch. II/III as board-click `target`
-  frames. That was the half the user says actually needs the axis, and it does not depend on any of
-  the engine work below.
-* **Chapter I is the straightforward one.** It resolves inside the Saga's own resolution during the
-  main phase — i.e. inside the plan apply — so it is the `ScriptedEtbDig` pin shape exactly. Full
-  plumbing checklist: a `thread_local` + RAII scope in `SpellEffects.h`; a `Plan::saga_ch1_choice`
-  field; consumption in `PerformSagaFreeCast` (rank into `cand_slots`, duplicate-not-whiff clamp,
-  plus a distinct DECLINE value — "you MAY cast it", the Turntimber `TURNTIMBER_NONE` precedent);
-  the fan-out in `AppendSubdecisionAxes`; the scope in `ApplyPlanDirect` **and** in `AIEngine`
-  (executor lockstep, or the realised turn is not the one that was scored); and then the four places
-  a new pin must be registered or it is silently wrong — `SamePlan`, `BpCandFingerprint`,
-  `IsApplyEmptyPlan`, and the **TT key fold** (`TurnSolver.cpp` ~42019, or a transposition reuses a
-  node scored under a different pin), plus the breakpoint capture/resume pins (~24307 / ~25022 /
-  ~25050). Today's pick is not naive — it scores each candidate by doing a real put on a COPY of the
-  state, so a Craterhoof team-pump or a Hornet Queen wave is measured rather than guessed — but it is
-  blind to the REST of the plan, which is what the axis would fix.
-* **Chapters II and III are the interesting one, and the Vial/Lackey precedent is the reference.**
-  The engine already pins board-owned decisions that resolve outside the main phase:
-  `Plan::vial_charge_choice` and `Plan::lackey_choice`, the latter explicitly carried on the
-  pre-combat plan "since the put resolves in that combat's damage step". What is further than either
-  precedent reaches is the TURN BOUNDARY: a Saga chapter fires in `AdvanceSagas` at the **next**
-  turn's draw step, so on the committed turn it resolves before any main-phase solve exists, and
-  inside the search it resolves in rollouts — the paths the audit already assigns to the heuristic.
-  **That is the design problem to solve**, and it is the reason this is parked rather than built: it
-  needs a decision about what a pin means when the chapter belongs to a turn the current plan does
-  not cover, not just the plumbing above.
-  The heuristic that stays the prior either way is `DefaultSagaChapterTarget` ("biggest body that can
-  still swing"), which is right nearly always in a race against a passive opponent. Its one known
-  edge is recorded in §1b: chapter II's counters are PERMANENT, so a body about to be eaten by
-  Natural Order is the wrong home for them.
+Both default ON, both with exact off-switches. The split is not stylistic: chapter I's guard is still
+standing when it fires, chapter II/III's would be long gone.
+
+**Both pins are RANKS, never permanent identities.** For II/III that is forced — a whole turn elapses
+between pinning and reading, during which we untap, draw and deploy, so a named permanent would go
+stale constantly. For chapter I it is forced the other way: the plan's own creature casts leave the
+hand *before* the Saga resolves (creatures rank 10, enchantments 20), so the list shrinks. Both clamp
+on over-range (duplicate-not-whiff), so drift costs a duplicate world, never a lost target.
+
+**The heuristics keep both doctrine jobs** — branch ORDER (entry 0 is the front, so a base plan and a
+k=0 variant agree) and the only decision on every plan-less path (d0, rollout leaves, and the human's
+preselected default). `DefaultSagaChapterTarget` is now just `SagaChapterTargetCandidates().front()`,
+byte-identical to the old scan.
+
+**What it measured, and the user called it in advance.** 13,000 held-out games per axis:
+
+| axis | d3 s770001 | d3 s880002 | d5 | 2HG-d3 | wall |
+|---|---|---|---|---|---|
+| chapter II/III | 0.0000 | +0.0004 | −0.0005 | −0.0003 | +1.5% … +4.9% |
+| chapter I | +0.0002 | −0.0002 | 0.0000 | −0.0003 | −1.3% … +8.1% |
+
+Flat, exactly as *"the decision is quite easy for the search"* predicted. **Neither axis buys measured
+quality; both ship ON for the reason the user gave** — branch-by-default consistency, and
+reachability of the cases the heuristics structurally cannot see (chapter II's counters are
+PERMANENT, so a body about to be eaten by Natural Order is the wrong home; chapter I's
+trial-on-a-copy is blind to a same-plan Natural Order, which resolves after the Saga).
+
+**Verified in the order that catches a DEAD axis**, which is the trap this session already fell into
+once — an axis emitting zero variants also produces identical digests, and that reads as success:
+
+1. **It fires.** 24,919 chapter-target and 11,652 chapter-I variants over 60 games, and Fyndhorn
+   Elves (1/1) now appears as a chapter II target — a body "biggest that can swing" never reaches.
+2. **Off-Saga decks are byte-identical.** Not a formality for chapter I: its TT-key fold sits inside
+   a gate shared with every other scripted pin, so it perturbs the key of any FiveColour/Critter
+   state carrying a tutor or dig pin. Measured — all five off-Saga digests unchanged.
+3. **Each off-switch reproduces its predecessor commit's four StompySurprise digests exactly.**
+4. **The human path is untouched.** 318 references replay 15 ok / 292 repaired / 0 play-drift /
+   0 enum-gap / 0 contract-fail — character-for-character the same result as before the axes.
+5. Smoke 71/80 byte-identical to GT; the 9 reds are the 4 stompy keys (stale from the promotion plus
+   this work) and the 5 pre-existing non-stompy ones, whose values are unchanged.
+
+**One detail worth keeping**, because it is the class of bug that is silent: the TT-key gate for
+chapter I tests `!= kSagaCh1Heuristic`, not the `>= 0` its neighbours use. A pending DECLINE is −2
+and is every bit as future-determining as a rank, so a `>= 0` gate would let two genuinely different
+states share a key.
 
 ---
 
