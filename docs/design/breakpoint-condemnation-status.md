@@ -1067,7 +1067,7 @@ dearer in TOTAL -- the tail sets the sign, exactly as the cost section above war
 condemnation's only available benefit is QUALITY -- spending the same units better. Cost-neutrality
 here is structural, not a defect to engineer away.
 
-### ...and UNBOUNDED is WORSE, not better -- the intuitive follow-up, measured and REFUTED
+### ...and UNBOUNDED: the prune WINS BIG, but the SOUNDNESS GUARD turns it into a loss
 
 The obvious corollary of the paragraph above is that the regime where a prune *can* pay is UNBOUNDED
 search, which is exactly what value-leaf label generation runs (USER 2026-09-16: *"it could help with
@@ -1075,13 +1075,35 @@ cost for parts of the value-leaf generation"*). **That was measured and it is fa
 margin.** An earlier revision of this section recommended it as worth trying; it is corrected here
 rather than deleted, because the reasoning behind it is sound and someone will re-derive it.
 
+**CORRECTED 2026-09-17.** An earlier revision of this section read the unbounded result as
+"condemnation is dearer, the value-leaf idea is refuted". That measured the FIXED filter without
+realising it (`MTG_BP_CONDEMN_NEW_OPTION` had just been flipped default ON, so an arm passing only
+`MTG_SNOW_CONDEMN=1` silently carried the guard). The UNFIXED filter is **16.2% CHEAPER** unbounded.
+The USER's prediction that unbounded search is where the prune pays was RIGHT.
+
 Snow, 10 games, depth 2, `--budget-ms 0` (the only unbounded depth that terminates on this deck):
 
-| arm | units | vs base |
-|---|---|---|
-| base (`MTG_SNOW_CONDEMN=0`) | 34,413,950 | -- |
-| condemnation, default cache (8192) | 39,400,239 | **+14.5%** |
-| condemnation, 32x cache (262144) | 37,914,466 | **+10.2%** |
+| arm | drops | units | vs base | cache lookups | hit rate |
+|---|---|---|---|---|---|
+| base (`MTG_SNOW_CONDEMN=0`) | 0 | 34,413,950 | -- | 27,744,829 | 98.06% |
+| condemnation **UNFIXED** | 817,461 | 28,832,176 | **-16.2%** | 23,103,744 | 97.40% |
+| condemnation **FIXED** (shipped) | 159,178 | 39,400,239 | **+14.5%** | 32,590,957 | 97.64% |
+
+**THE COST IS LOST MEMOISATION SHARING, NOT THE PRUNE.** Reducing possibilities does reduce work --
+that is the -16.2%. What costs is a side effect: the filter's answer is not a property of the STATE,
+it depends on WHICH CARDS THE PLAN ALREADY CAST, so the bp-enum cache must be keyed on the arrival
+path. Base answers "what continuations exist here?" once per state and reuses it -- 27.7M lookups
+served by only 538,605 enumerations, 98% sharing. With the filter live the same state must be
+enumerated per distinct cast set: misses go 538,605 -> 768,333 (+42.7%) while hits rise only +17%, and
+`la_bp_wave` rises +4,186,112, i.e. **~18 units per lost share** (each fresh enumeration's plans are
+then searched). Note the hit RATE barely moves (98.06 -> 97.64) -- a hit-rate test does NOT reveal
+this, and reading one as exoneration was a mistake made here. Confirmation: the UNFIXED arm has FEWER
+misses than the fixed one, because heavy pruning collapses cast-set diversity and restores sharing.
+
+So there are two independent effects: **pruning subtracts work and scales with drop count**, while
+**lost sharing adds work and is a FIXED toll for having the filter on at all**. Unfixed drops 817,461
+and the prune wins (-16.2%); the new-option guard spares 81% of those, gutting the benefit while the
+toll is unchanged (+14.5%). A 30-point swing caused entirely by the soundness guard.
 
 **THE REACH INVERTS.** `la_bp_wave` is 17.4% of units at d5/b20 but **68% at d2/b0** -- unbounded, the
 breakpoint enumeration IS the search. That is why the filter backfires rather than paying off:
