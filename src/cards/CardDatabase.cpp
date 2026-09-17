@@ -263,6 +263,25 @@ void CardDatabase::RebuildInternedIndex()
         if (kv.second.params.hand_size_anthem_max > m_max_hand_anthem)
         { m_max_hand_anthem = kv.second.params.hand_size_anthem_max; }
     }
+
+    // SMALLEST life_above_start_anthem_life over every loaded definition; INT_MAX when no card
+    // has one. The mirror of the bound above, for the life-keyed conditional anthem (Righteous
+    // Valkyrie). See MinLifeAboveStartAnthem().
+    m_min_life_above_start_anthem = std::numeric_limits<int>::max();
+    for (const auto& kv : m_cards)
+    {
+        const int n = kv.second.params.life_above_start_anthem_life;
+        if (n > 0 && n < m_min_life_above_start_anthem) { m_min_life_above_start_anthem = n; }
+    }
+
+    // Does any loaded card restrict its mana to a creature SUBTYPE (Giada)? Gates the mana-cache
+    // subtype fold. See HasSubtypeRestrictedMana().
+    m_has_subtype_restricted_mana = false;
+    for (const auto& kv : m_cards)
+    {
+        if (!kv.second.params.mana_only_subtype.empty())
+        { m_has_subtype_restricted_mana = true; break; }
+    }
 }
 
 std::vector<std::string> CardDatabase::MdfcBackFaceNames() const
@@ -643,6 +662,7 @@ CardParams CardDatabase::BuildParamsFromJson(const json& params) const
     p.attack_trigger_life_loss  = params.value("attack_trigger_life_loss", 0);
     p.grants_haste           = params.value("grants_haste", false);
     p.grants_double_strike   = params.value("grants_double_strike", false);
+    p.grants_lifelink        = params.value("grants_lifelink", false);
     p.affinity_for_subtype   = params.value("affinity_for_subtype", false);
     p.upkeep_adds_charge     = params.value("upkeep_adds_charge", false);
     p.can_animate            = params.value("can_animate", false);
@@ -655,6 +675,7 @@ CardParams CardDatabase::BuildParamsFromJson(const json& params) const
     p.has_replicate                  = params.value("has_replicate", false);
     p.grants_replicate_to_subtypes   = params.value("grants_replicate_to_subtypes", false);
     p.creature_mana_only             = params.value("creature_mana_only", false);
+    p.mana_only_subtype              = params.value("mana_only_subtype", std::string());
     p.colored_creature_only          = params.value("colored_creature_only", false);
     p.colored_creature_ability_ok    = params.value("colored_creature_ability_ok", false);
     if (params.contains("gy_return_cost"))
@@ -820,6 +841,7 @@ CardParams CardDatabase::BuildParamsFromJson(const json& params) const
     p.convoke                   = params.value("convoke", false);
     p.tutor_mv_max_is_x         = params.value("tutor_mv_max_is_x", false);
     p.wish_from_sideboard       = params.value("wish_from_sideboard", false);
+    p.wish_requires_name        = params.value("wish_requires_name", std::string());
     p.etb_energy                = params.value("etb_energy", 0);
     p.energy_per_colored_tap    = params.value("energy_per_colored_tap", 0);
     p.exiles_self_on_resolve    = params.value("exiles_self_on_resolve", false);
@@ -940,6 +962,9 @@ CardParams CardDatabase::BuildParamsFromJson(const json& params) const
     p.endstep_token_color                 = params.value("endstep_token_color", std::string());
     for (const std::string& s : params.value("endstep_token_subtypes", json::array()))
         p.endstep_token_subtypes.push_back(s);
+    p.endstep_lifegain_threshold          = params.value("endstep_lifegain_threshold", 1);
+    for (const std::string& s : params.value("endstep_token_keywords", json::array()))
+        p.endstep_token_keywords.push_back(s);
     p.endstep_token_ascend_copy           = params.value("endstep_token_ascend_copy", false);
     p.ascend                              = params.value("ascend", false);
     p.etb_opp_creatures_debuff      = params.value("etb_opp_creatures_debuff", 0);
@@ -1007,6 +1032,8 @@ CardParams CardDatabase::BuildParamsFromJson(const json& params) const
     p.dies_token_toughness      = params.value("dies_token_toughness", 0);
     for (const std::string& s : params.value("dies_token_subtypes", json::array()))
         p.dies_token_subtypes.push_back(s);
+    for (const std::string& s : params.value("dies_token_keywords", json::array()))
+        p.dies_token_keywords.push_back(s);
     p.dies_trigger_impulse_exile   = params.value("dies_trigger_impulse_exile", false);
     p.dies_impulse_requires_type    = params.value("dies_impulse_requires_type", std::string());
     p.dies_impulse_requires_subtype = params.value("dies_impulse_requires_subtype", std::string());
@@ -1090,6 +1117,16 @@ CardParams CardDatabase::BuildParamsFromJson(const json& params) const
     p.creature_enters_min_power     = params.value("creature_enters_min_power", 0);
     p.own_creature_enters_draw      = params.value("own_creature_enters_draw", 0);
     p.creature_enters_includes_self = params.value("creature_enters_includes_self", false);
+    for (const std::string& s : params.value("enters_watch_subtypes", json::array()))
+        p.enters_watch_subtypes.push_back(s);
+    p.own_creature_enters_lifegain_toughness =
+        params.value("own_creature_enters_lifegain_toughness", false);
+    p.own_creature_enters_self_counters =
+        params.value("own_creature_enters_self_counters", 0);
+    p.other_subtype_enters_counters_subtype =
+        params.value("other_subtype_enters_counters_subtype", std::string());
+    p.other_subtype_enters_counters_per_each =
+        params.value("other_subtype_enters_counters_per_each", 0);
     p.dies_trigger_copy_self_token  = params.value("dies_trigger_copy_self_token", false);
     p.tutor_color                   = params.value("tutor_color", std::string{});
     p.sac_additional_creature_color = params.value("sac_additional_creature_color", std::string{});
@@ -1117,6 +1154,9 @@ CardParams CardDatabase::BuildParamsFromJson(const json& params) const
     p.attack_pump_matching_power    = params.value("attack_pump_matching_power", 0);
     p.must_attack                   = params.value("must_attack", false);
     p.hand_size_anthem_max          = params.value("hand_size_anthem_max", -1);
+    p.life_above_start_anthem_life  = params.value("life_above_start_anthem_life", 0);
+    p.life_above_start_anthem_power = params.value("life_above_start_anthem_power", 0);
+    p.life_above_start_anthem_tough = params.value("life_above_start_anthem_tough", 0);
     p.hand_size_anthem_power        = params.value("hand_size_anthem_power", 0);
     p.hand_size_anthem_tough        = params.value("hand_size_anthem_tough", 0);
     p.life_threshold_pump_life  = params.value("life_threshold_pump_life", 0);
@@ -1124,6 +1164,8 @@ CardParams CardDatabase::BuildParamsFromJson(const json& params) const
     p.life_threshold_pump_tough = params.value("life_threshold_pump_tough", 0);
     p.combat_damage_each_discards   = params.value("combat_damage_each_discards", 0);
     p.firebreathing_discard         = params.value("firebreathing_discard", false);
+    p.firebreathing_tough           = params.value("firebreathing_tough", 0);
+    p.firebreathing_grants_lifelink = params.value("firebreathing_grants_lifelink", false);
     p.etb_token_includes_self       = params.value("etb_token_includes_self", false);
     p.team_pump_grants_haste        = params.value("team_pump_grants_haste", false);
     p.sacrifice_watch_pump_power    = params.value("sacrifice_watch_pump_power", 0);

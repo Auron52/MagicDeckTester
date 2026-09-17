@@ -547,6 +547,19 @@ static std::string SummarizePlan(const TurnSolver::Plan& plan, const GameState& 
                         + " (discard " + std::to_string(k)
                         + (k == 1 ? " card)" : " cards)");
                 }
+                else if (a.gy_exile_mode == 3)
+                {
+                    // Resplendent Angel's self pump + lifelink. Without this branch it fell into
+                    // the team-pump ELSE and the viewer described a 6-mana Resplendent Angel
+                    // activation as "team +1/+0 and haste" -- the human would pick blind, which is
+                    // exactly the class of gap the 2c-ter wiring pass exists to prevent.
+                    const CardDefinition* pd = CardDatabase::Instance().Lookup(a.card_name);
+                    const int pp = pd ? pd->params.firebreathing_power : 0;
+                    const int pt = pd ? pd->params.firebreathing_tough : 0;
+                    tag = a.card_name + ": pump +" + std::to_string(pp * k) + "/+"
+                        + std::to_string(pt * k) + " and lifelink"
+                        + (k > 1 ? " \xC3\x97" + std::to_string(k) : std::string());
+                }
                 else
                 {
                     tag = a.card_name + ": team +" + std::to_string(k)

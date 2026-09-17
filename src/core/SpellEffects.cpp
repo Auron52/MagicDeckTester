@@ -200,6 +200,13 @@ void PerformTutor(GameState& state, int controller_index, const CardParams& pp,
         if (r == TutorAskResult::Declined) { return; }   // declined, or the baked target is gone
         if (r == TutorAskResult::Chosen)   { want = chosen; }
     }
+    // NAME-RESTRICTED WISH resolution guard (Legion Angel: "a card ... named Legion Angel").
+    // TutorNumericFilterOk already enforces this at every ENUMERATION site, so this can only fire
+    // if the two ever drift -- a future archetype provider overriding TutorCandidates without
+    // consulting the helper, or a replayed reference carrying a stale baked target. Whiffing is
+    // the right disposition, matching the `idx < 0` guard below: fetch nothing rather than fetch
+    // the wrong card.
+    if (!pp.wish_requires_name.empty() && want != pp.wish_requires_name) { return; }
     // DIAGNOSTIC (MTG_TUTOR_CHOSEN_RANK, default off): where in the ranking did the SEARCH actually
     // land? Gated on g_real_resolution, so it reports only the target the engine commits to, never
     // the thousands of hypothetical tutors inside rollouts.
@@ -1270,7 +1277,7 @@ static bool TapFlowInfeasible(const GameState& state, const ManaCost& cost, bool
                          || def->params.mana_rock
                          || PaySacSpendableNow(state, state.battlefield[i], *def);   // §2a (fresh-hold aware, matching the payer)
         if (!is_src) { continue; }
-        if (def->params.creature_mana_only && !for_creature) { continue; }
+        if (!RestrictedManaUsable(def->params, for_creature, 2)) { continue; }
         if (!StorageSourceLive(state.battlefield[i], *def)) { continue; }
         if (!GraveyardFuelLive(state, active, *def)) { continue; }
         if (!ManaSubtypeGateLive(state, active, *def)) { continue; }   // Arbor Elf: no Forest = dead
@@ -2187,7 +2194,7 @@ static bool TapForCostBacktrackWorker(GameState& state, const ManaCost& cost,
                          || def->params.mana_rock
                          || PaySacSpendableNow(state, state.battlefield[i], *def);   // §2a (fresh-hold aware, matching the payer)
         if (!is_src) { continue; }
-        if (def->params.creature_mana_only && !for_creature) { continue; }
+        if (!RestrictedManaUsable(def->params, for_creature, 3)) { continue; }
         if (!StorageSourceLive(state.battlefield[i], *def)) { continue; }   // uncharged storage: no mana
         if (!GraveyardFuelLive(state, active, *def)) { continue; }   // Deathrite: no gy land = no mana
         if (!ManaSubtypeGateLive(state, active, *def)) { continue; }   // Arbor Elf: no Forest = no mana
@@ -3102,6 +3109,42 @@ inline bool ManaCacheKey(const GameState& state, const ManaCost& cost, bool for_
         mix(h, static_cast<std::uint64_t>(cost.hybrid_pair[0]) | (static_cast<std::uint64_t>(cost.hybrid_pair[1]) << 8)
              | (static_cast<std::uint64_t>(cost.hybrid_pair[2]) << 16) | (static_cast<std::uint64_t>(cost.hybrid_pair[3]) << 24));
         mix(h, for_creature ? 1ull : 0ull);
+        // SUBTYPE-RESTRICTED MANA (Giada) -- the rule this file states in bold above: any flag that
+        // changes the BACKTRACKER'S ANSWER for the same board+cost must be hashed into the key.
+        // With an Angel-only source on the battlefield, "pay {W}{W}" is payable for an Angel and may
+        // not be for a Human Cleric of the identical cost, so a solve cached while paying for one
+        // must not replay for the other -- that would be a board-identical, cost-identical,
+        // nondeterministic corruption of exactly the class already on record here.
+        //
+        // GATED TWICE, and the second gate is the one that matters. HasSubtypeRestrictedMana() is a
+        // property of the loaded cards.json, which now CONTAINS Giada -- so it is true for EVERY
+        // deck, and gating on it alone would re-key every deck's mana cache. That is not a slowdown
+        // to shrug at: this memo's sharing pattern is load-bearing under a node budget, and the
+        // repo has already measured a supposedly result-neutral cache flag that moved play. So the
+        // fold additionally requires a restricted source to be ON THE BATTLEFIELD -- precisely when
+        // the answer can differ -- leaving every board that has never seen one bit-for-bit
+        // unchanged, Angels included until a Giada actually lands.
+        bool board_has_restricted = false;
+        if (CardDatabase::Instance().HasSubtypeRestrictedMana())
+        {
+            for (const Permanent& bp : state.battlefield)
+            {
+                const CardDefinition* bd = CardDatabase::Instance().LookupCached(bp.card);
+                if (bd && !bd->params.mana_only_subtype.empty())
+                { board_has_restricted = true; break; }
+            }
+        }
+        if (board_has_restricted)
+        {
+            const Card* paying = PayingSpellCard();
+            std::uint64_t sub_h = paying == nullptr ? 0ull : 1ull;
+            if (paying != nullptr)
+            {
+                for (const std::string& s : paying->m_subtypes)
+                { for (char ch : s) { sub_h = sub_h * 1099511628211ull ^ static_cast<unsigned char>(ch); } }
+            }
+            mix(h, sub_h);
+        }
         mix(h, reserved_mask);
         mix(h, static_cast<std::uint64_t>(static_cast<std::int64_t>(untapped_max)));
         // OUTPUT MODE is part of the SEARCH, not just of what gets returned: `collapse_colors` is

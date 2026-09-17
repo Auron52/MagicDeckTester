@@ -4,6 +4,7 @@
 #include "CardTemplate.h"
 #include <cstdint>
 #include <filesystem>
+#include <limits>
 #include <functional>
 #include <optional>
 #include <string>
@@ -118,6 +119,19 @@ struct CardParams
     // Keyword lords: grant the named keyword to all creatures matching subtypes_affected.
     bool grants_haste        = false;  // Cloudshredder Sliver, Thrumming Hivepool
     bool grants_double_strike = false; // Thrumming Hivepool
+    // Lyra Dawnbringer: "Other Angels you control get +1/+1 and HAVE LIFELINK." The static
+    // subtype lifelink grant -- the engine's prior lifelink grants were all attachment- or
+    // duration-scoped (aura_grants_lifelink, equip_grants_lifelink, Heliod's until-EOT
+    // Permanent::temp_lifelink and its lifelink_grant_cost activation), none of them a lord.
+    // Resolved INSIDE CreatureHasLifelink -- the single shared lifelink oracle that
+    // ResolveCombatDamage consults -- so executor, rollout and the search's projections are
+    // lockstep for free. Honours lord_excludes_self via per-instance Card::m_number (3 copies of
+    // Lyra coexist only transiently under the legend rule, but "Other" must still be faithful).
+    // NOT goldfish-inert: each lifelinking attacker's damage is its own GainLife EVENT (CR
+    // 119.10), so N granted Angels connecting is N life-gain events -- N team-wide +1/+1 counter
+    // waves from each Archangel of Thune, and the fuel for Righteous Valkyrie's life-threshold
+    // anthem and Resplendent Angel's gained-5-life end step.
+    bool grants_lifelink     = false;  // Lyra Dawnbringer
 
     // Affinity for subtype: reduce this card's generic mana cost by 1 per matching
     // permanent you control (e.g. Thrumming Hivepool — Affinity for Slivers).
@@ -153,6 +167,13 @@ struct CardParams
     // Creature-only mana: if true, mana from this land may only be spent to cast creature
     // spells (e.g. Ancient Ziggurat). Enforced at payment time and in solver pool checks.
     bool creature_mana_only = false;
+    // Narrows creature_mana_only from "any creature spell" to "a creature spell with THIS subtype"
+    // (Giada, Font of Hope: "Spend this mana only to cast an Angel spell"). Empty = the historical
+    // Ancient-Ziggurat behaviour, so every existing card is byte-identical. Enforced through
+    // RestrictedManaUsable at the payment sites, with the paying spell carried on the
+    // SpellSubtypePayScope thread_local -- see the long note there for why "any creature" is NOT an
+    // acceptable collapse for this deck.
+    std::string mana_only_subtype;
 
     // Colored-creature-only mana (Unclaimed Territory / Cavern of Souls / Secluded Courtyard):
     // "{T}: Add {C}. {T}: Add one mana of any color -- spend only on a creature spell of the chosen
@@ -631,6 +652,21 @@ struct CardParams
     // power 1, subtypes ["Dragon"]). Empty cost -> inert (other decks byte-identical).
     std::optional<ManaCost>  firebreathing_cost;
     int                      firebreathing_power = 0;
+    // Toughness half of the self pump (Resplendent Angel's "+2/+2"). 0 for every classic
+    // firebreather, so they are unchanged. Applied to Permanent::temp_tough_bonus, which already
+    // exists, is cleared at both cleanup sites and is folded into the sim key.
+    int                      firebreathing_tough = 0;
+    // Resplendent Angel: the self pump ALSO grants lifelink until end of turn
+    // (Permanent::temp_lifelink, Heliod's field). This bool doubles as the ROUTING flag that
+    // excludes the card from the greedy combat-time firebreathing converter (ApplyFirebreathing) --
+    // the same job firebreathing_discard does, and for the same reason. That converter ranks
+    // activations by damage per MANA, and this ability's payoff is not damage, it is LIFE: six mana
+    // for +2/+0 is a 0.33 ratio that ranks dead last, while the lifelink half is what turns a swing
+    // into the 5th life that arms this very card's end-step trigger for a free 4/4 flier plus an
+    // Archangel of Thune team pump. Pricing that at zero inside a greedy step would hide the trade
+    // from the search, so the activation is enumerated as a searched main-phase ActivatePump
+    // (mode 3) instead and the SEARCH owns the judgement.
+    bool                     firebreathing_grants_lifelink = false;
     std::optional<ManaCost>  team_pump_cost;
     int                      team_pump_power = 0;
     std::vector<std::string> team_pump_subtypes;
@@ -774,6 +810,18 @@ struct CardParams
     // scripts/analyze_deck.py reads this param name as its most authoritative sideboard-reachability
     // detector, so renaming it silently un-scans a wish deck's toolbox.
     bool                     wish_from_sideboard  = false;
+    // "...a card NAMED X" -- narrows a tutor/wish to a single card name (Legion Angel searches
+    // outside the game only for another Legion Angel). Empty = unrestricted, so Living Wish and
+    // every library tutor are byte-identical. Applied as one more conjunct inside
+    // TutorNumericFilterOk, which is what makes it reach all four enumeration sites at once, plus
+    // a resolution guard in PerformTutor so enumeration and resolution cannot drift apart if a
+    // future archetype provider overrides TutorCandidates without consulting the helper.
+    //
+    // ALSO READ BY scripts/analyze_deck.py: it makes the sideboard-reachability scan NAME-AWARE,
+    // so a name-restricted wish contributes only that one name to the reachable set instead of the
+    // whole sideboard. Without that, this deck's two unreachable future-deckbuilding sideboard
+    // cards would be reported as implementable gaps.
+    std::string              wish_requires_name;
     // "Exile <this card>" on resolution, instead of the graveyard (Living Wish). NOT inert, though
     // nothing in this deck can interact with an exiled card: MidGameFeature::GraveyardSize and
     // ExileSize are real learned-model features, and EOT dominance folds each zone when the attached
@@ -1290,10 +1338,32 @@ struct CardParams
     //                                 so the copies never feed back into it (they are created
     //                                 simultaneously as one resolution).
     int  endstep_lifegain_tokens     = 0;
+    //   endstep_lifegain_threshold -- the MINIMUM life gained this turn the intervening-if
+    //                                 demands. Default 1 IS Ocelot Pride's ">0" reading, so every
+    //                                 prior card is byte-identical. Resplendent Angel sets 5
+    //                                 ("if you gained 5 OR MORE life this turn"). The counter is
+    //                                 CUMULATIVE across every life-gain event of the turn --
+    //                                 Player::life_gained_this_turn sums amounts and is never
+    //                                 reduced by life loss -- so Bishop of Wings' 4 plus Seraph
+    //                                 Sanctuary's 1 arms it across TWO separate events; no single
+    //                                 5-life event is required. Compared PER CARD inside the
+    //                                 trigger loop, against a value snapshotted BEFORE any token
+    //                                 is created (CR 603.4: the condition is checked as the
+    //                                 ability would go on the stack, and the Angel this trigger
+    //                                 makes is itself worth 4+ life off each Bishop -- that life
+    //                                 must not retroactively arm a copy whose condition failed).
+    int  endstep_lifegain_threshold  = 1;
     int  endstep_token_power         = 0;
     int  endstep_token_toughness     = 0;
     std::string              endstep_token_color;
     std::vector<std::string> endstep_token_subtypes;
+    //   endstep_token_keywords     -- printed keywords on the created token (Resplendent Angel's
+    //                                 4/4 Angel has flying AND vigilance). Empty = the historical
+    //                                 keywordless token. Carried rather than dropped as inert
+    //                                 because Serra the Benevolent's +2 pumps "creatures you
+    //                                 control with FLYING", so a keyword-less token would silently
+    //                                 miss that anthem.
+    std::vector<std::string> endstep_token_keywords;
     bool endstep_token_ascend_copy   = false;
     // ASCEND (CR 702.131): "If you control ten or more permanents, you get the city's blessing for
     // the rest of the game." A per-PLAYER designation (Player::has_city_blessing), not a permanent
@@ -1513,6 +1583,14 @@ struct CardParams
     int                      dies_token_power = 0;
     int                      dies_token_toughness = 0;
     std::vector<std::string> dies_token_subtypes;
+    // Printed keywords on the DEATH token (Bishop of Wings: "create a 1/1 white Spirit creature
+    // token with FLYING"). Exact mirror of etb_created_token_keywords, passed through to
+    // CreateToken's keyword argument. Empty default => every prior dies-token card (Mogg War
+    // Marshal, Rundvelt Hordemaster) is byte-identical. Carried rather than dropped as inert
+    // because a keyword on a token is READ by other cards in the same deck -- Serra the
+    // Benevolent's +1 pumps "creatures you control with flying" -- so a flying-less Spirit would
+    // silently under-count there even though flying itself never blocks in a goldfish.
+    std::vector<std::string> dies_token_keywords;
     bool                     dies_trigger_impulse_exile = false;
     std::string              dies_impulse_requires_type;     // "Creature"
     std::string              dies_impulse_requires_subtype;  // "Goblin"
@@ -1855,6 +1933,42 @@ struct CardParams
     int  own_creature_enters_draw      = 0;
     bool creature_enters_includes_self = false;
 
+    // ---- TRIBAL enter-watcher filter + payloads (Angels, 2026-09-17) -------------------------
+    // enters_watch_subtypes: a subtype OR-filter on the ENTERING creature, the same shape and the
+    // same site as creature_enters_min_power above -- one axis over. Empty = unfiltered, so every
+    // prior watcher (Soul Warden, Suture Priest, Daxos, Vaultborn Tyrant) is byte-identical and
+    // no ground truth moves. A VECTOR, not a scalar, because Righteous Valkyrie watches "another
+    // Angel OR CLERIC you control"; a scalar would have forced a second competing param. Three
+    // Angels-deck cards share this one filter: Bishop of Wings (gain 4), Seraph Sanctuary (gain
+    // 1 -- note the watcher is a LAND, which works because the watcher loop scans every
+    // battlefield permanent, not only creatures) and Righteous Valkyrie (gain the entrant's
+    // toughness).
+    std::vector<std::string> enters_watch_subtypes;
+    // Giada, Font of Hope: "Each OTHER Angel you control enters with an additional +1/+1 counter
+    // on it for each Angel you ALREADY control." A REPLACEMENT EFFECT (CR 614), not a trigger --
+    // applied in FireEtbWatchers ABOVE the FireCreatureEnterWatchers call, so the counters are on
+    // the body before any enter trigger reads it (Righteous Valkyrie gains the entrant's
+    // TOUGHNESS). `_subtype` both gates the entrant and is what gets counted on the battlefield;
+    // `_per_each` is the counters per already-controlled match (1 for Giada). 0/empty = off.
+    // "ALREADY control" excludes the entrant and INCLUDES the watcher itself (Scryfall ruling
+    // 2024-11-08), so it is >= 1 whenever the effect applies.
+    std::string other_subtype_enters_counters_subtype;
+    int         other_subtype_enters_counters_per_each = 0;
+    // own_creature_enters_lifegain_toughness: the gain is the ENTERING creature's live effective
+    // toughness (base + counters + lords + anthems) rather than the flat
+    // own_creature_enters_lifegain amount. Righteous Valkyrie. This is deliberately the LIVE
+    // toughness, not the printed one, because in this deck the entrant is routinely bigger than
+    // its card: Giada, Font of Hope applies +1/+1 counters AS the Angel enters (a CR 614
+    // replacement, so the counters are already on it when this trigger resolves) and Lyra
+    // Dawnbringer's lord adds +1/+1 on top.
+    bool own_creature_enters_lifegain_toughness = false;
+    // own_creature_enters_self_counters: put N +1/+1 counters on THIS permanent when a matching
+    // creature enters (Youthful Valkyrie: "Whenever another Angel you control enters, put a
+    // +1/+1 counter on this creature"). Added through the AddPlusCounters chokepoint so the
+    // counters MERGE into one entry -- BuildSimKey folds each Counter entry separately, so
+    // un-merged entries would split the transposition key for boards that are actually identical.
+    int  own_creature_enters_self_counters = 0;
+
     // Vaultborn Tyrant: "When this creature dies, if it's not a token, create a token that's a
     // copy of it ..." -> a token copy of the card (same name -> the copy's own params stay live:
     // its enter fires the watcher above; being is_token it never re-copies itself).
@@ -1978,6 +2092,19 @@ struct CardParams
     // Evaluated inside ComputeLordBonus, which is why that function takes the whole GameState.
     // -1 = not a conditional anthem.
     int hand_size_anthem_max   = -1;
+    // Righteous Valkyrie: "As long as you have at least 7 life MORE THAN YOUR STARTING LIFE
+    // TOTAL, creatures you control get +2/+2." A conditional TEAM anthem, the life-keyed twin of
+    // hand_size_anthem_max above and evaluated in the same ComputeLordBonus pass.
+    // life_above_start_anthem_life > 0 arms it; the match scope reuses affects_all_creatures /
+    // subtypes_affected and is SELF-INCLUSIVE ("creatures you control", not "other").
+    // THE THRESHOLD IS RELATIVE: gamesetup::StartingLife() + N, never a literal 27 -- a 2HG job
+    // starts at 30 and the correct threshold there is 37. Same reading as Ajani, Strength of the
+    // Pride's 0. The card must NOT use template "lord_effect": its unconditional power_bonus is
+    // 0, so IsLordPermanent is false and it is deliberately absent from the caller's pre-filtered
+    // lord list; the conditional pass below scans it separately.
+    int life_above_start_anthem_life  = 0;
+    int life_above_start_anthem_power = 0;
+    int life_above_start_anthem_tough = 0;
     int hand_size_anthem_power = 0;
     int hand_size_anthem_tough = 0;
 
@@ -2374,6 +2501,22 @@ public:
     // provably a no-op. Measured (callgrind 2026-09-11) at ~1.8% of a KittyEquipment in-game run.
     int MaxHandSizeAnthemMax() const { return m_max_hand_anthem; }
 
+    // The SMALLEST CardParams::life_above_start_anthem_life over every loaded definition
+    // (INT_MAX = no card has a conditional life-above-starting anthem at all). The exact mirror
+    // of MaxHandSizeAnthemMax above, with the inequality the other way round: every iteration of
+    // that pass ends in `if (life < StartingLife() + life_above_start_anthem_life) continue;`, so
+    // when the controller's life is BELOW StartingLife() + this minimum, no permanent can pass
+    // and the walk is provably a no-op. On every deck that carries no such card -- which is all
+    // 20 shipped decks other than Angels -- the guard is one integer compare against INT_MAX and
+    // the pass never runs, so this is byte-identical by construction rather than by measurement.
+    int MinLifeAboveStartAnthem() const { return m_min_life_above_start_anthem; }
+
+    // True iff ANY loaded definition carries CardParams::mana_only_subtype (Giada, Font of Hope).
+    // A derived constant of the card data, refreshed by RebuildInternedIndex and immutable during
+    // play. It gates the payment cache's subtype fold: no such card loaded -> the fold is skipped
+    // entirely and every other deck's mana-cache keys are bit-for-bit unchanged.
+    bool HasSubtypeRestrictedMana() const { return m_has_subtype_restricted_mana; }
+
     bool IsImplemented(const std::string& name) const;
 
     // Returns all registered card names — used by the analyzer to check coverage.
@@ -2408,6 +2551,9 @@ private:
     // play (values point into m_cards nodes, which never move). Lock-free reads are safe.
     std::unordered_map<const std::string*, const CardDefinition*> m_by_name_ptr;
     int m_max_hand_anthem = -1;   // see MaxHandSizeAnthemMax(); maintained by RebuildInternedIndex
+    // see MinLifeAboveStartAnthem(); maintained by RebuildInternedIndex. INT_MAX = no such card.
+    int m_min_life_above_start_anthem = std::numeric_limits<int>::max();
+    bool m_has_subtype_restricted_mana = false;   // see HasSubtypeRestrictedMana()
     void RebuildInternedIndex();
 
     static CardDatabase s_instance;   // eager singleton storage (see Instance())

@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<cockatrice_deck version="1">
+    <deckname></deckname>
+    <comments></comments>
+    <zone name="main">
+        <card number="3" name="Lyra Dawnbringer"/>
+        <card number="4" name="Youthful Valkyrie"/>
+        <card number="4" name="Resplendent Angel"/>
+        <card number="19" name="Plains"/>
+        <card number="1" name="Lightning Greaves"/>
+        <card number="4" name="Bishop of Wings"/>
+        <card number="1" name="Legion Angel"/>
+        <card number="4" name="Seraph Sanctuary"/>
+        <card number="4" name="Righteous Valkyrie"/>
+        <card number="1" name="Sol Ring"/>
+        <card number="4" name="Archangel of Thune"/>
+        <card number="1" name="Azorius Chancery"/>
+        <card number="3" name="Swords to Plowshares"/>
+        <card number="3" name="Unexpectedly Absent"/>
+        <card number="2" name="Serra the Benevolent"/>
+        <card number="2" name="Giada, Font of Hope"/>
+    </zone>
+    <zone name="side">
+        <card number="1" name="Lyra, Archangel of Dawn"/>
+        <card number="3" name="Legion Angel"/>
+        <card number="1" name="Lightstall Inquisitor"/>
+    </zone>
+</cockatrice_deck>

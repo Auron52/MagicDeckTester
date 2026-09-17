@@ -7910,6 +7910,268 @@
    "parameters": {
     "etb_put_creature_cards_from_hand": true
    }
+  },
+  {
+   "name": "Lyra Dawnbringer",
+   "mana_cost": "{3}{W}{W}",
+   "types": [
+    "Creature"
+   ],
+   "supertypes": [
+    "Legendary"
+   ],
+   "subtypes": [
+    "Angel"
+   ],
+   "keywords": [
+    "Flying",
+    "First strike",
+    "Lifelink"
+   ],
+   "power": 5,
+   "toughness": 5,
+   "oracle_text": "Flying\nFirst strike (This creature deals combat damage before creatures without first strike.)\nLifelink (Damage dealt by this creature also causes you to gain that much life.)\nOther Angels you control get +1/+1 and have lifelink. [The +1/+1 half is the standard lord: lord_effect + subtypes_affected [\"Angel\"] + lord_excludes_self (Rageblood Shaman's shape), applied inside ComputeLordBonus -- the one shared P/T site combat, the lethal-damage SBA and board eval all read, so executor and rollout are lockstep. It reaches Angel TOKENS (Serra the Benevolent's -3 and Resplendent Angel's end step both spec subtype Angel). THE LIFELINK GRANT IS THE NEW PART: grants_lifelink, a static subtype keyword lord in the grants_haste / grants_double_strike family. It had no precedent -- the engine's prior lifelink grants were all attachment- or duration-scoped (aura_grants_lifelink, equip_grants_lifelink, Heliod's until-EOT temp_lifelink and its lifelink_grant_cost activation) -- so it is resolved inside CreatureHasLifelink, the SINGLE shared lifelink oracle that ResolveCombatDamage consults, rather than at any executor-only site. Self-exclusion is by per-instance m_number, so \"Other\" is faithful (inert for Lyra herself: her printed Lifelink short-circuits first). LIFELINK IS NOT GOLDFISH-INERT AND IS THE CARD'S REAL CONTRIBUTION: each lifelinking Angel's combat damage is its OWN life-gain EVENT (CR 119.10), so N granted Angels connecting is N events -- N team-wide +1/+1 counter waves from each Archangel of Thune -- and it feeds Righteous Valkyrie's life-threshold anthem and Resplendent Angel's gained-5-life end step. Per CR 510.2 combat damage is simultaneous, so counters from a combat lifelink gain do NOT add to that same combat's damage (Combat.cpp defers every gain until after all attackers' damage is assigned). LEGEND RULE is live at 3 copies and correctly ordered: EnforceLegendRule runs AFTER the enter cascade at every site, so a second Lyra still fires every Angel-enter watcher (Bishop of Wings, Youthful Valkyrie, Righteous Valkyrie, Seraph Sanctuary) before dying -- and dying is itself Bishop's \"an Angel you control dies\" trigger. Casting a redundant Lyra is a real line here, not a no-op; do not score copies 2 and 3 as dead. [PARTIAL: FLYING is parsed (Keyword::Flying) but structurally INERT for combat -- the passive opponent never blocks and there is no blocker path in ResolveCombatDamage. WHY inert: structural. NOTE it is NOT inert for Serra the Benevolent's +2, which pumps \"creatures you control with flying\", so the keyword is load-bearing in this deck for a different reason.] [PARTIAL: FIRST STRIKE is parsed but structurally INERT -- no blockers, and the engine collapses the combat damage step into one event, so strike order can never change an outcome. WHY inert: structural. Ocelot Pride carries the same disclosure.]",
+   "template": "lord_effect",
+   "parameters": {
+    "subtypes_affected": [
+     "Angel"
+    ],
+    "power_bonus": 1,
+    "tough_bonus": 1,
+    "lord_excludes_self": true,
+    "grants_lifelink": true
+   }
+  },
+  {
+   "name": "Youthful Valkyrie",
+   "mana_cost": "{1}{W}",
+   "types": [
+    "Creature"
+   ],
+   "subtypes": [
+    "Angel"
+   ],
+   "keywords": [
+    "Flying"
+   ],
+   "power": 1,
+   "toughness": 3,
+   "oracle_text": "Flying\nWhenever another Angel you control enters, put a +1/+1 counter on this creature. [own_creature_enters_self_counters 1 + enters_watch_subtypes [\"Angel\"], fired from FireCreatureEnterWatchers -- the universal enter cascade and the SHARED lockstep site for executor and rollout, so the counter lands identically in a real game and in every projected one. \"ANOTHER\" is the loop's existing i == entered_index skip (a Valkyrie never counters its own enter); \"YOU CONTROL\" is the existing controller test, so an opponent spawn never triggers it. NOT LEGENDARY, so all four copies coexist and their triggers COMPOUND: with N Valkyries out, one Angel entering puts a counter on EACH of the other N-1, and a second Youthful Valkyrie entering pumps the first (a Valkyrie is itself an Angel) without pumping itself. ANGEL TOKENS DO TRIGGER IT, which is most of the card's value here -- Resplendent Angel's and Serra the Benevolent's 4/4 Angel tokens are made by CreateToken, which stamps the token's subtypes and then runs the same enter cascade. Bishop of Wings' 1/1 Spirit is NOT an Angel and correctly does not trigger it. The counters go on ITSELF, never on the entrant, so there is no ordering coupling with Righteous Valkyrie's toughness-scaled lifegain or Giada's as-enters counters -- every interaction is commutative counter addition. Added through the AddPlusCounters chokepoint (not a raw push_back) so counters MERGE into one entry: BuildSimKey folds each Counter entry separately, and un-merged entries would split the transposition key for boards that are genuinely identical. [PARTIAL: FLYING is parsed but structurally INERT for combat -- no blocker path in ResolveCombatDamage. WHY inert: structural. It IS read by Serra the Benevolent's +2 flying anthem, so the keyword is not cosmetic in this deck.]",
+   "template": "custom",
+   "parameters": {
+    "own_creature_enters_self_counters": 1,
+    "enters_watch_subtypes": [
+     "Angel"
+    ]
+   }
+  },
+  {
+   "name": "Bishop of Wings",
+   "mana_cost": "{W}{W}",
+   "types": [
+    "Creature"
+   ],
+   "subtypes": [
+    "Human",
+    "Cleric"
+   ],
+   "keywords": [],
+   "power": 1,
+   "toughness": 4,
+   "oracle_text": "Whenever an Angel you control enters, you gain 4 life.\nWhenever an Angel you control dies, create a 1/1 white Spirit creature token with flying. [Bishop is a Human CLERIC, not an Angel: it can never be the Angel that triggers its own enter half (so the shared watcher's \"another\" index skip is faithful and creature_enters_includes_self stays false), and being a Cleric it DOES satisfy Righteous Valkyrie's \"another Angel or Cleric you control enters\". ENTER HALF: own_creature_enters_lifegain 4 gated by enters_watch_subtypes [\"Angel\"], fired from the shared FireCreatureEnterWatchers cascade -- once per Angel entering on our side, INCLUDING TOKENS. Each gain is its OWN life-gain EVENT (CR 119.10) through the shared GainLife hook, so N Bishops on one Angel is N events = N Archangel of Thune team pumps, never one gain of 4N; it also accumulates life_gained_this_turn for Resplendent Angel's \"gained 5 or more life this turn\" end step and pushes life toward Righteous Valkyrie's starting+7 anthem. This is the deck's engine. DIES HALF: dies_watch_subtype \"Angel\" + a 1/1 white Spirit with flying, fired from OnCreatureDies, which every death site funnels through; the Spirit is not an Angel, so it never re-triggers the enter half. THE DIES HALF IS LIVE BUT RARE, and deliberately implemented rather than deferred -- a rare trigger is not an inert one. Against this engine's single passive opponent (never blocks, never deals damage, never removes, takes no turns) the ONLY Angel death path is the LEGEND RULE on the deck's 3 Lyra Dawnbringer and 2 Giada, Font of Hope, both Legendary Creature - Angel: EnforceLegendRule routes every doomed creature through OnCreatureDies, and the newcomer's enter trigger is already banked before that state-based action runs, so casting a second Lyra with Bishop out is \"gain 4, Thune counters on the team, then a 1/1 flier\". The deck's own removal CANNOT feed it: Swords to Plowshares EXILES (exile is not a death, CR 700.4) and Unexpectedly Absent tucks into the library -- neither is a battlefield-to-graveyard move. No sacrifice outlets, no -X/-X, no self-damage, so the lethal-damage and toughness SBAs are unreachable. Token FLYING is carried, not dropped as inert, because Serra the Benevolent's +2 reads it (\"creatures you control with flying\"); token colour white is carried for faithfulness and nothing in mono-white Angels reads it. Both triggers are mandatory and untargeted -- no player choice to surface.]",
+   "template": "custom",
+   "parameters": {
+    "own_creature_enters_lifegain": 4,
+    "enters_watch_subtypes": [
+     "Angel"
+    ],
+    "dies_watch_subtype": "Angel",
+    "dies_trigger_creates_tokens": 1,
+    "dies_token_power": 1,
+    "dies_token_toughness": 1,
+    "dies_token_subtypes": [
+     "Spirit"
+    ],
+    "dies_token_keywords": [
+     "Flying"
+    ],
+    "created_token_color": "W"
+   }
+  },
+  {
+   "name": "Righteous Valkyrie",
+   "mana_cost": "{2}{W}",
+   "types": [
+    "Creature"
+   ],
+   "subtypes": [
+    "Angel",
+    "Cleric"
+   ],
+   "keywords": [
+    "Flying"
+   ],
+   "power": 2,
+   "toughness": 4,
+   "oracle_text": "Flying\nWhenever another Angel or Cleric you control enters, you gain life equal to that creature's toughness.\nAs long as you have at least 7 life more than your starting life total, creatures you control get +2/+2. [ENTER WATCHER: the own-controller lane of the shared FireCreatureEnterWatchers, \"another\" via the existing entered_index skip (creature_enters_includes_self stays false), filtered by enters_watch_subtypes [\"Angel\",\"Cleric\"] -- an OR over the list, so Bishop of Wings (Human CLERIC) and every Angel both trigger it, while Bishop's 1/1 Spirit token does not. The amount is own_creature_enters_lifegain_toughness: the entering creature's LIVE effective toughness (printed + counters + temp + ComputeLordBonus), NOT its printed toughness -- which matters concretely here, because Giada, Font of Hope makes other Angels enter WITH +1/+1 counters (a CR 614 replacement applied above the trigger cascade, so the counters are already on the body), Lyra Dawnbringer's lord adds +1/+1, and this card's own live anthem adds another +2. Recomputed PER TRIGGERING WATCHER rather than memoized, because an earlier watcher's gain in the same enter can cross the threshold and switch the anthem on mid-loop; CR 608.2 has each trigger compute its value on its own resolution. Routed through the shared GainLife, so each trigger is its own life-gain EVENT (CR 119.10) feeding Archangel of Thune, Resplendent Angel's 5-life end step and this anthem. ANTHEM: a CONDITIONAL STATIC (CR 611.3, continuously checked) keyed on life RELATIVE to gamesetup::StartingLife() -- StartingLife() + 7, NEVER a literal 27, since a 2HG job starts at 30 and the correct threshold there is 37 (the same reading as Ajani, Strength of the Pride's 0). Evaluated in ComputeLordBonus beside the hand-size anthem pass, so every combat / board-eval / SBA read site picks it up, and guarded by the MinLifeAboveStartAnthem() derived constant so every deck without such a card pays one integer compare. Deliberately NOT template lord_effect: its unconditional power_bonus is 0, so IsLordPermanent is false and it is absent from the caller's pre-filtered lord list; the conditional pass scans it separately. SELF-INCLUSIVE (\"creatures you control\", not \"other\") and non-legendary, so 4 copies stack to +8/+8 and each copy's enter triggers the others. In this matchup life is MONOTONE NON-DECREASING (the passive opponent deals no damage and the deck pays no life), so once crossed the anthem never switches back off -- the off-path is real code that is inert here. [PARTIAL: FLYING is parsed but structurally INERT for combat -- no blocker path in ResolveCombatDamage. WHY inert: structural. It IS read by Serra the Benevolent's +2.]",
+   "template": "vanilla_creature",
+   "parameters": {
+    "enters_watch_subtypes": [
+     "Angel",
+     "Cleric"
+    ],
+    "own_creature_enters_lifegain_toughness": true,
+    "affects_all_creatures": true,
+    "life_above_start_anthem_life": 7,
+    "life_above_start_anthem_power": 2,
+    "life_above_start_anthem_tough": 2
+   }
+  },
+  {
+   "name": "Seraph Sanctuary",
+   "mana_cost": "",
+   "types": [
+    "Land"
+   ],
+   "subtypes": [],
+   "keywords": [],
+   "oracle_text": "When this land enters, you gain 1 life.\nWhenever an Angel you control enters, you gain 1 life.\n{T}: Add {C}. [All three clauses modelled; nothing deferred. Land ETB lifegain via etb_lifegain (Kazandu Refuge precedent), fired from the land-play path through the shared GainLife -- so it bumps life_gained_this_turn and fires the whenever-you-gain-life watchers (Archangel of Thune's team counters, Resplendent Angel's 5-life threshold). The Angel trigger is own_creature_enters_lifegain 1 narrowed by enters_watch_subtypes [\"Angel\"], fired from the shared FireCreatureEnterWatchers, whose watcher loop scans ALL battlefield permanents rather than only creatures -- so a LAND watcher needs no new firing site. It is the own-controller lane because the oracle says \"an Angel YOU CONTROL\". ENTERS UNTAPPED: the card has no enters-tapped clause, so enters_tapped is deliberately absent (the Blasted Landscape precedent). Taps for COLOURLESS only and the ability is UNRESTRICTED -- there is no spend-only-on-an-Angel clause on this card (that is Giada). In this mono-white deck that {C} cannot pay a {W} pip, which is faithful and is a real cost of the manabase, not a modelling gap: 4 of 24 lands produce colourless only, against {3}{W}{W} Archangel of Thune and the other WW Angels, so Sanctuary-heavy openers genuinely colour-screw. The 1 life is NOT small here -- it is a life-gain EVENT (CR 119.10) per Angel per copy, and with Archangel of Thune out every one of those events is +1/+1 on the whole team.]",
+   "template": "basic_land",
+   "parameters": {
+    "produces": [
+     "C"
+    ],
+    "etb_lifegain": 1,
+    "own_creature_enters_lifegain": 1,
+    "enters_watch_subtypes": [
+     "Angel"
+    ]
+   }
+  },
+  {
+   "name": "Resplendent Angel",
+   "mana_cost": "{1}{W}{W}",
+   "types": [
+    "Creature"
+   ],
+   "subtypes": [
+    "Angel"
+   ],
+   "keywords": [
+    "Flying"
+   ],
+   "power": 3,
+   "toughness": 3,
+   "oracle_text": "Flying\nAt the beginning of each end step, if you gained 5 or more life this turn, create a 4/4 white Angel creature token with flying and vigilance.\n{3}{W}{W}{W}: Until end of turn, this creature gets +2/+2 and gains lifelink. [NOT LEGENDARY, so four copies coexist and their triggers COMPOUND: a qualifying end step with four out makes FOUR 4/4 Angels. THE TRIGGER rides the Ocelot Pride block (endstep_lifegain_tokens 1 + the token spec + endstep_token_keywords), resolved by the shared PerformEndStepLifegainTokens called identically from the executor's EndStep and the rollout's end-of-turn mirror -- lockstep, or the rollout would project a board the real game keeps growing. THE THRESHOLD IS THE WHOLE CARD AND IT IS CUMULATIVE: \"you gained 5 or more life this turn\" sums EVERY life-gain event of the turn (Player::life_gained_this_turn sums amounts and is never reduced by life loss), so Bishop of Wings' 4 plus Seraph Sanctuary's 1 arms it across TWO separate events -- no single 5-life event is required. Ocelot Pride's existing read is the boolean \">0\" and would have fired this on 1 life, which is why endstep_lifegain_threshold exists (default 1 = the historical behaviour), compared PER CARD inside the trigger loop. INTERVENING-IF (CR 603.4): the condition is SNAPSHOT before anything is created, which is load-bearing here in a way it never was for Ocelot Pride -- the Angel this trigger makes is itself worth 4 life off each Bishop plus its toughness off each Righteous Valkyrie, and that later life must NOT retroactively arm a copy whose condition had already failed when the end step began. THE TOKEN IS AN ANGEL, which is the point: it enters through the universal cascade, so each one is an Angel ENTERING -- Bishop of Wings, Seraph Sanctuary, Righteous Valkyrie, Youthful Valkyrie's counter, Giada's as-enters counters -- and every one of those gains is a separate life-gain EVENT, i.e. a team-wide +1/+1 from every Archangel of Thune. THE ACTIVATED ABILITY is a SELF pump with a keyword rider, so it rides firebreathing_cost/_power/_tough + firebreathing_grants_lifelink, and like Burning-Fist Minotaur's discard rider it is routed OUT of the greedy combat-time firebreathing converter and INTO a searched main-phase ActivatePump (mode 3) -- that converter ranks activations by damage per MANA, and six mana for +2/+0 is a 0.33 ratio that ranks dead last, while the lifelink half is what turns a swing into the 5th life that arms this very card's end-step trigger for a free 4/4 flier. Pricing that at zero inside a greedy step would be exactly the greedy-step-inside-the-searched-window this repo forbids, so the trade is the SEARCH's call. Lifelink sets Permanent::temp_lifelink, the same until-EOT field Heliod's grant uses, read by CreatureHasLifelink at the damage sites; per CR 510.2 combat damage is simultaneous, so the life it gains does not feed back into that same combat. Repeat activations stack the +2/+2; the lifelink half is idempotent. The +2 TOUGHNESS is modelled for real (temp_tough_bonus) even though nothing in a goldfish can kill the Angel -- disclosed, not deferred. [PARTIAL: \"at the beginning of EACH end step\" is collapsed to one trigger per turn. WHY provably inert: this engine's single passive opponent takes NO TURNS -- the goldfish is the active player every turn -- so there is no opponent end step to miss. If an opponent-turn model is ever built this needs an each-player flag.] [PARTIAL: FLYING on the Angel and on its token is parsed but structurally INERT for combat -- no blocker path in ResolveCombatDamage. WHY inert: structural. Both are still carried because Serra the Benevolent's +2 reads flying. VIGILANCE on the token is likewise carried and inert: the opponent never attacks, so there is never a reason to hold a blocker back.]",
+   "template": "custom",
+   "parameters": {
+    "endstep_lifegain_tokens": 1,
+    "endstep_lifegain_threshold": 5,
+    "endstep_token_power": 4,
+    "endstep_token_toughness": 4,
+    "endstep_token_color": "W",
+    "endstep_token_subtypes": [
+     "Angel"
+    ],
+    "endstep_token_keywords": [
+     "Flying",
+     "Vigilance"
+    ],
+    "firebreathing_cost": "{3}{W}{W}{W}",
+    "firebreathing_power": 2,
+    "firebreathing_tough": 2,
+    "firebreathing_grants_lifelink": true
+   }
+  },
+  {
+   "name": "Legion Angel",
+   "mana_cost": "{2}{W}{W}",
+   "types": [
+    "Creature"
+   ],
+   "subtypes": [
+    "Angel",
+    "Warrior"
+   ],
+   "keywords": [
+    "Flying"
+   ],
+   "power": 4,
+   "toughness": 3,
+   "oracle_text": "Flying\nWhen this creature enters, you may reveal a card you own named Legion Angel from outside the game and put it into your hand. [THE deck's only sideboard access, and the USER (2026-09-17) ruled it a real sideboard card BECAUSE it searches other copies -- the other two sideboard cards are future-modification candidates and are NOT reachable (this wish names only itself). 1 mainboard + 3 sideboard = a FOUR-DEEP chain: each ETB fetches the next copy TO HAND, so it is CARD ADVANTAGE, not tempo -- the fetched copy still costs {2}{W}{W} to cast. A wish is mechanically a TUTOR whose search ZONE is the sideboard (CR 400.11b), so this rides the whole searched-tutor apparatus (tutor_to_hand + tutor_types, the plan-variant target axis, the signature folds) with only the pool swapped -- the Living Wish precedent. TWO DIFFERENCES FROM LIVING WISH, both load-bearing. (1) NAME-RESTRICTED: wish_requires_name pins the target to this card's own name, so the pool is the 3 sideboard copies and NOT the two Angels beside them. It is enforced as one more conjunct inside TutorNumericFilterOk -- which is what makes it reach every enumeration site at once -- plus a resolution guard in PerformTutor, so enumeration and resolution cannot drift if a future archetype provider overrides TutorCandidates. (2) The source is a CREATURE, not a sorcery, so it fetches from its ETB with the target baked at cast time (the Goblin Matron / Stoneforge Mystic shape) and, with one legal name, there is exactly one variant. tutor_types [Creature] is REQUIRED, not decorative: the ETB tutor arm is gated on a non-empty type list, and every card named Legion Angel IS a Creature, so the filter is faithful and the NAME is the binding constraint. Each sideboard card is a SINGLETON consumed on fetch, so the 4th copy's ETB finds an empty pool and whiffs harmlessly. NO shuffle: a wish searches no library, so CR 701.19c never fires and the wish path skips the post-search shuffle unconditionally. The Angel Warrior subtypes are NOT inert -- this body is an Angel ETB, so it feeds the deck's tribal lifegain chain (Bishop of Wings, Seraph Sanctuary, Righteous Valkyrie), takes Giada's as-enters counters and a Youthful Valkyrie counter, and each of those gains is a separate life-gain EVENT for Archangel of Thune. [PARTIAL: \"you may\" -- declining the fetch is not offered autonomously. WHY inert: a to-hand fetch costs no mana, no life, no tempo, no shuffle and reveals nothing a passive opponent could act on, so taking is weakly dominant (strictly, below 7 cards in hand); at 8+ the cleanup discard sheds a flooded Plains rather than a castable Angel. Disclosed, not silently dropped.] [PARTIAL: \"reveal\" -- the information half is inert (the passive opponent makes no decisions and nothing reads \"was revealed\"); the viewer half rides the tutor path's existing reveal.] [PARTIAL: FLYING is parsed but structurally INERT for combat -- no blocker path in ResolveCombatDamage. WHY inert: structural. It IS read by Serra the Benevolent's +2.]",
+   "template": "custom",
+   "parameters": {
+    "tutor_to_hand": true,
+    "tutor_types": [
+     "Creature"
+    ],
+    "wish_from_sideboard": true,
+    "wish_requires_name": "Legion Angel"
+   }
+  },
+  {
+   "name": "Serra the Benevolent",
+   "mana_cost": "{2}{W}{W}",
+   "types": [
+    "Planeswalker"
+   ],
+   "supertypes": [
+    "Legendary"
+   ],
+   "subtypes": [
+    "Serra"
+   ],
+   "keywords": [],
+   "oracle_text": "+2: Creatures you control with flying get +1/+1 until end of turn.\n−3: Create a 4/4 white Angel creature token with flying and vigilance.\n−6: You get an emblem with \"If you control a creature, damage that would reduce your life total to less than 1 reduces it to 1 instead.\" [Enters at loyalty 4; one loyalty ability per turn, activatable the turn she lands; dies at loyalty 0. Vs the passive opponent the walker is NEVER ATTACKED, so loyalty only ever RISES -- the -6 is reachable two turns after she lands (4 -> +2 -> 6 -> -6 -> 0), which is why the emblem needed a ruling rather than a shrug. +2 = flying_team_pump 1: every creature we control WITH FLYING gets +1/+1 until end of turn (temp_power_bonus/temp_tough_bonus, cleared at cleanup, already folded into the sim key). The set is fixed AT RESOLUTION (CR 611.2c) -- an Angel cast later in the same main gets nothing. Not a small effect here: 9 of the deck's 10 creature slots fly; only Bishop of Wings (Human Cleric) misses. THIS IS THE FIRST EFFECT IN THE ENGINE THAT READS Keyword::Flying FOR A PUMP -- flying was previously inert everywhere, so every Angel's and every Angel token's keyword list is now load-bearing rather than cosmetic. -3 = angel_token_44: a 4/4 white Angel with flying and vigilance, created through the SHARED CreateToken (not the local loyalty make_token lambda, which has no white-only colour path and carries no keyword list -- Flying would be dropped and Serra's own +2 would then skip her own token), which stamps subtypes, maps the colour and both keywords, and ends in the universal enter cascade. The Angel SUBTYPE is the payload: Bishop of Wings gains 4, Seraph Sanctuary 1, Righteous Valkyrie its toughness, Youthful Valkyrie takes a counter, Giada's as-enters replacement sizes it up and Lyra's lord grants it +1/+1 and lifelink -- each of those gains its own life-gain EVENT (CR 119.10) and so a team-wide +1/+1 from every Archangel of Thune. It is the SAME token Resplendent Angel's end-step trigger makes. Legend rule engine-enforced at 2 copies. [PARTIAL: the -6 EMBLEM is granted as a NO-OP and no emblem zone is built. WHY provably inert: it is a damage floor on OUR life total, and nothing in this game can damage us -- the single passive opponent never attacks, blocks, casts or deals damage, and this 60 contains no self-damage source, so our life total only ever rises and the replacement has zero reachable applications. The LOYALTY COST is real and is the ability's entire content here: -6 from exactly 6 kills Serra for nothing, forfeiting every future anthem and Angel. It is therefore NOT enumerated for the autonomous search -- a VALUE gate, not a legality one, exactly like Ajani, Strength of the Pride's 0 -- but it stays enumerated whenever rules-legal under human play, per the never-narrow-a-legal-choice rule.] [PARTIAL: VIGILANCE on the token is parsed but structurally INERT -- the opponent never attacks, so there is never a reason to hold a blocker back. WHY inert: structural. FLYING on the token is NOT inert: Serra's own +2 reads it.]",
+   "template": "custom",
+   "parameters": {
+    "loyalty_start": 4,
+    "loyalty_abilities": [
+     {
+      "delta": 2,
+      "effect": "flying_team_pump",
+      "amount": 1
+     },
+     {
+      "delta": -3,
+      "effect": "angel_token_44"
+     },
+     {
+      "delta": -6,
+      "effect": "emblem_damage_floor"
+     }
+    ]
+   }
+  },
+  {
+   "name": "Giada, Font of Hope",
+   "mana_cost": "{1}{W}",
+   "types": [
+    "Creature"
+   ],
+   "supertypes": [
+    "Legendary"
+   ],
+   "subtypes": [
+    "Angel"
+   ],
+   "keywords": [
+    "Flying",
+    "Vigilance"
+   ],
+   "power": 2,
+   "toughness": 2,
+   "oracle_text": "Flying, vigilance\nEach other Angel you control enters with an additional +1/+1 counter on it for each Angel you already control.\n{T}: Add {W}. Spend this mana only to cast an Angel spell. [CLAUSE 2 is a REPLACEMENT EFFECT (CR 614), not a trigger: other_subtype_enters_counters_subtype \"Angel\" + _per_each 1, applied at the top of FireEtbWatchers -- the universal enter cascade -- ABOVE the call into the creature-enter watchers, so the counters are already on the body when the enter TRIGGERS read it. That ordering is load-bearing, not cosmetic: Righteous Valkyrie gains life equal to THAT CREATURE'S TOUGHNESS, so an Archangel of Thune entering as a 4/5 must gain 5, not 4 -- and that life feeds Resplendent Angel's 5-life end-step threshold and Archangel of Thune's team counters. Placing the block below the call would compile, stay byte-identical for every other deck, and be wrong only for this one. N = Angels you control OTHER than the entrant, INCLUDING Giada herself (Scryfall ruling 2024-11-08: \"each Angel you already control\" means each Angel you control other than the Angel entering, including Giada), so N >= 1 whenever the effect applies and a lone Giada plus an entering Archangel gives a 4/5, not a 5/6. Applies to TOKENS too (Serra the Benevolent's -3, Resplendent Angel's end step), since CreateToken routes through the same cascade. Giada's OWN entry gets nothing (\"each OTHER Angel\"), but a SECOND Giada entering DOES get counters from the first before the legend rule kills one -- and that legend-rule death is itself an Angel dying, i.e. a Bishop of Wings Spirit token. CLAUSE 3 is Angel-restricted mana: mana_dork + produces [W] + creature_mana_only + mana_only_subtype \"Angel\". The bare creature_mana_only collapse used for Cavern of Souls / Unclaimed Territory is NOT faithful here -- that collapse is justified as exact for a MONO-TRIBAL deck, and this deck plays 4 Bishop of Wings (Human Cleric, {W}{W}), a non-Angel creature Giada's mana may not legally cast. Without the subtype Giada would become a 21st white source for a {W}{W} two-drop in a deck with only ~20 white sources (Seraph Sanctuary taps for {C}), so being white-short with Giada untapped is a reachable line, not a corner case. The restriction is carried literally via a thread_local pay scope set at each cast site and mixed into the mana-cache key. Summoning sickness applies to the {T} and is already enforced; Lightning Greaves' haste unlocks it same-turn (CR 302.6). VIGILANCE IS LIVE AND NOT INERT here: it lets Giada attack and still tap for Angel mana the same turn. [PARTIAL: FLYING is parsed but structurally INERT for combat -- no blocker path in ResolveCombatDamage. WHY inert: structural. It IS read by Serra the Benevolent's +2.]",
+   "template": "mana_dork",
+   "parameters": {
+    "produces": [
+     "W"
+    ],
+    "creature_mana_only": true,
+    "mana_only_subtype": "Angel",
+    "other_subtype_enters_counters_subtype": "Angel",
+    "other_subtype_enters_counters_per_each": 1
+   }
   }
  ]
 }

@@ -148,6 +148,18 @@
     "toughness": "5",
     "type_line": "Creature — Dinosaur"
   },
+  "Apex Altisaur": {
+    "cmc": 9.0,
+    "keywords": [
+      "Enrage",
+      "Fight"
+    ],
+    "mana_cost": "{7}{G}{G}",
+    "oracle_text": "When this creature enters, it fights up to one target creature you don't control.\nEnrage — Whenever this creature is dealt damage, it fights up to one target creature you don't control.",
+    "power": "10",
+    "toughness": "10",
+    "type_line": "Creature — Dinosaur"
+  },
   "Apex of Power": {
     "cmc": 10.0,
     "keywords": [],
@@ -301,6 +313,15 @@
     "power": null,
     "toughness": null,
     "type_line": "Artifact"
+  },
+  "Bishop of Wings": {
+    "cmc": 2.0,
+    "keywords": [],
+    "mana_cost": "{W}{W}",
+    "oracle_text": "Whenever an Angel you control enters, you gain 4 life.\nWhenever an Angel you control dies, create a 1/1 white Spirit creature token with flying.",
+    "power": "1",
+    "toughness": "4",
+    "type_line": "Creature — Human Cleric"
   },
   "Black Lotus": {
     "cmc": 0.0,
@@ -1205,6 +1226,15 @@
     "toughness": null,
     "type_line": "Land"
   },
+  "Fyndhorn Elves": {
+    "cmc": 1.0,
+    "keywords": [],
+    "mana_cost": "{G}",
+    "oracle_text": "{T}: Add {G}.",
+    "power": "1",
+    "toughness": "1",
+    "type_line": "Creature — Elf Druid"
+  },
   "Galerider Sliver": {
     "cmc": 1.0,
     "keywords": [],
@@ -1240,6 +1270,29 @@
     "power": "5",
     "toughness": "5",
     "type_line": "Legendary Creature — Human Wizard"
+  },
+  "Ghalta, Stampede Tyrant": {
+    "cmc": 8.0,
+    "keywords": [
+      "Trample"
+    ],
+    "mana_cost": "{5}{G}{G}{G}",
+    "oracle_text": "Trample\nWhen Ghalta enters, put any number of creature cards from your hand onto the battlefield.",
+    "power": "12",
+    "toughness": "12",
+    "type_line": "Legendary Creature — Elder Dinosaur"
+  },
+  "Giada, Font of Hope": {
+    "cmc": 2.0,
+    "keywords": [
+      "Flying",
+      "Vigilance"
+    ],
+    "mana_cost": "{1}{W}",
+    "oracle_text": "Flying, vigilance\nEach other Angel you control enters with an additional +1/+1 counter on it for each Angel you already control.\n{T}: Add {W}. Spend this mana only to cast an Angel spell.",
+    "power": "2",
+    "toughness": "2",
+    "type_line": "Legendary Creature — Angel"
   },
   "Gladecover Scout": {
     "cmc": 1.0,
@@ -1858,6 +1911,17 @@
     "toughness": "1",
     "type_line": "Creature — Sliver"
   },
+  "Legion Angel": {
+    "cmc": 4.0,
+    "keywords": [
+      "Flying"
+    ],
+    "mana_cost": "{2}{W}{W}",
+    "oracle_text": "Flying\nWhen this creature enters, you may reveal a card you own named Legion Angel from outside the game and put it into your hand.",
+    "power": "4",
+    "toughness": "3",
+    "type_line": "Creature — Angel Warrior"
+  },
   "Light Up the Stage": {
     "cmc": 3.0,
     "keywords": [
@@ -1978,6 +2042,19 @@
     "power": null,
     "toughness": null,
     "type_line": "Instant"
+  },
+  "Lyra Dawnbringer": {
+    "cmc": 5.0,
+    "keywords": [
+      "First strike",
+      "Flying",
+      "Lifelink"
+    ],
+    "mana_cost": "{3}{W}{W}",
+    "oracle_text": "Flying\nFirst strike (This creature deals combat damage before creatures without first strike.)\nLifelink (Damage dealt by this creature also causes you to gain that much life.)\nOther Angels you control get +1/+1 and have lifelink.",
+    "power": "5",
+    "toughness": "5",
+    "type_line": "Legendary Creature — Angel"
   },
   "Maelstrom Archangel": {
     "cmc": 5.0,
@@ -2641,6 +2718,17 @@
     "toughness": null,
     "type_line": "Land"
   },
+  "Resplendent Angel": {
+    "cmc": 3.0,
+    "keywords": [
+      "Flying"
+    ],
+    "mana_cost": "{1}{W}{W}",
+    "oracle_text": "Flying\nAt the beginning of each end step, if you gained 5 or more life this turn, create a 4/4 white Angel creature token with flying and vigilance.\n{3}{W}{W}{W}: Until end of turn, this creature gets +2/+2 and gains lifelink.",
+    "power": "3",
+    "toughness": "3",
+    "type_line": "Creature — Angel"
+  },
   "Reveillark": {
     "cmc": 5.0,
     "keywords": [
@@ -2661,6 +2749,17 @@
     "power": null,
     "toughness": null,
     "type_line": "Sorcery"
+  },
+  "Righteous Valkyrie": {
+    "cmc": 3.0,
+    "keywords": [
+      "Flying"
+    ],
+    "mana_cost": "{2}{W}",
+    "oracle_text": "Flying\nWhenever another Angel or Cleric you control enters, you gain life equal to that creature's toughness.\nAs long as you have at least 7 life more than your starting life total, creatures you control get +2/+2.",
+    "power": "2",
+    "toughness": "4",
+    "type_line": "Creature — Angel Cleric"
   },
   "Rimefeather Owl": {
     "cmc": 7.0,
@@ -2855,6 +2954,15 @@
     "toughness": null,
     "type_line": "Instant"
   },
+  "Seraph Sanctuary": {
+    "cmc": 0.0,
+    "keywords": [],
+    "mana_cost": "",
+    "oracle_text": "When this land enters, you gain 1 life.\nWhenever an Angel you control enters, you gain 1 life.\n{T}: Add {C}.",
+    "power": null,
+    "toughness": null,
+    "type_line": "Land"
+  },
   "Serra Ascendant": {
     "cmc": 1.0,
     "keywords": [
@@ -2865,6 +2973,15 @@
     "power": "1",
     "toughness": "1",
     "type_line": "Creature — Human Monk"
+  },
+  "Serra the Benevolent": {
+    "cmc": 4.0,
+    "keywords": [],
+    "mana_cost": "{2}{W}{W}",
+    "oracle_text": "+2: Creatures you control with flying get +1/+1 until end of turn.\n−3: Create a 4/4 white Angel creature token with flying and vigilance.\n−6: You get an emblem with \"If you control a creature, damage that would reduce your life total to less than 1 reduces it to 1 instead.\"",
+    "power": null,
+    "toughness": null,
+    "type_line": "Legendary Planeswalker — Serra"
   },
   "Sethron, Hurloon General": {
     "cmc": 5.0,
@@ -3596,6 +3713,17 @@
     "toughness": null,
     "type_line": "Land"
   },
+  "World War Hulk": {
+    "cmc": 5.0,
+    "keywords": [
+      "Double"
+    ],
+    "mana_cost": "{3}{G}{G}",
+    "oracle_text": "(As this Saga enters and after your draw step, add a lore counter. Sacrifice after III.)\nI — The next red or green creature spell you cast this turn can be cast without paying its mana cost.\nII — Put three +1/+1 counters on target creature you control.\nIII — Choose target creature you control. Until end of turn, double its power and toughness and it gains trample.",
+    "power": null,
+    "toughness": null,
+    "type_line": "Enchantment — Saga"
+  },
   "Worldly Tutor": {
     "cmc": 1.0,
     "keywords": [],
@@ -3642,6 +3770,17 @@
     "power": "2",
     "toughness": "1",
     "type_line": "Creature — Human Shaman"
+  },
+  "Youthful Valkyrie": {
+    "cmc": 2.0,
+    "keywords": [
+      "Flying"
+    ],
+    "mana_cost": "{1}{W}",
+    "oracle_text": "Flying\nWhenever another Angel you control enters, put a +1/+1 counter on this creature.",
+    "power": "1",
+    "toughness": "3",
+    "type_line": "Creature — Angel"
   },
   "Zada, Hedron Grinder": {
     "cmc": 4.0,

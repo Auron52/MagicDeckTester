@@ -904,13 +904,18 @@ void GoldFishRunner::StampDeckTraits(GameState& state, const Decklist& deck)
     }();
     // Does anything in this deck READ life_gained_this_turn at the END STEP (Ocelot Pride)? Gates
     // the life_gained_this_turn key fold only -- see GameState::deck_reads_endstep_lifegain.
-    state.deck_reads_endstep_lifegain = [&deck]{
+    state.deck_endstep_lifegain_max_threshold = [&deck]{
+        int mx = 0;
         for (const Card& c : deck.mainboard)
         {
             const CardDefinition* d = CardDatabase::Instance().LookupCached(c);
-            if (d && d->params.endstep_lifegain_tokens > 0) { return true; }
+            if (!d || d->params.endstep_lifegain_tokens <= 0) { continue; }
+            // Threshold 1 is the historical "gained any life at all" reading (Ocelot Pride), which
+            // is also this param's default -- so a card that never set it still stamps 1 here and
+            // keeps the bare-marker fold.
+            mx = std::max(mx, std::max(1, d->params.endstep_lifegain_threshold));
         }
-        return false;
+        return mx;
     }();
     // NOTE: opponent_library_dealt is deliberately NOT stamped here. It means "a library was
     // actually dealt", and only opponentdeck::Deal may raise it -- see the comment there. Callers

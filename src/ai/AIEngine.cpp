@@ -3682,6 +3682,10 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
         if (AffordAuditOn()) { g_afford_real_attempts.fetch_add(1, std::memory_order_relaxed); }
         if (!available.CanPay(effective))
         { if (AffordAuditOn()) { g_afford_real_fails.fetch_add(1, std::memory_order_relaxed); } return; }
+        // Subtype-restricted mana (Giada, Font of Hope): tell the payment layer WHICH spell is
+        // being paid for, so a source that may only cast an Angel spell is never spent on a Human
+        // Cleric. Inert unless some loaded card carries mana_only_subtype.
+        SpellSubtypePayScope _ssps(&def->card);
         if (!TapForCost(state, effective, available, def->card.IsCreature()))
         { if (AffordAuditOn()) { g_afford_real_fails.fetch_add(1, std::memory_order_relaxed); } return; }
 
@@ -4811,6 +4815,9 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
             // Kaldring (executor mirror): probe stranded-ness FIRST, then pay the played card's
             // own cost, then commit -- lockstep twin of the rollout's trailing-pass site.
             const CardDefinition* td = CardDatabase::Instance().Lookup(a.tutor_target);
+            // Giada: lockstep with the rollout's twin of this site -- the played card's subtypes
+            // bind a subtype-restricted source exactly as a hand cast's would.
+            SpellSubtypePayScope _ssps(td ? &td->card : nullptr);
             ManaPool avail = AvailableManaPool(state);
             if (ApplyGraveyardPlayAbility(state, state.active_player_index, a.sac_source_id,
                                           a.tutor_target.str(), /*commit=*/false)
@@ -6110,6 +6117,7 @@ void AIEngine::CastSpellFromHand(GameState& state, Card& hand_card, ManaPool& av
             }
             if (reserved_host > 0) { available = AvailableManaPool(state); }
         }
+        SpellSubtypePayScope _ssps(&def->card);   // see the Giada note at the other cast site
         bool paid_ok = TapForCost(state, effective, available, def->card.IsCreature());
         if (reserved_host > 0)
         {

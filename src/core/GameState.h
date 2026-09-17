@@ -288,13 +288,22 @@ struct GameState
     // a conditional increment at five sites).
     bool                     deck_reads_mv_cast = false;
     // Deck-level stamp (GoldFishRunner::SetupGame), same shape and same rationale as
-    // deck_reads_mv_cast: true iff some card in the deck carries endstep_lifegain_tokens, i.e.
-    // something actually READS Player::life_gained_this_turn at the end step. Ocelot Pride's
-    // trigger makes that counter future-determining in a way it was not before (a turn that gained
-    // life ends with more permanents than one that did not), so it must join the sim key -- but
-    // ONLY for a deck that runs such a card, or every lifegain deck's keys would shift for a value
-    // none of them reads. Gates the key fold only; the counter itself always runs.
-    bool                     deck_reads_endstep_lifegain = false;
+    // The LARGEST CardParams::endstep_lifegain_threshold over the cards in this deck that carry
+    // endstep_lifegain_tokens, i.e. over everything that actually READS
+    // Player::life_gained_this_turn at the end step; 0 = no such card. (Was a bare bool
+    // `deck_reads_endstep_lifegain` until 2026-09-17, when Resplendent Angel introduced the first
+    // threshold above 1.) Ocelot Pride's trigger makes that counter future-determining in a way it
+    // was not before (a turn that gained life ends with more permanents than one that did not), so
+    // it must join the sim key -- but ONLY for a deck that runs such a card, or every lifegain
+    // deck's keys would shift for a value none of them reads. Gates the key fold only; the counter
+    // itself always runs.
+    //
+    // WHY THE MAXIMUM AND NOT A FLAG: at threshold 1 the trigger reads ">0" and never the amount,
+    // so a bare marker is the right fold -- a 1-life turn and a 40-life turn are the same position.
+    // At threshold 5 (Resplendent Angel) that is FALSE: a 3-life turn and a 7-life turn have
+    // genuinely different futures and must not share a memo key. See the fold in TurnSolver's
+    // BuildSimKey, which clamps the counter to this maximum.
+    int                      deck_endstep_lifegain_max_threshold = 0;
     // "You can cast only one more spell this turn" (Irencrag Feat, CardParams::max_casts_after) enforced
     // at EXECUTION time: -1 = no restrictor active (unlimited); otherwise the number of ADDITIONAL spells
     // still castable this turn. Installed when a max_casts_after spell is cast, decremented at every later

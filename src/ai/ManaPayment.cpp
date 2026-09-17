@@ -514,7 +514,7 @@ bool TapForCostSharedOnce(GameState& state, const ManaCost& cost_in, bool for_cr
                    || def.params.mana_rock
                    || PaySacSpendableNow(state, p, def);   // §2a: a Treasure pays like a land, then dies (fresh-hold aware)
         if (!is_src) { return false; }
-        if (def.params.creature_mana_only && !for_creature) { return false; }
+        if (!RestrictedManaUsable(def.params, for_creature, 1)) { return false; }
         if (!StorageSourceLive(p, def)) { return false; }   // uncharged storage land makes no mana
         if (!GraveyardFuelLive(state, active, def)) { return false; }   // Deathrite: no gy land = no mana
         if (!ManaSubtypeGateLive(state, active, def)) { return false; } // Arbor Elf: no Forest = no mana

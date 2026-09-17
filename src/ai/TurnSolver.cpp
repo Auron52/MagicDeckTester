@@ -3939,6 +3939,9 @@ static bool SubsetPayableWithFilters(const GameState& state, const std::vector<A
                               && def->params.land_aura_extra_mana > 0;
             if ((is_rock || is_aura) != want_rock) { continue; }
             const bool for_creature = def && def->card.IsCreature();
+            // Subtype-restricted mana (Giada): carry the paying spell so an Angel-only source is
+            // not counted as payment for a non-Angel. Inert without mana_only_subtype.
+            SpellSubtypePayScope _ssps(def ? &def->card : nullptr);
             // RESERVE THE AURA'S DECLARED HOST across its own payment: which land pays for a land Aura
             // and which land carries it are the same scarce resource, and spending the host is how a
             // legal "Aura here, then the spell it enables" line reads as unpayable. Retried unreserved
@@ -4346,6 +4349,7 @@ static bool SubsetPayableSequential(const GameState& state, const std::vector<Ac
                     lp.tapped = true; reserved_host = a.enchant_target; break;
                 }
             }
+            SpellSubtypePayScope _ssps(&def.card);   // Giada: see the note at the enumeration site
             bool paid_ok = TapForCostDirect(cp, ec, def.card.IsCreature());
             if (reserved_host > 0)
             {
@@ -14083,6 +14087,70 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
                     if (!HumanPlayActive()) { continue; }
                     ev = 1;
                 }
+                else if (ab.effect == "flying_team_pump")
+                {
+                    // Serra the Benevolent +2: +N/+N until EOT to every FLIER we control. Worth
+                    // the extra damage it puts through this turn, which is N per flier that can
+                    // actually attack -- a tapped or summoning-sick body gains nothing this turn,
+                    // and the pump expires at cleanup. Plus the loyalty it ADDS, which vs a passive
+                    // opponent (the walker is never attacked, so loyalty only ever rises) is real
+                    // progress toward the -3 Angel.
+                    int fliers = 0;
+                    for (const Permanent& q : state.battlefield)
+                    {
+                        if (q.controller_index != state.active_player_index) { continue; }
+                        if (!q.card.IsCreature() && !q.is_animated) { continue; }
+                        if (!q.card.HasKeyword(Keyword::Flying)) { continue; }
+                        if (!CanAttackFull(q, state.battlefield, state.active_player_index))
+                        { continue; }
+                        ++fliers;
+                    }
+                    ev = fliers * ab.amount * DMG;
+                    if (ev <= 0) { ev = 1; }   // still legal, still banks loyalty
+                }
+                else if (ab.effect == "angel_token_44")
+                {
+                    // Serra the Benevolent -3: a 4/4 flying Angel. Its damage over the remaining
+                    // attacks, plus the tribal ENTER payoff, which in this deck is most of the
+                    // value: every Angel-enter watcher fires (Bishop of Wings 4 life, Seraph
+                    // Sanctuary 1, Righteous Valkyrie its toughness), and each of those gains is
+                    // its own life-gain EVENT, i.e. a team-wide +1/+1 counter from every Archangel
+                    // of Thune. Scored with the same warden x reciprocal shape pridemate_token
+                    // above uses, so the two token-makers are priced consistently.
+                    int wardens = 0, recip = 1, own_creatures = 0; bool team = false;
+                    for (const Permanent& q : state.battlefield)
+                    {
+                        if (q.controller_index != state.active_player_index) { continue; }
+                        if (q.card.IsCreature()) { ++own_creatures; }
+                        const CardDefinition* qd = CardDatabase::Instance().LookupCached(q.card);
+                        if (!qd) { continue; }
+                        if (qd->params.any_creature_enters_lifegain > 0
+                            || qd->params.own_creature_enters_lifegain > 0
+                            || qd->params.own_creature_enters_lifegain_toughness) { ++wardens; }
+                        if (qd->params.lifegain_self_counters > 0)
+                        { recip += qd->params.lifegain_self_counters; }
+                        if (qd->params.lifegain_each_own_creature_counters > 0) { team = true; }
+                    }
+                    if (team) { recip += own_creatures + 1; }
+                    ev = 4 * DMG * std::max(0, ExpectedAttacks(state) - 1) + wardens * recip * DMG;
+                    if (ev <= 0) { ev = 1; }
+                }
+                else if (ab.effect == "emblem_damage_floor")
+                {
+                    // Serra the Benevolent -6: the emblem is a damage floor on OUR life total and
+                    // nothing in this game deals us damage (passive opponent, no self-damage source
+                    // in the deck), so it is a provable no-op -- while the -6 kills a walker that
+                    // would otherwise keep making 4/4 Angels. Strictly negative in every board
+                    // state. A VALUE gate, not a legality one, exactly like Ajani's 0 above: human
+                    // play still sees it whenever it is rules-legal.
+                    //
+                    // THIS `continue` IS LOAD-BEARING. The loop's default is `int ev = 1;` and an
+                    // unrecognised effect string falls through every branch and is pushed as a real
+                    // action -- so without the gate the autonomous search would be handed a legal,
+                    // positively-valued plan that suicides a 4-mana walker for literally nothing.
+                    if (!HumanPlayActive()) { continue; }
+                    ev = 1;
+                }
                 else if (ab.effect == "face_damage") { ev = ab.amount * DMG; }
                 else if (ab.effect == "food_token") { ev = DMG / 3; }
                 else if (ab.effect == "elk_transform")
@@ -15032,16 +15100,25 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
             //           one matching creature would actually gain something -- otherwise it is a
             //           guaranteed no-op option, which the human-play plan menu must never contain
             //           (the Wirewood Lodge lesson directly above).
+            //   mode 3: Resplendent Angel "{3}{W}{W}{W}: this creature gets +2/+2 and gains
+            //           lifelink". Same reason as mode 1 -- the converter's damage-per-mana ratio
+            //           cannot price LIFE, and here the life IS the payoff (5 gained arms this
+            //           card's own end-step 4/4 Angel and every Archangel of Thune team pump).
             const bool self_pump_discard = sd->params.firebreathing_discard
                                         && sd->params.firebreathing_cost.has_value()
                                         && sd->params.firebreathing_power > 0;
+            const bool self_pump_lifelink = sd->params.firebreathing_grants_lifelink
+                                        && sd->params.firebreathing_cost.has_value()
+                                        && (sd->params.firebreathing_power > 0
+                                            || sd->params.firebreathing_tough > 0);
             const bool team_pump_haste   = sd->params.team_pump_grants_haste
                                         && sd->params.team_pump_cost.has_value();
-            if (self_pump_discard || team_pump_haste)
+            if (self_pump_discard || self_pump_lifelink || team_pump_haste)
             {
-                const int  mode = self_pump_discard ? 1 : 2;
-                const ManaCost per = self_pump_discard ? sd->params.firebreathing_cost.value()
-                                                       : sd->params.team_pump_cost.value();
+                const int  mode = self_pump_discard ? 1 : (self_pump_lifelink ? 3 : 2);
+                const ManaCost per = (self_pump_discard || self_pump_lifelink)
+                                         ? sd->params.firebreathing_cost.value()
+                                         : sd->params.team_pump_cost.value();
                 const int per_mv = per.ManaValue();
                 int kmax = per_mv > 0 ? AvailableManaPool(state).Total() / per_mv : 1;
                 if (mode == 1)
@@ -15052,7 +15129,8 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
                 // here so a future multi-hybrid activation cost cannot silently produce a cost whose
                 // hybrid metadata under-counts its own pips (which would REFUSE a legal payment).
                 if (per.hybrid_count > 0) { kmax = std::min(kmax, 4 / per.hybrid_count); }
-                bool any_beneficiary = (mode == 1);
+                // mode 3 always benefits its own source (it is a self pump), like mode 1.
+                bool any_beneficiary = (mode == 1 || mode == 3);
                 if (mode == 2)
                 {
                     for (const Permanent& q : state.battlefield)
@@ -22437,6 +22515,11 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
                     lp.tapped = true; reserved_host = enchant_target; break;
                 }
             }
+            // Subtype-restricted mana (Giada, Font of Hope): ApplyPlanDirect is THE rollout's cast
+            // path (and the shared one claude-play executes through), so without this the rollout
+            // would happily pay for a Human Cleric off an Angel-only source while the executor
+            // refuses -- a rollout-vs-real divergence, i.e. exactly an [fd-diverge].
+            SpellSubtypePayScope _ssps(&def.card);
             bool paid_ok = TapForCostDirect(state, ec, is_creature);
             if (reserved_host > 0)
             {
@@ -24957,6 +25040,11 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
             // never paid for a no-op (source tapped meanwhile / target gone / land drop consumed),
             // then pay a.cost (the nonland target's mana cost; {0} for a land) and commit.
             const CardDefinition* td = CardDatabase::Instance().Lookup(a.tutor_target);
+            // Playing a card FROM THE GRAVEYARD is a cast for payment purposes, so a
+            // subtype-restricted source (Giada) is bound by the played card's subtypes too. Inert
+            // in Angels (no graveyard-play card), wired for correctness and kept in lockstep with
+            // the AIEngine mirror of this same activation.
+            SpellSubtypePayScope _ssps(td ? &td->card : nullptr);
             if (ApplyGraveyardPlayAbility(state, state.active_player_index, a.sac_source_id,
                                           a.tutor_target.str(), /*commit=*/false)
                 && TapForCostDirect(state, a.cost,
@@ -31589,6 +31677,11 @@ static std::vector<TurnSolver::Plan> EnumeratePlansWithLandUncached(const GameSt
         // any-colour land: deduping the two loses the unrestricted land's non-creature lines
         // (and could force the strictly-worse Ziggurat as the sole representative). Distinguish.
         s += pp.creature_mana_only    ? "M" : "-";
+        // ...and a SUBTYPE-restricted source (Giada: Angel spells only) is not interchangeable with
+        // a plain creature-only one either -- it pays for a strictly smaller set of spells. Append
+        // the subtype itself, so two different tribal restrictions never collapse together. Empty
+        // for every other card, so no existing digest moves.
+        s += pp.mana_only_subtype;
         // Fetchlands with different target colours are NOT interchangeable; distinguish
         // them. Empty for ordinary lands -> sig unchanged (other decks byte-identical).
         for (const std::string& ft : pp.fetch_land_types) { s += "f" + ft; }
@@ -32573,6 +32666,23 @@ namespace enummemo
                              (unsigned long long)g_mismatches.load());
             }
             std::fprintf(stderr, "\n");
+            // Subtype-restricted mana coverage (Giada). Printed alongside the memo stats so any
+            // run can show its own proof; silent unless MTG_SUBTYPE_MANA_AUDIT is set.
+            if (SubtypeManaAuditOn())
+            {
+                std::fprintf(stderr,
+                             "[subtype-mana] checked=%lld unset_scope=%lld"
+                             " (payer=%lld flowprobe=%lld backtrack=%lld bound=%lld)%s\n",
+                             (long long)SubtypeManaCheckedCount().load(),
+                             (long long)SubtypeManaUnsetScopeCount().load(),
+                             (long long)SubtypeManaUnsetSite(1).load(),
+                             (long long)SubtypeManaUnsetSite(2).load(),
+                             (long long)SubtypeManaUnsetSite(3).load(),
+                             (long long)SubtypeManaUnsetSite(4).load(),
+                             SubtypeManaUnsetSite(1).load() == 0
+                                 ? "  (the real payer always knew its spell)"
+                                 : "  <-- THE REAL PAYER IS UNWIRED");
+            }
         }
     };
     inline Dumper g_dumper;
@@ -33038,10 +33148,27 @@ static TranspositionTable::Key BuildSimKey(const GameState& state, int depth, in
         // with extra Cats on the board. It reads ">0" and never the amount (see
         // PerformEndStepLifegainTokens), so fold a BARE MARKER rather than the value -- a 1-life
         // turn and a 40-life turn are the same position to the trigger and must share a key.
-        // Deck-gated (deck_reads_endstep_lifegain), so every other lifegain deck keeps the EXACT
-        // prior key.
-        if (state.deck_reads_endstep_lifegain && p.life_gained_this_turn > 0)
-        { Fold(k, 0x0CE10); }
+        // Deck-gated (deck_endstep_lifegain_max_threshold), so every other lifegain deck keeps the
+        // EXACT prior key.
+        //
+        // ...BUT ONLY AT THRESHOLD 1. Resplendent Angel reads "if you gained 5 OR MORE life this
+        // turn", and for it the bare marker is wrong: a 3-life turn and a 7-life turn are NOT the
+        // same position, and merging them would let the search project an end-step Angel token off
+        // a turn that never earned one. So when the deck's largest threshold is above 1, also fold
+        // the counter CLAMPED to that maximum -- every value at or above it meets every threshold
+        // in the deck and is genuinely equivalent, while values below it are kept apart. The clamp
+        // can only ever OVER-key (fewer memo hits), never under-key. At threshold 1 the extra fold
+        // is skipped entirely, so Ocelot Pride / CritterLifegain keys are byte-identical and no
+        // ground truth moves.
+        if (state.deck_endstep_lifegain_max_threshold > 0 && p.life_gained_this_turn > 0)
+        {
+            Fold(k, 0x0CE10);
+            if (state.deck_endstep_lifegain_max_threshold > 1)
+            {
+                Fold(k, static_cast<uint64_t>(std::min(p.life_gained_this_turn,
+                                                       state.deck_endstep_lifegain_max_threshold)));
+            }
+        }
         // The city's blessing (ascend). Monotone and never reset, so two otherwise-identical states
         // that differ in it have genuinely different futures (one doubles its tokens every end step,
         // the other does not). Folded only when TRUE -> byte-identical for every non-ascend deck.
@@ -46199,6 +46326,7 @@ TurnSolver::LineCheck TurnSolver::CheckLine(const GameState& state_in, bool is_p
                                         : (pending[k].has_spectacle && spec) ? pending[k].spectacle_cost
                                         : pending[k].full_cost;
                     const bool for_creature = pending[k].def && pending[k].def->card.IsCreature();
+                    SpellSubtypePayScope _ssps(pending[k].def ? &pending[k].def->card : nullptr);
                     // Pass ta=1: bank line-demanded colours ahead of an untapper's own payment so
                     // the ETB untap recharges the banked lands (see line_tap_ahead above).
                     // Transactional: adopted only when the cast still pays with the banking in

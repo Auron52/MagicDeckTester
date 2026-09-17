@@ -125,6 +125,11 @@ MANIFEST = {
     # (WriteDragonDecisionJson / dragonPanelHtml). Was `main_phase` while the selection was search-only.
     "tutor_to_battlefield":  ("dragon",               truthy),
     "fetch_land_types":      ("main_phase",           truthy),
+    # Resplendent Angel's "{3}{W}{W}{W}: +2/+2 and gains lifelink": routed OUT of the greedy combat
+    # firebreathing converter and INTO a searched main-phase Action::Kind::ActivatePump (mode 3), so
+    # whether/how many times to activate is a real plan choice the human picks among -- exactly like
+    # Burning-Fist Minotaur's discard rider and Sethron's team pump.
+    "firebreathing_grants_lifelink": ("main_phase",           truthy),
     # ---- EldraziDisplacerFlicker (flicker combo) --------------------------------------------
     # Blink ("{cost}: Exile another target creature, then return it"). TWO choices, both
     # plan-variant sub-decisions on main_phase exactly like tutor/X/soulfire-count: WHICH creature
@@ -633,6 +638,32 @@ INERT_PARAMS = {
     "etb_opp_creates_tokens": "automatic ETB gift (fixed count, single opponent -> no target)",
     "any_creature_enters_lifegain": "automatic enter trigger (Soul Warden; Soul's Attendant / Auriok Champion's 'you may' always taken -- disclosed 6a)",
     "own_creature_enters_lifegain": "automatic enter trigger (Suture Priest, may-always-taken)",
+    # ---- Angels (2026-09-17). Every one of these is a MANDATORY, UNTARGETED trigger, a static
+    # ability, a token-spec constant, or a legality FILTER on a pick that is already surfaced
+    # elsewhere -- so none of them creates an interactive choice for the human. Listed explicitly
+    # rather than left unmapped, because the self-guard is what stops a new interactive mechanic
+    # from shipping unwired, and silence is exactly what it must never accept.
+    "enters_watch_subtypes": "subtype FILTER on an automatic enter trigger (Bishop of Wings / Seraph Sanctuary / Righteous Valkyrie) -- legality, not a choice",
+    "own_creature_enters_lifegain_toughness": "automatic enter trigger whose AMOUNT is computed from the entering creature's live toughness (Righteous Valkyrie) -- mandatory, untargeted, nothing to pick",
+    "own_creature_enters_self_counters": "automatic enter trigger putting +1/+1 counters on ITS OWN source (Youthful Valkyrie) -- mandatory, and the source is not a target",
+    "life_above_start_anthem_life": "conditional static team anthem keyed on life vs STARTING life (Righteous Valkyrie) -- continuous, no activation, no choice",
+    "life_above_start_anthem_power": "anthem spec constant", "life_above_start_anthem_tough": "anthem spec constant",
+    "other_subtype_enters_counters_subtype": "as-enters +1/+1 counter REPLACEMENT effect (Giada, CR 614) -- mandatory, applies itself, nothing to pick",
+    "other_subtype_enters_counters_per_each": "replacement spec constant (counters per already-controlled match)",
+    "mana_only_subtype": "restricted-mana legality FILTER (Giada: Angel spells only) -- narrows which spells a source may pay for; the engine allocates it during payment and the viewer deliberately never offers a restricted source for hand pre-tapping (see 6a)",
+    "grants_lifelink": "static subtype keyword lord (Lyra Dawnbringer) -- continuous, no choice",
+    "dies_token_keywords": "death-token spec constant (Bishop of Wings' Spirit has flying)",
+    # The Ocelot Pride end-step block itself was never classified (it predates the self-guard's
+    # fail-closed default and only surfaced now, when Angels became the second deck to use it).
+    # Mandatory, untargeted, no "may" -- the token's stats are printed constants.
+    "endstep_lifegain_tokens": "mandatory end-step trigger creating N tokens (Ocelot Pride / Resplendent Angel) -- no 'may', no target, nothing to pick",
+    "endstep_token_power": "end-step token spec constant", "endstep_token_toughness": "end-step token spec constant",
+    "endstep_token_color": "end-step token spec constant", "endstep_token_subtypes": "end-step token spec constant",
+    "endstep_token_ascend_copy": "the city's-blessing half of the end-step trigger (Ocelot Pride) -- mandatory, applies to a computed set, no choice",
+    "endstep_lifegain_threshold": "intervening-if THRESHOLD on a mandatory end-step trigger (Resplendent Angel, 'gained 5 or more life') -- a condition, not a choice",
+    "endstep_token_keywords": "end-step token spec constant (flying + vigilance)",
+    "firebreathing_tough": "self-pump spec constant (the +2 toughness half); the activation itself is surfaced as a main_phase ActivatePump variant",
+    "wish_requires_name": "NAME filter on an already-mapped tutor (rides tutor_to_hand -> main_phase plan variants); narrows the pool, adds no decision",
     "opp_creature_enters_life_loss": "automatic enter trigger (Suture Priest, may-always-taken)",
     "etb_opp_creatures_debuff": "automatic ETB sweep, hits every qualifying opponent creature",
     "opp_dies_life_loss": "automatic death trigger",

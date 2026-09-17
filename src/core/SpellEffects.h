@@ -1321,6 +1321,14 @@ inline bool TutorNumericFilterOk(const Card& card, const CardParams& pp)
     if (pp.tutor_max_toughness >= 0
         && (!card.m_toughness.has_value()
             || card.m_toughness.value() > pp.tutor_max_toughness)) { return false; }
+    // "...a card NAMED X" (Legion Angel: "you may reveal a card you own named Legion Angel from
+    // outside the game"). One more CONJUNCT on top of the type/colour/MV filters -- the same move
+    // tutor_max_mv and tutor_max_toughness made -- which is what makes it reach every tutor filter
+    // site at once (the unpruned branch, the heuristic branch, GenericProvider::TutorCandidates,
+    // and PerformEtbTutorToHandMulti) instead of being bolted onto one of them. Empty = no name
+    // restriction, so every prior tutor and the unrestricted Living Wish are byte-identical.
+    if (!pp.wish_requires_name.empty() && card.m_name.str() != pp.wish_requires_name)
+    { return false; }
     return true;
 }
 
@@ -2610,6 +2618,30 @@ inline bool CreatureHasLifelink(const Permanent& creature, const GameState& stat
             const CardDefinition* d = CardDatabase::Instance().LookupCached(a.card);
             if (d && d->params.is_equipment && d->params.equip_grants_lifelink) { return true; }
         }
+        // Static subtype lifelink LORD (Lyra Dawnbringer: "Other Angels you control have
+        // lifelink"). Folded into this existing same-controller pass rather than given its own
+        // battlefield scan -- this is the hot combat path and the header records a ~3% rollout
+        // cost for exactly that duplication. Resolving here (the single lifelink oracle that
+        // ResolveCombatDamage consults) is what keeps executor, rollout and search lockstep.
+        // Self-exclusion is by per-instance m_number, the same key aura_attached_to/equipped_to
+        // use above -- not by name, which would be wrong with 3 copies of Lyra on the stack of
+        // legend-rule replacements, and not by address, which is not available here.
+        {
+            const CardDefinition* d = CardDatabase::Instance().LookupCached(a.card);
+            if (d && d->params.grants_lifelink
+                && !(d->params.lord_excludes_self && a.card.m_number == creature.card.m_number))
+            {
+                if (d->params.affects_all_creatures) { return true; }
+                // An animated land has every creature type (Mutavault), so any subtype lord
+                // reaches it -- the same rule the P/T lord scans and HasHasteFromLords apply.
+                if (creature.is_animated && !d->params.subtypes_affected.empty()) { return true; }
+                for (const std::string& sub : d->params.subtypes_affected)
+                {
+                    for (const std::string& cs : creature.card.m_subtypes)
+                    { if (cs == sub) { return true; } }
+                }
+            }
+        }
     }
     return false;
 }
@@ -3110,6 +3142,51 @@ inline std::pair<int,int> ComputeLordBonus(
             tb += sd->params.hand_size_anthem_tough;
         }
     }
+
+    // Conditional LIFE-keyed team anthem (Righteous Valkyrie: "As long as you have at least 7
+    // life more than your starting life total, creatures you control get +2/+2"). Same shape and
+    // the same skip-the-whole-walk discipline as the hand-size pass above, with the inequality
+    // reversed: every iteration ends in "life below this card's threshold -> continue", so a
+    // controller whose life is under the SMALLEST threshold in the loaded card data can pass
+    // nothing. MinLifeAboveStartAnthem() is INT_MAX on every deck that carries no such card, so
+    // those decks pay one integer compare and the pass provably never runs.
+    //
+    // THE THRESHOLD IS RELATIVE TO STARTING LIFE, not the literal 27 the card reads at 20 --
+    // a 2HG job starts at 30, where the correct threshold is 37. Same reading as Ajani, Strength
+    // of the Pride's 0.
+    const int min_life_anthem = CardDatabase::Instance().MinLifeAboveStartAnthem();
+    if (min_life_anthem != std::numeric_limits<int>::max()
+        && state.players[controller_index].life >= gamesetup::StartingLife() + min_life_anthem)
+    {
+        const int life = state.players[controller_index].life;
+        for (const Permanent& src : battlefield)
+        {
+            if (src.controller_index != controller_index) { continue; }
+            const CardDefinition* sd = CardDatabase::Instance().LookupCached(src.card);
+            if (!sd || sd->params.life_above_start_anthem_life <= 0) { continue; }
+            if (life < gamesetup::StartingLife() + sd->params.life_above_start_anthem_life)
+            { continue; }
+            // Match scope reuses the lord vocabulary. SELF-INCLUSIVE: the oracle says "creatures
+            // you control", not "other", so there is deliberately no lord_excludes_self check.
+            bool matches = sd->params.affects_all_creatures;
+            if (!matches && all_creature_types && !sd->params.subtypes_affected.empty())
+            { matches = true; }
+            if (!matches)
+            {
+                // Manual subtype loop, same reason as the pass above (CardHasSubtype is defined
+                // further down this header).
+                for (const std::string& sub : sd->params.subtypes_affected)
+                {
+                    if (matches) { break; }
+                    for (const std::string& cs : creature.m_subtypes)
+                    { if (cs == sub) { matches = true; break; } }
+                }
+            }
+            if (!matches) { continue; }
+            pb += sd->params.life_above_start_anthem_power;
+            tb += sd->params.life_above_start_anthem_tough;
+        }
+    }
     return {pb, tb};
 }
 
@@ -3425,6 +3502,36 @@ inline void FireCreatureEnterWatchers(GameState& state, int entered_controller, 
         }
         return entered_power;
     };
+    // Entered creature's effective TOUGHNESS (base + counters + temp + lords), the twin of
+    // entered_power_now above -- Righteous Valkyrie gains "life equal to that creature's
+    // toughness". DELIBERATELY NOT MEMOIZED, unlike the power lambda: watchers fire in one
+    // inline pass, so an earlier watcher's GainLife can cross Righteous Valkyrie's own
+    // life-above-starting anthem threshold partway through the loop and raise the entrant's
+    // toughness for a LATER watcher's trigger. Each trigger computes its value on its own
+    // resolution (CR 608.2), so recomputing per-watcher is the faithful read. (The power memo
+    // has the same theoretical shape but is inert -- lifegain does not move power -- so it is
+    // left alone rather than "fixed" into a slower unmemoized form.)
+    auto entered_toughness_now = [&]() -> int
+    {
+        const Permanent& e = state.battlefield[entered_index];
+        return e.EffectiveToughness()
+            + ComputeLordBonus(e.card, state, e.controller_index, e.is_animated, &e).second;
+    };
+    // Tribal filter on the ENTERING creature (Angels: Bishop of Wings / Seraph Sanctuary
+    // ["Angel"], Righteous Valkyrie ["Angel","Cleric"], Youthful Valkyrie ["Angel"]). Empty =
+    // unfiltered, so every prior watcher is byte-identical. Hand-rolled subtype loop rather than
+    // CardHasSubtype: that helper is defined FURTHER DOWN this header and is not declared yet
+    // here -- the same reason Emiel's Unicorn check below hand-rolls it.
+    auto enters_subtype_ok = [&](const CardParams& wp) -> bool
+    {
+        if (wp.enters_watch_subtypes.empty()) { return true; }
+        for (const std::string& want : wp.enters_watch_subtypes)
+        {
+            for (const std::string& cs : state.battlefield[entered_index].card.m_subtypes)
+            { if (cs == want) { return true; } }
+        }
+        return false;
+    };
     // Vaultborn Tyrant's draw rider ("... and draw a card"), shared by the another-creature loop
     // and the self-include tail below.
     auto watcher_draw = [&](int who, int n_draw)
@@ -3456,21 +3563,51 @@ inline void FireCreatureEnterWatchers(GameState& state, int entered_controller, 
         // EVENT (CR 119.10), so 2 Soul Wardens + 2 Soul's Attendants on one creature entering are
         // FOUR Ajani's Pridemate triggers, not one gain of 4. GainLife never adds or removes a
         // permanent (its watchers only add counters), so `w` / `n` stay valid across the call.
-        if (wp.any_creature_enters_lifegain > 0)
+        if (wp.any_creature_enters_lifegain > 0 && enters_subtype_ok(wp))
         {
             GainLife(state, w.controller_index, wp.any_creature_enters_lifegain);
             if (log) { note(w.controller_index, w.card.m_name.str()); }
         }
         // "Whenever another creature you control enters, you [may] gain N" (Suture Priest cl. 1;
         // Vaultborn Tyrant adds a minimum-power filter on the ENTERING creature + a draw rider).
-        if (wp.own_creature_enters_lifegain > 0 && w.controller_index == entered_controller
+        if ((wp.own_creature_enters_lifegain > 0 || wp.own_creature_enters_lifegain_toughness)
+            && w.controller_index == entered_controller
             && (wp.creature_enters_min_power <= 0
-                || entered_power_now() >= wp.creature_enters_min_power))
+                || entered_power_now() >= wp.creature_enters_min_power)
+            && enters_subtype_ok(wp))
         {
-            GainLife(state, w.controller_index, wp.own_creature_enters_lifegain);
+            // Righteous Valkyrie gains the ENTERING creature's toughness; everyone else gains a
+            // flat amount. Read live (counters from Giada's as-enters replacement, Lyra's lord,
+            // this card's own anthem), never the printed back half.
+            const int gain = wp.own_creature_enters_lifegain_toughness
+                           ? entered_toughness_now()
+                           : wp.own_creature_enters_lifegain;
+            GainLife(state, w.controller_index, gain);
             if (wp.own_creature_enters_draw > 0)
             { watcher_draw(w.controller_index, wp.own_creature_enters_draw); }
             if (log) { note(w.controller_index, w.card.m_name.str()); }
+        }
+        // Youthful Valkyrie: "Whenever another Angel you control enters, put a +1/+1 counter on
+        // THIS creature." Same filter family, different payload. Written through
+        // state.battlefield[i], not the const ref `w`; AddPlusCounters adds no permanent, so `w`
+        // and `n` stay valid across the call (the same reasoning the GainLife comment above
+        // gives). AddPlusCounters (not a raw push_back) so the counters MERGE -- BuildSimKey
+        // folds each Counter entry separately, and un-merged entries would split the
+        // transposition key for boards that are genuinely identical.
+        if (wp.own_creature_enters_self_counters > 0
+            && w.controller_index == entered_controller
+            && enters_subtype_ok(wp))
+        {
+            const std::string wname = w.card.m_name.str();
+            AddPlusCounters(state.battlefield[i], wp.own_creature_enters_self_counters);
+            if (log)
+            {
+                EmitPlayEvent(state.turn_number, "ability",
+                              "\xE2\x9E\x95 " + wname + ": +"
+                              + std::to_string(wp.own_creature_enters_self_counters) + "/+"
+                              + std::to_string(wp.own_creature_enters_self_counters)
+                              + " counter (Angel entered)");
+            }
         }
         // "Whenever a creature an opponent controls enters, that player loses N" (Suture Priest
         // clause 2 -- the drain engine; life LOSS, not damage).
@@ -3550,11 +3687,20 @@ inline void FireCreatureEnterWatchers(GameState& state, int entered_controller, 
         const Permanent& e = state.battlefield[entered_index];
         const CardDefinition* ed = CardDatabase::Instance().LookupCached(e.card);
         if (ed && ed->params.creature_enters_includes_self
-            && ed->params.own_creature_enters_lifegain > 0
+            && (ed->params.own_creature_enters_lifegain > 0
+                || ed->params.own_creature_enters_lifegain_toughness)
             && (ed->params.creature_enters_min_power <= 0
-                || entered_power_now() >= ed->params.creature_enters_min_power))
+                || entered_power_now() >= ed->params.creature_enters_min_power)
+            && enters_subtype_ok(ed->params))
         {
-            GainLife(state, e.controller_index, ed->params.own_creature_enters_lifegain);
+            // Symmetry with the loop above. Inert for every Angels card (all four tribal
+            // watchers say "another", or are a Cleric/land that can never be the entering
+            // Angel), but leaving the tail unguarded would leak the filter for any future
+            // self-inclusive tribal watcher.
+            GainLife(state, e.controller_index,
+                     ed->params.own_creature_enters_lifegain_toughness
+                         ? entered_toughness_now()
+                         : ed->params.own_creature_enters_lifegain);
             if (ed->params.own_creature_enters_draw > 0)
             { watcher_draw(e.controller_index, ed->params.own_creature_enters_draw); }
             if (log) { note(e.controller_index, e.card.m_name.str()); }
@@ -3916,13 +4062,23 @@ inline void PerformEndStepLifegainTokens(GameState& state)
         if (d && d->params.endstep_lifegain_tokens > 0) { triggers.push_back(d); }
     }
     if (triggers.empty()) { return; }
-    // The intervening-if. Note it reads ">0", never the amount: a turn that gained 1 life and a turn
-    // that gained 40 produce exactly the same trigger.
-    if (state.players[active].life_gained_this_turn <= 0) { return; }
+    // The intervening-if (CR 603.4), SNAPSHOT before anything is created. At Ocelot Pride's
+    // threshold 1 this reads ">0" and never the amount -- a turn that gained 1 life and a turn that
+    // gained 40 produce exactly the same trigger -- but Resplendent Angel demands 5 or more, and
+    // there the snapshot is load-bearing rather than incidental: the 4/4 Angel THIS trigger creates
+    // is itself worth 4 life off every Bishop of Wings plus its toughness off every Righteous
+    // Valkyrie, and that life must NOT retroactively arm a second Resplendent Angel whose condition
+    // had already failed when the end step began. A live re-read would roughly double this deck's
+    // token output and would be a straight CR 603.4 violation. The counter is monotone within a
+    // turn, so the resolution re-check adds nothing and one snapshot is faithful.
+    const int gained_this_turn = state.players[active].life_gained_this_turn;
+    if (gained_this_turn <= 0) { return; }
 
     for (const CardDefinition* d : triggers)
     {
         const CardParams& pp = d->params;
+        // Per-card threshold: default 1 reproduces the historical behaviour exactly.
+        if (gained_this_turn < std::max(1, pp.endstep_lifegain_threshold)) { continue; }
         for (int i = 0; i < pp.endstep_lifegain_tokens; ++i)
         {
             // Enters through the universal cascade: in a lifegain deck each Cat is a creature
@@ -3930,7 +4086,8 @@ inline void PerformEndStepLifegainTokens(GameState& state)
             // apiece -- which is more life gained, which is a counter on every Pridemate and Voice
             // and a team pump from every Archangel of Thune.
             CreateToken(state, active, pp.endstep_token_power, pp.endstep_token_toughness,
-                        pp.endstep_token_subtypes, pp.endstep_token_color, {});
+                        pp.endstep_token_subtypes, pp.endstep_token_color,
+                        pp.endstep_token_keywords);
         }
         if (!pp.endstep_token_ascend_copy || !state.players[active].has_city_blessing) { continue; }
         // "Then if you have the city's blessing, for each token you control that entered this turn,
@@ -4124,6 +4281,61 @@ inline void FireEtbWatchers(GameState& state, int controller, int entered_index)
             state.battlefield[entered_index].chosen_subtype_id =
                 DominantCreatureSubtypeId(state, e.controller_index);
         }
+    }
+    // ---- AS-ENTERS +1/+1 COUNTERS, a REPLACEMENT EFFECT (CR 614) ----------------------------
+    // Giada, Font of Hope: "Each OTHER Angel you control enters with an additional +1/+1 counter
+    // on it for each Angel you ALREADY control."
+    //
+    // THIS MUST SIT ABOVE THE FireCreatureEnterWatchers CALL BELOW, and the ordering is
+    // load-bearing rather than tidy: a replacement effect modifies the event as it happens, so the
+    // counters are already on the body when the enter TRIGGERS resolve. Righteous Valkyrie gains
+    // life equal to THAT CREATURE'S TOUGHNESS, so an Archangel of Thune entering as a 4/5 must gain
+    // 5, not 4 -- and that life feeds Resplendent Angel's 5-life end-step threshold and every
+    // Archangel of Thune team pump. Placing this block below the call compiles, stays
+    // byte-identical for every other deck, and is wrong only for this one: the classic dead-site
+    // failure. It is pinned by a scenario fixture, not by this comment.
+    //
+    // "ALREADY control" settles the off-by-one (Scryfall ruling 2024-11-08): the count is every
+    // matching permanent we control OTHER than the entrant, INCLUDING Giada herself -- so a lone
+    // Giada plus an entering Archangel of Thune is +1/+1, a 4/5, not a 5/6. "Each OTHER Angel"
+    // means Giada's own entry gets nothing; a SECOND Giada entering does get counters from the
+    // first, before the legend rule kills one.
+    //
+    // Reaches TOKENS for free (Serra the Benevolent's -3, Resplendent Angel's end step), since
+    // CreateToken routes through this same cascade. Param-gated -> one empty-string test for every
+    // other deck.
+    if (state.battlefield[entered_index].card.IsCreature())
+    {
+        const int ectrl = state.battlefield[entered_index].controller_index;
+        const int enum_ = state.battlefield[entered_index].card.m_number;
+        int add = 0;
+        for (const Permanent& w : state.battlefield)
+        {
+            if (w.controller_index != ectrl) { continue; }
+            const CardDefinition* wd = CardDatabase::Instance().LookupCached(w.card);
+            if (!wd || wd->params.other_subtype_enters_counters_per_each <= 0
+                || wd->params.other_subtype_enters_counters_subtype.empty()) { continue; }
+            const std::string& sub = wd->params.other_subtype_enters_counters_subtype;
+            // The ENTRANT must match the watched subtype ("each other ANGEL"), and must not be the
+            // watcher itself ("OTHER").
+            if (&w == &state.battlefield[entered_index]) { continue; }
+            if (!CardHasSubtype(state.battlefield[entered_index].card, sub)) { continue; }
+            // "for each Angel you ALREADY control": every matching permanent we control except the
+            // entrant. Giada counts herself, so this is >= 1 whenever the effect applies.
+            int already = 0;
+            for (const Permanent& q : state.battlefield)
+            {
+                if (q.controller_index != ectrl) { continue; }
+                if (&q == &state.battlefield[entered_index]) { continue; }
+                if (q.card.IsCreature() && CardHasSubtype(q.card, sub)) { ++already; }
+            }
+            add += already * wd->params.other_subtype_enters_counters_per_each;
+        }
+        // AddPlusCounters (not a raw counters.push_back) so the counters MERGE into one entry:
+        // BuildSimKey folds each Counter entry's (type, count) separately, so un-merged entries
+        // would split the transposition key for boards that are genuinely identical. It also runs
+        // RefreshCounterThresholdKeywords, the layer-6 chokepoint.
+        if (add > 0) { AddPlusCounters(state.battlefield[entered_index], add); }
     }
     if (state.battlefield[entered_index].card.IsCreature())
     { FireCreatureEnterWatchers(state, state.battlefield[entered_index].controller_index, entered_index); }
@@ -5659,7 +5871,7 @@ inline void OnCreatureDies(GameState& state, int dead_controller, const Card& de
         {
             CreateToken(state, dead_controller, wp.dies_token_power,
                         wp.dies_token_toughness, wp.dies_token_subtypes,
-                        wp.created_token_color);
+                        wp.created_token_color, wp.dies_token_keywords);
         }
         // Vaultborn Tyrant: "When this creature dies, if it's not a token, create a token that's
         // a copy of it." Only ever in `reactions` via the dead card's OWN self-watcher, so the
@@ -5873,6 +6085,11 @@ inline std::string LoyaltyAbilityText(const CardParams::LoyaltyAbilityParam& ab)
         ab.effect == "lifegain_creatures_plus_walkers"
                                                ? "gain life per creature and planeswalker" :
         ab.effect == "pridemate_token"         ? "create an Ajani's Pridemate" :
+        ab.effect == "flying_team_pump"        ? ("creatures with flying get +"
+                                                  + std::to_string(ab.amount) + "/+"
+                                                  + std::to_string(ab.amount)) :
+        ab.effect == "angel_token_44"          ? "create a 4/4 Angel with flying and vigilance" :
+        ab.effect == "emblem_damage_floor"     ? "emblem: damage can't reduce your life below 1" :
         ab.effect == "exile_all_opponent_artifacts_creatures"
                                                ? ("at " + std::to_string(ab.amount)
                                                   + "+ life over starting: exile Ajani and your opponents' artifacts and creatures") :
@@ -6055,6 +6272,74 @@ inline void ApplyLoyaltyAbility(GameState& state, int controller, int walker_id,
                           d->card.m_name.str() + " 0: life below starting+"
                           + std::to_string(ab.amount) + " -- nothing happens");
         }
+    }
+    else if (ab.effect == "flying_team_pump")
+    {
+        // Serra the Benevolent +2: "Creatures you control with flying get +1/+1 until end of
+        // turn." The affected set is fixed AT RESOLUTION (CR 611.2c) -- an Angel cast later in the
+        // same main phase gets nothing -- which is exactly what iterating the battlefield here
+        // gives. Until-EOT via temp_power_bonus/temp_tough_bonus, cleared at both cleanup sites
+        // and already folded into the sim key.
+        //
+        // THIS IS THE FIRST EFFECT IN THE ENGINE THAT READS Keyword::Flying FOR A PUMP: flying was
+        // previously inert everywhere (the passive opponent never blocks, so there is no blocker
+        // path in ResolveCombatDamage). It is NOT inert here -- 9 of this deck's 10 creature slots
+        // fly, and only Bishop of Wings (Human Cleric) misses, so every Angel's and every Angel
+        // token's `keywords` list is now load-bearing rather than cosmetic.
+        int pumped = 0;
+        for (Permanent& q : state.battlefield)
+        {
+            if (q.controller_index != controller) { continue; }
+            if (!q.card.IsCreature() && !q.is_animated) { continue; }
+            if (!q.card.HasKeyword(Keyword::Flying)) { continue; }
+            q.temp_power_bonus += ab.amount;
+            q.temp_tough_bonus += ab.amount;
+            ++pumped;
+        }
+        if (g_play_event_sink && !g_tap_speculating)
+        {
+            EmitPlayEvent(state.turn_number, "ability",
+                          d->card.m_name.str() + " +" + std::to_string(ab.delta)
+                          + ": " + std::to_string(pumped) + " flier(s) get +"
+                          + std::to_string(ab.amount) + "/+" + std::to_string(ab.amount));
+        }
+    }
+    else if (ab.effect == "angel_token_44")
+    {
+        // Serra the Benevolent -3: "Create a 4/4 white Angel creature token with flying and
+        // vigilance." Routed through the SHARED CreateToken rather than the local make_token
+        // lambda: make_token has no white-only colour path (pridemate_token has to bolt White on
+        // afterwards) and carries no keyword list at all, so Flying would be silently dropped --
+        // which would make Serra's own +2 skip her own token. CreateToken sets m_subtypes, maps the
+        // colour, maps both keywords, and ends in FireEtbWatchers, the universal enter cascade.
+        //
+        // The ANGEL SUBTYPE is the payload, not decoration: the token entering is an Angel ENTER,
+        // so Bishop of Wings gains 4, Seraph Sanctuary gains 1, Righteous Valkyrie gains its
+        // toughness, Youthful Valkyrie takes a counter, Giada's as-enters replacement sizes it up
+        // and Lyra's lord grants it +1/+1 and lifelink -- and each of those gains is its own
+        // life-gain EVENT (CR 119.10), i.e. a team-wide +1/+1 from every Archangel of Thune.
+        // VIGILANCE is populated but structurally inert here (the opponent never attacks, so there
+        // is never a reason to hold a blocker back); FLYING is populated and NOT inert -- Serra's
+        // own +2 reads it.
+        CreateToken(state, controller, 4, 4, {"Angel"}, "W", {"Flying", "Vigilance"});
+    }
+    else if (ab.effect == "emblem_damage_floor")
+    {
+        // Serra the Benevolent -6: "You get an emblem with 'If you control a creature, damage that
+        // would reduce your life total to less than 1 reduces it to 1 instead.'"
+        //
+        // DELIBERATE NO-OP, and the emptiness is the implementation rather than an omission. The
+        // emblem is a damage floor on OUR life total, and nothing in this game can damage us: the
+        // single passive opponent never attacks, blocks, casts or deals damage, and this 60 carries
+        // no self-damage source. Our life total only ever rises. So the replacement effect has zero
+        // reachable applications and needs no emblem zone to represent it faithfully.
+        //
+        // The LOYALTY COST is real and is the ability's entire content here -- -6 from exactly 6
+        // kills Serra for nothing, forfeiting every future anthem and Angel token. It is paid above
+        // this branch and the loyalty-death check at the tail bins her, so the cost is modelled
+        // even though the effect is not. It is deliberately NOT enumerated for the autonomous
+        // search (a VALUE gate in CollectActions, the Ajani-0 precedent) but stays reachable in
+        // human play, where narrowing a legal choice is forbidden.
     }
     else if (ab.effect == "kavu_token")
     {
@@ -7262,6 +7547,26 @@ inline int ApplyActivatePump(GameState& state, int controller, int source_id, in
                               state.battlefield[src].card.m_name.str() + ": +"
                               + std::to_string(sd->params.firebreathing_power)
                               + "/+0 (discarded " + shed + ")");
+            }
+        }
+        else if (mode == 3)
+        {
+            // Resplendent Angel: "{3}{W}{W}{W}: Until end of turn, this creature gets +2/+2 and
+            // gains lifelink." A SELF pump with a keyword rider, so it rides firebreathing_power /
+            // firebreathing_tough rather than the team_pump_* fields. temp_lifelink is the same
+            // until-EOT field Heliod's {1}{W} grant sets, read by CreatureHasLifelink at the damage
+            // site and cleared at both cleanup sites; repeat activations stack the +2/+2 while the
+            // lifelink half is idempotent.
+            Permanent& s = state.battlefield[src];
+            s.temp_power_bonus += sd->params.firebreathing_power;
+            s.temp_tough_bonus += sd->params.firebreathing_tough;
+            s.temp_lifelink = true;
+            if (g_play_event_sink && !g_tap_speculating)
+            {
+                EmitPlayEvent(state.turn_number, "ability",
+                              s.card.m_name.str() + ": +"
+                              + std::to_string(sd->params.firebreathing_power) + "/+"
+                              + std::to_string(sd->params.firebreathing_tough) + " and lifelink");
             }
         }
         else   // mode 2 -- team pump + haste
@@ -8565,7 +8870,11 @@ inline int ApplyFirebreathing(GameState& state, int controller,
             // spending the hand for +2/+0 is a judgment the SEARCH must own -- it is enumerated as
             // a main-phase Action::Kind::ActivatePump instead. Leaving it in would be exactly the
             // greedy-step-inside-the-searched-window this repo forbids.
-            if (d->params.firebreathing_discard) { continue; }
+            // Same exclusion, same reason, for a firebreather whose rider is LIFELINK (Resplendent
+            // Angel): the ratio below prices damage per mana and cannot price the life, which in
+            // its deck is the entire point of the activation.
+            if (d->params.firebreathing_discard || d->params.firebreathing_grants_lifelink)
+            { continue; }
             const ManaCost& c = d->params.firebreathing_cost.value();
             if (!pool.CanPay(c)) { continue; }
             double ratio = static_cast<double>(d->params.firebreathing_power)
@@ -16924,6 +17233,84 @@ struct CreatureAbilityPayScope
     ~CreatureAbilityPayScope() { PayingCreatureAbility() = prev; }
 };
 
+// ---- SUBTYPE-RESTRICTED MANA (Giada, Font of Hope) ------------------------------------------
+// "{T}: Add {W}. Spend this mana only to cast an ANGEL spell." The payment layer threads only a
+// `bool for_creature`, so the SPELL'S IDENTITY is not visible at the sites that decide whether a
+// restricted source may pay -- and threading a card pointer through every TapForCost signature is
+// exactly what the CreatureAbilityPayScope comment above says not to do. So the paying spell rides
+// a thread_local scope, set where `for_creature` is already computed from the definition.
+//
+// WHY THIS IS NOT COLLAPSED TO "any creature" the way Cavern of Souls / Unclaimed Territory are:
+// that collapse is justified in its own design doc as exact FOR A MONO-TRIBAL DECK, because every
+// creature in such a deck shares one type. Angels breaks the premise -- it runs 4 Bishop of Wings,
+// a Human CLERIC, which Giada's mana may not legally cast. Without the subtype Giada would become a
+// 21st white source for a {W}{W} two-drop in a deck with only ~20 white sources (Seraph Sanctuary
+// taps for {C}), so being white-short with Giada untapped is a reachable line, not a corner case.
+inline const Card*& PayingSpellCard()
+{
+    static thread_local const Card* v = nullptr;
+    return v;
+}
+struct SpellSubtypePayScope
+{
+    const Card* prev;
+    explicit SpellSubtypePayScope(const Card* c) : prev(PayingSpellCard()) { PayingSpellCard() = c; }
+    ~SpellSubtypePayScope() { PayingSpellCard() = prev; }
+};
+
+// May a source carrying mana_only_subtype pay for the spell currently being paid for?
+// Empty restriction -> always yes, so every other card is byte-identical.
+//
+// An UNSET scope answers YES (permissive). That direction is deliberate: a false NO would refuse a
+// legal Angel cast and silently cost the deck games, whereas a false YES only reproduces the
+// pre-existing "any creature" behaviour on a path that has not been taught the spell. The scope is
+// set at every cast site that derives for_creature from a definition; MTG_SUBTYPE_MANA_AUDIT counts
+// the unset-scope taps so "probably covered" can be turned into a number.
+// COVERAGE AUDIT (MTG_SUBTYPE_MANA_AUDIT, default off, zero cost when off). The permissive
+// fallback above is only safe if the scope is actually SET everywhere a spell is paid for -- and
+// "I added it at the sites I found" is not proof. This counts the consultations that reached a
+// restricted source with NO scope set, i.e. exactly the paths that would silently revert to the
+// unfaithful "any creature" behaviour. A run reporting 0 unset is the proof; anything else names a
+// payment path still to wire. It is what turned a one-game fd-diverge fix into a covered one.
+inline std::atomic<long long>& SubtypeManaUnsetScopeCount()
+{ static std::atomic<long long> v{0}; return v; }
+inline std::atomic<long long>& SubtypeManaCheckedCount()
+{ static std::atomic<long long> v{0}; return v; }
+// Per-call-site breakdown of the unset-scope consultations: 1 = the real payer's `usable` filter
+// (ManaPayment), 2 = TapFlowInfeasible's early-bail feasibility probe, 3 = the backtracker worker,
+// 4 = UntappedManaUpperBound. Only site 1 is a genuine gap; 2 and 4 are deliberately permissive
+// (a BOUND must not under-count, and a prune-probe must not prune a payable line).
+inline std::atomic<long long>& SubtypeManaUnsetSite(int i)
+{ static std::atomic<long long> v[8]; return v[i & 7]; }
+inline bool SubtypeManaAuditOn()
+{ static const bool v = EnvOn("MTG_SUBTYPE_MANA_AUDIT"); return v; }
+
+inline bool SubtypeManaOk(const CardParams& pp)
+{
+    if (pp.mana_only_subtype.empty()) { return true; }
+    const Card* c = PayingSpellCard();
+    if (SubtypeManaAuditOn())
+    {
+        SubtypeManaCheckedCount().fetch_add(1, std::memory_order_relaxed);
+        if (c == nullptr) { SubtypeManaUnsetScopeCount().fetch_add(1, std::memory_order_relaxed); }
+    }
+    if (c == nullptr) { return true; }
+    for (const std::string& s : c->m_subtypes)
+    { if (s == pp.mana_only_subtype) { return true; } }
+    return false;
+}
+
+// The one predicate every payment site asks of a restricted source: "creature-only, and (if it also
+// names a subtype) a spell of that subtype". Returns false when the source may NOT pay.
+inline bool RestrictedManaUsable(const CardParams& pp, bool for_creature, int site = 0)
+{
+    if (!pp.creature_mana_only) { return true; }
+    if (!for_creature)          { return false; }
+    if (SubtypeManaAuditOn() && !pp.mana_only_subtype.empty() && PayingSpellCard() == nullptr)
+    { SubtypeManaUnsetSite(site).fetch_add(1, std::memory_order_relaxed); }
+    return SubtypeManaOk(pp);
+}
+
 // Colours a source may produce to pay for THIS spell (payment context -> for_creature is known).
 // Identical to EffectiveProduces for every source EXCEPT a colored_creature_only source (Unclaimed
 // Territory / Cavern of Souls: {C} free, coloured only for a creature spell of the chosen type,
@@ -20146,7 +20533,7 @@ inline int UntappedManaUpperBound(const GameState& state, bool for_creature,
                          || d->params.mana_rock
                          || PaySacSpendableNow(state, p, *d);   // §2a (fresh-hold aware, matching the payer)
         if (!is_src) { continue; }
-        if (d->params.creature_mana_only && !for_creature) { continue; }
+        if (!RestrictedManaUsable(d->params, for_creature, 4)) { continue; }
         if (!StorageSourceLive(p, *d)) { continue; }   // uncharged storage land makes no mana
         if (!GraveyardFuelLive(state, active, *d)) { continue; }   // Deathrite: no gy land
         if (!ManaSubtypeGateLive(state, active, *d)) { continue; } // Arbor Elf: no Forest

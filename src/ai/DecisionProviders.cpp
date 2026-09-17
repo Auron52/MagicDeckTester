@@ -9658,6 +9658,15 @@ const DecisionProvider& DetectDecisionProvider(const Decklist& deck)
     bool eldrazi = false;
     bool snow = false;   // Snow midrange -- SnowProvider (Generic + the 5c2 tie-break opt-out)
     bool critter = false; // CritterLifegain -- routes ABOVE goblin (Ranger-Captain's sac outlet) and anti (its tutor)
+    // Angels tribal (mono-white). MUST be detected and MUST return ABOVE `critter`: this deck runs
+    // 4 Archangel of Thune, whose lifegain_each_own_creature_counters ALONE sets the CritterLifegain
+    // signature -- the archetype-NEUTRAL-param misroute class that has now caught Mirrorwing
+    // (Goblin Instigator), StompySurprise (Hornet Queen), Minotaur (Slaughter-Priest) and Dragons.
+    // Landing on CritterLifegainProvider would hand Angels another deck's discard buckets, cast
+    // ordering AND its LegendKeepIndex override -- and this deck has 3 Lyra + 2 Giada + 2 Serra, so
+    // that last one is not hypothetical. Angels gets GENERIC (no narrowing at all) until it earns a
+    // MEASURED hook of its own, per the analyze-deck 4a rule.
+    bool angels = false;
     for (const Card& c : deck.mainboard)
     {
         const CardDefinition* def = CardDatabase::Instance().LookupCached(c);
@@ -9672,6 +9681,23 @@ const DecisionProvider& DetectDecisionProvider(const Decklist& deck)
         // goblin (Ranger-Captain of Eos's sac_creature_outlet) and anti (its tutor_to_hand).
         if (p.lifegain_self_counters > 0 || p.lifegain_each_own_creature_counters > 0
             || p.lifegain_target_own_counter) { critter = true; }
+
+        // Angels signature: OR-ed across FIVE different cards' params (Giada's as-enters counter
+        // replacement, Lyra's static lifelink lord, Youthful Valkyrie's self-counter watcher,
+        // Righteous Valkyrie's life-above-starting anthem, Legion Angel's name-restricted wish) so
+        // no single deckbuilding swap can silently lose the routing -- the same discipline the
+        // Dragons/Minotaur/Fluctuator signatures use. Every one is new + gated (0/false/empty
+        // inert), so no existing deck can set it, and none is a colourless staple another deck
+        // might splash (Lightning Greaves and Sol Ring are deliberately not in the list -- that is
+        // exactly the class the Dragons block excluded).
+        if (p.other_subtype_enters_counters_per_each > 0
+            || p.grants_lifelink
+            || p.own_creature_enters_self_counters > 0
+            || p.life_above_start_anthem_life > 0
+            || !p.wish_requires_name.empty())
+        {
+            angels = true;
+        }
 
         // Fluctuator cycling combo. Signature = the four params this deck introduced, OR-ed across
         // FOUR DIFFERENT CARDS (Fluctuator, Drannith Stinger, Hollow One, Unearth) so a
@@ -9890,6 +9916,10 @@ const DecisionProvider& DetectDecisionProvider(const Decklist& deck)
         }
     }
 
+    // Angels FIRST -- above critter, whose signature its 4 Archangel of Thune would otherwise set
+    // (see the flag's comment). GenericProvider on purpose: a new deck earns its own provider only
+    // once it has a measured hook to hold, and until then it gets no narrowing at all.
+    if (angels)      { return g_generic; }
     // ABOVE everything: this deck's own signature is unambiguous, and its tutor_to_hand would
     // otherwise be read as anti-lifegain (see the flag's comment).
     if (critter)     { return g_critter; }

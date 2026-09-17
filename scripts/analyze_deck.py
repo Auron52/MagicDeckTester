@@ -177,6 +177,15 @@ def SideboardReachability(main_names: list[str], side_names: list[str],
     restriction ("creature or land card" for Living Wish) is deliberately NOT applied, because
     an unimplemented card has no known types, so filtering by type would skip exactly the cards
     that still need implementing.
+
+    Reachability is a SET, not a flag (2026-09-17). It was collapsed to a bool, so any wish made
+    the WHOLE sideboard scannable -- which is right for Living Wish ("a creature or land card")
+    but wrong for a NAME-RESTRICTED wish. Legion Angel reveals only "a card you own named Legion
+    Angel", so on the Angels deck it reaches its own 3 copies and provably cannot reach the two
+    cards sitting beside them; reporting those as implementable gaps would invent work the rules
+    make impossible. A wish carrying `wish_requires_name` therefore contributes only that one
+    name. The other two detectors exist to fire on an UNIMPLEMENTED wish, where no params are
+    knowable, so they stay conservative and contribute the whole sideboard.
     """
     entries = {}
     if cards_json.exists():
@@ -187,17 +196,46 @@ def SideboardReachability(main_names: list[str], side_names: list[str],
                 entries[card["name"]] = card
 
     via: list[dict] = []
+    reachable_names: list[str] = []          # order-preserving union over every detector
+
+    def _contribute(names):
+        for n in names:
+            if n not in reachable_names:
+                reachable_names.append(n)
+
     for name in main_names:
         entry = entries.get(name)
-        if entry and (entry.get("parameters", {}) or {}).get("wish_from_sideboard"):
-            via.append({"card": name, "detected_by": "wish_from_sideboard parameter"})
+        params = (entry.get("parameters", {}) or {}) if entry else {}
+        if entry and params.get("wish_from_sideboard"):
+            want = params.get("wish_requires_name") or ""
+            if want:
+                # NAME-RESTRICTED wish (Legion Angel): it can only ever find copies of one card,
+                # so that is the entire reachable set it contributes.
+                hits = [n for n in side_names if n == want]
+                via.append({"card": name,
+                            "detected_by": f"wish_from_sideboard parameter (named '{want}')",
+                            "names": hits})
+                _contribute(hits)
+            else:
+                via.append({"card": name, "detected_by": "wish_from_sideboard parameter",
+                            "names": list(side_names)})
+                _contribute(side_names)
         elif entry and "outside the game" in entry.get("oracle_text", "").lower():
-            via.append({"card": name, "detected_by": "oracle text 'outside the game'"})
+            via.append({"card": name, "detected_by": "oracle text 'outside the game'",
+                        "names": list(side_names)})
+            _contribute(side_names)
         elif name in WISH_CARD_NAMES:
-            via.append({"card": name, "detected_by": "known wish card (not yet implemented)"})
+            via.append({"card": name, "detected_by": "known wish card (not yet implemented)",
+                        "names": list(side_names)})
+            _contribute(side_names)
 
+    unreachable = [n for n in side_names if n not in reachable_names]
     if not side_names:
         reason = "deck has no sideboard"
+    elif via and unreachable:
+        reason = (f"{len(reachable_names)} of {len(side_names)} sideboard card(s) reachable via "
+                  + ", ".join(v["card"] for v in via)
+                  + "; NOT reachable (no wish names them): " + ", ".join(sorted(set(unreachable))))
     elif via:
         reason = (f"{len(side_names)} sideboard card(s) reachable via "
                   + ", ".join(v["card"] for v in via))
@@ -205,7 +243,8 @@ def SideboardReachability(main_names: list[str], side_names: list[str],
         reason = ("no mainboard card fetches from outside the game -- sideboard is unreachable "
                   "in this simulator (no game 2, no sideboarding) and is NOT scanned")
 
-    return {"reachable": bool(via and side_names), "via": via, "reason": reason}
+    return {"reachable": bool(reachable_names), "via": via,
+            "names": reachable_names, "unreachable": unreachable, "reason": reason}
 
 # ---------------------------------------------------------------------------
 # Vial target computation
@@ -926,8 +965,11 @@ def Main():
     # conditions (Essence Depleter, Dimensional Infiltrator) live there, and scanning the
     # mainboard alone reported a clean two-card gap while staying silent on them.
     reach       = SideboardReachability(card_names, side_names, cards_json)
-    scanned     = card_names + ([n for n in side_names if n not in card_names]
-                                if reach["reachable"] else [])
+    # Only the REACHABLE sideboard names are held to a mainboard card's standard. For an
+    # unrestricted wish that is the whole sideboard (unchanged); for a name-restricted one
+    # (Legion Angel) it is just the copies it can name, so the cards sitting beside them are not
+    # reported as gaps the rules make impossible to ever reach.
+    scanned     = card_names + [n for n in reach["names"] if n not in card_names]
     boards      = {n: "main" for n in card_names}
     for n in side_names:
         boards.setdefault(n, "side")
@@ -943,6 +985,8 @@ def Main():
         "sideboard": {
             "cards":     side_names,
             "reachable": reach["reachable"],
+            "reachable_names":   reach["names"],
+            "unreachable_names": reach["unreachable"],
             "via":       reach["via"],
             "reason":    reach["reason"],
         },
