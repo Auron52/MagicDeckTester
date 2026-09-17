@@ -1333,3 +1333,11 @@ d0 as a fixed baseline, and a baseline that drifts under an unrelated search cha
 the gate the executor already carries three lines from the analogous call. Cost of applying it: the
 d0 rows return to zero, i.e. the suite gives back 5 turns over 200,000 games. Worth it for a stable
 comparator; the user's call.
+
+## Addendum M — worst-case A/B on fresh seeds (2026-09-17)
+
+The tier-level regressions were re-measured at ~30x sample on disjoint seeds
+(9,000,001+), 1,364,000 games per arm. Dragons, melira and critter turned out to be
+NOISE at play settings; burn REVERSED into an improvement; dragonstorm and th are
+real. Full method, results and the parked follow-up plan:
+**`docs/design/greedy-deletion-worst-case-ab.md`**.
