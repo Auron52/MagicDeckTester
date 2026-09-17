@@ -1327,6 +1327,179 @@ attempt guarded four of the five and missed the SITE fold, which on Snow is the 
 self-check. **An arm that claims to reproduce another arm's key must assert the miss count, not the
 units.**
 
+### RESOLVED (2026-09-17, run `kc1`): the filter reaches FEWER states. The spec violation is LOOKUPS, alone.
+
+Everything above measures states through `misses`, and `misses` cannot answer the question. The USER's
+spec is a **set relation with a direction** -- *"we should miss exactly where baseline misses"*, and
+*"it is possible for us to do less work if there are lines we never run … but there should be none the
+other way"* -- while a miss count conflates three things: residency (clear-on-full, not LRU), the byte
+budget (`plancache::Fits`, which `MTG_BP_ENUM_CACHE_CAP` does not control, which is why clears stall at
+3-4), and per-thread duplication (the cache is `thread_local`, so which games shared a worker moves the
+number -- the same non-reproducibility `units_total` has).
+
+**THE INSTRUMENT: `MTG_BP_KEY_CENSUS` (+ `MTG_BP_KEY_CENSUS_DUMP`).** A process-global, never-cleared
+set of every key the bp-enum cache is *consulted* with, recorded before the `find`. It is immune to all
+three confounds, and it is **reproducible**, which nothing else here is. Snow, 10 games, seed 930000,
+d2/b0, **default cache settings** (deliberately -- the census needs no cap raising, so the 30 GB
+byte-budget fight is not on the critical path at all):
+
+| arm | distinct states | lookups | misses | clears |
+|---|---|---|---|---|
+| base (filter OFF) | 405,277 | 27,274,130 | 431,881 | 50 |
+| **base_rep** (replicate) | **405,277** | **27,274,130** | 433,593 | 50 |
+| `snapnone` (filter ON, base's key) | **403,455** (−0.45%) | **31,987,946 (+17.3%)** | 508,007 | 59 |
+| `perpath` (filter ON, full key) | 407,429 (+0.53%) | 32,110,062 (+17.7%) | 514,255 | 61 |
+
+**1. The census is reproducible, across runs as well as arms.** `base_rep`'s key set is byte-identical
+to `base`'s -- same 405,277 keys, same dump file size -- while its `misses` differ by 1,712. And run
+`kc2`, launched separately hours later with a different arm design, reproduced **every distinct count in
+this table to the digit** (405,277 / 403,455 / 407,429) while its `misses` moved again (430,827 vs
+433,593 on the same replicate config). That is the property that makes the rest of the table mean
+anything, and the reason to read `distinct`, never `misses`.
+
+**2. THE FILTER REACHES FEWER STATES, NOT MORE: −0.45%.** The claim this document carried for a day --
+that the extra derivations *"are the search visiting more distinct breakpoint states"* and that *"no
+key-merging scheme of any kind recovers them"* -- is now **refuted by measurement**, not merely
+retracted as an unsupported inference. The USER's instinct (*"The misses should be the same as no
+condemnation. I sense a bug"*) was right on the substance, and the direction is even slightly better
+than the spec demands: the prune removes states, as a prune should.
+
+**3. AND THE FIVE KEY FOLDS SPLIT ALMOST NOTHING: +0.53%** (2,152 keys). `misses` reported that same
+widening as +20.9% on an earlier cell. So the key-width story, which cost two arms and a retraction,
+is a ~0.5% effect end to end.
+
+**4. WHAT IS LEFT IS THE WHOLE DEFECT: +17.3% LOOKUPS ON A SMALLER STATE SET.** Lookups are
+cap-independent -- no residency argument can touch them -- so this is the spec violation in isolation,
+with every other explanation now excluded:
+
+* lookups per distinct state: **67.3 → 79.3**. The filter consults the cache 4.7M more times while
+  visiting 1,822 fewer states.
+* the miss inflation is *entirely* eviction, and now quantified: re-derivations (misses − distinct) are
+  26,604 for base but **104,552** for `snapnone` -- 3.9x the churn on a 0.45% *smaller* working set,
+  which is what 17% more lookups through a clear-on-full cache does.
+
+**A prune cannot raise lookups.** Per the USER's standing doctrine (2026-08-28) that is a defect with a
+location, and the location is no longer "somewhere in the cost". The candidate mechanism is the **wave
+backfill**, and the wave probe's own comments describe the mechanism precisely: *"retired = the rank was
+PAST THE END of the continuation list, so the apply's only product was learning `n`"*, and *"STILLBORN
+= a wave-0 plan's slot opens at rank W (`BpSearchWidth`) and the breakpoint's real continuation list is
+SHORTER than W"*. **Condemnation's entire effect is to make continuation lists shorter**, so it
+manufactures exactly the condition those counters measure -- and each such probe apply is a full
+`ApplyPlanDirect` that walks breakpoints and consults this cache. That raises lookups and units while
+*reducing* states, which is the measured shape exactly. `logs/snow_perf/wavebackfill.sh` tests it
+directly (`scored`/`retired`/`stillborn`/`nskip` vs base). Note `MTG_BP_WAVE_NSKIP` already defaults ON
+and its scope (`UnbudgetedWorkScopeActive()`) is live at b0, so any delta is what survives the existing
+mitigation -- and its `known_n` is keyed on `(base plan index << 8 | bp_at)`, a **positional** key,
+while condemnation's drop count is **path-dependent**, which is a concrete way for that mitigation to
+leak under condemnation specifically.
+
+#### THE SET RELATION ITSELF (run `kc2`, the corrected arms) -- the violation is 715 states, interior-only
+
+With the lever moved to the environment so the arm vector matches (see the batch-arm-fold trap below),
+the sets compare. Snow 10 games, seed 930000, d2/b0, `SNAPSHOT_NONE=1` on both arms, default cache.
+Firing assertion passed: `base` drops=0, `snapnone` drops=125,953.
+
+| relation | keys |
+|---|---|
+| shared | 402,740 |
+| **`snapnone` \ `base`** -- states ONLY the filtered search reaches | **715 (0.18%)** |
+| `base` \ `snapnone` -- states the filter never enumerates (**the upside**) | **2,537** |
+
+**And play is IDENTICAL on every arm** (`digest=7916f1f572f914e7`, `avg=5.9000`, all four). So the 715
+are **pure search interior**: removing a candidate changes the node's B&B cutoffs, so the search reaches
+a few states the unfiltered walk never needed. They are not new *play*, and they are not a soundness
+problem -- but per the USER's spec (*"there should be none the other way"*) they are still the wrong
+direction, and at 715 keys they are small enough to enumerate and root-cause individually rather than
+argue about (`LC_ALL=C comm -13 base.keys snapnone.keys`).
+
+**The proportions are the story.** 125,953 drops buy 2,537 fewer states (net −1,822) -- and cost
+**+17.7% lookups** and **+14.8% units** (40,142,740 -> 46,099,869, both arms narrowed so the narrowing
+cancels). The filter is doing a great deal of dropping for very little state reduction, and paying for
+it many times over in consultations. That is the shape option (D) is designed to fix: it keeps the
+2,537-state upside available while making the lookup column baseline's by construction.
+
+#### CORRECTION (2026-09-17): `MTG_BP_KEY_SNAPSHOT_NONE` IS NOT AN "EQUAL KEY TO BASE" ARM
+
+This document has said, repeatedly and as the premise of the whole key-width investigation, that
+*"Condemnation-OFF binds none of them -- on Snow the scope is not even constructed."* **That is false,
+and the arm built on it does not measure what it claims.**
+
+Read `CantripOrderScope`'s constructor (`TurnSolver.cpp:10020-10040`). The scope is constructed
+**unconditionally** at the breakpoint sites (`TurnSolver.cpp:23919`, `25232`, `AIEngine.cpp:3885`) --
+`BpClassifyActive(state)` is merely passed *as an argument*, it does not gate construction -- and the
+ctor binds two members with no condition at all:
+
+| fold | binds when | in the condemnation-OFF baseline? |
+|---|---|---|
+| pre-draw hand snapshot (`g_bp_hand_before`) | `CantripOrderEnabled() \|\| classify` | no (`MTG_CANTRIP_ORDER` is absent from `src/ai/data/heuristic_defaults.env`, so off) |
+| plan cast set (`g_bp_plan_casts`) | `CantripOrderEnabled() \|\| classify` | no |
+| site + how reached (`g_bp_site_def`, `g_bp_site_activated`) | `classify` | no |
+| **mana-source count (`g_bp_mana_sources_before`)** | **unconditional** | **YES** |
+| **deferred-Karoo reservation (`g_land_drop_reserved`)** | **unconditional** | **YES** |
+
+Both of those folds are guarded in `BpEnumBuildKey` by `!s_snapshot_none` *alone*
+(`TurnSolver.cpp:43118`, `43121`). So `MTG_BP_KEY_SNAPSHOT_NONE=1` does not equalise the arm to base's
+key -- **it makes the key strictly NARROWER than base's**, on both arms, by merging states that the
+baseline engine keeps apart.
+
+**And narrowing is expensive, measured.** Two runs of the *same* condemnation-OFF Snow cell
+(10 games, seed 930000, d2/b0), identical play (`digest=7916f1f572f914e7`, `avg=5.9000` both):
+
+| base arm | `units_total` | wall |
+|---|---|---|
+| `MTG_BP_KEY_SNAPSHOT_NONE` unset (run `ap2`) | 34,414,324 | 697 s |
+| `MTG_BP_KEY_SNAPSHOT_NONE=1` (run `kc1`) | **40,142,740 (+16.6%)** | 1,951 s |
+
+Merging on mana-source count makes the cache serve a list derived at a state with a different mana
+count, so the walker learns a wrong continuation length (`g_bp_cands_last`) and does more work. Play
+survives it; cost does not.
+
+**WHAT THIS INVALIDATES.** Every "at equal key" figure above -- the `missspec` +9.96% units / +6.0%
+misses / +12.2% lookups, and the `ceiling` arm's "key merging worth 0.4%" -- compared `snapnone`
+(condemnation ON, key **narrower** than base's) against `base` (condemnation OFF, **normal** key). The
+key narrowing's own +16.6% is folded into those numbers with the opposite sign to the one assumed. Those
+rows are **not** "the filter's cost at equal key"; they are the filter's cost *plus* a narrowing penalty,
+minus whatever the filter saves. Do not quote them.
+
+**What remains valid, and why the `kc1`/`kc2` table above is unaffected:** in those runs the narrowing
+is applied to **both** arms (`base`, `base_rep` and `snapnone` all carry `SNAPSHOT_NONE=1`), so it is
+controlled rather than confounded. The −0.45% states and +17.3% lookups are a like-for-like comparison
+*within* the narrowed key space. They just cannot be compared against the older tables, which live in a
+different key space.
+
+**AND THIS IS AN ARGUMENT FOR OPTION (D).** "Equal key" is not reachable by narrowing -- narrowing is
+itself a large cost, and it is unsound besides. It is reachable by making condemnation **add no fold in
+the first place**, which is precisely what filtering at consumption does: the continuation list stops
+being a function of the arriving cast set, so base's own folds (mana source, Karoo) stay exactly where
+they are in *both* arms and nothing needs suppressing. Under (D) the spec is met by construction; under
+emission-time filtering it cannot even be *measured* without perturbing the thing being measured.
+
+#### THE TRAP THAT VOIDED RUN `kc1`'s SET DIFFERENCE (counts are fine; sets were not)
+
+`kc1` reported `shared=0`: base and `snapnone` had **zero** keys in common out of ~405,000 each, with
+each arm's "unique" count equal to its entire set. Two runs of the same ten games cannot disagree about
+every breakpoint state, so that is an arm-design bug, and it is this:
+
+> `MTG_SNOW_CONDEMN` is heurarm slot `SNOW_CONDEMN`; a manifest's per-job `flags` sets that slot; and
+> `BpEnumBuildKey` folds **the whole arm vector** into every key -- deliberately, as the **BATCH-ARM
+> FOLD**, so that a mixed-arm pooled batch cannot share cache entries across arms. Two arms differing
+> in any slot therefore inhabit **disjoint key spaces by construction**.
+
+`MTG_BP_KEY_SNAPSHOT_NONE` does not suppress it and must not -- it is not one of the five condemnation
+folds. Setting the lever in the **environment** leaves the slot unset (`heurarm::Flag` returns the env
+default when `t_arm[slot] < 0`), so the fold is identical across arms and the sets compare.
+
+**What this does NOT invalidate, so nobody "fixes" the neighbouring scripts by mistake:** an arm
+constant is a **bijection** on the key space. It changes *which* keys are built, never *how many*. Every
+count in the table above, and every count in `missspec.sh` / `ceiling.sh` / `allpaths.sh`, stands. Only
+a set comparison needs the env form.
+
+**Two further traps, both live in this directory's scripts:** `EnvOn` is `getenv(k) != "0"`, so
+`MTG_SNOW_CONDEMN=false` reads as **ON** -- passing `false` to the env form silently makes the baseline
+arm a second filtered arm. The drops assertion in `census.sh` exists to catch that rather than trust a
+comment. And `comm` must run under `LC_ALL=C` against these dumps, or locale collation can report both
+files as wholly unique -- the same `shared=0` shape from an unrelated cause.
+
 ### THE MODEL, IN THE USER'S OWN TERMS (2026-09-17) -- read this before the numbers
 
 Four statements, and they define what this feature is for and how to judge it:
@@ -1407,7 +1580,99 @@ partial, which is the whole difficulty.
   all-paths rule, so it carries no soundness gain -- and it gives up the prune's derivation saving,
   which the table above says was only ~0.4% anyway.
 
+* **(D) FILTER AT CONSUMPTION, NOT AT EMISSION.** The preferred option as of 2026-09-17, and the only
+  one that satisfies the USER's spec *structurally* rather than by measurement. See below.
+
 **Do not sell any of these on cost.** The cost case died with the `snapnone` arm.
+
+### (D) THE EMISSION/CONSUMPTION FORK -- one root under all three symptoms
+
+Today's drop is a **`continue` in the candidate-emission loop** (`TurnSolver.cpp` ~11340): the plan for
+`ap.hand[i]` is never emitted, so **the continuation list itself gets shorter**. Every hard problem in
+this document is a consequence of that one choice:
+
+1. **`bp_choice` is a positional index** (`out = cands[plan.bp_choice]`), so the list's length and order
+   are load-bearing. A widening discovered mid-decision would renumber candidates the search has
+   already scored -- which is exactly why all-paths stage 1 must **defer**, and why it measured
+   `deferred_widenings=890,258` against 2,475 realised drops.
+2. **The list is a function of the arriving line's cast set**, so the cast set must be folded into the
+   bp-enum key -- five folds -- and the path-dependence of the verdict becomes a *soundness* problem
+   rather than a bookkeeping one.
+3. **The list is shorter than `W`**, which manufactures the stillborn/retired wave slots that are the
+   leading candidate for the **+17.3% lookups**.
+
+**The change:** emit *every* candidate -- list identical to baseline's, same length, same order -- mark
+the condemned ones with a per-candidate flag, and skip them where they would be **scored / applied /
+rolled out**. Consequences, in the order the USER's spec asks for them:
+
+* **Misses and lookups become baseline's BY CONSTRUCTION.** The list is no longer a function of the
+  cast set, so **no condemnation fold is needed in the key at all** -- not five, not one. *"We should
+  miss exactly where baseline misses and hit otherwise"* stops being something to measure and becomes
+  something the design cannot violate. The 0.53% state-splitting and the eviction churn both go to zero.
+* **The fixpoint becomes free.** Indices are baseline's, so a widening is a **bit flip** on a candidate
+  already in the list: no re-derivation, no renumbering, no deferral, no re-run. The all-paths rule
+  applies *within* the decision, and all 890,258 deferred widenings are realisable. **The index-stability
+  compromise that made stage 1 a floor was a consequence of emission-time filtering, not a property of
+  the rule.**
+* **The wave-slot length `n` becomes baseline's**, so symptom 3 cannot arise, and `MTG_BP_WAVE_NSKIP`'s
+  positional `known_n` stops being a stale-length hazard under a path-dependent filter.
+* **The saving relocates to where the cost actually is.** Emission-time filtering saves a *derivation*
+  (measured: ~0.4%). Consumption-time filtering saves the **apply and the rollout** -- and on Snow
+  77.6% of all units are wave applies, of which 85% never reach a rollout. This is a better lever on
+  the USER's own framing that all-paths *"should be a cost lever vs no condemnation … since it has the
+  same or fewer distinct states"*: now it has **exactly** the same states.
+
+**What it gives up:** building the `Plan` for a candidate that will be skipped. That is the ~0.4%
+derivation saving, and buying the whole spec with it is the trade this document has been looking for.
+
+**WHY NOT A RE-RUN FIXPOINT -- and this is measured precedent, not preference.** The obvious
+alternative is to re-solve the decision when a widening appears. This file already tried that shape
+elsewhere and records the verdict in `ApplySecondMainInSearch`: of the M2 fixpoint's three forms, *"an
+unconditional re-solve-and-play was net-red on the hinata battery"* and *"a lethal-only NESTED SOLVE
+re-pass taxed the whole suite's budget (478 searched games slower)"*; what survived is **enumeration +
+probe applies only**. A per-decision re-solve for all-paths is the same shape that lost twice. Option
+(D) needs no re-entry at all.
+
+#### AUDIT OF (D), FIRST PASS DONE 2026-09-17 -- one real leak found, and it is a one-line fix
+
+The premise is that the continuation list is a *menu* and nothing reads it as semantics. Checked, not
+assumed. The list source is `TurnSolver::EnumerateBreakpointPlans` (`TurnSolver.cpp:21953`), and
+**the executor indexes the same list** (`AIEngine.cpp:3918`, `resolve_draw_breakpoint`) -- so the
+condemned flag must be stamped *inside* that function, where both sides get it by construction. That is
+the existing lockstep rule, and it makes (D) cheaper rather than harder: full-length in both sides means
+`bp_choice` finally denotes the same candidate on both.
+
+Consumers of the list found so far:
+
+| consumer | reads | under (D) |
+|---|---|---|
+| `out = cands[plan.bp_choice]` | one index | **safe** -- the search never scores a condemned index, so it never commits one |
+| `g_bp_cands_last` (21956) | length | **improves** -- becomes baseline's length, which is the fix for symptom 3, and for NSKIP's positional `known_n` going stale under a path-dependent filter |
+| `g_bp_cands_fp_distinct`, `bpcands::g_fp_*` | length + content | stats only (`MTG_ROLLOUT_STATS`) |
+| **`g_bp_cands_has_empty` (21985-21987)** | **membership** | **THE LEAK -- must be fixed** |
+
+**THE LEAK, exactly.** The node's child loop (`TurnSolver.cpp:35704`) walks `k = 0..node_n`, where
+`k == node_n` is the explicit EMPTY continuation, and pre-skips that arm when the list already contains
+an apply-empty entry:
+
+> *"EMPTY pre-skip: the k loop reached the EMPTY arm (so **every cands index was visited**) and the list
+> holds an apply-empty entry -- the EMPTY arm's state is already in the dedup set, so the resume apply it
+> would pay is pure waste. **Exact by construction**."*
+
+Under (D) the loop still reaches `k == node_n` but **no longer visits every index** -- condemned ones are
+skipped. If the apply-empty entry is itself condemned, `g_bp_cands_has_empty` is still true (it is
+present in the list) while its state was never reached, so the EMPTY arm is skipped on a premise that no
+longer holds and **the empty line is silently lost**. That is a lossy prune, i.e. the dealbreaker class,
+and it would not show up as a crash or a counter -- only as a missing line.
+
+**Fix:** compute `g_bp_cands_has_empty` over **non-condemned entries only**. The existing comment
+("exact by construction") is precisely the invariant to preserve, and it names its own repair.
+
+This is the pattern to expect for the rest of the audit: membership read as semantics, in a spot whose
+comment already states the invariant. The remaining item to check before building is `bp_seen_states` /
+the dedup set, and whether wave 0 should decline to emit a variant for a condemned index (it should --
+the variant would be a no-op, and skipping emission does not disturb `bp_choice`, which indexes `cands`,
+not the variant list).
 
 ### Instruments added (all default OFF, counters only)
 
@@ -1418,6 +1683,14 @@ partial, which is the whole difficulty.
 * `MTG_BP_CASTSET_PROBE` -- the exact measurement above, with the independent state fingerprint.
 * `MTG_BP_KEY_CASTS_NONE` / `MTG_BP_KEY_SNAPSHOT_NONE` -- key-width arms. Both deliberately UNSOUND
   as play; units and misses only.
+* `MTG_BP_KEY_CENSUS` (+ `MTG_BP_KEY_CENSUS_DUMP=<path>`) -- **the instrument that settled the spec
+  question.** Process-global, never-cleared set of every key the bp-enum cache is consulted with,
+  recorded before the `find`; prints `distinct=` and `builds=` at exit, and dumps the sorted key set so
+  two arms' sets can be DIFFERENCED. Immune to residency, to the byte budget and to thread shape, and
+  **reproducible** -- which `misses` and `units_total` are not. Needs no cap raising, so it replaces
+  the whole "raise `MTG_BP_ENUM_CACHE_CAP` until clears reach 0" line of attack, which could never have
+  reached 0 anyway (`plancache::Fits` also wipes). One mutex-guarded insert per key build.
+  **Read `distinct`, not `misses`, for any question about how many states the search reaches.**
 
 **A DEAD END, RECORDED SO IT IS NOT RETRIED:** `MTG_BP_ENUM_VERIFY` cannot answer "does the cast fold
 carry information on Snow". Its baseline is 21.9% pre-existing, and the arms do not check identical

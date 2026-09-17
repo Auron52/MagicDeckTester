@@ -42816,6 +42816,81 @@ namespace
         return on;
     }
 
+    // THE KEY CENSUS (MTG_BP_KEY_CENSUS=1, default off = byte-identical).
+    //
+    // WHAT IT MEASURES, AND WHY `misses` CANNOT. The spec for any condemnation filter is a SET
+    // relation, not a count (USER, 2026-09-17): "we should miss exactly where baseline misses and hit
+    // otherwise -- our only extra work is checking condemnation status", and "it is possible for us to
+    // do less work if there are lines we never run ... but there should be none the other way". A
+    // prune narrows the continuation lists the search walks, so the breakpoint states it reaches must
+    // be a SUBSET of the unfiltered search's. A key the filtered arm builds that the baseline arm
+    // NEVER builds is therefore a DEFECT, not a price.
+    //
+    // BpEnumProbe::misses cannot test that, for three independent reasons -- each of which produced a
+    // wrong number on 2026-09-17:
+    //   * the cache is CLEAR-ON-FULL, so a miss means "not resident", not "not seen". Raising
+    //     MTG_BP_ENUM_CACHE_CAP 8192 -> 400000 moved the apparent extra-state count from +20.3% to
+    //     +6.0%: a third of the reported "cost" was eviction churn, not states.
+    //   * plancache::Fits wipes on a BYTE budget that MTG_BP_ENUM_CACHE_CAP does not control, so
+    //     clears stall at 3-4 however high the count cap goes, and the residual is never separable.
+    //   * the cache is thread_local, so `misses` is a sum over threads of per-thread distinct keys,
+    //     and which games share a worker is timing-dependent -- the same reason units_total is not
+    //     reproducible on a pooled batch (measured: two identical configs differed by 1,013 drops).
+    // The census is immune to all three: GLOBAL, never cleared, recorded on every key build
+    // regardless of residency. That also makes it REPRODUCIBLE -- the cache contract is
+    // result-neutral, so the set of keys a game builds does not depend on what was resident, only the
+    // number of re-derivations does.
+    //
+    // MTG_BP_KEY_CENSUS_DUMP=<path> writes the sorted key set, and that is the point: two arms'
+    // dumps DIFFERENCE, giving |filtered \ baseline| (must be 0 to meet the spec) and
+    // |baseline \ filtered| (the upside -- states nobody enumerates). A count comparison cannot
+    // distinguish those two directions; this is why the census dumps rather than just tallying.
+    //
+    // Cost: one mutex-guarded insert per key build (~800k on the Snow 10-game cell) plus 16 bytes per
+    // distinct key. Diagnostic only -- it records, it never gates.
+    struct BpKeyCensus
+    {
+        std::mutex mu;
+        std::unordered_set<TranspositionTable::Key, TranspositionTable::KeyHash> keys;
+        std::atomic<unsigned long long> builds{0};
+        ~BpKeyCensus()
+        {
+            if (!EnvOn("MTG_BP_KEY_CENSUS")) { return; }
+            std::fprintf(stderr, "[bp-census] distinct=%zu builds=%llu\n",
+                         keys.size(), builds.load());
+            const char* path = std::getenv("MTG_BP_KEY_CENSUS_DUMP");
+            if (path == nullptr || *path == '\0') { return; }
+            std::vector<TranspositionTable::Key> v(keys.begin(), keys.end());
+            std::sort(v.begin(), v.end(), [](const TranspositionTable::Key& a,
+                                             const TranspositionTable::Key& b)
+                      { return a.h1 != b.h1 ? a.h1 < b.h1 : a.h2 < b.h2; });
+            std::FILE* f = std::fopen(path, "w");
+            if (f == nullptr)
+            {   // Say so loudly: a silently absent dump would read downstream as an EMPTY key set,
+                // i.e. a spurious "no extra states".
+                std::fprintf(stderr, "[bp-census] FAILED to open dump path %s\n", path);
+                return;
+            }
+            for (const TranspositionTable::Key& k : v)
+            { std::fprintf(f, "%016llx%016llx\n", static_cast<unsigned long long>(k.h1),
+                           static_cast<unsigned long long>(k.h2)); }
+            std::fclose(f);
+            std::fprintf(stderr, "[bp-census] dumped %zu keys to %s\n", v.size(), path);
+        }
+    };
+    BpKeyCensus g_bp_key_census;
+    inline bool BpKeyCensusOn()
+    {
+        static const bool on = EnvOn("MTG_BP_KEY_CENSUS");
+        return on;
+    }
+    inline void BpKeyCensusRecord(const TranspositionTable::Key& k)
+    {
+        g_bp_key_census.builds.fetch_add(1, std::memory_order_relaxed);
+        std::lock_guard<std::mutex> lk(g_bp_key_census.mu);
+        g_bp_key_census.keys.insert(k);
+    }
+
     // THE KEY VERIFIER (MTG_BP_ENUM_VERIFY=1, default off, expensive).
     //
     // Every fold in BpEnumBuildKey is a SOUNDNESS claim of the form "two states that agree on
@@ -42944,11 +43019,32 @@ static bool BpEnumBuildKey(const GameState& state, bool is_pre_combat,
     TranspositionTable::Key key = BuildBreakpointKey(state, is_pre_combat);
     // THE TRUE CEILING PROBE (MTG_BP_KEY_SNAPSHOT_NONE=1) -- MEASUREMENT ONLY, DELIBERATELY UNSOUND.
     //
-    // Turning condemnation on does not add ONE fold to this key, it adds FIVE, because the whole
+    // Turning condemnation on does not add ONE fold to this key, it adds THREE, because much of the
     // CantripOrderScope binds with it: the pre-draw hand snapshot (every card NUMBER in it), the
-    // deferred-Karoo reservation, the mana-source count, the plan's cast set, and the site (plus how
-    // it was reached). Condemnation-OFF binds none of them -- on Snow the scope is not even
-    // constructed (`if (BpClassifyActive(state))` at the site-8 binding).
+    // plan's cast set, and the site (plus how it was reached).
+    //
+    // CORRECTED 2026-09-17 -- THE OTHER TWO FOLDS THIS FLAG SUPPRESSES ARE IN THE BASELINE TOO, so
+    // this flag does NOT equalise the key to the condemnation-OFF arm's; it makes it strictly
+    // NARROWER THAN BASE'S. The claim that used to stand here ("the key is byte-for-byte what the
+    // condemnation-off arm computes") was wrong, and every "at equal key" number measured through it
+    // is confounded by the narrowing. Read the ctor at CantripOrderScope: it is constructed
+    // UNCONDITIONALLY at the breakpoint sites (BpClassifyActive(state) is passed as an ARGUMENT, it
+    // does not gate construction), and it binds `g_bp_mana_sources_before` and `g_land_drop_reserved`
+    // with no condition at all -- while their folds below are guarded by `!s_snapshot_none` alone.
+    // With MTG_CANTRIP_ORDER off (its default -- it is not in heuristic_defaults.env) the hand
+    // snapshot, cast set and site folds do bind only under condemnation, which is the part that was
+    // right.
+    //
+    // MEASURED COST OF THE NARROWING, condemnation OFF both sides, Snow 10 games seed 930000 d2/b0,
+    // play IDENTICAL (digest 7916f1f572f914e7, avg 5.9000): unset 34,414,324 units / 697 s wall vs
+    // set 40,142,740 units (+16.6%) / 1,951 s. Merging on mana-source count makes the cache serve a
+    // list derived at a state with a different mana count, so the walker learns a wrong continuation
+    // length (g_bp_cands_last) and does more work.
+    //
+    // SO: usable only with the flag set on BOTH arms, where the narrowing is controlled rather than
+    // confounded -- never as "the filter on base's key". For the question it was built for ("does the
+    // filter reach states baseline does not"), use MTG_BP_KEY_CENSUS instead: it answers the set
+    // question directly and needs no key surgery at all.
     //
     // WHY THIS FLAG EXISTS AND MTG_BP_KEY_CASTS_NONE DID NOT SUFFICE. That flag dropped the cast set
     // alone and was reported here as "the filter on base's key". It was not: the other four folds
@@ -42957,11 +43053,14 @@ static bool BpEnumBuildKey(const GameState& state, bool is_pre_combat,
     // and could not bound what a path-independent verdict could recover. USER 2026-09-17: *"The
     // misses should be the same as no condemnation. I sense a bug."* -- correct, and this is it.
     //
-    // WHAT THIS ONE CLAIMS. With it set, the key is byte-for-byte what the condemnation-off arm
-    // computes, so misses MUST land on base's if the cache is the mechanism. That makes it a
-    // self-checking arm: misses != base's means the extra derivations come from the search visiting
-    // different states (the filter changes the candidate lists, hence the tree), NOT from key width,
-    // and no key-merging scheme of any kind can recover them.
+    // WHAT THIS ONE CLAIMED, AND WHY IT IS RETRACTED. It claimed the key was byte-for-byte the
+    // condemnation-off arm's, making it self-checking ("misses != base's means the search visits
+    // different states"). Both halves are wrong: the key is narrower than base's (see the correction
+    // above), and the inference was refuted directly by MTG_BP_KEY_CENSUS -- the filter reaches
+    // FEWER distinct states, not more (403,455 vs 405,277 on the 10-game cell), while lookups rise
+    // 17.3%. The extra derivations were eviction churn through a clear-on-full cache, not new states.
+    // A miss count cannot distinguish those; the census can. See
+    // docs/design/breakpoint-condemnation-status.md 2026-09-17.
     static const bool s_snapshot_none = EnvOn("MTG_BP_KEY_SNAPSHOT_NONE");
     // BATCH-ARM FOLD (recoverability audit 2026-09-03). This cache and the canon verdict memo are
     // thread_local and survive the batch runner's job switches, and ClearPerGameCaches does not
@@ -43388,6 +43487,10 @@ static BpEnumEntry* BpEnumEntryFor(const GameState& state, bool is_pre_combat,
     const bool keyed = (pre_key != nullptr)
         ? (key = *pre_key, true)
         : BpEnumBuildKey(state, is_pre_combat, &key);
+    // KEY CENSUS (see BpKeyCensus): record every key this cache is CONSULTED with, before the find,
+    // so the tally is residency-independent. `builds` here is therefore exactly `hits + misses`
+    // -- the lookup count -- which is the second spec metric: a prune cannot raise lookups.
+    if (keyed && BpKeyCensusOn()) { BpKeyCensusRecord(key); }
     if (keyed)
     {
         BpEnumMap::iterator it = cache.find(key);
