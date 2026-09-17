@@ -825,3 +825,30 @@ root+1), but not as a scored option at the base-plan slot. That is narrower than
 2026-09-16 rule ("empty needs to be a valid option ... for every segment"), and it is one
 environment variable away: `MTG_BP_EMPTY_ARM=1` costs 0.951x against a 1.000x bar, so enabling it
 does NOT breach the no-budget-increase constraint either. This is the call to revisit first.
+
+### G.11 SHIPPED at ec8bc51f — the acceptance test, on the shipped binary with no env overrides
+
+`MTG_M2_YIELD_STATS=1`, 60 games per deck at each deck's own play settings, seed 7700001,
+`build/Release/mtg` as committed, **no environment variables set at all**. All 20 decks:
+
+```
+in-rollout=0   breakpoint-fallback=0   (base=0  MISMATCH=0  searched-resolve=0)
+REAL main-phase decisions by depth:  NONE
+```
+
+(melira reads `base=4 searched-resolve=4`: four executor breakpoints whose committed plan carried no
+searched continuation, all four resolved by the full searched re-solve, none greedy.)
+
+Every number that would indicate a greedy decision reads zero, on every deck, at the shipped
+defaults:
+
+* **no greedy continuation** in real play (`breakpoint-fallback=0`),
+* **no greedy continuation inside rollouts either** (`in-rollout=0`),
+* **no greedy main-phase decision at any depth** (`NONE` — this is what `MTG_REFUTED_FOLLOW=0` bought),
+* **no scored-vs-realised divergence** (`MISMATCH=0`).
+
+The only `TurnSolver::Solve()` reachable from inside the search is the horizon leaf, site 90, which
+doctrine permits and which the same instrument reports separately as
+`GREEDY SITES inside search: s90=... [horizon leaf only; no breakpoint fallback exists]`.
+
+Tiers accepted in f2812fdf. Not pushed — that and the overnight tier are the user's call.
