@@ -157,6 +157,13 @@ static void JsonBattlefield(std::ostream& os, const GameState& s, int controller
         // that explains why the drain accelerates -- it belongs on the board like every other
         // counter kind (viewer issue #12). Additive display field; absent when zero.
         if (p.age_counters)     { cs.push_back({ "age",       "age",       p.age_counters }); }
+        // SPORE counters (the Thallid family) and QUEST counters (Beastmaster Ascension). Both are
+        // display REQUIREMENTS, not niceties: without them a human cannot see how close a Thallid is
+        // to its third spore counter, or how close the Ascension is to switching on a +5/+5 team
+        // anthem -- which is the entire read of a Fungus board and makes the attack decision
+        // unplayable by hand. Additive display fields; absent when zero.
+        if (p.spore_counters)   { cs.push_back({ "spore",     "spore",     p.spore_counters }); }
+        if (p.quest_counters)   { cs.push_back({ "quest",     "quest",     p.quest_counters }); }
         // num = stable per-copy id; is_aura/is_equip + attached_to let the viewer draw an Aura or
         // an attached Equipment overlapping the creature (m_number) it enchants/equips
         // (0 = unattached). Additive display fields (equipment added 2026-08-14 -- attached
@@ -5613,7 +5620,8 @@ static void WriteGameLog(const std::filesystem::path& dir, const std::string& na
 //     "turn": 4, "on_the_play": true,            // turn to run; state runs THROUGH this turn
 //     "active_life": 20, "opponent_life": 5,
 //     "battlefield": [ { "name": "Birds of Paradise", "controller": 0, "tapped": false, "sick": false }, ... ],
-//                                    // also: "charge_counters" / "storage_counters", and
+//                                    // also: "charge_counters" / "storage_counters" /
+//                                    // "spore_counters" / "quest_counters", and
 //                                    // "equips": "<host card name>" to stage an ATTACHED Equipment/Aura
 //     "hand": [ "Aria of Flame", "Invigorate" ],
 //     "graveyard": [ "Scourge of Valkas" ],       // stage cards in the graveyard (gy-reading abilities)
@@ -5830,6 +5838,12 @@ static int RunScenario(const std::filesystem::path& scenario_path)
             // Dwarven Hold: storage_counters) or a primed Aether Vial (charge_counters).
             p.storage_counters  = e.value("storage_counters", 0);
             p.charge_counters   = e.value("charge_counters", 0);
+            // Spore / quest counters. The --scenario builder constructs a PARTIAL GameState and has
+            // silently dropped a field three times before, each time making a fixture that looked
+            // valid but started from the wrong board -- so a new counter kind gets staged here at
+            // the same time it is added to Permanent, not when someone first needs a fixture.
+            p.spore_counters    = e.value("spore_counters", 0);
+            p.quest_counters    = e.value("quest_counters", 0);
             // "As this enters, choose a color" (Coldsteel Heart). A permanent STAGED directly onto
             // the battlefield never ran the as-enters replacement (FireOwnEtbTriggers fires only on
             // a real entry), so without this it would sit at chosen_color = -1 and silently fall

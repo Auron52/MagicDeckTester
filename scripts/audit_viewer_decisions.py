@@ -436,6 +436,20 @@ INERT_PARAMS = {
     "prevents_minus_counters": "static replacement (Melira) -- automatic",
     "reduces_minus_counters_by_one": "static replacement (Vizier) -- automatic",
     "persist": "triggered return, mandatory, no choice (the -1/-1 counter routes through the statics)",
+    # ---- Fungus (2026-09-17) ----
+    "spore_upkeep_self": "mandatory untargeted upkeep trigger (put a spore counter on this creature) -- nothing to choose",
+    "spore_upkeep_each_fungus": "mandatory untargeted upkeep sweep (a spore counter on EACH Fungus you control) -- not a target, exhaustive; trigger ORDER among the several spore triggers is a CR 603.3b choice but provably inert (every one only ADDS counters and none reads a count, so every ordering gives an identical board)",
+    "spore_creates_tokens": "token count constant", "spore_token_power": "token spec constant",
+    "spore_token_toughness": "token spec constant", "spore_token_subtypes": "token spec constant",
+    "spore_token_color": "token spec constant",
+    "quest_counter_per_attacker": "automatic attack trigger, one counter per DECLARED attacker; the printed 'you may' is modelled as always-take and is STRICTLY DOMINATED (no counter cap, no sacrifice-at-N clause, no cost, and the passive goldfish opponent creates no state in which fewer counters is better) -- disclosed 6a, provably inert",
+    "quest_anthem_threshold": "conditional static anthem keyed on a live counter total -- automatic, no choice",
+    "quest_anthem_power": "anthem spec constant", "quest_anthem_tough": "anthem spec constant",
+    "doubles_tokens": "static replacement effect (CR 614) -- never on the stack, no choice. Ordering multiple copies is technically a CR 616.1 choice but provably inert: every copy applies the same x2 to the same event, so all orderings give 2^N",
+    "doubles_counters": "static replacement effect (CR 614) -- as above",
+    "upkeep_tokens_per_plus_one_counter": "mandatory untargeted upkeep trigger (a Saproling per +1/+1 counter) -- count is read from board state, nothing to choose",
+    "upkeep_token_color": "token spec constant",
+    "sac_outlet_add_mana_any_color": "mana-outlet payload; WHICH Saproling is sacrificed rides the existing `sacrifice` decision and the COLOUR is resolved by the shared ChosenFloatColorCandidates fan as a main_phase plan variant (singleton {G} in this mono-green deck)",
     "etb_self_lifegain": "mandatory lifegain amount",
     "etb_damage_equals_power": "computed damage (live power substitution on etb_damage_any)",
     "sac_outlet_add_counter_to_self": "outlet payload constant (Carrion Feeder +1/+1) -- the victim choice rides the sacrifice type",
@@ -744,6 +758,7 @@ INERT_PARAMS = {
     "devotion_color": "the colour Heliod's devotion gate counts -- a printed constant, no choice",
     "sac_outlet_add_mana_color": "sac-outlet mana output color (Skirk {R}); auto-resolved (left to engine)",
     "sac_outlet_add_mana_amount": "sac-outlet mana output amount; auto-resolved (left to engine)",
+    "sac_outlet_draw": "automatic sac-outlet draw (Psychotrope Thallid, 1 card), no choice in the payload; the ACTIVATION rides sac_creature_outlet -> activate and WHICH Saproling dies is the `sacrifice` board decision",
     "sac_outlet_damage": "automatic sac-outlet damage, no target in goldfish (Siege-Gang -> face)",
     "sac_outlet_creates_tokens": "automatic sac-outlet token creation (Pashalik 2), no choice",
     "sac_outlet_token_power": "sac-outlet token P/T detail", "sac_outlet_token_toughness": "sac-outlet token P/T detail",
@@ -888,6 +903,13 @@ MAINPHASE_PARAMS = {
     # fungible. A deck holding several DISTINCT legal targets would want the per-name plan-variant
     # fan that Haven of the Spirit Dragon's gy_return_cost already uses (GYR#).
     "reanimate_creature_max_mv": "Unearth graveyard-reanimate cast = a main_phase plan action; WHICH creature returns is auto-resolved (highest MV within the cap) -- disclosed 6a, and forced to a single legal target in this deck",
+    # ---- Fungus (2026-09-17) ----
+    # The spore outlet is a BOARD ACTIVATION: an Action::Kind::ActivatePermAbility with
+    # PermAbilityMode::SporeSaproling, so it appears as a main_phase plan action on the clicked
+    # permanent. Its cost is COUNTERS (no mana, no {T}), so it is repeatable within a turn and the
+    # activation count K rides chosen_x as a searched plan variant -- the human reaches K=2 by
+    # choosing it twice, exactly as for the drain/exile sinks.
+    "spore_saproling_cost": "spore outlet = a main_phase board activation (ActivatePermAbility/SporeSaproling); K rides chosen_x",
     "sacrifice_draw_cost": "Fiery Islet sac-to-draw activation (main_phase play)",
     "stages_cards":        "Light Up the Stage: staged cards become castable (main_phase plays)",
     "tap_token_cost":      "Sliver Hive activated token ability (main_phase play)",
@@ -933,6 +955,21 @@ MAINPHASE_PARAMS = {
 
 # Known unwired decision gaps, DEFERRED with the user's sign-off (disclosed in Stage 6a).
 DEFERRED_PARAMS = {
+    # Mycoloth's DEVOUR (2026-09-17). Two separable decisions, and only one of them is surfaced:
+    #   * HOW MANY to devour IS surfaced -- it is a real searched plan variant (one CastFromHand
+    #     variant per k, keyed into plan_signature), so a human picks among distinct `main_phase`
+    #     plans exactly as for splice/replicate counts. Not a gap.
+    #   * WHICH creatures are devoured is AUTO-RESOLVED by the shared expendability ranking
+    #     (SacExpendabilityRank: tokens and weak bodies first, lords and scaling creatures last).
+    #     This IS a disclosed gap. Wiring it means a MULTI-select sacrifice -- "pick 3 of your 14
+    #     Saprolings" -- which the existing single-victim `sacrifice` chooser has no shape for.
+    #     Its cost in THIS deck is small and bounded: devour fires at most twice per game (2x
+    #     Mycoloth), the fodder is overwhelmingly fungible 1/1 Saproling tokens, and the ranking
+    #     already prefers the one genuinely-correct special case (Tukatongue Thallid, whose death
+    #     REFUNDS a Saproling). PROVISIONAL -- needs the user's sign-off.
+    "devour": "devour COUNT is surfaced as a searched main_phase plan variant; WHICH creatures are "
+              "devoured is auto-resolved by the shared expendability ranking -- wiring it needs a "
+              "multi-select sacrifice the registry has no shape for. PROVISIONAL, pending sign-off",
     # (cascade_max_mv moved to the MANIFEST 2026-09-03: the may-cast surfaces as `free_cast`
     # at the cascade trigger's resolution; the hit itself is rules-forced, not a choice.)
     "untap_x_mana_sources": "Reality Spasm untap mode -- engine model shipped default-ON (4f449fbd, "

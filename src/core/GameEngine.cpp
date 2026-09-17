@@ -55,6 +55,10 @@ static void CollectBoardState(const GameState& state,
         if (p.charge_counters != 0) { snap.counters.push_back({ "charge", p.charge_counters }); }
         if (p.verse_counters  != 0) { snap.counters.push_back({ "verse",  p.verse_counters  }); }
         if (p.storage_counters != 0) { snap.counters.push_back({ "storage", p.storage_counters }); }
+        // Spore / quest counters -- see the matching note in main.cpp's board serializer: a human
+        // reads a Fungus board by these two numbers, so they must reach the viewer.
+        if (p.spore_counters != 0) { snap.counters.push_back({ "spore", p.spore_counters }); }
+        if (p.quest_counters != 0) { snap.counters.push_back({ "quest", p.quest_counters }); }
 
         if (p.controller_index == state.active_player_index) { battlefield_out.push_back(std::move(snap)); }
         else { opp_battlefield_out.push_back(std::move(snap)); }  // Forbidden Orchard tokens / spawns

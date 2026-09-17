@@ -1,30 +1,33 @@
 {
-  "_README": "Intentional, reviewed divergences between cards.json and the Scryfall snapshot (src/cards/data/scryfall_reference.json). audit_card_fields.py downgrades a HARD mismatch to an ALLOWLISTED divergence when the card+field appears here. Keyed by card name -> field ('keywords'|'subtypes'|'supertypes'|'types'|'P/T'|'mana_cost') -> reason. This is NOT for systematic conventions (ability words, land subtypes, Basic/World supertypes, CDA * power) -- those are stripped in-code. An entry that no longer mismatches is reported as STALE so this file stays honest. Adding an entry is an explicit, reviewed decision that the divergence is correct.",
-  "Galerider Sliver": {
-    "keywords": "Keyword-lord: 'Sliver creatures you control have flying' grants flying to your Slivers INCLUDING itself, so the card functionally has flying (modeled self-innate). Scryfall lists no innate keyword. Anthem-to-other-Slivers inert in goldfishing (no blockers). See oracle bracket-note."
-  },
-  "Striking Sliver": {
-    "keywords": "Keyword-lord: grants first strike to your Slivers incl. itself (modeled self-innate). First strike is inert in goldfishing (no blockers). See oracle bracket-note."
-  },
-  "Cloudshredder Sliver": {
-    "keywords": "Keyword-lord: grants flying+haste to your Slivers incl. itself. Flying self-innate + inert in goldfishing; haste additionally granted to other Slivers via grants_haste param. See oracle bracket-note."
-  },
-  "Haytham Kenway": {
-    "keywords": "'Protection from Assassins' is a real keyword but inert in goldfishing (no Assassins in play); the protection-to-other-Knights is an anthem grant, not an innate keyword Scryfall would list on this card's other Knights."
-  },
-  "Goblin Piledriver": {
-    "keywords": "'Protection from blue' is a real keyword but inert in goldfishing (the passive opponent has no blue sources or blockers to target); the attack-trigger +2/+0 per other attacking Goblin is modeled via attack_pump_power_per_other_matching. See the card's oracle bracket-note."
-  },
-  "Progenitus": {
-    "keywords": "'Protection from everything' is a real keyword but inert in goldfishing (the passive opponent never targets, blocks, or damages); the graveyard shuffle-in replacement IS modeled (graveyard_replace_shuffle_library). Mirrors the Haytham/Piledriver protection precedent."
-  },
-  "Bloom Tender": {
-    "keywords": "Scryfall lists 'vivid' in keywords -- a data quirk (no rules-meaningful innate keyword on this card); the each-color-among-permanents mana ability is modeled via domain_mana."
-  },
-  "Glorybringer": {
-    "keywords": "'Exert' is a real keyword but its use is OPTIONAL and provably worthless here: exerting costs the next untap step (so Glorybringer cannot attack the following turn -- strictly negative) and its payload is 4 damage to a non-Dragon creature an opponent controls, which against the passive goldfish never blocks, never attacks, and is read by no card in the deck. Never exerting is therefore the OPTIMAL line, so omitting the keyword is byte-identical to modelling it and playing it correctly. USER-approved deferral 2026-08-26; see docs/design/analysis-Dragons.md. Mirrors the Progenitus / Goblin Piledriver protection precedent (a real keyword, inert in goldfishing). Revisit in phase 2, when a real opponent makes removal meaningful."
-  },
-  "Auriok Champion": {
-    "keywords": "'Protection from black and from red' is a real keyword but inert in goldfishing on all four DEBT axes (the passive opponent never damages, targets, blocks or enchants; the CritterLifegain deck runs no Auras/Equipment, and its only targeting sources are white). Mirrors the Goblin Piledriver / Progenitus protection precedent; NOT protection_from_everything (that would wrongly exclude it from Heliod's targets)."
-  }
+ "_README": "Intentional, reviewed divergences between cards.json and the Scryfall snapshot (src/cards/data/scryfall_reference.json). audit_card_fields.py downgrades a HARD mismatch to an ALLOWLISTED divergence when the card+field appears here. Keyed by card name -> field ('keywords'|'subtypes'|'supertypes'|'types'|'P/T'|'mana_cost') -> reason. This is NOT for systematic conventions (ability words, land subtypes, Basic/World supertypes, CDA * power) -- those are stripped in-code. An entry that no longer mismatches is reported as STALE so this file stays honest. Adding an entry is an explicit, reviewed decision that the divergence is correct.",
+ "Galerider Sliver": {
+  "keywords": "Keyword-lord: 'Sliver creatures you control have flying' grants flying to your Slivers INCLUDING itself, so the card functionally has flying (modeled self-innate). Scryfall lists no innate keyword. Anthem-to-other-Slivers inert in goldfishing (no blockers). See oracle bracket-note."
+ },
+ "Striking Sliver": {
+  "keywords": "Keyword-lord: grants first strike to your Slivers incl. itself (modeled self-innate). First strike is inert in goldfishing (no blockers). See oracle bracket-note."
+ },
+ "Cloudshredder Sliver": {
+  "keywords": "Keyword-lord: grants flying+haste to your Slivers incl. itself. Flying self-innate + inert in goldfishing; haste additionally granted to other Slivers via grants_haste param. See oracle bracket-note."
+ },
+ "Haytham Kenway": {
+  "keywords": "'Protection from Assassins' is a real keyword but inert in goldfishing (no Assassins in play); the protection-to-other-Knights is an anthem grant, not an innate keyword Scryfall would list on this card's other Knights."
+ },
+ "Goblin Piledriver": {
+  "keywords": "'Protection from blue' is a real keyword but inert in goldfishing (the passive opponent has no blue sources or blockers to target); the attack-trigger +2/+0 per other attacking Goblin is modeled via attack_pump_power_per_other_matching. See the card's oracle bracket-note."
+ },
+ "Progenitus": {
+  "keywords": "'Protection from everything' is a real keyword but inert in goldfishing (the passive opponent never targets, blocks, or damages); the graveyard shuffle-in replacement IS modeled (graveyard_replace_shuffle_library). Mirrors the Haytham/Piledriver protection precedent."
+ },
+ "Bloom Tender": {
+  "keywords": "Scryfall lists 'vivid' in keywords -- a data quirk (no rules-meaningful innate keyword on this card); the each-color-among-permanents mana ability is modeled via domain_mana."
+ },
+ "Glorybringer": {
+  "keywords": "'Exert' is a real keyword but its use is OPTIONAL and provably worthless here: exerting costs the next untap step (so Glorybringer cannot attack the following turn -- strictly negative) and its payload is 4 damage to a non-Dragon creature an opponent controls, which against the passive goldfish never blocks, never attacks, and is read by no card in the deck. Never exerting is therefore the OPTIMAL line, so omitting the keyword is byte-identical to modelling it and playing it correctly. USER-approved deferral 2026-08-26; see docs/design/analysis-Dragons.md. Mirrors the Progenitus / Goblin Piledriver protection precedent (a real keyword, inert in goldfishing). Revisit in phase 2, when a real opponent makes removal meaningful."
+ },
+ "Auriok Champion": {
+  "keywords": "'Protection from black and from red' is a real keyword but inert in goldfishing on all four DEBT axes (the passive opponent never damages, targets, blocks or enchants; the CritterLifegain deck runs no Auras/Equipment, and its only targeting sources are white). Mirrors the Goblin Piledriver / Progenitus protection precedent; NOT protection_from_everything (that would wrongly exclude it from Heliod's targets)."
+ },
+ "Mycoloth": {
+  "keywords": "'Devour 2' is a real keyword and is FULLY MODELLED -- but via the `devour` CardParam, not via Keyword::Devour. The engine's Keyword enum deliberately carries only the keywords some code path actually READS, and the cards.json loader rejects an unknown keyword string outright, so listing \"Devour\" here would fail to load. Nothing is dropped: devour is applied as an as-enters replacement (CR 702.81) in the pre-push window at both enter sites, the sacrifice count is a searched plan variant, the +1/+1 counters go through the Doubling-Season-aware PutPlusCounters, and the victims' death triggers are deferred until after the entrant lands. This is the modelled-by-param rather than by-enum case, distinct from the Piledriver/Progenitus entries above (a real keyword left INERT); here the mechanic is implemented in full."
+ }
 }

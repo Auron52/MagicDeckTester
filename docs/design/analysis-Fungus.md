@@ -314,6 +314,40 @@ is disclosed in Stage 6a. Recorded here so the result lands either way.
 
 ---
 
+## Stage 3 / 4 — results
+
+**Stage 3 coverage: CLEAN.** All 14 cards report `full`; `missing` is empty; no partial gaps.
+Every card's `mana_cost`, `cmc`, P/T, type line, keywords and oracle text was verified by a direct
+Scryfall fetch (the `/cards/collection` endpoint, after waiting out a rate limit) — not taken from
+the research drafts. All five late-fetched cards matched their drafts exactly.
+
+**Stage 4a provider routing: FIXED, and it took TWO fixes.** The first (found by reading) was the
+Goblins misroute via `sac_creature_outlet`. The second was found only by **running the deck**, and
+is broader: **Wild Growth is a land aura, and `is_land_aura` ALONE sets the EldraziFlicker
+signature** — which is detected *above* even the goblin check, so Fungus was inheriting
+`EldraziFlickerProvider` wholesale. That is the **seventh** instance of the archetype-neutral-param
+misroute class, and the widest-reaching yet: any deck playing Wild Growth, Fertile Ground or Utopia
+Sprawl hits it.
+
+Fungus is now routed above both. Verified empirically across all 25 decks that **no other deck's
+routing moved** — the signature is OR'd across six cards' params, every one new and gated, so no
+existing deck can set it.
+
+*Lesson worth keeping: reading `SelectDecisionProvider` found one misroute; running one game found
+the other. The audit is cheap — run it, don't reason about it.*
+
+**Stage 4 profile: written** (`decks/Fungus/Fungus.profile.json`), 13 card-score entries (all
+non-basics — so no card is scored as an empty slot). Baseline only, per policy: no exhaustive
+keep/bottom table, which is the separate user-initiated mulligan stage.
+
+Notable card scores (first-copy marginal value): Sporecrown Thallid **+0.51**, Beastmaster
+Ascension **+0.35**, Thallid **+0.30**. Thallid Shell-Dweller is **−0.31** — consistent with a 0/5
+Defender whose only contributions are the spore engine and being a Fungus body. Beastmaster
+Ascension's second copy is **−0.35**, i.e. strongly diminishing: one is a wincon, two is a dead
+card. That is a deckbuilding observation for the user, not a modelling problem.
+
+First real game: wins **turn 5** at depth 0.
+
 ## Stage log
 
 * **2026-09-17** — Stage 1 coverage run; 11 missing cards; four engine mechanics absent

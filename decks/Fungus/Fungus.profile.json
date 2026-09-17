@@ -1,0 +1,63 @@
+{
+  "card_scores": {
+    "Beastmaster Ascension": [
+      0.34643918345295965,
+      -0.3471790890269153
+    ],
+    "Doubling Season": [
+      -0.114579836634217,
+      -0.2962962962962967
+    ],
+    "Essence Warden": [
+      0.12247962844508731
+    ],
+    "Mycoloth": [
+      -0.15008382535170206
+    ],
+    "Psychotrope Thallid": [
+      0.072296469947986
+    ],
+    "Simic Growth Chamber": [
+      -0.010551931659834146
+    ],
+    "Sporecrown Thallid": [
+      0.5125469043151964,
+      0.27458484691229934
+    ],
+    "Sporesower Thallid": [
+      -0.05693869096934545,
+      -0.11806130903065437
+    ],
+    "Thallid": [
+      0.30222611112540854,
+      0.1895678092399402
+    ],
+    "Thallid Shell-Dweller": [
+      -0.31082207274242446,
+      -0.3894449499545045
+    ],
+    "Tukatongue Thallid": [
+      0.10677029684427364,
+      -0.14280566898870983
+    ],
+    "Utopia Mycon": [
+      0.09740795216164688,
+      0.2162520729684907
+    ],
+    "Wild Growth": [
+      -0.13069445049915007
+    ]
+  },
+  "hand_score_threshold": -1e+18,
+  "mulligan": {
+    "bottom_order": "count_first",
+    "curve_check": "two_drop",
+    "max_lands": 5,
+    "min_color_sources": {},
+    "min_lands": 1,
+    "min_playable": 0,
+    "required_pieces": [],
+    "stop_at": 4
+  },
+  "version": 1
+}

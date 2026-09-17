@@ -285,6 +285,15 @@
     "toughness": "3",
     "type_line": "Legendary Creature — Cat Knight"
   },
+  "Beastmaster Ascension": {
+    "cmc": 3.0,
+    "keywords": [],
+    "mana_cost": "{2}{G}",
+    "oracle_text": "Whenever a creature you control attacks, you may put a quest counter on this enchantment.\nAs long as this enchantment has seven or more quest counters on it, creatures you control get +5/+5.",
+    "power": null,
+    "toughness": null,
+    "type_line": "Enchantment"
+  },
   "Benalish Marshal": {
     "cmc": 3.0,
     "keywords": [],
@@ -827,6 +836,15 @@
     "power": null,
     "toughness": null,
     "type_line": "Sorcery"
+  },
+  "Doubling Season": {
+    "cmc": 5.0,
+    "keywords": [],
+    "mana_cost": "{4}{G}",
+    "oracle_text": "If an effect would create one or more tokens under your control, it creates twice that many of those tokens instead.\nIf an effect would put one or more counters on a permanent you control, it puts twice that many of those counters on that permanent instead.",
+    "power": null,
+    "toughness": null,
+    "type_line": "Enchantment"
   },
   "Dragon Tempest": {
     "cmc": 2.0,
@@ -2289,6 +2307,17 @@
     "toughness": "4",
     "type_line": "Legendary Creature — Goblin Noble"
   },
+  "Mycoloth": {
+    "cmc": 5.0,
+    "keywords": [
+      "Devour"
+    ],
+    "mana_cost": "{3}{G}{G}",
+    "oracle_text": "Devour 2 (As this creature enters, you may sacrifice any number of creatures. It enters with twice that many +1/+1 counters on it.)\nAt the beginning of your upkeep, create a 1/1 green Saproling creature token for each +1/+1 counter on this creature.",
+    "power": "4",
+    "toughness": "4",
+    "type_line": "Creature — Fungus"
+  },
   "Mystic Monastery": {
     "cmc": 0.0,
     "keywords": [],
@@ -2538,6 +2567,15 @@
     "power": "10",
     "toughness": "10",
     "type_line": "Legendary Creature — Hydra Avatar"
+  },
+  "Psychotrope Thallid": {
+    "cmc": 3.0,
+    "keywords": [],
+    "mana_cost": "{2}{G}",
+    "oracle_text": "At the beginning of your upkeep, put a spore counter on this creature.\nRemove three spore counters from this creature: Create a 1/1 green Saproling creature token.\n{1}, Sacrifice a Saproling: Draw a card.",
+    "power": "1",
+    "toughness": "1",
+    "type_line": "Creature — Fungus"
   },
   "Puresteel Paladin": {
     "cmc": 2.0,
@@ -3063,6 +3101,15 @@
     "toughness": "2",
     "type_line": "Creature — Goblin"
   },
+  "Simic Growth Chamber": {
+    "cmc": 0.0,
+    "keywords": [],
+    "mana_cost": "",
+    "oracle_text": "This land enters tapped.\nWhen this land enters, return a land you control to its owner's hand.\n{T}: Add {G}{U}.",
+    "power": null,
+    "toughness": null,
+    "type_line": "Land"
+  },
   "Sinew Sliver": {
     "cmc": 2.0,
     "keywords": [],
@@ -3245,6 +3292,24 @@
     "toughness": null,
     "type_line": "Enchantment — Aura"
   },
+  "Sporecrown Thallid": {
+    "cmc": 2.0,
+    "keywords": [],
+    "mana_cost": "{1}{G}",
+    "oracle_text": "Each other creature you control that's a Fungus or Saproling gets +1/+1.",
+    "power": "2",
+    "toughness": "2",
+    "type_line": "Creature — Fungus"
+  },
+  "Sporesower Thallid": {
+    "cmc": 4.0,
+    "keywords": [],
+    "mana_cost": "{2}{G}{G}",
+    "oracle_text": "At the beginning of your upkeep, put a spore counter on each Fungus you control.\nRemove three spore counters from this creature: Create a 1/1 green Saproling creature token.",
+    "power": "4",
+    "toughness": "4",
+    "type_line": "Creature — Fungus"
+  },
   "Steam Vents": {
     "cmc": 0.0,
     "keywords": [],
@@ -3384,6 +3449,26 @@
     "toughness": null,
     "type_line": "Instant"
   },
+  "Thallid": {
+    "cmc": 1.0,
+    "keywords": [],
+    "mana_cost": "{G}",
+    "oracle_text": "At the beginning of your upkeep, put a spore counter on this creature.\nRemove three spore counters from this creature: Create a 1/1 green Saproling creature token.",
+    "power": "1",
+    "toughness": "1",
+    "type_line": "Creature — Fungus"
+  },
+  "Thallid Shell-Dweller": {
+    "cmc": 2.0,
+    "keywords": [
+      "Defender"
+    ],
+    "mana_cost": "{1}{G}",
+    "oracle_text": "Defender\nAt the beginning of your upkeep, put a spore counter on this creature.\nRemove three spore counters from this creature: Create a 1/1 green Saproling creature token.",
+    "power": "0",
+    "toughness": "5",
+    "type_line": "Creature — Fungus"
+  },
   "Three Tree City": {
     "cmc": 0.0,
     "keywords": [],
@@ -3473,6 +3558,15 @@
     "power": null,
     "toughness": null,
     "type_line": "Artifact Land"
+  },
+  "Tukatongue Thallid": {
+    "cmc": 1.0,
+    "keywords": [],
+    "mana_cost": "{G}",
+    "oracle_text": "When this creature dies, create a 1/1 green Saproling creature token.",
+    "power": "1",
+    "toughness": "1",
+    "type_line": "Creature — Fungus"
   },
   "Turntimber Symbiosis": {
     "cmc": 7.0,
@@ -3585,6 +3679,15 @@
     "power": null,
     "toughness": null,
     "type_line": "Artifact"
+  },
+  "Utopia Mycon": {
+    "cmc": 1.0,
+    "keywords": [],
+    "mana_cost": "{G}",
+    "oracle_text": "At the beginning of your upkeep, put a spore counter on this creature.\nRemove three spore counters from this creature: Create a 1/1 green Saproling creature token.\nSacrifice a Saproling: Add one mana of any color.",
+    "power": "0",
+    "toughness": "2",
+    "type_line": "Creature — Fungus"
   },
   "Utvara Hellkite": {
     "cmc": 8.0,
