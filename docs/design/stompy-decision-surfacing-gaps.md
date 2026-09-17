@@ -101,13 +101,23 @@ heuristic"*, 2026-08-25); the off-switch is there because the measurement bought
 
 This was sized during the same session and deliberately not built. The finding is architectural:
 
-* **Chapters II and III cannot be a plan axis at all.** They fire in `AdvanceSagas` at the DRAW STEP
-  of a later turn — inside a rollout, not inside any plan's apply — and this engine does not branch
-  inside rollouts. Their target is therefore a resolution-time HEURISTIC
-  (`DefaultSagaChapterTarget` = "biggest body that can swing now") and the honest route to improving
-  it is `.claude/skills/heuristic-optimization.md` (propose variants, sweep, adopt on approval), not
-  a searched axis. The doc's earlier claim that "a searched resolution-time choice would be" the
-  right shape overstated what the architecture supports.
+* **Chapters II and III are a different shape from chapter I — but NOT out of reach.** USER,
+  2026-09-17b: *"Technically they are decisions like that of Aether Vial."* That is the right
+  reference and it corrects an earlier draft of this section, which claimed they "cannot be a plan
+  axis at all". The engine already pins decisions that resolve OUTSIDE the main phase:
+  `Plan::vial_charge_choice` (Vial charges on an upkeep trigger, activates at instant speed) and
+  `Plan::lackey_choice` — whose own comment is explicit that the trigger "belongs to a Lackey
+  already in play, not to anything in `actions`", and that only the pre-combat plan can carry it
+  "since the put resolves in that combat's damage step". A board-owned, later-resolving decision
+  carried on a plan is therefore an established pattern, not a missing one.
+  What is genuinely further than either precedent reaches: a Saga chapter fires in `AdvanceSagas`
+  at the **next turn's** draw step, so the decision and its resolution are separated by a turn
+  boundary — inside a rollout, where this engine does not branch. Vial and Lackey both resolve
+  within the turn their plan covers. So the open question is not "is this shape legal?" (it is) but
+  "what does a pin mean when the chapter belongs to a turn the current plan does not cover?" —
+  which is the thing to settle before building anything. Until then the target is a resolution-time
+  heuristic (`DefaultSagaChapterTarget` = "biggest body that can swing now"), improvable via
+  `.claude/skills/heuristic-optimization.md` independently of any axis work.
 * **Chapter I CAN be searched**, because it resolves inside the Saga's own resolution during the main
   phase — i.e. inside the plan apply. The shape is the `ScriptedEtbDig` pin, and the full plumbing
   checklist is: a `thread_local` + RAII scope in `SpellEffects.h`; a `Plan::saga_ch1_choice` field;
