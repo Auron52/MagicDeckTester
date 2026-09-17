@@ -355,7 +355,7 @@ static std::atomic<long long> g_condemn_drops_greedy{0};
 //
 // The executor bucket therefore doubles as a GREEDY DETECTOR for the deletion programme: a drop
 // there means the executor had to solve for itself, i.e. a searched continuation was unavailable.
-// If MTG_BP_SITE3 + MTG_BP_NO_GREEDY_CONT do what they are meant to, this bucket tends to zero and
+// With the greedy continuation deleted (2026-09-17) this bucket tends to zero and
 // condemnation becomes a pure search-side prune.
 static std::atomic<long long> g_bp_condemn_seen{0};
 static std::atomic<long long> g_bp_condemn_drops{0};
@@ -1818,79 +1818,6 @@ static bool BpPlanMadeACast()
 // Clairvoyance is what makes the rule exact rather than a heuristic: the search already knows what
 // the trigger will draw, so "new information arrived" is never a reason to re-offer a card. Only
 // ORDER POSITION is.
-// See the call site in bp_searched_plan: replace the greedy continuation with the CANONICAL one.
-static bool BpNoGreedyContinuationEnabled()
-{
-    static const bool on = EnvOn("MTG_BP_NO_GREEDY_CONT");
-    return heurarm::Flag(heurarm::BP_NO_GREEDY_CONT, on);
-}
-
-// MTG_BP_CANON_CONT -- "sound-NGC": the greedy-deletion form built after BOTH prior forms were
-// measured lossy for KNOWN, distinct reasons, fixing each at its root instead of picking a new
-// point on the same trade:
-//   * NGC (cands[0] always) lost "cast nothing" -- greedy's Solve can decline every cast and
-//     measurably does (treasure_hunt's regression was pinned on NGC alone). Here ACT-vs-PASS is
-//     judged by the SAME Solve the greedy path runs, at the SAME post-breakpoint-land state, so a
-//     genuine pass falls through to the greedy path and reproduces it byte-for-byte (the land is
-//     replayed on the real state and the Solve memo-hits the probe's).
-//   * NGC's cost was UNCHARGED RECURSIVE enumeration: an apply inside EnumeratePlansWithLand hits
-//     a breakpoint, NGC enumerates again, at every level, none of it billed to units (Dragonstorm
-//     gi=2686: 96% of its 1.15M lookups and 45k derivations arrived with g_bp_enum_depth > 0;
-//     11.8x tail wall at LOWER units). Here the lever stands down inside a derivation
-//     (g_bp_enum_depth > 0), where the greedy fallback is the base engine's own behaviour anyway.
-// What remains deleted: greedy's FREE PICK of WHICH casts to make -- when Solve says act, the
-// continuation is the canonical cands[0], "continue in the deck's cast order". Only ACT-vs-PASS
-// stays with Solve, the same judgement class as the accepted greedy land drop.
-// Do not combine with MTG_BP_NO_GREEDY_CONT / MTG_BP_BASE_EMPTY (they'd race for the same plans);
-// all three are mutually exclusive A/B arms of the same fallback.
-static bool BpCanonContEnabled()
-{
-    // ADOPTED 2026-09-02 (=0 disables) as part of the TIGHT sound recipe: SITE3 + DEFER + NODE +
-    // ROOTTURN + CANON with MTG_BP_CANON_REC off -- canon covers the SEARCHED structure (root
-    // enum, node resume, captured applies), every playout-side apply keeps greedy per the USER's
-    // ruling ("rollouts being greedy is fine... I can always increase depth and budget to rely
-    // on them less. That is not true for the searched part"). Dossier: hinata -0.0057/-0.0096
-    // (t 2.7/4.5, 10k/block paired), 4 movers clean, 11 decks game-identical; quiet-box wall
-    // hinata +6.4%, dragonstorm +12.9% (the one deck over the bar -- USER accepted, perf work
-    // continues from this baseline), every other deck <= +2.9%. Executor main-phase greedy
-    // decisions: NONE; zero ROOT-kind fallbacks. docs/design/bp-greedy-continuation-deletion.md.
-    static const bool on = EnvOn("MTG_BP_CANON_CONT", true);
-    return heurarm::Flag(heurarm::BP_CANON_CONT, on);
-}
-
-// MTG_BP_CANON_ROLLOUT -- canon fires in PLAIN rollout applies too (default OFF = canon is
-// scoped to decision/recorded/resumed/hosted applies; see the scope note at the canon block).
-static bool BpCanonRolloutToo()
-{
-    static const bool on = EnvOn("MTG_BP_CANON_ROLLOUT");
-    return heurarm::Flag(heurarm::BP_CANON_ROLLOUT, on);
-}
-
-// MTG_BP_CANON_REC -- canon fires at RECORDING rollout applies too (out_breakpoint set, not
-// root). DEFAULT OFF since the 2026-09-02 tight-scope adoption (=1 restores canon-everywhere-
-// but-plain-rollouts, the form the first 140k gate measured at -0.0126 hinata / +18.6% wall):
-// recording applies in rollout context are still PLAYOUT territory per the USER's ruling, and
-// their canon traffic (91.5% of hinata's 4.03M fires, a BuildBreakpointKey walk each even on a
-// verdict-memo hit) is what made the full recipe fail the wall bar. The quality they carry
-// (~0.005 of hinata's gain) is recoverable by depth/budget instead.
-static bool BpCanonRecToo()
-{
-    static const bool on = EnvOn("MTG_BP_CANON_REC");
-    return heurarm::Flag(heurarm::BP_CANON_REC, on);
-}
-
-// MTG_BP_CANON_RECROOT -- the middle arm between REC=1 (canon at every recording rollout apply;
-// hinata +18.7% wall, quality -0.0126/-0.0137) and the TIGHT scope REC=0 (hinata +6.1% wall,
-// quality -0.0057/-0.0096, so the rec traffic carries ~half the gain): with REC=0, still fire
-// canon at recording applies ON THE ROOT TURN (state.turn_number == g_condemn_root_turn -- the
-// same authority test the node's ROOTTURN gate uses). The committed decision's own rollout lines
-// get canonical continuations; lookahead-turn rollouts keep greedy. Default OFF.
-static bool BpCanonRecRootOnly()
-{
-    static const bool on = EnvOn("MTG_BP_CANON_RECROOT");
-    return heurarm::Flag(heurarm::BP_CANON_RECROOT, on);
-}
-
 // One breakpoint-enum cache entry (see BpEnumEntryFor, defined with the enum memo far below).
 struct BpEnumEntry
 {
@@ -1902,41 +1829,6 @@ static bool BpEnumBuildKey(const GameState& state, bool is_pre_combat,
                            TranspositionTable::Key* out);
 static BpEnumEntry* BpEnumEntryFor(const GameState& state, bool is_pre_combat,
                                    const TranspositionTable::Key* pre_key = nullptr);
-// Canon's ACT-vs-PASS verdict memo, SEPARATE from the plan cache on purpose: a PASS state must
-// never pay a plan-list derivation (the entry-rider form did, and measured WORSE on hinata --
-// 56% of its 4.03M fires pass). Slot index = (site==1 | karoo_deferred<<1); -1 = unknown.
-struct CanonVerdict { int8_t v[4] = { -1, -1, -1, -1 }; };
-
-// MTG_BP_BASE_EMPTY -- the BASE plan's continuation is the EMPTY one, not a greedy Solve.
-//
-// WHY THIS IS THE RIGHT SHAPE, and why MTG_BP_NO_GREEDY_CONT was not. At an open-class breakpoint
-// the search ALREADY branches: wave 0 emits the (base x bp_choice) product, and each variant
-// resolves to cands[bp_choice] -- a searched continuation. The only plan that fell through to a
-// greedy Solve is the BASE plan itself, which is the asymmetry NGC's comment names ("a base plan is
-// SCORED on a greedy continuation while its own variants are scored on searched ones"). But a base
-// plan already MEANS "cast this subset"; its extensions are exactly what the variants enumerate. So
-// the honest continuation for a base plan is to cast NOTHING more, and base + variants then cover
-// the whole space -- empty included -- with no greedy step anywhere.
-//
-// NGC instead answered cands[0], which is strictly WORSE than the greedy it replaced: EnumeratePlans
-// drops the empty combination by contract (see "The empty combination (skip everything) is not a
-// plan and is dropped"), so cands[0] can NEVER be "cast nothing", while the greedy Solve could.
-// Measured 2026-09-02: that reachability loss costs treasure_hunt +0.0016/+0.0018 (the six-arm
-// ladder pins it on NGC alone -- s3 is byte-identical to base, and s3ngc/node/roott are all
-// byte-identical to ngc), and it lands on the standing no-lossy-truncation bar.
-//
-// It is also CHEAPER than either predecessor, which is the second half of the case. NGC replaced a
-// greedy Solve with a full EnumerateBreakpointPlans per base plan; its comment predicted that would
-// be "near-free ... an enum-memo HIT", and Dragonstorm refutes that outright -- 10-14x WALL on the
-// tail games at IDENTICAL win turns and LOWER units (gi=2686: 11.0s -> 159s, units 59456 -> 53350).
-// That work charges no units, so budget_ms cannot throttle it. This lever runs NEITHER the Solve nor
-// the enumeration: it hands back an empty plan.
-//
-// SCOPE. Only base plans (bp_choice < 0) at an OPEN class (class_on): with the class closed no
-// variants are emitted, so an empty base plan would delete the continuation outright rather than
-// relocate it. A VARIANT sitting at a breakpoint it is not targeting keeps its greedy continuation
-// too -- it has to reach its own bp_at, and stopping early would make the nested slot unreachable
-// (the deliberate L*W-not-W^L trade).
 // MTG_BP_EMPTY_ARM -- emit the EMPTY continuation as a wave-0 arm at every breakpoint index.
 // See the emission site in the wave-0 fan-out for the full argument. DEFAULT OFF: it changes play
 // wherever a breakpoint fires, so it is a GT-moving change that has to be measured, not assumed.
@@ -1944,20 +1836,6 @@ static bool BpEmptyArmEnabled()
 {
     static const bool on = EnvOn("MTG_BP_EMPTY_ARM");
     return heurarm::Flag(heurarm::BP_EMPTY_ARM, on);
-}
-
-// MTG_BP_DROP_GREEDY -- see the application site in bp_searched_plan. DEFAULT OFF: it changes play
-// wherever a breakpoint fires, so it is GT-moving for every deck and has to be measured per deck.
-static bool BpDropGreedyContinuation()
-{
-    static const bool on = EnvOn("MTG_BP_DROP_GREEDY");
-    return heurarm::Flag(heurarm::BP_DROP_GREEDY, on);
-}
-
-static bool BpBaseEmptyContinuation()
-{
-    static const bool on = EnvOn("MTG_BP_BASE_EMPTY");
-    return heurarm::Flag(heurarm::BP_BASE_EMPTY, on);
 }
 
 static bool BpCondemnOrderAwareEnabled()
@@ -2664,174 +2542,29 @@ static bool SecondMainUnproductive(const GameState& state)
 // can be aimed at the measured productive set rather than a guess. Dumped at exit.
 namespace greedysite
 {
-// Every remaining greedy TurnSolver::Solve() reached from inside the search, counted by site, so
-// "is there greedy left in the search" is answered by measurement rather than by reading call
-// graphs. Sites 0-7 are BREAKPOINT continuations falling back to greedy because the site was not
-// searchable (bp_searched_plan returned false); site 90 is SolveWithLookahead's depth<=0 base case.
+// The ONE greedy TurnSolver::Solve() reached from inside the search: SolveWithLookahead's depth<=0
+// base case (site 90) -- the horizon playout's per-turn policy, permitted by doctrine (USER
+// 2026-09-05: greedy is allowed only beyond the search horizon, for this-turn go-off heuristics,
+// mana allocation and non-dork attacks). Every breakpoint continuation inside ApplyPlanDirect is
+// now either the plan's own searched choice (rank / chain / EMPTY arm / node child) or the EMPTY
+// default; there is no fallback Solve() to count (deleted 2026-09-17 -- see
+// docs/design/greedy-continuation-deletion-route.md). Sites 0-8 therefore no longer exist here.
 inline bool Enabled() { static const bool v = EnvOn("MTG_M2_YIELD_STATS"); return v; }
-inline std::atomic<unsigned long long> g[100] = {};
-inline void Record(int site) { if (Enabled() && site >= 0 && site < 100) { g[site].fetch_add(1, std::memory_order_relaxed); } }
-// ...and whether that greedy Solve DECIDED ANYTHING. A count alone cannot distinguish "greedy is
-// still choosing plays" from "greedy is called on a state with no legal option and returns an empty
-// plan" -- and after MTG_BP_NO_GREEDY_CONT the residual is exactly the cands.empty() path, i.e. the
-// second kind by construction. VOLUME IS NOT HARM (five times in this arc), so the number that
-// matters for "is greedy deleted" is this one, not g[].
-inline std::atomic<unsigned long long> act[100] = {};
-// WHY a continuation still fell to greedy under MTG_BP_NO_GREEDY_CONT. Only two reasons exist and
-// they need different fixes: the class is masked off (MTG_BP_SITES), or the enumeration returned an
-// EMPTY candidate list so there was nothing canonical to continue with.
-inline std::atomic<unsigned long long> why_class{0}, why_empty{0};
-// WHY bp_searched_plan returned false, per SITE -- the unconditional version of why_class/why_empty
-// above (those two only fire under MTG_BP_NO_GREEDY_CONT, so with the lever off they read 0 and say
-// nothing). Every in-tree greedy Solve in the engine sits behind `if (!bp_searched_plan(site, ...))`,
-// so this breakdown IS the inventory of what a fix would have to cover, and it sizes the ceiling of
-// "host the node here" BEFORE any of it is built:
-//   MASKED  the class is off in BpSiteMask -> open the mask (site 3 is off by default: 0x77)
-//   BASE    the plan carries no choice (bp_choice < 0) -- the BASE plan. THE NODE'S TARGET: hosting
-//           makes the base plan pend and enumerates the full continuation list plus the empty arm.
-//   NESTED  a variant sitting at a breakpoint it is not targeting (seen_before != bp_at). It must
-//           reach its OWN bp_at, so it cannot simply stop -- the deliberate L*W-not-W^L trade, and
-//           NOT fixed by hosting. This is the residue that decides whether "zero in-tree greedy" is
-//           reachable at all.
-//   OVERRUN bp_choice >= cands.size() -- more variants than continuations; the node's full
-//           enumeration removes it by construction.
-//   NOHOST  a BASE plan in an apply NO CALLER IS HOSTING (bp_capture == nullptr) -- a rollout
-//           apply, an enumeration probe, or a depth/turn the node's own gates excluded. Split out
-//           of BASE because the two need OPPOSITE fixes and the undivided number hid that: BASE is
-//           "host this site", NOHOST is "host this CALLER", and only the second is left once the
-//           site set is widened. Measured rather than reasoned: with the node on and the site
-//           hosted, a base plan reaching the fallback PROVES no capture was offered, because the
-//           pend returns before it -- so if NOHOST ever read low while BASE read high, the code
-//           reading behind this whole stage would be wrong.
-enum Why { kMasked = 0, kBase, kNested, kOverrun, kNoHost, kWhyCount };
-inline std::atomic<unsigned long long> why[100][kWhyCount] = {};
-inline const char* WhyName(int w)
-{ return w == kMasked ? "masked" : w == kBase ? "base" : w == kNested ? "nested"
-       : w == kOverrun ? "overrun" : "nohost"; }
-inline void RecordWhy(int site, int w)
-{ if (Enabled() && site >= 0 && site < 100 && w >= 0 && w < kWhyCount)
-  { why[site][w].fetch_add(1, std::memory_order_relaxed); } }
-// WHICH KIND OF APPLY the NOHOST fallbacks happen in -- the sizing question for "grow the host
-// set", because only 2 of the engine's 42 ApplyPlanDirect call sites pass a capture at all. Three
-// bits off signals already in scope, so this costs no call-site edits and cannot drift:
-//   1 ROOT    g_bp_root_enum -- the committed decision's own enumeration, not a rollout
-//   2 REC     out_breakpoint != nullptr -- a RECORDED apply (committed line / wave entry)
-//   4 RESUME  bp_resume != nullptr -- already a node child being resumed
-// A fallback in a ROOT+REC apply is one the two host loops could plausibly be extended to cover;
-// one in a plain rollout apply (0) is the expensive half, since hosting there means a rollout
-// being able to pend and resume.
-inline std::atomic<unsigned long long> nohost_kind[8] = {};
-inline void RecordNoHost(int kind)
-{ if (Enabled() && kind >= 0 && kind < 8) { nohost_kind[kind].fetch_add(1, std::memory_order_relaxed); } }
-// Apply-kind (ROOT|REC|RESUME bitmap) per unresolved WHY class -- the decision-vs-playout
-// attribution for the classes the nohost table never covered (nested / overrun / base).
-inline std::atomic<unsigned long long> why_kind[kWhyCount][8] = {};
-inline void RecordWhyKind(int w, int kind)
-{ if (Enabled() && w >= 0 && w < kWhyCount && kind >= 0 && kind < 8)
-  { why_kind[w][kind].fetch_add(1, std::memory_order_relaxed); } }
-// WHERE canon fires and what it pays, by the same ROOT|REC|RESUME kind bitmap (+8 = a capture was
-// present). fires = canon-eligible entries; copies = probe GameState deep-copies paid; enums =
-// EnumerateBreakpointPlans paid on ACT; scoped_out = entries the rollout scope declined. The wall
-// decomposition said canon IS the recipe's wall (ds +50.7% alone at -1.09% units) -- these split
-// the residue after scoping so the next cut aims at the right context.
-inline std::atomic<unsigned long long> canon_fires[16] = {}, canon_copies[16] = {},
-                                       canon_enums[16] = {}, canon_scoped_out[16] = {};
-inline void RecordCanon(std::atomic<unsigned long long> (&a)[16], int kind)
-{ if (Enabled() && kind >= 0 && kind < 16) { a[kind].fetch_add(1, std::memory_order_relaxed); } }
+inline std::atomic<unsigned long long> g90{0}, act90{0};
+inline void Record(int site) { if (Enabled() && site == 90) { g90.fetch_add(1, std::memory_order_relaxed); } }
+// ...and whether that Solve DECIDED anything (a count alone cannot distinguish "the leaf chooses
+// plays" from "the leaf is called on a state with no legal option").
 inline void RecordOutcome(int site, bool acted)
-{ if (Enabled() && acted && site >= 0 && site < 100) { act[site].fetch_add(1, std::memory_order_relaxed); } }
+{ if (Enabled() && acted && site == 90) { act90.fetch_add(1, std::memory_order_relaxed); } }
 struct Dumper
 {
     ~Dumper()
     {
         if (!Enabled()) { return; }
-        std::fprintf(stderr, "=== GREEDY SITES inside search:");
-        bool any = false;
-        for (int i = 0; i < 100; ++i)
-        { if (g[i].load()) { std::fprintf(stderr, "  s%d=%llu(acted %llu)", i, g[i].load(), act[i].load()); any = true; } }
-        if (!any) { std::fprintf(stderr, "  NONE"); }
-        std::fprintf(stderr, "  | fell-to-greedy: class-masked %llu, empty-cands %llu  ===\n",
-                     why_class.load(), why_empty.load());
-        // Per-site WHY breakdown -- the inventory a fix has to cover. `masked` is answerable by
-        // opening the mask, and `base`/`overrun` by hosting the node at that site. `nested` is NOT
-        // (that variant has to reach its own bp_at), and neither is `nohost`, which is the apply
-        // having no host to pend into at all -- MEASURED 2026-09-02 as the large majority, and the
-        // reason widening the SITE set cannot reach zero in-tree greedy on its own.
-        for (int i = 0; i < 100; ++i)
-        {
-            unsigned long long tot = 0;
-            for (int w = 0; w < kWhyCount; ++w) { tot += why[i][w].load(); }
-            if (tot == 0) { continue; }
-            std::fprintf(stderr, "    s%d unresolved=%llu:", i, tot);
-            for (int w = 0; w < kWhyCount; ++w)
-            {
-                const unsigned long long v = why[i][w].load();
-                if (v) { std::fprintf(stderr, "  %s=%llu(%.1f%%)", WhyName(w), v, 100.0 * v / tot); }
-            }
-            std::fprintf(stderr, "\n");
-        }
-        // WHERE the nohost fallbacks live -- see RecordNoHost. This sizes "grow the host set":
-        // the ROOT+REC bucket is what the two existing host loops could be extended to cover, the
-        // bare-rollout bucket is the expensive half.
-        unsigned long long nh_tot = 0;
-        for (int k = 0; k < 8; ++k) { nh_tot += nohost_kind[k].load(); }
-        if (nh_tot)
-        {
-            std::fprintf(stderr, "    nohost by apply kind (total %llu):", nh_tot);
-            for (int k = 0; k < 8; ++k)
-            {
-                const unsigned long long v = nohost_kind[k].load();
-                if (!v) { continue; }
-                std::fprintf(stderr, "  [%s%s%s]=%llu(%.1f%%)",
-                             (k & 1) ? "root" : "rollout", (k & 2) ? "+rec" : "",
-                             (k & 4) ? "+resume" : "", v, 100.0 * v / nh_tot);
-            }
-            std::fprintf(stderr, "\n");
-        }
-        // The decision-vs-playout attribution for EVERY unresolved class (2026-09-05): any
-        // nonzero [root...] bucket outside nohost is a greedy continuation firing inside the
-        // decision-side structure -- the number the "searched window is greedy-free" claim
-        // rests on.
-        for (int w = 0; w < kWhyCount; ++w)
-        {
-            if (w == kNoHost) { continue; }   // covered by its own table above
-            unsigned long long tot = 0;
-            for (int k = 0; k < 8; ++k) { tot += why_kind[w][k].load(); }
-            if (!tot) { continue; }
-            std::fprintf(stderr, "    %s by apply kind (total %llu):", WhyName(w), tot);
-            for (int k = 0; k < 8; ++k)
-            {
-                const unsigned long long v = why_kind[w][k].load();
-                if (!v) { continue; }
-                std::fprintf(stderr, "  [%s%s%s]=%llu(%.1f%%)",
-                             (k & 1) ? "root" : "rollout", (k & 2) ? "+rec" : "",
-                             (k & 4) ? "+resume" : "", v, 100.0 * v / tot);
-            }
-            std::fprintf(stderr, "\n");
-        }
-        // Canon's own traffic by apply-kind bitmap (root|rec|resume|capture) -- the wall lives in
-        // the copies+enums columns, so this says which context the next scope cut should target.
-        auto canon_row = [](const char* label, std::atomic<unsigned long long> (&a)[16])
-        {
-            unsigned long long tot = 0;
-            for (int k = 0; k < 16; ++k) { tot += a[k].load(); }
-            if (!tot) { return; }
-            std::fprintf(stderr, "    canon %s (total %llu):", label, tot);
-            for (int k = 0; k < 16; ++k)
-            {
-                const unsigned long long v = a[k].load();
-                if (!v) { continue; }
-                std::fprintf(stderr, "  [%s%s%s%s]=%llu(%.1f%%)",
-                             (k & 1) ? "root" : "rollout", (k & 2) ? "+rec" : "",
-                             (k & 4) ? "+resume" : "", (k & 8) ? "+cap" : "",
-                             v, 100.0 * v / tot);
-            }
-            std::fprintf(stderr, "\n");
-        };
-        canon_row("fires", canon_fires);
-        canon_row("copies", canon_copies);
-        canon_row("enums", canon_enums);
-        canon_row("scoped-out", canon_scoped_out);
+        if (g90.load())
+        { std::fprintf(stderr, "=== GREEDY SITES inside search:  s90=%llu(acted %llu)  [horizon leaf only; no breakpoint fallback exists]  ===\n",
+                       g90.load(), act90.load()); }
+        else { std::fprintf(stderr, "=== GREEDY SITES inside search:  NONE  ===\n"); }
     }
 };
 inline Dumper g_dumper;
@@ -3925,17 +3658,6 @@ static void ProbeColorExactReject(const GameState& state, const std::vector<Acti
                  srcs.empty() ? "" : "   UNTAPPED{", srcs.empty() ? "" : (srcs + "}").c_str());
 }
 
-// ---- MTG_CONT_DIFF: the greedy-deletion CASE LIST --------------------------------------------
-// Deleting the greedy breakpoint continuation (MTG_BP_NO_GREEDY_CONT) replaces it with cands[0] --
-// "continue in the deck's cast order". Where the two agree, deleting greedy is free. Where they
-// differ, the cast ORDER decides the line, and each difference is its own case to review: either
-// the order is right (and greedy was the lossy one) or an order rule is not yet built for that
-// state. Deduped by signature so a run yields a CASE LIST, not a flood.
-inline bool ContDiffOn()
-{
-    static const bool v = EnvOn("MTG_CONT_DIFF");
-    return v;
-}
 // MTG_BP_DUPE_TRACE: same case-list treatment for the node's duplicate CHILD applies (13.2% of
 // the node's units, and the whole gap between "+28% wall at equal quality" and "+11%"). Keeps a
 // per-key origin map, so it costs a string per surviving child -- diagnostic only, never on in a
@@ -3976,83 +3698,7 @@ inline std::string DupeSig(const TurnSolver::Plan& p)
     s += p.land_to_play.empty() ? " +noland" : (" +" + p.land_to_play);
     return s;
 }
-namespace contdiff
-{
-    struct Case
-    {
-        long long count = 0;
-        int       turn  = 0;   // first occurrence, for the repro
-        std::string hand;
-        std::string desc;   // PendDesc at first occurrence: pool/untapped/hand/gy/lib, so an
-                            // affordability difference reads directly off the case list
-    };
-    inline std::mutex                            mu;
-    inline std::map<std::string, Case>           cases;
-    inline std::atomic<long long>                seen{0}, same{0};
 
-    inline std::string PlanSig(const TurnSolver::Plan& p)
-    {
-        std::vector<std::string> names;
-        for (const Action& a : p.actions) { names.push_back(a.card_name.str()); }
-        std::string s;
-        for (const std::string& n : names) { s += n; s += ";"; }
-        // CASTS ONLY -- deliberately NOT the land. The two paths play the breakpoint land by
-        // DIFFERENT mechanisms (greedy: play_breakpoint_land() runs BEFORE Solve, so the land is
-        // already down and absent from its plan; searched: the land rides inside the plan and
-        // bp_play_searched_land() plays it), so comparing the land field reports a difference that
-        // does not exist in play. It made "+land X vs nothing" the top case until this was fixed.
-        return s.empty() ? "(nothing)" : s;
-    }
-
-    struct Reporter
-    {
-        ~Reporter()
-        {
-            if (!ContDiffOn() || seen.load() == 0) { return; }
-            std::fprintf(stderr,
-                "[cont-diff] continuations=%lld  same_as_greedy=%lld (%.1f%%)  DISTINCT CASES=%zu\n",
-                seen.load(), same.load(),
-                seen.load() ? 100.0 * static_cast<double>(same.load()) / static_cast<double>(seen.load()) : 0.0,
-                cases.size());
-            // Most frequent first: the case that decides the most lines is the one to fix first.
-            std::vector<std::pair<std::string, Case>> v(cases.begin(), cases.end());
-            std::sort(v.begin(), v.end(),
-                      [](const auto& a, const auto& b) { return a.second.count > b.second.count; });
-            for (std::size_t i = 0; i < v.size() && i < 40; ++i)
-            {
-                std::fprintf(stderr, "[cont-diff] n=%lld T%d %s\n            hand=%s\n            state=%s\n",
-                             v[i].second.count, v[i].second.turn, v[i].first.c_str(),
-                             v[i].second.hand.c_str(), v[i].second.desc.c_str());
-            }
-        }
-    };
-    inline Reporter g_reporter;
-}   // namespace contdiff
-
-// Record one continuation decision: what the cast order chose vs what greedy would have played.
-static void ContDiffRecord(int site, const GameState& state, bool is_pre_combat,
-                           const TurnSolver::Plan& canon)
-{
-    contdiff::seen.fetch_add(1, std::memory_order_relaxed);
-    const TurnSolver::Plan greedy = TurnSolver::Solve(state, is_pre_combat);
-    const std::string cs = contdiff::PlanSig(canon), gs = contdiff::PlanSig(greedy);
-    if (cs == gs) { contdiff::same.fetch_add(1, std::memory_order_relaxed); return; }
-    std::string key = "site=" + std::to_string(site) + "  ORDER=[" + cs + "]  greedy=[" + gs + "]";
-    std::lock_guard<std::mutex> lk(contdiff::mu);
-    auto it = contdiff::cases.find(key);
-    if (it == contdiff::cases.end())
-    {
-        contdiff::Case c;
-        c.turn = state.turn_number;
-        std::vector<std::string> h;
-        for (const Card& card : state.ActivePlayer().hand) { h.push_back(card.m_name); }
-        std::sort(h.begin(), h.end());
-        for (const std::string& n : h) { c.hand += n; c.hand += ";"; }
-        c.desc = PendDesc(state);
-        it = contdiff::cases.emplace(key, std::move(c)).first;
-    }
-    ++it->second.count;
-}
 
 // MTG_SEQ_CHAIN_TRACE -- diagnostic (default off, print-only). Traces every enumerated subset that
 // contains an untap ritual plus a Hinata reducer (in-subset or already on board) and names the FIRST
@@ -7973,8 +7619,8 @@ static thread_local bool g_fresh_axis_enum = false;
 // breakpoint, and the OUTER rollout scores each one. ADOPTED default W=2 -- measured the knee of
 // the curve: it takes essentially all of the available quality (TH -0.05..-0.09 avg, Dragonstorm
 // -0.02..-0.044, burn -0.002, Hinata neutral-to-better) where W=4 adds only -0.002..-0.01 more for
-// +30-35% nodes. **MTG_BP_SEARCH=0 restores the old greedy engine byte-identically** and is the
-// A/B hatch. Read once so the hot paths pay one load.
+// +30-35% nodes. MTG_BP_SEARCH=0 emits no wave-0 variants (every unhosted continuation is then
+// the EMPTY default; the greedy engine it once restored is deleted). Read once so the hot paths pay one load.
 static int BpSearchWidth()
 {
     static const int w = []() -> int
@@ -8428,7 +8074,7 @@ static int BpSearchDepth()
 // ZERO and silently disables EVERY site; a boolean has no such foot-gun.
 static bool BpPlainCantripSiteEnabled()
 {
-    // ADOPTED 2026-09-02 as part of the tight sound recipe (=0 disables); see BpCanonContEnabled.
+    // ADOPTED 2026-09-02 as part of the tight sound recipe (=0 disables).
     static const bool on = EnvOn("MTG_BP_SITE3", true);
     return heurarm::Flag(heurarm::BP_SITE3, on);
 }
@@ -8498,7 +8144,7 @@ static bool BpPartitionCantripEnabled()
 static bool BpNodeEnabled()
 {
     // ADOPTED 2026-09-02 as part of the tight sound recipe (=0 disables); root-turn hosting only
-    // by default -- see BpNodeRootTurnOnly and BpCanonContEnabled.
+    // by default -- see BpNodeRootTurnOnly.
     static const bool on = EnvOn("MTG_BP_NODE", true);
     return heurarm::Flag(heurarm::BP_NODE, on);
 }
@@ -9255,7 +8901,7 @@ static int BpWave0SiteMask()
     // and avg returns to 5.8833 -- byte-identical to the baseline, where the eager arm was 5.9000.
     // Note this is the OPPOSITE outcome to the site-6 deferral above, which measured worse; the two
     // sites differ in how universally they fire, so the result had to be measured, not inherited.
-    // ADOPTED 2026-09-02 as part of the tight sound recipe (=0 disables); see BpCanonContEnabled.
+    // ADOPTED 2026-09-02 as part of the tight sound recipe (=0 disables).
     static const bool s3_defer_env = EnvOn("MTG_BP_SITE3_DEFER", true);
     if (heurarm::Flag(heurarm::BP_SITE3_DEFER, s3_defer_env)) { out &= ~(1 << 3); }
     // MTG_BP_NODE: the plain-cantrip continuation is a real search node, so the (base x k) wave-0
@@ -20095,9 +19741,9 @@ namespace
                 const uint64_t q = searched[i].load(std::memory_order_relaxed);
                 const uint64_t z = nested[i].load(std::memory_order_relaxed);
                 if (n) { std::fprintf(stderr,
-                                      "[bp-probe] %-58s total=%-10llu greedy=%-10llu searched=%-10llu"
+                                      "[bp-probe] %-58s total=%-10llu empty-default=%-10llu searched=%-10llu"
                                       " nested-unsearchable=%-10llu (%.1f%% searched, committed-line: %llu)"
-                                      "  [greedy split: overrun=%llu untarget=%llu]\n",
+                                      "  [empty-default split: overrun=%llu untarget=%llu]\n",
                                       kBpSiteName[i], static_cast<unsigned long long>(n),
                                       static_cast<unsigned long long>(n - q),
                                       static_cast<unsigned long long>(q),
@@ -21243,7 +20889,7 @@ ManaCost LineCastCostTotal(const std::vector<Action>& acts)
 // exactly where the committed line is chosen.
 static bool BpNodeRootTurnOnly()
 {
-    // ADOPTED 2026-09-02 as part of the tight sound recipe (=0 disables); see BpCanonContEnabled.
+    // ADOPTED 2026-09-02 as part of the tight sound recipe (=0 disables).
     // 99.4% of the full node's work was on lookahead turns never played; root-turn hosting keeps
     // the quality at a fraction of the full node's cost.
     static const bool env_on = EnvOn("MTG_BP_NODE_ROOTTURN", true);
@@ -21611,7 +21257,7 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
     // AFTER the main casts (below, before the deferred-cantrip re-solve). By then the lands we
     // needed are tapped, and BounceKarooLand returns a spent land for zero tempo loss. The land
     // drop is RESERVED for the Karoo: while deferred, a draw/cantrip breakpoint must not play a
-    // revealed land as the drop (guarded in play_breakpoint_land / play_drawn_flood_keep_land).
+    // revealed land as the drop (a land-carrying continuation is its own enumerated entry).
     // Lockstep: AIEngine::TakeTurn defers its fold_land the same way. MTG_NO_KAROO_DEFER opts
     // out (old land-first behaviour) for the A/B. Inert for decks without a Karoo.
     static const bool s_karoo_defer = !EnvOn("MTG_NO_KAROO_DEFER");
@@ -21838,98 +21484,6 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
         }
     };
 
-    // Play a revealed land as the turn's land drop inside a staged-draw breakpoint
-    // (pre-combat only), mirroring the real engine's draw-engine second pass
-    // (AIEngine::TryPlayLand). A Light Up the Stage land revealed by the draw frees
-    // mana for the freshly revealed spells; without this the search under-developed
-    // vs the real game (the gi=561 class: real cast a creature a turn earlier off the
-    // revealed land). Records the played land (Kind::PlayLand) into `sink` so
-    // commit-the-line replay reproduces it. Used only by the DrawSpell (stages_cards)
-    // branch -- for Treasure Hunt's DrawUntilNonland the revealed lands are Land's
-    // Edge ammo, not a land drop. Always mutates state; records only while building a
-    // committed line (out_breakpoint && sink non-null).
-    // Both land lambdas take the TARGET state explicitly (normally `state`): MTG_CONT_DIFF needs to
-    // rebuild greedy's post-land decision state on a COPY, because comparing greedy at the PRE-land
-    // state mis-reports every continuation the breakpoint land makes affordable as "greedy declines"
-    // (measured: it made an unaffordable-without-the-land Treasure Hunt the top "empty" case).
-    auto play_breakpoint_land = [&](GameState& st, std::vector<Action>* sink)
-    {
-        // Default engine behavior (mirrors s_fd_opp_spawns); MTG_LEGACY_SEARCH opts
-        // back into the held-out baseline (byte-frozen old ground truth) for A/Bs.
-        static const bool s_fd = !EnvOn("MTG_LEGACY_SEARCH");
-        if (!s_fd || !is_pre_combat) { return; }
-        if (karoo_deferred) { return; }   // the drop is reserved for the deferred Karoo
-        // MTG_FORCE_LAND diagnostic (see EnumeratePlansWithLand): the POST-DRAW drop is picked by
-        // SimulateLandPlay, a static ranker the search never branches on -- so forcing it in the
-        // plan enumerator alone cannot reach this decision. Honour the override here too, else a
-        // deferred-drop turn silently ignores it.
-        std::string played;
-        const std::string forced = ForcedLandForTurn(st.turn_number);
-        if (!forced.empty() && PlayLandByName(st, forced, std::string{})) { played = forced; }
-        else { played = SimulateLandPlay(st); }
-        if (!played.empty() && out_breakpoint != nullptr && sink != nullptr)
-        {
-            Action la;
-            la.kind      = Action::Kind::PlayLand;
-            la.card_name = played;
-            sink->push_back(la);
-        }
-    };
-
-    // Part B (defer-the-land-until-you-see-the-draw): after a Treasure Hunt (DrawUntilNonland)
-    // resolves, play the DEFERRED land drop now that the draw is known. If the hand is flooding
-    // and no no-max-hand-size land is already in play, play a DRAWN Reliquary Tower so the whole
-    // draw is KEPT as Land's Edge ammo (gi=65). Otherwise play the best normal land (chosen
-    // against the post-draw hand) so the drop is developed and the land not discarded (gi=881: a
-    // drawn Temple of Epiphany was discarded only because the deferred drop was never played).
-    // Only when the land drop is still open (the plan deferred); records the play for
-    // commit-the-line replay. Legacy keeps the frozen behavior (no land here).
-    auto play_drawn_flood_keep_land = [&](GameState& st, std::vector<Action>* sink)
-    {
-        static const bool s_fd = !EnvOn("MTG_LEGACY_SEARCH");
-        if (!s_fd || !is_pre_combat) { return; }
-        if (karoo_deferred) { return; }   // the drop is reserved for the deferred Karoo
-        Player& lp = st.ActivePlayer();
-        if (lp.lands_played_this_turn >= lp.LandDropsAvailable()) { return; }   // drop already used
-
-        // Hold the drop entirely when the lands in hand are the marginal Land's Edge ammo for a lethal this
-        // turn: playing one would push the count below lethal and the fire-count heuristic (below, in this
-        // same ApplyPlanDirect) would then hold the rest, slipping the win a turn (s1 gi0 T4-vs-T3).
-        // Provider-owned (HoldDeferredDropForLethal); default off for every other deck.
-        if (ResolveProvider(st).HoldDeferredDropForLethal(st, st.active_player_index)) { return; }
-
-        // The keep-ammo land CHOICE is deck logic -> ask the provider (PostDrawKeepLandName); the engine
-        // keeps the open-drop precondition above and the land-play mechanism below.
-        std::string reliquary =
-            ResolveProvider(st).PostDrawKeepLandName(st, st.active_player_index);
-        if (!reliquary.empty())
-        {
-            if (PlayLandByName(st, reliquary, std::string{}) && out_breakpoint != nullptr && sink != nullptr)
-            {
-                Action la;
-                la.kind      = Action::Kind::PlayLand;
-                la.card_name = reliquary;
-                sink->push_back(la);
-            }
-            return;
-        }
-        // No flood-keep land YET, but another dig is affordable this turn -> HOLD the drop
-        // (HoldDeferredDropForFurtherDig). Developing here spends the only way to play a Reliquary Tower one
-        // dig too early, so a Tower revealed by the NEXT dig is unplayable and the flood is discarded at
-        // cleanup (s2 gi1). This step runs again after that dig, so a whiff still develops -- just one dig
-        // later.
-        if (ResolveProvider(st).HoldDeferredDropForFurtherDig(st, st.active_player_index)) { return; }
-        // NO RULE FIRED -> the static ranker picks the drop (SimulateLandPlay: first multi-colour
-        // land in HAND ORDER, blind to yield). This is the SEARCH RESTRICTION documented in
-        // clairvoyant-reference-shortfalls.md A6: the post-dig continuation is resolved by the GREEDY
-        // TurnSolver::Solve below, which does not enumerate land variants, so no depth or budget can
-        // reach a different drop. MTG_BP_DROP_SEARCHED omits the static pick -- but until the
-        // breakpoint is a real search node that is strictly worse (no land is played at all), so it
-        // is opt-in for diagnosis only, NOT a fix.
-        static const bool s_searched = EnvOn("MTG_BP_DROP_SEARCHED");
-        if (!s_searched) { play_breakpoint_land(st, sink); }
-    };
-
     // ---- Searched breakpoint continuation (Plan::bp_choice) ------------------------------------
     // The breakpoint at index `bp_at` becomes a real search node when the plan carries a bp_choice:
     // instead of the static land ranker + greedy Solve, the continuation is candidate k of the SAME
@@ -22040,214 +21594,30 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
                 resolved = true;
             }
         }
-        // MTG_BP_NO_GREEDY_CONT -- DELETE the greedy continuation (USER 2026-08-26: "greedy removal
-        // is a correctness thing ... that is the whole purpose of the design").
+        // Whether the PLAN itself carried this continuation (rank / chain / EMPTY arm / node child).
+        // Only the probe reads it: everything below resolves to a Plan regardless.
+        const bool resolved_by_plan = resolved;
+        // NO GREEDY CONTINUATION EXISTS. A continuation the plan did not carry is EMPTY: "I am
+        // done acting in this phase" -- cast nothing more, play no land (land-carrying
+        // continuations are their own entries in the enumerated list), let the trailing passes
+        // run. This is unconditional: base plans, variants at a breakpoint they are not
+        // targeting, overruns, masked classes, playout applies -- every apply kind alike, so
+        // there is no scope predicate for a future change to widen or misread.
         //
-        // Everything above resolves a continuation only for the ONE variant targeting this
-        // breakpoint. Every other plan reaching the same breakpoint -- above all the BASE PLAN
-        // itself -- fell through to a greedy TurnSolver::Solve below. On KittyEquipment that is the
-        // dominant greedy site in the engine: measured at shipped settings, 278,794 of 337,769
-        // greedy calls per 200 games (82.5%), and FLAT across every width, order and condemnation
-        // configuration tried -- because it is decided by plan/variant structure, not by the length
-        // of the continuation list.
-        //
-        // The replacement is the CANONICAL continuation, cands[0]. That is only a principled answer
-        // once the deck has a FULL cast order (MTG_KE_ORDER_FULL): with a class ranking, rank ties
-        // leave cands[0] arbitrary among peers, whereas under a total order it is exactly "continue
-        // in the USER's order". So this is the payoff the full order was the prerequisite for.
-        //
-        // Note what it also fixes beyond deleting greedy: today a base plan is SCORED on a greedy
-        // continuation while its own variants are scored on searched ones, so the two are not
-        // compared on the same footing. The overrun case (bp_choice >= cands.size(), a duplicate of
-        // the base plan) collapses onto cands[0] too, which is what it was always meant to be.
-        //
-        // Cost should be near-free rather than a new enumeration: the variants of this same base
-        // plan already enumerated this exact breakpoint state, so this is an enum-memo HIT and a
-        // vector index in place of a greedy Solve. That is the measurement, not the assumption.
-        // MTG_BP_BASE_EMPTY -- see BpBaseEmptyContinuation. Ahead of the NGC block on purpose: when
-        // both are on this claims the base plan (the dominant greedy site) and NGC is left covering
-        // only the non-targeting variants, so the two compose instead of racing for the same plan.
-        // MTG_BP_DROP_GREEDY -- the greedy continuation is DELETED, not replaced (USER 2026-09-16:
-        // *"Can we try dropping greedy?"*). Every unresolved continuation at an OPEN class answers
-        // EMPTY: "I am done acting in this phase."
-        //
-        // This is the difference between deleting greedy and swapping it. NGC swapped it for
-        // cands[0], which measured WORSE than the greedy it replaced because the empty combination
-        // is dropped from EnumeratePlans by contract, so the replacement could not express the one
-        // answer that is always legal. MTG_BP_BASE_EMPTY deletes it for BASE plans only, which is
-        // where most of it lives but not all: a VARIANT sitting at a breakpoint it is not targeting
-        // keeps greedy under that lever. This takes the remainder.
-        //
-        // COST, stated up front: a variant that stops early may not reach its own bp_at, which makes
-        // it a duplicate of its base plan -- a wasted node, never a wrong answer. Whether that
-        // matters is deck-shaped: where the later breakpoints come from the TRAILING PASS (Snow's
-        // site 8 -- each Sheets/Augur activation fires one regardless of what the continuation did)
-        // the nested slot is still reached and nothing is lost. Where they come from the
-        // continuation's own casts, the deeper slots go unreachable and the L*W fan-out degenerates.
-        // So this is measured per deck, not adopted globally on an argument.
-        //
-        // class_on is retained from the base-empty scope and is not optional: with the class closed
-        // no variants are emitted at all, so answering empty would delete the continuation outright
-        // rather than relocate it to the variants.
-        if (!resolved && class_on && BpDropGreedyContinuation())
+        // HISTORY (USER, 2026-08-09 / 08-23 / 09-05 / 09-17): the fallback here was a greedy
+        // TurnSolver::Solve() -- an unbounded-width chooser standing in for the ranks the W-wide
+        // wave-0 window and the budget-bound deferred waves could not reach. Three replacement
+        // forms (NGC = cands[0]; BASE_EMPTY; CANON = greedy act-vs-pass then cands[0]) were each
+        // scoped or measured lossy, and the "tight scope" that shipped left the greedy at every
+        // searched LOOKAHEAD turn because the ROOT bit it keyed on was g_fsline_nest == 0 (the
+        // root turn only). The USER's rule: a red measurement is a budget / reachability problem
+        // to remedy (EMPTY arm, node hosting, rank scheduling, budget) -- never a reason to keep
+        // or re-introduce a greedy decision. docs/design/greedy-continuation-deletion-route.md.
+        if (!resolved)
         {
             out              = TurnSolver::Plan{};
-            out.land_decided = true;
+            out.land_decided = true;   // as kBpEmptyChoice: nothing downstream plays a drop we declined
             resolved         = true;
-        }
-        if (!resolved && class_on && plan.bp_choice < 0 && BpBaseEmptyContinuation())
-        {
-            out              = TurnSolver::Plan{};
-            out.land_decided = true;   // as kBpEmptyChoice: nothing downstream greedy-plays a drop
-            resolved         = true;
-        }
-        // MTG_BP_CANON_CONT (sound-NGC; rationale at BpCanonContEnabled). ACT-vs-PASS from the
-        // greedy path's own Solve at its own post-land state; on ACT the continuation is the
-        // canonical cands[0]; on PASS fall through to the greedy path verbatim. Stands down inside
-        // a derivation (the uncharged-recursion wall) -- there the base greedy fallback runs, as
-        // it does in the shipped engine.
-        //
-        // SCOPE (2026-09-02): canon also stands down in a PLAIN ROLLOUT apply -- no root enum, no
-        // recording, no node resume, no capture -- where the USER's scope ruling keeps greedy as
-        // the playout policy anyway. The quiet-box wall decomposition caught why this matters:
-        // canon-everywhere pays a GameState copy + Solve probe per apply and an uncharged
-        // EnumerateBreakpointPlans per ACT at states rollouts visit constantly, which alone was
-        // +50.7% wall on dragonstorm (its s2 impulse re-solve is 96.6% plain-rollout traffic)
-        // against a -1.09% units read. Decision/recorded/resumed applies keep canon -- greedy
-        // still decides nothing there. MTG_BP_CANON_ROLLOUT=1 restores canon-everywhere (the
-        // form the 2026-09-02 quality gates measured) for A/B.
-        const bool canon_scope_ok = g_bp_root_enum
-                                 || (out_breakpoint != nullptr
-                                     && (BpCanonRecToo()
-                                         || (BpCanonRecRootOnly() && g_condemn_root_turn >= 0
-                                             && state.turn_number == g_condemn_root_turn)))
-                                 || bp_resume != nullptr || bp_capture != nullptr
-                                 || BpCanonRolloutToo();
-        const int canon_kind = (g_bp_root_enum ? 1 : 0) | (out_breakpoint != nullptr ? 2 : 0)
-                             | (bp_resume != nullptr ? 4 : 0) | (bp_capture != nullptr ? 8 : 0);
-        if (!resolved && class_on && BpCanonContEnabled() && g_bp_enum_depth == 0
-            && !canon_scope_ok)
-        { greedysite::RecordCanon(greedysite::canon_scoped_out, canon_kind); }
-        if (!resolved && class_on && BpCanonContEnabled() && g_bp_enum_depth == 0
-            && canon_scope_ok)
-        {
-            greedysite::RecordCanon(greedysite::canon_fires, canon_kind);
-            // The ACT-vs-PASS verdict is MEMOIZED (see CanonVerdict): it is deterministic in the
-            // mid-turn-exact enum key plus the probe's land mechanism (site==1 uses the flood-keep
-            // lambda) and the deferred-Karoo reservation, which index the slot. Without this,
-            // every revisit of the same state re-paid a GameState deep-copy + Solve -- measured
-            // 2026-09-02 as canon's entire wall cost (+50.7% dragonstorm alone; 91.5% of hinata's
-            // 4.03M fires on [rollout+rec] applies revisiting the same states). The map is
-            // SEPARATE from the plan cache so a PASS state never pays a plan-list derivation (the
-            // entry-rider form did, and measured WORSE on hinata, where 56% of fires pass); a
-            // PASS revisit costs one key walk and a lookup, an ACT revisit adds one cache hit and
-            // a single-Plan copy. Cap rides MTG_BP_ENUM_CACHE_CAP x4 (verdicts are 4 bytes).
-            static thread_local std::unordered_map<TranspositionTable::Key, CanonVerdict,
-                                                   TranspositionTable::KeyHash> canon_memo;
-            static const std::size_t s_canon_cap =
-                static_cast<std::size_t>(std::max(1, EnvInt("MTG_BP_ENUM_CACHE_CAP", 8192))) * 4;
-            const int ci = ((site == 1) ? 1 : 0) | (karoo_deferred ? 2 : 0);
-            TranspositionTable::Key ckey;
-            const bool ckeyed = BpEnumBuildKey(state, is_pre_combat, &ckey);
-            int8_t acted8 = -1;
-            if (ckeyed)
-            {
-                const auto vit = canon_memo.find(ckey);
-                if (vit != canon_memo.end()) { acted8 = vit->second.v[ci]; }
-            }
-            if (acted8 < 0)
-            {
-            // Probe at the state greedy will actually solve: if a breakpoint land could still be
-            // played, replay the site's own land mechanism on a COPY first (deciding on the
-            // pre-land state mis-reads every cast that land unlocks as a pass -- the same bug the
-            // CONT_DIFF instrument had). The copy is skipped whenever no drop is possible.
-            bool acted = false;
-            {
-                const Player& lp0     = state.ActivePlayer();
-                bool land_in_hand     = false;
-                for (const Card& c : lp0.hand)
-                {
-                    auto cd = CardDatabase::Instance().LookupCached(c);
-                    if ((cd && cd->card.IsLand()) || c.IsLand()) { land_in_hand = true; break; }
-                }
-                const bool drop_possible = is_pre_combat && !karoo_deferred && land_in_hand
-                    && lp0.lands_played_this_turn < lp0.LandDropsAvailable();
-                if (drop_possible)
-                {
-                    greedysite::RecordCanon(greedysite::canon_copies, canon_kind);
-                    GameState probe = state;
-                    if (site == 1) { play_drawn_flood_keep_land(probe, nullptr); }
-                    else           { play_breakpoint_land(probe, nullptr); }
-                    acted = !TurnSolver::Solve(probe, is_pre_combat).actions.empty();
-                }
-                else
-                { acted = !TurnSolver::Solve(state, is_pre_combat).actions.empty(); }
-            }
-            greedysite::RecordCanon(greedysite::canon_enums, canon_kind);   // real probe work paid
-            acted8 = acted ? 1 : 0;
-            if (ckeyed)
-            {
-                if (canon_memo.size() >= s_canon_cap) { canon_memo.clear(); }
-                canon_memo[ckey].v[ci] = acted8;
-            }
-            }
-            if (acted8 == 1)
-            {
-            BpEnumEntry* ent = BpEnumEntryFor(state, is_pre_combat, ckeyed ? &ckey : nullptr);
-            if (!ent->plans.empty())
-            {
-                out      = ent->plans.front();
-                resolved = true;
-                if (ContDiffOn())
-                {
-                    GameState gst = state;
-                    if (site == 1) { play_drawn_flood_keep_land(gst, nullptr); }
-                    else           { play_breakpoint_land(gst, nullptr); }
-                    ContDiffRecord(site, gst, is_pre_combat, out);
-                }
-            }
-            // plans empty while the probe acts: the enumeration offers nothing here, so the
-            // greedy Solve below remains the only answer (same residue NGC left).
-            }
-        }
-        if (!resolved && !class_on && BpNoGreedyContinuationEnabled() && greedysite::Enabled())
-        { greedysite::why_class.fetch_add(1, std::memory_order_relaxed); }
-        if (!resolved && class_on && BpNoGreedyContinuationEnabled())
-        {
-            const std::vector<TurnSolver::Plan> cands =
-                TurnSolver::EnumerateBreakpointPlans(state, is_pre_combat);
-            if (!cands.empty())
-            {
-                out      = cands.front();
-                resolved = true;
-                // MTG_CONT_DIFF -- print-only case collector for the greedy-deletion work. Deleting
-                // the greedy continuation means "continue in the deck's cast order" (cands[0]), so
-                // wherever that differs from what the greedy Solve would have played, the ORDER is
-                // what decides the line -- and a difference is either the order being right and the
-                // greedy being the lossy one, or an order rule not yet built for this state. Those
-                // are the cases to fix one at a time, so collect them DEDUPED BY SIGNATURE (each
-                // distinct canonical-vs-greedy pair once, with an occurrence count) rather than
-                // flooding one line per call. Costs a greedy Solve per continuation -> diagnostic
-                // runs only; inert (one bool test) when off.
-                //
-                // AT GREEDY'S OWN STATE: the greedy path plays the breakpoint land BEFORE its
-                // Solve, so diffing at the pre-land `state` mis-reports every cast the land makes
-                // affordable as "greedy declines" (first measured case list: an
-                // unaffordable-without-the-land Treasure Hunt was the top "empty" case at
-                // unt=1/2 pool=0). Rebuild the post-land state on a copy with the SAME site-
-                // appropriate mechanism the fallback below would use, and diff there.
-                if (ContDiffOn())
-                {
-                    GameState gst = state;
-                    if (site == 1) { play_drawn_flood_keep_land(gst, nullptr); }
-                    else           { play_breakpoint_land(gst, nullptr); }
-                    ContDiffRecord(site, gst, is_pre_combat, out);
-                }
-            }
-            else if (greedysite::Enabled())
-            { greedysite::why_empty.fetch_add(1, std::memory_order_relaxed); }
-            // cands EMPTY means the enumeration offers nothing here; the greedy Solve below is then
-            // the only remaining answer and is left in place rather than emitting an empty plan.
         }
         // Lockstep trace (MTG_BP_TRACE): the apply side's breakpoint SEQUENCE for the committed
         // line, printed only while g_bp_trace_arm is set (the fd-trace committed-line replay), so
@@ -22258,35 +21628,10 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
             std::fprintf(stderr,
                          "[bp-apply] turn=%d site=%d idx=%d bp_at=%d bp_choice=%d searched=%d%s\n",
                          state.turn_number, site, seen_before, plan.bp_at, plan.bp_choice,
-                         resolved ? 1 : 0, class_on ? "" : " (class off)");
+                         resolved_by_plan ? 1 : 0, class_on ? "" : " (class off)");
         }
-        // Attribute an UNRESOLVED continuation to its reason (see greedysite::Why). Order matters:
-        // a masked class short-circuits before bp_choice is even consulted, and a base plan is not
-        // "nested" merely because it carries no choice.
-        if (!resolved && greedysite::Enabled())
-        {
-            // BASE splits on whether a caller was HOSTING this apply at all: with no capture
-            // pointer there is nothing for a base plan to pend into, whatever the site set says.
-            const int why = !class_on              ? greedysite::kMasked
-                          : plan.bp_choice < 0     ? (bp_capture == nullptr ? greedysite::kNoHost
-                                                                            : greedysite::kBase)
-                          : seen_before != plan.bp_at ? greedysite::kNested
-                                                      : greedysite::kOverrun;
-            greedysite::RecordWhy(site, why);
-            const int apply_kind = (g_bp_root_enum ? 1 : 0)
-                                 | (out_breakpoint != nullptr ? 2 : 0)
-                                 | (bp_resume != nullptr ? 4 : 0);
-            if (why == greedysite::kNoHost) { greedysite::RecordNoHost(apply_kind); }
-            // ...and the SAME kind split for every OTHER unresolved class (2026-09-05). The
-            // nohost-only split answered "grow the host set"; this one answers the sharper
-            // question another agent raised -- do NESTED/OVERRUN/BASE greedy continuations fire
-            // inside the DECISION-side structure (ROOT bit set) or only in playout applies? The
-            // "searched window is greedy-free" claim rests on this number being zero, and it was
-            // previously asserted from the nohost table alone, which never covered these classes.
-            greedysite::RecordWhyKind(why, apply_kind);
-        }
-        BpHit(site, out_breakpoint != nullptr, resolved, nested_blocked, eligible);
-        return resolved;
+        BpHit(site, out_breakpoint != nullptr, resolved_by_plan, nested_blocked, eligible);
+        return resolved_by_plan;
     };
     // Play a continuation's SEARCHED land drop and record it for commit-the-line replay. Inert for
     // a greedy continuation (Solve never sets land_decided), so the greedy path is unchanged.
@@ -23529,14 +22874,7 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
             {
                 if (out_breakpoint && my_bp_sink) { sink_stack.push_back(my_bp_sink); }
                 TurnSolver::Plan extra;
-                if (!bp_searched_plan(0, extra))
-                {
-                    play_breakpoint_land(state, my_bp_sink);
-                    greedysite::Record(0);
-                    extra = TurnSolver::Solve(state, is_pre_combat);
-                    greedysite::RecordOutcome(0, !extra.actions.empty()
-                        || (extra.land_decided && !extra.land_to_play.empty()));
-                }
+                bp_searched_plan(0, extra);   // resolves to the plan's continuation or EMPTY
                 bp_play_searched_land(extra, my_bp_sink);
                 apply_continuation_precasts(extra);
                 apply_plan_actions(extra.actions, extra.searched_order);
@@ -23560,7 +22898,7 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
             // so new castables are played with remaining mana. The flood-keep land play (part
             // B) plays a drawn Reliquary Tower as the open land drop so a flooded draw is KEPT
             // for Land's Edge rather than discarded at cleanup; other revealed lands remain
-            // Land's Edge ammo (no land played). See play_drawn_flood_keep_land.
+            // Land's Edge ammo (no land played).
             if (!s_human_play)
             {
                 if (out_breakpoint && my_bp_sink) { sink_stack.push_back(my_bp_sink); }
@@ -23570,14 +22908,7 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
                 // into a copy BEFORE enumerating casts, so `extra` was scored WITH it in play --
                 // applying only extra.actions would silently discard the search's land choice.
                 TurnSolver::Plan extra;
-                if (!bp_searched_plan(1, extra))
-                {
-                    play_drawn_flood_keep_land(state, my_bp_sink);
-                    greedysite::Record(1);
-                    extra = TurnSolver::Solve(state, is_pre_combat);
-                    greedysite::RecordOutcome(1, !extra.actions.empty()
-                        || (extra.land_decided && !extra.land_to_play.empty()));
-                }
+                bp_searched_plan(1, extra);   // resolves to the plan's continuation or EMPTY
                 bp_play_searched_land(extra, my_bp_sink);
                 apply_continuation_precasts(extra);
                 apply_plan_actions(extra.actions, extra.searched_order);
@@ -23900,14 +23231,7 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
             {
                 if (out_breakpoint && my_bp_sink) { sink_stack.push_back(my_bp_sink); }
                 TurnSolver::Plan extra;
-                if (!bp_searched_plan(2, extra))
-                {
-                    play_breakpoint_land(state, my_bp_sink);
-                    greedysite::Record(2);
-                    extra = TurnSolver::Solve(state, is_pre_combat);
-                    greedysite::RecordOutcome(2, !extra.actions.empty()
-                        || (extra.land_decided && !extra.land_to_play.empty()));
-                }
+                bp_searched_plan(2, extra);   // resolves to the plan's continuation or EMPTY
                 bp_play_searched_land(extra, my_bp_sink);
                 // Lotus Bloom: the staged Dragonstorm/rituals grew this pre-pass first (the
                 // executor's breakpoint replay had the same gap) -- now the shared loop.
@@ -23964,14 +23288,7 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
                 {
                     if (out_breakpoint && my_bp_sink) { sink_stack.push_back(my_bp_sink); }
                     TurnSolver::Plan extra;
-                    if (!bp_searched_plan(0, extra))
-                    {
-                        play_breakpoint_land(state, my_bp_sink);
-                        greedysite::Record(0);
-                        extra = TurnSolver::Solve(state, is_pre_combat);
-                        greedysite::RecordOutcome(0, !extra.actions.empty()
-                            || (extra.land_decided && !extra.land_to_play.empty()));
-                    }
+                    bp_searched_plan(0, extra);   // resolves to the plan's continuation or EMPTY
                     bp_play_searched_land(extra, my_bp_sink);
                     apply_continuation_precasts(extra);
                     apply_plan_actions(extra.actions, extra.searched_order);
@@ -24160,14 +23477,7 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
                                                           /*site_activated=*/false,
                                                           state.turn_number);
                         TurnSolver::Plan extra;
-                        if (!bp_searched_plan(6, extra))
-                        {
-                            play_breakpoint_land(state, my_bp_sink);
-                            greedysite::Record(6);
-                            extra = TurnSolver::Solve(state, is_pre_combat);
-                            greedysite::RecordOutcome(6, !extra.actions.empty()
-                                || (extra.land_decided && !extra.land_to_play.empty()));
-                        }
+                        bp_searched_plan(6, extra);   // resolves to the plan's continuation or EMPTY
                         bp_play_searched_land(extra, my_bp_sink);
                         apply_continuation_precasts(extra);
                         apply_plan_actions(extra.actions, extra.searched_order);
@@ -24853,12 +24163,7 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
                     && TurnSolver::PodChainAnotherActivatablePod(state))
                 {
                     TurnSolver::Plan extra;
-                    if (!bp_searched_plan(7, extra))
-                    {
-                        greedysite::Record(7);
-                        extra = TurnSolver::Solve(state, is_pre_combat);
-                        greedysite::RecordOutcome(7, !extra.actions.empty());
-                    }
+                    bp_searched_plan(7, extra);   // resolves to the plan's continuation or EMPTY
                     bp_play_searched_land(extra, nullptr);
                     apply_continuation_precasts(extra);
                     apply_plan_actions(extra.actions, extra.searched_order);
@@ -25034,7 +24339,8 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
                         }
                         else if (!searched)
                         {
-                            // GREEDY fallback, deliberately NARROW: a full Solve here fired
+                            // UNSEARCHED look continuation, deliberately NARROW and NOT a Solve
+                            // (the greedy fallback is deleted): a full Solve here once fired
                             // 166k-521k times per d3 game (playouts activate looks nearly every
                             // simulated turn) -- a measured 9x playout multiplier and 30-300s
                             // games. A found LAND is played directly (the +1 mana matters and is
@@ -25043,7 +24349,6 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
                             // are still fully expressible where they matter: the searched
                             // variants above and the executor's committed re-solve (which is
                             // NOT narrowed) both run the real continuation.
-                            greedysite::Record(8);
                             const Player& lap2 = state.players[state.active_player_index];
                             const CardDefinition* fd2 =
                                 CardDatabase::Instance().LookupCached(lap2.hand.back());
@@ -25053,7 +24358,6 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
                                 mini.land_decided = true;
                                 mini.land_to_play = lap2.hand.back().m_name.str();
                                 bp_play_searched_land(mini, nullptr);
-                                greedysite::RecordOutcome(8, true);
                             }
                         }
                     }
@@ -25494,15 +24798,7 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
         // Trick-armed (Gold Rush / draw-payload trick) => site 5 (searchable); equipment-ETB draw
         // (Puresteel) => site 6 (searchable); plain cantrip => site 3 (pruned). See
         // deferred_site_index, where the precedence lives.
-        const bool bp5_from_rank = bp_searched_plan(deferred_site_index(), extra);
-        if (!bp5_from_rank)
-        {
-            play_breakpoint_land(state, out_breakpoint);
-            greedysite::Record(8);
-            extra = TurnSolver::Solve(state, is_pre_combat);
-            greedysite::RecordOutcome(8, !extra.actions.empty()
-                || (extra.land_decided && !extra.land_to_play.empty()));
-        }
+        const bool bp5_from_rank = bp_searched_plan(deferred_site_index(), extra);   // plan-carried, else EMPTY
         // Diagnostic (default off): what the deferred continuation solved, and from which arm.
         {
             static const bool s_bp5_trace = EnvOn("MTG_BP5_TRACE");
@@ -25517,7 +24813,7 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
                 }
                 std::string line = std::string("[bp5] T") + std::to_string(state.turn_number)
                                  + " site=" + std::to_string(deferred_site_index())
-                                 + (bp5_from_rank ? " rank" : " greedy")
+                                 + (bp5_from_rank ? " rank" : " empty")
                                  + " pool=" + std::to_string(AvailableManaPool(state).Total())
                                  + " tre=" + std::to_string(n_tre)
                                  + " land!=" + std::to_string(n_untapped_land)
@@ -25705,13 +25001,7 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
                 // "greedy Solve()s actually reached from inside the search", and bumping it before
                 // the searched attempt counted the site's successes as greedy too -- which is the
                 // exact reading error the counter exists to prevent.
-                if (!bp_searched_plan(4, extra))
-                {
-                    greedysite::Record(4);
-                    extra = TurnSolver::Solve(state, is_pre_combat);
-                    greedysite::RecordOutcome(4, !extra.actions.empty()
-                        || (extra.land_decided && !extra.land_to_play.empty()));
-                }
+                bp_searched_plan(4, extra);   // resolves to the plan's continuation or EMPTY
                 bp_play_searched_land(extra, my_bp_sink);
                 apply_continuation_precasts(extra);
                 apply_plan_actions(extra.actions, extra.searched_order);

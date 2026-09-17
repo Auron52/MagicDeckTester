@@ -3026,6 +3026,12 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
                     // covers, e.g. after a re-line).
                     if (s_refuted_follow && m_refuted_follow && !m_in_rollout)
                     {
+                        // Counted as a REAL main-phase greedy decision at this depth
+                        // (MTG_M2_YIELD_STATS): this site had no counter, so the executor's
+                        // "main-phase decisions: NONE" line never covered it -- and a FALSE
+                        // refutation (the 2026-09-16 empty-node bug) plays the rest of the
+                        // game through exactly this branch.
+                        execgreedy::Record(m_lookahead_depth, m_in_rollout);
                         plan = TurnSolver::Solve(state, is_pre_combat_main);
                         if (s_fd_trace)
                         { std::fprintf(stderr, "[fd] T%d pre=%d GREEDY (refuted-follow) %s\n", state.turn_number,
@@ -3900,13 +3906,12 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
             // tolerated scope), which means realized-vs-scored can now diverge on these 8-in-50
             // continuations, in the conservative direction: the realized continuation is chosen
             // by a strictly stronger solver than the one that scored it.
-            // MTG_EXEC_BP_SEARCHED=0 restores the old greedy fallback.
-            static const bool s_exec_bp_searched = EnvOn("MTG_EXEC_BP_SEARCHED", true);
+            // There is no hatch back to a greedy fallback at depth > 0 (deleted 2026-09-17).
             execgreedy::RecordBpCause(plan.bp_choice >= 0);
             // depth > 0 REQUIRED: at d0 there IS no search (the d0 runner is the greedy
             // configuration by design), and SolveWithLookahead(d0) is not byte-equal to
             // Solve() -- an unscoped first version moved a d0 GT cell (melira gi382).
-            if (s_exec_bp_searched && !m_in_rollout && m_lookahead_depth > 0)
+            if (!m_in_rollout && m_lookahead_depth > 0)
             {
                 if (execgreedy::Enabled())
                 { execgreedy::g_bp_searched.fetch_add(1, std::memory_order_relaxed); }
@@ -4752,11 +4757,10 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
                     if (!pod_bp_searched)
                     {
                         // Same searched re-solve as the main breakpoint site above (the pod
-                        // trailing-pass twin); see the comment there. =0 hatch shared.
-                        static const bool s_exec_bp_searched2 = EnvOn("MTG_EXEC_BP_SEARCHED", true);
+                        // trailing-pass twin); see the comment there. No greedy hatch.
                         execgreedy::RecordBpCause(plan.bp_choice >= 0);
                         // depth > 0 REQUIRED -- see the main site's note (d0 is greedy by design).
-                        if (s_exec_bp_searched2 && !m_in_rollout && m_lookahead_depth > 0)
+                        if (!m_in_rollout && m_lookahead_depth > 0)
                         {
                             if (execgreedy::Enabled())
                             { execgreedy::g_bp_searched.fetch_add(1, std::memory_order_relaxed); }

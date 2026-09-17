@@ -77,7 +77,6 @@ enum Slot : int
     BP_CONDEMN_ORDER,         // MTG_BP_CONDEMN_ORDER_AWARE  don't condemn a slot AFTER the bp site
     SF_PUT_BP,                // MTG_SF_PUT_BP             site 6 fires off a Stoneforge PUT too
     KE_ORDER_FULL,            // MTG_KE_ORDER_FULL         KittyEquipment FULL (total) cast order
-    BP_NO_GREEDY_CONT,        // MTG_BP_NO_GREEDY_CONT     canonical continuation instead of greedy Solve
     HINATA_ORDER_FULL,        // MTG_HINATA_ORDER_FULL     Hinata FULL cast order (Ponder/Preordain PEERS)
     HINATA_PP_STRICT,         // MTG_HINATA_PP_STRICT      ...and split the peers: Ponder before Preordain
     HINATA_IREN_EARLY,        // MTG_HINATA_IREN_EARLY     LOO: Irencrag back to 18 (any payoff may follow)
@@ -129,14 +128,9 @@ enum Slot : int
     EDF_SEQ_ETB,              // MTG_EDF_SEQ_ETB           an ETB-untap chain reaches the SEQUENCED payability walk
     BP_NODE_D0ONLY,           // MTG_BP_NODE_D0ONLY        host the breakpoint node only at zero REMAINING depth
     BP_NODE_ROOTTURN,         // MTG_BP_NODE_ROOTTURN      host the breakpoint node only on the ROOT TURN
-    BP_BASE_EMPTY,            // MTG_BP_BASE_EMPTY         a BASE plan's continuation is EMPTY, not greedy
     BP_NODE_D56,              // MTG_BP_NODE_D56           the node hosts deferred sites 5 and 6 too, not just 3
     BP_NODE_KEEPWAVE,         // MTG_BP_NODE_KEEPWAVE      ...and the RANK machinery keeps covering 5/6 anyway
     BP_NODE_KEEPWAVE3,        // MTG_BP_NODE_KEEPWAVE3     ...the same for SITE 3, the shipped candidate's own site
-    BP_CANON_CONT,            // MTG_BP_CANON_CONT         sound-NGC: greedy judges ACT-vs-PASS, order picks the cast
-    BP_CANON_ROLLOUT,         // MTG_BP_CANON_ROLLOUT      canon fires in PLAIN rollout applies too (unscoped form)
-    BP_CANON_REC,             // MTG_BP_CANON_REC          canon fires at RECORDING rollout applies (default ON)
-    BP_CANON_RECROOT,         // MTG_BP_CANON_RECROOT      with REC=0, rec applies still fire on the ROOT TURN
     HEROISM_MAGNET_TRAIT,     // MTG_HEROISM_MAGNET_TRAIT  a live copy-token enchantment counts as a magnet
     HEROISM_FRESH_HOLD,       // MTG_HEROISM_FRESH_HOLD    ...and unlocks same-turn spend of fresh Treasures
     ETB_TAP_YIELD,            // MTG_ETB_TAP_YIELD         ETB-untap tap-ahead takes the HIGHEST-yield lands
@@ -197,7 +191,6 @@ enum Slot : int
     BP_CONDEMN_SAME_TURN,     // MTG_BP_CONDEMN_SAME_TURN  a breakpoint snapshot describes ONE turn
     SNOW_CONDEMN,             // MTG_SNOW_CONDEMN        Snow opts into breakpoint condemnation
     BP_EMPTY_ARM,             // MTG_BP_EMPTY_ARM        "done with this phase" as a scored arm
-    BP_DROP_GREEDY,           // MTG_BP_DROP_GREEDY      delete the greedy continuation outright
     BP_CONDEMN_NEW_OPTION,    // MTG_BP_CONDEMN_NEW_OPTION  spare when the site drew a payable card
     BP_CONDEMN_PLAN_CAST,     // MTG_BP_CONDEMN_PLAN_CAST  a plan that cast NOTHING declined nothing
     EDF_PAIN_LOOP_AUTO,       // MTG_PAINLAND_TAPAHEAD_LOOP_AUTO the AUTONOMOUS loop's tap-ahead banks a painland's painless {C} too (default ON since 2026-09-16)
@@ -260,7 +253,6 @@ inline const char* Name(int slot)
         "MTG_BP_CONDEMN_ORDER_AWARE",
         "MTG_SF_PUT_BP",
         "MTG_KE_ORDER_FULL",
-        "MTG_BP_NO_GREEDY_CONT",
         "MTG_HINATA_ORDER_FULL",
         "MTG_HINATA_PP_STRICT",
         "MTG_HINATA_IREN_EARLY",
@@ -312,14 +304,9 @@ inline const char* Name(int slot)
         "MTG_EDF_SEQ_ETB",
         "MTG_BP_NODE_D0ONLY",
         "MTG_BP_NODE_ROOTTURN",
-        "MTG_BP_BASE_EMPTY",
         "MTG_BP_NODE_D56",
         "MTG_BP_NODE_KEEPWAVE",
         "MTG_BP_NODE_KEEPWAVE3",
-        "MTG_BP_CANON_CONT",
-        "MTG_BP_CANON_ROLLOUT",
-        "MTG_BP_CANON_REC",
-        "MTG_BP_CANON_RECROOT",
         "MTG_HEROISM_MAGNET_TRAIT",
         "MTG_HEROISM_FRESH_HOLD",
         "MTG_ETB_TAP_YIELD",
@@ -373,7 +360,6 @@ inline const char* Name(int slot)
         "MTG_BP_CONDEMN_SAME_TURN",
         "MTG_SNOW_CONDEMN",
         "MTG_BP_EMPTY_ARM",
-        "MTG_BP_DROP_GREEDY",
         "MTG_BP_CONDEMN_NEW_OPTION",
         "MTG_BP_CONDEMN_PLAN_CAST",
         "MTG_PAINLAND_TAPAHEAD_LOOP_AUTO",
