@@ -1,4 +1,4 @@
-# Regression ground truth -- commit 25d92282  date 2026-09-15
+# Regression ground truth -- commit 0c348790  date 2026-09-17
 # Promoted from accepted runs by 'regression.sh --accept' -- do not hand-edit.
 # Key: <deck>_<mode>_d<depth>_s<seed> = <avg>[/<play_digest>]   (avg = mean turn-to-win, unwon = max_turns+1)
 # Modes: smoke (<15m), regression (<45m), overnight (<8h); seeds disjoint.
@@ -37,7 +37,7 @@ creature_giving_smoke_d5_s1001=4.6667/ae3e7c5e37a15aa5
 mirrorwing_smoke_d0_s1001=5.8750/7b10f802e622da62
 mirrorwing_smoke_d3_s1001=4.2467/30490dc947a1902d
 mirrorwing_smoke_d5_s1001=4.3333/036eca1757a6048b
-fivecolour_smoke_d0_s1001=5.5690/d60b3371276968d6
+fivecolour_smoke_d0_s1001=5.5690/51b469bcf1488d43
 fivecolour_smoke_d3_s1001=4.8533/580641fb22835f1f
 fivecolour_smoke_d5_s1001=4.9733/4f2e53df21615101
 stompy_smoke_d0_s1001=5.4420/dc78a74c3af62737
@@ -79,7 +79,7 @@ stompy2hg_smoke_d3_s1001=5.0000/73d0994752ca4e51
 kitty2hg_smoke_d3_s1001=4.9400/436f255dcee200b0
 dragons2hg_smoke_d3_s1001=6.3000/43872dc33fccb094
 breaching2hg_smoke_d3_s1001=3.0800/f1307147f8590dac
-critter2hg_smoke_d3_s1001=5.2000/4e1d2b89c377cd77
+critter2hg_smoke_d3_s1001=4.7600/4aaade4204c60879
 melira2hg_smoke_d3_s1001=4.8400/a1e1ae800ec7e953
 fluctuator_smoke_d0_s1001=5.0850/e3eb10426016ab34
 fluctuator_smoke_d3_s1001=3.6400/b174974742419f91
@@ -141,7 +141,7 @@ mirrorwing_regression_d3_s2002=4.3050/2ee2962715011c56
 mirrorwing_regression_d3_s3003=4.1450/6614ced9db72a29f
 mirrorwing_regression_d5_s2002=4.3200/5fec06b3d93178e5
 mirrorwing_regression_d5_s3003=4.1800/1f48bb1509bf36f5
-fivecolour_regression_d0_s2002=5.6500/c18be9b73119926e
+fivecolour_regression_d0_s2002=5.6500/a6655c28e187d2c9
 fivecolour_regression_d3_s2002=4.9000/5d3702ab6c831b10
 fivecolour_regression_d3_s3003=4.8200/0dc9d9af0b2cd333
 fivecolour_regression_d5_s2002=4.8100/0a0ee031fb55cf71
