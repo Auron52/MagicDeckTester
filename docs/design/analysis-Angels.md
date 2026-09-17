@@ -293,6 +293,156 @@ double-counted `seed + gameNumber` and its coordinates did not reproduce.)
 
 _(results table filled in when the agents land)_
 
+## Claude-play sweep
+
+commit: 3f05cd05
+seeds: 4304/4 4306/6 4309/9 4312/2 4313/3 4315/5 4318/8 4319/9 4323/3 4325/5 4326/6 4330/0
+       (+ 5 games at seed 4242 from a discarded first wave, see below)
+games: 17
+flags: 0 unresolved
+
+Every game was driven by an independent Opus agent through the `--claude-play` stateless-replay
+protocol, each reading the deck's `cards.json` entries first (Rule 0) and re-deriving the arithmetic
+by hand. **Claude matched the search's win turn in all 17 games** (12 at T5, 5 at T6) — which for
+this deck is unsurprising: the lines are forced curve-outs, not decision-dense.
+
+Every new mechanic was verified with numbers, not eyeballs:
+
+| mechanic | verified in | what was checked |
+|---|---|---|
+| Giada's as-enters counters | 4304, 4315, 4318, 4325 | The entrant never counts itself, Giada counts herself: 1 / 2 / 3 / 4 counters as the Angel count climbs. |
+| **Giada's Angel-only mana** | 4304, 4315, 4318, 4325 | Never leaked onto a non-Angel. **4318 is the negative proof**: on a board where casting Serra would have required spending Giada's mana on a non-Angel, the engine correctly did not offer Serra at all — the exact defect fixed in 5a. |
+| Thune's per-EVENT counters | 4304, 4309, 4312, 4313, 4326, 4330 | Two/three separate life-gain events produce two/three separate team pumps, never one merged counter. |
+| **Righteous Valkyrie reads LIVE toughness** | 4304, 4306, 4309, 4312, 4315, 4318, 4326 | Gains the entrant's *current* toughness including Giada's counters, Lyra's lord and its own anthem — e.g. +7 for a printed 3/4, +10 for a printed 5/5. **This is the replacement-before-trigger ordering, confirmed in live play.** |
+| the 27-life anthem edge | 4312, 4315, 4326 | **4312 proves it positively**: at 26 the trigger gained +5, not the +7 it would have gained if the anthem were already live; it armed at exactly 27. 4326 saw both sides through combat damage. |
+| Legion Angel's wish | 4304, 4306, 4313, 4315, 4318, 4319, 4325, 4330 | Fetches a sideboard copy (ids 200001/200002) **to hand**, library size unchanged; chains correctly through 2 fetches; respects the 3-copy pool. |
+| Lyra's lord + lifelink grant | 4315, 4319, 4323, 4330 | Both halves skip Bishop of Wings (Human Cleric) and Lyra herself; the lifelink total matched the Angels' damage exactly, with Bishop's damage excluded. |
+| Resplendent Angel's end step | 4319 (positive, twice), 4323 + 4313 (negative) | Fires at 6 and 7 life gained; correctly does NOT fire at 4, or at 1. |
+| Bishop / Seraph Sanctuary | 4319, 4326, 4330 | +4 and +1 per Angel, per copy; neither fires for a non-Angel, and Bishop does not pay for its own entry. |
+
+### The discarded first wave (recorded because the error is instructive)
+
+The first sweep used `--seed 4242 --game-index 0..17`, on my incorrect belief that the game index
+varies the game. **It does not** — the SEED fixes the shuffle and `--game-index` only selects the
+opponent-spawn pattern, so all 18 agents were handed the *same opening hand*. Five finished before I
+caught it (all clean, all T5, matching the search) and every one of them independently reported the
+same blind spot — *"Giada never hit play; another game must cover the Giada-mana check"* — which is
+what surfaced the mistake. The rest were stopped and the seeds rebuilt from a 40-game log scan
+choosing games that actually deploy the new cards. Their 5 results are counted above because they
+are valid games; they are simply 5 views of one game rather than 5 independent ones.
+
+A second trap on the way: the per-game log's `seed` field is **already** the per-game seed, so the
+first rebuilt table double-counted `seed + gameNumber` and its coordinates did not reproduce.
+
+### Observations recorded, not flagged
+
+1. **Swords to Plowshares is never offered** (see Open items #1). Four agents independently traced
+   this to the documented generic gate that suppresses `controller_lifegain_equals_power` spells
+   absent a Tainted Remedy, because handing a passive opponent life is strictly bad. Correct for the
+   decks it was written for; **arguably wrong for Angels**, where self-targeting gains US life and
+   feeds the whole engine. Not a rules violation — an archetype-blind narrowing.
+2. **Duplicate plan entries.** Every agent saw runs of byte-identical plans (commonly six
+   `land=Plains; cast: Serra the Benevolent`); several probed them individually and confirmed
+   identical resulting states. Harmless to the search, but real noise on the **human** decision
+   surface — two different Serra copies also render identically, since casts carry no source id.
+3. **The `bottom` step's `ai_choice` wanted to bottom Legion Angel** (4325), which would discard the
+   deck's only maindeck copy *and* the entire 3-card sideboard wish chain. This is the documented
+   per-step-hint caveat in `claude-play.md`, not an engine defect — but it is a concrete example of
+   that hint being actively bad, worth remembering when the mulligan stage is run.
+
+## Stage 6a — encoded heuristics & assumptions disclosure (MANDATORY)
+
+Compiled from the code, not from memory.
+
+### 1. Global engine assumptions shaping every number above
+
+| assumption | effect on this deck |
+|---|---|
+| A single **passive opponent**: never blocks, attacks, casts, removes, or gains/prevents life | **Flying is inert** on all 9 fliers, **first strike** inert on Lyra, **vigilance** inert on tokens. Also means the deck's 3 Swords + 3 Unexpectedly Absent are near-dead cards, which is why they score negative. |
+| The opponent **takes no turns** | Resplendent Angel's "at the beginning of **each** end step" collapses to one trigger per turn. Disclosed as a provably-inert collapse. |
+| **Clairvoyant search** over a deterministically shuffled, known library | The win turns are a best-case clock, not a realistic one. |
+| **First main only** — `DeckUsesSecondMain` does NOT fire for this deck | No card here generates a combat resource (no spectacle, no combat untap, no combat-damage free cast). Confirmed per card. |
+| Opponent creature spawns in 8 of 10 game indices | The only reason `targeting: creature` ever has a legal target. |
+| Measurement settings | profile-driven; the depth sweep above is d0/d3/d5 at budget 200 ms. |
+
+### 2. Card-modeling simplifications (every bracket note in this deck)
+
+* **Flying** (Lyra, Youthful Valkyrie, Resplendent Angel + its token, Righteous Valkyrie, Legion
+  Angel, Giada, Archangel of Thune, Serra's token) — parsed, structurally inert for combat. **But
+  NOT cosmetic:** Serra the Benevolent's +2 pumps "creatures you control with flying", so this is
+  the first effect in the engine that READS the keyword. Every flier's keyword list is load-bearing.
+* **First strike** (Lyra) — parsed, inert: no blockers, and the engine collapses combat damage into
+  one event.
+* **Vigilance** (Serra's and Resplendent Angel's tokens) — parsed, inert: the opponent never
+  attacks, so there is never a reason to hold a blocker back. **Giada's vigilance is NOT inert** —
+  she taps for mana, so it lets her attack and still pay for an Angel.
+* **Serra the Benevolent's −6 emblem** — granted as a **no-op**, no emblem zone built. It is a damage
+  floor on OUR life total and nothing in this game damages us. The loyalty COST is modelled, and the
+  ability is value-gated out of the autonomous search (the Ajani-0 precedent) while staying
+  reachable in human play. **PROVISIONAL — needs your sign-off.**
+* **Azorius Chancery** {W}{U} modelled as wild — the {U} is dead in mono-white, so this only ever
+  makes the land worse, never better.
+* **Seraph Sanctuary taps for {C} only** — faithful, and a real constraint: 4 of 24 lands cannot pay
+  a {W} pip, so Sanctuary-heavy openers genuinely colour-screw. Not a modelling gap.
+
+### 3. DecisionProvider heuristics — **Angels rides `GenericProvider` and overrides NOTHING**
+
+No deck-specific narrowing at all: pure search within the global assumptions above. This is
+deliberate (Stage 4a) — a new deck earns its own provider only once it has a *measured* hook.
+
+Two **generic** narrowings do affect this deck and you should see them:
+
+* **Swords to Plowshares / Unexpectedly Absent self-targeting is suppressed.** A generic gate skips
+  `controller_lifegain_equals_power` spells unless a lifegain→loss enabler is live. Sound reasoning
+  for the decks it was written for; in Angels self-targeting gains **us** life, which is an engine
+  trigger (Thune counters, the anthem, Resplendent's 5-life threshold). **What it could cost: a real
+  line.** Swordsing our own 1/1 Spirit token with a wide board is plausibly correct and the search
+  can never discover it. Flagged as the top follow-up.
+* **Unexpectedly Absent is pruned to X=0 and opponent-creature targets** (pre-existing, disclosed in
+  its own bracket note).
+
+### 4. Play-viewer auto-resolved decisions
+
+**Viewer-ready.** `audit_viewer_decisions.py` reports no HARD MISS, no self-guard failure, no driver
+failure, and its oracle-text cross-check finds *no choice phrase left unmodeled*. Every interactive
+choice this deck's cards create is surfaced: `main_phase` plans (incl. Serra's loyalty ability as its
+own labelled sub-decision and Resplendent Angel's activation, newly labelled), `target`, `bounce`,
+`discard`, `mulligan`, `bottom`.
+
+Three known, disclosed gaps:
+
+1. **Legion Angel's "you MAY" decline is not offered.** Taking a free card costs no mana, life,
+   tempo or shuffle, so it is weakly dominant. Wiring it is one argument (`human_repick=true`) if you
+   ever want it. **PROVISIONAL.**
+2. **Giada never appears as a hand-tappable source in the viewer's "Tap mana" mode.** Correct by
+   design — `HumanPreTapFaces` returns "" for a `creature_mana_only` source so a restricted unit
+   cannot be laundered into the float — but it reads as a bug to a human. Same as Cavern of Souls.
+3. **Duplicate plan entries** (see the sweep). Not a missing decision; a cluttered one.
+
+### 5. Things I did NOT do, deliberately
+
+* **Did not touch ground truth.** The 9 pre-existing smoke failures belong to `4f23627e`.
+* **Did not add Angels to the regression suite.** That is its own task with shared time budgets, and
+  it cannot be `--accept`ed cleanly while those 9 are outstanding.
+* **Did not implement Lyra, Archangel of Dawn or Lightstall Inquisitor** — your ruling: unreachable,
+  future-deckbuilding candidates. They are for `deck-screening.md` when you want them.
+* **Did not generate a mulligan profile or a value leaf.** Per the pipeline-ordering policy those are
+  the LAST stages and you kick them off.
+
+## PENDING YOUR SIGN-OFF (provisional; nothing here blocked the work)
+
+1. **`card_fields` gate is RED on two cards that are not in this deck** — `Apex Altisaur`
+   (`enrage`, `fight`) and `World War Hulk` (`double`). My `--update` added them to the Scryfall
+   snapshot for the first time, so this is their first-ever offline diff. They look like the
+   "real keyword, inert in goldfishing" class already allowlisted for Progenitus / Goblin
+   Piledriver, i.e. a `scryfall_divergences.json` entry rather than a code fix — **but they belong
+   to the Saga/Altisaur workstream and allowlisting another workstream's card is not my call.**
+   I did NOT sign these off, so `verify_deck.py` still exits non-zero on Angels.
+2. **Serra's −6 emblem as a modelled no-op** (see 6a §2).
+3. **Legion Angel's "you may" decline not being surfaced** (see 6a §4).
+4. **Should Swords to Plowshares be allowed to target our own creatures in this deck?** This is a
+   real strategic question, not paperwork — see Open items #1.
+
 ## Approved deferrals
 
 _(none yet — every proposed deferral is PROVISIONAL until the user signs it off; see the closing
