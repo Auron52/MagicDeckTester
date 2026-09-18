@@ -1,4 +1,4 @@
-# Regression ground truth -- commit fdba518a  date 2026-09-17
+# Regression ground truth -- commit 8f68da18  date 2026-09-18
 # Promoted from accepted runs by 'regression.sh --accept' -- do not hand-edit.
 # Key: <deck>_<mode>_d<depth>_s<seed> = <avg>[/<play_digest>]   (avg = mean turn-to-win, unwon = max_turns+1)
 # Modes: smoke (<15m), regression (<45m), overnight (<8h); seeds disjoint.
@@ -61,6 +61,9 @@ critter_smoke_d5_s1001=4.4000/324ce9ba19f5d157
 melira_smoke_d0_s1001=6.3830/2bef1db05d71d48b
 melira_smoke_d3_s1001=4.6800/3bd83ad7111eb78e
 melira_smoke_d5_s1001=4.7600/7aea360e54275be3
+angels_smoke_d0_s1001=5.8900/01f97dda41c22025
+angels_smoke_d3_s1001=5.4880/d4a352478f1262fc
+angels_smoke_d5_s1001=5.4667/8298cd37b2d06fa8
 hinata2hg_smoke_d3_s1001=5.6667/2f991179a9d890b5
 antilife2hg_smoke_d3_s1001=3.9700/3a62229bd908ddc1
 minotaur2hg_smoke_d3_s1001=5.3500/c7a878202e0ba31a
@@ -181,6 +184,11 @@ melira_regression_d3_s2002=4.7733/3b26ab8517b189b7
 melira_regression_d3_s3003=4.6267/e25943cfc1c1d1b7
 melira_regression_d5_s2002=4.7750/a67ac8b38a2845c2
 melira_regression_d5_s3003=4.6000/87a433be2ee9f7a5
+angels_regression_d0_s2002=5.8300/21dff7b2e821375b
+angels_regression_d3_s2002=5.5467/73a7d310561bf500
+angels_regression_d3_s3003=5.4167/fc55e2efc4f8839f
+angels_regression_d5_s2002=5.5400/cec481c9a73d4a6a
+angels_regression_d5_s3003=5.3960/9a84a8a3004985c7
 hinata2hg_regression_d3_s2002=5.5700/b5897803c5f569d5
 hinata2hg_regression_d5_s2002=5.5200/7eadddfb82c4ab6d
 antilife2hg_regression_d3_s2002=4.3133/25f6c0fd83311e41

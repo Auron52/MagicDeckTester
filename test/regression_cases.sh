@@ -37,6 +37,7 @@ declare -A DECK_FILE=(
   [breaching]=decks/BreachingDragonstorm/BreachingDragonstorm.cod
   [critter]=decks/CritterLifegain/CritterLifegain.cod
   [melira]="decks/Melira Pod/Melira Pod.cod"
+  [angels]=decks/Angels/Angels.cod
   [fluctuator]=decks/Fluctuator/Fluctuator.cod
 )
 declare -A DECK_PROF=(
@@ -59,6 +60,7 @@ declare -A DECK_PROF=(
   [breaching]=decks/BreachingDragonstorm/BreachingDragonstorm.profile.json
   [critter]=decks/CritterLifegain/CritterLifegain.profile.json
   [melira]="decks/Melira Pod/Melira Pod.profile.json"
+  [angels]=decks/Angels/Angels.profile.json
   [fluctuator]=decks/Fluctuator/Fluctuator.profile.json
 )
 
@@ -203,6 +205,17 @@ SMOKE_CASES=(
   "melira 0 1001 1000 0"
   "melira 3 1001   50 10"
   "melira 5 1001   25 20"
+  # angels: ADDED 2026-09-18 (mono-white Angels tribal; analysis-Angels.md). Full kitty/critter
+  # shape because it is one of the CHEAPEST decks in the matrix -- measured single-threaded at the
+  # tier's own budgets: d0 ~0 s, d3 b10 0.066 s/game, d5 b20 0.060 s/game (cf. dragons 0.98 / 2.00).
+  # Smoke's share is ~26 core-s. It ships the leafless single-pass shape (leaf: none), so the d3/d5
+  # cells WILL move if a value leaf is ever adopted -- regenerate GT then.
+  # Added specifically to close a hole the ledger documents: with no GT key, NOTHING in the repo
+  # noticed when an engine change moved this deck's play, and its claude-play sweep record could go
+  # stale silently. That had to be checked by hand once already (2026-09-18, digests, Saga work).
+  "angels 0 1001 1000 0"
+  "angels 3 1001  250 10"
+  "angels 5 1001  150 20"
   # 2HG gate (user request 2026-09-04): "<deck>2hg" = the SAME deck/profile at starting_life 30
   # + opponent_heads 2 (regression.sh strips the suffix for file lookup and adds the job fields).
   # Small on purpose -- just enough that a change which obviously ignores 2HG (second-face
@@ -366,6 +379,12 @@ REGRESSION_CASES=(
   "melira 3 3003   75 10"
   "melira 5 2002   40 20"
   "melira 5 3003   40 20"
+  # angels: ADDED 2026-09-18 (see the SMOKE block). ~77 core-s for this tier.
+  "angels 0 2002 1000 0"
+  "angels 3 2002  300 10"
+  "angels 3 3003  300 10"
+  "angels 5 2002  250 20"
+  "angels 5 3003  250 20"
   # 2HG gate, second seed (see the SMOKE block for the design): the seven 2HG-relevant decks at
   # d3, plus ONE d5 case (hinata2hg -- the value_play/deep-search path under two heads, covering
   # the Crackle declared-count search where the second face changes lethality). No canaries here
@@ -682,6 +701,20 @@ OVERNIGHT_CASES=(
   "melira 5 5005  150 20"
   "melira 5 6006  150 20"
   "melira 5 7007  150 20"
+  # angels: ADDED 2026-09-18 (see the SMOKE block). Full kitty/critter overnight shape -- it
+  # projects to ~11 core-minutes against an 8 h tier budget, so there is nothing to trim for.
+  "angels 0  4004 2000 0"
+  "angels 0  6006 2000 0"
+  "angels 0  8008 2000 0"
+  "angels 0 10010 2000 0"
+  "angels 3 4004 1000 20"
+  "angels 3 5005 1000 20"
+  "angels 3 6006 1000 20"
+  "angels 3 7007 1000 20"
+  "angels 5 4004  500 40"
+  "angels 5 5005  500 40"
+  "angels 5 6006  500 40"
+  "angels 5 7007  500 40"
   # 2HG gate, deep tier (user request 2026-09-04): the six 2HG-relevant decks at DEFAULT
   # SETTINGS -- depth-5 rows drop the depth key so each deck's value_play block owns the play
   # depth (fivecolour runs d6), at the SAME per-deck overnight d5 budget as the deck's own rows.
