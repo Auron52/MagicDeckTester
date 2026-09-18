@@ -863,7 +863,8 @@ INERT_PARAMS = {
     "charge_minus_power": "Jitte -1/-1 mode payload detail (the creature pick surfaces as per-target main_phase JitteModeAbility variants)",
     "charge_minus_tough": "Jitte -1/-1 mode payload detail (rides equip_combat_damage_charges)",
     "charge_lifegain": "Jitte lifegain mode payload detail (mode pick surfaces as main_phase JitteModeAbility)",
-    "allow_self_target": "targeting-legality broadening detail (Unexpectedly Absent; the pick itself rides tuck_to_library -> target)",
+    "allow_self_target": "targeting-legality broadening detail (Unexpectedly Absent, Swords to Plowshares; "
+                         "the pick itself rides targeting / tuck_to_library -> target)",
     "tap_put_from_hand_types": "put-from-hand card-type filter detail (rides tap_put_from_hand_cost -> main_phase)",
     # --- Fluctuator (cycling combo) ---
     "reduces_cycling_activation": "Fluctuator: STATIC cycling-cost reduction, no choice of its own -- it only makes the existing cycling activations cheaper (often FREE), and those already surface as cycling_cost main_phase plays. Nothing is decided when it applies.",

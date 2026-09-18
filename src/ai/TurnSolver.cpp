@@ -5179,6 +5179,12 @@ static bool SubsetHasUnbackedLifegainRemoval(const GameState& state,
                                              const std::vector<Action>& cands,
                                              const std::vector<int>& sel)
 {
+    // HUMAN PLAY (user, 2026-09-18): the same VALUE judgement as the enumeration gate, so the same
+    // escape. A human who chose to cast Swords with no enabler is not making the myopic mistake this
+    // rejects -- they are self-targeting for the life. Rejecting the PLAN here would delete the cast
+    // from the menu again even after the enumeration gate let it through. Inert for the search:
+    // HumanPlayActive() is false in every search/rollout scope.
+    if (HumanPlayActive())                              { return false; }
     bool has_removal = false, has_enabler = false;
     for (int j : sel)
     {
@@ -11622,7 +11628,25 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
             && (!HasOpponentCreature(state, state.active_player_index)
                 || !RemedyActiveOrInHand(state, state.active_player_index)))
         {
-            continue;
+            // HUMAN PLAY (user, 2026-09-18: "Swords should be able to self-target for the user"):
+            // exiling our OWN creature gains US life equal to its power, which on a lifegain deck is a
+            // real line (Angels: a life-gain EVENT feeds Archangel of Thune, Righteous Valkyrie's
+            // threshold and Resplendent Angel's end-step token). The gate above is a GOLDFISHING VALUE
+            // judgement about handing a PASSIVE OPPONENT life -- not a legality rule -- so per the
+            // never-narrow-a-legal-choice doctrine (Ajani-0, TurnSolver.cpp ~14205) it must not narrow
+            // the viewer. Search/rollout is byte-identical: HumanPlayActive() is false there by
+            // construction (RevealLogPause / HumanPlaySuppress).
+            // Still requires SOME creature on the battlefield -- with none, the spell has no legal
+            // target and stays uncastable for the human too.
+            bool any_creature_on_board = false;
+            for (const Permanent& bp : state.battlefield)
+            {
+                if (bp.card.IsCreature()) { any_creature_on_board = true; break; }
+            }
+            if (!(HumanPlayActive() && def.params.allow_self_target && any_creature_on_board))
+            {
+                continue;
+            }
         }
 
         // {X} spells: enumerate candidate X values (provider XCandidates narrows the range,
@@ -23783,6 +23807,23 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
                         if (bp.controller_index == state.active_player_index || !bp.card.IsCreature()) { continue; }
                         int pw = bp.EffectivePower();
                         if (pw > best_pw) { best_pw = pw; default_ci = bi; }
+                    }
+                    // Self-target (user, 2026-09-18): with NO opponent creature the block above leaves
+                    // default_ci < 0 and the chooser was never consulted, so the human could not pick at
+                    // all. Fall back to our own LOWEST-power creature: the cheapest body to trade for the
+                    // life-gain event, and the conservative default if the player just accepts it. The
+                    // chooser below can still pick any legal creature (main.cpp offers both sides).
+                    if (default_ci < 0 && def.params.allow_self_target)
+                    {
+                        int low_pw = -1;
+                        for (int bi = 0; bi < static_cast<int>(state.battlefield.size()); ++bi)
+                        {
+                            const Permanent& bp = state.battlefield[bi];
+                            if (bp.controller_index != state.active_player_index || !bp.card.IsCreature()) { continue; }
+                            if (CreatureHasShroud(bp, state)) { continue; }   // RULES: shroud cannot be targeted
+                            int pw = bp.EffectivePower();
+                            if (low_pw < 0 || pw < low_pw) { low_pw = pw; default_ci = bi; }
+                        }
                     }
                 }
                 if (default_ci >= 0)

@@ -1584,12 +1584,13 @@
    ],
    "subtypes": [],
    "keywords": [],
-   "oracle_text": "Exile target creature. Its controller gains life equal to its power. [Exile + the controller-lifegain rider: targeting an opponent creature with Tainted Remedy out deals damage equal to its power. Inert without Remedy vs a passive opponent.]",
+   "oracle_text": "Exile target creature. Its controller gains life equal to its power. [Exile + the controller-lifegain rider: targeting an opponent creature with Tainted Remedy out deals damage equal to its power. Inert without Remedy vs a passive opponent. allow_self_target (user, 2026-09-18) opens SELF-targeting in HUMAN PLAY only -- exiling our own creature gains US its power in life, a real line in a lifegain deck (Angels: the gain is an EVENT, so it feeds Archangel of Thune, Righteous Valkyrie's threshold and Resplendent Angel's end-step token). The autonomous search is UNCHANGED and still declines to hand a passive opponent life; whether it should get a gated version is an open heuristic question, measured separately.]",
    "template": "removal",
    "parameters": {
     "damage": 1,
     "targeting": "creature",
-    "controller_lifegain_equals_power": true
+    "controller_lifegain_equals_power": true,
+    "allow_self_target": true
    }
   },
   {

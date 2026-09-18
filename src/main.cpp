@@ -2182,8 +2182,8 @@ static void WriteTargetDecisionJson(std::ostream& os, const GameState& s, const 
     { d.Note("reply an option index. The chosen creature gets " + pump_desc
              + ". Default = the AI's pick (best attacker)."); }
     else if (!remove_desc.empty())
-    { d.Note("reply an option index. The chosen opponent creature is " + remove_desc
-             + ". Default = the AI's pick (largest)."); }
+    { d.Note("reply an option index. The chosen creature is " + remove_desc
+             + ". Only legal targets are listed. Default = the AI's pick."); }
     else if (random_damage)
     { d.Note("reply an option index. Each chosen target is dealt a RANDOM exiled card's "
              "mana value (assigned positionally, not steerable); pick " + std::to_string(min_targets)
@@ -3945,9 +3945,16 @@ void ClaudePlayHarness::InstallResolutionChoosers(AIEngine& ai)
             const bool exile_removal = (def.tmpl == CardTemplate::Removal);
             // Tuck removal (Unexpectedly Absent) neither exiles nor gains life -- the Swords wording
             // here was actively misleading in a lifegain-trigger deck (5d sweep, gi=9).
+            // With allow_self_target the wording must not say "you" for a target whose controller may be
+            // EITHER side -- the rider gives the life to the exiled creature's CONTROLLER (CR: "its
+            // controller"), so self-targeting gains US life and is a real line in a lifegain deck.
             const std::string remove_desc = !exile_removal ? std::string()
                 : def.params.tuck_to_library
                 ? std::string("put into its owner's library just beneath the top X cards (a token ceases to exist); no life gain")
+                : def.params.allow_self_target
+                ? std::string("exiled; ITS CONTROLLER gains life equal to its power -- so targeting your OWN "
+                              "creature gains YOU that life (a Tainted Remedy / Plague Drone flips an "
+                              "opponent's gain to a loss)")
                 : std::string("exiled; you gain life equal to its power (a Tainted Remedy / Plague Drone flips that to a life loss)");
             // Creature-targeting burn (Searing Blood "target creature"; Searing Blaze "... that player
             // controls"): the human picks WHICH creature takes the damage. Own creatures are offered too
@@ -4022,6 +4029,11 @@ void ClaudePlayHarness::InstallResolutionChoosers(AIEngine& ai)
             }
             else if (trick)          { CollectOwnCreatureTargets(s, controller, legal, legal_labels); }
             else if (own_pump)       { CollectOwnCreatureTargets(s, controller, legal, legal_labels); }
+            // Self-targeting removal (user, 2026-09-18): with allow_self_target the human sees BOTH
+            // sides -- Swords on our own creature gains US its power in life. CollectCreatureTargets is
+            // the existing both-sides collector and already filters shroud on the own side.
+            else if (exile_removal && def.params.allow_self_target)
+                                     { CollectCreatureTargets(s, controller, legal, legal_labels); }
             else if (exile_removal)  { CollectOpponentCreatureTargets(s, controller, legal, legal_labels); }
             else if (creature_burn)  { CollectCreatureTargets(s, controller, legal, legal_labels); }
             else                     { CollectDamageTargets(s, controller, players_only, legal, legal_labels); }

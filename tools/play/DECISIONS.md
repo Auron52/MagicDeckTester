@@ -90,7 +90,13 @@ human play the plan menu enumerates ONE empty-target cast (no clairvoyant named 
 leaked the top-7 into a no-reveal game and went stale the moment a same-line Worldly Tutor
 reordered the library); the human picks at resolution off the REAL look, or -1 to put nothing.
 Autonomous play keeps the searched named-variant axis unchanged. Unexpectedly Absent's target reuses `target` (the
-tuck branch consults `g_play_target_chooser` with every nonland permanent legal, own side included).
+tuck branch consults `g_play_target_chooser`; `allow_self_target` lets the CAST be offered with no
+opponent creature on board). **Correction 2026-09-18:** this used to claim the tuck branch offered
+"every nonland permanent legal, own side included". It did not — the viewer's legal list for a
+Removal-template card came from `CollectOpponentCreatureTargets` (opponent CREATURES only) regardless
+of `allow_self_target`, which only ever gated cast EMISSION. As of 2026-09-18 a card carrying
+`allow_self_target` does get the both-sides list (`CollectCreatureTargets`), which is what makes
+Swords to Plowshares self-targetable in the viewer (user request; the search is unchanged).
 
 Planeswalker loyalty-ability TARGET reuse note (2026-09-03): Oko's +1 (`elk_transform`), Bolas's +3
 (`destroy_own_noncreature`) and -2 (`steal_creature`) all reuse `target` via a dedicated
