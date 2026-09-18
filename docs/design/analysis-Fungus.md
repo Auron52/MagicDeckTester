@@ -749,3 +749,39 @@ cost", not as a 6% speedup.
 **This is the measurement the green smoke gate could not give.** Smoke reported `play-changed=0`,
 which proves only that the new `#D` term is byte-identical for decks *without* devour; Fungus is not
 in the regression suite (ledger Q5) and no other deck carries devour.
+
+## Viewer: SIX indistinguishable "cast Utopia Mycon" entries (2026-09-18, OPEN)
+
+Noticed while reproducing the seed-9 line, not user-reported. Seed 9 / gi 8, T1, hand
+holding exactly ONE Forest and ONE Utopia Mycon:
+
+```
+x1  land=Forest; cast: Thallid
+x1  land=Simic Growth Chamber; cast: (nothing)
+x1  land=Forest; cast: (nothing)
+x6  land=Forest; cast: Utopia Mycon        <-- six identical menu entries
+x1  land=none; cast: (nothing)
+```
+
+What has been ruled out:
+
+* **Not an unprune artifact.** `MTG_UNPRUNED=0` and `=1` both give exactly six. (The
+  usual explanation for near-duplicates in the viewer menu — the human enumeration
+  runs unpruned — does not apply.)
+* **Not two copies of a card or two lands.** There is one of each in hand.
+* **Not general viewer noise.** Goblins' T1 menu has no duplicate at all; Minotaur's
+  only duplicate is `x2` on a fetchland, where the hidden difference (fetch target) is
+  real and merely unprinted in the summary.
+* **Not visible in the serialized plan.** All six carry byte-identical
+  `actions: [{"card": "Utopia Mycon"}]`.
+
+So the six differ in a field the summary and the action JSON do not print — the
+Minotaur fetchland shape. **Prime suspect: the any-colour float fan.** Utopia Mycon
+sets `sac_outlet_add_mana_any_color`, whose colour resolves through the shared
+`ChosenFloatColorCandidates` fan, and six is suspiciously exactly WUBRG + colourless.
+If so the card's own `oracle_text` note is wrong where it claims "in this mono-green
+list that fan is the singleton {G}" — and the cost is paid on every enumeration, not
+just in the menu.
+
+NOT INVESTIGATED FURTHER and NOT FIXED: found while the box was reserved for the
+value-leaf generation. Cheap next step is to dump `chosen_float_color` for the six.
