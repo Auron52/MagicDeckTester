@@ -617,3 +617,92 @@ report)_
 ## Verification (Stage 5)
 
 _(not started)_
+
+## Value leaf — GENERATED and MEASURED (2026-09-18). It works, and it is NOT adoptable yet.
+
+Following the retraction above, the leaf was generated. This section is the answer to the user's
+"use this as a test-case for whatever rules we are using to determine 'we don't need a value-leaf'."
+
+### Generation cost demolishes the premise of the shortcut
+
+`bash scripts/valueleaf.sh run decks/Angels` — **complete in ~11 minutes wall**, ~1 core-hour: 13,576
+labelled rows from 2,500 games, then 52/52 matrix cells at 400 games (20,800 games), 0 condemned,
+held-out RMSE 0.5510. Utilisation was ~30 of 32 cores throughout.
+
+That matters for the RULE, not just for this deck. The whole justification for deciding leaf-necessity
+from a cheap proxy is that *"value-leaf generation costs hours"* (`shape_probe.py`'s opening line).
+For an expensive deck it does — FiveColour burned 47.4 core-h on H6 alone. **For a cheap deck it does
+not**, and Angels is one of the cheapest in the matrix (0.060 s/game at d5b20). The proxy was bought
+at a price this deck never had to pay: measuring the real thing cost 11 minutes, less than the time I
+spent constructing the argument for skipping it.
+
+### Phase E measured nothing, and said so
+
+Every phase E arm came back **byte-identical to baseline**, with the harness printing
+`this arm is not engaging` and, on the trust sweep, `8/8 seeds byte-identical ... the trust lever
+never engaged. Check the config before reading this as evidence.`
+
+Cause: the pipeline staged `logs/eval/Angels.value.STAGED.json` carrying **the live deck's**
+`value_play` — `{ladder: single, leaf: none}`. Per `MulliganProfileIO.h:1146`, `leaf: "none"` makes
+`apply_leaf_policy()` parse the 120-tree model and then replace it with `Constant()`. So the freshly
+generated model was structurally unable to be consulted by its own adoption A/B.
+
+This is adjacent to `value-leaf-ab-never-measures-the-benefit.md` (phase E runs no BARE arm) but is a
+**separate and stricter defect**: there, every arm had a sidecar and the comparison was
+under-powered; here, the model itself was switched off in every arm. Any deck that already ships
+`leaf: none` — **7 of 20 per [[onpolicy-shape-screen]]** — will silently regenerate a model its own
+A/B cannot test. Reading that byte-identical output as "the leaf does nothing" is exactly the
+[[digest-equality-can-mean-broken]] trap, and it would have confirmed my retracted claim by accident.
+The staged file has been rewritten to the shape actually measured, with a `provenance` note.
+
+### The real comparison (built by hand: ship / model / bare, two budgets)
+
+Three arms, identical deck + profile, differing only in the sidecar — shipped leafless
+(`{ladder: single, leaf: none, alpha: relaxed}`), the staged **model** (menu shape #1,
+`{ladder: escalation, leaf: model}`), and **bare** (no sidecar at all — the arm phase E never runs).
+
+**Cost — deterministic units, 200 games, seed 8008, single-threaded (no contention):**
+
+| config | bare | ship (leafless) | model | model vs ship |
+|---|---|---|---|---|
+| d5 b20 | 13,982,864 | 5,905,703 | **1,060,000** | **0.18x — 5.6x cheaper** |
+| d3 b10 | 7,901,326 | 6,269,627 | **330,445** | **0.053x — 19x cheaper** |
+
+**Quality — paired PER GAME over 4 seeds x 1000 games per arm (`MTG_DUMP_WINS`), positive = model
+worse:**
+
+| config | delta | better / worse / tied | sign-z |
+|---|---|---|---|
+| **d5 b20** (the deck's own play config) | **+0.0008 t** (se 0.0004) | 0 / 3 / 3997 | −1.73 (not significant) |
+| d3 b10 (shallow sanity tier) | **+0.0168 t** (se 0.0021) | 3 / 70 / 3927 | **−7.84** |
+
+### Verdict
+
+**At its own play config the leaf is a large, clean cost win: 5.6x less search work for three changed
+games in four thousand.** That is a far bigger saving than the shape work found (the leafless shape
+bought 0.29x against the rollout ladder; the model buys 0.18x against the leafless shape), and it
+settles the retracted question — the "no value leaf is needed" conclusion was not just unsupported,
+it was **wrong by a factor of five and a half.**
+
+**It is still NOT adoptable, and not because of cost.** At d3b10 it loses 0.0168 turns with z −7.84.
+That is the **depth-split signature** already recorded for exactly two decks in
+[[onpolicy-shape-screen]] — *"good at d5, bad at d3: Hinata2 (z −4.33 at d3b10) and KittyEquipment
+(z −3.46 at d3b10). Both are blocked only by a shallow sanity tier."* **Angels is the third.**
+
+And it is blocked by the same open design question, which is the user's and not an agent's: shape keys
+apply **unconditionally at sidecar-load**, while `escalation_cap` and `escalation_fresh_frac` are
+gated on-policy via `vp_here`. There is no way to say "model leaf at d5, leafless at d3". Gating shape
+the same way would unblock all three decks, but `vp_here` requires `value_play.drives()` and
+Fluctuator locks no depth, so that exact gate would silently switch Fluctuator's adopted shape off.
+
+This is **not a clean win** by this repo's definition ([[fresh-full-was-not-a-clean-win]]: no
+regression on ANY axis vs the shipped baseline), so it is **staged, not adopted** — and Angels now
+runs d3 cases in the regression suite, which is precisely the tier that would go red.
+
+**Nothing was adopted. The shipped sidecar is unchanged** apart from the mullgen settings phase F
+records (`K` confirmation — see the phase F output). Staged model:
+`logs/eval/Angels.value.STAGED.json`; arms reproducible from
+`logs/vlq_angels/armtest/{manifest,q}.json`.
+
+**If the shape depth-gate ever lands, Angels should be re-measured with Hinata2 and KittyEquipment as
+one batch** — three decks, one design decision, one screen.
