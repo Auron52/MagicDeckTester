@@ -135,20 +135,79 @@ rejectable, ~92% of its search time, byte-identical play**.
 **The ESCALATION ladder has no equivalent gate at all.** It is the path that *does* read the table,
 and it reads it too late.
 
-### How big is it, honestly
+### How big is it, honestly — BUILT AND MEASURED 2026-09-18
 
-For Angels, currently: **near zero, because trust is masking it.** The adopted `value_trust_depth: 5`
-already suppresses escalation at c >= 5, which is where every never-take entry of
-`[2, 3, 3, 6, 6, 6, 6, 6]` sits bar one. The single remaining never-take rung is c=4, and trust 4 vs
-trust 5 measured **identical units (1,060,000 both)** — so there is nothing left for a gate to save
-here.
+The gate is now implemented (`MTG_ESC_XO_SKIP`, below) and the answer is: **the defect is real, the
+gate is correct and free, and its production prize is about 0.4% on exactly one deck.**
 
-That is a statement about Angels, not about the defect. The exposure is on decks that ship **no trust
-at all**, where nothing suppresses the escalation and the table's never-take entries are paid in full
-on every hit — **11 of the 21 modelled decks** (Anti-Lifegain, Creature Giving, Dragons, Dragonstorm,
-Hinata2, KittyEquipment, Melira Pod, Mirrorwing Dragon, StompySurprise, treasure_hunt, and the rest
-carrying `trust=None`). Several have never-take entries: Creature Giving `take[7]=take[8]=6`,
-Mirrorwing `take[6..8]=6`, StompySurprise `take[7]=take[8]=6`, Dragons `take[6..8]=6`.
+**RETRACTION — the exposure estimate in the first draft of this section was wrong.** It said the
+11 no-trust decks were the exposed population and named their never-take entries: Creature Giving
+`take[7..8]=6`, Mirrorwing `take[6..8]=6`, StompySurprise `take[7..8]=6`, Dragons `take[6..8]=6`.
+**Those entries are unreachable and are never consulted.** `TakeAtForCommitted` clamps the committed
+depth into the table, and `committed <= depth`; at a shipping depth of 5 or 6 no lookup can ever land
+on index 7 or 8. Three of the four named decks (Dragons, Mirrorwing, StompySurprise) additionally
+ship `leaf: none`, which takes the `line_constant` branch — `taken = hcommitted >= 1` — so they do
+not read the table at all. I read never-take entries off the artifacts without checking whether the
+index was in range, which is the same failure as reading a units ratio instead of the rule's input.
+
+The reachable population, recomputed at each deck's **actual** shipping `target_depth`, is five decks
+— and every one of them is a **trust** deck, the opposite of the claim:
+
+| deck | D | trust | dead committed depths (`take_at[c] > D`) |
+|---|---|---|---|
+| Angels | 5 | 5 | **3, 4** |
+| Auras | 5 | 5 | 4 |
+| BreachingDragonstorm | 5 | 4 | 3 |
+| CritterLifegain | 5 | 5 | 4 |
+| Knights | 5 | 5 | 4 |
+
+Reachable is not the same as reached. Measured escalation counts (250 games/deck, `MTG_HYBRID_STATS`):
+
+```
+                 b3                      b10                     b20
+angels    1432 dec  29 esc  54 skip   1365   1 esc  12 skip   1353   0 esc   1 skip
+auras      319 dec  44 esc   0 skip    287  12 esc   0 skip    277   2 esc   0 skip
+breaching  256 dec   0 esc   0 skip    255   0 esc   0 skip    255   0 esc   0 skip
+critter    333 dec  77 esc   0 skip    272  16 esc   0 skip    263   7 esc   0 skip
+knights    272 dec   7 esc   0 skip    267   2 esc   0 skip    265   0 esc   0 skip
+-- no-trust decks, where escalation is FREQUENT --
+melira     679 dec 426 esc   0 skip    581 327 esc   0 skip
+hinata     673 dec 376 esc   0 skip    603 310 esc   0 skip
+cr.giving  379 dec 126 esc   0 skip    332  79 esc   0 skip
+antilife   307 dec  54 esc   0 skip    291  38 esc   0 skip
+```
+
+**Only Angels ever trips the gate.** The four other reachable decks escalate at committed depths the
+table can reach, so nothing is skippable; the no-trust decks escalate constantly (Melira on 63% of
+decisions) and skip **zero**, because their tables never demand an unreachable depth.
+
+A/B on Angels, 12,000 games per arm, three budgets, `value_play` shape as shipped:
+
+| budget | units OFF | units ON | delta | escalations skipped |
+|---|---|---|---|---|
+| b3 | 17,505,130 | 17,024,488 | **−2.75%** | 582 |
+| b10 | 20,366,727 | 20,228,976 | −0.68% | 79 |
+| b20 | 23,593,068 | 23,493,309 | −0.42% | 19 |
+
+**12 of 12 play digests byte-identical**, which is the result the construction predicts and therefore
+the one that confirms the premise: that work was computed and thrown away. The saving scales with how
+starved the search is — largest exactly where budget is scarce, which is the right direction, but
+Angels ships at b20/b40 where it is ~0.4%.
+
+### Why the prize is small, and why that is not a coincidence
+
+The two conditions the gate needs are **anti-correlated by construction**. A deck earns never-take
+entries when its leaf is strong relative to the heuristic; that same strength is what earns it a high
+`value_trust_depth` — both are fit from the same depth matrix. But trust is evaluated *first*, at the
+`escalate` decision, so on a strong-leaf deck trust has already closed the door the gate would close.
+Conversely, a weak-leaf deck escalates constantly but has a permissive table with nothing to skip.
+
+Angels is the exception only because its table is anomalously restrictive for a deck of its trust
+level — and that anomaly is precisely the zero-signal fit documented at the top of this file. **The
+defect and the only deck it reaches both trace back to the same bad matrix.**
+
+This also answers item 3 of the original plan: the gate does **not** make `value_trust_depth`
+redundant — the reverse. Trust does nearly all the suppression, and the gate collects a residue.
 
 ### Why this interacts with trust, and what it implies
 
@@ -164,15 +223,54 @@ pre-escalation gate would capture most of what trust buys, without trust's quali
 precisely the risk the user flagged for depth < 5. It might make shallow trust unnecessary rather
 than merely better-proven.
 
-### Proposed, NOT done
+### The gate, as built — ADOPTED 2026-09-18, default ON
 
-1. Add the pre-escalation crossover gate to the **escalation ladder** (mirroring `xo_live` /
-   `xo_need` at `TurnSolver.cpp:41394`), behind its own flag, default OFF.
-2. A/B it on the decks with never-take entries and no trust. Expect **byte-identical play** by
-   construction; the deliverable is the units saved. If play is NOT identical, the gate's premise is
-   wrong and that is the more interesting result.
-3. If it lands, re-ask whether `value_trust_depth` is still needed anywhere, or only as a tiebreak
-   for the case the user identified: *"trust overrides cases that are close, but where the value-leaf
-   barely loses in quality over the heuristic"* — i.e. where the table says take-the-heuristic by a
-   hair and the escalation is not worth the hair. That case is real but narrow, and on Angels it
-   never arose (trust 4 == trust 5, byte-identical).
+`MTG_ESC_XO_SKIP` (default ON, `=0` to disable), at the `escalate` decision in
+`TurnSolver::FullSearchLineHybrid`:
+
+```cpp
+const bool xo_esc_dead = s_esc_xo_skip && !line_constant
+                      && !value_fallback_take_at.empty() && s_vto_override < 0
+                      && TakeAtForCommitted(value_fallback_take_at, committed) > depth;
+const bool escalate = esc_wanted && !xo_esc_dead;
+```
+
+**Why `depth` is a sound bound.** `hcommitted` cannot exceed `depth` on either escalation path: the
+ladder searches `esc_depth = min(depth, MTG_ESC_DEPTH_CAP)`, and the single/FIT path caps at
+`clamp(escalation_cap, 1, depth)`. So `take_at[committed] > depth` *proves* the take can never fire.
+`depth` is deliberately the **loose** bound — the tighter per-path cap is only known inside the block
+— so the gate skips a strict subset of the provably-dead escalations and can never skip a live one.
+
+The three guards are copied verbatim from the FIT gate for the reason that gate gives: `line_constant`
+takes any heuristic line (`hcommitted >= 1`, table not consulted) and `s_vto_override >= 0`
+(`MTG_VALUE_TRUST_OFFSET`) makes the take decision judge by the uniform offset instead of the table.
+Gating on the table in either case is exactly the drift `TakeAtForCommitted` exists to prevent.
+
+**One instrumentation trap, worth recording.** The first version counted `xo_esc_dead`
+unconditionally. `xo_esc_dead` is a property of `(committed, depth, table)` alone, so it is true on
+masses of decisions that were never going to escalate — the first run reported **1175 skips on a run
+whose `redos` was 0 in both arms**, i.e. a saving the arm had not made, while units were identical to
+the byte. Counting `esc_wanted && xo_esc_dead` fixed it. A counter that agrees with the flag rather
+than with the units is worse than no counter.
+
+### Verification
+
+* **Liveness traced before reading the A/B** — Angels b3, 582 escalations actually removed.
+* **Play-neutral** — 12/12 digests identical on Angels across b3/b10/b20 (12,000 games/arm).
+* **Fleet-neutral** — with the flag ON: smoke 83/83 and regression 113/113 configs unchanged vs
+  committed GT, 0 play-changed, references unchanged.
+* **Inert at its default** — smoke 83/83, 0 changed, both before and after the default was flipped ON.
+  Play is identical either way, so no GT key moved and no rebaseline was needed.
+
+### Follow-up NOT taken: the tighter bound
+
+The gate uses `depth`, the universal bound. The **per-path** bound is tighter and known before the
+escalation runs: `min(depth, MTG_ESC_DEPTH_CAP)` on the ladder, `clamp(escalation_cap, 1, depth)` on
+the single/FIT path. Using it would fire strictly more often — e.g. FiveColour ships `target_depth: 6`
+with `escalation_cap: 5` and `take_at[5] = 6`, so committed=5 is dead against the real cap of 5 while
+looking alive against `depth` of 6. It is left undone deliberately: both cap values are computed
+*inside* the escalation block and would have to be hoisted, the `eff_single_deck` path is only taken
+under further conditions, and the measured prize for getting it right is a fraction of the ~0.4% the
+loose bound already collects. A wrong tighter bound would skip a **live** escalation, which is a
+quality regression rather than a missed saving — an asymmetry that argues for leaving it alone until
+something makes the prize worth the care.

@@ -40762,6 +40762,9 @@ TurnSolver::SearchLine TurnSolver::FullSearchLine(const GameState& state, int de
 // start-gate nudge could finish it) vs way down at depth 1-2 (interior-node cost alone blows the budget,
 // no nudge helps). Printed once at process exit. Off => zero overhead. See learned-d0-policy.md.
 inline std::atomic<long long>& FitSkips() { static std::atomic<long long> v{0}; return v; }
+// Whole ESCALATIONS skipped by the crossover gate (MTG_ESC_XO_SKIP). Always counted; printed with the
+// rest of the hybrid diagnostics under MTG_HYBRID_STATS.
+inline std::atomic<long long>& EscXoSkips() { static std::atomic<long long> v{0}; return v; }
 inline std::atomic<long long>& CalibCount() { static std::atomic<long long> v{0}; return v; }
 inline std::atomic<long long>& CalibUnits() { static std::atomic<long long> v{0}; return v; }
 
@@ -40882,6 +40885,12 @@ namespace
                 std::cerr << "[hybrid-stats] FIT passes SKIPPED by the crossover gate: "
                           << FitSkips().load() << " (MTG_ESC_FIT_CROSSOVER; each one a rollout the"
                           << " measured take_at would have discarded)\n";
+            }
+            if (EscXoSkips().load() > 0)
+            {
+                std::cerr << "[hybrid-stats] ESCALATIONS skipped by the crossover gate: "
+                          << EscXoSkips().load() << " (MTG_ESC_XO_SKIP; take_at[committed] > depth, so"
+                          << " the take could not have fired at any reachable hcommitted)\n";
             }
         }
     };
@@ -41576,7 +41585,39 @@ TurnSolver::SearchLine TurnSolver::FullSearchLineHybrid(const GameState& state, 
             return line;
         }
     }
-    const bool escalate = (value_min_depth > 0 && value_active && committed < value_min_depth && !verified) || nl_force_escalate || single_failed;
+    // ESCALATION CROSSOVER GATE (MTG_ESC_XO_SKIP, default ON; =0 to disable). The sibling of the FIT
+    // gate above, on the path that actually ships. The escalation below consults the crossover only
+    // AFTER paying for it (`taken = hcommitted >= TakeAtForCommitted(...)`), so where the table's
+    // requirement is out of reach the whole escalation is provably dead work: it computes a line that
+    // the take decision is guaranteed to discard, and we return the value-leaf line we already had.
+    //
+    // DECIDABLE UP FRONT because hcommitted is BOUNDED BY `depth` on both escalation paths -- the ladder
+    // searches `esc_depth = min(depth, MTG_ESC_DEPTH_CAP)` and the single/FIT path caps at
+    // `clamp(escalation_cap, 1, depth)`. So `TakeAtForCommitted(take_at, committed) > depth` proves the
+    // take can never fire. `depth` is deliberately the LOOSE bound (the tighter per-path cap is only
+    // known inside the block): the gate then skips a strict subset of the provably-dead escalations and
+    // can never skip a live one.
+    //
+    // Guards copied VERBATIM from the FIT gate, for the same reason it gives: `line_constant` takes any
+    // heuristic line (`hcommitted >= 1`, table not consulted) and `s_vto_override >= 0` makes the take
+    // decision judge by the uniform offset instead of the table -- gating on the table in either case is
+    // exactly the drift TakeAtForCommitted exists to prevent.
+    // ADOPTED 2026-09-18 (default ON). Play-neutral by construction and verified so: 12/12 byte-identical
+    // digests on Angels over 12,000 games x 3 budgets, smoke 83/83 and regression 113/113 unchanged with
+    // the gate armed. Units -0.42% (b20) to -2.75% (b3) on Angels, 0 elsewhere -- it is the only deck the
+    // gate reaches. See value-leaf-matrix-has-no-signal-when-the-deck-proves.md for why the prize is
+    // small and why that is structural, not incidental.
+    static const bool s_esc_xo_skip = EnvOn("MTG_ESC_XO_SKIP", true);
+    const bool xo_esc_dead = s_esc_xo_skip && !line_constant
+                          && !value_fallback_take_at.empty() && s_vto_override < 0
+                          && TakeAtForCommitted(value_fallback_take_at, committed) > depth;
+    // Count only escalations the gate REALLY removed. `xo_esc_dead` is a property of (committed, depth,
+    // table) alone, so it is true on masses of decisions that were never going to escalate anyway (on a
+    // trust-5 deck whose probe reaches depth 5, every one of them) -- tallying it unconditionally reports
+    // a saving the arm did not make, which is the exact trap of reading a counter instead of the units.
+    const bool esc_wanted = (value_min_depth > 0 && value_active && committed < value_min_depth && !verified) || nl_force_escalate || single_failed;
+    const bool escalate = esc_wanted && !xo_esc_dead;
+    if (esc_wanted && xo_esc_dead) { EscXoSkips().fetch_add(1, std::memory_order_relaxed); }
     if (g_hybrid_stats.enabled && value_active)
     {
         g_hybrid_stats.decisions.fetch_add(1);
