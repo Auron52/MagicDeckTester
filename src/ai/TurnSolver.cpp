@@ -11845,6 +11845,12 @@ namespace poolaudit
     inline Dumper g_dumper;
 }
 
+// Token equip hosts admitted by the null-def relaxation below (MTG_EQUIP_TOKEN_HOST). A widening
+// change that emits nothing is indistinguishable from a no-op by digest, and that failure mode has
+// already been hit once here (the Marit Lage name match in DecisionProviders.cpp, caught only by
+// its counter), so this one is counted from the start. Printed with the hybrid diagnostics.
+inline std::atomic<long long>& EquipTokenHosts() { static std::atomic<long long> v{0}; return v; }
+
 static std::vector<Action> CollectActions(const GameState& state, bool is_pre_combat)
 {
     const Player& ap = state.ActivePlayer();
@@ -14249,21 +14255,40 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
             };
             std::vector<Host> hosts;
             std::vector<int>  attached_to;   // parallel to equips: current host id (battlefield only)
+            // TOKENS ARE LEGAL HOSTS. Equip targets "creature you control" (CR 702.6b) and a token
+            // is a creature, but a CreateToken permanent has a SYNTHETIC name ("4/4 Angel Token")
+            // and therefore no CardDefinition -- so the old fatal `if (!d) { continue; }` here made
+            // every generic token silently unequippable. A rules/modelling bug, not a ranking
+            // choice: MTG_EQUIP_ALL_HOSTS=1 (emit every host, bypassing the single heuristic pick)
+            // named the SAME eight pairs, which is what ruled the heuristic out. Found by the user
+            // hand-playing Angels seed 1 -- "I had no means to equip the new token with Lightning
+            // Greaves" -- and it was wrong in the SEARCH too, since the viewer renders the plans
+            // the search enumerates. See docs/design/tokens-are-never-equip-hosts.md.
+            //
+            // Reading a null definition as DEFAULT params is sound by construction, the same
+            // argument the snow certificate already turns on (SnowCertVanillaToken,
+            // DecisionProviders.cpp): a CreateToken permanent is a VANILLA BODY -- no params, so
+            // not an equipment, no protection from everything, not a mana source, no attack
+            // payoff -- and its keywords come from one closed hard-coded set of which only Haste
+            // is read here. An unknown NON-token is still skipped, which is what the guard was for.
+            // MTG_EQUIP_TOKEN_HOST=0 restores the old exclusion for the A/B; default ON.
+            static const bool s_token_host = EnvOn("MTG_EQUIP_TOKEN_HOST", true);
             for (const Permanent& p : state.battlefield)
             {
                 if (p.controller_index != state.active_player_index) { continue; }
                 const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
-                if (!d) { continue; }
-                if (d->params.is_equipment) { equips.push_back({ d, &p.card }); attached_to.push_back(p.equipped_to); }
+                if (!d && !(s_token_host && p.is_token)) { continue; }
+                if (d && d->params.is_equipment) { equips.push_back({ d, &p.card }); attached_to.push_back(p.equipped_to); }
                 if (p.card.IsCreature() || p.is_animated)
                 {
                     // Protection from everything (Progenitus): equip TARGETS (CR 702.6b), so a
                     // protected creature is never a legal host -- excluding it here covers both
                     // worlds (the executor only applies search-produced Equip actions).
-                    if (d->params.protection_from_everything) { continue; }
-                    const bool src = (d->tmpl == CardTemplate::ManaDork) || d->params.mana_rock;
+                    if (d && d->params.protection_from_everything) { continue; }
+                    const bool src = d && ((d->tmpl == CardTemplate::ManaDork) || d->params.mana_rock);
                     const int  sc  = p.EffectivePower() + (src ? PermanentManaYield(state, p, *d) : 0)
-                                   + attack_payoff(*d);
+                                   + (d ? attack_payoff(*d) : 0);
+                    if (!d) { EquipTokenHosts().fetch_add(1, std::memory_order_relaxed); }
                     hosts.push_back({ p.card.m_number, p.entered_this_turn,
                                       p.card.HasKeyword(Keyword::Haste), sc, /*in_hand=*/false });
                 }
@@ -40982,6 +41007,13 @@ namespace
                 std::cerr << "[hybrid-stats] ESCALATIONS skipped by the crossover gate: "
                           << EscXoSkips().load() << " (MTG_ESC_XO_SKIP; take_at[committed] > depth, so"
                           << " the take could not have fired at any reachable hcommitted)\n";
+            }
+            if (EquipTokenHosts().load() > 0)
+            {
+                std::cerr << "[hybrid-stats] TOKEN equip hosts admitted: "
+                          << EquipTokenHosts().load() << " (MTG_EQUIP_TOKEN_HOST; each one a host"
+                          << " the null-definition guard used to drop -- zero here on a"
+                          << " token+equipment deck means the widening never fired)\n";
             }
         }
     };
