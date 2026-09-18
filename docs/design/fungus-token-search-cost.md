@@ -436,3 +436,153 @@ user's call):
 
 Without this, any Fungus value-leaf run needs `valueleaf.sh finish` to terminate, and phase A will
 re-queue the same ten zero-row games on every resume.
+
+---
+
+## ROOT CAUSE #3, 2026-09-18: the label stragglers are a MISSING CERTIFICATE, not a cost problem
+
+**User, 2026-09-18:** *"We should also consider reducing the branching factor as needed."* This
+section is the measurement that request asked for, and it ends somewhere the two cost fixes above
+could not reach.
+
+### The branching census, on BOTH paths -- they are different machines
+
+`MTG_BF_CENSUS` ("which effects are causing notable branching factors") plus `MTG_DEDUP_CENSUS` and
+`MTG_ROLLOUT_STATS`. The play column is the known pathological game single-threaded
+(`--seed 1600607 --game-index 607`); the label column is 8 games of the `901750` block at the phase-A
+config (`MTG_EVAL_ROWS_K=3 MTG_EVAL_ROWS_ROLLOUT=0`, unbounded search).
+
+| | play (d5/b20) | label (unbounded) |
+|---|---|---|
+| decisions / candidates | 19,422 / 344,619 | 19,644 / 315,225 |
+| mean width / max width | 17.74 / 200 | 16.05 / 176 |
+| interior_frac | 0.142 | **0.823** |
+| `units.fs_pre` (one node per pre-combat plan applied) | 2.9% | **43.7%** |
+| `units.la_cand` | 35.3% | 10.7% |
+| `units.fs_bp_wave` | 0.6% | 18.7% |
+| `units.rollout_step` | 21.2% | 13.4% |
+| candidate dup rate (post-apply state) | **41.8%** | 18.6% |
+| `copy_FALSE` (plan-signature dedup would delete these) | 67,725 | 101,527 |
+| greedy subsets scored / search subsets | 25,790,445 / 354,473 | 6,231,944 / 2,268,409 |
+
+**Do not carry a conclusion from one column to the other.** Play is a rollout-and-candidate machine;
+the label is an interior-node machine (82% interior). `MTG_CAND_DEDUP`'s 41.8% prize is play-side
+only -- its two call sites live in `SolveWithLookahead` and the label path never reaches them, which
+that flag's own note already recorded.
+
+**The dominant branching DIMENSION on the label path is the spore K-axis.** 44.5% of candidate mass
+carries a `chosen_x`, and it is almost entirely `ActivatePermAbility` (kind 26) on the Thallid
+family: `Thallid` 99,221 activations from **3 distinct physical sources**, `Thallid Shell-Dweller`
+39,855 from **4**. Interchangeable sources cost 2^k selections to express k+1 distinct outcomes,
+which is the exact defect the hand-cast half of `FinalizeFoldTags` was built for.
+
+### Lever 1, BUILT: `MTG_FOLD_COUNTER_SOURCES` -- and it is nearly inert here
+
+`PermIsPlainForFold` refused any permanent carrying spore/quest counters. Its stated reason is
+right but proves a narrower thing than the clause implemented: *"a Thallid holding 2 spores and one
+holding 5 are not interchangeable"* is an argument about UNEQUAL counts. Two Thallids on the SAME
+count are as interchangeable as two Scrying Sheets. The arm moves that distinction into
+`ActivationEquivTag` instead of using it to gate membership.
+
+| | arm off | arm on |
+|---|---|---|
+| tagged actions | 2,362,673 | 2,816,289 |
+| kept classes / members | 99,920 / 205,057 | 102,842 / 210,901 |
+| `drop_src` (source emits >1 k) | 0 | **116,427** |
+| `guard_reject` (greedy / search) | 401,563 / 12,004 | 482,591 / **12,004** |
+| greedy subsets | 6,231,944 | 6,150,916 (-1.3%) |
+| **`units_total`** | 2,910,912 | **2,910,912** |
+| `MTG_FOLD_VERIFY` UNRECOVERABLE | 0 | **0** (recoverable 457,567) |
+| wall, 8 label games, 2 reps | 11.28 / 11.58 s | 11.15 / 11.10 s |
+
+It is **lossless** (the verifier is armed and non-vacuous) and **inert when off** (the control
+reproduces `units_total` to the digit, and the counters are mixed into the tag only when the arm is
+on). But read the two bold cells: `units_total` is **identical to the digit** and the SEARCH half of
+`guard_reject` does not move at all -- every new rejection lands in the greedy odometer. The ~2.6%
+wall is the uncounted greedy-subset saving and nothing else. Two structural reasons it cannot do
+better here: `drop_src` kills 116,427 classes because a Thallid holding 6+ counters emits more than
+one `k` and the fold's source condition (correctly) refuses it; and the searched enumeration does
+not build its selections through the odometer the canonical-prefix guard rules.
+
+**Default OFF.** Kept because it is a correct generalisation of a shipped fold and a deck with more
+same-count counter sources would pay differently -- not because it helped this one.
+
+### Lever 2, MEASURED: the general EOT closure is NOT dead here (it was on Snow)
+
+`MTG_FSW_EOT_DEDUP=1` (census, byte-identical), same 8 games:
+
+```
+general nodes=44315  distinct end-states=300029  duplicate=58203 (16.2% of boundaries)
+by elided work: duplicate free=52543 leaf=0 REAL=5660 | distinct free=209095 leaf=0 real=90934
+                real-dup share=5.9%
+```
+
+`a3503192` measured this **DEAD on Snow** -- 4.5M duplicate boundaries, *every one* `free`, only
+389 of 16,077,262 distinct boundaries leading to a real subtree. On Fungus **5,660 duplicates lead
+to a real subtree, a 5.9% real-dup share**, against an `fs_pre` that is 43.7% of units. The Snow
+verdict does not transfer, and mode 2 is worth an A/B on this deck. Also from the same run:
+`[bp-waves] scored=572,671 rolled=289,220 dupstate=265,108 improved=0` -- the wave phase is 18.7% of
+label units and improved **nothing** in 8 games (Snow: 133 of 158M, so this is the same shape, worse).
+
+### THE STRAGGLER: what is actually happening, measured live
+
+None of the above is what makes a game run 2.83 h. `MTG_WINLESS_STATS_EVERY=30` on the straggler
+(`--seed 901762 --game-index 12 --games 1 --threads 1`) prints the search's position while it runs,
+which is the only way in -- the box refuses gdb/perf attach and an exit-time counter never prints
+for a game that never exits. After ~90 s:
+
+```
+=== [progress] at t7 cut=7 candidate 177/676 (max seen 960) ===
+=== [progress] at t7 cut=7 candidate  37/332 (max seen 1100) ===
+=== WINLESS CERT[m1]: checks=13212 fired=0 (0.0%) ===
+=== WINLESS CERT scope: fsw nodes all=16006 label=15806 edge=13209
+                      | plans all=873680 label=866773 edge=811799 ===
+=== WINLESS SEED: tries=15809 wins=3 (0.0%) | edge tries=13212 wins=3 ===
+=== WINLESS RESIDUAL: 13209 of 13212 edge nodes (100.0%) resolved by neither ===
+=== LABEL WORK: ApplyPlanDirect calls=6762581 | fsw-plans=6703584 ===
+```
+
+Three numbers say the whole thing:
+
+* **93.7% of every plan the search expands is at a HORIZON-EDGE node** (811,799 of 866,773). An edge
+  node sits at `turn >= cutoff`: it cannot search deeper, so its only job is to answer "can I win
+  THIS turn?"
+* **Those nodes are 99.98% no-win** -- `WINLESS SEED` finds 3 wins in 15,809 tries.
+* **The certificate that exists to answer exactly this question fires 0 times in 13,212 checks.**
+
+So the search proves "no win on turn 7" by brute-force applying 300-1,100 plans at each of 13,209
+nodes, one at a time, ~99.98% of the time to arrive at the answer a certificate would return in
+microseconds. Node widths are still GROWING when sampled (960 -> 1,100), which is why the game has
+no natural end.
+
+### Why the certificate never fires: Fungus has no provider
+
+`ProvenWinlessThisTurn` is a `DecisionProvider` hook whose generic implementation is
+`return false` -- deliberately, and the contract note says why ("a sound generic bound has to prove
+nothing else in this deck can move the opponent's life total or library, and `CardParams` carries
+419 fields"). **Exactly two providers implement it: `EldraziFlickerProvider` and `SnowProvider`.**
+Fungus has a recogniser (`DecisionProviders.cpp`, the six-card gated-param signature) but it routes
+to `GenericProvider` -- the comment there says so outright: *"Fungus has no measured deck heuristic
+to hold yet"*.
+
+**That routing decision, made for the heuristics, is what costs the label path its tractability.**
+The certificate is not a heuristic; it is a proof, and it is the only thing in the engine that can
+turn a 1,100-wide edge node into O(1).
+
+### What this retires, and what it promotes
+
+* **RETIRED as the straggler fix: land/token fusion.** The recommendation two sections up ("do LAND
+  fusion first") stands as a per-node cost win (x1.56 linear / x3.66 quadratic) and would help every
+  Fungus game. It is **not** the straggler fix and must not be sold as one: a 3.7x cheaper node
+  against a node count that is still growing at sample time buys 3.7x on an unbounded quantity. The
+  same sentence was already written at the end of the census section; this measurement is the proof.
+* **PROMOTED: `FungusProvider::ProvenWinlessThisTurn`.** This is now the top item for this deck, and
+  it is the concrete answer to step 3.1 of `label-work-bounding-by-reachable-states.md` ("classify
+  the tail before building anything") for Fungus: the tail is **no-win-by-8 edge nodes**, not late
+  wins and not failed combos. Build against `SnowProvider::ProvenWinlessThisTurn` as the worked
+  example. The bar is the hook's own: it may over-credit the player's reach and decline, never
+  under-credit -- a false positive silently converts a win into a loss. `WINLESS SEED`'s 3 wins in
+  15,809 tries are the audit set to check it against, and `MTG_WINLESS_WINDUMP=<n>` prints the
+  winning plans so the certificate can be made to cover them by EXECUTION rather than approximation.
+* **Also promoted, cheaper:** an A/B of `MTG_FSW_EOT_DEDUP=2` on Fungus (5.9% real-dup share, and
+  lossless by the same argument that made the winless-develop closure sound).

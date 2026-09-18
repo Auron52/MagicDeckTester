@@ -207,6 +207,7 @@ enum Slot : int
     BP_VARIANT_FIRST,         // MTG_BP_VARIANT_FIRST      schedule a base plan's breakpoint variants BEFORE the base (equal value)
     BP_NESTED_CANON_PLAYOUT,  // MTG_BP_NESTED_CANON_PLAYOUT  ...the nested default fires inside PLAYOUT applies too (uncharged wall)
     SAC_OUTLET_PAY,           // MTG_SAC_OUTLET_PAY        a sac-for-mana outlet's fodder is a LAST-RANKED payment source, not a searched action
+    FOLD_COUNTER_SOURCES,     // MTG_FOLD_COUNTER_SOURCES  two same-named sources on the SAME counter count fold (the count joins the tag)
     COUNT
 };
 
@@ -384,6 +385,7 @@ inline const char* Name(int slot)
         "MTG_BP_VARIANT_FIRST",
         "MTG_BP_NESTED_CANON_PLAYOUT",
         "MTG_SAC_OUTLET_PAY",
+        "MTG_FOLD_COUNTER_SOURCES",
     };
     // The enum and this table are ONE mapping split across two lists: a slot added to one and not
     // the other silently shifts every lever after it (a manifest asking for lever X would set Y).

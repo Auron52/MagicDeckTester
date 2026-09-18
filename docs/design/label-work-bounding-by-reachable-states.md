@@ -73,3 +73,48 @@ What already reasons over STATES rather than plans, and is therefore the seed of
   find the next.
 - The exact reference rows from the cancelled value-leaf run are over-labelled by the old
   certificate; the value-leaf re-run is a fresh queue on 1806a7e9 or later.
+
+## 5. Step 3.1 ANSWERED for Fungus (2026-09-18): the tail is NO-WIN EDGE NODES
+
+Section 3 step 1 asks to *"classify the tail before building anything"* into late win / no win by 8 /
+loop closes / loop cannot close. For Fungus the answer is measured, and it is **none of the combo
+classes** -- it is the plainest one, and the cause is a routing decision rather than a search defect.
+
+Method: `MTG_WINLESS_STATS_EVERY=30` on a straggler that never finishes
+(`--seed 901762 --game-index 12 --games 1 --threads 1`, phase-A label config). The live reporter
+exists precisely for this class and is the only way in. After ~90 s:
+
+```
+=== [progress] at t7 cut=7 candidate 177/676 (max seen 960) ===
+=== [progress] at t7 cut=7 candidate  37/332 (max seen 1100) ===
+=== WINLESS CERT[m1]: checks=13212 fired=0 (0.0%) ===
+=== WINLESS CERT scope: fsw nodes all=16006 label=15806 edge=13209
+                      | plans all=873680 label=866773 edge=811799 ===
+=== WINLESS SEED: tries=15809 wins=3 (0.0%) | edge tries=13212 wins=3 ===
+=== WINLESS RESIDUAL: 13209 of 13212 edge nodes (100.0%) resolved by neither ===
+```
+
+* **93.7% of all expanded plans sit at horizon-edge nodes** (811,799 of 866,773). Those nodes answer
+  one question -- "can I win THIS turn?" -- and they answer it by applying 300-1,100 plans one at a
+  time.
+* **They are 99.98% no-win**: 3 wins in 15,809 seed tries. This is the `g_res_win`/`g_res_nowin`
+  reading section 2's table calls for, and it says the residual class is as prunable as a class gets.
+* **The certificate fires 0 times in 13,212 checks**, so none of that is avoided.
+
+**Why it fires zero: `ProvenWinlessThisTurn` is a provider hook with a `return false` generic, and
+only `EldraziFlickerProvider` and `SnowProvider` implement it.** Fungus is recognised in
+`DecisionProviders.cpp` but routed to `GenericProvider` -- a decision taken because the deck had no
+measured *heuristic* to hold. The certificate is not a heuristic; it is the one hook on that
+interface whose contract is a proof, and routing to Generic silently gave this deck the
+no-certificate path. Any deck whose labels are expensive and whose provider is Generic has the same
+hole, so this is worth checking before the next deck's value leaf is costed, not after.
+
+**Consequence for this design.** Items 2-4 of section 3 (positive go-off certificate, bounding the
+failed combo, per-reachable-state work) all target combo-shaped tails. Fungus's tail needs none of
+them -- it needs item 1 of the table in section 2, the certificate itself, extended to a third
+archetype. That is a smaller and much better-understood piece of work than the rest of this doc, and
+it should be done first because it is the one with a measured 93.7% denominator behind it.
+
+The full measurement, including the branching census that ruled out the cost-side explanations
+(per-node constants, board size, candidate dedup, the activation fold), is in
+`fungus-token-search-cost.md`, section "ROOT CAUSE #3".

@@ -6604,6 +6604,32 @@ std::vector<int> TurnSolver::ManaUnlockColorReserve(const GameState& state,
 // Conservative by construction: anything unrecognised or non-default returns false, which yields
 // tag 0 = never folded = today's behaviour. A deck that attaches anything to its dig sources simply
 // stops folding them, automatically, with no per-deck configuration.
+//
+// --- COUNTER-CARRYING SOURCES (MTG_FOLD_COUNTER_SOURCES) --------------------------------------
+// The spore/quest clause below refuses ANY permanent carrying such a counter. Its stated reason is
+// correct but proves a narrower thing than the clause implements: "a Thallid holding 2 spores and
+// one holding 5 are not interchangeable" is an argument about UNEQUAL counts. Two Thallids holding
+// the SAME count are as interchangeable as two Scrying Sheets, and popping either leaves the pair in
+// states that differ only by permuting two identical permanents.
+//
+// The fix is therefore not to drop the distinction but to MOVE IT INTO THE TAG: this arm lets a
+// counter-carrying source reach the fold and mixes the counts into ActivationEquivTag, so equal
+// counts share a class and unequal counts land in different ones -- which is what the clause's own
+// argument asks for. Everything that made the original fold safe is untouched (the members must
+// still be field-identical, and the source must still offer exactly one action).
+//
+// WHY IT MATTERS HERE, measured (MTG_BF_CENSUS, Fungus label path, 8 games of the 901750 block):
+// candidate mass carrying a chosen_x is 44.5%, and the spore activation is nearly all of it --
+// `Thallid` 99,221 activations from 3 distinct physical sources and `Thallid Shell-Dweller` 39,855
+// from 4. Those multiply into the powerset: k interchangeable sources cost 2^k selections to
+// express k+1 distinct outcomes, and `fs_pre` (one interior node per pre-combat plan applied) is
+// 43.7% of that path's units. This is the same defect the hand-cast half of the fold was built for,
+// one predicate away from already being fixed.
+inline bool FoldCounterSourcesOn()
+{
+    static const bool env_on = EnvOn("MTG_FOLD_COUNTER_SOURCES");
+    return heurarm::Flag(heurarm::FOLD_COUNTER_SOURCES, env_on);
+}
 static bool PermIsPlainForFold(const GameState& state, const Permanent& p)
 {
     if (p.damage != 0 || p.pending_death_trigger != 0 || !p.counters.empty()) { return false; }
@@ -6656,7 +6682,10 @@ static bool PermIsPlainForFold(const GameState& state, const Permanent& p)
     // Spore / quest counters differentiate two otherwise identical copies, and LOAD-BEARINGLY so:
     // a Thallid holding 2 spores and one holding 5 are not interchangeable activation sources (one
     // can pop, the other cannot), and folding them would pick a winner among real alternatives.
-    if (p.spore_counters != 0 || p.quest_counters != 0) { return false; }
+    // Under MTG_FOLD_COUNTER_SOURCES that distinction moves into the TAG instead of gating
+    // membership, so UNEQUAL counts still never share a class -- see the note above this function.
+    if (!FoldCounterSourcesOn() && (p.spore_counters != 0 || p.quest_counters != 0))
+    { return false; }
     if (p.temp_haste || p.temp_lifelink || p.exile_at_end) { return false; }
     if (p.chosen_subtype_id != 0) { return false; }
     if (p.is_animated || p.is_token || p.echo_resolved) { return false; }
@@ -7116,6 +7145,15 @@ static int ActivationEquivTag(const GameState& state, const Permanent& src, cons
     mix(static_cast<std::uint64_t>(cost.has_x ? 1 : 0));
     mix(static_cast<std::uint64_t>(cost.x_pips));
     mix(static_cast<std::uint64_t>(src.tapped ? 1 : 0));
+    // The counters PermIsPlainForFold used to refuse outright. Mixed only when the arm is on, so the
+    // shipped tag stream is bit-for-bit what it was (with the arm off these are always 0 anyway,
+    // since the predicate refuses a non-zero count -- but "always 0" and "not mixed" are different
+    // hashes, and an A/B whose control arm moved would measure the wrong thing).
+    if (FoldCounterSourcesOn())
+    {
+        mix(static_cast<std::uint64_t>(src.spore_counters));
+        mix(static_cast<std::uint64_t>(src.quest_counters));
+    }
     const int t = static_cast<int>(h & 0x7fffffff);
     return t == 0 ? 1 : t;   // never collide with "do not fold"
 }
@@ -15820,9 +15858,16 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
                     a.sac_source_id  = src.card.m_number;
                     a.ability_mode   = Action::AbilityMode::SporeSaproling;
                     a.chosen_x       = k;
-                    // No equiv_tag fold: PermIsPlainForFold already refuses a permanent carrying
-                    // spore counters, so two Thallids on different counts can never be pooled.
-                    a.equiv_tag      = 0;
+                    // Interchangeable-source fold, proved from THIS state (see ActivationEquivTag).
+                    // Without MTG_FOLD_COUNTER_SOURCES this is always 0: PermIsPlainForFold refuses
+                    // a permanent carrying spore counters, so two Thallids on DIFFERENT counts can
+                    // never be pooled. With the arm on, the count is part of the tag, so two on the
+                    // SAME count share a class and two on different counts still do not -- and a
+                    // source holding enough counters to emit more than one k drops its class at the
+                    // fold's own source condition, exactly as a multi-ability source does.
+                    a.equiv_tag      = ActivationEquivTag(
+                        state, src, static_cast<const std::string&>(src.card.m_name),
+                        static_cast<int>(Action::AbilityMode::SporeSaproling), ManaCost{}, k);
                     a.cost           = ManaCost{};   // the cost is counters, not mana
                     // Each Saproling is a 1/1 body; the repo's convention scores a created token at
                     // its body value. No direct_damage -- a token is board, not face damage.
