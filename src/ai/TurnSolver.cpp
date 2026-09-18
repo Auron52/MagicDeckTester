@@ -35965,6 +35965,9 @@ inline void MaybeProgress()
                  g_cur_turn.load(), g_cur_cut.load(), g_cur_scanned.load(), g_cur_pre.load(),
                  g_max_pre.load());
     DumpCounters("progress");
+    // Provider certificate decline attribution, if the deck has one. Same argument as the block
+    // above: the counters that matter belong to the game that never reaches exit.
+    FungusCertReasonReport();
 }
 struct Dumper
 {

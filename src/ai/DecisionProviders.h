@@ -1355,6 +1355,40 @@ public:
     }
 };
 
+// Fungus (Thallid / Saproling spore-token swarm). EXISTS FOR ONE HOOK: the winless certificate.
+//
+// The deck was deliberately routed to GenericProvider -- "Fungus has no measured deck heuristic to
+// hold yet" -- and that is still true of every JUDGEMENT hook. But `ProvenWinlessThisTurn` is not a
+// judgement, it is the one hook on the interface whose contract is a PROOF, and routing a deck to
+// Generic silently gives it the no-certificate path (the generic is `return false`). Measured cost
+// of that on the label path (docs/design/fungus-token-search-cost.md, ROOT CAUSE #3):
+//
+//     WINLESS CERT[m1]: checks=13212 fired=0 (0.0%)
+//     CERT scope: plans all=873680 label=866773 edge=811799     <- 93.7% of plans at EDGE nodes
+//     WINLESS SEED:    tries=15809 wins=3 (0.0%)                <- and they are 99.98% no-win
+//
+// So the labeller proved "no win on turn 7" by applying 300-1,100 plans at each of 13,209 nodes.
+// This is the same shape the Snow certificate was built for (Snow: 92.5% edge plans, 7 winnable of
+// 6,943) and the deck is, if anything, a cleaner case -- see the implementation's contract block.
+//
+// EVERYTHING ELSE IS INHERITED. Only Name() and the certificate are overridden, so every heuristic
+// this deck plays with is byte-for-byte the Generic one it played with before.
+// Decline attribution for the certificate below (MTG_WINLESS_STATS). Printed at exit AND on each
+// [progress] tick -- a straggler that never exits is exactly the game whose declines you need to
+// read, which is the same reason winlesscert's own counters grew a periodic dump.
+void FungusCertReasonReport();
+
+class FungusProvider : public GenericProvider
+{
+public:
+    const char* Name() const override { return "Fungus"; }
+    // Callers use it ONLY where the search is unbounded (the offline label ladder / unbounded
+    // depth-matrix cells), so it cannot change play -- see TurnSolver's WinlessCertificateActive.
+    // A correct certificate leaves LABELS identical too: it declines only lines that provably
+    // cannot win this turn. Gated by MTG_FUNGUS_CERT for the A/B.
+    bool ProvenWinlessThisTurn(const GameState& s, int controller) const override;
+};
+
 // CritterLifegain (mono-white "whenever you gain life" aggro: Soul Warden / Soul's Attendant /
 // Auriok Champion feeding Ajani's Pridemate / Voice of the Blessed / Archangel of Thune / Heliod,
 // Sun-Crowned, with Ajani, Strength of the Pride x3). Exists FIRST for routing correctness:

@@ -613,3 +613,137 @@ each. `MTG_DUMP_VALUE_ROWS` is written by all workers into one file with no orde
 Compare label dumps **sorted**. A raw byte compare on a multi-threaded dump manufactures a play
 change out of nothing, which is expensive in exactly the wrong direction: it makes a lossless
 change look lossy and invites someone to "fix" a correct mechanism.
+
+---
+
+## BUILT, 2026-09-18: `FungusProvider::ProvenWinlessThisTurn`
+
+The item promoted in the section above is now implemented (`src/ai/DecisionProviders.{h,cpp}`),
+behind `MTG_FUNGUS_CERT` (**default OFF** -- see "The default question" below). This section records
+what it proves, what it measured, and where the remaining looseness is, so the next tightening is
+aimed rather than guessed.
+
+### Why Fungus had no certificate at all
+
+`ProvenWinlessThisTurn` is a `DecisionProvider` hook. The generic implementation is `return false`
+-- "I cannot prove anything" -- and before this change only `EldraziFlickerProvider` and
+`SnowProvider` overrode it. Fungus routed to `GenericProvider`:
+
+```cpp
+if (fungus)      { return g_generic; }   // before
+if (fungus)      { return g_fungus; }    // after
+```
+
+That routing line was written for *heuristics* -- Fungus wanted none of Snow's play preferences, so
+it took the generic provider and with it, silently, the generic **proof**. This is worth naming as a
+trap for every future deck: **the provider table couples judgement and proof, and they have opposite
+defaults.** Declining to supply a heuristic costs nothing; inheriting `return false` for a
+certificate costs the entire horizon-edge saving. A deck that opts out of provider heuristics should
+still be asked whether it can prove a winless turn.
+
+### The contract, and why this deck is provable
+
+The hook's bar is one-sided and unforgiving: it may **over-credit** the player's reach and decline,
+but it may never **under-credit**, because a false positive silently converts a win into a loss.
+Fungus is provable because four facts hold across its whole pool, each checked by reading
+`src/cards/data/cards.json` rather than from memory:
+
+1. **Combat is the only route to the opponent's life.** No burn, no drain, no mill kill.
+2. **Nothing grants haste**, so this turn's attackers are exactly what `CanAttackFull` reports *now*
+   -- a token created later this turn can never attack this turn.
+3. **Nothing untaps**, so an already-tapped body is spent.
+4. Only two effects can grow the team after the function looks: **Sporecrown Thallid** (the pool's
+   only lord, `+1/+1` to other Fungi/Saprolings) and **Beastmaster Ascension** (`+5/+5` at seven
+   quest counters, one counter per *declared attacker*, doubled by Doubling Season -- and the
+   counters land in the declare-attackers step, so a wide enough attack switches the anthem on
+   during its own combat).
+
+So the bound is `base_damage + attackers x (lords + anthem)`, and the certificate fires only when
+that is strictly below the opponent's life. Blockers are ignored (they only reduce damage), and
+`lords` is applied to every attacker rather than only the Fungus/Saproling ones it really pumps --
+both over-credits, the admissible direction.
+
+### THE INVARIANT: the whitelist is by NAME, and it is load-bearing
+
+`FungusCertKnownDef` checks the card's **name** against the fourteen mainboard cards, and every zone
+that can reach play this turn is walked against it -- hand, battlefield (both sides), graveyard, and
+the library when a draw outlet is live. An unrecognised card **declines**.
+
+This is deliberate and must not be "improved" into a params-shaped test. The property it buys is
+that **adding a card to the deck can make the labeller slower; it can never make it wrong.** A
+params-shaped test would instead silently mis-price the first card whose reach is expressed by a
+param the certificate does not read -- which is the exact failure mode that turns a proof into a
+guess. The cost of the name list is that it must be edited when the decklist changes; that cost is
+the point.
+
+Two `d == nullptr` branches are load-bearing in the other direction: a definition-less permanent or
+graveyard entry is one of **our own Saproling tokens**, not an unknown card. The same missing
+definition that puts it on that branch is what guarantees it carries no params and hence no ability.
+
+### Measured: 8 label games, `--threads 8`
+
+| | `MTG_FUNGUS_CERT=0` | `MTG_FUNGUS_CERT=1` |
+|---|---|---|
+| `WINLESS CERT[m1]` | `checks=37253 fired=0` (**0.0%**) | `checks=37253 fired=30050` (**80.7%**) |
+| `units_total` | 2,910,912 | 1,645,239 (**1.77x**) |
+| wall, 2 reps | 11.28 s / 11.24 s | 7.35 s / 7.24 s (**1.55x**) |
+| label rows | 47 | 47, **identical content**, avg 5.8750 both arms |
+| `MTG_WINLESS_AUDIT` | -- | 30,050 certified nodes probed, **violations=0** |
+
+`MTG_WINLESS_AUDIT` is the falsification harness, and it is the only number in this table that
+speaks to *correctness*: it runs the win-seed even at nodes the certificate cut, so a seeded win
+there is a recorded violation. Zero on 30,050 nodes is evidence, not proof -- the proof is the
+contract above.
+
+### Declines are ATTRIBUTED, because the last two tightenings came from the tally
+
+`FungusWhy` tallies every decline by reason and `FungusCertReasonReport()` prints it at exit **and on
+every `[progress]` tick** -- a straggler that never exits is exactly the game whose declines you need
+to read. Both tightenings this buys were diagnosed, not guessed:
+
+* `unknown-card=7,656` -- the largest class at first. `MTG_FUNGUS_CERT_TRACE` named it in one line:
+  `1/1 Saproling Token`, in the **graveyard**. The deck sacrifices Saprolings all game, so its own
+  dead tokens were being read as unrecognised cards. Fixed by the `d == nullptr` skip. **Now 0.**
+* `library-reachable=17,004` -- my own blanket decline the moment a Psychotrope Thallid was on the
+  battlefield, on the grounds that the library becomes reachable. Replaced by a **fodder-bounded
+  library walk**: at most `fodder` cards can be drawn, so at most that many library lords can
+  arrive. **Now 0.**
+
+After both: `fired=36,611 combat-lethal=14,907`, with every other class at zero.
+
+### Where the remaining looseness is -- the aimed next step
+
+`combat-lethal` is the only surviving decline class, so the next tightening is entirely a question of
+making the damage bound tighter without making it unsound. Three named over-credits, in the order
+they are likely to bite:
+
+1. **A Saproling is counted as an attacker AND as sac fodder simultaneously.** This is the sharpest
+   one, and it is not a mana question. Both of the deck's outlets eat Saprolings
+   (`sac_creature_requires_subtype: "Saproling"`), so a body spent to find a Beastmaster Ascension
+   cannot also be attacking with it. The joint bound is "attack with `n - k` while drawing `k`",
+   maximised over `k`, instead of today's "attack with `n` *and* draw `n`".
+2. **`fodder` counts every creature, not just Saprolings.** The outlets require the subtype, so the
+   deck's Fungi (Thallid, Sporesower, Utopia Mycon, Mycoloth, ...) are not fodder for either. Sound
+   but loose, and cheap to fix.
+3. **Hand cards are credited as cast for free.** The analogue of `SnowCertGainBound`. Note that
+   Fungus makes this weaker than it looks: **Utopia Mycon** is "Sacrifice a Saproling: Add one mana
+   of any color" with *no* mana cost, so every Saproling is also a mana, and a naive "untapped lands"
+   bound would be badly wrong. A mana bound here must be a joint Saproling budget -- which is the
+   same budget item 1 is about, so the two should be built together or not at all.
+
+The straggler (`--seed 901762 --game-index 12`) is the case that shows why this matters: its fire
+rate **falls from 80.7% to ~67% as the board widens**, and every one of its declines is
+`combat-lethal`. Once the board is wide enough that seven attackers is automatic, the Ascension term
+alone reads as lethal and the certificate stops paying. **That game is still enormous with the
+certificate on** -- 53M `ApplyPlanDirect` calls and climbing at 19 minutes -- so the certificate
+should be reported as a large constant-factor win on typical label games, **not** as the fix for the
+worst straggler.
+
+### The default question (open)
+
+`MTG_FUNGUS_CERT` ships **OFF**. Snow's equivalent ships ON, but it was adopted on a wider base:
+18 games / 123 label rows, against this certificate's 8 games / 47 rows. The gate for flipping the
+default is a wider label set (~24 games) with `MTG_WINLESS_AUDIT` armed and violations still zero.
+Play is unaffected either way -- the hook is consulted only where the search is unbounded (the label
+ladder and unbounded depth-matrix cells, via `WinlessCertificateActive`), so it cannot change play;
+the Fungus play-invariance check exists to hold the *routing* change to that claim.

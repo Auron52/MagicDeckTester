@@ -9626,6 +9626,7 @@ namespace
     const MinotaurProvider       g_minotaur;
     const DragonsProvider        g_dragons;
     const SnowProvider           g_snow;
+    const FungusProvider         g_fungus;
     const CritterLifegainProvider g_critter;
     const FluctuatorProvider     g_fluctuator;
     const AurasProvider          g_auras;
@@ -9984,7 +9985,12 @@ const DecisionProvider& DetectDecisionProvider(const Decklist& deck)
     // that signature. That is no longer true -- the term was removed from the signature rather
     // than worked around here (see the eldrazi flag above), which fixes it for every deck instead
     // of this one. The ordering is kept because the goblin reason stands on its own.
-    if (fungus)      { return g_generic; }
+    // Was g_generic until the label measurement gave this deck a hook worth holding. FungusProvider
+    // is GenericProvider plus ONE override -- ProvenWinlessThisTurn -- so every judgement hook is
+    // still byte-for-byte the Generic one, and with MTG_FUNGUS_CERT off the two are indistinguishable
+    // apart from Name(). The certificate is consulted only where the search is unbounded (the label
+    // ladder), so it cannot change play at all. See FungusProvider's declaration for the 93.7%.
+    if (fungus)      { return g_fungus; }
     if (eldrazi)     { return g_eldrazi_flicker; }
     if (dragonstorm) { return g_dragonstorm; }
     if (hinata) { return g_hinata; }
@@ -19500,6 +19506,321 @@ bool SnowProvider::ProvenWinlessThisTurn(const GameState& s, int me) const
         return SnowNote(SnowWhy::CombatLethal, false);
     }
     return SnowNote(SnowWhy::Fired, true);
+}
+
+// ============================ FUNGUS WINLESS CERTIFICATE ====================================
+//
+// Same contract as SnowProvider::ProvenWinlessThisTurn: return true ONLY when no legal sequence of
+// plays can win the game for `me` this turn. A false positive silently converts a win into a loss,
+// so every term below over-credits the player and every unrecognised thing DECLINES.
+//
+// WHY THIS DECK IS A CLEAN CASE (read the pool before trusting any of it --
+// decks/Fungus/Fungus.cod is 14 distinct mainboard cards):
+//
+//   * COMBAT IS THE ONLY ROUTE to the opponent's life total. Nothing in the pool deals damage,
+//     drains, mills or poisons. Utopia Mycon makes mana, Psychotrope Thallid draws, Essence Warden
+//     gains OUR life, Spore Flower (sideboard) prevents damage. None of those can kill.
+//   * NOTHING GRANTS HASTE. Every token the deck makes -- spore pops, Tukatongue's death trigger,
+//     Mycoloth's upkeep, all doubled by Doubling Season -- arrives summoning-sick and cannot attack
+//     the turn it is created. So this turn's attackers are exactly the creatures that can attack
+//     RIGHT NOW, and `CanAttackFull` is the whole test.
+//   * NOTHING UNTAPS. A creature tapped for mana stays tapped, so it cannot be brought back.
+//
+// That leaves exactly TWO ways damage can still grow after this function looks:
+//
+//   1. SPORECROWN THALLID, the pool's only lord (+1/+1 to each OTHER Fungus or Saproling). One
+//      cast from hand pumps the whole attacking team immediately.
+//   2. BEASTMASTER ASCENSION, the pool's only anthem and the deck's stated win condition: at seven
+//      quest counters, creatures you control get +5/+5. Counters land one per DECLARED attacker,
+//      so a wide enough attack switches it on IN THE SAME COMBAT -- and Doubling Season doubles
+//      each counter placed, which halves the attackers needed.
+//
+// Both are credited below, generously: the lord bonus is applied to EVERY attacker (including
+// non-Fungus creatures it does not actually pump, and the Sporecrown itself, which it excludes),
+// and mana is ignored entirely -- every copy in hand is assumed cast for free.
+//
+// THE LIBRARY IS THE ONE HOLE, and it is closed by declining. Psychotrope Thallid ({1}, Sacrifice a
+// Saproling: Draw a card) is the only card in the pool that reaches the library, and a drawn
+// Sporecrown or Ascension would invalidate the hand-only pool bound. Rather than price it, this
+// declines outright whenever one is on the battlefield -- it is a 1-of.
+//
+// THE INVARIANT THAT KEEPS ALL OF THIS TRUE UNDER A DECKLIST CHANGE: the whitelist is by NAME and
+// every zone that can reach play is walked against it. A card added to the deck is unknown, so the
+// certificate declines instead of reasoning about it. Adding a card can therefore make the labeller
+// SLOWER; it cannot make it wrong. (Same property as SnowCertKnownDef -- and the reason neither
+// whitelist may be replaced by a params-shaped test.)
+namespace
+{
+enum class FungusWhy { Fired = 0, AlreadyWon, OppDeckThin, Zones, UnknownCard, OppPermanent,
+                       LibraryReachable, CombatLethal, Count };
+inline std::atomic<unsigned long long> g_fungus_why[static_cast<int>(FungusWhy::Count)] = {};
+
+// MTG_FUNGUS_CERT -- the A/B gate. OFF here means FungusProvider is byte-for-byte GenericProvider.
+inline bool FungusCertOn()
+{
+    static const bool v = EnvOn("MTG_FUNGUS_CERT");
+    return v;
+}
+inline bool FungusCertStatsOn()
+{
+    static const bool v = EnvOn("MTG_WINLESS_STATS");
+    return v;
+}
+inline bool FungusNote(FungusWhy w, bool r)
+{
+    if (FungusCertStatsOn())
+    { g_fungus_why[static_cast<int>(w)].fetch_add(1, std::memory_order_relaxed); }
+    return r;
+}
+
+// The pool this analysis has actually reasoned about: decks/Fungus/Fungus.cod, main + side.
+// Memoised per CardDefinition* exactly like SnowCertKnownDef -- this runs at every edge node.
+bool FungusCertKnownDef(const CardDefinition* d)
+{
+    if (d == nullptr) { return false; }
+    static thread_local std::unordered_map<const CardDefinition*, char> memo;
+    const auto it = memo.find(d);
+    if (it != memo.end()) { return it->second != 0; }
+    static const std::set<std::string> kPool = {
+        // main deck (decks/Fungus/Fungus.cod)
+        "Thallid", "Thallid Shell-Dweller", "Sporesower Thallid", "Sporecrown Thallid",
+        "Tukatongue Thallid", "Psychotrope Thallid", "Utopia Mycon", "Mycoloth",
+        "Doubling Season", "Beastmaster Ascension", "Wild Growth", "Essence Warden",
+        "Forest", "Simic Growth Chamber",
+        // sideboard. Spore Flower is a DAMAGE PREVENTER and is not in cards.json at all, so a copy
+        // in hand looks up to nullptr and declines on that path anyway; named here so that adding
+        // it to the database later does not silently change this function's reach.
+        "Spore Flower",
+    };
+    const bool known = kPool.count(d->card.m_name.str()) != 0;
+    memo.emplace(d, known ? 1 : 0);
+    return known;
+}
+
+// MTG_FUNGUS_CERT_TRACE -- name the cards that cause an `unknown-card` decline. A decline class
+// with 7,656 members is only actionable once you know WHICH card it is; guessing is how a whitelist
+// grows a wrong entry. One line per distinct name, first sighting only.
+void FungusUnknownTrace(const char* zone, const Card& c)
+{
+    static const bool on = EnvOn("MTG_FUNGUS_CERT_TRACE");
+    if (!on) { return; }
+    static std::mutex mu;
+    static std::set<std::string> seen;
+    const std::string n = c.m_name.str();
+    std::lock_guard<std::mutex> lk(mu);
+    if (!seen.insert(zone + std::string("|") + n).second) { return; }
+    std::fprintf(stderr, "=== FUNGUS CERT unknown card: zone=%s name=\"%s\" ===\n",
+                 zone, n.c_str());
+}
+
+}   // namespace
+
+// Decline attribution (MTG_WINLESS_STATS). Every decline hands the node back to a full unbounded
+// enumeration, so WHICH term declined is the only thing that says where the next tightening goes --
+// a bare fire rate cannot. Same shape as SNOW WINLESS CERT reasons, but reachable by name so the
+// [progress] tick can print it too: a straggler that never exits is exactly the game whose declines
+// you need to read.
+void FungusCertReasonReport()
+{
+    if (!FungusCertStatsOn()) { return; }
+    static const char* kName[] = { "fired", "already-won", "opp-deck-thin", "zones",
+                                   "unknown-card", "opp-permanent", "library-reachable",
+                                   "combat-lethal" };
+    bool any = false;
+    for (int i = 0; i < static_cast<int>(FungusWhy::Count); ++i)
+    { if (g_fungus_why[i].load()) { any = true; break; } }
+    if (!any) { return; }
+    std::fprintf(stderr, "=== FUNGUS WINLESS CERT reasons:");
+    for (int i = 0; i < static_cast<int>(FungusWhy::Count); ++i)
+    {
+        const unsigned long long v = g_fungus_why[i].load();
+        if (v) { std::fprintf(stderr, " %s=%llu", kName[i], v); }
+    }
+    std::fprintf(stderr, " ===\n");
+}
+
+// Exit-time twin of the above (the periodic tick only runs under MTG_WINLESS_STATS_EVERY).
+namespace { struct FungusWhyDumper { ~FungusWhyDumper() { FungusCertReasonReport(); } };
+            FungusWhyDumper g_fungus_why_dumper; }
+
+bool FungusProvider::ProvenWinlessThisTurn(const GameState& s, int me) const
+{
+    if (!FungusCertOn())  { return false; }
+    if (me < 0 || me > 1) { return false; }
+    const Player& ap  = s.players[me];
+    const Player& opp = s.players[1 - me];
+
+    // Never claim a winless turn on a board the caller is about to score as a win, and never one
+    // where the opponent's own draw could deck them without a play of ours.
+    if (opp.life <= 0 || s.opponent_decked)                  { return FungusNote(FungusWhy::AlreadyWon, false); }
+    if (opp.poison_counters > 0)                             { return FungusNote(FungusWhy::AlreadyWon, false); }
+    if (s.opponent_library_dealt && opp.library.size() <= 1) { return FungusNote(FungusWhy::OppDeckThin, false); }
+    // Zones this analysis does not model at all.
+    if (!ap.staged_cards.empty() || !ap.suspended_cards.empty())
+    { return FungusNote(FungusWhy::Zones, false); }
+
+    const CardDatabase& db = CardDatabase::Instance();
+
+    // Every zone a card could reach play from this turn. The LIBRARY is handled separately (see the
+    // Psychotrope decline below) rather than walked: it is 40+ cards at every edge node.
+    for (const Card& c : ap.hand)
+    { if (!FungusCertKnownDef(db.LookupCached(c)))
+      { FungusUnknownTrace("hand", c); return FungusNote(FungusWhy::UnknownCard, false); } }
+    // The graveyard is not a playable zone for this pool -- no recursion, no flashback, no escape.
+    // Walked anyway so that an unrecognised card sitting there declines rather than being assumed
+    // inert, which is the same posture the hand takes.
+    for (const Card& c : ap.graveyard)
+    {
+        const CardDefinition* d = db.LookupCached(c);
+        // A definition-less graveyard entry is one of OUR DEAD TOKENS -- this deck sacrifices
+        // Saprolings for mana all game, so they pile up there. It is not an unrecognised card:
+        // the same `d == nullptr` that puts it on this branch is what guarantees it carries no
+        // params and therefore no ability, and no card in the pool plays from the graveyard in the
+        // first place. (Measured: this alone was 7,656 of the declines on the 8-game label block --
+        // MTG_FUNGUS_CERT_TRACE named it `1/1 Saproling Token`.)
+        if (d == nullptr) { continue; }
+        if (!FungusCertKnownDef(d))
+        { FungusUnknownTrace("graveyard", c); return FungusNote(FungusWhy::UnknownCard, false); }
+    }
+
+    long long attackers    = 0;   // creatures that can attack RIGHT NOW (nothing gains haste)
+    long long base_damage  = 0;   // ...and their power before lord / anthem terms
+    long long lords        = 0;   // Sporecrown Thallid, battlefield + hand
+    int       ba_best      = 0;   // most quest counters on one of our Ascensions
+    bool      ba_reachable = false;
+    bool      doubling     = false;
+    int       ba_threshold = 0, ba_power = 0, ba_per_attacker = 0;
+    bool      draw_outlet  = false;   // a live "sacrifice a Saproling: draw" outlet
+    long long fodder       = 0;       // creatures it could eat, i.e. an upper bound on DRAWS
+
+    for (const Permanent& p : s.battlefield)
+    {
+        const CardDefinition* d = db.LookupCached(p.card);
+        if (p.controller_index != me)
+        {
+            // The opponent's side can only REDUCE our damage (blockers), which is the safe
+            // direction for an upper bound -- so their definition-less tokens are fine to ignore.
+            // A definition-carrying opponent permanent outside the pool is not.
+            if (d != nullptr && !FungusCertKnownDef(d))
+            { return FungusNote(FungusWhy::OppPermanent, false); }
+            continue;
+        }
+        if (d == nullptr)
+        {
+            // One of OUR permanents with no definition is a TOKEN, and every token this deck can
+            // make is a vanilla 1/1 green Saproling -- the same `d == nullptr` that licenses this
+            // branch is what guarantees it carries no params, hence no ability. Its body is its
+            // only reach, so bound it rather than bail (this is the common case on a token board:
+            // bailing here would make the certificate useless on exactly the deck it is for).
+            ++fodder;   // every token this deck makes is a Saproling, hence draw fuel
+            if (CanAttackFull(p, s.battlefield, me))
+            { ++attackers; base_damage += std::max(0, p.EffectivePower()); }
+            continue;
+        }
+        if (!FungusCertKnownDef(d)) { return FungusNote(FungusWhy::UnknownCard, false); }
+
+        const CardParams& q = d->params;
+        // The library becomes reachable the moment a draw outlet is on the battlefield (Psychotrope
+        // Thallid, "{1}, Sacrifice a Saproling: Draw a card" -- the pool's ONLY route to it). Noted
+        // here and BOUNDED below rather than declined: declining on its presence alone was 17,004
+        // of the declines on the 8-game label block, the largest class by a wide margin.
+        if (q.sac_creature_outlet && q.sac_outlet_draw > 0) { draw_outlet = true; }
+        if (q.doubles_counters) { doubling = true; }
+        if (q.quest_anthem_threshold > 0)
+        {
+            ba_reachable    = true;
+            ba_best         = std::max(ba_best, p.quest_counters);
+            ba_threshold    = std::max(ba_threshold, q.quest_anthem_threshold);
+            ba_power        = std::max(ba_power, q.quest_anthem_power);
+            ba_per_attacker = std::max(ba_per_attacker, q.quest_counter_per_attacker);
+        }
+        // The pool's only lord is Sporecrown Thallid; IsLordPermanent is used rather than a
+        // name so that a lord added to the pool is priced instead of ignored.
+        if (IsLordPermanent(*d)) { lords += std::max(0, q.power_bonus); }
+
+        if (p.card.IsCreature() || p.is_animated)
+        {
+            // Over-credit the fodder count: a nontoken creature is only Saproling fodder if it IS a
+            // Saproling, and counting every creature can only raise the draw bound.
+            ++fodder;
+            if (!CanAttackFull(p, s.battlefield, me)) { continue; }
+            ++attackers;
+            base_damage += std::max(0, p.EffectivePower());
+        }
+    }
+
+    // THE LIBRARY TERM. With a draw outlet live, the hand is no longer the whole pool: a drawn
+    // Sporecrown or Ascension would grow the team after this function looked. Bound it instead of
+    // declining -- draws are capped by the fodder the outlet has to eat, and a drawn card can only
+    // matter if it is one of those two. Deliberately loose in three places (the sacrificed bodies
+    // are still counted as attackers above, mana for the {1} activations is ignored, and a draw
+    // spent on the Ascension is also allowed to be a Sporecrown), all in the over-crediting
+    // direction. Paid only on this path, and only when there is fodder to pay with.
+    if (draw_outlet && fodder > 0)
+    {
+        long long lib_lords = 0;
+        for (const Card& c : ap.library)
+        {
+            const CardDefinition* d = db.LookupCached(c);
+            if (d == nullptr) { continue; }   // no definition, no ability (see the graveyard note)
+            if (!FungusCertKnownDef(d))
+            { FungusUnknownTrace("library", c); return FungusNote(FungusWhy::UnknownCard, false); }
+            const CardParams& q = d->params;
+            if (q.doubles_counters) { doubling = true; }
+            if (q.quest_anthem_threshold > 0)
+            {
+                ba_reachable    = true;
+                ba_threshold    = std::max(ba_threshold, q.quest_anthem_threshold);
+                ba_power        = std::max(ba_power, q.quest_anthem_power);
+                ba_per_attacker = std::max(ba_per_attacker, q.quest_counter_per_attacker);
+            }
+            if (IsLordPermanent(*d)) { lib_lords += std::max(0, q.power_bonus); }
+        }
+        // At most `fodder` cards can be drawn, so at most that many of the library's lords can
+        // arrive. Taking the largest-first is exact for "most bonus within a draw budget"; this
+        // approximates it upward by using the running sum capped at the same count.
+        lords += std::min(lib_lords, fodder);
+    }
+
+    // Hand copies of the two cards that can still grow the team AFTER this function looks. Mana is
+    // deliberately ignored: crediting every copy as cast for free can only widen the bound.
+    for (const Card& c : ap.hand)
+    {
+        const CardDefinition* d = db.LookupCached(c);
+        if (d == nullptr) { continue; }   // unreachable: the hand walk above already declined
+        const CardParams& q = d->params;
+        if (q.doubles_counters) { doubling = true; }
+        if (q.quest_anthem_threshold > 0)
+        {
+            ba_reachable    = true;
+            ba_threshold    = std::max(ba_threshold, q.quest_anthem_threshold);
+            ba_power        = std::max(ba_power, q.quest_anthem_power);
+            ba_per_attacker = std::max(ba_per_attacker, q.quest_counter_per_attacker);
+        }
+        // The pool's only lord is Sporecrown Thallid; IsLordPermanent is used rather than a
+        // name so that a lord added to the pool is priced instead of ignored.
+        if (IsLordPermanent(*d)) { lords += std::max(0, q.power_bonus); }
+    }
+
+    // THE ANTHEM TERM. Counters land one per DECLARED attacker (doubled by Doubling Season), and
+    // the static is checked continuously, so a wide enough attack switches it on during its own
+    // combat. Credited whenever the arithmetic reaches the threshold -- it does not ask whether the
+    // "you may" trigger would be taken, nor whether the Ascension in hand is castable.
+    long long anthem = 0;
+    if (ba_reachable && ba_power > 0 && ba_threshold > 0)
+    {
+        const long long per  = std::max(1, ba_per_attacker) * (doubling ? 2 : 1);
+        const long long gain = attackers * per;
+        if (static_cast<long long>(ba_best) + gain >= ba_threshold) { anthem = ba_power; }
+    }
+
+    // Blockers are ignored (they can only reduce damage), trample is absent from the pool, and
+    // `lords` is applied to every attacker rather than only to the Fungus/Saproling ones it really
+    // pumps. All three are over-credits, which is the only admissible direction here.
+    const long long combat = base_damage + attackers * (lords + anthem);
+
+    if (combat >= opp.life) { return FungusNote(FungusWhy::CombatLethal, false); }
+    return FungusNote(FungusWhy::Fired, true);
 }
 
 // WHICH creature to blink. Unnarrowed this is "every creature on the board", and across two or
