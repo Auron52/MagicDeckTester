@@ -370,6 +370,13 @@ static std::atomic<long long> g_bp_condemn_seen{0};
 static std::atomic<long long> g_bp_condemn_drops{0};
 static std::atomic<long long> g_bp_condemn_drops_greedy{0};
 static std::atomic<long long> g_bp_condemn_drops_exec{0};
+// DROP-MODE firing counters (MTG_BP_CONDEMN_DROP_MODE; see BpCondemnDropMode). Modes 1 and 2 both
+// look like condemnation-OFF from the outside, so without these a silently inert arm is
+// indistinguishable from a working one that happens to be cheap.
+static int BpCondemnDropMode();                          // defined with the mode's documentation
+static std::atomic<long long> g_bp_condemn_emitted{0};  // condemned candidates offered anyway (1, 2)
+static std::atomic<long long> g_bp_demote_lists{0};      // continuation lists holding a condemned name
+static std::atomic<long long> g_bp_demote_plans{0};      // entries actually moved to the back
 // WHY-NOT histogram (MTG_BP_CONDEMN_WHYNOT). Each consultation that did not drop is charged to its
 // FIRST blocking gate, which turns "what is condemnation's ceiling?" from a trial-and-error
 // question into a read: g_wn_peer is what a FINER CAST ORDER could still recover (two cards at one
@@ -837,6 +844,38 @@ namespace
                       << " rollout=" << (bg - be)
                       << " rollout_frac=" << (bd ? static_cast<double>(bg - be) / bd : 0.0)
                       << ")\n";
+            // DROP MODE FIRING COUNTERS (see BpCondemnDropMode). A lever with no firing counter
+            // reads as "no effect" when it is really a no-op, which is this feature's established
+            // bug signature -- and modes 1/2 are especially exposed to it, because both LOOK like
+            // condemnation-off from the outside (identical play, near-identical work) whether they
+            // are working or silently inert. So each prints what it actually did:
+            //   COUNT_ONLY -- drops>0 with emitted==drops is the whole assertion: every condemned
+            //                 candidate was counted AND offered anyway.
+            //   DEMOTE     -- lists>0 AND plans>0. `lists` counts continuation lists that held at
+            //                 least one condemned name, `plans` the entries actually moved to the
+            //                 back. plans==0 with lists>0 means the demote PREDICATE never matched a
+            //                 plan -- i.e. the name never appeared in any continuation -- which is
+            //                 an inert arm dressed as a working one, not a cheap condemnation.
+            const int dmode = BpCondemnDropMode();
+            if (dmode != 0 || g_bp_demote_plans.load() > 0 || g_bp_condemn_emitted.load() > 0)
+            {
+                std::cerr << "[rollout-stats] bp_drop_mode=" << dmode
+                          << (dmode == 0 ? " (DELETE)" : dmode == 1 ? " (COUNT_ONLY)"
+                                                       : dmode == 2 ? " (DEMOTE)" : " (UNKNOWN)")
+                          << " emitted_anyway=" << g_bp_condemn_emitted.load()
+                          << " demote_lists=" << g_bp_demote_lists.load()
+                          << " demote_plans=" << g_bp_demote_plans.load() << "\n";
+                if (dmode == 1 && g_bp_condemn_emitted.load() != bd)
+                {
+                    std::cerr << "  WARNING -- COUNT_ONLY emitted " << g_bp_condemn_emitted.load()
+                              << " but counted " << bd << " drops; they must be EQUAL.\n";
+                }
+                if (dmode == 2 && g_bp_demote_plans.load() == 0)
+                {
+                    std::cerr << "  NO POWER -- DEMOTE never moved a plan. Any work delta below is"
+                                 " NOT the demotion.\n";
+                }
+            }
             // Gated on the env read OR on any observed activity, so a per-job heurarm arm that turns
             // the rule on inside a pooled batch still reports.
             static const bool s_ap_dump = EnvOn("MTG_BP_CONDEMN_ALLPATHS");
@@ -2005,6 +2044,49 @@ static bool BpCondemnAllPathsEnabled()
     static const bool on = EnvOn("MTG_BP_CONDEMN_ALLPATHS");   // DEFAULT OFF until measured
     return heurarm::Flag(heurarm::BP_CONDEMN_ALLPATHS, on);
 }
+
+// ---- WHAT A CONDEMNATION *DOES* (MTG_BP_CONDEMN_DROP_MODE) ------------------------------------
+// The filter has always had exactly one response to a condemned candidate: delete it from the
+// enumeration. These are the other two, and they exist because deletion MISSES THE USER'S BAR.
+//
+// THE BAR (USER 2026-09-17): *"There should be no additional misses if implemented correctly ... We
+// should miss exactly where baseline misses and hit otherwise. Our only extra work is checking
+// condemnation status and deciding what we need to implement ... It is possible for us to do less
+// work if there are lines we never run. That part is the upside of the condemnation design, but
+// there should be none the other way."*
+//
+// MEASURED AGAINST IT (Snow, 10 games, d2/b0, SNAPSHOT_NONE both arms, play byte-identical):
+// lookups +17.63%, misses +17.83%, wave slots +18.25%, scored applies +17.94%, units +14.70% -- on
+// 0.45% FEWER distinct states. So the filtered search is not exploring a SUBTREE of baseline's; it
+// re-expands the same ground. ~47 units of extra work per drop.
+//
+// THE MECHANISM, and why each mode isolates a piece of it. Deleting a candidate that carries value
+// lowers the node's best value, which WEAKENS THE BOUND, which lets siblings expand that baseline
+// cut off. Corroborated by where the drops are: `searched=125,164 exec=0 rollout=0` -- every Snow
+// drop is in the searched space, exactly where a bound exists to weaken.
+//
+//   0  DELETE     (default, the shipped behaviour) -- the candidate is not emitted.
+//   1  COUNT_ONLY -- run the whole condemnation test, count the drop, then EMIT anyway. This is the
+//                    user's own decomposition made measurable: everything except "deciding what we
+//                    need to implement". It is the CONTROL that separates the cost of CHECKING
+//                    (which the bar allows) from the cost of DROPPING (which it does not). Play must
+//                    stay byte-identical to condemnation-off, and any work delta is the check alone.
+//   2  DEMOTE     -- emit the candidate, and rank every continuation that casts it LAST (see
+//                    BpDemoteCondemnedPlans). The list keeps BASELINE'S LENGTH, so no rank
+//                    compaction: with W=2 against a mean list of 6.69, deletion promotes a rank-2
+//                    entry into a width-2 window, which is condemnation acting as a RE-RANKER in a
+//                    prune's clothes. Demotion makes that explicit and, unlike deletion, leaves the
+//                    demoted line REACHABLE by a later deferred wave -- so it is also the shape that
+//                    answers the exclusive-slot soundness defect (a deleted line no sibling covers).
+static int BpCondemnDropMode()
+{
+    static const int v = EnvInt("MTG_BP_CONDEMN_DROP_MODE", 0);
+    return v;
+}
+// Names condemned during the enumeration in flight, for DEMOTE. Saved/cleared/restored around each
+// derivation by BpEnumEntryFor (a nested derivation must not eat the outer one's set), so it is
+// empty outside one -- every other caller's behaviour stands unchanged.
+static thread_local std::vector<std::uint64_t> t_bp_condemned_names;
 // The effective "some line reaching this state cast nothing" bit for the enumeration in flight.
 // Bound by BpEnumEntryFor around the derivation (and folded into the key by BpEnumBuildKey, so a
 // state served under a set bit never shares an entry with one served under a clear bit). False
@@ -11379,12 +11461,33 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
                             { g_bp_condemn_drops_exec.fetch_add(1, std::memory_order_relaxed); }
                         }
                     }
-                    // TRUNC-DEMOTION (audit §6.1): a SEARCHED-space drop deletes a candidate this
-                    // enumeration would otherwise offer, so no enclosing no-win over this subtree
-                    // is a complete refutation. Rollout/executor drops are playout-layer policy
-                    // (scope ruling 2026-09-02) and do not demote.
-                    if (g_search_candidate_enum && TruncCompleteEnabled()) { ++g_fs_trunc_events; }
-                    continue;
+                    // WHAT THE CONDEMNATION DOES -- see BpCondemnDropMode for the bar this exists to
+                    // test. Mode 0 (default) deletes, exactly as before. Modes 1 and 2 fall THROUGH
+                    // to the emission below, so the candidate is still offered; 2 additionally
+                    // records the name so the continuation list can rank it last.
+                    const int drop_mode = BpCondemnDropMode();
+                    if (drop_mode == 2)
+                    {
+                        // Dedup on insert: this fires once per (candidate, enumeration) and the set
+                        // is hand-sized, so a linear scan beats a set allocation on a path that runs
+                        // tens of millions of times per game.
+                        const std::uint64_t h = def.card.m_name_hash;
+                        bool have = false;
+                        for (std::uint64_t k : t_bp_condemned_names) { if (k == h) { have = true; break; } }
+                        if (!have) { t_bp_condemned_names.push_back(h); }
+                    }
+                    if (drop_mode != 0 && s_rollout_stats)
+                    { g_bp_condemn_emitted.fetch_add(1, std::memory_order_relaxed); }
+                    if (drop_mode == 0)
+                    {
+                        // TRUNC-DEMOTION (audit §6.1): a SEARCHED-space drop deletes a candidate this
+                        // enumeration would otherwise offer, so no enclosing no-win over this subtree
+                        // is a complete refutation. Rollout/executor drops are playout-layer policy
+                        // (scope ruling 2026-09-02) and do not demote. Modes 1/2 emit the candidate,
+                        // so no truncation happened and there is nothing to demote.
+                        if (g_search_candidate_enum && TruncCompleteEnabled()) { ++g_fs_trunc_events; }
+                        continue;
+                    }
                 }
             }
         }
@@ -44169,12 +44272,62 @@ static BpEnumEntry* BpEnumEntryFor(const GameState& state, bool is_pre_combat,
         }
     }
 
+    // DEMOTE MODE (BpCondemnDropMode()==2): the condemnation test below emits the candidate and
+    // records its name instead of deleting it, and we rank the continuations that cast it LAST.
+    // Save/restore rather than plain clear: EnumeratePlansWithLand can re-enter this function, and a
+    // nested derivation must not consume the outer one's set.
+    const bool demote = (BpCondemnDropMode() == 2);
+    std::vector<std::uint64_t> outer_condemned;
+    if (demote) { outer_condemned.swap(t_bp_condemned_names); }
     ++g_bp_enum_depth;   // suppress the fan-out: this IS the continuation list, not a new decision
     std::vector<TurnSolver::Plan> plans = EnumeratePlansWithLand(state, is_pre_combat);
     --g_bp_enum_depth;
     // MTG_BP_CANDS_ORDER: value-best first (wins, then total_eval), so the rank window and the
     // node's budget-cut child walk reach what the deleted greedy used to pick. See the flag.
     if (BpCandsOrderEnabled()) { MoveOrderPlans(plans); }
+    if (demote)
+    {
+        // STABLE partition, so within each of the two groups the value order MoveOrderPlans just
+        // established is preserved exactly. The list therefore has baseline's LENGTH and baseline's
+        // relative order among the lines condemnation has no opinion about -- the only change is
+        // that a condemned line sits after them instead of ahead of them. Applied here, after the
+        // memo's derivation and before the entry is stored, so the executor's replay
+        // (AIEngine::resolve_draw_breakpoint indexes this same list) sees the identical ordering --
+        // `bp_choice` is a POSITIONAL index and a list that reordered between scoring and replay
+        // would make the executor play a candidate the search never scored.
+        if (!t_bp_condemned_names.empty())
+        {
+            auto clean = [](const TurnSolver::Plan& p)
+            {
+                for (const Action& a : p.actions)
+                {
+                    if (a.kind != Action::Kind::CastFromHand
+                        && a.kind != Action::Kind::CastFromGraveyard) { continue; }
+                    // `def` is resolved by CollectActions where the name is assigned, and these
+                    // plans came straight out of the derivation above, so it is populated. Falling
+                    // back to a name lookup rather than trusting it: a null here would silently
+                    // under-demote, which reads downstream as "the lever has no effect" -- the
+                    // false-zero signature this feature has already produced three times.
+                    const CardDefinition* d = a.def;
+                    if (d == nullptr) { d = CardDatabase::Instance().Lookup(a.card_name); }
+                    const std::uint64_t h = d ? d->card.m_name_hash : 0;
+                    for (std::uint64_t k : t_bp_condemned_names) { if (k == h) { return false; } }
+                }
+                return true;   // casts nothing condemned -> keeps its rank
+            };
+            const std::size_t moved = static_cast<std::size_t>(
+                std::count_if(plans.begin(), plans.end(),
+                              [&](const TurnSolver::Plan& p) { return !clean(p); }));
+            std::stable_partition(plans.begin(), plans.end(), clean);
+            if (s_rollout_stats)
+            {
+                g_bp_demote_lists.fetch_add(1, std::memory_order_relaxed);
+                g_bp_demote_plans.fetch_add(static_cast<long long>(moved),
+                                            std::memory_order_relaxed);
+            }
+        }
+        t_bp_condemned_names.swap(outer_condemned);
+    }
     plancache::ReportHiwater("bp", state, plans);
 
     if (keyed)

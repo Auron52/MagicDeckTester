@@ -2004,3 +2004,117 @@ carry information on Snow". Its baseline is 21.9% pre-existing, and the arms do 
 populations because the verifier itself perturbs cache residency: fold on 59,416/271,539 (21.883%),
 fold off 59,496/271,698 (21.898%), all folds off 59,496/271,796 (21.890%). 80 counts against a
 59,416 baseline settles nothing in either direction.
+
+---
+
+## 2026-09-17: THE ALL-PATHS RULE, MEASURED AT GAMES=10 -- 0.1% OF THE OVERSHOOT
+
+The USER's rule (option A: *"only condemn in cases where all of the lines that reach that state
+condemn"*) was run as a third arm against `off` and per-path condemnation on the full 10-game Snow
+cell (d2/b0, `SNAPSHOT_NONE` all three arms, `logs/snow_perf/barcheck_bar10.log`). All three arms
+play **byte-identical** (`7916f1f572f914e7`, avg 5.9000), which is itself the first result: on Snow,
+condemnation in any form changes no play at all.
+
+| metric | off | per-path | vs off | all-paths | vs off |
+|---|---|---|---|---|---|
+| hits | 26,841,846 | 31,573,408 | +17.63% | 31,569,033 | +17.61% |
+| misses | 432,422 | 509,502 | +17.83% | 509,615 | +17.85% |
+| clears | 50 | 59 | +18.00% | 59 | +18.00% |
+| wave host nodes | 22,757 | 25,240 | +10.91% | 25,237 | +10.90% |
+| slots | 2,517,447 | 2,976,767 | +18.25% | 2,976,432 | +18.23% |
+| scored applies | 28,019,861 | 33,046,727 | +17.94% | 33,042,412 | +17.92% |
+| units_total | 40,143,167 | 46,043,691 | +14.70% | 46,038,075 | +14.68% |
+| **LOOKUPS (h+m)** | **27,274,268** | **32,082,910** | **+17.63%** | **32,078,648** | **+17.62%** |
+
+**The all-paths rule returns 0.1% of per-path's overshoot: 4,262 of 4,808,642 lookups.** That is the
+number the 0.09% path-disagreement rate predicted (290 of 331,245 key builds), and it confirms the
+derivation rather than merely agreeing with it: the rule shrinks the condemn set by *path
+disagreement*, and Snow's overshoot is not caused by condemning on the wrong paths. It is caused by
+condemning lines that carry value on **every** path. Condemning LESS cannot fix that.
+
+(`allpaths` drops 125,167 vs per-path's 125,159 -- slightly MORE, not fewer. Re-admitting changes the
+tree, which changes how many consultations happen at all, so the drop count is a firing counter, not
+a monotone measure of the condemn set. The script's `<` assertion is therefore too strong; the
+verdict reads the lookup delta.)
+
+## 2026-09-17: WHAT A CONDEMNATION *DOES* -- THE DECOMPOSITION (`MTG_BP_CONDEMN_DROP_MODE`)
+
+The USER's bar names two separate things -- *"our only extra work is **checking** condemnation status
+and **deciding what we need to implement**"* -- and every measurement so far had them fused. The flag
+separates them. All three modes run the identical condemnation test; they differ only in the response.
+
+| mode | response to a condemned candidate |
+|---|---|
+| 0 `DELETE` | not emitted (the shipped behaviour) |
+| 1 `COUNT_ONLY` | counted, then **emitted anyway**. The control: checking without deciding. |
+| 2 `DEMOTE` | emitted, and every continuation that casts it is ranked **last** (`std::stable_partition` after `MoveOrderPlans`, inside `BpEnumEntryFor` so the executor's replay indexes the same order) |
+
+### Measured, Snow 8-game cell (gi=0..7, 16 s, `logs/snow_perf/armcheck_mode1.log`)
+
+All four arms play byte-identical (`bd3f8a9af6ff6cee`, avg 5.6250); all three condemning arms have
+identical firing counts (762 consultations dropped), so no row below is a no-power artifact.
+
+| metric | off | count-only | demote | delete |
+|---|---|---|---|---|
+| hits | 410,167 | +0.00% | −0.01% | **+2.26%** |
+| misses | 27,788 | +0.00% | +0.00% | −0.10% |
+| wave host nodes | 5,931 | +0.00% | +0.00% | **+0.67%** |
+| slots | 99,540 | +0.00% | +0.00% | **+1.32%** |
+| scored applies | 365,400 | +0.00% | −0.02% | **+2.06%** |
+| stillborn | 70,620 | +0.00% | −0.01% | +1.11% |
+| units_total | 1,647,283 | +0.00% | −0.00% | **+1.08%** |
+| **LOOKUPS** | **437,955** | **+0.00%** | **−0.01%** | **+2.11%** |
+
+Firing counters: `count` = `emitted_anyway=762` (== drops, the assertion the mode exists to make);
+`demote` = `emitted_anyway=762 demote_lists=424 demote_plans=189`.
+
+**THREE FINDINGS.**
+
+1. **CHECKING IS FREE.** `count-only` is `+0.00%` on every row, to the last digit, against 762
+   consultations that all fired. So the half of the bar the USER explicitly allowed costs *nothing
+   measurable* -- the entire overshoot is the *deciding*, i.e. the deletion.
+2. **DEMOTE MEETS THE BAR.** Every row is `<=` baseline, several marginally below it. This is the
+   first form of condemnation that satisfies the spec as written, and it satisfies it by
+   construction rather than by luck: the continuation list keeps baseline's LENGTH, so no rank
+   compaction occurs, no bound weakens from a shortened list, and the search explores baseline's
+   tree.
+3. **DEMOTE ALSO SAVES ESSENTIALLY NOTHING** (−0.01%). That is not a defect of the implementation, it
+   is a fact about where the work is: **wave 0 emits `bp_choice = 0..W-1` blind**, so the slot count
+   does not depend on which entries are in the window. Substituting one entry for another cannot
+   change the number of applies. The only mechanism that shortens the deferred-wave walk is making
+   the list shorter -- which is deletion, and deletion costs 17.6% elsewhere.
+
+### What that means
+
+On Snow, condemnation cannot pay for itself in *either* form: deletion overshoots by +17.6% and
+demotion breaks even. The upside the design was premised on -- *"it is possible for us to do less
+work if there are lines we never run"* -- does not materialise at `b0`, because at unlimited budget
+the deferred waves walk the whole list regardless of its order.
+
+Demotion is still the better shape, for a reason that is not about cost: a demoted line stays
+**reachable** by a later deferred wave, so it is not a truncation at all, which retires the
+exclusive-slot defect (bug 9) by construction rather than by argument.
+
+**THE NEXT MODE TO TRY (not built).** `DEFER` -- demote, and let the deferred-wave loop treat the
+condemned tail as *"only if budget remains"*. At `b0` that saves nothing by definition, which is
+exactly why every measurement in this document is blind to it: the whole cell is unlimited-budget.
+At a finite play budget it is a real saving, and it stays lossless under the USER's soundness bar
+(*"unrecoverable means not recoverable at unlimited budget (0) and depth 8"*) because at unlimited
+budget the tail is still walked. Pricing it needs a cell at Snow's actual play settings, not `b0`.
+
+## 2026-09-17: THE MISS CLAUSE IS A CACHE-POLICY BUG, AND IT IS ALREADY FIXED BY THE CAP
+
+The bar's first clause -- *"there should be no additional misses"* -- is separable from the rest, and
+it is not about which states the search discovers. The bp-enum cache is **clear-on-full at 8192, not
+LRU**, so misses track evictions. Four arms, 8-game cell (`logs/snow_perf/armcheck_cap1.log`):
+
+| metric | off | off + cap 400k | on | on + cap 400k |
+|---|---|---|---|---|
+| misses | 27,788 | 26,930 (−3.09%) | 27,760 (−0.10%) | **26,902 (−3.19%)** |
+| clears | 1 | **0** | 1 | **0** |
+| LOOKUPS | 437,955 | +0.00% | +2.11% | +2.11% |
+
+With the cache no longer thrashing, **the condemning arm has FEWER misses than baseline**
+(26,902 vs 26,930). The miss clause is met; the lookup clause is untouched by the cap, exactly as it
+should be (the cap moves the hit/miss split, not the number of consultations). The two clauses have
+different causes and should stop being reported as one number.
