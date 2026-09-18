@@ -108,3 +108,71 @@ play) and halved the d3 deficit. See `analysis-Angels.md`.
 Hinata2 and KittyEquipment carry the same "good at d5, bad at d3" signature and were screened before
 this defect class was understood. Their metadata was derived the same way. Worth an hour to check
 whether their blocker is also two keys rather than the shape-gate design question.
+
+## FOLLOW-UP (same session): the escalation ladder pays for work the table already rejected
+
+USER, on being told the crossover is consulted *after* escalating: *"Wait, you are saying we still
+escalate to a heuristic depth that provides worse quality than our current value-leaf? If so, that is
+a real cost bug that we need to address. There is no point in doing work with the heuristic that is
+not expected to outperform what we have already done with the value-leaf."*
+
+Correct, and it is confirmed in the code rather than inferred from the artifact.
+
+`MulliganProfile.h:277` — *"At runtime, **after escalating** a leaf line committed at depth c, the
+hybrid TAKES the heuristic iff hcommitted >= value_fallback_take_at[c], else it keeps the leaf … A
+value > value_fallback_max_depth means **never fall back at this c (leaf >= any heuristic)**."*
+
+So where the table says never-take, the escalation is **provably wasted**: it computes a line the
+ladder is then guaranteed to discard.
+
+**A gate for exactly this already exists — and is off, and is FIT-only.**
+`TurnSolver.cpp:41394`, `MTG_ESC_FIT_CROSSOVER`, whose own comment (`:40970`) says *"default OFF
+pending the A/B … Where the table says a pass at `dpass` could NOT be taken, running it is provably
+wasted: the ladder would compute the identical line and discard it."* Its measured prize on the FIT
+path was large — breaching `take_at[5]=6` against a FIT reach of 5 made **all 3 of its passes
+rejectable, ~92% of its search time, byte-identical play**.
+
+**The ESCALATION ladder has no equivalent gate at all.** It is the path that *does* read the table,
+and it reads it too late.
+
+### How big is it, honestly
+
+For Angels, currently: **near zero, because trust is masking it.** The adopted `value_trust_depth: 5`
+already suppresses escalation at c >= 5, which is where every never-take entry of
+`[2, 3, 3, 6, 6, 6, 6, 6]` sits bar one. The single remaining never-take rung is c=4, and trust 4 vs
+trust 5 measured **identical units (1,060,000 both)** — so there is nothing left for a gate to save
+here.
+
+That is a statement about Angels, not about the defect. The exposure is on decks that ship **no trust
+at all**, where nothing suppresses the escalation and the table's never-take entries are paid in full
+on every hit — **11 of the 21 modelled decks** (Anti-Lifegain, Creature Giving, Dragons, Dragonstorm,
+Hinata2, KittyEquipment, Melira Pod, Mirrorwing Dragon, StompySurprise, treasure_hunt, and the rest
+carrying `trust=None`). Several have never-take entries: Creature Giving `take[7]=take[8]=6`,
+Mirrorwing `take[6..8]=6`, StompySurprise `take[7]=take[8]=6`, Dragons `take[6..8]=6`.
+
+### Why this interacts with trust, and what it implies
+
+Trust and the crossover gate **overlap**: both avoid an escalation, by different reasoning. Trust
+says *"a line committed this deep needs no verification"*; the gate says *"no reachable heuristic
+depth could beat this line, so verifying is pointless."* The gate is the better-founded of the two —
+it is a statement about the measured table rather than a blanket depth threshold, and it needs no
+non-inferiority A/B to justify because it is play-neutral by construction (the ladder would discard
+the result anyway).
+
+**That suggests the ordering we actually want is: gate first, trust second.** A correct
+pre-escalation gate would capture most of what trust buys, without trust's quality risk — which is
+precisely the risk the user flagged for depth < 5. It might make shallow trust unnecessary rather
+than merely better-proven.
+
+### Proposed, NOT done
+
+1. Add the pre-escalation crossover gate to the **escalation ladder** (mirroring `xo_live` /
+   `xo_need` at `TurnSolver.cpp:41394`), behind its own flag, default OFF.
+2. A/B it on the decks with never-take entries and no trust. Expect **byte-identical play** by
+   construction; the deliverable is the units saved. If play is NOT identical, the gate's premise is
+   wrong and that is the more interesting result.
+3. If it lands, re-ask whether `value_trust_depth` is still needed anywhere, or only as a tiebreak
+   for the case the user identified: *"trust overrides cases that are close, but where the value-leaf
+   barely loses in quality over the heuristic"* — i.e. where the table says take-the-heuristic by a
+   hair and the escalation is not worth the hair. That case is real but narrow, and on Angels it
+   never arose (trust 4 == trust 5, byte-identical).
