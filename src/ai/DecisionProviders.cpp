@@ -9611,6 +9611,9 @@ namespace
     // Stateless, read-only -> single shared const instances are thread-safe (same model as
     // CardDatabase). Process lifetime, so GameState's raw pointer stays valid.
     const GenericProvider        g_generic;
+    const AngelsProvider         g_angels;
+    const BreachingDragonstormProvider g_breaching_dragonstorm;
+    const KnightsProvider        g_knights;
     const AntiLifegainProvider   g_antilife;
     const TreasureHuntProvider   g_treasure;
     const VialProvider           g_vial;
@@ -9685,9 +9688,13 @@ const DecisionProvider& DetectDecisionProvider(const Decklist& deck)
     // (Goblin Instigator), StompySurprise (Hornet Queen), Minotaur (Slaughter-Priest) and Dragons.
     // Landing on CritterLifegainProvider would hand Angels another deck's discard buckets, cast
     // ordering AND its LegendKeepIndex override -- and this deck has 3 Lyra + 2 Giada + 2 Serra, so
-    // that last one is not hypothetical. Angels gets GENERIC (no narrowing at all) until it earns a
-    // MEASURED hook of its own, per the analyze-deck 4a rule.
+    // that last one is not hypothetical. Angels holds NO judgement hook: AngelsProvider is an empty
+    // DeckProvider derivation, so every heuristic is byte-for-byte the Generic one it rode before
+    // (verified play-neutral by the smoke audit, play-changed=0). What it adds is a place for a
+    // proof and a name in the audit -- see the always-own-a-provider block above the routing chain.
     bool angels = false;
+    bool knights = false;    // Knight tribal on Aether Vial -- KnightsProvider DERIVES from Vial
+    bool breaching = false;  // Breaching Dragonstorm cascade/free-cast pile -- rode Generic
     for (const Card& c : deck.mainboard)
     {
         const CardDefinition* def = CardDatabase::Instance().LookupCached(c);
@@ -9720,6 +9727,29 @@ const DecisionProvider& DetectDecisionProvider(const Decklist& deck)
         {
             angels = true;
         }
+
+        // Knights. Keyed on the literal subtype string "Knight" across THREE different cards
+        // (Knight Exemplar's lord, Worthy Knight's cast watcher, Acclaimed Contender's dig), so a
+        // deckbuilding swap cannot silently lose the routing. Keying on the SUBTYPE rather than on
+        // the param is what keeps this deck-identifying: `subtypes_affected` and `etb_dig_subtypes`
+        // are archetype-NEUTRAL on their own (every tribal deck sets them), and that neutrality is
+        // precisely the misroute class provider_audit.py exists to catch. MUST return ABOVE vial --
+        // Aether Vial's upkeep_adds_charge is what routed this deck to VialProvider before.
+        {
+            const auto has_knight = [](const std::vector<std::string>& v)
+            { return std::find(v.begin(), v.end(), "Knight") != v.end(); };
+            if (has_knight(p.subtypes_affected) || p.cast_trigger_subtype == "Knight"
+                || has_knight(p.etb_dig_subtypes))
+            { knights = true; }
+        }
+
+        // Breaching Dragonstorm. OR-ed across its namesake (the exile-until-nonland free cast),
+        // Creative Technique (demonstrate) and the Dragon self-bounce. This deck reached the
+        // GenericProvider fallback -- it trips no other signature -- so the routing below is purely
+        // additive and cannot take the deck off a provider it was measured on.
+        if (p.etb_exile_until_nonland || p.demonstrate
+            || p.self_bounce_on_etb_subtype == "Dragon")
+        { breaching = true; }
 
         // Fluctuator cycling combo. Signature = the four params this deck introduced, OR-ed across
         // FOUR DIFFERENT CARDS (Fluctuator, Drannith Stinger, Hollow One, Unearth) so a
@@ -9969,10 +9999,34 @@ const DecisionProvider& DetectDecisionProvider(const Decklist& deck)
         }
     }
 
+    // =========================================================================================
+    // EVERY SHIPPED DECK OWNS A PROVIDER (USER 2026-09-18). The old rule written all over the
+    // comments below -- "a deck earns its own provider only once it has a MEASURED hook to hold" --
+    // is RETIRED. It was guarding a real property (do not bolt unmeasured heuristics onto a deck)
+    // but it conflated judgement with proof, and `ProvenWinlessThisTurn` is a PROOF: a correct one
+    // cannot change play or labels, only make the search cheaper. Routing a deck to Generic to
+    // decline the first silently declined the second too. Fungus paid 13,212 checks with 0 fires
+    // for that; implementing the certificate was a 1.9x label speedup with identical labels.
+    //
+    // So: a deck with no measured hook still gets its OWN provider, as an EMPTY derivation of the
+    // provider it already rode. That is play-neutral by construction -- it inherits every judgement
+    // hook byte-for-byte, which is exactly the no-narrowing property the old rule wanted -- while
+    // giving the deck a place for a certificate and a name in scripts/provider_audit.py.
+    //
+    // The historical "was g_generic until it earned a hook" notes below are kept as PROVENANCE for
+    // why each provider's hooks exist; they no longer describe the rule for adding a new deck.
+    // DeckProvider's pure-virtual Certificate() makes the compiler ask the question; the audit's
+    // --check closes the half the compiler cannot see (inheriting another deck's answer).
+    // =========================================================================================
+
     // Angels FIRST -- above critter, whose signature its 4 Archangel of Thune would otherwise set
     // (see the flag's comment). GenericProvider on purpose: a new deck earns its own provider only
     // once it has a measured hook to hold, and until then it gets no narrowing at all.
-    if (angels)      { return g_generic; }
+    if (angels)      { return g_angels; }
+    // Knights: KnightsProvider, which DERIVES FROM VialProvider -- the deck rode VialProvider and
+    // still runs on exactly its hooks, so this is play-neutral. Must sit ABOVE `vial`.
+    if (knights)     { return g_knights; }
+    if (breaching)   { return g_breaching_dragonstorm; }
     // ABOVE everything: this deck's own signature is unambiguous, and its tutor_to_hand would
     // otherwise be read as anti-lifegain (see the flag's comment).
     if (critter)     { return g_critter; }

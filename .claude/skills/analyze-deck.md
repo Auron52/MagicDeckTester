@@ -359,10 +359,14 @@ profile is written.
 python3 scripts/provider_audit.py            # or: --check to exit 1 on a suspect
 ```
 
-**Confirm the deck landed on the provider you intend**, which for a brand-new deck is almost
-always `Generic`. Do this at Stage 4, not later: the provider decides which heuristics NARROW the
-search, so every number produced after it — the profile, the depth sweep, the value leaf, the
-ground truth — is measured under whatever routing this step would have caught.
+**Every shipped deck OWNS a provider (USER 2026-09-18).** A brand-new deck does NOT get
+`GenericProvider`; it gets its own class, even when it has no heuristic to hold. `--check` now
+**fails** on a deck riding `Generic`, on two decks sharing one provider, and on a provider class
+that does not declare `Certificate()` in its own body.
+
+Do this at Stage 4, not later: the provider decides which heuristics NARROW the search, so every
+number produced after it — the profile, the depth sweep, the value leaf, the ground truth — is
+measured under whatever routing this step would have caught.
 
 `SelectDecisionProvider` detects the archetype from CARD PARAMS, and several of those params are
 archetype-NEUTRAL — `etb_self_creates_tokens`, `sac_creature_outlet` and `reduces_spell_subtype`
@@ -371,16 +375,40 @@ silently inherits another archetype's narrowing. That has happened four times (M
 StompySurprise, Minotaur, Dragons), every one found by accident well after the deck was measured,
 and in Minotaur's case the borrowed hook DELETED a real decision branch rather than reordering it.
 
-Landing on a foreign provider is not automatically wrong — Knights and slivers_vial both ride
-`VialProvider` deliberately. What the core invariant forbids is getting there **by accident**. So:
+Landing on a foreign provider is now a **failure**, not a judgement call: sharing is what let
+Knights ride `VialProvider` unexamined for months. Reuse the CODE by deriving; do not reuse the
+CLASS. What the core invariant forbids is getting there **by accident**. So:
 
 - **Intended?** Say so in the Stage 6 disclosure, naming the provider and why it fits.
 - **Not intended?** Add a signature for the deck and route it ABOVE the offending branch in
   `SelectDecisionProvider` (copy the Dragons block). Build the signature by OR-ing gated params
   from **several different cards**, so a deckbuilding swap cannot silently lose it, and never key
   it on a colourless staple any deck might add (Lightning Greaves was excluded for exactly this).
-- A new deck earns its OWN provider only once it has a **measured** hook to hold. Until then it
-  gets Generic and no narrowing at all.
+- **Always create the provider, even with nothing to put in it.** Derive from the provider the
+  deck would otherwise have ridden — `DeckProvider` (== Generic behaviour) in the usual case, or
+  another deck's provider when there is genuinely code to reuse (`KnightsProvider : VialProvider`).
+  An **empty derivation is play-neutral by construction**: it inherits every judgement hook
+  byte-for-byte, so it preserves the "no unmeasured narrowing" property the old rule was protecting
+  while giving the deck a place for a proof and a name in the audit. Verify with smoke's
+  `play-changed=0`.
+- **Do NOT derive from a thematically-related deck's provider** (BreachingDragonstorm from
+  `DragonstormProvider`, say). That imports unmeasured narrowing and is the misroute class this
+  stage exists to catch. Derive from what the deck ACTUALLY ROUTES TO today; change that only with
+  a measurement.
+- **Answer the certificate question.** `DeckProvider::Certificate()` is pure virtual, so a new
+  provider does not compile until you do. `NotAssessed` is a legitimate answer — say what would
+  have to be checked. What is no longer possible is not being asked.
+
+  **WHY THIS RULE EXISTS.** The previous rule was "a deck earns its OWN provider only once it has a
+  measured hook to hold". It was protecting something real — do not bolt unmeasured heuristics onto
+  a deck — but it conflated two different things. A **judgement** hook (tutor width, cast order,
+  discard buckets) must indeed be measured before adoption. `ProvenWinlessThisTurn` is **not a
+  judgement, it is a PROOF**: its contract is one-sided and a correct one cannot change play or
+  labels at all, only make the search cheaper. Routing a deck to Generic to decline the first
+  silently declined the second, because the generic certificate is `return false`. Fungus ran that
+  way for months: the certificate fired **0 times in 13,212 checks** while 93.7% of enumerated plans
+  sat at horizon-edge nodes that are 99.98% no-win. Implementing it was a **1.9x** label speedup
+  with byte-identical labels (`docs/design/fungus-token-search-cost.md`).
 
 ---
 

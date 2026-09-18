@@ -176,12 +176,102 @@ public:
     double      NcLandDropTempoBonus(const GameState&, int) const override;
 };
 
+// =============================================================================================
+// DeckProvider -- the base EVERY deck-specific provider derives from.
+//
+// USER DIRECTIVE 2026-09-18: *"Can we stop allowing decks to be lazy about providers? ... even
+// better would probably be to always create a new provider and just derive from a different one if
+// there is code to reuse."*
+//
+// THIS REVERSES THE OLD DOCTRINE, which was written into SelectDecisionProvider a dozen times as
+// "a deck earns its own provider only once it has a MEASURED hook to hold, and until then it gets
+// no narrowing at all". That rule was protecting a real property -- do not bolt unmeasured
+// heuristics onto a deck -- but it conflated two different things and paid for it:
+//
+//   * a JUDGEMENT hook (tutor width, cast order, discard buckets) genuinely must be measured
+//     before it is adopted, because a wrong one silently plays worse; but
+//   * `ProvenWinlessThisTurn` is NOT a judgement. It is a PROOF, its contract is one-sided, and a
+//     correct one cannot change play or labels at all -- it can only make the search cheaper.
+//
+// Routing a deck to GenericProvider to decline the first silently also declined the second, because
+// the generic certificate is `return false`. Measured cost on Fungus: the certificate fired 0 times
+// in 13,212 checks while 93.7% of enumerated plans sat at horizon-edge nodes that are 99.98%
+// no-win. Implementing it was a 1.9x label speedup with byte-identical labels
+// (docs/design/fungus-token-search-cost.md). The deck had been "correctly" lazy for months.
+//
+// So: an empty derivation costs NOTHING -- it inherits every judgement hook byte-for-byte, which is
+// exactly the no-narrowing property the old rule wanted -- while giving the deck a PLACE for a
+// proof and a NAME in the audit. Laziness now has to be declared rather than defaulted into.
+//
+// The pure virtual below is the enforcement: a new deck provider does not compile until somebody
+// answers the certificate question. `scripts/provider_audit.py --check` closes the other half (a
+// provider that inherits an ANSWER from another deck's provider, which the compiler cannot catch).
+// =============================================================================================
+
+enum class CertState
+{
+    Implemented,   // ProvenWinlessThisTurn is overridden here and proves something
+    NotAssessed,   // nobody has looked yet. Legal, but it is now VISIBLE instead of implicit
+    Inapplicable,  // looked, and this deck cannot support a sound certificate -- `why` says why
+};
+
+struct CertStance
+{
+    CertState   state;
+    const char* why;   // never null: for NotAssessed say what would have to be checked
+};
+
+class DeckProvider : public GenericProvider
+{
+public:
+    // Every deck-specific provider must answer this. See the block above for why it is pure.
+    virtual CertStance Certificate() const = 0;
+};
+
+// ---------------------------------------------------------------------------------------------
+// The three decks that were riding somebody else's provider when the always-own-a-provider rule
+// landed (2026-09-18). Each is an EMPTY derivation on purpose: it inherits every judgement hook
+// byte-for-byte from the provider it already rode, so routing to it is provably play-neutral --
+// verified by the smoke audit's play-changed=0 and by each deck's own invariance run. What they add
+// is a PLACE to put a proof and a NAME in the audit, which is the whole point of the rule.
+//
+// Do NOT "helpfully" derive one of these from a thematically-related deck's provider (Breaching
+// Dragonstorm from DragonstormProvider, say). That would import unmeasured narrowing heuristics and
+// is exactly the misroute class scripts/provider_audit.py exists to catch. Derive from the provider
+// the deck ACTUALLY ROUTES TO TODAY; change that only with a measurement.
+
+// Angels (Giada / Lyra / Righteous Valkyrie lifegain-angels). Rode GenericProvider.
+class AngelsProvider : public DeckProvider
+{
+public:
+    CertStance Certificate() const override
+    { return { CertState::NotAssessed, "NOT ASSESSED. Combat looks like the only route to the "
+               "opponent's life, but Lightning Greaves GRANTS HASTE -- so the Snow/Fungus 'this "
+               "turn's attackers are exactly CanAttackFull now' shortcut does NOT hold here and a "
+               "certificate must price the equip." }; }
+    const char* Name() const override { return "Angels"; }
+};
+
+// Breaching Dragonstorm (cascade / free-cast pile). Rode GenericProvider -- it trips no other
+// signature, so this routing is additive.
+class BreachingDragonstormProvider : public DeckProvider
+{
+public:
+    CertStance Certificate() const override
+    { return { CertState::NotAssessed, "NOT ASSESSED. Kills off free-cast chains (cascade, "
+               "Creative Technique) and Maelstrom Wanderer GRANTS HASTE, so a bound must cover "
+               "cards cast this turn off the top -- the hardest shape on the list." }; }
+    const char* Name() const override { return "BreachingDragonstorm"; }
+};
+
 // Anti-Lifegain combo (Tainted Remedy / Plague Drone / Aria / Reverent Silence): the
 // deck whose damage flows through opponent-lifegain flipped to loss. Overrides the
 // tutor/fetch/alt-payload/enabler-ordering hooks; inherits Generic for the rest.
-class AntiLifegainProvider : public GenericProvider
+class AntiLifegainProvider : public DeckProvider
 {
 public:
+    CertStance Certificate() const override
+    { return { CertState::NotAssessed, "NOT ASSESSED. This deck kills by damage flows through opponent LIFEGAIN flipped to loss, so the bound is over lifegain sources" }; }
     const char* Name() const override { return "AntiLifegain"; }
     bool ArchetypeCardValue(const GameState&, const CardDefinition&, int, int&) const override;
     std::vector<std::string> TutorCandidates(const GameState&, int, const CardParams&) const override;
@@ -244,9 +334,11 @@ public:
 
 // Treasure Hunt + Land's Edge: dig-when-stuck, Land's Edge fire count, deck-aware
 // scry/surveil keep, and land-first discard. Inherits Generic for the rest.
-class TreasureHuntProvider : public GenericProvider
+class TreasureHuntProvider : public DeckProvider
 {
 public:
+    CertStance Certificate() const override
+    { return { CertState::NotAssessed, "NOT ASSESSED. This deck kills by a dig/ramp shell -- establish the kill route before assuming combat" }; }
     const char* Name() const override { return "TreasureHunt"; }
     bool        HasAnyDigSource (const GameState&) const override;
     bool        ShouldConsiderDig(const GameState&) const override;
@@ -295,9 +387,11 @@ public:
 };
 
 // Aether Vial decks (Slivers, Knights): the hand-aware vial charge policy.
-class VialProvider : public GenericProvider
+class VialProvider : public DeckProvider
 {
 public:
+    CertStance Certificate() const override
+    { return { CertState::NotAssessed, "NOT ASSESSED. Test: is combat the ONLY route to the opponent's life, and does nothing in the pool grant haste or untap? See SnowProvider/FungusProvider for the worked shape." }; }
     // No overrides left: the hand-aware charge policy this class existed for is now the ROOT
     // default (GenericProvider::WantVialCharge, adopted 2026-08-18) -- an archetype opt-in was the
     // very thing that let Goblins/Minotaur silently lose their Vial. The class stays so routing and
@@ -312,14 +406,29 @@ public:
     const char* CastOrderTierName(int rank) const override;
 };
 
+// Knights (Aether Vial knight tribal). Rode VialProvider and STILL DOES -- it derives from it, so
+// the Vial charge/drop policy this deck was measured with is inherited unchanged. This is the
+// "derive from a different one if there is code to reuse" case in the user's directive.
+class KnightsProvider : public VialProvider
+{
+public:
+    CertStance Certificate() const override
+    { return { CertState::NotAssessed, "NOT ASSESSED. Combat is the likely sole route, but Aether "
+               "Vial puts a creature onto the battlefield at instant speed and Kinsbaile Cavalier "
+               "grants DOUBLE STRIKE -- both have to be priced before any bound is sound." }; }
+    const char* Name() const override { return "Knights"; }
+};
+
 
 // Mono-red Burn (Searing Blaze's landfall damage is the deck's signature): once it has enough
 // lands in play (its curve tops at mana value 2), it BANKS further land drops so a future
 // topdecked Searing Blaze has a land to play for its landfall (3-to-face instead of 1). Inherits
 // Generic for everything else; the only override is the equal-value land-drop tiebreak.
-class BurnProvider : public GenericProvider
+class BurnProvider : public DeckProvider
 {
 public:
+    CertStance Certificate() const override
+    { return { CertState::NotAssessed, "NOT ASSESSED. This deck kills by direct damage, so a certificate must bound burn reach in hand+library, not just combat" }; }
     const char* Name() const override { return "Burn"; }
     bool PreferHoldLandDrop(const GameState&, int) const override;
     // Shard Volley is the deck's only sacrifice-a-land spell, and every land it could sacrifice is a
@@ -332,9 +441,11 @@ public:
 // Hinata's "{1} less per target", which the deck maximises by targeting extra/own/opponent
 // permanents -- so its goldfish opponent must present real targets. Layer 2 grows this provider
 // with the board-aware multi-target discount and the Reality-Spasm -> Crackle mana ritual.
-class HinataProvider : public GenericProvider
+class HinataProvider : public DeckProvider
 {
 public:
+    CertStance Certificate() const override
+    { return { CertState::NotAssessed, "NOT ASSESSED. Test: is combat the ONLY route to the opponent's life, and does nothing in the pool grant haste or untap? See SnowProvider/FungusProvider for the worked shape." }; }
     const char* Name() const override { return "Hinata"; }
     bool OpponentPlaysLands() const override { return true; }
     // M2 FIXPOINT OPT-IN, mode 2 (ADOPTED 2026-09-06; USER approved the per-deck opt-in and
@@ -507,9 +618,11 @@ public:
 // + SELECTION heuristic (Lathliss-first / Scourge-second, haste-Dragon reserved for the alpha
 // strike); the engine keeps the put + reshuffle mechanism and MTG_UNPRUNED(tutor) reverts to the
 // full library-order enumeration. Inherits Generic for everything else.
-class DragonstormProvider : public GenericProvider
+class DragonstormProvider : public DeckProvider
 {
 public:
+    CertStance Certificate() const override
+    { return { CertState::NotAssessed, "NOT ASSESSED. This deck kills by a storm combo, so the bound is over ritual mana and copy count, not attackers" }; }
     // NOTE (2026-08-23): this deck used to OPT OUT of the horizon-honest no-win tie-break
     // (GradesNoWinLeaf) on the strength of s5005 gi227 -- "truncates a 13-spell turn-6 chain, turn-8
     // win -> LOSS, survives 20x budget". Re-tested against both adoption gates, that game supports
@@ -589,9 +702,11 @@ public:
 // override defers the creature-sac VALUE outlets (and haste-gates Skirk's sac-for-mana) out of the
 // pre-combat cast-subset enumeration -- the wide-board branch explosion that dominates the deep
 // rollout. Inherits Generic for everything else. Off-switch MTG_NO_GOBLIN_SAC_2ND (default ON).
-class GoblinsProvider : public GenericProvider
+class GoblinsProvider : public DeckProvider
 {
 public:
+    CertStance Certificate() const override
+    { return { CertState::NotAssessed, "NOT ASSESSED. Test: is combat the ONLY route to the opponent's life, and does nothing in the pool grant haste or untap? See SnowProvider/FungusProvider for the worked shape." }; }
     const char* Name() const override { return "Goblins"; }
     bool DeferSacOutletPreCombat(const GameState&, const Permanent&, bool) const override;
     // Goblin Matron tutors for "a Goblin card" out of ~16 distinct Goblin names, and unlike every
@@ -678,9 +793,11 @@ public:
 // the standing full-list A/B lever. With no Orchard left the full Generic list returns
 // (search picks). Non-land tutors (Enlightened Tutor) are untouched. Inherits Generic for
 // everything else, including the root SacTutorPutList burst scorer.
-class CreatureGivingProvider : public GenericProvider
+class CreatureGivingProvider : public DeckProvider
 {
 public:
+    CertStance Certificate() const override
+    { return { CertState::NotAssessed, "NOT ASSESSED. Test: is combat the ONLY route to the opponent's life, and does nothing in the pool grant haste or untap? See SnowProvider/FungusProvider for the worked shape." }; }
     const char* Name() const override { return "CreatureGiving"; }
     std::vector<std::string> TutorCandidates(const GameState&, int, const CardParams&) const override;
     std::vector<int> CleanupDiscardCandidates(
@@ -740,9 +857,11 @@ public:
 // sources; once we have this, aim to be able to generate 2 of each colour." Encoded as a strict
 // lexicographic key in FetchCandidates -- coverage first (weighted by what the hand actually wants
 // to cast, accelerants first), then redundancy toward two sources per colour.
-class FiveColourProvider : public GenericProvider
+class FiveColourProvider : public DeckProvider
 {
 public:
+    CertStance Certificate() const override
+    { return { CertState::NotAssessed, "NOT ASSESSED. Test: is combat the ONLY route to the opponent's life, and does nothing in the pool grant haste or untap? See SnowProvider/FungusProvider for the worked shape." }; }
     const char* Name() const override { return "FiveColour"; }
     std::vector<std::string> FetchCandidates(const GameState&, int, const CardParams&) const override;
     // Fetch search breadth: the base-class DEFAULT (top entry only) is exactly this deck's
@@ -813,9 +932,11 @@ public:
 // Mirrorwing/Zada spell-copy swarm: overrides ONLY the trick-target narrowing (a 5f perf prune --
 // the per-target variant group was the measured top branching driver on a swarm board). Every
 // other decision resolves through GenericProvider exactly as before.
-class MirrorwingProvider : public GenericProvider
+class MirrorwingProvider : public DeckProvider
 {
 public:
+    CertStance Certificate() const override
+    { return { CertState::NotAssessed, "NOT ASSESSED. Test: is combat the ONLY route to the opponent's life, and does nothing in the pool grant haste or untap? See SnowProvider/FungusProvider for the worked shape." }; }
     const char* Name() const override { return "Mirrorwing"; }
     void TrickTargetCandidates(const GameState&, const CardDefinition&,
                                std::vector<int>&) const override;
@@ -922,9 +1043,11 @@ public:
 // tutor_to_hand sets the anti-lifegain signature on its own (the exact Goblin-Matron misroute
 // class -- without this the deck ran under AntiLifegainProvider, whose discard/tutor heuristics
 // hunt lifegain_to_loss enablers this deck does not play).
-class EquipmentProvider : public GenericProvider
+class EquipmentProvider : public DeckProvider
 {
 public:
+    CertStance Certificate() const override
+    { return { CertState::NotAssessed, "NOT ASSESSED. Test: is combat the ONLY route to the opponent's life, and does nothing in the pool grant haste or untap? See SnowProvider/FungusProvider for the worked shape." }; }
     const char* Name() const override { return "Equipment"; }
     // Haste-equip host width 2 (base default 1, the measured FiveColour trade-off): the gi=39
     // T5 kill needs "equip Greaves -> the Balan cast in this same subset", and the width-1
@@ -1058,9 +1181,11 @@ public:
 // StompySurprise (mono-green elf ramp). Detection keys on the deck's gated params (see the
 // stompy flag in DetectDecisionProvider); every hook except the one below stays Generic, so
 // routing this deck here instead of g_generic changes nothing but the cleanup-discard ranking.
-class StompyProvider : public GenericProvider
+class StompyProvider : public DeckProvider
 {
 public:
+    CertStance Certificate() const override
+    { return { CertState::NotAssessed, "NOT ASSESSED. Test: is combat the ONLY route to the opponent's life, and does nothing in the pool grant haste or untap? See SnowProvider/FungusProvider for the worked shape." }; }
     const char* Name() const override { return "Stompy"; }
     // Board-lethal search short-circuit (win-turn-invariant; see EquipmentProvider's note). This
     // deck's late boards are the pathological wide shape it exists for -- elf swarm + Hornet
@@ -1110,9 +1235,11 @@ public:
 // autonomous search structurally could not consider the sac-draw the deck is built around --
 // found by the reference bench (auras s21/gi20: the human sacs Canopy on T4 AND T5, finds
 // Ethereal Armor + Light-Paws, wins T5; the search sat on both Canopies and won T6).
-class AurasProvider : public GenericProvider
+class AurasProvider : public DeckProvider
 {
 public:
+    CertStance Certificate() const override
+    { return { CertState::NotAssessed, "NOT ASSESSED. Test: is combat the ONLY route to the opponent's life, and does nothing in the pool grant haste or untap? See SnowProvider/FungusProvider for the worked shape." }; }
     const char* Name() const override { return "Auras"; }
     bool        HasAnyDigSource (const GameState& s) const override;
     bool        ShouldConsiderDig(const GameState& s) const override;
@@ -1139,9 +1266,11 @@ public:
 //     invariant forbids: here it would cheerfully cycle away the deck's only Fluctuator.
 // The dig itself stays a SEARCHED axis (DigDecisionSearched) -- these hooks supply the default and
 // the horizon behaviour, and the rollout scores dig/no-dig per plan.
-class FluctuatorProvider : public GenericProvider
+class FluctuatorProvider : public DeckProvider
 {
 public:
+    CertStance Certificate() const override
+    { return { CertState::NotAssessed, "NOT ASSESSED. This deck kills by a cycling combo, so the bound is over reachable cycling chains" }; }
     const char* Name() const override { return "Fluctuator"; }
     bool        HasAnyDigSource (const GameState& s) const override;
     bool        ShouldConsiderDig(const GameState& s) const override;
@@ -1175,9 +1304,11 @@ public:
 // Everything else inherits Generic -- the deck was routed to GenericProvider when its
 // GoblinsProvider misroute was fixed precisely because it had no measured heuristic of its own,
 // and a bucket policy is exactly such a heuristic.
-class DragonsProvider : public GenericProvider
+class DragonsProvider : public DeckProvider
 {
 public:
+    CertStance Certificate() const override
+    { return { CertState::NotAssessed, "NOT ASSESSED. Test: is combat the ONLY route to the opponent's life, and does nothing in the pool grant haste or untap? See SnowProvider/FungusProvider for the worked shape." }; }
     const char* Name() const override { return "Dragons"; }
     // CastOrderRank -- the USER's reviewed TOTAL order for this deck (2026-09-04, second
     // revision): land, then the rocks, then Dragon Tempest, reducers, Lathliss, Scourge, the
@@ -1223,9 +1354,11 @@ public:
 // permanents accumulated toward the Treefolk CDA and the Slumber threshold) -- enablers lower
 // nobody's life on the turn they land, so the tie-break prices the build-up at zero. Every other
 // decision inherits Generic untouched.
-class SnowProvider : public GenericProvider
+class SnowProvider : public DeckProvider
 {
 public:
+    CertStance Certificate() const override
+    { return { CertState::Implemented, "ProvenWinlessThisTurn is overridden below" }; }
     const char* Name() const override { return "Snow"; }
     bool GradesNoWinLeaf() const override { return false; }
     // Scrying Sheets holds its tap for the {1}{S} look ability while the board can still PAY that
@@ -1378,9 +1511,11 @@ public:
 // read, which is the same reason winlesscert's own counters grew a periodic dump.
 void FungusCertReasonReport();
 
-class FungusProvider : public GenericProvider
+class FungusProvider : public DeckProvider
 {
 public:
+    CertStance Certificate() const override
+    { return { CertState::Implemented, "ProvenWinlessThisTurn is overridden below" }; }
     const char* Name() const override { return "Fungus"; }
     // Callers use it ONLY where the search is unbounded (the offline label ladder / unbounded
     // depth-matrix cells), so it cannot change play -- see TurnSolver's WinlessCertificateActive.
@@ -1397,9 +1532,11 @@ public:
 // signature, OR-ed across the three lifegain-watcher params (Pridemate/Voice, Thune, Heliod), none
 // of which any other deck sets. It holds exactly ONE hook: the walker-aware legend keep below.
 // Everything else is Generic -- no narrowing, full search.
-class CritterLifegainProvider : public GenericProvider
+class CritterLifegainProvider : public DeckProvider
 {
 public:
+    CertStance Certificate() const override
+    { return { CertState::NotAssessed, "NOT ASSESSED. Test: is combat the ONLY route to the opponent's life, and does nothing in the pool grant haste or untap? See SnowProvider/FungusProvider for the worked shape." }; }
     const char* Name() const override { return "CritterLifegain"; }
     // Legend rule for three Ajani, Strength of the Pride: keep the copy with the MOST loyalty
     // (tie: the one that can still activate this turn, then the oldest). Tried as the generic
@@ -1433,9 +1570,11 @@ public:
 // persist loop from the autonomous search (verified live before this fix: zero outlet activations
 // across 8 probe games under provider=Goblins). Inherits every Generic hook; deck-specific
 // narrowings are added here only once measured (the Minotaur/Dragons rule).
-class MeliraPodProvider : public GenericProvider
+class MeliraPodProvider : public DeckProvider
 {
 public:
+    CertStance Certificate() const override
+    { return { CertState::NotAssessed, "NOT ASSESSED. Test: is combat the ONLY route to the opponent's life, and does nothing in the pool grant haste or untap? See SnowProvider/FungusProvider for the worked shape." }; }
     const char* Name() const override { return "MeliraPod"; }
     // Felidar Guardian's ETB flicker on the PUT paths (Pod / Chord / a Reveillark return), where
     // no cast-time variant carries the target: tapped Birthing Pod (a second activation this
@@ -1473,9 +1612,11 @@ public:
                          const CardDefinition& sd) const override;
 };
 
-class MinotaurProvider : public GenericProvider
+class MinotaurProvider : public DeckProvider
 {
 public:
+    CertStance Certificate() const override
+    { return { CertState::NotAssessed, "NOT ASSESSED. Test: is combat the ONLY route to the opponent's life, and does nothing in the pool grant haste or untap? See SnowProvider/FungusProvider for the worked shape." }; }
     const char* Name() const override { return "Minotaur"; }
     // The generic fallback is DESCENDING MANA VALUE, and 100% of this deck's rollout sheds happen
     // with fewer than four lands out -- the one state where "shed the most expensive card" reaches
@@ -1502,9 +1643,11 @@ public:
 //     outlet and multiplying across outlets.
 //
 // Everything else is Generic.
-class EldraziFlickerProvider : public GenericProvider
+class EldraziFlickerProvider : public DeckProvider
 {
 public:
+    CertStance Certificate() const override
+    { return { CertState::Implemented, "ProvenWinlessThisTurn is overridden below" }; }
     const char* Name() const override { return "EldraziFlicker"; }
 
     std::vector<int> BlinkActivationCounts(const GameState& s, const Permanent& source,

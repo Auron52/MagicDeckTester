@@ -46,24 +46,33 @@ def discover(args):
         base = os.path.join(ROOT, "decks")
         dirs = [os.path.join(base, d) for d in sorted(os.listdir(base))
                 if os.path.isdir(os.path.join(base, d))]
-    out = []
+    out, unprofiled = [], []
     for d in dirs:
-        for f in sorted(os.listdir(d)):
-            if not f.endswith(".profile.json"):
-                continue
+        profs = [f for f in sorted(os.listdir(d)) if f.endswith(".profile.json")]
+        if not profs:
+            # A decklist with NO profile is invisible to this audit -- and that is a hole in the
+            # always-own-a-provider rule, because a deck can dodge it simply by never being
+            # analyzed. Report it rather than silently skipping (the whole point of this script is
+            # that nothing routes without somebody deciding).
+            for f in sorted(os.listdir(d)):
+                if f.endswith((".cod", ".txt")):
+                    unprofiled.append(os.path.basename(d))
+                    break
+            continue
+        for f in profs:
             stem = f[: -len(".profile.json")]
             for ext in (".cod", ".txt"):
                 deck = os.path.join(d, stem + ext)
                 if os.path.exists(deck):
                     out.append((stem, deck, os.path.join(d, f)))
                     break
-    return out
+    return out, sorted(set(unprofiled))
 
 
 def main():
     argv = sys.argv[1:]
     check = "--check" in argv
-    decks = discover(argv)
+    decks, unprofiled = discover(argv)
     if not decks:
         print("no decks found", file=sys.stderr)
         return 2
@@ -89,26 +98,82 @@ def main():
         if m:
             found[m.group(1)] = m.group(2)
 
+    # ---- certificate stance, parsed from the header ------------------------------------------
+    # The compiler forces a NEW provider to answer Certificate() (DeckProvider's pure virtual), but
+    # it CANNOT catch a provider that inherits an ANSWER from another deck's provider -- e.g.
+    # KnightsProvider deriving from VialProvider. That loophole is exactly the laziness the rule
+    # exists to remove, so it is closed here by requiring the declaration in the class's OWN body.
+    hdr = open(os.path.join(ROOT, "src", "ai", "DecisionProviders.h")).read()
+    stance, missing_cert = {}, []
+    for m in re.finditer(r"^class (\w+)Provider : public (\w+)\b", hdr, re.M):
+        name, base = m.group(1), m.group(2)
+        if name in ("Generic", "Deck"):
+            continue
+        body = hdr[m.end(): hdr.index("\n};", m.end())]
+        cm = re.search(r"CertStance Certificate\(\) const override\s*\{?\s*return\s*\{\s*CertState::(\w+)", body)
+        if cm:
+            stance[name] = cm.group(1)
+        else:
+            missing_cert.append((name, base))
+
     width = max(len(s) for s, _, _ in decks)
-    suspects = []
+    suspects, generic, shared = [], [], {}
     for stem, _, _ in decks:
         key = stem.replace(" ", "_")
         prov = found.get(key, "?")
         norm = re.sub(r"[^a-z]", "", stem.lower())
         pnorm = prov.lower()
-        ok = prov in ("Generic", "?") or pnorm in norm or norm in pnorm
-        if not ok:
+        named = pnorm in norm or norm in pnorm
+        if prov == "Generic":
+            generic.append(stem)
+        if prov not in ("?",):
+            shared.setdefault(prov, []).append(stem)
+        if not (prov in ("Generic", "?") or named):
             suspects.append((stem, prov))
-        print(f"  {stem:<{width}}  {prov}{'' if ok else '   <-- REVIEW: foreign provider'}")
+        cert = stance.get(prov, "-")
+        flag = ""
+        if prov == "Generic":
+            flag = "   <-- FAIL: no provider of its own"
+        elif not named:
+            flag = "   <-- note: name differs (fine if this provider is only this deck's)"
+        print(f"  {stem:<{width}}  {prov:<22} cert={cert}{flag}")
 
-    if suspects:
-        print("\nDecks on a provider that does not match their name:")
-        for stem, prov in suspects:
-            print(f"  {stem} -> {prov}")
-        print("\nThis is a SCREEN, not a verdict. Confirm each is deliberate (Knights and")
-        print("slivers_vial ride VialProvider on purpose). If one is NOT, route it above the")
-        print("offending branch in SelectDecisionProvider -- see the Dragons block there.")
-    return 1 if (check and suspects) else 0
+    borrowed = {p: d for p, d in shared.items() if len(d) > 1}
+
+    print()
+    n_impl = sum(1 for v in stance.values() if v == "Implemented")
+    print(f"  winless certificate: {n_impl} implemented, "
+          f"{sum(1 for v in stance.values() if v == 'NotAssessed')} not assessed, "
+          f"{sum(1 for v in stance.values() if v == 'Inapplicable')} inapplicable")
+
+    if unprofiled:
+        print("\n  NOT AUDITED (decklist present, no .profile.json -- routing undecided): "
+              + ", ".join(unprofiled))
+
+    hard = []
+    if generic:
+        hard.append("decks with NO provider of their own (riding GenericProvider): "
+                    + ", ".join(generic))
+    if borrowed:
+        hard.append("providers shared by more than one deck: "
+                    + "; ".join(f"{p} <- {', '.join(d)}" for p, d in borrowed.items()))
+    if missing_cert:
+        hard.append("provider classes that do not declare Certificate() in their OWN body "
+                    "(they silently inherit another deck's answer): "
+                    + ", ".join(f"{n}Provider(:{b})" for n, b in missing_cert))
+
+    if hard:
+        print("\nFAIL -- the always-own-a-provider rule (USER 2026-09-18):")
+        for h in hard:
+            print("  * " + h)
+        print("\nFix: add a provider for the deck in src/ai/DecisionProviders.h deriving from")
+        print("DeckProvider (or from the provider it ALREADY routes to, if there is code to")
+        print("reuse), give it Name() + Certificate(), and route it in SelectDecisionProvider")
+        print("ABOVE whatever branch it currently trips. An empty derivation is play-neutral.")
+    elif suspects:
+        print("\nName-mismatch notes only (not a failure): ", ", ".join(f"{a}->{b}" for a, b in suspects))
+
+    return 1 if (check and hard) else 0
 
 
 if __name__ == "__main__":
