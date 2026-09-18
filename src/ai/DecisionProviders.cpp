@@ -19622,6 +19622,39 @@ inline void FungusLethalNote(FungusLethal w)
     { g_fungus_lethal[static_cast<int>(w)].fetch_add(1, std::memory_order_relaxed); }
 }
 
+// WHAT-IF for the lord-library tightening, measured BEFORE building it. lord-library is 98.0% of
+// declines, and the obvious fix is to stop crediting library Sporecrowns as free: one costs {1} for
+// the Psychotrope draw plus {1}{G} for the cast, so >= 3 mana per copy -- the same shape as
+// SnowCertGainBound pricing a library-sourced permanent at >= 2 (dig, then cast).
+//
+// These counters CHANGE NO BEHAVIOUR. They re-run the bound with the cap applied and record whether
+// the node WOULD have been certified, which is the only honest way to decide whether the real
+// change earns its risk: a certificate bug is silent, so a tightening that buys little must not be
+// built at all. The ranked guess that sent the last attempt at the anthem term was wrong by two
+// orders of magnitude; this is the cheap way not to repeat that.
+inline std::atomic<unsigned long long> g_fungus_whatif_fire{0};
+inline std::atomic<unsigned long long> g_fungus_whatif_stuck{0};
+
+// THE CEILING of the whole lord-library line. The counters above measure ONE proposed tightening
+// (price a library copy at >= 3 mana); this one measures the best ANY of them could ever do, by
+// deleting the library lord credit outright -- which is not a legal certificate (it would
+// UNDER-credit the player and could certify a node that is actually a win) but is a perfectly
+// good upper bound on the payoff. If even the ceiling is small, every tightening in this family is
+// dead and the certificate is at its ceiling for this deck, which is a far more useful thing to
+// know than the score of one candidate.
+inline std::atomic<unsigned long long> g_fungus_ceiling_fire{0};
+// JOINT ceiling: library lords AND the anthem both deleted. Distinguishes the two explanations the
+// single-term ceiling cannot: either these nodes are genuinely wide boards that are lethal on the
+// bodies alone (nothing to fix), or several optimistic terms are CO-CARRYING, each independently
+// clearing the life total, in which case only a joint tightening could ever pay. Also unsound by
+// construction, and for the same reason: it is a bound on the payoff, not a candidate.
+inline std::atomic<unsigned long long> g_fungus_ceiling_joint{0};
+// Is the ANTHEM half of that joint even tightenable? Only if the Ascension is NOT already on the
+// battlefield. A board Ascension's +5/+5 is real -- no mana, no draw, nothing to bound -- so if the
+// lord-library mass is mostly board-Ascension nodes, the joint tightening is capped no matter how
+// good the library-lord bound gets, and the whole line is closed.
+inline std::atomic<unsigned long long> g_fungus_ll_ba[3] = {};   // 0 board, 1 hand-only, 2 library-only
+
 // The pool this analysis has actually reasoned about: decks/Fungus/Fungus.cod, main + side.
 // Memoised per CardDefinition* exactly like SnowCertKnownDef -- this runs at every edge node.
 bool FungusCertKnownDef(const CardDefinition* d)
@@ -19700,6 +19733,30 @@ void FungusCertReasonReport()
         if (v) { std::fprintf(stderr, " %s=%llu", kLethal[i], v); }
     }
     std::fprintf(stderr, " ===\n");
+
+    const unsigned long long wf = g_fungus_whatif_fire.load();
+    const unsigned long long ws = g_fungus_whatif_stuck.load();
+    if (wf || ws)
+    {
+        std::fprintf(stderr,
+                     "=== FUNGUS WHAT-IF (library lord priced at >=3 mana, NOT APPLIED): "
+                     "would-fire=%llu still-declines=%llu (%.1f%% of lord-library) ===\n",
+                     wf, ws, (wf + ws) ? 100.0 * static_cast<double>(wf) / static_cast<double>(wf + ws) : 0.0);
+        const unsigned long long cf = g_fungus_ceiling_fire.load();
+        std::fprintf(stderr,
+                     "=== FUNGUS WHAT-IF CEILING (library lords DELETED -- unsound, upper bound "
+                     "on any tightening in this family): would-fire=%llu (%.1f%% of lord-library) ===\n",
+                     cf, (wf + ws) ? 100.0 * static_cast<double>(cf) / static_cast<double>(wf + ws) : 0.0);
+        const unsigned long long cj = g_fungus_ceiling_joint.load();
+        std::fprintf(stderr,
+                     "=== FUNGUS WHAT-IF JOINT CEILING (library lords AND anthem deleted -- unsound): "
+                     "would-fire=%llu (%.1f%% of lord-library) ===\n",
+                     cj, (wf + ws) ? 100.0 * static_cast<double>(cj) / static_cast<double>(wf + ws) : 0.0);
+        std::fprintf(stderr,
+                     "=== FUNGUS lord-library, WHERE THE ASCENSION IS: board=%llu hand-only=%llu "
+                     "library-only=%llu ===\n",
+                     g_fungus_ll_ba[0].load(), g_fungus_ll_ba[1].load(), g_fungus_ll_ba[2].load());
+    }
 }
 
 // Exit-time twin of the above (the periodic tick only runs under MTG_WINLESS_STATS_EVERY).
@@ -19900,7 +19957,35 @@ bool FungusProvider::ProvenWinlessThisTurn(const GameState& s, int me) const
             if (base_damage >= opp.life)                          { FungusLethalNote(FungusLethal::BaseLethal); }
             else if (lb >= opp.life)                              { FungusLethalNote(FungusLethal::LordBoard); }
             else if (lh >= opp.life)                              { FungusLethalNote(FungusLethal::LordHand); }
-            else if (base_damage + attackers * lords >= opp.life) { FungusLethalNote(FungusLethal::LordLibrary); }
+            else if (base_damage + attackers * lords >= opp.life)
+            {
+                FungusLethalNote(FungusLethal::LordLibrary);
+                // WHAT-IF ONLY -- no behaviour change. Price each library Sporecrown at >= 3 mana
+                // ({1} for the Psychotrope draw + {1}{G} for the cast) against an UPPER bound on
+                // this turn's mana. UntappedManaUpperBound already credits the sac-for-mana outlet
+                // (Utopia Mycon turns each Saproling into a mana), so it does not need a Fungus
+                // special case -- which is exactly why it is the right helper to reuse. It reads
+                // state.active_player_index, so it is only meaningful on our own turn; when it is
+                // not our turn the what-if simply declines to claim anything.
+                if (s.active_player_index == me)
+                {
+                    const long long mana_ub  = UntappedManaUpperBound(s, /*for_creature=*/false,
+                                                                      /*reserved_mask=*/0, /*stop_at=*/-1);
+                    const long long lib_cap  = std::min(lords_lib, std::max(0LL, mana_ub / 3));
+                    const long long capped   = lords_board + lords_hand + lib_cap;
+                    if (base_damage + attackers * (capped + anthem) < opp.life)
+                    { g_fungus_whatif_fire.fetch_add(1, std::memory_order_relaxed); }
+                    else
+                    { g_fungus_whatif_stuck.fetch_add(1, std::memory_order_relaxed); }
+                }
+                // The ceiling: library lords deleted entirely (see g_fungus_ceiling_fire).
+                if (base_damage + attackers * (lords_board + lords_hand + anthem) < opp.life)
+                { g_fungus_ceiling_fire.fetch_add(1, std::memory_order_relaxed); }
+                if (base_damage + attackers * (lords_board + lords_hand) < opp.life)
+                { g_fungus_ceiling_joint.fetch_add(1, std::memory_order_relaxed); }
+                g_fungus_ll_ba[(ba_src & 1) ? 0 : ((ba_src & 2) ? 1 : 2)]
+                    .fetch_add(1, std::memory_order_relaxed);
+            }
             else if (ba_src & 1)                                  { FungusLethalNote(FungusLethal::AnthemBattlefield); }
             else if (ba_src & 2)                                  { FungusLethalNote(FungusLethal::AnthemHand); }
             else                                                  { FungusLethalNote(FungusLethal::AnthemLibrary); }

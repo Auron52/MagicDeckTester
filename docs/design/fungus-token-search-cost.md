@@ -826,21 +826,68 @@ change of the three -- a certificate bug is silent -- aimed at under 1% of the p
 third time this session that instrumenting a decline class beat reasoning about it
 (`unknown-card` -> dead Saproling tokens; `library-reachable` -> a blanket decline; now this).
 
-### Aimed next: bound the library lord by mana and by the draw budget
+### The tightening was MEASURED BEFORE BEING BUILT -- and the first two candidates died
 
-The fix is now specific. Drawing and casting one library Sporecrown costs, at minimum, **one
-Saproling sacrificed plus `{1}` for the Psychotrope draw, plus `{2}` more for the cast -- 3 mana and
-1 Saproling per copy.** Today both are free. Two properties make this tractable rather than scary:
+Drawing and casting one library Sporecrown costs at minimum a Saproling plus `{1}` for the
+Psychotrope draw plus `{2}` more for the cast: **3 mana and 1 Saproling per copy**, where today both
+are free. That is the obvious fix, and `UntappedManaUpperBound` is the right helper to price it
+(it already credits the sac-for-mana outlet, so Utopia Mycon turning Saprolings into mana needs no
+Fungus special case). Rather than build it, it was added as a **what-if counter** -- re-run the bound
+with the cap applied, record whether the node WOULD have certified, change no behaviour:
 
-* **Without Utopia Mycon on the battlefield the bound is hard and cheap:** mana comes only from
-  untapped lands, so `x <= floor(M / 3)` copies, where `M` is untapped land production (Wild Growth's
-  `+{G}` included). No search, no joint optimisation.
-* **With Mycon it becomes a joint Saproling budget**, because each sacrificed Saproling is worth one
-  mana *and* one fewer attacker. Sacrificing `j` for mana and `x` for draws needs `j + x <= S` and
-  `3x <= M + j`, giving `x <= floor((M + S) / 4)` -- still closed-form, no loop.
+| what-if (none of these are applied) | would-fire | share of `lord-library` |
+|---|---|---|
+| library Sporecrown priced at `>= 3` mana | 2,025 | 6.3% |
+| **CEILING**: library lords DELETED (unsound) | 2,064 | 6.4% |
+| **JOINT CEILING**: library lords **and** anthem deleted (unsound) | **32,386** | **100.0%** |
 
-Both stay over-credits (they ignore that a drawn Sporecrown must also be *found*, i.e. that the draw
-is random rather than a tutor), so the one-sided contract is preserved. **Measure the what-if before
-building it:** add a counter for how many `lord-library` declines would flip to `fired` under the
-capped `lords_lib`, which changes no behaviour and says whether the real change is worth its risk.
-Only build it if that number is large -- the ranking was wrong once already.
+Read those three rows together, because separately each one misleads:
+
+* The mana bound buys 6.3%, and the **ceiling on its entire family is 6.4%** -- the cheap bound
+  already captures 98.1% of the best any library-lord tightening could ever do. On its own that
+  reads as "the certificate is at its ceiling; stop."
+* The joint ceiling says that is **wrong**. Delete the anthem as well and **every single one** of the
+  32,386 certifies. So these boards are NOT lethal on the bodies: `base_damage + attackers x
+  (lords_board + lords_hand)` is short of the opponent's life **100% of the time**.
+
+The two credits are **CO-CARRYING**: each independently clears the life total, so cutting either one
+alone changes nothing because the other takes over. That is the whole explanation for the 6.4%
+ceiling, and it is invisible to any measurement that varies one term at a time.
+
+**A trap in the attribution itself, worth keeping.** The zone buckets classify by lords with the
+anthem EXCLUDED, while the real bound includes it. So a node lands in `lord-library` whenever the
+lords reach lethal -- even if the anthem reaches lethal too. `lord-library = 98.0%` therefore does
+**not** mean "the library lord is the cause"; it means "the library lord is *a* sufficient cause".
+Attribution by first-match over a sum of terms names one carrier and hides the rest.
+
+### Where the Ascension actually is -- and why the last lever is a SAPROLING budget, not a mana one
+
+```
+FUNGUS lord-library, WHERE THE ASCENSION IS: board=29  hand-only=195  library-only=32162
+```
+
+**99.3% of the remaining declines rest on an Ascension that is still in the LIBRARY**, and only 29
+nodes (0.09%) have a real one on the battlefield. So both co-carrying credits are library credits:
+the certificate is conjuring *two different unseen cards* and then believing the board they imply.
+
+That also explains why the mana bound failed, and names the one lever left. Mana is **not** the
+scarce resource on these boards -- Utopia Mycon is "Sacrifice a Saproling: Add one mana of any
+color" with no mana cost, so a wide token board *is* a large mana pool and a `/3` cap never binds.
+The scarce resource is **Saprolings**, and the binding constraint is that they are spent twice over:
+
+* every library card needs a **draw**, and every draw sacrifices a **Saproling** (plus `{1}`);
+* every point of Mycon mana also sacrifices a **Saproling**;
+* and every sacrificed Saproling is **one fewer attacker** -- which fights the Ascension's own
+  precondition, because the anthem needs **seven declared attackers** to switch on.
+
+So the deck cannot both dig out the Ascension and keep the board wide enough to turn it on, and the
+certificate currently lets it do both for free. The remaining candidate is therefore the **joint
+Saproling budget** -- maximise over `k` (Saprolings spent) of "attack with `n - k` while drawing and
+casting with `k`", instead of today's "attack with `n` **and** draw `n`". It is the item the doc
+originally ranked first, for the right mechanism but the wrong term.
+
+**Bar for building it:** it is the most intricate change of the three and a certificate bug is
+silent, so it needs its own careful soundness pass, a `MTG_WINLESS_AUDIT` run at least as wide as
+the adoption run, and -- per the lesson above -- a what-if counter measuring the JOINT effect before
+any behaviour changes. The prize is real and now quantified: the joint ceiling is 100% of 32,386
+declines, which is 28% of all checks, i.e. a fire rate of ~85.8% -> ~99.8%.
