@@ -58,8 +58,11 @@ bool GoldFishRunner::DeckUsesSecondMain(const Decklist& deck)
     // skipped m2 ever has value (the Utvara/Adeline attack-created-token question: the whitelist's
     // in-code comment names untap-on-attack as a trigger, but no such param is in this predicate).
     // Byte-identical when the arm measures no better: the whitelist is then confirmed per-deck.
+    // heurarm slot (2026-09-18) for the same reason EDF_M2 below has one: read as a bare
+    // `static const bool` a process can only BE one arm, which forces one `mtg --batch` per arm --
+    // the per-item loop CLAUDE.md forbids. As a per-job override both arms ride ONE pooled batch.
     static const bool s_force_m2 = EnvOn("MTG_FORCE_USES_M2");
-    if (s_force_m2) { return true; }
+    if (heurarm::Flag(heurarm::FORCE_USES_M2, s_force_m2)) { return true; }
     for (const Card& c : deck.mainboard)
     {
         const CardDefinition* def = CardDatabase::Instance().LookupCached(c);

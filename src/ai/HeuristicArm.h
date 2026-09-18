@@ -210,6 +210,7 @@ enum Slot : int
     FOLD_COUNTER_SOURCES,     // MTG_FOLD_COUNTER_SOURCES  two same-named sources on the SAME counter count fold (the count joins the tag)
     FUNGUS_SAC_DRAW_CLOCK,    // MTG_FUNGUS_SAC_DRAW_CLOCK  sac a Saproling to DRAW only when it is not already on the clock
     BP_CONDEMN_NEWOPT_BYNAME, // MTG_BP_CONDEMN_NEWOPT_BYNAME  a new card only earns the exclusive-slot exemption if its NAME was not already passed on
+    FORCE_USES_M2,            // MTG_FORCE_USES_M2         force the searched SECOND MAIN on regardless of the whitelist
     COUNT
 };
 
@@ -390,6 +391,7 @@ inline const char* Name(int slot)
         "MTG_FOLD_COUNTER_SOURCES",
         "MTG_FUNGUS_SAC_DRAW_CLOCK",
         "MTG_BP_CONDEMN_NEWOPT_BYNAME",
+        "MTG_FORCE_USES_M2",
     };
     // The enum and this table are ONE mapping split across two lists: a slot added to one and not
     // the other silently shifts every lever after it (a manifest asking for lever X would set Y).

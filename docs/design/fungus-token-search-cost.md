@@ -891,3 +891,100 @@ silent, so it needs its own careful soundness pass, a `MTG_WINLESS_AUDIT` run at
 the adoption run, and -- per the lesson above -- a what-if counter measuring the JOINT effect before
 any behaviour changes. The prize is real and now quantified: the joint ceiling is 100% of 32,386
 declines, which is 28% of all checks, i.e. a fire rate of ~85.8% -> ~99.8%.
+
+## THE SAC-TO-DRAW CLOCK RULE: adjudicated 2026-09-18, and the predicate named the wrong creature
+
+The user's rule for Psychotrope Thallid ("{1}, Sacrifice a Saproling: Draw a card"), in their words:
+
+> Sacrifice this saproling for a card when the creature doesn't move up our clock and keep it when
+> it does.
+
+with the acceptance criterion *"this won't get perfect results with respect to tests but, as long as
+we can determine that it is just clairvoyance, we can accept it"*, the method *"one way is simply to
+analyze every loss"*, and the scope limit *"the mana case is a different one -- in that case we can
+just let the search take over whether it is worthwhile"* (so Utopia Mycon's mana sac is untouched).
+
+### Why the draw is the half worth taking off the search
+
+Fungus runs **no shuffle effects** -- no card in the list carries a shuffle, tutor or fetch param --
+so the library is a fixed permutation from setup and the search's simulated draws come from that
+same permutation. The draw decision is therefore **structurally clairvoyant**. The mana sac is not:
+its payoff is fully determined inside the plan ("this lets me cast X"), so the search can price it
+honestly and should keep owning it. That split is the user's and it is the right one.
+
+**No existing instrument can measure this deck's draw clairvoyance by decoupling.**
+`MTG_SHUFFLE_SALT_SEARCH` salts mid-game RESHUFFLES only, of which this deck has none: 1,500 pooled
+games across baseline + 4 salts returned identical digests on every arm. That is "nothing to salt",
+not "no clairvoyance". A positive control on FiveColour/treasure_hunt also failed to move, which
+surfaced a second and more general gap: **21 of 24 decks now carry a value sidecar, so the rollout
+-- and with it every rollout-time shuffle -- is replaced by the O(1) evaluator.** The flag is far
+narrower than its documentation implies. Measuring draw clairvoyance for a deck like this needs a
+new instrument that salts the library order seen during EVALUATION, not just at reshuffles.
+
+### The adjudication (5,000 paired games, seed 70000, one pooled batch)
+
+|                | base (OFF) | clock (ON) |
+|----------------|-----------|-----------|
+| avg win turn   | 5.6406    | 5.6378    |
+| unwon          | 19        | 19        |
+
+`DIVERGENT 22 -- WORSE 4, BETTER 18`, unwon set identical. Every one of the four slower games was
+replayed in both arms with `--log-dir` and read action by action (`scripts/win_divergence.py` emits
+the repro commands; `--seed base+gi --game-index gi --games 1` is the only form that replays the
+same game):
+
+| game | base -> clock | what the base arm's sac-draws actually produced | clairvoyance? |
+|---|---|---|---|
+| `gi=616`  | T7 -> T8 | T7: sacced, drew **Beastmaster Ascension**, cast it, swung 28 -- won on the spot | **yes** |
+| `gi=912`  | T5 -> T6 | T5: drew a **Forest**, never cast; the 22-damage kill owed it nothing | no |
+| `gi=1280` | T6 -> T7 | T5 -> Forest, T6 -> Tukatongue (never cast); Beastmaster came off the NORMAL T6 draw | no |
+| `gi=4880` | T7 -> T8 | T5: drew a **Forest** | no |
+
+So it is **not** just clairvoyance -- one of four. And the other three share a signature that has
+nothing to do with sacrificing: the clock arm **declines its turn-1 Utopia Mycon** (`gi=1280` plays
+Essence Warden over it), leaving mana unspent and falling a turn behind before a Psychotrope is even
+on the board. A decision-level rule cannot do that. The cause had to be upstream.
+
+### The defect: `src` is the OUTLET, and the victim is chosen somewhere else
+
+`DecisionProvider::FodderSacUseful(s, src, def)` passes the **outlet** permanent as `src`. The body
+that dies is picked separately, a few lines earlier in `TurnSolver`, by `CanonicalSacVictim`, and
+baked into `Action::sac_victim_id`.
+
+The first version of the hook asked *"is SOME Saproling off the clock?"*. `CanonicalSacVictim` ranks
+by **expendability** -- effective power, tokens first -- and every Saproling is an identical 1/1
+token, so which one it returns is settled by the tie-break, not by whether it is attacking. The gate
+therefore green-lit the sac on the strength of a summoning-sick Saproling sitting elsewhere on the
+board while the engine went and spent an **attacking** one: the exact inversion of the rule.
+
+Because the hook is consulted at **every node of every lookahead**, that inconsistency is not a
+local misplay -- it perturbs the search's valuation of whole lines, which is why the damage surfaced
+as a mis-valued turn-1 play rather than as a bad sacrifice. Fixed by recomputing the same victim
+with the same arguments the call site uses and testing **that** body.
+
+**The general lesson, and it is not Fungus-specific:** a heuristic that gates one decision must be
+evaluated on the object the decision actually consumes. A provider hook that receives the *source*
+of an action and reasons about the action's *target* is reasoning about a different question, and
+the two agree often enough to look correct in a small sample. The 500-game run saw 2 divergences,
+both favourable, and said nothing.
+
+### A withdrawn claim
+
+The 500-game run reported the rule at **1.71x less search work**. It does not replicate: at 5,000
+games the same arm used **more** (28,448,468 vs 22,230,701 thread-ms, 1.28x the other way). Fungus
+concentrates ~26% of its compute in ~11.5% of its games, so one pathological game moves these sums
+by more than the effect. Neither number is a usable cost estimate and the speedup claim is
+withdrawn rather than reversed. (Same shape as the repo's own one-run-t-stat lesson: +2.36 then
+-2.07 on the same binary.)
+
+### Sequencing consequence for the value leaf
+
+The value leaf's model, depth matrix and crossover are all fitted to the play that ships, so **every
+open Fungus play lever must be closed before the freeze is taken**, not after. Three were open on
+2026-09-18: `MTG_FUNGUS_SAC_DRAW_CLOCK`, `MTG_SAC_OUTLET_PAY` (the held-out measurement in
+`logs/sacpay_ab/holdout.json` turned out to be a manifest with no results in it -- it had never been
+run) and `MTG_FORCE_USES_M2` (which could not ride a pooled batch at all until it was given a
+heurarm slot: `GoldFishRunner.cpp` read it as a process-wide `static const bool`, so a process could
+only ever BE one arm). They are measured 2x2x2 in ONE pooled batch rather than as three A/Bs,
+because this repo has already been burned by per-lever readings that did not compose (+0.0201
+alone, -0.0616 in combination).

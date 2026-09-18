@@ -19834,8 +19834,19 @@ namespace { struct FungusWhyDumper { ~FungusWhyDumper() { FungusCertReasonReport
 // THE RULE. A Saproling made this turn is summoning-sick, so it contributes 0 damage AND -- because
 // Beastmaster Ascension's quest counters come from DECLARED ATTACKERS -- 0 quest counters this turn.
 // Eating one costs this turn's clock nothing on either axis. A Saproling that CAN attack costs both.
-// So: offer the draw only while some Saproling is off the clock; once every one of them is attacking,
-// keep them.
+// So: offer the draw only when the body that will ACTUALLY BE SPENT is off the clock.
+//
+// THE PREDICATE MUST NAME THE VICTIM, NOT THE BOARD (fixed 2026-09-18 after adjudicating the 5,000-
+// game confirmation run). `src` here is the OUTLET permanent, not the fodder: TurnSolver picks the
+// body separately, via CanonicalSacVictim, and bakes it into Action::sac_victim_id. The first
+// version of this hook asked "is SOME Saproling off the clock", which is a different question with
+// a different answer -- CanonicalSacVictim ranks by EXPENDABILITY (effective power, tokens first),
+// and every Saproling is an identical 1/1 token, so the body it returns is decided by the tie-break
+// and is frequently one that CAN attack. The gate then green-lit the sac on the strength of a sick
+// Saproling sitting elsewhere on the board while the engine spent an attacking one: the exact
+// inversion of the rule. So recompute the same victim with the same arguments the call site uses
+// and test THAT body. A heuristic that gates one decision must be evaluated on the object the
+// decision actually consumes.
 //
 // NOT a dominance argument, and it must not be sold as one: the sacrificed body would have attacked
 // NEXT turn, and the objective is avg win turn, so this is a tempo trade. Hence the arm, default OFF.
@@ -19851,15 +19862,21 @@ bool FungusProvider::FodderSacUseful(const GameState& s, const Permanent& src,
     { return GenericProvider::FodderSacUseful(s, src, def); }
 
     const int me = src.controller_index;
+    // Same call, same arguments as the enumeration site in TurnSolver -- keeping them in lockstep is
+    // the whole point; a divergence here would re-open the bug this replaced.
+    const int victim_id = CanonicalSacVictim(s, me, src.card.m_number,
+                                             def.params.sac_creature_requires_subtype,
+                                             def.params.sac_outlet_allows_enchantment,
+                                             def.params.sac_outlet_excludes_self);
+    if (victim_id < 0) { return GenericProvider::FodderSacUseful(s, src, def); }   // no legal fodder
+
     for (const Permanent& p : s.battlefield)
     {
-        if (p.controller_index != me)                 { continue; }
-        if (!CardHasSubtype(p.card, "Saproling"))     { continue; }   // the outlet's own filter
-        if (&p == &src)                               { continue; }   // the outlet itself
+        if (p.controller_index != me || p.card.m_number != victim_id) { continue; }
         // A body that cannot attack this turn is not on the clock, so spending it is free THIS turn.
-        if (!CanAttackFull(p, s.battlefield, me))     { return true; }
+        return !CanAttackFull(p, s.battlefield, me);
     }
-    return false;
+    return GenericProvider::FodderSacUseful(s, src, def);   // victim not on the battlefield: unchanged
 }
 
 bool FungusProvider::ProvenWinlessThisTurn(const GameState& s, int me) const
