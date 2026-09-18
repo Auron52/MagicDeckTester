@@ -1,7 +1,10 @@
 {
-  "value_play": {
-    "ladder": "single",
-    "leaf": "none",
-    "alpha": "relaxed"
-  }
+ "value_play": {
+  "ladder": "single",
+  "leaf": "none",
+  "alpha": "relaxed",
+  "mull_gen_depth": 1,
+  "mull_gen_budget_ms": 3,
+  "expected_buckets": 14
+ }
 }
