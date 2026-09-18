@@ -284,3 +284,73 @@ would blow the smoke (<15 min) and regression (<45 min) budgets on its own.
 A value-leaf generation on this deck should also be costed against these numbers before being
 started: the skill quotes tens of hours for a normal deck, and ~2% of this deck's games are
 minutes-to-tens-of-minutes each.
+
+---
+
+## ROOT CAUSE #2, 2026-09-18: the enum memo was paying a deep copy on every hit (1.37x)
+
+The Dragons fix above removed the largest per-node cost and thereby exposed the next one. A `perf`
+profile of a straggler label game (`--seed 900193 --game-index 193`, one of the ten games phase A
+could not finish in **two successive runs**, ~2.9 h each and still `[RUNNING]`) put a single symbol
+at the top:
+
+```
+25.64%  std::vector<Action>::vector(std::vector<Action> const&)
+ 3.80%  TurnSolver::Plan::Plan(TurnSolver::Plan const&)
+ 2.67%  basic_string::_M_construct<char*>
+ 2.30%  std::vector<Action>::~vector()
+```
+
+A DWARF call graph named the path exactly:
+
+```
+FSLineWin -> FSLineTail -> ApplyPlanDirect -> EnumerateBreakpointPlans
+  -> vector<Plan>::vector(const vector<Plan>&)     <- a COPY, not a move
+    -> Plan::Plan(const Plan&) -> vector<Action>::vector(const&)
+```
+
+`EnumerateBreakpointPlans` was one line:
+
+```cpp
+return BpEnumEntryFor(state, is_pre_combat)->plans;   // returns BY VALUE
+```
+
+`BpEnumEntryFor` hands back a pointer into the thread_local enum memo, and returning `->plans` by
+value **deep-copies the whole memoised list on every hit** — every `Plan`, its entire
+`vector<Action>`, and a `std::string` inside each `Action` (`sizeof(Action) == 352`). The memo
+exists to avoid re-deriving that list, and it was handing back most of the saving in copy cost.
+This is why it hid behind the Dragons cost: both are per-node constants, and the profile only ever
+shows the bigger one.
+
+**The fix** (commit below) adds `EnumerateBreakpointPlansRef`, returning `const std::vector<Plan>&`,
+and converts the three hot `ApplyPlanDirect` call sites. The by-value overload stays for callers
+that need ownership.
+
+**The lifetime contract is the whole risk, and it is documented on the declaration.** The reference
+is invalidated by the next enumeration on the thread, via three distinct paths: the memo clears on
+its count cap, it clears on exceeding the plancache byte budget, and when the cache is disabled (or
+one entry exceeds the whole budget) the entry returned is a single `thread_local` scratch that the
+next call overwrites. Each converted site was checked to read the list immediately and to call
+nothing re-entrant — `PlanOpensBreakpoint`, `IsApplyEmptyPlan` and `BpCandFingerprint` are all
+verified pure. The **executor** sites in `AIEngine` were deliberately left by-value: they run once
+per committed decision, they are not hot, and that path is lockstep-critical.
+
+**Measured** (matched Profile-config binaries, same games, same threads):
+
+| path | before | after | speedup |
+|---|---|---|---|
+| label / row-dump (`MTG_EVAL_ROWS_K=3`, unbounded search) — time to 136 rows, 24 games | 141.4 s | 103.3 s | **1.37x** |
+| play (depth 5, budget 20 ms) — 100 games seed 7001 | 63.0 s | 55.6 s | **1.13x** |
+
+1.37x is what Amdahl predicts from a 25.6% site (1.34x), which is the check that the right thing
+was removed. Play is **byte-identical**: smoke 83/0 with `play-changed=0`, scenarios 100/100, unit
+2,634,451 assertions, and the A/B's own avg turn is 5.6800 on both arms.
+
+After the fix the profile is **flat** — no symbol above 7.2% (`BuildSimKey` 7.2% + its lambda 2.0%
+is now the largest single cost, and the next target if this deck needs more).
+
+**What this does NOT fix.** It is a constant factor, and the ten straggler games are an
+*unbounded-search* problem: the label path runs with no budget by design (a full-strength teacher
+label), so a board that explodes combinatorially still explodes, 1.37x sooner. The remaining lever
+for those specific games is still the Saproling-fusion work described above, or accepting them via
+`valueleaf.sh finish`.

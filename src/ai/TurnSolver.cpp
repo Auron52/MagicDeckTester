@@ -22988,8 +22988,13 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
         else if (eligible)
         {
             // Shared with the executor (AIEngine::resolve_draw_breakpoint): both index the SAME list.
-            std::vector<TurnSolver::Plan> cands =
-                TurnSolver::EnumerateBreakpointPlans(state, is_pre_combat);
+            // BY REFERENCE (see EnumerateBreakpointPlansRef's lifetime contract): this block only
+            // READS the list -- size, two pure per-Plan predicate walks, and one Plan copied out --
+            // and nothing it calls re-enters the enumerator, so the memo entry cannot be invalidated
+            // underneath it. The by-value form was deep-copying every Plan's whole vector<Action> on
+            // every apply, which perf put at 25.6% of a pathological Fungus label game.
+            const std::vector<TurnSolver::Plan>& cands =
+                TurnSolver::EnumerateBreakpointPlansRef(state, is_pre_combat);
             // How LONG is the ranked list? The caller can only emit bp_choice = 0..W-1 blind, so
             // report the real length back for the deferred-wave loop (and MTG_BP_CANDS_PROBE).
             // See g_bp_cands_last -- write-only for now, hence byte-identical.
@@ -23077,8 +23082,9 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
             && (g_rollout_nest == 0 || BpNestedCanonPlayout())
             && plan.bp_choice >= 0 && !plan.bp_all && seen_before >= 0 && seen_before != plan.bp_at)
         {
-            const std::vector<TurnSolver::Plan> ncands =
-                TurnSolver::EnumerateBreakpointPlans(state, is_pre_combat);
+            // By reference: read immediately, one Plan copied out, no re-entry between.
+            const std::vector<TurnSolver::Plan>& ncands =
+                TurnSolver::EnumerateBreakpointPlansRef(state, is_pre_combat);
             if (!ncands.empty()) { out = ncands.front(); resolved = true; }
         }
         // MTG_BP_ENUM_CANON / MTG_BP_BASE_CANON (levers; see the flags): two further un-branched
@@ -23093,8 +23099,9 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
                                         && state.turn_number > g_condemn_root_turn + 1));
             if (enum_slot || base_slot)
             {
-                const std::vector<TurnSolver::Plan> ncands =
-                    TurnSolver::EnumerateBreakpointPlans(state, is_pre_combat);
+                // By reference: read immediately, one Plan copied out, no re-entry between.
+                const std::vector<TurnSolver::Plan>& ncands =
+                    TurnSolver::EnumerateBreakpointPlansRef(state, is_pre_combat);
                 if (!ncands.empty()) { out = ncands.front(); resolved = true; }
             }
         }
@@ -44703,6 +44710,13 @@ namespace bpdesign
 // be identical either way, and the smoke digests are the check.
 std::vector<TurnSolver::Plan> TurnSolver::EnumerateBreakpointPlans(const GameState& state,
                                                                    bool is_pre_combat)
+{
+    return BpEnumEntryFor(state, is_pre_combat)->plans;
+}
+
+// See the LIFETIME CONTRACT on the declaration: valid only until the next enumeration on this thread.
+const std::vector<TurnSolver::Plan>& TurnSolver::EnumerateBreakpointPlansRef(const GameState& state,
+                                                                            bool is_pre_combat)
 {
     return BpEnumEntryFor(state, is_pre_combat)->plans;
 }

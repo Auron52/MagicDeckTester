@@ -1185,6 +1185,26 @@ public:
     // never EnumerateMainPlans, or the realised play would drift from the searched one.
     static std::vector<Plan> EnumerateBreakpointPlans(const GameState& state, bool is_pre_combat);
 
+    // THE SAME LIST, WITHOUT COPYING IT OUT OF THE ENUM MEMO. EnumerateBreakpointPlans returns by
+    // value, so every call deep-copies the memoised result -- each Plan copying its whole
+    // vector<Action>, and an Action is 352 bytes with a std::string in it. That copy was measured at
+    // 25.6% of a pathological Fungus label game (perf, 2026-09-18), i.e. the memo was paying on
+    // every hit most of what it exists to save.
+    //
+    // LIFETIME CONTRACT -- read this before using it. The reference points into a thread_local cache
+    // (BpEnumEntryFor), and it is invalidated by THE NEXT ENUMERATION ON THIS THREAD, through any of
+    // three paths: the cache clears on reaching its count cap, it clears on exceeding the plancache
+    // byte budget, and when the cache is disabled (or one entry exceeds the whole budget) the entry
+    // handed back is a single thread_local scratch that the next call overwrites.
+    //
+    // So: READ IT IMMEDIATELY, and do not hold it across anything that can re-enter the enumerator
+    // (EnumerateBreakpointPlans / EnumerateMainPlans / ApplyPlanDirect / any FSLine* / Solve). If you
+    // need it to survive such a call, take the by-value overload instead -- that is what it is for.
+    // Pure per-Plan predicates are fine (PlanOpensBreakpoint, IsApplyEmptyPlan, BpCandFingerprint are
+    // all verified free of re-entry).
+    static const std::vector<Plan>& EnumerateBreakpointPlansRef(const GameState& state,
+                                                                bool is_pre_combat);
+
     // CHAIN SLOT. A Plan::bp_choice of kBpChainChoice + j is not a rank: it resolves at apply time
     // to the j-th continuation that itself OPENS another breakpoint, which is the continuation the
     // static value ranker buries (it buys options, not board) and the one a chain deck's kill turn
