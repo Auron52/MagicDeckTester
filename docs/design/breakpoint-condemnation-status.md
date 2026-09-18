@@ -2118,3 +2118,104 @@ With the cache no longer thrashing, **the condemning arm has FEWER misses than b
 (26,902 vs 26,930). The miss clause is met; the lookup clause is untouched by the cap, exactly as it
 should be (the cap moves the hit/miss split, not the number of consultations). The two clauses have
 different causes and should stop being reported as one number.
+
+---
+
+## 2026-09-18: THE PRUNE DOES DO LESS WORK. THE SOUNDNESS GUARD IS THE ENTIRE COST.
+
+**USER, 2026-09-18:** *"I don't want waves. I want to delete unnecessary paths according to
+condemnation while eliminating any duplication."* and *"There should be a solution that does less
+work. We need to find and implement it."*
+
+There is, and the previous section was measuring the wrong arm. **Every `armcheck.sh` run in this
+investigation pinned `MTG_BP_CONDEMN_NEW_OPTION=1`** -- the exclusive-slot soundness guard, which
+spares **81% of all drops**. The harness put the fixed probe variables AFTER the per-arm ones, and
+`env` takes the last assignment, so an arm could not override it. Every arm was the expensive one.
+
+### Snow, 10 games, d2/b0, `SNAPSHOT_NONE` all arms, play BYTE-IDENTICAL in all four (`7916f1f572f914e7`, avg 5.9000)
+
+| metric | off | guarded (shipped) | **unguarded** | unguarded + len-memo |
+|---|---|---|---|---|
+| hits | 26,842,249 | +17.73% | **−24.31%** | −24.31% |
+| misses | 431,881 | +18.35% | +0.49% | +0.49% |
+| wave host nodes | 22,757 | +11.08% | +3.69% | +3.67% |
+| slots | 2,517,447 | +18.39% | +1.30% | +1.30% |
+| scored applies | 28,019,734 | +18.05% | **−23.30%** | −23.30% |
+| rolled | 3,139,744 | +21.70% | **−14.31%** | −14.31% |
+| stillborn | 1,680,273 | +19.88% | +4.77% | +4.77% |
+| **units_total** | **40,142,740** | **+14.84%** | **−19.43%** | **−19.43%** |
+| **LOOKUPS (h+m)** | **27,274,130** | **+17.74%** | **−23.92%** | −23.92% |
+| wall | 860 s | 962 s | **667 s (−22.4%)** | 667 s |
+| drops | 0 | 125,953 | **754,719** | 754,719 |
+
+**The filter, allowed to actually filter, is a −19.4% units / −23.9% lookups / −22.4% wall win with
+identical play.** This reproduces the 2026-09-17 finding (UNFIXED −16.2% / FIXED +14.5%) in the
+current harness and at a larger drop count.
+
+**IT IS NOT A "TOLL PLUS A BENEFIT" MODEL, AND THAT MATTERS.** The guarded arm drops 125,953 and
+costs +14.84%; the unguarded arm drops 754,719 and saves 19.43%. The cost is *non-monotone in drops*:
+a small number of drops is strictly worse than none, and a large number is strictly better than
+either. Deleting a few candidates perturbs the continuation lists (which is what grows nodes +11%,
+slots +18%, stillborn +20%) without deleting enough lines to pay for the perturbation.
+**A half-applied prune is the worst of both.** That is the single most useful thing this table says,
+and it retires the "condemnation has a fixed toll" framing that three earlier sections are built on.
+
+### THE BLOCKER IS EXACTLY ONE GAME, AND IT STILL BITES
+
+`gi=1357` (930000 block, d5/b20), re-verified today against the current binary:
+
+| arm | result |
+|---|---|
+| condemnation off | **8** |
+| guarded (shipped) | **8** |
+| unguarded | **9 (unwon)** |
+
+So the guard is still load-bearing and the default cannot simply be flipped. The mechanism is the one
+`BpSiteAddedAPayableOption`'s comment records: the continuation slot is EXCLUSIVE, so dropping Skred
+hands the slot to Rimefeather Owl, whose `{5}{U}{U}` taps a Boreal Druid and turns exactly-lethal
+1+1+5 = 7 into 6.
+
+### NEW TODAY: MAKING THE SLOT NON-EXCLUSIVE DOES NOT FIX IT
+
+If the defect were purely the exclusive slot, then scoring "cast nothing more" as a real alternative
+would recover the game -- EMPTY preserves the Druids and the exact-lethal attack. It does not:
+
+| arm (all unguarded) | gi=1357 |
+|---|---|
+| control | 9 |
+| `MTG_BP_EMPTY_ARM=1` | 9 |
+| `MTG_BP_BASE_EMPTY=1` | 9 |
+| both | 9 |
+
+**So the search SCORES THE OWL LINE ABOVE THE WINNING EMPTY LINE.** That is a VALUATION defect, not a
+condemnation defect: condemnation only removes the third option (Skred) that happened to outrank the
+Owl for unrelated reasons. `EnumeratePlans` already owns the right debit
+(`CollectAttackingManaSources` / `AttackTapDiscount`: "a subset that taps them to pay loses their
+attack"), gated on `is_pre_combat`. **The next step is to find why that debit does not make EMPTY beat
+the Owl in the continuation** -- if it can be made to, the guard becomes unnecessary and the −19.4%
+is unlocked without any exemption, which is what the USER's instruction asks for.
+
+### A LEVER THAT DID NOT WORK, RECORDED SO IT IS NOT RETRIED
+
+`MTG_BP_NSKIP_GLOBAL` -- the cross-node continuation-LENGTH memo. NSKIP's own comment is right that
+the length "is not unknowable, it is merely unremembered", and its memo `bp_known_n` really is
+node-local and keyed positionally, so the idea was to key it on
+`(node state dedup key, base plan fingerprint, bp_at)` -- all available before the apply, and a LENGTH
+needs no depth/budget split because it is a property of the state alone.
+
+**Built, verified sound, and it is a DUD on Snow.** `MTG_BP_NSKIP_GLOBAL_VERIFY=1` (record and compare,
+never skip) reports **0 mismatches** over repeat keys, so the key is fine enough. But the memo barely
+populates: on the 10-game cell, `records=4607 hits=1027 skips=3`. Three slots skipped out of 1.76M
+stillborn. The reason is the RECORD condition, inherited from NSKIP: only a wave-0 `bp_choice == 0`
+variant inside the FSLineWin node loop ever writes, which on Snow is a tiny fraction of the applies
+that discover a length. Kept default-OFF with its verifier; widening the record site is where any
+future attempt must start, not the key.
+
+### HARNESS CORRECTIONS
+
+* `armcheck.sh` now places per-arm variables LAST so an arm can override a default. The old order is
+  what hid this entire finding.
+* `SNAPNONE=0` measures at the real shipping key. Checked today: `MTG_BP_KEY_SNAPSHOT_NONE` has **no
+  effect at all** on a condemnation-OFF arm (identical hits/misses/units), and on the condemning arms
+  it moves only `misses`, not `units` or `lookups`. So every comparison above is robust to it. The
+  memory note claiming the narrowing alone costs +16.6% units does NOT reproduce on this binary.

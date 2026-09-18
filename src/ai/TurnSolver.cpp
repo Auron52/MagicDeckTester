@@ -563,9 +563,17 @@ static std::atomic<long long> g_bp_condemn_drops_exec{0};
 // look like condemnation-OFF from the outside, so without these a silently inert arm is
 // indistinguishable from a working one that happens to be cheap.
 static int BpCondemnDropMode();                          // defined with the mode's documentation
+static int BpSearchWidth();                              // wave-0 width W (defined far below)
 static std::atomic<long long> g_bp_condemn_emitted{0};  // condemned candidates offered anyway (1, 2)
 static std::atomic<long long> g_bp_demote_lists{0};      // continuation lists holding a condemned name
 static std::atomic<long long> g_bp_demote_plans{0};      // entries actually moved to the back
+// ...and the only two that say whether the move REACHED the scored set (see the demote block).
+// CROSS-NODE CONTINUATION-LENGTH MEMO (MTG_BP_NSKIP_GLOBAL; see BpNSkipGlobalMode far below). At
+// file scope rather than beside the memo because the rollout-stats reporter above needs them.
+static std::atomic<long long> g_bplen_records{0}, g_bplen_hits{0}, g_bplen_skips{0},
+                              g_bplen_clears{0}, g_bplen_checked{0}, g_bplen_mismatch{0};
+static std::atomic<long long> g_bp_demote_in_window{0};  // condemned entries at rank < W
+static std::atomic<long long> g_bp_demote_rank0{0};      // ...lists whose VALUE-BEST entry was condemned
 // WHY-NOT histogram (MTG_BP_CONDEMN_WHYNOT). Each consultation that did not drop is charged to its
 // FIRST blocking gate, which turns "what is condemnation's ceiling?" from a trial-and-error
 // question into a read: g_wn_peer is what a FINER CAST ORDER could still recover (two cards at one
@@ -1053,7 +1061,16 @@ namespace
                                                        : dmode == 2 ? " (DEMOTE)" : " (UNKNOWN)")
                           << " emitted_anyway=" << g_bp_condemn_emitted.load()
                           << " demote_lists=" << g_bp_demote_lists.load()
-                          << " demote_plans=" << g_bp_demote_plans.load() << "\n";
+                          << " demote_plans=" << g_bp_demote_plans.load()
+                          << " demote_in_window=" << g_bp_demote_in_window.load()
+                          << " demote_rank0=" << g_bp_demote_rank0.load() << "\n";
+                if (dmode == 2 && g_bp_demote_plans.load() > 0
+                    && g_bp_demote_in_window.load() == 0)
+                {
+                    std::cerr << "  INERT -- DEMOTE moved plans but NONE was inside the wave-0"
+                                 " window (W=" << BpSearchWidth() << "), so nothing that gets"
+                                 " SCORED changed. 'Meets the bar' here is vacuous.\n";
+                }
                 if (dmode == 1 && g_bp_condemn_emitted.load() != bd)
                 {
                     std::cerr << "  WARNING -- COUNT_ONLY emitted " << g_bp_condemn_emitted.load()
@@ -1063,6 +1080,29 @@ namespace
                 {
                     std::cerr << "  NO POWER -- DEMOTE never moved a plan. Any work delta below is"
                                  " NOT the demotion.\n";
+                }
+            }
+            // CROSS-NODE LENGTH MEMO (MTG_BP_NSKIP_GLOBAL). `skips` is the firing counter -- slots
+            // never opened, each one an ApplyPlanDirect not performed. `mismatch` is the SOUNDNESS
+            // assertion under MTG_BP_NSKIP_GLOBAL_VERIFY=1 and must be 0: a nonzero count means the
+            // key merges two states with different list lengths, so a skip could hide a real rank.
+            if (g_bplen_records.load() > 0 || g_bplen_hits.load() > 0)
+            {
+                const long long ch = g_bplen_checked.load(), mm = g_bplen_mismatch.load();
+                std::cerr << "[rollout-stats] bp_len_memo records=" << g_bplen_records.load()
+                          << " hits=" << g_bplen_hits.load()
+                          << " skips=" << g_bplen_skips.load()
+                          << " clears=" << g_bplen_clears.load()
+                          << " verify_checked=" << ch << " verify_MISMATCH=" << mm << "\n";
+                if (mm > 0)
+                {
+                    std::cerr << "  UNSOUND -- the length key merges states with DIFFERENT list"
+                                 " lengths. MTG_BP_NSKIP_GLOBAL must stay off until this is 0.\n";
+                }
+                else if (ch > 0)
+                {
+                    std::cerr << "  verify clean: " << ch << " repeat keys, every one the same"
+                                 " length.\n";
                 }
             }
             // Gated on the env read OR on any observed activity, so a per-job heurarm arm that turns
@@ -31348,6 +31388,103 @@ namespace
         return on && UnbudgetedWorkScopeActive();
     }
 
+    // ---- THE SAME LENGTH, LEARNED ONCE INSTEAD OF ONCE PER NODE (MTG_BP_NSKIP_GLOBAL) ----------
+    //
+    // NSKIP's own comment has the right insight -- the continuation list's length "is not unknowable,
+    // it is merely unremembered" -- but its memo `bp_known_n` is a **node-local** keyed
+    // **positionally** on `(base plan index << 8 | bp_at)`. Two things follow: it is discarded when
+    // the node returns, and its key is meaningless anywhere else. So every other node that reaches
+    // the same breakpoint pays a full `ApplyPlanDirect` to rediscover a length some node already had.
+    //
+    // THE WASTE THIS TARGETS IS THE LARGEST SINGLE BLOCK ON THE TABLE. Snow 10 games d2/b0:
+    // **1,680,273 of 2,517,447 wave slots (66.7%) are STILLBORN** -- opened at a rank the list does
+    // not have, retired on their first hand-out, having bought nothing but `n`. And that is the
+    // residual *after* NSKIP, which already halves it (slots 4,618,573 -> 2,918,243, stillborn
+    // 3,426,123 -> 1,724,192, `improved` identical at 133 both ways).
+    //
+    // IT IS WORSE UNDER CONDEMNATION, which is why it is the lever for the USER's bar: deleting a
+    // condemned candidate SHORTENS the list, so more ranks are past its end. Measured, delete vs off:
+    // slots +18.39% but stillborn +19.88%. The filter pays for its own deletions in rediscovery.
+    //
+    // WHY IT CAN BE KEYED AT ALL, given the walker must decide BEFORE the apply and the apply is what
+    // produces the breakpoint state. The length is a deterministic function of
+    // `(node state, base plan, bp_at)` -- a variant targets ONE breakpoint index and every other
+    // breakpoint resolves to the unconditional EMPTY fallback, so the state at breakpoint #at is
+    // fixed by the base plan's own prefix. All three are in hand before the apply. Keyed on the plan
+    // FINGERPRINT rather than its index, which is what structurally avoids the stale-position hazard
+    // that made an earlier attempt at this lever lossy.
+    //
+    // WHY IT NEEDS NO BUDGET/DEPTH SPLIT, unlike value reuse. A LENGTH is a property of the state
+    // alone: it does not depend on remaining depth, on the budget, or on what the search did with it.
+    // That is the whole difference from the order-free WIN-reuse defect (which needed SPLIT KEYS and
+    // budget gating) and it is why this one is safe to share across nodes.
+    //
+    // SOUNDNESS: a hit can only cause AddSlots to decline a slot whose every rank is past the end of
+    // the list -- i.e. a slot that would have been retired stillborn on its first hand-out. No
+    // continuation becomes unreachable. `MTG_BP_NSKIP_GLOBAL_VERIFY=1` asserts that directly: it
+    // records and consults but NEVER skips, and counts every case where the memoised length differs
+    // from the one the apply actually observed. That count must be 0.
+    //
+    // MODES: 0 = off (default, byte-identical). 1 = skip slots resuming past rank 0, exactly NSKIP's
+    // contract. 2 = also skip a rank-0 slot whose memoised length is 0 (the apply reached no eligible
+    // breakpoint at all), which NSKIP cannot do because it only ever looks at `k0 > 0`.
+    // Scoped to UnbudgetedWorkScopeActive() for NSKIP's reason: under a budget, work a skip saves is
+    // work the budget re-spends elsewhere, which moves the committed line and churns GT for decks
+    // that gain nothing. Under no budget there is nothing to re-spend, so it is pure saving.
+    inline int BpNSkipGlobalMode()
+    {
+        static const int v = EnvInt("MTG_BP_NSKIP_GLOBAL", 0);
+        return (v != 0 && UnbudgetedWorkScopeActive()) ? v : 0;
+    }
+    inline bool BpNSkipGlobalVerify()
+    {
+        static const bool v = EnvOn("MTG_BP_NSKIP_GLOBAL_VERIFY");
+        return v;
+    }
+    struct BpLenKey
+    {
+        TranspositionTable::Key k;
+        std::uint64_t           fp;
+        int                     at;
+        bool operator==(const BpLenKey& o) const
+        { return at == o.at && fp == o.fp && k == o.k; }
+    };
+    struct BpLenKeyHash
+    {
+        std::size_t operator()(const BpLenKey& x) const
+        {
+            std::size_t h = TranspositionTable::KeyHash{}(x.k);
+            h ^= std::hash<std::uint64_t>{}(x.fp) + 0x9e3779b97f4a7c15ull + (h << 6) + (h >> 2);
+            h ^= static_cast<std::size_t>(x.at) + 0x9e3779b97f4a7c15ull + (h << 6) + (h >> 2);
+            return h;
+        }
+    };
+    using BpLenMap = std::unordered_map<BpLenKey, int, BpLenKeyHash>;
+    inline BpLenMap& BpLenMemo() { static thread_local BpLenMap m; return m; }
+    // Count-capped like every other memo here, and CLEARED PER GAME (ClearPerGameCaches) so a
+    // worker's job history cannot change a game's work meter.
+    inline std::size_t BpLenMemoCap()
+    { static const std::size_t v = static_cast<std::size_t>(EnvInt("MTG_BP_NSKIP_GLOBAL_CAP", 262144)); return v; }
+    inline void BpLenRecord(const BpLenKey& k, int n)
+    {
+        BpLenMap& m = BpLenMemo();
+        if (BpNSkipGlobalVerify())
+        {
+            const auto it = m.find(k);
+            if (it != m.end())
+            {
+                g_bplen_checked.fetch_add(1, std::memory_order_relaxed);
+                // THE SOUNDNESS ASSERTION. Same key, different length => the key is too coarse and
+                // mode 1/2 would skip a slot that has real ranks. Must be 0.
+                if (it->second != n) { g_bplen_mismatch.fetch_add(1, std::memory_order_relaxed); }
+            }
+        }
+        if (m.size() >= BpLenMemoCap())
+        { m.clear(); g_bplen_clears.fetch_add(1, std::memory_order_relaxed); }
+        m[k] = n;
+        g_bplen_records.fetch_add(1, std::memory_order_relaxed);
+    }
+
     inline void BpWaveMax(std::atomic<int>& m, int k)
     {
         int prev = m.load(std::memory_order_relaxed);
@@ -31388,9 +31525,12 @@ public:
     // `known_n` (MTG_BP_WAVE_NSKIP; nullptr = off) maps (base plan index << 8 | bp_at) to the
     // continuation list length wave 0's k=0 variant already measured there. See BpWaveNSkipOn.
     using KnownLens = std::unordered_map<uint64_t, int>;
+    // `node_key` (MTG_BP_NSKIP_GLOBAL; nullptr = off) is this node's state dedup key, the half of the
+    // cross-node length memo's key the walker cannot derive from `plans`. See BpNSkipGlobalMode.
     BpWaveWalker(const GameState& state, const std::vector<TurnSolver::Plan>& plans,
-                 std::size_t limit, const KnownLens* known_n = nullptr)
-        : m_known_n(known_n)
+                 std::size_t limit, const KnownLens* known_n = nullptr,
+                 const TranspositionTable::Key* node_key = nullptr)
+        : m_known_n(known_n), m_node_key(node_key)
     {
         const int  sites  = BpWaveSiteMask();
         const bool dig_bp = BpDigFanoutPending(state, sites);
@@ -31507,6 +31647,28 @@ private:
                     continue;
                 }
             }
+            // ...and the SAME QUESTION ASKED OF EVERY OTHER NODE (MTG_BP_NSKIP_GLOBAL). The block
+            // above can only answer for a length THIS node's own wave 0 happened to measure; this one
+            // answers from any node that ever measured it, which is where the remaining 1.68M
+            // stillborn slots live. Mode 2 additionally covers k0 == 0, which the node-local memo
+            // structurally cannot: a rank-0 slot is skippable exactly when the list is EMPTY.
+            const int gmode = BpNSkipGlobalMode();
+            if (gmode != 0 && m_node_key != nullptr && (k0 > 0 || gmode >= 2))
+            {
+                const BpLenKey lk{ *m_node_key, BpCandFingerprint(plans[idx]), at };
+                const BpLenMap& gm = BpLenMemo();
+                const auto git = gm.find(lk);
+                if (git != gm.end())
+                {
+                    g_bplen_hits.fetch_add(1, std::memory_order_relaxed);
+                    if (git->second <= k0 && !BpNSkipGlobalVerify())
+                    {
+                        g_bplen_skips.fetch_add(1, std::memory_order_relaxed);
+                        g_bp_wave_probe.nskip_slots.fetch_add(1, std::memory_order_relaxed);
+                        continue;
+                    }
+                }
+            }
             m_slots.push_back(Slot{ idx, bi, at, k0, k0, -1, false });
             if (at > 0 && BpWaveProbeOn())
             { g_bp_wave_probe.nested.fetch_add(1, std::memory_order_relaxed); }
@@ -31515,6 +31677,7 @@ private:
     }
 
     const KnownLens*         m_known_n = nullptr;   // MTG_BP_WAVE_NSKIP; nullptr = off
+    const TranspositionTable::Key* m_node_key = nullptr;   // MTG_BP_NSKIP_GLOBAL; nullptr = off
     std::vector<Slot>        m_slots;
     std::vector<std::size_t> m_bases;      // node-plan index of each base plan, in slot-creation order
     std::vector<int>         m_at_count;   // how many bp_at slots each base already has
@@ -33965,6 +34128,11 @@ void TurnSolver::ClearPerGameCaches()
     // only the work METER's determinism ("Play was never affected"); for an accumulator that decides
     // what is condemned it would cost PLAY determinism, which no thread-shape-dependent input may do.
     BpAllPathsClear();
+    // The cross-node continuation-LENGTH memo (MTG_BP_NSKIP_GLOBAL). A length cannot change a play
+    // -- it only declines slots whose every rank is past the end of the list -- but it CAN change the
+    // work meter, and a thread_local that outlived a batch worker's job switch would make a game's
+    // units depend on which games shared the worker. Same argument as the plan memos above.
+    BpLenMemo().clear();
 }
 
 
@@ -38364,6 +38532,12 @@ static TurnSolver::SearchLine FSLineWin(const GameState& state, int depth, int m
     // MTG_BP_WAVE_NSKIP only: continuation-list lengths this node's wave-0 variants measured, keyed
     // (base plan index << 8 | bp_at). Left empty when the flag is off, so the walker sees nullptr.
     BpWaveWalker::KnownLens bp_known_n;
+    // MTG_BP_NSKIP_GLOBAL only: this node's state dedup key, the cross-node half of the length
+    // memo's key (see BpNSkipGlobalMode). Computed ONCE per node and only when the flag is on, so
+    // the default path pays nothing and stays byte-identical.
+    const bool nskip_global_here = (BpNSkipGlobalMode() != 0);
+    const TranspositionTable::Key node_dedup_key =
+        nskip_global_here ? BuildDedupKey(state) : TranspositionTable::Key{};
     // MTG_BP_DUPE_TRACE origin map for THIS host (see the m2 host's node_key_origin). This set has
     // more claimants than the m2 one -- ordinary plans, breakpoint VARIANTS, wave entries -- so an
     // unattributed dupe here is itself informative: it came from a claimant not traced.
@@ -38520,6 +38694,15 @@ static TurnSolver::SearchLine FSLineWin(const GameState& state, int depth, int m
         if (nskip_here && p.bp_choice == 0 && !p.bp_all && p.bp_base >= 0)
         { bp_known_n[(static_cast<uint64_t>(p.bp_base) << 8)
                      | static_cast<uint64_t>(p.bp_at & 0xFF)] = g_bp_cands_last; }
+        // ...and the same fact, keyed so every OTHER node can use it (MTG_BP_NSKIP_GLOBAL). Content
+        // key, not position: (node state, base plan fingerprint, bp_at). Recorded on the same
+        // condition as the node-local memo above, so the two always learn from the same applies.
+        if (nskip_here && nskip_global_here && p.bp_choice == 0 && !p.bp_all && p.bp_base >= 0
+            && p.bp_base < static_cast<int>(pre.size()))
+        {
+            BpLenRecord(BpLenKey{ node_dedup_key, BpCandFingerprint(pre[p.bp_base]), p.bp_at },
+                        g_bp_cands_last);
+        }
         if (node_snap.pending)
         {
             // ---- THE BREAKPOINT NODE (MTG_BP_NODE) -------------------------------------------
@@ -38941,7 +39124,8 @@ static TurnSolver::SearchLine FSLineWin(const GameState& state, int depth, int m
     // silent-mis-ordering hazard). Off under a budget by default => byte-identical there.
     if (BpWavesHere(budget) && !gdom_no_waves)
     {
-        BpWaveWalker walker(state, pre, scanned, bp_known_n.empty() ? nullptr : &bp_known_n);
+        BpWaveWalker walker(state, pre, scanned, bp_known_n.empty() ? nullptr : &bp_known_n,
+                            nskip_global_here ? &node_dedup_key : nullptr);
         if (walker.Empty())
         {
             if (BpWaveProbeOn()) { g_bp_wave_probe.no_slots.fetch_add(1); }
@@ -45018,12 +45202,30 @@ static BpEnumEntry* BpEnumEntryFor(const GameState& state, bool is_pre_combat,
             const std::size_t moved = static_cast<std::size_t>(
                 std::count_if(plans.begin(), plans.end(),
                               [&](const TurnSolver::Plan& p) { return !clean(p); }));
+            // DOES THE DEMOTION REACH ANYTHING THAT GETS SCORED? `moved` alone cannot say. Wave 0
+            // emits bp_choice = 0..W-1, so an entry already at rank >= W is not scored either way
+            // and moving it is a no-op on the search -- an arm that only ever moves those is INERT,
+            // and it would present exactly as "demote meets the bar", which is the no-power trap in
+            // its most convincing costume. The number that matters is how many condemned entries sit
+            // INSIDE the wave-0 window and are therefore evicted from the scored set by the move,
+            // and (sharper still) how often the VALUE-BEST entry is the condemned one -- that is the
+            // case where deletion demonstrably removes value and the node's bound must weaken.
+            // Read via DEMOTE mode, but it measures DELETE too: demote's list is baseline's list, so
+            // `in_window` is exactly the set of entries deletion removes from the scored window.
+            const int wv = BpSearchWidth();
+            const std::size_t lim =
+                std::min(static_cast<std::size_t>(wv > 0 ? wv : 0), plans.size());
+            long long in_window = 0;
+            for (std::size_t i = 0; i < lim; ++i) { if (!clean(plans[i])) { ++in_window; } }
+            const bool rank0 = !plans.empty() && !clean(plans[0]);
             std::stable_partition(plans.begin(), plans.end(), clean);
             if (s_rollout_stats)
             {
                 g_bp_demote_lists.fetch_add(1, std::memory_order_relaxed);
                 g_bp_demote_plans.fetch_add(static_cast<long long>(moved),
                                             std::memory_order_relaxed);
+                g_bp_demote_in_window.fetch_add(in_window, std::memory_order_relaxed);
+                if (rank0) { g_bp_demote_rank0.fetch_add(1, std::memory_order_relaxed); }
             }
         }
         t_bp_condemned_names.swap(outer_condemned);
