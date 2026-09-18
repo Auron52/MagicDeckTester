@@ -988,3 +988,345 @@ heurarm slot: `GoldFishRunner.cpp` read it as a process-wide `static const bool`
 only ever BE one arm). They are measured 2x2x2 in ONE pooled batch rather than as three A/Bs,
 because this repo has already been burned by per-lever readings that did not compose (+0.0201
 alone, -0.0616 in combination).
+
+---
+
+# BRANCHING-FACTOR WORK, 2026-09-18: the user's three items
+
+**User, 2026-09-18**, after reading the blow-up diagnosis above:
+
+> "We should heuristic to remove the colour fan. This deck only uses green or perhaps just let the
+> mana heuristic handle that. As I said before, we should de-duplicate the choice of which source a
+> saproling comes from, the oldest entry that has 3 counters first. We can also try your idea, but I
+> would also like the earlier points optimized."
+
+and, clarifying the second item:
+
+> "We should be able to fold entries with the same number of counters."
+> "i.e. Heuristically, we know that the source of the saproling does not matter in this deck, so we
+> can safely choose any of them that has enough counters to be the first one."
+
+Three items. Item 1 needed no code, item 2 is the large win, item 3 is measured but not built.
+
+## Item 1: the colour fan -- ALREADY HANDLED, nothing built
+
+The user's own alternative ("or perhaps just let the mana heuristic handle that") is what is already
+happening. `ChosenFloatColorCandidates` filters candidate colours by DEMAND -- coloured pips summed
+over the active player's nonland cards in hand, library, graveyard and battlefield -- and that
+filter is explicitly *not* a heuristic and is *not* lifted by `MTG_UNPRUNED(SacColor)`:
+
+```cpp
+// a colour no card in ANY of the active player's zones has a pip for cannot be spent on anything,
+// so the variant that floats it is a dead branch, not a choice the search is being denied.
+for (int c = 0; c < 5; ++c) { if (demand[c] > 0) { idx.push_back(c); } }
+```
+
+Every mainboard nonland card in this deck is mono-green, so `demand[]` can only ever have the G slot
+set and the fan is the singleton `{G}`. Utopia Mycon's "add one mana of any color" therefore already
+costs exactly one action.
+
+**Proved by measurement, not by reading the comment** -- the comment on the emission site said so,
+and this session had already caught one stale comment of exactly that kind ("Fungus ... routed to
+`GenericProvider`", which `FungusProvider` had made false). The falsification is zero-code:
+`MTG_SAC_COLOR_CAP=1` truncates the fan to one colour, so if the fan is already a singleton, capping
+it must be byte-identical.
+
+| | 400 games, seed 40000 |
+|---|---|
+| baseline | avg 5.6725 |
+| `MTG_SAC_COLOR_CAP=1` | avg 5.6725 |
+| per-game win turns (`MTG_DUMP_WINS`) | **400/400 identical** |
+
+**Nothing to build.** Recorded because "restrict the any-colour fan" is an obvious-looking
+optimisation that someone will propose again; the answer is that the demand filter got there first.
+
+## Item 2: the spore-source pool -- BUILT, `MTG_FUNGUS_SPORE_POOL`
+
+### What it does
+
+Every interchangeable spore outlet becomes ONE POOL. The canonical (oldest) payer carries a single
+k-axis whose maximum is the POOL's total capacity; every other member emits nothing; the apply twin
+spends oldest-first, rolling over between bodies. So the enumeration carries **how many** Saprolings
+to make and never **which body pays** -- collapsing 2^n source selections into the n+1 outcomes that
+actually differ.
+
+**The count axis survives intact**, which is the one thing that must not be lost: the card data is
+explicit that K is a real searched axis and not a greedy max ("holding three counters until a
+Doubling Season resolves turns one Saproling into two, and Mycoloth's devour wants the bodies on the
+battlefield BEFORE it enters"). Pooling collapses the SOURCE only.
+
+It is a HEURISTIC, on the user's explicit ruling, and not a proof: spending Thallid A's counters
+rather than Thallid B's leaves a different DISTRIBUTION of residual counters. The total is
+identical -- every pop costs the same three -- and the user has ruled the distribution does not
+matter for this deck. That is exactly the deck-provider scope the repo reserves for narrowing, so it
+lives behind `FungusProvider::FoldSporeSourceIdentity()` and is inert for every other deck.
+
+Age is a safe canonical key for this specific ability: the activation has no {T} in its cost, so
+summoning sickness never makes one body legal and another not (CR 302.6 restricts only {T}
+abilities). `PermIsPlainForFold`'s usual manland caveat cannot arise here.
+
+Pool membership is decided by a field-by-field payload compare (`SporePayloadsMatch`), not by card
+name, so a list that ever gains an outlet minting something other than a 1/1 green Saproling simply
+fails to pool and keeps its own axis, automatically.
+
+### WHY THE SHIPPED LOSSLESS FOLD COULD NOT DO THIS
+
+`MTG_FOLD_COUNTER_SOURCES` was built for exactly this shape and measured **inert** (`units_total`
+identical to the digit). The two reasons are structural, and the pool sidesteps both rather than
+fixing either:
+
+1. **`FinalizeFoldTags` CONDITION 2 drops any class whose source emitted more than one action.** A
+   Thallid holding six counters emits `k=1` AND `k=2`, so `src_cnt > 1` and the class dies. That is
+   the whole of `drop_src=116,427`. The condition is correct for the case it was written for (an
+   Aether Vial deploy colliding with a cast on the same hand slot); it is simply fatal here.
+2. **The canonical-prefix guard is gated `from_odometer`**, and the searched enumeration never goes
+   through the odometer -- which is why the SEARCH half of `guard_reject` did not move at all while
+   the greedy half moved 81k.
+
+Pooling at the EMISSION site needs neither: it emits one action per COUNT instead of one per
+(source, count), so the powerset collapses before any guard is consulted.
+
+### Measured
+
+Inertness first, because a default-off lever that is not byte-identical is a bug regardless of its
+prize:
+
+| gate | result |
+|---|---|
+| lever OFF vs the pre-change binary, 400 games | **400/400 identical** |
+| scenarios | 103 passed, 0 failed |
+| unit | 114 cases, 2,634,478 assertions |
+
+Then the effect. Branching census (`MTG_BF_CENSUS` + `MTG_ROLLOUT_STATS`, 6 games, single-threaded)
+confirms the lever actually fires -- required, because an unchanged average has three causes and
+"never ran" is one of them:
+
+| | OFF | ON |
+|---|---|---|
+| candidates | 428,477 | 414,808 |
+| mean width | 29.38 | 28.41 |
+| **max width** | **360** | **227** |
+| `chosen_x` mass | 123,933 (28.9%) | 109,358 (26.4%) |
+| `Sporesower Thallid` activations | 52,006 | **26,869** (-48%) |
+| `Thallid Shell-Dweller` activations | 2,161 | **1,367** (-37%) |
+
+And the two paths, which do NOT pay the same:
+
+| | games | `units_total` | wall | labels / win turns |
+|---|---|---|---|---|
+| play (d5/b20), seed 40000 | 400 | -- | -- | **400/400 identical** |
+| label, seed 901750 | 8 | 1,708,948 -> 1,642,561 (1.04x) | 7.32 -> 6.29 s (1.16x) | 45 rows identical |
+| label, seed 31337 (held out) | 24 | 7,143,918 -> **4,850,445** (**1.47x**) | 69.60 -> **26.73 s** (**2.60x**) | 129 rows identical |
+
+**The gain scales with how hard the block is**, which is the right shape for this deck: 1.16x on the
+easy 8-game block, **2.60x** on the wider held-out block. Wall improves faster than units because
+the collapsed enumerations are also cheaper per node -- max width falls 360 -> 227, and the board-size
+tail is what the per-node cost is made of (see the census section above).
+
+**Play is metric-neutral and labels are unchanged on every block measured.** That is evidence, not
+proof -- this is a heuristic and it narrows the search -- but it is the evidence the adoption bar asks
+for, taken on a held-out seed rather than the block the lever was developed against.
+
+METHOD NOTE, and it is the one this doc already records: label dumps were written to FRESH paths and
+compared SORTED, and the dump's own seed column was checked (`24 distinct` for a 24-game run). The
+append-mode trap that turned 128 rows into "222" is one reused `/tmp` name away at all times.
+
+## Item 3: the joint Saproling budget -- BUILT BEHIND `MTG_FUNGUS_CERT_JOINT` (default OFF)
+
+The user's "your idea": the certificate's remaining looseness. Per this doc's own standing rule --
+and it has now killed three ranked guesses on this deck -- the candidate was instrumented as a
+what-if counter BEFORE any behaviour change.
+
+### The bound
+
+Today's bound takes the maximum over a combination that cannot happen: it credits
+`min(lib_lords, fodder)` library Sporecrowns as drawn AND keeps every one of those bodies attacking.
+Each draw costs a Saproling, the outlets eat Saprolings, so a body spent digging is a body not
+attacking -- which fights the Ascension's own precondition of seven DECLARED attackers.
+
+So maximise over `k` (Saprolings spent) of "attack with what is left while drawing with `k`":
+
+```
+atk(k) = attackers - max(0, k - free_fodder)        free_fodder = max(0, fodder - attackers)
+ld(k)  = lords_board + lords_hand + min(lib_lords, k)
+an(k)  = ba_power  if reachable, seen (k>0 for a library-only Ascension), and ba_best + atk(k)*per >= threshold
+combat = max over k of  base_damage + atk(k) * (ld(k) + an(k))
+```
+
+**Admissible by construction** -- `<=` today's bound at every node, so it can only ever fire more --
+with two over-credits kept deliberately so it can never UNDER-credit: bodies that were never going
+to attack (summoning-sick tokens, Shell-Dweller's defender) are spent FIRST and cost nothing, and
+the attackers that are spent are assumed to have contributed 0 power to `base_damage`.
+
+Soundness note on the obvious objection: a player could attack first and sacrifice afterwards,
+keeping both the damage and the draw. That does not break the bound, because a card drawn after
+combat cannot pump *this* turn's attack, and the certificate's question is only "can I win THIS
+turn".
+
+### Measured, and the variance is the headline
+
+| block | would-fire | still-declines | share of combat-lethal |
+|---|---|---|---|
+| seed 901750, 8 games | 8,946 | 5,867 | **60.4%** |
+| seed 31337, 24 games (held out) | 4,707 | 28,307 | **14.3%** |
+
+**Both numbers are reported because the spread is the finding.** A 4x swing between blocks means
+this candidate must not be sized from one of them -- which is the same "one run is not evidence"
+lesson the `MTG_BP_SEARCH=0` entry in this doc already carries. For comparison, on the same
+instrument the two earlier candidates scored 0.6% (library lord priced at >= 3 mana) and 0.6% (the
+unsound CEILING of that whole family), so 14.3% is still an order of magnitude better than anything
+previously proposed here, and it is an ADMISSIBLE bound rather than a ceiling.
+
+### Built, and how the cost was taken out
+
+The exhaustive sweep is O(fodder) per declining node and `fodder` reaches the hundreds on exactly
+the boards this is for, so it is not shippable as written. It reduces to O(lib_lord_count):
+
+* for `k <= free_fodder` the attacker count is CONSTANT and `ld` is non-decreasing but caps at
+  `lib_lord_count`, so the maximum on that whole range sits at `min(free_fodder, lib_lord_count)`;
+* past `free_fodder` the attackers fall by one per `k` while `ld` still caps, so only
+  `[free_fodder, free_fodder + lib_lord_count]` can hold the maximum;
+* `k in {0,1}` additionally covers the library-only-Ascension step in `seen`.
+
+`lib_lord_count <= 4` in this list, so the shipped path evaluates ~7 values of `k`.
+
+**The reduction is CHECKED, not argued.** A reduced set that missed the true maximum would make the
+bound too small -- an UNDER-credit, the one direction this hook may never take -- so under
+`MTG_WINLESS_STATS` every declining node also runs the exhaustive sweep and compares:
+`FUNGUS JOINT reduced-vs-exhaustive MISMATCHES` must be 0. The what-if counter and the real bound
+call the SAME lambda, so they cannot drift.
+
+### The latent `lords_lib` soundness bug -- FIXED in the same change
+
+Recorded in `label-work-bounding-by-reachable-states.md` section 6 and now closed. The original
+expression capped a SUM OF POWER BONUSES with a draw COUNT:
+
+```cpp
+lords_lib += std::min(lib_lords, fodder);          // lib_lords = SUM of power_bonus
+```
+
+That is exact only while every lord in the pool is +1/+1 -- true of Sporecrown Thallid, so it has
+never yet been wrong. Add a +2/+2 lord and it UNDER-credits: four copies give `lib_lords=8`, and
+with `fodder=3` the cap yields 3 when three draws really fetch three lords worth +6. Under-crediting
+is how a certificate certifies a node that is actually a win. Now:
+
+```cpp
+lords_lib += std::min(lib_lord_count, fodder) * lib_lord_bonus;
+```
+
+**Behaviour-neutral on this list** (every lord is +1/+1, so `min(4,f)*1 == min(4,f)`), which is why
+it can ride along with a default-off lever without needing its own A/B.
+
+### What adoption still needs
+
+`MTG_WINLESS_AUDIT` at least as wide as the certificate's own adoption run (99,128 nodes,
+violations 0), because the hook's bar is one-sided and a false positive silently converts a win into
+a loss. Until then the lever stays **default OFF**.
+
+---
+
+## THE CERTIFICATE WAS UNSOUND, and the audit found it: the anthem does not stack in the bound
+
+**Found 2026-09-18, while trying to widen the joint budget's audit past its adoption bar.** This is
+the most important result on this page, and it is a defect in code that had already SHIPPED
+(`MTG_FUNGUS_CERT`, default ON since earlier the same day).
+
+### How it surfaced
+
+The joint-budget audit on the block it was developed against (seed 31337, 94,512 certified nodes)
+reported **violations=0**. Pushing to a wider, held-out block to clear the doc's own adoption bar
+(99,128 nodes) turned up **4 violations in 434,817 nodes** on seed 52000.
+
+Isolating the two levers showed they owned none of it:
+
+| config | probes | violations |
+|---|---|---|
+| **JOINT=0 POOL=0 (the SHIPPED default)** | 454,185 | **4** |
+| JOINT=1 POOL=0 | 458,432 | 4 |
+| JOINT=0 POOL=1 | 430,670 | 4 |
+| JOINT=1 POOL=1 | 434,817 | 4 |
+
+Identical count in every arm: **pre-existing, in shipped code**, and nothing to do with the work
+that found it.
+
+### The bug
+
+```cpp
+ba_power = std::max(ba_power, q.quest_anthem_power);   // <-- ONE copy's worth, however many are out
+```
+
+Beastmaster Ascension reads *"As long as **this** enchantment has seven or more quest counters on
+it, creatures you control get +5/+5."* Two copies at threshold are two independent continuous
+effects -- **+10/+10**, not +5/+5. All four violation boards held TWO Ascensions, and the arithmetic
+is exact. From the dump:
+
+```
+VIOLATION t6: opp_life=15 creatures=2
+bf=[Tukatongue Thallid, Simic Growth Chamber, Forest, Beastmaster Ascension, Forest,
+    Thallid, Beastmaster Ascension, Forest, Doubling Season, Forest]
+```
+
+Certificate: `base_damage(2) + attackers(2) * (lords 0 + anthem 5) = 12 < 15` -> certifies "cannot
+win this turn". Reality with both Ascensions online: `2 * (1 + 10) = 22 >= 15` -> **wins**.
+
+That is an UNDER-credit, the one direction the hook's contract forbids: *"it may over-credit the
+player's reach and decline, but it may never under-credit, because a false positive silently
+converts a win into a loss."*
+
+### The fix
+
+Count the copies and test each on its OWN counters, because the counters are per-copy too -- a fresh
+Ascension and one sitting on six do not come online together:
+
+```
+ready  = (battlefield copies with own_counters + gain >= threshold)
+       + (hand + library copies, only if gain >= threshold -- they enter with NO counters)
+anthem = ready * ba_power
+```
+
+`ba_threshold` also changed from a MAX to a MIN across copies. With one anthem card in the pool the
+two are the same number, but a max-threshold would make a second anthem card harder to switch on
+than it really is -- the inadmissible direction again, latent in exactly the way the `lords_lib` sum
+was.
+
+The term is now a lambda of the attacker count (`anthem_for`) because the joint budget re-evaluates
+it at several attacker counts, and the two must not drift.
+
+### Measured
+
+| | before | after |
+|---|---|---|
+| audit violations (seed 52000, 48 games) | **4** | **0** |
+| certified nodes probed | 454,185 | 453,526 |
+| fire rate | 92.9% | **92.9%** |
+| seed 31337 block: checks / fired / units | 108,650 / 92,239 / 7,143,918 | **identical** |
+| seed 31337 labels | 129 rows | **identical** |
+
+**The fix is surgical and essentially free.** It changes only the nodes that were actually wrong:
+seed 31337 had no violations and is bit-identical afterwards (same checks, same fired, same
+units_total, same 129 labels), while seed 52000 goes 4 -> 0 at an unchanged fire rate.
+
+### What this says about the method
+
+* **The narrow audit passed.** 94,512 nodes on the tuning block found nothing; 454,185 on a
+  held-out block found four. The adoption bar ("at least as wide as the adoption run") is doing real
+  work, and the held-out part of it is the half that mattered -- the certificate's own adoption run
+  had 99,128 nodes and also missed this.
+* **Every gate the deck has was green while this was live.** Smoke, regression, scenarios and the
+  unit suite all pass with the bug in place, because the certificate is label-scoped and cannot
+  change play -- it corrupts TRAINING LABELS silently. `MTG_WINLESS_AUDIT` is the only instrument in
+  the repo that can see it. Any future certificate work should run it wide and held-out, not just
+  wide.
+* **Two of the three soundness defects found today are the same shape**: a per-copy quantity folded
+  with `max` or summed-then-capped, where the copies really add. `ba_power` (max over Ascensions)
+  and `lords_lib` (sum of bonuses capped by a draw count). When a bound aggregates over copies,
+  state explicitly whether the effect stacks.
+
+### Consequence for the value leaf
+
+Phase A rows generated before this fix were labelled by a certificate that could declare a winnable
+turn unwinnable. The 14,007 rows currently banked are therefore suspect wherever a board held two
+Ascensions. The observed rate is low (4 nodes in 454k on one seed, 0 on another) and a label is only
+wrong if a violation lands on a ROW's own root rather than an interior node -- but the honest
+position is that the banked rows predate a soundness fix, and a regeneration on the fixed engine is
+the clean route. That is the user's call, not an agent's; it is recorded here rather than acted on.
