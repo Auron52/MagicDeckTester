@@ -1,0 +1,309 @@
+{
+  "seed": 9, "game_index": 8, "win_turn": 5, "won": true,
+  "mulligan": { "count": 0, "bottom": [] },
+  "decisions": [
+    { "chosen": 1, "decision": {
+  "decision_index": 0,
+  "type": "mulligan",
+  "turn": 0,
+  "me": { "life": 20, "battlefield": [] },
+  "opponent": { "life": 20, "battlefield": [] },
+  "mulligan_count": 0,
+  "on_the_play": false,
+  "to_bottom": 0,
+  "hand": [{ "num": 1, "name": "Archangel of Thune" }, { "num": 2, "name": "Archangel of Thune" }, { "num": 17, "name": "Plains" }, { "num": 57, "name": "Youthful Valkyrie" }, { "num": 50, "name": "Sol Ring" }, { "num": 44, "name": "Seraph Sanctuary" }, { "num": 18, "name": "Plains" }],
+  "ai_choice": 1,
+  "note": "reply 1 to KEEP this hand (then bottom 0 card(s)), or 0 to mulligan again"
+}
+},
+    { "chosen": 1, "decision": {
+  "decision_index": 1,
+  "main_ordinal": 0,
+  "type": "main_phase",
+  "turn": 1,
+  "phase": "pre_main",
+  "on_the_play": false,
+  "drew": [{ "turn": 1, "card": "Resplendent Angel" }],
+  "mdfc_backs": ["Boulderloft Pathway", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [], "vial_counters": [], "hand": [{ "num": 1, "name": "Archangel of Thune", "cost": "{3}{W}{W}", "mv": 5, "kind": "permanent", "is_creature": true }, { "num": 2, "name": "Archangel of Thune", "cost": "{3}{W}{W}", "mv": 5, "kind": "permanent", "is_creature": true }, { "num": 17, "name": "Plains", "cost": "", "mv": 0, "kind": "land" }, { "num": 18, "name": "Plains", "cost": "", "mv": 0, "kind": "land" }, { "num": 36, "name": "Resplendent Angel", "cost": "{1}{W}{W}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 44, "name": "Seraph Sanctuary", "cost": "", "mv": 0, "kind": "land" }, { "num": 50, "name": "Sol Ring", "cost": "{1}", "mv": 1, "kind": "permanent" }, { "num": 57, "name": "Youthful Valkyrie", "cost": "{1}{W}", "mv": 2, "kind": "permanent", "is_creature": true }], "graveyard": [], "library_size": 52, "land_drops_left": 1 },
+  "opponent": { "life": 20, "battlefield": [] },
+  "plans": [
+    { "index": 0, "summary": "land=Plains; cast: Sol Ring, Youthful Valkyrie", "land": "Plains", "drops": ["Youthful Valkyrie"], "casts": ["Sol Ring", "Youthful Valkyrie"], "cast_order_canonical": ["Sol Ring", "Youthful Valkyrie"], "actions": [{ "card": "Sol Ring" }, { "card": "Youthful Valkyrie" }] },
+    { "index": 1, "summary": "land=Plains; cast: Sol Ring", "land": "Plains", "casts": ["Sol Ring"], "actions": [{ "card": "Sol Ring" }] },
+    { "index": 2, "summary": "land=Seraph Sanctuary; cast: Sol Ring", "land": "Seraph Sanctuary", "casts": ["Sol Ring"], "actions": [{ "card": "Sol Ring" }] },
+    { "index": 3, "summary": "land=Plains; cast: (nothing)", "land": "Plains", "casts": [], "actions": [] },
+    { "index": 4, "summary": "land=Seraph Sanctuary; cast: (nothing)", "land": "Seraph Sanctuary", "casts": [], "actions": [] },
+    { "index": 5, "summary": "land=none; cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 2,
+  "type": "main_phase",
+  "turn": 1,
+  "phase": "pre_main",
+  "on_the_play": false,
+  "mdfc_backs": ["Boulderloft Pathway", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Plains", "idx": 0, "num": 17, "tapped": true, "is_land": true }, { "name": "Sol Ring", "idx": 1, "num": 50, "is_land": false, "taps": "C" }], "vial_counters": [], "hand": [{ "num": 1, "name": "Archangel of Thune", "cost": "{3}{W}{W}", "mv": 5, "kind": "permanent", "is_creature": true }, { "num": 2, "name": "Archangel of Thune", "cost": "{3}{W}{W}", "mv": 5, "kind": "permanent", "is_creature": true }, { "num": 18, "name": "Plains", "cost": "", "mv": 0, "kind": "land" }, { "num": 36, "name": "Resplendent Angel", "cost": "{1}{W}{W}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 44, "name": "Seraph Sanctuary", "cost": "", "mv": 0, "kind": "land" }, { "num": 57, "name": "Youthful Valkyrie", "cost": "{1}{W}", "mv": 2, "kind": "permanent", "is_creature": true }], "graveyard": [], "library_size": 52, "land_drops_left": 0 },
+  "opponent": { "life": 20, "battlefield": [] },
+  "plans": [
+    { "index": 0, "summary": "cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 3,
+  "type": "main_phase",
+  "turn": 1,
+  "phase": "post_main",
+  "on_the_play": false,
+  "mdfc_backs": ["Boulderloft Pathway", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Plains", "idx": 0, "num": 17, "tapped": true, "is_land": true }, { "name": "Sol Ring", "idx": 1, "num": 50, "is_land": false, "taps": "C" }], "vial_counters": [], "hand": [{ "num": 1, "name": "Archangel of Thune", "cost": "{3}{W}{W}", "mv": 5, "kind": "permanent", "is_creature": true }, { "num": 2, "name": "Archangel of Thune", "cost": "{3}{W}{W}", "mv": 5, "kind": "permanent", "is_creature": true }, { "num": 18, "name": "Plains", "cost": "", "mv": 0, "kind": "land" }, { "num": 36, "name": "Resplendent Angel", "cost": "{1}{W}{W}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 44, "name": "Seraph Sanctuary", "cost": "", "mv": 0, "kind": "land" }, { "num": 57, "name": "Youthful Valkyrie", "cost": "{1}{W}", "mv": 2, "kind": "permanent", "is_creature": true }], "graveyard": [], "library_size": 52, "land_drops_left": 0 },
+  "opponent": { "life": 20, "battlefield": [] },
+  "plans": [
+    { "index": 0, "summary": "cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
+}
+},
+    { "chosen": 0, "decision": {
+  "decision_index": 4,
+  "main_ordinal": 1,
+  "type": "main_phase",
+  "turn": 2,
+  "phase": "pre_main",
+  "on_the_play": false,
+  "drew": [{ "turn": 2, "card": "Plains" }],
+  "mdfc_backs": ["Boulderloft Pathway", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Plains", "idx": 0, "num": 17, "is_land": true, "taps": "W" }, { "name": "Sol Ring", "idx": 1, "num": 50, "is_land": false, "taps": "C" }], "vial_counters": [], "hand": [{ "num": 1, "name": "Archangel of Thune", "cost": "{3}{W}{W}", "mv": 5, "kind": "permanent", "is_creature": true }, { "num": 2, "name": "Archangel of Thune", "cost": "{3}{W}{W}", "mv": 5, "kind": "permanent", "is_creature": true }, { "num": 18, "name": "Plains", "cost": "", "mv": 0, "kind": "land" }, { "num": 19, "name": "Plains", "cost": "", "mv": 0, "kind": "land" }, { "num": 36, "name": "Resplendent Angel", "cost": "{1}{W}{W}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 44, "name": "Seraph Sanctuary", "cost": "", "mv": 0, "kind": "land" }, { "num": 57, "name": "Youthful Valkyrie", "cost": "{1}{W}", "mv": 2, "kind": "permanent", "is_creature": true }], "graveyard": [], "library_size": 51, "land_drops_left": 1 },
+  "opponent": { "life": 20, "battlefield": [] },
+  "plans": [
+    { "index": 0, "summary": "land=Plains; cast: Resplendent Angel", "land": "Plains", "casts": ["Resplendent Angel"], "actions": [{ "card": "Resplendent Angel" }] },
+    { "index": 1, "summary": "land=Seraph Sanctuary; cast: Youthful Valkyrie", "land": "Seraph Sanctuary", "casts": ["Youthful Valkyrie"], "actions": [{ "card": "Youthful Valkyrie" }] },
+    { "index": 2, "summary": "land=Plains; cast: Youthful Valkyrie", "land": "Plains", "casts": ["Youthful Valkyrie"], "actions": [{ "card": "Youthful Valkyrie" }] },
+    { "index": 3, "summary": "land=none; cast: Youthful Valkyrie", "land": null, "casts": ["Youthful Valkyrie"], "actions": [{ "card": "Youthful Valkyrie" }] },
+    { "index": 4, "summary": "land=Seraph Sanctuary; cast: (nothing)", "land": "Seraph Sanctuary", "casts": [], "actions": [] },
+    { "index": 5, "summary": "land=Plains; cast: (nothing)", "land": "Plains", "casts": [], "actions": [] },
+    { "index": 6, "summary": "land=none; cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 5,
+  "type": "main_phase",
+  "turn": 2,
+  "phase": "pre_main",
+  "on_the_play": false,
+  "mdfc_backs": ["Boulderloft Pathway", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Plains", "idx": 0, "num": 17, "tapped": true, "is_land": true }, { "name": "Plains", "idx": 2, "num": 18, "tapped": true, "is_land": true }, { "name": "Resplendent Angel", "idx": 3, "num": 36, "is_land": false }, { "name": "Sol Ring", "idx": 1, "num": 50, "tapped": true, "is_land": false }], "vial_counters": [], "hand": [{ "num": 1, "name": "Archangel of Thune", "cost": "{3}{W}{W}", "mv": 5, "kind": "permanent", "is_creature": true }, { "num": 2, "name": "Archangel of Thune", "cost": "{3}{W}{W}", "mv": 5, "kind": "permanent", "is_creature": true }, { "num": 19, "name": "Plains", "cost": "", "mv": 0, "kind": "land" }, { "num": 44, "name": "Seraph Sanctuary", "cost": "", "mv": 0, "kind": "land" }, { "num": 57, "name": "Youthful Valkyrie", "cost": "{1}{W}", "mv": 2, "kind": "permanent", "is_creature": true }], "graveyard": [], "library_size": 51, "land_drops_left": 0, "floating_mana": {"C": 1} },
+  "opponent": { "life": 20, "battlefield": [] },
+  "plans": [
+    { "index": 0, "summary": "cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 6,
+  "type": "main_phase",
+  "turn": 2,
+  "phase": "post_main",
+  "on_the_play": false,
+  "mdfc_backs": ["Boulderloft Pathway", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Plains", "idx": 0, "num": 17, "tapped": true, "is_land": true }, { "name": "Plains", "idx": 2, "num": 18, "tapped": true, "is_land": true }, { "name": "Resplendent Angel", "idx": 3, "num": 36, "is_land": false }, { "name": "Sol Ring", "idx": 1, "num": 50, "tapped": true, "is_land": false }], "vial_counters": [], "hand": [{ "num": 1, "name": "Archangel of Thune", "cost": "{3}{W}{W}", "mv": 5, "kind": "permanent", "is_creature": true }, { "num": 2, "name": "Archangel of Thune", "cost": "{3}{W}{W}", "mv": 5, "kind": "permanent", "is_creature": true }, { "num": 19, "name": "Plains", "cost": "", "mv": 0, "kind": "land" }, { "num": 44, "name": "Seraph Sanctuary", "cost": "", "mv": 0, "kind": "land" }, { "num": 57, "name": "Youthful Valkyrie", "cost": "{1}{W}", "mv": 2, "kind": "permanent", "is_creature": true }], "graveyard": [], "library_size": 51, "land_drops_left": 0 },
+  "opponent": { "life": 20, "battlefield": [] },
+  "plans": [
+    { "index": 0, "summary": "cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
+}
+},
+    { "chosen": 2, "decision": {
+  "decision_index": 7,
+  "main_ordinal": 2,
+  "type": "main_phase",
+  "turn": 3,
+  "phase": "pre_main",
+  "on_the_play": false,
+  "drew": [{ "turn": 3, "card": "Lyra Dawnbringer" }],
+  "mdfc_backs": ["Boulderloft Pathway", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Plains", "idx": 0, "num": 17, "is_land": true, "taps": "W" }, { "name": "Plains", "idx": 2, "num": 18, "is_land": true, "taps": "W" }, { "name": "Resplendent Angel", "idx": 3, "num": 36, "is_land": false }, { "name": "Sol Ring", "idx": 1, "num": 50, "is_land": false, "taps": "C" }], "vial_counters": [], "hand": [{ "num": 1, "name": "Archangel of Thune", "cost": "{3}{W}{W}", "mv": 5, "kind": "permanent", "is_creature": true }, { "num": 2, "name": "Archangel of Thune", "cost": "{3}{W}{W}", "mv": 5, "kind": "permanent", "is_creature": true }, { "num": 14, "name": "Lyra Dawnbringer", "cost": "{3}{W}{W}", "mv": 5, "kind": "permanent", "is_creature": true }, { "num": 19, "name": "Plains", "cost": "", "mv": 0, "kind": "land" }, { "num": 44, "name": "Seraph Sanctuary", "cost": "", "mv": 0, "kind": "land" }, { "num": 57, "name": "Youthful Valkyrie", "cost": "{1}{W}", "mv": 2, "kind": "permanent", "is_creature": true }], "graveyard": [], "library_size": 50, "land_drops_left": 1 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "1/1 Creature", "idx": 5, "num": 500001, "is_land": false }, { "name": "6/6 Creature", "idx": 4, "num": 500000, "is_land": false }] },
+  "plans": [
+    { "index": 0, "summary": "land=Seraph Sanctuary; cast: Lyra Dawnbringer", "land": "Seraph Sanctuary", "casts": ["Lyra Dawnbringer"], "actions": [{ "card": "Lyra Dawnbringer" }] },
+    { "index": 1, "summary": "land=Plains; cast: Lyra Dawnbringer", "land": "Plains", "casts": ["Lyra Dawnbringer"], "actions": [{ "card": "Lyra Dawnbringer" }] },
+    { "index": 2, "summary": "land=Seraph Sanctuary; cast: Archangel of Thune", "land": "Seraph Sanctuary", "casts": ["Archangel of Thune"], "actions": [{ "card": "Archangel of Thune" }] },
+    { "index": 3, "summary": "land=Plains; cast: Archangel of Thune", "land": "Plains", "casts": ["Archangel of Thune"], "actions": [{ "card": "Archangel of Thune" }] },
+    { "index": 4, "summary": "land=Seraph Sanctuary; cast: Youthful Valkyrie", "land": "Seraph Sanctuary", "casts": ["Youthful Valkyrie"], "actions": [{ "card": "Youthful Valkyrie" }] },
+    { "index": 5, "summary": "land=Plains; cast: Youthful Valkyrie", "land": "Plains", "casts": ["Youthful Valkyrie"], "actions": [{ "card": "Youthful Valkyrie" }] },
+    { "index": 6, "summary": "land=none; cast: Youthful Valkyrie", "land": null, "casts": ["Youthful Valkyrie"], "actions": [{ "card": "Youthful Valkyrie" }] },
+    { "index": 7, "summary": "land=Seraph Sanctuary; cast: (nothing)", "land": "Seraph Sanctuary", "casts": [], "actions": [] },
+    { "index": 8, "summary": "land=Plains; cast: (nothing)", "land": "Plains", "casts": [], "actions": [] },
+    { "index": 9, "summary": "land=none; cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 8,
+  "type": "main_phase",
+  "turn": 3,
+  "phase": "pre_main",
+  "on_the_play": false,
+  "events": [{ "turn": 3, "kind": "trigger", "text": "❤️ life gained: Archangel of Thune: +1/+1 on each creature" }, { "turn": 3, "kind": "drain", "text": "💚 Archangel of Thune entered — Seraph Sanctuary: you +1 (21→22)" }],
+  "mdfc_backs": ["Boulderloft Pathway", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 22, "battlefield": [{ "name": "Archangel of Thune", "idx": 7, "num": 1, "is_land": false, "counters": [{ "kind": "p1p1", "label": "+1/+1", "count": 1 }] }, { "name": "Plains", "idx": 0, "num": 17, "tapped": true, "is_land": true }, { "name": "Plains", "idx": 2, "num": 18, "tapped": true, "is_land": true }, { "name": "Resplendent Angel", "idx": 3, "num": 36, "is_land": false, "counters": [{ "kind": "p1p1", "label": "+1/+1", "count": 1 }] }, { "name": "Seraph Sanctuary", "idx": 6, "num": 44, "tapped": true, "is_land": true }, { "name": "Sol Ring", "idx": 1, "num": 50, "tapped": true, "is_land": false }], "vial_counters": [], "hand": [{ "num": 2, "name": "Archangel of Thune", "cost": "{3}{W}{W}", "mv": 5, "kind": "permanent", "is_creature": true }, { "num": 14, "name": "Lyra Dawnbringer", "cost": "{3}{W}{W}", "mv": 5, "kind": "permanent", "is_creature": true }, { "num": 19, "name": "Plains", "cost": "", "mv": 0, "kind": "land" }, { "num": 57, "name": "Youthful Valkyrie", "cost": "{1}{W}", "mv": 2, "kind": "permanent", "is_creature": true }], "graveyard": [], "library_size": 50, "land_drops_left": 0 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "1/1 Creature", "idx": 5, "num": 500001, "is_land": false }, { "name": "6/6 Creature", "idx": 4, "num": 500000, "is_land": false }] },
+  "plans": [
+    { "index": 0, "summary": "cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 9,
+  "type": "main_phase",
+  "turn": 3,
+  "phase": "post_main",
+  "on_the_play": false,
+  "events": [{ "turn": 3, "kind": "combat", "text": "⚔ attacked: Resplendent Angel (4) — 4 to opponent (20→16)" }],
+  "mdfc_backs": ["Boulderloft Pathway", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 22, "battlefield": [{ "name": "Archangel of Thune", "idx": 7, "num": 1, "is_land": false, "counters": [{ "kind": "p1p1", "label": "+1/+1", "count": 1 }] }, { "name": "Plains", "idx": 0, "num": 17, "tapped": true, "is_land": true }, { "name": "Plains", "idx": 2, "num": 18, "tapped": true, "is_land": true }, { "name": "Resplendent Angel", "idx": 3, "num": 36, "tapped": true, "is_land": false, "counters": [{ "kind": "p1p1", "label": "+1/+1", "count": 1 }] }, { "name": "Seraph Sanctuary", "idx": 6, "num": 44, "tapped": true, "is_land": true }, { "name": "Sol Ring", "idx": 1, "num": 50, "tapped": true, "is_land": false }], "vial_counters": [], "hand": [{ "num": 2, "name": "Archangel of Thune", "cost": "{3}{W}{W}", "mv": 5, "kind": "permanent", "is_creature": true }, { "num": 14, "name": "Lyra Dawnbringer", "cost": "{3}{W}{W}", "mv": 5, "kind": "permanent", "is_creature": true }, { "num": 19, "name": "Plains", "cost": "", "mv": 0, "kind": "land" }, { "num": 57, "name": "Youthful Valkyrie", "cost": "{1}{W}", "mv": 2, "kind": "permanent", "is_creature": true }], "graveyard": [], "library_size": 50, "land_drops_left": 0 },
+  "opponent": { "life": 16, "battlefield": [{ "name": "1/1 Creature", "idx": 5, "num": 500001, "is_land": false }, { "name": "6/6 Creature", "idx": 4, "num": 500000, "is_land": false }] },
+  "plans": [
+    { "index": 0, "summary": "cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
+}
+},
+    { "chosen": 2, "decision": {
+  "decision_index": 10,
+  "main_ordinal": 3,
+  "type": "main_phase",
+  "turn": 4,
+  "phase": "pre_main",
+  "on_the_play": false,
+  "drew": [{ "turn": 4, "card": "Youthful Valkyrie" }],
+  "mdfc_backs": ["Boulderloft Pathway", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 22, "battlefield": [{ "name": "Archangel of Thune", "idx": 7, "num": 1, "is_land": false, "counters": [{ "kind": "p1p1", "label": "+1/+1", "count": 1 }] }, { "name": "Plains", "idx": 0, "num": 17, "is_land": true, "taps": "W" }, { "name": "Plains", "idx": 2, "num": 18, "is_land": true, "taps": "W" }, { "name": "Resplendent Angel", "idx": 3, "num": 36, "is_land": false, "counters": [{ "kind": "p1p1", "label": "+1/+1", "count": 1 }] }, { "name": "Seraph Sanctuary", "idx": 6, "num": 44, "is_land": true, "taps": "C" }, { "name": "Sol Ring", "idx": 1, "num": 50, "is_land": false, "taps": "C" }], "vial_counters": [], "hand": [{ "num": 2, "name": "Archangel of Thune", "cost": "{3}{W}{W}", "mv": 5, "kind": "permanent", "is_creature": true }, { "num": 14, "name": "Lyra Dawnbringer", "cost": "{3}{W}{W}", "mv": 5, "kind": "permanent", "is_creature": true }, { "num": 19, "name": "Plains", "cost": "", "mv": 0, "kind": "land" }, { "num": 57, "name": "Youthful Valkyrie", "cost": "{1}{W}", "mv": 2, "kind": "permanent", "is_creature": true }, { "num": 58, "name": "Youthful Valkyrie", "cost": "{1}{W}", "mv": 2, "kind": "permanent", "is_creature": true }], "graveyard": [], "library_size": 49, "land_drops_left": 1 },
+  "opponent": { "life": 16, "battlefield": [{ "name": "1/1 Creature", "idx": 5, "num": 500001, "is_land": false }, { "name": "6/6 Creature", "idx": 4, "num": 500000, "is_land": false }] },
+  "plans": [
+    { "index": 0, "summary": "land=Plains; cast: Lyra Dawnbringer", "land": "Plains", "casts": ["Lyra Dawnbringer"], "actions": [{ "card": "Lyra Dawnbringer" }] },
+    { "index": 1, "summary": "land=none; cast: Lyra Dawnbringer", "land": null, "casts": ["Lyra Dawnbringer"], "actions": [{ "card": "Lyra Dawnbringer" }] },
+    { "index": 2, "summary": "land=Plains; cast: Archangel of Thune", "land": "Plains", "casts": ["Archangel of Thune"], "actions": [{ "card": "Archangel of Thune" }] },
+    { "index": 3, "summary": "land=none; cast: Archangel of Thune", "land": null, "casts": ["Archangel of Thune"], "actions": [{ "card": "Archangel of Thune" }] },
+    { "index": 4, "summary": "land=Plains; cast: Youthful Valkyrie, Youthful Valkyrie", "land": "Plains", "casts": ["Youthful Valkyrie", "Youthful Valkyrie"], "cast_order_canonical": ["Youthful Valkyrie", "Youthful Valkyrie"], "actions": [{ "card": "Youthful Valkyrie" }, { "card": "Youthful Valkyrie" }] },
+    { "index": 5, "summary": "land=none; cast: Youthful Valkyrie, Youthful Valkyrie", "land": null, "casts": ["Youthful Valkyrie", "Youthful Valkyrie"], "cast_order_canonical": ["Youthful Valkyrie", "Youthful Valkyrie"], "actions": [{ "card": "Youthful Valkyrie" }, { "card": "Youthful Valkyrie" }] },
+    { "index": 6, "summary": "land=Plains; cast: Youthful Valkyrie", "land": "Plains", "casts": ["Youthful Valkyrie"], "actions": [{ "card": "Youthful Valkyrie" }] },
+    { "index": 7, "summary": "land=none; cast: Youthful Valkyrie", "land": null, "casts": ["Youthful Valkyrie"], "actions": [{ "card": "Youthful Valkyrie" }] },
+    { "index": 8, "summary": "land=Plains; cast: Resplendent Angel: pump +2/+2 and lifelink", "land": "Plains", "casts": ["Resplendent Angel"], "actions": [{ "card": "Resplendent Angel", "src_num": 36, "activate": true, "cost_pips": "WWW", "x": 1 }] },
+    { "index": 9, "summary": "land=Plains; cast: (nothing)", "land": "Plains", "casts": [], "actions": [] },
+    { "index": 10, "summary": "land=none; cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 11,
+  "type": "main_phase",
+  "turn": 4,
+  "phase": "pre_main",
+  "on_the_play": false,
+  "events": [{ "turn": 4, "kind": "trigger", "text": "❤️ life gained: Archangel of Thune: +1/+1 on each creature, Archangel of Thune: +1/+1 on each creature" }, { "turn": 4, "kind": "drain", "text": "💚 Archangel of Thune entered — Seraph Sanctuary: you +1 (22→23)" }],
+  "mdfc_backs": ["Boulderloft Pathway", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 23, "battlefield": [{ "name": "Archangel of Thune", "idx": 7, "num": 1, "is_land": false, "counters": [{ "kind": "p1p1", "label": "+1/+1", "count": 3 }] }, { "name": "Archangel of Thune", "idx": 9, "num": 2, "is_land": false, "counters": [{ "kind": "p1p1", "label": "+1/+1", "count": 2 }] }, { "name": "Plains", "idx": 0, "num": 17, "tapped": true, "is_land": true }, { "name": "Plains", "idx": 2, "num": 18, "tapped": true, "is_land": true }, { "name": "Plains", "idx": 8, "num": 19, "is_land": true, "taps": "W" }, { "name": "Resplendent Angel", "idx": 3, "num": 36, "is_land": false, "counters": [{ "kind": "p1p1", "label": "+1/+1", "count": 3 }] }, { "name": "Seraph Sanctuary", "idx": 6, "num": 44, "tapped": true, "is_land": true }, { "name": "Sol Ring", "idx": 1, "num": 50, "tapped": true, "is_land": false }], "vial_counters": [], "hand": [{ "num": 14, "name": "Lyra Dawnbringer", "cost": "{3}{W}{W}", "mv": 5, "kind": "permanent", "is_creature": true }, { "num": 57, "name": "Youthful Valkyrie", "cost": "{1}{W}", "mv": 2, "kind": "permanent", "is_creature": true }, { "num": 58, "name": "Youthful Valkyrie", "cost": "{1}{W}", "mv": 2, "kind": "permanent", "is_creature": true }], "graveyard": [], "library_size": 49, "land_drops_left": 0 },
+  "opponent": { "life": 16, "battlefield": [{ "name": "1/1 Creature", "idx": 5, "num": 500001, "is_land": false }, { "name": "6/6 Creature", "idx": 4, "num": 500000, "is_land": false }] },
+  "plans": [
+    { "index": 0, "summary": "cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 12,
+  "type": "main_phase",
+  "turn": 4,
+  "phase": "post_main",
+  "on_the_play": false,
+  "events": [{ "turn": 4, "kind": "trigger", "text": "❤️ life gained: Archangel of Thune: +1/+1 on each creature, Archangel of Thune: +1/+1 on each creature" }, { "turn": 4, "kind": "combat", "text": "⚔ attacked: Resplendent Angel (6), Archangel of Thune (6) — 12 to opponent (16→4)" }],
+  "mdfc_backs": ["Boulderloft Pathway", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 29, "battlefield": [{ "name": "Archangel of Thune", "idx": 7, "num": 1, "tapped": true, "is_land": false, "counters": [{ "kind": "p1p1", "label": "+1/+1", "count": 5 }] }, { "name": "Archangel of Thune", "idx": 9, "num": 2, "is_land": false, "counters": [{ "kind": "p1p1", "label": "+1/+1", "count": 4 }] }, { "name": "Plains", "idx": 0, "num": 17, "tapped": true, "is_land": true }, { "name": "Plains", "idx": 2, "num": 18, "tapped": true, "is_land": true }, { "name": "Plains", "idx": 8, "num": 19, "is_land": true, "taps": "W" }, { "name": "Resplendent Angel", "idx": 3, "num": 36, "tapped": true, "is_land": false, "counters": [{ "kind": "p1p1", "label": "+1/+1", "count": 5 }] }, { "name": "Seraph Sanctuary", "idx": 6, "num": 44, "tapped": true, "is_land": true }, { "name": "Sol Ring", "idx": 1, "num": 50, "tapped": true, "is_land": false }], "vial_counters": [], "hand": [{ "num": 14, "name": "Lyra Dawnbringer", "cost": "{3}{W}{W}", "mv": 5, "kind": "permanent", "is_creature": true }, { "num": 57, "name": "Youthful Valkyrie", "cost": "{1}{W}", "mv": 2, "kind": "permanent", "is_creature": true }, { "num": 58, "name": "Youthful Valkyrie", "cost": "{1}{W}", "mv": 2, "kind": "permanent", "is_creature": true }], "graveyard": [], "library_size": 49, "land_drops_left": 0 },
+  "opponent": { "life": 4, "battlefield": [{ "name": "1/1 Creature", "idx": 5, "num": 500001, "is_land": false }, { "name": "6/6 Creature", "idx": 4, "num": 500000, "is_land": false }] },
+  "plans": [
+    { "index": 0, "summary": "cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
+}
+},
+    { "chosen": 0, "decision": {
+  "decision_index": 13,
+  "main_ordinal": 4,
+  "type": "main_phase",
+  "turn": 5,
+  "phase": "pre_main",
+  "on_the_play": false,
+  "drew": [{ "turn": 5, "card": "Unexpectedly Absent" }],
+  "events": [{ "turn": 4, "kind": "trigger", "text": "❤️ life gained: Archangel of Thune: +1/+1 on each creature, Archangel of Thune: +1/+1 on each creature" }, { "turn": 4, "kind": "drain", "text": "💚 4/4 Angel Token entered — Seraph Sanctuary: you +1 (29→30)" }],
+  "mdfc_backs": ["Boulderloft Pathway", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 30, "battlefield": [{ "name": "4/4 Angel Token", "idx": 10, "num": 1000, "is_land": false, "counters": [{ "kind": "p1p1", "label": "+1/+1", "count": 2 }] }, { "name": "Archangel of Thune", "idx": 7, "num": 1, "is_land": false, "counters": [{ "kind": "p1p1", "label": "+1/+1", "count": 7 }] }, { "name": "Archangel of Thune", "idx": 9, "num": 2, "is_land": false, "counters": [{ "kind": "p1p1", "label": "+1/+1", "count": 6 }] }, { "name": "Plains", "idx": 0, "num": 17, "is_land": true, "taps": "W" }, { "name": "Plains", "idx": 2, "num": 18, "is_land": true, "taps": "W" }, { "name": "Plains", "idx": 8, "num": 19, "is_land": true, "taps": "W" }, { "name": "Resplendent Angel", "idx": 3, "num": 36, "is_land": false, "counters": [{ "kind": "p1p1", "label": "+1/+1", "count": 7 }] }, { "name": "Seraph Sanctuary", "idx": 6, "num": 44, "is_land": true, "taps": "C" }, { "name": "Sol Ring", "idx": 1, "num": 50, "is_land": false, "taps": "C" }], "vial_counters": [], "hand": [{ "num": 14, "name": "Lyra Dawnbringer", "cost": "{3}{W}{W}", "mv": 5, "kind": "permanent", "is_creature": true }, { "num": 54, "name": "Unexpectedly Absent", "cost": "{X}{W}{W}", "mv": 2, "kind": "nonpermanent" }, { "num": 57, "name": "Youthful Valkyrie", "cost": "{1}{W}", "mv": 2, "kind": "permanent", "is_creature": true }, { "num": 58, "name": "Youthful Valkyrie", "cost": "{1}{W}", "mv": 2, "kind": "permanent", "is_creature": true }], "graveyard": [], "library_size": 48, "land_drops_left": 1 },
+  "opponent": { "life": 4, "battlefield": [{ "name": "1/1 Creature", "idx": 5, "num": 500001, "is_land": false }, { "name": "6/6 Creature", "idx": 4, "num": 500000, "is_land": false }] },
+  "plans": [
+    { "index": 0, "summary": "land=none; cast: Lyra Dawnbringer", "land": null, "casts": ["Lyra Dawnbringer"], "actions": [{ "card": "Lyra Dawnbringer" }] },
+    { "index": 1, "summary": "land=none; cast: Youthful Valkyrie, Youthful Valkyrie", "land": null, "casts": ["Youthful Valkyrie", "Youthful Valkyrie"], "cast_order_canonical": ["Youthful Valkyrie", "Youthful Valkyrie"], "actions": [{ "card": "Youthful Valkyrie" }, { "card": "Youthful Valkyrie" }] },
+    { "index": 2, "summary": "land=none; cast: Unexpectedly Absent, Youthful Valkyrie", "land": null, "casts": ["Unexpectedly Absent", "Youthful Valkyrie"], "cast_order_canonical": ["Youthful Valkyrie", "Unexpectedly Absent"], "actions": [{ "card": "Unexpectedly Absent" }, { "card": "Youthful Valkyrie" }] },
+    { "index": 3, "summary": "land=none; cast: Unexpectedly Absent, Youthful Valkyrie", "land": null, "casts": ["Unexpectedly Absent", "Youthful Valkyrie"], "cast_order_canonical": ["Youthful Valkyrie", "Unexpectedly Absent"], "actions": [{ "card": "Unexpectedly Absent", "x": 1 }, { "card": "Youthful Valkyrie" }] },
+    { "index": 4, "summary": "land=none; cast: Unexpectedly Absent, Youthful Valkyrie", "land": null, "casts": ["Unexpectedly Absent", "Youthful Valkyrie"], "cast_order_canonical": ["Youthful Valkyrie", "Unexpectedly Absent"], "actions": [{ "card": "Unexpectedly Absent", "x": 2 }, { "card": "Youthful Valkyrie" }] },
+    { "index": 5, "summary": "land=none; cast: Youthful Valkyrie", "land": null, "casts": ["Youthful Valkyrie"], "actions": [{ "card": "Youthful Valkyrie" }] },
+    { "index": 6, "summary": "land=none; cast: Resplendent Angel: pump +2/+2 and lifelink", "land": null, "casts": ["Resplendent Angel"], "actions": [{ "card": "Resplendent Angel", "src_num": 36, "activate": true, "cost_pips": "WWW", "x": 1 }] },
+    { "index": 7, "summary": "land=none; cast: Unexpectedly Absent", "land": null, "casts": ["Unexpectedly Absent"], "actions": [{ "card": "Unexpectedly Absent" }] },
+    { "index": 8, "summary": "land=none; cast: Unexpectedly Absent", "land": null, "casts": ["Unexpectedly Absent"], "actions": [{ "card": "Unexpectedly Absent", "x": 1 }] },
+    { "index": 9, "summary": "land=none; cast: Unexpectedly Absent", "land": null, "casts": ["Unexpectedly Absent"], "actions": [{ "card": "Unexpectedly Absent", "x": 2 }] },
+    { "index": 10, "summary": "land=none; cast: Unexpectedly Absent", "land": null, "casts": ["Unexpectedly Absent"], "actions": [{ "card": "Unexpectedly Absent", "x": 3 }] },
+    { "index": 11, "summary": "land=none; cast: Unexpectedly Absent", "land": null, "casts": ["Unexpectedly Absent"], "actions": [{ "card": "Unexpectedly Absent", "x": 4 }] },
+    { "index": 12, "summary": "land=none; cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 14,
+  "type": "main_phase",
+  "turn": 5,
+  "phase": "pre_main",
+  "on_the_play": false,
+  "events": [{ "turn": 5, "kind": "trigger", "text": "❤️ life gained: Archangel of Thune: +1/+1 on each creature, Archangel of Thune: +1/+1 on each creature" }, { "turn": 5, "kind": "drain", "text": "💚 Lyra Dawnbringer entered — Seraph Sanctuary: you +1 (30→31)" }],
+  "mdfc_backs": ["Boulderloft Pathway", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 31, "battlefield": [{ "name": "4/4 Angel Token", "idx": 10, "num": 1000, "is_land": false, "counters": [{ "kind": "p1p1", "label": "+1/+1", "count": 4 }] }, { "name": "Archangel of Thune", "idx": 7, "num": 1, "is_land": false, "counters": [{ "kind": "p1p1", "label": "+1/+1", "count": 9 }] }, { "name": "Archangel of Thune", "idx": 9, "num": 2, "is_land": false, "counters": [{ "kind": "p1p1", "label": "+1/+1", "count": 8 }] }, { "name": "Lyra Dawnbringer", "idx": 11, "num": 14, "is_land": false, "counters": [{ "kind": "p1p1", "label": "+1/+1", "count": 2 }] }, { "name": "Plains", "idx": 0, "num": 17, "tapped": true, "is_land": true }, { "name": "Plains", "idx": 2, "num": 18, "tapped": true, "is_land": true }, { "name": "Plains", "idx": 8, "num": 19, "is_land": true, "taps": "W" }, { "name": "Resplendent Angel", "idx": 3, "num": 36, "is_land": false, "counters": [{ "kind": "p1p1", "label": "+1/+1", "count": 9 }] }, { "name": "Seraph Sanctuary", "idx": 6, "num": 44, "tapped": true, "is_land": true }, { "name": "Sol Ring", "idx": 1, "num": 50, "tapped": true, "is_land": false }], "vial_counters": [], "hand": [{ "num": 54, "name": "Unexpectedly Absent", "cost": "{X}{W}{W}", "mv": 2, "kind": "nonpermanent" }, { "num": 57, "name": "Youthful Valkyrie", "cost": "{1}{W}", "mv": 2, "kind": "permanent", "is_creature": true }, { "num": 58, "name": "Youthful Valkyrie", "cost": "{1}{W}", "mv": 2, "kind": "permanent", "is_creature": true }], "graveyard": [], "library_size": 48, "land_drops_left": 1 },
+  "opponent": { "life": 4, "battlefield": [{ "name": "1/1 Creature", "idx": 5, "num": 500001, "is_land": false }, { "name": "6/6 Creature", "idx": 4, "num": 500000, "is_land": false }] },
+  "plans": [
+    { "index": 0, "summary": "land=none; cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
+}
+}
+  ],
+  "final_events": [
+    { "turn": 5, "kind": "trigger", "text": "❤️ life gained: Archangel of Thune: +1/+1 on each creature, Archangel of Thune: +1/+1 on each creature" },
+    { "turn": 5, "kind": "trigger", "text": "❤️ life gained: Archangel of Thune: +1/+1 on each creature, Archangel of Thune: +1/+1 on each creature" },
+    { "turn": 5, "kind": "trigger", "text": "❤️ life gained: Archangel of Thune: +1/+1 on each creature, Archangel of Thune: +1/+1 on each creature" },
+    { "turn": 5, "kind": "trigger", "text": "❤️ life gained: Archangel of Thune: +1/+1 on each creature, Archangel of Thune: +1/+1 on each creature" },
+    { "turn": 5, "kind": "combat", "text": "⚔ attacked: Resplendent Angel (13), Archangel of Thune (13), Archangel of Thune (12), 4/4 Angel Token (9) — 47 to opponent (4→-43)" }
+  ]
+}
