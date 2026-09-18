@@ -19555,10 +19555,23 @@ enum class FungusWhy { Fired = 0, AlreadyWon, OppDeckThin, Zones, UnknownCard, O
                        LibraryReachable, CombatLethal, Count };
 inline std::atomic<unsigned long long> g_fungus_why[static_cast<int>(FungusWhy::Count)] = {};
 
-// MTG_FUNGUS_CERT -- the A/B gate. OFF here means FungusProvider is byte-for-byte GenericProvider.
+// MTG_FUNGUS_CERT -- the A/B gate, kept as the off switch. `=0` makes FungusProvider byte-for-byte
+// GenericProvider again, which is what any future bisect wants.
+//
+// DEFAULT ON since 2026-09-18, on a HELD-OUT 24-game label block (seed 31337, disjoint from the
+// 8-game block the two tightenings were tuned on): 128 label rows IDENTICAL to the arm-off run,
+// fire rate 85.8%, wall 179s -> 94s (1.90x), and MTG_WINLESS_AUDIT probed 99,128 certified nodes
+// with violations=0.
+//
+// The load-bearing number is the 99,128 AUDITED NODES, not the row count. 128 rows is merely
+// comparable to SnowProvider's own adoption base (123); what makes this adoptable is that the
+// falsification harness ran the canonical go-off at every node the certificate cut and found no
+// win, on 3.3x the nodes of the tuning block. Play is untouched by construction -- the hook is
+// consulted only where the search is unbounded (WinlessCertificateActive) -- and that is held by
+// the Fungus play-invariance check, 250 games seed 7001, avg 5.6120 unchanged.
 inline bool FungusCertOn()
 {
-    static const bool v = EnvOn("MTG_FUNGUS_CERT");
+    static const bool v = EnvOn("MTG_FUNGUS_CERT", true);
     return v;
 }
 inline bool FungusCertStatsOn()
@@ -19571,6 +19584,42 @@ inline bool FungusNote(FungusWhy w, bool r)
     if (FungusCertStatsOn())
     { g_fungus_why[static_cast<int>(w)].fetch_add(1, std::memory_order_relaxed); }
     return r;
+}
+
+// STRUCTURE OF THE combat-lethal DECLINE. Once unknown-card and library-reachable were driven to
+// zero, combat-lethal is the only class left -- and "14,907 declines" says nothing about where to
+// aim, because the bound is a SUM of three terms and any one of them can carry it. This splits a
+// decline by asking which term is load-bearing, i.e. what the bound would say with the more
+// optimistic terms removed:
+//
+//   base-lethal   the attackers on board are ALREADY lethal at printed power. No tightening of the
+//                 growth terms can help; the node is genuinely wide and the certificate is done.
+//   lord-*        base is short, but base + attackers x lords reaches -- Sporecrown carries it.
+//                 Split by WHERE the Sporecrown is, for the same reason the anthem is: on the
+//                 battlefield the +1/+1 is already real, in hand it still needs {1}{G}, and in
+//                 LIBRARY it needs a draw ({1} + a Saproling) AND the cast. Four library copies is
+//                 +4/+4 on every attacker credited entirely for free.
+//   anthem-lethal the Beastmaster Ascension +5/+5 carries it -- split by WHERE the Ascension is,
+//                 because that is exactly the difference between a real threat and a loose credit:
+//                 on the battlefield it is one cast away from nothing (it is already there); in
+//                 hand it still needs {2}{G}; in LIBRARY ONLY it needs a draw that costs {1} and a
+//                 Saproling, which is the credit most likely to be over-generous.
+//
+// The whole point is that these prescribe DIFFERENT actions, and two of them prescribe stopping.
+// MEASURED 2026-09-18 on the held-out block: lord-lethal is 32,640 of 33,057 declines (98.7%), and
+// all three anthem buckets together are 279 (0.8%). The ranked guess in the docs had the LIBRARY
+// ANTHEM credit as the likely culprit; it is 14 nodes. So the lord term is split the same way the
+// anthem was, because the same question decides the same way: is the credit that flips the bound
+// already ON THE BATTLEFIELD (real, and the certificate is at its ceiling), or does it require
+// drawing and casting Sporecrowns that are still in HAND or LIBRARY (loose, and a mana bound is
+// the fix)? Crediting four library Sporecrowns is +4/+4 on every attacker for free.
+enum class FungusLethal { BaseLethal = 0, LordBoard, LordHand, LordLibrary, AnthemBattlefield,
+                          AnthemHand, AnthemLibrary, Count };
+inline std::atomic<unsigned long long> g_fungus_lethal[static_cast<int>(FungusLethal::Count)] = {};
+inline void FungusLethalNote(FungusLethal w)
+{
+    if (FungusCertStatsOn())
+    { g_fungus_lethal[static_cast<int>(w)].fetch_add(1, std::memory_order_relaxed); }
 }
 
 // The pool this analysis has actually reasoned about: decks/Fungus/Fungus.cod, main + side.
@@ -19637,6 +19686,20 @@ void FungusCertReasonReport()
         if (v) { std::fprintf(stderr, " %s=%llu", kName[i], v); }
     }
     std::fprintf(stderr, " ===\n");
+
+    static const char* kLethal[] = { "base-lethal", "lord-board", "lord-hand", "lord-library",
+                                     "anthem-battlefield", "anthem-hand", "anthem-library-only" };
+    bool anyl = false;
+    for (int i = 0; i < static_cast<int>(FungusLethal::Count); ++i)
+    { if (g_fungus_lethal[i].load()) { anyl = true; break; } }
+    if (!anyl) { return; }
+    std::fprintf(stderr, "=== FUNGUS WINLESS CERT combat-lethal breakdown:");
+    for (int i = 0; i < static_cast<int>(FungusLethal::Count); ++i)
+    {
+        const unsigned long long v = g_fungus_lethal[i].load();
+        if (v) { std::fprintf(stderr, " %s=%llu", kLethal[i], v); }
+    }
+    std::fprintf(stderr, " ===\n");
 }
 
 // Exit-time twin of the above (the periodic tick only runs under MTG_WINLESS_STATS_EVERY).
@@ -19685,13 +19748,16 @@ bool FungusProvider::ProvenWinlessThisTurn(const GameState& s, int me) const
 
     long long attackers    = 0;   // creatures that can attack RIGHT NOW (nothing gains haste)
     long long base_damage  = 0;   // ...and their power before lord / anthem terms
-    long long lords        = 0;   // Sporecrown Thallid, battlefield + hand
+    long long lords_board  = 0;   // Sporecrown Thallid already on the battlefield
+    long long lords_hand   = 0;   // ...in hand, so still needing {1}{G}
+    long long lords_lib    = 0;   // ...in the library, so needing a DRAW and then {1}{G}
     int       ba_best      = 0;   // most quest counters on one of our Ascensions
     bool      ba_reachable = false;
     bool      doubling     = false;
     int       ba_threshold = 0, ba_power = 0, ba_per_attacker = 0;
     bool      draw_outlet  = false;   // a live "sacrifice a Saproling: draw" outlet
     long long fodder       = 0;       // creatures it could eat, i.e. an upper bound on DRAWS
+    int       ba_src       = 0;       // where the Ascension was found: 1 battlefield, 2 hand, 4 library
 
     for (const Permanent& p : s.battlefield)
     {
@@ -19729,6 +19795,7 @@ bool FungusProvider::ProvenWinlessThisTurn(const GameState& s, int me) const
         if (q.quest_anthem_threshold > 0)
         {
             ba_reachable    = true;
+            ba_src         |= 1;
             ba_best         = std::max(ba_best, p.quest_counters);
             ba_threshold    = std::max(ba_threshold, q.quest_anthem_threshold);
             ba_power        = std::max(ba_power, q.quest_anthem_power);
@@ -19736,7 +19803,7 @@ bool FungusProvider::ProvenWinlessThisTurn(const GameState& s, int me) const
         }
         // The pool's only lord is Sporecrown Thallid; IsLordPermanent is used rather than a
         // name so that a lord added to the pool is priced instead of ignored.
-        if (IsLordPermanent(*d)) { lords += std::max(0, q.power_bonus); }
+        if (IsLordPermanent(*d)) { lords_board += std::max(0, q.power_bonus); }
 
         if (p.card.IsCreature() || p.is_animated)
         {
@@ -19770,6 +19837,7 @@ bool FungusProvider::ProvenWinlessThisTurn(const GameState& s, int me) const
             if (q.quest_anthem_threshold > 0)
             {
                 ba_reachable    = true;
+                ba_src         |= 4;
                 ba_threshold    = std::max(ba_threshold, q.quest_anthem_threshold);
                 ba_power        = std::max(ba_power, q.quest_anthem_power);
                 ba_per_attacker = std::max(ba_per_attacker, q.quest_counter_per_attacker);
@@ -19779,7 +19847,7 @@ bool FungusProvider::ProvenWinlessThisTurn(const GameState& s, int me) const
         // At most `fodder` cards can be drawn, so at most that many of the library's lords can
         // arrive. Taking the largest-first is exact for "most bonus within a draw budget"; this
         // approximates it upward by using the running sum capped at the same count.
-        lords += std::min(lib_lords, fodder);
+        lords_lib += std::min(lib_lords, fodder);
     }
 
     // Hand copies of the two cards that can still grow the team AFTER this function looks. Mana is
@@ -19793,14 +19861,16 @@ bool FungusProvider::ProvenWinlessThisTurn(const GameState& s, int me) const
         if (q.quest_anthem_threshold > 0)
         {
             ba_reachable    = true;
+            ba_src         |= 2;
             ba_threshold    = std::max(ba_threshold, q.quest_anthem_threshold);
             ba_power        = std::max(ba_power, q.quest_anthem_power);
             ba_per_attacker = std::max(ba_per_attacker, q.quest_counter_per_attacker);
         }
         // The pool's only lord is Sporecrown Thallid; IsLordPermanent is used rather than a
         // name so that a lord added to the pool is priced instead of ignored.
-        if (IsLordPermanent(*d)) { lords += std::max(0, q.power_bonus); }
+        if (IsLordPermanent(*d)) { lords_hand += std::max(0, q.power_bonus); }
     }
+    const long long lords = lords_board + lords_hand + lords_lib;
 
     // THE ANTHEM TERM. Counters land one per DECLARED attacker (doubled by Doubling Season), and
     // the static is checked continuously, so a wide enough attack switches it on during its own
@@ -19819,7 +19889,24 @@ bool FungusProvider::ProvenWinlessThisTurn(const GameState& s, int me) const
     // pumps. All three are over-credits, which is the only admissible direction here.
     const long long combat = base_damage + attackers * (lords + anthem);
 
-    if (combat >= opp.life) { return FungusNote(FungusWhy::CombatLethal, false); }
+    if (combat >= opp.life)
+    {
+        // Attribute the decline to the term that actually carries it -- see FungusLethal. Costs a
+        // couple of comparisons on an already-declining path, and only under MTG_WINLESS_STATS.
+        if (FungusCertStatsOn())
+        {
+            const long long lb = base_damage + attackers * lords_board;
+            const long long lh = lb + attackers * lords_hand;
+            if (base_damage >= opp.life)                          { FungusLethalNote(FungusLethal::BaseLethal); }
+            else if (lb >= opp.life)                              { FungusLethalNote(FungusLethal::LordBoard); }
+            else if (lh >= opp.life)                              { FungusLethalNote(FungusLethal::LordHand); }
+            else if (base_damage + attackers * lords >= opp.life) { FungusLethalNote(FungusLethal::LordLibrary); }
+            else if (ba_src & 1)                                  { FungusLethalNote(FungusLethal::AnthemBattlefield); }
+            else if (ba_src & 2)                                  { FungusLethalNote(FungusLethal::AnthemHand); }
+            else                                                  { FungusLethalNote(FungusLethal::AnthemLibrary); }
+        }
+        return FungusNote(FungusWhy::CombatLethal, false);
+    }
     return FungusNote(FungusWhy::Fired, true);
 }
 

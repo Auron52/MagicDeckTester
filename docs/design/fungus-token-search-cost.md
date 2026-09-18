@@ -739,11 +739,108 @@ certificate on** -- 53M `ApplyPlanDirect` calls and climbing at 19 minutes -- so
 should be reported as a large constant-factor win on typical label games, **not** as the fix for the
 worst straggler.
 
-### The default question (open)
+### The default question: RESOLVED, default ON (2026-09-18)
 
-`MTG_FUNGUS_CERT` ships **OFF**. Snow's equivalent ships ON, but it was adopted on a wider base:
-18 games / 123 label rows, against this certificate's 8 games / 47 rows. The gate for flipping the
-default is a wider label set (~24 games) with `MTG_WINLESS_AUDIT` armed and violations still zero.
-Play is unaffected either way -- the hook is consulted only where the search is unbounded (the label
-ladder and unbounded depth-matrix cells, via `WinlessCertificateActive`), so it cannot change play;
-the Fungus play-invariance check exists to hold the *routing* change to that claim.
+`MTG_FUNGUS_CERT` now defaults **ON**; `=0` remains the off switch, and with it off `FungusProvider`
+is byte-for-byte `GenericProvider` again, which is what a future bisect wants.
+
+The gate written in the first draft of this section was "~24 label games with `MTG_WINLESS_AUDIT`
+armed and violations still zero". It was run on a **held-out** seed (31337), deliberately disjoint
+from the 8-game block the two tightenings were tuned on -- tightenings diagnosed from a decline
+tally are fitted to the block that produced the tally, so measuring the result on the same block
+would be self-confirming.
+
+| | 8-game tuning block | **24-game held out** | `SnowProvider` at adoption |
+|---|---|---|---|
+| label rows | 47 | **128, identical to arm-off** | 123 |
+| fire rate | 80.7% | **85.8%** | -- |
+| wall | 11.28 s -> 7.35 s (1.55x) | **179 s -> 94 s (1.90x)** | -- |
+| `MTG_WINLESS_AUDIT` | 30,050 probed, 0 violations | **99,128 probed, 0 violations** | -- |
+
+**The load-bearing number is 99,128 audited nodes, not the row count.** 128 rows is merely
+*comparable* to Snow's 123, not wider; what makes this adoptable is that the falsification harness
+ran the canonical go-off at every node the certificate cut and found no win, on 3.3x the nodes of
+the block the tightenings were fitted to. The fire rate also rose on held-out data (80.7% -> 85.8%),
+which is the opposite of the usual tuning story: the wider block holds more ordinary mid-game edge
+nodes and proportionally fewer of the wide-board nodes that defeat the bound.
+
+### METHOD TRAP, and it bit this very measurement: `MTG_DUMP_VALUE_ROWS` APPENDS
+
+The first write-up of the table above said **222 rows**. It was wrong, and the way it was wrong is
+worth more than the correction.
+
+`MTG_DUMP_VALUE_ROWS` opens its file in **APPEND** mode, not truncate. Verified directly: write a
+sentinel line into the target, run, and the sentinel is still there with a fresh `#` header
+underneath it. Two of the arm files (`/tmp/w_off.rows`, `/tmp/w_on.rows`) were names reused from an
+earlier 8-game A/B in the same session, so each already held 94 rows. 222 = **94 stale + 128 real**.
+
+Why it did not corrupt the *conclusion*, and why that is luck rather than method: the 94 stale rows
+were byte-identical in both arms (they came from a prior off/on pair that was itself identical), so
+they cancelled in the compare. Filtering both files to the block's own seeds (31337..31360) leaves
+128 vs 128, **SAME** -- and the rebuilt binary's arm-off run reproduces exactly those 128. The
+comparison survived; the row COUNT, and the "wider base than Snow" claim built on it, did not.
+
+Two rules fall out, and they compose with the sorted-dump note above:
+1. **Always write a label dump to a fresh path** (or truncate it first). A reused `/tmp` name in a
+   long session is a silent data-union.
+2. **Sanity-check the dump's own seed column against the seeds you asked for.** One
+   `awk '{print $(NF-1)}' | sort -u` would have caught this instantly -- the file claimed 32
+   distinct seeds for a 24-game run. That check is cheaper than the compare it guards.
+
+The same append behaviour explains the audit arm's "DIFFER": it wrote to a *fresh* name, so it holds
+the clean 128 while the arm it was compared against held 222. Its 128 are byte-identical to the
+arm-off 128. No row's content ever differed in any arm.
+
+### The `combat-lethal` breakdown: MEASURED, and it refuted the ranked guess
+
+`combat-lethal` is the only surviving decline class (33,057 against 115,541 fires on the held-out
+block). The three over-credits listed above were *ranked by guess*. So instead of building the
+top-ranked one, the decline was split by **which term actually carries it** (`FungusLethal`, printed
+beside the reason tally under `MTG_WINLESS_STATS`) -- asking, for each decline, what the bound would
+say with the more optimistic terms removed. The split is by ZONE, because that is the difference
+between a real threat and a loose credit: on the battlefield the pump is already there; in hand it
+still needs `{1}{G}`; in the library it needs a draw costing `{1}` **and** a Saproling **and** the
+cast.
+
+```
+base-lethal=138  lord-board=238  lord-hand=16  lord-library=32386
+anthem-battlefield=160  anthem-hand=105  anthem-library-only=14
+```
+
+**`lord-library` is 32,386 of 33,057 -- 98.0% of every remaining decline.** One credit, in one zone,
+is the entire tail:
+
+```cpp
+lords_lib += std::min(lib_lords, fodder);   // <-- 98.0% of all declines live here
+```
+
+It credits every Sporecrown Thallid still in the **library** as drawn *and* cast for free. With four
+copies that is **+4/+4 on every attacker**, conjured from cards nobody has seen, and it is applied to
+a board where `base_damage` alone is not lethal in 99.6% of these nodes (`base-lethal` is 138).
+
+**The guess this refutes is worth recording.** The doc's own ranked list put the joint Saproling
+budget first and the library-*anthem* credit as the likely culprit. The measurement says
+`anthem-library-only` is **14 nodes**, and all three anthem buckets together are 279 (0.8%). Had the
+joint budget been built on the ranking, it would have been the most intricate and most dangerous
+change of the three -- a certificate bug is silent -- aimed at under 1% of the problem. This is the
+third time this session that instrumenting a decline class beat reasoning about it
+(`unknown-card` -> dead Saproling tokens; `library-reachable` -> a blanket decline; now this).
+
+### Aimed next: bound the library lord by mana and by the draw budget
+
+The fix is now specific. Drawing and casting one library Sporecrown costs, at minimum, **one
+Saproling sacrificed plus `{1}` for the Psychotrope draw, plus `{2}` more for the cast -- 3 mana and
+1 Saproling per copy.** Today both are free. Two properties make this tractable rather than scary:
+
+* **Without Utopia Mycon on the battlefield the bound is hard and cheap:** mana comes only from
+  untapped lands, so `x <= floor(M / 3)` copies, where `M` is untapped land production (Wild Growth's
+  `+{G}` included). No search, no joint optimisation.
+* **With Mycon it becomes a joint Saproling budget**, because each sacrificed Saproling is worth one
+  mana *and* one fewer attacker. Sacrificing `j` for mana and `x` for draws needs `j + x <= S` and
+  `3x <= M + j`, giving `x <= floor((M + S) / 4)` -- still closed-form, no loop.
+
+Both stay over-credits (they ignore that a drawn Sporecrown must also be *found*, i.e. that the draw
+is random rather than a tutor), so the one-sided contract is preserved. **Measure the what-if before
+building it:** add a counter for how many `lord-library` declines would flip to `fired` under the
+capped `lords_lib`, which changes no behaviour and says whether the real change is worth its risk.
+Only build it if that number is large -- the ranking was wrong once already.
