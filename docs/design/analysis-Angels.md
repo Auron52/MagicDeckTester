@@ -452,8 +452,14 @@ Three known, disclosed gaps:
 ### 5. Things I did NOT do, deliberately
 
 * **Did not touch ground truth.** The 9 pre-existing smoke failures belong to `4f23627e`.
+  **UPDATE 2026-09-18: those 9 are gone** — the intervening GT accepts (`44f759f3`, `f1037a32`,
+  `964c9b99`) absorbed them. Smoke at `2c9cf04b` is **80 passed / 0 failed / 0 play-changed**, so the
+  stated blocker below no longer exists.
 * **Did not add Angels to the regression suite.** That is its own task with shared time budgets, and
-  it cannot be `--accept`ed cleanly while those 9 are outstanding.
+  it cannot be `--accept`ed cleanly while those 9 are outstanding. **UPDATE: now UNBLOCKED** (smoke
+  is clean). This is also the durable fix for the sweep-staleness hole documented above — without a
+  GT key, nothing in the repo notices when an engine change moves this deck's play. **Awaiting your
+  go, because it spends shared per-tier time budget.**
 * **Did not implement Lyra, Archangel of Dawn or Lightstall Inquisitor** — your ruling: unreachable,
   future-deckbuilding candidates. They are for `deck-screening.md` when you want them.
 * **Did not generate a mulligan profile or a value leaf.** Per the pipeline-ordering policy those are
