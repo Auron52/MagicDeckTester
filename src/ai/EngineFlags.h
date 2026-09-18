@@ -53,6 +53,37 @@ inline bool UpkeepRevealTopEnabled()
     return env_on;
 }
 
+// MTG_FUNGUS_SPORE_POOL (DEFAULT OFF -> byte-identical; heurarm slot so one pooled batch carries
+// both arms) -- treat every interchangeable spore outlet as ONE POOL, spent oldest-first, so the
+// only enumerated axis is HOW MANY Saprolings to make and never WHICH body pays.
+//
+// USER 2026-09-18: *"we should de-duplicate the choice of which source a saproling comes from, the
+// oldest entry that has 3 counters first"*, and the licence that makes it admissible:
+// *"Heuristically, we know that the source of the saproling does not matter in this deck, so we can
+// safely choose any of them that has enough counters to be the first one."* It is a HEURISTIC, not
+// a proof -- spending Thallid A's counters rather than Thallid B's leaves a different DISTRIBUTION
+// of residual counters (the total is identical: every pop costs exactly the same three) and a
+// future turn could in principle care which body kept them. The user has ruled that it does not for
+// this deck, which is exactly the deck-provider scope the repo reserves for narrowing.
+//
+// WHY THE GENERAL FOLD COULD NOT DO THIS (measured, fungus-token-search-cost.md): the shipped
+// canonical-prefix fold is lossless and was tried here first as MTG_FOLD_COUNTER_SOURCES. It moved
+// `units_total` by ZERO, for two structural reasons this lever sidesteps rather than fixes --
+// FinalizeFoldTags CONDITION 2 drops any class whose source emitted more than one action (a Thallid
+// on six counters emits k=1 AND k=2, so every class died: drop_src=116,427), and the prefix guard
+// is gated `from_odometer`, which the searched enumeration never goes through. Pooling at the
+// EMISSION site needs neither: it emits one action per COUNT instead of one per (source,count), so
+// the powerset collapses before any guard is consulted.
+//
+// Read by BOTH the rollout (TurnSolver's spore emission and its ApplyPlanDirect twin) and the
+// executor (AIEngine's spore apply) -- shared reader per the lockstep rule, because an emission
+// that pooled and an apply that did not would spend the wrong bodies.
+inline bool SporeSourcePoolEnabled()
+{
+    static const bool env_on = EnvOn("MTG_FUNGUS_SPORE_POOL");
+    return heurarm::Flag(heurarm::FUNGUS_SPORE_POOL, env_on);
+}
+
 // MTG_M2_FIXPOINT (DEFAULT OFF -> byte-identical; heurarm slot for per-job pooling): restore the
 // FREE INTER-MAIN RE-SOLVE the second main never had -- after an m2 plan whose apply/execution
 // FIRED a breakpoint (cards may have entered hand mid-plan), solve m2 AGAIN on the post-draw

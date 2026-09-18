@@ -1535,6 +1535,15 @@ public:
     // Behind heurarm FUNGUS_SAC_DRAW_CLOCK, default OFF -> byte-identical.
     bool FodderSacUseful(const GameState& s, const Permanent& src,
                          const CardDefinition& def) const override;
+
+    // USER 2026-09-18: *"Heuristically, we know that the source of the saproling does not matter in
+    // this deck, so we can safely choose any of them that has enough counters to be the first
+    // one."* The deck's five spore outlets (Thallid, Thallid Shell-Dweller, Sporesower Thallid,
+    // Utopia Mycon, Psychotrope Thallid -- 17 bodies) carry a BYTE-IDENTICAL spore payload in
+    // cards.json: cost 3 counters, one 1/1 green Saproling. So the only thing "which body pays"
+    // decides is where the residual counters sit, which is what the ruling above waives.
+    // Behind heurarm FUNGUS_SPORE_POOL, default OFF -> byte-identical until the A/B is accepted.
+    bool FoldSporeSourceIdentity() const override { return true; }
 };
 
 // CritterLifegain (mono-white "whenever you gain life" aggro: Soul Warden / Soul's Attendant /

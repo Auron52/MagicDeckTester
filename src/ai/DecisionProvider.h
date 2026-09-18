@@ -1708,6 +1708,27 @@ public:
     virtual bool ImpulseFloatColorRedOnly()       const { return false; }
     virtual bool RestrictSacColorsToHasteAndRed() const { return false; }
 
+    // FoldSporeSourceIdentity -- opt IN to treating every interchangeable spore outlet as ONE POOL,
+    // so the enumeration carries HOW MANY Saprolings to make and never WHICH body pays for them.
+    // HEURISTIC, provider-owned, NOT byte-identical; see SporeSourcePoolEnabled() in EngineFlags.h
+    // for the user's ruling and for why the lossless canonical-prefix fold measured inert here.
+    //
+    // Why this is the deck's single biggest enumeration axis rather than a tidy-up: the spore
+    // activation costs NO mana and NO {T} (CR 302.6 restricts only {T} abilities), so it is the one
+    // action in the deck that the mana supply does not bound -- K is bounded by counters/3. Mana is
+    // what keeps every other deck's plan space finite. Measured on the label path
+    // (docs/design/fungus-token-search-cost.md): 44.5% of ALL candidate mass carries a chosen_x and
+    // it is almost entirely this activation -- `Thallid` 99,221 activations from 3 distinct physical
+    // sources, `Thallid Shell-Dweller` 39,855 from 4. k interchangeable sources cost 2^k selections
+    // to express the k+1 outcomes that actually differ.
+    //
+    // THE COUNT AXIS MUST SURVIVE. Pooling collapses the SOURCE, never K: the card data is explicit
+    // that K is a real searched axis and not a greedy max ("holding three counters until a Doubling
+    // Season resolves turns one Saproling into two, and Mycoloth's devour wants the bodies on the
+    // battlefield BEFORE it enters"). A provider that folded to "pop everything" would lose lines
+    // the deck is actually built around.
+    virtual bool FoldSporeSourceIdentity() const { return false; }
+
     // HoldsSacLandBurnUntilLethal -- opt IN to the sac-land burn hold (Shard Volley). A spell whose
     // additional cost is "sacrifice a land" spends a permanent mana source for a fixed lump of damage,
     // which in a goldfish is worth the same on any later turn -- so the enumerators drop plans that cast

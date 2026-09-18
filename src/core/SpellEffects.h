@@ -14080,23 +14080,75 @@ inline void ApplyPermAbility(GameState& state, int controller, int source_id, Pe
 // The bound here is the counter supply instead. ApplyPermAbility re-checks and decrements it on
 // every call, so this simply stops when the counters run out. Returns how many actually fired.
 // Shared by the executor and the rollout so the two cannot drift.
+// Two spore outlets are INTERCHANGEABLE only when the activation costs the same counters and mints
+// the same token. Compared field by field rather than by card name, so that a list which ever gains
+// an outlet whose Saproling is not a 1/1 green simply fails to pool with the others and keeps its
+// own axis, automatically and with no per-deck configuration. (Fungus's five outlets -- Thallid,
+// Thallid Shell-Dweller, Sporesower Thallid, Utopia Mycon, Psychotrope Thallid -- are identical on
+// every field here, which is what makes the pool legitimate for this deck.)
+inline bool SporePayloadsMatch(const CardParams& a, const CardParams& b)
+{
+    return a.spore_saproling_cost  == b.spore_saproling_cost
+        && a.spore_creates_tokens  == b.spore_creates_tokens
+        && a.spore_token_power     == b.spore_token_power
+        && a.spore_token_toughness == b.spore_token_toughness
+        && a.spore_token_color     == b.spore_token_color
+        && a.spore_token_subtypes  == b.spore_token_subtypes;
+}
+
+// The pool's canonical NEXT payer: the OLDEST permanent we control that still holds enough counters
+// and whose payload matches. state.battlefield is entry order -- permanents are appended on entry
+// and an erase preserves relative order -- so the first match is the longest-standing body. That is
+// the USER's rule verbatim ("the oldest entry that has 3 counters first"), and it is the same
+// canonicalisation FinalizeFoldTags already relies on for ord 0.
+//
+// Age is a SAFE canonical key here for a reason specific to this ability: it has no {T} in its cost,
+// so summoning sickness never makes one body legal and another not (CR 302.6 restricts only {T}
+// abilities). The fold's usual manland caveat therefore cannot arise -- there is no sense in which
+// the newest copy could be activatable when the oldest is not.
+inline int NextCanonicalSporeSource(const GameState& state, int controller, const CardParams& want)
+{
+    for (const Permanent& p : state.battlefield)
+    {
+        if (p.controller_index != controller)                  { continue; }
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+        if (d == nullptr || d->params.spore_saproling_cost <= 0) { continue; }
+        if (!SporePayloadsMatch(d->params, want))                { continue; }
+        if (p.spore_counters < d->params.spore_saproling_cost)   { continue; }
+        return p.card.m_number;
+    }
+    return 0;
+}
+
 inline int SpendSporeActivations(GameState& state, int controller, int source_id,
                                  const CardDefinition& def, int want)
 {
     if (want <= 0 || def.params.spore_saproling_cost <= 0) { return 0; }
+    // POOLED (MTG_FUNGUS_SPORE_POOL + a provider opting in via FoldSporeSourceIdentity): the
+    // emission side counted the WHOLE pool's capacity into chosen_x, so when this source runs dry
+    // the remaining activations must ROLL OVER to the next canonical payer rather than being
+    // silently dropped. With the lever off this is `false` and the loop stays bounded by source_id
+    // alone -- byte-identical to the pre-lever form.
+    const bool pooled = SporeSourcePoolEnabled()
+                     && ResolveProvider(state).FoldSporeSourceIdentity();
     int fired = 0;
     for (int i = 0; i < want; ++i)
     {
         // Re-locate the source every iteration: each activation calls CreateToken, which push_backs
         // onto the battlefield and can reallocate it, so a pointer taken before the loop dangles.
-        const Permanent* src = nullptr;
+        int use_id = 0;
         for (const Permanent& p : state.battlefield)
         {
             if (p.card.m_number == source_id && p.controller_index == controller)
-            { src = &p; break; }
+            {
+                if (p.spore_counters >= def.params.spore_saproling_cost) { use_id = source_id; }
+                break;
+            }
         }
-        if (src == nullptr || src->spore_counters < def.params.spore_saproling_cost) { break; }
-        ApplyPermAbility(state, controller, source_id, PermAbilityMode::SporeSaproling);
+        if (use_id == 0 && pooled)
+        { use_id = NextCanonicalSporeSource(state, controller, def.params); }
+        if (use_id == 0) { break; }
+        ApplyPermAbility(state, controller, use_id, PermAbilityMode::SporeSaproling);
         ++fired;
     }
     return fired;

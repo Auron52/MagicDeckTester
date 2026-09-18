@@ -16074,7 +16074,46 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
             if (sd->params.spore_saproling_cost > 0
                 && src.spore_counters >= sd->params.spore_saproling_cost)
             {
-                const int max_k = src.spore_counters / sd->params.spore_saproling_cost;
+                int max_k = src.spore_counters / sd->params.spore_saproling_cost;
+                // POOLED SOURCES (MTG_FUNGUS_SPORE_POOL + FoldSporeSourceIdentity). WHICH body pays
+                // is not a decision this deck's provider wants enumerated, only HOW MANY Saprolings
+                // result -- so the whole interchangeable pool emits ONE k-axis, carried by the
+                // canonical (oldest) payer, and every other member emits nothing. That turns the
+                // 2^n selections over n sources into the n+1 outcomes that actually differ.
+                //
+                // Note this is a strictly WIDER axis at the canonical source, not a narrower one:
+                // max_k becomes the POOL's capacity, so "make five Saprolings off four bodies" is a
+                // single action here where before it needed a four-action subset. The apply twin
+                // (SpendSporeActivations) rolls over between payers to match, in the same order.
+                //
+                // Excluded under human play and under MTG_UNPRUNED for the same reason the k-fan
+                // itself is: the viewer's main phase re-prompts after every activation, so a human
+                // reaches "pop twice" by choosing it twice and must keep seeing the real bodies.
+                bool emit = true;
+                if (SporeSourcePoolEnabled()
+                    && ResolveProvider(state).FoldSporeSourceIdentity()
+                    && !HumanPlayActive()
+                    && !DecisionUnpruned(UnprunedGate::BlinkTarget))
+                {
+                    if (NextCanonicalSporeSource(state, state.active_player_index, sd->params)
+                        != src.card.m_number)
+                    {
+                        emit = false;   // a non-canonical member of the pool: the axis is elsewhere
+                    }
+                    else
+                    {
+                        max_k = 0;
+                        for (const Permanent& q : state.battlefield)
+                        {
+                            if (q.controller_index != state.active_player_index) { continue; }
+                            const CardDefinition* qd =
+                                CardDatabase::Instance().LookupCached(q.card);
+                            if (qd == nullptr || qd->params.spore_saproling_cost <= 0) { continue; }
+                            if (!SporePayloadsMatch(qd->params, sd->params))           { continue; }
+                            max_k += q.spore_counters / qd->params.spore_saproling_cost;
+                        }
+                    }
+                }
                 std::vector<int> counts{ 1 };
                 if (max_k > 1 && !HumanPlayActive()
                     && !DecisionUnpruned(UnprunedGate::BlinkTarget))
@@ -16082,6 +16121,7 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
                     counts.clear();
                     for (int k = 1; k <= max_k; ++k) { counts.push_back(k); }
                 }
+                if (!emit) { counts.clear(); }
                 for (int k : counts)
                 {
                     Action a;
