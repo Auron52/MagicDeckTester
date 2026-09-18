@@ -564,6 +564,7 @@ static std::atomic<long long> g_bp_condemn_drops_exec{0};
 // indistinguishable from a working one that happens to be cheap.
 static int BpCondemnDropMode();                          // defined with the mode's documentation
 static int BpSearchWidth();                              // wave-0 width W (defined far below)
+static bool BpCondemnNewOptByNameEnabled();              // defined with the guard it refines
 static std::atomic<long long> g_bp_condemn_emitted{0};  // condemned candidates offered anyway (1, 2)
 static std::atomic<long long> g_bp_demote_lists{0};      // continuation lists holding a condemned name
 static std::atomic<long long> g_bp_demote_plans{0};      // entries actually moved to the back
@@ -572,6 +573,10 @@ static std::atomic<long long> g_bp_demote_plans{0};      // entries actually mov
 // file scope rather than beside the memo because the rollout-stats reporter above needs them.
 static std::atomic<long long> g_bplen_records{0}, g_bplen_hits{0}, g_bplen_skips{0},
                               g_bplen_clears{0}, g_bplen_checked{0}, g_bplen_mismatch{0};
+// MTG_BP_CONDEMN_NEWOPT_BYNAME firing counter: new payable cards REFUSED the "new option" exemption
+// because a copy of the same NAME was already in hand (i.e. already passed on). Zero means the rule
+// never fired and any work delta is not it.
+static std::atomic<long long> g_bp_newopt_samename{0};
 static std::atomic<long long> g_bp_demote_in_window{0};  // condemned entries at rank < W
 static std::atomic<long long> g_bp_demote_rank0{0};      // ...lists whose VALUE-BEST entry was condemned
 // WHY-NOT histogram (MTG_BP_CONDEMN_WHYNOT). Each consultation that did not drop is charged to its
@@ -1080,6 +1085,17 @@ namespace
                 {
                     std::cerr << "  NO POWER -- DEMOTE never moved a plan. Any work delta below is"
                                  " NOT the demotion.\n";
+                }
+            }
+            if (g_bp_newopt_samename.load() > 0 || BpCondemnNewOptByNameEnabled())
+            {
+                std::cerr << "[rollout-stats] bp_newopt_byname refused_samename="
+                          << g_bp_newopt_samename.load()
+                          << "  (new payable cards DENIED the exemption because that NAME was"
+                             " already in hand, i.e. already passed on)\n";
+                if (g_bp_newopt_samename.load() == 0)
+                {
+                    std::cerr << "  NO POWER -- the rule never fired; any work delta is NOT it.\n";
                 }
             }
             // CROSS-NODE LENGTH MEMO (MTG_BP_NSKIP_GLOBAL). `skips` is the firing counter -- slots
@@ -2825,6 +2841,74 @@ static bool BpCondemnNewOptionEnabled()
     return heurarm::Flag(heurarm::BP_CONDEMN_NEW_OPTION, on);
 }
 
+// A CARD WE HAVE ALREADY PASSED ON IS NOT RECONSIDERED (MTG_BP_CONDEMN_NEWOPT_BYNAME).
+//
+// USER 2026-09-18: *"if the card is new, but the new card's name has not yet been condemned then we
+// still keep it, but we would drop a card whose name had already been condemned"* /
+// *"if the card is one we've already passed on we don't reconsider it."*
+//
+// THE DEFECT THIS CLOSES. The exclusive-slot guard below asks "did the site put ANY new payable card
+// in hand?" and, if so, spares the drop -- whatever the candidate is and whatever the new card is.
+// It never looks at NAMES, which is the one thing the rest of condemnation is entirely built on (the
+// dominance scan keys on `m_name_hash` + `BpCardWasInHandBefore`; `BpPlanCasts` is a name test). So a
+// site that draws a SECOND Boreal Druid -- a name the plan already offered and declined at its own
+// slot -- currently disarms the filter for that whole consultation, on the strength of an "option"
+// that is not new in any sense the premise cares about. That is why the guard spares 81% of drops.
+//
+// THE RULE: a new card counts as a NEW OPTION only if its NAME was not already in hand before the
+// breakpoint. If a copy of that name was there, the plan weighed that name at its slot and passed,
+// so a fresh copy carries no information the decline did not already account for -- and the decline
+// of the candidate therefore still means what it says.
+//
+// WHY THE CANDIDATE SIDE NEEDS NO CHANGE. It already implements this: the `dominated` scan in
+// CollectActions condemns a card when some copy of the SAME NAME was in hand before and is at least
+// as urgent, so a freshly drawn copy of an already-passed name is condemnable today. The guard was
+// the only place the name test was missing.
+//
+// gi=1357 STAYS SAFE BY CONSTRUCTION, which is what makes this the narrow fix rather than a weaker
+// guard: no Rimefeather Owl was in hand before the Scrying Sheets activation, so the Owl is still a
+// genuinely new option, the guard still fires, and Skred is still spared.
+//
+// DEFAULT OFF until measured -- this only ever makes the guard fire LESS, i.e. it drops MORE, which
+// is the direction that needs evidence rather than an argument.
+static bool BpCondemnNewOptByNameEnabled()
+{
+    static const bool on = EnvOn("MTG_BP_CONDEMN_NEWOPT_BYNAME");
+    return on;
+}
+// CONDEMNATION'S URGENCY ORDER, in one place so the candidate side and the guard cannot drift.
+// Lower = more urgent. A STAGED copy expires (Light Up the Stage / Expressive Iteration exile it at
+// end of turn); a plain hand copy never does, so it is maximally patient.
+static int BpCardUrgency(const Card& c)
+{
+    return c.m_is_staged ? c.m_staged_expiry : std::numeric_limits<int>::max();
+}
+
+// HAVE WE ALREADY PASSED ON THIS CARD? (USER's phrasing.) True when a copy of the SAME NAME was in
+// hand before the breakpoint AND that copy was at least as urgent as this one.
+//
+// THE EXPIRY EXCEPTION (USER 2026-09-18): *"the only exception to the 'name' thing is new cards with
+// expiry, such as from Light up the Stage. We don't condemn cards that expire earlier than the one
+// that was condemned."* A fresh copy that expires EARLIER than the copy we passed on is not the same
+// decision: the plan weighed a patient copy and declined it, which says nothing about a copy that
+// will be exiled this turn if unused. So the urgency test is required, not decoration -- without it
+// this refinement would silently condemn the urgent half of every staged pair.
+//
+// This is the exact test the `dominated` scan in CollectActions applies to the CANDIDATE
+// (`urgency(c) <= u_cand`), which is the consistency property that matters: one urgency semantics
+// for both sides of the rule.
+static bool BpNamePassedOnBefore(const Player& ap, const Card& newc)
+{
+    const int u_new = BpCardUrgency(newc);
+    for (const Card& o : ap.hand)
+    {
+        if (o.m_name_hash != newc.m_name_hash)   { continue; }
+        if (!BpCardWasInHandBefore(o.m_number))  { continue; }
+        if (BpCardUrgency(o) <= u_new)           { return true; }
+    }
+    return false;
+}
+
 // Payability is passed in because EffectiveCost is an AIEngine member and this is a free function;
 // the caller hands over the same pool-and-cost test the drop itself uses, so the two cannot drift.
 template <typename PayableFn>
@@ -2832,9 +2916,17 @@ static bool BpSiteAddedAPayableOption(const Player& ap, PayableFn payable)
 {
     if (!BpCondemnNewOptionEnabled())  { return false; }
     if (g_bp_hand_before == nullptr)   { return false; }
+    const bool by_name = BpCondemnNewOptByNameEnabled();
     for (const Card& c : ap.hand)
     {
         if (BpCardWasInHandBefore(c.m_number)) { continue; }      // not new: the plan saw it
+        // ...and this copy may be new while its NAME is not. See BpCondemnNewOptByNameEnabled.
+        if (by_name && BpNamePassedOnBefore(ap, c))
+        {
+            if (s_rollout_stats)
+            { g_bp_newopt_samename.fetch_add(1, std::memory_order_relaxed); }
+            continue;
+        }
         const CardDefinition* cd = CardDatabase::Instance().LookupCached(c);
         if (cd == nullptr) { continue; }
         if (payable(*cd)) { return true; }

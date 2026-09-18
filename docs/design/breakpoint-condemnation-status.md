@@ -2219,3 +2219,88 @@ future attempt must start, not the key.
   effect at all** on a condemnation-OFF arm (identical hits/misses/units), and on the condemning arms
   it moves only `misses`, not `units` or `lookups`. So every comparison above is robust to it. The
   memory note claiming the narrowing alone costs +16.6% units does NOT reproduce on this binary.
+
+---
+
+## 2026-09-18: THE GUARD IS NAME-BLIND, AND FIXING THAT RECOVERS 3/4 OF ITS COST
+
+**USER, 2026-09-18:** *"We shouldn't be guarding like that? We should be condemning particular card
+names etc."* / *"if the card is new, but the new card's name has not yet been condemned then we still
+keep it, but we would drop a card whose name had already been condemned"* / *"if the card is one we've
+already passed on we don't reconsider it."*
+
+**THE DEFECT.** Everything else in condemnation is built on NAMES -- the `dominated` scan keys on
+`m_name_hash` + `BpCardWasInHandBefore`, `BpPlanCasts` is a name test. `BpSiteAddedAPayableOption`
+alone is name-blind: it asks *"did the site put ANY new payable card in hand?"* and, if so, spares the
+drop -- whatever the candidate is and whatever the new card is. So a site that draws a **second copy
+of a name the plan already declined at its own slot** disarms the filter for that entire consultation,
+on the strength of an "option" that is new in no sense the premise cares about. That is the mechanism
+behind the guard sparing **81% of all drops**.
+
+**THE RULE (`MTG_BP_CONDEMN_NEWOPT_BYNAME`, default OFF).** A new card counts as a new option only if
+its NAME was not already in hand before the breakpoint. `BpNamePassedOnBefore`.
+
+**THE EXPIRY EXCEPTION, and it is load-bearing** (USER: *"the only exception to the 'name' thing is
+new cards with expiry, such as from Light up the Stage. We don't condemn cards that expire earlier
+than the one that was condemned"*). A fresh copy that expires EARLIER than the copy we passed on is
+not the same decision: the plan declined a patient copy, which says nothing about a copy that will be
+exiled this turn if unused. So "passed on" requires `BpCardUrgency(old) <= BpCardUrgency(new)` --
+extracted into one helper so the candidate side and the guard cannot drift, since this is the exact
+test the `dominated` scan already applies to the candidate. **Inert on Snow** (no staged cards -> both
+urgencies are `INT_MAX`), so every Snow number below is unaffected by it; it matters for the Light Up
+the Stage / Expressive Iteration decks (kitty, Hinata), which is precisely where a name-only version
+would have condemned the urgent half of every staged pair.
+
+**THE CANDIDATE SIDE NEEDED NO CHANGE** -- it already implements the USER's rule. The `dominated` scan
+condemns a card when a copy of the same name was in hand before and is at least as urgent, so a
+freshly drawn copy of an already-passed name is condemnable today. The guard was the only place the
+name test was missing.
+
+### Snow, 10 games, d2/b0, play BYTE-IDENTICAL in all four arms (`7916f1f572f914e7`, avg 5.9000)
+
+| metric | off | guarded (shipped) | **byname** | unguarded |
+|---|---|---|---|---|
+| hits | 26,842,249 | +17.73% | **+2.69%** | −24.31% |
+| misses | 431,881 | +18.35% | +17.92% | +0.49% |
+| wave host nodes | 22,757 | +11.08% | +11.33% | +3.69% |
+| slots | 2,517,447 | +18.39% | +18.18% | +1.30% |
+| scored applies | 28,019,734 | +18.05% | **+3.58%** | −23.30% |
+| stillborn | 1,680,273 | +19.88% | +21.11% | +4.77% |
+| **units_total** | **40,142,740** | **+14.84%** | **+3.62%** | **−19.43%** |
+| **LOOKUPS (h+m)** | **27,274,130** | **+17.74%** | **+2.93%** | **−23.92%** |
+| wall | 971 s | 1076 s | **973 s** | 736 s |
+| drops | 0 | 125,953 | **526,566** | 754,719 |
+
+`refused_samename=442,641` -- the rule fires hard. Drops go 125,953 -> **526,566**, 70% of the way to
+unguarded, and it **recovers 11.2 of the guard's 14.84 units points** (and 14.8 of its 17.74 lookup
+points), landing at **wall parity with baseline**.
+
+**AND IT KEEPS BOTH KNOWN REGRESSIONS SAFE**, which is the whole point -- it is a narrower guard, not
+a weaker one. Re-verified at d5/b20 on the current binary:
+
+| game | off | guarded | **byname** | unguarded |
+|---|---|---|---|---|
+| gi=487 | 6 | 6 | 6 | 6 (repaired since; no longer a blocker) |
+| gi=1357 | 8 | 8 | **8** | 9 (unwon) |
+| gi=1553 | 6 | 6 | **6** | 7 |
+
+gi=1357 is safe *by construction*: no Rimefeather Owl was in hand before the Scrying Sheets
+activation, so the Owl is still a genuinely new name, the guard still fires, and Skred is still spared.
+
+### WHAT IS LEFT, AND WHERE THE NEXT LEVER IS
+
+byname still spares 228,153 drops (30%) and those cost the difference between +3.62% and −19.43%, so
+the residual exemption is worth ~23 points. Note the shape: byname's `nodes` (+11.33%), `slots`
+(+18.18%) and `stillborn` (+21.11%) are still at GUARDED levels while its `hits`/`scored`/`units` came
+right down. **The tree only shrinks once enough is dropped** -- unguarded is the only arm where
+`nodes` and `slots` come back toward baseline. That threshold, not a linear saving, is what the next
+lever has to cross.
+
+The obvious next narrowing is per-CANDIDATE rather than per-consultation: the guard still spares
+*every* candidate whenever one genuinely-new payable name arrives, but the exclusive-slot harm only
+reaches a candidate that actually contests the slot with that new option. Sparing only the contested
+candidates is the same kind of granularity fix as this one, one level down.
+
+**NOT ADOPTED YET.** The default stays OFF: three games is not the adoption bar. The gate is the
+paired 2000-game d5/b20 cell the guard itself was adopted on (`logs/snow_perf/condfix_wins`), read
+per-game via `test/paired_arms.py`, not by deck mean.
