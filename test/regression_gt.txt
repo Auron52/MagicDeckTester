@@ -1,4 +1,4 @@
-# Regression ground truth -- commit 4ea95056  date 2026-09-18
+# Regression ground truth -- commit 68a9cfc7  date 2026-09-18
 # Promoted from accepted runs by 'regression.sh --accept' -- do not hand-edit.
 # Key: <deck>_<mode>_d<depth>_s<seed> = <avg>[/<play_digest>]   (avg = mean turn-to-win, unwon = max_turns+1)
 # Modes: smoke (<15m), regression (<45m), overnight (<8h); seeds disjoint.
@@ -432,6 +432,18 @@ melira_overnight_d5_s4004=4.8267/003886f4a911f0b0
 melira_overnight_d5_s5005=4.6667/eb745c43e6b89fee
 melira_overnight_d5_s6006=4.7000/82b18f59ee048b63
 melira_overnight_d5_s7007=4.7467/b7786ce5517f1166
+angels_overnight_d0_s4004=5.8570/18915f50eccb3e3c
+angels_overnight_d0_s6006=5.7900/df0af81b9b8ddc65
+angels_overnight_d0_s8008=5.8450/bbdd13b1f8235ca2
+angels_overnight_d0_s10010=5.8370/af9d03d54778bb16
+angels_overnight_d3_s4004=5.4530/5f7d88b10bfcdea5
+angels_overnight_d3_s5005=5.4630/399c0bf259b3ddf8
+angels_overnight_d3_s6006=5.3920/37db7268bb64e12e
+angels_overnight_d3_s7007=5.4150/fc08141fbb1e552b
+angels_overnight_d5_s4004=5.4340/73fe477063919514
+angels_overnight_d5_s5005=5.4760/d9d4e59063deb683
+angels_overnight_d5_s6006=5.4240/9abde4a69343d409
+angels_overnight_d5_s7007=5.3840/83abd5f205e0f616
 hinata2hg_overnight_d5_s4004=5.5200/eac71137f947bd6a
 hinata2hg_overnight_d5_s5005=5.3500/b9730fc4e581ebe4
 hinata2hg_overnight_d5_s6006=5.7900/294b0981c9250f64
