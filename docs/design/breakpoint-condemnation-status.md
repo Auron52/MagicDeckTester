@@ -2793,3 +2793,109 @@ that −19% survives with the class open is what settles "can condemnation help 
 * **Still owed:** the full regression tier; the GT rebaseline with per-difference verdicts;
   root-cause of `gi=198` (seed 940000, the one game of 2,000 the activation rule moved, 8 -> no win);
   and the `auras gi20` game above.
+
+## 2026-09-18 (later still): WHY CONDEMNATION DOES MORE WORK -- ROOT-CAUSED, AND THE FIX DESIGN
+
+USER: *"pin down why we are doing more work with condemnation on. To me, that is a bug and I require
+some extremely strong evidence and explanation to convince me otherwise."* Then, on being shown the
+mechanism: *"If we aren't deleting plans with condemnation what are we doing?"* and *"We could delete
+options, but we need to not duplicate plans after said options are deleted."*
+
+### THE ANSWER: AT THE SHIPPING DROP RATE, CONDEMNATION IS A RE-RANKING, NOT A PRUNE
+
+Three facts compose into the whole explanation:
+
+1. **The filter deletes OPTIONS, not plans.** It lives in `CollectActions` (TurnSolver.cpp:11949),
+   which returns the ACTION MENU; the subset machinery then builds plans from what is left. So the
+   filtered plan set is not "baseline's plans minus the condemned ones" -- it is a fresh enumeration
+   over a smaller menu, and the mana the condemned cast would have spent is still there to spend.
+2. **The search walks ~2 of ~19 continuations.** `BpSearchWidth()` is 2 -- the design note at
+   TurnSolver.cpp:9326 states it outright ("exactly THREE of n continuations are ever explored") and
+   the Snow arithmetic confirms it exactly (`reach + unreachable == n * mean`, ratio 0.9998-1.0003):
+   walk depth is **1.99 entries per breakpoint and 89% of continuations are NEVER walked, in every
+   arm**.
+3. **Therefore a drop is a PROMOTION.** Below the window it removes nothing the search would have
+   walked. Inside the window it does not remove a walk -- it pulls the next entry in. The promoted
+   line is one BASELINE NEVER WALKED, and on Snow the promoted lines are cheap draws (Astrolabe,
+   Coatl, the tap-draw), each of which -- with the put-in-hand class open -- OPENS A NEW BREAKPOINT,
+   costing a whole continuation list plus its own wave slots.
+
+**gi=8 (69% of the 10-game cell) is the proof.** Shipping default, 168,404 drops:
+
+| gi=8                    | off        | on (shipping) | unguarded (867k drops) |
+|-------------------------|-----------:|--------------:|-----------------------:|
+| mean list length        | 18.65      | 18.87 (+1.2%) | 14.37 (**-23.0%**)     |
+| walk depth / breakpoint | 1.992      | 1.967         | 1.796                  |
+| distinct bp states      | 479,978    | **+13.68%**   | **-4.77%**             |
+| site-10 (draw) reached  | 297,801    | **+54.20%**   | +33.69%                |
+| continuation lists      | 1,459,285  | **+42.05%**   | +21.74%                |
+| units                   | 31,308,714 | **+37.16%**   | **-9.28%**             |
+
+Neither the list nor the walk shrinks at the shipping rate: the prune removes NO work, it manufactures
+42% more breakpoints. Work falls only once drops shorten the list PAST the window -- which is what the
+unguarded arm does, and there `distinct` goes NEGATIVE, i.e. it finally becomes a true subset filter.
+**The soundness guard is what holds condemnation in the re-ranking regime** (it spares ~81% of drops).
+This is the mechanical explanation of the previously-recorded non-monotonicity ("a half-applied prune
+is worse than none").
+
+Per-game attribution (`logs/snow_perf/pergame.sh`, one process per game) sums to the batch total to
+**0.0009%**, so this decomposition IS the cell, not a sample of it. The inflation is NOT spread: gi=8
+is +37.16%, gi=9 is -0.06%, and the eight fast games together are +3.7%.
+
+### HYPOTHESES KILLED (do not re-derive)
+
+* **Escalation / honest re-evaluation** -- `condemn_drops=0` and `interior_esc=0` in every arm.
+* **Key-fold cache churn.** Condemnation arms three extra folds in `BpEnumBuildKey` (hand snapshot,
+  cast set, site) and the cache is clear-on-full at 8192. Raising `MTG_BP_ENUM_CACHE_CAP` to 400000
+  cuts clears 96.5% (29 -> 1) and moves `units`, `builds` and `lists` by **exactly 0.00%** --
+  re-derivations are UNIT-FREE. The fold comment at TurnSolver.cpp:45172 ("the prune's saving was
+  being handed back as cache misses") is true of DERIVATIONS but is not what `units_total` measures.
+* **Nesting.** `MTG_BP_NEST_DISCOVER=0` barely moves the gap (gi=6: +5.26% vs +5.80%).
+* The controlling experiment for all three: with the put-in-hand class CLOSED, condemnation's folds
+  are still armed and the filter still fires (67 drops) yet `distinct` is **exactly equal
+  (14,791 = 14,791)** and the gap collapses to +0.37%. The extra states are real lines, not key
+  fragmentation.
+
+### THE DUPLICATION MEASUREMENT (USER's directive)
+
+`MTG_DEDUP_CENSUS`, gi=6: off `seen=221,501 dup=129,332` (58.39%); on `seen=238,432 dup=138,692`
+(58.17%). Condemnation adds 16,931 candidates of which **9,360 (55%) land on a post-apply state a
+sibling already reached**. The dup RATE is unchanged -- condemnation does not duplicate worse per
+candidate, it manufactures more candidates which duplicate at the standing 58-64% background rate.
+
+### THE DESIGN
+
+**A -- RANK-PRESERVING DROP (do not promote). RECOMMENDED.**
+Enumerate the continuation list UNFILTERED; mark condemned entries; the walker opens its slots at the
+UNFILTERED ranks and skips condemned ones **without re-indexing**. A condemned entry in the window
+costs its slot and is not backfilled.
+* Satisfies the USER's spec BY CONSTRUCTION: every line walked is a line baseline walked, drops can
+  only ever remove walks, and the distinct breakpoint states become a strict subset.
+* Also closes the MENU-substitution channel, because the list is enumerated before filtering -- the
+  freed mana can no longer be re-spent on a different cast.
+* Attacks the apply, which is where the cost is (77.6% of Snow's units are wave applies, 85% of which
+  never reach a rollout).
+* **The claim it must answer:** it spends search WIDTH at breakpoints where a drop lands in the
+  window. Condemnation's own premise says that is free -- the condemned line is covered by a sibling
+  branch, so the width given up was being spent on a duplicate of that sibling. If the premise holds,
+  A costs no quality; if it does not, A shows up as regressions. Measure paired at play settings plus
+  the unrecoverable census at budget 0 / depth 8.
+
+**B -- PROMOTE BUT DEDUPE ON POST-APPLY STATE. BLOCKED BY EXISTING EVIDENCE.**
+* As a PRE-apply test it needs the plan signature, measured **32-38% FALSE** (gi=6 alone:
+  copy_FALSE 53,339 vs copy_perm 88,438) -- a lossy prune deleting distinct lines, refused by the
+  no-lossy-truncation bar. Confirmed by [[snow-candidate-duplication-2026-09-09]].
+* As a POST-apply test it saves only the rollout, not the apply -- and the apply is the cost.
+  `MTG_CAND_DEDUP` already measured WALL-NEUTRAL.
+* So B cannot pay unless a SOUND pre-apply state test is found, which is its own project.
+
+**Check A against the unguarded arm**, which already reaches the true-deletion regime empirically
+(-8.53% units, distinct -4.77%, play byte-identical). If A works, it may make the soundness GUARD
+affordable again -- the guard's entire cost today is that it holds the prune in the reshuffle regime.
+
+### CONDEMNATION DOES PAY, UNGUARDED (`cond_pih2`, 10 games d2/b0, real key, class open)
+
+All four arms play BYTE-IDENTICALLY (digest 41b15b80ee5c8038, avg 5.9000):
+guarded+byname+activation **+9.04%**, unguarded **-4.51%**, unguarded+activation **-8.53%** units
+(-10.46% lookups, -11.1% wall). So the answer to *"see whether condemnation can help at all"* is YES,
+but only where the guard is not holding it in the re-ranking regime.
