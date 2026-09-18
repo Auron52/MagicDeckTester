@@ -398,3 +398,41 @@ own before any creature-token work is attempted.
 search. `gi=12` is stuck labelling **turn 2** — its real board is nearly empty, and the explosion is
 entirely inside the label's full-game rollout. Fusion makes each node ~1.6-3.7x cheaper; it does not
 make an unbounded search terminate.
+
+## WHY PHASE A HANGS AND PHASE C DOES NOT: the abandon ceiling is not wired to phase A
+
+Phase A of the value leaf stalled on this deck **twice**, both times on the same ten single-game
+jobs, each burning ~2.9 h and still `[RUNNING]` when the run was stopped — permanently occupying
+10 of 24 workers and producing no rows.
+
+`scripts/valueleaf.sh` already has the mechanism that exists for precisely this. `BatchRunner`
+supports a deterministic per-game work ceiling (`--abandon-units`, `--abandon-k`,
+`--abandon-calib`, `--abandon-floor-units`), stated in work UNITS rather than wall clock so the
+abandoned set is identical on every machine and across resumes. **It is passed only to the PHASE C
+matrix invocation.** Phase A's batch call passes none of it, so a phase-A game has no ceiling of
+any kind and runs until the process is killed.
+
+The design note for that mechanism is itself written against a phase-A observation — it rejects a
+250M floor because it *"would have let through the 6.41-hour game the phase-A heartbeat had already
+recorded"*. So phase A's monsters were known; the guard just never got attached to it.
+
+Abandoning is consistent with what phase A already accepts: rows dedupe on `(seed,turn)`, resume
+queues only games with **zero** rows, and the script's own comment says losing late-turn rows is
+*"a handful of rows against a hundred core-hours; `finish` exists precisely because fewer rows is
+acceptable"*.
+
+**Proposed change** (NOT made — it alters what training data a generation keeps, which is the
+user's call):
+* pass `--abandon-units <N>` to the phase-A batch. The ABSOLUTE cap is the right form here; the
+  relative `--abandon-k` ceiling calibrates against a matrix *cell*, and phase A has no cells.
+* `N` must be calibrated **against the label workload**, per that note's own warning
+  ("CALIBRATE AGAINST THE WORKLOAD YOU ARE BOUNDING, not a convenient proxy"). Phase C's
+  `ABANDON_FLOOR_UNITS=40000000` was calibrated for unbounded search **against a value leaf**;
+  phase A is unbounded search with **no** leaf (it is generating the first model), so units per
+  core-second differ and the number cannot be carried across. The batch reports per-game units only
+  when abandonment is armed, so the calibration is: arm it with a deliberately huge cap on a Fungus
+  label block, read the reported units, and set `N` to the user's stated policy
+  (*"above 10 minutes... maybe even 30 minutes"*).
+
+Without this, any Fungus value-leaf run needs `valueleaf.sh finish` to terminate, and phase A will
+re-queue the same ten zero-row games on every resume.
