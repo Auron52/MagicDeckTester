@@ -582,7 +582,14 @@ class Spec:
         # reads both, and the STEM is what matters -- mtg-analyze derives the keep table's filename
         # from the decklist's stem, so an arm named anything else would generate `<other>.keepmodel…`.
         self.name   = os.path.splitext(os.path.basename(self.base_path))[0]   # profile/sidecar stem
-        self.stem   = self.name + ".txt"
+        # DO NOT fold this into `stem`. It was `self.stem` until 2026-09-18, and the per-RUN
+        # namespacing added below (line ~601) then OVERWROTE it with the spec's basename -- so an arm
+        # decklist got written as `<specfile>` and mtg-analyze, which derives BOTH the keep table's
+        # filename and the play-profile sibling it looks for from the decklist's stem, went hunting
+        # for `<specfile>.profile.json` while the copied sidecar sat there as `<name>.profile.json`.
+        # That broke `--floor` / `--with-floor` outright for every spec not named `<DeckName>.json`
+        # ("keep-gen: no play profile beside the decklist"), which is to say almost all of them.
+        self.deck_stem = self.name + ".txt"
         # Every scratch path is namespaced by DECK. Keying them on the arm tag alone (logs/deckcmp/
         # base/) meant two specs over different decks shared `base/`, and `numbering.json` is written
         # per arm but read by the engine when the JOB runs -- so a second invocation between a floor
@@ -678,7 +685,7 @@ class Spec:
         os.makedirs(outdir, exist_ok=True)
         ordered  = [(counts[n], n) for _, n in self.deck if counts.get(n)]
         ordered += [(counts[n], n) for n in sorted(set(counts) - set(self.counts))]
-        dp = os.path.join(outdir, self.stem)
+        dp = os.path.join(outdir, self.deck_stem)
         open(dp, "w").write(decklist_body(ordered, self.side))
         np_ = os.path.join(outdir, "numbering.json")
         nums = (self.nums if tag == "base" else
@@ -1023,7 +1030,7 @@ def pool_table(spec, why, dry=False):
             subprocess.check_call(["cp", "-f", src, d])
     ordered  = [(counts[n], n) for _, n in spec.deck if counts.get(n)]
     ordered += [(counts[n], n) for n in sorted(set(counts) - set(spec.counts))]
-    deck = os.path.join(d, spec.stem)
+    deck = os.path.join(d, spec.deck_stem)   # <name>.txt -- NOT the per-run stem; see deck_stem
     open(deck, "w").write(decklist_body(ordered, spec.side))
     log = os.path.join(spec.out, "pooltable.log")
     print(f"  keep table     {why}\n"
