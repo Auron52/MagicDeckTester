@@ -2899,3 +2899,159 @@ All four arms play BYTE-IDENTICALLY (digest 41b15b80ee5c8038, avg 5.9000):
 guarded+byname+activation **+9.04%**, unguarded **-4.51%**, unguarded+activation **-8.53%** units
 (-10.46% lookups, -11.1% wall). So the answer to *"see whether condemnation can help at all"* is YES,
 but only where the guard is not holding it in the re-ranking regime.
+
+---
+
+# 2026-09-18 (LATER): THE REAL ROOT CAUSE -- CONDEMNATION SWITCHED OFF THE NO-WIN MEMO
+
+**The section above this one is WRONG about the mechanism, and the correction matters more than the
+finding.** It attributed condemnation's cost to RANK PROMOTION: with `BpSearchWidth()` at 2, deleting
+an entry compacts the list and slides an unwalked line into the window. Design A (drop mode 3,
+`SKIP`) was built to close that channel exactly -- enumerate unfiltered, rank, then empty the
+condemned entry IN PLACE so no successor moves. It closes the channel completely and buys NOTHING:
+
+| Snow, d2/b0, units vs condemnation-off | DELETE (shipped) | SKIP (design A) | DEMOTE |
+|---|---|---|---|
+| gi=8 (69% of the cell) | +37.16% | **+38.94%** | -0.07% |
+| 10-game cell | +25.76% | **+26.99%** | -0.05% |
+
+SKIP is WORSE, by the cost of the apply the emptied entry still spends. Two further readings kill the
+rank story outright: **gi=1 pays +5.49% with ZERO condemned entries inside the width window and ZERO
+at rank 0** -- meaningless for a ranking mechanism -- and with the deferred wave switched off
+entirely (`MTG_BP_WAVES=0`, so ranks 0..W-1 are all that exist) SKIP still tracks DELETE to within
+0.06pp. The cost is per-DROP, not per-rank.
+
+## THE MECHANISM
+
+`SimulateToEnd` stores a no-win refutation only under
+
+```
+nowin_armed && g_fs_trunc_events == trunc_at_entry
+```
+
+and `MTG_TRUNC_COMPLETE` (default ON) makes every searched-space condemnation drop bump
+`g_fs_trunc_events`. The flag's own comment names the culprit -- *"condemnation-filter drops (the m2
+filter ... and the breakpoint-condemnation twin)"*. The counter is a SUBTREE-INCLUSIVE watermark
+compared at every ancestor: *"a truncation ANYWHERE in the subtree propagates up and suppresses the
+no-win store at every ancestor."*
+
+So one drop stops the node and everything above it from memoising its refutation. With 168,404 drops
+on gi=8 that is the no-win transposition table switched off for the whole search, and the search
+re-derives every transposition at full price.
+
+**This engine has already paid for this exact pathology under a different trigger.** Both notes are
+about BUDGET truncation hitting the same watermark: *"once the first exhausted-mode truncation lands
+no no-win can be memoised (the trunc_at_entry watermark), so continuing re-searches every
+transposition at full price -- a leafless Melira pass estimated at 10.8k ran to 130k units"*, and
+*"14 aborts x 455k units in one Melira game (80% of its cost)"*. Condemnation walked into it too.
+
+## THE A/B (`MTG_BP_CONDEMN_NOWIN_TRUNC=0`, new lever, default ON = shipped behaviour)
+
+| gi | drops | watermark ON | watermark OFF |
+|---|---|---|---|
+| 1 | 580 | +5.49% | **+0.00%** |
+| 6 | 1,567 | +5.80% | **-0.32%** |
+| 8 | 168,404 | +37.16% | **-2.61%** |
+| cell | | **+25.81%** | **-1.83%** |
+
+The condemnation-OFF arm is BIT-IDENTICAL under both flag values on every game, so this is a single
+clean difference, not a difference-of-differences: the watermark does nothing until condemnation
+fires.
+
+**Why dropping it is not a revert of audit §6.1.** The watermark does not make condemnation sound --
+the prune happens in the live search either way. It only stops the CACHE remembering an answer the
+search already computed under that prune. The guard that actually governs is the USER's bar (a
+condemned line must be covered by a sibling at unlimited budget, depth 8). Corroboration that it is
+the blunt half of a pair: `NoWinEntry::condemn_drops` exists to MARK a filter-touched refutation and
+is replayed on a hit -- and it is provably always 0, because this gate rejects every subtree that
+would set it. (It is fed by `g_condemn_drops`, the M2 filter's counter, which reads 0 on Snow: the
+breakpoint twin got the watermark and never the marker.)
+
+## SOUNDNESS: THE NO-WIN VERIFIER (`MTG_NOWIN_VERIFY`, NEW)
+
+The WIN half of the leaf TT has had `MTG_LEAF_VERIFY` since mirrorwing gi=363. The NO-WIN half had
+NOTHING -- and running `MTG_LEAF_VERIFY` at this question answers a DIFFERENT one (it only verifies
+the win table), i.e. it is a no-power pass dressed as a clean bill of health. The new harness
+recomputes every no-win HIT fresh at the same cutoff and reports any that a real search refutes.
+
+* **60,319 verified hits across three arms, 0 bad.**
+* **POSITIVE CONTROL** (`MTG_NOWIN_VERIFY_POISON=1`, serves entries ignoring their bound): fires
+  immediately with exactly the right shape -- `cutoff=9 bound=7 fresh_win=8`. So `bad=0` means
+  something.
+
+## WHY THE PRUNE IS STILL SMALL: THE GUARD, NOT THE MECHANICS
+
+The why-not histogram over all 293,885 consultations on gi=6 (arithmetic self-checks:
+122,017 - 18,000 - 83,754 - 18,696 = 1,567 = drops):
+
+| blocked at | count | share |
+|---|---|---|
+| plan made no cast | 68,767 | 23.4% |
+| turn mana not settled | 83,711 | 28.5% |
+| the plan casts it itself | 17,449 | 5.9% |
+| slot after the site | 1,941 | 0.7% |
+| **reached the dominance test** | **122,017** | **41.5%** |
+| -- no earlier copy declined | 18,000 | |
+| -- unpayable anyway | 83,754 | |
+| -- **"new option" exemption** | **18,696** | |
+| -- **dropped** | **1,567** | **0.53%** |
+
+The exclusive-slot guard spares **18,696 of the 20,263** candidates that are otherwise payable AND
+dominated -- **92.3% of the droppable population**. That, not the drop mechanics, is what caps the
+prune.
+
+## THE USER'S RULE IS THE LEVER (name, or name + ability)
+
+USER 2026-09-18: *"At the end of the day we should decline any card name we have considered already
+in our order"* / *"(or card name + ability)"*. Both halves already existed, default OFF:
+`MTG_BP_CONDEMN_NEWOPT_BYNAME` and `MTG_BP_CONDEMN_ACTIVATION=1`.
+
+| arm (Snow, d2/b0, watermark OFF) | units vs off | drops | rate | gi=1357 |
+|---|---|---|---|---|
+| `guard` (shipping) | -1.83% | 111,069 | 2.19% | safe |
+| `byname` | **-9.06%** | 412,362 | 8.20% | safe |
+| `byname + activation=1` | **-14.32%** | 411,467 | 8.23% | **safe** |
+| `unguarded` | -21.14% | 746,713 | 15.69% | -- |
+| `unguarded + activation` | -24.23% | 740,748 | 15.75% | **LOSES (9.0000)** |
+
+**gi=1357 remains the discriminator and it still works.** The unguarded arm never wins it; every
+guarded arm including byname takes it on T8 -- exactly as the byname note predicted "by
+construction" (no Rimefeather Owl was in hand before the Scrying Sheets activation, so the Owl is
+still a genuinely new option and Skred is still spared). So the sound stopping point is the USER's
+rule; the extra ~10pp the unguarded arm offers is precisely what costs the game.
+
+**EVERY EARLIER COST VERDICT IN THIS DOC IS CONTAMINATED.** The guarded +9.04%, byname +3.62%,
+unguarded -4.51%/-8.53% were all measured with the watermark ON, which penalised each arm IN
+PROPORTION TO ITS DROP COUNT -- i.e. in proportion to the quantity under test. The ranking between
+guards was not trustworthy either.
+
+## CONDEMNATION IS A DEGENERATE-TAIL LEVER (USER's hypothesis, confirmed)
+
+USER: *"condemnation will also be more important for degenerate cases, since there are too many
+options in those cases and the cuts will likely be more frequent"* / *"For more normal cases it is a
+smaller impact."* Both are exactly right:
+
+| | n | off units | `guard` | `byname_act` | `ung_act` |
+|---|---|---|---|---|---|
+| **monsters (>=1M units)** | 2 | 43,605,760 | -1.89% | **-14.86%** | -25.04% |
+| normal games | 8 | 1,793,230 | -0.16% | **-1.24%** | -4.38% |
+
+~12x bigger on the tail. And the driver is the DROP RATE, which tracks option count: gi=8 has mean
+list length 12.3 and an 11.42% drop rate (-19.95%), while gi=9 has nearly the same list length (11.6)
+but a normal 1.85% rate and a normal -1.89%.
+
+**CONSEQUENCE FOR HOW THIS IS MEASURED:** the deck mean is the wrong readout. A seed block without a
+monster measures condemnation at ~-1% and reads as "not worth the soundness risk" -- which is roughly
+how it HAS been read until now. Tail-weight the evaluation set.
+
+## STATE / OWED
+
+* NEW levers, all default-OFF or default-shipped-behaviour, and the default path is verified
+  byte-identical to `323ad62f` on 6 decks / 52 games: `MTG_BP_CONDEMN_DROP_MODE=3` (SKIP -- built,
+  measured, REFUTED, kept as the instrument that proved the rank channel is worth ~0),
+  `MTG_BP_CONDEMN_NOWIN_TRUNC` (the fix), `MTG_NOWIN_VERIFY` + `..._POISON` (the missing harness).
+* `MTG_TRUNC_COMPLETE` 1 vs 0 at PLAY settings: all six deck digests identical (52 games).
+* **OWED:** the play-settings arm sweep (running, 6 arms x 300 games); the per-game `.units` tail
+  analysis at play settings; the unrecoverable census at budget 0 / depth 8 for byname + activation
+  (they drop MORE, which is the direction that needs it -- gi=1357 is one case, not a census); the
+  other two filter decks (Kitty, AntiLifegain); the regression tier; the GT rebaseline.

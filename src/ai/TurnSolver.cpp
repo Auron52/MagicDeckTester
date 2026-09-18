@@ -565,10 +565,41 @@ static std::atomic<long long> g_bp_condemn_drops_exec{0};
 static int BpCondemnDropMode();                          // defined with the mode's documentation
 static int BpSearchWidth();                              // wave-0 width W (defined far below)
 static bool BpCondemnNewOptByNameEnabled();              // defined with the guard it refines
-static std::atomic<long long> g_bp_condemn_emitted{0};  // condemned candidates offered anyway (1, 2)
-static std::atomic<long long> g_bp_demote_lists{0};      // continuation lists holding a condemned name
-static std::atomic<long long> g_bp_demote_plans{0};      // entries actually moved to the back
-// ...and the only two that say whether the move REACHED the scored set (see the demote block).
+static bool BpCondemnNoWinTrunc();                       // defined with the watermark it gates
+// MTG_NOWIN_VERIFY -- recompute every NO-WIN cache hit fresh and report any that a real search
+// refutes. See the harness at the hit site for why the existing MTG_LEAF_VERIFY cannot stand in for
+// it (that one verifies the WIN table). `checked` is reported with `bad` so a zero cannot be read as
+// a pass when it is really an absence of tests.
+static bool NoWinVerifyOn()
+{
+    static const bool on = EnvOn("MTG_NOWIN_VERIFY");
+    return on;
+}
+static thread_local bool t_nowin_verifying = false;
+static std::atomic<long long> g_nowin_verify_checked{0}, g_nowin_verify_bad{0};
+// MTG_NOWIN_VERIFY_POISON -- the harness's POSITIVE CONTROL, and it exists because "bad=0" is the
+// exact shape a broken checker produces. It serves a no-win entry while IGNORING its bound, which is
+// unsound by construction: the entry refutes only turns <= bound, so a query with a later cutoff can
+// have a win the entry never looked for. If the verifier does NOT light up under this, it cannot
+// detect the real hazard either and its clean runs mean nothing. Never set outside the self-test.
+static bool NoWinVerifyPoison()
+{
+    static const bool on = EnvOn("MTG_NOWIN_VERIFY_POISON");
+    return on;
+}
+// MTG_BP_CONDEMN_NOWIN_TRUNC=0 firing counter: searched-space drops that did NOT demote an enclosing
+// no-win. Zero with the flag off means the watermark was never being bumped here in the first place,
+// i.e. any work delta is not this lever -- the false-zero signature this feature has produced three
+// times already.
+static std::atomic<long long> g_bp_condemn_trunc_spared{0};
+static std::atomic<long long> g_bp_condemn_emitted{0};  // condemned candidates offered anyway (1,2,3)
+// THE MARKING COUNTERS, shared by DEMOTE (2) and SKIP (3) because both do the same LOCATING work and
+// differ only in what they then do with the entry: `plans` counts continuation entries that cast a
+// condemned name (demote moves them to the back; skip empties them in place). Printed as
+// `cond_*` since 2026-09-18; logs older than that print the same four numbers as `demote_*`.
+static std::atomic<long long> g_bp_cond_mark_lists{0};      // continuation lists holding a condemned name
+static std::atomic<long long> g_bp_cond_mark_plans{0};      // entries the condemned-name predicate matched
+// ...and the only two that say whether the marking REACHED the scored set (see the marking block).
 // CROSS-NODE CONTINUATION-LENGTH MEMO (MTG_BP_NSKIP_GLOBAL; see BpNSkipGlobalMode far below). At
 // file scope rather than beside the memo because the rollout-stats reporter above needs them.
 static std::atomic<long long> g_bplen_records{0}, g_bplen_hits{0}, g_bplen_skips{0},
@@ -581,8 +612,8 @@ static std::atomic<long long> g_bp_newopt_samename{0};
 // provider's ACTIVATION order had already passed when the site fired. Zero => the rule never fired.
 static std::atomic<long long> g_bp_condemn_act_drops{0};
 static bool BpCondemnActivationEnabled();   // defined with the rule, next to the other condemn flags
-static std::atomic<long long> g_bp_demote_in_window{0};  // condemned entries at rank < W
-static std::atomic<long long> g_bp_demote_rank0{0};      // ...lists whose VALUE-BEST entry was condemned
+static std::atomic<long long> g_bp_cond_mark_in_window{0};  // condemned entries at rank < W
+static std::atomic<long long> g_bp_cond_mark_rank0{0};      // ...lists whose VALUE-BEST entry was condemned
 // WHY-NOT histogram (MTG_BP_CONDEMN_WHYNOT). Each consultation that did not drop is charged to its
 // FIRST blocking gate, which turns "what is condemnation's ceiling?" from a trial-and-error
 // question into a read: g_wn_peer is what a FINER CAST ORDER could still recover (two cards at one
@@ -1058,25 +1089,58 @@ namespace
             //   COUNT_ONLY -- drops>0 with emitted==drops is the whole assertion: every condemned
             //                 candidate was counted AND offered anyway.
             //   DEMOTE     -- lists>0 AND plans>0. `lists` counts continuation lists that held at
-            //                 least one condemned name, `plans` the entries actually moved to the
-            //                 back. plans==0 with lists>0 means the demote PREDICATE never matched a
-            //                 plan -- i.e. the name never appeared in any continuation -- which is
-            //                 an inert arm dressed as a working one, not a cheap condemnation.
+            //                 least one condemned name, `plans` the entries the predicate matched.
+            //                 plans==0 with lists>0 means the PREDICATE never matched a plan -- i.e.
+            //                 the name never appeared in any continuation -- which is an inert arm
+            //                 dressed as a working one, not a cheap condemnation.
+            //   SKIP       -- the same two, plus in_window. SKIP is the mode most exposed to the
+            //                 no-power trap, because its whole claim is that it does LESS: an arm
+            //                 that empties only entries at rank >= W changes nothing the search
+            //                 scores, so a flat or cheap result would read as "design A is free"
+            //                 when it is really "design A never fired". in_window == 0 is therefore
+            //                 a VERDICT-VOIDING reading, not a footnote.
+            if (NoWinVerifyOn())
+            {
+                const long long ck = g_nowin_verify_checked.load();
+                const long long bd2 = g_nowin_verify_bad.load();
+                std::cerr << "[nowin-verify] checked=" << ck << " bad=" << bd2
+                          << (ck == 0 ? "   NO POWER -- no no-win hit was ever verified, so `bad=0`"
+                                        " is an ABSENCE OF TESTS, not a pass.\n"
+                            : bd2 == 0 ? "   SOUND on this run.\n"
+                                       : "   *** UNSOUND: the no-win table refuted a line that"
+                                         " exists. ***\n");
+            }
+            // THE WATERMARK LEVER (see BpCondemnNoWinTrunc). Printed whenever it is off, because an
+            // arm that reads "condemnation is now cheap" is only believable alongside the count of
+            // drops that actually skipped the demotion.
+            if (!BpCondemnNoWinTrunc())
+            {
+                const long long sp = g_bp_condemn_trunc_spared.load();
+                std::cerr << "[rollout-stats] bp_condemn_nowin_trunc=OFF spared_demotions=" << sp
+                          << "\n";
+                if (sp == 0)
+                {
+                    std::cerr << "  NO POWER -- the watermark was never bumped at this site anyway;"
+                                 " any work delta is NOT this lever.\n";
+                }
+            }
             const int dmode = BpCondemnDropMode();
-            if (dmode != 0 || g_bp_demote_plans.load() > 0 || g_bp_condemn_emitted.load() > 0)
+            if (dmode != 0 || g_bp_cond_mark_plans.load() > 0 || g_bp_condemn_emitted.load() > 0)
             {
                 std::cerr << "[rollout-stats] bp_drop_mode=" << dmode
                           << (dmode == 0 ? " (DELETE)" : dmode == 1 ? " (COUNT_ONLY)"
-                                                       : dmode == 2 ? " (DEMOTE)" : " (UNKNOWN)")
+                                                       : dmode == 2 ? " (DEMOTE)"
+                                                       : dmode == 3 ? " (SKIP)" : " (UNKNOWN)")
                           << " emitted_anyway=" << g_bp_condemn_emitted.load()
-                          << " demote_lists=" << g_bp_demote_lists.load()
-                          << " demote_plans=" << g_bp_demote_plans.load()
-                          << " demote_in_window=" << g_bp_demote_in_window.load()
-                          << " demote_rank0=" << g_bp_demote_rank0.load() << "\n";
-                if (dmode == 2 && g_bp_demote_plans.load() > 0
-                    && g_bp_demote_in_window.load() == 0)
+                          << " cond_lists=" << g_bp_cond_mark_lists.load()
+                          << " cond_plans=" << g_bp_cond_mark_plans.load()
+                          << " cond_in_window=" << g_bp_cond_mark_in_window.load()
+                          << " cond_rank0=" << g_bp_cond_mark_rank0.load() << "\n";
+                if ((dmode == 2 || dmode == 3) && g_bp_cond_mark_plans.load() > 0
+                    && g_bp_cond_mark_in_window.load() == 0)
                 {
-                    std::cerr << "  INERT -- DEMOTE moved plans but NONE was inside the wave-0"
+                    std::cerr << "  INERT -- " << (dmode == 2 ? "DEMOTE" : "SKIP")
+                              << " marked plans but NONE was inside the wave-0"
                                  " window (W=" << BpSearchWidth() << "), so nothing that gets"
                                  " SCORED changed. 'Meets the bar' here is vacuous.\n";
                 }
@@ -1085,10 +1149,24 @@ namespace
                     std::cerr << "  WARNING -- COUNT_ONLY emitted " << g_bp_condemn_emitted.load()
                               << " but counted " << bd << " drops; they must be EQUAL.\n";
                 }
-                if (dmode == 2 && g_bp_demote_plans.load() == 0)
+                if ((dmode == 2 || dmode == 3) && g_bp_cond_mark_plans.load() == 0)
                 {
-                    std::cerr << "  NO POWER -- DEMOTE never moved a plan. Any work delta below is"
-                                 " NOT the demotion.\n";
+                    std::cerr << "  NO POWER -- " << (dmode == 2 ? "DEMOTE" : "SKIP")
+                              << " never marked a plan. Any work delta below is NOT the mode.\n";
+                }
+                // SKIP's structural assertion, which no other mode can make: it must never CHANGE a
+                // continuation list's LENGTH, because the entry is emptied in place rather than
+                // removed. That is the rank-preservation property the whole design rests on, so it
+                // is asserted against the measured list length rather than argued from the code --
+                // if a future edit erases instead of empties, `lists`/`mean_len` move and this line
+                // is where it shows.
+                if (dmode == 3 && g_bp_cond_mark_plans.load() > 0)
+                {
+                    std::cerr << "  SKIP -- " << g_bp_cond_mark_plans.load()
+                              << " entries emptied in place, " << g_bp_cond_mark_in_window.load()
+                              << " of them inside W=" << BpSearchWidth()
+                              << ". List LENGTHS are unchanged by construction; compare `lists` and"
+                                 " the wave probe's mean length against the DELETE arm.\n";
                 }
             }
             if (g_bp_condemn_act_drops.load() > 0 || BpCondemnActivationEnabled())
@@ -2431,14 +2509,98 @@ static bool BpCondemnAllPathsEnabled()
 //                    prune's clothes. Demotion makes that explicit and, unlike deletion, leaves the
 //                    demoted line REACHABLE by a later deferred wave -- so it is also the shape that
 //                    answers the exclusive-slot soundness defect (a deleted line no sibling covers).
+//                    What it does NOT fix is the promotion: moving rank 2 to the back still shifts
+//                    ranks 3.. up by one, so the width-2 window still admits a line baseline never
+//                    walked. That is why mode 3 exists.
+//   3  SKIP        -- RANK-PRESERVING DROP (design A, 2026-09-18). Emit the candidate, let it take
+//                    its true rank in the ranked list, and then replace that ENTRY IN PLACE with the
+//                    EMPTY continuation ("cast nothing more, let the trailing passes run"). The slot
+//                    is spent and NOTHING IS BACKFILLED.
+//
+// WHY MODE 3 IS THE SHAPE THE USER'S BAR ASKS FOR. Root-caused 2026-09-18 (see
+// docs/design/breakpoint-condemnation-status.md): condemnation was doing MORE work, not less, and
+// the cause is that DELETE is a re-ranking rather than a prune. Three composing facts:
+//   (a) the filter deletes OPTIONS from the action menu (this is CollectActions), not plans, so the
+//       subset machinery re-enumerates over a smaller menu and the condemned cast's MANA is still
+//       there to spend on something else;
+//   (b) BpSearchWidth() is 2 -- the search walks ~1.99 of ~19 continuations and 89% of the list is
+//       NEVER walked at shipped settings (the measurement is on the note at BpWaveWalker);
+//   (c) so deleting an entry PROMOTES an unwalked line into the window instead of deleting a walk.
+//       On Snow the promoted lines are cheap draws, each of which -- with the put-in-hand class open
+//       -- OPENS A NEW BREAKPOINT carrying a whole continuation list plus its own wave slots.
+// Measured on the game that carries 69% of the cell (gi=8, shipping default, 168,404 drops): mean
+// list length 18.65 -> 18.87 and walk depth 1.992 -> 1.967 -- NEITHER SHRINKS -- while continuation
+// lists went +42.05%, distinct breakpoint states +13.68% and units +37.16%. Distinct states RISING
+// is the spec violation stated exactly: baseline never reaches those states.
+//
+// Mode 3 removes each fact in turn, which is what makes it sound BY CONSTRUCTION rather than by
+// measurement:
+//   * the list is derived and RANKED with every candidate present, so the ranking is bit-for-bit
+//     condemnation-OFF's ranking -- there is no promotion because there is no compaction;
+//   * the replacement is in place, so bp_choice (a POSITIONAL index, shared with the executor's
+//     replay) keeps addressing the same line it addressed with condemnation off;
+//   * every line still walked is a line baseline walked, and a condemned rank now walks the EMPTY
+//     continuation instead of a cast line -- strictly less work at that slot, and the set of
+//     distinct breakpoint states becomes a strict SUBSET of baseline's.
+// The premise it has to answer is condemnation's own: spending the slot is free precisely because a
+// sibling branch already covers the condemned line. If that premise holds, mode 3 is quality-free;
+// if it does not, it shows up as a regression rather than as silent extra work.
+//
+// WHERE IT APPLIES. The replacement lives in the breakpoint continuation memo, so mode 3 is a
+// SEARCH-SPACE lever: at a rollout or executor enumeration the candidate is simply emitted, exactly
+// as under modes 1 and 2. On Snow that is the whole population anyway (`searched=125,164 exec=0
+// rollout=0`). It DOES truncate -- the emptied line is unreachable at any budget, same as DELETE --
+// so it demotes no-win completeness identically; see the TruncCompleteEnabled call at the drop site.
 static int BpCondemnDropMode()
 {
     static const int v = EnvInt("MTG_BP_CONDEMN_DROP_MODE", 0);
     return v;
 }
-// Names condemned during the enumeration in flight, for DEMOTE. Saved/cleared/restored around each
-// derivation by BpEnumEntryFor (a nested derivation must not eat the outer one's set), so it is
-// empty outside one -- every other caller's behaviour stands unchanged.
+// ---- MTG_BP_CONDEMN_NOWIN_TRUNC -- DOES A CONDEMNATION DROP DEMOTE A NO-WIN? -------------------
+// DEFAULT ON = the shipped behaviour (a drop bumps g_fs_trunc_events). =0 drops the watermark.
+//
+// THIS ONE INCREMENT IS WHAT CONDEMNATION COSTS. Root-caused 2026-09-18 after the rank-preserving
+// design (drop mode 3) came back +26.99% against DELETE's +25.76% -- i.e. closing the rank-promotion
+// channel bought nothing, because the cost was never about ranks. SimulateToEnd stores a no-win only
+// under `nowin_armed && g_fs_trunc_events == trunc_at_entry`, and the counter is a SUBTREE-INCLUSIVE
+// watermark compared at every ancestor ("a truncation ANYWHERE in the subtree propagates up and
+// suppresses the no-win store at every ancestor"). So one drop stops the node AND every node above
+// it from memoising its refutation, and the search re-derives every transposition at full price.
+//
+// MEASURED (Snow, d2/b0, per game, units vs condemnation-off; MTG_TRUNC_COMPLETE=0 as the probe):
+//   gi=1  +5.49% -> +0.00%   gi=6  +5.80% -> -0.32%   gi=0  +0.89% -> +0.19%
+// and the condemnation-OFF arm is BIT-IDENTICAL under both flag values on every game, so the
+// watermark does precisely nothing until condemnation fires. The cost is therefore PER DROP, not per
+// rank -- which is also why gi=1 pays +5.49% with ZERO condemned entries inside the width window and
+// ZERO at rank 0, a reading that is nonsense for a ranking mechanism and exact for a per-drop one.
+//
+// WHY DROPPING IT IS NOT A REVERT OF AUDIT §6.1. The watermark does not make condemnation sound: the
+// prune happens in the live search either way. It only stops the CACHE remembering an answer the
+// search already computed under that prune, so it buys no completeness the prune did not already
+// spend -- it just makes us pay for the same pruned answer again at every transposition. The guard
+// that actually governs is the USER's bar (a condemned line must be covered by a sibling at
+// unlimited budget, depth 8); this is a redundant second guard costing +25.76% on the cell.
+// Corroboration that the watermark is the blunt half of a pair: NoWinEntry carries a `condemn_drops`
+// field, replayed on a hit, designed to MARK a filter-touched refutation -- and it is provably always
+// 0, because this gate rejects every subtree that would set it. (It is fed by g_condemn_drops, the
+// M2 filter's counter, which reads 0 on Snow: the breakpoint twin was given the watermark and never
+// the marker.)
+//
+// THE ONE REAL HAZARD, and it is testable rather than arguable: the no-win key is
+// BuildSimKey(state, depth, max_turns, second_main) with NO condemnation fold, so the same state
+// reached under a different condemnation context could inherit a refutation that does not hold
+// there. MTG_LEAF_VERIFY recomputes every hit fresh and reports stale hits -- run it with this off
+// before trusting the default flip. Scoped to the BREAKPOINT twin only; the m2 filter's own bump
+// (it has the working marker) is untouched.
+static bool BpCondemnNoWinTrunc()
+{
+    static const bool on = EnvOn("MTG_BP_CONDEMN_NOWIN_TRUNC", true);
+    return on;
+}
+// Names condemned during the enumeration in flight, for the MARKING modes (DEMOTE and SKIP).
+// Saved/cleared/restored around each derivation by BpDeriveContinuationList (a nested derivation
+// must not eat the outer one's set), so it is empty outside one -- every other caller's behaviour
+// stands unchanged.
 static thread_local std::vector<std::uint64_t> t_bp_condemned_names;
 // The effective "some line reaching this state cast nothing" bit for the enumeration in flight.
 // Bound by BpEnumEntryFor around the derivation (and folded into the key by BpEnumBuildKey, so a
@@ -12460,11 +12622,12 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
                         }
                     }
                     // WHAT THE CONDEMNATION DOES -- see BpCondemnDropMode for the bar this exists to
-                    // test. Mode 0 (default) deletes, exactly as before. Modes 1 and 2 fall THROUGH
-                    // to the emission below, so the candidate is still offered; 2 additionally
-                    // records the name so the continuation list can rank it last.
+                    // test. Mode 0 (default) deletes, exactly as before. Modes 1, 2 and 3 fall
+                    // THROUGH to the emission below, so the candidate is still offered and takes its
+                    // true rank; 2 and 3 additionally record the name, which is what lets the
+                    // continuation list rank it last (2) or empty its entry in place (3).
                     const int drop_mode = BpCondemnDropMode();
-                    if (drop_mode == 2)
+                    if (drop_mode == 2 || drop_mode == 3)
                     {
                         // Dedup on insert: this fires once per (candidate, enumeration) and the set
                         // is hand-sized, so a linear scan beats a set allocation on a path that runs
@@ -12476,16 +12639,34 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
                     }
                     if (drop_mode != 0 && s_rollout_stats)
                     { g_bp_condemn_emitted.fetch_add(1, std::memory_order_relaxed); }
-                    if (drop_mode == 0)
+                    // TRUNC-DEMOTION (audit §6.1): a SEARCHED-space drop deletes a candidate this
+                    // enumeration would otherwise offer, so no enclosing no-win over this subtree
+                    // is a complete refutation. Rollout/executor drops are playout-layer policy
+                    // (scope ruling 2026-09-02) and do not demote. Modes 1/2 emit the candidate AND
+                    // leave it reachable, so no truncation happened and there is nothing to demote.
+                    //
+                    // MODE 3 (SKIP) DEMOTES EXACTLY LIKE DELETE, and getting this wrong would be a
+                    // soundness bug rather than a missed saving: emitting the candidate is not the
+                    // question -- REACHABILITY is, and mode 3 empties the entry in place, so the
+                    // condemned line is unreachable at any budget just as a deleted one is. It is
+                    // charged here, at the same `g_search_candidate_enum` scope mode 0 uses, rather
+                    // than where the emptying happens: a drop recorded outside a continuation
+                    // derivation empties nothing, so this OVER-counts, and over-counting only ever
+                    // weakens a no-win claim -- the safe direction for a completeness demotion.
+                    //
+                    // ...AND THE WATERMARK IS WHAT CONDEMNATION ACTUALLY COSTS (2026-09-18). See
+                    // BpCondemnNoWinTrunc: this single increment is the +25.76% -- not the deletion,
+                    // not the ranking. Gated so it can be measured and, if it holds up, dropped.
+                    if (drop_mode == 0 || drop_mode == 3)
                     {
-                        // TRUNC-DEMOTION (audit §6.1): a SEARCHED-space drop deletes a candidate this
-                        // enumeration would otherwise offer, so no enclosing no-win over this subtree
-                        // is a complete refutation. Rollout/executor drops are playout-layer policy
-                        // (scope ruling 2026-09-02) and do not demote. Modes 1/2 emit the candidate,
-                        // so no truncation happened and there is nothing to demote.
-                        if (g_search_candidate_enum && TruncCompleteEnabled()) { ++g_fs_trunc_events; }
-                        continue;
+                        if (g_search_candidate_enum && TruncCompleteEnabled())
+                        {
+                            if (BpCondemnNoWinTrunc()) { ++g_fs_trunc_events; }
+                            else if (s_rollout_stats)
+                            { g_bp_condemn_trunc_spared.fetch_add(1, std::memory_order_relaxed); }
+                        }
                     }
+                    if (drop_mode == 0) { continue; }
                 }
             }
         }
@@ -35904,8 +36085,56 @@ static int SimulateToEnd(GameState&& state, int depth, int max_turns,
         if (nowin_armed)
         {
             const TranspositionTable::NoWinEntry* e = tt->LookupNoWin(key);
-            if (e != nullptr && cutoff_turn <= e->bound)
+            // The bound test is the entry's correctness condition; POISON drops it on purpose to
+            // prove the verifier below can fail (see NoWinVerifyPoison). Byte-identical when off.
+            if (e != nullptr && (cutoff_turn <= e->bound
+                                 || (NoWinVerifyOn() && NoWinVerifyPoison())))
             {
+                // NO-WIN SOUNDNESS HARNESS (MTG_NOWIN_VERIFY). The WIN half has had MTG_LEAF_VERIFY
+                // since the mirrorwing gi=363 stale hit; the NO-WIN half had NOTHING, which matters
+                // now because MTG_BP_CONDEMN_NOWIN_TRUNC=0 lets condemnation-pruned refutations into
+                // this table for the first time, and the key (BuildSimKey) carries NO condemnation
+                // fold. So the question "can a no-win stored under one condemnation context be served
+                // to a query under another?" was unanswerable by any existing instrument -- and
+                // running MTG_LEAF_VERIFY at it answers a DIFFERENT question (it only verifies the
+                // win table), which is a no-power pass dressed as a clean bill of health.
+                //
+                // THE ASSERTION: the entry says "no win at turn <= bound" and we only serve it when
+                // cutoff_turn <= bound, so a fresh unmemoised run at THIS cutoff must also find no
+                // win. A fresh win is a disproof -- the cache is refuting a line that exists.
+                //
+                // `checked` is reported beside `bad`, because "bad == 0" is worthless without it:
+                // zero failures out of zero checks is the shape every no-power pass takes.
+                if (NoWinVerifyOn() && !t_nowin_verifying)
+                {
+                    t_nowin_verifying = true;
+                    // The probe must leave NO trace on the enclosing node: a condemnation drop inside
+                    // it would bump the caller's own truncation watermark (and the escalation
+                    // counter), which would silently change what the REAL search memoises -- an
+                    // instrument that perturbs the thing it measures.
+                    const unsigned long long trunc_save = g_fs_trunc_events;
+                    const unsigned long long drops_save = g_condemn_drops;
+                    GameState copy  = state;
+                    const int  fresh = SimulateToEndImpl(copy, depth, max_turns, nullptr,
+                                                         cutoff_turn, second_main, nullptr);
+                    g_fs_trunc_events = trunc_save;
+                    g_condemn_drops   = drops_save;
+                    t_nowin_verifying = false;
+                    g_nowin_verify_checked.fetch_add(1, std::memory_order_relaxed);
+                    if (fresh <= max_turns)
+                    {
+                        const long long n =
+                            g_nowin_verify_bad.fetch_add(1, std::memory_order_relaxed);
+                        if (n < 20)   // one is already a disproof
+                        {
+                            std::fprintf(stderr,
+                                         "[nowin-verify] STALE NO-WIN #%lld turn=%d depth=%d"
+                                         " cutoff=%d bound=%d fresh_win=%d condemn_drops=%u\n",
+                                         n + 1, state.turn_number, depth, cutoff_turn,
+                                         e->bound, fresh, e->condemn_drops);
+                        }
+                    }
+                }
                 PROF_INC(tt_nowin_hit); ++g_tt_hit_n;
                 if (cutoff_turn >= max_turns && e->leaf_tb != leafeval::kInvalid)
                 { leafeval::Publish(e->leaf_tb); leafeval::PublishLife(e->leaf_life); }
@@ -45961,6 +46190,132 @@ static bool BpEnumBuildKey(const GameState& state, bool is_pre_combat,
     return true;
 }
 
+// THE CONTINUATION LIST: derive, rank, and apply the condemnation MARKING (drop modes 2 and 3).
+//
+// Factored out of BpEnumEntryFor for two reasons, one of which is a correctness one. (1) The enum
+// VERIFIER re-derives the list to check the memo, and under a marking mode an UNMARKED `fresh` would
+// diff against a MARKED `served` and report a phantom CONTENT-DIFF -- the verifier's whole value is
+// that a diff is a disproof, so a mode that manufactures diffs would retire the tool. (2) The
+// save/restore of t_bp_condemned_names has to wrap the derivation at BOTH sites, and a second
+// hand-written copy of that dance is exactly the lockstep hazard this feature has already paid for.
+//
+// `count_stats` is false for the verifier's re-derivation, so the firing counters keep measuring
+// PLAY rather than double-counting the checker's own work.
+static std::vector<TurnSolver::Plan> BpDeriveContinuationList(const GameState& state,
+                                                              bool is_pre_combat,
+                                                              bool count_stats)
+{
+    const int  mode   = BpCondemnDropMode();
+    const bool demote = (mode == 2);   // condemned lines ranked LAST (list keeps every entry)
+    const bool skip   = (mode == 3);   // condemned ENTRIES emptied in place (ranks preserved)
+    const bool mark   = demote || skip;
+    // Save/restore rather than plain clear: EnumeratePlansWithLand can re-enter this function, and a
+    // nested derivation must not consume the outer one's set.
+    std::vector<std::uint64_t> outer_condemned;
+    if (mark) { outer_condemned.swap(t_bp_condemned_names); }
+    ++g_bp_enum_depth;   // suppress the fan-out: this IS the continuation list, not a new decision
+    std::vector<TurnSolver::Plan> plans = EnumeratePlansWithLand(state, is_pre_combat);
+    --g_bp_enum_depth;
+    // MTG_BP_CANDS_ORDER: value-best first (wins, then total_eval), so the rank window and the
+    // node's budget-cut child walk reach what the deleted greedy used to pick. See the flag.
+    //
+    // THE RANKING IS BASELINE'S RANKING UNDER EITHER MARKING MODE, and that is the point of doing the
+    // sort HERE, before anything is moved or emptied: every candidate is present and carries its true
+    // value, so this sort produces bit-for-bit the order condemnation-OFF produces. Mode 3's
+    // rank-preservation guarantee rests entirely on that -- it is a property of where the sort sits,
+    // not something the marking below has to be careful about.
+    if (BpCandsOrderEnabled()) { MoveOrderPlans(plans); }
+    if (mark)
+    {
+        // Applied here, after the memo's derivation and before the entry is stored, so the executor's
+        // replay (AIEngine::resolve_draw_breakpoint indexes this same list) sees the identical list
+        // -- `bp_choice` is a POSITIONAL index and a list that differed between scoring and replay
+        // would make the executor play a candidate the search never scored. Sharing ONE list through
+        // the memo is what makes both modes lockstep-proof by construction rather than by a mirrored
+        // edit in AIEngine.cpp.
+        if (!t_bp_condemned_names.empty())
+        {
+            auto clean = [](const TurnSolver::Plan& p)
+            {
+                for (const Action& a : p.actions)
+                {
+                    if (a.kind != Action::Kind::CastFromHand
+                        && a.kind != Action::Kind::CastFromGraveyard) { continue; }
+                    // `def` is resolved by CollectActions where the name is assigned, and these
+                    // plans came straight out of the derivation above, so it is populated. Falling
+                    // back to a name lookup rather than trusting it: a null here would silently
+                    // under-mark, which reads downstream as "the lever has no effect" -- the
+                    // false-zero signature this feature has already produced three times.
+                    const CardDefinition* d = a.def;
+                    if (d == nullptr) { d = CardDatabase::Instance().Lookup(a.card_name); }
+                    const std::uint64_t h = d ? d->card.m_name_hash : 0;
+                    for (std::uint64_t k : t_bp_condemned_names) { if (k == h) { return false; } }
+                }
+                return true;   // casts nothing condemned -> keeps its rank AND its content
+            };
+            const std::size_t matched = static_cast<std::size_t>(
+                std::count_if(plans.begin(), plans.end(),
+                              [&](const TurnSolver::Plan& p) { return !clean(p); }));
+            // DOES THE MARKING REACH ANYTHING THAT GETS SCORED? `matched` alone cannot say. Wave 0
+            // emits bp_choice = 0..W-1, so an entry already at rank >= W is not scored either way
+            // and marking it is a no-op on the search -- an arm that only ever marks those is INERT,
+            // and it would present exactly as "the mode meets the bar", which is the no-power trap in
+            // its most convincing costume. The number that matters is how many condemned entries sit
+            // INSIDE the wave-0 window, and (sharper still) how often the VALUE-BEST entry is the
+            // condemned one -- that is the case where deletion demonstrably removes value and the
+            // node's bound must weaken. These measure DELETE too: a marking mode's list is
+            // baseline's list, so `in_window` is exactly the set of entries deletion removes from
+            // the scored window.
+            const int wv = BpSearchWidth();
+            const std::size_t lim =
+                std::min(static_cast<std::size_t>(wv > 0 ? wv : 0), plans.size());
+            long long in_window = 0;
+            for (std::size_t i = 0; i < lim; ++i) { if (!clean(plans[i])) { ++in_window; } }
+            const bool rank0 = !plans.empty() && !clean(plans[0]);
+            if (demote)
+            {
+                // STABLE partition, so within each of the two groups the value order MoveOrderPlans
+                // just established is preserved exactly. The list keeps baseline's LENGTH and
+                // baseline's relative order among the lines condemnation has no opinion about -- the
+                // only change is that a condemned line sits after them instead of ahead of them.
+                std::stable_partition(plans.begin(), plans.end(), clean);
+            }
+            else
+            {
+                // SKIP (design A): replace the condemned ENTRY with the EMPTY continuation, in
+                // place. Not erased and not moved -- every surviving entry keeps the index it had
+                // with condemnation off, so nothing is promoted into the width-W window and the set
+                // of lines the search walks can only SHRINK. The slot is spent and not backfilled,
+                // which is the deliberate cost: see BpCondemnDropMode for why spending it is what
+                // condemnation's own premise says is free.
+                //
+                // The replacement is the same object the kBpEmptyChoice arm and the overrun fallback
+                // build ("cast nothing more, play no land, let the trailing passes run"), so it needs
+                // no special case at either resolution site, and land_decided keeps anything
+                // downstream from greedy-playing a drop this continuation declined. It satisfies
+                // IsApplyEmptyPlan, so the node host's EMPTY pre-skip and the post-apply dedup both
+                // recognise it for what it is rather than paying a rank to rediscover it.
+                for (TurnSolver::Plan& p : plans)
+                {
+                    if (clean(p)) { continue; }
+                    p               = TurnSolver::Plan{};
+                    p.land_decided  = true;
+                }
+            }
+            if (count_stats && s_rollout_stats)
+            {
+                g_bp_cond_mark_lists.fetch_add(1, std::memory_order_relaxed);
+                g_bp_cond_mark_plans.fetch_add(static_cast<long long>(matched),
+                                               std::memory_order_relaxed);
+                g_bp_cond_mark_in_window.fetch_add(in_window, std::memory_order_relaxed);
+                if (rank0) { g_bp_cond_mark_rank0.fetch_add(1, std::memory_order_relaxed); }
+            }
+        }
+        t_bp_condemned_names.swap(outer_condemned);
+    }
+    return plans;
+}
+
 static BpEnumEntry* BpEnumEntryFor(const GameState& state, bool is_pre_combat,
                                    const TranspositionTable::Key* pre_key)
 {
@@ -46011,12 +46366,16 @@ static BpEnumEntry* BpEnumEntryFor(const GameState& state, bool is_pre_combat,
             // KEY VERIFIER: does the cached list actually equal a fresh derivation at this state?
             // See BpEnumVerify. Suppressed during its own re-derivation, so hits reached from
             // inside the check do not verify recursively.
+            //
+            // Through BpDeriveContinuationList, so `fresh` is the SAME derivation the entry was
+            // built by -- ranked, and marked under drop modes 2/3. Re-deriving raw would have made
+            // every marked list read as a CONTENT-DIFF, i.e. the checker reporting its own omission
+            // as an engine bug. count_stats=false: the checker's work is not play.
             if (BpEnumVerifyOn() && !t_bp_enum_verifying)
             {
                 t_bp_enum_verifying = true;
-                ++g_bp_enum_depth;
-                std::vector<TurnSolver::Plan> fresh = EnumeratePlansWithLand(state, is_pre_combat);
-                --g_bp_enum_depth;
+                std::vector<TurnSolver::Plan> fresh =
+                    BpDeriveContinuationList(state, is_pre_combat, /*count_stats=*/false);
                 t_bp_enum_verifying = false;
                 const std::vector<TurnSolver::Plan>& served = it->second.plans;
                 std::vector<std::uint64_t> fa, sa;
@@ -46050,80 +46409,10 @@ static BpEnumEntry* BpEnumEntryFor(const GameState& state, bool is_pre_combat,
         }
     }
 
-    // DEMOTE MODE (BpCondemnDropMode()==2): the condemnation test below emits the candidate and
-    // records its name instead of deleting it, and we rank the continuations that cast it LAST.
-    // Save/restore rather than plain clear: EnumeratePlansWithLand can re-enter this function, and a
-    // nested derivation must not consume the outer one's set.
-    const bool demote = (BpCondemnDropMode() == 2);
-    std::vector<std::uint64_t> outer_condemned;
-    if (demote) { outer_condemned.swap(t_bp_condemned_names); }
-    ++g_bp_enum_depth;   // suppress the fan-out: this IS the continuation list, not a new decision
-    std::vector<TurnSolver::Plan> plans = EnumeratePlansWithLand(state, is_pre_combat);
-    --g_bp_enum_depth;
-    // MTG_BP_CANDS_ORDER: value-best first (wins, then total_eval), so the rank window and the
-    // node's budget-cut child walk reach what the deleted greedy used to pick. See the flag.
-    if (BpCandsOrderEnabled()) { MoveOrderPlans(plans); }
-    if (demote)
-    {
-        // STABLE partition, so within each of the two groups the value order MoveOrderPlans just
-        // established is preserved exactly. The list therefore has baseline's LENGTH and baseline's
-        // relative order among the lines condemnation has no opinion about -- the only change is
-        // that a condemned line sits after them instead of ahead of them. Applied here, after the
-        // memo's derivation and before the entry is stored, so the executor's replay
-        // (AIEngine::resolve_draw_breakpoint indexes this same list) sees the identical ordering --
-        // `bp_choice` is a POSITIONAL index and a list that reordered between scoring and replay
-        // would make the executor play a candidate the search never scored.
-        if (!t_bp_condemned_names.empty())
-        {
-            auto clean = [](const TurnSolver::Plan& p)
-            {
-                for (const Action& a : p.actions)
-                {
-                    if (a.kind != Action::Kind::CastFromHand
-                        && a.kind != Action::Kind::CastFromGraveyard) { continue; }
-                    // `def` is resolved by CollectActions where the name is assigned, and these
-                    // plans came straight out of the derivation above, so it is populated. Falling
-                    // back to a name lookup rather than trusting it: a null here would silently
-                    // under-demote, which reads downstream as "the lever has no effect" -- the
-                    // false-zero signature this feature has already produced three times.
-                    const CardDefinition* d = a.def;
-                    if (d == nullptr) { d = CardDatabase::Instance().Lookup(a.card_name); }
-                    const std::uint64_t h = d ? d->card.m_name_hash : 0;
-                    for (std::uint64_t k : t_bp_condemned_names) { if (k == h) { return false; } }
-                }
-                return true;   // casts nothing condemned -> keeps its rank
-            };
-            const std::size_t moved = static_cast<std::size_t>(
-                std::count_if(plans.begin(), plans.end(),
-                              [&](const TurnSolver::Plan& p) { return !clean(p); }));
-            // DOES THE DEMOTION REACH ANYTHING THAT GETS SCORED? `moved` alone cannot say. Wave 0
-            // emits bp_choice = 0..W-1, so an entry already at rank >= W is not scored either way
-            // and moving it is a no-op on the search -- an arm that only ever moves those is INERT,
-            // and it would present exactly as "demote meets the bar", which is the no-power trap in
-            // its most convincing costume. The number that matters is how many condemned entries sit
-            // INSIDE the wave-0 window and are therefore evicted from the scored set by the move,
-            // and (sharper still) how often the VALUE-BEST entry is the condemned one -- that is the
-            // case where deletion demonstrably removes value and the node's bound must weaken.
-            // Read via DEMOTE mode, but it measures DELETE too: demote's list is baseline's list, so
-            // `in_window` is exactly the set of entries deletion removes from the scored window.
-            const int wv = BpSearchWidth();
-            const std::size_t lim =
-                std::min(static_cast<std::size_t>(wv > 0 ? wv : 0), plans.size());
-            long long in_window = 0;
-            for (std::size_t i = 0; i < lim; ++i) { if (!clean(plans[i])) { ++in_window; } }
-            const bool rank0 = !plans.empty() && !clean(plans[0]);
-            std::stable_partition(plans.begin(), plans.end(), clean);
-            if (s_rollout_stats)
-            {
-                g_bp_demote_lists.fetch_add(1, std::memory_order_relaxed);
-                g_bp_demote_plans.fetch_add(static_cast<long long>(moved),
-                                            std::memory_order_relaxed);
-                g_bp_demote_in_window.fetch_add(in_window, std::memory_order_relaxed);
-                if (rank0) { g_bp_demote_rank0.fetch_add(1, std::memory_order_relaxed); }
-            }
-        }
-        t_bp_condemned_names.swap(outer_condemned);
-    }
+    // Derive, rank, and (drop modes 2/3) mark the condemned entries -- see BpDeriveContinuationList,
+    // which the verifier above shares so a marked list is never diffed against an unmarked one.
+    std::vector<TurnSolver::Plan> plans = BpDeriveContinuationList(state, is_pre_combat,
+                                                                  /*count_stats=*/true);
     plancache::ReportHiwater("bp", state, plans);
 
     if (keyed)
