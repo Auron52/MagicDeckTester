@@ -354,3 +354,47 @@ is now the largest single cost, and the next target if this deck needs more).
 label), so a board that explodes combinatorially still explodes, 1.37x sooner. The remaining lever
 for those specific games is still the Saproling-fusion work described above, or accepting them via
 `valueleaf.sh finish`.
+
+## THE MISSING MEASUREMENT, taken 2026-09-18: the fusion prize is x1.56 linear / x3.66 quadratic
+
+`MTG_BOARD_CENSUS=1` over 23 Fungus label games (the completable members of the `901750` block;
+`gi=12` excluded because it never finishes), 13,958 sampled rollout turn-steps at stride 64:
+
+```
+board: all_perms_mean=11.69  ours_mean=9.86  ours_max=364  all_max=365
+ours:  creatures_mean=5.48   tokens_mean=2.15  token_share=0.218
+FUSION: classes_mean=6.31  collapsed_mean=3.55  shrink=0.360  biggest_group=352  hosts_uniqued=4144
+FUSION PRIZE: linear_work x1.56333  quadratic_work x3.66357
+              (sum n 137,670 -> 88,062 ; sum n^2 2,207,262 -> 602,490)
+```
+
+**The rollout board really does reach 364 permanents** against a real board of 15, which is the
+hypothesis this instrument was built to test, and it holds.
+
+**The cost is in a tail so thin that mean board size is the wrong summary.** Boards of 97+ are
+**0.07% of steps** but carry **23.9% of all quadratic work**; every bucket at 17+ carries 47.5% of
+quadratic work between them. After fusion **every bucket above 16 is empty** — the tail is exactly
+what fusion deletes.
+
+**THE SURPRISE: the largest fungible class is FOREST, not Saprolings.**
+
+```
+collapsible_by_card  Forest=23775   1/1 Saproling Token=20669   Tukatongue Thallid=2062
+                     Utopia Mycon=879   Thallid Shell-Dweller=577   Simic Growth Chamber=496
+```
+
+This doc (and the clue-fusion precedent) framed the work as *Saproling* fusion. The census says
+basic Forests are 48% of all collapsible instances, more than the Saproling tokens. That matters
+for sequencing, because **lands are the easier and safer half**: no summoning sickness, no combat
+state, no counters, no P/T, and no lord/anthem interaction — the fields that make creature fusion
+delicate. `hosts_uniqued=4144` is the guard already handling the one real complication here (a
+Forest hosting Wild Growth is force-uniqued and cannot collapse).
+
+**Recommendation:** do LAND fusion first as its own change. It is the larger share of the prize, it
+touches none of the combat/lord machinery, and it can be measured against the unpruned arm on its
+own before any creature-token work is attempted.
+
+**What this does not change:** the prize is a per-node constant (a big one), not a bound on the
+search. `gi=12` is stuck labelling **turn 2** — its real board is nearly empty, and the explosion is
+entirely inside the label's full-game rollout. Fusion makes each node ~1.6-3.7x cheaper; it does not
+make an unbounded search terminate.
