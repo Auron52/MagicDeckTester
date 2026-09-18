@@ -5421,11 +5421,15 @@ static int EvalCard(const CardDefinition& def, const GameState& state, int chose
         if (def.params.lifegain_self_counters > 0 || def.params.lifegain_each_own_creature_counters > 0
             || def.params.lifegain_target_own_counter || def.params.creature_requires_devotion > 0)
         {
-            int watchers = 0, own_creatures = 0;
+            int watchers = 0, own_creatures = 0, own_recipients = 0;
             for (const Permanent& q : state.battlefield)
             {
                 if (q.controller_index != state.active_player_index) { continue; }
-                if (q.card.IsCreature()) { ++own_creatures; }
+                if (q.card.IsCreature())
+                {
+                    ++own_creatures;
+                    if (LifegainCounterSubtypeOk(def.params, q.card)) { ++own_recipients; }
+                }
                 const CardDefinition* qd = CardDatabase::Instance().LookupCached(q.card);
                 if (qd && (qd->params.any_creature_enters_lifegain > 0
                            || qd->params.own_creature_enters_lifegain > 0)) { ++watchers; }
@@ -5433,9 +5437,17 @@ static int EvalCard(const CardDefinition& def, const GameState& state, int chose
             dyn += def.params.lifegain_self_counters * watchers;
             // Archangel of Thune: one gain event = +1/+1 on the whole team it joins -- price one
             // event's worth of permanent team growth so the greedy leaf deploys the deck's payoff
-            // ahead of a vanilla five-drop; the search owns the multi-event valuation.
+            // ahead of a vanilla five-drop; the search owns the multi-event valuation. Lyra,
+            // Archangel of Dawn narrows the RECIPIENTS to one subtype, so credit the bodies that
+            // would actually take a counter (own_recipients == own_creatures when the filter is
+            // empty, which is what keeps Thune byte-identical), and count the watcher itself only
+            // when it matches its own filter.
             if (def.params.lifegain_each_own_creature_counters > 0)
-            { lifegain_deck_credit += def.params.lifegain_each_own_creature_counters * (own_creatures + 1) * DMG; }
+            {
+                const int self = LifegainCounterSubtypeOk(def.params, def.card) ? 1 : 0;
+                lifegain_deck_credit += def.params.lifegain_each_own_creature_counters
+                                      * (own_recipients + self) * DMG;
+            }
             // Heliod: a counter per gain event on one body -- a flat engine credit.
             if (def.params.lifegain_target_own_counter) { lifegain_deck_credit += 2 * DMG; }
         }
@@ -14937,8 +14949,15 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
                     // ramp still outranks idling on an empty board. The AMOUNT gained is not
                     // priced: it does not create extra events (life itself is goldfish-inert,
                     // except toward Serra Ascendant's threshold -- left to the rollout).
-                    int recip = 0; bool team = false;
+                    int recip = 0;
                     int own_creatures = 0;
+                    // A SUBTYPE-NARROWED team watcher (Lyra, Archangel of Dawn) counters only its own
+                    // subtype, so crediting the whole team would overstate it. Hold the first team
+                    // watcher's params and count its REAL recipients below -- which reduces to
+                    // own_creatures for an unnarrowed watcher, keeping Archangel of Thune identical.
+                    // (Crediting one team watcher rather than all of them is a pre-existing
+                    // simplification of this estimate and is deliberately left as it was.)
+                    const CardParams* team_wp = nullptr;
                     for (const Permanent& q : state.battlefield)
                     {
                         if (q.controller_index != state.active_player_index) { continue; }
@@ -14946,10 +14965,12 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
                         const CardDefinition* qd = CardDatabase::Instance().LookupCached(q.card);
                         if (!qd) { continue; }
                         if (qd->params.lifegain_self_counters > 0)              { recip += qd->params.lifegain_self_counters; }
-                        if (qd->params.lifegain_each_own_creature_counters > 0) { team = true; }
+                        if (qd->params.lifegain_each_own_creature_counters > 0 && !team_wp)
+                        { team_wp = &qd->params; }
                         if (qd->params.lifegain_target_own_counter)             { recip += 1; }
                     }
-                    if (team) { recip += own_creatures; }
+                    if (team_wp)
+                    { recip += CountLifegainCounterRecipients(state, state.active_player_index, *team_wp); }
                     ev = std::max(DMG / 2, recip * DMG * std::max(0, ExpectedAttacks(state) - 1));
                 }
                 else if (ab.effect == "pridemate_token")
@@ -14958,7 +14979,8 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
                     // own enter-watcher (Soul Warden / Soul's Attendant / Auriok Champion / Daxos)
                     // fires its own gain event, each a counter on every recipient incl. the new
                     // token itself.
-                    int wardens = 0, recip = 1; bool team = false; int own_creatures = 0;
+                    int wardens = 0, recip = 1; int own_creatures = 0;
+                    const CardParams* team_wp = nullptr;   // narrowed team watcher: see above
                     for (const Permanent& q : state.battlefield)
                     {
                         if (q.controller_index != state.active_player_index) { continue; }
@@ -14968,10 +14990,17 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
                         if (qd->params.any_creature_enters_lifegain > 0
                             || qd->params.own_creature_enters_lifegain > 0)      { ++wardens; }
                         if (qd->params.lifegain_self_counters > 0)              { recip += qd->params.lifegain_self_counters; }
-                        if (qd->params.lifegain_each_own_creature_counters > 0) { team = true; }
+                        if (qd->params.lifegain_each_own_creature_counters > 0 && !team_wp)
+                        { team_wp = &qd->params; }
                         if (qd->params.lifegain_target_own_counter)             { recip += 1; }
                     }
-                    if (team) { recip += own_creatures + 1; }
+                    // The +1 is the token this ability is about to make -- a 2/2 CAT, which a
+                    // narrowed Angel watcher would NOT counter.
+                    if (team_wp)
+                    {
+                        recip += CountLifegainCounterRecipients(state, state.active_player_index, *team_wp)
+                               + (LifegainCounterAcceptsSubtype(*team_wp, "Cat") ? 1 : 0);
+                    }
                     ev = 2 * DMG * std::max(0, ExpectedAttacks(state) - 1) + wardens * recip * DMG;
                     if (ev <= 0) { ev = 1; }
                 }
@@ -15016,7 +15045,14 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
                     // its own life-gain EVENT, i.e. a team-wide +1/+1 counter from every Archangel
                     // of Thune. Scored with the same warden x reciprocal shape pridemate_token
                     // above uses, so the two token-makers are priced consistently.
-                    int wardens = 0, recip = 1, own_creatures = 0; bool team = false;
+                    // THIS SITE IS IN THE ANGELS DECK (2 Serra the Benevolent), and it is exactly
+                    // where a narrowed watcher matters most: Lyra, Archangel of Dawn counters only
+                    // Angels, but the token Serra makes IS an Angel, and so is nearly every body
+                    // this deck has out. Dropping the team term when a narrowed watcher is present
+                    // would under-rank the deck's strongest loyalty line precisely when Lyra is on
+                    // the battlefield -- so count the real recipients instead.
+                    int wardens = 0, recip = 1, own_creatures = 0;
+                    const CardParams* team_wp = nullptr;
                     for (const Permanent& q : state.battlefield)
                     {
                         if (q.controller_index != state.active_player_index) { continue; }
@@ -15028,9 +15064,16 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
                             || qd->params.own_creature_enters_lifegain_toughness) { ++wardens; }
                         if (qd->params.lifegain_self_counters > 0)
                         { recip += qd->params.lifegain_self_counters; }
-                        if (qd->params.lifegain_each_own_creature_counters > 0) { team = true; }
+                        if (qd->params.lifegain_each_own_creature_counters > 0 && !team_wp)
+                        { team_wp = &qd->params; }
                     }
-                    if (team) { recip += own_creatures + 1; }
+                    // The +1 is the 4/4 ANGEL token this ability is about to make, which an
+                    // Angel-narrowed watcher DOES counter.
+                    if (team_wp)
+                    {
+                        recip += CountLifegainCounterRecipients(state, state.active_player_index, *team_wp)
+                               + (LifegainCounterAcceptsSubtype(*team_wp, "Angel") ? 1 : 0);
+                    }
                     ev = 4 * DMG * std::max(0, ExpectedAttacks(state) - 1) + wardens * recip * DMG;
                     if (ev <= 0) { ev = 1; }
                 }

@@ -8439,6 +8439,52 @@
     ],
     "upkeep_token_color": "G"
    }
+  },
+  {
+   "name": "Lightstall Inquisitor",
+   "mana_cost": "{W}",
+   "types": [
+    "Creature"
+   ],
+   "subtypes": [
+    "Angel",
+    "Wizard"
+   ],
+   "keywords": [
+    "Vigilance"
+   ],
+   "power": 2,
+   "toughness": 1,
+   "oracle_text": "Vigilance\nWhen this creature enters, each opponent exiles a card from their hand and may play that card for as long as it remains exiled. Each spell cast this way costs {1} more to cast. Each land played this way enters tapped. [bracket note: THE ETB IS NOT MODELLED AND IS STRUCTURALLY INERT HERE. The opponent DOES get a 60-card library and a 7-card opening hand dealt (OpponentDeck.h, kOpeningHandSize 7) whenever the deck raises an opponent-zone trait, so the naive reason -- 'there is nothing to exile' -- is WRONG and must not be reused. It is inert for two checked reasons instead. (1) DeckTouchesOpponentZones (GoldFishRunner.cpp) keys only on exile_opponent_top_cost, which nothing in this deck has, so no opponent hand is dealt here at all. (2) Even where one IS dealt, players[1].hand is WRITE-ONLY -- the only references to it in src/ are the two pushes that fill it -- and there is no opponent cast or land-play path, so the exile, the permission to play, the {1} tax and the tapped-land rider have nothing that could read them. It is modelled as ABSENT rather than as a simplification with a residual: there is no direction in which it could change a goldfish outcome. In a REAL game it is a genuine two-sided effect (it strips a card to exile but hands the opponent the option to play it, taxed) and this sim cannot price either side. VIGILANCE IS ALSO INERT: the passive opponent never attacks, so untapping-on-attack can never matter (the same reason Archangel of Thune's Flying is recorded inert). WHAT IS LOAD-BEARING is what is left: a ONE-MANA ANGEL BODY. That is not a small thing in this deck -- Bishop of Wings (gain 4 whenever an Angel enters), Righteous Valkyrie (gain life equal to its toughness), Seraph Sanctuary (gain 1) and Giada (an extra +1/+1 counter on each other Angel entering) all key on the subtype, not the body, so the cheapest possible Angel is the cheapest possible trigger. Each of those gains is its own life-gain EVENT (CR 119.10), which is what Archangel of Thune, Lyra Archangel of Dawn and Resplendent Angel's 5-life threshold read. So the sim values this card almost entirely as an enabler, which is the honest reading of why it is in the deck -- but a screen that likes it is liking the enabler, never the disruption.]",
+   "template": "vanilla_creature",
+   "parameters": {}
+  },
+  {
+   "name": "Lyra, Archangel of Dawn",
+   "mana_cost": "{2}{W}",
+   "types": [
+    "Creature"
+   ],
+   "supertypes": [
+    "Legendary"
+   ],
+   "subtypes": [
+    "Angel",
+    "Knight"
+   ],
+   "keywords": [
+    "Flying"
+   ],
+   "power": 3,
+   "toughness": 3,
+   "oracle_text": "Flying\nWhenever you gain life, put a +1/+1 counter on each Angel you control. [Archangel of Thune's watcher narrowed to one subtype: lifegain_each_own_creature_counters 1 plus the new lifegain_counters_subtypes [\"Angel\"], which filters the RECIPIENTS (where enters_watch_subtypes filters the ENTERING creature). An EMPTY filter means every creature, so Thune and every watcher predating the field are byte-identical -- that inertness is the reason the filter was added rather than a second param. Fires ONCE PER LIFE-GAIN EVENT (CR 119.10) through the shared GainLife/FireLifegainWatchers hook, so two Angels entering under Bishop of Wings is two events and therefore two counters on every Angel, not one. Counters land on every Angel INCLUDING Lyra herself (she is an Angel, so she matches her own filter) and including Angels that entered this turn, Angel TOKENS (Serra the Benevolent's -3 and Resplendent Angel's end step both spec subtype Angel), with AnnihilateCounters after each per CR 704.5r. IN THIS DECK THE NARROWING IS NEARLY FREE: every creature except Bishop of Wings (Human Cleric) is an Angel, so she is close to a three-mana Archangel of Thune -- which is the whole reason to test her. The search-side credit in TurnSolver counts RECIPIENTS rather than the whole team so executor and rollout stay in lockstep on that difference. FLYING IS INERT (the single passive opponent never blocks). LEGENDARY is modelled and is NOT inert -- a second copy is dead -- but it does not collide with Lyra Dawnbringer, a different name. Not to be confused with that card: this is a {2}{W} 3/3 from Reality Fracture, not the {3}{W}{W} 5/5 lifelink lord.]",
+   "template": "custom",
+   "parameters": {
+    "lifegain_each_own_creature_counters": 1,
+    "lifegain_counters_subtypes": [
+     "Angel"
+    ]
+   }
   }
  ]
 }

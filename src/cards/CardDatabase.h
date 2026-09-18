@@ -1386,6 +1386,13 @@ struct CardParams
     int  counter_threshold_flying_vigilance  = 0;
     int  counter_threshold_indestructible    = 0;
     int  lifegain_each_own_creature_counters = 0;
+    //   lifegain_counters_subtypes          -- subtype OR-filter on the RECIPIENTS of the line
+    //                                          above. EMPTY = every creature you control, so
+    //                                          Archangel of Thune is byte-identical to before this
+    //                                          field existed; ["Angel"] narrows it to Angels (Lyra,
+    //                                          Archangel of Dawn). Filters the RECIPIENTS, where
+    //                                          enters_watch_subtypes filters the ENTERING creature.
+    std::vector<std::string> lifegain_counters_subtypes;
     bool lifegain_target_own_counter         = false;
     int  own_creature_dies_lifegain          = 0;
     // ---- Ocelot Pride: end-step token trigger + ASCEND (the city's blessing) ----------------

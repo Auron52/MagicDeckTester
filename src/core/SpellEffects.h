@@ -3884,6 +3884,55 @@ inline int DefaultLifegainCounterTarget(const GameState& state, int controller)
     return best >= 0 ? best : fallback;
 }
 
+// Subtype OR-filter on the RECIPIENTS of lifegain_each_own_creature_counters. EMPTY = every
+// creature you control, so Archangel of Thune -- and every watcher that predates this filter -- is
+// byte-identical. ["Angel"] narrows it to Angels (Lyra, Archangel of Dawn). Note this filters the
+// RECIPIENTS, where enters_watch_subtypes filters the ENTERING creature; a card can want either.
+// Hand-rolled subtype loop rather than CardHasSubtype: that helper is defined FURTHER DOWN this
+// header and is not declared yet here -- the same reason enters_subtype_ok hand-rolls it.
+inline bool LifegainCounterSubtypeOk(const CardParams& wp, const Card& c)
+{
+    if (wp.lifegain_counters_subtypes.empty()) { return true; }
+    for (const std::string& want : wp.lifegain_counters_subtypes)
+    {
+        for (const std::string& cs : c.m_subtypes) { if (cs == want) { return true; } }
+    }
+    return false;
+}
+
+// The same question asked about a token that does not exist yet, by its subtype literal: would this
+// watcher counter the 4/4 ANGEL Serra the Benevolent's -3 is about to make, or the 2/2 CAT Ajani's
+// -2 makes? Used by the search's loyalty-ability valuation, which prices the token it is about to
+// create alongside the bodies already out.
+inline bool LifegainCounterAcceptsSubtype(const CardParams& wp, std::string_view sub)
+{
+    if (wp.lifegain_counters_subtypes.empty()) { return true; }
+    for (const std::string& want : wp.lifegain_counters_subtypes) { if (want == sub) { return true; } }
+    return false;
+}
+
+// How many bodies a team watcher would actually counter on this board: every own creature for an
+// unnarrowed watcher (Archangel of Thune), only the matching subtype for a narrowed one (Lyra,
+// Archangel of Dawn). Reduces EXACTLY to the own-creature count when the filter is empty, which is
+// what keeps every valuation that predates the filter byte-identical.
+//
+// NOTE the creature gate is `IsCreature()` alone, deliberately matching FireLifegainWatchers rather
+// than the engine's usual `IsCreature() || is_animated`. An animated Mutavault already takes no
+// counter from Archangel of Thune today, so honouring animation here would silently CHANGE a
+// shipped deck (slivers_vial is the only list with can_animate) -- that is a real pre-existing rules
+// gap, but fixing it is a GT-moving change that owes its own measurement, not a rider on this one.
+inline int CountLifegainCounterRecipients(const GameState& state, int player, const CardParams& wp)
+{
+    int n = 0;
+    for (const Permanent& p : state.battlefield)
+    {
+        if (p.controller_index != player || !p.card.IsCreature()) { continue; }
+        if (!LifegainCounterSubtypeOk(wp, p.card)) { continue; }
+        ++n;
+    }
+    return n;
+}
+
 inline void FireLifegainWatchers(GameState& state, int player)
 {
     // Speculative-tap regions save/restore LIFE around phantom taps but not counters; no
@@ -3925,19 +3974,36 @@ inline void FireLifegainWatchers(GameState& state, int player)
             AddPlusCounters(state.battlefield[i], wp.lifegain_self_counters);
             if (log) { ev += (ev.empty() ? "" : ", ") + state.battlefield[i].card.m_name.str() + " +1/+1"; }
         }
-        // "put a +1/+1 counter on each creature you control" (Archangel of Thune). Counters land on
-        // every creature INCLUDING Thune itself and bodies that entered this turn. Annihilate
-        // after each (CR 704.5r) -- a no-op unless a body carries -1/-1 counters.
+        // "put a +1/+1 counter on each creature you control" (Archangel of Thune), or on each
+        // creature of one SUBTYPE (Lyra, Archangel of Dawn: "each Angel you control"). Counters
+        // land on every recipient INCLUDING the watcher itself when it matches its own filter, and
+        // on bodies that entered this turn. Annihilate after each (CR 704.5r) -- a no-op unless a
+        // body carries -1/-1 counters.
         if (wp.lifegain_each_own_creature_counters > 0)
         {
             for (int j = 0; j < n; ++j)
             {
                 Permanent& c = state.battlefield[j];
                 if (c.controller_index != player || !c.card.IsCreature()) { continue; }
+                if (!LifegainCounterSubtypeOk(wp, c.card)) { continue; }
                 AddPlusCounters(c, wp.lifegain_each_own_creature_counters);
                 AnnihilateCounters(c);
             }
-            if (log) { ev += (ev.empty() ? "" : ", ") + state.battlefield[i].card.m_name.str() + ": +1/+1 on each creature"; }
+            if (log)
+            {
+                std::string who = "creature";
+                if (!wp.lifegain_counters_subtypes.empty())
+                {
+                    // Join the WHOLE filter: naming only the first would tell the viewer
+                    // "+1/+1 on each Angel" for an ["Angel","Cleric"] watcher that also
+                    // counters Clerics.
+                    who.clear();
+                    for (const std::string& s : wp.lifegain_counters_subtypes)
+                    { who += (who.empty() ? "" : "/") + s; }
+                }
+                ev += (ev.empty() ? "" : ", ") + state.battlefield[i].card.m_name.str()
+                    + ": +1/+1 on each " + who;
+            }
         }
         // "put a +1/+1 counter on target creature or enchantment you control" (Heliod). ONE pick:
         // the provider's, else the generic default. Human play picks off the board from the FULL

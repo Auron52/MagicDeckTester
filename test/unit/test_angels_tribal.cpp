@@ -337,3 +337,80 @@ TEST_CASE("Ocelot Pride is unchanged by the threshold param (default 1 = the his
     PerformEndStepLifegainTokens(s);
     CHECK(s.battlefield.size() == before + 1);
 }
+
+// ---- Lyra, Archangel of Dawn (2026-09-18) ------------------------------------------------------
+// "Whenever you gain life, put a +1/+1 counter on each Angel you control." Archangel of Thune's
+// watcher narrowed by the new lifegain_counters_subtypes RECIPIENT filter. Every check below is
+// invisible in a game log until it is wrong by a whole subtype.
+TEST_CASE("Lyra Archangel of Dawn counters each ANGEL, herself included, and skips non-Angels")
+{
+    EnsureCardsLoaded();
+    GameState s = Fresh();
+    const int lyra   = Put(s, "Lyra, Archangel of Dawn", 0, 1);
+    const int bishop = Put(s, "Bishop of Wings", 0, 2);          // Human Cleric -- NOT an Angel
+    const int youth  = Put(s, "Youthful Valkyrie", 0, 3);        // Angel
+
+    GainLife(s, 0, 1);                                            // ONE life-gain event
+    CHECK_MESSAGE(PlusCounters(s.battlefield[lyra]) == 1,
+                  "Lyra is an Angel, so she matches her OWN filter and counters herself");
+    CHECK(PlusCounters(s.battlefield[youth]) == 1);
+    CHECK_MESSAGE(PlusCounters(s.battlefield[bishop]) == 0,
+                  "Bishop of Wings is a Human Cleric -- the whole point of the narrowing");
+}
+
+TEST_CASE("Lyra Archangel of Dawn fires once per life-gain EVENT, not per point of life")
+{
+    EnsureCardsLoaded();
+    GameState s = Fresh();
+    const int lyra = Put(s, "Lyra, Archangel of Dawn", 0, 1);
+
+    GainLife(s, 0, 5);                                            // one event of five life
+    CHECK_MESSAGE(PlusCounters(s.battlefield[lyra]) == 1, "five life in ONE event is ONE counter");
+    GainLife(s, 0, 1);
+    GainLife(s, 0, 1);                                            // two more events
+    CHECK(PlusCounters(s.battlefield[lyra]) == 3);
+}
+
+TEST_CASE("Lyra Archangel of Dawn reaches Angel TOKENS and bodies that entered this turn")
+{
+    EnsureCardsLoaded();
+    GameState s = Fresh();
+    Put(s, "Lyra, Archangel of Dawn", 0, 1);
+    // Resplendent Angel's end-step token is a 4/4 Angel; make one the same way the engine does.
+    const std::size_t before = s.battlefield.size();
+    CreateToken(s, 0, /*power=*/4, /*toughness=*/4, { "Angel" }, "W", { "Flying", "Vigilance" });
+    REQUIRE(s.battlefield.size() == before + 1);
+    const int tok = static_cast<int>(s.battlefield.size()) - 1;
+    REQUIRE(s.battlefield[tok].is_token);
+
+    GainLife(s, 0, 1);
+    CHECK_MESSAGE(PlusCounters(s.battlefield[tok]) == 1,
+                  "an Angel TOKEN is an Angel -- Serra's -3 and Resplendent Angel both make these");
+}
+
+TEST_CASE("Archangel of Thune is UNCHANGED by the filter: an empty list still hits every creature")
+{
+    EnsureCardsLoaded();
+    GameState s = Fresh();
+    Put(s, "Archangel of Thune", 0, 1);
+    const int bishop = Put(s, "Bishop of Wings", 0, 2);           // Human Cleric
+
+    GainLife(s, 0, 1);
+    CHECK_MESSAGE(PlusCounters(s.battlefield[bishop]) == 1,
+                  "Thune has NO recipient filter, so a non-Angel must still be countered -- this is "
+                  "the regression guard for the whole narrowing change");
+}
+
+TEST_CASE("Thune and Lyra Archangel of Dawn stack: a non-Angel gets only Thune's counter")
+{
+    EnsureCardsLoaded();
+    GameState s = Fresh();
+    Put(s, "Archangel of Thune", 0, 1);
+    Put(s, "Lyra, Archangel of Dawn", 0, 2);
+    const int bishop = Put(s, "Bishop of Wings", 0, 3);           // Human Cleric
+    const int angel  = Put(s, "Youthful Valkyrie", 0, 4);         // Angel
+
+    GainLife(s, 0, 1);                                            // ONE event, TWO watchers
+    CHECK_MESSAGE(PlusCounters(s.battlefield[angel]) == 2, "an Angel is countered by both watchers");
+    CHECK_MESSAGE(PlusCounters(s.battlefield[bishop]) == 1, "a non-Angel is countered by Thune only");
+}
