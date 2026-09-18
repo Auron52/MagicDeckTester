@@ -493,13 +493,78 @@ Adopted as `decks/Angels/Angels.value.json`:
 (The file's PRESENCE is what activates it; `leaf: "none"` means there is no learned model to build.)
 
 Adopted without asking under the standing no-drawback rule (USER 2026-09-03): identical quality plus
-a large cost win is not a trade-off. **Why the deck proves everything inside the horizon:** it is a
-linear aggro curve-out — every game in the sweep was decided by turn 5-6 with no combo to project
-past, so the rollout's horizon evaluation was never the binding constraint. That is precisely the
-profile for which a value leaf is a net negative (cf. Stompy).
+a large cost win is not a trade-off.
 
 **Practical consequence:** the 2.3x CPU saving is exactly what makes the deferred, user-kicked-off
 mulligan generation cheaper when you want it.
+
+### RETRACTED 2026-09-18: "no value leaf is needed" did not follow from this evidence
+
+The shape adoption above stands — it is re-confirmed below. **The leaf-necessity conclusion does
+not.** USER, 2026-09-18: *"I would like to revisit value-leaf generation. We should use this as a
+test-case for whatever rules we are using to determine 'we don't need a value-leaf'."* Doing that
+turned the rule on my own reasoning, and my reasoning failed it.
+
+**What I claimed:** *"Why the deck proves everything inside the horizon: it is a linear aggro
+curve-out... That is precisely the profile for which a value leaf is a net negative (cf. Stompy)."*
+
+**What the rule actually keys on.** `search-shape-mechanisms.md` mechanism 3 and
+[[leaf-necessity-is-predictable]] name ONE predictor: the **probe-failure rate** — how often the
+leafless probe cannot PROVE its win, counted as single passes per ladder decision at d5b20. Low means
+the deck proves everything and a leaf is a model it never consults; high means the leaf question is
+live and can go either way.
+
+**I never measured it.** I inferred "proves everything" from a units RATIO between two leafless
+shapes and wrote a mechanism story around it. Measured now (`MTG_ROLLOUT_STATS=1`, 60 games, seed
+880500, d5b20, single-threaded):
+
+```
+reserved single pass: completed=148 overruns=0 (partial kept=0, escalated=0) gate_refusals=0
+heuristic-ladder totals: decisions=352
+```
+
+| band | decks | rate |
+|---|---|---|
+| LOW — skip generation | slivers 1/61, knights 2/62, auras 2/62, goblins 5/65, fluct 6/66 | 1.6–9% |
+| HIGH — leaf question live | critter 10/70, th 14/154, kitty 22/82, dragons 28/88, fivecolour 311/646, hinata 77/136 | 14–57% |
+| **Angels** | **148/352** | **42%** |
+
+**Angels is in the HIGH band**, between dragons (32%) and fivecolour (48%). The deck does NOT prove
+everything inside its horizon — it fails to prove on roughly two decisions in five. The claim was
+false, and it was the entire basis for skipping generation.
+
+**The tell was in my own result and I read past it.** I adopted shape #3 (`ladder: single`), which the
+menu prescribes for a HIGH probe-failure rate, while writing the LOW-rate rationale next to it. A deck
+that truly proves everything wants shape #2 (`esc_nl`), because — mechanism 3 — *"where the probe
+nearly always proves, BOTH passes are nearly free and the leafless escalation wins simply by not
+adding a pass at all."* `fit_nl` beating `esc_nl` 0.37x to 0.49x was evidence AGAINST my story.
+
+**And the rule cannot finish the job here.** At HIGH it forks, with no way to tell the branches apart
+short of generating:
+
+| | probe-failure | leafless verdict |
+|---|---|---|
+| Hinata2 | 77/136 (57%) | shape #3 is enough (z +0.17, neutral) |
+| FiveColour | 311/646 (48%) | **leaf is load-bearing** (escnl z −3.73, single z −5.83) |
+
+Angels at 42% sits between them. So the honest output of the rule for this deck is **"generate it and
+measure"**, not "skip it" — which is what is now being done.
+
+**What IS re-confirmed** (same run, both arms, identical inputs, single-threaded):
+
+| arm | units | wall | avg win turn | play digest |
+|---|---|---|---|---|
+| `heur` — full rollout ladder | 2,251,993 | 18,170 ms | 5.2333 | `0694afc2c8c7e05a` |
+| shipped — leafless single pass | 657,601 | 2,647 ms | 5.2333 | `0694afc2c8c7e05a` |
+
+**0.29x units, 6.9x wall, byte-identical play.** The shape stays adopted on its own merits.
+
+**Lesson for the next deck, and it generalises past this one:** the probe-failure rate is cheap — one
+`MTG_ROLLOUT_STATS=1` run of 60 games — and it is the rule's ACTUAL input. `shape_probe.py`'s units
+table answers "which leafless shape", and its docstring's "and, from the size of the gap, whether a
+leaf is worth generating at all" is a much weaker inference than it reads as. Measure the rate; do not
+narrate the mechanism from a ratio. Compare [[dont-rationalize-a-measured-cut]] — a mechanism invented
+after the numbers explains them, it does not extend them.
 
 ## Performance profile (with the leafless shape adopted)
 
