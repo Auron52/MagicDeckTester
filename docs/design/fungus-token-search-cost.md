@@ -519,8 +519,25 @@ by elided work: duplicate free=52543 leaf=0 REAL=5660 | distinct free=209095 lea
 
 `a3503192` measured this **DEAD on Snow** -- 4.5M duplicate boundaries, *every one* `free`, only
 389 of 16,077,262 distinct boundaries leading to a real subtree. On Fungus **5,660 duplicates lead
-to a real subtree, a 5.9% real-dup share**, against an `fs_pre` that is 43.7% of units. The Snow
-verdict does not transfer, and mode 2 is worth an A/B on this deck. Also from the same run:
+to a real subtree, a 5.9% real-dup share**, against an `fs_pre` that is 43.7% of units. So the Snow
+census verdict does not transfer.
+
+**The COLLAPSE still does not pay, and mode 2 was run rather than assumed** (same 8 games):
+
+| | mode 0 | mode 2 (collapse) |
+|---|---|---|
+| `units_total` | 2,910,912 | **2,910,912** |
+| wall | 11.31 s | 11.39 s |
+| labels | — | **identical** (row content; the dump ORDER varies with thread scheduling, so compare sorted -- a raw `cmp` reports a false difference) |
+| its own `distinct` / `duplicate` / real-dup | 300,029 / 58,203 / 5,660 | **unchanged** |
+
+Its own counters not moving is the tell. The closure fires at the end-of-turn boundary, i.e. AFTER
+the plan has been applied, so the boundary count is fixed by the plan count and only the recursion
+BELOW it can be elided -- and eliding it changes nothing, which points at that recursion already
+being served by the transposition table. (Hypothesis, not measured: the cheap confirmation is a TT
+hit-rate read across the two modes. It is consistent with `a3503192`'s Snow finding from the other
+side.) **Not a lever on this deck either; the 5.9% census figure is a boundary statistic, not a
+prize.** Also from the same run:
 `[bp-waves] scored=572,671 rolled=289,220 dupstate=265,108 improved=0` -- the wave phase is 18.7% of
 label units and improved **nothing** in 8 games (Snow: 133 of 158M, so this is the same shape, worse).
 
@@ -584,5 +601,15 @@ turn a 1,100-wide edge node into O(1).
   under-credit -- a false positive silently converts a win into a loss. `WINLESS SEED`'s 3 wins in
   15,809 tries are the audit set to check it against, and `MTG_WINLESS_WINDUMP=<n>` prints the
   winning plans so the certificate can be made to cover them by EXECUTION rather than approximation.
-* **Also promoted, cheaper:** an A/B of `MTG_FSW_EOT_DEDUP=2` on Fungus (5.9% real-dup share, and
-  lossless by the same argument that made the winless-develop closure sound).
+* **NOT a lever, run and refuted:** `MTG_FSW_EOT_DEDUP=2` (see the table above -- `units_total`
+  identical to the digit, labels identical, its own counters unmoved). The 5.9% real-dup share is a
+  boundary statistic; collapsing it buys nothing.
+
+### Method note worth keeping
+
+Two separate A/Bs in this section first read as "rows DIFFER" under `cmp`, and both were **thread
+scheduling reordering the dump file**, not a behaviour change -- the row CONTENT was identical in
+each. `MTG_DUMP_VALUE_ROWS` is written by all workers into one file with no ordering guarantee.
+Compare label dumps **sorted**. A raw byte compare on a multi-threaded dump manufactures a play
+change out of nothing, which is expensive in exactly the wrong direction: it makes a lossless
+change look lossy and invites someone to "fix" a correct mechanism.
