@@ -11,7 +11,8 @@ was looking for — **raise Giada, Font of Hope 2 → 4**. Worth **−0.303 / �
 20 / 30(2HG) / 40 life over 80,000 held-out games per format. Full list under
 *THE RECOMMENDED LIST* below.
 
-**Scale:** ~4.5 million games across six screens, three formats, all arms deck-construction legal.
+**Scale:** ~6.5 million games across nine screens, three formats, four disjoint held-out seed
+blocks, all arms deck-construction legal.
 
 **User framing (2026-09-18):** *"figuring out how to fit in the new cards … I'm guessing we'll want
 to drop at least 1 or 2 if not 3-4 5-drops"*; Swords and Unexpectedly are **not** candidates
@@ -412,6 +413,87 @@ Known, deliberately not fixed: `FireLifegainWatchers` gates on `IsCreature()` al
 land takes no counter from Archangel of Thune even though animation grants all creature types. Real
 pre-existing rules gap; fixing it moves `slivers_vial`'s GT, so it owes its own measurement.
 
+### Screen 7 — the RANKING held out, not just the winner (`spec7_rank_heldout.json`)
+
+`--confirm` validates one arm against base. The recommendation rests on the ORDER of six arms, so
+the order is what needed holding out: 6 arms × 3 formats × 40,000 games on seed **1500000**,
+disjoint from the screen's 1200000 and the confirm's 1700000.
+
+| arm | std (screen → held-out) | 2hg | long |
+|---|---|---|---|
+| `v_a` | −0.3017 → **−0.3071** | −0.3268 → **−0.3303** | −0.3716 → **−0.3730** |
+| `v_b` | −0.2915 → −0.2977 | −0.3126 → −0.3166 | −0.3522 → −0.3570 |
+| `v_t2d1` | −0.3014 → −0.3067 | −0.3268 → −0.3269 | −0.3584 → −0.3566 |
+| `v_li1` | −0.3339 → −0.3382 | −0.3411 → −0.3444 | −0.3775 → −0.3761 |
+| `v_rf2` | −0.2473 → −0.2517 | −0.2913 → −0.2939 | −0.3300 → −0.3278 |
+| `v_yv0` | −0.3337 → −0.3362 | −0.3390 → −0.3373 | −0.3807 → −0.3781 |
+
+**Every arm reproduces within ~0.006 and the ordering is identical in all three formats.** The three
+load-bearing margins survive: Giada 4 > 3 (0.0094 / 0.0137 / 0.0160), Dawnbringer 0 ≥ 1
+(0.0004 / 0.0034 / 0.0164, growing with length as screen 4 predicted), Remote Farm 4 > 2
+(0.0554 / 0.0364 / 0.0452).
+
+### Screen 8 — is `v_a` LOCALLY optimal? (`spec8_local.json`)
+
+10 arms + `v_a` × 3 formats × 40,000 games, seed 1600000. Every arm is `v_a` with exactly **one**
+single-card trade, so each row is a clean 1-for-1. Margins are **vs `v_a`**; positive = worse.
+
+| trade | std | 2hg | long | verdict |
+|---|---|---|---|---|
+| `w_solring0` cut Sol Ring, +1 YV | **+0.1041** | +0.0973 | +0.1041 | Sol Ring is enormous. Keep. |
+| `w_rvalk3` Righteous Valkyrie 4→3, +1 YV | **+0.0365** | +0.0528 | +0.0647 | 4 is firmly right. |
+| `w_thune4` Thune 3→4, −1 YV | +0.0172 | +0.0108 | +0.0026 | 3 Thune confirmed. |
+| `w_serra3` Serra 2→3, −1 YV | +0.0101 | +0.0121 | +0.0149 | 2 Serra confirmed. |
+| `w_land25` Plains 16→17, −1 YV | +0.0090 | +0.0084 | +0.0104 | 24 lands ≥ 25. |
+| `w_resp3` Resplendent 4→3, +1 YV | −0.0092 | −0.0035 | +0.0048 | wash |
+| `w_land23` Plains 16→15, +1 YV | −0.0079 | −0.0116 | −0.0093 | **fully modelled — tested** |
+| `w_thune2` Thune 3→2, +1 YV | −0.0174 | −0.0114 | −0.0006 | **fully modelled — tested** |
+| `w_bishop3` Bishop 4→3, +1 YV | −0.0140 | −0.0129 | −0.0118 | under-modelled, see below |
+| `w_serra1` Serra 2→1, +1 YV | −0.0118 | −0.0177 | −0.0176 | under-modelled, see below |
+
+The two sanity arms land hard, which is what gives the small rows credibility: this screen can
+resolve a real effect when there is one.
+
+**The interesting pattern: four trades beat `v_a`, and every one of them buys a THIRD Youthful
+Valkyrie.** That is not a contradiction of `v_a`'s Giada 4 / YV 2 — screens 4, 5 and 7 all say
+Giada > YV. Put together, the implied ordering is **Giada > Youthful Valkyrie > {the 3rd Thune, the
+2nd Serra, the 4th Bishop, the 24th land}**. So the ideal is Giada 4 *and* YV 3, paid for elsewhere.
+
+**Two of the four are disqualified by the yardstick discipline, not by their numbers:**
+* **Serra the Benevolent** — her −6 emblem is a *provable no-op* in this matchup (a damage floor on
+  a life total nothing can reduce). Cutting her is flattered exactly the way cutting Greaves was.
+* **Bishop of Wings** — the lifegain half is modelled, but the "whenever an Angel you control dies,
+  make a 1/1 Spirit" half is **near-inert against an opponent that never interacts**: Angels
+  essentially do not die in a goldfish. Cutting Bishop is flattered by the half the sim cannot run.
+
+Both margins (0.012–0.018) are far under the −0.05t yardstick, so they are **not adoptable** on this
+evidence. The other two — paying with a Plains or the third Thune — are fully modelled on both
+sides, so they got their own held-out block.
+
+### Screen 9 — the two fully-modelled refinements, held out (`spec9_refine.json`)
+
+3 arms × 3 formats × **60,000** games, seed 1800000, disjoint from every prior block. Margins vs
+`v_a`; pairwise se ≈ 0.0019–0.0023.
+
+| trade | std (screen 8 → held out) | 2hg | long |
+|---|---|---|---|
+| `w_thune2` Thune 3→2, YV 2→3 | −0.0174 → **−0.0151** (t≈−7.9) | −0.0114 → **−0.0064** (t≈−3.2) | −0.0006 → **−0.0017** (t≈−0.7) |
+| `w_land23` Plains 16→15, YV 2→3 | −0.0079 → **−0.0031** (t≈−1.6) | −0.0116 → **−0.0040** (t≈−2.0) | −0.0093 → **−0.0058** (t≈−2.5) |
+
+**`w_land23` shrank by ~60% on held-out seeds** — the textbook selection-bias signature on a small
+effect in a 10-arm screen, and the reason a trade never gets adopted off its discovery block.
+It is noise; 24 lands stands.
+
+**`w_thune2` is real but it is a 20-life-only tweak.** It holds at std (−0.0151), halves at 2HG, and
+is indistinguishable from zero by 40 life. **Not taken.** The recommendation has to serve 2HG and
+long as well, and buying 0.015 turns at 20 life for nothing at 40 is not a trade worth making the
+default. Recorded here with its size and its decay so the option is on the record if someone wants
+a dedicated 20-life build.
+
+**Net: `v_a` is locally optimal** — to within ~0.015t at 20 life and ~0.006t at 30–40 life, against
+single-card trades in every direction, with the two sanity arms (Sol Ring, Righteous Valkyrie)
+confirming the screen resolves real effects when they exist.
+
 ## THE RECOMMENDED LIST (`v_a`)
 
 Held out on disjoint seeds with no measurable shrinkage. Pooled over **80,000 games per format**:
@@ -444,10 +526,22 @@ Lightstall are the user's *introduction slots*. Mainboarding 4 Lyra with one sti
 **5 copies — illegal**. Legion Angel's wish is `wish_requires_name`-pinned to its own name, so the
 pool is exactly the 3 Legion Angels and every other sideboard slot is mechanically inert here.
 
-**Flex slot, and which way to move it.** `2 Youthful Valkyrie → 2 Lightstall Inquisitor` (`v_yv0`)
-is worth **−0.032 at 20 life, −0.012 at 2HG, −0.009 at 40 life**. Take it only for a short-format
-list; it decays to nothing as the game lengthens, and Lightstall's one real-game asset (the ETB) is
-unmodelled in both directions.
+**The flex slot — and applying the yardstick to it honestly.** `2 Youthful Valkyrie → 2 Lightstall
+Inquisitor` (`v_yv0`) measures **−0.032 at 20 life, −0.012 at 2HG, −0.009 at 40 life**. An earlier
+draft of this doc called that "take it for a short-format list". **That was under-hedged, by this
+doc's own standard.** The swap adds a card whose rider is unmodelled, so the −0.05t bias yardstick
+applies to it — and every one of those three margins is *below* the yardstick. Consistency demands
+the same verdict Lightning Greaves got: **not supported.** Lightstall stays out of the 60. If it is
+wanted anywhere it is a sideboard card for an explicitly short format, on judgement, not on this
+screen.
+
+**Where the yardstick does NOT apply, and why the core recommendation survives it.** The yardstick
+prices *cutting a card the sim cannot model*. It is the wrong comparator for a comparison where both
+arms hold the same card SET and differ only in counts of well-modelled cards — there the relevant
+guards are the se and the measured apparatus floor. That is the case for every load-bearing claim
+here: Giada 4 vs 3 (`v_a` vs `v_b`, −0.0194 ± 0.0027, t = −7.29), Remote Farm 4 vs 2 (`v_a` vs
+`v_rf2`, 0.0477 under corrected per-arm tables), and Dawnbringer 0 vs 1 (`v_a` vs `v_t2d1`). None of
+those trades an unmodelled card for anything.
 
 ### What was NOT changed, and why that took a deliberate experiment
 
