@@ -391,12 +391,39 @@ src_fingerprint() { git rev-parse HEAD:src 2>/dev/null; }
 # measured on a deck we no longer ship. The play digest cannot catch it either: a swapped deck is
 # usually still pinned to its OLD list in the smoke suite (deliberately, until its artifacts exist),
 # so the digest does not move at all. Caught on Mirrorwing 2026-08-22.
+#
+# LINE ENDINGS ARE STRIPPED BEFORE HASHING, and that is not cosmetic. A .cod is Cockatrice's format
+# and routinely arrives CRLF; git hands the working tree LF. So a checkout, a rebase, or an editor
+# round-trip flips every byte of the file without changing one card, and a raw-byte hash calls that
+# a new decklist. That is the WRONG failure direction for this particular guard: its documented
+# response is "there is nothing to keep, archive the queue and start over", so a whitespace-only
+# normalisation costs hours of banked rows. Caught on Fungus 2026-09-18, where a rebase re-materialised
+# Fungus.cod as LF and the stamp (taken when the tree held CRLF) declared the list replaced -- with
+# 6885 labelled rows behind it, and the file provably identical card-for-card.
 deck_fingerprint() {
     local row key dir stem df
     for row in "${DECK_TABLE[@]}"; do
         IFS='|' read -r key dir stem _ <<<"$row"
         df=$(deck_file "$dir" "$stem")
-        [ -n "$df" ] && printf '%s %s\n' "$key" "$(sha256sum "$df" | cut -d' ' -f1)"
+        [ -n "$df" ] && printf '%s %s\n' "$key" "$(tr -d '\r' < "$df" | sha256sum | cut -d' ' -f1)"
+    done | sort
+}
+
+# The pre-2026-09-18 RAW-BYTE fingerprint, in whichever line-ending form is named: `lf` for the file
+# exactly as it sits, `crlf` for the same cards with CRLF endings. Kept ONLY so a queue stamped by the
+# old function migrates instead of aborting -- the stamp is a bare hash, so the only way to ask "were
+# these the same cards?" after the fact is to re-hash the CURRENT content in the form the stamp used.
+deck_fingerprint_legacy() {
+    local mode=$1 row key dir stem df
+    for row in "${DECK_TABLE[@]}"; do
+        IFS='|' read -r key dir stem _ <<<"$row"
+        df=$(deck_file "$dir" "$stem")
+        [ -n "$df" ] || continue
+        if [ "$mode" = crlf ]; then
+            printf '%s %s\n' "$key" "$(tr -d '\r' < "$df" | sed 's/$/\r/' | sha256sum | cut -d' ' -f1)"
+        else
+            printf '%s %s\n' "$key" "$(sha256sum "$df" | cut -d' ' -f1)"
+        fi
     done | sort
 }
 
@@ -412,6 +439,16 @@ check_decks() {
     [ -e "$frozen" ] || return 0            # pre-dates the stamp; nothing to compare against
     now=$(deck_fingerprint)
     [ "$now" = "$(cat "$frozen")" ] && return 0
+    # A queue stamped before the line-ending normalisation above. If the CURRENT file re-hashes to the
+    # stamp in either raw form, the cards never changed and only the stamp's FORM is stale -- re-stamp
+    # and carry on rather than throwing the queue away.
+    for _form in lf crlf; do
+        [ "$(deck_fingerprint_legacy "$_form")" = "$(cat "$frozen")" ] || continue
+        log "decklist stamp is the pre-2026-09-18 raw-byte form ($_form); the list is UNCHANGED"
+        log "  card-for-card (line endings only) -- re-stamping and continuing."
+        printf '%s\n' "$now" > "$frozen"
+        return 0
+    done
     log "ABORT: the DECKLIST changed under this queue -- every row, matrix cell and trained model in"
     log "  $VLQ is fitted to the previous list and describes a deck that is no longer being measured."
     log "  Unlike a src/play move there is nothing to salvage, so this stops rather than resuming."
