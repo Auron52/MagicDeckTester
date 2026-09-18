@@ -2456,3 +2456,63 @@ byname is a wash against the shipped guard (and moved ZERO of the 2,000 block-B 
 NOT replicate on held-out seeds. So condemnation's QUALITY benefit on Snow is not established; its
 case rests entirely on the unbounded-search cost, where `byname` is worth 11.2 units points over the
 shipped guard.
+
+---
+
+## 2026-09-18: CONDEMNING ACTIVATIONS (`MTG_BP_CONDEMN_ACTIVATION`) -- BUILT, CORRECT, AND NARROW BY ORDER
+
+USER: *"Activation should be able to be condemned."* / *"condemnation should only happen if the
+activation is the same ability from an identical card."* / *"putting the abilities earlier would be
+better. In that case, they would get condemned if we don't utilize them ... they do need to be after
+mana sources that can be used this turn like land."*
+
+**THE HOLE.** Condemnation's candidate loop is indexed over `ap.hand[i]` -- it is a HAND-CAST rule, so
+an activation could never be condemned whatever its rank. Hence `Scrying Sheets` shows **0 drops in
+every arm**, while Frost Augur shows drops only as a CAST. This is the hole behind the measured cost:
+an overrun wave rank hits the EMPTY fallback, the continuation's OWN trailing pass activates a
+tap-draw, and that opens a NESTED breakpoint.
+
+**AVAILABILITY IS THE EVIDENCE OF DECLINE -- so this needs no new snapshot.** The trailing pass is
+ORDERED by `ActivationOrderRank` and applies only the plan's own actions
+(`apply_trailing_activations(plan.actions)` -- it is NOT greedy, which is what makes "the plan
+declined it" well-defined at all). So by the time a site at rank R fires, every activation ranked
+`< R` that the plan carried has already run; one still available at the breakpoint was offered at its
+slot and passed over. That avoids adding a `CantripOrderScope` field, which would have risked the
+search/executor LOCKSTEP defect this feature has already hit once.
+
+**SAME ABILITY, IDENTICAL CARD** is satisfied by construction: the decline is SELF-evidenced -- an
+activation is condemned because THIS permanent's own ability was passed over, never by inferring it
+from another card's decline. Sheets and Augur carry the same tap-draw but are different cards with
+different costs and different slots.
+
+**MEASURED (8-game cell), and the result is the design finding:**
+
+| arm | drops | act drops | units | lookups |
+|---|---|---|---|---|
+| off | 0 | — | — | — |
+| guarded | 762 | 0 | +1.08% | +2.11% |
+| + activation | 762 | **66** | +1.07% | +2.10% |
+| + activation + byname | 6,646 | 66 | +2.64% | +4.93% |
+
+It fires -- but only **66 times**, and changes nothing measurable. **The reason is the order itself:**
+the rule needs `rank(candidate) < rank(site)`, Snow's activation order has exactly two ranks (Sheets
+10, Augur 20), and the site is usually the EARLIER one. Nothing precedes it, so nothing is
+condemnable.
+
+**THIS CONFIRMS THE USER'S INTUITION DIRECTLY: with the draws LAST, nothing precedes them, so the
+draws can neither condemn nor be condemned.** The mechanism is now in place and correct; what it
+needs to pay is the rank change -- moving the draw abilities (and cast-time draws) earlier, after the
+mana sources usable this turn.
+
+**THE RANK CONSTRAINT MAPS ONTO EXISTING SLOTS.** "After mana sources that can be used this turn" is
+satisfied by anything ranked >= 2: the land drop is `LandDropCastOrderRank() == 0` and Arcum's
+Astrolabe (an artifact that enters untapped and taps immediately) is rank **1**. Mana dorks do not
+constrain it -- a Boreal Druid cast this turn is summoning-sick and cannot tap.
+
+**THE TRADE TO SETTLE BEFORE PICKING A RANK**, in the provider's own words: *"put the draw last and
+that premise is true by construction ... Put the draw first and nothing has been offered yet, so
+there is nothing to condemn."* Draw-LAST maximises how many CARDS are condemnable; draw-EARLY is what
+makes the ABILITY condemnable and cuts the nested-breakpoint inflation (+15.9% breakpoints reached).
+Which wins is empirical. **The cast order is USER-REVIEWED per deck, so the rank is the USER's call,
+not an agent's** -- the sweep to run once chosen is rank 2 / ~50 / current 300, on cost AND held-out
+quality.

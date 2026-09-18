@@ -577,6 +577,10 @@ static std::atomic<long long> g_bplen_records{0}, g_bplen_hits{0}, g_bplen_skips
 // because a copy of the same NAME was already in hand (i.e. already passed on). Zero means the rule
 // never fired and any work delta is not it.
 static std::atomic<long long> g_bp_newopt_samename{0};
+// MTG_BP_CONDEMN_ACTIVATION firing counter: activations dropped because their slot in the
+// provider's ACTIVATION order had already passed when the site fired. Zero => the rule never fired.
+static std::atomic<long long> g_bp_condemn_act_drops{0};
+static bool BpCondemnActivationEnabled();   // defined with the rule, next to the other condemn flags
 static std::atomic<long long> g_bp_demote_in_window{0};  // condemned entries at rank < W
 static std::atomic<long long> g_bp_demote_rank0{0};      // ...lists whose VALUE-BEST entry was condemned
 // WHY-NOT histogram (MTG_BP_CONDEMN_WHYNOT). Each consultation that did not drop is charged to its
@@ -1086,6 +1090,14 @@ namespace
                     std::cerr << "  NO POWER -- DEMOTE never moved a plan. Any work delta below is"
                                  " NOT the demotion.\n";
                 }
+            }
+            if (g_bp_condemn_act_drops.load() > 0 || BpCondemnActivationEnabled())
+            {
+                std::cerr << "[rollout-stats] bp_condemn_activation drops="
+                          << g_bp_condemn_act_drops.load()
+                          << "  (activations whose slot in the ACTIVATION order had already passed)\n";
+                if (g_bp_condemn_act_drops.load() == 0)
+                { std::cerr << "  NO POWER -- the rule never fired.\n"; }
             }
             if (g_bp_newopt_samename.load() > 0 || BpCondemnNewOptByNameEnabled())
             {
@@ -2871,6 +2883,14 @@ static bool BpCondemnNewOptionEnabled()
 //
 // DEFAULT OFF until measured -- this only ever makes the guard fire LESS, i.e. it drops MORE, which
 // is the direction that needs evidence rather than an argument.
+// See the emission site for the full rule. DEFAULT OFF: it only ever condemns MORE, which is the
+// direction that needs evidence rather than an argument.
+static bool BpCondemnActivationEnabled()
+{
+    static const bool on = EnvOn("MTG_BP_CONDEMN_ACTIVATION");
+    return on;
+}
+
 static bool BpCondemnNewOptByNameEnabled()
 {
     // Per-JOB overridable (heurarm) so off / guarded / byname sweep in ONE pooled batch instead of
@@ -15700,6 +15720,55 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
                     if (!m.cost->has_value()) { continue; }
                     const bool taps = PermAbilityTaps(m.mode);
                     if (taps && (src.tapped || !src.CanTap())) { continue; }
+                    // CONDEMNING AN ACTIVATION (MTG_BP_CONDEMN_ACTIVATION; USER 2026-09-18:
+                    // *"Activation should be able to be condemned."*).
+                    //
+                    // Condemnation has always been a HAND-CAST rule -- its candidate loop is indexed
+                    // over `ap.hand[i]` -- so an activation could never be condemned whatever its
+                    // rank. That is why Scrying Sheets shows ZERO drops in every arm while Frost
+                    // Augur shows drops only as a CAST, and it is the hole behind the measured cost:
+                    // an overrun wave rank hits the EMPTY fallback, the continuation's own trailing
+                    // pass activates a tap-draw, and that opens a NESTED breakpoint -- a whole
+                    // continuation list plus its wave slots. 67.6% of wave slots are stillborn and
+                    // each one can do this.
+                    //
+                    // WHY AVAILABILITY *IS* THE EVIDENCE OF DECLINE, so this needs no new snapshot
+                    // (and therefore cannot break the search/executor lockstep the way a new
+                    // CantripOrderScope field would). The trailing pass is ORDERED by
+                    // ActivationOrderRank and applies only the PLAN's own actions
+                    // (`apply_trailing_activations(plan.actions)` -- it is not greedy). So by the
+                    // time a site at rank R fires, every activation ranked < R that the plan carried
+                    // has ALREADY run. One that is still available here was therefore offered at its
+                    // slot and passed over -- which is exactly condemnation's premise.
+                    //
+                    // SAME ABILITY, IDENTICAL CARD (USER: *"condemnation should only happen if the
+                    // activation is the same ability from an identical card"*). Satisfied by
+                    // construction: the decline is SELF-evidenced -- we condemn this activation
+                    // because THIS permanent's own ability was passed over, never by inferring it
+                    // from a different card's decline. Scrying Sheets and Frost Augur carry the same
+                    // tap-draw but are different cards with different costs and different slots, and
+                    // declining one says nothing about the other.
+                    //
+                    // Requires a provider opinion on both ranks (0 = "no opinion"), so a deck whose
+                    // provider does not order its activations is byte-identical. `entered_this_turn`
+                    // is the post-entry exemption: a permanent the plan CAST was never enumerable as
+                    // an activation when the plan was chosen (site 9 exists for exactly that), so it
+                    // was not declined.
+                    if (BpCondemnActivationEnabled() && BpClassifyActive(state)
+                        && g_bp_site_def != nullptr && g_bp_site_activated
+                        && BpSnapshotOnItsTurn(state) && BpPlanMadeACast()
+                        && BpTurnManaSettled(state) && !src.entered_this_turn)
+                    {
+                        const DecisionProvider& aprov = ResolveProvider(state);
+                        const int r_cand = aprov.ActivationOrderRank(state, *sd);
+                        const int r_site = aprov.ActivationOrderRank(state, *g_bp_site_def);
+                        if (r_cand != 0 && r_site != 0 && r_cand < r_site)
+                        {
+                            if (s_rollout_stats)
+                            { g_bp_condemn_act_drops.fetch_add(1, std::memory_order_relaxed); }
+                            continue;
+                        }
+                    }
                     ManaCost cost = EffectiveActivationCost(state, state.active_player_index,
                                                             src.card, m.cost->value());
                     if (m.mode == Action::AbilityMode::TapDraw && sd->params.tap_draw_cost_less_per_rad)
@@ -31752,6 +31821,22 @@ public:
             // opened at, so the apply bought nothing but `n`. See slots_stillborn.
             if (BpWaveProbeOn() && m_last_k == sl.k0)
             { g_bp_wave_probe.slots_stillborn.fetch_add(1); }
+        }
+        // ...AND REMEMBER `n` FOR EVERY OTHER NODE (MTG_BP_NSKIP_GLOBAL). THIS is the record site
+        // that matters: the walker learns the real length on EVERY variant it hands out, whereas
+        // NSKIP's own memo is written only by a wave-0 `bp_choice == 0` variant inside the FSLineWin
+        // node loop -- which on Snow is a tiny fraction of the applies that discover a length, and is
+        // why the first wiring of this memo recorded 4,607 entries and skipped 3 slots against 1.76M
+        // stillborn ones.
+        //
+        // WHY THIS IS THE COST THAT MATTERS. A stillborn slot is not just a wasted apply: an overrun
+        // rank hits the unconditional EMPTY fallback ("cast nothing more ... let the trailing passes
+        // run"), so the trailing pass ACTIVATES the tap-draw and opens a NESTED breakpoint, which
+        // costs a whole continuation list plus its own wave slots. 67.6% of slots are stillborn, and
+        // every one of them re-derives a length some node already knew.
+        if (m_node_key != nullptr && sl.base < plans.size())
+        {
+            BpLenRecord(BpLenKey{ *m_node_key, BpCandFingerprint(plans[sl.base]), sl.at }, n);
         }
         // Open slots for every nested breakpoint this apply proved exists.
         if (seen > 0 && BpNestDiscover()) { AddSlots(plans, bi, seen); }
