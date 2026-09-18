@@ -1,4 +1,4 @@
-# Regression ground truth -- commit 84532cac  date 2026-09-18
+# Regression ground truth -- commit ac4b2842  date 2026-09-18
 # Promoted from accepted runs by 'regression.sh --accept' -- do not hand-edit.
 # Key: <deck>_<mode>_d<depth>_s<seed> = <avg>[/<play_digest>]   (avg = mean turn-to-win, unwon = max_turns+1)
 # Modes: smoke (<15m), regression (<45m), overnight (<8h); seeds disjoint.
@@ -61,9 +61,9 @@ critter_smoke_d5_s1001=4.4000/324ce9ba19f5d157
 melira_smoke_d0_s1001=6.3830/2bef1db05d71d48b
 melira_smoke_d3_s1001=4.6800/3bd83ad7111eb78e
 melira_smoke_d5_s1001=4.7600/7aea360e54275be3
-angels_smoke_d0_s1001=5.8900/2d9415ad2c6088f2
-angels_smoke_d3_s1001=5.4920/887dc3f9985610a5
-angels_smoke_d5_s1001=5.4667/f00bf37be51e1a11
+angels_smoke_d0_s1001=5.6300/baedb2928e986927
+angels_smoke_d3_s1001=5.2800/be49c6e606c37a73
+angels_smoke_d5_s1001=5.3533/7c3f5a4aa2aa961b
 hinata2hg_smoke_d3_s1001=5.6667/2f991179a9d890b5
 antilife2hg_smoke_d3_s1001=3.9700/3a62229bd908ddc1
 minotaur2hg_smoke_d3_s1001=5.3500/c7a878202e0ba31a
@@ -184,11 +184,11 @@ melira_regression_d3_s2002=4.7733/3b26ab8517b189b7
 melira_regression_d3_s3003=4.6267/e25943cfc1c1d1b7
 melira_regression_d5_s2002=4.7750/a67ac8b38a2845c2
 melira_regression_d5_s3003=4.6000/87a433be2ee9f7a5
-angels_regression_d0_s2002=5.8300/41ed3d01ab418df2
-angels_regression_d3_s2002=5.5667/83f4a7072d8a1306
-angels_regression_d3_s3003=5.4200/155f39410ce07bfb
-angels_regression_d5_s2002=5.5400/cec481c9a73d4a6a
-angels_regression_d5_s3003=5.3960/fa453e6e119f9ddf
+angels_regression_d0_s2002=5.5740/3253377f04c4918a
+angels_regression_d3_s2002=5.2633/3fe26534b0dd8998
+angels_regression_d3_s3003=5.2833/7da89f19a1dc0dfc
+angels_regression_d5_s2002=5.2400/3ba8d22ca7355ad4
+angels_regression_d5_s3003=5.2560/da2964b29e85ba68
 hinata2hg_regression_d3_s2002=5.5700/b5897803c5f569d5
 hinata2hg_regression_d5_s2002=5.5200/7eadddfb82c4ab6d
 antilife2hg_regression_d3_s2002=4.3133/25f6c0fd83311e41
@@ -432,18 +432,18 @@ melira_overnight_d5_s4004=4.8267/003886f4a911f0b0
 melira_overnight_d5_s5005=4.6667/eb745c43e6b89fee
 melira_overnight_d5_s6006=4.7000/82b18f59ee048b63
 melira_overnight_d5_s7007=4.7467/b7786ce5517f1166
-angels_overnight_d0_s4004=5.8570/fe813c24f136b77c
-angels_overnight_d0_s6006=5.7900/5dd26ee8005e05e3
-angels_overnight_d0_s8008=5.8450/81a73f16ed9ae290
-angels_overnight_d0_s10010=5.8365/457e6eac354648e9
-angels_overnight_d3_s4004=5.4530/d693cf2c706009e1
-angels_overnight_d3_s5005=5.4630/7dfb2e6bb6b9fb8e
-angels_overnight_d3_s6006=5.3920/efc3d506f16f1080
-angels_overnight_d3_s7007=5.4150/52e006fc53472857
-angels_overnight_d5_s4004=5.4340/74eb7bcc96c2bcc9
-angels_overnight_d5_s5005=5.4760/7c18fde306f438de
-angels_overnight_d5_s6006=5.4240/aa3ffb618ae011ac
-angels_overnight_d5_s7007=5.3840/349e0ab54e8168d4
+angels_overnight_d0_s4004=5.5955/d17408bdc8b55f8d
+angels_overnight_d0_s6006=5.5635/8cff625d47b985fb
+angels_overnight_d0_s8008=5.6105/af6f64008ad7c5df
+angels_overnight_d0_s10010=5.5865/293df20fa5790c67
+angels_overnight_d3_s4004=5.2700/2a8f81b7237af070
+angels_overnight_d3_s5005=5.3160/0fbf2eb4120977ed
+angels_overnight_d3_s6006=5.2850/a465b4df51a233cd
+angels_overnight_d3_s7007=5.2840/04782c11013b451d
+angels_overnight_d5_s4004=5.3020/c18622efa94f8a97
+angels_overnight_d5_s5005=5.3160/a4e108259a0066b6
+angels_overnight_d5_s6006=5.2680/546105843b4dd283
+angels_overnight_d5_s7007=5.2940/e7fe9f08687a2272
 hinata2hg_overnight_d5_s4004=5.5200/eac71137f947bd6a
 hinata2hg_overnight_d5_s5005=5.3500/b9730fc4e581ebe4
 hinata2hg_overnight_d5_s6006=5.7900/294b0981c9250f64
