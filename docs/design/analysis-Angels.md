@@ -295,7 +295,8 @@ _(results table filled in when the agents land)_
 
 ## Claude-play sweep
 
-commit: 3f05cd05
+commit: 4235353c (was `3f05cd05` pre-rebase; the branch rebased onto origin before pushing)
+still valid at: 964c9b99 — see "Sweep staleness re-check" below
 seeds: 4304/4 4306/6 4309/9 4312/2 4313/3 4315/5 4318/8 4319/9 4323/3 4325/5 4326/6 4330/0
        (+ 5 games at seed 4242 from a discarded first wave, see below)
 games: 17
@@ -333,6 +334,35 @@ are valid games; they are simply 5 views of one game rather than 5 independent o
 
 A second trap on the way: the per-game log's `seed` field is **already** the per-game seed, so the
 first rebuilt table double-counted `seed + gameNumber` and its coordinates did not reproduce.
+
+### Sweep staleness re-check (2026-09-18, at HEAD 964c9b99)
+
+`verify_deck.py` warns that **nothing tracks this deck's play** — Angels is not a regression case, so
+no ground-truth digest goes red when an engine change moves it, and the sweep record above can rot
+silently. Two engine commits landed after the sweep (`7f26ce18`, `fd901a03` — searched Saga chapter
+target and chapter-I free cast), touching `GameState.h`, `SpellEffects.h` and `TurnSolver.cpp` for a
+combined +371 lines. Angels plays no Sagas, so the new code *should* be gated off — but "should be
+inert" is exactly the claim this repo requires to be measured.
+
+Measured it instead: a clean worktree at `0e8da038` (the last Angels commit, pre-Saga) built and run
+against **the identical 1600-game manifest** (`logs/angels/neutrality/manifest.json`, the same
+3x400 d5 + 400 d3 at budget 200 ms), with the deck/profile/value paths pinned absolute so both arms
+read byte-identical inputs and only the binary differs:
+
+| job | baseline `0e8da038` | HEAD `964c9b99` |
+|---|---|---|
+| d5 seed 9100 | 5.4050 · `7fc6e456101aee97` | 5.4050 · `7fc6e456101aee97` |
+| d5 seed 9200 | 5.3600 · `3a9fd51ee22773e0` | 5.3600 · `3a9fd51ee22773e0` |
+| d5 seed 9300 | 5.3600 · `d36ebdcd671a5f65` | 5.3600 · `d36ebdcd671a5f65` |
+| d3 seed 9400 | 5.3825 · `82d9e3e224a16c01` | 5.3825 · `82d9e3e224a16c01` |
+
+**All four play digests identical across 1600 games.** Per this repo's "digest equality beats a sign
+test" lesson that is a proof of neutrality, not evidence of it, so the sweep record above is **not
+stale at `964c9b99`** and does not need re-running. It will still rot silently on the *next* engine
+change — the durable fix is adding Angels to the regression suite (Open items).
+
+These four averages also reproduce the Performance-profile section's numbers exactly (5.405 / 5.360 /
+5.360 / 5.383), which independently re-confirms that record.
 
 ### Observations recorded, not flagged
 
@@ -496,13 +526,13 @@ single tail, it is not currently costing anything worth fixing.
 
 ## PENDING YOUR SIGN-OFF (provisional; nothing here blocked the work)
 
-1. **`card_fields` gate is RED on two cards that are not in this deck** — `Apex Altisaur`
-   (`enrage`, `fight`) and `World War Hulk` (`double`). My `--update` added them to the Scryfall
-   snapshot for the first time, so this is their first-ever offline diff. They look like the
-   "real keyword, inert in goldfishing" class already allowlisted for Progenitus / Goblin
-   Piledriver, i.e. a `scryfall_divergences.json` entry rather than a code fix — **but they belong
-   to the Saga/Altisaur workstream and allowlisting another workstream's card is not my call.**
-   I did NOT sign these off, so `verify_deck.py` still exits non-zero on Angels.
+1. ~~**`card_fields` gate is RED on two cards that are not in this deck**~~ — **RESOLVED by the
+   StompySurprise workstream in `1b616ea8`, 2026-09-17.** `Apex Altisaur` (`enrage`, `fight`) and
+   `World War Hulk` (`double`) went into `MODELED_ELSEWHERE_KEYWORDS`, not the per-card allowlist:
+   Enrage is an ability WORD (CR 207.2c) and Fight/Double are keyword ACTIONS (CR 701.12), so none
+   of the three is a keyword ability and the systematic strip is the correct bucket. My report had
+   guessed `scryfall_divergences.json`, which would have worked but for the wrong reason.
+   **`verify_deck.py decks/Angels/Angels.cod` now exits 0 — every blocking gate green.**
 2. **Serra's −6 emblem as a modelled no-op** (see 6a §2).
 3. **Legion Angel's "you may" decline not being surfaced** (see 6a §4).
 4. **Should Swords to Plowshares be allowed to target our own creatures in this deck?** This is a
