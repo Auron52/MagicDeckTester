@@ -150,18 +150,35 @@ ship `leaf: none`, which takes the `line_constant` branch — `taken = hcommitte
 not read the table at all. I read never-take entries off the artifacts without checking whether the
 index was in range, which is the same failure as reading a units ratio instead of the rule's input.
 
-The reachable population, recomputed at each deck's **actual** shipping `target_depth`, is five decks
-— and every one of them is a **trust** deck, the opposite of the claim:
+**SECOND RETRACTION — the five-deck table first published here was also wrong, by an off-by-one.**
+It listed Auras, Breaching, Critter and Knights as having dead rungs. They do not. The crossover is
+stored as a **parallel array** — `committed_depths: [1..8]` alongside `take_heuristic_at_hdepth` — and
+`MulliganProfileIO.h:1182` maps `take_at[cds[i]] = tks[i]`. Indexing the raw JSON array by `c`, as the
+first analysis did, shifts every entry by one: it read Critter's `take_at[4]` as 6 when the runtime
+value is **2**. The shipped gate was never affected — it reads `value_fallback_take_at`, which the
+loader builds correctly — but the claim about *which decks it reaches* was wrong.
 
-| deck | D | trust | dead committed depths (`take_at[c] > D`) |
-|---|---|---|---|
-| Angels | 5 | 5 | **3, 4** |
-| Auras | 5 | 5 | 4 |
-| BreachingDragonstorm | 5 | 4 | 3 |
-| CritterLifegain | 5 | 5 | 4 |
-| Knights | 5 | 5 | 4 |
+Recomputed with loader semantics, at each deck's real shipping `target_depth`:
 
-Reachable is not the same as reached. Measured escalation counts (250 games/deck, `MTG_HYBRID_STATS`):
+| deck | D | trust | `take_at[c]`, c = 1..D | dead |
+|---|---|---|---|---|
+| **Angels** | 5 | 5 | 2, 3, 3, **6** | **c=4** |
+| Auras | 5 | 5 | 1, 1, 1, 3 | — |
+| BreachingDragonstorm | 5 | 4 | 1, 1, 2 | — |
+| CritterLifegain | 5 | 5 | 1, 1, 1, 2 | — |
+| Knights | 5 | 5 | 1, 1, 1, 2 | — |
+| Melira Pod | 5 | 0 | 1, 2, 3, 4, 5 | — |
+| Anti-Lifegain / Creature Giving / KittyEquipment | 5 | 0 | 1, 1, 1, 2, 3 | — |
+| Hinata2 | 5 | 0 | 1, 1, 1, 1, 2 | — |
+| FiveColour | 6 | 6 | 1, 1, 1, 2, 4 | — |
+| burn | 6 | 5 | 1, 1, 1, 3 | — |
+| slivers_vial | 5 | 5 | 1, 1, 2, 2 | — |
+
+**Angels `c=4` is the only structurally dead rung in the fleet.** The corrected analysis now *agrees*
+with the measurement (skips on Angels, zero everywhere else), which the wrong table did not — four
+decks it predicted would fire never did, and I explained that away instead of re-deriving it.
+
+Measured escalation counts (250 games/deck, `MTG_HYBRID_STATS`):
 
 ```
                  b3                      b10                     b20
@@ -261,6 +278,77 @@ than with the units is worse than no counter.
   committed GT, 0 play-changed, references unchanged.
 * **Inert at its default** — smoke 83/83, 0 changed, both before and after the default was flipped ON.
   Play is identical either way, so no GT key moved and no rebaseline was needed.
+
+## The real prize is NOT depth-bound — it is BUDGET-bound (measured 2026-09-18)
+
+USER, on being told the gate saves nothing on 20 of 21 decks: *"Why zero on every other deck? It
+seems to me like this should happen more than occasionally unless we are misunderstanding how it
+works?"*
+
+Right, and the structural gate above is not the measurement that answers it. `MTG_ESCALATION_DUMP`
+emits `taken` per escalation, which is the ground truth for "was this escalation wasted":
+
+| deck | budget | escalations | taken | **wasted** | by committed depth (taken) |
+|---|---|---|---|---|---|
+| **Melira Pod** | b10 | 426 | 115 | **311 (73.0%)** | c2:147(83) c3:170(16) c4:85(2) c5:21(11) |
+| CritterLifegain | b3 | 77 | 40 | 37 (48.1%) | c3:36(36) c4:37(0) |
+| Auras | b3 | 44 | 42 | 2 (4.5%) | c2:13(11) c3:31(31) |
+| Creature Giving | b10 | 126 | 122 | 4 (3.2%) | c3:44(44) c4:58(58) c5:23(19) |
+| Hinata2 | b10 | 376 | 368 | 8 (2.1%) | c4:110(110) c5:159(153) |
+
+**Melira throws away 73% of its escalations, and the structural gate cannot see one of them.** Its
+table is `take_at[c] = c` for c = 1..5 — every rung reachable in principle, so `take_at[c] > depth` is
+never true. The rejections are not depth failures, they are **affordability** failures: at c=3 the
+take needs `hcommitted >= 3` and the escalation only ever affords 1–2.
+
+The cost, measured against `MTG_VALUE_MIN_DEPTH=0` (escalation off) on Melira b10, 250 games:
+
+```
+with escalation   8,540,118 units
+no escalation     7,556,395 units
+escalation costs    983,723 = 11.5% of ALL search work
+  x 73% rejected  ~ 718,000 = 8.4% of ALL search work, spent on lines that were discarded
+```
+
+**~8.4% of Melira's entire search budget is spent computing lines the crossover then throws away** —
+twenty times the 0.42% the structural gate recovers on Angels, on a deck the structural gate never
+touches.
+
+The mechanism is visible directly in the escalation's own budget accounting:
+
+```
+probe-budget leftover at escalation: mean 24.7% of decision budget
+decile histogram (0-10% .. 90-100%): 229 19 18 22 24 33 33 27 15 6
+redo_short=415 of 426 (escalations that did NOT reach user depth)
+```
+
+**229 of 426 escalations start with less than 10% of the decision budget remaining**, and 415 of 426
+never reach user depth. The probe spends the budget, then the escalation is launched nearly broke,
+cannot climb to the crossover, and its result is discarded.
+
+### What that implies for the next gate
+
+Gate on the **predicted affordable heuristic depth**, not the structural maximum:
+
+```
+predicted_affordable_hdepth < TakeAtForCommitted(take_at, committed)  =>  skip
+```
+
+The machinery already exists and is already trusted on the other path — the FIT gate's `daff` walk
+computes exactly this from the probe's recorded per-depth cost structure and R (`eff_single_predict`,
+`TurnSolver.cpp:41937`). This is the same idea as the shipped gate with a tighter, empirical bound.
+
+**It is NOT play-neutral, and must not be adopted on the shipped gate's evidence.** A prediction can
+be wrong in both directions; when it under-predicts it skips a *live* escalation, which is a quality
+regression, not a missed saving. So it needs a real non-inferiority A/B on win-turn — unlike the
+structural gate, which was provable and needed only a digest check. The decks to measure are the ones
+with the waste, which are exactly the ones the structural gate ignores: Melira first, then Critter at
+tight budgets.
+
+There is also a **cheaper, blunter** alternative worth measuring in the same pass: if the escalation
+is launched with <10% of the decision budget left it almost never clears the crossover, so a simple
+"don't start an escalation you cannot fund" floor may capture most of the 8.4% without any prediction
+model. On Melira that single rule would gate 229 of 426 escalations.
 
 ### Follow-up NOT taken: the tighter bound
 
