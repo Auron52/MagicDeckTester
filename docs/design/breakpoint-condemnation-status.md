@@ -2367,3 +2367,92 @@ Read per-game, never by deck mean:
 pooled queue. NOTE the heurarm vector is folded into every bp-enum key, so a pooled run puts the arms
 in DISJOINT key spaces: fine for a QUALITY sweep, but never read arm-vs-arm CACHE numbers off one --
 use `armcheck.sh`, which sets the arms in the environment.
+
+---
+
+## 2026-09-18: WHY THE COST IS NON-MONOTONE IN DROPS -- FULLY ROOT-CAUSED
+
+USER: *"That makes no sense to me. I would like to dig into that until we have it fully addressed."*
+The anomaly: `guarded` drops 125,953 and costs **+14.84%** units, while `unguarded` drops 6x more
+(754,719) and **saves 19.43%**. More pruning, less cost -- but the intermediate arm is the expensive
+one. It is not about bounds, depth or cutoffs. It is about **how many breakpoints the search reaches**.
+
+### THE MEASUREMENT (Snow 10 games d2/b0, `armcheck_byname10_*`)
+
+| arm | drops | site-8 breakpoints | mean list len | len-1 lists | nested-slots | units |
+|---|---|---|---|---|---|---|
+| off | 0 | 1,569,675 | 17.61 | 57,573 (3.7%) | 562,943 | — |
+| guarded | 125,953 | **+15.9%** | 17.92 | 101,332 (5.6%) | **+16.5%** | +14.84% |
+| byname | 526,566 | +13.2% | 15.97 | 185,073 (10.4%) | +13.5% | +3.62% |
+| unguarded | 754,719 | **−2.7%** | 13.47 | 235,863 (15.4%) | **−4.6%** | −19.43% |
+
+**TWO EFFECTS RUN IN OPPOSITE DIRECTIONS.**
+
+1. **List shortening is MONOTONE in drops** -- length-1 lists go 3.7% -> 5.6% -> 10.4% -> 15.4%. This
+   is the prune working, and it is pure saving.
+2. **Breakpoints reached is NOT** -- it rises 16% then falls below baseline. Everything expensive
+   (slots, scored applies, lookups) is charged PER BREAKPOINT REACHED, so effect 2 dominates at low
+   drop rates and effect 1 only wins at high ones.
+
+`nodes` tracks breakpoints reached almost exactly (22,757 / 25,279 / 25,336 / 23,596), which is why
+the tree *looked* like it was growing: it was hosting more waves, not searching deeper. Depth is
+pinned at 2 and the budget is unlimited, so nothing here can change the horizon.
+
+### THE MECHANISM, WITH EVIDENCE AT EACH STEP
+
+**Drop composition by card name** (`MTG_CONDEMN_WHO=1`, 8-game cell) is the key:
+
+| dropped card | guarded | byname | unguarded | role |
+|---|---|---|---|---|
+| **Frost Augur** | **1** | 237 | **475** | **IS a breakpoint site** (its `{S},{T}` tap-draw) |
+| **Boreal Druid** | 4 | 145 | **370** | **mana SOURCE** |
+| Skred | 581 | 708 | 2,504 | mana sink (goldfish-inert) |
+| Marit Lage's Slumber | 66 | 933 | 2,845 | mana sink |
+| Ice-Fang Coatl | 0 | 2,063 | 4,480 | mana sink |
+| Abominable Treefolk | 0 | 206 | 1,309 | mana sink |
+| TOTAL | 762 | 6,640 | 15,876 | |
+
+**CONDEMNING A MANA SINK FREES MANA IN THE CONTINUATION.** The trailing pass can then afford the
+`{1}{S}` tap-draw activation it could not before, which **opens another breakpoint** -- and a
+breakpoint costs a whole continuation list plus its wave slots, far more than the cast it replaced.
+`guarded` drops almost only sinks (581 of its 762 drops are Skred; it condemns the Augur exactly
+ONCE and the Druid 4 times), so it manufactures breakpoints: **+15.9%**.
+
+**CONFIRMED BY THE NESTING COUNTERS, which is what the mechanism predicts:** the extra breakpoints are
+opened INSIDE continuations, so `nested-slots` must move in lockstep with breakpoints reached. It
+does -- +16.5% vs +15.9% for guarded, −4.6% vs −2.7% for unguarded. `nested-scored` is already
+2,807,416 of 28,019,734 applies at baseline (10%), so each nested breakpoint is expensive.
+
+**CONDEMNING A MANA SOURCE OR THE SITE CARD DOES THE OPPOSITE.** `unguarded` condemns Boreal Druid
+370 times and Frost Augur 475 times, removing both the mana that funds an activation and the
+permanent that provides one, so breakpoints fall back to baseline and the list-shortening saving is
+finally allowed to show.
+
+### WHAT THIS MEANS
+
+On Snow, condemnation at a low drop rate does not remove work -- it **converts "spend mana on a card"
+into "spend mana on a tap-draw activation"**, and the second is far costlier because it opens a
+breakpoint. The +14.84% is that conversion, not overhead and not bound weakening (the earlier
+"weakened cutoffs / bound weakening" reading in this document is superseded: depth and budget are
+fixed, and the growth is entirely in breakpoints hosted).
+
+Two consequences worth acting on:
+
+* **The lever that would actually cut Snow's cost is bounding NESTING** (`BpSearchDepth`, nested
+  discovery), which is independent of condemnation and helps the `off` arm too.
+* **A prune that frees a resource is not automatically a saving** on a deck whose expensive decision
+  is an ACTIVATION funded by that resource. This generalises beyond Snow: any deck with a
+  mana-costed breakpoint site has it.
+
+### HELD-OUT QUALITY (4,000 games, seeds 940000 + 950000, d5/b20, paired vs `guarded`)
+
+| comparison | delta | better / worse | moved |
+|---|---|---|---|
+| byname | +0.0003 ± 0.0004 | 1 / 2 | 3/4000 (0.07%) |
+| off | +0.0000 ± 0.0006 | 3 / 3 | 6/4000 (0.15%) |
+
+byname is a wash against the shipped guard (and moved ZERO of the 2,000 block-B games). **And so is
+`off`** -- the "condemnation earns its keep, off is 3 games worse" result from the 930000 block does
+NOT replicate on held-out seeds. So condemnation's QUALITY benefit on Snow is not established; its
+case rests entirely on the unbounded-search cost, where `byname` is worth 11.2 units points over the
+shipped guard.
