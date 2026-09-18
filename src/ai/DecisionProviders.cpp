@@ -19775,6 +19775,18 @@ inline bool FungusCertStatsOn()
     static const bool v = EnvOn("MTG_WINLESS_STATS");
     return v;
 }
+
+// MTG_FUNGUS_CERT_JOINT -- DEFAULT OFF. Applies the JOINT SAPROLING BUDGET as the real damage
+// bound instead of today's "attack with everything AND draw with everything". Admissible by
+// construction (<= today's bound at every node), so switching it on can only make the certificate
+// fire MORE -- it can never certify a node today's bound refused to. Default off until the
+// MTG_WINLESS_AUDIT run is at least as wide as the certificate's own adoption run (99,128 nodes,
+// violations 0), because a false positive here silently converts a win into a loss.
+inline bool FungusCertJointOn()
+{
+    static const bool v = EnvOn("MTG_FUNGUS_CERT_JOINT");
+    return v;
+}
 inline bool FungusNote(FungusWhy w, bool r)
 {
     if (FungusCertStatsOn())
@@ -19850,6 +19862,31 @@ inline std::atomic<unsigned long long> g_fungus_ceiling_joint{0};
 // lord-library mass is mostly board-Ascension nodes, the joint tightening is capped no matter how
 // good the library-lord bound gets, and the whole line is closed.
 inline std::atomic<unsigned long long> g_fungus_ll_ba[3] = {};   // 0 board, 1 hand-only, 2 library-only
+
+// THE JOINT SAPROLING BUDGET (what-if; the candidate the two ceilings above jointly point at).
+// Unlike the ceilings this one is a REAL, ADMISSIBLE bound -- it is what would actually ship -- so
+// its number is a prize rather than an upper bound on one.
+//
+// What today's bound does wrong is not any single term, it is that it takes the maximum over a
+// combination that cannot happen: it credits `min(lib_lords, fodder)` library Sporecrowns as drawn
+// AND keeps every one of those bodies attacking. Each draw costs a Saproling, and the pool's outlets
+// eat Saprolings (`sac_creature_requires_subtype`), so a body spent digging is a body not attacking
+// -- which fights the Ascension's own precondition of seven DECLARED attackers. The deck cannot both
+// dig out the Ascension and stay wide enough to switch it on, and the certificate presently lets it
+// do both for free.
+//
+// So maximise over k -- Saprolings spent -- of "attack with what is left while drawing with k",
+// instead of "attack with everything AND draw with everything". Two over-credits are kept
+// deliberately, because the bound must never UNDER-credit: bodies that cannot attack anyway (a token
+// minted this turn is summoning sick; Thallid Shell-Dweller has defender) are spent FIRST and cost
+// nothing, and the attackers that are spent are assumed to have contributed 0 power to base_damage.
+// By construction this is <= today's bound at every node, so it can only ever fire more.
+inline std::atomic<unsigned long long> g_fungus_joint_fire{0};
+inline std::atomic<unsigned long long> g_fungus_joint_stuck{0};
+// The shipped path evaluates only the handful of k that can hold the maximum; this counts nodes
+// where that reduced set disagreed with the exhaustive sweep. MUST be 0 -- a reduction that misses
+// the true maximum makes the bound too SMALL, which is the inadmissible direction.
+inline std::atomic<unsigned long long> g_fungus_joint_mismatch{0};
 
 // The pool this analysis has actually reasoned about: decks/Fungus/Fungus.cod, main + side.
 // Memoised per CardDefinition* exactly like SnowCertKnownDef -- this runs at every edge node.
@@ -19952,6 +19989,19 @@ void FungusCertReasonReport()
                      "=== FUNGUS lord-library, WHERE THE ASCENSION IS: board=%llu hand-only=%llu "
                      "library-only=%llu ===\n",
                      g_fungus_ll_ba[0].load(), g_fungus_ll_ba[1].load(), g_fungus_ll_ba[2].load());
+    }
+    const unsigned long long jf = g_fungus_joint_fire.load();
+    const unsigned long long js = g_fungus_joint_stuck.load();
+    if (jf || js)
+    {
+        std::fprintf(stderr,
+                     "=== FUNGUS JOINT SAPROLING BUDGET (admissible, NOT APPLIED): "
+                     "would-fire=%llu still-declines=%llu (%.1f%% of ALL combat-lethal declines) ===\n",
+                     jf, js,
+                     (jf + js) ? 100.0 * static_cast<double>(jf) / static_cast<double>(jf + js) : 0.0);
+        std::fprintf(stderr,
+                     "=== FUNGUS JOINT reduced-vs-exhaustive MISMATCHES: %llu (must be 0) ===\n",
+                     g_fungus_joint_mismatch.load());
     }
 }
 
@@ -20070,6 +20120,24 @@ bool FungusProvider::ProvenWinlessThisTurn(const GameState& s, int me) const
     bool      ba_reachable = false;
     bool      doubling     = false;
     int       ba_threshold = 0, ba_power = 0, ba_per_attacker = 0;
+    // THE ANTHEM STACKS PER COPY, and taking a MAX here was a soundness bug -- found 2026-09-18 by
+    // MTG_WINLESS_AUDIT (4 violations in 454,185 certified nodes, seed 52000; the narrower adoption
+    // audit on seed 31337 had found none). Beastmaster Ascension reads "As long as THIS enchantment
+    // has seven or more quest counters on it, creatures you control get +5/+5" -- two copies at
+    // threshold are two independent continuous effects, i.e. +10/+10, not +5/+5. Every one of the
+    // four violation boards held TWO Ascensions, and the arithmetic is exact: opp_life=15 against
+    // two 1/1s, certificate said 2 + 2*5 = 12 (declines the win), reality is 2*(1+10) = 22.
+    // UNDER-crediting is the one direction this hook may never take, so the copies are counted.
+    //
+    // Counters are per-copy too, so each copy needs its OWN threshold test -- a fresh Ascension and
+    // one sitting on six counters do not come online together. Eight is more copies than any legal
+    // deck plays; an overflow is credited as READY, which over-credits and stays admissible.
+    enum { kBaMax = 8 };
+    int       ba_bf_ctr[kBaMax] = {};   // quest counters on each Ascension we control
+    int       ba_bf_n      = 0;         // ...how many of those we recorded
+    int       ba_bf_extra  = 0;         // ...and how many overflowed (credited as ready)
+    int       ba_hand_n    = 0;         // copies in hand: enter with 0 counters, so they need the
+    int       ba_lib_n     = 0;         // whole gain from THIS combat (as do library copies)
     bool      draw_outlet  = false;   // a live "sacrifice a Saproling: draw" outlet
     long long fodder       = 0;       // creatures it could eat, i.e. an upper bound on DRAWS
     int       ba_src       = 0;       // where the Ascension was found: 1 battlefield, 2 hand, 4 library
@@ -20112,9 +20180,15 @@ bool FungusProvider::ProvenWinlessThisTurn(const GameState& s, int me) const
             ba_reachable    = true;
             ba_src         |= 1;
             ba_best         = std::max(ba_best, p.quest_counters);
-            ba_threshold    = std::max(ba_threshold, q.quest_anthem_threshold);
+            // MIN threshold and MAX power, both over-credits: with a single anthem card in the pool
+            // these are the same number either way, but a max-threshold would make a second anthem
+            // card harder to bring online than it really is, which is the inadmissible direction.
+            ba_threshold    = ba_threshold ? std::min(ba_threshold, q.quest_anthem_threshold)
+                                           : q.quest_anthem_threshold;
             ba_power        = std::max(ba_power, q.quest_anthem_power);
             ba_per_attacker = std::max(ba_per_attacker, q.quest_counter_per_attacker);
+            if (ba_bf_n < kBaMax) { ba_bf_ctr[ba_bf_n++] = std::max(0, p.quest_counters); }
+            else                  { ++ba_bf_extra; }
         }
         // The pool's only lord is Sporecrown Thallid; IsLordPermanent is used rather than a
         // name so that a lord added to the pool is priced instead of ignored.
@@ -20138,9 +20212,22 @@ bool FungusProvider::ProvenWinlessThisTurn(const GameState& s, int me) const
     // are still counted as attackers above, mana for the {1} activations is ignored, and a draw
     // spent on the Ascension is also allowed to be a Sporecrown), all in the over-crediting
     // direction. Paid only on this path, and only when there is fodder to pay with.
+    // Hoisted out of the block below so the joint-budget what-if can re-price it against a DRAW
+    // COUNT rather than against the whole fodder pool. Zero unless the library was actually walked.
+    //
+    // LIB_LORD_COUNT AND LIB_LORD_BONUS ARE SEPARATE, and that is a SOUNDNESS fix, not a style
+    // choice. The original form summed the library lords' POWER BONUSES into one number and then
+    // capped that SUM with a draw COUNT (`std::min(lib_lords, fodder)`), which is only exact while
+    // every lord in the pool is +1/+1 -- true of Sporecrown Thallid, and true of this list today, so
+    // the expression has never yet been wrong. Add a +2/+2 lord and it UNDER-credits: four copies
+    // would give lib_lords=8, and with fodder=3 the cap yields 3 when three draws really fetch
+    // three lords worth +6. Under-crediting is the INADMISSIBLE direction for this hook -- it is
+    // how a certificate certifies a node that is actually a win. Cap the COUNT and multiply by the
+    // largest bonus instead, which is exact at +1/+1 and over-credits otherwise.
+    long long lib_lord_count = 0;   // how many lords are in the library (each needs its own DRAW)
+    long long lib_lord_bonus = 0;   // ...and the largest power bonus among them
     if (draw_outlet && fodder > 0)
     {
-        long long lib_lords = 0;
         for (const Card& c : ap.library)
         {
             const CardDefinition* d = db.LookupCached(c);
@@ -20153,16 +20240,22 @@ bool FungusProvider::ProvenWinlessThisTurn(const GameState& s, int me) const
             {
                 ba_reachable    = true;
                 ba_src         |= 4;
-                ba_threshold    = std::max(ba_threshold, q.quest_anthem_threshold);
+                ba_threshold    = ba_threshold ? std::min(ba_threshold, q.quest_anthem_threshold)
+                                               : q.quest_anthem_threshold;
                 ba_power        = std::max(ba_power, q.quest_anthem_power);
                 ba_per_attacker = std::max(ba_per_attacker, q.quest_counter_per_attacker);
+                ++ba_lib_n;
             }
-            if (IsLordPermanent(*d)) { lib_lords += std::max(0, q.power_bonus); }
+            if (IsLordPermanent(*d))
+            {
+                ++lib_lord_count;
+                lib_lord_bonus = std::max(lib_lord_bonus,
+                                          static_cast<long long>(std::max(0, q.power_bonus)));
+            }
         }
         // At most `fodder` cards can be drawn, so at most that many of the library's lords can
-        // arrive. Taking the largest-first is exact for "most bonus within a draw budget"; this
-        // approximates it upward by using the running sum capped at the same count.
-        lords_lib += std::min(lib_lords, fodder);
+        // arrive -- and each arrival is worth at most the largest bonus in the library.
+        lords_lib += std::min(lib_lord_count, fodder) * lib_lord_bonus;
     }
 
     // Hand copies of the two cards that can still grow the team AFTER this function looks. Mana is
@@ -20177,9 +20270,11 @@ bool FungusProvider::ProvenWinlessThisTurn(const GameState& s, int me) const
         {
             ba_reachable    = true;
             ba_src         |= 2;
-            ba_threshold    = std::max(ba_threshold, q.quest_anthem_threshold);
+            ba_threshold    = ba_threshold ? std::min(ba_threshold, q.quest_anthem_threshold)
+                                           : q.quest_anthem_threshold;
             ba_power        = std::max(ba_power, q.quest_anthem_power);
             ba_per_attacker = std::max(ba_per_attacker, q.quest_counter_per_attacker);
+            ++ba_hand_n;
         }
         // The pool's only lord is Sporecrown Thallid; IsLordPermanent is used rather than a
         // name so that a lord added to the pool is priced instead of ignored.
@@ -20191,18 +20286,81 @@ bool FungusProvider::ProvenWinlessThisTurn(const GameState& s, int me) const
     // the static is checked continuously, so a wide enough attack switches it on during its own
     // combat. Credited whenever the arithmetic reaches the threshold -- it does not ask whether the
     // "you may" trigger would be taken, nor whether the Ascension in hand is castable.
-    long long anthem = 0;
-    if (ba_reachable && ba_power > 0 && ba_threshold > 0)
+    //
+    // SUMMED OVER COPIES, not maxed -- see the soundness note on ba_bf_ctr above. Each battlefield
+    // copy is tested on its OWN counters; a hand or library copy enters with none and therefore
+    // needs the whole of this combat's gain, which is a real constraint and keeps the term from
+    // collapsing into "every copy is always on". Written as a lambda of the attacker count because
+    // the joint budget below re-evaluates it at several attacker counts, and the two must agree.
+    auto anthem_for = [&](long long atk) -> long long
     {
+        if (!ba_reachable || ba_power <= 0 || ba_threshold <= 0) { return 0; }
         const long long per  = std::max(1, ba_per_attacker) * (doubling ? 2 : 1);
-        const long long gain = attackers * per;
-        if (static_cast<long long>(ba_best) + gain >= ba_threshold) { anthem = ba_power; }
-    }
+        const long long gain = atk * per;
+        long long ready = ba_bf_extra;   // overflow copies credited as ready (over-credit)
+        for (int i = 0; i < ba_bf_n; ++i)
+        { if (static_cast<long long>(ba_bf_ctr[i]) + gain >= ba_threshold) { ++ready; } }
+        if (gain >= ba_threshold) { ready += ba_hand_n + ba_lib_n; }
+        return ready * ba_power;
+    };
+    const long long anthem = anthem_for(attackers);
+
+    // ---- THE JOINT SAPROLING BUDGET ---------------------------------------------------------
+    // ONE definition, used by both the what-if counter and the flag-gated real bound, so the two
+    // cannot drift apart. Derivation and measurements: docs/design/fungus-token-search-cost.md.
+    //
+    // Today's bound maximises over a combination that CANNOT HAPPEN: it credits the library's
+    // Sporecrowns as drawn AND keeps every body that paid for those draws attacking. Both of the
+    // deck's outlets eat Saprolings (`sac_creature_requires_subtype`), so a body spent digging is a
+    // body not attacking -- which fights the Ascension's own precondition of seven DECLARED
+    // attackers. Maximise over k (Saprolings spent) instead.
+    // Fodder that was never going to attack (a token minted this turn is summoning sick; Thallid
+    // Shell-Dweller has defender) is spent FIRST and costs nothing. Over-counted on purpose -- a
+    // body that cannot attack need not even be a legal Saproling to sacrifice -- which credits the
+    // player with MORE free draws, the admissible direction.
+    const long long free_fodder = std::max(0LL, fodder - attackers);
+    auto joint_at = [&](long long k) -> long long
+    {
+        const long long atk = attackers - std::max(0LL, k - free_fodder);
+        if (atk < 0) { return 0; }
+        const long long ld  = lords_board + lords_hand
+                            + std::min(lib_lord_count, k) * lib_lord_bonus;
+        // A library-ONLY Ascension has to be found too, so it needs one of those k draws. One draw
+        // is allowed to fetch both it and a lord, which is an over-credit and therefore fine.
+        // anthem_for is SHARED with the real bound above so the per-copy sum cannot drift.
+        const bool      seen = ((ba_src & 3) != 0) || k > 0;
+        const long long an   = seen ? anthem_for(atk) : 0;
+        // base_damage is NOT reduced by the spent attackers' power. Assuming they contributed 0 is
+        // the over-crediting direction, and it is what keeps this admissible without needing to
+        // know WHICH bodies were sacrificed.
+        return base_damage + atk * (ld + an);
+    };
+    // Only a handful of k can hold the maximum, so the shipped path does not sweep to `fodder`
+    // (which reaches the hundreds on the boards this is for, at every edge node):
+    //   * for k <= free_fodder the attacker count is CONSTANT and `ld` is non-decreasing but caps
+    //     at lib_lord_count, so the maximum on that whole range sits at min(free_fodder, count);
+    //   * past free_fodder the attackers fall by one per k while `ld` still caps, so only
+    //     [free_fodder, free_fodder + lib_lord_count] can hold it;
+    //   * k in {0,1} additionally covers the library-only-Ascension step in `seen`.
+    // Verified against the exhaustive sweep at runtime under MTG_WINLESS_STATS (see the mismatch
+    // counter) rather than argued.
+    auto joint_bound = [&]() -> long long
+    {
+        long long best = 0;
+        auto probe = [&](long long k)
+        { if (k >= 0 && k <= fodder) { best = std::max(best, joint_at(k)); } };
+        probe(0);
+        probe(1);
+        probe(std::min(free_fodder, lib_lord_count));
+        for (long long j = 0; j <= lib_lord_count; ++j) { probe(free_fodder + j); }
+        return best;
+    };
 
     // Blockers are ignored (they can only reduce damage), trample is absent from the pool, and
     // `lords` is applied to every attacker rather than only to the Fungus/Saproling ones it really
     // pumps. All three are over-credits, which is the only admissible direction here.
-    const long long combat = base_damage + attackers * (lords + anthem);
+    const long long combat_today = base_damage + attackers * (lords + anthem);
+    const long long combat       = FungusCertJointOn() ? joint_bound() : combat_today;
 
     if (combat >= opp.life)
     {
@@ -20247,6 +20405,27 @@ bool FungusProvider::ProvenWinlessThisTurn(const GameState& s, int me) const
             else if (ba_src & 1)                                  { FungusLethalNote(FungusLethal::AnthemBattlefield); }
             else if (ba_src & 2)                                  { FungusLethalNote(FungusLethal::AnthemHand); }
             else                                                  { FungusLethalNote(FungusLethal::AnthemLibrary); }
+
+            // ---- JOINT SAPROLING BUDGET -- WHAT-IF ONLY, no behaviour change -------------------
+            // Measured across EVERY combat-lethal decline, not just the lord-library ones: the
+            // coupling it models (a body spent digging is a body not attacking) can rescue an
+            // anthem-carried decline too, and the per-term attribution above cannot see that
+            // because it classifies by first match over a sum. See g_fungus_joint_fire.
+            {
+                const long long reduced = joint_bound();
+                // EXHAUSTIVE sweep, used only to falsify the reduced evaluation set above. If the
+                // reduction ever drops the true maximum it would make the bound smaller than it
+                // should be -- an UNDER-credit, the one direction this hook may never take -- so it
+                // is checked at runtime on every declining node rather than argued on paper.
+                long long full = 0;
+                for (long long k = 0; k <= fodder; ++k) { full = std::max(full, joint_at(k)); }
+                if (reduced != full)
+                { g_fungus_joint_mismatch.fetch_add(1, std::memory_order_relaxed); }
+                if (reduced < opp.life)
+                { g_fungus_joint_fire.fetch_add(1, std::memory_order_relaxed); }
+                else
+                { g_fungus_joint_stuck.fetch_add(1, std::memory_order_relaxed); }
+            }
         }
         return FungusNote(FungusWhy::CombatLethal, false);
     }
