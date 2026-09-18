@@ -7423,7 +7423,8 @@ inline std::vector<int> ChooseDevourVictimIndices(GameState& state, int controll
     // byte-identical and never fires" is THE recurring bug for this whole family of hooks
     // (tools/play/DECISIONS.md names it), and the only way to tell a dead path from a legitimately
     // forced pick is to see k, the candidate count and whether a chooser is attached.
-    if (EnvOn("MTG_DEVOUR_TRACE"))
+    static const bool s_devour_trace = EnvOn("MTG_DEVOUR_TRACE");
+    if (s_devour_trace)
     {
         int ncre = 0;
         for (const Permanent& v : state.battlefield)
@@ -7487,12 +7488,29 @@ inline int ApplyDevourAsEnters(GameState& state, int controller, const CardParam
     // Phase 2 -- remove them all, recording each death for the caller to fire later. Erase from the
     // HIGHEST index down so the earlier indices stay valid.
     std::sort(idxs.begin(), idxs.end(), std::greater<int>());
+    std::vector<std::string> eaten;
     for (int idx : idxs)
     {
         const Permanent& v = state.battlefield[static_cast<std::size_t>(idx)];
+        eaten.push_back(v.card.m_name.str());
         deferred.push_back(DevourDeath{ v.card, v.is_token, MinusCountersOn(v) });
         state.players[controller].graveyard.push_back(v.card);
         state.battlefield.erase(state.battlefield.begin() + idx);
+    }
+    // HISTORY VISIBILITY (USER 2026-09-18: "There was a phantom saproling hanging around after I
+    // played Mycoloth"). Devour used to emit NOTHING, and neither does OnCreatureDies, so the whole
+    // event was invisible: five creatures vanished, a Mycoloth appeared carrying 8 counters, and a
+    // Saproling nobody could account for sat on the board. The board was right -- the Saproling is
+    // Tukatongue Thallid's deferred death trigger -- but a correct board with no explanation reads
+    // as a bug, and cost a report. Name the victims and the counters they became.
+    if (g_play_event_sink && !g_tap_speculating)
+    {
+        std::string ev = source_name + ": devoured ";
+        for (std::size_t i = 0; i < eaten.size(); ++i)
+        { if (i) { ev += ", "; } ev += eaten[i]; }
+        ev += " \xE2\x86\x92 +" + std::to_string(p.devour * static_cast<int>(idxs.size()))
+            + " +1/+1 counters";
+        EmitPlayEvent(state.turn_number, "sacrifice", "\xF0\x9F\x8D\xBD " + ev);
     }
     // A sacrifice is a sacrifice, so the "whenever you sacrifice" watchers fire now; only the DEATH
     // triggers wait for the entrant.
@@ -7506,7 +7524,26 @@ inline void FireDeferredDevourDeaths(GameState& state, int controller,
                                      std::vector<DevourDeath>& deferred)
 {
     for (const DevourDeath& d : deferred)
-    { OnCreatureDies(state, controller, d.card, d.was_token, d.minus_counters); }
+    {
+        // Same history-visibility fix as the devour itself, and this is the half that actually
+        // produced the "phantom Saproling" report: OnCreatureDies emits NO play events anywhere, so
+        // a dies-trigger token (Tukatongue Thallid's replacement Saproling) simply materialised on
+        // the board with nothing in the log tying it to the body that died two steps earlier. Diff
+        // the battlefield across the call rather than reading the params, so this reports whatever
+        // the trigger ACTUALLY created instead of what we predicted it would.
+        const std::size_t before = state.battlefield.size();
+        OnCreatureDies(state, controller, d.card, d.was_token, d.minus_counters);
+        if (g_play_event_sink && !g_tap_speculating && state.battlefield.size() > before)
+        {
+            std::string ev = d.card.m_name.str() + " died \xE2\x86\x92 ";
+            for (std::size_t i = before; i < state.battlefield.size(); ++i)
+            {
+                if (i > before) { ev += ", "; }
+                ev += state.battlefield[i].card.m_name.str();
+            }
+            EmitPlayEvent(state.turn_number, "trigger", "\xF0\x9F\x92\x80 " + ev);
+        }
+    }
     deferred.clear();
 }
 

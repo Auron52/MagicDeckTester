@@ -13813,7 +13813,10 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
                 if (q.controller_index == state.active_player_index && q.card.IsCreature())
                 { ++own; }
             }
-            if (EnvOn("MTG_DEVOUR_TRACE"))
+            // `static const bool`, not a bare EnvOn: EnvOn calls getenv EVERY time and this sits
+            // inside CollectActions, which runs per search node. The repo idiom for a hot flag.
+            static const bool s_devour_trace = EnvOn("MTG_DEVOUR_TRACE");
+            if (s_devour_trace)
             {
                 std::fprintf(stderr, "[devour-enum] %s: pushing k=0..%d (%d variants)\n",
                              a.card_name.str().c_str(), own, own + 1);
@@ -30592,6 +30595,22 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
                         // DISTINCT plans (core invariant); gated on the param.
                         + ((act.def && act.def->params.etb_blink_permanent)
                            ? ("#F" + std::to_string(act.chosen_x)) : "")
+                        // MYCOLOTH'S DEVOUR COUNT (CR 702.81): "devour 0" and "devour 5" are
+                        // DIFFERENT SPELLS -- different board, different permanent, different clock.
+                        // Exactly the #S/#V/#K/#B/#X/#F case, and it was simply never added here.
+                        // CollectActions fans one cast variant per k = 0..(own creatures) and
+                        // plan_signature (the TRACE probe) already carries "/D<k>", but THIS
+                        // signature -- the one the powerset dedup actually keys on -- did not, so
+                        // all k collapsed to one plan. The survivor is the highest-ranked (this
+                        // dedup runs after the sort) and the enumerator's ordering hint is
+                        // `eval += k * (devour - 1)`, monotone in k -- so the survivor was ALWAYS
+                        // "devour your whole board", every other k was unreachable at any budget,
+                        // and the human menu could only ever offer the one line. That also made the
+                        // victim chooser dead in practice: devouring everything leaves nothing to
+                        // choose. -1 = not a devour cast, so every other deck's signature is
+                        // byte-identical (the #S/#V/#K precedent).
+                        + (act.devour_count >= 0
+                           ? ("#D" + std::to_string(act.devour_count)) : "")
                         // Planeswalker cast + same-turn loyalty activation (CritterLifegain's Ajani):
                         // the plain cast and each "cast + activate #k" variant are DISTINCT plans
                         // (core invariant; the name-only dedup would keep the first and hide the
@@ -44528,6 +44547,32 @@ std::vector<TurnSolver::Plan> TurnSolver::EnumerateMainPlans(const GameState& st
             if (have_bank)  { kept.push_back(std::move(bank)); }
             if (have_combo) { kept.push_back(std::move(combo)); }
             plans = std::move(kept);
+        }
+    }
+    // MTG_DEVOUR_TRACE: how many DISTINCT devour counts actually reach the human menu. The
+    // enumerator fans k = 0..own (see the [devour-enum] line); this says how many survive to the
+    // decision. Diagnostic only, no behaviour.
+    static const bool s_devour_menu_trace = EnvOn("MTG_DEVOUR_TRACE");
+    if (s_devour_menu_trace)
+    {
+        std::vector<int> ks;
+        for (const Plan& pl : plans)
+        {
+            for (const Action& a : pl.actions)
+            {
+                if (a.devour_count >= 0
+                    && std::find(ks.begin(), ks.end(), a.devour_count) == ks.end())
+                { ks.push_back(a.devour_count); }
+            }
+        }
+        if (!ks.empty())
+        {
+            std::sort(ks.begin(), ks.end());
+            std::string s;
+            for (std::size_t i = 0; i < ks.size(); ++i)
+            { if (i) { s += ","; } s += std::to_string(ks[i]); }
+            std::fprintf(stderr, "[devour-menu] %d plans, distinct devour counts: {%s}\n",
+                         static_cast<int>(plans.size()), s.c_str());
         }
     }
     return plans;
