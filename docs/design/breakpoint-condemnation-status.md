@@ -2304,3 +2304,66 @@ candidates is the same kind of granularity fix as this one, one level down.
 **NOT ADOPTED YET.** The default stays OFF: three games is not the adoption bar. The gate is the
 paired 2000-game d5/b20 cell the guard itself was adopted on (`logs/snow_perf/condfix_wins`), read
 per-game via `test/paired_arms.py`, not by deck mean.
+
+### gi=919 ROOT-CAUSED: T1 LAND CHURN, NOT A DELETED LINE
+
+USER rule (2026-09-18): *"a general rule I recommend with condemnation cases is not to immediately
+reject if you see something unrecoverable. It's best to understand the why and potentially fix the
+condemnation order if that is the cause."* And, sharpening it: *"The real question is, if X was
+intended to be cast, why we can't cast it in an order that is consistent with the order I made?"* --
+*"This is a trickier question than 'can it run the original winning line?'. Obviously it cannot
+because of condemnation and that condemnation may be just fine."*
+
+**STEP 1 -- what byname condemns that guarded does not.** `MTG_CONDEMN_WHO=1` on gi=919, diffed
+between arms, is exactly two cards:
+
+| drop | rank | site | site_rank |
+|---|---|---|---|
+| Abominable Treefolk | 135 | Scrying Sheets / Frost Augur | 103 / 111 |
+| Ice-Fang Coatl | 302 | Scrying Sheets / Frost Augur | 103 / 111 |
+
+All `where=srch` (no executor drops), ~85% `plan_n=1 tail=0`. Both ranks are what
+`SnowProvider::CastOrderRank` intends: commitments are `100 + mv*8 + role*2 + big` (Treefolk mv4 =
+135) and "THE DRAWS, last" are `300 + mv` (Coatl mv2 = 302, because its ETB draws a card).
+
+**STEP 2 -- and neither card was the one the winning line needed.** `byname` *casts* Abominable
+Treefolk at T6; Ice-Fang Coatl is kept to hand in BOTH arms and cast in NEITHER.
+
+**STEP 3 -- the lines first diverge at TURN 1, ON THE LAND DROP.** Via `--game-trace-dir` with a
+manifest carrying `"game_index": 919` (the chunk offset, which reproduces the single `--seed
+930919 --game-index 919` run exactly):
+
+| | guarded (wins T7) | byname (T8) |
+|---|---|---|
+| T1 land | Snow-Covered **Forest** | Snow-Covered **Mountain** |
+| T1 cast | **Boreal Druid** `{G}` | -- nothing |
+
+**There is no breakpoint at T1** (no Scrying Sheets on board yet), so nothing was condemned there, and
+Boreal Druid sits at rank 109 exactly where the order puts it -- nothing prevented casting it at its
+slot. **So the answer to the USER's question is that in this game we CAN cast it in an order
+consistent with the order; the search simply did not choose to.** The regression is mediated purely
+through the search's VALUES: condemnation changes continuation sets deep in the tree, the deep
+evaluations move, and at a finite budget the early land pick moves with them. That is BUDGET CHURN,
+a different failure class from gi=1357 (where condemnation genuinely deleted the Skred occupying the
+slot), and it is what the d5/b0 recoverability run tests.
+
+**A WRONG TURN, RECORDED SO IT IS NOT RETAKEN.** Ice-Fang Coatl's FLASH was proposed as the root
+cause -- it is ranked 302 as a draw, and a flash card arguably has no sorcery-speed slot at all, so
+"offered at its slot and declined" would be a false premise. Two corrections: flash IS modelled (it is
+a KEYWORD -- `keywords: ['Flying','Flash']` -> `Keyword::Flash`, read in TurnSolver's stack/phase
+test; the first check looked in `parameters` and wrongly concluded it was unmodelled), and USER:
+*"Flash doesn't matter here"* -- in a goldfish model nothing makes holding it better, so the
+main-phase decline is a real decision.
+
+### HELD-OUT SWEEP (in flight)
+
+`logs/snow_perf/sweep3.manifest.json` -- ONE pooled batch, 6 jobs = {off, guarded, byname} x {seed
+940000, 950000} x 2000 games at d5/b20, 16 threads (16/16 workers busy). Seeds are held out from the
+q2 cell (930000..931999) and the bases are spaced 10,000 apart, well clear of the 2,000-game span.
+Read per-game, never by deck mean:
+`python3 test/paired_arms.py logs/snow_perf/sweep3_wins --base guarded --arm byname --list-moved`.
+
+`MTG_BP_CONDEMN_NEWOPT_BYNAME` is now also a **heurarm slot**, which is what lets the arms share one
+pooled queue. NOTE the heurarm vector is folded into every bp-enum key, so a pooled run puts the arms
+in DISJOINT key spaces: fine for a QUALITY sweep, but never read arm-vs-arm CACHE numbers off one --
+use `armcheck.sh`, which sets the arms in the environment.

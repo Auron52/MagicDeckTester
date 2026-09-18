@@ -2873,8 +2873,14 @@ static bool BpCondemnNewOptionEnabled()
 // is the direction that needs evidence rather than an argument.
 static bool BpCondemnNewOptByNameEnabled()
 {
+    // Per-JOB overridable (heurarm) so off / guarded / byname sweep in ONE pooled batch instead of
+    // one batch per arm -- the repo's batching rule, and the only way a multi-arm seed sweep keeps
+    // the cores saturated to a single tail. NOTE the heurarm vector is folded into every bp-enum
+    // key, so the arms sit in DISJOINT key spaces: fine for a QUALITY sweep (each arm is internally
+    // consistent) but never read arm-vs-arm CACHE numbers off a pooled run -- use armcheck.sh for
+    // those, which sets the arms in the environment.
     static const bool on = EnvOn("MTG_BP_CONDEMN_NEWOPT_BYNAME");
-    return on;
+    return heurarm::Flag(heurarm::BP_CONDEMN_NEWOPT_BYNAME, on);
 }
 // CONDEMNATION'S URGENCY ORDER, in one place so the candidate side and the guard cannot drift.
 // Lower = more urgent. A STAGED copy expires (Light Up the Stage / Expressive Iteration exile it at
