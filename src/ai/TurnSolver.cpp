@@ -9849,7 +9849,7 @@ static int BpSiteMask()
     {
         const char* v = std::getenv("MTG_BP_SITES");
         if (v == nullptr || *v == '\0') { return 0xF7; }   // 0x77 + site 7 (pod chain, default ON)
-        return std::atoi(v) & 0x3FF;
+        return std::atoi(v) & 0x7FF;
     }();
     // OR'd, not overridden: an explicit MTG_BP_SITES stays authoritative for every other class, and
     // with the lever off this returns exactly the old value (byte-identical).
@@ -9863,7 +9863,13 @@ static int BpSiteMask()
     // Site 9 (post-entry activation) is likewise unconditional here -- its own hatch lives in the
     // shared gate (PostEntryBreakpointClassOn), which both worlds read, so a disabled class is
     // simply never reached rather than masked on one side only.
-    return ((BpPlainCantripSiteEnabled() || BpNodeEnabled()) ? (m | 0x08) : m) | 0x100 | 0x200;
+    // Site 10 (the general put-in-hand class) rides its OWN flag rather than a mask bit, for the
+    // reason MTG_BP_SITE3 spells out: MTG_BP_SITES is parsed with atoi, so MTG_BP_SITES=0x4FF reads
+    // as ZERO and silently disables every site. Off by default => bit 10 clear => bp_at numbering is
+    // exactly what it was.
+    const int base = ((BpPlainCantripSiteEnabled() || BpNodeEnabled()) ? (m | 0x08) : m)
+                     | 0x100 | 0x200;
+    return BpPutInHandEnabled() ? (base | 0x400) : base;
 }
 
 // Site 7 (pod chain) class accessor for the executor twin -- see the header note. The executor
@@ -10844,14 +10850,18 @@ TurnSolver::CantripOrderScope::~CantripOrderScope()
     g_bp_site_turn       = m_saved_turn;
 }
 
+// MTG_BP_PUT_IN_HAND joins the two existing consumers here rather than capturing its own snapshot:
+// the general rule IS a before/after comparison, so the pre-cast hand is its input, and sharing the
+// one capture is what makes the executor's `rdb_hand` and the rollout's `hand_at_cast` the same
+// observation in both worlds. Still gated, so a ship config with every lever off pays nothing.
 bool TurnSolver::BreakpointHandSnapshotWanted()
 {
-    return CantripOrderEnabled() || BpClassifyEnabled();
+    return CantripOrderEnabled() || BpClassifyEnabled() || BpPutInHandEnabled();
 }
 
 bool TurnSolver::BreakpointHandSnapshotWanted(const GameState& state)
 {
-    return CantripOrderEnabled() || BpClassifyActive(state);
+    return CantripOrderEnabled() || BpClassifyActive(state) || BpPutInHandEnabled();
 }
 
 // ---- Breakpoint site 6: the equipment-ETB draw (Puresteel Paladin) ----------------------------
@@ -10996,6 +11006,23 @@ std::vector<int> TurnSolver::HandCardNumbers(const GameState& state)
     out.reserve(ap.hand.size());
     for (const Card& c : ap.hand) { out.push_back(c.m_number); }
     return out;
+}
+
+// CONTENT, never a count. A cast that draws one card and discards another leaves the hand the same
+// SIZE, and the cast card itself has left hand, so a size comparison answers a different question --
+// the same anchoring rule the reference replay learned the hard way (m_number, never an index).
+// An EMPTY `before` means no snapshot was taken, which must read as "nothing is new": that is the
+// safe direction everywhere else the snapshot is consumed (BpCardWasInHandBefore) and it keeps an
+// unsnapshotted path from arming a breakpoint the other world will not.
+bool TurnSolver::HandGainedACard(const std::vector<int>& before, const GameState& state)
+{
+    if (before.empty()) { return false; }
+    const Player& ap = state.players[state.active_player_index];
+    for (const Card& c : ap.hand)
+    {
+        if (std::find(before.begin(), before.end(), c.m_number) == before.end()) { return true; }
+    }
+    return false;
 }
 
 // ---- CollectActions ------------------------------------------------------
@@ -21324,7 +21351,7 @@ namespace
     // but any number previously quoted from MTG_BP_PROBE or MTG_BP_CANDS_PROBE on a deck that reaches
     // site 8 or 9 (Snow reaches site 8 on every consultation) is void.
     // THE GUARD below is the durable half of the fix: adding site 10 must not silently smear again.
-    constexpr int kBpSites = 10;
+    constexpr int kBpSites = 11;
     const char* const kBpSiteName[kBpSites] = {
         "stages_cards/EI  (Light Up the Stage, Expressive Iteration)",
         "DrawUntilNonland (Treasure Hunt)",
@@ -21336,6 +21363,7 @@ namespace
         "pod_fetch        (Birthing Pod same-phase chain)",
         "snow_look_top    (Scrying Sheets / Frost Augur put-into-hand)",
         "post_entry_act   (activation pending after a permanent entered)",
+        "put_in_hand      (ANY cast whose resolution put a card in hand)",
     };
     // One-time, loud, and it names the constant to change. A silent out-of-range drop would read
     // downstream as "that site never fires", which is this file's established bug signature.
@@ -22857,10 +22885,14 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
     // rather than an implicit one -- no deck holds both, and KittyEquipment holds neither of the
     // other two.
     bool deferred_equip_armed = false;
+    // The GENERAL put-in-hand class (site 10, MTG_BP_PUT_IN_HAND -- see EngineFlags.h). LAST in the
+    // precedence order below, which is the whole point: it arms only where no param-keyed class did,
+    // so turning the rule on cannot renumber a class that already worked.
+    bool deferred_put_armed = false;
     // The one place the precedence lives, so the dispatch below and the prefix-resume capture that
     // has to agree with it cannot drift apart.
     auto deferred_site_index = [&]() -> int
-    { return deferred_trick_armed ? 5 : (deferred_equip_armed ? 6 : 3); };
+    { return deferred_trick_armed ? 5 : (deferred_equip_armed ? 6 : (deferred_put_armed ? 10 : 3)); };
 
     // Does the NODE own the deferred class this apply armed (see BpNodeSites)? The node's contract
     // is prefix + explicit continuation, and it has TWO halves that must agree: the base plan has
@@ -25291,6 +25323,30 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
             // the shared PerformSacrificeLandCost (SpellEffects.h) -- byte-identical logic:
             // provider-ranked tapped-first default + human chooser override.
             PerformSacrificeLandCost(state, name);
+        }
+
+        // THE GENERAL RULE (MTG_BP_PUT_IN_HAND; see EngineFlags.h). ONE arming site, HERE at the end
+        // of apply_one -- after every resolution branch above has run -- because that is the only
+        // place where the question can be asked of the OUTCOME rather than of the card. Whether the
+        // cast was a cantrip, an ETB-draw permanent, a tutor, or something implemented next year,
+        // the test is the same: did the hand gain a card?
+        //
+        // STRICTLY ADDITIVE. The param-keyed sites above keep their own arming and their own site
+        // numbers; `!deferred_cantrip_resolve` means this only catches what they MISS, so every
+        // class that already worked is byte-identical with the flag on. What it adds today is the
+        // etb_self_draw family (Ice-Fang Coatl, Arcum's Astrolabe), which no whitelist mentions.
+        //
+        // `sink_stack.empty()` and `!s_human_play` are the same two conditions every other deferred
+        // arming site carries: a re-solve already inside a continuation re-solves inline, and human
+        // play stops for the chooser instead of arming anything.
+        if (BpPutInHandEnabled() && !s_human_play && sink_stack.empty()
+            && !deferred_cantrip_resolve
+            && TurnSolver::HandGainedACard(hand_at_cast, state))
+        {
+            deferred_cantrip_resolve = true;
+            deferred_cantrip_site    = &def;
+            deferred_hand_before     = hand_at_cast;
+            deferred_put_armed       = true;   // site 10, its own bit (see deferred_site_index)
         }
     };
 

@@ -447,6 +447,43 @@ inline bool TopResolveEnabled()
     return heurarm::Flag(heurarm::TOP_RESOLVE, v);
 }
 
+// MTG_BP_PUT_IN_HAND=1 -- THE GENERAL RULE (USER 2026-09-18): *"Coatl should open a breakpoint just
+// like Astrolabe and every other card that puts things in hand. That might need an update, since
+// this is a general rule."* / *"We shouldn't need to fiddle around with individual cards for this.
+// It should be automatic."*
+//
+// WHAT IS WRONG TODAY. Both worlds decide "did this cast put a card in hand?" from a WHITELIST of
+// params and templates that has grown one clause at a time -- AIEngine's note_draw_engine and
+// is_draw_engine, and TurnSolver's seven arming sites: DrawUntilNonland, cascade_max_mv,
+// shuffle_reveal_freecast, etb_exile_until_nonland, stages_cards, impulse_exile, solo_target_trick
+// with a draw/Treasure payload, tutor_to_hand, tutor_to_top, etb_dig_count, EquipmentDrawBreakpoint.
+// `etb_self_draw` is in NONE of them, so a permanent whose ETB draws -- Ice-Fang Coatl AND Arcum's
+// Astrolabe, the whole family -- arms nothing. The card enters, a card appears in hand, and the turn
+// continues as if it had not: the drawn card cannot be cast in the phase that drew it.
+//
+// The whitelist is the defect, not its contents. Every clause above was added because some card fell
+// through, and the next one will too.
+//
+// THE RULE IS THE OBSERVATION, NOT A PREDICATE ON THE CARD: a cast arms a breakpoint iff the caster's
+// hand actually GAINED A CARD when it resolved. Card-agnostic, param-agnostic, and it cannot be
+// out of date -- a card implemented tomorrow is covered the day it is implemented.
+//
+// CONTENT-ANCHORED, never a size: a resolution that draws one card and discards another leaves the
+// hand the same SIZE, and the cast card itself has left hand, so only "a number present now that was
+// not present before" is the honest test (TurnSolver::HandGainedACard). Both worlds already capture
+// the pre-cast snapshot this needs -- ApplyPlanDirect's `hand_at_cast` and AIEngine's `rdb_hand` --
+// so the rule reads state both sides already agree on, which is what keeps bp_at numbering in
+// LOCKSTEP. That lockstep is why this is one shared reader and not two flags.
+//
+// DEFAULT OFF: it opens a NEW breakpoint class on every deck holding any such card, and breakpoints
+// are the expensive unit (this file's own condemnation arc: everything costly is charged per
+// breakpoint reached). Adoption needs the full suite plus per-deck quality, not smoke.
+inline bool BpPutInHandEnabled()
+{
+    static const bool v = EnvOn("MTG_BP_PUT_IN_HAND");   // default OFF; =1 enables
+    return v;
+}
+
 // MTG_LEGACY_STATIC_TAPPED=1: classify land tapped-ness from the STATIC enters_tapped flag in the
 // land-priority passes, as before the dynamic fix (byte-identical A/B hatch). See
 // AIEngine::TryPlayLand and TurnSolver's greedy_land_name -- the two implement the same passes

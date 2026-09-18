@@ -1045,6 +1045,12 @@ public:
     // small vector per armed breakpoint) and taken BEFORE the draw resolves.
     static std::vector<int> HandCardNumbers(const GameState& state);
 
+    // ...and the AUTOMATIC "this cast put a card in hand" test built on it (MTG_BP_PUT_IN_HAND; see
+    // EngineFlags.h for why the whitelists it replaces are the defect). Shared by both worlds --
+    // ApplyPlanDirect's arming and AIEngine's draw-engine classification -- because a class one
+    // world counts and the other does not shifts every later bp_at index.
+    static bool HandGainedACard(const std::vector<int>& before, const GameState& state);
+
     // Lands + mana rocks + mana dorks the active player controls. Snapshotted at a breakpoint so a
     // decline can be re-admitted once the mana base grows (BpTurnManaSettled).
     static int ManaSourceCount(const GameState& state);

@@ -3655,6 +3655,10 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
     auto cast_alt = [&](const std::string& name, int alt_lifegain)
     {
         Player& ap = state.ActivePlayer();
+        // Same pre-cast snapshot cast_by_name takes -- without it a later put_in_hand_armed()
+        // would compare against a STALE hand from an earlier cast and misread the diff.
+        if (TurnSolver::BreakpointHandSnapshotWanted(state))
+        { rdb_hand = TurnSolver::HandCardNumbers(state); }
         auto it = std::find_if(ap.hand.begin(), ap.hand.end(),
             [&name](const Card& c) { return c.m_name == name; });
         if (it == ap.hand.end()) { return; }
@@ -3679,6 +3683,10 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
     auto cast_from_graveyard = [&](const std::string& name, int discard_lands)
     {
         Player& ap = state.ActivePlayer();
+        // Same pre-cast snapshot cast_by_name takes -- without it a later put_in_hand_armed()
+        // would compare against a STALE hand from an earlier cast and misread the diff.
+        if (TurnSolver::BreakpointHandSnapshotWanted(state))
+        { rdb_hand = TurnSolver::HandCardNumbers(state); }
         auto git = std::find_if(ap.graveyard.begin(), ap.graveyard.end(),
             [&name](const Card& c) { return c.m_name == name; });
         if (git == ap.graveyard.end()) { return; }
@@ -3807,6 +3815,28 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
                   // right: the Paladin has to be out ALREADY for its trigger to see this enter.
                   || TurnSolver::EquipmentDrawBreakpoint(state, *d)))
         { cast_draw_engine = true; }
+    };
+
+    // THE GENERAL RULE, executor half (MTG_BP_PUT_IN_HAND; see EngineFlags.h and the TurnSolver
+    // twin at the end of apply_one). Both lists above are PRE-resolution predicates on the card's
+    // NAME, which is precisely why they need a clause per card family and keep missing one -- today
+    // the whole etb_self_draw family (Ice-Fang Coatl, Arcum's Astrolabe). This asks the outcome
+    // instead, so it must run AFTER resolve_now(): did the hand gain a card?
+    //
+    // `rdb_hand` is the pre-cast snapshot cast_by_name already takes, and the rollout's
+    // `hand_at_cast` is the same observation on the same state -- which is what keeps the two worlds
+    // counting the SAME breakpoints. A class one world counts and the other does not shifts every
+    // later bp_at index and silently changes play.
+    //
+    // It serves BOTH consumers, so it must be called unconditionally rather than short-circuited
+    // behind `s_full_depth`: the return value arms the full-depth breakpoint, and the side effect is
+    // note_draw_engine's twin -- the depth-0 post-cast second pass.
+    auto put_in_hand_armed = [&]() -> bool
+    {
+        if (!BpPutInHandEnabled())                        { return false; }
+        if (!TurnSolver::HandGainedACard(rdb_hand, state)) { return false; }
+        cast_draw_engine = true;
+        return true;
     };
 
     // True for a draw spell that stages cards (e.g. Light Up the Stage). After casting
@@ -4179,7 +4209,8 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
             const Action& a = extra.actions[ci];
             {
                 m_pending_devour_count = a.devour_count; cast_by_name(a.card_name, a.tutor_target, a.chosen_x, a.soulfire_own_targets, a.ponder_keep, a.crackle_targets, a.splice_count, a.chosen_float_color, a.enchant_target, a.free_cast, a.bestow, a.replicate_count, a.convoke_green, a.convoke_other, a.phyrexian_life, a.evoke); resolve_now(); walker_cast_activation(a);
-                if (is_draw_engine(a.card_name))
+                const bool put_armed_c = put_in_hand_armed();
+                if (is_draw_engine(a.card_name) || put_armed_c)
                 {
                     rdb_site = CardDatabase::Instance().Lookup(a.card_name);
                     rdb_site_activated = false;   // a CAST-armed site
@@ -4410,7 +4441,10 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
             if (a.kind != Action::Kind::CastFromHand || a.sacrifice_land) { continue; }
             if (a.alt_cost) { cast_alt(a.card_name, a.alt_lifegain); resolve_now(); continue; }
             m_pending_devour_count = a.devour_count; cast_by_name(a.card_name, a.tutor_target, a.chosen_x, a.soulfire_own_targets, a.ponder_keep, a.crackle_targets, a.splice_count, a.chosen_float_color, a.enchant_target, a.free_cast, a.bestow, a.replicate_count, a.convoke_green, a.convoke_other, a.phyrexian_life, a.evoke); note_draw_engine(a.card_name); resolve_now(); walker_cast_activation(a); fire_unlock();
-            if (s_full_depth && is_draw_engine(a.card_name))
+            // put_in_hand_armed() runs FIRST and unconditionally: it also arms the depth-0
+            // second pass, which `s_full_depth &&` would short-circuit away.
+            const bool put_armed = put_in_hand_armed();
+            if (s_full_depth && (is_draw_engine(a.card_name) || put_armed))
             {
                 if (fd_plan_committed)
                 { if (!bp_replayed) { replay_recorded(plan.breakpoint_actions); bp_replayed = true; } }
@@ -4556,7 +4590,10 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
                  && !ResolveProvider(state).CastEnablerFirst(state, a.card_name))
         {
             m_pending_devour_count = a.devour_count; cast_by_name(a.card_name, a.tutor_target, a.chosen_x, a.soulfire_own_targets, a.ponder_keep, a.crackle_targets, a.splice_count, a.chosen_float_color, a.enchant_target, a.free_cast, a.bestow, a.replicate_count, a.convoke_green, a.convoke_other, a.phyrexian_life, a.evoke); note_draw_engine(a.card_name); resolve_now(); walker_cast_activation(a); fire_unlock();
-            if (s_full_depth && is_draw_engine(a.card_name))
+            // put_in_hand_armed() runs FIRST and unconditionally: it also arms the depth-0
+            // second pass, which `s_full_depth &&` would short-circuit away.
+            const bool put_armed = put_in_hand_armed();
+            if (s_full_depth && (is_draw_engine(a.card_name) || put_armed))
             {
                 if (fd_plan_committed)
                 { if (!bp_replayed) { replay_recorded(plan.breakpoint_actions); bp_replayed = true; } }

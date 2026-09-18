@@ -2650,3 +2650,71 @@ evidence: **−23.4%**, the largest single move any lever in this arc has produc
 −7.75% vs −7.25%, but its digest moves, so it needs held-out quality validation that `act_name` does
 not. Given the rank change is condemnation-neutral by construction (previous section), that 0.5% is a
 tree-shape accident on ten games, not a mechanism -- **keep the rank arms OFF.**
+
+## 2026-09-18: "EVERY CARD THAT PUTS THINGS IN HAND" -- THE WHITELIST WAS THE DEFECT (`MTG_BP_PUT_IN_HAND`)
+
+USER: *"Coatl should open a breakpoint just like Astrolabe and every other card that puts things in
+hand. That might need an update, since this is a general rule."* / *"We shouldn't need to fiddle
+around with individual cards for this. It should be automatic."*
+
+**FIRST, A CORRECTION TO THE PREMISE, AND IT MAKES THE POINT SHARPER: Astrolabe does not open one
+either.** Both worlds decide "did this cast put a card in hand?" from a WHITELIST that has grown one
+clause at a time -- `AIEngine::note_draw_engine` and `is_draw_engine`, plus TurnSolver's seven arming
+sites: `DrawUntilNonland`, `cascade_max_mv`, `shuffle_reveal_freecast`, `etb_exile_until_nonland`,
+`stages_cards`, `impulse_exile`, `solo_target_trick` + draw/Treasure payload, `tutor_to_hand`,
+`tutor_to_top`, `etb_dig_count`, `EquipmentDrawBreakpoint`. **`etb_self_draw` appears in none of
+them** -- it does not appear in `src/ai/TurnSolver.cpp` at all. So the entire ETB-draw family (Ice-Fang
+Coatl AND Arcum's Astrolabe) arms nothing: the card enters, a card appears in hand, and the phase
+continues as though it had not.
+
+**THE RULE IS THE OBSERVATION, NOT A PREDICATE ON THE CARD.** A cast arms a breakpoint iff the
+caster's hand actually GAINED A CARD when it resolved (`TurnSolver::HandGainedACard`). Card-agnostic,
+param-agnostic, and it cannot go out of date -- a card implemented tomorrow is covered the day it is
+implemented. Content-anchored on `m_number`, never a size: a resolution that draws one and discards
+one leaves the size unchanged, and the cast card itself has left hand.
+
+**ONE ARMING SITE, and both worlds read the same observation.** TurnSolver arms once at the END of
+`apply_one`, after every resolution branch -- the only place the OUTCOME is visible. The executor asks
+the same question after `resolve_now()`, against `rdb_hand`, the pre-cast snapshot `cast_by_name`
+already takes (`cast_alt` / `cast_from_graveyard` now take it too, or a stale hand would be compared).
+That shared observation is what keeps `bp_at` numbering in lockstep. **Strictly additive:** it arms
+only where no param-keyed class did (`!deferred_cantrip_resolve`), so every class that already worked
+is byte-identical, and it gets its own site bit (10, `put_in_hand`) so it can never renumber one.
+
+**IT FIRES.** Snow, 4 games: a third class appears -- `put_in_hand n=1,929 mean=2.42 max=11` beside
+`snow_look_top n=37,852` and `post_entry_act n=1,323`.
+
+**SNOW COST (8-game cell), vs the best current config (byname + activation):**
+
+| | units | lists | nested-slots | drops | digest |
+|---|---|---|---|---|---|
+| base | 1,690,443 | 78,815 | 11,183 | 6,646 | `bd3f8a9a` |
+| **+ put_in_hand** | +10.69% | +62.91% | +185.22% | 9,315 | `c3d6d2ec` |
+| + put_in_hand + draw-early | +6.06% | +55.98% | +172.08% | 7,198 | `41a318be` |
+
+**AND IT REVIVES THE DRAW-RANK LEVER, WHICH IS THE PART WORTH KEEPING.** The previous section proved
+the Snow cast order was condemnation-NEUTRAL because every site was an activation, so
+`BpSlotIsAfterSite`'s rank comparison was dead code. With this rule on, **Coatl and Astrolabe are
+genuine CAST sites** and that comparison goes live. Measured: draw-early moves from **+0.44%** (a wash,
+measured against an engine where it could not matter) to **−4.19% units / −4.26% lists / −22.7% drops**
+against `pih`. The USER's instinct was right; it was being measured on the wrong engine.
+
+**CROSS-DECK BLAST RADIUS (smoke, flag forced ON) -- NOT ADOPTABLE AS A DEFAULT YET:**
+
+```
+configs changed: 27   unchanged: 56
+[searched] slower=53  faster=8   play-changed=149
+[d0      ] slower=32  faster=99  play-changed=677
+keys: better=5 worse=9 identical=69
+  mirrorwing_smoke_d3 +0.1400   mirrorwing_smoke_d5 +0.1200   hinata_smoke_d5 +0.1067
+  mirrorwing_smoke_d0 -0.0520   hinata_smoke_d0 -0.0310
+```
+
+**That split -- d0 broadly BETTER (99 faster vs 32 slower), searched depths WORSE (53 vs 8) -- is the
+exact signature `MTG_ACQ_DIG` produced**, whose recorded resolution was a **d0-only scope**: *"the
+first arm also armed the rollout's deferred re-solve at searched depths, and held-out it went 6/8
+searched keys RED against d0 4/4 green -- the arming re-biased plan selection toward digger lines
+whose pruned greedy continuation misplayed the committed turn."* So the next step is a d0-only arm of
+this rule, measured against the same cells, before any searched-depth adoption is attempted.
+
+DEFAULT OFF. Smoke with the flag off: **83/83, 0 configs changed, 0 play changes** -- byte-identical.
