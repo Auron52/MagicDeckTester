@@ -702,3 +702,50 @@ always devours everything, so the victim decision genuinely never arises. A gate
 the engine's preferred line cannot distinguish "this decision is unwired" from "this decision is
 unreachable because another decision is unwired". `MTG_DEVOUR_TRACE` (env-gated, no behaviour,
 registered in `--list-flags`) is what separated them, and is kept for that reason.
+
+### RESOLVED (2026-09-18, commit c5b6491e) — one missing term in the dedup signature
+
+The collapse was in the **effect-signature dedup** in `EnumeratePlans` (TurnSolver.cpp ~30600), not
+in the group walk. That signature already carries every other "same card, different spell" axis —
+`#S` modal, `#V` Natural Order victim, `#K` Terastodon, `#B0/#B1` bestow, `#X` Chord/convoke,
+`#F` Felidar — and **devour was simply never added to it**. Every `k` therefore hashed identically
+and collapsed to one plan. Two properties made the survivor always the same one: the dedup runs
+*after* the sort, so the survivor is the highest-ranked plan, and `v.eval += k * (devour - 1)` is
+monotone in `k`, so the highest-ranked plan is always `k = own creatures`.
+
+The right idea was already written down against the **wrong** signature: the `/D<k>` term in
+`plan_signature` (~1730) carries a comment warning that a name-only dedup would collapse every `k`.
+It was never mirrored into the signature the dedup actually keys on.
+
+One term, three symptoms, all three resolved:
+
+| | before | after |
+|---|---|---|
+| devour counts offered | `{5}` | `{0,1,2,3,4,5}` |
+| plans on that board | 92 | 262 |
+| victim prompt | never fired | `SACRIFICE DECISION SURFACED: source "Mycoloth (devour 1 of 1)"` |
+
+#### Measured impact — it is a real quality gain, not just a menu fix
+
+5,000 games, seed 70000, `decks/Fungus/Fungus.profile.json`, all three open levers OFF, **paired by
+game index**. The pre-fix arm is the `base` arm of the 2×2×2 lever sweep (its binary was mapped
+before the fix landed), so both arms are the same seeds on the same profile.
+
+| | avg win turn | unwon | digest | ms |
+|---|---|---|---|---|
+| pre-fix  | 5.6406 | 19 | `ae1c3d83170c6e43` | 27,770,462 |
+| post-fix | **5.6254** | 19 | `7b0964f4a131d190` | 26,089,322 |
+
+```
+paired n=5000  mean delta=-0.0152  se=0.0020  t=-7.722
+DIVERGENT 95   WORSE 9   BETTER 86      sign test p=6.6e-17
+```
+
+Unwon is unchanged at 19=19, so the gain is genuinely faster wins and not a win/loss shift. The
+`ms` columns are *not* a clean comparison — the pre-fix arm shared its pool with other arms while
+the post-fix arm ran alone — so read them only as "the 92→262 plan-space widening did not blow up
+cost", not as a 6% speedup.
+
+**This is the measurement the green smoke gate could not give.** Smoke reported `play-changed=0`,
+which proves only that the new `#D` term is byte-identical for decks *without* devour; Fungus is not
+in the regression suite (ledger Q5) and no other deck carries devour.

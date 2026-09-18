@@ -1,0 +1,51 @@
+{
+ "note": "A spore activation and a hand cast DO combine in one line -- the general mechanism is sound, which is what makes the _GAP fixture's failure specifically about same-line-created fodder rather than about mixing activations with casts. Four lands, so no sacrifice is needed.",
+ "deck": "decks/Fungus/Fungus.cod",
+ "turn": 5,
+ "on_the_play": false,
+ "active_life": 20,
+ "opponent_life": 20,
+ "battlefield": [
+  {
+   "name": "Forest",
+   "controller": 0
+  },
+  {
+   "name": "Forest",
+   "controller": 0
+  },
+  {
+   "name": "Forest",
+   "controller": 0
+  },
+  {
+   "name": "Forest",
+   "controller": 0
+  },
+  {
+   "name": "Thallid Shell-Dweller",
+   "controller": 0,
+   "spore_counters": 3,
+   "sick": false
+  },
+  {
+   "name": "Utopia Mycon",
+   "controller": 0,
+   "spore_counters": 0,
+   "sick": false
+  }
+ ],
+ "hand": [
+  "Sporesower Thallid"
+ ],
+ "library_filler": "Forest",
+ "library_size": 40,
+ "depth": 3,
+ "budget_ms": 100,
+ "max_turns": 5,
+ "validate_line": "cast=Thallid Shell-Dweller;cast=Sporesower Thallid",
+ "expect_verdict": "accept",
+ "env": {
+  "MTG_HUMAN_PLAY": "1"
+ }
+}

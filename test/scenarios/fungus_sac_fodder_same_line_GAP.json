@@ -1,0 +1,47 @@
+{
+ "note": "CHARACTERIZATION FIXTURE -- it pins a KNOWN GAP, not desired behaviour. See docs/design/sac-fodder-created-in-the-same-line.md. Identical to fungus_sac_fodder_on_board.json in every way except WHERE the Saproling comes from: here the line makes it itself, by removing three spore counters from Thallid Shell-Dweller. That one difference flips the verdict from accept to illegal, because the sac-outlet candidate emitter bails on CanonicalSacVictim() < 0 against the board as it stands, so the SacForMana action is never emitted at all. USER 2026-09-17: 'Should be able to activate and sac in same line ideally, to avoid extra breakpoints.' WHEN THAT IS FIXED, flip expect_verdict to 'accept' -- this fixture exists so the fix cannot land unnoticed and the gap cannot be forgotten.",
+ "deck": "decks/Fungus/Fungus.cod",
+ "turn": 5,
+ "on_the_play": false,
+ "active_life": 20,
+ "opponent_life": 20,
+ "battlefield": [
+  {
+   "name": "Forest",
+   "controller": 0
+  },
+  {
+   "name": "Forest",
+   "controller": 0
+  },
+  {
+   "name": "Forest",
+   "controller": 0
+  },
+  {
+   "name": "Thallid Shell-Dweller",
+   "controller": 0,
+   "spore_counters": 3,
+   "sick": false
+  },
+  {
+   "name": "Utopia Mycon",
+   "controller": 0,
+   "spore_counters": 0,
+   "sick": false
+  }
+ ],
+ "hand": [
+  "Sporesower Thallid"
+ ],
+ "library_filler": "Forest",
+ "library_size": 40,
+ "depth": 3,
+ "budget_ms": 100,
+ "max_turns": 5,
+ "validate_line": "cast=Thallid Shell-Dweller;sacout=Utopia Mycon;cast=Sporesower Thallid",
+ "expect_verdict": "illegal",
+ "env": {
+  "MTG_HUMAN_PLAY": "1"
+ }
+}

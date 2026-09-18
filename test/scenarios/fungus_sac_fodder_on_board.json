@@ -1,0 +1,58 @@
+{
+ "note": "Utopia Mycon's 'Sacrifice a Saproling: add one mana of any color' pays the 4th mana for Sporesower Thallid ({2}{G}{G}) off THREE lands. The fodder is a Saproling TOKEN already on the battlefield -- which is why this fixture needs the harness's token staging ('token': true): Fungus's whole engine reads permanents that can only be tokens, and before that existed NO fixture could state this deck's real board. Guards the working half of the pair below.",
+ "deck": "decks/Fungus/Fungus.cod",
+ "turn": 5,
+ "on_the_play": false,
+ "active_life": 20,
+ "opponent_life": 20,
+ "battlefield": [
+  {
+   "name": "Forest",
+   "controller": 0
+  },
+  {
+   "name": "Forest",
+   "controller": 0
+  },
+  {
+   "name": "Forest",
+   "controller": 0
+  },
+  {
+   "name": "Thallid Shell-Dweller",
+   "controller": 0,
+   "spore_counters": 0,
+   "sick": false
+  },
+  {
+   "name": "Utopia Mycon",
+   "controller": 0,
+   "spore_counters": 0,
+   "sick": false
+  },
+  {
+   "token": true,
+   "power": 1,
+   "toughness": 1,
+   "subtypes": [
+    "Saproling"
+   ],
+   "color": "G",
+   "controller": 0,
+   "sick": false
+  }
+ ],
+ "hand": [
+  "Sporesower Thallid"
+ ],
+ "library_filler": "Forest",
+ "library_size": 40,
+ "depth": 3,
+ "budget_ms": 100,
+ "max_turns": 5,
+ "validate_line": "sacout=Utopia Mycon;cast=Sporesower Thallid",
+ "expect_verdict": "accept",
+ "env": {
+  "MTG_HUMAN_PLAY": "1"
+ }
+}

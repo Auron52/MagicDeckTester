@@ -5634,6 +5634,10 @@ static void WriteGameLog(const std::filesystem::path& dir, const std::string& na
 //                                    // also: "charge_counters" / "storage_counters" /
 //                                    // "spore_counters" / "quest_counters", and
 //                                    // "equips": "<host card name>" to stage an ATTACHED Equipment/Aura
+//                                    // A TOKEN (no cards.json entry) is staged with
+//                                    // { "token": true, "power": 1, "toughness": 1,
+//                                    //   "subtypes": ["Saproling"], "color": "G" } -- see the
+//                                    // CreateTokenOnce mirror in the staging loop.
 //     "hand": [ "Aria of Flame", "Invigorate" ],
 //     "graveyard": [ "Scourge of Valkas" ],       // stage cards in the graveyard (gy-reading abilities)
 //     "library_filler": "Forest", "library_size": 40,   // so draws / rollouts don't run dry
@@ -5840,7 +5844,38 @@ static int RunScenario(const std::filesystem::path& scenario_path)
         for (const auto& e : j.value("battlefield", json::array()))
         {
             Permanent p;
-            p.card              = make_card(e.at("name").get<std::string>());
+            // A TOKEN on the battlefield ("token": true). Tokens have no cards.json entry, so
+            // make_card cannot build one -- which meant a token board was simply INEXPRESSIBLE as a
+            // fixture. That is not a cosmetic gap: Fungus is a Saproling-token deck whose whole
+            // engine (Utopia Mycon's "Sacrifice a Saproling: add one mana", Psychotrope's sac-draw,
+            // Mycoloth's devour fodder) reads permanents that can only be tokens, so NO fixture
+            // could state its real board. Fields mirror CreateTokenOnce exactly -- same generated
+            // name, same is_token flag, same numbering space -- so a staged token and a created one
+            // are indistinguishable to every predicate that reads them.
+            if (e.value("token", false))
+            {
+                const int         tp   = e.value("power", 1);
+                const int         tt   = e.value("toughness", 1);
+                const auto        subs = e.value("subtypes", std::vector<std::string>{});
+                const std::string col  = e.value("color", std::string());
+                std::string tn = std::to_string(tp) + "/" + std::to_string(tt);
+                if (!subs.empty()) { tn += " " + subs[0]; }
+                tn += " Token";
+                p.card.m_name = tn;
+                p.card.RehashName();
+                p.card.AddType(CardType::Creature);
+                p.card.m_subtypes  = subs;
+                p.card.m_power     = tp;
+                p.card.m_toughness = tt;
+                p.card.m_number    = state.next_token_number++;
+                if (!col.empty())
+                {
+                    const Color c = CharToColor(col);
+                    p.card.AddColor(c);
+                }
+                p.is_token = true;
+            }
+            else { p.card = make_card(e.at("name").get<std::string>()); }
             p.controller_index  = e.value("controller", 0);
             p.owner_index       = p.controller_index;
             p.tapped            = e.value("tapped", false);
