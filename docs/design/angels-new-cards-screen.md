@@ -414,6 +414,39 @@ Known, deliberately not fixed: `FireLifegainWatchers` gates on `IsCreature()` al
 land takes no counter from Archangel of Thune even though animation grants all creature types. Real
 pre-existing rules gap; fixing it moves `slivers_vial`'s GT, so it owes its own measurement.
 
+## Engine defect that invalidates the legend-count arms (fixed, `9134e4e3`)
+
+**Screens 1–9 ran on an engine that refused to cast a second Giada or a second Lyra**, so every
+number above comparing MORE copies of a legend against FEWER is a **lower bound on the
+higher-count arm**. The user's challenge to the 4-ofs is what surfaced it.
+
+`OfferDuplicateLegendCast` prunes a duplicate legendary cast on the reasoning that the legend rule
+kills the new copy on resolution, so the cast is a **tie** that costs a card and a turn's mana. That
+holds only when nothing reads the entry or the death, and it was guarded by a template whitelist
+(`VanillaCreature` / `LordEffect`). The whitelist answers the wrong question: the template describes
+the **card**, but whether a duplicate is a tie depends on the **board around it**.
+
+In this deck it is never a tie. A second Lyra or Giada still fires every Angel-enter watcher before
+it dies — Bishop of Wings gains 4, Righteous Valkyrie gains its toughness, Seraph Sanctuary gains 1,
+Youthful Valkyrie takes a counter, Giada adds an as-enters counter — each of those a separate
+life-gain **event** (CR 119.10) that Archangel of Thune and Lyra Archangel of Dawn read. And the
+legend-rule death is *itself* Bishop of Wings' "an Angel you control dies", i.e. a Spirit token.
+`cards.json` already said so on Lyra Dawnbringer: *"Casting a redundant Lyra is a real line here,
+not a no-op; do not score copies 2 and 3 as dead."* The engine was scoring them as dead anyway.
+Confirmed with `MTG_TRACE=legend`: **33 duplicate-Dawnbringer events blocked per 1500 Angels games**
+(and 8 duplicate-Lathliss per 800 Dragons games).
+
+The fix vetoes the prune by asking the board rather than the template, and is strictly an
+improvement where it changed anything: across smoke + regression, **0 slower / 7 faster / 57
+play-changed at searched depths, and byte-identical at autonomous d0**. Windows + Linux +
+determinism parity all green.
+
+**Consequence for this document.** Screen 10 was killed mid-flight rather than read, because it was
+measuring exactly the arms the defect biased. Screen 11 re-runs the legend counts *and* Lightstall on
+the fixed engine. Nothing in the *core* recommendation is known to move — `v_a` already runs the
+higher legend counts, so the defect ran **against** it — but the margins between `v_a` and the
+lower-count arms should be treated as unsettled until screen 11 lands.
+
 ### Screen 7 — the RANKING held out, not just the winner (`spec7_rank_heldout.json`)
 
 `--confirm` validates one arm against base. The recommendation rests on the ORDER of six arms, so
@@ -527,14 +560,32 @@ Lightstall are the user's *introduction slots*. Mainboarding 4 Lyra with one sti
 **5 copies — illegal**. Legion Angel's wish is `wish_requires_name`-pinned to its own name, so the
 pool is exactly the 3 Legion Angels and every other sideboard slot is mechanically inert here.
 
-**The flex slot — and applying the yardstick to it honestly.** `2 Youthful Valkyrie → 2 Lightstall
-Inquisitor` (`v_yv0`) measures **−0.032 at 20 life, −0.012 at 2HG, −0.009 at 40 life**. An earlier
-draft of this doc called that "take it for a short-format list". **That was under-hedged, by this
-doc's own standard.** The swap adds a card whose rider is unmodelled, so the −0.05t bias yardstick
-applies to it — and every one of those three margins is *below* the yardstick. Consistency demands
-the same verdict Lightning Greaves got: **not supported.** Lightstall stays out of the 60. If it is
-wanted anywhere it is a sideboard card for an explicitly short format, on judgement, not on this
-screen.
+**The flex slot — and a correction, because the yardstick was applied to it BACKWARDS.**
+`2 Youthful Valkyrie → 2 Lightstall Inquisitor` (`v_yv0`) measures **−0.032 at 20 life, −0.012 at
+2HG, −0.009 at 40 life**. A previous revision of this section ruled Lightstall out by declaring
+those margins "below the −0.05t yardstick". **That was wrong, and it contradicted the very next
+paragraph of this document.**
+
+The yardstick prices **cutting** a card the sim cannot model, because in that direction the
+apparatus charges *nothing* for the loss and so flatters the arm doing the cutting. It says nothing
+about an arm that **adds** one. And neither Lightstall swap cuts an under-modelled card: `v_yv0`
+cuts Youthful Valkyrie and `v_li1` cuts Archangel of Thune, both fully modelled. So the gate simply
+does not apply here, in either direction, and the margins are not apparatus inflation.
+
+What *is* true about Lightstall is different and narrower. Its ETB is not a partly-modelled rider
+with a residual — `cards.json` records it as **structurally absent**: `DeckTouchesOpponentZones`
+keys only on `exile_opponent_top_cost`, which nothing in this deck has, so no opponent hand is ever
+dealt and there is no direction in which the exile could move a goldfish result. What the screen
+therefore measures is the honest remainder: **a one-mana Angel body**, the cheapest possible trigger
+for Bishop of Wings, Righteous Valkyrie, Seraph Sanctuary and Giada. In a real game the ETB is a
+genuine *two-sided* effect — it strips a card but hands the opponent a taxed copy of it — and this
+sim cannot price either side. That makes the number neither a floor nor a ceiling for real play; it
+makes it a measurement of the **enabler only**, and whether the disruption half is worth anything is
+a judgement that lives outside this apparatus.
+
+So the honest status is: **the exclusion was not earned, and Lightstall is back in scope.**
+Screens 1–9 also measured it on an engine that under-rated every Angel-heavy arm (see *Engine defect
+that invalidates the legend-count arms* below). It is re-measured properly in screen 11.
 
 **Where the yardstick does NOT apply, and why the core recommendation survives it.** The yardstick
 prices *cutting a card the sim cannot model*. It is the wrong comparator for a comparison where both
