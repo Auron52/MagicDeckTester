@@ -211,6 +211,8 @@ enum Slot : int
     FUNGUS_SAC_DRAW_CLOCK,    // MTG_FUNGUS_SAC_DRAW_CLOCK  sac a Saproling to DRAW only when it is not already on the clock
     BP_CONDEMN_NEWOPT_BYNAME, // MTG_BP_CONDEMN_NEWOPT_BYNAME  a new card only earns the exclusive-slot exemption if its NAME was not already passed on
     FORCE_USES_M2,            // MTG_FORCE_USES_M2         force the searched SECOND MAIN on regardless of the whitelist
+    SNOW_ORDER_DRAW_EARLY,    // MTG_SNOW_ORDER_DRAW_EARLY     the DRAW BAND moves from LAST to just after the fixer
+    SNOW_ORDER_TAPDRAW_EARLY, // MTG_SNOW_ORDER_TAPDRAW_EARLY  ...and the tap-draw PERMANENTS join that band
     COUNT
 };
 
@@ -392,6 +394,8 @@ inline const char* Name(int slot)
         "MTG_FUNGUS_SAC_DRAW_CLOCK",
         "MTG_BP_CONDEMN_NEWOPT_BYNAME",
         "MTG_FORCE_USES_M2",
+        "MTG_SNOW_ORDER_DRAW_EARLY",
+        "MTG_SNOW_ORDER_TAPDRAW_EARLY",
     };
     // The enum and this table are ONE mapping split across two lists: a slot added to one and not
     // the other silently shifts every lever after it (a manifest asking for lever X would set Y).

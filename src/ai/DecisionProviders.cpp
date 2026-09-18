@@ -2434,6 +2434,51 @@ inline bool SnowActOrderOn()
     return heurarm::Flag(heurarm::SNOW_ACT_ORDER, env);
 }
 
+// THE DRAW BAND'S BASE -- 300 (LAST, shipped) or 2 (immediately after the fixer).
+// USER 2026-09-18: *"Let's try moving all of the draw to just after Astrolabe."*
+//
+// WHY THIS IS WORTH TRYING, given draw-last is the half the whole order was built around: the two
+// halves of condemnation pull in opposite directions and only a measurement settles which is worth
+// more on this deck.
+//   * DRAW LAST maximises condemnable CARDS. Everything else reached its slot before the draw, so
+//     declining it is a real decision and the drop is sound by construction.
+//   * DRAW EARLY makes the DRAW ITSELF condemnable. Ranked last, a draw is never "passed over" --
+//     nothing follows it -- so a line that declines to draw is never charged for that. Ranked at 2,
+//     a plan that skips the draw and commits instead has genuinely passed on it. That matters here
+//     because the measured cost of condemnation on Snow is NOT the drops, it is the BREAKPOINTS
+//     REACHED (+15.9%): condemning a mana SINK frees mana, the trailing pass then affords the
+//     {1}{S} tap-draw, and a whole nested breakpoint opens. A condemnable draw is the only thing
+//     that can close that loop at its source.
+//
+// The USER's one constraint is satisfied by anything >= 2: *"they do need to be after mana sources
+// that can be used this turn like land."* The land drop is 0 and the fixer is 1; the deck's other
+// accelerants are Coldsteel Heart (enters tapped) and Boreal Druid (summoning-sick), neither of
+// which can pay for anything on the turn it arrives, so no ordering of them can fund a draw.
+//
+// DEFAULT OFF -- this is a trial arm, and the cast order is USER-REVIEWED per deck, so it does not
+// change shipped play until the sweep says it should.
+inline int SnowDrawBandBase()
+{
+    static const bool env = EnvOn("MTG_SNOW_ORDER_DRAW_EARLY", false);
+    return heurarm::Flag(heurarm::SNOW_ORDER_DRAW_EARLY, env) ? 2 : 300;
+}
+
+// ...and the SECOND HALF, separable because it is a different claim (a lever spanning two sites is
+// TWO levers -- see [[trace-a-mover-before-attributing]]). The predicate above is param-derived from
+// CAST-time draw (etb_self_draw / cast_draw), which on this deck is Ice-Fang Coatl alone: Frost
+// Augur and Scrying Sheets draw from a {T} ability and are deliberately excluded (see [3] below).
+// The USER's phrase was "all of the draw", and "the draw abilities and cards in particular" -- so
+// this arm moves the tap-draw PERMANENTS into the draw band too, immediately behind the cast-draws.
+//
+// Note what this can and cannot reach: it moves the CARD (when is the Augur deployed), not the
+// ACTIVATION (when is it tapped). The activation runs in ApplyPlanDirect's trailing pass, after
+// every cast, and ActivationOrderRank orders only activations against each other.
+inline bool SnowTapDrawEarlyOn()
+{
+    static const bool env = EnvOn("MTG_SNOW_ORDER_TAPDRAW_EARLY", false);
+    return heurarm::Flag(heurarm::SNOW_ORDER_TAPDRAW_EARLY, env);
+}
+
 int SnowProvider::CastOrderRank(const GameState& s, const CardDefinition& def) const
 {
     if (!SnowCastOrderOn()) { return GenericProvider::CastOrderRank(s, def); }
@@ -2451,7 +2496,16 @@ int SnowProvider::CastOrderRank(const GameState& s, const CardDefinition& def) c
     // Cast-time draw only (ETB / on-cast): Frost Augur and Scrying Sheets draw from an ACTIVATED
     // {T} ability on the battlefield, which is not a cast-order decision at all, so they stay in
     // the commit band and get deployed early to tap on a later turn.
-    if (p.etb_self_draw > 0 || p.cast_draw > 0) { return 300 + mv; }
+    //
+    // The BASE is the arm (SnowDrawBandBase: 300 = last, 2 = just after the fixer). The band's
+    // INTERNAL order is untouched by the arm -- cheapest draw first either way -- so the two arms
+    // differ in exactly one thing, where the band sits, which is what makes the A/B attributable.
+    const int draw_base = SnowDrawBandBase();
+    if (p.etb_self_draw > 0 || p.cast_draw > 0) { return draw_base + mv; }
+    // The tap-draw permanents, opt-in, immediately BEHIND the cast-draws within the same band: a
+    // cast-draw pays off the moment it resolves, a tap-draw not until a later turn (summoning
+    // sickness for the Augur, and the land drop is already spent for Sheets).
+    if (p.tap_draw_cost && SnowTapDrawEarlyOn()) { return draw_base + 20 + mv; }
 
     // [2] THE COMMITMENTS, cheapest to most expensive (the USER's rule), with EVERY TIE SPLIT
     // (USER: *"let's split them up in any order"*). Ties are not free here: two cards sharing a

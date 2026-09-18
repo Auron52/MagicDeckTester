@@ -2485,6 +2485,12 @@ activation is condemned because THIS permanent's own ability was passed over, ne
 from another card's decline. Sheets and Augur carry the same tap-draw but are different cards with
 different costs and different slots.
 
+> **WRONG -- see "THE ACTIVATION RULE WAS THE INVERSE OF THE RULE ASKED FOR" at the end of this file.**
+> The rank gate below satisfies the restriction in the *opposite* direction: identical cards share a
+> rank, so strict-less can never fire for them, and every firing it produces is a DIFFERENT card. The
+> paragraph above, and the "narrow by order" conclusion this section draws from the 66 firings, are
+> both retained only so neither gets re-derived.
+
 **MEASURED (8-game cell), and the result is the design finding:**
 
 | arm | drops | act drops | units | lookups |
@@ -2516,3 +2522,131 @@ makes the ABILITY condemnable and cuts the nested-breakpoint inflation (+15.9% b
 Which wins is empirical. **The cast order is USER-REVIEWED per deck, so the rank is the USER's call,
 not an agent's** -- the sweep to run once chosen is rank 2 / ~50 / current 300, on cost AND held-out
 quality.
+
+## 2026-09-18: THE DRAW RANK IS CONDEMNATION-NEUTRAL ON SNOW -- EVERY SITE IS AN ACTIVATION
+
+USER: *"Let's try moving all of the draw to just after Astrolabe."*
+
+Built as two separable arms (a lever spanning two sites is TWO levers), both DEFAULT OFF:
+
+* **`MTG_SNOW_ORDER_DRAW_EARLY`** -- the draw band's BASE moves `300 -> 2`, i.e. immediately after the
+  fixer. Param-derived (`etb_self_draw || cast_draw`), which on this deck is **Ice-Fang Coatl alone**
+  (Arcum's Astrolabe matches too but is caught by the fixer clause at rank 1 first).
+* **`MTG_SNOW_ORDER_TAPDRAW_EARLY`** -- the tap-draw PERMANENTS (`tap_draw_cost`: Frost Augur, Scrying
+  Sheets) join that band at `+20`, behind the cast-draws. This is the "abilities" half, and note what
+  it can and cannot reach: it moves the CARD (when the Augur is deployed), not the ACTIVATION.
+
+The band's INTERNAL order is untouched by either arm -- cheapest first either way -- so the arms
+differ in exactly one thing, where the band sits.
+
+**MEASURED, 10-game cell (gi=0..9, d2/b0, `SNAPNONE=0` = the real shipping key). All four arms play to
+`avg=5.9000`; every arm's digest differs, so they are real line changes, not no-ops.**
+
+| vs **byname** | units | lookups | lists | nested-slots | site8 reached | drops |
+|---|---|---|---|---|---|---|
+| draw-early | +0.44% | +0.23% | +0.24% | −0.31% | +0.24% | +1.29% |
+| tapdraw-early | +1.05% | +1.03% | +0.61% | +0.32% | +0.64% | +1.28% |
+| **both** | **−0.38%** | −0.58% | −0.62% | −1.11% | −0.65% | +0.60% |
+
+(For scale, in the same cell `byname` beats `guarded` by **−9.63% units / −12.42% lookups**, and the
+inflation this was meant to attack is **+15.9% breakpoints reached**.)
+
+**IT IS A WASH, AND THE REASON IS STRUCTURAL -- NOT A TUNING MISS.**
+
+**No Snow breakpoint ever consults a candidate's cast rank.** The probe names every site the deck
+reaches, and there are exactly two: `snow_look_top` (site 8, the {T} tap-draw, **1,814,560**) and
+`post_entry_act` (site 9, an activation pending after a permanent entered, **41,802**). **Both are
+reached by ACTIVATION.** `BpSlotIsAfterSite` short-circuits on exactly that:
+
+```cpp
+if (g_bp_site_activated) { return false; }   // the whole cast order is strictly before it
+return prov.CastOrderRankLatest(state, *cd) >= prov.CastOrderRank(state, *g_bp_site_def);
+```
+
+The rank comparison on the last line is **dead code on this deck**, and so is the land half's twin
+(`BpLandDropSlotPassed` returns `true` on an activated site before it reads `LandDropCastOrderRank`).
+There is no cast-draw site at all: Ice-Fang Coatl's ETB draw does not open a breakpoint.
+
+So moving the draw band changes the cast SEQUENCE -- hence the different digests, the ±1% work, and
+the sequential-payability walk at `CandidatesInCastOrder` -- but it **cannot change a single
+condemnation decision**. It is a play-quality lever, not a condemnation lever.
+
+**THIS ALSO ANSWERS THE DESIGN QUESTION IT WAS ASKED FOR.** The hope was: *"putting the abilities
+earlier ... they would get condemned if we don't utilize them."* On this deck a draw CARD is already
+maximally condemnable -- an activated site puts the entire cast order behind it, so every card in hand
+is condemnable at site 8 regardless of rank. What is NOT condemnable is the **ACTIVATION ITSELF**, and
+no cast-order rank can reach it. That is a job for `MTG_BP_CONDEMN_ACTIVATION`, below.
+
+**SOUNDNESS IS UNAFFECTED BY THE MOVE**, which is worth stating because the order's own design note
+says draw-last is what makes condemnation sound here. The soundness argument for an activated site is
+that the trailing pass runs after EVERY cast -- true whatever order the casts are in -- so
+"offered-and-declined" still holds under draw-early. The two arms are safe to sweep.
+
+## 2026-09-18: THE ACTIVATION RULE WAS THE INVERSE OF THE RULE ASKED FOR
+
+USER: *"condemnation should only happen if the activation is the same ability from an identical card."*
+
+`MTG_BP_CONDEMN_ACTIVATION` as first shipped (cd168de6) gated on
+`ActivationOrderRank(cand) < ActivationOrderRank(site)`, and the source comment claimed the USER's
+restriction was "satisfied by construction". **It was satisfied by construction in the wrong
+direction, on both halves:**
+
+* **Identical cards have identical ranks**, so strict-less can NEVER hold for them. The case the rule
+  was asked for was the one case it could not fire on.
+* Every firing it DID produce was therefore a **different** card (Snow's two activation ranks are
+  Sheets 10, Augur 20) -- exactly the case the restriction excludes.
+
+That is the whole explanation of the "66 firings, +0.00%" result recorded in the previous section: it
+was not a narrow rule, it was the complement of the intended one.
+
+**THE FIX** is a mode, so the earlier measurement stays reproducible: `1` = the USER's rule (same
+`m_name_hash` as the site, plus `BpActivationAbilityUnambiguous` -- the scope records the site's CARD
+and not which of its abilities fired, so "identical card" only establishes "same ability" when the
+card has exactly one activated ability); `2` = the old rank route, documented as NOT the USER's rule;
+`3` = both.
+
+**8-game cell, firing counts:** name **1,008** · rank **66** · both **1,074**. `1,008 + 66 = 1,074`
+exactly -- the two sets are **disjoint**, which is the inversion stated arithmetically.
+
+And the name rule is the first lever in this arc to move the metric the whole investigation is about:
+**site-8 breakpoints reached −1.72%** on that cell (71,891 -> 70,656), play digest **unchanged**.
+
+### MEASURED AT GAMES=10: THE ACTIVATION RULE IS THE ROOT-CAUSE FIX
+
+10-game cell (gi=0..9, d2/b0, `SNAPNONE=0` = the real shipping key), baseline **byname**:
+
+| metric | guarded | **byname** | **act_name** | act_name + rank arms |
+|---|---|---|---|---|
+| units_total | +10.80% | 41,600,541 | **−7.25%** | −7.75% |
+| LOOKUPS | +14.38% | 28,073,701 | **−10.20%** | −10.86% |
+| **site 8 reached** | +2.35% | 1,777,321 | **−11.05%** | −11.68% |
+| **nested-slots** | +2.69% | 638,941 | **−23.38%** | −24.34% |
+| lists | +0.31% | 1,875,347 | −0.73% | −1.53% |
+| wall | 1,614 s | 1,550 s | **1,449 s** | 1,480 s |
+| activation drops | — | 0 | **218,703** | 215,630 |
+| play digest | `7916f1f5` | `7916f1f5` | **`7916f1f5`** | `497e879f` |
+
+**THE PLAY DIGEST IS UNCHANGED.** `act_name` produces byte-identical play to `byname` and to
+`guarded` on all ten games while doing 7.25% less work -- which is the USER's bar met exactly: *"We
+should miss exactly where baseline misses and hit otherwise ... It is possible for us to do less work
+if there are lines we never run."*
+
+**AND IT CLOSES THE INFLATION THIS WHOLE ARC WAS CHASING.** Restated against the condemnation-OFF
+baseline on one key (off implied from the same cell's measured +13.20% / +15.86% ratios):
+
+| arm | site-8 breakpoints reached | vs off |
+|---|---|---|
+| off | 1,570,072 | +0.00% |
+| guarded | 1,819,035 | **+15.86%** |
+| byname | 1,777,321 | +13.20% |
+| **act_name** | 1,581,000 | **+0.70%** |
+
+The mechanism was: condemning a mana SINK frees mana -> the continuation's own trailing pass affords
+the `{1}{S}` tap-draw -> a NESTED breakpoint opens (a whole continuation list plus its wave slots).
+Condemning the ACTIVATION closes that loop at its source, and the `nested-slots` row is the direct
+evidence: **−23.4%**, the largest single move any lever in this arc has produced.
+
+**THE RANK ARMS ADD ~0.5% AND COST A PLAY CHANGE.** `act_early` (activation rule + both rank arms) is
+−7.75% vs −7.25%, but its digest moves, so it needs held-out quality validation that `act_name` does
+not. Given the rank change is condemnation-neutral by construction (previous section), that 0.5% is a
+tree-shape accident on ten games, not a mechanism -- **keep the rank arms OFF.**

@@ -2883,13 +2883,45 @@ static bool BpCondemnNewOptionEnabled()
 //
 // DEFAULT OFF until measured -- this only ever makes the guard fire LESS, i.e. it drops MORE, which
 // is the direction that needs evidence rather than an argument.
-// See the emission site for the full rule. DEFAULT OFF: it only ever condemns MORE, which is the
-// direction that needs evidence rather than an argument.
-static bool BpCondemnActivationEnabled()
+// "SAME ABILITY" needs the site's ability to be UNAMBIGUOUS. The scope records the site's CARD, not
+// which of its abilities opened the breakpoint, so on a permanent carrying two distinct activated
+// abilities "identical card" would not establish "same ability" -- the site could have been the other
+// one. Exactly one engaged mode makes the inference exact, and every card this can fire on today
+// (Scrying Sheets, Frost Augur) has exactly one.
+static bool BpActivationAbilityUnambiguous(const CardParams& p)
 {
-    static const bool on = EnvOn("MTG_BP_CONDEMN_ACTIVATION");
-    return on;
+    int n = 0;
+    if (p.tap_damage_cost)          { ++n; }
+    if (p.tap_investigate_cost)     { ++n; }
+    if (p.tap_draw_cost)            { ++n; }
+    if (p.sac_draw_cost)            { ++n; }
+    if (p.drain_cost)               { ++n; }
+    if (p.exile_opponent_top_cost)  { ++n; }
+    if (p.ice_counter_cost)         { ++n; }
+    if (p.lifelink_grant_cost)      { ++n; }
+    return n == 1;
 }
+
+// CONDEMNING AN ACTIVATION (MTG_BP_CONDEMN_ACTIVATION). See the emission site for the full rule.
+// DEFAULT OFF: it only ever condemns MORE, which is the direction that needs evidence rather than an
+// argument.
+//
+//   1 = IDENTICAL CARD -- the USER's rule: *"condemnation should only happen if the activation is
+//       the same ability from an identical card."* The candidate's ability is condemned only when
+//       the site is a copy of the SAME CARD, so the decline is self-evidenced.
+//   2 = EARLIER RANK -- shipped first (cd168de6) and it is NOT the USER's rule. It condemns a
+//       candidate whose ActivationOrderRank is strictly less than the site's, which is a DIFFERENT
+//       card by construction (identical cards have identical ranks), so it excludes exactly the case
+//       the rule was asked for and admits exactly the case the rule excludes. Kept as a mode rather
+//       than deleted because its measurement is a finding worth reproducing: it fires 66 times on
+//       the 8-game Snow cell and moves work by +0.00%, which is what made the inversion visible.
+//   3 = both.
+static int BpCondemnActivationMode()
+{
+    static const int m = EnvInt("MTG_BP_CONDEMN_ACTIVATION", 0);
+    return m;
+}
+static bool BpCondemnActivationEnabled() { return BpCondemnActivationMode() != 0; }
 
 static bool BpCondemnNewOptByNameEnabled()
 {
@@ -15767,27 +15799,47 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
                     // slot and passed over -- which is exactly condemnation's premise.
                     //
                     // SAME ABILITY, IDENTICAL CARD (USER: *"condemnation should only happen if the
-                    // activation is the same ability from an identical card"*). Satisfied by
-                    // construction: the decline is SELF-evidenced -- we condemn this activation
-                    // because THIS permanent's own ability was passed over, never by inferring it
-                    // from a different card's decline. Scrying Sheets and Frost Augur carry the same
-                    // tap-draw but are different cards with different costs and different slots, and
-                    // declining one says nothing about the other.
+                    // activation is the same ability from an identical card"*) -- MODE 1, and it is
+                    // a NAME test, not a rank test.
                     //
-                    // Requires a provider opinion on both ranks (0 = "no opinion"), so a deck whose
-                    // provider does not order its activations is byte-identical. `entered_this_turn`
-                    // is the post-entry exemption: a permanent the plan CAST was never enumerable as
-                    // an activation when the plan was chosen (site 9 exists for exactly that), so it
-                    // was not declined.
+                    // The site is a tap-draw the plan DID activate; this candidate is a copy of the
+                    // same card whose identical ability the plan did NOT activate. Identical cards
+                    // share a slot, so the trailing pass offered both at the same moment and the
+                    // plan took one -- the decline of the other is as direct as evidence gets, and
+                    // it never infers a decline across two different cards. Scrying Sheets and Frost
+                    // Augur both carry a tap-draw but have different costs and different slots, so
+                    // declining one says nothing about the other; this rule refuses both directions.
+                    //
+                    // MODE 2 (the first shipped attempt) compared ActivationOrderRank instead:
+                    // `r_cand < r_site`. That is the exact INVERSE of the rule asked for. Identical
+                    // cards have identical ranks, so strict-less can never hold for the case above,
+                    // and every firing it does produce is a DIFFERENT card -- the case the USER's
+                    // restriction excludes. Measured: 66 firings on the 8-game Snow cell, +0.00%
+                    // work. Kept behind the mode so the finding stays reproducible.
+                    //
+                    // `entered_this_turn` is the post-entry exemption: a permanent the plan CAST was
+                    // never enumerable as an activation when the plan was chosen (site 9 exists for
+                    // exactly that), so it was not declined.
                     if (BpCondemnActivationEnabled() && BpClassifyActive(state)
                         && g_bp_site_def != nullptr && g_bp_site_activated
                         && BpSnapshotOnItsTurn(state) && BpPlanMadeACast()
                         && BpTurnManaSettled(state) && !src.entered_this_turn)
                     {
-                        const DecisionProvider& aprov = ResolveProvider(state);
-                        const int r_cand = aprov.ActivationOrderRank(state, *sd);
-                        const int r_site = aprov.ActivationOrderRank(state, *g_bp_site_def);
-                        if (r_cand != 0 && r_site != 0 && r_cand < r_site)
+                        const int  amode = BpCondemnActivationMode();
+                        const bool same  = (amode & 1) != 0
+                            && sd->card.m_name_hash == g_bp_site_def->card.m_name_hash
+                            && BpActivationAbilityUnambiguous(sd->params);
+                        bool earlier = false;
+                        if ((amode & 2) != 0)
+                        {
+                            // Requires a provider opinion on both ranks (0 = "no opinion"), so a
+                            // deck whose provider does not order its activations is byte-identical.
+                            const DecisionProvider& aprov = ResolveProvider(state);
+                            const int r_cand = aprov.ActivationOrderRank(state, *sd);
+                            const int r_site = aprov.ActivationOrderRank(state, *g_bp_site_def);
+                            earlier = r_cand != 0 && r_site != 0 && r_cand < r_site;
+                        }
+                        if (same || earlier)
                         {
                             if (s_rollout_stats)
                             { g_bp_condemn_act_drops.fetch_add(1, std::memory_order_relaxed); }
