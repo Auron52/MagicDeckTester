@@ -589,11 +589,37 @@ and gate nothing**. Both are written up in the perf doc.
    two cards and `etb_untap_lands` on two more — four cards across two archetype-specific params.
    Fungus was the only other deck carrying `is_land_aura` at all. The rule it encodes: **a term in
    an archetype signature must be a param no other archetype would plausibly run.**
-7. **Q7 — how long should the value leaf be allowed to run?** At the measured rate Phase A alone
-   is ~7 h and the full five phases are plausibly multi-day, because ~26% of compute goes into the
-   11.5% of games that the token-board pathology makes pathological. The default taken is **let it
-   run**; `valueleaf.sh finish` is the supported way to cut it short if the answer is "not that
-   long". Only the user makes that call.
+7. **Q7 — how long should the value leaf be allowed to run? The ~7 h phase-A figure is REFUTED
+   (2026-09-18); overnight now looks likely.** The original estimate — Phase A alone ~7 h, five
+   phases plausibly multi-day — was measured at commit `d81195f7`, before four commits that all
+   land on exactly that path: the winless certificate (`e413fff8`, 1.77x fewer label units,
+   defaulted ON in `b106ffd9`), the enum-memo deep-copy fix (`50bbbde1`, 1.37x on the label path),
+   the same-count counter-source fold (`204ac346`, root-caused on the Fungus label stragglers) and
+   the `CountControlledDragons` ETB fix (1.43x on the worst game).
+
+   Re-timed against the cancelled run's own `SLOW-GAME` repros, which carry their recorded times.
+   Both runs are 24-worker batches, so this is paired and if anything pessimistic for the new
+   binary (the probe ran as a 25th thread against a saturated box):
+
+   | game | old | new | speedup |
+   |---|---|---|---|
+   | `--seed 901796 --game-index 46` | 66.5 s | 8.5 s | 7.8x |
+   | `--seed 901780 --game-index 30` | 81.6 s | 24.4 s | 3.3x |
+   | `--seed 901765 --game-index 15` | 174.7 s | 9.0 s | 19.5x |
+   | `--seed 901769 --game-index 19` | 395.9 s | 15.8 s | 25.1x |
+   | total | 718.7 s | 57.7 s | **12.5x** |
+
+   **The slope is the finding, not the average: the speedup GROWS with the old cost.** That is what
+   the certificate predicts — it prunes horizon-edge label work, which is what made the long games
+   long. Phase A is all-or-nothing and its completion is decided by the tail, and the tail is the
+   part that improved most. 707 games remain (rows dedupe per game, so the banked 1,793 are not
+   re-paid); even at the worst factor observed that is about an hour.
+
+   **Caveat:** four games hand-picked from one job's slow list is a probe, not a distribution. And
+   **phase C (the H x V depth matrix) is unmeasured for this deck** and is now the long pole — the
+   certificate is consulted in the unbounded matrix cells too, so it should help there, but no
+   number has been taken. `valueleaf.sh finish` remains the supported way to cut phase C short.
+   The default taken is still **let it run**; only the user makes that call.
 
 **Not pushed.** Engine changes are substantial and CI (Linux + Windows) has not run; MSVC is
 unverified from this container. `git push` when you want the Windows/determinism-parity signal.
