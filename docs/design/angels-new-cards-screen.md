@@ -11,7 +11,8 @@ was looking for — **raise Giada, Font of Hope 2 → 4**. Worth **−0.303 / �
 20 / 30(2HG) / 40 life over 80,000 held-out games per format. Full list under
 *THE RECOMMENDED LIST* below.
 
-**Scale:** ~6.5 million games across nine screens, three formats, four disjoint held-out seed
+**Scale:** **8,230,000 paired games** across nine screens and two held-out confirmations (counted
+from the `N arms x M games` line of each log, not estimated), three formats, five disjoint seed
 blocks, all arms deck-construction legal.
 
 **User framing (2026-09-18):** *"figuring out how to fit in the new cards … I'm guessing we'll want
