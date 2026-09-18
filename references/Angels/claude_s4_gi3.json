@@ -1,0 +1,325 @@
+{
+  "seed": 4, "game_index": 3, "win_turn": 5, "won": true,
+  "mulligan": { "count": 1, "bottom": [16] },
+  "decisions": [
+    { "chosen": 0, "decision": {
+  "decision_index": 0,
+  "type": "mulligan",
+  "turn": 0,
+  "me": { "life": 20, "battlefield": [] },
+  "opponent": { "life": 20, "battlefield": [] },
+  "mulligan_count": 0,
+  "on_the_play": true,
+  "to_bottom": 0,
+  "hand": [{ "num": 1, "name": "Archangel of Thune" }, { "num": 17, "name": "Plains" }, { "num": 18, "name": "Plains" }, { "num": 19, "name": "Plains" }, { "num": 20, "name": "Plains" }, { "num": 2, "name": "Archangel of Thune" }, { "num": 3, "name": "Archangel of Thune" }],
+  "ai_choice": 0,
+  "note": "reply 1 to KEEP this hand (then bottom 0 card(s)), or 0 to mulligan again"
+}
+},
+    { "chosen": 1, "decision": {
+  "decision_index": 1,
+  "type": "mulligan",
+  "turn": 0,
+  "me": { "life": 20, "battlefield": [] },
+  "opponent": { "life": 20, "battlefield": [] },
+  "mulligan_count": 1,
+  "on_the_play": true,
+  "to_bottom": 1,
+  "hand": [{ "num": 16, "name": "Lyra Dawnbringer" }, { "num": 15, "name": "Lyra Dawnbringer" }, { "num": 59, "name": "Youthful Valkyrie" }, { "num": 30, "name": "Plains" }, { "num": 7, "name": "Bishop of Wings" }, { "num": 39, "name": "Resplendent Angel" }, { "num": 47, "name": "Seraph Sanctuary" }],
+  "ai_choice": 1,
+  "note": "reply 1 to KEEP this hand (then bottom 1 card(s)), or 0 to mulligan again"
+}
+},
+    { "chosen": 0, "decision": {
+  "decision_index": 2,
+  "type": "bottom",
+  "turn": 0,
+  "me": { "life": 20, "battlefield": [] },
+  "opponent": { "life": 20, "battlefield": [] },
+  "bottom_step": 0,
+  "bottom_total": 1,
+  "hand": [{ "num": 16, "name": "Lyra Dawnbringer", "win_optimal": true }, { "num": 15, "name": "Lyra Dawnbringer", "win_optimal": true }, { "num": 59, "name": "Youthful Valkyrie", "win_optimal": true }, { "num": 30, "name": "Plains", "win_optimal": true }, { "num": 7, "name": "Bishop of Wings", "win_optimal": true }, { "num": 39, "name": "Resplendent Angel", "win_optimal": true }, { "num": 47, "name": "Seraph Sanctuary", "win_optimal": true }],
+  "ai_choice": { "index": 0, "num": 16, "name": "Lyra Dawnbringer" },
+  "ai_set": [],
+  "note": "reply the hand INDEX (0-based) of the card to put on the bottom (step 1 of 1)"
+}
+},
+    { "chosen": 0, "decision": {
+  "decision_index": 3,
+  "main_ordinal": 0,
+  "type": "main_phase",
+  "turn": 1,
+  "phase": "pre_main",
+  "on_the_play": true,
+  "mdfc_backs": ["Boulderloft Pathway", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [], "vial_counters": [], "hand": [{ "num": 7, "name": "Bishop of Wings", "cost": "{W}{W}", "mv": 2, "kind": "permanent", "is_creature": true }, { "num": 15, "name": "Lyra Dawnbringer", "cost": "{3}{W}{W}", "mv": 5, "kind": "permanent", "is_creature": true }, { "num": 30, "name": "Plains", "cost": "", "mv": 0, "kind": "land" }, { "num": 39, "name": "Resplendent Angel", "cost": "{1}{W}{W}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 47, "name": "Seraph Sanctuary", "cost": "", "mv": 0, "kind": "land" }, { "num": 59, "name": "Youthful Valkyrie", "cost": "{1}{W}", "mv": 2, "kind": "permanent", "is_creature": true }], "graveyard": [], "library_size": 54, "land_drops_left": 1 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "2/2 Creature", "idx": 0, "num": 500000, "is_land": false }] },
+  "plans": [
+    { "index": 0, "summary": "land=Plains; cast: (nothing)", "land": "Plains", "casts": [], "actions": [] },
+    { "index": 1, "summary": "land=Seraph Sanctuary; cast: (nothing)", "land": "Seraph Sanctuary", "casts": [], "actions": [] },
+    { "index": 2, "summary": "land=none; cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 4,
+  "type": "main_phase",
+  "turn": 1,
+  "phase": "pre_main",
+  "on_the_play": true,
+  "mdfc_backs": ["Boulderloft Pathway", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Plains", "idx": 1, "num": 30, "is_land": true, "taps": "W" }], "vial_counters": [], "hand": [{ "num": 7, "name": "Bishop of Wings", "cost": "{W}{W}", "mv": 2, "kind": "permanent", "is_creature": true }, { "num": 15, "name": "Lyra Dawnbringer", "cost": "{3}{W}{W}", "mv": 5, "kind": "permanent", "is_creature": true }, { "num": 39, "name": "Resplendent Angel", "cost": "{1}{W}{W}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 47, "name": "Seraph Sanctuary", "cost": "", "mv": 0, "kind": "land" }, { "num": 59, "name": "Youthful Valkyrie", "cost": "{1}{W}", "mv": 2, "kind": "permanent", "is_creature": true }], "graveyard": [], "library_size": 54, "land_drops_left": 0 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "2/2 Creature", "idx": 0, "num": 500000, "is_land": false }] },
+  "plans": [
+    { "index": 0, "summary": "cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 5,
+  "type": "main_phase",
+  "turn": 1,
+  "phase": "post_main",
+  "on_the_play": true,
+  "mdfc_backs": ["Boulderloft Pathway", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Plains", "idx": 1, "num": 30, "is_land": true, "taps": "W" }], "vial_counters": [], "hand": [{ "num": 7, "name": "Bishop of Wings", "cost": "{W}{W}", "mv": 2, "kind": "permanent", "is_creature": true }, { "num": 15, "name": "Lyra Dawnbringer", "cost": "{3}{W}{W}", "mv": 5, "kind": "permanent", "is_creature": true }, { "num": 39, "name": "Resplendent Angel", "cost": "{1}{W}{W}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 47, "name": "Seraph Sanctuary", "cost": "", "mv": 0, "kind": "land" }, { "num": 59, "name": "Youthful Valkyrie", "cost": "{1}{W}", "mv": 2, "kind": "permanent", "is_creature": true }], "graveyard": [], "library_size": 54, "land_drops_left": 0 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "2/2 Creature", "idx": 0, "num": 500000, "is_land": false }] },
+  "plans": [
+    { "index": 0, "summary": "cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
+}
+},
+    { "chosen": 2, "decision": {
+  "decision_index": 6,
+  "main_ordinal": 1,
+  "type": "main_phase",
+  "turn": 2,
+  "phase": "pre_main",
+  "on_the_play": true,
+  "drew": [{ "turn": 2, "card": "Plains" }],
+  "mdfc_backs": ["Boulderloft Pathway", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Plains", "idx": 1, "num": 30, "is_land": true, "taps": "W" }], "vial_counters": [], "hand": [{ "num": 7, "name": "Bishop of Wings", "cost": "{W}{W}", "mv": 2, "kind": "permanent", "is_creature": true }, { "num": 15, "name": "Lyra Dawnbringer", "cost": "{3}{W}{W}", "mv": 5, "kind": "permanent", "is_creature": true }, { "num": 27, "name": "Plains", "cost": "", "mv": 0, "kind": "land" }, { "num": 39, "name": "Resplendent Angel", "cost": "{1}{W}{W}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 47, "name": "Seraph Sanctuary", "cost": "", "mv": 0, "kind": "land" }, { "num": 59, "name": "Youthful Valkyrie", "cost": "{1}{W}", "mv": 2, "kind": "permanent", "is_creature": true }], "graveyard": [], "library_size": 53, "land_drops_left": 1 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "2/2 Creature", "idx": 0, "num": 500000, "is_land": false }, { "name": "2/2 Creature", "idx": 2, "num": 500001, "is_land": false }] },
+  "plans": [
+    { "index": 0, "summary": "land=Seraph Sanctuary; cast: Youthful Valkyrie", "land": "Seraph Sanctuary", "casts": ["Youthful Valkyrie"], "actions": [{ "card": "Youthful Valkyrie" }] },
+    { "index": 1, "summary": "land=Plains; cast: Youthful Valkyrie", "land": "Plains", "casts": ["Youthful Valkyrie"], "actions": [{ "card": "Youthful Valkyrie" }] },
+    { "index": 2, "summary": "land=Plains; cast: Bishop of Wings", "land": "Plains", "casts": ["Bishop of Wings"], "actions": [{ "card": "Bishop of Wings" }] },
+    { "index": 3, "summary": "land=Seraph Sanctuary; cast: (nothing)", "land": "Seraph Sanctuary", "casts": [], "actions": [] },
+    { "index": 4, "summary": "land=Plains; cast: (nothing)", "land": "Plains", "casts": [], "actions": [] },
+    { "index": 5, "summary": "land=none; cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 7,
+  "type": "main_phase",
+  "turn": 2,
+  "phase": "pre_main",
+  "on_the_play": true,
+  "mdfc_backs": ["Boulderloft Pathway", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Bishop of Wings", "idx": 4, "num": 7, "is_land": false }, { "name": "Plains", "idx": 1, "num": 30, "tapped": true, "is_land": true }, { "name": "Plains", "idx": 3, "num": 27, "tapped": true, "is_land": true }], "vial_counters": [], "hand": [{ "num": 15, "name": "Lyra Dawnbringer", "cost": "{3}{W}{W}", "mv": 5, "kind": "permanent", "is_creature": true }, { "num": 39, "name": "Resplendent Angel", "cost": "{1}{W}{W}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 47, "name": "Seraph Sanctuary", "cost": "", "mv": 0, "kind": "land" }, { "num": 59, "name": "Youthful Valkyrie", "cost": "{1}{W}", "mv": 2, "kind": "permanent", "is_creature": true }], "graveyard": [], "library_size": 53, "land_drops_left": 0 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "2/2 Creature", "idx": 0, "num": 500000, "is_land": false }, { "name": "2/2 Creature", "idx": 2, "num": 500001, "is_land": false }] },
+  "plans": [
+    { "index": 0, "summary": "cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 8,
+  "type": "main_phase",
+  "turn": 2,
+  "phase": "post_main",
+  "on_the_play": true,
+  "mdfc_backs": ["Boulderloft Pathway", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Bishop of Wings", "idx": 4, "num": 7, "is_land": false }, { "name": "Plains", "idx": 1, "num": 30, "tapped": true, "is_land": true }, { "name": "Plains", "idx": 3, "num": 27, "tapped": true, "is_land": true }], "vial_counters": [], "hand": [{ "num": 15, "name": "Lyra Dawnbringer", "cost": "{3}{W}{W}", "mv": 5, "kind": "permanent", "is_creature": true }, { "num": 39, "name": "Resplendent Angel", "cost": "{1}{W}{W}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 47, "name": "Seraph Sanctuary", "cost": "", "mv": 0, "kind": "land" }, { "num": 59, "name": "Youthful Valkyrie", "cost": "{1}{W}", "mv": 2, "kind": "permanent", "is_creature": true }], "graveyard": [], "library_size": 53, "land_drops_left": 0 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "2/2 Creature", "idx": 0, "num": 500000, "is_land": false }, { "name": "2/2 Creature", "idx": 2, "num": 500001, "is_land": false }] },
+  "plans": [
+    { "index": 0, "summary": "cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
+}
+},
+    { "chosen": 0, "decision": {
+  "decision_index": 9,
+  "main_ordinal": 2,
+  "type": "main_phase",
+  "turn": 3,
+  "phase": "pre_main",
+  "on_the_play": true,
+  "drew": [{ "turn": 3, "card": "Unexpectedly Absent" }],
+  "mdfc_backs": ["Boulderloft Pathway", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Bishop of Wings", "idx": 4, "num": 7, "is_land": false }, { "name": "Plains", "idx": 1, "num": 30, "is_land": true, "taps": "W" }, { "name": "Plains", "idx": 3, "num": 27, "is_land": true, "taps": "W" }], "vial_counters": [], "hand": [{ "num": 15, "name": "Lyra Dawnbringer", "cost": "{3}{W}{W}", "mv": 5, "kind": "permanent", "is_creature": true }, { "num": 39, "name": "Resplendent Angel", "cost": "{1}{W}{W}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 47, "name": "Seraph Sanctuary", "cost": "", "mv": 0, "kind": "land" }, { "num": 54, "name": "Unexpectedly Absent", "cost": "{X}{W}{W}", "mv": 2, "kind": "nonpermanent" }, { "num": 59, "name": "Youthful Valkyrie", "cost": "{1}{W}", "mv": 2, "kind": "permanent", "is_creature": true }], "graveyard": [], "library_size": 52, "land_drops_left": 1 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "2/2 Creature", "idx": 0, "num": 500000, "is_land": false }, { "name": "2/2 Creature", "idx": 2, "num": 500001, "is_land": false }, { "name": "2/2 Creature", "idx": 5, "num": 500002, "is_land": false }] },
+  "plans": [
+    { "index": 0, "summary": "land=Seraph Sanctuary; cast: Resplendent Angel", "land": "Seraph Sanctuary", "casts": ["Resplendent Angel"], "actions": [{ "card": "Resplendent Angel" }] },
+    { "index": 1, "summary": "land=Seraph Sanctuary; cast: Youthful Valkyrie", "land": "Seraph Sanctuary", "casts": ["Youthful Valkyrie"], "actions": [{ "card": "Youthful Valkyrie" }] },
+    { "index": 2, "summary": "land=none; cast: Youthful Valkyrie", "land": null, "casts": ["Youthful Valkyrie"], "actions": [{ "card": "Youthful Valkyrie" }] },
+    { "index": 3, "summary": "land=Seraph Sanctuary; cast: Unexpectedly Absent", "land": "Seraph Sanctuary", "casts": ["Unexpectedly Absent"], "actions": [{ "card": "Unexpectedly Absent" }] },
+    { "index": 4, "summary": "land=Seraph Sanctuary; cast: Unexpectedly Absent", "land": "Seraph Sanctuary", "casts": ["Unexpectedly Absent"], "actions": [{ "card": "Unexpectedly Absent", "x": 1 }] },
+    { "index": 5, "summary": "land=none; cast: Unexpectedly Absent", "land": null, "casts": ["Unexpectedly Absent"], "actions": [{ "card": "Unexpectedly Absent" }] },
+    { "index": 6, "summary": "land=Seraph Sanctuary; cast: (nothing)", "land": "Seraph Sanctuary", "casts": [], "actions": [] },
+    { "index": 7, "summary": "land=none; cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 10,
+  "type": "main_phase",
+  "turn": 3,
+  "phase": "pre_main",
+  "on_the_play": true,
+  "events": [{ "turn": 3, "kind": "drain", "text": "💚 Resplendent Angel entered — Bishop of Wings, Seraph Sanctuary: you +5 (21→26)" }],
+  "mdfc_backs": ["Boulderloft Pathway", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 26, "battlefield": [{ "name": "Bishop of Wings", "idx": 4, "num": 7, "is_land": false }, { "name": "Plains", "idx": 1, "num": 30, "tapped": true, "is_land": true }, { "name": "Plains", "idx": 3, "num": 27, "tapped": true, "is_land": true }, { "name": "Resplendent Angel", "idx": 7, "num": 39, "is_land": false }, { "name": "Seraph Sanctuary", "idx": 6, "num": 47, "tapped": true, "is_land": true }], "vial_counters": [], "hand": [{ "num": 15, "name": "Lyra Dawnbringer", "cost": "{3}{W}{W}", "mv": 5, "kind": "permanent", "is_creature": true }, { "num": 54, "name": "Unexpectedly Absent", "cost": "{X}{W}{W}", "mv": 2, "kind": "nonpermanent" }, { "num": 59, "name": "Youthful Valkyrie", "cost": "{1}{W}", "mv": 2, "kind": "permanent", "is_creature": true }], "graveyard": [], "library_size": 52, "land_drops_left": 0 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "2/2 Creature", "idx": 0, "num": 500000, "is_land": false }, { "name": "2/2 Creature", "idx": 2, "num": 500001, "is_land": false }, { "name": "2/2 Creature", "idx": 5, "num": 500002, "is_land": false }] },
+  "plans": [
+    { "index": 0, "summary": "cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 11,
+  "type": "main_phase",
+  "turn": 3,
+  "phase": "post_main",
+  "on_the_play": true,
+  "events": [{ "turn": 3, "kind": "combat", "text": "⚔ attacked: Bishop of Wings (1) — 1 to opponent (20→19)" }],
+  "mdfc_backs": ["Boulderloft Pathway", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 26, "battlefield": [{ "name": "Bishop of Wings", "idx": 4, "num": 7, "tapped": true, "is_land": false }, { "name": "Plains", "idx": 1, "num": 30, "tapped": true, "is_land": true }, { "name": "Plains", "idx": 3, "num": 27, "tapped": true, "is_land": true }, { "name": "Resplendent Angel", "idx": 7, "num": 39, "is_land": false }, { "name": "Seraph Sanctuary", "idx": 6, "num": 47, "tapped": true, "is_land": true }], "vial_counters": [], "hand": [{ "num": 15, "name": "Lyra Dawnbringer", "cost": "{3}{W}{W}", "mv": 5, "kind": "permanent", "is_creature": true }, { "num": 54, "name": "Unexpectedly Absent", "cost": "{X}{W}{W}", "mv": 2, "kind": "nonpermanent" }, { "num": 59, "name": "Youthful Valkyrie", "cost": "{1}{W}", "mv": 2, "kind": "permanent", "is_creature": true }], "graveyard": [], "library_size": 52, "land_drops_left": 0 },
+  "opponent": { "life": 19, "battlefield": [{ "name": "2/2 Creature", "idx": 0, "num": 500000, "is_land": false }, { "name": "2/2 Creature", "idx": 2, "num": 500001, "is_land": false }, { "name": "2/2 Creature", "idx": 5, "num": 500002, "is_land": false }] },
+  "plans": [
+    { "index": 0, "summary": "cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
+}
+},
+    { "chosen": 1, "decision": {
+  "decision_index": 12,
+  "main_ordinal": 3,
+  "type": "main_phase",
+  "turn": 4,
+  "phase": "pre_main",
+  "on_the_play": true,
+  "drew": [{ "turn": 4, "card": "Plains" }],
+  "events": [{ "turn": 3, "kind": "drain", "text": "💚 4/4 Angel Token entered — Bishop of Wings, Seraph Sanctuary: you +5 (26→31)" }],
+  "mdfc_backs": ["Boulderloft Pathway", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 31, "battlefield": [{ "name": "4/4 Angel Token", "idx": 8, "num": 1000, "is_land": false }, { "name": "Bishop of Wings", "idx": 4, "num": 7, "is_land": false }, { "name": "Plains", "idx": 1, "num": 30, "is_land": true, "taps": "W" }, { "name": "Plains", "idx": 3, "num": 27, "is_land": true, "taps": "W" }, { "name": "Resplendent Angel", "idx": 7, "num": 39, "is_land": false }, { "name": "Seraph Sanctuary", "idx": 6, "num": 47, "is_land": true, "taps": "C" }], "vial_counters": [], "hand": [{ "num": 15, "name": "Lyra Dawnbringer", "cost": "{3}{W}{W}", "mv": 5, "kind": "permanent", "is_creature": true }, { "num": 35, "name": "Plains", "cost": "", "mv": 0, "kind": "land" }, { "num": 54, "name": "Unexpectedly Absent", "cost": "{X}{W}{W}", "mv": 2, "kind": "nonpermanent" }, { "num": 59, "name": "Youthful Valkyrie", "cost": "{1}{W}", "mv": 2, "kind": "permanent", "is_creature": true }], "graveyard": [], "library_size": 51, "land_drops_left": 1 },
+  "opponent": { "life": 19, "battlefield": [{ "name": "2/2 Creature", "idx": 0, "num": 500000, "is_land": false }, { "name": "2/2 Creature", "idx": 2, "num": 500001, "is_land": false }, { "name": "2/2 Creature", "idx": 5, "num": 500002, "is_land": false }] },
+  "plans": [
+    { "index": 0, "summary": "land=Plains; cast: Unexpectedly Absent, Youthful Valkyrie", "land": "Plains", "casts": ["Unexpectedly Absent", "Youthful Valkyrie"], "cast_order_canonical": ["Youthful Valkyrie", "Unexpectedly Absent"], "actions": [{ "card": "Unexpectedly Absent" }, { "card": "Youthful Valkyrie" }] },
+    { "index": 1, "summary": "land=Plains; cast: Youthful Valkyrie", "land": "Plains", "casts": ["Youthful Valkyrie"], "actions": [{ "card": "Youthful Valkyrie" }] },
+    { "index": 2, "summary": "land=none; cast: Youthful Valkyrie", "land": null, "casts": ["Youthful Valkyrie"], "actions": [{ "card": "Youthful Valkyrie" }] },
+    { "index": 3, "summary": "land=Plains; cast: Unexpectedly Absent", "land": "Plains", "casts": ["Unexpectedly Absent"], "actions": [{ "card": "Unexpectedly Absent" }] },
+    { "index": 4, "summary": "land=Plains; cast: Unexpectedly Absent", "land": "Plains", "casts": ["Unexpectedly Absent"], "actions": [{ "card": "Unexpectedly Absent", "x": 1 }] },
+    { "index": 5, "summary": "land=Plains; cast: Unexpectedly Absent", "land": "Plains", "casts": ["Unexpectedly Absent"], "actions": [{ "card": "Unexpectedly Absent", "x": 2 }] },
+    { "index": 6, "summary": "land=none; cast: Unexpectedly Absent", "land": null, "casts": ["Unexpectedly Absent"], "actions": [{ "card": "Unexpectedly Absent" }] },
+    { "index": 7, "summary": "land=none; cast: Unexpectedly Absent", "land": null, "casts": ["Unexpectedly Absent"], "actions": [{ "card": "Unexpectedly Absent", "x": 1 }] },
+    { "index": 8, "summary": "land=Plains; cast: (nothing)", "land": "Plains", "casts": [], "actions": [] },
+    { "index": 9, "summary": "land=none; cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 13,
+  "main_ordinal": 4,
+  "type": "main_phase",
+  "turn": 4,
+  "phase": "pre_main",
+  "on_the_play": true,
+  "events": [{ "turn": 4, "kind": "drain", "text": "💚 Youthful Valkyrie entered — Bishop of Wings, Seraph Sanctuary: you +5 (31→36)" }],
+  "mdfc_backs": ["Boulderloft Pathway", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 36, "battlefield": [{ "name": "4/4 Angel Token", "idx": 8, "num": 1000, "is_land": false }, { "name": "Bishop of Wings", "idx": 4, "num": 7, "is_land": false }, { "name": "Plains", "idx": 1, "num": 30, "tapped": true, "is_land": true }, { "name": "Plains", "idx": 3, "num": 27, "is_land": true, "taps": "W" }, { "name": "Plains", "idx": 9, "num": 35, "is_land": true, "taps": "W" }, { "name": "Resplendent Angel", "idx": 7, "num": 39, "is_land": false }, { "name": "Seraph Sanctuary", "idx": 6, "num": 47, "tapped": true, "is_land": true }, { "name": "Youthful Valkyrie", "idx": 10, "num": 59, "is_land": false }], "vial_counters": [], "hand": [{ "num": 15, "name": "Lyra Dawnbringer", "cost": "{3}{W}{W}", "mv": 5, "kind": "permanent", "is_creature": true }, { "num": 54, "name": "Unexpectedly Absent", "cost": "{X}{W}{W}", "mv": 2, "kind": "nonpermanent" }], "graveyard": [], "library_size": 51, "land_drops_left": 0 },
+  "opponent": { "life": 19, "battlefield": [{ "name": "2/2 Creature", "idx": 0, "num": 500000, "is_land": false }, { "name": "2/2 Creature", "idx": 2, "num": 500001, "is_land": false }, { "name": "2/2 Creature", "idx": 5, "num": 500002, "is_land": false }] },
+  "plans": [
+    { "index": 0, "summary": "land=none; cast: Unexpectedly Absent", "land": null, "casts": ["Unexpectedly Absent"], "actions": [{ "card": "Unexpectedly Absent" }] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 14,
+  "main_ordinal": 5,
+  "type": "main_phase",
+  "turn": 4,
+  "phase": "post_main",
+  "on_the_play": true,
+  "events": [{ "turn": 4, "kind": "combat", "text": "⚔ attacked: Bishop of Wings (1), Resplendent Angel (3), 4/4 Angel Token (4) — 8 to opponent (19→11)" }],
+  "mdfc_backs": ["Boulderloft Pathway", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 36, "battlefield": [{ "name": "4/4 Angel Token", "idx": 8, "num": 1000, "is_land": false }, { "name": "Bishop of Wings", "idx": 4, "num": 7, "tapped": true, "is_land": false }, { "name": "Plains", "idx": 1, "num": 30, "tapped": true, "is_land": true }, { "name": "Plains", "idx": 3, "num": 27, "is_land": true, "taps": "W" }, { "name": "Plains", "idx": 9, "num": 35, "is_land": true, "taps": "W" }, { "name": "Resplendent Angel", "idx": 7, "num": 39, "tapped": true, "is_land": false }, { "name": "Seraph Sanctuary", "idx": 6, "num": 47, "tapped": true, "is_land": true }, { "name": "Youthful Valkyrie", "idx": 10, "num": 59, "is_land": false }], "vial_counters": [], "hand": [{ "num": 15, "name": "Lyra Dawnbringer", "cost": "{3}{W}{W}", "mv": 5, "kind": "permanent", "is_creature": true }, { "num": 54, "name": "Unexpectedly Absent", "cost": "{X}{W}{W}", "mv": 2, "kind": "nonpermanent" }], "graveyard": [], "library_size": 51, "land_drops_left": 0 },
+  "opponent": { "life": 11, "battlefield": [{ "name": "2/2 Creature", "idx": 0, "num": 500000, "is_land": false }, { "name": "2/2 Creature", "idx": 2, "num": 500001, "is_land": false }, { "name": "2/2 Creature", "idx": 5, "num": 500002, "is_land": false }] },
+  "plans": [
+    { "index": 0, "summary": "land=none; cast: Unexpectedly Absent", "land": null, "casts": ["Unexpectedly Absent"], "actions": [{ "card": "Unexpectedly Absent" }] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
+}
+},
+    { "chosen": 0, "decision": {
+  "decision_index": 15,
+  "main_ordinal": 6,
+  "type": "main_phase",
+  "turn": 5,
+  "phase": "pre_main",
+  "on_the_play": true,
+  "drew": [{ "turn": 5, "card": "Plains" }],
+  "events": [{ "turn": 4, "kind": "ability", "text": "➕ Youthful Valkyrie: +1/+1 counter (Angel entered)" }, { "turn": 4, "kind": "drain", "text": "💚 4/4 Angel Token entered — Bishop of Wings, Seraph Sanctuary: you +5 (36→41)" }],
+  "mdfc_backs": ["Boulderloft Pathway", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 41, "battlefield": [{ "name": "4/4 Angel Token", "idx": 8, "num": 1000, "is_land": false }, { "name": "4/4 Angel Token", "idx": 11, "num": 1001, "is_land": false }, { "name": "Bishop of Wings", "idx": 4, "num": 7, "is_land": false }, { "name": "Plains", "idx": 1, "num": 30, "is_land": true, "taps": "W" }, { "name": "Plains", "idx": 3, "num": 27, "is_land": true, "taps": "W" }, { "name": "Plains", "idx": 9, "num": 35, "is_land": true, "taps": "W" }, { "name": "Resplendent Angel", "idx": 7, "num": 39, "is_land": false }, { "name": "Seraph Sanctuary", "idx": 6, "num": 47, "is_land": true, "taps": "C" }, { "name": "Youthful Valkyrie", "idx": 10, "num": 59, "is_land": false, "counters": [{ "kind": "p1p1", "label": "+1/+1", "count": 1 }] }], "vial_counters": [], "hand": [{ "num": 15, "name": "Lyra Dawnbringer", "cost": "{3}{W}{W}", "mv": 5, "kind": "permanent", "is_creature": true }, { "num": 34, "name": "Plains", "cost": "", "mv": 0, "kind": "land" }, { "num": 54, "name": "Unexpectedly Absent", "cost": "{X}{W}{W}", "mv": 2, "kind": "nonpermanent" }], "graveyard": [], "library_size": 50, "land_drops_left": 1 },
+  "opponent": { "life": 11, "battlefield": [{ "name": "2/2 Creature", "idx": 0, "num": 500000, "is_land": false }, { "name": "2/2 Creature", "idx": 2, "num": 500001, "is_land": false }, { "name": "2/2 Creature", "idx": 5, "num": 500002, "is_land": false }] },
+  "plans": [
+    { "index": 0, "summary": "land=Plains; cast: Lyra Dawnbringer", "land": "Plains", "casts": ["Lyra Dawnbringer"], "actions": [{ "card": "Lyra Dawnbringer" }] },
+    { "index": 1, "summary": "land=Plains; cast: Unexpectedly Absent", "land": "Plains", "casts": ["Unexpectedly Absent"], "actions": [{ "card": "Unexpectedly Absent" }] },
+    { "index": 2, "summary": "land=Plains; cast: Unexpectedly Absent", "land": "Plains", "casts": ["Unexpectedly Absent"], "actions": [{ "card": "Unexpectedly Absent", "x": 1 }] },
+    { "index": 3, "summary": "land=Plains; cast: Unexpectedly Absent", "land": "Plains", "casts": ["Unexpectedly Absent"], "actions": [{ "card": "Unexpectedly Absent", "x": 2 }] },
+    { "index": 4, "summary": "land=Plains; cast: Unexpectedly Absent", "land": "Plains", "casts": ["Unexpectedly Absent"], "actions": [{ "card": "Unexpectedly Absent", "x": 3 }] },
+    { "index": 5, "summary": "land=none; cast: Unexpectedly Absent", "land": null, "casts": ["Unexpectedly Absent"], "actions": [{ "card": "Unexpectedly Absent" }] },
+    { "index": 6, "summary": "land=none; cast: Unexpectedly Absent", "land": null, "casts": ["Unexpectedly Absent"], "actions": [{ "card": "Unexpectedly Absent", "x": 1 }] },
+    { "index": 7, "summary": "land=none; cast: Unexpectedly Absent", "land": null, "casts": ["Unexpectedly Absent"], "actions": [{ "card": "Unexpectedly Absent", "x": 2 }] },
+    { "index": 8, "summary": "land=Plains; cast: (nothing)", "land": "Plains", "casts": [], "actions": [] },
+    { "index": 9, "summary": "land=none; cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 16,
+  "type": "main_phase",
+  "turn": 5,
+  "phase": "pre_main",
+  "on_the_play": true,
+  "events": [{ "turn": 5, "kind": "ability", "text": "➕ Youthful Valkyrie: +1/+1 counter (Angel entered)" }, { "turn": 5, "kind": "drain", "text": "💚 Lyra Dawnbringer entered — Bishop of Wings, Seraph Sanctuary: you +5 (41→46)" }],
+  "mdfc_backs": ["Boulderloft Pathway", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 46, "battlefield": [{ "name": "4/4 Angel Token", "idx": 8, "num": 1000, "is_land": false }, { "name": "4/4 Angel Token", "idx": 11, "num": 1001, "is_land": false }, { "name": "Bishop of Wings", "idx": 4, "num": 7, "is_land": false }, { "name": "Lyra Dawnbringer", "idx": 13, "num": 15, "is_land": false }, { "name": "Plains", "idx": 1, "num": 30, "tapped": true, "is_land": true }, { "name": "Plains", "idx": 3, "num": 27, "tapped": true, "is_land": true }, { "name": "Plains", "idx": 9, "num": 35, "tapped": true, "is_land": true }, { "name": "Plains", "idx": 12, "num": 34, "tapped": true, "is_land": true }, { "name": "Resplendent Angel", "idx": 7, "num": 39, "is_land": false }, { "name": "Seraph Sanctuary", "idx": 6, "num": 47, "tapped": true, "is_land": true }, { "name": "Youthful Valkyrie", "idx": 10, "num": 59, "is_land": false, "counters": [{ "kind": "p1p1", "label": "+1/+1", "count": 2 }] }], "vial_counters": [], "hand": [{ "num": 54, "name": "Unexpectedly Absent", "cost": "{X}{W}{W}", "mv": 2, "kind": "nonpermanent" }], "graveyard": [], "library_size": 50, "land_drops_left": 0 },
+  "opponent": { "life": 11, "battlefield": [{ "name": "2/2 Creature", "idx": 0, "num": 500000, "is_land": false }, { "name": "2/2 Creature", "idx": 2, "num": 500001, "is_land": false }, { "name": "2/2 Creature", "idx": 5, "num": 500002, "is_land": false }] },
+  "plans": [
+    { "index": 0, "summary": "cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
+}
+}
+  ],
+  "final_events": [
+    { "turn": 5, "kind": "combat", "text": "⚔ attacked: Bishop of Wings (1), Resplendent Angel (4), 4/4 Angel Token (5), Youthful Valkyrie (4), 4/4 Angel Token (5) — 19 to opponent (11→-8)" }
+  ]
+}
