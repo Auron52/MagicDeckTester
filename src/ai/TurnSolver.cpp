@@ -47447,6 +47447,98 @@ TurnSolver::LineCheck TurnSolver::CheckLine(const GameState& state_in, bool is_p
         }
     }
 
+    // RESTRICTED-MANA gate: reject a line whose spell cannot be paid even when it is handed EVERY
+    // source it may legally spend, plus all of this line's own ramp.
+    //
+    // AvailableManaPool is FLAT -- it has no notion of a source whose mana only some spells may
+    // spend -- so both walks below would pay Serra the Benevolent's {2}{W}{W} with Giada, Font of
+    // Hope's "{T}: Add {W}. Spend this mana only to cast an ANGEL spell" and call the line
+    // rules-legal. USER, Angels s10/gi9 T3 (logs/play/rejections/Angels_cod_s10_gi9_t3.json): two
+    // Plains + Seraph Sanctuary ({C}) is three mana for a four-drop PLANESWALKER, and Giada's {W}
+    // may not be spent on it -- "should be fully illegal, not just not enumerated". The enumerator
+    // has always known this (BuildNonCreaturePool drops creature_mana_only sources; the real
+    // payment carries SpellSubtypePayScope); only CheckLine was reading the flat pool.
+    //
+    // Same shape as the colour gate above and the board_acts cost fix before it: an UPPER BOUND
+    // test, so it can only reject the genuinely unpayable. Every spell is priced as if it were the
+    // only one in the line (no contention) and credited with every producer the line casts (no
+    // ordering), which is why no legal line can trip it -- contention and order stay the business
+    // of the two walks below.
+    if (!pending.empty())
+    {
+        // What this line's own producers add, credited to every cast (order-free upper bound).
+        // Local twin of the greedy walk's addColorToPool, which is declared further down.
+        auto ramp_add = [](ManaPool& p, const std::string& col, int amt) {
+            if (amt <= 0) { return; }
+            if      (col == "W") { p.white     += amt; }
+            else if (col == "U") { p.blue      += amt; }
+            else if (col == "B") { p.black     += amt; }
+            else if (col == "R") { p.red       += amt; }
+            else if (col == "G") { p.green     += amt; }
+            else if (col == "C") { p.colorless += amt; }
+            else                 { p.wild      += amt; }
+        };
+        ManaPool ramp;
+        for (const PendingCast& pc : pending)
+        {
+            if (!pc.def) { continue; }
+            if (pc.rock)                    { AddSourceToPool(ramp, s, *pc.def); }
+            else if (IsManaRitual(*pc.def)) { ramp_add(ramp, pc.def->params.ritual_float_color,
+                                                       RitualFloatAmount(s, *pc.def, /*chosen_x=*/0)); }
+        }
+        for (const PendingCast& pc : pending)
+        {
+            if (pc.alt_free || pc.board_act || !pc.def) { continue; }  // no mana / not a hand cast
+            if (pc.full_cost.has_x)                     { continue; }  // X is the player's choice
+            // Everything this spell may legally spend: the unrestricted board, plus each restricted
+            // source whose own condition this spell satisfies.
+            ManaPool usable;
+            int gy_fuel = -1;
+            for (const Permanent& p : s.battlefield)
+            {
+                if (p.controller_index != s.active_player_index || p.tapped) { continue; }
+                const CardDefinition* pd = CardDatabase::Instance().LookupCached(p.card);
+                if (!pd) { continue; }
+                const bool is_land = (pd->tmpl == CardTemplate::BasicLand);
+                const bool is_dork = (pd->tmpl == CardTemplate::ManaDork && CanTapNow(p, s.battlefield))
+                                  || pd->params.mana_rock || PaySacSpendableNow(s, p, *pd);
+                if (!is_land && !is_dork) { continue; }
+                if (pd->params.gy_land_exile_mana)      // Deathrite: fuel-counted (mirrors the pools)
+                {
+                    if (gy_fuel < 0) { gy_fuel = GraveyardLandFuel(s, s.active_player_index); }
+                    if (gy_fuel <= 0) { continue; }
+                    --gy_fuel;
+                }
+                // The two restrictions the card data models. Ancient Ziggurat / Cavern of Souls
+                // collapse to creature_mana_only; Giada adds mana_only_subtype on top of it.
+                if (pd->params.creature_mana_only && !pc.def->card.IsCreature()) { continue; }
+                if (!pd->params.mana_only_subtype.empty())
+                {
+                    bool has_sub = false;
+                    for (const std::string& st : pc.def->card.m_subtypes)
+                    { if (st == pd->params.mana_only_subtype) { has_sub = true; break; } }
+                    if (!has_sub) { continue; }
+                }
+                AddSourceToPool(usable, s, *pd, PermanentManaYield(s, p, *pd), &p);
+            }
+            if (FloatLeftoverManaEnabled()) { usable.AddPool(s.floating_mana); }
+            usable.AddPool(ramp);
+            usable.wild += sac_wild;
+            if (usable.CanPay(pc.full_cost)) { continue; }
+            // Only blame the restriction when lifting it is what makes the cost payable -- otherwise
+            // this is a plain shortfall and the walks below will say so in their own words.
+            ManaPool flat = AvailableManaPool(s);
+            flat.AddPool(ramp); flat.wild += sac_wild;
+            if (!flat.CanPay(pc.full_cost)) { continue; }
+            out.verdict = V::Illegal; out.failed_action = "cast=" + pc.name;
+            out.reason = "can't pay for '" + pc.name + "': the mana is there, but some of it is "
+                         "restricted and '" + pc.name + "' may not spend it (a source like Giada, "
+                         "Font of Hope or Ancient Ziggurat only pays for spells matching its own "
+                         "condition)";
+            return out;
+        }
+    }
+
     // Greedy affordability fixpoint: repeatedly cast any affordable not-yet-cast spell,
     // mana producers FIRST so a freshly-cast rock's mana is online for the rest of the
     // line (the same-turn ramp the enumerator's AvailableManaPool does not credit). Order-
