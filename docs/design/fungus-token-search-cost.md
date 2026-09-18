@@ -216,6 +216,46 @@ Measured on the same game, cumulative with the subtype fix:
 Unlike token fusion this helps every deck, not just this one, and it leaves a mechanism in place:
 **the next cascade scan added should get a `deck_has_*` stamp rather than a `CardDatabase::Has*()`.**
 
+## Candidate: de-duplicate TOKEN CREATION — as a deck heuristic, not a general rule
+
+**User, 2026-09-17:** *"Cost-wise we should de-duplicate token creation. If you don't want a
+saproling token from source x, you also don't need to evaluate the token from source y, assuming
+both can create one."* And immediately after, the qualifier that decides where it goes:
+*"(this example is potentially a heuristic for this deck, since it really is not a general rule)"*.
+
+**That qualifier is the whole design.** The repo's core invariant is that only a deck/archetype
+provider may narrow the search; a generic limiter is forbidden. And the general rule really is
+false — two sources that both make "a 1/1 Saproling" are not interchangeable in general:
+
+* the costs differ (three spore counters off a specific body, vs mana, vs a sacrifice), and which
+  body paid decides what that body can do on a LATER turn;
+* the sources' own residual state differs (a Thallid left at 0 spore counters vs one left at 2);
+* one source may be doubled by Doubling Season and another not;
+* a source may itself be an attacker, or a sac-outlet's fodder.
+
+What IS true for this deck is narrower and worth measuring: across the Thallid family the bodies
+are near-interchangeable, so the *decline* branch is being re-evaluated once per source.
+
+**Existing machinery to build on rather than reinvent** (all in `src/ai/TurnSolver.cpp`):
+
+* `FinalizeFoldTags` + the `g_fold_*` counters — collapses interchangeable actions into one class,
+  but today it is offered `CastFromHand` candidates; the spore activation is an
+  `ActivatePermAbility` (`PermAbilityMode::SporeSaproling`), so it is almost certainly not covered.
+  **Check that first** — the fold may just need extending to the activation path.
+* `MTG_CAND_DEDUP` / `MTG_DEDUP_CENSUS` — skips a candidate whose post-apply state an earlier
+  sibling already reached. Measured at **64% of scored candidates on Snow**; default OFF because
+  it was built for speed and did not deliver it there. The census is the cheap first measurement
+  here: **run it on a Fungus slow game and read the dup rate before building anything.**
+* `MTG_FOLD_VERIFY` — the recoverability verifier, and the reason this can be done safely at all:
+  it asserts at runtime that every rejected selection has a legal, enumerable TWIN. That converts
+  "is this lossy?" from an argument into a check. Both holes fixed in `4b589c0d` were twin
+  failures it would have caught.
+
+**Order of work:** census the duplication rate → confirm the fold does not already cover the
+activation path → implement in a `FungusProvider` (which does not exist yet; see
+`fungus-second-main-and-devour.md`, which needs one for the same reason) → measure per
+`heuristic-optimization.md`, with `MTG_FOLD_VERIFY` armed.
+
 ## The direction that was guessed, and is now NOT the priority
 
 The repo already has a USER-blessed doctrine for exactly this shape: **fuse fungible tokens for the

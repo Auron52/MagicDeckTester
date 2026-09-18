@@ -1160,6 +1160,32 @@ void BounceKarooLand(GameState& state, int controller, int self_index)
     }
     if (pick < 0 || pick >= static_cast<int>(state.battlefield.size())) { return; }  // defensive
     Card c = state.battlefield[pick].card;
+    // ATTACHMENTS FALL OFF THE BOUNCED LAND (CR 704.5m / 301.5c) -- the same loop every other
+    // "permanent leaves the battlefield" site runs (combat death, the legend-rule sweep, the
+    // sacrifice paths). This one was MISSING, and it was not merely untidy: per-copy m_number is
+    // STABLE, so the aura kept pointing at the bounced land's number, and replaying that very same
+    // physical card RE-ATTACHED it for free. Traced end to end on a constructed board
+    // (test/scenarios/karoo_bounce_drops_land_aura.json):
+    //     T3  Forest#1 + Wild Growth#2 -> attachedTo:1
+    //     T3  play Simic Growth Chamber -> Forest#1 bounced to HAND, Wild Growth still attachedTo:1
+    //     T5  replay Forest#1           -> Wild Growth live again, two turns later, at no cost
+    // The error favours the AI, so the search can learn to "bounce and rebuy" an aura it never
+    // re-cast. USER-flagged 2026-09-17: "You need to be careful of bounce lands when there are land
+    // enchantments out."
+    //
+    // Zeroing (not graveyarding) is deliberate: it is exactly what the sibling sites do, so this
+    // stays consistent with the engine's existing model of a detached aura. Whether an orphaned
+    // Aura should instead go to the graveyard is a real CR 704.5m question, but it is the SAME
+    // question at all of those sites and is not this fix's business -- an aura at
+    // aura_attached_to == 0 contributes nothing, so it is inert either way.
+    {
+        const int gone_num = state.battlefield[pick].card.m_number;
+        for (Permanent& e : state.battlefield)
+        {
+            if (e.aura_attached_to == gone_num) { e.aura_attached_to = 0; }
+            if (e.equipped_to      == gone_num) { e.equipped_to      = 0; }
+        }
+    }
     c.m_is_staged = false;
     c.m_def = nullptr;
     state.players[controller].hand.push_back(c);

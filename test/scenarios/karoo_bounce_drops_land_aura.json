@@ -1,0 +1,19 @@
+{
+  "deck": "decks/Fungus/Fungus.cod",
+  "turn": 3,
+  "on_the_play": true,
+  "active_life": 20,
+  "opponent_life": 20,
+  "battlefield": [
+    { "name": "Forest", "controller": 0, "tapped": false },
+    { "name": "Wild Growth", "controller": 0, "tapped": false, "equips": "Forest" }
+  ],
+  "hand": ["Simic Growth Chamber"],
+  "library_filler": "Forest",
+  "library_size": 30,
+  "depth": 1,
+  "budget_ms": 50,
+  "max_turns": 5,
+  "expect_attachment": { "Wild Growth": "<none>" },
+  "comment": "A KAROO BOUNCE MUST DETACH AN AURA ON THE LAND IT RETURNS (CR 704.5m / 301.5c). BounceKarooLand erased the land without the attachment-falls-off loop every other leaves-the-battlefield site runs, and because per-copy m_number is STABLE the aura kept pointing at the bounced land's number -- so replaying that same physical card RE-ATTACHED it for free. Traced on this exact board before the fix: T3 Forest#1 + Wild Growth#2->attachedTo:1; T3 play Simic Growth Chamber bounces Forest#1 to HAND while Wild Growth stays attachedTo:1; T5 replay Forest#1 and the aura is live again, two turns later, at no cost. The error favours the AI (a free bounce-and-rebuy the search can learn to exploit), which is why it needs a pinned fixture rather than a comment. The board is constructed because an enchanted-land-bounced-by-its-own-karoo state is not reliably reached by seed-driven play, and the deck is Fungus because it runs both halves (2 Wild Growth, 3 Simic Growth Chamber). The assertion is on the REPLAY turn, not the bounce turn: expect_attachment resolves a host by battlefield m_number, so while the host sits in hand a stale pointer already reads as <none> and the bug would hide. USER-flagged 2026-09-17: 'You need to be careful of bounce lands when there are land enchantments out.'"
+}
