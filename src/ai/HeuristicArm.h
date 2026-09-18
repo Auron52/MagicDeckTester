@@ -208,6 +208,7 @@ enum Slot : int
     BP_NESTED_CANON_PLAYOUT,  // MTG_BP_NESTED_CANON_PLAYOUT  ...the nested default fires inside PLAYOUT applies too (uncharged wall)
     SAC_OUTLET_PAY,           // MTG_SAC_OUTLET_PAY        a sac-for-mana outlet's fodder is a LAST-RANKED payment source, not a searched action
     FOLD_COUNTER_SOURCES,     // MTG_FOLD_COUNTER_SOURCES  two same-named sources on the SAME counter count fold (the count joins the tag)
+    FUNGUS_SAC_DRAW_CLOCK,    // MTG_FUNGUS_SAC_DRAW_CLOCK  sac a Saproling to DRAW only when it is not already on the clock
     BP_CONDEMN_NEWOPT_BYNAME, // MTG_BP_CONDEMN_NEWOPT_BYNAME  a new card only earns the exclusive-slot exemption if its NAME was not already passed on
     COUNT
 };
@@ -387,6 +388,7 @@ inline const char* Name(int slot)
         "MTG_BP_NESTED_CANON_PLAYOUT",
         "MTG_SAC_OUTLET_PAY",
         "MTG_FOLD_COUNTER_SOURCES",
+        "MTG_FUNGUS_SAC_DRAW_CLOCK",
         "MTG_BP_CONDEMN_NEWOPT_BYNAME",
     };
     // The enum and this table are ONE mapping split across two lists: a slot added to one and not

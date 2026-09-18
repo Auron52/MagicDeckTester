@@ -19817,6 +19817,51 @@ void FungusCertReasonReport()
 namespace { struct FungusWhyDumper { ~FungusWhyDumper() { FungusCertReasonReport(); } };
             FungusWhyDumper g_fungus_why_dumper; }
 
+// USER 2026-09-18: "Sacrifice this saproling for a card when the creature doesn't move up our clock
+// and keep it when it does."
+//
+// WHY THIS HOOK, AND WHY ONLY THIS ONE. FodderSacUseful is consulted from the NON-MANA branch of the
+// sac-outlet enumeration only, so it reaches Psychotrope Thallid's "{1}, Sacrifice a Saproling: Draw
+// a card" and never Utopia Mycon's "Sacrifice a Saproling: Add one mana of any color". That is
+// exactly the right split, and it is the user's: the MANA sac's payoff is fully determined inside
+// the plan ("this lets me cast X"), so the search can price it honestly and should keep owning it.
+// The DRAW's payoff is only revealed by the card that comes up -- and Fungus runs no shuffle
+// effects, so its library is a fixed permutation from setup and the search's simulated draws come
+// from that same permutation. The draw decision is therefore STRUCTURALLY CLAIRVOYANT, and no
+// existing instrument decouples it: MTG_SHUFFLE_SALT_SEARCH salts mid-game RESHUFFLES, of which
+// this deck has none (verified: no card in the list carries a shuffle/tutor/fetch param).
+//
+// THE RULE. A Saproling made this turn is summoning-sick, so it contributes 0 damage AND -- because
+// Beastmaster Ascension's quest counters come from DECLARED ATTACKERS -- 0 quest counters this turn.
+// Eating one costs this turn's clock nothing on either axis. A Saproling that CAN attack costs both.
+// So: offer the draw only while some Saproling is off the clock; once every one of them is attacking,
+// keep them.
+//
+// NOT a dominance argument, and it must not be sold as one: the sacrificed body would have attacked
+// NEXT turn, and the objective is avg win turn, so this is a tempo trade. Hence the arm, default OFF.
+bool FungusProvider::FodderSacUseful(const GameState& s, const Permanent& src,
+                                     const CardDefinition& def) const
+{
+    static const bool env_on = EnvOn("MTG_FUNGUS_SAC_DRAW_CLOCK");
+    if (!heurarm::Flag(heurarm::FUNGUS_SAC_DRAW_CLOCK, env_on))
+    { return GenericProvider::FodderSacUseful(s, src, def); }
+    // Not the draw outlet -> unchanged. (Mycon reaches this function only if it ever loses its
+    // mana payload; the guard keeps the rule aimed at the draw regardless.)
+    if (def.params.sac_outlet_draw <= 0)
+    { return GenericProvider::FodderSacUseful(s, src, def); }
+
+    const int me = src.controller_index;
+    for (const Permanent& p : s.battlefield)
+    {
+        if (p.controller_index != me)                 { continue; }
+        if (!CardHasSubtype(p.card, "Saproling"))     { continue; }   // the outlet's own filter
+        if (&p == &src)                               { continue; }   // the outlet itself
+        // A body that cannot attack this turn is not on the clock, so spending it is free THIS turn.
+        if (!CanAttackFull(p, s.battlefield, me))     { return true; }
+    }
+    return false;
+}
+
 bool FungusProvider::ProvenWinlessThisTurn(const GameState& s, int me) const
 {
     if (!FungusCertOn())  { return false; }

@@ -1522,6 +1522,19 @@ public:
     // A correct certificate leaves LABELS identical too: it declines only lines that provably
     // cannot win this turn. Gated by MTG_FUNGUS_CERT for the A/B.
     bool ProvenWinlessThisTurn(const GameState& s, int controller) const override;
+
+    // USER 2026-09-18: *"Sacrifice this saproling for a card when the creature doesn't move up our
+    // clock and keep it when it does."* Gates ONLY the Psychotrope Thallid DRAW outlet -- the hook
+    // is consulted from the non-mana branch alone, so Utopia Mycon's sac-for-MANA is untouched and
+    // stays with the search, which is the right split: the mana sac's payoff is fully determined
+    // inside the plan ("this lets me cast X"), while the DRAW's payoff is only revealed by the card
+    // that comes up. Fungus runs no shuffle effects, so its library is a fixed permutation from
+    // setup and the search's simulated draws come from that same permutation -- i.e. the draw
+    // decision is STRUCTURALLY CLAIRVOYANT and no existing flag decouples it
+    // (MTG_SHUFFLE_SALT_SEARCH salts mid-game RESHUFFLES, of which this deck has none).
+    // Behind heurarm FUNGUS_SAC_DRAW_CLOCK, default OFF -> byte-identical.
+    bool FodderSacUseful(const GameState& s, const Permanent& src,
+                         const CardDefinition& def) const override;
 };
 
 // CritterLifegain (mono-white "whenever you gain life" aggro: Soul Warden / Soul's Attendant /
