@@ -421,6 +421,77 @@ static bool HandShedIsPayoff(const GameState& s, int controller)
     return false;
 }
 
+// Would a creature with THIS card's types entering under our control -- or dying, which is what the
+// legend rule immediately does to one of the two copies -- cause anything at all?
+//
+// The duplicate-legend prune's whole premise is that the cast is a TIE: the copy resolves, the
+// legend rule kills one, the board is unchanged. That premise is a claim about the BOARD, and the
+// template whitelist cannot see the board. Two decks in this repo break it outright:
+//
+//   * Angels. A second Lyra Dawnbringer (template lord_effect, so whitelisted) entering is
+//     "another Angel", so Righteous Valkyrie gains life equal to its TOUGHNESS, Bishop of Wings
+//     gains 4 and each Seraph Sanctuary gains 1 -- and per the official Archangel of Thune ruling
+//     those are SEPARATE life-gain events (CR 119.10), each of which puts a +1/+1 counter on the
+//     whole team through every Archangel of Thune and every Lyra, Archangel of Dawn. Then the
+//     legend-rule death is an Angel dying, so Bishop of Wings leaves a 1/1 flying Spirit behind.
+//   * Dragons / Dragonstorm. A second Lathliss, Dragon Queen (template vanilla_creature, so
+//     whitelisted) is "another nontoken Dragon you control", so the RESIDENT Lathliss creates a
+//     5/5 flier. The duplicate cast buys a 5/5 for {4}{R}{R} and the legend rule is just the price.
+//
+// Note what that second case shows: `vanilla_creature` is NOT "a body and nothing else". It is the
+// base template that params decorate, and Lathliss carries a full enter-watcher in params. So the
+// template test was never a sound proxy for enter-inertness even for the card itself.
+//
+// ENUMERATED IN THE GENEROUS DIRECTION ON PURPOSE, and subtype filters are honoured but never
+// required: a field missed here costs one extra plan variant in a state where nothing fires, while
+// the behaviour it replaces cost a real line. Same failure-direction argument the hook comment in
+// DecisionProvider.h already makes -- it just applied it to the wrong question.
+static bool DuplicateEntryOrDeathHasUpside(const GameState& s, int controller,
+                                           const CardDefinition& def)
+{
+    auto one = [&](const std::string& want)
+    {
+        if (want.empty()) { return true; }               // unfiltered watcher -> fires on anything
+        for (const std::string& cs : def.card.m_subtypes) { if (cs == want) { return true; } }
+        return false;
+    };
+    auto any = [&](const std::vector<std::string>& want)
+    {
+        if (want.empty()) { return true; }
+        for (const std::string& w : want) { if (one(w)) { return true; } }
+        return false;
+    };
+    for (const Permanent& p : s.battlefield)
+    {
+        if (p.controller_index != controller) { continue; }
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+        if (!d) { continue; }
+        const CardParams& wp = d->params;
+        // --- fires when another creature we control ENTERS ---
+        if (wp.any_creature_enters_lifegain > 0) { return true; }
+        if (any(wp.enters_watch_subtypes)
+            && (wp.own_creature_enters_lifegain > 0
+                || wp.own_creature_enters_lifegain_toughness
+                || wp.own_creature_enters_self_counters > 0
+                || wp.own_creature_enters_draw > 0))
+        { return true; }
+        // Giada-class CR 614 as-enters replacement (counters on the entering Angel).
+        if (wp.other_subtype_enters_counters_per_each > 0
+            && one(wp.other_subtype_enters_counters_subtype))
+        { return true; }
+        // Lathliss-class "whenever another <subtype> you control enters, create a token".
+        if (wp.etb_other_subtype_creates_tokens && one(wp.etb_token_requires_subtype))
+        { return true; }
+        // --- fires when a creature we control DIES; the legend rule is a death ---
+        if (wp.own_creature_dies_lifegain > 0) { return true; }
+        if ((wp.dies_trigger_creates_tokens > 0 || wp.dies_trigger_damage > 0
+             || wp.dies_trigger_impulse_exile)
+            && one(wp.dies_watch_subtype))
+        { return true; }
+    }
+    return false;
+}
+
 // Prune casting a legendary permanent we already control a copy of, when that card does nothing on
 // entry. See the hook comment in DecisionProvider.h for why the whitelist is positive rather than
 // an etb_* enumeration (the failure direction matters: a missed field would prune a GOOD cast).
@@ -448,6 +519,10 @@ bool DecisionProvider::OfferDuplicateLegendCast(const GameState& s, int controll
     {
         if (p.controller_index == controller && p.card.m_name == def.card.m_name)
         {
+            // ...unless the ENTRY or the legend-rule DEATH itself has upside, in which case the
+            // cast was never the tie this prune assumes (see DuplicateEntryOrDeathHasUpside above:
+            // a second Lathliss is a 5/5 Dragon token, a second Lyra Dawnbringer is three life-gain
+            // events, a team of +1/+1 counters and a Spirit).
             // ...unless emptying the hand is itself the payoff (see HandShedIsPayoff above): then
             // the cast is not the tie this prune assumes, and dropping it loses a real line.
             //
@@ -467,6 +542,19 @@ bool DecisionProvider::OfferDuplicateLegendCast(const GameState& s, int controll
             // exactly the rejection this fix exists to remove; the human path is d0 without being
             // greedy, since a person, not the static scorer, is choosing.
             if (!HumanPlayActive() && !g_searched_play) { return false; }
+            if (DuplicateEntryOrDeathHasUpside(s, controller, def)) { return true; }
+            // ...and, for searched/human play only, offer the duplicate whenever its ENTRY or its
+            // legend-rule DEATH has upside (DuplicateEntryOrDeathHasUpside above: a second Lathliss
+            // is a 5/5 Dragon token; a second Lyra Dawnbringer is three life-gain events, a
+            // team-wide counter from every Archangel of Thune and a Bishop of Wings Spirit).
+            //
+            // BELOW the greedy gate, and that placement is MEASURED, not assumed. Offering it at
+            // autonomous d0 too reproduced the 2026-08-29 carve-out exactly -- smoke [searched]
+            // 0 slower / 1 faster / 23 play-changed, but [d0] 7 slower / 4 faster / 47
+            // play-changed. Same cause the carve-out already records: at depth 0 an extra plan
+            // variant is not searched, it is picked by enumeration order, and the static scorer
+            // takes a body it cannot see the legend rule about to eat. Gated here, d0 stays
+            // byte-identical and only the searched tiers move.
             return HandShedIsPayoff(s, controller);
         }
     }

@@ -1921,6 +1921,24 @@ public:
     // inertness instead would fail the wrong way: miss one field and a genuinely good cast is
     // pruned. Muxus (etb_reveal_count: a second copy really does fire the reveal) is `custom` and
     // so is never pruned, which is the behaviour that must not regress.
+    //
+    // CORRECTED 2026-09-18 (user: "we need to avoid pruning legendary creatures in any cases where
+    // them entering or dying has upside"). THE TEMPLATE TEST ANSWERS THE WRONG QUESTION. "Does this
+    // card do something on entry?" is not the same as "does this card ENTERING cause anything?" --
+    // the second depends on the BOARD, and on params the template name does not imply:
+    //   * `vanilla_creature` is not "a body and nothing else", it is the base template that params
+    //     decorate. Lathliss, Dragon Queen is vanilla_creature AND carries a full enter-watcher
+    //     (etb_other_subtype_creates_tokens), so a second Lathliss makes the resident one create a
+    //     5/5 flier -- a duplicate cast that buys a 5/5 for {4}{R}{R} was being pruned outright.
+    //   * even a genuinely inert body is not inert in a TRIBAL deck: a second Lyra Dawnbringer
+    //     (lord_effect) entering triggers Righteous Valkyrie, Bishop of Wings and four Seraph
+    //     Sanctuaries -- separate life-gain events, each a team-wide +1/+1 through every Archangel
+    //     of Thune -- and its legend-rule death then leaves a Bishop of Wings Spirit.
+    // So the whitelist is now a NECESSARY condition, not a sufficient one:
+    // DuplicateEntryOrDeathHasUpside (DecisionProviders.cpp) vetoes the prune whenever any
+    // enter-watcher or dies-watcher we control could fire on the entering card's types. It is
+    // enumerated generously for the same failure-direction reason stated above -- which is the
+    // argument this comment was already making, applied to the question that actually matters.
     virtual bool OfferDuplicateLegendCast(const GameState& s, int controller,
                                           const CardDefinition& def) const;
 

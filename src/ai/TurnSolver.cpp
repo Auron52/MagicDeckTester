@@ -11970,7 +11970,11 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
         // Duplicate legend with nothing on entry: the legend rule kills it the moment it resolves,
         // so the cast buys nothing and costs a card plus this turn's mana. Provider-owned, and a
         // PRUNE rather than a ranking -- it drops a plan variant that cannot be better, which
-        // matters because variants share a fixed rollout budget. Default off (MTG_PRUNE_DUP_LEGEND).
+        // matters because variants share a fixed rollout budget. Default ON
+        // (EnvOn("MTG_PRUNE_DUP_LEGEND", true); =0 restores the old always-offer behaviour).
+        // "NOTHING ON ENTRY" IS THE WHOLE PRECONDITION and it is checked, not assumed: the provider
+        // vetoes the prune when the duplicate's ENTRY or its legend-rule DEATH has upside, because
+        // then the cast was never the tie this prune is named after.
         if (!ResolveProvider(state).OfferDuplicateLegendCast(state, state.active_player_index, def))
         { continue; }
         // Suspend-only cards (Lotus Bloom, mana_cost "") have NO normal cost -- they can ONLY be
