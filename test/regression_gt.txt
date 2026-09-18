@@ -1,4 +1,4 @@
-# Regression ground truth -- commit 68a9cfc7  date 2026-09-18
+# Regression ground truth -- commit 79d2016f  date 2026-09-18
 # Promoted from accepted runs by 'regression.sh --accept' -- do not hand-edit.
 # Key: <deck>_<mode>_d<depth>_s<seed> = <avg>[/<play_digest>]   (avg = mean turn-to-win, unwon = max_turns+1)
 # Modes: smoke (<15m), regression (<45m), overnight (<8h); seeds disjoint.
@@ -309,7 +309,7 @@ goblins_overnight_d3_s5005=3.7910/a4609f2246388696
 goblins_overnight_d3_s6006=3.8150/183d2699120b40b5
 goblins_overnight_d3_s7007=3.8080/fccbb86896222969
 goblins_overnight_d5_s4004=3.8290/ccf761585a1c2c25
-goblins_overnight_d5_s5005=3.7910/16bebc4df465897d
+goblins_overnight_d5_s5005=3.7910/4a76955f5f112372
 goblins_overnight_d5_s6006=3.8160/d207a8768d063671
 goblins_overnight_d5_s7007=3.8080/a0f37aebfe94b6b7
 creature_giving_overnight_d0_s4004=5.5915/c723d70174e5df30
