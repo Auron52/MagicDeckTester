@@ -1,9 +1,17 @@
 # Fitting Lightstall Inquisitor, Lyra Archangel of Dawn and Remote Farm into Angels
 
-**Status:** screening IN PROGRESS 2026-09-18. Cards are IMPLEMENTED and committed (`037bb8c5`);
-**no decklist has been changed** — `decks/Angels/Angels.cod` is untouched and adoption is the
-user's call. This doc is the record of what was measured and, more importantly, of what the
-measurements CANNOT see.
+**Status:** screening COMPLETE 2026-09-18, one recommendation, held out and confirmed. Cards are
+IMPLEMENTED and committed (`037bb8c5`); **no decklist has been changed** — `decks/Angels/Angels.cod`
+is untouched and adoption is the user's call. This doc is the record of what was measured and, more
+importantly, of what the measurements CANNOT see.
+
+**The answer, in one line:** adopt **4 Lyra, Archangel of Dawn** (cutting all 3 Lyra Dawnbringer and
+1 Archangel of Thune), **4 Remote Farm** and the Azorius Chancery's slot, and — the finding nobody
+was looking for — **raise Giada, Font of Hope 2 → 4**. Worth **−0.303 / −0.326 / −0.369** turns at
+20 / 30(2HG) / 40 life over 80,000 held-out games per format. Full list under
+*THE RECOMMENDED LIST* below.
+
+**Scale:** ~4.5 million games across six screens, three formats, all arms deck-construction legal.
 
 **User framing (2026-09-18):** *"figuring out how to fit in the new cards … I'm guessing we'll want
 to drop at least 1 or 2 if not 3-4 5-drops"*; Swords and Unexpectedly are **not** candidates
@@ -17,15 +25,36 @@ able to evaluate most possibilities."*
 | card | what it is | what the sim sees |
 |---|---|---|
 | **Lyra, Archangel of Dawn** `{2}{W}` 3/3 Legendary Angel Knight, Flying | "Whenever you gain life, put a +1/+1 counter on each Angel you control" — Archangel of Thune narrowed to Angels | **Nearly everything.** Fully modelled. In this deck every creature but Bishop of Wings is an Angel, so she is close to a 3-mana Thune. NOT a 5-drop: she is a **three**-drop. |
-| **Lightstall Inquisitor** `{W}` 2/1 Angel Wizard, Vigilance | ETB: each opponent exiles a card and may play it, taxed `{1}` | **Only the body.** The ETB is structurally inert (no opponent cast path) and vigilance is inert (the opponent never attacks). What is left is a ONE-MANA ANGEL, i.e. the cheapest possible lifegain trigger for Bishop of Wings / Righteous Valkyrie / Seraph Sanctuary / Giada. A screen that likes this card is liking the enabler, never the disruption. |
+| **Lightstall Inquisitor** `{W}` 2/1 Angel Wizard, Vigilance | ETB: each opponent exiles a card from hand and may play it, taxed `{1}`, lands tapped | **Only the body.** The ETB is structurally inert (no opponent cast path) and vigilance is inert (the opponent never attacks). What is left is a ONE-MANA ANGEL, i.e. the cheapest possible lifegain trigger for Bishop of Wings / Righteous Valkyrie / Seraph Sanctuary / Giada. A screen that likes this card is liking the enabler, never the rider — and the rider is a small tax, not disruption. |
 | **Remote Farm** (land) | enters tapped w/ 2 depletion counters; `{T}`, remove one: add `{W}{W}`; sacrifice at zero | **The upside only** — see below. |
+
+## LEGALITY BOUNDS THE SEARCH — and screens 1–3 crossed it
+
+**Nothing in this toolchain enforces the four-copy rule.** `deck_compare.py` validates that an arm
+is 60 cards; it does not validate that the 60 are legal. Checked in `cards.json`:
+
+| card | `supertypes` | copy cap |
+|---|---|---|
+| Plains | `["Basic"]` | unlimited |
+| **Remote Farm** | `None` — a *nonbasic* land | **4** |
+| **Lightstall Inquisitor** | `None` | **4** |
+| **Lyra, Archangel of Dawn** | `["Legendary"]` | **4** |
+| Legion Angel | `None` | **4** — already at cap (1 main + 3 side) |
+
+So **`rf6`, `rf8`, `lad5` and `lad6` are deck-construction-illegal and cannot be adopted at any
+measured value.** They were the top arms of screens 1–3. Every arm from screen 4 onward is checked
+against this table before it is run.
+
+This also *partly dissolves* the caveat below: the legal maximum for both Lyra and Remote Farm is 4,
+so "monotone out to 6 or 8" is no longer a question anyone has to answer. What remains is whether
+the shape is monotone *within* 0–4, which screen 4's ladders measure directly.
 
 ## THE CENTRAL CAVEAT: two results are monotone to the edge of the tested range
 
 Both `Remote Farm count` and `Lyra count` kept improving at every step out to the largest value
-tested (8 Remote Farm; 6 Lyra). **A real cost curve bends. Monotone-to-the-boundary is the
-signature of a cost the model never pays**, and in both cases the mechanism is the same and is
-measured:
+tested (8 Remote Farm; 6 Lyra) — **both past the legal cap of 4**. **A real cost curve bends.
+Monotone-to-the-boundary is the signature of a cost the model never pays**, and in both cases the
+mechanism is the same and is measured:
 
 * **Remote Farm.** Of the copies that reach the battlefield, **only 7% ever spend both counters and
   sacrifice themselves; 82% are tapped exactly once.** The deck wins around turn 5.3, so Remote
@@ -93,15 +122,132 @@ t = −18.83.** Lyra is worth significantly MORE the longer the game runs.
 | `lad4_rf2` / `rf4` / `rf6` | −0.2123 / −0.2698 / −0.3221 | −0.2605 / −0.3072 / −0.3488 |
 | `lad4_rf4_li2` | −0.3211 | −0.3222 |
 
-### Screen 3 — the life SLOPE, 20/40/60 life (`spec3_slope.json`) — IN FLIGHT
+### Screen 3 — the life SLOPE, 20/40/60 life (`spec3_slope.json`) — LANDED
 
-Launched 2026-09-18, log `logs/deckcmp/angels_newcards/screen3.log`. Arms: `lad4`, `lad6`,
-`lad4_li2`, `lad4_rf2`, `lad4_rf6`, `rf6_only`. **How to read it:** the question is the SLOPE of
-each arm's delta against starting life, because that is the closest available proxy for the cost
-the sim cannot bill. An arm whose advantage GROWS with life (Lyra) is a real engine; one whose
-advantage SHRINKS (Lightstall, and possibly high Remote Farm counts) is buying tempo the real game
-will not pay for. If `lad6 − lad4` shrinks as life rises, that is the dead-legend cost becoming
-visible and argues for the lower count.
+21 cells × 20,000 games, `max_turns` 18, log `logs/deckcmp/angels_newcards/screen3.log`. The
+question is the SLOPE of each arm's delta against starting life — the closest available proxy for
+the cost the sim cannot bill. An arm whose advantage GROWS with life is a real engine; one whose
+advantage SHRINKS is buying tempo the longer game will not pay for.
+
+| arm | Δ @20 | Δ @40 | Δ @60 | **slope (L60−L20)** | t | read |
+|---|---|---|---|---|---|---|
+| `lad4` | −0.1406 | −0.2024 | −0.2076 | **−0.0669** | −18.42 | grows — real engine |
+| `lad6` *(illegal)* | −0.1845 | −0.2547 | −0.2439 | −0.0594 | −13.75 | grows |
+| `lad4_rf2` | −0.2139 | −0.2591 | −0.2368 | −0.0229 | −5.30 | grows, then flattens |
+| `lad4_li2` | −0.1985 | −0.2212 | −0.1797 | **+0.0188** | **+4.31** | **SIGN FLIP** |
+| `lad4_rf6` *(illegal)* | −0.3229 | −0.3460 | −0.2858 | **+0.0370** | +7.45 | decays |
+| `rf6_only` *(illegal)* | −0.1555 | −0.1580 | **−0.0730** | **+0.0825** | **+19.80** | **collapses by half** |
+
+**This is the bend the earlier screens could not produce, and it is unambiguous.**
+
+* **`rf6_only` loses half its value between 40 and 60 life** (−0.158 → −0.073, t = +19.80). That is
+  the depletion-sacrifice bill finally arriving: given a long enough game, the deck *does* run its
+  Remote Farms out and sacrifice them. The cost is real, the sim can price it, and 20 life simply
+  is not long enough to see it. Remote Farm is a **tempo land**, correctly valued only against a
+  stated game length.
+* **`lad4_li2` flips sign.** At 20 life adding 2 Lightstall beats `lad4` (−0.1985 vs −0.1406); at
+  60 life it is *worse* than `lad4` (−0.1797 vs −0.2076). Lightstall Inquisitor does not merely
+  fade in long games — it **costs** you them.
+* **Lyra holds up across the whole range** (−0.1406 → −0.2024 → −0.2076). The gain plateaus between
+  40 and 60 but never reverses. This is the one card here with no length caveat at all.
+
+### Screen 4 — the main list-settling screen, ALL ARMS LEGAL (`spec4_main.json`)
+
+18 arms + base × 3 formats (`std` 20 / `2hg` 30+2 heads / `long` 40) × **30,000** games,
+`max_turns` 18, one pooled batch, 32/32 workers throughout. Fall-through 0.39% worst-arm
+(≈0.00025t of one-sided bias — three orders of magnitude under the effects below).
+Log `logs/deckcmp/angels_newcards/screen4.log`.
+
+**A — which big slots to cut for 4 Lyra ArchDawn** (24 lands, no Chancery). The answer is clean and
+monotone in all three formats, and the ordering *widens* with game length:
+
+| arm | std | 2hg | long |
+|---|---|---|---|
+| `a_t3d0` Thune 3, Dawnbringer 0 | **−0.1516** | **−0.1991** | **−0.2196** |
+| `a_t2d1` Thune 2, Dawnbringer 1 | −0.1477 | −0.1949 | −0.2048 |
+| `a_t1d2` Thune 1, Dawnbringer 2 | −0.1456 | −0.1890 | −0.1919 |
+| `a_t0d3` Thune 0, Dawnbringer 3 | −0.1399 | −0.1791 | −0.1693 |
+
+**Cut Lyra Dawnbringer, keep Archangel of Thune.** Thune's lifegain→team-counter trigger is the
+deck's engine; Dawnbringer is a lord whose flying and first strike are both structurally inert here,
+so only the +1/+1 and lifelink survive.
+
+**B — Remote Farm ladder** (on `a_t2d1`). Monotone to the legal cap of 4 in every format; the
+marginal copy decays but never turns:
+
+| arm | std | 2hg | long |
+|---|---|---|---|
+| rf0 | −0.1477 | −0.1949 | −0.2048 |
+| `b_rf1` | −0.1817 | −0.2219 | −0.2320 |
+| `b_rf2` | −0.2138 | −0.2432 | −0.2569 |
+| `b_rf3` | −0.2424 | −0.2628 | −0.2787 |
+| `b_rf4` | **−0.2692** | **−0.2843** | **−0.2996** |
+
+**D — Giada, Font of Hope. The screen's one genuinely new finding.**
+
+| arm | std | 2hg | long | slope (long−std) | t |
+|---|---|---|---|---|---|
+| `b_rf4` Giada 2 / YV 4 | −0.2692 | −0.2843 | −0.2996 | −0.0304 | −9.16 |
+| `d_giada3` Giada 3 / YV 3 | −0.2903 | −0.3171 | −0.3382 | −0.0479 | −13.73 |
+| `d_giada4` Giada 4 / YV 2 | −0.2987 | **−0.3294** | **−0.3521** | **−0.0534** | −14.71 |
+
+Best *legal, actionable* arm in both 2hg and long. Mechanism: Giada's clause 2 is a CR 614
+replacement that sizes up every other entering Angel, and Righteous Valkyrie gains life equal to
+**that creature's live toughness** — so a bigger entrant is more life, which is more Thune / Lyra
+ArchDawn counter events. She is an engine multiplier, not a curve filler.
+**The dead-legend worry points the other way here:** a legend's redundant-copy cost should bite
+*harder* in longer games (more cards seen), yet Giada 4's advantage *grows* with length. That is
+evidence against the concern, not for it.
+
+**E — land count** (on rf4): 23 (−0.2784 / −0.2843 / −0.3007) ≈ 24 (−0.2692 / −0.2843 / −0.2996)
+> 25 (−0.2629 / −0.2763 / −0.2949). **Do not go to 25.**
+
+**C — Lightstall, and why its group is confounded.** `c_li1/2/3` buy Lightstall by cutting *more*
+Archangel of Thune, so they move two axes at once. Their slopes tell the story anyway: `c_li1`
+−0.0049, `c_li2` +0.0076, `c_li3` **+0.0349** — the more Lightstall, the more the arm's advantage
+is a short-game artifact. At `2hg` the ladder has already flattened (`c_li2` −0.3093 vs `c_li3`
+−0.3089).
+
+### Screen 5 — the finals, group winners CROSSED (`spec5_finals.json`)
+
+13 arms + base × 3 formats × **40,000** games. Screen 4 settled four axes separately; nothing had
+tested them together. Reference arm `v_a` = Thune 3 / Dawnbringer 0 / **LAD 4** / Giada 4 / YV 2 /
+Chancery 0 / Plains 16 / **Remote Farm 4** (24 lands).
+Log `logs/deckcmp/angels_newcards/screen5.log`.
+
+| arm (trade vs `v_a`) | std | 2hg | long | vs `v_a` (std / 2hg / long) |
+|---|---|---|---|---|
+| **`v_a`** | **−0.3017** | **−0.3268** | **−0.3716** | — |
+| `v_b` Giada 3 / YV 3 | −0.2915 | −0.3126 | −0.3522 | +0.010 / +0.014 / +0.019 |
+| `v_t2d1` Thune 2 / Dawnbringer 1 | −0.3014 | −0.3268 | −0.3584 | +0.000 / 0.000 / +0.013 |
+| `v_serra3` Serra 3, YV 1 | −0.2906 | −0.3146 | −0.3537 | +0.011 / +0.012 / +0.018 |
+| `v_sanc3` Sanctuary 3, Plains 17 | −0.2692 | −0.2900 | −0.3214 | +0.033 / +0.037 / +0.050 |
+| `v_rf2` Remote Farm 2 | −0.2473 | −0.2913 | −0.3300 | +0.054 / +0.036 / +0.042 |
+| `v_rf0` Remote Farm 0 | −0.1844 | −0.2509 | −0.2778 | +0.117 / +0.076 / +0.094 |
+| `v_yv0` YV 0, Lightstall 2 | −0.3337 | −0.3390 | −0.3807 | −0.032 / −0.012 / −0.009 |
+| `v_land23` 23 lands, Lightstall 1 | −0.3246 | −0.3408 | −0.3836 | −0.023 / −0.014 / −0.012 |
+| `v_li1` Thune 2, Lightstall 1 | −0.3339 | −0.3411 | −0.3775 | −0.032 / −0.014 / −0.006 |
+| `v_li2` Thune 1, Lightstall 2 | −0.3611 | −0.3501 | −0.3735 | −0.059 / −0.023 / −0.002 |
+| `v_nogreaves` cut Greaves, +1 Lightstall | −0.3355 | −0.3570 | −0.4091 | −0.034 / −0.030 / −0.038 |
+| **`z_swords2_li1` — BIAS YARDSTICK, NOT ADOPTABLE** | −0.3524 | −0.3758 | −0.4273 | **−0.051 / −0.049 / −0.056** |
+
+**New answers:** Seraph Sanctuary stays at **4** (cutting one for a Plains is clearly worse, despite
+the {C}); Serra stays at **2**; Giada 4 > Giada 3 confirmed on the full candidate, gap widening with
+length; Remote Farm 4 ≫ 2 ≫ 0 in every format.
+
+### THE YARDSTICK ARM CHANGED AN ANSWER — this is why it was carried
+
+`z_swords2_li1` cuts ONE Swords to Plowshares and measures **−0.05t**. Nothing is being bought: the
+goldfish has no creature worth exiling and the lifegain rider needs Tainted Remedy. **That −0.05 is
+the price this apparatus pays an arm for discarding a card it cannot model** — and it is LARGER
+than most of the real effects in this table.
+
+Apply it to `v_nogreaves`. Cutting Lightning Greaves measured better in all three formats
+(−0.034 / −0.030 / −0.038) with a good slope — it looks adoptable. But its margin sits **below the
+yardstick**, and Greaves' unmodelled half (shroud, i.e. protection from removal) is the *same class
+of blindness* as Swords'. Haste is modelled and real; shroud is worth zero against an opponent that
+never interacts. **Not adopted.** Without a deliberate yardstick arm in the screen this would have
+read as a clean win.
 
 ## Standing conclusions
 
@@ -113,12 +259,30 @@ visible and argues for the lower count.
    cuts FOUR five-drops (Thune 4→2, Lyra Dawnbringer 3→1), the top of the range guessed.
 3. **Azorius Chancery does not earn its slot.** Negative in all three screens (−0.0048, −0.0083,
    −0.0078). Small but consistent. Cut it.
-4. **Lightstall Inquisitor is marginal and mode-dependent.** Helps at 20 life, ~zero at 40. Its
-   only real-game value (the ETB) is unmodelled, so the sim can neither credit nor debit it. This
-   is a card to decide on judgement, not on this screen.
-5. **Remote Farm: the sim wants an absurd number of them and cannot be trusted on the count.**
-   Direction is real (the deck is mana-hungry and the burst genuinely accelerates it); the optimum
-   is not measurable here.
+4. **Lightstall Inquisitor is a short-game card that turns NEGATIVE in long games.** Helps at 20
+   life, ~zero at 40, and at 60 life `lad4_li2` is measurably *worse* than `lad4` (slope +0.0188,
+   t = +4.31). Include it only for a list aimed at short games.
+
+   **On the unmodelled ETB, stated precisely** (an earlier draft of this doc called it "its only
+   real-game value", which is sloppier than the card deserves). Oracle: *each opponent exiles a card
+   from their hand and may play that card for as long as it remains exiled; each spell cast this way
+   costs {1} more; each land played this way enters tapped.* The opponent does not lose the card — so
+   this is not disruption. What it is, is a small **tax**: {1} more on that card, and a tapped land
+   if it is a land, against a small gift (the card dodges hand-size and discard). Net mildly in our
+   favour, and small either way. It does not rescue Lightstall, because what the screen measures and
+   rejects is the *body's* tempo contribution decaying to zero by 40–60 life — a separate thing from
+   the rider, and the larger one.
+5. **Remote Farm is a tempo land whose cost the sim CAN price — given a long enough game.**
+   `rf6_only` loses half its value between 40 and 60 life (t = +19.80). Direction is real at 20
+   life; the card is progressively worse the longer the format. Capped at 4 by legality anyway.
+6. **`opponent_heads` is structurally inert for this deck.** Every read site of
+   `gamesetup::OpponentHeads()` is gated on a param (`etb_damage_each_opponent`,
+   `tap_opponent_lifegain`, `alt_lifegain_each_player`, `attack_creates_tokens`,
+   `tap_damage_each_opponent`, X-spell face targeting) and **no card in the Angels 60 or its
+   sideboard carries any of them**. So 2HG here reduces exactly to `starting_life: 30`, i.e. a
+   50%-longer race. Righteous Valkyrie's anthem is `StartingLife() + 7`, so it needs the same
+   *gain* (7 life) at 30 as at 20 — the deck's key threshold is format-invariant. Resplendent
+   Angel's 5-life trigger is an absolute per-turn amount, likewise invariant.
 
 ## Two arms whose numbers must NOT be acted on
 
@@ -144,14 +308,89 @@ buckets via `scripts/alias_card_into_bucket.py` — the sanctioned no-regenerati
 Measured composition fall-through: **≤0.0076% of hands** on every arm, far under the 1%
 `max_fallback`, so the shipped table is kept on every arm and coverage is effectively exact.
 
-**The one live apparatus caveat.** Aliasing Lyra into Archangel of Thune's bucket means the
-mulligan treats a **three**-drop as a **five**-drop. That holds the keep policy fixed across arms
-by construction, which is what ISOLATES the in-play difference — but it is precisely the case where
-the new card would want a DIFFERENT keep policy, and the alias cannot see that. Given the effect
-sizes (0.14–0.35 against a ~0.005–0.01 floor, a 14–40x margin) this will not flip a sign, but it
-could move the optimal counts. The sanctioned fix is one table generated over the REAL candidate
-decklists with **`MTG_KEEP_ARM_DECKS`** (per-bucket MAX across arms, every unreachable cell
-dropped — Rule 0a's "union TABLE", never a union deck). **NOT YET RUN.**
+**The one live apparatus caveat — and it is now MEASURED to be real, not merely suspected.**
+Aliasing Lyra into Archangel of Thune's bucket means the mulligan treats a **three**-drop as a
+**five**-drop. That holds the keep policy fixed across arms by construction, which is what ISOLATES
+the in-play difference — but it is precisely the case where the new card would want a DIFFERENT
+keep policy, and the alias cannot see that.
+
+**Equivalence discovery run on the union pool returns K=17, not 14, and the three extra buckets are
+exactly the three aliased cards** — Remote Farm is NOT equivalent to Plains, Lyra ArchDawn is NOT
+equivalent to Archangel of Thune, Lightstall is NOT equivalent to the Greaves/Swords bucket. The
+alias is demonstrably wrong rather than unverified. (`armtable/Angels.keepmodel.gencache.json`.)
+
+**Which way it biases, card by card** — this is the part that matters for reading the results:
+
+| alias | what the mulligan therefore believes | direction of the bias |
+|---|---|---|
+| Lyra ArchDawn → Archangel of Thune | the arm's hand is more top-heavy than it is, so it mulligans hands it should keep | **AGAINST** the Lyra arms — the measured Lyra effect is a FLOOR |
+| Remote Farm → Plains | a tapped depletion land counts as an untapped Plains, so land-light hands get over-kept | **FOR** the Remote Farm arms |
+| Lightstall → Greaves/Swords | a 1-drop Angel counted as a non-creature | ambiguous, and Lightstall is not in the recommendation |
+
+So the headline recommendation (adopt Lyra, cut Dawnbringer, raise Giada) sits on the **conservative**
+side of the distortion, and **the Remote Farm count is the least-secure part of it**.
+
+**Attempted fix, and why it was abandoned.** One table over the REAL candidate decklists with
+`MTG_KEEP_ARM_DECKS` (Rule 0a's "union TABLE", never a union deck) — 10 arms, 190,062 reachable
+cells of a 280,514 envelope (25.1% dropped as unreachable). It ran at 815 rollouts/s rather than the
+~4,000/s the shipped table managed, because **hands holding 3+ Remote Farm roll out 5–6 s each**
+(depletion counters multiply the decision tree). Projection from the live monitor: the fused
+sub-table phase alone needed **3.6 h**, total 4 h+. Killed at 19 min; its journal is preserved at
+`armtable/Angels.keepmodel.exhaustive.raw.json.journal` and the run is resumable.
+Replaced by `--with-floor`, which brackets the same question per-arm at R=10 — see below.
+
+### THE BRACKET (`spec6_floor_2hg.json --with-floor v_a,v_rf2`) — and it REFUTED one of my predictions
+
+`--with-floor` generates a throwaway R=10 table for **each arm's own 60** and re-measures the same
+paired games under it. `v_a`'s bracket table therefore buckets Lyra ArchDawn, Giada and Remote Farm
+**correctly** — which is exactly the alias distortion, priced. (It needed a single-format spec: a
+multi-format spec refuses a bracket, correctly, because a floor measured at one starting life does
+not bound another's. Run at 2hg, the format the user asked about.)
+
+| | `v_a` | `v_rf2` |
+|---|---|---|
+| under the shared (aliased) table | −0.3238 | −0.2875 |
+| under each arm's OWN R=10 table | **−0.3897** | **−0.3420** |
+| apparatus bias | −0.0659 (t=−8.89) | −0.0545 (t=−7.60) |
+| floor = \|bias\|+2se | 0.0808 | 0.0688 |
+| **effect / floor** | **4.01x** | **4.18x** |
+
+Both clear the 3x screening bar. But the **nulls** are the real content — a bracket only worries when
+the two nulls *differ*, and here they differ in a specific, informative way:
+
+```
+per-arm nulls, own table vs the shared one (positive = the OWN table plays WEAKER)
+  base      +0.01815      <- base gains nothing from a worse copy of its own table
+  v_a       -0.04780      <- v_a plays BETTER on its own table, despite R=10
+  v_rf2     -0.03635
+```
+
+The shared aliased table **handicaps the candidate arms**, and does so *despite* their bracket
+tables being R=10 (which the skill measures as ~0.032t of pure quality loss on its own). Correcting
+the bucketing makes `v_a` look **better**, −0.3238 → −0.3897.
+
+**What this confirms, and what it refutes.**
+* **Confirmed:** the Lyra alias (a 3-drop bucketed as a 5-drop) biases *against* the Lyra arms. The
+  headline numbers in this doc are a **floor**, not an inflation.
+* **REFUTED — my own prediction.** I reasoned above that aliasing Remote Farm onto Plains would bias
+  *for* the Remote Farm arms (a tapped depletion land being keep-scored as an untapped Plains, so
+  land-light hands get over-kept). The measurement says otherwise: under the corrected apparatus
+  `v_a` beats `v_rf2` by **0.0477**, *wider* than the 0.0363 the shared table showed. The 4-Remote-
+  Farm count is not an artefact of the alias; if anything the alias understates it. The prediction
+  table above is left in place deliberately — it was a reasonable mechanism and it was wrong.
+
+### Two structural claims, closed by digest probe rather than argument
+
+Both are byte-identical over 4,000 games (every game outcome, not just the mean):
+
+| claim | probe | result |
+|---|---|---|
+| `opponent_heads` is inert for Angels | base deck, life 30, heads 1 vs 2 | **IDENTICAL** — so "2HG" for this deck is exactly `starting_life: 30` |
+| the adopted 3-card sideboard plays like the shipped 5-card one | same 60, side 5 vs side 3, at life 20 AND life 30 | **IDENTICAL** at both — every measurement transfers |
+
+The sideboard probe was not idle: Legion Angel's wish is name-pinned so the two extra cards can
+never be fetched, but sideboard SIZE is folded into the search's state key (`Dominance.h`), so it
+was reachable in principle. It isn't.
 
 ## Engine work this required (committed, `037bb8c5`)
 
@@ -173,12 +412,68 @@ Known, deliberately not fixed: `FireLifegainWatchers` gates on `IsCreature()` al
 land takes no counter from Archangel of Thune even though animation grants all creature types. Real
 pre-existing rules gap; fixing it moves `slivers_vial`'s GT, so it owes its own measurement.
 
+## THE RECOMMENDED LIST (`v_a`)
+
+Held out on disjoint seeds with no measurable shrinkage. Pooled over **80,000 games per format**:
+
+| format | Δ avg win turn vs the shipped list | shrinkage screen → held-out |
+|---|---|---|
+| std (20 life) | **−0.3032** | −0.0030 (t = −0.60) |
+| **2HG (30 life, 2 heads)** | **−0.3259** | +0.0018 (t = +0.33) |
+| long (40 life) | **−0.3692** | +0.0048 (t = +0.82) |
+
+```
+CREATURES (24)                        LANDS (24)
+  4 Lyra, Archangel of Dawn   NEW      16 Plains          (19 -> 16)
+  3 Archangel of Thune        (4 -> 3)  4 Seraph Sanctuary (unchanged -- 4 is right, tested)
+  0 Lyra Dawnbringer          (3 -> 0)  4 Remote Farm      NEW
+  4 Giada, Font of Hope       (2 -> 4)  0 Azorius Chancery (1 -> 0)
+  2 Youthful Valkyrie         (4 -> 2)
+  4 Righteous Valkyrie                 OTHER (12)
+  4 Resplendent Angel                   2 Serra the Benevolent  (2 is right, tested)
+  4 Bishop of Wings                     1 Sol Ring
+  1 Legion Angel                        1 Lightning Greaves   <- KEPT, see the yardstick
+                                        3 Swords to Plowshares
+SIDEBOARD (3)                           3 Unexpectedly Absent
+  3 Legion Angel   <- the wish pool, and nothing else
+```
+
+**The sideboard must be rebuilt, and this is not cosmetic.** `decks/Angels/Angels.cod` currently
+sides `1 Lyra, Archangel of Dawn + 3 Legion Angel + 1 Lightstall Inquisitor`, where the Lyra and the
+Lightstall are the user's *introduction slots*. Mainboarding 4 Lyra with one still in the side is
+**5 copies — illegal**. Legion Angel's wish is `wish_requires_name`-pinned to its own name, so the
+pool is exactly the 3 Legion Angels and every other sideboard slot is mechanically inert here.
+
+**Flex slot, and which way to move it.** `2 Youthful Valkyrie → 2 Lightstall Inquisitor` (`v_yv0`)
+is worth **−0.032 at 20 life, −0.012 at 2HG, −0.009 at 40 life**. Take it only for a short-format
+list; it decays to nothing as the game lengthens, and Lightstall's one real-game asset (the ETB) is
+unmodelled in both directions.
+
+### What was NOT changed, and why that took a deliberate experiment
+
+`v_nogreaves` (cut Lightning Greaves for a Lightstall) measured better in **all three** formats
+(−0.034 / −0.030 / −0.038) with a good slope. It is not in the list. Its margin is *below* the
+measured bias yardstick (−0.05t for cutting one Swords to Plowshares), and Greaves' unmodelled half
+— shroud, i.e. protection from removal — is the same class of blindness as Swords'. Haste is
+modelled and real; shroud is worth exactly zero against an opponent that never interacts.
+
 ## If a list is adopted
 
-Screening produces a RANKING, not a shippable deck. An adopted combination owes its own artifacts
-through `.claude/skills/mulligan-profile.md` (Angels generates a complete table in ~16 min) and its
-own regression ground truth, and the predecessor list is archived per CLAUDE.md
-(`decks/Angels/v1-<slug>/`, and its `references/` move with it).
+Screening produces a RANKING, not a shippable deck. Adoption is the USER'S call; nothing here has
+been written to `decks/`. An adopted combination owes:
+
+1. Its own mulligan table via `.claude/skills/mulligan-profile.md` (Angels generated a complete one
+   in ~16 min — but budget MORE here: Remote Farm hands roll out 5–6 s each, and the R=10 bracket
+   table for `v_a` alone took ~45 min).
+2. **A bucket ruling.** The candidate's own 60 discovers **K=14**, but the union pool discovers
+   **K=17**. `value_play.expected_buckets` is a USER ruling, never an agent's — it is currently 14
+   in `decks/Angels/Angels.value.json` and has NOT been touched (the 17 was set only on a throwaway
+   screening copy under `logs/`).
+3. Its own regression ground truth, plus — noted while checking the 2HG convention — **Angels has no
+   `angels2hg` case** in `test/regression_cases.sh`, though 19 other decks do. It was added
+   2026-09-18 and the 2HG gate was never backfilled.
+4. Archival of the predecessor per CLAUDE.md (`decks/Angels/v1-<slug>/`, and its `references/` move
+   with it).
 
 ## Related
 
