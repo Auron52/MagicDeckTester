@@ -1,7 +1,13 @@
 # Sac-for-mana outlets: model them as a LAST-RANKED MANA SOURCE, not a searched action
 
-**Status:** proposed, not built. Deferred here per the CLAUDE.md rule that deferred work lives in
-`docs/design/`.
+**Status (2026-09-18): BUILT, behind `MTG_SAC_OUTLET_PAY` / `heurarm::SAC_OUTLET_PAY`, DEFAULT
+OFF.** A `heurarm` slot rather than a bare env flag so both arms ride ONE pooled batch (an
+`EnvOn` static can only ever BE one arm, which forces the per-arm wave CLAUDE.md forbids). The OFF
+arm is byte-identical: smoke `configs changed: 0`, `play-changed=0`, scenarios 100/100.
+
+Read §"AS BUILT" below before changing any of it — the implementation makes three choices the
+proposal did not anticipate, and it uncovered a class of latent defect that is worth more than the
+feature.
 
 **Origin — user, 2026-09-17**, on Utopia Mycon and then generalising it:
 
@@ -150,3 +156,110 @@ above defects were.
 * Measure per `heuristic-optimization.md`: train seeds, held-out validation, report before adopting.
   The headline numbers are avg win turn (must not regress) **and** enumeration/branching cost, which
   is the reason to do it at all.
+
+---
+
+# AS BUILT (2026-09-18) — "§2b"
+
+Named §2b because it is the second instalment of §2a (`TreasurePaySourceEnabled`, "one-shot lump
+sac sources as PAYMENT sources"), and shares its machinery and its contract.
+
+## The structural difference from §2a, and what falls out of it
+
+A Treasure **is** the source: it taps, it dies, one permanent. A repeatable outlet is a permanent
+that eats OTHER permanents. So:
+
+> **The payment source is each piece of legal FODDER, priced at the outlet's yield. The outlet is
+> only the permission.**
+
+N Saprolings under a Utopia Mycon are N one-mana rainbow sources; N Goblins under a Skirk
+Prospector are N `{R}` sources. That single reframing is what let this reuse the whole §2a path
+instead of inventing a repeatable-activation concept inside the mana solver.
+
+## Where it plugs in
+
+| piece | what |
+|---|---|
+| `SacOutletPayEnabled()` | the lever (`SpellEffects.h`) |
+| `LiveSacPayOutlet(state, controller)` | the board's outlet, resolved **once per payment** |
+| `IsSacPayFodder(p, def, outlet)` | subtype filter + "Sacrifice ANOTHER" |
+| `SacPayOutletColors(params)` | pinned `{R}` vs "any color" — same shape as `EffectiveProduces` |
+| `SacPayFodderRank(...)` | **base 500** — behind every real source (defaults top out at 62) |
+| `Permanent::pay_sac_eaten` | the in-flight mark; `CommitPaySacSacrifices` does the real sacrifice |
+| `GameState::deck_has_sac_mana_outlet` | per-game presence gate, stamped in `StampDeckTraits` |
+| kind 5 in `TapForCostSharedOnce` | the payer branch that eats |
+| `CollectActions` | **suppresses** the mana outlet's searched actions — this is the cost win |
+
+The four supply scans that must agree with the payer or they prune payable lines — `AvailableManaPool`,
+`AvailableManaPoolNoAttackers`, `BuildNonCreaturePool`, `BuildColorFeasibility`, `ComputeAvailableColors`
+— all credit fodder, and so does `UntappedManaUpperBound`. That last one is **load-bearing, not
+bookkeeping**: `PaymentManaCovers` turns a short bound into a *proof* of unpayability and refuses
+the payment before the greedy runs, so a bound blind to fodder would reject exactly the casts this
+lever exists to enable.
+
+## Three choices the proposal did not anticipate
+
+**1. TAPPED bodies are fodder.** Sacrificing is not tapping, and *attack, then eat the attackers
+post-combat for mana* is the Skirk line the Goblin deck is built on. The payer's source loop
+short-circuits on `p.tapped` — that had to become `p.tapped && !sac_outlet.valid()`, which keeps
+the historical short-circuit (including the `LookupCached`) when the lever is off. Within fodder,
+`SacPayFodderCostsAttack` then defers a body that still *has* an attack to give, which is the
+engine-side expression of the user's "prioritizes saprolings with summoning sickness".
+
+**2. GREEDY PATH ONLY.** The backtracker memoises payments in `g_mana_cache` as a set of tapped
+battlefield ordinals, and an eaten body is not a tap — a cached entry could not replay it. Fodder
+ranks last, so the greedy reaches it whenever it is the answer; a cost only the backtracker could
+assemble simply does not see fodder. Pessimistic, i.e. the safe direction: a payable cast fails
+rather than an unpayable one resolving. (The legacy `MTG_TAP_LEGACY` 4-step path is likewise not
+covered; it is an A/B baseline, not a ship path.)
+
+**3. The commit is a REAL sacrifice.** Eaten fodder goes through `SacrificePermanentAt` —
+graveyard, sacrifice watchers, death triggers — not the bare erase a Treasure gets, because
+Pashalik Mons pings on a Goblin death and Rundvelt Hordemaster impulse-exiles, and the searched
+`SacForMana` action this replaces fired both. That is correct, and it is also what made the whole
+thing explode; see below.
+
+## THE REAL FIND: a payment that sacrifices a creature MUTATES ZONES
+
+The engine's payment layer rests on an unwritten invariant — **a mana payment does not change the
+zones** — and essentially every caller relies on it. Making a payment sacrifice a creature breaks
+that invariant comprehensively: the body moves to a graveyard, watchers fire, tokens are created,
+cards are pushed into hand.
+
+Turning the lever on segfaulted the batch. `perf`/gdb only showed the *symptom* (a corrupt free
+inside `PoolAllocator`), so this was settled with an **ASan build** (a deliberate separate cmake
+route, `build/Asan`, run with `MTG_POOL_ALLOC=0` so the custom allocator does not hide the poison).
+ASan named the site in one run. Three defects, **two of them pre-existing and latent under §2a**:
+
+| site | defect |
+|---|---|
+| `TurnSolver.cpp` `apply_one` | held a **hand iterator** across the cast's own payment. Eating a Goblin fired Rundvelt Hordemaster's dies-impulse, which `push_back`s into that same hand and reallocates it — so `it->m_is_staged` and `zone.erase(it)` ran on freed memory. Fixed by re-finding the copy by its stable per-copy `m_number`. |
+| `AnimateLandsShared` | range-`for` over `state.battlefield` writing `p.is_animated` **after** a payment that can erase. Pre-existing: a cracked §2a Treasure does it too. Fixed to index + re-find by number. |
+| `ActivateTapTokensShared` | cached `bf_size` across a payment that can shrink the battlefield — an out-of-bounds write on the `tapped = false` rollback. Pre-existing, same cause. Fixed to a live bound. |
+
+And one in the new code: `CommitPaySacSacrifices` used a `static thread_local` scratch vector, which
+a death trigger reaching another payment re-enters and clears underneath the loop walking it. Now a
+plain local.
+
+**The standing lesson, which outlives this lever:** a mana payment is not side-effect-free, and the
+set of callers holding a zone iterator, a battlefield reference or a cached index across one is not
+knowable by reading. ASan is the tool; guessing is not. The §2a note *"No index survives a
+successful payment"* states the contract correctly — it was simply not being honoured.
+
+## STILL MISSING: the plan-added fodder credit (stage 2)
+
+The user's load-bearing requirement — *"We do need to count saprolings (or goblins) that are added
+to the battlefield during the plan"* — **is not implemented.**
+
+At APPLY time it happens to work: the plan applies sequentially, so a spore activation earlier in
+the plan has already put its Saproling on the board when the payer runs. The hole is at
+**ENUMERATION** time: every supply scan above reads the plan-start battlefield, so a subset whose
+mana comes from a body the same subset creates scores as unpayable and is never offered. That is
+exactly the Doubling-Season-off-an-activated-Saproling line §3c of
+`fungus-second-main-and-devour.md` is built on.
+
+The failure is invisible in aggregate — the line does not error, it simply is never chosen, and the
+deck merely looks a little slower. If the A/B comes back quality-negative on Fungus, **this is the
+first thing to suspect**, not the ranking. `SubsetOversubscribesSacFodder` already bails out
+entirely when a co-selected action can add a matching creature, and Melira Pod (where persist
+*returns* a sacrificed body) is the regression case that catches a naive static count.

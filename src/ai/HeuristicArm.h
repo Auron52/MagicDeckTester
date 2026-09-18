@@ -206,6 +206,7 @@ enum Slot : int
     BP_NESTED_CANON,          // MTG_BP_NESTED_CANON       an un-branched NESTED slot defaults to the value-best entry, not EMPTY
     BP_VARIANT_FIRST,         // MTG_BP_VARIANT_FIRST      schedule a base plan's breakpoint variants BEFORE the base (equal value)
     BP_NESTED_CANON_PLAYOUT,  // MTG_BP_NESTED_CANON_PLAYOUT  ...the nested default fires inside PLAYOUT applies too (uncharged wall)
+    SAC_OUTLET_PAY,           // MTG_SAC_OUTLET_PAY        a sac-for-mana outlet's fodder is a LAST-RANKED payment source, not a searched action
     COUNT
 };
 
@@ -382,6 +383,7 @@ inline const char* Name(int slot)
         "MTG_BP_NESTED_CANON",
         "MTG_BP_VARIANT_FIRST",
         "MTG_BP_NESTED_CANON_PLAYOUT",
+        "MTG_SAC_OUTLET_PAY",
     };
     // The enum and this table are ONE mapping split across two lists: a slot added to one and not
     // the other silently shifts every lever after it (a manifest asking for lever X would set Y).

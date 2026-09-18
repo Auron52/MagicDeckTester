@@ -930,6 +930,7 @@ void GoldFishRunner::StampDeckTraits(GameState& state, const Decklist& deck)
     // gate stays open, which is merely the old behaviour.
     {
         bool garth = false, ascend = false, devotion = false, dragon_ping = false;
+        bool sac_mana_outlet = false;
         auto scan = [&](const std::vector<Card>& zone)
         {
             for (const Card& c : zone)
@@ -940,6 +941,7 @@ void GoldFishRunner::StampDeckTraits(GameState& state, const Decklist& deck)
                 if (d->params.ascend)                         { ascend = true; }
                 if (d->params.creature_requires_devotion > 0) { devotion = true; }
                 if (d->params.dragon_ping_on_enter)           { dragon_ping = true; }
+                if (IsSacManaOutlet(d->params))               { sac_mana_outlet = true; }
             }
         };
         scan(deck.mainboard);
@@ -947,6 +949,7 @@ void GoldFishRunner::StampDeckTraits(GameState& state, const Decklist& deck)
         state.deck_has_ascend            = garth || ascend;
         state.deck_has_devotion_creature = garth || devotion;
         state.deck_has_dragon_ping       = garth || dragon_ping;
+        state.deck_has_sac_mana_outlet   = garth || sac_mana_outlet;
     }
     // NOTE: opponent_library_dealt is deliberately NOT stamped here. It means "a library was
     // actually dealt", and only opponentdeck::Deal may raise it -- see the comment there. Callers

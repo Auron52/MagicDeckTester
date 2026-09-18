@@ -334,6 +334,11 @@ struct GameState
     bool                     deck_has_ascend            = true;   // RefreshCityBlessing
     bool                     deck_has_devotion_creature = true;   // RefreshDevotionCreatures
     bool                     deck_has_dragon_ping       = true;   // Scourge of Valkas' enter ping
+    // Same shape, different consumer: LiveSacPayOutlet's board scan (§2b, Utopia Mycon / Skirk
+    // Prospector as a last-ranked PAYMENT source). It would otherwise run once per payment on
+    // every deck. Defaults true for the reason above -- an unstamped state keeps the scan, and the
+    // real gate is the board (no outlet on the battlefield -> no fodder) plus MTG_SAC_OUTLET_PAY.
+    bool                     deck_has_sac_mana_outlet   = true;   // IsSacManaOutlet in the list
     // "You can cast only one more spell this turn" (Irencrag Feat, CardParams::max_casts_after) enforced
     // at EXECUTION time: -1 = no restrictor active (unlimited); otherwise the number of ADDITIONAL spells
     // still castable this turn. Installed when a max_casts_after spell is cast, decremented at every later

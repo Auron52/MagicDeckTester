@@ -114,13 +114,25 @@ total, so there is nothing to search here. **[D]**
 
 ### Main 1 — in this order
 1. **Land drop, and the Wild Growth line.** **[U]** Wild Growth is `Enchant land` — **ANY land,
-   not just a Forest** (an earlier draft of this doc said Forest; that was wrong). So its best
-   host is a **bounceland**, where it turns one tap into `{G}{U}` + `{G}` = **three mana**.
+   not just a Forest** (an earlier draft of this doc said Forest; that was wrong).
+
+   **THE HOST CHOICE IS ABOUT BOUNCE EXPOSURE, NOT ABOUT MANA** — a second correction, because
+   this doc previously said a bounceland was simply the *best* host (one tap for `{G}{U}` + `{G}`
+   = three mana). The extra mana is real, but it is not the reason. **USER:** *"It's not that Wild
+   Growth is best on a bounceland. It is that putting it on a bounceland can avoid it being
+   bounced. If we have other things to bounce you can feel free to stick it on a Forest."*
+
+   So the rule is conditional, not absolute. Every karoo we later play must return a land, and the
+   one land we will never want to return is a karoo (returning it re-triggers the bounce and costs
+   the tempo again), so an aura parked on a karoo is out of the line of fire. Park it on a Forest
+   and the next karoo may have nothing else to return — and the aura goes with it. **Where the
+   board already holds a spare land to return, the Forest is a perfectly good host.** What the
+   engine needs is the *exposure* term, not a preferred host type.
 
    The user's line, which the engine must be able to express: *Wild Growth in hand, a Forest in
    play, a bounceland in hand* -> **float the {G} off the Forest first**, play the bounceland
    returning the now-spent Forest, then cast Wild Growth **on the bounceland**. The Forest's mana
-   is banked before it leaves and the aura lands on the better host.
+   is banked before it leaves and the aura lands where the next karoo cannot reach it.
 
    **And the warning that came with it was a real defect.** *"You need to be careful of bounce
    lands when there are land enchantments out."* `BounceKarooLand` erased the land without the

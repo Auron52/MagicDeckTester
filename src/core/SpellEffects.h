@@ -17303,6 +17303,179 @@ inline bool TreasurePaySourceEnabled()
     return v;
 }
 
+// ---- REPEATABLE creature-sac MANA OUTLETS as payment sources (§2b) ---------------------------
+// MTG_SAC_OUTLET_PAY / heurarm SAC_OUTLET_PAY -- DEFAULT OFF, built 2026-09-18 for the A/B.
+//
+// USER, 2026-09-17, on Utopia Mycon and then generalising it:
+//   "it's not clear to me whether we really need to search the sac ability for mana generation.
+//    Theoretically we could just treat it as a mana source with the highest level of deferral.
+//    i.e. It is only used if absolutely necessary and prioritizes saprolings with summoning
+//    sickness."   ...   "it might make sense to do it this way for Skirk Prospector in Goblins
+//    as well."   ...   "we don't take lines that sacrifice more creatures than we want to."
+//
+// §2a routes a ONE-SHOT lump sac source (a Treasure) through the payment solver. This is the same
+// move for a REPEATABLE outlet, and the one structural difference is where the mana lives: a
+// Treasure IS the source, while an outlet is a permanent that eats OTHER permanents -- so the
+// payment source is each piece of legal FODDER, priced at the outlet's yield, and the outlet is
+// only the permission. N Saprolings under a Utopia Mycon are N one-mana rainbow sources.
+//
+// WHAT IT BUYS. The searched model emits a SacForMana action per outlet plus a demand-driven
+// multi-sac burst, so the plan enumerator branches over HOW MANY creatures to eat on a deck whose
+// whole plan is making dozens of fungible bodies -- and then needs two subset guards
+// (SubsetWastesCreatureSacMana / SubsetOversubscribesSacFodder) to keep that branching honest.
+// As a last-ranked payment source the count is not a decision at all: the payer eats exactly as
+// many as the cost requires and only when nothing else can pay.
+//
+// IT IS A COST CHANGE, NOT A CORRECTNESS FIX, and the adoption bar follows from that. USER:
+// "this is a cost change that we are aiming to not cost any quality." The search ALREADY rejects
+// over-sacrificing lines -- eating bodies slows the clock and the objective is avg win turn -- so
+// a heuristic replacing it can only match or lose on quality. Any win-turn regression is
+// disqualifying. See docs/design/sac-mana-outlet-as-deferred-source.md.
+//
+// GREEDY-PATH ONLY, deliberately. The backtracker memoises payments in g_mana_cache as a set of
+// tapped battlefield ORDINALS, and eaten fodder is not a tap -- a cached entry could not replay
+// it. Fodder ranks last, so the greedy reaches it whenever it is the answer; a cost only the
+// backtracker could assemble simply does not see the fodder, which is the pessimistic (safe)
+// direction: a payable cast fails rather than an unpayable one resolving.
+inline bool SacOutletPayEnabled()
+{
+    static const bool env_on = EnvOn("MTG_SAC_OUTLET_PAY");
+    return heurarm::Flag(heurarm::SAC_OUTLET_PAY, env_on);
+}
+
+// The outlet a payment may eat fodder through. `def` null = none live.
+struct SacPayOutlet
+{
+    const CardDefinition* def       = nullptr;   // Utopia Mycon / Skirk Prospector
+    int                   source_id = 0;         // its card.m_number ("Sacrifice ANOTHER ..." filter)
+    bool valid() const { return def != nullptr; }
+};
+
+// Scan once per payment (never per source per pip -- that is O(n^2) on a 40-token board, which is
+// exactly the cost this whole strand is trying to remove). state.deck_has_sac_mana_outlet makes it
+// free for every deck that cannot contain one.
+inline SacPayOutlet LiveSacPayOutlet(const GameState& state, int controller)
+{
+    SacPayOutlet out;
+    if (!state.deck_has_sac_mana_outlet || !SacOutletPayEnabled()) { return out; }
+    for (const Permanent& p : state.battlefield)
+    {
+        if (p.controller_index != controller || p.pay_sac_eaten) { continue; }
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+        if (!d || !IsSacManaOutlet(d->params)) { continue; }
+        // The FIRST live outlet is enough: a deck runs copies of ONE such card (4 Skirk, 2 Mycon),
+        // never two different ones, so a second copy changes no colour and no filter.
+        out.def = d; out.source_id = p.card.m_number;
+        return out;
+    }
+    return out;
+}
+
+// Is this permanent legal fodder for `outlet` right now?
+inline bool IsSacPayFodder(const Permanent& p, const CardDefinition& def,
+                           const SacPayOutlet& outlet)
+{
+    if (!outlet.valid() || p.pay_sac_eaten) { return false; }
+    if (!def.card.IsCreature()) { return false; }
+    const CardParams& op = outlet.def->params;
+    if (op.sac_outlet_excludes_self && p.card.m_number == outlet.source_id) { return false; }
+    if (!op.sac_creature_requires_subtype.empty()
+        && !CardHasSubtype(p.card, op.sac_creature_requires_subtype)) { return false; }
+    return true;
+}
+
+// The colours one activation yields. Mirrors EffectiveProduces' pinned-colour shape exactly:
+// Skirk pins {R}; Utopia Mycon pins nothing and makes one mana of ANY colour.
+inline const std::vector<Color>& SacPayOutletColors(const CardParams& op)
+{
+    static const std::vector<Color> kAnyColor{ Color::White, Color::Blue, Color::Black,
+                                               Color::Red,   Color::Green };
+    static const std::vector<Color> kColorless{ Color::Colorless };
+    static const std::vector<Color> kW{ Color::White }, kU{ Color::Blue }, kB{ Color::Black },
+                                    kR{ Color::Red },   kG{ Color::Green };
+    if (!op.sac_outlet_add_mana_color.empty())
+    {
+        switch (op.sac_outlet_add_mana_color[0])
+        {
+            case 'C': return kColorless;
+            case 'W': return kW;
+            case 'U': return kU;
+            case 'B': return kB;
+            case 'R': return kR;
+            case 'G': return kG;
+            default:  break;
+        }
+    }
+    return kAnyColor;
+}
+
+// TAP-ORDER rank for a piece of fodder (LOWER = eaten first). Base 500 puts every fodder creature
+// behind every real source on the board -- the defaults top out at 62 ({C}-manland 60, storage 62)
+// -- which IS the user's "highest level of deferral": the payer reaches fodder only when nothing
+// else can pay the pip.
+//
+// Within fodder, two terms:
+//   * A BODY THAT WOULD ATTACK is eaten later. USER: "prioritizes saprolings with summoning
+//     sickness" -- a creature that cannot attack this turn costs nothing to eat NOW, so it is the
+//     free one. Same "its tap costs an attack" test AvailableManaPoolNoAttackers uses.
+//   * then the SHARED expendability ranking (SacExpendabilityRank): tokens and self-replacing
+//     bodies first, lords and combo enablers deferred, the outlet itself dead last. One ordering
+//     for the searched victim pick, the devour victim pick and this -- they cannot drift.
+// Would eating this body give up a real attack? Same test AvailableManaPoolNoAttackers applies to a
+// creature mana source: it must be ABLE to attack and have power to bring. An already-tapped
+// attacker reads false -- it has swung, so eating it post-combat is free, which is the point.
+inline bool SacPayFodderCostsAttack(const GameState& state, const Permanent& p)
+{
+    const int controller = p.controller_index;
+    if (!CanAttackFull(p, state.battlefield, controller)) { return false; }
+    const int power = p.EffectivePower()
+                    + ComputeLordBonus(p.card, state, controller,
+                                       /*all_creature_types=*/false, &p).first;
+    return power > 0;
+}
+
+inline int SacPayFodderRank(const GameState& state, const Permanent& p, const SacPayOutlet& outlet)
+{
+    return 500 + (SacPayFodderCostsAttack(state, p) ? 10000 : 0)
+               + SacExpendabilityRank(p, outlet.source_id);
+}
+
+// How many activations the board can still pay for. NOTE IT COUNTS TAPPED BODIES TOO: sacrificing
+// is not tapping, and "attack, then eat the attackers post-combat for mana" is the Skirk line the
+// deck is built on. (The payer's own source loop has to make the same exception -- see its
+// `p.tapped` short-circuit.) `no_attackers` drops the bodies whose loss WOULD cost an attack, for
+// the AvailableManaPoolNoAttackers twin.
+inline int SacPayFodderCount(const GameState& state, int controller, const SacPayOutlet& outlet,
+                             const Permanent* skip = nullptr, bool no_attackers = false)
+{
+    if (!outlet.valid()) { return 0; }
+    int n = 0;
+    for (const Permanent& p : state.battlefield)
+    {
+        if (&p == skip || p.controller_index != controller) { continue; }
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+        if (!d || !IsSacPayFodder(p, *d, outlet)) { continue; }
+        if (no_attackers && SacPayFodderCostsAttack(state, p)) { continue; }
+        ++n;
+    }
+    return n;
+}
+
+// Credit that supply into a projected pool. A rainbow outlet (Utopia Mycon) is `wild` and NOT
+// wild_c -- "one mana of any color" cannot pay a {C} pip -- exactly as AddSourceToPool credits a
+// multi-colour source; a pinned outlet (Skirk's {R}) credits its letter.
+inline void AddSacPayFodderToPool(ManaPool& pool, const GameState& state, int controller,
+                                  const SacPayOutlet& outlet, const Permanent* skip = nullptr,
+                                  bool no_attackers = false)
+{
+    const int n = SacPayFodderCount(state, controller, outlet, skip, no_attackers);
+    if (n <= 0) { return; }
+    const int per = std::max(1, outlet.def->params.sac_outlet_add_mana_amount);
+    const std::vector<Color>& prod = SacPayOutletColors(outlet.def->params);
+    if (prod.size() > 1) { pool.wild += n * per; }
+    else                 { pool.Add(prod[0], n * per); }
+}
+
 // A sac source the PAYMENT solver owns. `produces.empty()` keeps this to the sources that carry no
 // colour of their own today (the whole reason they are invisible to the payment path: pay_produces()
 // comes back empty, `makes` is false, and every source scan skips them).
@@ -17336,6 +17509,37 @@ inline bool IsPaySacSource(const CardDefinition& def)
 // flag is off, because IsPaySacSource is then always false.
 inline void CommitPaySacSacrifices(GameState& state, int controller)
 {
+    // §2b first: fodder eaten through a sac-for-mana outlet is a REAL sacrifice, so it goes
+    // through SacrificePermanentAt (graveyard -> sacrifice watchers -> death triggers), not the
+    // bare erase a Treasure gets -- Pashalik Mons pings on a Goblin death and Tukatongue refunds a
+    // Saproling, and the searched SacForMana action this replaces fired both.
+    //
+    // BY CARD NUMBER, re-found each time, because a death trigger may itself add or remove a
+    // permanent (Mogg War Marshal, Tukatongue) and would invalidate an index taken before it ran.
+    // The whole loop is skipped on the overwhelmingly common no-mark board.
+    for (std::size_t i = 0; i < state.battlefield.size(); ++i)
+    {
+        if (!state.battlefield[i].pay_sac_eaten) { continue; }
+        // A PLAIN LOCAL, deliberately not the thread_local scratch this file uses elsewhere:
+        // SacrificePermanentAt below fires death triggers, and a death trigger can reach another
+        // payment (Rundvelt Hordemaster's impulse-exile plays a card), which re-enters THIS
+        // function. A shared buffer would be cleared and refilled underneath the loop that is
+        // walking it. The allocation is paid only on the rare board that actually ate something.
+        std::vector<int> eaten;
+        for (Permanent& q : state.battlefield)
+        { if (q.pay_sac_eaten) { q.pay_sac_eaten = false; eaten.push_back(q.card.m_number); } }
+        for (int num : eaten)
+        {
+            for (std::size_t k = 0; k < state.battlefield.size(); ++k)
+            {
+                if (state.battlefield[k].card.m_number != num) { continue; }
+                SacrificePermanentAt(state, state.battlefield[k].controller_index,
+                                     static_cast<int>(k));
+                break;
+            }
+        }
+        break;
+    }
     if (!TreasurePaySourceEnabled()) { return; }
     for (int i = static_cast<int>(state.battlefield.size()) - 1; i >= 0; --i)
     {
@@ -21062,6 +21266,17 @@ inline int UntappedManaUpperBound(const GameState& state, bool for_creature,
         if (!GraveyardFuelLive(state, active, *d)) { continue; }   // Deathrite: no gy land
         if (!ManaSubtypeGateLive(state, active, *d)) { continue; } // Arbor Elf: no Forest
         total += SourceMaxNetLive(state, p, *d, aura_fold);
+    }
+    // §2b: one mana per body a live sac-for-mana outlet can eat (MTG_SAC_OUTLET_PAY). THIS IS
+    // LOAD-BEARING, not bookkeeping: PaymentManaCovers turns a short bound into a PROOF of
+    // unpayability and refuses the payment before the greedy runs, so a bound blind to fodder
+    // would reject exactly the casts this lever exists to enable. The bound may only ever
+    // OVER-count (a loose bound fails to prune; a tight one prunes a payable cost), and crediting
+    // fodder the backtracker cannot actually reach errs in that safe direction.
+    if (const SacPayOutlet so = LiveSacPayOutlet(state, active); so.valid())
+    {
+        total += SacPayFodderCount(state, active, so)
+               * std::max(1, so.def->params.sac_outlet_add_mana_amount);
     }
     return total;
 }

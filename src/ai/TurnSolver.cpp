@@ -1791,6 +1791,11 @@ static ManaPool BuildNonCreaturePool(const GameState& state)
         }
         AddSourceToPool(pool, state, *def, PermanentManaYield(state, p, *def), &p);
     }
+    // §2b: sac-outlet fodder, for the same reason the §2a Treasure line above had to be added --
+    // and it is the same failure if it is missed. An outlet's mana is unrestricted, so it belongs
+    // in the NONCREATURE pool; omitting it would have this test reject casts the payer pays.
+    AddSacPayFodderToPool(pool, state, state.active_player_index,
+                          LiveSacPayOutlet(state, state.active_player_index));
     if (FloatLeftoverManaEnabled()) { pool.AddPool(state.floating_mana); }  // see AvailableManaPool
     return pool;
 }
@@ -3750,6 +3755,20 @@ static void ComputeAvailableColors(const GameState& state, bool have[5])
         if (ScaledManaNetYield(state, *def) > 0)
         { have[0] = have[1] = have[2] = have[3] = have[4] = true; }
         if (def->params.domain_mana && CanTapNow(p, state.battlefield)) { scaling_source = true; }
+    }
+
+    // §2b: a live sac-for-mana outlet with fodder supplies its colours, for exactly the reason the
+    // §2a clause inside the loop spells out -- this gate rejects a subset whose pip "no untapped
+    // source can produce at all", and a rainbow outlet is often the only source of an off-colour
+    // pip. Outside the loop because fodder is not filtered on `tapped` (a creature that attacked
+    // can still be sacrificed), which is the same exception the payer makes.
+    if (const SacPayOutlet so = LiveSacPayOutlet(state, active); so.valid())
+    {
+        if (SacPayFodderCount(state, active, so) > 0)
+        {
+            for (Color c : SacPayOutletColors(so.def->params))
+            { const int ci = static_cast<int>(c); if (ci >= 0 && ci < 5) { have[ci] = true; } }
+        }
     }
 
     // SCALING SOURCE WIDENING (domain_mana: Faeburrow Elder / Bloom Tender).
@@ -15868,6 +15887,14 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
             // into the VALUE branch below, which emitted an action that sacrifices a Saproling for
             // nothing at all.
             const bool is_mana_outlet = IsSacManaOutlet(sd->params);
+            // §2b (MTG_SAC_OUTLET_PAY): the MANA half of a repeatable creature-sac outlet is a
+            // last-ranked PAYMENT source, not a searched action -- so emit nothing for it here.
+            // THAT SUPPRESSION IS THE CHANGE: it deletes the "how many bodies do we eat" branching
+            // axis (the single-sac action, the demand-driven multi-sac burst and the per-colour fan
+            // above it) from every enumeration on a deck whose plan is making dozens of fungible
+            // bodies. VALUE outlets (Siege-Gang's damage, Psychotrope Thallid's draw) are untouched
+            // -- their payload is not mana and the payer has no way to reach it.
+            if (is_mana_outlet && SacOutletPayEnabled()) { continue; }
             // Sac-outlet pre-combat deferral (GoblinsProvider::DeferSacOutletPreCombat, ADOPTED default-ON,
             // off-switch MTG_NO_GOBLIN_SAC_2ND): defer the VALUE outlets (Siege-Gang / Pashalik / the multi-
             // sac burst) to the second main and haste-gate Skirk's mana outlet. Vs the passive opponent a
@@ -23075,6 +23102,14 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
             }
         }
         if (it == zone.end()) { return; }
+        // STABLE HANDLE on the chosen copy, because `it` DOES NOT SURVIVE THIS CAST'S PAYMENT.
+        // A payment can now mutate this very zone: §2b eats a sac-outlet's fodder, and that death
+        // fires its triggers -- Rundvelt Hordemaster's dies-impulse-exile pushes a card into the
+        // HAND and reallocates it. The reads far below (`it->m_is_staged`, `it->m_number`) and
+        // `zone.erase(it)` then run on freed memory; ASan caught exactly that on Goblins. Card
+        // m_number is a per-copy stable id, so re-finding by it is exact and -- on the overwhelming
+        // majority of payments, which mutate no zone -- returns the same element.
+        const int cast_zone_number = it->m_number;
         const CardDefinition* opt = CardDatabase::Instance().LookupCached(*it);
         if (!opt) { return; }
         // BESTOW: the card leaves the hand exactly as it would for a normal cast, but everything
@@ -23285,6 +23320,11 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
         // Apex of Power cast-from-hand gate (captured BEFORE the erase invalidates `it`): a hand copy
         // has m_is_staged == false -> cast_from_hand true (adds Apex's 10-colour float); an Apex cast off
         // another Apex's staged exile has m_is_staged == true -> false (float withheld). Inert otherwise.
+        // Re-find the copy (see cast_zone_number above): the payment may have reallocated `zone`.
+        it = zone.end();
+        for (auto c = zone.begin(); c != zone.end(); ++c)
+        { if (c->m_number == cast_zone_number) { it = c; break; } }
+        if (it == zone.end()) { return; }   // the payment consumed the very copy being cast
         const bool cast_from_hand = !it->m_is_staged;
         // Per-copy stable ID of the card being cast. The permanent must carry it (like the
         // executor's EffectHandler::EnterBattlefield does via entry.source.m_number) so that

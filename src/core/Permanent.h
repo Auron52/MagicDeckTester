@@ -114,6 +114,17 @@ struct Permanent
                                            // Bazaar): accumulated over idle turns; an untapped charged
                                            // storage land taps to burst {R} x storage_counters (zeroing
                                            // them), NOT sacrificed. See CardParams::storage_land.
+    // EATEN BY THE IN-FLIGHT PAYMENT as sac-outlet fodder (Utopia Mycon / Skirk Prospector --
+    // see SacOutletPayEnabled). A payment cannot erase mid-flight (the source loops hold
+    // `Permanent&` and derive the reserved-mask index from `&p - battlefield.data()`), so the
+    // "tap" of a fodder creature only MARKS it and CommitPaySacSacrifices does the real
+    // sacrifice on each success path -- the §2a Treasure contract exactly.
+    // A DEDICATED FLAG rather than reusing `tapped`, which is what §2a does, because a Treasure
+    // is never tapped by anything else and a SAPROLING IS: it attacks. Committing on `tapped`
+    // would eat every attacker the moment a second-main payment ran. Always false outside a
+    // payment attempt (set and cleared inside one, restored by PermPaySnap on every failure
+    // path), and never set at all while the lever is off -> byte-identical.
+    bool      pay_sac_eaten          = false;
     bool      storage_hold_this_turn = false; // #6 human-play tap-vs-charge: when the non-clairvoyant
                                            // human elects to HOLD a charged storage land this turn (build
                                            // the battery rather than burst now), this flags it not-live

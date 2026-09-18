@@ -51,6 +51,7 @@ struct PermPaySnap
     bool tapped;
     int  depletion;   // first Depletion entry's count; -1 = no Depletion entry
     int  storage;
+    bool eaten;       // §2b: marked as sac-outlet fodder by THIS payment attempt (Permanent::pay_sac_eaten)
 };
 
 static const bool g_pay_snap_verify = EnvOn("MTG_PAY_SNAP_VERIFY");
@@ -109,7 +110,7 @@ static void SnapPayFields(const std::vector<Permanent>& bf, std::vector<PermPayS
         int dep = -1;
         for (const Counter& c : bf[i].counters)
         { if (c.type == Counter::Type::Depletion) { dep = c.count; break; } }
-        out[i] = PermPaySnap{ bf[i].tapped, dep, bf[i].storage_counters };
+        out[i] = PermPaySnap{ bf[i].tapped, dep, bf[i].storage_counters, bf[i].pay_sac_eaten };
     }
 }
 
@@ -124,6 +125,7 @@ static void RestorePayFields(std::vector<Permanent>& bf, const std::vector<PermP
         Permanent& p       = bf[i];
         p.tapped           = snap[i].tapped;
         p.storage_counters = snap[i].storage;
+        p.pay_sac_eaten    = snap[i].eaten;   // §2b: a failed attempt eats nothing
         if (snap[i].depletion >= 0)
         {
             for (Counter& c : p.counters)
@@ -170,6 +172,7 @@ static void VerifyPaySnapRestore(const std::vector<Permanent>& now,
         if (a.verse_counters != b.verse_counters)     { fail(i, "verse_counters"); }
         if (a.storage_counters != b.storage_counters) { fail(i, "storage_counters"); }
         if (a.storage_hold_this_turn != b.storage_hold_this_turn) { fail(i, "storage_hold_this_turn"); }
+        if (a.pay_sac_eaten != b.pay_sac_eaten)       { fail(i, "pay_sac_eaten"); }
         if (a.garth_chosen_mask != b.garth_chosen_mask) { fail(i, "garth_chosen_mask"); }
         if (a.loyalty != b.loyalty)                   { fail(i, "loyalty"); }
         if (a.loyalty_activated_this_turn != b.loyalty_activated_this_turn) { fail(i, "loyalty_activated_this_turn"); }
@@ -501,6 +504,30 @@ bool TapForCostSharedOnce(GameState& state, const ManaCost& cost_in, bool for_cr
     // is snow mana regardless of the feeder). false for every non-{S} pip -> byte-identical.
     bool paying_snow = false;
 
+    // §2b SAC-FOR-MANA FODDER (MTG_SAC_OUTLET_PAY -- see SacOutletPayEnabled in SpellEffects.h).
+    // Resolved ONCE per payment, never per source per pip: the latter is the O(board^2) walk this
+    // whole strand exists to delete on a 40-Saproling board. An invalid descriptor makes every
+    // branch below a single null test, which is what keeps the lever's OFF arm and every deck
+    // without an outlet byte-identical.
+    const SacPayOutlet sac_outlet = LiveSacPayOutlet(state, active);
+    // Fodder is only ever considered for a permanent `usable()` REJECTS, so no permanent can be
+    // offered twice in one pip selection (a Goblin mana dork taps at its own rank; it is not eaten).
+    auto fodder_ok = [&](const Permanent& p, const CardDefinition& def) -> bool
+    {
+        if (!sac_outlet.valid()) { return false; }
+        // The creature THIS cast is about to sacrifice as a cost is already spent (see
+        // g_pay_sac_victim below); eating it too would spend one body twice.
+        if (g_pay_sac_victim != 0 && p.card.m_number == g_pay_sac_victim) { return false; }
+        if (paying_snow && !def.card.HasSupertype(Supertype::Snow)) { return false; }
+        if (def.params.creature_mana_only && !for_creature) { return false; }
+        if (reserved_mask)
+        {
+            const std::size_t idx = static_cast<std::size_t>(&p - state.battlefield.data());
+            if (idx < 64 && (reserved_mask & (1ull << idx))) { return false; }
+        }
+        return IsSacPayFodder(p, def, sac_outlet);
+    };
+
     auto usable = [&](const Permanent& p, const CardDefinition& def) -> bool
     {
         if (paying_snow && !def.card.HasSupertype(Supertype::Snow)) { return false; }
@@ -616,11 +643,30 @@ bool TapForCostSharedOnce(GameState& state, const ManaCost& cost_in, bool for_cr
             for (int i = 0; i < bn; ++i)
             {
                 Permanent& p = state.battlefield[i];
-                if (p.controller_index != active || p.tapped) { continue; }
+                if (p.controller_index != active) { continue; }
+                // A TAPPED permanent is never a TAP source -- but §2b can still EAT it: sacrificing
+                // is not tapping, and "attack, then sac the attackers for mana" is the Skirk line
+                // this deck is built on. With the lever off (or no outlet on the board) sac_outlet
+                // is invalid and this is the historical short-circuit, LookupCached included.
+                if (p.tapped && !sac_outlet.valid()) { continue; }
                 const CardDefinition* def = CardDatabase::Instance().LookupCached(p.card);
-                if (!def || !usable(p, *def)) { continue; }
+                if (!def) { continue; }
+                const bool tap_ok = !p.tapped && usable(p, *def);
+                const bool fodder = !tap_ok && fodder_ok(p, *def);
+                if (!tap_ok && !fodder) { continue; }
                 int kind = 0;
-                if (def->params.is_filter)
+                if (fodder)
+                {
+                    // §2b: the colours come from the OUTLET, not from the fodder's own (empty)
+                    // produces -- the body is the resource, the outlet is the permission.
+                    const std::vector<Color>& prod = SacPayOutletColors(sac_outlet.def->params);
+                    bool makes = false;
+                    if (any) { makes = !prod.empty(); }
+                    else { for (Color c : prod) { if (c == needed) { makes = true; break; } } }
+                    if (!makes) { continue; }
+                    kind = 5;
+                }
+                else if (def->params.is_filter)
                 {
                     if (any || needed == Color::Colorless) { kind = 3; }   // {C} mode covers generic/{C}
                     else
@@ -684,7 +730,11 @@ bool TapForCostSharedOnce(GameState& state, const ManaCost& cost_in, bool for_cr
                     kind = 1;
                     }
                 }
-                int rank = ResolveProvider(state).ManaSourceRank(state, *def);
+                // §2b fodder is ranked by SacPayFodderRank, whose base 500 sits behind every real
+                // source on the board -- the user's "highest level of deferral", expressed as a
+                // tap-order rank rather than as a rule anyone has to enforce.
+                int rank = (kind == 5) ? SacPayFodderRank(state, p, sac_outlet)
+                                       : ResolveProvider(state).ManaSourceRank(state, *def);
                 // Filter {C} mode on a generic/{C} pip: least flexible mana on the board, so it
                 // spends just after a true {C}-only source and BEFORE any coloured land -- see
                 // FilterCFirstEnabled (treasure_hunt s11: the old rank-25 read tapped the real
@@ -811,6 +861,32 @@ bool TapForCostSharedOnce(GameState& state, const ManaCost& cost_in, bool for_cr
             }
             Permanent& bp = state.battlefield[best_i];
             const CardDefinition* bdef = CardDatabase::Instance().LookupCached(bp.card);
+            if (best_kind == 5)
+            {
+                // §2b: EAT one body through the outlet. Marked, not erased -- erasing mid-payment
+                // invalidates the `Permanent&`s this loop holds and the reserved-mask indices it
+                // derives from `&p - battlefield.data()`, so CommitPaySacSacrifices performs the
+                // real sacrifice (graveyard + death triggers) on each success return. Exactly the
+                // §2a Treasure contract, and a failed attempt restores the mark from bf_pre.
+                const CardParams& op = sac_outlet.def->params;
+                const std::vector<Color>& prod = SacPayOutletColors(op);
+                // A generic pip takes a colour THIS LINE still owes rather than decklist order --
+                // the same LineDemandAnyPipColor the direct-source tap uses, so a rainbow outlet
+                // does not float a colour the rest of the turn cannot spend.
+                const Color col = any ? LineDemandAnyPipColor(state, prod, floating, prod[0])
+                                      : needed;
+                const int amt = std::max(1, op.sac_outlet_add_mana_amount);
+                bp.pay_sac_eaten = true;
+                floating.Add(col, amt);
+                if (available)
+                {
+                    // Lockstep with AddSacPayFodderToPool's credit: rainbow supply was banked as
+                    // `wild`, a pinned outlet's as its letter.
+                    if (prod.size() > 1) { available->wild = std::max(0, available->wild - amt); }
+                    else                 { available->Add(col, -amt); }
+                }
+                return true;
+            }
             if (best_kind == 1)
             {
                 // {C}-only for a non-creature colored_creature_only land -> the generic tap uses {C}
@@ -1852,6 +1928,10 @@ ManaPool AvailableManaPool(const GameState& state, const Permanent* skip)
         }
         AddSourceToPool(pool, state, *def, PermanentManaYield(state, p, *def), &p);
     }
+    // §2b: bodies a live sac-for-mana outlet can eat are supply too (MTG_SAC_OUTLET_PAY). Inert --
+    // one null test -- with the lever off or no outlet on the board.
+    AddSacPayFodderToPool(pool, state, state.active_player_index,
+                          LiveSacPayOutlet(state, state.active_player_index), skip);
     if (FloatLeftoverManaEnabled()) { pool.AddPool(state.floating_mana); }
     return pool;
 }
@@ -1888,6 +1968,10 @@ ManaPool AvailableManaPoolNoAttackers(const GameState& state)
         }
         AddSourceToPool(pool, state, *def, PermanentManaYield(state, p, *def), &p);
     }
+    // §2b, minus the bodies whose loss would cost a real attack -- the same exclusion this pool
+    // applies to a creature mana source, applied to fodder.
+    AddSacPayFodderToPool(pool, state, active, LiveSacPayOutlet(state, active),
+                          /*skip=*/nullptr, /*no_attackers=*/true);
     if (FloatLeftoverManaEnabled()) { pool.AddPool(state.floating_mana); }
     return pool;
 }
@@ -2107,6 +2191,19 @@ ColorFeasibility BuildColorFeasibility(const GameState& state, bool noncreature,
             continue;
         }
         add(mask, amt);
+    }
+    // §2b: fodder a live sac-for-mana outlet can eat (MTG_SAC_OUTLET_PAY). Outside the loop above
+    // because fodder is not filtered on `tapped` -- a creature that already attacked can still be
+    // sacrificed, and this gate must see the same supply the payer does or it prunes a payable line.
+    if (const SacPayOutlet so = LiveSacPayOutlet(state, active); so.valid())
+    {
+        int smask = 0;
+        for (Color c : SacPayOutletColors(so.def->params))
+        { const int ci = static_cast<int>(c); if (ci >= 0 && ci < 5) { smask |= (1 << ci); } }
+        const int per = std::max(1, so.def->params.sac_outlet_add_mana_amount);
+        // Free choice of colour per activation, which is exactly what "add one mana of any color"
+        // is -- so add(), not add_one_of_each().
+        add(smask, SacPayFodderCount(state, active, so, skip) * per);
     }
     // The turn-scoped reserve is spendable on this phase's casts, so it is supply like any other.
     if (FloatLeftoverManaEnabled())
@@ -2782,17 +2879,26 @@ void AnimateLandsShared(GameState& state, ManaPool* available)
     // DeferSacOutletPreCombat is skipped under HumanPlayActive(). Autonomous play is unchanged, so
     // no ground truth moves.
     if (HumanPlayActive()) { return; }
-    for (Permanent& p : state.battlefield)
+    // A PAYMENT CAN CHANGE THE BATTLEFIELD, so neither a range-for reference nor a cached index
+    // survives the pay call: CommitPaySacSacrifices erases a cracked §2a Treasure, and §2b eats a
+    // sac-outlet's fodder -- whose death triggers may also APPEND (a Mogg War Marshal token). The
+    // old range-for wrote `p.is_animated` through a reference the erase had already invalidated.
+    // Walk by live index and re-find the permanent by card number afterwards. Byte-identical while
+    // nothing erases (same order, same permanent) -- which is every payment before §2a/§2b fire.
+    for (std::size_t i = 0; i < state.battlefield.size(); ++i)
     {
+        const Permanent& p = state.battlefield[i];
         if (p.controller_index != state.active_player_index
             || p.tapped || p.is_animated) { continue; }
         const CardDefinition* def = CardDatabase::Instance().LookupCached(p.card);
         if (!def || !def->params.can_animate || !def->params.animate_cost.has_value()) { continue; }
-        const ManaCost& cost = def->params.animate_cost.value();
+        const int      num  = p.card.m_number;
+        const ManaCost cost = def->params.animate_cost.value();
         if (available != nullptr && !available->CanPay(cost)) { continue; }
         if (!TapForCostShared(state, cost, false, available,
                               /*honor_legacy_cco=*/available == nullptr)) { continue; }
-        p.is_animated = true;
+        for (Permanent& q : state.battlefield)
+        { if (q.card.m_number == num) { q.is_animated = true; break; } }
     }
 }
 
@@ -2809,9 +2915,12 @@ void ActivateTapTokensShared(GameState& state, ManaPool* available)
     // HUMAN PLAY: stand down -- the token ability is Action::Kind::TapForTokenPay there. Same
     // reasoning as AnimateLandsShared above.
     if (HumanPlayActive()) { return; }
-    int bf_size = static_cast<int>(state.battlefield.size());
-    for (int i = 0; i < bf_size; ++i)
+    // LIVE size, not a cached one: a payment inside this loop can SHRINK the battlefield (see
+    // AnimateLandsShared's note), and a stale bound then indexes past the end -- an out-of-bounds
+    // write on the `tapped = false` rollback path. Unchanged while nothing erases.
+    for (int i = 0; i < static_cast<int>(state.battlefield.size()); ++i)
     {
+        const int bf_size = static_cast<int>(state.battlefield.size());
         if (state.battlefield[i].controller_index != state.active_player_index
             || state.battlefield[i].tapped) { continue; }
         const CardDefinition* def =
