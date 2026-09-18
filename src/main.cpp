@@ -606,6 +606,17 @@ static std::string SummarizePlan(const TurnSolver::Plan& plan, const GameState& 
         { tag += " (pay " + std::to_string(a.phyrexian_life) + " life)"; }
         // Evoke variant (Reveillark): same lesson -- the evoke and hard casts share a name.
         if (a.evoke) { tag += " (evoke)"; }
+        // DEVOUR count (Mycoloth, CR 702.81). Same lesson again, and it had actually GONE WRONG:
+        // the solver enumerates one cast variant per k = 0..(own creatures), keyed into
+        // plan_signature so they are genuinely distinct plans -- but NOTHING rendered k, so the
+        // human saw 34 Mycoloth plans differing only by land choice and cast order and could not
+        // tell a "devour 0" from a "devour 5". The deferral note in audit_viewer_decisions.py even
+        // claimed the count "IS surfaced ... a human picks among distinct main_phase plans exactly
+        // as for splice/replicate counts"; it was surfaced in the SEARCH and invisible in the GUI.
+        // -1 = not a devour cast (every other card, unchanged); 0 is meaningful and must print,
+        // because declining to devour is a real and frequently-correct choice.
+        if (a.devour_count >= 0)
+        { tag += " (devour " + std::to_string(a.devour_count) + ")"; }
         if (a.discard_lands)  { tag += " +discard" + std::to_string(a.discard_lands); }
         casts.push_back(tag);
     }

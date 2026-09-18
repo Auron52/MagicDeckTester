@@ -7392,12 +7392,22 @@ struct DevourDeath { Card card; bool was_token; int minus_counters; };
 // before lords and scaling creatures). For this deck that ordering is already the right one --
 // Tukatongue Thallid ranks as expendable because its death REFUNDS a Saproling, which is exactly
 // what you want to feed a Mycoloth.
-inline int ApplyDevourAsEnters(GameState& state, int controller, const CardParams& p, int k,
-                               std::vector<DevourDeath>& deferred)
+//
+// ...but a HUMAN picks its own fodder (USER, 2026-09-18: "I'm not given any choices for what to
+// sacrifice to Mycoloth. As usual it should use the targeting approach"). This reuses the existing
+// `sacrifice` board-click decision (g_play_sacrifice_chooser) rather than introducing a type -- the
+// same reuse ChooseSacOutletVictimIndex made. Devour is a genuine choice even though the COUNT is
+// already searched: feeding the Tukatongue refunds a Saproling, feeding a spore-loaded Thallid
+// throws away a Saproling engine two upkeeps from paying out, and feeding a Sporecrown de-buffs
+// every Fungus on the board.
+//
+// Returns the chosen battlefield indices, in no particular order. `k` is a MAXIMUM -- fewer
+// candidates than k is legal ("you MAY sacrifice any number").
+inline std::vector<int> ChooseDevourVictimIndices(GameState& state, int controller, int k,
+                                                  const std::string& source_name)
 {
-    if (p.devour <= 0 || k <= 0) { return 0; }
-    // Phase 1 -- choose up to k distinct victims WITHOUT touching the board, so no death trigger can
-    // interleave with the selection.
+    // Heuristic order first: it IS the answer when no human is attached, and it is the per-pick
+    // DEFAULT when one is, so holding enter reproduces the autonomous line exactly.
     std::vector<std::pair<int,int>> ranked;   // (expendability rank, battlefield index)
     for (int i = 0; i < static_cast<int>(state.battlefield.size()); ++i)
     {
@@ -7407,12 +7417,75 @@ inline int ApplyDevourAsEnters(GameState& state, int controller, const CardParam
     }
     std::sort(ranked.begin(), ranked.end());
     if (static_cast<int>(ranked.size()) > k) { ranked.resize(static_cast<std::size_t>(k)); }
-    if (ranked.empty()) { return 0; }
+
+    std::vector<int> picked;
+    // MTG_DEVOUR_TRACE=1: diagnostic only, no behaviour. Exists because "the chooser compiles, is
+    // byte-identical and never fires" is THE recurring bug for this whole family of hooks
+    // (tools/play/DECISIONS.md names it), and the only way to tell a dead path from a legitimately
+    // forced pick is to see k, the candidate count and whether a chooser is attached.
+    if (EnvOn("MTG_DEVOUR_TRACE"))
+    {
+        int ncre = 0;
+        for (const Permanent& v : state.battlefield)
+        { if (v.controller_index == controller && v.card.IsCreature()) { ++ncre; } }
+        std::fprintf(stderr, "[devour-trace] src=%s k=%d creatures=%d ranked=%d chooser=%s\n",
+                     source_name.c_str(), k, ncre, static_cast<int>(ranked.size()),
+                     g_play_sacrifice_chooser ? "ATTACHED" : "null");
+    }
+    if (!g_play_sacrifice_chooser)
+    {
+        for (const auto& r : ranked) { picked.push_back(r.second); }
+        return picked;                       // search / rollout / autonomous -- byte-identical
+    }
+
+    // One prompt per victim, each over the candidates NOT yet picked. The board is never touched
+    // here: CR 702.81b makes the victims simultaneous, so selecting one at a time is a UI shape,
+    // not a rules order -- and doing it without mutating state is what keeps it so.
+    const int want = static_cast<int>(ranked.size());
+    for (int n = 0; n < want; ++n)
+    {
+        std::vector<int> cands;
+        for (int i = 0; i < static_cast<int>(state.battlefield.size()); ++i)
+        {
+            const Permanent& v = state.battlefield[i];
+            if (v.controller_index != controller || !v.card.IsCreature()) { continue; }
+            if (std::find(picked.begin(), picked.end(), i) != picked.end()) { continue; }
+            cands.push_back(i);
+        }
+        if (cands.empty()) { break; }
+        // Forced: as many picks still owed as candidates left. Do not prompt for a non-choice --
+        // same rule ChooseSacOutletVictimIndex applies at size 1.
+        if (static_cast<int>(cands.size()) <= want - n)
+        {
+            for (int c : cands) { picked.push_back(c); }
+            break;
+        }
+        // Default = the heuristic's nth choice, if it is still available.
+        int def_opt = 0;
+        for (int c = 0; c < static_cast<int>(cands.size()); ++c)
+        {
+            if (cands[c] == ranked[static_cast<std::size_t>(n)].second) { def_opt = c; break; }
+        }
+        const std::string prompt = source_name + " (devour " + std::to_string(n + 1)
+                                 + " of " + std::to_string(want) + ")";
+        const int chosen = (*g_play_sacrifice_chooser)(state, controller, prompt, cands, def_opt);
+        picked.push_back((chosen >= 0 && chosen < static_cast<int>(cands.size()))
+                         ? cands[chosen] : cands[def_opt]);
+    }
+    return picked;
+}
+
+inline int ApplyDevourAsEnters(GameState& state, int controller, const CardParams& p, int k,
+                               std::vector<DevourDeath>& deferred,
+                               const std::string& source_name = "Devour")
+{
+    if (p.devour <= 0 || k <= 0) { return 0; }
+    // Phase 1 -- choose up to k distinct victims WITHOUT touching the board, so no death trigger can
+    // interleave with the selection.
+    std::vector<int> idxs = ChooseDevourVictimIndices(state, controller, k, source_name);
+    if (idxs.empty()) { return 0; }
     // Phase 2 -- remove them all, recording each death for the caller to fire later. Erase from the
     // HIGHEST index down so the earlier indices stay valid.
-    std::vector<int> idxs;
-    idxs.reserve(ranked.size());
-    for (const auto& r : ranked) { idxs.push_back(r.second); }
     std::sort(idxs.begin(), idxs.end(), std::greater<int>());
     for (int idx : idxs)
     {

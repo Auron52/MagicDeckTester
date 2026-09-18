@@ -623,3 +623,82 @@ and gate nothing**. Both are written up in the perf doc.
 
 **Not pushed.** Engine changes are substantial and CI (Linux + Windows) has not run; MSVC is
 unverified from this container. `git push` when you want the Windows/determinism-parity signal.
+
+## Viewer: devour — three bugs behind one report (2026-09-18)
+
+USER, mid-session: *"I'm not given any choices for what to sacrifice to Mycoloth. As usual it
+should use the targeting approach (pick directly on the board) for sacrifice."* Investigating that
+turned up three independent defects, of which two are fixed and one is open. They are listed in the
+order they have to be fixed, because each one hides the next.
+
+### 1. FIXED — the victim choice was never wired
+
+`DecisionProvider::FodderSacUseful`-style board picking already existed for sacrifices: the
+`sacrifice` decision type (`g_play_sacrifice_chooser`, `promptPanelHtml`, board shape), used by the
+sac-outlet victims and Natural Order's additional cost. Devour simply never called it.
+
+It had been written down as a deliberate deferral in `audit_viewer_decisions.py`, and **the stated
+reason was wrong**:
+
+> wiring it needs a MULTI-select sacrifice -- "pick 3 of your 14 Saprolings" -- which the existing
+> single-victim `sacrifice` chooser has no shape for.
+
+Asking the existing single-victim chooser ONCE PER VICTIM, over the candidates not yet picked,
+needs no new type, no multi-select, no new GUI branch and no new emitter. `ChooseDevourVictimIndices`
+(SpellEffects.h) does that, defaulting each pick to the old expendability ranking so the autonomous
+line is reproduced by holding enter. CR 702.81b simultaneity is preserved because selection never
+touches the battlefield -- the victims are still removed together afterwards.
+
+**The reusable lesson:** a deferral resting on *"no shape exists for this"* should first be re-read
+as *"which existing shape, REPEATED, would do?"*
+
+### 2. FIXED — the devour COUNT was invisible in the GUI
+
+`devour` did not appear in `src/main.cpp` at all. `CollectActions` genuinely fans one cast variant
+per k = 0..(own creatures) and `plan_signature` carries `/D<k>` so they never collapse -- but
+nothing RENDERED k. The human saw 34 Mycoloth plans differing only by land choice and cast order,
+with no way to tell a `devour 0` from a `devour 5`. The plan summary now prints `(devour N)`;
+`-1` (not a devour cast) prints nothing, and `0` prints, because declining is a real choice.
+
+The same deferral note asserted the opposite, and it is worth quoting as a warning about
+verification-by-assertion:
+
+> HOW MANY to devour IS surfaced -- it is a real searched plan variant ... so a human picks among
+> distinct `main_phase` plans exactly as for splice/replicate counts. Not a gap.
+
+It was surfaced in the SEARCH and invisible in the GUI. Nobody had looked at the rendering.
+
+### 3. OPEN — only k = (all creatures) ever reaches the plan list
+
+Measured, seed 9005 turn 6: 92 plans, 34 mention Mycoloth, and **every one says `(devour 5)`** with
+5 creatures on board. The variation is purely land x cast order.
+
+What has been RULED OUT, each by direct test rather than reading:
+
+* **Not the enumerator.** `MTG_DEVOUR_TRACE=1` prints `[devour-enum] Mycoloth: pushing k=0..6
+  (7 variants)` -- the fan runs and pushes every k.
+* **Not plan dedup.** `plan_signature` appends `/D<k>` (TurnSolver.cpp ~1730).
+* **Not plan equality.** The plan comparator explicitly tests `x.devour_count != y.devour_count`.
+* **Not the group cap.** `MTG_UNPRUNED=1` (which `--claude-play` sets anyway) opens
+  `UnprunedGate::GroupCap`.
+* **Not the viewer plan valve.** `MTG_VIEWER_PLAN_CAP=0` changes nothing.
+* **Not a dead code path.** `[devour-trace] ... chooser=ATTACHED` proves the human-play devour
+  resolution is reached with a live chooser.
+
+So the actions are created with distinct k and the plan builder surfaces exactly one of them. The
+collapse is between `CollectActions` and the plan list -- the per-hand-card option group
+(`PlanGroupKey` -> `groups`) is where to look next: the group is documented as "one mutually-
+exclusive option list per hand card", so a walk that takes only the best-eval option per group would
+produce exactly this symptom, and `v.eval += k * (devour - 1)` makes k = own the best-eval option by
+construction.
+
+**Consequence while this is open:** fix 1 is inert in practice. The victim prompt is correct to stay
+silent when the line devours the entire board, because then there is nothing to choose -- so the
+user still gets no sacrifice choice until k can vary.
+
+**Why the coverage gate could not have caught this.** `audit_viewer_decisions.py --verify-card
+Mycoloth` reports HARD_MISS, and correctly: an AI-driven driver always takes the AI's plan, which
+always devours everything, so the victim decision genuinely never arises. A gate that drives only
+the engine's preferred line cannot distinguish "this decision is unwired" from "this decision is
+unreachable because another decision is unwired". `MTG_DEVOUR_TRACE` (env-gated, no behaviour,
+registered in `--list-flags`) is what separated them, and is kept for that reason.

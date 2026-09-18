@@ -222,6 +222,13 @@ MANIFEST = {
     # victim filter; WHICH permanent dies is the existing `sacrifice` board-click decision.
     "sac_outlet_allows_enchantment": ("sacrifice",    truthy),
     "sac_outlet_excludes_self":      ("sacrifice",    truthy),
+    # Mycoloth's devour (CR 702.81). The COUNT rides main_phase as a searched plan variant; WHICH
+    # creatures are eaten is the same `sacrifice` board-click decision, asked once per victim over
+    # the candidates not yet picked (ChooseDevourVictimIndices). Promoted out of the disclosed-gap
+    # list 2026-09-18 on the user's instruction ("As usual it should use the targeting approach") --
+    # the old disclosure said it "needs a multi-select sacrifice the registry has no shape for",
+    # which was the wrong shape to look for: repeated single-select needs no new type at all.
+    "devour":                        ("sacrifice",    positive),
     # MDFC (Pathway) land: playing it offers a "which face?" choice surfaced as main_phase plan
     # variants (a `face` choose sub, one variant per face) -- not its own decision type.
     "mdfc_back_name":        ("main_phase",           truthy),
@@ -955,21 +962,16 @@ MAINPHASE_PARAMS = {
 
 # Known unwired decision gaps, DEFERRED with the user's sign-off (disclosed in Stage 6a).
 DEFERRED_PARAMS = {
-    # Mycoloth's DEVOUR (2026-09-17). Two separable decisions, and only one of them is surfaced:
-    #   * HOW MANY to devour IS surfaced -- it is a real searched plan variant (one CastFromHand
-    #     variant per k, keyed into plan_signature), so a human picks among distinct `main_phase`
-    #     plans exactly as for splice/replicate counts. Not a gap.
-    #   * WHICH creatures are devoured is AUTO-RESOLVED by the shared expendability ranking
-    #     (SacExpendabilityRank: tokens and weak bodies first, lords and scaling creatures last).
-    #     This IS a disclosed gap. Wiring it means a MULTI-select sacrifice -- "pick 3 of your 14
-    #     Saprolings" -- which the existing single-victim `sacrifice` chooser has no shape for.
-    #     Its cost in THIS deck is small and bounded: devour fires at most twice per game (2x
-    #     Mycoloth), the fodder is overwhelmingly fungible 1/1 Saproling tokens, and the ranking
-    #     already prefers the one genuinely-correct special case (Tukatongue Thallid, whose death
-    #     REFUNDS a Saproling). PROVISIONAL -- needs the user's sign-off.
-    "devour": "devour COUNT is surfaced as a searched main_phase plan variant; WHICH creatures are "
-              "devoured is auto-resolved by the shared expendability ranking -- wiring it needs a "
-              "multi-select sacrifice the registry has no shape for. PROVISIONAL, pending sign-off",
+    # (Mycoloth's DEVOUR was disclosed here 2026-09-17 and CLOSED 2026-09-18. The rationale for
+    #  deferring it was that wiring it "means a MULTI-select sacrifice, which the existing
+    #  single-victim `sacrifice` chooser has no shape for". That was the wrong shape to look for:
+    #  asking the existing single-victim chooser ONCE PER VICTIM, over the candidates not yet
+    #  picked, needs no new type, no multi-select and no new GUI branch. Kept as a note because the
+    #  mistake is reusable -- a deferral resting on "no shape exists" should be re-read as "which
+    #  existing shape, repeated, would do?" before it is written down. USER: "As usual it should
+    #  use the targeting approach (pick directly on the board) for sacrifice.")
+    # (devour MOVED to the MANIFEST 2026-09-18 -- WHICH creatures are devoured is now the
+    #  `sacrifice` board-click decision, asked once per victim. See ChooseDevourVictimIndices.)
     # (cascade_max_mv moved to the MANIFEST 2026-09-03: the may-cast surfaces as `free_cast`
     # at the cascade trigger's resolution; the hit itself is rules-forced, not a choice.)
     "untap_x_mana_sources": "Reality Spasm untap mode -- engine model shipped default-ON (4f449fbd, "

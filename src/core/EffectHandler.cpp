@@ -68,8 +68,11 @@ void EffectHandler::EnterBattlefield(GameState& state, const StackEntry& entry,
     std::vector<DevourDeath> devoured;
     if (edef->params.devour > 0 && entry.devour_count.value_or(0) > 0)
     {
+        // Name passed through so the human's per-victim board prompt says WHICH devourer is eating
+        // (a board can hold two Mycoloths). Inert in search/rollout -- the chooser is nulled there.
         const int ctrs = ApplyDevourAsEnters(state, entry.controller_index, edef->params,
-                                             entry.devour_count.value_or(0), devoured);
+                                             entry.devour_count.value_or(0), devoured,
+                                             perm.card.m_name.str());
         PutPlusCounters(state, perm, ctrs);
     }
     state.battlefield.push_back(perm);

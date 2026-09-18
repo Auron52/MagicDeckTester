@@ -146,13 +146,28 @@
   /* counter badges on a permanent — one colored circle per counter kind, hover for a tooltip.
      Multiple kinds (rare) stack left-to-right so each is distinguishable. */
   .thumb .cnts { position:absolute; bottom:2px; left:2px; display:flex; gap:2px; z-index:3; }
+  /* The BASE rule carries a background of its own. Every kind below overrides it, so the fallback
+     is never seen on a known counter -- but a kind the engine emits and this stylesheet has not
+     been taught renders as a visible grey badge instead of near-black text on card art, i.e.
+     INVISIBLE. That is exactly how spore and quest counters went missing: JsonBattlefield emitted
+     them (with a comment calling them display REQUIREMENTS), and only the CSS was never added, so
+     the data was on the wire and on the board and simply could not be seen. A default background
+     turns "unstyled kind" from a silent failure into an obvious one. */
   .thumb .cnt { min-width:16px; height:16px; padding:0 3px; border-radius:9px; font-size:10px; font-weight:700;
-      display:flex; align-items:center; justify-content:center; color:#0c1116; box-shadow:0 0 0 1px rgba(0,0,0,.55); cursor:help; }
+      display:flex; align-items:center; justify-content:center; color:#0c1116; background:#b9bec6;
+      box-shadow:0 0 0 1px rgba(0,0,0,.55); cursor:help; }
   .thumb .cnt.p1p1{ background:var(--good); } .thumb .cnt.m1m1{ background:var(--bad); }
   .thumb .cnt.loyalty{ background:var(--warn); } .thumb .cnt.poison{ background:#9a6ad1; }
   .thumb .cnt.depletion{ background:var(--land); } .thumb .cnt.charge{ background:var(--acc); }
   .thumb .cnt.verse{ background:#e69a5a; } .thumb .cnt.storage{ background:#e3b23c; }
   .thumb .cnt.age{ background:#8a7fb5; }   /* cumulative upkeep (Varchild's War-Riders) */
+  /* SPORE (the Thallid family) and QUEST (Beastmaster Ascension). Both are the whole read of a
+     Fungus board: spore says how close a Thallid is to its third counter (-> a Saproling), quest
+     says how close the Ascension is to switching on its +5/+5 team anthem at seven. Deliberately
+     NOT green -- --good is already the +1/+1 badge and a mono-green deck's board is green enough
+     that a green badge on green art is the failure we just fixed. */
+  .thumb .cnt.spore{ background:#c2e05a; }  /* lime -- reads on the Thallids' dark art */
+  .thumb .cnt.quest{ background:#f0782f; }  /* orange -- the anthem clock, distinct from storage gold */
   /* floating (unspent) mana, shown beside the Lands header */
   .floatmana { margin-left:10px; display:inline-flex; gap:3px; vertical-align:middle; }
   .mpip { display:inline-flex; align-items:center; justify-content:center; min-width:18px; height:18px; padding:0 5px;

@@ -13813,6 +13813,11 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
                 if (q.controller_index == state.active_player_index && q.card.IsCreature())
                 { ++own; }
             }
+            if (EnvOn("MTG_DEVOUR_TRACE"))
+            {
+                std::fprintf(stderr, "[devour-enum] %s: pushing k=0..%d (%d variants)\n",
+                             a.card_name.str().c_str(), own, own + 1);
+            }
             for (int k = 0; k <= own; ++k)
             {
                 Action v = a;
@@ -24373,8 +24378,11 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
             std::vector<DevourDeath> devoured;
             if (def.params.devour > 0 && cast_devour > 0)
             {
+                // Name passed for lockstep with the executor twin. This site is the ROLLOUT, where
+                // g_play_sacrifice_chooser is always null (RevealLogPause), so the human prompt can
+                // never fire here -- it is the heuristic ranking, byte-identically.
                 const int ctrs = ApplyDevourAsEnters(state, state.active_player_index, def.params,
-                                                     cast_devour, devoured);
+                                                     cast_devour, devoured, perm.card.m_name.str());
                 PutPlusCounters(state, perm, ctrs);
             }
             state.battlefield.push_back(perm);
