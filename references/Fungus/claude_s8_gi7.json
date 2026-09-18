@@ -1,0 +1,461 @@
+{
+  "seed": 8, "game_index": 7, "win_turn": 7, "won": true,
+  "mulligan": { "count": 1, "bottom": [50] },
+  "decisions": [
+    { "chosen": 0, "decision": {
+  "decision_index": 0,
+  "type": "mulligan",
+  "turn": 0,
+  "me": { "life": 20, "battlefield": [] },
+  "opponent": { "life": 20, "battlefield": [] },
+  "mulligan_count": 0,
+  "on_the_play": true,
+  "to_bottom": 0,
+  "hand": [{ "num": 1, "name": "Beastmaster Ascension" }, { "num": 5, "name": "Doubling Season" }, { "num": 55, "name": "Utopia Mycon" }, { "num": 10, "name": "Forest" }, { "num": 51, "name": "Tukatongue Thallid" }, { "num": 52, "name": "Tukatongue Thallid" }, { "num": 56, "name": "Utopia Mycon" }],
+  "ai_choice": 0,
+  "note": "reply 1 to KEEP this hand (then bottom 0 card(s)), or 0 to mulligan again"
+}
+},
+    { "chosen": 1, "decision": {
+  "decision_index": 1,
+  "type": "mulligan",
+  "turn": 0,
+  "me": { "life": 20, "battlefield": [] },
+  "opponent": { "life": 20, "battlefield": [] },
+  "mulligan_count": 1,
+  "on_the_play": true,
+  "to_bottom": 1,
+  "hand": [{ "num": 49, "name": "Thallid Shell-Dweller" }, { "num": 36, "name": "Sporecrown Thallid" }, { "num": 15, "name": "Forest" }, { "num": 17, "name": "Forest" }, { "num": 50, "name": "Thallid Shell-Dweller" }, { "num": 28, "name": "Forest" }, { "num": 7, "name": "Doubling Season" }],
+  "ai_choice": 1,
+  "note": "reply 1 to KEEP this hand (then bottom 1 card(s)), or 0 to mulligan again"
+}
+},
+    { "chosen": 4, "decision": {
+  "decision_index": 2,
+  "type": "bottom",
+  "turn": 0,
+  "me": { "life": 20, "battlefield": [] },
+  "opponent": { "life": 20, "battlefield": [] },
+  "bottom_step": 0,
+  "bottom_total": 1,
+  "hand": [{ "num": 49, "name": "Thallid Shell-Dweller", "win_optimal": true }, { "num": 36, "name": "Sporecrown Thallid", "win_optimal": true }, { "num": 15, "name": "Forest", "win_optimal": true }, { "num": 17, "name": "Forest", "win_optimal": true }, { "num": 50, "name": "Thallid Shell-Dweller", "win_optimal": true }, { "num": 28, "name": "Forest", "win_optimal": true }, { "num": 7, "name": "Doubling Season", "win_optimal": true }],
+  "ai_choice": { "index": 2, "num": 15, "name": "Forest" },
+  "ai_set": [],
+  "note": "reply the hand INDEX (0-based) of the card to put on the bottom (step 1 of 1)"
+}
+},
+    { "chosen": 0, "decision": {
+  "decision_index": 3,
+  "main_ordinal": 0,
+  "type": "main_phase",
+  "turn": 1,
+  "phase": "pre_main",
+  "on_the_play": true,
+  "mdfc_backs": ["Boulderloft Pathway", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [], "vial_counters": [], "hand": [{ "num": 7, "name": "Doubling Season", "cost": "{4}{G}", "mv": 5, "kind": "permanent" }, { "num": 15, "name": "Forest", "cost": "", "mv": 0, "kind": "land" }, { "num": 17, "name": "Forest", "cost": "", "mv": 0, "kind": "land" }, { "num": 28, "name": "Forest", "cost": "", "mv": 0, "kind": "land" }, { "num": 36, "name": "Sporecrown Thallid", "cost": "{1}{G}", "mv": 2, "kind": "permanent", "is_creature": true }, { "num": 49, "name": "Thallid Shell-Dweller", "cost": "{1}{G}", "mv": 2, "kind": "permanent", "is_creature": true }], "graveyard": [], "library_size": 54, "land_drops_left": 1 },
+  "opponent": { "life": 20, "battlefield": [] },
+  "plans": [
+    { "index": 0, "summary": "land=Forest; cast: (nothing)", "land": "Forest", "casts": [], "actions": [] },
+    { "index": 1, "summary": "land=none; cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 4,
+  "type": "main_phase",
+  "turn": 1,
+  "phase": "pre_main",
+  "on_the_play": true,
+  "mdfc_backs": ["Boulderloft Pathway", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Forest", "idx": 0, "num": 15, "is_land": true, "taps": "G" }], "vial_counters": [], "hand": [{ "num": 7, "name": "Doubling Season", "cost": "{4}{G}", "mv": 5, "kind": "permanent" }, { "num": 17, "name": "Forest", "cost": "", "mv": 0, "kind": "land" }, { "num": 28, "name": "Forest", "cost": "", "mv": 0, "kind": "land" }, { "num": 36, "name": "Sporecrown Thallid", "cost": "{1}{G}", "mv": 2, "kind": "permanent", "is_creature": true }, { "num": 49, "name": "Thallid Shell-Dweller", "cost": "{1}{G}", "mv": 2, "kind": "permanent", "is_creature": true }], "graveyard": [], "library_size": 54, "land_drops_left": 0 },
+  "opponent": { "life": 20, "battlefield": [] },
+  "plans": [
+    { "index": 0, "summary": "cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 5,
+  "type": "main_phase",
+  "turn": 1,
+  "phase": "post_main",
+  "on_the_play": true,
+  "mdfc_backs": ["Boulderloft Pathway", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Forest", "idx": 0, "num": 15, "is_land": true, "taps": "G" }], "vial_counters": [], "hand": [{ "num": 7, "name": "Doubling Season", "cost": "{4}{G}", "mv": 5, "kind": "permanent" }, { "num": 17, "name": "Forest", "cost": "", "mv": 0, "kind": "land" }, { "num": 28, "name": "Forest", "cost": "", "mv": 0, "kind": "land" }, { "num": 36, "name": "Sporecrown Thallid", "cost": "{1}{G}", "mv": 2, "kind": "permanent", "is_creature": true }, { "num": 49, "name": "Thallid Shell-Dweller", "cost": "{1}{G}", "mv": 2, "kind": "permanent", "is_creature": true }], "graveyard": [], "library_size": 54, "land_drops_left": 0 },
+  "opponent": { "life": 20, "battlefield": [] },
+  "plans": [
+    { "index": 0, "summary": "cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
+}
+},
+    { "chosen": 4, "decision": {
+  "decision_index": 6,
+  "main_ordinal": 1,
+  "type": "main_phase",
+  "turn": 2,
+  "phase": "pre_main",
+  "on_the_play": true,
+  "drew": [{ "turn": 2, "card": "Thallid" }],
+  "mdfc_backs": ["Boulderloft Pathway", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Forest", "idx": 0, "num": 15, "is_land": true, "taps": "G" }], "vial_counters": [], "hand": [{ "num": 7, "name": "Doubling Season", "cost": "{4}{G}", "mv": 5, "kind": "permanent" }, { "num": 17, "name": "Forest", "cost": "", "mv": 0, "kind": "land" }, { "num": 28, "name": "Forest", "cost": "", "mv": 0, "kind": "land" }, { "num": 36, "name": "Sporecrown Thallid", "cost": "{1}{G}", "mv": 2, "kind": "permanent", "is_creature": true }, { "num": 45, "name": "Thallid", "cost": "{G}", "mv": 1, "kind": "permanent", "is_creature": true }, { "num": 49, "name": "Thallid Shell-Dweller", "cost": "{1}{G}", "mv": 2, "kind": "permanent", "is_creature": true }], "graveyard": [], "library_size": 53, "land_drops_left": 1 },
+  "opponent": { "life": 20, "battlefield": [] },
+  "plans": [
+    { "index": 0, "summary": "land=Forest; cast: Sporecrown Thallid", "land": "Forest", "casts": ["Sporecrown Thallid"], "actions": [{ "card": "Sporecrown Thallid" }] },
+    { "index": 1, "summary": "land=Forest; cast: Thallid", "land": "Forest", "casts": ["Thallid"], "actions": [{ "card": "Thallid" }] },
+    { "index": 2, "summary": "land=none; cast: Thallid", "land": null, "casts": ["Thallid"], "actions": [{ "card": "Thallid" }] },
+    { "index": 3, "summary": "land=Forest; cast: (nothing)", "land": "Forest", "casts": [], "actions": [] },
+    { "index": 4, "summary": "land=Forest; cast: Thallid Shell-Dweller", "land": "Forest", "casts": ["Thallid Shell-Dweller"], "actions": [{ "card": "Thallid Shell-Dweller" }] },
+    { "index": 5, "summary": "land=none; cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 7,
+  "type": "main_phase",
+  "turn": 2,
+  "phase": "pre_main",
+  "on_the_play": true,
+  "mdfc_backs": ["Boulderloft Pathway", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Forest", "idx": 0, "num": 15, "tapped": true, "is_land": true }, { "name": "Forest", "idx": 1, "num": 17, "tapped": true, "is_land": true }, { "name": "Thallid Shell-Dweller", "idx": 2, "num": 49, "is_land": false }], "vial_counters": [], "hand": [{ "num": 7, "name": "Doubling Season", "cost": "{4}{G}", "mv": 5, "kind": "permanent" }, { "num": 28, "name": "Forest", "cost": "", "mv": 0, "kind": "land" }, { "num": 36, "name": "Sporecrown Thallid", "cost": "{1}{G}", "mv": 2, "kind": "permanent", "is_creature": true }, { "num": 45, "name": "Thallid", "cost": "{G}", "mv": 1, "kind": "permanent", "is_creature": true }], "graveyard": [], "library_size": 53, "land_drops_left": 0 },
+  "opponent": { "life": 20, "battlefield": [] },
+  "plans": [
+    { "index": 0, "summary": "cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 8,
+  "type": "main_phase",
+  "turn": 2,
+  "phase": "post_main",
+  "on_the_play": true,
+  "mdfc_backs": ["Boulderloft Pathway", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Forest", "idx": 0, "num": 15, "tapped": true, "is_land": true }, { "name": "Forest", "idx": 1, "num": 17, "tapped": true, "is_land": true }, { "name": "Thallid Shell-Dweller", "idx": 2, "num": 49, "is_land": false }], "vial_counters": [], "hand": [{ "num": 7, "name": "Doubling Season", "cost": "{4}{G}", "mv": 5, "kind": "permanent" }, { "num": 28, "name": "Forest", "cost": "", "mv": 0, "kind": "land" }, { "num": 36, "name": "Sporecrown Thallid", "cost": "{1}{G}", "mv": 2, "kind": "permanent", "is_creature": true }, { "num": 45, "name": "Thallid", "cost": "{G}", "mv": 1, "kind": "permanent", "is_creature": true }], "graveyard": [], "library_size": 53, "land_drops_left": 0 },
+  "opponent": { "life": 20, "battlefield": [] },
+  "plans": [
+    { "index": 0, "summary": "cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
+}
+},
+    { "chosen": 1, "cast_order": ["*", "Thallid", "Sporecrown Thallid"], "decision": {
+  "decision_index": 9,
+  "main_ordinal": 2,
+  "type": "main_phase",
+  "turn": 3,
+  "phase": "pre_main",
+  "on_the_play": true,
+  "drew": [{ "turn": 3, "card": "Forest" }],
+  "mdfc_backs": ["Boulderloft Pathway", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Forest", "idx": 0, "num": 15, "is_land": true, "taps": "G" }, { "name": "Forest", "idx": 1, "num": 17, "is_land": true, "taps": "G" }, { "name": "Thallid Shell-Dweller", "idx": 2, "num": 49, "is_land": false, "counters": [{ "kind": "spore", "label": "spore", "count": 1 }] }], "vial_counters": [], "hand": [{ "num": 7, "name": "Doubling Season", "cost": "{4}{G}", "mv": 5, "kind": "permanent" }, { "num": 28, "name": "Forest", "cost": "", "mv": 0, "kind": "land" }, { "num": 11, "name": "Forest", "cost": "", "mv": 0, "kind": "land" }, { "num": 36, "name": "Sporecrown Thallid", "cost": "{1}{G}", "mv": 2, "kind": "permanent", "is_creature": true }, { "num": 45, "name": "Thallid", "cost": "{G}", "mv": 1, "kind": "permanent", "is_creature": true }], "graveyard": [], "library_size": 52, "land_drops_left": 1 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "4/4 Creature", "idx": 3, "num": 500000, "is_land": false }] },
+  "plans": [
+    { "index": 0, "summary": "land=Forest; cast: Sporecrown Thallid, Thallid", "land": "Forest", "casts": ["Sporecrown Thallid", "Thallid"], "cast_order_canonical": ["Sporecrown Thallid", "Thallid"], "actions": [{ "card": "Sporecrown Thallid" }, { "card": "Thallid" }] },
+    { "index": 1, "summary": "land=Forest; cast: Thallid, Sporecrown Thallid", "land": "Forest", "casts": ["Thallid", "Sporecrown Thallid"], "cast_order_canonical": ["Thallid", "Sporecrown Thallid"], "actions": [{ "card": "Thallid" }, { "card": "Sporecrown Thallid" }] },
+    { "index": 2, "summary": "land=Forest; cast: Sporecrown Thallid", "land": "Forest", "casts": ["Sporecrown Thallid"], "actions": [{ "card": "Sporecrown Thallid" }] },
+    { "index": 3, "summary": "land=none; cast: Sporecrown Thallid", "land": null, "casts": ["Sporecrown Thallid"], "actions": [{ "card": "Sporecrown Thallid" }] },
+    { "index": 4, "summary": "land=Forest; cast: Thallid", "land": "Forest", "casts": ["Thallid"], "actions": [{ "card": "Thallid" }] },
+    { "index": 5, "summary": "land=none; cast: Thallid", "land": null, "casts": ["Thallid"], "actions": [{ "card": "Thallid" }] },
+    { "index": 6, "summary": "land=Forest; cast: (nothing)", "land": "Forest", "casts": [], "actions": [] },
+    { "index": 7, "summary": "land=none; cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 10,
+  "type": "main_phase",
+  "turn": 3,
+  "phase": "pre_main",
+  "on_the_play": true,
+  "mdfc_backs": ["Boulderloft Pathway", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Forest", "idx": 0, "num": 15, "tapped": true, "is_land": true }, { "name": "Forest", "idx": 1, "num": 17, "tapped": true, "is_land": true }, { "name": "Forest", "idx": 4, "num": 28, "tapped": true, "is_land": true }, { "name": "Sporecrown Thallid", "idx": 6, "num": 36, "is_land": false }, { "name": "Thallid", "idx": 5, "num": 45, "is_land": false }, { "name": "Thallid Shell-Dweller", "idx": 2, "num": 49, "is_land": false, "counters": [{ "kind": "spore", "label": "spore", "count": 1 }] }], "vial_counters": [], "hand": [{ "num": 7, "name": "Doubling Season", "cost": "{4}{G}", "mv": 5, "kind": "permanent" }, { "num": 11, "name": "Forest", "cost": "", "mv": 0, "kind": "land" }], "graveyard": [], "library_size": 52, "land_drops_left": 0 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "4/4 Creature", "idx": 3, "num": 500000, "is_land": false }] },
+  "plans": [
+    { "index": 0, "summary": "cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 11,
+  "type": "main_phase",
+  "turn": 3,
+  "phase": "post_main",
+  "on_the_play": true,
+  "mdfc_backs": ["Boulderloft Pathway", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Forest", "idx": 0, "num": 15, "tapped": true, "is_land": true }, { "name": "Forest", "idx": 1, "num": 17, "tapped": true, "is_land": true }, { "name": "Forest", "idx": 4, "num": 28, "tapped": true, "is_land": true }, { "name": "Sporecrown Thallid", "idx": 6, "num": 36, "is_land": false }, { "name": "Thallid", "idx": 5, "num": 45, "is_land": false }, { "name": "Thallid Shell-Dweller", "idx": 2, "num": 49, "is_land": false, "counters": [{ "kind": "spore", "label": "spore", "count": 1 }] }], "vial_counters": [], "hand": [{ "num": 7, "name": "Doubling Season", "cost": "{4}{G}", "mv": 5, "kind": "permanent" }, { "num": 11, "name": "Forest", "cost": "", "mv": 0, "kind": "land" }], "graveyard": [], "library_size": 52, "land_drops_left": 0 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "4/4 Creature", "idx": 3, "num": 500000, "is_land": false }] },
+  "plans": [
+    { "index": 0, "summary": "cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
+}
+},
+    { "chosen": 0, "decision": {
+  "decision_index": 12,
+  "main_ordinal": 3,
+  "type": "main_phase",
+  "turn": 4,
+  "phase": "pre_main",
+  "on_the_play": true,
+  "drew": [{ "turn": 4, "card": "Forest" }],
+  "mdfc_backs": ["Boulderloft Pathway", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Forest", "idx": 0, "num": 15, "is_land": true, "taps": "G" }, { "name": "Forest", "idx": 1, "num": 17, "is_land": true, "taps": "G" }, { "name": "Forest", "idx": 4, "num": 28, "is_land": true, "taps": "G" }, { "name": "Sporecrown Thallid", "idx": 6, "num": 36, "is_land": false }, { "name": "Thallid", "idx": 5, "num": 45, "is_land": false, "counters": [{ "kind": "spore", "label": "spore", "count": 1 }] }, { "name": "Thallid Shell-Dweller", "idx": 2, "num": 49, "is_land": false, "counters": [{ "kind": "spore", "label": "spore", "count": 2 }] }], "vial_counters": [], "hand": [{ "num": 7, "name": "Doubling Season", "cost": "{4}{G}", "mv": 5, "kind": "permanent" }, { "num": 11, "name": "Forest", "cost": "", "mv": 0, "kind": "land" }, { "num": 20, "name": "Forest", "cost": "", "mv": 0, "kind": "land" }], "graveyard": [], "library_size": 51, "land_drops_left": 1 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "4/4 Creature", "idx": 3, "num": 500000, "is_land": false }] },
+  "plans": [
+    { "index": 0, "summary": "land=Forest; cast: (nothing)", "land": "Forest", "casts": [], "actions": [] },
+    { "index": 1, "summary": "land=none; cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 13,
+  "type": "main_phase",
+  "turn": 4,
+  "phase": "pre_main",
+  "on_the_play": true,
+  "mdfc_backs": ["Boulderloft Pathway", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Forest", "idx": 0, "num": 15, "is_land": true, "taps": "G" }, { "name": "Forest", "idx": 1, "num": 17, "is_land": true, "taps": "G" }, { "name": "Forest", "idx": 4, "num": 28, "is_land": true, "taps": "G" }, { "name": "Forest", "idx": 7, "num": 11, "is_land": true, "taps": "G" }, { "name": "Sporecrown Thallid", "idx": 6, "num": 36, "is_land": false }, { "name": "Thallid", "idx": 5, "num": 45, "is_land": false, "counters": [{ "kind": "spore", "label": "spore", "count": 1 }] }, { "name": "Thallid Shell-Dweller", "idx": 2, "num": 49, "is_land": false, "counters": [{ "kind": "spore", "label": "spore", "count": 2 }] }], "vial_counters": [], "hand": [{ "num": 7, "name": "Doubling Season", "cost": "{4}{G}", "mv": 5, "kind": "permanent" }, { "num": 20, "name": "Forest", "cost": "", "mv": 0, "kind": "land" }], "graveyard": [], "library_size": 51, "land_drops_left": 0 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "4/4 Creature", "idx": 3, "num": 500000, "is_land": false }] },
+  "plans": [
+    { "index": 0, "summary": "cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 14,
+  "type": "main_phase",
+  "turn": 4,
+  "phase": "post_main",
+  "on_the_play": true,
+  "events": [{ "turn": 4, "kind": "combat", "text": "⚔ attacked: Thallid (2), Sporecrown Thallid (2) — 4 to opponent (20→16)" }],
+  "mdfc_backs": ["Boulderloft Pathway", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Forest", "idx": 0, "num": 15, "is_land": true, "taps": "G" }, { "name": "Forest", "idx": 1, "num": 17, "is_land": true, "taps": "G" }, { "name": "Forest", "idx": 4, "num": 28, "is_land": true, "taps": "G" }, { "name": "Forest", "idx": 7, "num": 11, "is_land": true, "taps": "G" }, { "name": "Sporecrown Thallid", "idx": 6, "num": 36, "tapped": true, "is_land": false }, { "name": "Thallid", "idx": 5, "num": 45, "tapped": true, "is_land": false, "counters": [{ "kind": "spore", "label": "spore", "count": 1 }] }, { "name": "Thallid Shell-Dweller", "idx": 2, "num": 49, "is_land": false, "counters": [{ "kind": "spore", "label": "spore", "count": 2 }] }], "vial_counters": [], "hand": [{ "num": 7, "name": "Doubling Season", "cost": "{4}{G}", "mv": 5, "kind": "permanent" }, { "num": 20, "name": "Forest", "cost": "", "mv": 0, "kind": "land" }], "graveyard": [], "library_size": 51, "land_drops_left": 0 },
+  "opponent": { "life": 16, "battlefield": [{ "name": "4/4 Creature", "idx": 3, "num": 500000, "is_land": false }] },
+  "plans": [
+    { "index": 0, "summary": "cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
+}
+},
+    { "chosen": 4, "cast_order": ["*", "Doubling Season", "Thallid Shell-Dweller"], "decision": {
+  "decision_index": 15,
+  "main_ordinal": 4,
+  "type": "main_phase",
+  "turn": 5,
+  "phase": "pre_main",
+  "on_the_play": true,
+  "drew": [{ "turn": 5, "card": "Thallid" }],
+  "mdfc_backs": ["Boulderloft Pathway", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Forest", "idx": 0, "num": 15, "is_land": true, "taps": "G" }, { "name": "Forest", "idx": 1, "num": 17, "is_land": true, "taps": "G" }, { "name": "Forest", "idx": 4, "num": 28, "is_land": true, "taps": "G" }, { "name": "Forest", "idx": 7, "num": 11, "is_land": true, "taps": "G" }, { "name": "Sporecrown Thallid", "idx": 6, "num": 36, "is_land": false }, { "name": "Thallid", "idx": 5, "num": 45, "is_land": false, "counters": [{ "kind": "spore", "label": "spore", "count": 2 }] }, { "name": "Thallid Shell-Dweller", "idx": 2, "num": 49, "is_land": false, "counters": [{ "kind": "spore", "label": "spore", "count": 3 }] }], "vial_counters": [], "hand": [{ "num": 7, "name": "Doubling Season", "cost": "{4}{G}", "mv": 5, "kind": "permanent" }, { "num": 20, "name": "Forest", "cost": "", "mv": 0, "kind": "land" }, { "num": 43, "name": "Thallid", "cost": "{G}", "mv": 1, "kind": "permanent", "is_creature": true }], "graveyard": [], "library_size": 50, "land_drops_left": 1 },
+  "opponent": { "life": 16, "battlefield": [{ "name": "4/4 Creature", "idx": 3, "num": 500000, "is_land": false }] },
+  "plans": [
+    { "index": 0, "summary": "land=Forest; cast: Thallid, Thallid Shell-Dweller: remove three spore counters: create a Saproling", "land": "Forest", "casts": ["Thallid", "Thallid Shell-Dweller"], "actions": [{ "card": "Thallid" }, { "card": "Thallid Shell-Dweller", "src_num": 49, "activate": true, "x": 1 }] },
+    { "index": 1, "summary": "land=none; cast: Thallid, Thallid Shell-Dweller: remove three spore counters: create a Saproling", "land": null, "casts": ["Thallid", "Thallid Shell-Dweller"], "actions": [{ "card": "Thallid" }, { "card": "Thallid Shell-Dweller", "src_num": 49, "activate": true, "x": 1 }] },
+    { "index": 2, "summary": "land=Forest; cast: Thallid", "land": "Forest", "casts": ["Thallid"], "actions": [{ "card": "Thallid" }] },
+    { "index": 3, "summary": "land=none; cast: Thallid", "land": null, "casts": ["Thallid"], "actions": [{ "card": "Thallid" }] },
+    { "index": 4, "summary": "land=Forest; cast: Doubling Season, Thallid Shell-Dweller: remove three spore counters: create a Saproling", "land": "Forest", "casts": ["Doubling Season", "Thallid Shell-Dweller"], "actions": [{ "card": "Doubling Season" }, { "card": "Thallid Shell-Dweller", "src_num": 49, "activate": true, "x": 1 }] },
+    { "index": 5, "summary": "land=Forest; cast: Doubling Season", "land": "Forest", "casts": ["Doubling Season"], "actions": [{ "card": "Doubling Season" }] },
+    { "index": 6, "summary": "land=Forest; cast: Thallid Shell-Dweller: remove three spore counters: create a Saproling", "land": "Forest", "casts": ["Thallid Shell-Dweller"], "actions": [{ "card": "Thallid Shell-Dweller", "src_num": 49, "activate": true, "x": 1 }] },
+    { "index": 7, "summary": "land=none; cast: Thallid Shell-Dweller: remove three spore counters: create a Saproling", "land": null, "casts": ["Thallid Shell-Dweller"], "actions": [{ "card": "Thallid Shell-Dweller", "src_num": 49, "activate": true, "x": 1 }] },
+    { "index": 8, "summary": "land=Forest; cast: (nothing)", "land": "Forest", "casts": [], "actions": [] },
+    { "index": 9, "summary": "land=none; cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 16,
+  "type": "main_phase",
+  "turn": 5,
+  "phase": "pre_main",
+  "on_the_play": true,
+  "events": [{ "turn": 5, "kind": "token", "text": "🍄 Thallid Shell-Dweller: removes 3 spore counters -> Saproling" }],
+  "mdfc_backs": ["Boulderloft Pathway", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "1/1 Saproling Token", "idx": 10, "num": 1000, "is_land": false }, { "name": "1/1 Saproling Token", "idx": 11, "num": 1001, "is_land": false }, { "name": "Doubling Season", "idx": 9, "num": 7, "is_land": false }, { "name": "Forest", "idx": 0, "num": 15, "tapped": true, "is_land": true }, { "name": "Forest", "idx": 1, "num": 17, "tapped": true, "is_land": true }, { "name": "Forest", "idx": 4, "num": 28, "tapped": true, "is_land": true }, { "name": "Forest", "idx": 7, "num": 11, "tapped": true, "is_land": true }, { "name": "Forest", "idx": 8, "num": 20, "tapped": true, "is_land": true }, { "name": "Sporecrown Thallid", "idx": 6, "num": 36, "is_land": false }, { "name": "Thallid", "idx": 5, "num": 45, "is_land": false, "counters": [{ "kind": "spore", "label": "spore", "count": 2 }] }, { "name": "Thallid Shell-Dweller", "idx": 2, "num": 49, "is_land": false }], "vial_counters": [], "hand": [{ "num": 43, "name": "Thallid", "cost": "{G}", "mv": 1, "kind": "permanent", "is_creature": true }], "graveyard": [], "library_size": 50, "land_drops_left": 0 },
+  "opponent": { "life": 16, "battlefield": [{ "name": "4/4 Creature", "idx": 3, "num": 500000, "is_land": false }] },
+  "plans": [
+    { "index": 0, "summary": "cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 17,
+  "type": "main_phase",
+  "turn": 5,
+  "phase": "post_main",
+  "on_the_play": true,
+  "events": [{ "turn": 5, "kind": "combat", "text": "⚔ attacked: Thallid (2), Sporecrown Thallid (2) — 4 to opponent (16→12)" }],
+  "mdfc_backs": ["Boulderloft Pathway", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "1/1 Saproling Token", "idx": 10, "num": 1000, "is_land": false }, { "name": "1/1 Saproling Token", "idx": 11, "num": 1001, "is_land": false }, { "name": "Doubling Season", "idx": 9, "num": 7, "is_land": false }, { "name": "Forest", "idx": 0, "num": 15, "tapped": true, "is_land": true }, { "name": "Forest", "idx": 1, "num": 17, "tapped": true, "is_land": true }, { "name": "Forest", "idx": 4, "num": 28, "tapped": true, "is_land": true }, { "name": "Forest", "idx": 7, "num": 11, "tapped": true, "is_land": true }, { "name": "Forest", "idx": 8, "num": 20, "tapped": true, "is_land": true }, { "name": "Sporecrown Thallid", "idx": 6, "num": 36, "tapped": true, "is_land": false }, { "name": "Thallid", "idx": 5, "num": 45, "tapped": true, "is_land": false, "counters": [{ "kind": "spore", "label": "spore", "count": 2 }] }, { "name": "Thallid Shell-Dweller", "idx": 2, "num": 49, "is_land": false }], "vial_counters": [], "hand": [{ "num": 43, "name": "Thallid", "cost": "{G}", "mv": 1, "kind": "permanent", "is_creature": true }], "graveyard": [], "library_size": 50, "land_drops_left": 0 },
+  "opponent": { "life": 12, "battlefield": [{ "name": "4/4 Creature", "idx": 3, "num": 500000, "is_land": false }] },
+  "plans": [
+    { "index": 0, "summary": "cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
+}
+},
+    { "chosen": 4, "cast_order": ["*", "Utopia Mycon", "Thallid", "Thallid"], "decision": {
+  "decision_index": 18,
+  "main_ordinal": 5,
+  "type": "main_phase",
+  "turn": 6,
+  "phase": "pre_main",
+  "on_the_play": true,
+  "drew": [{ "turn": 6, "card": "Utopia Mycon" }],
+  "mdfc_backs": ["Boulderloft Pathway", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "1/1 Saproling Token", "idx": 10, "num": 1000, "is_land": false }, { "name": "1/1 Saproling Token", "idx": 11, "num": 1001, "is_land": false }, { "name": "Doubling Season", "idx": 9, "num": 7, "is_land": false }, { "name": "Forest", "idx": 0, "num": 15, "is_land": true, "taps": "G" }, { "name": "Forest", "idx": 1, "num": 17, "is_land": true, "taps": "G" }, { "name": "Forest", "idx": 4, "num": 28, "is_land": true, "taps": "G" }, { "name": "Forest", "idx": 7, "num": 11, "is_land": true, "taps": "G" }, { "name": "Forest", "idx": 8, "num": 20, "is_land": true, "taps": "G" }, { "name": "Sporecrown Thallid", "idx": 6, "num": 36, "is_land": false }, { "name": "Thallid", "idx": 5, "num": 45, "is_land": false, "counters": [{ "kind": "spore", "label": "spore", "count": 4 }] }, { "name": "Thallid Shell-Dweller", "idx": 2, "num": 49, "is_land": false, "counters": [{ "kind": "spore", "label": "spore", "count": 2 }] }], "vial_counters": [], "hand": [{ "num": 43, "name": "Thallid", "cost": "{G}", "mv": 1, "kind": "permanent", "is_creature": true }, { "num": 55, "name": "Utopia Mycon", "cost": "{G}", "mv": 1, "kind": "permanent", "is_creature": true }], "graveyard": [], "library_size": 49, "land_drops_left": 1 },
+  "opponent": { "life": 12, "battlefield": [{ "name": "4/4 Creature", "idx": 3, "num": 500000, "is_land": false }] },
+  "plans": [
+    { "index": 0, "summary": "land=none; cast: Thallid: remove three spore counters: create a Saproling", "land": null, "casts": ["Thallid"], "actions": [{ "card": "Thallid", "src_num": 45, "activate": true, "x": 1 }] },
+    { "index": 1, "summary": "land=none; cast: Thallid, Thallid: remove three spore counters: create a Saproling", "land": null, "casts": ["Thallid", "Thallid"], "actions": [{ "card": "Thallid" }, { "card": "Thallid", "src_num": 45, "activate": true, "x": 1 }] },
+    { "index": 2, "summary": "land=none; cast: Utopia Mycon, Thallid: remove three spore counters: create a Saproling", "land": null, "casts": ["Utopia Mycon", "Thallid"], "actions": [{ "card": "Utopia Mycon" }, { "card": "Thallid", "src_num": 45, "activate": true, "x": 1 }] },
+    { "index": 3, "summary": "land=none; cast: Thallid, Utopia Mycon, Thallid: remove three spore counters: create a Saproling", "land": null, "casts": ["Thallid", "Utopia Mycon", "Thallid"], "cast_order_canonical": ["Thallid", "Utopia Mycon"], "actions": [{ "card": "Thallid" }, { "card": "Utopia Mycon" }, { "card": "Thallid", "src_num": 45, "activate": true, "x": 1 }] },
+    { "index": 4, "summary": "land=none; cast: Utopia Mycon, Thallid, Thallid: remove three spore counters: create a Saproling", "land": null, "casts": ["Utopia Mycon", "Thallid", "Thallid"], "cast_order_canonical": ["Utopia Mycon", "Thallid"], "actions": [{ "card": "Utopia Mycon" }, { "card": "Thallid" }, { "card": "Thallid", "src_num": 45, "activate": true, "x": 1 }] },
+    { "index": 5, "summary": "land=none; cast: (nothing)", "land": null, "casts": [], "actions": [] },
+    { "index": 6, "summary": "land=none; cast: Thallid", "land": null, "casts": ["Thallid"], "actions": [{ "card": "Thallid" }] },
+    { "index": 7, "summary": "land=none; cast: Utopia Mycon", "land": null, "casts": ["Utopia Mycon"], "actions": [{ "card": "Utopia Mycon" }] },
+    { "index": 8, "summary": "land=none; cast: Thallid, Utopia Mycon", "land": null, "casts": ["Thallid", "Utopia Mycon"], "cast_order_canonical": ["Thallid", "Utopia Mycon"], "actions": [{ "card": "Thallid" }, { "card": "Utopia Mycon" }] },
+    { "index": 9, "summary": "land=none; cast: Utopia Mycon, Thallid", "land": null, "casts": ["Utopia Mycon", "Thallid"], "cast_order_canonical": ["Utopia Mycon", "Thallid"], "actions": [{ "card": "Utopia Mycon" }, { "card": "Thallid" }] },
+    { "index": 10, "summary": "land=none; cast: Utopia Mycon, Thallid: remove three spore counters: create a Saproling", "land": null, "casts": ["Utopia Mycon", "Thallid"], "actions": [{ "card": "Utopia Mycon" }, { "card": "Thallid", "src_num": 45, "activate": true, "x": 1 }] },
+    { "index": 11, "summary": "land=none; cast: Utopia Mycon, Thallid: remove three spore counters: create a Saproling", "land": null, "casts": ["Utopia Mycon", "Thallid"], "actions": [{ "card": "Utopia Mycon" }, { "card": "Thallid", "src_num": 45, "activate": true, "x": 1 }] },
+    { "index": 12, "summary": "land=none; cast: Utopia Mycon, Thallid: remove three spore counters: create a Saproling", "land": null, "casts": ["Utopia Mycon", "Thallid"], "actions": [{ "card": "Utopia Mycon" }, { "card": "Thallid", "src_num": 45, "activate": true, "x": 1 }] },
+    { "index": 13, "summary": "land=none; cast: Utopia Mycon, Thallid: remove three spore counters: create a Saproling", "land": null, "casts": ["Utopia Mycon", "Thallid"], "actions": [{ "card": "Utopia Mycon" }, { "card": "Thallid", "src_num": 45, "activate": true, "x": 1 }] },
+    { "index": 14, "summary": "land=none; cast: Utopia Mycon, Thallid: remove three spore counters: create a Saproling", "land": null, "casts": ["Utopia Mycon", "Thallid"], "actions": [{ "card": "Utopia Mycon" }, { "card": "Thallid", "src_num": 45, "activate": true, "x": 1 }] },
+    { "index": 15, "summary": "land=none; cast: Thallid, Utopia Mycon, Thallid: remove three spore counters: create a Saproling", "land": null, "casts": ["Thallid", "Utopia Mycon", "Thallid"], "cast_order_canonical": ["Thallid", "Utopia Mycon"], "actions": [{ "card": "Thallid" }, { "card": "Utopia Mycon" }, { "card": "Thallid", "src_num": 45, "activate": true, "x": 1 }] },
+    { "index": 16, "summary": "land=none; cast: Thallid, Utopia Mycon, Thallid: remove three spore counters: create a Saproling", "land": null, "casts": ["Thallid", "Utopia Mycon", "Thallid"], "cast_order_canonical": ["Thallid", "Utopia Mycon"], "actions": [{ "card": "Thallid" }, { "card": "Utopia Mycon" }, { "card": "Thallid", "src_num": 45, "activate": true, "x": 1 }] },
+    { "index": 17, "summary": "land=none; cast: Thallid, Utopia Mycon, Thallid: remove three spore counters: create a Saproling", "land": null, "casts": ["Thallid", "Utopia Mycon", "Thallid"], "cast_order_canonical": ["Thallid", "Utopia Mycon"], "actions": [{ "card": "Thallid" }, { "card": "Utopia Mycon" }, { "card": "Thallid", "src_num": 45, "activate": true, "x": 1 }] },
+    { "index": 18, "summary": "land=none; cast: Thallid, Utopia Mycon, Thallid: remove three spore counters: create a Saproling", "land": null, "casts": ["Thallid", "Utopia Mycon", "Thallid"], "cast_order_canonical": ["Thallid", "Utopia Mycon"], "actions": [{ "card": "Thallid" }, { "card": "Utopia Mycon" }, { "card": "Thallid", "src_num": 45, "activate": true, "x": 1 }] },
+    { "index": 19, "summary": "land=none; cast: Thallid, Utopia Mycon, Thallid: remove three spore counters: create a Saproling", "land": null, "casts": ["Thallid", "Utopia Mycon", "Thallid"], "cast_order_canonical": ["Thallid", "Utopia Mycon"], "actions": [{ "card": "Thallid" }, { "card": "Utopia Mycon" }, { "card": "Thallid", "src_num": 45, "activate": true, "x": 1 }] },
+    { "index": 20, "summary": "land=none; cast: Utopia Mycon, Thallid, Thallid: remove three spore counters: create a Saproling", "land": null, "casts": ["Utopia Mycon", "Thallid", "Thallid"], "cast_order_canonical": ["Utopia Mycon", "Thallid"], "actions": [{ "card": "Utopia Mycon" }, { "card": "Thallid" }, { "card": "Thallid", "src_num": 45, "activate": true, "x": 1 }] },
+    { "index": 21, "summary": "land=none; cast: Utopia Mycon, Thallid, Thallid: remove three spore counters: create a Saproling", "land": null, "casts": ["Utopia Mycon", "Thallid", "Thallid"], "cast_order_canonical": ["Utopia Mycon", "Thallid"], "actions": [{ "card": "Utopia Mycon" }, { "card": "Thallid" }, { "card": "Thallid", "src_num": 45, "activate": true, "x": 1 }] },
+    { "index": 22, "summary": "land=none; cast: Utopia Mycon, Thallid, Thallid: remove three spore counters: create a Saproling", "land": null, "casts": ["Utopia Mycon", "Thallid", "Thallid"], "cast_order_canonical": ["Utopia Mycon", "Thallid"], "actions": [{ "card": "Utopia Mycon" }, { "card": "Thallid" }, { "card": "Thallid", "src_num": 45, "activate": true, "x": 1 }] },
+    { "index": 23, "summary": "land=none; cast: Utopia Mycon, Thallid, Thallid: remove three spore counters: create a Saproling", "land": null, "casts": ["Utopia Mycon", "Thallid", "Thallid"], "cast_order_canonical": ["Utopia Mycon", "Thallid"], "actions": [{ "card": "Utopia Mycon" }, { "card": "Thallid" }, { "card": "Thallid", "src_num": 45, "activate": true, "x": 1 }] },
+    { "index": 24, "summary": "land=none; cast: Utopia Mycon, Thallid, Thallid: remove three spore counters: create a Saproling", "land": null, "casts": ["Utopia Mycon", "Thallid", "Thallid"], "cast_order_canonical": ["Utopia Mycon", "Thallid"], "actions": [{ "card": "Utopia Mycon" }, { "card": "Thallid" }, { "card": "Thallid", "src_num": 45, "activate": true, "x": 1 }] },
+    { "index": 25, "summary": "land=none; cast: Utopia Mycon", "land": null, "casts": ["Utopia Mycon"], "actions": [{ "card": "Utopia Mycon" }] },
+    { "index": 26, "summary": "land=none; cast: Utopia Mycon", "land": null, "casts": ["Utopia Mycon"], "actions": [{ "card": "Utopia Mycon" }] },
+    { "index": 27, "summary": "land=none; cast: Utopia Mycon", "land": null, "casts": ["Utopia Mycon"], "actions": [{ "card": "Utopia Mycon" }] },
+    { "index": 28, "summary": "land=none; cast: Utopia Mycon", "land": null, "casts": ["Utopia Mycon"], "actions": [{ "card": "Utopia Mycon" }] },
+    { "index": 29, "summary": "land=none; cast: Utopia Mycon", "land": null, "casts": ["Utopia Mycon"], "actions": [{ "card": "Utopia Mycon" }] },
+    { "index": 30, "summary": "land=none; cast: Thallid, Utopia Mycon", "land": null, "casts": ["Thallid", "Utopia Mycon"], "cast_order_canonical": ["Thallid", "Utopia Mycon"], "actions": [{ "card": "Thallid" }, { "card": "Utopia Mycon" }] },
+    { "index": 31, "summary": "land=none; cast: Thallid, Utopia Mycon", "land": null, "casts": ["Thallid", "Utopia Mycon"], "cast_order_canonical": ["Thallid", "Utopia Mycon"], "actions": [{ "card": "Thallid" }, { "card": "Utopia Mycon" }] },
+    { "index": 32, "summary": "land=none; cast: Thallid, Utopia Mycon", "land": null, "casts": ["Thallid", "Utopia Mycon"], "cast_order_canonical": ["Thallid", "Utopia Mycon"], "actions": [{ "card": "Thallid" }, { "card": "Utopia Mycon" }] },
+    { "index": 33, "summary": "land=none; cast: Thallid, Utopia Mycon", "land": null, "casts": ["Thallid", "Utopia Mycon"], "cast_order_canonical": ["Thallid", "Utopia Mycon"], "actions": [{ "card": "Thallid" }, { "card": "Utopia Mycon" }] },
+    { "index": 34, "summary": "land=none; cast: Thallid, Utopia Mycon", "land": null, "casts": ["Thallid", "Utopia Mycon"], "cast_order_canonical": ["Thallid", "Utopia Mycon"], "actions": [{ "card": "Thallid" }, { "card": "Utopia Mycon" }] },
+    { "index": 35, "summary": "land=none; cast: Utopia Mycon, Thallid", "land": null, "casts": ["Utopia Mycon", "Thallid"], "cast_order_canonical": ["Utopia Mycon", "Thallid"], "actions": [{ "card": "Utopia Mycon" }, { "card": "Thallid" }] },
+    { "index": 36, "summary": "land=none; cast: Utopia Mycon, Thallid", "land": null, "casts": ["Utopia Mycon", "Thallid"], "cast_order_canonical": ["Utopia Mycon", "Thallid"], "actions": [{ "card": "Utopia Mycon" }, { "card": "Thallid" }] },
+    { "index": 37, "summary": "land=none; cast: Utopia Mycon, Thallid", "land": null, "casts": ["Utopia Mycon", "Thallid"], "cast_order_canonical": ["Utopia Mycon", "Thallid"], "actions": [{ "card": "Utopia Mycon" }, { "card": "Thallid" }] },
+    { "index": 38, "summary": "land=none; cast: Utopia Mycon, Thallid", "land": null, "casts": ["Utopia Mycon", "Thallid"], "cast_order_canonical": ["Utopia Mycon", "Thallid"], "actions": [{ "card": "Utopia Mycon" }, { "card": "Thallid" }] },
+    { "index": 39, "summary": "land=none; cast: Utopia Mycon, Thallid", "land": null, "casts": ["Utopia Mycon", "Thallid"], "cast_order_canonical": ["Utopia Mycon", "Thallid"], "actions": [{ "card": "Utopia Mycon" }, { "card": "Thallid" }] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 19,
+  "type": "main_phase",
+  "turn": 6,
+  "phase": "pre_main",
+  "on_the_play": true,
+  "events": [{ "turn": 6, "kind": "token", "text": "🍄 Thallid: removes 3 spore counters -> Saproling" }],
+  "mdfc_backs": ["Boulderloft Pathway", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "1/1 Saproling Token", "idx": 10, "num": 1000, "is_land": false }, { "name": "1/1 Saproling Token", "idx": 11, "num": 1001, "is_land": false }, { "name": "1/1 Saproling Token", "idx": 14, "num": 1002, "is_land": false }, { "name": "1/1 Saproling Token", "idx": 15, "num": 1003, "is_land": false }, { "name": "Doubling Season", "idx": 9, "num": 7, "is_land": false }, { "name": "Forest", "idx": 0, "num": 15, "tapped": true, "is_land": true }, { "name": "Forest", "idx": 1, "num": 17, "tapped": true, "is_land": true }, { "name": "Forest", "idx": 4, "num": 28, "is_land": true, "taps": "G" }, { "name": "Forest", "idx": 7, "num": 11, "is_land": true, "taps": "G" }, { "name": "Forest", "idx": 8, "num": 20, "is_land": true, "taps": "G" }, { "name": "Sporecrown Thallid", "idx": 6, "num": 36, "is_land": false }, { "name": "Thallid", "idx": 5, "num": 45, "is_land": false, "counters": [{ "kind": "spore", "label": "spore", "count": 1 }] }, { "name": "Thallid", "idx": 13, "num": 43, "is_land": false }, { "name": "Thallid Shell-Dweller", "idx": 2, "num": 49, "is_land": false, "counters": [{ "kind": "spore", "label": "spore", "count": 2 }] }, { "name": "Utopia Mycon", "idx": 12, "num": 55, "is_land": false }], "vial_counters": [], "hand": [], "graveyard": [], "library_size": 49, "land_drops_left": 1 },
+  "opponent": { "life": 12, "battlefield": [{ "name": "4/4 Creature", "idx": 3, "num": 500000, "is_land": false }] },
+  "plans": [
+    { "index": 0, "summary": "land=none; cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 20,
+  "type": "main_phase",
+  "turn": 6,
+  "phase": "post_main",
+  "on_the_play": true,
+  "events": [{ "turn": 6, "kind": "combat", "text": "⚔ attacked: Thallid (2), Sporecrown Thallid (2), 1/1 Saproling Token (2), 1/1 Saproling Token (2) — 8 to opponent (12→4)" }],
+  "mdfc_backs": ["Boulderloft Pathway", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "1/1 Saproling Token", "idx": 10, "num": 1000, "tapped": true, "is_land": false }, { "name": "1/1 Saproling Token", "idx": 11, "num": 1001, "tapped": true, "is_land": false }, { "name": "1/1 Saproling Token", "idx": 14, "num": 1002, "is_land": false }, { "name": "1/1 Saproling Token", "idx": 15, "num": 1003, "is_land": false }, { "name": "Doubling Season", "idx": 9, "num": 7, "is_land": false }, { "name": "Forest", "idx": 0, "num": 15, "tapped": true, "is_land": true }, { "name": "Forest", "idx": 1, "num": 17, "tapped": true, "is_land": true }, { "name": "Forest", "idx": 4, "num": 28, "is_land": true, "taps": "G" }, { "name": "Forest", "idx": 7, "num": 11, "is_land": true, "taps": "G" }, { "name": "Forest", "idx": 8, "num": 20, "is_land": true, "taps": "G" }, { "name": "Sporecrown Thallid", "idx": 6, "num": 36, "tapped": true, "is_land": false }, { "name": "Thallid", "idx": 5, "num": 45, "tapped": true, "is_land": false, "counters": [{ "kind": "spore", "label": "spore", "count": 1 }] }, { "name": "Thallid", "idx": 13, "num": 43, "is_land": false }, { "name": "Thallid Shell-Dweller", "idx": 2, "num": 49, "is_land": false, "counters": [{ "kind": "spore", "label": "spore", "count": 2 }] }, { "name": "Utopia Mycon", "idx": 12, "num": 55, "is_land": false }], "vial_counters": [], "hand": [], "graveyard": [], "library_size": 49, "land_drops_left": 1 },
+  "opponent": { "life": 4, "battlefield": [{ "name": "4/4 Creature", "idx": 3, "num": 500000, "is_land": false }] },
+  "plans": [
+    { "index": 0, "summary": "land=none; cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
+}
+},
+    { "chosen": 6, "decision": {
+  "decision_index": 21,
+  "main_ordinal": 6,
+  "type": "main_phase",
+  "turn": 7,
+  "phase": "pre_main",
+  "on_the_play": true,
+  "drew": [{ "turn": 7, "card": "Forest" }],
+  "mdfc_backs": ["Boulderloft Pathway", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "1/1 Saproling Token", "idx": 10, "num": 1000, "is_land": false }, { "name": "1/1 Saproling Token", "idx": 11, "num": 1001, "is_land": false }, { "name": "1/1 Saproling Token", "idx": 14, "num": 1002, "is_land": false }, { "name": "1/1 Saproling Token", "idx": 15, "num": 1003, "is_land": false }, { "name": "Doubling Season", "idx": 9, "num": 7, "is_land": false }, { "name": "Forest", "idx": 0, "num": 15, "is_land": true, "taps": "G" }, { "name": "Forest", "idx": 1, "num": 17, "is_land": true, "taps": "G" }, { "name": "Forest", "idx": 4, "num": 28, "is_land": true, "taps": "G" }, { "name": "Forest", "idx": 7, "num": 11, "is_land": true, "taps": "G" }, { "name": "Forest", "idx": 8, "num": 20, "is_land": true, "taps": "G" }, { "name": "Sporecrown Thallid", "idx": 6, "num": 36, "is_land": false }, { "name": "Thallid", "idx": 5, "num": 45, "is_land": false, "counters": [{ "kind": "spore", "label": "spore", "count": 3 }] }, { "name": "Thallid", "idx": 13, "num": 43, "is_land": false, "counters": [{ "kind": "spore", "label": "spore", "count": 2 }] }, { "name": "Thallid Shell-Dweller", "idx": 2, "num": 49, "is_land": false, "counters": [{ "kind": "spore", "label": "spore", "count": 4 }] }, { "name": "Utopia Mycon", "idx": 12, "num": 55, "is_land": false, "counters": [{ "kind": "spore", "label": "spore", "count": 2 }] }], "vial_counters": [], "hand": [{ "num": 27, "name": "Forest", "cost": "", "mv": 0, "kind": "land" }], "graveyard": [], "library_size": 48, "land_drops_left": 1 },
+  "opponent": { "life": 4, "battlefield": [{ "name": "4/4 Creature", "idx": 3, "num": 500000, "is_land": false }] },
+  "plans": [
+    { "index": 0, "summary": "land=Forest; cast: Thallid Shell-Dweller: remove three spore counters: create a Saproling, Thallid: remove three spore counters: create a Saproling", "land": "Forest", "casts": ["Thallid Shell-Dweller", "Thallid"], "actions": [{ "card": "Thallid Shell-Dweller", "src_num": 49, "activate": true, "x": 1 }, { "card": "Thallid", "src_num": 45, "activate": true, "x": 1 }] },
+    { "index": 1, "summary": "land=none; cast: Thallid Shell-Dweller: remove three spore counters: create a Saproling, Thallid: remove three spore counters: create a Saproling", "land": null, "casts": ["Thallid Shell-Dweller", "Thallid"], "actions": [{ "card": "Thallid Shell-Dweller", "src_num": 49, "activate": true, "x": 1 }, { "card": "Thallid", "src_num": 45, "activate": true, "x": 1 }] },
+    { "index": 2, "summary": "land=Forest; cast: Thallid Shell-Dweller: remove three spore counters: create a Saproling", "land": "Forest", "casts": ["Thallid Shell-Dweller"], "actions": [{ "card": "Thallid Shell-Dweller", "src_num": 49, "activate": true, "x": 1 }] },
+    { "index": 3, "summary": "land=Forest; cast: Thallid: remove three spore counters: create a Saproling", "land": "Forest", "casts": ["Thallid"], "actions": [{ "card": "Thallid", "src_num": 45, "activate": true, "x": 1 }] },
+    { "index": 4, "summary": "land=none; cast: Thallid Shell-Dweller: remove three spore counters: create a Saproling", "land": null, "casts": ["Thallid Shell-Dweller"], "actions": [{ "card": "Thallid Shell-Dweller", "src_num": 49, "activate": true, "x": 1 }] },
+    { "index": 5, "summary": "land=none; cast: Thallid: remove three spore counters: create a Saproling", "land": null, "casts": ["Thallid"], "actions": [{ "card": "Thallid", "src_num": 45, "activate": true, "x": 1 }] },
+    { "index": 6, "summary": "land=Forest; cast: (nothing)", "land": "Forest", "casts": [], "actions": [] },
+    { "index": 7, "summary": "land=none; cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 22,
+  "main_ordinal": 7,
+  "type": "main_phase",
+  "turn": 7,
+  "phase": "pre_main",
+  "on_the_play": true,
+  "mdfc_backs": ["Boulderloft Pathway", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "1/1 Saproling Token", "idx": 10, "num": 1000, "is_land": false }, { "name": "1/1 Saproling Token", "idx": 11, "num": 1001, "is_land": false }, { "name": "1/1 Saproling Token", "idx": 14, "num": 1002, "is_land": false }, { "name": "1/1 Saproling Token", "idx": 15, "num": 1003, "is_land": false }, { "name": "Doubling Season", "idx": 9, "num": 7, "is_land": false }, { "name": "Forest", "idx": 0, "num": 15, "is_land": true, "taps": "G" }, { "name": "Forest", "idx": 1, "num": 17, "is_land": true, "taps": "G" }, { "name": "Forest", "idx": 4, "num": 28, "is_land": true, "taps": "G" }, { "name": "Forest", "idx": 7, "num": 11, "is_land": true, "taps": "G" }, { "name": "Forest", "idx": 8, "num": 20, "is_land": true, "taps": "G" }, { "name": "Forest", "idx": 16, "num": 27, "is_land": true, "taps": "G" }, { "name": "Sporecrown Thallid", "idx": 6, "num": 36, "is_land": false }, { "name": "Thallid", "idx": 5, "num": 45, "is_land": false, "counters": [{ "kind": "spore", "label": "spore", "count": 3 }] }, { "name": "Thallid", "idx": 13, "num": 43, "is_land": false, "counters": [{ "kind": "spore", "label": "spore", "count": 2 }] }, { "name": "Thallid Shell-Dweller", "idx": 2, "num": 49, "is_land": false, "counters": [{ "kind": "spore", "label": "spore", "count": 4 }] }, { "name": "Utopia Mycon", "idx": 12, "num": 55, "is_land": false, "counters": [{ "kind": "spore", "label": "spore", "count": 2 }] }], "vial_counters": [], "hand": [], "graveyard": [], "library_size": 48, "land_drops_left": 0 },
+  "opponent": { "life": 4, "battlefield": [{ "name": "4/4 Creature", "idx": 3, "num": 500000, "is_land": false }] },
+  "plans": [
+    { "index": 0, "summary": "land=none; cast: Thallid Shell-Dweller: remove three spore counters: create a Saproling, Thallid: remove three spore counters: create a Saproling", "land": null, "casts": ["Thallid Shell-Dweller", "Thallid"], "actions": [{ "card": "Thallid Shell-Dweller", "src_num": 49, "activate": true, "x": 1 }, { "card": "Thallid", "src_num": 45, "activate": true, "x": 1 }] },
+    { "index": 1, "summary": "land=none; cast: Thallid Shell-Dweller: remove three spore counters: create a Saproling", "land": null, "casts": ["Thallid Shell-Dweller"], "actions": [{ "card": "Thallid Shell-Dweller", "src_num": 49, "activate": true, "x": 1 }] },
+    { "index": 2, "summary": "land=none; cast: Thallid: remove three spore counters: create a Saproling", "land": null, "casts": ["Thallid"], "actions": [{ "card": "Thallid", "src_num": 45, "activate": true, "x": 1 }] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
+}
+}
+  ],
+  "final_events": [
+    { "turn": 7, "kind": "combat", "text": "⚔ attacked: Thallid (2), Sporecrown Thallid (2), 1/1 Saproling Token (2), 1/1 Saproling Token (2), Utopia Mycon (1), Thallid (2), 1/1 Saproling Token (2), 1/1 Saproling Token (2) — 15 to opponent (4→-11)" }
+  ]
+}
