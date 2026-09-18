@@ -118,3 +118,60 @@ it should be done first because it is the one with a measured 93.7% denominator 
 The full measurement, including the branching census that ruled out the cost-side explanations
 (per-node constants, board size, candidate dedup, the activation fold), is in
 `fungus-token-search-cost.md`, section "ROOT CAUSE #3".
+
+## 6. Step 3.1 REFINED (2026-09-18, late): the carrier is the ANTHEM sourced from the LIBRARY
+
+Section 5 named the certificate as the lever and the lord-library term as the biggest decline class.
+Measured on the two phase-A stragglers that had to be cancelled after 6.5 h each
+(`--seed 901386 --game-index 136`, `--seed 901103 --game-index 103`, phase-A label config,
+`MTG_WINLESS_STATS=1`), the what-if counters that were built for exactly this question now answer it,
+and they **refute the obvious tightening**:
+
+```
+FUNGUS WHAT-IF (library lord priced at >=3 mana, NOT APPLIED):
+    would-fire=362  still-declines=61918   (0.6% of lord-library)
+FUNGUS WHAT-IF CEILING (library lords DELETED -- unsound upper bound on the whole family):
+    would-fire=362                          (0.6% of lord-library)
+FUNGUS WHAT-IF JOINT CEILING (library lords AND anthem deleted -- unsound):
+    would-fire=62280                        (100.0% of lord-library)
+FUNGUS lord-library, WHERE THE ASCENSION IS: board=0  hand-only=10  library-only=62270
+```
+
+Three readings, and the third is the one that matters:
+
+1. **The proposed tightening is worth 0.6%.** Pricing a library Sporecrown at >= 3 mana ({1} for the
+   Psychotrope draw + {1}{G} for the cast) would certify 362 of 62,280 nodes. Not worth the risk of
+   touching a certificate.
+2. **The whole library-lord FAMILY is dead**, not just that candidate. Deleting the library lord
+   credit outright -- unsound, and therefore a hard ceiling on any bound in that family -- also
+   scores 0.6%. This is precisely what the ceiling counter exists to say, and it says: stop here.
+3. **The joint ceiling is 100%.** Delete library lords *and* the anthem and every one of those
+   62,280 nodes certifies. Since the lord half is worth 0.6%, the anthem term is carrying
+   essentially all of it -- the two are CO-CARRYING and only the anthem is tightenable.
+
+And `WHERE THE ASCENSION IS` closes the argument: **board=0, library-only=62,270 (99.98%)**. The
+section-2 note reserved the possibility that these were board Ascensions, whose +5/+5 is real (no
+mana, no draw, nothing to bound) and would have capped the whole line no matter what. They are not.
+Every one of them is an Ascension **still in the library**, credited at full +5/+5 to every attacker
+merely because a draw outlet is live.
+
+### The next change, therefore
+
+`ba_reachable` is set from a library-sourced Ascension inside the `draw_outlet && fodder > 0` block
+with **no cost bound at all**, while `lords_lib` sitting three lines away IS bounded
+(`std::min(lib_lords, fodder)`). Give the library-sourced anthem the same treatment the library lord
+already has -- it must be drawn ({1} + a Saproling) and cast ({1}{G}) before it can pump anything,
+and it needs `ba_threshold` quest counters on top. Bound it by the draw budget and a mana upper
+bound (`UntappedManaUpperBound`, which already credits Utopia Mycon's sac-for-mana), exactly as the
+lord term is.
+
+**Do the what-if FIRST, again.** The same counter shape that just killed the lord candidate should
+price the anthem candidate before any behaviour changes: the joint ceiling proves the anthem term is
+where the mass is, but not that a *sound* bound on it recovers that mass. The 0.6% result above is
+what this method is for -- the ranked guess would have built the lord bound.
+
+### Soundness note for whoever builds it
+
+`lords_lib` caps a sum of POWER BONUSES with a draw COUNT (`std::min(lib_lords, fodder)`). That is
+exact only because the pool's one lord is +1/+1. A +2/+2 lord would make the cap UNDER-credit, which
+is the one inadmissible direction. Cap the count and multiply by the max bonus.
