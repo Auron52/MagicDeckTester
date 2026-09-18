@@ -536,12 +536,21 @@ inline bool TopResolveEnabled()
 // so the rule reads state both sides already agree on, which is what keeps bp_at numbering in
 // LOCKSTEP. That lockstep is why this is one shared reader and not two flags.
 //
-// DEFAULT OFF: it opens a NEW breakpoint class on every deck holding any such card, and breakpoints
-// are the expensive unit (this file's own condemnation arc: everything costly is charged per
-// breakpoint reached). Adoption needs the full suite plus per-deck quality, not smoke.
+// DEFAULT ON (USER 2026-09-18: *"We do need to open the breakpoints regardless. Then the idea is to
+// see whether condemnation can help at all."*).
+//
+// THE COST IS NOT AN ARGUMENT AGAINST OPENING THEM, and that ordering is deliberate. This is the same
+// ruling site 8 already carries -- *"same-turn playability of the found card is a correctness
+// requirement (USER 2026-09-06, 'we need to be able to play it'), not a search lever"*. A card the
+// turn drew that the turn cannot then cast is a line the engine simply cannot express, at any budget
+// or depth; leaving the class shut because it is cheaper is the "narrow the rule until it is free"
+// move this arc has already had to undo twice (the exclusive-slot guard sparing 81% of drops; the
+// activation rule's inverted gate). Open the class, THEN ask condemnation to pay for it.
+//
+// =0 is the hatch, and it is what every pre-2026-09-18 measurement in this file was taken under.
 inline bool BpPutInHandEnabled()
 {
-    static const bool v = EnvOn("MTG_BP_PUT_IN_HAND");   // default OFF; =1 enables
+    static const bool v = EnvOn("MTG_BP_PUT_IN_HAND", true);   // DEFAULT ON; =0 reverts
     return v;
 }
 

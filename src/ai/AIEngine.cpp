@@ -3831,9 +3831,17 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
     // It serves BOTH consumers, so it must be called unconditionally rather than short-circuited
     // behind `s_full_depth`: the return value arms the full-depth breakpoint, and the side effect is
     // note_draw_engine's twin -- the depth-0 post-cast second pass.
-    auto put_in_hand_armed = [&]() -> bool
+    auto put_in_hand_armed = [&](const std::string& name) -> bool
     {
         if (!BpPutInHandEnabled())                        { return false; }
+        // ONLY where no param-keyed class claims the cast -- the SAME gate the rollout's arming
+        // uses, so the two worlds agree on the site NUMBER and not merely on the existence of a
+        // breakpoint. Without it this hook armed the executor at full depth for solo_target_trick
+        // casts the search had armed as site 5 (is_draw_engine does not list that class; the
+        // committed-continuation catch-all covers it), and Mirrorwing d3 lost 0.1266 at every
+        // budget.
+        const CardDefinition* d = CardDatabase::Instance().Lookup(name);
+        if (d == nullptr || TurnSolver::ParamKeyedDrawClass(state, *d)) { return false; }
         if (!TurnSolver::HandGainedACard(rdb_hand, state)) { return false; }
         cast_draw_engine = true;
         return true;
@@ -4209,7 +4217,7 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
             const Action& a = extra.actions[ci];
             {
                 m_pending_devour_count = a.devour_count; cast_by_name(a.card_name, a.tutor_target, a.chosen_x, a.soulfire_own_targets, a.ponder_keep, a.crackle_targets, a.splice_count, a.chosen_float_color, a.enchant_target, a.free_cast, a.bestow, a.replicate_count, a.convoke_green, a.convoke_other, a.phyrexian_life, a.evoke); resolve_now(); walker_cast_activation(a);
-                const bool put_armed_c = put_in_hand_armed();
+                const bool put_armed_c = put_in_hand_armed(a.card_name);
                 if (is_draw_engine(a.card_name) || put_armed_c)
                 {
                     rdb_site = CardDatabase::Instance().Lookup(a.card_name);
@@ -4443,7 +4451,7 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
             m_pending_devour_count = a.devour_count; cast_by_name(a.card_name, a.tutor_target, a.chosen_x, a.soulfire_own_targets, a.ponder_keep, a.crackle_targets, a.splice_count, a.chosen_float_color, a.enchant_target, a.free_cast, a.bestow, a.replicate_count, a.convoke_green, a.convoke_other, a.phyrexian_life, a.evoke); note_draw_engine(a.card_name); resolve_now(); walker_cast_activation(a); fire_unlock();
             // put_in_hand_armed() runs FIRST and unconditionally: it also arms the depth-0
             // second pass, which `s_full_depth &&` would short-circuit away.
-            const bool put_armed = put_in_hand_armed();
+            const bool put_armed = put_in_hand_armed(a.card_name);
             if (s_full_depth && (is_draw_engine(a.card_name) || put_armed))
             {
                 if (fd_plan_committed)
@@ -4592,7 +4600,7 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
             m_pending_devour_count = a.devour_count; cast_by_name(a.card_name, a.tutor_target, a.chosen_x, a.soulfire_own_targets, a.ponder_keep, a.crackle_targets, a.splice_count, a.chosen_float_color, a.enchant_target, a.free_cast, a.bestow, a.replicate_count, a.convoke_green, a.convoke_other, a.phyrexian_life, a.evoke); note_draw_engine(a.card_name); resolve_now(); walker_cast_activation(a); fire_unlock();
             // put_in_hand_armed() runs FIRST and unconditionally: it also arms the depth-0
             // second pass, which `s_full_depth &&` would short-circuit away.
-            const bool put_armed = put_in_hand_armed();
+            const bool put_armed = put_in_hand_armed(a.card_name);
             if (s_full_depth && (is_draw_engine(a.card_name) || put_armed))
             {
                 if (fd_plan_committed)

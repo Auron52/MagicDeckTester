@@ -2718,3 +2718,78 @@ whose pruned greedy continuation misplayed the committed turn."* So the next ste
 this rule, measured against the same cells, before any searched-depth adoption is attempted.
 
 DEFAULT OFF. Smoke with the flag off: **83/83, 0 configs changed, 0 play changes** -- byte-identical.
+
+## 2026-09-18 (later): THE CLASS IS OPEN BY DEFAULT, AND THE SEARCHED-DEPTH DAMAGE WAS MINE
+
+USER: *"We do need to open the breakpoints regardless. Then the idea is to see whether condemnation
+can help at all."* / *"We'll have to close the searched depth issues as best as we can."*
+
+`MTG_BP_PUT_IN_HAND` now DEFAULTS ON. The cost is not an argument against opening the class -- this is
+the ruling site 8 already carries (*"same-turn playability of the found card is a correctness
+requirement, not a search lever"*). The d0-only scope floated in the previous section is WITHDRAWN: it
+was the "narrow the rule until it is free" move this arc has already had to undo twice.
+
+**THE 53-SLOWER BLAST RADIUS WAS A LOCKSTEP BUG IN THE FIRST CUT, NOT THE CLASS.** Diagnosis order,
+and it is the reusable part:
+
+1. **Budget sweep first.** Mirrorwing d3, 150 games, budgets 10 / 40 / 160: delta **+0.1400 /
+   +0.1266 / +0.1266**. FLAT once the curve settles => not budget churn, a real defect
+   (`logs/snow_perf/churn.sh`).
+2. **Then ask whether the new class is even involved.** `MTG_BP_CANDS_PROBE` on Mirrorwing: site 10
+   **never fires** -- only `trick_payload` (site 5) -- yet the play digest moved. So the damage was in
+   the code around the class, not the class.
+3. **The asymmetry.** `solo_target_trick` is in AIEngine's `note_draw_engine` but NOT in
+   `is_draw_engine`; at full depth the executor covers site 5 through the committed-continuation
+   catch-all. The first cut armed the executor's site-10 hook for those casts while the search had
+   armed site 5 -- so the two worlds disagreed about the site NUMBER and every later `bp_at` index
+   shifted.
+
+**THE FIX: `TurnSolver::ParamKeyedDrawClass`,** one shared predicate both worlds gate site 10 on. It
+is still a whitelist, and that is fine, because of what it now decides: not *whether* a cast opens a
+breakpoint (HandGainedACard answers that, from the outcome) but only *which site number* it carries. A
+card missing from it still gets its breakpoint, as site 10. The degradation is the right way round.
+
+| smoke, class forced on | first cut | after the fix |
+|---|---|---|
+| configs changed | 27 / 83 | **14 / 83** |
+| searched slower / faster | 53 / 8 | **2 / 4** |
+| d0 slower / faster | 32 / 99 | **0 / 0** |
+| GT keys worse / better | 9 / 5 | **0 / 2** |
+
+Both moved keys are IMPROVEMENTS (`fivecolour2hg_smoke_d3` −0.0250, `auras2hg_smoke_d3` −0.0200); the
+14 "failures" are digest changes at identical scores. Mirrorwing is byte-identical at every budget.
+The one remaining slower game (`auras_smoke_d3 gi20`, T4->T5) is offset inside its own cell -- that
+deck's aggregate is identical at budgets 10, 40 and 160.
+
+### CAN CONDEMNATION HELP AT ALL? NOT AS IT STANDS: +9.04% AT BEST, FOR NOTHING
+
+10 games, d2/b0, real shipping key, class open. **Play byte-identical in all four arms**
+(`41b15b80ee5c8038`, avg 5.9000) -- condemnation changes no line on this deck, only the work:
+
+| vs condemnation OFF | units | site-8 reached | nested-slots | drops |
+|---|---|---|---|---|
+| guarded | +25.78% | +25.70% | +25.68% | 173,162 |
+| byname | +16.23% | +23.76% | +17.91% | 619,023 |
+| **byname + activation** | **+9.04%** | +11.95% | **+5.01%** | 618,288 |
+
+And the class made condemnation's overhead WORSE, not better: breakpoints reached went from +15.86%
+over off (before the class) to +25.70% after. More cast sites = more places for the freed-mana
+mechanism to open a nested breakpoint. The activation rule still repairs most of it (nested slots
++25.68% -> +5.01%), but it repairs condemnation's own overhead rather than paying for the class.
+
+**OPEN, AND THE MEASUREMENT THAT DECIDES IT:** the UNGUARDED prune. Before the class existed that was
+the only arm ever to show the design's premised upside (−19.43% units / −23.92% lookups, identical
+play); the soundness guard, which spares 81% of drops to protect gi=1357, was the entire cost. Whether
+that −19% survives with the class open is what settles "can condemnation help at all". Cell in flight:
+`armcheck.sh cond_pih2` = off / byname+act / unguarded / unguarded+act, GAMES=10.
+
+### STATE AT THE HANDOFF
+
+* **Pushed:** `b2b4f050` (the class, default OFF at that commit), `c4f558dc` (the activation-rule
+  inversion fix; CI green ubuntu + windows + determinism parity).
+* **Local, NOT pushed:** the default flip to ON + `ParamKeyedDrawClass`. Deliberately unpushed: the
+  flip turns the shared branch's smoke red (14 digest changes) until GT is rebaselined, and a
+  rebaseline needs a verdict per difference.
+* **Still owed:** the full regression tier; the GT rebaseline with per-difference verdicts;
+  root-cause of `gi=198` (seed 940000, the one game of 2,000 the activation rule moved, 8 -> no win);
+  and the `auras gi20` game above.

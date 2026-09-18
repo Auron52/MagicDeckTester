@@ -1051,6 +1051,14 @@ public:
     // world counts and the other does not shifts every later bp_at index.
     static bool HandGainedACard(const std::vector<int>& before, const GameState& state);
 
+    // ...and the test that decides WHICH SITE NUMBER the resulting breakpoint gets: does an EXISTING
+    // param-keyed class already claim this cast? Site 10 is the FALLBACK for what the whitelists
+    // miss, so an incomplete answer here costs a site NUMBER, never a breakpoint. Both worlds gate
+    // site 10 on this one function, because a cast one world numbers 5 and the other numbers 10
+    // shifts every later bp_at index -- which is how the first cut of this rule cost Mirrorwing
+    // +0.1266 at every budget.
+    static bool ParamKeyedDrawClass(const GameState& state, const CardDefinition& def);
+
     // Lands + mana rocks + mana dorks the active player controls. Snapshotted at a breakpoint so a
     // decline can be re-admitted once the mana base grows (BpTurnManaSettled).
     static int ManaSourceCount(const GameState& state);

@@ -11278,6 +11278,42 @@ std::vector<int> TurnSolver::HandCardNumbers(const GameState& state)
 // An EMPTY `before` means no snapshot was taken, which must read as "nothing is new": that is the
 // safe direction everywhere else the snapshot is consumed (BpCardWasInHandBefore) and it keeps an
 // unsnapshotted path from arming a breakpoint the other world will not.
+// THE UNION OF EVERY EXISTING PARAM-KEYED DRAW CLASS -- AIEngine's `note_draw_engine` and
+// `is_draw_engine` plus TurnSolver's own arming sites. Yes, this is the whitelist the general rule
+// exists to replace; the difference is what it now decides. It no longer answers "does this cast
+// open a breakpoint?" -- HandGainedACard answers that, from the outcome. It answers only "has some
+// class already claimed this cast?", i.e. which SITE NUMBER the breakpoint carries. A card missing
+// from this list still gets its breakpoint; it just gets it as site 10.
+//
+// WHY IT MUST BE ONE SHARED FUNCTION. The two worlds' existing predicates are NOT the same set --
+// `solo_target_trick` is in note_draw_engine but not in is_draw_engine, so at full depth the
+// executor covers site 5 through the post-loop committed-continuation catch-all instead. The first
+// cut of the general rule armed the executor's site-10 hook for those casts while the search had
+// armed site 5, and the bp_at indices diverged: Mirrorwing d3 lost 0.1266 at budget 10, 40 AND 160 --
+// flat in budget, which is what says "not churn, a real defect".
+bool TurnSolver::ParamKeyedDrawClass(const GameState& state, const CardDefinition& def)
+{
+    const CardParams& p = def.params;
+    return def.tmpl == CardTemplate::DrawUntilNonland
+        || def.tmpl == CardTemplate::DrawSpell
+        || p.draw > 0
+        || p.cascade_max_mv > 0
+        || p.shuffle_reveal_freecast
+        || p.etb_exile_until_nonland
+        || p.stages_cards
+        || p.expressive_iteration
+        || p.impulse_exile > 0
+        || p.damage_equals_top_mv
+        || p.tutor_to_hand
+        || p.tutor_to_top
+        || p.etb_dig_count > 0
+        // The Zada/Mirrorwing trick class (site 5), whichever payload armed it.
+        || (p.solo_target_trick && (p.cast_draw > 0 || p.creates_treasures > 0))
+        // Site 6 -- state-keyed, because the draw belongs to the WATCHER (Puresteel Paladin), not
+        // to the Equipment resolving here.
+        || TurnSolver::EquipmentDrawBreakpoint(state, def);
+}
+
 bool TurnSolver::HandGainedACard(const std::vector<int>& before, const GameState& state)
 {
     if (before.empty()) { return false; }
@@ -25708,6 +25744,7 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
         // play stops for the chooser instead of arming anything.
         if (BpPutInHandEnabled() && !s_human_play && sink_stack.empty()
             && !deferred_cantrip_resolve
+            && !TurnSolver::ParamKeyedDrawClass(state, def)
             && TurnSolver::HandGainedACard(hand_at_cast, state))
         {
             deferred_cantrip_resolve = true;
