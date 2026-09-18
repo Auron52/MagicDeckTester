@@ -706,3 +706,108 @@ records (`K` confirmation — see the phase F output). Staged model:
 
 **If the shape depth-gate ever lands, Angels should be re-measured with Hinata2 and KittyEquipment as
 one batch** — three decks, one design decision, one screen.
+
+## Value leaf — ADOPTED 2026-09-18, after correcting TWO miscalibrated crossover keys
+
+USER: *"I would probably actually adopt that, since d5 is the priority. Also, do we know why it is so
+much cheaper? Do we trust the leaf?"* … *"Worst case scenario, we can just use more budget"* …
+*"It might be that we have something wrong in the matrix crossover. That's worth a check."*
+
+All three follow-ups were measured. The last one was right, and it changed what got adopted.
+
+### Why it is cheaper — measured, not narrated
+
+Same 200 games, seed 8008, d5b20, single-threaded, `MTG_ROLLOUT_STATS=1`:
+
+| | ship (leafless) | model |
+|---|---|---|
+| rollout calls (`SimulateToEnd`) | 1,509,527 | **17,192** (88x fewer) |
+| rollout steps — share of all units | 1,653,172 — 28.0% | 13,153 — **1.2%** |
+| escalation re-traversal (`interior_esc`) | 285,434 (32% of interior) | **0** |
+| interior nodes expanded | 890,128 | **969,278 (MORE)** |
+| `id_depth` mean | 4.841 | 4.842 |
+| units total | 5,905,703 | **1,060,000** |
+
+Two sources, and neither is a shortcut: the O(1) evaluator replaces simulate-to-end at the horizon,
+and escalation re-traversal falls to exactly zero. The search commits at the **same depth
+distribution** and expands **more** tree. That directly refutes the "the leaf is short-circuiting the
+search" worry — it is doing the same search, more cheaply.
+
+### Do we trust it?
+
+Yes at the depth we ship, and the matrix is the evidence: **V ≡ H at every matched rung** —
+H1..H5 = 5.4425 / 5.4356 / 5.4344 / 5.4344 / 5.4344 and V1..V5 identical to four decimals. Per the
+skill, "trust the leaf" means "the leaf matches H5", and V5 = H5 = 5.4344 exactly. In play at d5b20
+it differs from the leafless shape in **3 games out of 4,000**. Held-out RMSE 0.5510.
+
+The honest limit: this is a fit to THIS decklist at this commit. Changing the list — e.g. adding the
+two sideboard cards under consideration — invalidates it and it must be regenerated.
+
+### "Can we just use more budget?" — no, and the reason is informative
+
+The d3b10 deficit is **completely invariant to budget**. b10 / b20 / b40 / b80 / b160 all produce
+*literally identical games* (+0.0168, 3 better / 70 worse / 3927 tied, every time), and identical
+units (330,445 at both b10 and b160). The leaf makes the search so cheap that it **exhausts its
+depth-3 tree well inside b10** — it is depth-bound, not budget-bound, so extra time has nothing to buy.
+
+### The crossover WAS wrong — two keys, and they act in SERIES
+
+`value_trust_depth=3` and `take_heuristic_at_hdepth=[2,3,6,6,6,6,6,6]`. The H ladder caps at **H5**, so
+a threshold of 6 is the `maxH+1` **"never fall back"** sentinel: any line committed at depth >= 3 kept
+the leaf with no heuristic check ever — and at a d3 search *every* line commits at <= 3. The leaf had
+no safety net at exactly the depth where it is weakest.
+
+Both keys came from the phase E run that never engaged, so neither was ever validated.
+
+Measured at d3b10, paired over 4,000 games (positive = worse than the shipped leafless shape):
+
+| config | delta | better / worse / tied | z |
+|---|---|---|---|
+| trust 3, take 6 (as generated) | +0.0168 | 3 / 70 / 3927 | −7.84 |
+| trust 3, **take 3** | +0.0168 | 3 / 70 / 3927 | −7.84 — **inert** |
+| **trust 6**, take 6 | +0.0168 | 3 / 70 / 3927 | −7.84 — **inert** |
+| trust 6, take 3 | +0.0095 | 2 / 40 / 3958 | −5.86 |
+| **trust 4, take 3  (ADOPTED)** | **+0.0095** | 2 / 40 / 3958 | −5.86 |
+
+**Fixing either key alone is exactly inert** — trust 3 means depth-3 lines never escalate, so the
+crossover is never consulted; raising trust alone just runs into the never-fall-back sentinel. This is
+the [[digest-equality-can-mean-broken]] pattern in miniature: two of these four arms would have been
+reported as "no effect" by anyone who changed one key and read the digest.
+
+**Why trust 4 and not 6.** Trust 6 gets the same d3 quality but destroys the entire benefit —
+**7,866,063 units at d5b20, 1.33x MORE than not adopting at all**, for play identical to trust 4. The
+saving *is* the trust. Trust 4 keeps the full d5 win (1,060,000 units, unchanged) because d5 lines
+commit at depth 4 and stay trusted, while d3 lines commit at <= 3 and now escalate. Trust 5 measured
+identically to trust 4 on every axis.
+
+### What was adopted, and what it cost
+
+`decks/Angels/Angels.value.json` — the model, `{ladder: escalation, leaf: model}`,
+`value_trust_depth: 4`, `take_heuristic_at_hdepth[c=3]: 3`, mullgen keys preserved.
+
+**Artifact verified by digest against the measured arm** — shipped and arm produce identical digests
+at d5b20 (`09a2f972ef922255`, `a2bff14118fecffd`) and d3b10 (`6961b7a96983d68a`, `96b0c2eca528a141`).
+
+Suite impact — **of 113 regression configs, exactly 2 moved, both Angels d3**:
+
+| key | old | new |
+|---|---|---|
+| `angels_regression_d3_s2002` | 5.5467 / `73a7d310561bf500` | 5.5667 / `83f4a7072d8a1306` |
+| `angels_regression_d3_s3003` | 5.4167 / `fc55e2efc4f8839f` | 5.4200 / `77675d3f6b75f343` |
+
+**Both d5 keys and the d0 key are byte-identical**, as is every other deck, and the references are
+unchanged (11 ok / 296 repaired / 0 play-drift, 318 refs). d5 wall in-batch fell 33.1s -> 12.7s and
+42.3s -> 14.5s. Smoke and regression re-accepted; `gt_logs` 83 / 113 consistent, 0 stale.
+
+**This is a real, recorded regression at d3 (+0.0095 turns, ~1% of games) accepted deliberately**,
+because d3 is a suite sanity tier and not a configuration this deck ships, while d5 — what it does
+ship — got 5.6x cheaper at byte-identical play. USER's call: *"d5 is the priority."*
+
+### Consequence for the fleet — the depth-split blocker may be narrower than recorded
+
+Angels was the third deck with the "good at d5, bad at d3" signature, after Hinata2 and
+KittyEquipment, and that was recorded as blocked on the un-gated shape-key design question. **For
+Angels it was not the shape gate at all — it was two unvalidated crossover keys.** Whether the same
+is true of Hinata2 and KittyEquipment is untested and worth an hour: both were screened before this
+class of defect was understood, and both would have had their trust/crossover metadata derived the
+same way. If it is the same cause, the design decision may not be needed for them either.
