@@ -3682,6 +3682,32 @@ instrument is units: -5.0% (Snow, 200g seed 910000), -15.2% (Snow, 8g seed 70000
 * STILL REQUIRED: the regression suite itself, which is this repo's pre-push gate and needs
   `build/Release` (currently held by the USER's census).
 
+### FUNGUS WOULD NOT BENEFIT FROM THIS LEVER (2026-09-19)
+
+`MTG_FOLD_COUNTER_SOURCES`'s own rationale block was written from Fungus measurements ("`Thallid`
+99,221 activations from 3 distinct physical sources"), so the obvious hope was that it had been
+half-delivering for the same reason MTG_FOLD_ACT_SOURCES was -- the fold reaching only the greedy
+path. **Measured, and it is not so.** Fungus, 8 games, seed 901750, 2x2 over
+(`MTG_FOLD_COUNTER_SOURCES`, `MTG_FOLD_SEARCH_ODO`):
+
+| CS | SO | mean_width | copyaxis_share | search rejections | units | avg | UNRECOVERABLE |
+|---|---|---|---|---|---|---|---|
+| 0 | 0 | 18.1281 | 0.00202 | 1,848 | 1,186,636 | 5.6250 | 0 |
+| 0 | 1 | 18.1281 | 0.00202 | 40,138 | 1,186,636 | 5.6250 | 0 |
+| 1 | 0 | 18.1281 | 0.00202 | 1,848 | 1,186,636 | 5.6250 | 0 |
+| 1 | 1 | 18.0967 | 0.00132 | 43,892 | **1,185,588 (-0.09%)** | 5.6250 | 0 |
+
+The lever FIRES on Fungus (search rejections 1,848 -> 43,892) and is sound there
+(UNRECOVERABLE=0 in all four), but **Fungus's interchangeable-copy axis is 0.2%, not Snow's 18.7%**,
+its mean width is 18 rather than 62, and the work saved is -0.09%. Fungus's cost is on the LABEL
+path (`fs_pre`), which `bf_census` -- a census of `SolveUncached` candidate decisions -- does not
+count at all. **A deck does not benefit from this because it runs many copies of one permanent; it
+benefits because its SEARCH CANDIDATE LIST carries the copy axis, and Fungus's does not.**
+
+UNEXPLAINED AND RECORDED AS SUCH: Fungus shows `repeat_share = 0.1334` where Snow shows exactly 0,
+under the same `bp_base`-inclusive key. Something about Fungus's enumeration emits genuinely
+repeated candidates. Not chased; flagged.
+
 ### STILL OPEN
 
 * **The 25.1% breakpoint-variant repetition is untouched by this** and is now the largest single
