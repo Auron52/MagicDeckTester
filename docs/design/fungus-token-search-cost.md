@@ -1330,3 +1330,144 @@ Ascensions. The observed rate is low (4 nodes in 454k on one seed, 0 on another)
 wrong if a violation lands on a ROW's own root rather than an interior node -- but the honest
 position is that the banked rows predate a soundness fix, and a regeneration on the fixed engine is
 the clean route. That is the user's call, not an agent's; it is recorded here rather than acted on.
+
+---
+
+## ROOT CAUSE #3, 2026-09-19: the cost has MOVED -- it is the plan enumerator now, not the cascade
+
+The 2026-09-17/18 fixes worked, and the profile that proves it also invalidates the standing plan.
+Going into this session the hypothesis was "more of the same": `SimulateEndAndStartNextTurn` still
+holds **twelve ungated full-battlefield walks per simulated turn-step**, each with a `LookupCached`
+per permanent, for mechanics the deck does not contain (`no_max_hand_size`, `storage_land`,
+`upkeep_adds_charge`, the upkeep-token block, `echo_cost`, `AdvanceSagas`,
+`SpawnForbiddenOrchardTokensTurnStart`, `PerformUpkeepSacTutor`, `PerformUpkeepSlumber`,
+`PerformUpkeepReorder`, `PerformUpkeepSporeCounters`, `PerformEndStepLifegainTokens`). Twelve
+`deck_has_*` stamps were drafted.
+
+**A profile stopped that before it was built.** Two slow census games (`--seed 1400125
+--game-index 125` and `--seed 1600066 --game-index 66`, ~1.39M and 1.37M units, `build/Profile`,
+`perf record -e cpu-clock -F 499`, output under `/tmp`):
+
+| symbol | g125 self |
+|---|---|
+| `SolveUncached::consider` (the per-subset callback) | 12.17% |
+| `ColorFeasibility::Payable` | 8.80% |
+| `EnumeratePlanPositions` | 5.29% |
+| `TapForCostSharedOnce` (+ its two lambdas) | 6.11% |
+| `SubsetHasUnbackedEtbGift` | 3.36% |
+| `ManaPool::CanPayFlat` | 2.87% |
+| `SubsetHasDuplicateSacSource` | 2.84% |
+| `SubsetOversubscribesSacFodder` | 2.55% |
+| `SubsetPayable` | 2.33% |
+| ... 8 more `Subset*` filters | ~7% |
+| `CardDatabase::LookupCached` | **1.87%** |
+| `RefreshDevotionCreatures` / `FireEtbWatchers` / `CardHasSubtype` | **absent** |
+
+`LookupCached` was 14.75% before the cascade fixes and is 1.87% now; `FireEtbWatchers` (16.93%) and
+`CardHasSubtype` (12.63%) have left the profile entirely. **The twelve remaining board walks are
+together worth single-digit percent, and were not worth twelve gates.** Roughly **60% of a slow game
+is now plan enumeration and per-subset filtering.**
+
+### The defect class survived the move: the guard is still inside the loop
+
+`SolveUncached::consider` (and its lockstep twin `EnumeratePlans::eval_and_push`) runs **seventeen
+`Subset*` rejection filters per enumerated subset**. Every one of them is commented "inert for every
+deck without X" -- but *inert* here means **returns false**, not **is skipped**. Each still walks
+`sel`, dereferencing a cold `CardParams` per selected action, to rediscover that the deck has no
+Aria of Flame / no splice card / no phyrexian pip. This is exactly the shape that made the Dragon
+count 45% of a game, one level up the call stack.
+
+Three fixes went in, all **byte-identical by construction** and none needing a lever:
+
+* **`SubsetHasUnbackedEtbGift` called `RemedyActive` FIRST** -- a full battlefield walk with a
+  `LookupCached` per permanent -- *before* the cheap `sel` scan that decides the answer for every
+  deck but Anti-Lifegain. Once per enumerated subset, on a board reaching 364 permanents. The
+  predicate is a conjunction of pure tests, so the order is free; the board walk now sits last and is
+  unreachable without a gift. `DecisionUnpruned` deliberately did **not** move below the loop: it
+  carries a gate-reachability probe side effect, and it is hoisted instead so the probe can only
+  over-report a gate as reachable, never under-report one as dead.
+* **`SubsetOversubscribesSacFodder` allocated before it early-outed.** It built a
+  `vector<pair<string,int>>` (with a `std::string` copy per outlet, and a `ControlledDefByNumber`
+  board scan per candidate sac action) and only then tested `outlets < 2`. A necessary-condition
+  prepass now counts candidate sac actions -- no allocation, no `CardDefinition` read, no
+  battlefield touch -- and returns early when there are fewer than two, since `outlets` is a strict
+  subset of them. This is the one filter in the chain Fungus genuinely runs (Utopia Mycon is a
+  creature-sac outlet), which is precisely why the cheap half had to come first.
+* **`PerformEndStepLifegainTokens` scanned the board before reading its own intervening-if.** Every
+  trigger it collects is worded "if you gained life this turn", so a turn that gained none fires
+  nothing regardless of the board. The counter read is hoisted above the scan; the CR 603.4 snapshot
+  property is unaffected (still one read, still before anything is created).
+
+### What they bought, and the honest size of it
+
+Seven tail games, both arms launched concurrently, `units` and win turn asserted identical on every
+one (`test/subset_filter_ab.sh`):
+
+| seed | units | cpu before | cpu after | speedup |
+|---|---|---|---|---|
+| 1600930 | 753,162 | 129.0 s | 122.1 s | 1.056x |
+| 1700036 | 716,507 | 78.7 s | 75.1 s | 1.047x |
+| 2000564 | 519,181 | 68.9 s | 67.1 s | 1.027x |
+| 1200328 | 905,676 | 75.7 s | 72.3 s | 1.047x |
+| 1700914 | 1,072,828 | 88.4 s | 84.6 s | 1.046x |
+| 1300295 | 133,650 | 82.9 s | 74.9 s | 1.107x |
+| 1100891 | 920,628 | 95.3 s | 94.9 s | 1.004x |
+| **total** | | **618.8 s** | **591.0 s** | **1.047x** |
+
+**Byte-identity: confirmed -- units and win turn identical on all seven games.** That is the claim
+that matters; it is exact, not statistical.
+
+**Cost: 1.047x, and the FIRST measurement of it was wrong in a way worth recording.** Run in wall
+clock the same seven games came back 1.064x aggregate but with **one game going the wrong way
+(0.948x)** -- on a box at loadavg 45 (a 24-worker census plus the A/B's own 14 processes). Switching
+the currency to `task-clock:u` (process CPU time, which does not charge a run for the time it sat
+descheduled) put **all seven games on the right side**, 1.004x to 1.107x, and moved the aggregate
+only slightly, to 1.047x. The aggregate was roughly right by luck; the per-game signal -- the part
+that tells you whether the change ever hurts -- was pure scheduler noise. This is the same
+correction `test/etb_gate_ab.sh` already documents, and it should have been the currency from the
+start.
+
+### Where the remaining headroom is
+
+This is a ~4.7% fix inside a ~60% region, and the region is now the whole game. The obvious next step
+is the **general form of the same short-circuit**: a per-ENUMERATION precondition summary computed
+once over `cands` (which is fixed for an entire subset walk) and consulted by each filter through a
+thread-local pointer, defaulting to "run every filter" so any unset path keeps today's behaviour.
+Each filter's "true" outcome requires at least one selected candidate carrying its property, and
+`sel` indexes into `cands`, so absence across all of `cands` is a sound necessary condition. That
+covers the other thirteen filters and both lockstep chains with two setup sites and no `GameState`
+growth, no `Dominance` entry and no scenario-harness hazard.
+
+Worth noting what it does **not** touch: `ColorFeasibility::Payable` (8.80%) and `CanPayFlat`
+(2.87%) are genuine payability work on subsets that really are candidates. Those need either
+memoisation or fewer subsets -- and *fewer subsets* is what the spore pool below actually delivers.
+
+## The spore-source pool, measured (2026-09-19): 24,000-game paired census
+
+`MTG_FUNGUS_SPORE_POOL` shipped default OFF and had never been measured at play settings. Twelve
+blocks x 1000 games x {poolOFF, poolON}, d5/20 virtual-ms, one pooled batch (24/24 workers
+throughout), read with `test/fungus_slow_census.py`:
+
+| | poolOFF | poolON |
+|---|---|---|
+| avg win turn | 5.5868 (n=11,994) | **5.5845** (n=11,523) |
+| total units | 1,414,115,716 | 1,300,798,297 |
+| median units | 38,894 | 38,069 |
+| p99 units | 1,178,171 | **1,100,783** |
+| wall tail >= 30 s | 532 games (4.4%), **12.98 h** | 283 games (2.5%), **5.50 h** |
+| ms/unit vs the 0.00111 contract | 55.2x | **38.9x** |
+
+Paired over the 11,521 games both arms finished: **1.046x in units**, cheaper on 6,858 games, more
+expensive on 499, equal on 4,164. The tail is where it pays -- the >=30 s wall tail more than halves.
+
+**It is not play-neutral**: win turn differs on 13 of 11,521 paired games. The average moves the
+right way (5.5845 vs 5.5868, lower is better) but that difference is far inside the noise of a
+12-block sample, so the honest statement is *play-indifferent on average, cheaper in the tail*.
+Because it is a provider-owned narrowing rather than a reordering, adopting it is the
+`heuristic-optimization.md` flow -- this census is the train half, and a held-out confirm on fresh
+seeds is still owed.
+
+**Do not compare this census's wall tail to the earlier one** (`logs/leaf_tiebreak/check.out`: base
+9.75 h, leaf 9.14 h). The two ran under different contention and the older one recorded no units, so
+there is no common currency between them. Within this census both arms shared the box, which is what
+makes the poolOFF-vs-poolON comparison sound.

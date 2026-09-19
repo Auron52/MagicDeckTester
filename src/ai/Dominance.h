@@ -164,7 +164,13 @@ static_assert(sizeof(Player) == 200,
 // larger than either branch measured alone. Each field keeps the classification its own entry gives
 // it; nothing about either is changed by the other's presence. This is exactly the collision the
 // static_assert below exists to catch, and it caught it.
-static_assert(sizeof(GameState) == 808,
+// 808 -> 816 (2026-09-19): GameState gained `deck_has_subtype_enter_counters` and
+// `deck_has_etb_counter_payer` (two bools + padding), the presence gates for the two ETB-cascade
+// watcher scans whose param test sat INSIDE the walk. Classification: both are DECK CONSTANTS,
+// stamped once in StampDeckTraits and never written again, so they are identical across every pair
+// of states Build() could ever compare -- nothing to fold, exactly like deck_reads_endstep_lifegain
+// and deck_reads_mv_cast above. (The same classification the three earlier deck_has_* gates carry.)
+static_assert(sizeof(GameState) == 816,
               "GameState changed size -- fold any new field into dominance::Build() (see the "
               "MAINTENANCE HAZARD note at the top of Dominance.h) before updating this number.");
 

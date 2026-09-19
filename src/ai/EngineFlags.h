@@ -84,6 +84,36 @@ inline bool SporeSourcePoolEnabled()
     return heurarm::Flag(heurarm::FUNGUS_SPORE_POOL, env_on);
 }
 
+// MTG_ETB_WATCHER_GATES (DEFAULT ON) -- stamp the two remaining ETB-cascade presence gates
+// (GameState::deck_has_subtype_enter_counters / deck_has_etb_counter_payer) from the decklist
+// instead of leaving them unconditionally open.
+//
+// THIS IS NOT A HEURISTIC AND IT NARROWS NOTHING. The scans it gates look for a CardParams field;
+// when no card in the mainboard or sideboard carries that field, the scan is guaranteed to find
+// nothing, so skipping it cannot change a single trigger. It is behind a lever purely so the COST
+// can be measured as a proper A/B in ONE pooled batch (the repo forbids the per-arm wave a
+// process-wide static would force), and so the old behaviour stays one flag away if the stamp is
+// ever found to be wrong for a deck.
+//
+// WHY IT DEFAULTS ON, unlike the narrowing levers above it: the three sibling gates added
+// 2026-09-17 (ascend / devotion / dragon_ping) also ship unconditionally on, for the same reason --
+// a gate that is provably inert cannot be "adopted", only switched off by accident. Turning it off
+// restores a scan that finds nothing; the measured effect is wall, not play.
+//
+// SAFETY, which is the whole argument: the flags DEFAULT TRUE in GameState (= do the scan = old
+// behaviour), so any path that builds a state WITHOUT stamping -- the scenario harness is the
+// documented one -- keeps every trigger. A flag wrongly true costs time; wrongly false drops a
+// trigger. Only ever err true. Garth One-Eye holds every gate open because he materialises cards
+// that need not appear in any decklist.
+//
+// Read at STAMP time only (GoldFishRunner::StampDeckTraits), so there is no executor/rollout
+// lockstep concern: the stamp is a per-GAME constant and both worlds read the same GameState field.
+inline bool EtbWatcherGatesEnabled()
+{
+    static const bool env_on = EnvOn("MTG_ETB_WATCHER_GATES", true);
+    return heurarm::Flag(heurarm::ETB_WATCHER_GATES, env_on);
+}
+
 // MTG_M2_FIXPOINT (DEFAULT OFF -> byte-identical; heurarm slot for per-job pooling): restore the
 // FREE INTER-MAIN RE-SOLVE the second main never had -- after an m2 plan whose apply/execution
 // FIRED a breakpoint (cards may have entered hand mid-plan), solve m2 AGAIN on the post-draw

@@ -339,6 +339,32 @@ struct GameState
     // every deck. Defaults true for the reason above -- an unstamped state keeps the scan, and the
     // real gate is the board (no outlet on the battlefield -> no fodder) plus MTG_SAC_OUTLET_PAY.
     bool                     deck_has_sac_mana_outlet   = true;   // IsSacManaOutlet in the list
+    // TWO MORE OF THE SAME, found 2026-09-19 by re-reading the cascade after the three above were
+    // added. Those three closed the walks whose guard sat OUTSIDE the loop; these two are the ones
+    // whose guard sits INSIDE it, which is the same defect wearing a param check:
+    //
+    //   FireEtbWatchers         -- the "each other Angel you control" scan (Giada, param
+    //                              other_subtype_enters_counters_per_each). Entered for ANY
+    //                              entering creature, and only then does it test the param, once
+    //                              per permanent, each behind a LookupCached.
+    //   FireCreatureEnterWatchers -- the optional-cost counter scan (Emiel, param
+    //                              other_creature_etb_counter_cost). Same shape, same per-enter
+    //                              cost, no entrant-side gate at all.
+    //
+    // Both therefore cost O(battlefield) per CREATURE ENTERING on every deck in the repo, to find
+    // a param almost none of them have. That is the exact shape of the Dragon count (45% of a slow
+    // game) and it matters for the same reason: a token deck routes CreateToken through this
+    // cascade, so the cost is O(tokens x board) -- quadratic -- and Fungus reaches 364 permanents
+    // in rollouts against a real board of 15. The other three watcher scans in the same function
+    // (graveyard-enter team counters, Dragon Tempest's haste, Puresteel's equipment draw) are
+    // already cheap for this shape: each is gated on the ENTRANT first (entered from a graveyard /
+    // has flying / is an Equipment), so a vanilla token never reaches their walks and they are
+    // deliberately left alone rather than given a flag they do not need.
+    //
+    // Same safety rule as the block above: DEFAULT TRUE == do the scan == the old behaviour, so an
+    // unstamped GameState (the scenario harness) keeps every trigger. Only ever err true.
+    bool                     deck_has_subtype_enter_counters = true;  // Giada-style "each other X"
+    bool                     deck_has_etb_counter_payer      = true;  // Emiel-style optional cost
     // "You can cast only one more spell this turn" (Irencrag Feat, CardParams::max_casts_after) enforced
     // at EXECUTION time: -1 = no restrictor active (unlimited); otherwise the number of ADDITIONAL spells
     // still castable this turn. Installed when a max_casts_after spell is cast, decremented at every later

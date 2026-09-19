@@ -3738,7 +3738,13 @@ inline void FireCreatureEnterWatchers(GameState& state, int entered_controller, 
     // byte-identical. Whether the ALWAYS-PAY default is right for the search is a separate,
     // measurable question (heuristic-optimization workflow); it is deliberately not answered here.
     static const bool s_human_etb_counter_pay = EnvOn("MTG_HUMAN_ETB_COUNTER_PAY");
-    const bool skip_optional_etb_counter = HumanPlayActive() && !s_human_etb_counter_pay;
+    // PRESENCE GATE (GameState::deck_has_etb_counter_payer), folded into the loop's own condition
+    // beside the human-play skip. Same argument as the Giada scan in FireEtbWatchers: the param
+    // test is INSIDE the walk, so every creature entering costs a full battlefield pass with a
+    // LookupCached per permanent to find a param the deck does not contain -- and CreateToken comes
+    // through here too. Defaults true, so an unstamped state keeps the scan.
+    const bool skip_optional_etb_counter =
+        (HumanPlayActive() && !s_human_etb_counter_pay) || !state.deck_has_etb_counter_payer;
     for (std::size_t wi = 0; wi < state.battlefield.size() && !skip_optional_etb_counter; ++wi)
     {
         const int watcher_ctrl = state.battlefield[wi].controller_index;
@@ -4270,6 +4276,15 @@ inline void RefreshCityBlessing(GameState& state)
 inline void PerformEndStepLifegainTokens(GameState& state)
 {
     const int active = state.active_player_index;
+    // THE INTERVENING-IF, READ FIRST (2026-09-19, cost). Every one of these triggers is worded "if
+    // you gained life this turn", so a turn that gained none fires nothing no matter what is on the
+    // battlefield -- and this function runs once per SIMULATED TURN-STEP, i.e. once per search work
+    // unit. Reading the counter here rather than after the scan below turns the common case (no life
+    // gained) from a full battlefield walk with a LookupCached per permanent into one integer test.
+    // Byte-identical by construction: the scan creates nothing and mutates nothing, and the counter
+    // it gates on cannot be changed by walking the board.
+    const int gained_this_turn = state.players[active].life_gained_this_turn;
+    if (gained_this_turn <= 0) { return; }
     // Snapshot the TRIGGERING definitions first: the tokens created below push_back onto the
     // battlefield (invalidating references) and, for a copy of an Ajani's Pridemate token, resolve
     // to a real definition -- neither may add a trigger to this turn's set.
@@ -4289,9 +4304,10 @@ inline void PerformEndStepLifegainTokens(GameState& state)
     // Valkyrie, and that life must NOT retroactively arm a second Resplendent Angel whose condition
     // had already failed when the end step began. A live re-read would roughly double this deck's
     // token output and would be a straight CR 603.4 violation. The counter is monotone within a
-    // turn, so the resolution re-check adds nothing and one snapshot is faithful.
-    const int gained_this_turn = state.players[active].life_gained_this_turn;
-    if (gained_this_turn <= 0) { return; }
+    // turn, so the resolution re-check adds nothing and one snapshot is faithful. (The read itself
+    // is hoisted to the top of the function -- see the note there -- which is why it does not appear
+    // here; the SNAPSHOT property this paragraph is about is unaffected, and is in fact stronger for
+    // being taken earlier: still one read, still before anything is created.)
 
     for (const CardDefinition* d : triggers)
     {
@@ -4553,7 +4569,13 @@ inline void FireEtbWatchers(GameState& state, int controller, int entered_index)
     // Reaches TOKENS for free (Serra the Benevolent's -3, Resplendent Angel's end step), since
     // CreateToken routes through this same cascade. Param-gated -> one empty-string test for every
     // other deck.
-    if (state.battlefield[entered_index].card.IsCreature())
+    // PRESENCE GATE (GameState::deck_has_subtype_enter_counters). The param test below sits INSIDE
+    // the walk, so without this the scan costs a full battlefield pass -- with a LookupCached per
+    // permanent -- for EVERY creature that enters, on every deck, to discover that no card has the
+    // param. CreateToken routes through this cascade, so on a token deck that is O(tokens x board).
+    // Defaults true (= scan = old behaviour) for an unstamped state; see the GameState block.
+    if (state.deck_has_subtype_enter_counters
+        && state.battlefield[entered_index].card.IsCreature())
     {
         const int ectrl = state.battlefield[entered_index].controller_index;
         const int enum_ = state.battlefield[entered_index].card.m_number;

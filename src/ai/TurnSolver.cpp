@@ -5886,7 +5886,25 @@ static bool SubsetHasUnbackedEtbGift(const GameState& state,
 // Anti-Lifegain plays it, so every other deck is byte-identical. MTG_UNBACKED_ETB_GIFT=0 reverts.
     static const bool s_gate = EnvOn("MTG_UNBACKED_ETB_GIFT", true);
     if (!s_gate || sel.empty())                         { return false; }
-    if (RemedyActive(state, state.active_player_index)) { return false; }
+    // ORDER IS A COST FIX (2026-09-19, perf). RemedyActive walks the WHOLE battlefield with a
+    // LookupCached per permanent, and it used to run FIRST -- i.e. once per enumerated subset, on
+    // every deck, before the cheap `sel` scan that answers "is there even a gift here?". On a
+    // Fungus rollout board (up to 364 permanents, and subsets enumerated combinatorially) that
+    // board walk was 3.4% of a slow game, spent proving a deck with no Aria of Flame has no Aria
+    // of Flame. The `sel` loop below is O(|sel|) over cold CardParams and decides the answer for
+    // every deck but Anti-Lifegain, so it goes first and the board walk becomes unreachable.
+    //
+    // The result is unchanged: the predicate is
+    //     (no lifegain_to_loss in sel) && has_gift && !RemedyActive && !DecisionUnpruned
+    // and && is commutative over these three pure tests -- RemedyActive is a const board read whose
+    // only effect is LookupCached's memo (documented never to escape into a key or output).
+    //
+    // DecisionUnpruned is NOT pure and therefore does NOT move below the loop: under MTG_GATE_PROBE
+    // it records that this gate has a reachable callsite for the deck. Hoisting it ABOVE the
+    // RemedyActive early-out it used to sit behind can only make that probe fire MORE often, which
+    // is the safe direction for a REACHABILITY probe (it may over-report a gate as reachable, never
+    // under-report one as dead). Play is byte-identical either way -- the probe is off in every
+    // normal run.
     if (DecisionUnpruned(UnprunedGate::AltPayload))     { return false; }
     bool has_gift = false;
     for (int j : sel)
@@ -5898,7 +5916,9 @@ static bool SubsetHasUnbackedEtbGift(const GameState& state,
         if (d->params.lifegain_to_loss)          { return false; }
         if (d->params.etb_opponent_lifegain > 0) { has_gift = true; }
     }
-    return has_gift;
+    if (!has_gift)                                      { return false; }
+    if (RemedyActive(state, state.active_player_index)) { return false; }
+    return true;
 }
 
 static bool SubsetHasUnbackedAltPayload(const GameState& state,
@@ -7612,6 +7632,24 @@ static bool SubsetOversubscribesSacFodder(const GameState& state,
                                           const std::vector<Action>& cands,
                                           const std::vector<int>& sel)
 {
+    // NECESSARY-CONDITION PREPASS (2026-09-19, perf). `outlets` below counts a STRICT SUBSET of the
+    // selected actions that pass these two tests, so fewer than two of them makes the `outlets < 2`
+    // early-out below a foregone conclusion -- and reaching it the long way costs, per enumerated
+    // subset: a heap-allocating vector<pair<string,int>>, a std::string copy per outlet, and a
+    // ControlledDefByNumber board scan per candidate sac action. This pass allocates nothing, reads
+    // no CardDefinition and touches no battlefield, and on every subset that is not a genuine
+    // multi-outlet sac plan it is the whole function. Measured at 2.6% of a Fungus slow game -- the
+    // one filter in this chain the deck really does run, because Utopia Mycon IS a creature-sac
+    // outlet, which is exactly why the cheap half had to come first.
+    int sac_actions = 0;
+    for (int j : sel)
+    {
+        const Action& a = cands[j];
+        if ((a.kind == Action::Kind::SacForMana || a.kind == Action::Kind::SacCreatureOutlet)
+            && a.sac_source_id != 0) { ++sac_actions; }
+    }
+    if (sac_actions < 2) { return false; }   // outlets <= sac_actions, and outlets < 2 returns false
+
     // (victim subtype filter, demand). Empty filter = "any creature you control".
     std::vector<std::pair<std::string, int>> demand;
     int outlets = 0;

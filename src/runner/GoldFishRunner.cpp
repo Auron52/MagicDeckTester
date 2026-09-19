@@ -9,6 +9,8 @@
 #include "../ai/AIEngine.h"
 #include "../ai/DecisionProviders.h"
 #include "../ai/HeuristicArm.h"   // EDF_M2 lever (flicker-combo second main)
+#include "../ai/EngineFlags.h"    // MTG_ETB_WATCHER_GATES (the ETB-cascade presence stamps below)
+#include "../ai/GameWorkMeter.h"  // per-game work meter: Begin/End pairing + the units this path reports
 #include "../ai/Profiler.h"
 #include "../deck/DeckLoader.h"
 #include <nlohmann/json.hpp>
@@ -732,7 +734,17 @@ RunResult GoldFishRunner::Run(const Decklist& deck, int num_games, uint64_t base
 #ifdef MTG_PROFILE
                 std::chrono::steady_clock::time_point prof_t0 = std::chrono::steady_clock::now();
 #endif
+                // Arm the per-game work meter DISARMED (limit 0), exactly as the analyzer's scoring
+                // rollout does. The meter's own contract is that "every entry point pairs
+                // Begin/End", and this path never did -- so `t_used` accumulated across every game
+                // on the thread. Nothing branches on it here (a ceiling is never armed on this
+                // path, so `Abandoned()` cannot become true and play is byte-identical), but two
+                // REPORTS read it and were wrong by the running total: MTG_DECISION_PROGRESS's
+                // `game_work=`, and the per-game units printed below.
+                gamework::Begin(0);
                 int win_turn = engine.RunGame(state, max_turns);
+                const long long g_units = gamework::Used();
+                gamework::End();
 #ifdef MTG_PROFILE
                 double game_ms = std::chrono::duration<double, std::milli>(
                     std::chrono::steady_clock::now() - prof_t0).count();
@@ -749,10 +761,14 @@ RunResult GoldFishRunner::Run(const Decklist& deck, int num_games, uint64_t base
                         // then runs loop index 0 against that same shuffle + spawn pattern). Same
                         // convention as the "Unwon games" repro list in main.cpp. Printing the bare
                         // base_seed silently replays game 0 instead.
+                        // units= alongside ms=, for the reason spelled out at the batch path's twin
+                        // of this line: ms is wall on a shared box and cannot carry an A/B, units is
+                        // the deterministic work meter, and the RATIO of the two is the per-unit
+                        // cost the virtual-ms budget assumes is constant.
                         std::fprintf(stderr,
-                            "[goldfish] SLOW-GAME %lldms  gi=%d wt=%d  repro: --seed %llu "
+                            "[goldfish] SLOW-GAME %lldms  gi=%d wt=%d units=%lld  repro: --seed %llu "
                             "--game-index %d --games 1\n",
-                            ms, gi, win_turn,
+                            ms, gi, win_turn, g_units,
                             static_cast<unsigned long long>(base_seed + static_cast<uint64_t>(gi)), gi);
                         std::fflush(stderr);
                     }
@@ -934,6 +950,12 @@ void GoldFishRunner::StampDeckTraits(GameState& state, const Decklist& deck)
     {
         bool garth = false, ascend = false, devotion = false, dragon_ping = false;
         bool sac_mana_outlet = false;
+        // The two guard-inside-the-loop scans (see the GameState block): a Giada-style "each other
+        // <subtype> you control" counter rider, and an Emiel-style optional-cost counter on another
+        // creature entering. Both need BOTH halves of their param pair to do anything, and the
+        // consumer tests both, so the stamp tests both too -- a card carrying only one half must
+        // not hold the gate open.
+        bool subtype_enter_counters = false, etb_counter_payer = false;
         auto scan = [&](const std::vector<Card>& zone)
         {
             for (const Card& c : zone)
@@ -945,6 +967,12 @@ void GoldFishRunner::StampDeckTraits(GameState& state, const Decklist& deck)
                 if (d->params.creature_requires_devotion > 0) { devotion = true; }
                 if (d->params.dragon_ping_on_enter)           { dragon_ping = true; }
                 if (IsSacManaOutlet(d->params))               { sac_mana_outlet = true; }
+                if (d->params.other_subtype_enters_counters_per_each > 0
+                    && !d->params.other_subtype_enters_counters_subtype.empty())
+                { subtype_enter_counters = true; }
+                if (d->params.other_creature_etb_counter_cost.has_value()
+                    && d->params.other_creature_etb_counters > 0)
+                { etb_counter_payer = true; }
             }
         };
         scan(deck.mainboard);
@@ -953,6 +981,14 @@ void GoldFishRunner::StampDeckTraits(GameState& state, const Decklist& deck)
         state.deck_has_devotion_creature = garth || devotion;
         state.deck_has_dragon_ping       = garth || dragon_ping;
         state.deck_has_sac_mana_outlet   = garth || sac_mana_outlet;
+        // MTG_ETB_WATCHER_GATES (default ON): with the lever off the two new flags stay at their
+        // GameState default of TRUE, i.e. both scans keep running exactly as before -- which is the
+        // control arm of the cost A/B, carried per job so one pooled batch measures both.
+        if (EtbWatcherGatesEnabled())
+        {
+            state.deck_has_subtype_enter_counters = garth || subtype_enter_counters;
+            state.deck_has_etb_counter_payer      = garth || etb_counter_payer;
+        }
     }
     // NOTE: opponent_library_dealt is deliberately NOT stamped here. It means "a library was
     // actually dealt", and only opponentdeck::Deal may raise it -- see the comment there. Callers

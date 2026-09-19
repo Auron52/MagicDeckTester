@@ -1904,12 +1904,27 @@ std::vector<BatchJobResult> BatchRunner::RunManifest(
                 // which the bare GoldFishRunner form is not once many cells share a process.
                 // The replay seed is base_seed + LOCAL index (that is what SetupGame shuffled on)
                 // while --game-index is the GLOBAL one (what the spawn schedule used).
+                //
+                // BOTH CURRENCIES, and units is the one an A/B can be read in. `ms` is wall on a
+                // box that is shared with other tenants and with this run's own 24 workers, so two
+                // arms measured at different moments are not comparable in it -- which is fatal for
+                // the thing this line exists to feed, since an optimization pass IS an A/B over the
+                // tail. `units` is the deterministic work meter (one per simulated turn-step,
+                // ai/GameWorkMeter.h): identical seed + arm gives an identical number on every
+                // machine and every run. The ABANDONED line one block up already reports units for
+                // exactly this reason ("the reader must be able to reproduce it"); the slow-game
+                // line was the other half of the same need and only ever had the noisy half.
+                //
+                // Keeping ms too is deliberate: the RATIO ms/units is itself a measurement -- the
+                // per-unit wall cost, which the virtual-ms budget assumes is a constant
+                // (SearchBudget::NODES_PER_VIRTUAL_MS). A deck whose ratio blows up is one whose
+                // budget no longer means what it says, and the pair of numbers is what shows it.
                 if (s_slow_game_ms > 0 && g_ms >= s_slow_game_ms)
                 {
                     std::fprintf(stderr,
-                        "[goldfish] SLOW-GAME %lldms  job=%s gi=%d wt=%d  repro: --seed %llu "
+                        "[goldfish] SLOW-GAME %lldms  job=%s gi=%d wt=%d units=%lld  repro: --seed %llu "
                         "--game-index %d --games 1\n",
-                        g_ms, job.name.c_str(), global_gi, win_turns[wi.job][wi.game],
+                        g_ms, job.name.c_str(), global_gi, win_turns[wi.job][wi.game], g_units,
                         static_cast<unsigned long long>(job.seed + static_cast<uint64_t>(wi.game)),
                         global_gi);
                     std::fflush(stderr);
