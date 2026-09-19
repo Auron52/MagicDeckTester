@@ -1217,11 +1217,28 @@ lords_lib += std::min(lib_lord_count, fodder) * lib_lord_bonus;
 **Behaviour-neutral on this list** (every lord is +1/+1, so `min(4,f)*1 == min(4,f)`), which is why
 it can ride along with a default-off lever without needing its own A/B.
 
-### What adoption still needs
+### What adoption needed -- MET 2026-09-19, and the lever is now DEFAULT ON
 
-`MTG_WINLESS_AUDIT` at least as wide as the certificate's own adoption run (99,128 nodes,
-violations 0), because the hook's bar is one-sided and a false positive silently converts a win into
-a loss. Until then the lever stays **default OFF**.
+The stated condition was `MTG_WINLESS_AUDIT` at least as wide as the certificate's own adoption run
+(99,128 nodes, violations 0), because the hook's bar is one-sided and a false positive silently
+converts a win into a loss. Run on seeds held out from both this section's tuning block (901750) and
+the certificate's own adoption block (31337):
+
+* **audit** -- 48 jobs x 4 games, seeds 61000-61191, pooled, `MTG_WINLESS_AUDIT=1`:
+  **1,711,293 certified-winless nodes probed, violations=0** (17x the bar), and
+  `FUNGUS JOINT reduced-vs-exhaustive MISMATCHES: 0`, so the O(lib_lord_count) reduction agreed with
+  the exhaustive sweep at every declining node.
+* **A/B** -- `test/fungus_cert_joint_ab.sh`, 32 games, seeds 62000-62031, both arms concurrent:
+  ApplyPlanDirect **85,841,868 -> 72,843,492 = 1.178x**, wall 702 s -> 589 s, certificate fire rate
+  66.9% -> 70.5%, and **LABELS IDENTICAL on all 185 rows**.
+
+The label-identity half is the load-bearing one: an unsound tightening makes a label come back
+LATER, which is the quality loss this repo does not trade for wall clock. Play cannot move -- the
+hook is consulted only where the search is unbounded. **Note the two blocks' 4x spread in
+would-fire share (60.4% / 14.3%) did NOT predict the delivered speedup**; the realised 1.178x sits
+below even the pessimistic block, which is the expected direction (a node that stops being searched
+is not a node whose cost was average) and one more reason to size from a measurement rather than
+from a what-if counter.
 
 ---
 
@@ -1589,3 +1606,197 @@ seeds is still owed.
 9.75 h, leaf 9.14 h). The two ran under different contention and the older one recorded no units, so
 there is no common currency between them. Within this census both arms shared the box, which is what
 makes the poolOFF-vs-poolON comparison sound.
+
+---
+
+# WHY THE PHASE-A TAIL GAMES TAKE FIVE HOURS (2026-09-19)
+
+The value-leaf run for this deck has never finished. Its last attempt died at ~7 h with
+**3 of 24 workers busy (12%)**, one game at **6.91 h**. The question this section answers is the
+user's: *what makes that game so slow, and what can we do about it?*
+
+## The four tail games, named
+
+`logs/vlq_fungus/rows.batch.log` carries the repro line for every game over the slow threshold. The
+four that owned the makespan:
+
+| repro | wall | win turn |
+|---|---|---|
+| `--seed 900738 --game-index 238` | 19,968 s (5.55 h) | 7 |
+| `--seed 901762 --game-index 12` | 19,870 s (5.52 h) | 8 |
+| `--seed 901839 --game-index 89` | 17,408 s (4.84 h) | 8 |
+| `--seed 900915 --game-index 165` | 14,352 s (3.99 h) | 6 |
+
+**They are the LONG games.** Win turns 7/8/8/6 against a deck average of 5.52-5.66. That is the
+whole correlation: a game that wins late has more real turns to label, and each of its labels has a
+deeper horizon left to refute.
+
+For scale, the *worst* game in the 24,000-game PLAY census is seed 1700120 at 3.86 M units / 226 s.
+The label path's worst is **~88x that**. The gap is not the deck getting harder; it is what phase A
+asks for.
+
+## What phase A asks for
+
+`scripts/valueleaf.sh` phase_rows runs the binary with `MTG_DUMP_VALUE_ROWS`, `MTG_EVAL_ROWS_K=3`,
+`MTG_EVAL_ROWS_ROLLOUT=0`. In `AIEngine.cpp` that means: at **every real pre-combat main**, inline
+and synchronously, run `EnumerateEarliestWins` **K=3 times** under reshuffled libraries, each an
+**UNBOUNDED exact search to the turn-8 cap**. Play is budgeted (d5/b20); the label is not budgeted
+at all. So an 8-turn game pays ~24 unbounded searches where play paid 8 budgeted ones.
+
+## Where the time actually goes, measured on the straggler
+
+`--seed 901762 --game-index 12` re-run on HEAD `f2431f77` with `MTG_DECISION_PROGRESS=1
+MTG_WINLESS_STATS=1 MTG_WINLESS_STATS_EVERY=60`:
+
+```
+[dprog] t1 LABEL ms=376 work=43039            <- turn 1's whole label: 376 ms
+=== LABEL WORK: ApplyPlanDirect calls=19238336 | ladder-pass=122 fsw-plans=19184254 ===
+=== WINLESS CERT[m1]: checks=23238 fired=17932 (77.2%) ===
+=== WINLESS CERT scope: plans all=909490 label=902583 edge=805007 ===
+=== WINLESS RESIDUAL: 5303 of 23238 edge nodes (22.8%) resolved by neither ===
+=== [progress] at t7 cut=7 candidate 50/340 (max seen 1192) ===
+```
+
+Read it in order:
+
+1. **One turn is not the problem; one PASS is.** Turn 1's label costs 376 ms. The next turn's label
+   was still running, alone, after minutes -- 19.2 M plan applications and climbing.
+2. **99.7% of that work is `fsw-plans`** (19,184,254 of 19,238,336). Those are plans applied one at
+   a time at a **horizon-edge node** -- a node whose only question is *"can I win THIS turn?"*.
+   `ladder-pass=122` says this is not a ladder climbing many rungs; it is a handful of passes
+   grinding an enormous plan set.
+3. **The node fan-out is 300-1,192 candidates**, and the search walks them individually.
+4. **The certificate already earns its keep**: it refutes 77-84% of edge nodes outright. This is
+   `FungusProvider` (e413fff8), and note it was ALREADY IN the frozen binary `8ac753c4` -- so the
+   5.5-hour games are what remains *after* a 1.90x win, not before it.
+5. **The residual 22.8% is the cost**, because the surviving nodes are the wide ones.
+
+## The residual has ONE cause, and it is nearly pure
+
+`FungusCertReasonReport` on the same run:
+
+```
+FUNGUS WINLESS CERT reasons: fired=21142 combat-lethal=10671
+combat-lethal breakdown: base-lethal=2 lord-board=28 lord-library=9982
+                         anthem-battlefield=1 anthem-library-only=658
+```
+
+**`lord-library` is 93.5% of every decline.** The certificate cannot certify the turn winless
+because it must assume a Sporecrown Thallid could be DRAWN out of the library and pump the team to
+lethal. Everything else -- lords on board, anthems, base lethal -- is rounding error.
+
+So the cost structure of a five-hour game is, end to end:
+
+> long game -> many real turns -> x3 reshuffles -> unbounded ladder -> thousands of horizon-edge
+> nodes -> ~23% of them survive the certificate, essentially all for `lord-library` -> each survivor
+> applies 300-1,192 plans one at a time.
+
+## Why the existing state-dedup does not help
+
+`MTG_LABEL_LADDER_DEDUP` collapses candidates with identical post-apply states -- the user's own
+"which states can be reached" doctrine. On this game it reports `searched=93 inherited=0`,
+**0.0%**. That is not a bug: it dedups at the LADDER ROOT, and a token deck's root candidates
+genuinely have distinct boards. The 99.7% of work sits at the horizon EDGE, where no state
+collapse is applied at all. That gap is exactly item 4 of
+`label-work-bounding-by-reachable-states.md`, and it remains unbuilt.
+
+`LABEL EDGE TAIL: elided=913419 continuations` shows the one edge-side optimisation that does fire
+-- but it elides the *continuation* after the apply, not the apply itself, and the apply is the cost.
+
+## What to do about it
+
+Ordered by evidence behind them, not by appeal.
+
+### 1. `MTG_FUNGUS_CERT_JOINT` -- built, and its adoption bar is now MET
+
+The joint Saproling budget prices the token pool once instead of letting it both attack and be
+eaten for cards. It bites directly on the lord terms, which is where 93.5% of the declines are. It
+was held at default OFF for one stated reason: *"`MTG_WINLESS_AUDIT` at least as wide as the
+certificate's own adoption run (99,128 nodes, violations 0)"*.
+
+Run 2026-09-19 -- 48 jobs x 4 games, held-out seeds 61000-61191, pooled, `MTG_WINLESS_AUDIT=1`:
+
+```
+=== WINLESS AUDIT: probed 1711293 certified-winless nodes with the canonical go-off, violations=0 ===
+=== FUNGUS JOINT reduced-vs-exhaustive MISMATCHES: 0 (must be 0) ===
+```
+
+**1,711,293 nodes, zero violations -- 17x the stated bar**, and the O(lib_lord_count) reduction
+agreed with the exhaustive sweep at every declining node. The condition the doc set for adoption is
+satisfied on its own terms.
+
+### 2. Levers that exist but were NOT in the frozen binary
+
+The banked rows were produced at `8ac753c4`. Since then: this session's three filter commits
+(~1.20x on tail games), and `MTG_FUNGUS_SPORE_POOL` (**1.47x units / 2.60x wall on the LABEL
+path**, default OFF, never yet used in a generation). The pool is the single biggest available
+multiplier on phase A -- and it is not play-neutral (13 of 12,000 census win turns move), so turning
+it on for a generation changes the play the leaf is fitted to. That is a decision, not a free win.
+
+### 3. The one that would actually change the shape: bound the library term by the TOP of the library
+
+This is a proposal, not a measurement. `lords_lib` is computed by walking the WHOLE library:
+
+```cpp
+for (const Card& c : ap.library) { ... if (IsLordPermanent(*d)) { ++lib_lord_count; ... } }
+lords_lib += std::min(lib_lord_count, fodder) * lib_lord_bonus;
+```
+
+With 4 Sporecrowns in the list and `fodder` usually >= 4 on a token board, the `min` almost never
+binds, so the bound is effectively *"all four library Sporecrowns arrive this turn"*. But draws come
+off the TOP in order, and the deck cannot reorder: verified against `cards.json`, the only library
+interaction in all 14 mainboard cards is Psychotrope Thallid's `sac_outlet_draw` -- **no shuffle, no
+tutor, no scry, no surveil**. `library.front()` is the top (`SpellEffects.h`). So only the top
+`max_draws` cards are reachable this turn, and on most boards none of them is a Sporecrown.
+
+**The soundness precondition, which is the whole difficulty.** `fodder` counts creatures ALREADY on
+the battlefield, and the comment calls it "an upper bound on DRAWS" -- but on this deck it is not
+one. Two mechanisms regenerate fodder during the turn, both verified in `cards.json`:
+
+* **Spore counters.** Every Thallid carries `spore_saproling_cost: 3`, `spore_creates_tokens: 1`, so
+  a creature sitting on 3+ counters makes a fresh Saproling without consuming a body.
+* **Tukatongue Thallid replaces itself.** `dies_watch_includes_self: true`,
+  `dies_trigger_creates_tokens: 1` -- sacrificing it to the draw outlet returns a Saproling, so that
+  draw cost NO net fodder. With Doubling Season (`doubles_tokens: true`) it returns *two*, and the
+  pool grows.
+
+Today's bound does not depend on `fodder` being a true ceiling -- with 4 Sporecrowns and `fodder`
+usually >= 4 the `min` does not bind -- so this is latent rather than live. **A top-of-library bound
+WOULD depend on it**: a lord sitting at position `max_draws + 1` that is nevertheless drawable is an
+UNDER-credit, the one direction this hook may never take. So the implementation is not
+`min(library.size(), fodder)`; it is a deliberately generous
+
+```
+max_draws = fodder
+          + SUM over permanents floor(spore_counters / spore_saproling_cost) * spore_creates_tokens * (doubling ? 2 : 1)
+          + (dies-token creatures on board) * dies_trigger_creates_tokens * (doubling ? 2 : 1)
+```
+
+every term rounded UP, and then `top_n = min(library.size(), max_draws)`. Mana is a further real
+bound on draws (each activation costs {1}) and is deliberately ignored here, exactly as the current
+code ignores it -- ignoring a limit is the safe direction.
+
+Even generously, `max_draws` lands in the high single digits against a ~30-card library, so the
+term collapses from "all four Sporecrowns arrive" to "is one of the top ~8 cards a Sporecrown" --
+usually no. Given `lord-library` is 93.5% of all declines, this is the largest identified lever on
+the tail. It must clear a `MTG_WINLESS_AUDIT` at least as wide as the 1.7 M-node run above before it
+ships, and it should ship behind its own flag so a bisect can separate it from the joint budget.
+
+### 4. The makespan is a separate problem, and no per-unit win fixes it
+
+Even at 2x, a queue whose tail is one 5.5-hour game still ends with 3 of 24 cores busy. The
+structural observation is that **a phase-A game is not an atomic unit of work**: it is ~8 real turns
+x K=3 independent label searches, computed inline in one thread because `EmitEvalRows` is called
+synchronously from the play loop. The play half is negligible (turn 1's real decision: 115 ms).
+Sharding the queue at the (game, turn) level rather than the game level would let a monster game's
+24 independent labels spread across the box. That is a driver+engine change, not a flag, and it is
+the only item here that attacks 12% utilisation rather than per-game cost.
+
+## A correction to this document's own record
+
+Section 5 of `label-work-bounding-by-reachable-states.md` states the certificate fires **0 times**
+for Fungus because the deck routes to `GenericProvider`. That was true when written and is now
+**stale**: `FungusProvider` (e413fff8, 2026-09-18) implements `ProvenWinlessThisTurn`, and the
+measured fire rate on the straggler is **77-84%**. The 93.7%-of-plans-at-edge-nodes figure quoted
+there was measured on the pre-certificate binary; the post-certificate equivalent is 88.5%
+(805,007 of 909,490), because the certificate removes whole nodes but the survivors are the widest.

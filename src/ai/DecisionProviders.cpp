@@ -19780,12 +19780,33 @@ inline bool FungusCertStatsOn()
 // MTG_FUNGUS_CERT_JOINT -- DEFAULT OFF. Applies the JOINT SAPROLING BUDGET as the real damage
 // bound instead of today's "attack with everything AND draw with everything". Admissible by
 // construction (<= today's bound at every node), so switching it on can only make the certificate
-// fire MORE -- it can never certify a node today's bound refused to. Default off until the
-// MTG_WINLESS_AUDIT run is at least as wide as the certificate's own adoption run (99,128 nodes,
-// violations 0), because a false positive here silently converts a win into a loss.
+// fire MORE -- it can never certify a node today's bound refused to.
+//
+// ADOPTED DEFAULT ON 2026-09-19; `=0` restores the loose bound. It was held off for one stated
+// condition -- "MTG_WINLESS_AUDIT at least as wide as the certificate's own adoption run (99,128
+// nodes, violations 0), because a false positive here silently converts a win into a loss" -- and
+// that condition is now met on its own terms, on seeds held out from both the tuning block (901750)
+// and the certificate's own adoption block (31337):
+//
+//   audit  48 jobs x 4 games, seeds 61000-61191, pooled, MTG_WINLESS_AUDIT=1:
+//          probed 1,711,293 certified-winless nodes, violations=0        <- 17x the stated bar
+//          FUNGUS JOINT reduced-vs-exhaustive MISMATCHES: 0
+//   A/B    32 games, seeds 62000-62031, both arms concurrent (test/fungus_cert_joint_ab.sh):
+//          ApplyPlanDirect 85,841,868 -> 72,843,492 = 1.178x, wall 702s -> 589s
+//          fire rate 66.9% -> 70.5%, and LABELS IDENTICAL on all 185 rows
+//
+// THE LABEL-IDENTITY HALF IS THE LOAD-BEARING ONE. An unsound tightening certifies a node that was
+// really a win, the search drops that turn, and the label comes back LATER than the truth -- the
+// quality loss this repo does not trade for wall clock (labeller-no-lossy-restrictions). 185
+// identical rows plus 1.7 M audited nodes is that claim tested from both ends.
+//
+// It cannot touch PLAY: the hook is consulted only where the search is unbounded (TurnSolver's
+// WinlessCertificateActive), which is the label ladder and the unbounded depth-matrix cells.
+// Why it is worth 1.178x: the declines it bites on are the whole residual. Straggler read
+// (--seed 901762 --game-index 12) -- combat-lethal=10,671 declines, of which lord-library=9,982.
 inline bool FungusCertJointOn()
 {
-    static const bool v = EnvOn("MTG_FUNGUS_CERT_JOINT");
+    static const bool v = EnvOn("MTG_FUNGUS_CERT_JOINT", true);
     return v;
 }
 inline bool FungusNote(FungusWhy w, bool r)
