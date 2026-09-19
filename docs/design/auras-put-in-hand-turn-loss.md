@@ -1,10 +1,13 @@
 # Auras loses a turn to the put-in-hand class, and no budget buys it back
 
-**Status:** gi20 FIXED (`e927240a`); **gi428 still open, and it is a DIFFERENT bug.**
+**Status:** gi20 FIXED (`e927240a`); **gi428 still open, and it is a DIFFERENT bug IN A DIFFERENT
+LAYER** -- an executor fix cannot touch it. Post-fix tiers: smoke **4 better / 0 worse**,
+regression **23 better / 3 worse** (3 = `hinata gi103` churn + gi428 counted at d3 and d5).
 
-The put-in-hand class was never the cause -- it is strictly additive at the search level
-(`MTG_LEGACY_SEARCH=1` finds T4 with the class ON); it merely selected a line that exposed an
-executor defect. That defect: `bp_play_searched_land` played a continuation's land with the plan's
+The put-in-hand class was not the cause OF gi20 -- for that game it is strictly additive at the
+search level (`MTG_LEGACY_SEARCH=1` finds T4 with the class ON); it merely selected a line that
+exposed an executor defect. **That sentence does NOT generalise to gi428**, where the class costs
+the legacy search a turn too; see the bottom section. That defect: `bp_play_searched_land` played a continuation's land with the plan's
 full triple (`fetch_target`, `land_face`, `rad_mode`) but recorded only `card_name`, and
 `replay_recorded` replayed it as `TryPlaySpecificLand(state, a.card_name)` -- front face, no fetch
 target. The searched land and the replayed land were different lands. gi20: Boulderloft `{W}`
@@ -12,9 +15,10 @@ searched, Branchloft `{G}` replayed, the recorded `Hyena Umbra {W}` stranded in 
 kill lost. Fixed by carrying the triple through the record/replay boundary; gi20 is now T4 in all
 20 ladder cells.
 
-**gi428 is unchanged by that fix and never emitted `[fd-diverge]`** -- same symptom, different
-cause, still to be diagnosed. The sections below were written before the fix and describe the
-shared investigation; read them for method, not for gi428's verdict.
+**gi428 is unchanged by that fix and never emitted `[fd-diverge]`** -- and it is not an executor
+bug at all. It is a SEARCH-layer loss; see "gi428 IS A DIFFERENT LAYER" at the bottom, which also
+retracts two claims made about it above. The sections below were written before the fix and
+describe the shared investigation; read them for method, not for gi428's verdict.
 
 **Found:** 2026-09-19, while running the pre-push gate for the breakpoint-condemnation branch.
 
@@ -118,6 +122,18 @@ All four Auras keys improve their aggregate (−0.0080 to −0.0100). Across the
 tier the branch is **better=22 / worse=3 / net −19 turns**, with every one of the 5 score-moving
 keys moving the right way and none moving the wrong way.
 
+**Re-measured after the gi20 fix (`e927240a`), 2026-09-19.** The fix's blast radius is surgical:
+it moved exactly **two smoke keys** (`auras_smoke_d3/d5_s1001`, each by the single game gi20,
+T5 -> T4) and **one regression key** (`auras_regression_d5_s3003`), all in the better direction;
+every other changed key is byte-identical to the pre-fix run. Post-fix totals:
+
+| tier | better | worse | distinct physical games worse |
+|---|---|---|---|
+| smoke | 4 | **0** | — |
+| regression | 23 | 3 | `hinata gi103` (churn, recovers at 4x/16x) + `auras gi428` (d3 and d5) |
+
+So gi428 is the ONLY unexplained regression left on the branch.
+
 ## Why this is written down rather than decided
 
 The repo's rebaseline bar wants a verdict per difference, and the two precedents point opposite
@@ -203,17 +219,79 @@ pre-existing and independent of the class — it is simply not exercised on this
 class points the search at that line. This is the same family as
 `docs/design/`-adjacent prior art on a DEVIATION leaving the committed line stale.
 
-**Not yet explained:** gi428 shows the same T4->T5 loss and the same legacy-engine recovery, but
-does NOT emit `[fd-diverge]`. So either the oracle misses that shape, or gi428's loss has a
-different proximate cause. Do not assume the two games are one bug until that is checked.
+**gi428 was checked and it is NOT this bug.** See the next section.
 
-### Where to look next
+## gi428 IS A DIFFERENT LAYER: the search never finds T4, and the executor is faithful
 
-The committed class-ON phase for T4 is `pre:spells[Spirit Link,Lion Umbra]{land=<none>}` — a
-DEFERRED land drop — whereas the class-OFF phase names a concrete land. Compare what the search
-simulated for that phase against what the executor actually did when popping it, starting with
-the deferred-land path and with Light-Paws' `aura_cast_tutor_attach` trigger (Spirit Link is an
-Aura, so the trigger fires during that phase and its choice of fetched Aura moves the damage).
+Measured 2026-09-19 on the fixed binary (`e927240a`), `--seed 2430 --game-index 428 --depth 5
+--budget-ms 0 --ignore-play-profile`.
+
+**The oracle is silent because there is nothing to diverge.** With the class open the search's own
+committed line says:
+
+```
+[fd] T1 LINE win=5 | pre:<pass>{land=Horizon Canopy} | pre:spells[Slippery Bogle,Gryff's Boon]{land=Plains}
+                   | pre:spells[Kor Spiritdancer]{land=Brushland} | pre:spells[All That Glitters]{land=Branchloft Pathway}
+                   | pre:spells[Rancor,Light-Paws, Emperor's Voice]{land=Brushland}
+[fd] T1 line win=5 searched_depth=5 verified=1 refuted_full=0 phases=5
+```
+
+It **predicts T5 and delivers T5**. gi20 predicted T4 and failed to replay it; gi428 never predicts
+T4 at all. `[fd-diverge]` not firing is the oracle being CORRECT, not the oracle missing a shape.
+
+With the class closed, same game, same depth, same unlimited budget:
+
+```
+[fd] T1 LINE win=4 | pre:<pass>{land=Horizon Canopy} | pre:spells[Kor Spiritdancer]{land=Plains}
+                   | pre:spells[Gryff's Boon,All That Glitters]{land=Branchloft Pathway} | pre:spells[Rancor]{land=Branchloft Pathway}
+[fd] T1 line win=4 searched_depth=4 verified=1 refuted_full=0 phases=4
+```
+
+**`searched_depth` is the tell.** Iterative deepening stops the OFF arm at depth 4 because it has a
+win there. The ON arm ran on to depth 5 -- so at depth 4 it found NO win, at unlimited budget. The
+T4 line left the reachable set.
+
+### RETRACTION: the legacy engine does NOT recover gi428
+
+This doc previously said gi428 showed "the same legacy-engine recovery". It does not. The 2x2:
+
+| | commit-the-line (default) | `MTG_LEGACY_SEARCH=1` |
+|---|---|---|
+| class OFF | **T4** | T5 |
+| class ON  | T5 | **T6** |
+
+The class costs BOTH engines exactly one turn. That is the strongest single argument that gi428's
+defect lives in the shared search/apply layer and not in the executor -- and it is why the gi20 fix,
+which is purely an executor record/replay repair, does nothing for it.
+
+### Ruled out, each with its power checked
+
+| suspect | evidence | power check |
+|---|---|---|
+| a candidate prune | `All That Glitters` considered **16,903** times with the class ON vs **1,772** OFF | n/a -- the count moved |
+| search effort | `--budget-ms 0`; the ON arm does **56,357** considerations vs 5,110, for a WORSE answer | n/a |
+| the solve memo | `MTG_SOLVE_MEMO=0` still T5 | trace differs from default -> arm had power |
+| the enum memo | `MTG_ENUM_MEMO=0` still T5 | trace differs from default -> arm had power |
+| the no-win memo | `MTG_FS_NOWIN_CACHE=0` byte-identical | `MTG_NOWIN_VERIFY_POISON=1` DIFFERS -> the cache is live here, so the inert arm is a REAL negative |
+
+More search, at unlimited budget, considering the winning card ten times more often, returning a
+worse answer. That is not effort and not a prune: opening the class changes which lines are
+**constructible**.
+
+### Two code facts to start from next time (observed, NOT yet proven causal)
+
+* **Kor Spiritdancer's implementation assumes the opposite of what the class asserts.** Its
+  `cards.json` note reads *"the draw fires in FireOnCastTriggers -- always drawn (card advantage),
+  to hand for later turns (no same-turn re-solve)"*. `draw_on_aura_cast: true` plus
+  `MTG_BP_PUT_IN_HAND`'s `HandGainedACard` test means every Aura cast in this deck now arms a
+  deferred continuation -- precisely the same-turn re-solve the card says it does not do. The T4
+  line needs `Gryff's Boon` AND `All That Glitters` in ONE turn with Spiritdancer already out, so
+  it is exactly the shape that arming splits.
+* **Site 10 has no `node_owns_site(10)` consumer.** Sites 3/5/6 each have one (`bp_truncate`);
+  site 10 arms (`TurnSolver.cpp` ~26174) but nothing partitions on it, and `BpNodeSites()` cannot
+  return bit 10 under any flag. **A trap recorded so it is not repeated:** adding bit 10 to that
+  mask behind a new flag is a NO-OP -- byte-identical output -- because there is no consumer to
+  read it. That is a no-power arm, not a negative result.
 
 ## Reproducing
 
