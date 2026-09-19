@@ -1244,13 +1244,14 @@ empty 2-slot inflates, so it should be discounted further, not acted on.
 **The 22-land arms did not win.** `s_leg0_b3_yv3_t2_p14` (−0.0116) sits behind its 23-land twin
 (−0.0132). Combined with screen 16, **23 lands** is the better-supported number.
 
-## THE DECIDED LIST (user, 2026-09-19) — authorised for adoption
+## THE DECIDED LIST (user, 2026-09-19) — ADOPTED, `598848fa`
 
 ```
  1 Lyra Dawnbringer          5   user: ">= 1 curve topper"
  2 Archangel of Thune        5   USER DECIDED — took Legion Angel's slot
  4 Lyra, Archangel of Dawn   3   4-of SURVIVED the corrected apparatus (+0.0161, t +4.5 @40)
- 4 Giada, Font of Hope       2   4th copy under verification (screen 18)
+ 4 Giada, Font of Hope       2   4th copy VERIFIED by screen 18 (beats a 3rd Thune,
+                                 a 2nd Dawnbringer, a 2nd YV and a Plains)
  1 Youthful Valkyrie         2
  4 Lightstall Inquisitor     1   user, over 3 — the old table was suppressing it by 0.02-0.025t
  4 Bishop of Wings           2   USER RULING — overrides every arm that cut it
@@ -1278,16 +1279,113 @@ in this campaign the sim's "better" list was one that cut a card the user then s
 structurally cannot see (Bishop's defensive life, Legion Angel's sideboard access, the never-cast
 removal).
 
+## Screen 18 — the Giada verification, and the bar applied
+
+`spec18_giada_verify.json`, seed 2800000 (an eighth disjoint block), 12 arms × 3 formats × 40,000
+games, same apparatus as screens 16–17. Reference `D` **is the decided list**, not a screen winner.
+
+The question was the user's: *"I guess we should verify that."* Screen 15 had the 4th Giada beating
+the 4th Lightstall by +0.0350; screen 16 reversed it; screen 17 then had Giada beating a 2nd
+Youthful Valkyrie at t +9.0. Every home tried for the freed slot so far had been **cheap or a land**
+— precisely the class the user's curve argument says is distorted. So this screen sent the slot to a
+**high drop**.
+
+**Not one candidate arm was faster than `D` on a single format.**
+
+| the freed 4th-Giada slot goes to | std | 2hg | long | late |
+|---|---|---|---|---|
+| 3rd Archangel of Thune | +0.0272 (t +15.1) | +0.0247 (t +11.8) | +0.0197 (t +8.2) | +0.0227 |
+| 2nd Lyra Dawnbringer | +0.0270 (t +15.3) | +0.0276 (t +13.5) | +0.0287 (t +12.2) | +0.0280 |
+| 2nd Youthful Valkyrie *(control, screen 17)* | +0.0125 | +0.0146 | +0.0162 | +0.0150 |
+| a Plains, 24 lands *(control, screen 16)* | +0.0139 | +0.0167 | +0.0211 | +0.0183 |
+
+Positive = **slower** than the decided list. Arms clearing condition (a): **NONE**. The six "push"
+arms (Giada to 2, both toppers up, etc.) were worse still, up to +0.0658 late.
+
+### Group 3 is what makes the answer interpretable
+
+Buying the *same* additions with a different card, Giada left at 4:
+
+| 3rd Archangel of Thune, paid by | std | 2hg | long | late |
+|---|---|---|---|---|
+| the 4th Giada | +0.0272 | +0.0247 | +0.0197 | +0.0227 |
+| the Youthful Valkyrie | +0.0169 | +0.0106 | +0.0046 | +0.0089 |
+| a land (22 lands) | +0.0170 | +0.0117 | +0.0028 | +0.0083 |
+
+Both alternatives still lose to `D`. **So the finding is not "Giada is weak"** — the high drops
+simply do not pay on this apparatus, however they are financed. Paying *with Giada* costs a further
++0.013–0.014 late, replicated across two different added cards; that gap is the price of Giada
+specifically.
+
+The user's curve argument predicted the high drops might pay here. **The measurement did not find
+it.** That does not refute the argument — the effect it describes lives where this apparatus cannot
+look — but it is a reason to hold at 2 Thune, not to go up.
+
+### The only arm faster than `D` is the calibration arm
+
+`ua2_t3_FLOOR` (Unexpectedly Absent 3→2, constant 23 lands) came in at −0.0339 late. It fails
+condition (c) outright — the user ruled the removal stays — and by construction it prices what the
+sim *manufactures* by turning a never-cast card into a live one. It is the floor, not a candidate.
+
+### Held out, and it replicated with no shrinkage
+
+`--confirm D`, seed 3300000 against the screen's 2800000, same apparatus, fingerprint-checked:
+
+| format | screen | held out | shrinkage | pooled (80,000 games) |
+|---|---|---|---|---|
+| std | −0.0729 | −0.0696 | +0.0033 (t +0.90) | **−0.0712** |
+| 2hg | −0.0866 | −0.0881 | −0.0015 (t −0.36) | **−0.0873** |
+| long | −0.1116 | −0.1089 | +0.0027 (t +0.55) | **−0.1103** |
+
+## ADOPTED, 2026-09-19 (`598848fa`, `4e81a3e7`)
+
+The list is at `decks/Angels/Angels.cod`; v1 is archived at `decks/Angels/v1-thune4-chancery/` with
+its 11 hand-played references moved to `references/Angels/v1-thune4-chancery/`.
+
+**What the curve actually did**, which is the clearest summary of the whole campaign:
+
+| | lands | avg cmc | 1cc | 2cc | 3cc | 4cc | 5cc |
+|---|---|---|---|---|---|---|---|
+| v1 | 24 | 2.86 | 4 | 14 | 8 | 3 | **7** |
+| v2 | 23 | **2.49** | 7 | 13 | 12 | 2 | **3** |
+
+Seven five-drops became three, and the 24th land came out *as a consequence* — the land ladder and
+the curve were always the same question. The two new 4-ofs are cheaper than their names suggest:
+**Lightstall Inquisitor is `{W}`** and **Lyra, Archangel of Dawn is `{2}{W}`**, so the 3-drop slot
+went 8 → 12 and the 1-drop slot 4 → 7.
+
+**Why the 4th Giada survives a falling curve** (user, 2026-09-19: *"Giada helps the existing high
+drops become castable … + the growing benefit of her +1/+1 counters"*). Both halves are modelled:
+`creature_mana_only: true` + `mana_only_subtype: "Angel"` makes her mana legal **only on Angel
+spells**, and that is now 20 of the 37 spells (not Bishop of Wings, a Human Cleric; not Serra, a
+planeswalker). Her acceleration did not weaken when the curve fell — it **re-aimed**, from seven
+5-drops to twelve Angel 3-drops, a far higher hit rate. That is also why `g3_t3` is doubly wrong: it
+removes the accelerant *and* returns the card to the slot the deck just left.
+
+One refinement: the legend rule caps Giada at one instance on the battlefield, so the **4th copy**
+does not add counter throughput — it adds the probability she is out on turn 2. The marginal copy is
+bought with consistency, not counters. It is not a blank either: with 4 Bishop of Wings the
+legend-rule death is an Angel dying (`dies_watch_subtype: "Angel"`), so it still yields a Spirit.
+*This mechanism was fitted after the numbers; it is consistent with them and verifiable in card
+data, but it is not proven — see the probe below.*
+
+### Pipeline and GT
+
+Profile → value leaf → mulligan, strictly serial. The value leaf was a clean win on both axes
+(−0.00125t, 6/0/2, **0.32x** cost — the baseline arm being this deck with *no* sidecar, so that
+figure is the leafless penalty measured directly). Phase F re-derived d1/b3 by measurement
+(rho 0.9996 at 0.39x) and recorded `expected_buckets = 15` **as discovered**. The mulligan table
+(K=15, R=40, 77,093 entries) cleared both gates 16/16 and beat v1's on both: keep **−0.2281t**
+(v1 −0.1967), bottoming **−0.0994t** under confound mode 3 (v1 −0.0789).
+
+Smoke and regression GT rebaselined; every Angels config faster, nothing else moved.
+
 ## Open, in priority order
 
-1. **Screen 17** (`spec17_rebuild_bottom.json`, seed 2700000) — spends the cheap slots on the
-   absorbers that won. Includes the decided list as `s_leg0_t2`.
-2. **Verify the Giada reversal** (user: *"I guess we should verify that"*). Screen 16 put the 4th
-   Giada below the 4th Lightstall, reversing screen 15; screen 17 then showed it beating a 2nd
-   Youthful Valkyrie decisively (t +9.0). Both can be true — it loses to a 1-drop and beats a
-   2-drop. Under the curve argument the natural home for that slot is a **3rd Thune or 2nd
-   Dawnbringer**, not anything cheap — untested.
-3. **The Bishop breakpoint probe.** Log turn-of-first-anthem at Bishop 4 vs Bishop 3. If cutting the
+1. **The Giada mechanism probe** — `--log-dir` cast counts for Giada's mana ability and
+   turn-of-first-Angel at 4 vs 3 copies. Turns the ramp story above from a fitted explanation into a
+   measurement. Same shape as the Bishop probe below; run them together.
+2. **The Bishop breakpoint probe.** Log turn-of-first-anthem at Bishop 4 vs Bishop 3. If cutting the
    4th barely delays start+7, its modelled value is near nil and all its remaining value is the
    defensive half the sim cannot see — which puts a number on how much to discount this entire class
    of result, not just Bishop's.
@@ -1296,12 +1394,25 @@ removal).
 4. **The World A/B curve diagnostic** — identical cheap-for-expensive swaps measured with the 2-slot
    empty (UA 3, YV 1) and full (UA 0, YV 4), differenced. World B is an **instrument, never a
    candidate**: the user ruled the removal stays.
-5. **`--confirm` on a disjoint block** before any adoption. Selection bias now compounds — screen 16
-   chose screen 17's arms.
-6. **Audit the value leaf**, the only un-checked half of the apparatus. 120 trees on 19 generic board
-   features (no card names, so no new-card blind spot), but fit on the incumbent at `6ab282ad`, and
-   **26 splits key on `src_u`** — blue sources, i.e. the Azorius Chancery this list cuts to zero.
-   Cheap audit: re-measure the pivotal comparisons with `leaf: none` and see if the ranking survives.
+5. **Audit the value leaf** — now re-scoped by the adoption. The concern was that the shipped model
+   was fit on the incumbent at `6ab282ad` with **26 splits keying on `src_u`** (blue sources, i.e.
+   the Azorius Chancery this list cuts to zero). The model has since been **regenerated on the
+   adopted list** (`4e81a3e7`), so that specific staleness is gone; what remains open is the
+   `leaf: none` sensitivity check — re-measure the pivotal comparisons leafless and see whether the
+   ranking survives. Note the regeneration already showed leafless costs this deck **3.1x** wall, so
+   `leaf: none` is an audit instrument here, not a shipping candidate.
+6. **`angels2hg` is missing from `test/regression_cases.sh`.** Angels is measured at 2HG all through
+   this campaign but has no 2HG regression case, unlike `antilife2hg` / `auras2hg` / `breaching2hg`.
+   Predates this work; still owed.
+7. **Two Fungus references no longer replay** (`claude_s1_gi0` win_turn 5→6, `claude_s2_gi1` 6→7),
+   found by the regression tier's `--strict` reference check on 2026-09-19. **Not caused by the
+   Angels work** — `src` is byte-identical to the `76f76796` GT accept and nothing under
+   `decks/Fungus` or `references/Fungus` changed. The cause is `56c57d73`, the site-10 breakpoint
+   fix, which widened the search in `TurnSolver.cpp` and created decision points those recorded
+   lines have no answer for (*"2 decision(s) the ref predates answered by engine default"*). It went
+   unseen because GT was accepted three minutes later, a ref-check failure does not block
+   `--accept`, and smoke skips the check entirely. **User's call**: the references are hand-played
+   and commit-only, so re-recording them or narrowing the search is not an agent's decision.
 
 ## Related
 
