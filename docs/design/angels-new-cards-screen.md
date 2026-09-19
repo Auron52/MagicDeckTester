@@ -1380,31 +1380,73 @@ figure is the leafless penalty measured directly). Phase F re-derived d1/b3 by m
 
 Smoke and regression GT rebaselined; every Angels config faster, nothing else moved.
 
+## The probes, run 2026-09-19 after adoption (3,000 games/arm, shipped apparatus)
+
+`logs/angels_probe/`. Arms are the shipped list, `giada3` (Giada 4→3) and `bishop3` (Bishop 4→3),
+each donating the slot to a **Plains** — the same single-donor convention screen 16's ladder used.
+Cutting a count can never break the shipped keep table's cell coverage (a bucket's enumerated max is
+the *generating* deck's count), so these arms run with no fall-through.
+
+**Giada's mana is measurable exactly.** She has vigilance, so she never taps to attack — therefore
+"Giada tapped" means "her mana ability was used", with no inference.
+
+| | ship | giada3 | bishop3 |
+|---|---|---|---|
+| avg win turn | 4.6573 | 4.6847 (+0.0274) | 4.6642 (+0.0069) |
+| **% games using Giada's mana** | **27.1%** | 21.5% (−5.5pp) | 26.4% |
+| first Angel cast | T1.714 | T1.734 | T1.713 |
+| first Angel cmc≥3 | T2.756 | T2.719 | T2.712 |
+| % resolving a Righteous Valkyrie | 54.5% | 55.0% | 54.1% |
+| **% reaching start+7 with RV out** | **46.4%** | 45.0% | **44.5% (−1.8pp)** |
+| **turn the RV anthem switches on** | **T4.179** | T4.195 | **T4.195 (+0.016)** |
+
+Her mana is used on T3 in 17.0% of games and T4 in 13.5%; the 4th copy is worth +5.5pp of games in
+which it gets used at all.
+
+**What this does and does not establish about the ramp story.** It establishes the mechanism is
+*real and exercised* — not a hypothesis — in better than a quarter of games. It does **not** show
+the 4th copy accelerating the deck, because `first Angel cmc≥3` gets marginally *earlier* at Giada 3.
+That is the donor's doing: a Plains substitutes for part of what her mana was doing, so this
+comparison cannot isolate acceleration. Reading it as "the ramp does not matter" would be wrong in
+the other direction. An arm donating to a non-mana card would separate them; not run.
+
+**The Bishop breakpoint question is now answered, and it supports the user's ruling by quantifying
+how little the sim can see.** Cutting the 4th Bishop delays Righteous Valkyrie's start+7 anthem by
+**0.016 turns** and costs **1.8pp** of games that reach it at all. That is near nil — exactly the
+outcome this probe was designed to detect. So the 4th Bishop's *modelled* value is tiny (consistent
+with screen 16 ranking it the weakest real card at 0.0299), and essentially all of its real value
+lives in the two streams this engine scores at exactly zero: life as a defensive resource
+(`OpponentDeck.h:119` — the opponent never takes a turn) and the Spirit half (nothing kills our
+Angels). Keeping it at 4 is a judgement about the game, not about these numbers, and the numbers no
+longer argue against it.
+
+**CLOSED: the never-cast question, now measured rather than inferred.** Across **9,000 games** over
+the three arms, **Unexpectedly Absent was cast 0 times and Swords to Plowshares 0 times.** Five of
+the 37 spells are pure deck-thinning in this simulation. Every delta in this document is therefore
+computed on a 32-spell deck, which is the single largest caveat on all of it.
+
+*(One number in the raw output is a survivorship artifact and should not be read: "life at turn 6"
+is higher in the cut arms only because slower arms have more games still alive at turn 6.)*
+
 ## Open, in priority order
 
-1. **The Giada mechanism probe** — `--log-dir` cast counts for Giada's mana ability and
-   turn-of-first-Angel at 4 vs 3 copies. Turns the ramp story above from a fitted explanation into a
-   measurement. Same shape as the Bishop probe below; run them together.
-2. **The Bishop breakpoint probe.** Log turn-of-first-anthem at Bishop 4 vs Bishop 3. If cutting the
-   4th barely delays start+7, its modelled value is near nil and all its remaining value is the
-   defensive half the sim cannot see — which puts a number on how much to discount this entire class
-   of result, not just Bishop's.
-3. **Direct cast-count probe on Unexpectedly Absent**, to turn "never cast" from inference into
-   measurement. If it is truly 0-for-N then 3 of 37 spells are invisible to every number here.
-4. **The World A/B curve diagnostic** — identical cheap-for-expensive swaps measured with the 2-slot
-   empty (UA 3, YV 1) and full (UA 0, YV 4), differenced. World B is an **instrument, never a
-   candidate**: the user ruled the removal stays.
-5. **Audit the value leaf** — now re-scoped by the adoption. The concern was that the shipped model
-   was fit on the incumbent at `6ab282ad` with **26 splits keying on `src_u`** (blue sources, i.e.
-   the Azorius Chancery this list cuts to zero). The model has since been **regenerated on the
-   adopted list** (`4e81a3e7`), so that specific staleness is gone; what remains open is the
-   `leaf: none` sensitivity check — re-measure the pivotal comparisons leafless and see whether the
-   ranking survives. Note the regeneration already showed leafless costs this deck **3.1x** wall, so
+1. **A non-land donor arm for Giada**, to separate ramp from body/counters. The probe above donated
+   the slot to a Plains, which substitutes for part of her mana, so it cannot isolate acceleration.
+   Re-run `giada3` donating to a non-mana card (a 2nd Youthful Valkyrie is the natural choice — it is
+   already a measured arm in screen 18) and compare `first Angel cmc>=3`.
+2. **The World A/B curve diagnostic** — identical cheap-for-expensive swaps measured with the 2-slot
+   empty (UA 3, YV 1) and full (UA 0, YV 4), differenced. Now better motivated than ever: the probe
+   measured **0 casts of Unexpectedly Absent and 0 of Swords to Plowshares in 9,000 games**, so the
+   distortion this diagnostic prices is confirmed to exist and only its size is unknown. World B is
+   an **instrument, never a candidate**: the user ruled the removal stays.
+3. **`leaf: none` sensitivity audit.** The staleness concern is gone — the model was regenerated on
+   the adopted list (`4e81a3e7`) — so what remains is only whether the pivotal comparisons survive
+   leafless. Note the regeneration measured leafless at **3.1x** wall cost on this deck, so
    `leaf: none` is an audit instrument here, not a shipping candidate.
-6. **`angels2hg` is missing from `test/regression_cases.sh`.** Angels is measured at 2HG all through
+4. **`angels2hg` is missing from `test/regression_cases.sh`.** Angels is measured at 2HG throughout
    this campaign but has no 2HG regression case, unlike `antilife2hg` / `auras2hg` / `breaching2hg`.
    Predates this work; still owed.
-7. **Two Fungus references no longer replay** (`claude_s1_gi0` win_turn 5→6, `claude_s2_gi1` 6→7),
+5. **Two Fungus references no longer replay** (`claude_s1_gi0` win_turn 5->6, `claude_s2_gi1` 6->7),
    found by the regression tier's `--strict` reference check on 2026-09-19. **Not caused by the
    Angels work** — `src` is byte-identical to the `76f76796` GT accept and nothing under
    `decks/Fungus` or `references/Fungus` changed. The cause is `56c57d73`, the site-10 breakpoint
@@ -1413,6 +1455,13 @@ Smoke and regression GT rebaselined; every Angels config faster, nothing else mo
    unseen because GT was accepted three minutes later, a ref-check failure does not block
    `--accept`, and smoke skips the check entirely. **User's call**: the references are hand-played
    and commit-only, so re-recording them or narrowing the search is not an agent's decision.
+
+### Closed by the 2026-09-19 probes
+
+* ~~Verify the Giada reversal~~ — screen 18: the 4th Giada beats a 3rd Thune, a 2nd Dawnbringer, a
+  2nd Youthful Valkyrie and a Plains. Its mana is exercised in 27.1% of games.
+* ~~The Bishop breakpoint probe~~ — cutting the 4th delays the anthem by 0.016 turns and 1.8pp.
+* ~~The Unexpectedly Absent cast-count probe~~ — 0 casts in 9,000 games, measured not inferred.
 
 ## Related
 
