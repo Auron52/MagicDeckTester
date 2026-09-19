@@ -1,10 +1,20 @@
 # Auras loses a turn to the put-in-hand class, and no budget buys it back
 
-**Status:** ROOT-CAUSED, fix not written. The put-in-hand class is strictly additive at the
-search level (`MTG_LEGACY_SEARCH=1` finds T4 with the class ON). The loss is a **commit-the-line
-REPLAY divergence**: the default executor commits a 4-phase line whose T4 win it SIMULATED and
-marked `verified=1`, pops all four phases without re-searching, and the kill never happens
-(`[fd-diverge] ... leaf_est=none`). The class only changes WHICH line is selected.
+**Status:** gi20 FIXED (`e927240a`); **gi428 still open, and it is a DIFFERENT bug.**
+
+The put-in-hand class was never the cause -- it is strictly additive at the search level
+(`MTG_LEGACY_SEARCH=1` finds T4 with the class ON); it merely selected a line that exposed an
+executor defect. That defect: `bp_play_searched_land` played a continuation's land with the plan's
+full triple (`fetch_target`, `land_face`, `rad_mode`) but recorded only `card_name`, and
+`replay_recorded` replayed it as `TryPlaySpecificLand(state, a.card_name)` -- front face, no fetch
+target. The searched land and the replayed land were different lands. gi20: Boulderloft `{W}`
+searched, Branchloft `{G}` replayed, the recorded `Hyena Umbra {W}` stranded in hand, committed T4
+kill lost. Fixed by carrying the triple through the record/replay boundary; gi20 is now T4 in all
+20 ladder cells.
+
+**gi428 is unchanged by that fix and never emitted `[fd-diverge]`** -- same symptom, different
+cause, still to be diagnosed. The sections below were written before the fix and describe the
+shared investigation; read them for method, not for gi428's verdict.
 
 **Found:** 2026-09-19, while running the pre-push gate for the breakpoint-condemnation branch.
 
