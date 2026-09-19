@@ -584,6 +584,59 @@ there is plenty of time.
 2. **The two winning edits were never combined.** The only combined arm (`d1_i1_yv0`, −0.0022 std)
    paid for the Dawnbringer out of Youthful Valkyrie rather than the Thune that made it free.
 
+### Screen 12 — the finals, held out on disjoint seeds (`spec12_finals.json`)
+
+14 arms + base × 3 formats × 40,000 games, seed 2200000. Deltas vs `v_a`, negative is faster.
+
+| arm | std | 2HG | long |
+|---|---|---|---|
+| `i3_t2_yv0` — screen 11's winner, **held out** | **−0.0572** (was −0.0558) | −0.0203 | −0.0125 |
+| `i2_t2_yv1` — held out | −0.0437 (was −0.0481) | −0.0191 | −0.0107 |
+| `i4_t1_yv0` Lightstall 4, Thune 1 | **−0.0785** (t −26) | −0.0255 | −0.0043 |
+| `i4_t2_yv0_lad3` 4th from Lyra ArchDawn | −0.0488 | +0.0002 | +0.0162 |
+| `i4_t2_yv0_g3` 4th from Giada | −0.0408 | +0.0040 | +0.0182 |
+| `i3_t1_yv1` Thune 1 | −0.0684 | −0.0267 | −0.0057 |
+| `i3_t3_yv0_g3` **control:** keep Thune 3, cut Giada | −0.0200 | +0.0095 | +0.0123 |
+| `d1_i3_t1_yv0` Dawnbringer + 3 Lightstall | −0.0530 | −0.0180 | +0.0025 |
+| `d2_i2_t1_yv0` two Dawnbringer | −0.0198 | −0.0011 | +0.0233 |
+| **`i3_t2_yv1_p15` 3 Lightstall, Thune 2, 23 lands** | **−0.0631** | **−0.0280** | **−0.0214** |
+
+**The Lightstall effect replicated with no shrinkage.** `i3_t2_yv0` came back **−0.0572** against a
+screen-11 value of −0.0558 on a disjoint seed block. That is the test that killed three of six
+adoptable-looking trades in an earlier campaign; this one passed it cleanly.
+
+**The control arm earned its place.** `i3_t3_yv0_g3` keeps Archangel of Thune at 3 and cuts a Giada
+instead: −0.0200 / +0.0095 / +0.0123, far worse than cutting Thune, and *worse than `v_a`* in two
+formats. So Thune is the right donor and the legends are not — the same answer the legend-count arms
+gave from the other direction. The 4th Lightstall confirms it again: funded from Thune it is the best
+std arm (−0.0785), funded from Lyra ArchDawn or Giada it is worse than taking only three.
+
+**A preference's price depends on what it displaces.** In screen 11 the Dawnbringer displaced the
+third Archangel of Thune and was free (−0.0015). Here the marginal slot is a *Lightstall*, so
+`d1_i3_t1_yv0` (−0.0530) sits ~0.026 behind `i4_t1_yv0` (−0.0785) at 20 life. Neither number is
+wrong; they answer different questions, and the second is the one that matters once Lightstall is in
+the list.
+
+**One arm is top-3 in every format, and it is the one that cut a land.** `i3_t2_yv1_p15` (3
+Lightstall, Thune 2, **23 lands**) is 3rd at 20 life, 1st at 30 and 1st at 40 — and at 40 life it is
+nearly twice the next arm. Everything else that wins at 20 life fades by 40.
+
+### ⚠ The caveat that governs how screens 11–13 should be read
+
+**Every direction winning here does the same thing: it trades five-mana bombs and lands for one-mana
+bodies.** That is precisely the edit this apparatus is least qualified to judge. The goldfish has no
+sweeper, no opposing removal and no card-quality pressure, so four 1-mana 2/1 Angels that merely
+have to *resolve* to trigger Bishop of Wings look strictly better than an Archangel of Thune that
+would win a real game by itself. The repo has recorded this blind spot before — the sim **overstates
+all-in cheap deploy** and **understates interaction** — and this is a textbook instance of it.
+
+What the measurement does establish, and establishes solidly: **within a goldfish race, Lightstall
+Inquisitor is a real card in this deck and Archangel of Thune is the most expendable slot.** What it
+cannot establish is how far to take that, because the first sweeper or removal spell prices the
+difference and the sim never shows one. The numbers below are reported as measured; the judgement
+about how much of the Thune-to-Lightstall trade to actually make is the user's, and the honest
+recommendation is deliberately more conservative than the maximum the screen points at.
+
 ## THE RECOMMENDED LIST (`v_a`)
 
 Held out on disjoint seeds with no measurable shrinkage. Pooled over **80,000 games per format**:
