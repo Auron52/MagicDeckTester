@@ -187,6 +187,13 @@ inline std::atomic<long long> g_fold_kept_members{0};   // ...and how many actio
 inline std::atomic<long long> g_fold_guard_seen{0};     // tagged actions the subset guard inspected
 inline std::atomic<long long> g_fold_guard_reject{0};   // subsets the canonical-prefix rule rejected
 inline std::atomic<long long> g_fold_reject_site[2];    // ...split by caller: 0 = greedy Solve, 1 = search
+// WHY THE SEARCH SIDE OF THAT SPLIT IS TINY -- three different causes, indistinguishable from the
+// reject count alone. [site]: every selection the guard was handed; _odo: those the ODOMETER built
+// (the prefix rule is fenced to those by design, see foldsel -- a hand-constructed line has no twin
+// and rejecting it deletes it outright); _tag: those that additionally carried a foldable tag and
+// so actually reached the prefix test. reject/tag is the rule's hit rate; tag/odo says the tags are
+// absent; odo/site says the caller does not enumerate a powerset at all.
+inline std::atomic<long long> g_fold_site_calls[2], g_fold_site_odo[2], g_fold_site_tag[2];
 // SUBSETS ACTUALLY SCORED, by site. THE work metric for this fold: units_total counts only the
 // SEARCH's scored candidates, and both odometers (the greedy rollout leaf and the nested
 // enumerations that run during scoring) are invisible to it -- which is why the first hand-cast
@@ -200,6 +207,25 @@ inline std::atomic<long long> g_subsets_scored[2];
 // checked at runtime rather than argued. Both holes fixed in 4b589c0d were exactly twin failures.
 inline std::atomic<long long> g_fold_recoverable{0};
 inline std::atomic<long long> g_fold_unrecoverable{0};
+// WHAT THE WIDTH WOULD COLLAPSE TO IF THE TWO OBVIOUS IDENTITIES WERE APPLIED WHERE IT IS BILLED.
+// `mean_width` alone cannot say whether a 120-wide decision is 120 real choices or one choice
+// counted 120 times, and the answer decides whether ANY identity rule can help. Three totals over
+// the same decisions, so the ratios are exact:
+//   g_w_raw    -- candidates.size(), what la_cand actually charges.
+//   g_w_exact  -- distinct ORDERED action sequences, source and hand index INCLUDED. The gap
+//                 raw->exact is literal repetition: the same plan enumerated more than once.
+//   g_w_blind  -- distinct action MULTISETS with sac_source_id / hand_index erased. The gap
+//                 exact->blind is the interchangeable-copy axis (USER 2026-09-09: "it doesn't
+//                 matter whether you tap Scrying Sheets 1, 2, 3 or 4 first").
+// Neither is a proposal on its own -- blind in particular is an UPPER bound, because two copies
+// are only interchangeable when FinalizeFoldTags proves it. They bound the prize.
+inline std::atomic<long long> g_w_raw{0}, g_w_exact{0}, g_w_blind{0};
+// ...and the same three restricted to NON-BREAKPOINT candidates (bp_choice < 0). The scoring-site
+// test (dedup_exact) and this list-site test disagreed -- the dump plainly shows repeated bp=-1
+// plans while the scoring site reported zero non-bp repeats -- and only one of them can be right.
+// Splitting the LIST-site count the same way the scoring site is split makes them comparable, so
+// whichever is wrong says so instead of both being quoted.
+inline std::atomic<long long> g_w_raw_nb{0}, g_w_exact_nb{0}, g_w_blind_nb{0};
 inline int Bucket(size_t n)
 {
     if (n <= 1) { return 0; }
@@ -227,6 +253,17 @@ static std::atomic<long long> g_dedup_seen{0}, g_dedup_dup{0};
 // reach an identical state. If this rate tracks dup_rate, the duplicates can be recognised from the
 // PLAN ALONE -- before the GameState copy and ApplyPlanDirect that the post-apply key needs.
 static std::atomic<long long> g_dedup_namedup{0};
+// EXACT REPEATS (see census_exact): candidates whose FULL fingerprint a sibling already had, split
+// by whether the post-apply state agreed. exact_FALSE > 0 would mean the fingerprint is
+// under-covering a field that matters, which is the failure mode its own header warns about --
+// so it is the instrument's self-check as much as the skip's safety number.
+static std::atomic<long long> g_dedup_exactdup{0}, g_dedup_exactfalse{0};
+// ...split by whether the plan is a BREAKPOINT VARIANT, because `bp_choice` is not a content field:
+// it is a POSITIONAL INDEX into a continuation list the wave machinery rebuilds, so the same
+// integer can name different continuations in different passes. Two bp variants can therefore be
+// content-identical by every field a fingerprint can read and still land apart, with nothing wrong.
+// Plans with bp_choice < 0 carry no such index and are the class where "identical" must mean it.
+static std::atomic<long long> g_dedup_exactdup_nb{0}, g_dedup_exactfalse_nb{0};
 // THE SAFETY NUMBER. Candidates whose copy-signature was already seen but whose post-apply STATE was
 // NOT: two plans that differ only in which copy they used, yet land somewhere different. Every one of
 // these is a line a signature-based dedup would wrongly delete. It must be 0 before the signature can
@@ -608,6 +645,11 @@ static std::atomic<long long> g_bplen_records{0}, g_bplen_hits{0}, g_bplen_skips
 // because a copy of the same NAME was already in hand (i.e. already passed on). Zero means the rule
 // never fired and any work delta is not it.
 static std::atomic<long long> g_bp_newopt_samename{0};
+// MTG_BP_CONDEMN_NEWOPT_SPELLONLY firing counter: new cards REFUSED the "new option" exemption
+// because they are LANDS, which cannot take the exclusive continuation CAST slot. Zero means the
+// rule never fired. See BpCondemnNewOptSpellOnly for the inspection that found this.
+static std::atomic<long long> g_bp_newopt_land{0};
+static bool BpCondemnNewOptSpellOnly();   // defined with the rule, next to the other condemn flags
 // MTG_BP_CONDEMN_ACTIVATION firing counter: activations dropped because their slot in the
 // provider's ACTIVATION order had already passed when the site fired. Zero => the rule never fired.
 static std::atomic<long long> g_bp_condemn_act_drops{0};
@@ -1050,9 +1092,38 @@ namespace
                               << " guard_reject=" << bfcensus::g_fold_guard_reject.load()
                               << " (greedy=" << bfcensus::g_fold_reject_site[0].load()
                               << " search=" << bfcensus::g_fold_reject_site[1].load() << ")\n";
+                    for (int st = 0; st < 2; ++st)
+                    {
+                        std::cerr << "[rollout-stats]   bf_foldsite "
+                                  << (st == 0 ? "greedy" : "search")
+                                  << " calls=" << bfcensus::g_fold_site_calls[st].load()
+                                  << " from_odometer=" << bfcensus::g_fold_site_odo[st].load()
+                                  << " with_tag=" << bfcensus::g_fold_site_tag[st].load()
+                                  << " rejected=" << bfcensus::g_fold_reject_site[st].load() << "\n";
+                    }
                     std::cerr << "[rollout-stats]   bf_scored greedy_subsets="
                               << bfcensus::g_subsets_scored[0].load()
                               << " search_subsets=" << bfcensus::g_subsets_scored[1].load() << "\n";
+                    {
+                        const double wr = static_cast<double>(bfcensus::g_w_raw.load());
+                        const double we = static_cast<double>(bfcensus::g_w_exact.load());
+                        const double wb = static_cast<double>(bfcensus::g_w_blind.load());
+                        std::cerr << "[rollout-stats]   bf_width raw=" << static_cast<long long>(wr)
+                                  << " distinct_exact=" << static_cast<long long>(we)
+                                  << " distinct_srcblind=" << static_cast<long long>(wb)
+                                  << "  repeat_share=" << (wr > 0 ? 1.0 - we / wr : 0.0)
+                                  << " copyaxis_share=" << (wr > 0 ? (we - wb) / wr : 0.0)
+                                  << " collapse=" << (wb > 0 ? wr / wb : 0.0) << "x\n";
+                        const double nr = static_cast<double>(bfcensus::g_w_raw_nb.load());
+                        const double ne = static_cast<double>(bfcensus::g_w_exact_nb.load());
+                        const double nb2 = static_cast<double>(bfcensus::g_w_blind_nb.load());
+                        std::cerr << "[rollout-stats]   bf_width NON-BP raw="
+                                  << static_cast<long long>(nr)
+                                  << " distinct_exact=" << static_cast<long long>(ne)
+                                  << " distinct_srcblind=" << static_cast<long long>(nb2)
+                                  << "  repeat_share=" << (nr > 0 ? 1.0 - ne / nr : 0.0)
+                                  << " copyaxis_share=" << (nr > 0 ? (ne - nb2) / nr : 0.0) << "\n";
+                    }
                 }
             }
             if (DedupCensusOn())
@@ -1066,6 +1137,17 @@ namespace
                           << " copy_FALSE=" << g_dedup_namefalse.load()
                           << " (dup = post-apply state a sibling already reached; copy_perm = of"
                              " those, the ones recognisable from the PLAN alone)\n";
+                const long long xd = g_dedup_exactdup.load(), xf = g_dedup_exactfalse.load();
+                std::cerr << "[rollout-stats] dedup_exact repeats=" << (xd + xf)
+                          << " share_of_seen=" << (ds ? static_cast<double>(xd + xf) / ds : 0.0)
+                          << " state_agreed=" << xd << " exact_FALSE=" << xf
+                          << " (repeat = FULL fingerprint a sibling already had; exact_FALSE must"
+                             " be 0 or the fingerprint under-covers a field that matters)\n";
+                const long long nd = g_dedup_exactdup_nb.load(), nf = g_dedup_exactfalse_nb.load();
+                std::cerr << "[rollout-stats] dedup_exact NON-BP repeats=" << (nd + nf)
+                          << " state_agreed=" << nd << " exact_FALSE=" << nf
+                          << " (bp_choice < 0 only -- the class where a fingerprint match is a"
+                             " content claim, not an index that means different things per wave)\n";
             }
             std::cerr << "[rollout-stats] cand_scored=" << g_cand_scored.load()
                       << " condemn_drops=" << dt
@@ -1184,6 +1266,17 @@ namespace
                           << "  (new payable cards DENIED the exemption because that NAME was"
                              " already in hand, i.e. already passed on)\n";
                 if (g_bp_newopt_samename.load() == 0)
+                {
+                    std::cerr << "  NO POWER -- the rule never fired; any work delta is NOT it.\n";
+                }
+            }
+            if (g_bp_newopt_land.load() > 0 || BpCondemnNewOptSpellOnly())
+            {
+                std::cerr << "[rollout-stats] bp_newopt_spellonly refused_land="
+                          << g_bp_newopt_land.load()
+                          << "  (new cards DENIED the exemption because a LAND cannot take the"
+                             " exclusive continuation cast slot)\n";
+                if (g_bp_newopt_land.load() == 0)
                 {
                     std::cerr << "  NO POWER -- the rule never fired; any work delta is NOT it.\n";
                 }
@@ -2589,9 +2682,15 @@ static int BpCondemnDropMode()
 // THE ONE REAL HAZARD, and it is testable rather than arguable: the no-win key is
 // BuildSimKey(state, depth, max_turns, second_main) with NO condemnation fold, so the same state
 // reached under a different condemnation context could inherit a refutation that does not hold
-// there. MTG_LEAF_VERIFY recomputes every hit fresh and reports stale hits -- run it with this off
-// before trusting the default flip. Scoped to the BREAKPOINT twin only; the m2 filter's own bump
-// (it has the working marker) is untouched.
+// there. Test it with MTG_NOWIN_VERIFY, NOT MTG_LEAF_VERIFY: the latter only recomputes hits in the
+// WIN half of the table and never touches a no-win entry, so pointing it here is a NO-POWER PASS
+// DRESSED AS A CLEAN BILL OF HEALTH (it duly reported 0 stale hits while checking nothing relevant).
+// MTG_NOWIN_VERIFY re-derives at the HIT site, so an entry stored under a different
+// g_bp_hand_before is compared against a derivation that is correct for THIS context -- which is
+// exactly the hazard. Measured with the watermark off (Snow gi=6, d2/b0): spared_demotions=1610,
+// checked=19006, bad=0, i.e. entries the watermark used to suppress WERE stored and WERE verified.
+// Scoped to the BREAKPOINT twin only; the m2 filter's own bump (it has the working marker) is
+// untouched.
 static bool BpCondemnNoWinTrunc()
 {
     static const bool on = EnvOn("MTG_BP_CONDEMN_NOWIN_TRUNC", true);
@@ -2707,6 +2806,13 @@ static bool BpPlanMadeACast()
 struct BpEnumEntry
 {
     std::vector<TurnSolver::Plan> plans;
+    // WHICH DECISION FILLED THIS ENTRY (MTG_BP_ENUM_EPOCH; see BpEnumEpochScoped). Every SIBLING
+    // memo in this family -- solvememo, enummemo, the candidate dedup -- stamps and checks this,
+    // and the stated reason is that their shared key is only exact WITHIN one decision. This cache
+    // is the one that does not: its own store site says so ("it is never epoch- or game-cleared"),
+    // and MTG_BP_ENUM_VERIFY reports a CONTENT-DIFF on ~5% of hits. The field is written
+    // unconditionally (one store, no branch) so the check can be flipped on without a second edit.
+    std::uint64_t epoch = 0;
 };
 // Build the enum-memo key (all folds included). Returns false when the cache is disabled
 // (MTG_NO_BP_ENUM_CACHE) -- callers then skip every memo layer.
@@ -3129,14 +3235,50 @@ static bool BpNamePassedOnBefore(const Player& ap, const Card& newc)
     return false;
 }
 
+// MTG_BP_CONDEMN_NEWOPT_SPELLONLY -- A DRAWN LAND IS NOT A NEW OPTION FOR THE CAST SLOT.
+// DEFAULT OFF (shipped behaviour) pending measurement.
+//
+// FOUND BY INSPECTION (2026-09-19, USER: *"I want to make sure that we are truly condemning
+// everything that makes sense according to my rule"*). Tracing the SPARED population with
+// MTG_CONDEMN_WHO=2 over Snow gi=3 and gi=5 at play settings: of 1,341 candidates that were
+// dominated AND payable and spared anyway by the exclusive-slot guard, **346 (25.8%) were spared by
+// a LAND arriving in hand** -- Snow-Covered Island 127, Scrying Sheets 102, Snow-Covered Mountain
+// 55, and so on.
+//
+// WHY THAT IS A DEFECT AND NOT A JUDGEMENT CALL. The guard's premise, in its own words, is that
+// "the site's draw contests the (exclusive) continuation slot with an option the plan never
+// weighed". A land does not contest that slot: the land drop is a separate resource (this repo
+// REJECTED land-drop-as-cast-order-slot-0 in 2026-08-27), and a continuation may play a land AND
+// still cast. So the decline of Coldsteel Heart is exactly as informative after drawing an Island as
+// before, and the exemption has no premise.
+//
+// THE MECHANISM IS THE TRIVIAL ONE: a land has no mana cost, so `now.CanPay(EffectiveCost(land))` is
+// true unconditionally. The `payable` lambda was written to ask "can we afford this SPELL"; nobody
+// excluded the cards it answers `true` for for free. On Snow this is not a corner case -- Scrying
+// Sheets' {1}{S} tap-draw reveals snow permanents off the top and the deck is ~40% snow lands, so
+// the commonest thing the SITE ITSELF draws is precisely the thing that disarms the filter.
+static bool BpCondemnNewOptSpellOnly()
+{
+    static const bool on = EnvOn("MTG_BP_CONDEMN_NEWOPT_SPELLONLY");
+    return on;
+}
+
 // Payability is passed in because EffectiveCost is an AIEngine member and this is a free function;
 // the caller hands over the same pool-and-cost test the drop itself uses, so the two cannot drift.
 template <typename PayableFn>
-static bool BpSiteAddedAPayableOption(const Player& ap, PayableFn payable)
+static bool BpSiteAddedAPayableOption(const Player& ap, PayableFn payable,
+                                      const Card** which = nullptr)
 {
+    // `which` is an INSPECTION out-param (MTG_CONDEMN_WHO=2): the card whose arrival justified
+    // sparing. Judging an exemption without naming the option that earned it is not inspection, it
+    // is a count -- and the whole question ("are we condemning everything that makes sense?") turns
+    // on whether that option is genuinely one the plan never weighed. Defaulted to nullptr so every
+    // existing caller is untouched; it is written ONLY on the true path, so a caller that ignores it
+    // is byte-identical to before.
     if (!BpCondemnNewOptionEnabled())  { return false; }
     if (g_bp_hand_before == nullptr)   { return false; }
     const bool by_name = BpCondemnNewOptByNameEnabled();
+    const bool spell_only = BpCondemnNewOptSpellOnly();
     for (const Card& c : ap.hand)
     {
         if (BpCardWasInHandBefore(c.m_number)) { continue; }      // not new: the plan saw it
@@ -3149,7 +3291,21 @@ static bool BpSiteAddedAPayableOption(const Player& ap, PayableFn payable)
         }
         const CardDefinition* cd = CardDatabase::Instance().LookupCached(c);
         if (cd == nullptr) { continue; }
-        if (payable(*cd)) { return true; }
+        // A land cannot take the exclusive continuation CAST slot. See BpCondemnNewOptSpellOnly.
+        //
+        // READ THE TYPE OFF THE DEFINITION, NOT THE HAND CARD. Card::IsLand() tests m_type_mask,
+        // which CardDatabase fills on the DEFINITION's card; the first cut of this checked
+        // c.IsLand() on the hand copy and the firing counter came back a clean 0 while the
+        // MTG_CONDEMN_WHO=2 trace was simultaneously naming lands as the sparing option -- i.e. the
+        // hand copy does not carry the mask. That contradiction is the only reason this was caught,
+        // which is exactly why the counter exists ("a clean zero is a bug signature").
+        if (spell_only && cd->card.IsLand())
+        {
+            if (s_rollout_stats)
+            { g_bp_newopt_land.fetch_add(1, std::memory_order_relaxed); }
+            continue;
+        }
+        if (payable(*cd)) { if (which != nullptr) { *which = &c; } return true; }
     }
     return false;
 }
@@ -7433,6 +7589,15 @@ inline thread_local bool g_from_odometer = false;
 inline bool Take() { const bool b = g_from_odometer; g_from_odometer = false; return b; }
 }   // namespace foldsel
 
+// MTG_FOLD_SEARCH_ODO -- DEFAULT OFF; =1 enables. Arms the flag above on the SEARCH's own
+// subset walk, which is a second, private copy of the odometer that was never wired to it. See
+// the set site in EnumeratePlansWithLandUncached for the measurement that found the gap.
+static bool FoldSearchOdometerOn()
+{
+    static const bool on = EnvOn("MTG_FOLD_SEARCH_ODO");
+    return on;
+}
+
 static bool FoldVerifyOn()
 {
     static const bool on = EnvOn("MTG_FOLD_VERIFY");
@@ -7546,6 +7711,23 @@ static void VerifyFoldRecoverable(const std::vector<Action>& cands, const std::v
 static bool SubsetHasDuplicateSacSource(const std::vector<Action>& cands, const std::vector<int>& sel,
                                         int site, bool from_odometer)
 {
+    if (BfCensusOn())
+    {
+        // See g_fold_site_calls: attribute this selection before any clause can return.
+        bfcensus::g_fold_site_calls[site & 1].fetch_add(1, std::memory_order_relaxed);
+        if (from_odometer)
+        {
+            bfcensus::g_fold_site_odo[site & 1].fetch_add(1, std::memory_order_relaxed);
+            for (size_t a = 0; a < sel.size(); ++a)
+            {
+                if (cands[sel[a]].equiv_tag != 0)
+                {
+                    bfcensus::g_fold_site_tag[site & 1].fetch_add(1, std::memory_order_relaxed);
+                    break;
+                }
+            }
+        }
+    }
     for (size_t a = 0; a < sel.size(); ++a)
     {
         if (cands[sel[a]].kind == Action::Kind::SacForMana)
@@ -9906,14 +10088,26 @@ int TurnSolver::BpChainCandIndex(const GameState& state,
 // resolution choices (scry/tutor/fetch/...) that distinguish variants with one cast-name set.
 // An under-covered field reads as fp-equal-but-state-distinct, i.e. OVER-counts predictability --
 // acceptable for sizing, not for a real skip (a real skip must compare post-states or full content).
-static uint64_t BpCandFingerprint(const TurnSolver::Plan& p)
+// `source_blind` (MTG_BP_ENUM_VERIFY only) zeroes the PHYSICAL SOURCE identity -- `sac_source_id`
+// and `hand_index` -- leaving everything else. It exists because this fingerprint is finer than the
+// equivalence the engine itself holds, and the key verifier was reading that as unsoundness:
+// "tap Frost Augur #17" and "tap Frost Augur #18" fingerprint differently while being the same play
+// (USER 2026-09-09: *"It doesn't matter whether you tap Scrying Sheets 1, 2, 3 or 4 first. They are
+// interchangeable"*), which is the premise MTG_FOLD_ACT_SOURCES ships on. Never use this for a
+// SKIP -- two sacrifices of different creatures are genuinely different plans and this cannot tell
+// them apart. It is a CLASSIFIER for the verifier's residue, nothing more.
+static uint64_t BpCandFingerprint(const TurnSolver::Plan& p, bool source_blind = false)
 {
     uint64_t h = 1469598103934665603ull;
     auto fold = [&h](uint64_t v) { h ^= v; h *= 1099511628211ull; };
     auto folds = [&](const std::string& s) { fold(std::hash<std::string>{}(s)); };
     fold(static_cast<uint64_t>(p.actions.size()));
-    for (const Action& a : p.actions)
+    for (const Action& a0 : p.actions)
     {
+        Action blind;
+        if (source_blind)
+        { blind = a0; blind.sac_source_id = 0; blind.hand_index = -1; }
+        const Action& a = source_blind ? blind : a0;
         fold(static_cast<uint64_t>(a.kind));
         folds(a.card_name.str());
         folds(a.chosen_float_color.str());
@@ -12551,20 +12745,61 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
                 if (!BpCardWasInHandBefore(c.m_number)) { continue; }   // not declined: it is new
                 if (urgency(c) <= u_cand) { dominated = true; break; }
             }
+            // MTG_CONDEMN_WHO=2 -- TRACE THE SPARED, NOT JUST THE DROPPED (2026-09-19, USER).
+            //
+            // USER: *"I want to make sure that we are truly condemning everything that makes sense
+            // according to my rule by inspection."* The =1 trace below prints only cards the filter
+            // DROPS, which can never answer that: a rule that is too timid drops a correct subset
+            // and looks perfect in a drop-only trace. The question is about the COMPLEMENT -- every
+            // candidate that reached the dominance test and was let go, and which gate let it go.
+            // The why-not histogram counts those buckets but cannot name a card, and a count cannot
+            // be judged by inspection.
+            //
+            // Printed at the three exits that spare a candidate AFTER the cheap preconditions have
+            // already passed (so this is not a log of everything the engine ever considered -- it is
+            // the population where the USER's rule is actually adjudicated):
+            //   notdom  -- no copy of this NAME was in hand before at equal-or-greater urgency, so
+            //              the card is genuinely new. Under the user's rule this SHOULD be spared.
+            //   unpay   -- dominated, but not castable right now, so dropping it changes nothing.
+            //   newopt  -- dominated AND payable AND the exclusive-slot guard spared it anyway.
+            //              THIS IS THE ONE TO READ: it is the only bucket where the filter declines
+            //              to apply the user's rule to a card the rule covers.
+            auto trace_spared = [&](const char* why, const Card* spared_by)
+            {
+                static const int s_who = EnvInt("MTG_CONDEMN_WHO", 0);
+                if (s_who < 2) { return; }
+                const DecisionProvider& p = ResolveProvider(state);
+                const char* where = (g_condemn_root_turn < 0) ? "EXEC"
+                                  : (g_search_candidate_enum ? "srch" : "leaf");
+                std::fprintf(stderr,
+                             "[condemn-spared] why=%s where=%s turn=%d card=%s rank=%d "
+                             "site=%s site_rank=%d plan_n=%d tail=%d by=%s\n",
+                             why, where, state.turn_number, def.card.m_name.c_str(),
+                             p.CastOrderRank(state, def),
+                             g_bp_site_def ? g_bp_site_def->card.m_name.c_str() : "(none)",
+                             g_bp_site_def ? p.CastOrderRank(state, *g_bp_site_def) : -1,
+                             g_bp_plan_casts ? static_cast<int>(g_bp_plan_casts->size()) : -1,
+                             BpPlanHasTail(ap) ? 1 : 0,
+                             spared_by ? spared_by->m_name.c_str() : "-");
+            };
+            if (!dominated) { trace_spared("notdom", nullptr); }
             if (s_bp_whynot && !dominated) { ++g_wn_notdominated; }
             if (dominated)
             {
                 ManaPool now = AvailableManaPool(state);
                 now.AddPool(state.floating_mana);
                 const bool payable_cand = now.CanPay(EffectiveCost(def, state));
+                if (!payable_cand) { trace_spared("unpay", nullptr); }
                 if (s_bp_whynot && !payable_cand) { ++g_wn_unpayable; }
                 // The site's draw contests the (exclusive) continuation slot with an option the
                 // plan never weighed => the decline is uninformative here. Short-circuited on
                 // payability so the hand scan never runs for a candidate that was not going to be
                 // dropped anyway. See BpSiteAddedAPayableOption; default off until measured.
+                const Card* newopt_card = nullptr;
                 const bool new_option = payable_cand && BpSiteAddedAPayableOption(
                     ap, [&](const CardDefinition& d)
-                    { return now.CanPay(EffectiveCost(d, state)); });
+                    { return now.CanPay(EffectiveCost(d, state)); }, &newopt_card);
+                if (new_option) { trace_spared("newopt", newopt_card); }
                 if (s_bp_whynot && new_option) { ++g_wn_newoption; }
                 if (payable_cand && !new_option)
                 {
@@ -17600,7 +17835,12 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
             }
         }
     }
-    // SEARCHED-PASS GATE (MTG_CONDEMN_SEARCHED_ONLY, default OFF -- byte-identical unset).
+    // SEARCHED-PASS GATE (MTG_CONDEMN_SEARCHED_ONLY -- DEFAULT ON, `=0` hatch; see the read below,
+    // `EnvOn(..., true)`, and the "DEFAULT ON (2026-08-21)" note beside it). This header used to say
+    // "default OFF -- byte-identical unset", which described the flag on the day it was introduced
+    // and not since it was adopted eight lines lower down. Reading the two together says the gate is
+    // inert, i.e. that condemnation runs in the rollout leaf; it does not, and the whole measurement
+    // below (rollout calls +4.4% for candidates -0.2%) is the reason it must not.
     // Condemnation's premise is "the m1 SEARCH saw this card and passed, so m2 must not
     // re-litigate it". That premise holds only where an m1 pass actually ranked a plan space.
     // The greedy collector (SolveUncached: "d0 decision + every rollout leaf") does not -- its
@@ -30951,6 +31191,28 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
                                            + ManaGateTriangular(mgy + pgy))
                     : (mcost + pcost <= mana_bound);
                 if (!ok) { continue; }
+                // MTG_FOLD_SEARCH_ODO (DEFAULT OFF): tell the receiving eval_and_push that THIS
+                // selection came off an odometer, which is the precondition the canonical-prefix
+                // fold is fenced behind (see foldsel). The loop above is a mixed-radix walk over
+                // `groups` crossed with a bitmask over `independent` -- a powerset, so the rule's
+                // premise holds here exactly as it does for the greedy walker: every arrangement's
+                // canonical twin is enumerated ALONGSIDE it by the same loop. The flag was simply
+                // never set on this path, because the search grew its own private copy of the walk
+                // rather than reusing the greedy's; the fence was aimed at the two CONSTRUCTED
+                // lines below (the go-off combo and the attack-only empty subset), which have no
+                // twin and must keep reading false.
+                // MEASURED CONSEQUENCE OF THE GAP (Snow, 8 games, play settings): the search hands
+                // the guard 442,394 selections and only 6,164 (1.4%) carry the flag, so the fold
+                // rejects 430 of them -- against 2,407,558 on the greedy side, where 100% carry it.
+                // That is why turning MTG_FOLD_ACT_SOURCES off leaves the search's candidate widths
+                // BYTE-IDENTICAL (62.2844 either way) while moving greedy_subsets 2.7M -> 5.1M: the
+                // deduplication everyone assumes is deduplicating Snow's four Scrying Sheets has
+                // never once been applied where those widths are counted.
+                // NOT DEFAULT-ON UNTIL MTG_FOLD_VERIFY SAYS SO. The rule deletes a line outright
+                // when its twin is not enumerable (knights gi497 lost a turn-4 kill exactly that
+                // way), and VerifyFoldRecoverable builds the twin on every rejection -- so this is
+                // a claim to CHECK at runtime, not to argue.
+                if (FoldSearchOdometerOn()) { foldsel::g_from_odometer = true; }
                 eval_and_push(sel);
             }
             int g = 0;
@@ -32357,10 +32619,25 @@ namespace
     // UnbudgetedWorkScopeActive() is the same structural latch the develop closure uses and carries
     // the same argument (drops no distinct line). NOT `budget->Unlimited()` -- see the scoping bug
     // in a54fdaff: default-constructed sub-budgets INSIDE a budgeted search report Unlimited().
+    //
+    // MTG_BP_NSKIP_ATPLAY (DEFAULT OFF) -- A MEASUREMENT HATCH THAT LIFTS THE SCOPE, NOT A
+    // SHIPPING CANDIDATE. The scope above is the reason `nskip=0` in every play-settings wave
+    // probe, and that turns the largest counter on the board into an unpriced one: at Snow's play
+    // settings 129,716 of 167,321 wave slots (77.5%) retire STILLBORN, and the lever built to stop
+    // that is fenced out of the only regime anybody ships. "It would churn GT" is a reason not to
+    // ADOPT it; it is not a reason not to KNOW what it costs. This flag exists so the question
+    // "where does the remaining cost lie?" can be answered with a number rather than an argument.
+    // Anything measured through it is quoted as a SIZE, and the 5 GT keys the note above records
+    // remain the adoption gate. Default off keeps every default path byte-identical.
+    inline bool BpNSkipScopeLifted()
+    {
+        static const bool v = EnvOn("MTG_BP_NSKIP_ATPLAY");
+        return v;
+    }
     inline bool BpWaveNSkipOn()
     {
         static const bool on = EnvOn("MTG_BP_WAVE_NSKIP", true);
-        return on && UnbudgetedWorkScopeActive();
+        return on && (UnbudgetedWorkScopeActive() || BpNSkipScopeLifted());
     }
 
     // ---- THE SAME LENGTH, LEARNED ONCE INSTEAD OF ONCE PER NODE (MTG_BP_NSKIP_GLOBAL) ----------
@@ -32409,7 +32686,8 @@ namespace
     inline int BpNSkipGlobalMode()
     {
         static const int v = EnvInt("MTG_BP_NSKIP_GLOBAL", 0);
-        return (v != 0 && UnbudgetedWorkScopeActive()) ? v : 0;
+        // MTG_BP_NSKIP_ATPLAY lifts the scope for MEASUREMENT only -- see BpNSkipScopeLifted.
+        return (v != 0 && (UnbudgetedWorkScopeActive() || BpNSkipScopeLifted())) ? v : 0;
     }
     inline bool BpNSkipGlobalVerify()
     {
@@ -44210,6 +44488,132 @@ TurnSolver::Plan TurnSolver::SolveWithLookahead(const GameState& state, bool is_
                 }
                 if (alt)  { bfcensus::g_sh_alt.fetch_add(1, std::memory_order_relaxed); }
             }
+            // ...and how much of that width is REPETITION rather than choice. See g_w_raw.
+            // The comparator is the engine's OWN BpCandFingerprint, not a hand-rolled key: its
+            // header already names this exact use ("cands.size() - distinct(fingerprints) sizes an
+            // exact enumeration-side dedup") and it folds every apply-relevant Plan/Action field
+            // plus the pinned resolution choices (scry/tutor/tapmode/ponder/discard/land). A
+            // hand-rolled key reading five fields would UNDER-count distinctness and inflate the
+            // prize. Two fields it does not fold are appended here because they are real
+            // distinctions at this site: `bp_choice` (two ranks of a breakpoint ladder are
+            // different decisions even when their action lists coincide) and `hand_index`.
+            // READ THESE AS AN UPPER BOUND EITHER WAY -- per that same header, an under-covered
+            // field reads as fingerprint-equal-but-state-distinct, and `copy_FALSE` in the dedup
+            // census is the measured instance of it on the copy axis.
+            {
+                std::set<std::uint64_t> exact, blind, exact_nb, blind_nb;
+                long long raw_nb = 0;
+                for (const Plan& q : candidates)
+                {
+                    std::uint64_t e = BpCandFingerprint(q, false);
+                    const std::uint64_t b = BpCandFingerprint(q, true);
+                    for (const Action& a : q.actions)
+                    { e = e * 1099511628211ull + static_cast<std::uint64_t>(a.hand_index + 2); }
+                    // bp_choice AND bp_at AND bp_base: all three name WHICH deviation this variant
+                    // is, and none is folded upstream. bp_at is 0 on every default path
+                    // (BpSearchDepth() == 1) but is in the key so raising MTG_BP_DEPTH cannot
+                    // silently turn a real axis into a phantom duplicate.
+                    std::uint64_t bp = static_cast<std::uint64_t>(q.bp_choice + 2);
+                    bp = bp * 1099511628211ull + static_cast<std::uint64_t>(q.bp_at + 2);
+                    bp = bp * 1099511628211ull + static_cast<std::uint64_t>(q.bp_base + 2);
+                    exact.insert(e * 1099511628211ull + bp);
+                    blind.insert(b * 1099511628211ull + bp);
+                    if (q.bp_choice < 0)
+                    {
+                        ++raw_nb;
+                        exact_nb.insert(e * 1099511628211ull + bp);
+                        blind_nb.insert(b * 1099511628211ull + bp);
+                    }
+                }
+                bfcensus::g_w_raw_nb.fetch_add(raw_nb, std::memory_order_relaxed);
+                bfcensus::g_w_exact_nb.fetch_add(static_cast<long long>(exact_nb.size()),
+                                                 std::memory_order_relaxed);
+                bfcensus::g_w_blind_nb.fetch_add(static_cast<long long>(blind_nb.size()),
+                                                 std::memory_order_relaxed);
+                bfcensus::g_w_raw.fetch_add(static_cast<long long>(candidates.size()),
+                                            std::memory_order_relaxed);
+                bfcensus::g_w_exact.fetch_add(static_cast<long long>(exact.size()),
+                                              std::memory_order_relaxed);
+                bfcensus::g_w_blind.fetch_add(static_cast<long long>(blind.size()),
+                                              std::memory_order_relaxed);
+            }
+        }
+
+        // MTG_BF_DUMP=<width> (print-only, default 0 = off): render the candidate LIST of the first
+        // few decisions at least that wide. The aggregate census cannot answer the one question that
+        // decides which lever applies, because three completely different mechanisms all show up as
+        // "mean_width=62":
+        //   (A) the interchangeable-source fold failed  -> ONE name appears at one node under MANY
+        //       distinct sac_source_id / hand_index. Fix = MTG_FOLD_ACT_SOURCES.
+        //   (B) condemnation failed                     -> one name is re-considered DOWN A CHAIN,
+        //       i.e. it recurs across the ranks of a breakpoint ladder. Fix = a condemnation rule.
+        //   (C) neither lever applies                   -> the plans are distinct SUBSETS over a
+        //       small already-deduplicated alphabet, and the width is 2^|alphabet|, not |alphabet|.
+        // So print the alphabet (distinct name|kind, with the physical sources seen for each) NEXT
+        // TO the plans, and the question answers itself. Counting the alphabet is the whole point:
+        // if |alphabet| is ~11 and the width is ~62, no identity rule can help, because every
+        // candidate is already a distinct COMBINATION of distinct actions.
+        static const int s_bf_dump = EnvInt("MTG_BF_DUMP", 0);
+        if (s_bf_dump > 0 && static_cast<int>(candidates.size()) >= s_bf_dump)
+        {
+            static std::atomic<int> s_dumped{0};
+            if (s_dumped.fetch_add(1, std::memory_order_relaxed) < 6)
+            {
+                std::lock_guard<std::mutex> lk(bfcensus::g_mu);
+                auto render = [](const Action& a)
+                {
+                    std::string s = static_cast<const std::string&>(a.card_name);
+                    s += "|k" + std::to_string(static_cast<int>(a.kind));
+                    if (a.chosen_x > 0) { s += "|x" + std::to_string(a.chosen_x); }
+                    return s;
+                };
+                // The ALPHABET: distinct name|kind|x, and for each, which physical copies were named.
+                std::map<std::string, long long> alpha;
+                std::map<std::string, std::set<int>> alpha_src;
+                std::map<std::string, std::set<int>> alpha_hand;
+                long long repeats = 0;   // plans naming the SAME name|kind more than once (case B)
+                for (const Plan& q : candidates)
+                {
+                    std::map<std::string, int> here;
+                    for (const Action& a : q.actions)
+                    {
+                        const std::string r = render(a);
+                        ++alpha[r];
+                        alpha_src[r].insert(a.sac_source_id);
+                        alpha_hand[r].insert(a.hand_index);
+                        ++here[r];
+                    }
+                    for (const auto& kv : here) { if (kv.second > 1) { ++repeats; break; } }
+                }
+                std::fprintf(stderr,
+                             "=== BF DUMP: width=%zu turn=%d depth=%d %s %s | alphabet=%zu distinct"
+                             " | plans naming one action TWICE = %lld ===\n",
+                             candidates.size(), state.turn_number, depth,
+                             enforce_budget ? "top-level" : "rollout",
+                             is_pre_combat ? "pre-combat" : "post-combat",
+                             alpha.size(), repeats);
+                for (const auto& kv : alpha)
+                {
+                    std::fprintf(stderr, "  ALPHA %-40s in %5lld plans | srcs=%zu hands=%zu\n",
+                                 kv.first.c_str(), kv.second,
+                                 alpha_src[kv.first].size(), alpha_hand[kv.first].size());
+                }
+                int shown = 0;
+                for (const Plan& q : candidates)
+                {
+                    if (shown++ >= 40) { break; }
+                    std::string s;
+                    for (const Action& a : q.actions)
+                    {
+                        if (!s.empty()) { s += " + "; }
+                        s += render(a);
+                        s += "[s" + std::to_string(a.sac_source_id)
+                           + ",h" + std::to_string(a.hand_index) + "]";
+                    }
+                    std::fprintf(stderr, "  PLAN bp=%d %s\n", q.bp_choice,
+                                 s.empty() ? "(empty)" : s.c_str());
+                }
+            }
         }
 
         // Cost-reframe count-bounder (dominance / resulting-state dedup): the over-optimistic relaxation
@@ -44225,6 +44629,14 @@ TurnSolver::Plan TurnSolver::SolveWithLookahead(const GameState& state, bool is_
         std::unordered_set<TranspositionTable::Key, TranspositionTable::KeyHash> census_seen;
         // Copy-permutation census: the same plan with hand_index (and only hand_index) erased.
         std::unordered_set<std::string> census_names;
+        // EXACT-REPEAT census: the same plan, nothing erased -- full BpCandFingerprint plus the two
+        // fields it does not fold (hand_index, bp_choice). `census_names` answers "would a
+        // COPY-BLIND skip be sound" and the answer is measured no (copy_FALSE). This answers the
+        // strictly weaker question nobody has asked yet: does the enumerator hand the scorer the
+        // VERY SAME plan twice? If it does, that share is removable on an identity no card can
+        // break, which is a different claim from the interchangeable-copy one and needs its own
+        // safety number. exact_FALSE is that number and it must be 0.
+        std::unordered_set<std::uint64_t> census_exact;
         // Searched-breakpoint variant dedup -- see the identical guard in FSLineWin. Records every
         // candidate's post-apply state but only SKIPS a bp_choice variant, so runs without variants
         // (and MTG_BP_SEARCH=0) never enter it and stay byte-identical.
@@ -44290,13 +44702,83 @@ TurnSolver::Plan TurnSolver::SolveWithLookahead(const GameState& state, bool is_
                 {
                     g_dedup_seen.fetch_add(1, std::memory_order_relaxed);
                     const bool name_dup = !census_names.insert(PlanCopySig(plan)).second;
+                    std::uint64_t efp = BpCandFingerprint(plan, false);
+                    for (const Action& ea : plan.actions)
+                    {
+                        efp = efp * 1099511628211ull + static_cast<std::uint64_t>(ea.hand_index + 2);
+                        // `rock_mana` -- WHICH COLOUR a mana rock was set to. BpCandFingerprint folds
+                        // `chosen_float_color` but not this, and Snow runs 4 Coldsteel Heart
+                        // ("as this enters, choose a colour") plus Arcum's Astrolabe, so two plans
+                        // that differ ONLY in the colour chosen are fingerprint-identical and land
+                        // on genuinely different states. Folded here so the repeat count measures
+                        // repetition rather than the comparator's blind spot.
+                        const ManaPool& r = ea.rock_mana;
+                        efp = efp * 1099511628211ull
+                              + static_cast<std::uint64_t>(r.white * 7 + r.blue * 11 + r.black * 13
+                                                           + r.red * 17 + r.green * 19
+                                                           + r.colorless * 23 + r.wild * 29);
+                        // `breakpoint_casts` -- the casts a breakpoint variant commits to. Also
+                        // unfolded upstream, and it is the entire content of a bp variant.
+                        for (const Action& bc : ea.breakpoint_casts)
+                        {
+                            efp = efp * 1099511628211ull
+                                  + std::hash<std::string>{}(bc.card_name.str())
+                                  + static_cast<std::uint64_t>(bc.hand_index + 2) * 131;
+                        }
+                    }
+                    // bp_choice + bp_at + bp_base -- see the identical key at the LIST site. Keyed
+                    // on bp_choice ALONE this read 75,668 repeats (25.1%); bp_base takes it to 0,
+                    // because two variants derived from DIFFERENT base plans are different entries
+                    // however alike their action lists look.
+                    efp = efp * 1099511628211ull + static_cast<std::uint64_t>(plan.bp_choice + 2);
+                    efp = efp * 1099511628211ull + static_cast<std::uint64_t>(plan.bp_at + 2);
+                    efp = efp * 1099511628211ull + static_cast<std::uint64_t>(plan.bp_base + 2);
+                    const bool exact_dup = !census_exact.insert(efp).second;
                     if (!census_seen.insert(BuildDedupKey(copy)).second)
                     {
                         g_dedup_dup.fetch_add(1, std::memory_order_relaxed);
                         if (name_dup) { g_dedup_namedup.fetch_add(1, std::memory_order_relaxed); }
+                        if (exact_dup)
+                        {
+                            g_dedup_exactdup.fetch_add(1, std::memory_order_relaxed);
+                            if (plan.bp_choice < 0)
+                            { g_dedup_exactdup_nb.fetch_add(1, std::memory_order_relaxed); }
+                        }
                     }
-                    else if (name_dup)
-                    { g_dedup_namefalse.fetch_add(1, std::memory_order_relaxed); }
+                    else
+                    {
+                        if (name_dup) { g_dedup_namefalse.fetch_add(1, std::memory_order_relaxed); }
+                        // THE SAFETY NUMBER for an exact-repeat skip. Must be 0.
+                        if (exact_dup)
+                        {
+                            g_dedup_exactfalse.fetch_add(1, std::memory_order_relaxed);
+                            if (plan.bp_choice < 0)
+                            { g_dedup_exactfalse_nb.fetch_add(1, std::memory_order_relaxed); }
+                            // ...and when it is not 0, SHOW THE PLAN. A share alone cannot say
+                            // whether the comparator is blind or the apply is state-dependent, and
+                            // those have opposite consequences.
+                            static std::atomic<int> s_xf{0};
+                            if (s_xf.fetch_add(1, std::memory_order_relaxed) < 8)
+                            {
+                                std::string s;
+                                for (const Action& a : plan.actions)
+                                {
+                                    if (!s.empty()) { s += " + "; }
+                                    s += a.card_name.str() + "|k"
+                                       + std::to_string(static_cast<int>(a.kind))
+                                       + "|x" + std::to_string(a.chosen_x)
+                                       + "[s" + std::to_string(a.sac_source_id)
+                                       + ",h" + std::to_string(a.hand_index) + "]";
+                                }
+                                std::fprintf(stderr,
+                                             "EXACT-FALSE t%d d%d %s land=%d/%s bp=%d :: %s\n",
+                                             state.turn_number, depth,
+                                             is_pre_combat ? "pre" : "post",
+                                             plan.land_decided ? 1 : 0, plan.land_to_play.c_str(),
+                                             plan.bp_choice, s.empty() ? "(empty)" : s.c_str());
+                            }
+                        }
+                    }
                 }
                 // ++candidates_done, unlike the pre-2026-09-09 reframe-only form: the APPLY above was
                 // paid for, so the overrun guard's avg_per_cand must see this candidate. Omitting it
@@ -44347,13 +44829,83 @@ TurnSolver::Plan TurnSolver::SolveWithLookahead(const GameState& state, bool is_
                 {
                     g_dedup_seen.fetch_add(1, std::memory_order_relaxed);
                     const bool name_dup = !census_names.insert(PlanCopySig(plan)).second;
+                    std::uint64_t efp = BpCandFingerprint(plan, false);
+                    for (const Action& ea : plan.actions)
+                    {
+                        efp = efp * 1099511628211ull + static_cast<std::uint64_t>(ea.hand_index + 2);
+                        // `rock_mana` -- WHICH COLOUR a mana rock was set to. BpCandFingerprint folds
+                        // `chosen_float_color` but not this, and Snow runs 4 Coldsteel Heart
+                        // ("as this enters, choose a colour") plus Arcum's Astrolabe, so two plans
+                        // that differ ONLY in the colour chosen are fingerprint-identical and land
+                        // on genuinely different states. Folded here so the repeat count measures
+                        // repetition rather than the comparator's blind spot.
+                        const ManaPool& r = ea.rock_mana;
+                        efp = efp * 1099511628211ull
+                              + static_cast<std::uint64_t>(r.white * 7 + r.blue * 11 + r.black * 13
+                                                           + r.red * 17 + r.green * 19
+                                                           + r.colorless * 23 + r.wild * 29);
+                        // `breakpoint_casts` -- the casts a breakpoint variant commits to. Also
+                        // unfolded upstream, and it is the entire content of a bp variant.
+                        for (const Action& bc : ea.breakpoint_casts)
+                        {
+                            efp = efp * 1099511628211ull
+                                  + std::hash<std::string>{}(bc.card_name.str())
+                                  + static_cast<std::uint64_t>(bc.hand_index + 2) * 131;
+                        }
+                    }
+                    // bp_choice + bp_at + bp_base -- see the identical key at the LIST site. Keyed
+                    // on bp_choice ALONE this read 75,668 repeats (25.1%); bp_base takes it to 0,
+                    // because two variants derived from DIFFERENT base plans are different entries
+                    // however alike their action lists look.
+                    efp = efp * 1099511628211ull + static_cast<std::uint64_t>(plan.bp_choice + 2);
+                    efp = efp * 1099511628211ull + static_cast<std::uint64_t>(plan.bp_at + 2);
+                    efp = efp * 1099511628211ull + static_cast<std::uint64_t>(plan.bp_base + 2);
+                    const bool exact_dup = !census_exact.insert(efp).second;
                     if (!census_seen.insert(BuildDedupKey(copy)).second)
                     {
                         g_dedup_dup.fetch_add(1, std::memory_order_relaxed);
                         if (name_dup) { g_dedup_namedup.fetch_add(1, std::memory_order_relaxed); }
+                        if (exact_dup)
+                        {
+                            g_dedup_exactdup.fetch_add(1, std::memory_order_relaxed);
+                            if (plan.bp_choice < 0)
+                            { g_dedup_exactdup_nb.fetch_add(1, std::memory_order_relaxed); }
+                        }
                     }
-                    else if (name_dup)
-                    { g_dedup_namefalse.fetch_add(1, std::memory_order_relaxed); }
+                    else
+                    {
+                        if (name_dup) { g_dedup_namefalse.fetch_add(1, std::memory_order_relaxed); }
+                        // THE SAFETY NUMBER for an exact-repeat skip. Must be 0.
+                        if (exact_dup)
+                        {
+                            g_dedup_exactfalse.fetch_add(1, std::memory_order_relaxed);
+                            if (plan.bp_choice < 0)
+                            { g_dedup_exactfalse_nb.fetch_add(1, std::memory_order_relaxed); }
+                            // ...and when it is not 0, SHOW THE PLAN. A share alone cannot say
+                            // whether the comparator is blind or the apply is state-dependent, and
+                            // those have opposite consequences.
+                            static std::atomic<int> s_xf{0};
+                            if (s_xf.fetch_add(1, std::memory_order_relaxed) < 8)
+                            {
+                                std::string s;
+                                for (const Action& a : plan.actions)
+                                {
+                                    if (!s.empty()) { s += " + "; }
+                                    s += a.card_name.str() + "|k"
+                                       + std::to_string(static_cast<int>(a.kind))
+                                       + "|x" + std::to_string(a.chosen_x)
+                                       + "[s" + std::to_string(a.sac_source_id)
+                                       + ",h" + std::to_string(a.hand_index) + "]";
+                                }
+                                std::fprintf(stderr,
+                                             "EXACT-FALSE t%d d%d %s land=%d/%s bp=%d :: %s\n",
+                                             state.turn_number, depth,
+                                             is_pre_combat ? "pre" : "post",
+                                             plan.land_decided ? 1 : 0, plan.land_to_play.c_str(),
+                                             plan.bp_choice, s.empty() ? "(empty)" : s.c_str());
+                            }
+                        }
+                    }
                 }
                 if (CandDedupActive() && !reframe_seen.insert(BuildDedupKey(copy)).second)
                 { ++candidates_done; continue; }
@@ -45653,18 +46205,56 @@ namespace
     // So: ORDER differences are counted and reported separately, and only a CONTENT difference --
     // the sorted fingerprint multisets disagree, i.e. the served list offers genuinely different
     // plans -- is a soundness failure.
+    // SOURCE-ONLY IS THE SECOND FALSE-POSITIVE CLASS, AND IT WAS REPORTED AS UNSOUNDNESS FIRST
+    // (2026-09-19). The order-vs-multiset fix above removed one; this removes its twin. The
+    // comparator is BpCandFingerprint, which is documented "MEASUREMENT ONLY" and folds
+    // `sac_source_id` -- the PHYSICAL copy. Snow runs four Frost Augurs and four Scrying Sheets,
+    // and MTG_FOLD_ACT_SOURCES ships precisely because those copies are interchangeable (USER
+    // 2026-09-09), so two derivations of the same state may canonicalise to a different copy. The
+    // dump under MTG_BP_ENUM_VERIFY=2 showed exactly that and nothing else:
+    //     ONLY-IN-SERVED rank=0: Frost Augur(x1)[src=18,hand=-1,ord=0]
+    //     ONLY-IN-FRESH  rank=0: Frost Augur(x1)[src=17,hand=-1,ord=0]
+    // i.e. the same play on a different copy. Counting that as CONTENT-DIFF made the verifier print
+    // "THE KEY IS UNSOUND, DO NOT SHIP IT" over 5% of hits on a key that is not unsound, and it
+    // stayed convincing because it also fired with condemnation OFF (5.84% vs 4.97%) -- which reads
+    // as "older than condemnation" rather than as "the comparator is wrong".
+    //
+    // TWO HYPOTHESES WERE ARGUED AND MEASURED AWAY BEFORE THE DUMP EXISTED, recorded so the next
+    // reader starts from the dump: (1) the library digest -- already order-exact over the whole
+    // library since 2026-08-20; (2) cross-decision staleness, since this is the ONE memo in its
+    // family not scoped to g_decision_epoch -- refuted by MTG_BP_ENUM_EPOCH, which fires (misses
+    // +17.6%) and moves CONTENT-DIFF by -0.06%.
+    //
+    // WHAT STILL HOLDS: the cache's shipped contract. 200 paired games at play settings, seed
+    // 710000: MTG_NO_BP_ENUM_CACHE gives digest 7c54eb23778c9c31 either way, 0/200 games moved,
+    // no-cache 2.05x slower so the comparison has power.
+    //
+    // THE RESIDUE IS REAL BUT TINY, AND IT IS NOT THE SAME SHAPE. After reclassification the
+    // 24-game play cell leaves CONTENT-DIFF 116 of 1,464,321 hits (0.0079%) with condemnation off
+    // and 50 of 1,431,725 (0.0035%) with it on -- condemnation REDUCES it, as it does the
+    // source-only class. Every dumped instance has `served` a strict SUBSET of `fresh`
+    // (served=10 fresh=12), the missing entries being supersets built on the two-Skred hand-cast
+    // fold classes (`Skred[hand=0,ord=0] + Skred[hand=1,ord=1] + Ice-Fang Coatl`). A served list
+    // that is SHORTER is a conservative failure -- the search sees fewer continuations, never a
+    // wrong one -- and the likely mechanism is MTG_FOLD_HAND_CASTS's canonical-prefix rule
+    // rejecting a different arrangement at fill time than at check time, i.e. the same
+    // interchangeable-copy premise surfacing as a length difference instead of a swap. NOT PROVEN;
+    // stated as the next thing to check, not as the answer.
     struct BpEnumVerify
     {
-        std::atomic<uint64_t> checked{0}, content_bad{0}, order_only{0};
+        std::atomic<uint64_t> checked{0}, content_bad{0}, order_only{0}, source_only{0};
         ~BpEnumVerify()
         {
             if (!EnvOn("MTG_BP_ENUM_VERIFY")) { return; }
             const uint64_t c = checked.load(), m = content_bad.load(), o = order_only.load();
+            const uint64_t s = source_only.load();
             std::fprintf(stderr,
                          "=== BP ENUM KEY VERIFY: %llu hits re-derived | CONTENT-DIFF %llu%s"
+                         " | source-only %llu (benign: same play, interchangeable copy)"
                          " | order-only %llu (benign, see BpEnumVerify) ===\n",
                          (unsigned long long)c, (unsigned long long)m,
                          m == 0 ? "" : "  <-- THE KEY IS UNSOUND, DO NOT SHIP IT",
+                         (unsigned long long)s,
                          (unsigned long long)o);
             if (c == 0)
             {
@@ -45741,6 +46331,38 @@ const std::vector<TurnSolver::Plan>& TurnSolver::EnumerateBreakpointPlansRef(con
 static bool BpEnumCacheOn()
 {
     static const bool s = !EnvOn("MTG_NO_BP_ENUM_CACHE");
+    return s;
+}
+
+// MTG_BP_ENUM_EPOCH (DEFAULT OFF) -- serve a cached continuation list only to the DECISION that
+// derived it. DIAGNOSTIC FIRST, adoption candidate second, and it exists because of a measurement:
+//
+//   MTG_BP_ENUM_VERIFY re-derives the list on every hit and compares MULTISETS. On the 24-game Snow
+//   play cell it reports CONTENT-DIFF on 71,211 of 1,431,688 hits with condemnation on (4.97%) and
+//   85,439 of 1,463,716 with it OFF (5.84%) -- so the served list is genuinely a different set of
+//   plans, it is NOT condemnation's doing, and condemnation in fact REDUCES it (its extra folds
+//   split the key). The verifier's two known false-positive routes are both already closed: it
+//   compares multisets rather than sequences (the 2026-09-17 fix for a 22% order-only false rate)
+//   and it re-derives through BpDeriveContinuationList so a marking mode cannot manufacture diffs.
+//   BpDeriveContinuationList does not truncate -- it sorts, then stable_partitions or replaces in
+//   place -- so a multiset difference cannot be a cap artefact either.
+//
+// WHY THE EPOCH IS THE SUSPECT. Every sibling memo keyed on BuildBreakpointKey is decision-scoped
+// and says why: "entries are valid for ONE decision (g_decision_epoch) -- the key's library digest
+// only implies content within a single decision". solvememo checks it, enummemo clears on it, the
+// candidate dedup mixes it into the key. THIS cache checks nothing -- its own store site records
+// the fact ("it is never epoch- or game-cleared") -- and is evicted only by a count/byte cap.
+//
+// WHAT IS ALREADY KNOWN ABOUT MATERIALITY, so this is not oversold: the cache's shipped contract
+// ("results must be identical either way") HOLDS on a 200-game paired play run at seed 710000 --
+// MTG_NO_BP_ENUM_CACHE gives digest 7c54eb23778c9c31 either way, 0/200 games moved, with the
+// no-cache side 2.05x slower so the comparison has power. So this is a LATENT key-completeness
+// defect, not an observed play bug, and it does not by itself block anything. Turning this on is
+// expected to cost hit rate; the question it answers first is whether CONTENT-DIFF goes to zero,
+// which is what would confirm the epoch as the missing scope rather than leaving it a hypothesis.
+static bool BpEnumEpochScoped()
+{
+    static const bool s = EnvOn("MTG_BP_ENUM_EPOCH");
     return s;
 }
 
@@ -46355,6 +46977,10 @@ static BpEnumEntry* BpEnumEntryFor(const GameState& state, bool is_pre_combat,
     if (keyed)
     {
         BpEnumMap::iterator it = cache.find(key);
+        // MTG_BP_ENUM_EPOCH: an entry filled by an EARLIER decision is treated as absent, so it is
+        // re-derived and overwritten below rather than served. See BpEnumEpochScoped.
+        if (it != cache.end() && BpEnumEpochScoped() && it->second.epoch != g_decision_epoch)
+        { it = cache.end(); }
         if (it != cache.end())
         {
             if (BpEnumProbeOn())
@@ -46382,11 +47008,38 @@ static BpEnumEntry* BpEnumEntryFor(const GameState& state, bool is_pre_combat,
                 fa.reserve(fresh.size()); sa.reserve(served.size());
                 for (const TurnSolver::Plan& p : fresh)  { fa.push_back(BpCandFingerprint(p)); }
                 for (const TurnSolver::Plan& p : served) { sa.push_back(BpCandFingerprint(p)); }
-                const bool same_seq = (fa == sa);
+                bool same_seq = (fa == sa);
                 std::sort(fa.begin(), fa.end());
                 std::sort(sa.begin(), sa.end());
-                const bool same_set = (fa == sa);   // multiset: what soundness actually requires
+                bool same_set = (fa == sa);   // multiset: what soundness actually requires
                 g_bp_enum_verify.checked.fetch_add(1, std::memory_order_relaxed);
+                // ...and if the multisets differ, is the ONLY difference which physical copy of an
+                // otherwise identical action was named? That is not a soundness failure, it is the
+                // interchangeable-source premise MTG_FOLD_ACT_SOURCES already ships on. Bucketed
+                // separately rather than silenced, so the count stays visible and a genuine
+                // content failure still reports. See BpEnumVerify.
+                if (!same_set)
+                {
+                    std::vector<std::uint64_t> fb, sb;
+                    fb.reserve(fresh.size()); sb.reserve(served.size());
+                    for (const TurnSolver::Plan& p : fresh)
+                    { fb.push_back(BpCandFingerprint(p, /*source_blind=*/true)); }
+                    for (const TurnSolver::Plan& p : served)
+                    { sb.push_back(BpCandFingerprint(p, /*source_blind=*/true)); }
+                    std::sort(fb.begin(), fb.end());
+                    std::sort(sb.begin(), sb.end());
+                    if (fb == sb)
+                    {
+                        g_bp_enum_verify.source_only.fetch_add(1, std::memory_order_relaxed);
+                        same_set = true;
+                        // ...and this hit is CLASSIFIED. Without pinning same_seq it would fall
+                        // through to the order-only branch as well and be counted twice -- which
+                        // duly produced `source-only 85323 | order-only 85323`, two buckets showing
+                        // one number, the shape that reads as corroboration when it is one event
+                        // double-counted.
+                        same_seq = true;
+                    }
+                }
                 if (!same_set)
                 {
                     const uint64_t n =
@@ -46400,6 +47053,55 @@ static BpEnumEntry* BpEnumEntryFor(const GameState& state, bool is_pre_combat,
                                      g_bp_plan_casts
                                          ? static_cast<int>(g_bp_plan_casts->size()) : -1,
                                      g_bp_site_def ? g_bp_site_def->card.m_name.c_str() : "(none)");
+                    }
+                    // MTG_BP_ENUM_VERIFY=2 -- NAME THE PLANS THAT DIFFER, not just the counts.
+                    // The header above says a diff happened and nothing about WHAT, and three
+                    // hypotheses were argued from it before this existed and two were wrong (the
+                    // library digest, which is already order-exact; and cross-decision staleness,
+                    // which MTG_BP_ENUM_EPOCH refuted by moving misses +17.6% and CONTENT-DIFF
+                    // -0.06%). A key is missing a FIELD, and the only thing that names the field is
+                    // the plan that appears on one side and not the other. Printed as the SYMMETRIC
+                    // DIFFERENCE so a long shared prefix does not bury the one entry that matters.
+                    static const int s_lvl = EnvInt("MTG_BP_ENUM_VERIFY", 0);
+                    if (s_lvl >= 2 && n < 6)
+                    {
+                        auto describe = [](const TurnSolver::Plan& p)
+                        {
+                            std::string s;
+                            for (const Action& a : p.actions)
+                            {
+                                if (!s.empty()) { s += " + "; }
+                                s += static_cast<const std::string&>(a.card_name);
+                                if (a.chosen_x > 0) { s += "(x" + std::to_string(a.chosen_x) + ")"; }
+                                // WHICH PHYSICAL COPY, and this is the field the whole question
+                                // turns on: with 4 interchangeable Frost Augurs / Scrying Sheets a
+                                // legitimate re-derivation may name a DIFFERENT copy for the same
+                                // play. If the two sides differ only here, the diff is the
+                                // FINGERPRINT being finer than the equivalence the engine itself
+                                // holds (USER 2026-09-09: "it doesn't matter whether you tap
+                                // Scrying Sheets 1, 2, 3 or 4"), not the cache serving a wrong list.
+                                s += "[src=" + std::to_string(a.sac_source_id)
+                                   + ",hand=" + std::to_string(a.hand_index)
+                                   + ",ord=" + std::to_string(a.equiv_ord) + "]";
+                            }
+                            return s.empty() ? std::string("(empty)") : s;
+                        };
+                        auto dump_only_in = [&](const char* tag,
+                                                const std::vector<TurnSolver::Plan>& a,
+                                                const std::vector<std::uint64_t>& mine,
+                                                const std::vector<std::uint64_t>& other)
+                        {
+                            for (std::size_t i = 0; i < a.size(); ++i)
+                            {
+                                const std::uint64_t fp = BpCandFingerprint(a[i]);
+                                if (std::count(mine.begin(), mine.end(), fp)
+                                    <= std::count(other.begin(), other.end(), fp)) { continue; }
+                                std::fprintf(stderr, "[bp-enum-verify]   ONLY-IN-%s rank=%zu: %s\n",
+                                             tag, i, describe(a[i]).c_str());
+                            }
+                        };
+                        dump_only_in("SERVED", served, sa, fa);
+                        dump_only_in("FRESH",  fresh,  fa, sa);
                     }
                 }
                 else if (!same_seq)
@@ -46441,7 +47143,14 @@ static BpEnumEntry* BpEnumEntryFor(const GameState& state, bool is_pre_combat,
             plancache::Acquire(psz, plancache::t_bp_bytes);
             BpEnumEntry ent;
             ent.plans = std::move(plans);
-            return &cache.emplace(key, std::move(ent)).first->second;
+            ent.epoch = g_decision_epoch;   // stamped unconditionally; see BpEnumEpochScoped
+            // insert_or_assign, not emplace: under MTG_BP_ENUM_EPOCH a stale-epoch entry is still
+            // PRESENT in the map (the hit site only declines to serve it), and emplace would leave
+            // it in place -- so the next decision would re-derive on every single lookup and never
+            // refresh the stamp. That is the "no-power arm dressed as a working one" shape: the
+            // flag would look enabled, cost wall, and never actually reseat the entry.
+            auto res = cache.insert_or_assign(key, std::move(ent));
+            return &res.first->second;
         }
     }
     // Cache disabled: hand back a thread_local scratch entry (fresh verdict slots each fill, so

@@ -3055,3 +3055,638 @@ how it HAS been read until now. Tail-weight the evaluation set.
   analysis at play settings; the unrecoverable census at budget 0 / depth 8 for byname + activation
   (they drop MORE, which is the direction that needs it -- gi=1357 is one case, not a census); the
   other two filter decks (Kitty, AntiLifegain); the regression tier; the GT rebaseline.
+
+## 2026-09-19: AT PLAY SETTINGS THE WHOLE LEVER IS WORTH ~NOTHING -- AND THE TAIL EFFECT DOES NOT SURVIVE
+
+The arm sweep above is UNBUDGETED (d2/b0), which is the right bar for a prune. This is the same
+question asked at Snow's shipping d5/b20, 300 games, paired per game (`test/paired_arms.py`,
+`logs/skipA/play2/`). `units` is the cost ratio against the base of each row.
+
+| comparison | games moved | units |
+|---|---|---|
+| off -> ship | 0/300 | +0.56% |
+| ship -> wmoff (watermark dropped) | **0/300** | -0.34% |
+| ship -> byname | **0/300** | -0.33% |
+| ship -> byname_act | **0/300** | -0.45% |
+| ship -> ung_act | **2 WORSE** | -0.81% |
+
+`wmoff` produces the play digest `a81699ae4c188e88`, which is *byte-identical to `ship`* -- dropping
+the watermark is not merely quality-neutral at play settings, it is the same play. `byname` and
+`byname_act` DO change the play digest while moving zero games.
+
+**THE DEGENERATE-TAIL EFFECT IS AN UNBUDGETED PHENOMENON. It does not survive to b20:**
+
+| | top 5 games (18.4% of all units) | remaining 275 |
+|---|---|---|
+| `ship` | +0.74% | +0.27% |
+| `byname_act` | +0.87% | -0.19% |
+
+At budget 0 the same split gave -14.86% on the monsters against -1.24% elsewhere. At b20 the tail is
+FLAT, and fractionally worse. The mechanism is not subtle and should have been predicted: **at a
+bound budget the budget is already doing the truncating.** The monster games are budget-capped in
+every arm, so the excess work condemnation exists to cut has already been cut by the budget, and the
+units total is pinned by the budget rather than by the search's shape. A prune cannot save work that
+a budget has already refused to spend.
+
+**So on Snow as shipped, condemnation -- guard, watermark, the USER's name rule, all of it -- is
+worth +-0.5% units and ZERO quality.** Its value is confined to the UNBUDGETED regime:
+`UnbudgetedWorkScopeActive()` = the value-leaf label ladder (`g_unbounded_label_search`) and b0 play
+(`g_unbudgeted_play`). That is a real regime -- it is where the multi-day generation runs live -- but
+it is not play, and no adoption argument here may be phrased as a play-performance win.
+
+### SCOPE CORRECTION: THIS IS A SNOW-ONLY DECISION
+
+The "other two filter decks" item in the OWED list above overstated the blast radius. Only Snow opts
+into breakpoint condemnation by default:
+
+| deck | hook | default |
+|---|---|---|
+| Snow | `EnvOn("MTG_SNOW_CONDEMN", true)` | **ON** |
+| KittyEquipment | `EnvOn("MTG_KE_CONDEMN")` | off |
+| Anti-Lifegain | `EnvOn("MTG_AL_BP_CONDEMN")` | off (and measured inert in 2026-08-21) |
+| (global route) | `EnvOn("MTG_BP_CLASSIFY")` | off |
+
+Every one of the three candidate default flips (`MTG_BP_CONDEMN_NOWIN_TRUNC=0`,
+`MTG_BP_CONDEMN_NEWOPT_BYNAME=1`, `MTG_BP_CONDEMN_ACTIVATION=1`) only has an effect where a drop
+happens, so with the other routes off they are Snow-only by construction. Kitty and AL are still
+worth measuring, but as GENERALITY checks on deck-agnostic code, not as part of the shipping
+decision.
+
+### THE ONE HAZARD THE WATERMARK WAS ACCIDENTALLY COVERING
+
+The no-win key is `BuildSimKey(state, depth, max_turns, second_main)` and folds NO condemnation
+context, while the drop decision reads `g_bp_hand_before` -- the pre-draw hand snapshot, which is
+PATH state. So two paths reaching the same key can in principle condemn differently, and with the
+watermark dropped a refutation derived under one becomes servable under the other. The old behaviour
+suppressed that store entirely, so the flip is what exposes it.
+
+This is tested with `MTG_NOWIN_VERIFY`, **not** `MTG_LEAF_VERIFY` -- the latter only recomputes the
+WIN half of the table and returns a clean 0 while checking nothing relevant (the recorded NO-POWER
+trap, which this arc already walked into once). `MTG_NOWIN_VERIFY` re-derives at the HIT site under
+that site's own path state, which is exactly the hazard. First reading, Snow gi=6 at d2/b0 with the
+watermark off: `spared_demotions=1610` (i.e. stores the watermark would have suppressed did happen),
+`checked=19006`, `bad=0`. Real evidence, but ONE game -- the guarantee is empirical, not structural,
+because the key genuinely omits the context. Widen it before flipping.
+
+## 2026-09-19: THREE CORRECTIONS, ONE REAL BUG, AND WHY QUALITY WAS NEVER GOING TO MOVE
+
+USER: *"Zero quality under a budget is unexpected. I would expect to see some sort of change"* /
+*"Same with the units"* / *"I want to make sure that we are truly condemning everything that makes
+sense according to my rule by inspection"* / *"We need to have the nowin on, but I was certain this
+was already done"*. Every one of those was right, and each overturned something recorded above.
+
+### CORRECTION 1 -- THERE ARE TWO NO-WIN MEMOS AND THE SECTION ABOVE CONFLATES THEM
+
+* **`MTG_FS_NOWIN_CACHE` -- DEFAULT ON.** Adopted 2026-08-05 on Hinata 58.6s -> 16.6s (3.53x). The
+  FSLine no-win cache. This is the one that was "already done".
+* **The leaf TT's no-win half (`NoWinLeafMemoArmed`) -- OFF in budgeted play.** Two routes, both
+  closed: `MTG_TT_NOWIN_CACHE` parked "DEFAULT OFF pending measurement", and
+  `MTG_UNBUDGETED_LEAF_MEMO` structurally gated to `g_unbudgeted_play > 0`, because a memo hit skips
+  a rollout and therefore its `ConsumeAt()` calls -- moving the deterministic work-unit count that
+  the budget itself is denominated in, and with it the ID start gate, the overrun guard and the GT
+  fingerprint.
+
+**BOTH STORES ARE GATED ON THE SAME `g_fs_trunc_events == trunc_at_entry` WATERMARK** (TurnSolver
+35774 and 40290). So the claim above that the watermark is "dead code at b20" is WRONG: it is live
+via the FSLine cache. It simply does not buy much on Snow -- measured, 24 games at play settings:
+
+| | cache ON | cache OFF | the cache is worth |
+|---|---|---|---|
+| condemnation off | 3,779,220 | 3,791,347 | 0.32% |
+| condemnation on | 3,780,511 | 3,783,875 | 0.09% |
+
+i.e. condemnation destroys ~72% of the cache's value, but the cache is worth 0.32% on this deck
+against 3.53x on Hinata. The watermark fix's payoff is a function of HOW MUCH THE NO-WIN CACHE IS
+WORTH ON THAT DECK, and Snow is close to the worst case for it.
+
+### CORRECTION 2 -- SNOW'S QUALITY IS NOT BUDGET-SENSITIVE, SO NO PRUNE COULD EVER SHOW QUALITY HERE
+
+24 games, condemnation off, `--depth 5 --ignore-play-profile`, budget swept:
+
+| budget | avg turn-to-win | units | effective depth (`id_depth` mean) |
+|---|---|---|---|
+| 20 (shipping) | **6.2500** | 3,779,220 | 1.42 |
+| 40 | **6.2500** | 8,177,751 | 1.70 |
+| 80 | **6.2500** | 15,266,336 | 1.93 |
+| 160 | **6.2500** | 27,442,139 | 2.15 |
+| 320 | **6.2500** | 48,770,485 | 2.31 |
+
+16x the budget, 12.9x the work, effective depth 1.42 -> 2.31, and not one game moves. Snow
+nominally searches at depth 5 and EFFECTIVELY SEARCHES AT 1.4.
+
+**THAT 24-GAME READ OVERSTATED IT, AND THE WIDE RUN IS THE ONE TO QUOTE.** 200 games, PAIRED,
+b20 vs b80 (`logs/skipA/budwide/`): avg 6.0750 -> 6.0650, **4 of 200 games moved (3 better, 1
+worse)**, paired delta -0.0100 +/- 0.0100, 95% CI [-0.0296, +0.0096], p=0.625, units 3.56x. So Snow
+DOES express quality changes -- the 24-game block simply held no sensitive game, which is how a
+quantised metric hands you a flat curve for free.
+
+**THE NUMBER TO CARRY IS THE EXCHANGE RATE: ~0.01 turns per +256% units, and not significant even at
+n=200.** A lever that moves units by <1% is ~1/300th of that, i.e. an expected 0.01 games moved over
+400 -- ZERO. So "0/300 games moved" for condemnation is ARITHMETIC, not evidence that the prune is
+harmless, and equally not evidence that it is safe. Quality power on this deck has to come from
+somewhere other than a sub-1% work saving.
+
+### CORRECTION 3 -- AT PLAY THE PRUNE REALLOCATES WORK, IT DOES NOT REDUCE IT
+
+`budget-stopped` is 48 of 10,564 wave nodes = **0.45%**, so the earlier "the budget already
+truncated it" explanation is wrong too. What happens instead, off -> spellonly at play settings:
+`scored` 995,436 -> 971,723 (down) while `slots` 167,321 -> 168,862 and `stillborn` 129,716 ->
+132,316 (both UP), and `budget-stopped` 48 -> 73. The deferred wave spends the freed capacity
+reaching further down the rank list. Hence 21k-32k real drops for -0.6%/-0.9% units.
+
+This is also why the cost is NON-MONOTONE IN DROPS, now confirmed at play settings: removing the
+plan-cast premise gate (`MTG_BP_CONDEMN_PLAN_CAST=0`) takes drops 32,024 -> 74,232 (+132%) and units
+3,745,428 -> **3,920,657**, which is WORSE THAN CONDEMNATION-OFF ENTIRELY (3,779,220).
+
+### THE REAL BUG FOUND BY INSPECTION: A DRAWN LAND DISARMED THE FILTER
+
+Tracing the SPARED population (new `MTG_CONDEMN_WHO=2`, which prints the complement of the old
+drop-only trace plus the card that earned the exemption) over Snow gi=3 and gi=5: of 1,341
+candidates that were dominated AND payable and spared anyway, **346 (25.8%) were spared by a LAND** --
+Snow-Covered Island 127, Scrying Sheets 102, Snow-Covered Mountain 55, Snow-Covered Forest 25,
+Highland Weald 24, Rimewood Falls 13.
+
+A land has no mana cost, so `now.CanPay(EffectiveCost(land))` is unconditionally true. The `payable`
+lambda was written to ask "can we afford this SPELL"; nothing excluded the cards it answers true for
+free. A land cannot take the exclusive continuation CAST slot (this repo rejected
+land-drop-as-cast-order-slot-0 on 2026-08-27), so the exemption had no premise. On Snow this is not
+a corner case: the site is Scrying Sheets digging for snow permanents in a deck that is ~40% snow
+lands, so **the commonest thing the site draws is exactly what disarms the filter.**
+
+`MTG_BP_CONDEMN_NEWOPT_SPELLONLY` (default OFF pending measurement), play settings, 24 games:
+
+| arm | drops | rate | units vs off | avg | gi=1357 |
+|---|---|---|---|---|---|
+| byname_act | 21,452 | 2.89% | -0.58% | 6.2500 | safe |
+| + spellonly | **31,861** | **4.31%** | -0.89% | 6.2500 | **safe** |
+
+**PROCESS NOTE, because it nearly shipped as "measured inert":** the first cut tested `c.IsLand()` on
+the HAND card and the firing counter came back a clean 0 while the trace was simultaneously naming
+lands. `Card::IsLand()` reads `m_type_mask`, which CardDatabase fills on the DEFINITION's card. The
+counter is the only reason this was caught -- "a clean zero is a bug signature", again.
+
+### WHERE THE RULE IS STILL NOT APPLIED (the population the USER asked to see)
+
+Why-not histogram, Snow gi=3 at play settings (arithmetic self-check: 948 = 25 + 697 + 95 + 131):
+
+| gate | n | share | judgement |
+|---|---|---|---|
+| `noplancast` | 1,922 | 51.6% | **the biggest exemption by far.** Under a literal reading of the USER's rule a plan that cast NOTHING declined every card in hand. Removing it doubles drops and COSTS 4.7% units at play (above) -- so it is not a free win, and its b0 behaviour is the open question. |
+| `managrew` | 833 | 22.4% | the USER's own correction ("uncondemn on land drop or rock played"). Correct as-is. |
+| `unpayable` | 697 | 18.7% | dominated but not castable now, so dropping changes nothing. Correct. |
+| `newoption` | 95 | 2.5% | the exclusive-slot guard, now 26% smaller after the land fix. |
+| `notdominated` | 25 | 0.7% | genuinely a new name. The USER's rule says spare it. Correct. |
+
+---
+
+## 2026-09-19 (LATER): WHERE SNOW'S REMAINING PLAY COST ACTUALLY LIES
+
+USER: *"I want to look more into where the remaining cost lies. In particular, I want to see whether
+more things should be condemned or if there is some other degenerate cause."*
+
+Everything below is the 24-game play cell (d5/b20, seed 700000, condemnation off unless stated),
+the same cell the drop-rate table above uses, so the numbers compose.
+
+### THE UNIT PARTITION, AND WHY IT BOUNDS THE FIRST BRANCH
+
+| bucket | units | share | what one unit buys |
+|---|---|---|---|
+| `la_cand` | 1,184,005 | 31.3% | one candidate scored |
+| `la_bp_wave` | 985,760 | 26.1% | one wave candidate |
+| `rollout_step` | 799,365 | 21.2% | one simulated turn-step |
+| `greedy_fallback` | 776,246 | 20.5% | **one whole greedy `Solve()`** |
+| `fs_pre` + `fs_bp_wave` | 33,844 | 0.9% | |
+
+Condemnation reaches only `la_bp_wave` + `fs_bp_wave` = 26.3%. `la_cand` does not move at all
+(+0.08% on the best arm) because a candidate is CHARGED BEFORE the filter is consulted.
+
+**The why-not CEILING at PLAY settings** (first reading not taken at b0 on one game index):
+
+```
+noplancast 228,116 (31%)  managrew 126,522 (17%)  PEER 99,838 (14%)  reached 237,768 (32%)
+  of reached: unpayable 120,421 (51%)  notdominated 51,559 (22%)  newoption 34,097 (14%)  DROPS 31,691 (13%)
+CEILING: realistic max ~44,997 (1.42x today), hard upper bound 131,529 (4.15x)
+```
+
+Today's 31,691 drops buy -0.90% units. At the hard 4.15x bound that extrapolates to ~-2.6%, and the
+extrapolation is OPTIMISTIC because cost is non-monotone in drops (the `nopc` arm measures worse).
+**Condemning more is worth low single-digit percent. That branch is closed on cost grounds.**
+
+### THREE DEGENERATE-CAUSE CANDIDATES, ALL REFUTED
+
+* **STILLBORN SLOTS -- 129,716 of 167,321 wave slots (77.5%) -- REFUTED AS A LEVER.** `MTG_BP_WAVE_NSKIP`
+  halves slots at b0 and is measured lossless there (`improved` identical at 133). It is scoped to
+  `UnbudgetedWorkScopeActive()`, so `nskip=0` in every play probe. `MTG_BP_NSKIP_ATPLAY` (added here,
+  DEFAULT OFF, measurement hatch only) lifts the scope: the memo **fires** -- nskip=1042, so this is
+  not a no-power pass -- and moves units **-0.03%**. It skips 1,042 of 129,716 stillborn slots, i.e.
+  0.8%. Adding the cross-node memo (`MTG_BP_NSKIP_GLOBAL=2`) takes it to 1,140 and -0.03%. WHY: the
+  memo's write site needs a wave-0 `bp_choice == 0` variant to have been SCORED, and under a 20 ms
+  budget it usually has not been. The b0 result does not transfer.
+* **NESTING IS PRODUCTIVE, NOT DEGENERATE.** `MTG_BP_NEST_DISCOVER=0` removes all 76,818 nested slots
+  and costs MORE: units 3,779,220 -> 4,064,206 (**+7.5%**), `la_cand` +15.5%, max-rank 136 -> 179,
+  and `improved` falls 143 -> 100. The search widens elsewhere to find the same lines. The
+  "stillborn -> EMPTY fallback -> nested breakpoint -> more stillborn" self-feeding loop is a real
+  chain but cutting it is a net loss.
+* **CANDIDATE DUPES (64%)** -- prior art, unchanged: pre-apply signature skip measured UNSOUND (32%
+  land on different states), post-apply skip wall-NEUTRAL.
+
+**And note the direction condemnation pushes the wave:** off 129,716 stillborn -> byname_act 132,316
+(+2.0%), slots 167,321 -> 168,862. Deleting a candidate SHORTENS the list, so more ranks are past its
+end. That is a SECOND mechanism, alongside the ID ladder climbing a rung, for why drops rise and
+units do not fall.
+
+### WHAT SURVIVED: THE BUDGET CANNOT SEE MOST OF THE WORK
+
+`units_total` is not a cost partition -- `greedy_fallback` bills one unit for an entire greedy
+`Solve()` while `la_cand` bills one unit per candidate. The branching-factor census sizes the gap:
+
+```
+bf_scored  greedy_subsets=21,543,585   search_subsets=1,622,195      units_total=3,779,220
+```
+
+`MTG_SOLVE_CHARGE` (pre-existing, DEFAULT OFF) bills the greedy subset walk to the active budget.
+Same cell:
+
+| | off | charge |
+|---|---|---|
+| greedy_subsets | 21,543,585 | 2,478,054 (**-88.5%**) |
+| search_subsets | 1,622,195 | 1,051,453 (-35%) |
+| units_total | 3,779,220 | 1,820,995 (-52%) |
+| decisions | 18,163 | 9,080 |
+
+**200-game PAIRED A/B at play settings (seed 710000, `logs/skipA/charge2/`):**
+
+```
+off    avg 6.0400  digest 7c54eb23778c9c31  ms 882,853
+charge avg 6.0600  digest 0f6b00cc115eeed8  ms 360,070      ->  2.45x FASTER
+paired delta +0.0200 +/- 0.0122, 95% CI [-0.0039, +0.0439], 1 better / 5 WORSE, moved 6/200 (3.0%)
+```
+
+**THIS CELL HAS POWER, WHICH IS WHY IT IS THE ONLY TRUSTWORTHY QUALITY READ IN THE WHOLE ARC.** Six
+games moved. Every condemnation arm measured on Snow at play moved ZERO of 400 -- including the
+control arm that was designed to differ -- so those were no-power passes. Here the instrument
+demonstrably resolves a small quality change, and what it says is that the greedy walk is BUYING
+something: 5 games worse against 1 better is not significant (p=0.219) but the sign is not
+ambiguous.
+
+### THE CONCLUSION, AND IT INVERTS THE QUESTION
+
+Comparing the two levers on the same currency -- turns gained per +100% units:
+
+| lever | units | quality | turns per +100% units |
+|---|---|---|---|
+| raw budget (b20 -> b80, 200g paired) | +256% | -0.010 | 0.0039 |
+| the greedy subset walk (charge -> off) | +108% | -0.020 | **0.0186** |
+
+**The greedy subset walk is ~4.8x more efficient at buying quality than raw search budget.** Both
+effects are individually non-significant and the ratio of two non-significant effects is weak
+evidence -- but it is the best available and it points one way. The 21.5M subset visits the budget
+cannot see are not degenerate waste; they are the most cost-effective work the engine does, and
+Snow's 20 ms budget is effectively a budget on the least productive half of the machine.
+
+So the answer to the USER's question is: **there is no remaining degenerate cause in the breakpoint
+machinery, and condemning more is worth low single-digit percent.** The cost is the greedy walk, it
+is real work, and removing it is a 2.45x speedup at a measurable quality price. Whether that trade
+is worth taking is a deck-owner call, not a bug fix -- and it is a global flag, so flipping it
+churns GT for every deck.
+
+### TWO WSL2 `perf` TRAPS, RECORDED BECAUSE BOTH FAIL AS "0.0% ACCOUNTED" RATHER THAN AS AN ERROR
+
+1. The default HARDWARE `cycles` event records a perf.data with ZERO samples. Use `-e cpu-clock`.
+2. **perf cannot write its output onto the workspace mount.** Every attempt under `logs/` produced a
+   1,496-byte file and `failed to write perf data, error: Bad address`. Record to `/tmp`, copy back.
+
+The tell for both is a perf.data that is ~1.5 KB regardless of run length, and a categoriser that
+reports `total self-time accounted: 0.0%`. See `logs/skipA/wallprof.sh`.
+
+**The profile itself (3 games, 1 thread, `cpu-clock`) shows NO hotspot:** the largest self-time
+symbol is `TurnSolver::SolveUncached` at 6.45% (9.08% across its two inlined copies), then
+`BuildSimKey` 5.74%, mana payment ~16% in aggregate (`TapForCostShared*` 6.9%, backtracker 3.2%,
+`ManaSourceRank` 1.7%), alloc/copy 9.9%, and the three greedy subset guards 3.5%. A flat profile is
+itself the finding: there is nothing to fix, only work to decide not to do.
+
+---
+
+## 2026-09-19 (LATER STILL): SNOW'S BRANCHING, AND A VERIFIER THAT CRIED WOLF
+
+USER: *"snow seems to have some major performance problems that remain. What is the source? If it is
+a high level of branching either condemnation or a heuristic to minimize a specific effect should be
+possible. I would like to determine the source of snow's slowness before we move ahead with adoption
+of condemnation as-is. I'm still a bit uncertain that condemnation is implemented 100% correctly."*
+
+### THE 26.3% / 2.6% GAP, SINCE IT WAS RIGHT TO QUERY IT
+
+26.3% is the share of units condemnation can REACH (`la_bp_wave` + `fs_bp_wave`). 2.6% is what it
+extracts at the hard ceiling. The gap is YIELD INSIDE ITS OWN REACH, ~10%.
+
+### SNOW'S BRANCHING IS ABNORMAL, AND IT IS SPECIFIC (MTG_BF_CENSUS, 8 games each)
+
+| deck | decisions | mean_width | max | greedy_subsets | search_subsets | greedy:search |
+|---|---|---|---|---|---|---|
+| **Snow** | 4,891 | **62.3** | 502 | **2,726,738** | 269,164 | **10.1 : 1** |
+| Hinata2 | 2,736 | 6.5 | 202 | 11,288 | 135,511 | 0.08 : 1 |
+| Fluctuator | 76 | 40.8 | 96 | 6,237 | 10,530 | 0.59 : 1 |
+| KittyEquipment | 1,076 | 34.5 | 303 | 564,251 | 37,871 | 14.9 : 1 |
+
+**9.6x Hinata's width, 241x its greedy subset work, 558 subset visits per decision against 4.1.**
+The generator is `bf_shape bp_variant = 62.8%` of Snow's candidate mass (Hinata 34.7%): 4 Scrying
+Sheets + 4 Frost Augur into a ~40%-snow manabase, so the tap-draw finds a snow card constantly and
+every find opens a breakpoint.
+
+**CORRECTION TO AN EARLIER READ IN THIS DOC:** `chosen_x` at 79.8% of Snow's mass is NOT an X-cost
+explosion. `PermAbilityTaps(TapDraw)` is true, so the K-axis block (TurnSolver.cpp ~16219) is skipped
+and every tap-draw emits exactly one action with `chosen_x = 1`. The width is bp_variants, not X.
+
+### EVERY STRUCTURAL PRUNE TESTED MAKES SNOW WORSE -- WHICH IS THE ANSWER TO "SHOULD MORE BE CUT"
+
+24-game play cell, seed 700000, against units_total 3,779,220 / avg 6.2500:
+
+| lever | units | other |
+|---|---|---|
+| `MTG_BP_NEST_DISCOVER=0` | **+7.5%** | `improved` 143 -> 100, max-rank 136 -> 179 |
+| `MTG_BP_PUT_IN_HAND=0` | **+22.0%** | avg 6.2500 -> **6.2917** (worse), width 66.0 -> 71.5 |
+| `MTG_FOLD_ACT_SOURCES=0` | +0.0% | greedy_subsets 21.5M -> **35.7M (+66%)** |
+| `MTG_FOLD_HAND_CASTS=0` | +0.0% | greedy_subsets 21.5M -> 29.1M (+35%) |
+| condemnation off | +0.9% | avg unchanged |
+
+The breakpoint machinery is a NET SAVING, not a cost. The one lever that works is the
+interchangeable-source fold -- the USER's own 2026-09-09 ruling -- and it is already default-on.
+
+**AND NOTE `units_total` IS 3,779,220 TO THE DIGIT IN ALL THREE FOLD ARMS.** A 66% swing in real
+work moves the metric everything is judged on by ZERO. Best single demonstration yet of the
+greedy-walk blind spot ([[snow-cost-is-the-greedy-walk-2026-09-19]]).
+
+### THE KEY VERIFIER WAS WRONG, AND IT WAS REPORTED TO THE USER BEFORE IT WAS CHECKED
+
+`MTG_BP_ENUM_VERIFY` reported CONTENT-DIFF on 85,439 of 1,463,716 hits (5.84%) with condemnation OFF
+and 71,211 of 1,431,688 (4.97%) with it ON, printing **"THE KEY IS UNSOUND, DO NOT SHIP IT"**. That
+was relayed as a real defect. It is a FALSE POSITIVE, and the dump says so in one line:
+
+```
+ONLY-IN-SERVED rank=0: Frost Augur(x1)[src=18,hand=-1,ord=0]
+ONLY-IN-FRESH  rank=0: Frost Augur(x1)[src=17,hand=-1,ord=0]
+```
+
+Same play, different physical copy. The comparator is `BpCandFingerprint`, whose own header says
+**"MEASUREMENT ONLY"**, and it folds `sac_source_id`. It is finer than the equivalence the engine
+holds -- the interchangeable-copy premise `MTG_FOLD_ACT_SOURCES` ships on. Exactly the class of
+false positive that verifier had ALREADY been fixed for once (sequence -> multiset, 2026-09-17).
+
+**Reclassified (new `source-only` bucket, `BpCandFingerprint(p, source_blind=true)`):**
+
+| arm | hits | CONTENT-DIFF | source-only |
+|---|---|---|---|
+| condemnation off | 1,464,321 | **116 (0.0079%)** | 85,323 |
+| condemnation on | 1,431,725 | **50 (0.0035%)** | 71,161 |
+
+**The contract HOLDS, with power:** 200 paired games at play settings, seed 710000,
+`MTG_NO_BP_ENUM_CACHE` on/off both `digest=7c54eb23778c9c31`, 0/200 moved, no-cache **2.05x** slower.
+
+**TWO HYPOTHESES MEASURED AWAY BEFORE THE DUMP EXISTED** -- recorded so the next reader dumps first:
+* the library digest: already order-exact over the WHOLE library since 2026-08-20.
+* cross-decision staleness -- this is the ONE memo in its family not scoped to `g_decision_epoch`
+  (solvememo checks it, enummemo clears on it, the candidate dedup mixes it into the key; this one's
+  own store site says "never epoch- or game-cleared"). Built `MTG_BP_ENUM_EPOCH` to test it: it
+  FIRES (misses +17.6%, so not a no-power arm) and moves CONTENT-DIFF **-0.06%**. REFUTED.
+
+**THE RESIDUE IS REAL BUT TINY AND A DIFFERENT SHAPE.** Every dumped instance has `served` a strict
+SUBSET of `fresh` (`served=10 fresh=12`), the missing entries supersets on the two-Skred hand-cast
+fold classes. A shorter served list is a CONSERVATIVE failure -- fewer continuations seen, never a
+wrong one. Likely `MTG_FOLD_HAND_CASTS`'s canonical-prefix rule choosing differently at fill vs check
+time. NOT PROVEN -- it is the next thing to check, not the answer.
+
+**INSTRUMENT BUG CAUGHT IN MY OWN CHANGE:** the first cut printed `source-only 85323 | order-only
+85323` -- one event counted in two buckets, which reads as corroboration. Fixed by pinning
+`same_seq` when a hit is classified source-only.
+
+### CONDEMNATION CORRECTNESS: NOTHING FOUND
+
+* `MTG_FOLD_VERIFY` with condemnation ON: `recoverable=14,192,208 UNRECOVERABLE=0`.
+* The enum-key residue is LOWER with condemnation on than off, in BOTH classes.
+* Condemnation never fires on the greedy path by design: `drops (searched=447,278 exec=13
+  rollout=0)`. So it is aimed at ~7% of subset visits, which is a SCOPE statement, not a defect.
+* STILL OUTSTANDING and it is the USER's own bar: the b0/d8 soundness census.
+
+---
+
+## 2026-09-19 (LATER STILL AGAIN): THE DEDUPLICATION WAS NEVER APPLIED WHERE THE WIDTH IS
+
+**USER:** *"I don't follow why condemnation + deduplication does not cut down exactly the cases you
+mentioned. With those, we should only have one chain of cards we can draw and only consider each
+card at most once. (deduplication being for Scrying Sheets and Augur's abilities)"*
+
+The premise was right and the answer is a wiring gap, not a design limit. `MTG_FOLD_ACT_SOURCES`
+is real, is default-on, is soundness-verified, and **has never once been applied to the search's
+candidate enumeration** -- the exact list whose width `la_cand` charges for.
+
+### HOW IT WAS FOUND: DUMP THE NODE, DO NOT REASON FROM `mean_width`
+
+`mean_width=62.3` is compatible with three different mechanisms, and the aggregate cannot separate
+them: the fold failed (one name, many physical copies), condemnation failed (one name re-considered
+down a chain), or neither applies (distinct subsets over a small alphabet). `MTG_BF_DUMP=<width>`
+prints the candidate LIST next to its distinct-action ALPHABET, and the question answers itself:
+
+```
+BF DUMP: width=120 turn=4 depth=1 | alphabet=4 distinct | plans naming one action TWICE = 4
+  ALPHA Frost Augur|k0              in  40 plans | srcs=1 hands=1
+  ALPHA Ice-Fang Coatl|k0           in  33 plans | srcs=1 hands=1
+  ALPHA Marit Lage's Slumber|k0     in  33 plans | srcs=1 hands=1
+  ALPHA Scrying Sheets|k26|x1       in 112 plans | srcs=3 hands=1
+  PLAN bp=-1 Marit Lage's Slumber[s0,h0] + Scrying Sheets[s37,h-1]
+  PLAN bp=-1 Marit Lage's Slumber[s0,h0] + Scrying Sheets[s39,h-1]
+  PLAN bp=-1 Marit Lage's Slumber[s0,h0] + Scrying Sheets[s37,h-1]
+```
+
+**120 candidates over FOUR distinct actions**, with Scrying Sheets carried under three distinct
+physical sources at one node. Every one of the six dumps has an alphabet of 3-4 and a width of
+102-141. I had previously reasoned that the width was subsets over a larger alphabet. It is not.
+
+**THE ONE-COMMAND CONFIRMATION.** With `MTG_FOLD_ACT_SOURCES=0` the widths are BYTE-IDENTICAL --
+120/108/102/110/141/120 in both arms, `mean_width=62.2844` to the digit -- while `greedy_subsets`
+moves 2,726,738 -> 5,134,296 (+88%). The fold does all of its work in the greedy walk and none here.
+
+### ROOT CAUSE: THE SEARCH GREW ITS OWN ODOMETER AND NOBODY WIRED THE FLAG
+
+The canonical-prefix rule is fenced behind `foldsel::g_from_odometer`, and **that fence is correct**:
+the rule drops a non-canonical arrangement on the premise that its twin is enumerated alongside it,
+which holds for a powerset walk and for nothing else. Applied to a hand-CONSTRUCTED line it deletes
+the line -- `knights_regression_d0_s2002` gi497 lost a turn-4 kill exactly that way.
+
+The greedy's walker sets the flag. The search's subset walk is a **second, private copy** of the same
+mixed-radix odometer (`TurnSolver.cpp`, `EnumeratePlansWithLandUncached`) and never set it. Split the
+guard by caller and the gap is unmissable (Snow, 8 games, play settings):
+
+| caller | guard calls | from_odometer | with_tag | rejected |
+|---|---|---|---|---|
+| greedy | 9,949,412 | 5,134,296 | 4,194,546 | **2,407,558** |
+| search |   443,254 | **6,164 (1.4%)** | 1,072 | **430** |
+
+The 6,164 that DO carry the flag arrive via the shared walker; the other 98.6% come off the private
+loop. The two genuinely constructed sites next to it -- the go-off combo line and the attack-only
+empty subset -- must keep reading false, and they do.
+
+### WHAT THE WIDTH DECOMPOSES TO -- AND A 25.1% FIGURE THAT WAS MY COMPARATOR, NOT THE ENGINE
+
+**CORRECTION.** This section first reported "repetition 25.1%, all of it breakpoint variants". That
+was wrong and the error was mine. `AppendBreakpointVariants` stamps **`bp_base`** (which base plan a
+variant derives from) and `bp_at`, and neither my key nor `BpCandFingerprint` folded either. With
+`bp_base` in the key, `repeat_share` is **EXACTLY 0** -- at the list site AND the scoring site, which
+had been disagreeing (the dump plainly showed repeated `bp=-1` plans while the scoring site reported
+zero non-bp repeats). Both were wrong the same way. `exact_FALSE` went 1,065 -> 0 with it, which is
+the self-check working: the residue WAS the comparator's blind spot, exactly as
+`BpCandFingerprint`'s own header warns.
+
+**When two of your own instruments disagree, neither is evidence until they agree.** I quoted the
+25.1% before reconciling them.
+
+So the corrected decomposition, measured with `BpCandFingerprint` + `hand_index` + `bp_choice` +
+`bp_at` + `bp_base`:
+
+| | share of raw candidate mass |
+|---|---|
+| repetition (the same candidate emitted twice) | **0** |
+| interchangeable-copy axis | **the only redundancy** |
+
+**AND ITS SIZE IS CELL-DEPENDENT, so quote a range.** `copyaxis_share` is 0.1867 on the seed-700000
+8-game cell and 0.0297 on the seed-910000 one; among ORDINARY (non-breakpoint) plans it is 0.2301
+and 0.0468 respectively. The units saving tracks it: -15.2% and -5.0%.
+
+### COVERAGE: ONE ENUMERATOR FEEDS BOTH CANDIDATE CLASSES
+
+`BpDeriveContinuationList` builds the breakpoint continuation list by calling
+`EnumeratePlansWithLand` -- the same enumerator as the top-level decision list. So there is exactly
+ONE search-side producer, both classes flow through the same odometer, and one flag covers both.
+Confirmed by the split census: non-breakpoint mass -25.8%, breakpoint mass -9.5%.
+
+### THE FIX, AND WHAT IT MEASURES
+
+`MTG_FOLD_SEARCH_ODO` (DEFAULT OFF) sets the flag on the search's own odometer. Not a new rule --
+the already-shipping one, at its second call site.
+
+8 games, play settings, `MTG_FOLD_VERIFY` armed:
+
+| | off | on |
+|---|---|---|
+| mean_width | 62.2844 | **52.441** |
+| units_total | 923,417 | **782,905 (-15.2%)** |
+| search_subsets | 269,164 | 192,951 (-28.3%) |
+| copyaxis_share | 0.1867 | **exactly 0** |
+| fold verifier | recoverable 2,407,988 / **UNRECOVERABLE 0** | recoverable 2,779,845 / **UNRECOVERABLE 0** |
+
+500 games paired across three decks (seed 880000, play settings):
+
+| deck | n | base | arm | better | worse | moved | units |
+|---|---|---|---|---|---|---|---|
+| Hinata2 | 150 | 5.5467 | 5.5467 | 0 | 0 | 0 | 1.0000 |
+| KittyEquipment | 150 | 4.3600 | 4.3600 | 0 | 0 | 0 | 0.9902 |
+| Snow | 200 | 6.0850 | **6.0800** | **1** | **0** | 1 | **0.9209** |
+
+Hinata2 and KittyEquipment return **byte-identical digests**, so this is not broad GT churn -- only
+decks holding interchangeable activation sources can move at all.
+
+### THE CAVEAT THAT MATTERS: UNITS ARE NOT WALL, AGAIN
+
+Snow's wall moved 512,036 -> 505,696 ms, **-1.2%**, against units -7.9%. `greedy_subsets` went UP
+4.5%. That is the same lesson as `MTG_SOLVE_CHARGE`: the budget is denominated in a currency blind
+to ~91% of the subset visits, so freeing search units mostly buys more greedy walking. Anyone
+quoting -15.2% as a speedup is quoting the wrong number.
+
+### ARE CONDEMNATION AND DEDUPLICATION FULLY EXERCISED? (USER, 2026-09-19)
+
+A 2x2 on Snow, 200 games each, seed 910000, play settings. `condemn` arms carry EVERY rule
+including the two that had never run outside a probe (`NEWOPT_BYNAME`, `ACTIVATION`).
+
+| arm | avg | better/worse vs base | moved | units | wall ms |
+|---|---|---|---|---|---|
+| base | 6.0850 | -- | -- | 1.0000 | 931,701 |
+| dedup (`FOLD_SEARCH_ODO=1`) | 6.0850 | 0 / 0 | **0/200** | **0.9497** | 916,018 |
+| condemn (all rules) | 6.0900 | 0 / **1** | 1/200 | 0.9952 | 951,104 |
+| both | 6.0900 | 0 / **1** | 1/200 | **0.9461** | 859,822 |
+
+Width and soundness on the same four cells (8 games, `MTG_FOLD_VERIFY` armed):
+
+| arm | mean_width | repeat_share | copyaxis_share | non-BP copyaxis | UNRECOVERABLE |
+|---|---|---|---|---|---|
+| base | 52.34 | 0 | 0.0297 | 0.0468 | **0** (1,411,701 checked) |
+| dedup | 50.60 | 0 | **0** | **0** | **0** (1,489,331) |
+| condemn | 52.53 | 0 | 0.0279 | 0.0446 | **0** (1,437,527) |
+| both | 50.87 | 0 | **0** | **0** | **0** (1,522,927) |
+
+**DEDUPLICATION IS NOW COMPLETE ON THE SEARCH PATH.** Both redundancies are provably zero, every
+rejection has a verified twin, and **0 of 200 games moved** -- while the digest DID change
+(`b5129938` -> `b70c3fa5`). That combination is exactly what a sound fold should produce: the engine
+sometimes names a different physical copy, and never reaches a different outcome.
+
+**CONDEMNATION IS FULLY ARMED AND FIRING, AND STILL COSTS A GAME.** `bp_condemn_seen=4,989,540
+drops=195,762 (3.92%)`, of which `bp_condemn_activation drops=34,764` -- the activation rule reaches
+Scrying Sheets and Frost Augur, which is the case the USER asked about. It buys units -0.5% and
+loses 1 game of 200 with 0 gained. Consistent with the whole arc; not significant on its own
+(sign p=1.000), but the direction has never once been positive.
+
+**THE INTERACTION RUNS THE UNINTUITIVE WAY: DEDUPLICATION MAKES CONDEMNATION FIRE MORE.**
+`bp_condemn_seen` 4,989,540 -> 5,361,488 (+7.5%), activation drops 34,764 -> 40,168 (+15.5%). A
+shorter, deduplicated continuation list lets MORE distinct names reach the condemnation order's
+slots -- the copies used to occupy them. So the two mechanisms are not substitutes; deduplication
+is what lets condemnation see the population it was designed for.
+
+**WHY CONDEMNATION COULD NOT REACH THE USER'S CASE BY DEFAULT.** The main-phase filter opens
+`if (a.kind != Action::Kind::CastFromHand || a.def == nullptr) { return false; }`, so an
+`ActivatePermAbility` -- which is what Scrying Sheets and Frost Augur are -- is invisible to it by
+construction. Only `MTG_BP_CONDEMN_ACTIVATION` reaches them, and it is `EnvInt(..., 0)`, DEFAULT
+OFF. The rollout exclusion is a different thing and is NOT a gap: `MTG_CONDEMN_SEARCHED_ONLY` is
+`EnvOn(..., true)`, default ON, because condemning inside an ESTIMATOR only makes it pessimistic
+(measured: rollout calls +4.4% for candidates -0.2%). A stale header calling that flag "default
+OFF" -- eight lines above the `EnvOn(..., true)` that adopted it -- has been corrected.
+
+### GENERALITY: 22 DECKS, AND ONLY TWO CAN EVEN NOTICE
+
+`MTG_FOLD_SEARCH_ODO` is GLOBAL -- it arms the canonical-prefix fold on the search odometer for
+every deck -- so the adoption question is not "does Snow get faster" but "which decks change".
+Every deck in `test/regression_cases.sh` plus Snow, 60 games each, seed 960000, one pooled batch
+per arm:
+
+**20 of 22 decks return a BYTE-IDENTICAL digest.** Only `angels` and `snow` differ, and both have
+an identical `avg` (5.3667 and 6.0833 in both arms).
+
+And on those two, the per-game `.wins` show the change is cosmetic. The format is
+`<game> <win_turn> <hash>`:
+
+```
+angels  52c52   < 51 5 3a104f6afccaeb4a   >  51 5 7b5813b4f6717fcf
+snow    35c35   < 34 8 30584a1dce534ad5   >  34 8 e063ed94bfc4b7e3
+```
+
+**One game each, the WIN TURN IDENTICAL in both, only the play-sequence hash moved.** That is
+precisely what a sound interchangeable-copy fold should look like: the engine names a different
+physical copy of an equivalent source and reaches the same outcome on the same turn. No game's
+result changes on any deck.
+
+GT impact is therefore two `.wins` lines on two tiers and NOTHING in `regression_gt.txt`, whose
+fingerprint is `<games_won>/<avg_win_turn>`.
+
+**DO NOT READ WALL OFF THAT RUN.** 60-game cells on a box also running the b0/d8 census produced
+`breaching -50.7%` and `slivers +19.7%`, which are contention, not effects. The deterministic
+instrument is units: -5.0% (Snow, 200g seed 910000), -15.2% (Snow, 8g seed 700000), -1.0%
+(KittyEquipment, 150g), 0.0% (Hinata2, 150g).
+
+### ADOPTION EVIDENCE FOR `MTG_FOLD_SEARCH_ODO`, IN ONE PLACE
+
+* It is NOT a new rule -- it is the already-shipping, already-verified canonical-prefix fold at the
+  second of its two call sites.
+* `MTG_FOLD_VERIFY`: `UNRECOVERABLE=0` in all four 2x2 cells, 1,522,927 rejections checked in the
+  `both` cell. Every rejected arrangement has a legal enumerable twin.
+* `copyaxis_share` -> EXACTLY 0; `repeat_share` was already 0. The search's candidate list is then
+  provably free of both redundancies.
+* 0 of 200 games moved on Snow; 0 of 150 on Hinata2 and KittyEquipment; 0 of 60 on 22 decks.
+* Work: units -1% to -15% depending on deck and cell.
+* STILL REQUIRED: the regression suite itself, which is this repo's pre-push gate and needs
+  `build/Release` (currently held by the USER's census).
+
+### STILL OPEN
+
+* **The 25.1% breakpoint-variant repetition is untouched by this** and is now the largest single
+  identifiable block in the search's candidate mass. Same actions, same rank, enumerated twice,
+  98.6% landing on the same state.
+* Adoption needs the regression suite (the pre-push gate) and a wider deck sweep than three.
+* `MTG_BP_CONDEMN_ACTIVATION` -- the rule that would apply the USER's "each card at most once" to
+  the Sheets/Augur abilities -- is still `EnvInt(..., 0)`, DEFAULT OFF, gated on the b0/d8 census.
