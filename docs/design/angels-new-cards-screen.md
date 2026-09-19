@@ -1208,13 +1208,55 @@ So cheap cards are over-rewarded for filling a hole that is not there, and high 
 under-rated. This is why the Legion slot went to Thune (−0.0110t) over the 2nd Youthful Valkyrie
 (−0.0130t) despite the sim's ranking: a 0.002t gap sits well inside the distortion.
 
+### Screen 17 — spending the cheap slots, and why its winners must be discarded
+
+Twenty arms, seed 2700000, same apparatus. Measured against the decided list `s_leg0_t2`:
+
+* **The Legion→Thune decision is vindicated and grows with length.** The previous list `W` measures
+  **+0.0018 / +0.0094 / +0.0161**, t +0.8 / +3.5 / **+5.1**. A wash at 20 life, clearly behind by 40.
+* **Giada's reversal replicated, harder.** `s_g3_yv2` (4th Giada → 2nd Youthful Valkyrie) is the
+  worst non-base arm: **+0.0118 / +0.0210 / +0.0316**, t up to **+9.0**. Reconciling with screen 16:
+  the 4th Giada *loses* to a 1-drop and *beats* a 2-drop. It is not weak — it is weak **relative to
+  Lightstall specifically**, and the untested question is what it does against a 3rd Thune or 2nd
+  Dawnbringer.
+* **Every arm that beat the decided list cut Bishop of Wings** — and that cut is now ruled out.
+
+**BISHOP OF WINGS STAYS AT 4 (user, 2026-09-19).** *"The card is a real engine and has a lot of
+upside that is not fully captured ... Bishop makes it very difficult to lose to Aggro and gives us a
+chance to reach the Righteous Valkyrie breakpoint."* Verified against the engine — three value
+streams, of which this apparatus sees exactly one:
+
+| stream | status |
+|---|---|
+| 4 life per Angel entering, each its own life-gain EVENT (feeds Thune, Lyra ArchDawn, Resplendent) | **modelled** |
+| Righteous Valkyrie's breakpoint, `life_above_start_anthem_life: 7` → +2/+2 | **modelled** — and format-invariant: +7 over starting life at 20/30/40, flat 4 per Angel, so the same number of Angels switches it on in every format |
+| life as a **defensive** resource | **structurally zero** — `OpponentDeck.h:119`, the goldfish takes every turn and the opponent never gets one, so our life only ever goes UP |
+| the Spirit tokens on an Angel dying | **never fires** — implemented correctly (`dies_watch_subtype: Angel`), but nothing kills our Angels |
+
+So the 0.0299 measured for the 4th Bishop is already *net* of the breakpoint, and its defensive half
+is worth exactly zero in every number in this document — not under-weighted, absent.
+
+**With Bishop at 4 and Serra at 2, the decided list is the best tested shape.** The only arm that
+still beats it is `s_leg0_resp3_yv3` at −0.0070 late — which is **+0.0010 (t +0.3) at 40 life**, a
+null at the format the user weights most, living entirely on 20-life speed. That is the axis the
+empty 2-slot inflates, so it should be discounted further, not acted on.
+
+**The 22-land arms did not win.** `s_leg0_b3_yv3_t2_p14` (−0.0116) sits behind its 23-land twin
+(−0.0132). Combined with screen 16, **23 lands** is the better-supported number.
+
 ## Open, in priority order
 
 1. **Screen 17** (`spec17_rebuild_bottom.json`, seed 2700000) — spends the cheap slots on the
    absorbers that won. Includes the decided list as `s_leg0_t2`.
 2. **Verify the Giada reversal** (user: *"I guess we should verify that"*). Screen 16 put the 4th
-   Giada below the 4th Lightstall, reversing screen 15. Under the curve argument the natural home for
-   that slot is a **3rd Thune or 2nd Dawnbringer**, not anything cheap — untested.
+   Giada below the 4th Lightstall, reversing screen 15; screen 17 then showed it beating a 2nd
+   Youthful Valkyrie decisively (t +9.0). Both can be true — it loses to a 1-drop and beats a
+   2-drop. Under the curve argument the natural home for that slot is a **3rd Thune or 2nd
+   Dawnbringer**, not anything cheap — untested.
+3. **The Bishop breakpoint probe.** Log turn-of-first-anthem at Bishop 4 vs Bishop 3. If cutting the
+   4th barely delays start+7, its modelled value is near nil and all its remaining value is the
+   defensive half the sim cannot see — which puts a number on how much to discount this entire class
+   of result, not just Bishop's.
 3. **Direct cast-count probe on Unexpectedly Absent**, to turn "never cast" from inference into
    measurement. If it is truly 0-for-N then 3 of 37 spells are invisible to every number here.
 4. **The World A/B curve diagnostic** — identical cheap-for-expensive swaps measured with the 2-slot
