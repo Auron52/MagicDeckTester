@@ -1403,12 +1403,29 @@ the *generating* deck's count), so these arms run with no fall-through.
 Her mana is used on T3 in 17.0% of games and T4 in 13.5%; the 4th copy is worth +5.5pp of games in
 which it gets used at all.
 
-**What this does and does not establish about the ramp story.** It establishes the mechanism is
-*real and exercised* — not a hypothesis — in better than a quarter of games. It does **not** show
-the 4th copy accelerating the deck, because `first Angel cmc≥3` gets marginally *earlier* at Giada 3.
-That is the donor's doing: a Plains substitutes for part of what her mana was doing, so this
-comparison cannot isolate acceleration. Reading it as "the ramp does not matter" would be wrong in
-the other direction. An arm donating to a non-mana card would separate them; not run.
+**The ramp story is real but it is NOT what the 4th copy buys.** A fourth arm settles it:
+`giada3_yv2` sends the freed slot to a 2nd Youthful Valkyrie — a 2-drop Angel that makes no mana —
+so the land count stays at 23 and every mana source except Giada is held constant.
+
+| first Angel cmc≥3 | ship | giada3 (Plains donor) | giada3_yv2 (non-land donor) |
+|---|---|---|---|
+| turn | T2.756 | T2.719 (−0.0368) | **T2.752 (−0.0037)** |
+| % games using Giada's mana | 27.1% | 21.5% | 22.6% |
+
+With the land donor the deck got *faster* to its first big Angel, which was the extra Plains, not
+Giada. With the confound removed the timing is **flat — 0.004 turns**. So: her mana ability is
+genuinely exercised (27.1% of games, and the 4th copy is worth ~4.5pp of that), but **the marginal
+4th copy does not measurably accelerate anything.** Its value has to come from the rest of the card
+— a 2-drop Angel body on curve, and the counters — not from ramp.
+
+That is a refinement of the user's hypothesis, not a refutation: the mechanism they named is real
+and modelled; it simply is not what the *fourth* copy is being paid for. Which lines up with the
+legend-rule point above — extra copies raise the chance she is out early, they do not add throughput.
+
+**Independent replication worth noting.** `giada3_yv2` measures +0.0170 avg win turn here on 3,000
+games and the shipped apparatus; screen 18's `g3_yv2` measured +0.0125 / +0.0146 / +0.0162 on 40,000
+games and the `angels_x` apparatus. Two different samples and two different keep tables agreeing to
+within noise is the strongest single check on the screening apparatus in this whole document.
 
 **The Bishop breakpoint question is now answered, and it supports the user's ruling by quantifying
 how little the sim can see.** Cutting the 4th Bishop delays Righteous Valkyrie's start+7 anthem by
@@ -1430,23 +1447,19 @@ is higher in the cut arms only because slower arms have more games still alive a
 
 ## Open, in priority order
 
-1. **A non-land donor arm for Giada**, to separate ramp from body/counters. The probe above donated
-   the slot to a Plains, which substitutes for part of her mana, so it cannot isolate acceleration.
-   Re-run `giada3` donating to a non-mana card (a 2nd Youthful Valkyrie is the natural choice — it is
-   already a measured arm in screen 18) and compare `first Angel cmc>=3`.
-2. **The World A/B curve diagnostic** — identical cheap-for-expensive swaps measured with the 2-slot
+1. **The World A/B curve diagnostic** — identical cheap-for-expensive swaps measured with the 2-slot
    empty (UA 3, YV 1) and full (UA 0, YV 4), differenced. Now better motivated than ever: the probe
    measured **0 casts of Unexpectedly Absent and 0 of Swords to Plowshares in 9,000 games**, so the
    distortion this diagnostic prices is confirmed to exist and only its size is unknown. World B is
    an **instrument, never a candidate**: the user ruled the removal stays.
-3. **`leaf: none` sensitivity audit.** The staleness concern is gone — the model was regenerated on
+2. **`leaf: none` sensitivity audit.** The staleness concern is gone — the model was regenerated on
    the adopted list (`4e81a3e7`) — so what remains is only whether the pivotal comparisons survive
    leafless. Note the regeneration measured leafless at **3.1x** wall cost on this deck, so
    `leaf: none` is an audit instrument here, not a shipping candidate.
-4. **`angels2hg` is missing from `test/regression_cases.sh`.** Angels is measured at 2HG throughout
+3. **`angels2hg` is missing from `test/regression_cases.sh`.** Angels is measured at 2HG throughout
    this campaign but has no 2HG regression case, unlike `antilife2hg` / `auras2hg` / `breaching2hg`.
    Predates this work; still owed.
-5. **Two Fungus references no longer replay** (`claude_s1_gi0` win_turn 5->6, `claude_s2_gi1` 6->7),
+4. **Two Fungus references no longer replay** (`claude_s1_gi0` win_turn 5->6, `claude_s2_gi1` 6->7),
    found by the regression tier's `--strict` reference check on 2026-09-19. **Not caused by the
    Angels work** — `src` is byte-identical to the `76f76796` GT accept and nothing under
    `decks/Fungus` or `references/Fungus` changed. The cause is `56c57d73`, the site-10 breakpoint
@@ -1462,6 +1475,8 @@ is higher in the cut arms only because slower arms have more games still alive a
   2nd Youthful Valkyrie and a Plains. Its mana is exercised in 27.1% of games.
 * ~~The Bishop breakpoint probe~~ — cutting the 4th delays the anthem by 0.016 turns and 1.8pp.
 * ~~The Unexpectedly Absent cast-count probe~~ — 0 casts in 9,000 games, measured not inferred.
+* ~~Separate Giada's ramp from her body~~ — the non-land donor arm shows the 4th copy moves the first
+  big Angel by 0.004 turns, i.e. it buys consistency and counters, not acceleration.
 
 ## Related
 
