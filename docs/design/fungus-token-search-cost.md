@@ -1800,3 +1800,63 @@ for Fungus because the deck routes to `GenericProvider`. That was true when writ
 measured fire rate on the straggler is **77-84%**. The 93.7%-of-plans-at-edge-nodes figure quoted
 there was measured on the pre-certificate binary; the post-certificate equivalent is 88.5%
 (805,007 of 909,490), because the certificate removes whole nodes but the survivors are the widest.
+
+---
+
+## WHY THERE ARE SO MANY PLANS IN THE FIRST PLACE (2026-09-19)
+
+The sections above establish that the cost is plans applied one at a time at horizon-edge nodes.
+This one asks where the plans come from. Measured, not reasoned: `MTG_FS_ROOT_DUMP=6` on the
+straggler (`--seed 901762 --game-index 12`), play path.
+
+**Read the dump carefully -- 320 dumped lines are ELEVEN separate enumerations, not one node.**
+(Boundaries are visible because `pre` is value-ordered, so `val` rising marks a new enumeration.)
+The largest single enumeration is **56 plans**. Quoting 320 as one node's fan-out would be wrong.
+
+**Those 56 plans are six decisions.** The complete set of distinct spell contents at that node:
+
+```
+Utopia Mycon + Thallid Shell-Dweller(x1) + Thallid Shell-Dweller(x1)
+Utopia Mycon + Thallid Shell-Dweller(x1)
+Utopia Mycon
+Thallid Shell-Dweller(x1) + Thallid Shell-Dweller(x1)
+Thallid Shell-Dweller(x1)
+(nothing)
+```
+
+| axis | factor | running | what it is |
+|---|---|---|---|
+| spell content | 6 | 6 | the actual decision |
+| land timing | x2 | 12 | `land=Forest` vs `land=(defer)` |
+| breakpoint continuation | x2.5 | 30 | `bp_choice` = -1 / 0 / 1 / 2097152, one variant per continuation |
+| identical in all printed fields | x1.9 | 56 | 56 plans, 30 distinct lines |
+
+**A 9.3x inflation over the real choice set**, and every one of the 56 is applied to a board at a
+node asking only "does any of these win this turn?".
+
+**The x1.9 is NOT established as waste.** `FsPlanText` does not print WHICH interchangeable
+permanent a plan used -- which Thallid activated, which land was tapped, which token was
+sacrificed -- so those may be genuinely distinct plans separated by a choice between objects that
+are identical in every respect that matters. That is precisely the class `MTG_FUNGUS_SPORE_POOL`
+folds, and it is why that lever is worth 1.47x units / 2.60x wall on the label path. Anyone
+attacking this number should start by re-dumping with the source identity included rather than
+assuming the duplicates are free.
+
+**Why the label path sees 300-1,192 and not 56.** Same structure, wider board. By turns 7-8 there
+are many more Saprolings and many more Thallids sitting on 3+ spore counters, so the base set grows
+and the same multipliers ride on top. The 300-1,192 figures come from the `[progress]` instrument
+during the label search (`candidate 50/340 (max seen 1192)`), not from this play-path dump.
+
+### How this composes with the certificate
+
+The two attack different factors of the same product, which is why neither alone is sufficient:
+
+* the **certificate** (the adopted joint budget, and the proposed top-of-library bound) stops the
+  search ENTERING the node -- all 56 go unapplied;
+* the **spore pool** shrinks the list inside nodes the certificate could not refute.
+
+The land-defer x2 and breakpoint x2.5 are untouched by either, and both are *searched rather than
+narrowed* by deliberate design (`bp_choice` "pins a breakpoint continuation ... searched rather
+than narrowed"). On a deck whose real decision set is six wide they are most of the plan count, so
+they are the obvious next question -- but changing them is a QUALITY decision the repo has already
+taken once, not an oversight to clean up.
