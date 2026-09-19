@@ -621,6 +621,42 @@ the list.
 Lightstall, Thune 2, **23 lands**) is 3rd at 20 life, 1st at 30 and 1st at 40 — and at 40 life it is
 nearly twice the next arm. Everything else that wins at 20 life fades by 40.
 
+### Screen 13 — converge: both open axes CLOSED (`spec13_converge.json`)
+
+14 arms + base × 3 formats × 40,000 games, seed 2300000. Deltas vs `v_a`.
+
+| arm | std | 2HG | long |
+|---|---|---|---|
+| `L` = 3 Lightstall, Thune 2, 23 lands — **3rd held-out block** | −0.0593 (−0.0631, −) | −0.0271 | −0.0140 |
+| `i4_t1_yv0` — held out | −0.0789 (was −0.0785) | −0.0283 | **+0.0000** |
+| **`L_t0_yv2` Thune 0, Lightstall 4, 23 lands** | **−0.0954** (t −30) | **−0.0373** | −0.0011 |
+| `t0_yv1_p16` Thune 0 at 24 lands | −0.0899 | −0.0257 | +0.0124 |
+| `L_p14` 22 lands | −0.0582 | −0.0260 | **−0.0158** |
+| `L_p13` 21 lands | −0.0551 | −0.0215 | −0.0099 |
+| **`L_t1_yv2` Thune 1, Lightstall 3, 23 lands** | −0.0756 | −0.0349 | −0.0144 |
+| `L_i4_t1` Thune 1, Lightstall 4 | −0.0844 | −0.0351 | −0.0102 |
+| `L_lad3_yv2` Lyra ArchDawn 4→3 | −0.0422 | −0.0099 | **+0.0103** |
+| `L_g3_yv2` Giada 4→3 | −0.0394 | −0.0046 | **+0.0105** |
+| `L_d1_t1` + 1 Lyra Dawnbringer | −0.0586 | −0.0227 | −0.0009 |
+
+**The land axis has an interior maximum — it is not another edge.** 23 lands ≈ 22 > 21 in every
+format (−0.0593 / −0.0582 / −0.0551 at 20 life). That axis is closed at **23**.
+
+**The Thune axis is closed by arithmetic.** Thune kept improving to 0, and 0 is the floor.
+`L_t0_yv2` is the biggest number in this entire campaign at 20 life (−0.0954) and at 30 (−0.0373) —
+**and it is worth nothing at all at 40 life (−0.0011).** That split is the blind spot showing itself
+on the instrument: the advantage of replacing bombs with one-drops is entirely an advantage of
+*speed*, and it evaporates exactly as the game gets long enough for card quality to matter.
+
+**THE 4-OFS HELD FOR A THIRD TIME, in the frame the list has actually moved to.** Cutting Lyra
+ArchDawn to 3 costs 0.017 / 0.017 / 0.024; cutting Giada to 3 costs 0.020 / 0.023 / 0.025 — and both
+turn *positive* (worse than `v_a`) at 40 life. Screens 11, 12 and 13 now agree on independent seed
+blocks: **the legend counts are right at 4, and the user's suspicion, while a good question, is
+answered in the negative.**
+
+**The Dawnbringer's price settles at ~0.013–0.017t.** `L_d1_t1` vs `L_t1_yv2` costs +0.0170 std,
++0.0122 2HG, +0.0135 long. Not free as it was against the third Thune, but small and stable.
+
 ### ⚠ The caveat that governs how screens 11–13 should be read
 
 **Every direction winning here does the same thing: it trades five-mana bombs and lands for one-mana
