@@ -357,6 +357,29 @@ site-10 arming lives there (`TurnSolver.cpp` ~26174), the shared apply path is w
 | `MTG_PLAN_SPACE_CAP=0`, `MTG_SOLVE_SPACE_CAP=0`, both, `MTG_NO_GROUP_CAP=1` | T5 | differs -> had power. REAL negatives: the position caps are not the cause. |
 | `MTG_EXEC_DROP_REPLAN=1` | T5 | re-planning every turn does not recover it either. |
 
+### Second round of negatives, all power-checked (2026-09-19)
+
+Every arm below was confirmed to change output before its result was believed; all still T5 against
+the class-OFF arm's T4.
+
+| axis | arms | result |
+|---|---|---|
+| breakpoint variant machinery | `MTG_BP_DEPTH` 2 / 4 / 8, and 8 combined with `MTG_BP_SEARCH=8` | T5. **This closes a real gap:** the previous `MTG_BP_DEPTH` 2/3/5 negatives were inherited from an earlier draft of this file and had NOT been power-checked. They are now mine and they hold. |
+| plan identity / dedupe | `MTG_BP_ENUM_VERIFY=1`, `MTG_BP_ENUM_CACHE_CAP=0`, `MTG_BP_KEY_CASTS_NONE=1`, `MTG_BP_KEY_NARROW=1` | T5. The plan-signature dedupe was a live suspect (there is recorded prior art that it is unsound), and it is not this. |
+
+**`MTG_BP_ENUM_VERIFY` printed nothing, and that is NOT a clean bill of health.** No output was
+captured, so its reporting path was never power-checked here; treat "the key is sound" as UNTESTED,
+not as established. (This repo has already burned one session on a verifier that cried wolf, and
+another on reading silence as a pass.)
+
+### What the apply path does NOT do, read from the source
+
+`apply_one` has exactly one early-out at its top -- `if (bp_truncate) { return; }` -- and site 10
+never sets `bp_truncate` (only sites 3/5/6 do, via `node_owns_site`, and site 10 has no such call
+site). So when the class arms mid-plan, **the plan's remaining casts are still applied**: the apply
+is additive there and the defect is NOT a silently dropped plan tail. Whatever the mismatch is, it
+is not this.
+
 ### Two code facts to start from next time (observed, NOT yet proven causal)
 
 * **Kor Spiritdancer's implementation assumes the opposite of what the class asserts.** Its
