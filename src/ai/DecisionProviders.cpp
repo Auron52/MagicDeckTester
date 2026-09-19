@@ -103,6 +103,7 @@ static std::atomic<uint32_t> g_gates_queried{0};
 
 void     SetGateProbe(bool on) { g_gate_probe.store(on); if (on) { g_gates_queried.store(0); } }
 uint32_t QueriedGatesMask()    { return g_gates_queried.load(); }
+bool     GateProbeArmed()      { return g_gate_probe.load(std::memory_order_relaxed); }
 
 // Parse MTG_UNPRUNE=<comma/space/;/| separated gate names> once into a bitmask over UnprunedGate.
 // "all" (or the legacy MTG_UNPRUNED) sets every bit. Unknown tokens are ignored. Case-insensitive.

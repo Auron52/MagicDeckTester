@@ -144,6 +144,11 @@ bool UseValueModel();
 void        SetGateProbe(bool on);
 uint32_t    QueriedGatesMask();
 const char* GateName(UnprunedGate g);
+// Is the probe armed RIGHT NOW? Read by anything that would otherwise skip a DecisionUnpruned
+// callsite as provably-dead work: the probe measures REACHABILITY, so a skipped query would show
+// up as a gate with no live decision point and be dropped from a sweep. Callers that consult this
+// disarm their own short-circuit while probing (TurnSolver's SubsetFilterPre is the one caller).
+bool        GateProbeArmed();
 
 class GenericProvider : public DecisionProvider
 {

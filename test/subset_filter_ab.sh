@@ -14,11 +14,27 @@
 # same box at the same instant -- which is the property the pooled batch was protecting. A serial
 # "run A, then run B" on a shared box measures the box's load drift, not the change.
 #
-# THE CORRECTNESS ASSERTION IS `units`, NOT A TIME. A work unit (ai/GameWorkMeter.h) is a
-# deterministic count of turn-steps and interior search nodes, identical for a given (seed,
-# game-index) on every machine. A reordering that is byte-identical MUST leave it -- and the win turn
-# -- exactly unchanged; if either moves, the change altered the search and the cost numbers are
-# meaningless.
+# THE CORRECTNESS ASSERTION IS `units`, NOT A TIME. A work unit (ai/GameWorkMeter.h) counts
+# turn-steps and interior search nodes. A reordering that is byte-identical MUST leave it -- and the
+# win turn -- exactly unchanged BETWEEN THE TWO ARMS OF ONE RUN; if either moves, the change altered
+# the search and the cost numbers are meaningless.
+#
+# "BETWEEN THE TWO ARMS OF ONE RUN" IS NOT PEDANTRY, and an earlier version of this header got it
+# wrong by claiming a unit count is "identical for a given (seed, game-index) on every machine".
+# OBSERVED 2026-09-19: this same script, the same binary, the same cards.json and the same single
+# game (seed 1200328, --threads 1, one game per process, no predecessor) reported 905,676 units
+# while a 24-worker census batch shared the box, and 901,945 an hour later on a quiet one. Ruled
+# out by direct test: the binary (the older build reproduces the quiet number), the card data (the
+# pre-rebase cards.json reproduces it too), self-concurrency (14 concurrent copies of the game all
+# report the quiet number) and cache sizing (MTG_MEM_BUDGET_MB 2000 and 8000 both do). Not
+# reproduced on demand; see docs/design/batch-run-to-run-nondeterminism.md, whose model
+# ("--threads 1 is 0/50 on units, because the predecessor sequence is identical") does not cover a
+# one-game process that has no predecessor at all.
+#
+# WHAT THAT MEANS FOR THIS HARNESS: it is sound as written, because both arms of a game are launched
+# TOGETHER and therefore share whatever condition is doing this -- which is why the assertion is
+# stated arm-to-arm. What is NOT safe is comparing a unit count from one run against a unit count
+# from another run taken under different box conditions, or quoting one as a stable fingerprint.
 #
 # THE COST CURRENCY IS CPU TIME, NOT WALL. The first run of this A/B used wall and came back 1.064x
 # with one of seven games going the WRONG way -- on a box at loadavg 45 (a 24-worker census plus the

@@ -1429,18 +1429,85 @@ start.
 
 ### Where the remaining headroom is
 
-This is a ~4.7% fix inside a ~60% region, and the region is now the whole game. The obvious next step
-is the **general form of the same short-circuit**: a per-ENUMERATION precondition summary computed
-once over `cands` (which is fixed for an entire subset walk) and consulted by each filter through a
-thread-local pointer, defaulting to "run every filter" so any unset path keeps today's behaviour.
-Each filter's "true" outcome requires at least one selected candidate carrying its property, and
-`sel` indexes into `cands`, so absence across all of `cands` is a sound necessary condition. That
-covers the other thirteen filters and both lockstep chains with two setup sites and no `GameState`
-growth, no `Dominance` entry and no scenario-harness hazard.
+This is a ~4.7% fix inside a ~60% region, and the region is now the whole game.
 
 Worth noting what it does **not** touch: `ColorFeasibility::Payable` (8.80%) and `CanPayFlat`
 (2.87%) are genuine payability work on subsets that really are candidates. Those need either
 memoisation or fewer subsets -- and *fewer subsets* is what the spore pool below actually delivers.
+
+## THE GENERAL FORM: `SubsetFilterPre`, and it is worth 1.136x
+
+The three fixes above each short-circuited ONE filter. The generalisation is to stop calling a
+filter at all when it cannot possibly fire, and it is worth almost three times as much.
+
+**The summary.** `SubsetFilterPre` is seventeen bools, one per filter (or per filter family),
+computed in ONE pass over `cands` before the walk starts, at both sites --
+`SolveUncached` (just after the `any_ritual` / `any_rock` scans it sits beside) and
+`EnumeratePlans` (after both aura injectors have appended, because the summary's whole claim is
+that it saw every member of `cands`). Each call site becomes `if (pre.<bit> && Filter(...))`.
+
+**Why it is sound, in one sentence:** `sel` holds indices INTO `cands`, `cands` is fixed for the
+whole enumeration, and every filter's `true` requires at least one SELECTED candidate carrying some
+property -- so if no candidate anywhere in `cands` carries it, the filter's answer is a foregone
+`false`. Each bit is deliberately WEAKER than its filter (it reads only `Action` fields -- never the
+board, never pair structure, never a `CardDefinition` the filter would re-resolve), so the summary
+can only err toward RUNNING a filter that would have returned false. Defaults are all TRUE, i.e.
+"run every filter", so a default-constructed summary is exactly the old behaviour.
+
+**Two details that are easy to get wrong, both handled:**
+
+* `RenumberFoldOrds()` mutates `cands` AFTER the summary is built -- but it only ever CLEARS an
+  `equiv_tag` or renumbers ords inside an existing class, never creates a nonzero tag. The
+  `dup_source` bit reads `equiv_tag != 0`, so building early is a superset of the post-renumber
+  truth: the safe direction.
+* Three default-off diagnostics count filter ENTRIES rather than outcomes -- the gate-reachability
+  probe (`DecisionUnpruned` fires inside two of these filters), `strandedstats::g_calls`, and
+  `bfcensus::g_fold_guard_seen`. To them a skipped call is an entry that vanished, and the probe is
+  the sharp one: a gate with no live callsite gets dropped from a sweep as provably dead. So when
+  any of the three is armed the summary comes back all-true. This is what `GateProbeArmed()` (new,
+  in `DecisionProviders.h`) exists for.
+
+**Two more hoists in the same change**, both of the same shape -- work that is constant for an
+enumeration being redone per subset:
+
+* `ResolveProvider(state).PrunesAcceleratorWithoutPayoff()` is a VIRTUAL call on a per-deck provider
+  and was dispatched once per enumerated subset at both sites. Hoisted to a `const bool`.
+* `VerifyFoldRecoverable()`'s own first line is `if (!FoldVerifyOn() ...) return;` -- but reaching
+  that line still meant a call into a large un-inlinable function plus a thread-local read, once per
+  fold REJECTION. On Fungus, where interchangeable sources make every enumeration fold, the two
+  constprop clones of that no-op were **1.29% of a slow game**. The flag now gates the call site.
+
+**Measured: 1.136x CPU time** over the same seven tail games, every game positive
+(1.066x-1.217x), units AND win turn identical on all seven:
+
+| seed | units | cpu before | cpu after | speedup |
+|---|---|---|---|---|
+| 1100891 | 920,628 | 61.1 s | 57.3 s | 1.066x |
+| 1200328 | 901,945 | 49.0 s | 42.4 s | 1.157x |
+| 1300295 | 133,650 | 54.7 s | 47.0 s | 1.163x |
+| 1600930 | 753,162 | 81.2 s | 66.8 s | **1.217x** |
+| 1700036 | 716,507 | 53.0 s | 45.8 s | 1.157x |
+| 1700914 | 1,072,828 | 58.1 s | 54.2 s | 1.071x |
+| 2000564 | 519,181 | 46.6 s | 41.7 s | 1.116x |
+| **total** | | **403.7 s** | **355.2 s** | **1.136x** |
+
+### A unit count is NOT a cross-run fingerprint, and this run is the evidence
+
+Seed 1200328 reads 901,945 units in the table above and read **905,676** in the 1.047x table
+earlier on the same day. Same game, same `--threads 1`, one game per process. Tested directly:
+the older binary reproduces the *quiet-box* number (so it is not the code), the pre-rebase
+`cards.json` reproduces it too (so it is not the card data), fourteen concurrent copies of the game
+all report it (so it is not self-concurrency), and `MTG_MEM_BUDGET_MB` at 2000 and 8000 both report
+it (so it is not cache sizing). The one thing true of the earlier run and nothing since: a 24-worker
+census batch was sharing the box.
+
+Not reproduced on demand, so no mechanism is claimed here. What matters is the consequence, and it
+is recorded in `test/subset_filter_ab.sh`'s header: **units are comparable between the two ARMS of
+one paired run -- which is exactly what that harness asserts, because it launches both arms
+together -- and are NOT comparable across runs taken under different box conditions.** Note this
+sits outside the model in `docs/design/batch-run-to-run-nondeterminism.md`, which attributes
+divergence to thread-carried state growing with run position and reports `--threads 1` as 0/50 on
+units; a one-game process has no predecessor at all.
 
 ## The spore-source pool, measured (2026-09-19): 24,000-game paired census
 
@@ -1448,20 +1515,28 @@ memoisation or fewer subsets -- and *fewer subsets* is what the spore pool below
 blocks x 1000 games x {poolOFF, poolON}, d5/20 virtual-ms, one pooled batch (24/24 workers
 throughout), read with `test/fungus_slow_census.py`:
 
+(Numbers below are the FINAL read, after all 24,000 games landed. An earlier revision of this
+section quoted a partial read taken while ~480 games were still draining -- 11,521 pairs, wall tail
+12.98 h -> 5.50 h, ms/unit 55.2x -> 38.9x. The ratios barely moved; the absolute tail hours did,
+because the stragglers are by definition the most expensive games and they were missing from both
+arms unevenly. Quote the table below, not that one.)
+
 | | poolOFF | poolON |
 |---|---|---|
-| avg win turn | 5.5868 (n=11,994) | **5.5845** (n=11,523) |
-| total units | 1,414,115,716 | 1,300,798,297 |
-| median units | 38,894 | 38,069 |
-| p99 units | 1,178,171 | **1,100,783** |
-| wall tail >= 30 s | 532 games (4.4%), **12.98 h** | 283 games (2.5%), **5.50 h** |
-| ms/unit vs the 0.00111 contract | 55.2x | **38.9x** |
+| avg win turn | 5.5875 (n=12,000) | **5.5861** (n=12,000) |
+| total units | 1,419,037,161 | 1,356,113,905 |
+| median units | 38,910 | 38,113 |
+| p99 units | 1,178,171 | **1,101,086** |
+| max units (one game) | 3,863,768 | **2,520,642** |
+| wall tail >= 30 s | 538 games (4.5%), **17.69 h** | 304 games (2.5%), **8.11 h** |
+| ms/unit vs the 0.00111 contract | 65.8x | **44.7x** |
 
-Paired over the 11,521 games both arms finished: **1.046x in units**, cheaper on 6,858 games, more
-expensive on 499, equal on 4,164. The tail is where it pays -- the >=30 s wall tail more than halves.
+Paired over all 12,000 games: **1.046x in units**, cheaper on 7,154 games, more expensive on 516,
+equal on 4,330. The tail is where it pays -- the >=30 s wall tail is cut to 46% of its hours, and the
+single worst game in the census drops from 3.86M units to 2.52M.
 
-**It is not play-neutral**: win turn differs on 13 of 11,521 paired games. The average moves the
-right way (5.5845 vs 5.5868, lower is better) but that difference is far inside the noise of a
+**It is not play-neutral**: win turn differs on 13 of 12,000 paired games. The average moves the
+right way (5.5861 vs 5.5875, lower is better) but that difference is far inside the noise of a
 12-block sample, so the honest statement is *play-indifferent on average, cheaper in the tail*.
 Because it is a provider-owned narrowing rather than a reordering, adopting it is the
 `heuristic-optimization.md` flow -- this census is the train half, and a held-out confirm on fresh

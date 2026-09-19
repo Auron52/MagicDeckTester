@@ -7476,7 +7476,14 @@ static bool SubsetHasDuplicateSacSource(const std::vector<Action>& cands, const 
             }
             if (!have_pred)
             {
-                VerifyFoldRecoverable(cands, sel, a, tag, site);
+                // FoldVerifyOn() HOISTED (2026-09-19, perf). The verifier's own first line is this
+                // same test, so it used to return immediately -- but "immediately" still meant a
+                // call into a large, un-inlinable function plus a thread-local read, once per fold
+                // REJECTION. On Fungus (interchangeable spore sources -> every enumeration folds)
+                // the two constprop clones of that no-op were 1.29% of a slow game. Testing the
+                // flag here lets the call vanish entirely when the verifier is off, which is every
+                // run but an MTG_FOLD_VERIFY audit.
+                if (FoldVerifyOn()) { VerifyFoldRecoverable(cands, sel, a, tag, site); }
                 static const bool s_ftrace = EnvOn("MTG_FOLD_TRACE");
                 if (s_ftrace)
                 {
@@ -7928,6 +7935,125 @@ static bool SubsetHasMissingTrickTarget(const GameState& state,
         if (!found) { return true; }
     }
     return false;
+}
+
+// ---- PER-ENUMERATION FILTER PRECONDITIONS (SubsetFilterPre) -----------------------------------
+//
+// THE DEFECT THIS CLOSES. Both subset walkers -- Solve::consider and EnumeratePlans::eval_and_push,
+// which run in lockstep -- apply the whole rejection chain above to EVERY enumerated subset, and
+// nearly every filter opens by rediscovering from `sel` that this deck holds no Swords, no Aria,
+// no Equip, no splice, no phyrexian pip. Each one is commented "inert for every deck without X",
+// and each comment is true about the ANSWER and misleading about the COST: **inert means returns
+// false, not is skipped.** The scan still runs, once per subset, dereferencing a cold CardParams
+// per selected action. On the 2026-09-19 Fungus profile the filters that deck can never trip were
+// ~4% of a slow game -- pure proof that a Saproling deck is not an Aura deck, recomputed millions
+// of times from the same unchanging candidate list.
+//
+// WHY IT IS SOUND. `sel` holds INDICES INTO `cands`, and `cands` is fixed for an entire
+// enumeration. So for each filter, "returns true" requires at least one SELECTED candidate
+// carrying some property P -- which no selection can supply when NO candidate in `cands` carries
+// P. Each bit below is that necessary condition, computed once in a single pass; a false bit makes
+// the filter's answer a foregone `false`, so skipping the call is byte-identical by construction.
+// The bits are deliberately WEAKER than the filters (they read only Action fields -- never the
+// board, never pair structure, never a CardDefinition the filter would re-resolve), so the summary
+// can only err toward RUNNING a filter that would have returned false. That direction costs a few
+// wasted cycles; the other direction would delete a line, and no bit here can take it.
+//
+// THE DEFAULTS ARE ALL TRUE -- "run every filter". A default-constructed summary is exactly
+// today's behaviour, so any path that does not build one keeps the unoptimised semantics.
+//
+// ONE MUTATION TO KNOW ABOUT. RenumberFoldOrds() rewrites equiv_tag/equiv_ord after the summary is
+// built, but it only ever CLEARS a tag or renumbers ords inside an existing class -- it never
+// creates a nonzero tag out of nothing. `dup_source` reads `equiv_tag != 0`, so a summary built
+// before the renumber is a superset of the truth after it: the safe direction.
+//
+// INSTRUMENTS DISARM IT. Three default-off diagnostics count filter ENTRIES rather than outcomes
+// -- the gate-reachability probe (DecisionUnpruned fires inside two of these filters), the
+// stranded-equip sizing counters (strandedstats::g_calls), and the branching census
+// (bfcensus::g_fold_guard_seen) -- and to them a skipped call is an entry that vanished. The probe
+// is the sharp one: it would read a gate with no live callsite and a sweep would then skip that
+// gate as provably dead. So when ANY of the three is armed, the summary comes back all-true and
+// every instrument sees exactly the callsites it saw before this optimisation existed.
+struct SubsetFilterPre
+{
+    bool lifegain_removal  = true;   // SubsetHasUnbackedLifegainRemoval
+    bool alt_payload       = true;   // SubsetHasUnbackedAltPayload (also a sound precondition for
+                                     // SubsetPumpWasted, which is an ORDERING tie-break called off
+                                     // this chain and is deliberately left ungated)
+    bool etb_gift          = true;   // SubsetHasUnbackedEtbGift
+    bool gift_damage       = true;   // SubsetHasUnbackedGiftDamage
+    bool dup_source        = true;   // SubsetHasDuplicateSacSource (any of its clauses)
+    bool equip             = true;   // SubsetHasStrandedEquip, SubsetHasShroudBlockedEquip
+    bool pod_activation    = true;   // SubsetHasStrandedPodActivation
+    bool hand_blink        = true;   // SubsetHasStrandedHandBlink
+    bool combo_route       = true;   // SubsetHasComboRouteWithOthers
+    bool persist_loop      = true;   // SubsetHasUnclosedPersistLoop
+    bool creature_sac_mana = true;   // SubsetWastesCreatureSacMana
+    bool sac_fodder        = true;   // SubsetOversubscribesSacFodder
+    bool phyrexian         = true;   // SubsetPhyrexianDominated
+    bool splice            = true;   // SubsetHasIllegalSplice
+    bool trick_target      = true;   // SubsetHasMissingTrickTarget
+    bool aura_target       = true;   // SubsetHasUnenabledRestrictedAura, SubsetHasAuraOnUncastCreature
+    bool vial              = true;   // the per-charge Vial capacity loop in eval_and_push
+};
+
+static SubsetFilterPre BuildSubsetFilterPre(const std::vector<Action>& cands)
+{
+    SubsetFilterPre p;
+    // See "INSTRUMENTS DISARM IT" above: all-true is the unoptimised chain, unchanged.
+    if (GateProbeArmed() || strandedstats::Enabled() || BfCensusOn() || FoldVerifyOn()) { return p; }
+
+    // Start from "no filter can fire" and raise a bit per candidate. A field added to the struct
+    // without a matching `false` here keeps its member initialiser -- i.e. stays TRUE, the
+    // unoptimised behaviour -- so forgetting one costs speed, never correctness.
+    p = SubsetFilterPre{ false, false, false, false, false, false, false, false, false,
+                         false, false, false, false, false, false, false, false };
+    int sac_actions = 0;   // sac_fodder needs TWO: `outlets` there counts a subset of these
+    for (const Action& a : cands)
+    {
+        const CardDefinition* d = a.def;   // exactly the pointer each filter reads (null -> skipped there too)
+        switch (a.kind)
+        {
+            case Action::Kind::Equip:             p.equip          = true; break;
+            case Action::Kind::ActivatePod:       p.pod_activation = true; break;
+            case Action::Kind::ComboRoute:        p.combo_route    = true; break;
+            case Action::Kind::ActivateVial:      p.vial           = true; break;
+            case Action::Kind::ActivateBlink:
+                if (a.needs_cast_mask != 0) { p.hand_blink = true; }
+                p.dup_source = true;                      // two blinks of one outlet
+                break;
+            case Action::Kind::SacCreatureOutlet:
+                if (a.sac_count > 1 && a.sac_victim_id != 0) { p.persist_loop = true; }
+                if (a.sac_source_id != 0)                    { ++sac_actions; }
+                break;
+            case Action::Kind::SacForMana:
+                if (a.sac_source_id != 0) { p.creature_sac_mana = true; ++sac_actions; }
+                p.dup_source = true;                      // two sacs of one source (id 0 included: they compare equal)
+                break;
+            case Action::Kind::ActivateLoyalty:
+            case Action::Kind::GarthActivate:
+            case Action::Kind::ActivatePermAbility:
+                p.dup_source = true;                      // one activation per source per plan
+                break;
+            case Action::Kind::CastFromHand:
+                if (a.enchant_target > 0)                     { p.aura_target = true; }
+                if (!a.trick_hand_target.empty())             { p.trick_target = true; }
+                if (d != nullptr && d->params.splice_onto_arcane) { p.splice = true; }
+                break;
+            default: break;
+        }
+        if (a.free_cast)          { p.dup_source = true; }   // bank slots, and the paid/free pair
+        if (a.equiv_tag != 0)     { p.dup_source = true; }   // canonical-prefix fold (see the note above)
+        if (a.alt_cost)           { p.alt_payload = true; }
+        if (a.phyrexian_life > 0) { p.phyrexian = true; }
+        if (d == nullptr) { continue; }
+        if (d->params.controller_lifegain_equals_power) { p.lifegain_removal = true; }
+        if (d->params.etb_opponent_lifegain > 0)        { p.etb_gift = true; }
+        if (d->tmpl == CardTemplate::DirectDamage && d->params.opponent_lifegain > 0)
+        { p.gift_damage = true; }
+    }
+    p.sac_fodder = (sac_actions >= 2);
+    return p;
 }
 
 // Fill a scaled divided-damage cast (Magma Opus) UP from a plan's LEFTOVER mana (user directive: "spend all
@@ -19768,6 +19894,13 @@ TurnSolver::Plan TurnSolver::SolveUncached(const GameState& state, bool is_pre_c
     // Cheap scan -> the credit below is inert for every deck without such a rock.
     bool any_rock = false;
     for (const Action& ra : cands) { if (ra.rock_mana.Total() > 0) { any_rock = true; break; } }
+    // Which of the subset rejection filters can fire AT ALL for this candidate list (see
+    // SubsetFilterPre): one pass now, in exchange for not re-deriving "this deck has no Aura" once
+    // per enumerated subset. Lockstep twin in EnumeratePlans.
+    const SubsetFilterPre pre = BuildSubsetFilterPre(cands);
+    // Provider payoff-prune opt-in, hoisted out of consider(): it is a VIRTUAL call on a per-deck
+    // provider, constant for the whole enumeration, and it used to be dispatched once per subset.
+    const bool payoff_prune_on = ResolveProvider(state).PrunesAcceleratorWithoutPayoff();
     // "{cost}, {T}" ability SELF-FUNDING debit (see PermAbilityTapDebitOf). State-only, so it is
     // built ONCE here and the per-subset path is a bool test plus a walk of the selection. Lockstep
     // twin of the scan in EnumeratePlans.
@@ -19988,54 +20121,58 @@ TurnSolver::Plan TurnSolver::SolveUncached(const GameState& state, bool is_pre_c
         }
         std::sort(sel.begin(), sel.end());          // ascending -> matches the powerset's bit order
         if (enumstats::Enabled()) { enumstats::g_c_enter.fetch_add(1, std::memory_order_relaxed); }
+        // EVERY `pre.` TEST BELOW IS A NECESSARY CONDITION FOR ITS FILTER, computed once over
+        // `cands` before the walk -- see SubsetFilterPre. A false bit means no selection out of
+        // this candidate list can make that filter return true, so the skip is byte-identical.
         // Reject a Swords cast not backed by a live/same-turn enabler (see the helper). Inert
         // for every deck without controller_lifegain_equals_power.
-        if (SubsetHasUnbackedLifegainRemoval(state, cands, sel)) { return; }
+        if (pre.lifegain_removal && SubsetHasUnbackedLifegainRemoval(state, cands, sel)) { return; }
         // Reject a free alt-cost payload not backed by a live/same-turn enabler (collapsed-main
         // twin of the Swords gate; inert wherever the extended emission never fires).
-        if (SubsetHasUnbackedAltPayload(state, cands, sel)) { return; }
-        if (SubsetHasUnbackedEtbGift(state, cands, sel))    { return; }
-        if (SubsetHasUnbackedGiftDamage(state, cands, sel)) { return; }
+        if (pre.alt_payload && SubsetHasUnbackedAltPayload(state, cands, sel)) { return; }
+        if (pre.etb_gift    && SubsetHasUnbackedEtbGift(state, cands, sel))    { return; }
+        if (pre.gift_damage && SubsetHasUnbackedGiftDamage(state, cands, sel)) { return; }
         // Payoff-prune (PrunesAcceleratorWithoutPayoff): drop a ritual-accelerant subset that casts no payoff
         // (Dragon/Dragonstorm/Apex). Provider-owned (DragonstormProvider) + MTG_UNPRUNED(payoffprune)-
         // gated; inert for every other deck -> byte-identical. storm_in_hand feeds the storm-hold rule
         // (a fair Dragon stops justifying a ritual when a storm is in hand); off by default.
-        if (ResolveProvider(state).PrunesAcceleratorWithoutPayoff()
+        if (payoff_prune_on
             && !DecisionUnpruned(UnprunedGate::PayoffPrune)
             && SubsetWastesAccelerant(cands, sel, storm_in_hand)) { return; }
         // Reject two SacForMana of the same source (its colour variants are mutually exclusive). Inert
         // without a SacForMana action (Lotus Bloom) -> byte-identical.
-        if (SubsetHasDuplicateSacSource(cands, sel, /*site=*/0, fold_from_odometer)) { return; }
+        if (pre.dup_source
+            && SubsetHasDuplicateSacSource(cands, sel, /*site=*/0, fold_from_odometer)) { return; }
         // Reject an Equip whose equipment/host is in hand and uncast by this subset (silent no-op).
         // Inert without an Equip candidate -> byte-identical. Kept in lockstep with the twin below.
-        if (SubsetHasStrandedEquip(state, cands, sel)) { return; }
+        if (pre.equip && SubsetHasStrandedEquip(state, cands, sel)) { return; }
         // Reject a hand-Pod activation without its cast, and a persist loop with no closer active
         // or cast (the cast-and-activate / cast-and-loop pairings). Lockstep twins below.
-        if (SubsetHasStrandedPodActivation(state, cands, sel)) { return; }
-        if (SubsetHasStrandedHandBlink(cands, sel)) { return; }
-        if (SubsetHasComboRouteWithOthers(cands, sel)) { return; }
-        if (SubsetHasUnclosedPersistLoop(state, cands, sel)) { return; }
+        if (pre.pod_activation && SubsetHasStrandedPodActivation(state, cands, sel)) { return; }
+        if (pre.hand_blink     && SubsetHasStrandedHandBlink(cands, sel)) { return; }
+        if (pre.combo_route    && SubsetHasComboRouteWithOthers(cands, sel)) { return; }
+        if (pre.persist_loop   && SubsetHasUnclosedPersistLoop(state, cands, sel)) { return; }
         // Reject an equip onto a shrouded host without the co-selected Greaves-off move (rules,
         // CR 702.18b; shroud fix 2026-08-14). Lockstep twin in eval_and_push.
-        if (SubsetHasShroudBlockedEquip(state, cands, sel)) { return; }
+        if (pre.equip && SubsetHasShroudBlockedEquip(state, cands, sel)) { return; }
         // Reject a creature sac-for-mana whose float nothing spends (see the helper). Solve's
         // rituals-for-payoff guard already covers this on the credited/pool path; this also catches
         // the filter fallback, and keeps the rule identical on both sides. Inert without a creature
         // mana outlet -> byte-identical.
-        if (SubsetWastesCreatureSacMana(state, cands, sel)) { return; }
+        if (pre.creature_sac_mana && SubsetWastesCreatureSacMana(state, cands, sel)) { return; }
         // Reject a plan whose sac outlets together demand more fodder than the board has
         // (found by the Fungus Stage-5d sweep: two Saproling-gated outlets, one Saproling --
         // the second half silently no-opped at apply). Correctness, not a narrowing.
-        if (SubsetOversubscribesSacFodder(state, cands, sel)) { return; }
+        if (pre.sac_fodder && SubsetOversubscribesSacFodder(state, cands, sel)) { return; }
         // Reject a life-paid phyrexian variant whose full-mana twin is jointly payable (weak
         // dominance -- see the helper). Inert without a phyrexian card -> byte-identical.
-        if (SubsetPhyrexianDominated(state, cands, sel)) { return; }
+        if (pre.phyrexian && SubsetPhyrexianDominated(state, cands, sel)) { return; }
         // Reject physically-impossible Desperate Ritual over-splice (a spliced copy must still be in
         // hand). Inert without a splice base selected -> byte-identical.
-        if (SubsetHasIllegalSplice(state, cands, sel)) { return; }
+        if (pre.splice && SubsetHasIllegalSplice(state, cands, sel)) { return; }
         // Reject a targeted trick whose target is neither on the battlefield nor cast by this
         // same subset (CR 601.2c). Inert without a targeted trick -> byte-identical.
-        if (SubsetHasMissingTrickTarget(state, cands, sel)) { return; }
+        if (pre.trick_target && SubsetHasMissingTrickTarget(state, cands, sel)) { return; }
         if (enumstats::Enabled()) { enumstats::g_c_rules.fetch_add(1, std::memory_order_relaxed); }   // passed the rules
         int mask = 0;
         for (int j : sel) { mask |= (1 << j); }
@@ -28610,6 +28747,13 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
     // Same-turn mana-rock ramp scan (mirrors Solve). Inert without a non-creature rock.
     bool any_rock = false;
     for (const Action& ra : cands) { if (ra.rock_mana.Total() > 0) { any_rock = true; break; } }
+    // Which subset rejection filters can fire at all (see SubsetFilterPre). Lockstep twin of the
+    // build in Solve, and built HERE -- after both aura injectors have appended their candidates,
+    // because the summary's whole claim is that it saw every member of `cands`.
+    const SubsetFilterPre pre = BuildSubsetFilterPre(cands);
+    // Provider payoff-prune opt-in, hoisted out of eval_and_push: a virtual call, constant for the
+    // enumeration, previously dispatched once per subset.
+    const bool payoff_prune_on = ResolveProvider(state).PrunesAcceleratorWithoutPayoff();
     // "{cost}, {T}" ability SELF-FUNDING debit scan (see PermAbilityTapDebitOf). Lockstep twin of
     // the scan in Solve; inert on every board with no such ability -> byte-identical.
     std::vector<ManaPool> tap_debit;
@@ -29176,77 +29320,87 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
         // what makes the partition exact (no dedup needed). Inert in normal mode.
         if (any_metalcraft && mcstats::Enabled()) { mcstats::BigEnter(cands, sel); }
         if (groupwave::g_state.tranche_rank >= 0 && !groupwave::SelTouchesRequired(sel)) { return; }
+        // EVERY `pre.` TEST BELOW IS A NECESSARY CONDITION FOR ITS FILTER (see SubsetFilterPre),
+        // computed once over `cands` before the walk; a false bit makes that filter's answer a
+        // foregone false for every selection. Lockstep twin of the chain in Solve::consider.
         // Reject a Swords cast not backed by a live/same-turn enabler (see the helper). Inert
         // for every deck without controller_lifegain_equals_power.
-        if (SubsetHasUnbackedLifegainRemoval(state, cands, sel)) { return; }
+        if (pre.lifegain_removal && SubsetHasUnbackedLifegainRemoval(state, cands, sel)) { return; }
         // Reject a free alt-cost payload not backed by a live/same-turn enabler (collapsed-main
         // twin of the Swords gate; inert wherever the extended emission never fires). Lockstep
         // twin of the check in Solve::consider.
-        if (SubsetHasUnbackedAltPayload(state, cands, sel)) { return; }
-        if (SubsetHasUnbackedEtbGift(state, cands, sel))    { return; }
-        if (SubsetHasUnbackedGiftDamage(state, cands, sel)) { return; }
+        if (pre.alt_payload && SubsetHasUnbackedAltPayload(state, cands, sel)) { return; }
+        if (pre.etb_gift    && SubsetHasUnbackedEtbGift(state, cands, sel))    { return; }
+        if (pre.gift_damage && SubsetHasUnbackedGiftDamage(state, cands, sel)) { return; }
         // Payoff-prune (PrunesAcceleratorWithoutPayoff): drop a ritual-accelerant subset that casts no payoff
         // (Dragon/Dragonstorm/Apex) from the SEARCH branch list -- this is where the freed budget
         // comes from. Provider-owned (DragonstormProvider) + MTG_UNPRUNED(payoffprune)-gated; inert
         // for every other deck -> byte-identical. storm_in_hand=false here on purpose: the storm-hold
         // rule biases the greedy/rollout POLICY (Solve's consider) only, leaving the search's root
         // branch list intact so it can still arbitrate the cast-a-dragon-now line.
-        if (ResolveProvider(state).PrunesAcceleratorWithoutPayoff()
+        if (payoff_prune_on
             && !DecisionUnpruned(UnprunedGate::PayoffPrune)
             && SubsetWastesAccelerant(cands, sel, /*storm_in_hand=*/false)) { return; }
         // Reject two SacForMana of the same source (mutually-exclusive colour variants). Inert
         // without a SacForMana action -> byte-identical.
-        if (SubsetHasDuplicateSacSource(cands, sel, /*site=*/1, fold_from_odometer)) { return; }
+        if (pre.dup_source
+            && SubsetHasDuplicateSacSource(cands, sel, /*site=*/1, fold_from_odometer)) { return; }
         // Reject an Equip whose equipment/host is in hand and uncast by this subset (silent no-op).
         // Inert without an Equip candidate -> byte-identical. Kept in lockstep with Solve's twin.
-        if (SubsetHasStrandedEquip(state, cands, sel)) { return; }
+        if (pre.equip && SubsetHasStrandedEquip(state, cands, sel)) { return; }
         // Reject a hand-Pod activation without its cast, and a persist loop with no closer active
         // or cast -- lockstep twins of Solve::consider's calls (see the helpers).
-        if (SubsetHasStrandedPodActivation(state, cands, sel)) { return; }
-        if (SubsetHasStrandedHandBlink(cands, sel)) { return; }
-        if (SubsetHasComboRouteWithOthers(cands, sel)) { return; }
-        if (SubsetHasUnclosedPersistLoop(state, cands, sel)) { return; }
+        if (pre.pod_activation && SubsetHasStrandedPodActivation(state, cands, sel)) { return; }
+        if (pre.hand_blink     && SubsetHasStrandedHandBlink(cands, sel)) { return; }
+        if (pre.combo_route    && SubsetHasComboRouteWithOthers(cands, sel)) { return; }
+        if (pre.persist_loop   && SubsetHasUnclosedPersistLoop(state, cands, sel)) { return; }
         // Reject an equip onto a shrouded host without the co-selected Greaves-off move (rules,
         // CR 702.18b; shroud fix 2026-08-14). Lockstep twin in Solve::consider.
-        if (SubsetHasShroudBlockedEquip(state, cands, sel)) { return; }
+        if (pre.equip && SubsetHasShroudBlockedEquip(state, cands, sel)) { return; }
         // Reject a creature sac-for-mana whose float nothing spends -- the dominated branch this
         // enumeration otherwise hands the search (Goblins gi44). Unlike the rituals-for-payoff guard
         // above, declining an in-play outlet keeps BOTH the outlet and the body, so there is no
         // "hold it for a later turn" trade for the search to arbitrate. See the helper.
-        if (SubsetWastesCreatureSacMana(state, cands, sel)) { return; }
+        if (pre.creature_sac_mana && SubsetWastesCreatureSacMana(state, cands, sel)) { return; }
         // Reject a plan whose sac outlets together demand more fodder than the board has
         // (found by the Fungus Stage-5d sweep: two Saproling-gated outlets, one Saproling --
         // the second half silently no-opped at apply). Correctness, not a narrowing.
-        if (SubsetOversubscribesSacFodder(state, cands, sel)) { return; }
+        if (pre.sac_fodder && SubsetOversubscribesSacFodder(state, cands, sel)) { return; }
         // Reject a life-paid phyrexian variant whose full-mana twin is jointly payable (weak
         // dominance -- lockstep twin of Solve::consider's call; see the helper).
-        if (SubsetPhyrexianDominated(state, cands, sel)) { return; }
+        if (pre.phyrexian && SubsetPhyrexianDominated(state, cands, sel)) { return; }
         // Reject physically-impossible Desperate Ritual over-splice. Inert without a splice base.
-        if (SubsetHasIllegalSplice(state, cands, sel)) { return; }
+        if (pre.splice && SubsetHasIllegalSplice(state, cands, sel)) { return; }
         // Reject a targeted trick whose target is neither on the battlefield nor cast by this
         // same subset (CR 601.2c). Inert without a targeted trick -> byte-identical.
-        if (SubsetHasMissingTrickTarget(state, cands, sel)) { return; }
+        if (pre.trick_target && SubsetHasMissingTrickTarget(state, cands, sel)) { return; }
         // Reject a sequenced restricted aura (injected above) with no in-subset enabler on its target.
         // No-op unless AppendSequencedAuraCandidates injected such a candidate (aura decks) -> byte-identical
         // otherwise. Gated by SeqAuraOrderingEnabled() (default on; MTG_LEGACY_NO_SEQ_AURA = viewer-only).
-        if (SeqAuraOrderingEnabled() && SubsetHasUnenabledRestrictedAura(state, cands, sel)) { return; }
+        if (pre.aura_target && SeqAuraOrderingEnabled()
+            && SubsetHasUnenabledRestrictedAura(state, cands, sel)) { return; }
         // Reject an Aura targeting a this-turn creature that the subset does not actually cast. No-op
         // unless AppendCreatureTargetAuraCandidates injected such a candidate -> byte-identical otherwise.
-        if (AuraOnNewCreatureEnabled() && SubsetHasAuraOnUncastCreature(state, cands, sel)) { return; }
-        // Reject combinations whose Vial deploys exceed the per-charge capacity.
-        for (int j : sel)
+        if (pre.aura_target && AuraOnNewCreatureEnabled()
+            && SubsetHasAuraOnUncastCreature(state, cands, sel)) { return; }
+        // Reject combinations whose Vial deploys exceed the per-charge capacity. `pre.vial` is false
+        // unless a Vial activation was emitted at all, which is the same sel-scan this loop opens with.
+        if (pre.vial)
         {
-            if (cands[j].kind != Action::Kind::ActivateVial) { continue; }
-            int charge = cands[j].card_mv;
-            int used   = 0;
-            for (int k : sel)
+            for (int j : sel)
             {
-                if (cands[k].kind == Action::Kind::ActivateVial && cands[k].card_mv == charge)
+                if (cands[j].kind != Action::Kind::ActivateVial) { continue; }
+                int charge = cands[j].card_mv;
+                int used   = 0;
+                for (int k : sel)
                 {
-                    ++used;
+                    if (cands[k].kind == Action::Kind::ActivateVial && cands[k].card_mv == charge)
+                    {
+                        ++used;
+                    }
                 }
+                if (used > capacity_for(charge)) { return; }
             }
-            if (used > capacity_for(charge)) { return; }
         }
 
         ManaCost combined;
