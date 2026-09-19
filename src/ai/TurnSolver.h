@@ -1293,16 +1293,23 @@ public:
     // opens in the trailing pass after the plan's own activations and re-decides the rest of the
     // phase exactly like site 7 (searched candidate via bp_choice, else the greedy Solve). The gate
     // is the user's affordability test, evaluated identically in both worlds at the same point.
-    // `pre_plan_numbers` = the m_numbers of the active player's permanents when the phase's plan
-    // STARTED (ApplyPlanDirect entry / TakeTurn entry). Only a permanent absent from it -- one this
-    // plan itself put onto the battlefield -- can carry an activation the plan could not express;
-    // anything already there was enumerated, and a plan that DECLINED its activation made a
-    // decision the continuation must not override (first smoke: the site re-fired on a walker cast
-    // the turn before and the greedy continuation overrode the plan's own loyalty choice).
+    // `pre_plan_keys` = the set of abilities of the active player's permanents that were ACTIVATABLE
+    // when the phase's plan STARTED (ApplyPlanDirect entry / TakeTurn entry), one key per ability.
+    // The site opens on a key that is activatable now and absent from that set -- the USER's
+    // 2026-09-19 rule, *"a new ability we can activate that we could not before"*. This subsumes the
+    // old `entered_this_turn` proxy (a permanent the plan cast has all-new keys) while also catching
+    // what the proxy missed -- a counter or a haste grant making a LONG-RESIDENT permanent's ability
+    // live -- and dropping what it wrongly caught (a sac outlet with no legal victim is not an
+    // activatable ability). A plan that DECLINED an activation still cannot be overridden: that
+    // ability was activatable at plan start, so its key is in the snapshot and it is not new.
+    // Both halves MUST come from CollectActivationKeys, or the delta is measured against a
+    // different question than it is tested with. See TurnSolver.cpp for the full rationale.
     static bool PostEntryActivationPending(const GameState& state,
-                                           const std::vector<int>& pre_plan_numbers);
-    static std::vector<int> OwnPermanentNumbers(const GameState& state);
+                                           const std::vector<uint64_t>& pre_plan_keys);
+    static std::vector<uint64_t> SnapshotActivatableAbilities(const GameState& state);
     static bool PostEntryBreakpointClassOn();
+    // MTG_BP_ABILITY_DELTA=0 reverts site 9 to the entered-this-turn proxy.
+    static bool BpAbilityDeltaOn();
     // #10 cast-order: canonical (executor clean-set) order of a plan's non-sac hand casts, for the
     // viewer to diff the human's queued order against (equal => don't emit --cast-order).
     static std::vector<std::string> CanonicalNonSacCastOrder(const GameState& state, const Plan& plan);

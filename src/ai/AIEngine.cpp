@@ -2129,7 +2129,7 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
     };
     // BREAKPOINT SITE 9 input (lockstep twin of ApplyPlanDirect's capture): the permanents this
     // phase's plan starts from. Empty when the class is off.
-    const std::vector<int> pre_plan_numbers = TurnSolver::OwnPermanentNumbers(state);
+    const std::vector<uint64_t> pre_plan_keys = TurnSolver::SnapshotActivatableAbilities(state);
     // M2 FIXPOINT exit stamp (see WantsSecondMainReentry): did THIS call's execution DRAW cards?
     // The executor's plain-cantrip/EI draws resolve inline (no breakpoint-machinery hook fires
     // for a non-committed plan), so the honest signal is the per-turn draw counter the engine
@@ -5435,7 +5435,7 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
     // earlier occurrence means the indices no longer agree, so the site stands down exactly as the
     // rollout did -- see the rollout note (Dragonstorm gi117).
     if (!HumanPlayActive() && plan.bp_choice >= 0 && bp_seen_exec == 0 && !bp_replayed
-        && TurnSolver::PostEntryActivationPending(state, pre_plan_numbers))
+        && TurnSolver::PostEntryActivationPending(state, pre_plan_keys))
     {
         TurnSolver::Plan extra;
         bool pe_searched = false;

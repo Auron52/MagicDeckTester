@@ -194,6 +194,7 @@ enum Slot : int
     BP_EMPTY_ARM,             // MTG_BP_EMPTY_ARM        "done with this phase" as a scored arm
     BP_CONDEMN_NEW_OPTION,    // MTG_BP_CONDEMN_NEW_OPTION  spare when the site drew a payable card
     BP_CONDEMN_PLAN_CAST,     // MTG_BP_CONDEMN_PLAN_CAST  a plan that cast NOTHING declined nothing
+    BP_ABILITY_DELTA,         // MTG_BP_ABILITY_DELTA    site 9 opens on a NEWLY activatable ability
     EDF_PAIN_LOOP_AUTO,       // MTG_PAINLAND_TAPAHEAD_LOOP_AUTO the AUTONOMOUS loop's tap-ahead banks a painland's painless {C} too (default ON since 2026-09-16)
     EDF_DEPLOY_NO_COUNTER,    // MTG_COMBO_OFF_DEPLOY_NO_COUNTER a mid-loop deploy never pays Emiel's {G/W} counter trigger (default ON since 2026-09-16)
     EDF_DIG_BANK_FIRST,       // MTG_COMBO_OFF_DIG_BANK_FIRST   ONE cheapest draw land is promoted, and only once the float already pays it (default ON since 2026-09-16)
@@ -380,6 +381,7 @@ inline const char* Name(int slot)
         "MTG_BP_EMPTY_ARM",
         "MTG_BP_CONDEMN_NEW_OPTION",
         "MTG_BP_CONDEMN_PLAN_CAST",
+        "MTG_BP_ABILITY_DELTA",
         "MTG_PAINLAND_TAPAHEAD_LOOP_AUTO",
         "MTG_COMBO_OFF_DEPLOY_NO_COUNTER",
         "MTG_COMBO_OFF_DIG_BANK_FIRST",

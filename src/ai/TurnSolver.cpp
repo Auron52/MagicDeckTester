@@ -10599,88 +10599,190 @@ bool TurnSolver::PostEntryBreakpointClassOn()
     return v;
 }
 
-std::vector<int> TurnSolver::OwnPermanentNumbers(const GameState& state)
+// THE DELTA RULE (USER 2026-09-19). *"I would actually like to change our approach for breakpoints
+// to be 100% general: 1. Hand or staged cards changed. 2. New ability can be activated."* --
+// *"It is exactly when there are new options to consider"*, and *"ability status meaning we have a
+// new ability we can activate THAT WE COULD NOT BEFORE."* Those last four words are the whole
+// specification: the site opens on a DELTA over the legal action set, never on a property of a card
+// or of an event. That is why it cannot drift as cards are added -- the failure this class had in
+// BOTH directions before (see below).
+//
+// IT IS THE SAME RULE THE OLD GATE WAS REACHING FOR, minus the proxy. "A permanent that entered
+// this turn" was standing in for "an activation the plan could not have expressed", and it is wrong
+// on both sides:
+//   * OVER-ARMS: a Utopia Mycon cast with no Saproling on the board armed the site, because the
+//     sac-outlet test priced the MANA cost (Mycon has none, so: unconditionally true) and never
+//     asked whether a legal victim existed. Under the delta rule an outlet with no victim is not an
+//     activatable ability at all, so it contributes no key and the arm simply does not happen --
+//     the bug dissolves rather than being patched. Same class as the finding that a gate must judge
+//     the CONSUMED object, not the outlet.
+//   * UNDER-ARMS: a Sporesower trigger taking an ALREADY-RESOLVED Thallid to its third spore
+//     counter, or a haste grant landing on a creature with a {T} ability, changed the action set
+//     without anything entering -- so the old gate saw nothing and the continuation was
+//     unreachable at any budget. Both are exactly the USER's own worked examples.
+//
+// WHY THIS DOES NOT RE-OPEN A DECLINED ACTIVATION -- the property the `entered_this_turn` filter
+// was protecting (first smoke: the site re-fired on a walker cast the turn before and the greedy
+// continuation overrode the plan's own loyalty choice). A declined activation was activatable when
+// the plan STARTED, so its key is in the snapshot, so it is not new, so it does not arm. The
+// guarantee is stronger than the proxy's and it is structural rather than incidental.
+bool TurnSolver::BpAbilityDeltaOn()
 {
-    std::vector<int> out;
+    // Routed through heurarm so BOTH arms fit one pooled batch: a bare `static const bool` is read
+    // once per process and forces the per-arm wave the batching rule forbids.
+    static const bool env = EnvOn("MTG_BP_ABILITY_DELTA", true);   // DEFAULT ON; =0 = entered-this-turn
+    return heurarm::Flag(heurarm::BP_ABILITY_DELTA, env);
+}
+
+namespace {
+
+// One ABILITY = one key, so a permanent whose other abilities are unchanged still registers a newly
+// activatable one (the Thallid reaching its third counter). Packed into a scalar rather than kept as
+// a struct so the snapshot is a flat sorted vector that the gate can binary-search. m_number is a
+// unique per-card-instance number, so two copies of a card never collide.
+enum : uint64_t {
+    kActLoyalty = 1, kActSpore, kActBlink, kActTeamPump, kActPod, kActSacOutlet,
+    kActModeBase                     // PermAbilityMode i -> kActModeBase + i
+};
+inline uint64_t ActKey(int m_number, uint64_t ability)
+{ return (static_cast<uint64_t>(static_cast<uint32_t>(m_number)) << 8) | ability; }
+
+// Lazily priced: the total is only needed once a permanent actually offers a mana-costed ability,
+// and most applies never reach one. Total-only (not colour-exact) for the reason the old gate gave:
+// a colour miss just yields an empty continuation, whereas a colour-exact test could disagree
+// between the two worlds' tap orders, and this predicate MUST agree in both.
+bool ActAffordable(const GameState& state, int ctrl, const Card& src,
+                   const std::optional<ManaCost>& c, int& total_cache)
+{
+    if (!c.has_value()) { return false; }
+    if (total_cache < 0)
+    {
+        ManaPool have = AvailableManaPool(state);
+        have.AddPool(state.floating_mana);
+        total_cache = static_cast<int>(have.Total());
+    }
+    const ManaCost eff = EffectiveActivationCost(state, ctrl, src, c.value());
+    return eff.ManaValue() <= total_cache;
+}
+
+// THE ONE ENUMERATOR. The snapshot and the gate both call it, which is what makes the delta
+// symmetric: an ability can only look "new" because its own activatability changed, never because
+// the two sides asked different questions. Same reason deferred_site_index is a single lambda.
+void CollectActivationKeys(const GameState& state, int ctrl, const Permanent& p,
+                           int& total_cache, std::vector<uint64_t>& out)
+{
+    const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+    if (d == nullptr) { return; }
+    const CardParams& pp = d->params;
+    const int num = p.card.m_number;
+
+    // Planeswalker: the loyalty cost is paid in loyalty, so any live walker qualifies. The
+    // cast-carried activation (ApplyCastLoyaltyActivation) sets loyalty_activated_this_turn, so a
+    // walker that already fired in-plan offers no key.
+    if (pp.loyalty_start > 0 && !pp.loyalty_abilities.empty()
+        && p.loyalty > 0 && !p.loyalty_activated_this_turn)
+    { out.push_back(ActKey(num, kActLoyalty)); }
+
+    // The PermAbilityMode sinks (the ModeSpec table in CollectActions). {T} modes need an untapped,
+    // non-sick source -- CanTap is the predicate that makes a haste grant register as a new option.
+    struct ModeCost { PermAbilityMode mode; const std::optional<ManaCost>* cost; };
+    const ModeCost modes[] = {
+        { PermAbilityMode::TapDamage,      &pp.tap_damage_cost         },
+        { PermAbilityMode::TapInvestigate, &pp.tap_investigate_cost    },
+        { PermAbilityMode::TapDraw,        &pp.tap_draw_cost           },
+        { PermAbilityMode::SacDraw,        &pp.sac_draw_cost           },
+        { PermAbilityMode::Drain,          &pp.drain_cost              },
+        { PermAbilityMode::ExileTop,       &pp.exile_opponent_top_cost },
+        { PermAbilityMode::IceCounter,     &pp.ice_counter_cost        },
+        { PermAbilityMode::GrantLifelink,  &pp.lifelink_grant_cost     },
+    };
+    for (std::size_t i = 0; i < sizeof modes / sizeof modes[0]; ++i)
+    {
+        if (!modes[i].cost->has_value()) { continue; }
+        if (PermAbilityTaps(modes[i].mode) && (p.tapped || !p.CanTap())) { continue; }
+        if (ActAffordable(state, ctrl, p.card, *modes[i].cost, total_cache))
+        { out.push_back(ActKey(num, kActModeBase + static_cast<uint64_t>(i))); }
+    }
+
+    // Spore outlet (the Thallid family): the cost is COUNTERS, not mana, so it is not in the
+    // ModeSpec table (keyed on an optional<ManaCost>) and ActAffordable has nothing to say about
+    // it. It taps nothing and sacrifices nothing, so a summoning-sick or already-tapped body still
+    // qualifies -- the only gate is the counter supply, which is precisely why this clause was
+    // already correct when the sac-outlet one below was not.
+    if (pp.spore_saproling_cost > 0 && p.spore_counters >= pp.spore_saproling_cost)
+    { out.push_back(ActKey(num, kActSpore)); }
+
+    if (ActAffordable(state, ctrl, p.card, pp.blink_cost, total_cache))
+    { out.push_back(ActKey(num, kActBlink)); }
+    if (ActAffordable(state, ctrl, p.card, pp.team_pump_cost, total_cache))
+    { out.push_back(ActKey(num, kActTeamPump)); }
+    if (pp.pod_mv_delta != 0 && (!pp.pod_taps || (!p.tapped && p.CanTap()))
+        && ActAffordable(state, ctrl, p.card, pp.pod_activation_cost, total_cache))
+    { out.push_back(ActKey(num, kActPod)); }
+
+    if (pp.sac_creature_outlet
+        && (!pp.sac_creature_cost.has_value()
+            || ActAffordable(state, ctrl, p.card, pp.sac_creature_cost, total_cache)))
+    {
+        bool ok = true;
+        if (pp.sac_outlet_self_only)
+        {
+            // The enumerator's own dominated-action gate: a self-only outlet is only an option
+            // while a death payoff is live, so the site never opens for an activation it would
+            // not emit.
+            ok = SelfSacHasDeathPayoff(state, ctrl, num);
+        }
+        else if (TurnSolver::BpAbilityDeltaOn())
+        {
+            // THE VICTIM IS THE CONSUMED OBJECT, and pricing the outlet's mana cost says nothing
+            // about whether one exists. Gated on the delta flag purely so =0 stays a byte-exact
+            // revert to the pre-2026-09-19 gate, which did not ask.
+            ok = CanonicalSacVictim(state, ctrl, num, pp.sac_creature_requires_subtype) >= 0;
+        }
+        if (ok) { out.push_back(ActKey(num, kActSacOutlet)); }
+    }
+}
+
+}   // namespace
+
+std::vector<uint64_t> TurnSolver::SnapshotActivatableAbilities(const GameState& state)
+{
+    std::vector<uint64_t> out;
     if (!PostEntryBreakpointClassOn()) { return out; }
-    out.reserve(state.battlefield.size());
+    const int ctrl = state.active_player_index;
+    int total_cache = -1;
     for (const Permanent& p : state.battlefield)
     {
-        if (p.controller_index == state.active_player_index && p.card.m_number != 0)
-        { out.push_back(p.card.m_number); }
+        // Tokens (m_number 0) are excluded: they cannot be told apart from one another, so a key
+        // built on their number would not identify an ability. Carried over deliberately.
+        if (p.controller_index != ctrl || p.card.m_number == 0) { continue; }
+        CollectActivationKeys(state, ctrl, p, total_cache, out);
     }
+    std::sort(out.begin(), out.end());
     return out;
 }
 
 bool TurnSolver::PostEntryActivationPending(const GameState& state,
-                                            const std::vector<int>& pre_plan_numbers)
+                                            const std::vector<uint64_t>& pre_plan_keys)
 {
     if (!PostEntryBreakpointClassOn()) { return false; }
-    const int ctrl = state.active_player_index;
-    int total = -1;   // lazily priced: most applies never reach a candidate
-    auto have_total = [&]() -> int
-    {
-        if (total < 0)
-        {
-            ManaPool have = AvailableManaPool(state);
-            have.AddPool(state.floating_mana);
-            total = static_cast<int>(have.Total());
-        }
-        return total;
-    };
-    auto affordable = [&](const std::optional<ManaCost>& c, const Card& src) -> bool
-    {
-        if (!c.has_value()) { return false; }
-        const ManaCost eff = EffectiveActivationCost(state, ctrl, src, c.value());
-        return eff.ManaValue() <= have_total();
-    };
+    const int ctrl   = state.active_player_index;
+    const bool delta = BpAbilityDeltaOn();
+    int total_cache  = -1;   // lazily priced: most applies never reach a candidate
+    std::vector<uint64_t> keys;
     for (const Permanent& p : state.battlefield)
     {
-        if (p.controller_index != ctrl || !p.entered_this_turn) { continue; }
-        // Tokens (m_number 0) are excluded: they cannot be told apart from a pre-plan token, and
-        // no token in the card pool carries an activation this gate looks for.
-        if (p.card.m_number == 0) { continue; }
-        if (std::find(pre_plan_numbers.begin(), pre_plan_numbers.end(), p.card.m_number)
-            != pre_plan_numbers.end()) { continue; }   // on the battlefield when the plan started
-        const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
-        if (d == nullptr) { continue; }
-        const CardParams& pp = d->params;
-        // Planeswalker: the loyalty cost is paid in loyalty, so any live walker qualifies.
-        if (pp.loyalty_start > 0 && !pp.loyalty_abilities.empty()
-            && p.loyalty > 0 && !p.loyalty_activated_this_turn) { return true; }
-        // The PermAbilityMode sinks (the ModeSpec table in CollectActions).
-        struct ModeCost { PermAbilityMode mode; const std::optional<ManaCost>* cost; };
-        const ModeCost modes[] = {
-            { PermAbilityMode::TapDamage,      &pp.tap_damage_cost         },
-            { PermAbilityMode::TapInvestigate, &pp.tap_investigate_cost    },
-            { PermAbilityMode::TapDraw,        &pp.tap_draw_cost           },
-            { PermAbilityMode::SacDraw,        &pp.sac_draw_cost           },
-            { PermAbilityMode::Drain,          &pp.drain_cost              },
-            { PermAbilityMode::ExileTop,       &pp.exile_opponent_top_cost },
-            { PermAbilityMode::IceCounter,     &pp.ice_counter_cost        },
-            { PermAbilityMode::GrantLifelink,  &pp.lifelink_grant_cost     },
-        };
-        for (const ModeCost& m : modes)
+        if (p.controller_index != ctrl || p.card.m_number == 0) { continue; }
+        // =0 restores the pre-2026-09-19 proxy: only a permanent the plan itself put onto the
+        // battlefield is considered. Under the delta rule this filter is exactly what has to go --
+        // an ability can become activatable on a permanent that has sat there for turns.
+        if (!delta && !p.entered_this_turn) { continue; }
+        keys.clear();
+        CollectActivationKeys(state, ctrl, p, total_cache, keys);
+        for (const uint64_t k : keys)
         {
-            if (!m.cost->has_value()) { continue; }
-            if (PermAbilityTaps(m.mode) && (p.tapped || !p.CanTap())) { continue; }
-            if (affordable(*m.cost, p.card)) { return true; }
-        }
-        // Spore outlet (the Thallid family): the cost is COUNTERS, not mana, so it is not in the
-        // ModeSpec table above (which is keyed on an optional<ManaCost>) and `affordable` has
-        // nothing to say about it. It taps nothing and sacrifices nothing, so a summoning-sick or
-        // already-tapped body still qualifies -- the only gate is the counter supply.
-        if (pp.spore_saproling_cost > 0 && p.spore_counters >= pp.spore_saproling_cost)
-        { return true; }
-        if (affordable(pp.blink_cost, p.card))     { return true; }
-        if (affordable(pp.team_pump_cost, p.card)) { return true; }
-        if (pp.pod_mv_delta != 0 && (!pp.pod_taps || (!p.tapped && p.CanTap()))
-            && affordable(pp.pod_activation_cost, p.card)) { return true; }
-        if (pp.sac_creature_outlet && (!pp.sac_creature_cost.has_value()
-                                       || affordable(pp.sac_creature_cost, p.card)))
-        {
-            if (!pp.sac_outlet_self_only) { return true; }
-            if (SelfSacHasDeathPayoff(state, ctrl, p.card.m_number)) { return true; }
+            if (!std::binary_search(pre_plan_keys.begin(), pre_plan_keys.end(), k))
+            { return true; }   // activatable NOW, and it was not when the plan started
         }
     }
     return false;
@@ -23613,7 +23715,7 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
     int opp_idx = 1 - state.active_player_index;
     // BREAKPOINT SITE 9 input: the permanents this plan STARTS from (empty when the class is off).
     // Lockstep twin: AIEngine::TakeTurn captures the same set at its entry.
-    const std::vector<int> pre_plan_numbers = TurnSolver::OwnPermanentNumbers(state);
+    const std::vector<uint64_t> pre_plan_keys = TurnSolver::SnapshotActivatableAbilities(state);
 
     // ORDER-CONDEMNATION stamp (rollout/interior half of the lockstep pair -- see
     // GameState::m1_hand): the pre-combat apply IS this projected turn's m1 decision point, so
@@ -27395,7 +27497,7 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
     // ordering constraint and survives only because Melira mixes no classes; site 9 is engine-wide
     // and cannot rely on that, so it stands down behind any earlier occurrence, in both worlds.
     if (!s_human_play && plan.bp_choice >= 0 && bp_seen == 0
-        && TurnSolver::PostEntryActivationPending(state, pre_plan_numbers))
+        && TurnSolver::PostEntryActivationPending(state, pre_plan_keys))
     {
         TurnSolver::Plan extra;
         if (bp_searched_plan(9, extra))

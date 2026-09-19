@@ -74,7 +74,67 @@ comparison is decided.
 `EnterHand()` helper exists. That absence is the mechanical reason the taxonomy drifts, and closing
 it is most of the fix.
 
-## Proposed shape
+## THE RULE, 2026-09-19 (USER) -- this SUPERSEDES the "Proposed shape" below
+
+> **USER:** *"So that way there is no question about when the breakpoints should open.
+> It is exactly when there are NEW OPTIONS TO CONSIDER."*
+
+and, spelling out what "new options" means: *"that means either hand status or ability status has
+changed"*, where *"ability status meaning we have a new ability we can activate **that we could not
+before**."*
+
+That last clause is the whole specification in four words -- **that we could not before**. It makes
+the test a DELTA, never a property of a card or an event, which is why it cannot drift.
+
+Everything below is its mechanics. Note what it buys beyond
+correctness: the arming question stops being a judgment call per card class, so there is nothing
+left to get wrong as cards are added -- which is precisely the failure mode the audit above
+documents ten times over.
+
+**USER, verbatim:** *"I would actually like to change our approach for breakpoints to be 100%
+general:*
+
+1. *Hand or staged cards changed.*
+2. *New ability can be activated.*
+
+*So 2 would not trigger for Thallid because it has no counters or a tap ability on a creature
+without haste because those cannot be activated. On the other hand if you say cast a spell that
+added the spore counters or gave the creature with the tap ability haste the breakpoint would
+open."*
+
+**Read condition 2 carefully, because it is not what the engine implements today and the difference
+is the whole point. It is keyed on the ABILITY BECOMING ACTIVATABLE, not on a permanent entering.**
+The two come apart in both directions, and today's site 9 is wrong in both:
+
+| situation | today (site 9: entered_this_turn + has-an-activation) | the rule |
+|---|---|---|
+| cast Utopia Mycon, no Saproling on board | **ARMS** (no victim test -- see the over-arm section) | no arm: not activatable |
+| cast a plain Thallid (0 spore counters) | no arm (spore counters correctly checked) | no arm -- agrees |
+| a Sporesower trigger takes a Thallid to 3 counters | **NO ARM** -- nothing entered | **ARM**: the spore ability just became activatable |
+| a haste grant lands on a creature with a {T} ability | **NO ARM** -- nothing entered | **ARM**: the {T} ability just became activatable |
+| Psychotrope saccing a Saproling to draw, later turn | **NO ARM** (see the Fungus section) | **ARM** by condition 1: a card entered hand |
+
+So the rule is a **state-delta over the LEGAL ACTION SET**, and both of its conditions are the same
+shape: *a new option appeared that the plan was not chosen against*. Condition 1 is new options in
+hand; condition 2 is new options on the battlefield. `entered_this_turn` is merely one CAUSE of
+condition 2, and keying on the cause is exactly the taxonomy-drift defect this whole document is
+about -- the engine has simply been making the same mistake one zone over.
+
+**The natural implementation, and it is condemnation's mirror image.** A plan is chosen against the
+set of actions available at that moment. Condemnation asks *"what was in that set and was declined?"*
+Condition 2 asks *"what is in the set now that was never in it?"* -- so the same snapshot serves
+both, and `PostEntryActivationPending` generalises by DROPPING its `entered_this_turn` filter and
+comparing against that snapshot instead of against entry. That also deletes the missing-victim bug
+rather than patching it: an ability with no legal victim was never in the new set to begin with.
+
+**Cost is the open question, and the USER has already supplied the answer's shape** (*"Activated
+ability breakpoints could potentially be pruned by a provider heuristic"*): the engine computes the
+delta generically and a provider may decline a class it has measured as worthless. Size the delta
+computation before assuming it is affordable -- recomputing the activatable set after every state
+change is the naive reading and is certainly too expensive; the snapshot-diff above is the cheap one
+because it only has to run where a breakpoint would be considered anyway.
+
+## Proposed shape (2026-08-25 -- superseded in part by the rule above; steps 1 and 3 still stand)
 
 1. Introduce one `EnterHand(state, controller, card, Reason)` choke point and route all 30 sites
    through it. Mechanical, individually reviewable, byte-identical on its own.
@@ -96,3 +156,191 @@ it is most of the fix.
 * **The log reporter has the same blind spot.** `GameEngine::ResolveStack`'s draw reporter is
   param-keyed too, so `drawn_card_used.py` reads 0 mid-main draws on Goblins even though the deck
   tutors. Fixing the arming without fixing the reporter leaves the census unable to confirm it.
+
+## 2026-09-19 -- THE RULING RESTATED, PLUS THE COST ANSWER THIS DOC WAS MISSING
+
+**USER, 2026-09-19:** *"I do want all draw or put-in-hand effects to create a breakpoint."* Same
+direction as the 2026-08-25 steer above, now stated without the hedge. And the refinement that
+answers this doc's own main objection:
+
+**USER:** *"Activated ability breakpoints could potentially be pruned by a provider heuristic to say
+'you don't need a breakpoint here'."*
+
+That is the split the repo already runs everywhere else, applied to arming: **the ENGINE arms on the
+EFFECT (a card entered hand -- generic, complete, cannot drift as cards are added), and the PROVIDER
+prunes the ones this deck does not need (per-deck, reviewable, and the only place a
+cost/quality judgment is allowed to live).** It dissolves the "Cost" bullet above: arming
+generically is no longer a bet that every new arming pays for itself, because a deck that measures a
+class as worthless can decline it by NAME of the class rather than by the engine forgetting to arm.
+Note the asymmetry that makes this safe in the direction the no-lossy bar cares about -- a missing
+ARM is unreachable at any budget and silent, while an unhelpful arm is only cost.
+
+### The live instance that prompted it: Fungus / Psychotrope Thallid
+
+Psychotrope Thallid is `{1}, Sacrifice a Saproling: Draw a card` (`sac_creature_outlet` +
+`sac_outlet_draw`). It is the deck's ONLY draw. **It opens no breakpoint on any turn but the one it
+enters**, measured 2026-09-19:
+
+* `MTG_BP_PROBE=1`, 12 games, seed 70900: **104,036 breakpoint continuation enumerations**, and
+  `MTG_BP_SITES=0` leaves that count **byte-identical** -- so every one comes from an UNCONDITIONAL
+  site (8 or 9). The deck holds no snow card, so all of it is **site 9, post-entry activation**.
+* Site 9 requires `entered_this_turn`, so it fires on the turn Utopia Mycon / Psychotrope is CAST
+  and never again. The sac-for-draw itself is not a breakpoint class at all: `sac_outlet_draw`
+  appears exactly ONCE in `TurnSolver.cpp` (line ~16689, a damage-bound term) and nowhere in the
+  breakpoint code. Psychotrope is modelled via `sac_creature_outlet`, so it does not even reach
+  `PermAbilityMode::SacDraw` (which is keyed on `sac_draw_cost`).
+* The only ACTIVATED-draw class is site 8, narrowly keyed on the snow `tap_draw_cost` (Scrying
+  Sheets / Frost Augur). It is the exact template for the generalisation -- including the part only
+  that route knows, `site_activated=true` (`TurnSolver.cpp` ~26500), and the lockstep warning beside
+  it: the EXECUTOR twin must bind the same `CantripOrderScope` or played != scored.
+
+**Why it matters here specifically (USER):** *"That is the primary thing that condemnation helps
+with, since it avoids reconsidering cards. That won't help for a lot of normal games, but it could
+be quite useful on the ones where we have a lot of mana, Psychotrope and Saprolings."* That board is
+the expensive-node shape in the Fungus phase-A tail (see `fungus-token-search-cost.md`), so the
+missing class and the label cost tail are the same problem seen from two ends.
+
+### The OPPOSITE defect, found in the same pass: site 9 arms when the ability cannot be activated
+
+Worth fixing alongside, because it is the same "judge the effect, not the card" error pointing the
+other way -- an OVER-arm rather than a missing one.
+
+`TurnSolver::PostEntryActivationPending` (~10265) accepts a sac outlet on the mana cost alone:
+
+```cpp
+if (pp.sac_creature_outlet && (!pp.sac_creature_cost.has_value()
+                               || affordable(pp.sac_creature_cost, p.card)))
+{ if (!pp.sac_outlet_self_only) { return true; } ... }
+```
+
+It never consults `sac_creature_requires_subtype` and never checks that a legal victim EXISTS.
+**Utopia Mycon has no mana cost**, so `!has_value()` makes this unconditionally true the turn it
+enters -- and Mycon is a 4-of at mv 1, normally cast well before any Saproling exists (spore
+counters need three upkeeps). So the deck arms a breakpoint for an ability that provably cannot be
+activated, repeatedly, on the cheapest and most-cast card in the list.
+
+The fix is already written: `CanonicalSacVictim` (`SpellEffects.h` ~7393) resolves a legal victim
+honouring `need_sub`, and is called from `TurnSolver.cpp` ~16625 and `DecisionProviders.cpp` ~20218
+-- just not from this gate. Same class as the recorded lesson that a gate must judge the object the
+decision CONSUMES, not the outlet that offers it.
+
+**NOT YET MEASURED**: the above is read from the code plus the deck's card data. Before fixing,
+count how many site-9 arms have no legal victim (a counter at the gate, over the suite), so the size
+of the over-arm is a number rather than an argument -- the same discipline the "Size the hole first"
+bullet asks for in the other direction.
+
+### ...and the CORRECT pattern is already in this function, four lines earlier
+
+**USER, 2026-09-19**, giving the prune's motivating case: *"breakpoints after playing a Thallid
+wouldn't be necessary, since activating it is not possible."* Exactly right -- a freshly-cast
+Thallid has ZERO spore counters and cannot pay the 3-counter cost, so arming there is pure cost.
+
+**The engine already does this correctly for the spore ability, and the two clauses are adjacent:**
+
+```cpp
+// Spore outlet (the Thallid family): the cost is COUNTERS, not mana ...      <- CORRECT: checks supply
+if (pp.spore_saproling_cost > 0 && p.spore_counters >= pp.spore_saproling_cost) { return true; }
+...
+if (pp.sac_creature_outlet && (!pp.sac_creature_cost.has_value()             <- BROKEN: no victim test
+                               || affordable(pp.sac_creature_cost, p.card))) { ... return true; }
+```
+
+`CardHasPostEntryActivation` likewise omits `spore_saproling_cost` from the wave-0 fan-out, so a
+plain Thallid never fans out either. Both halves of the spore path are right.
+
+**So for THIS deck the prune the user describes needs no provider hook at all -- it is the engine's
+own affordability gate, applied to the sac outlet with the same rigour it already applies to the
+spore counters.** That is the cheaper and more general fix, and it should be tried FIRST: a provider
+hook that declined the Mycon arm would be a per-deck patch over a generic gate that is simply
+incomplete. Reserve `ProviderPrunesBreakpointAt(...)` for the case that survives a correct
+affordability test -- an arming that IS legal but that a deck knows is not worth re-solving for.
+
+## 2026-09-19 -- HALF 2 IS IMPLEMENTED AND DEFAULT ON (`MTG_BP_ABILITY_DELTA`)
+
+**Status change: the ABILITY half of the user's rule is built, gated, and shipping ON.** The HAND
+half is separately live as of the same day, from the other work stream: site 10 (`put_in_hand`,
+`MTG_BP_PUT_IN_HAND`) went DEFAULT ON at USER direction 2026-09-18 -- *"We do need to open the
+breakpoints regardless. Then the idea is to see whether condemnation can help at all."* So both
+conditions of *"1. Hand or staged cards changed. 2. New ability can be activated"* now have an
+engine implementation. What remains open is condemnation, not the rule.
+
+### What changed
+
+`TurnSolver::PostEntryActivationPending` no longer asks *"did a permanent enter this turn?"*. It
+asks the user's question directly: **is an ability activatable NOW that was not activatable when the
+plan started?**
+
+* `OwnPermanentNumbers` (a list of card numbers) became
+  `SnapshotActivatableAbilities` (a sorted list of one key per ACTIVATABLE ABILITY).
+* Both the snapshot and the gate build their keys through **one shared enumerator**,
+  `CollectActivationKeys`. This is the load-bearing detail: with two copies, an ability could look
+  "new" because the two sides asked different questions rather than because anything changed. Same
+  reasoning as `deferred_site_index` being a single lambda.
+* `entered_this_turn` is simply dropped. The proxy is subsumed -- a permanent the plan cast has no
+  keys in the snapshot, so all of its keys are new.
+* `MTG_BP_ABILITY_DELTA=0` restores the old proxy exactly (and with it, the victim bug, deliberately
+  -- the hatch has to be a byte-exact revert to be worth having). Routed through the `heurarm` slot
+  `BP_ABILITY_DELTA` so both arms fit ONE pooled batch instead of a forbidden per-arm wave.
+
+### Why a DECLINED activation still cannot be re-opened
+
+This was the property the `entered_this_turn` filter existed to protect -- the first smoke of site 9
+re-fired on a walker cast the turn before, and the greedy continuation overrode the plan's own
+loyalty choice. The delta rule protects it **structurally rather than incidentally**: an activation
+the plan declined was activatable at plan start, so its key is in the snapshot, so it is not new, so
+it does not arm. The guarantee is strictly stronger than the proxy's.
+
+### Measured (Fungus, 12 games, seed 70900, `MTG_BP_PROBE=1`)
+
+| `MTG_BP_ABILITY_DELTA` | BP continuation enums | avg turns |
+|---|---|---|
+| `0` (entered-this-turn proxy) | 104,036 | 5.4167 |
+| `1` (delta rule) | **47,132** | 5.4167 |
+
+**A 55% cut in breakpoint work at identical play.** The removed 57k were overwhelmingly the
+over-arm this doc documents above: Utopia Mycon cast with no Saproling to sacrifice. Fixing the gate
+to ask whether a legal victim exists (`CanonicalSacVictim`, the function this doc already named)
+removes them at the source. Gates: scenarios 103/0; **smoke ALL PASS 83/0/0-new with
+`play-changed=0` and GT unchanged**, so the saving is pure cost reclamation, not a behaviour swap.
+
+**This is the strongest available evidence for the USER's 2026-09-19 remark** that *"realistically we
+may not need condemnation if we do the change for the ability breakpoints"*. Condemnation prunes
+breakpoints AFTER opening them; the delta rule declines to open the junk ones at all, and on this
+deck that is worth more than condemnation has ever been measured to be worth anywhere (see
+`breakpoint-condemnation-status.md`, whose reach/yield/reinvestment ceiling section bounds the
+filter's best case well under this).
+
+### HONEST GAP: the ADDITIVE half is implemented but NOT yet demonstrated
+
+Every deck probed so far shows the delta rule **only ever removing arms**, never adding one:
+
+| deck | delta=1 | delta=0 |
+|---|---|---|
+| Fungus | 47,132 | 104,036 |
+| Melira Pod | 11,289 | 12,332 |
+| KittyEquipment | 22,341 | 22,341 |
+| Dragons | 4 | 4 |
+
+The additive cases -- a Sporesower trigger taking a resident Thallid to its third counter, a haste
+grant landing on a {T} ability -- are what motivated the rule, and **none of them fired in these
+samples.** There is a structural reason to expect them to be rare rather than absent: mana
+availability generally *decreases* across a plan (the snapshot is taken with lands untapped), and
+spore counters move at UPKEEP, outside any plan apply. So the common "an ability became affordable"
+direction mostly cannot happen mid-plan.
+
+**Do not record the additive half as working on the strength of the cost win, which is entirely the
+subtractive half.** It needs a scenario that constructs the case directly -- a resident creature
+with a {T} ability plus a haste grant cast in the same plan is the cheapest one, and
+`tap_ability_self_funding_payable` is the nearest existing scenario to model it on. Until that
+exists this is *reasoned, not measured*.
+
+### Still open after this
+
+* **Condemnation on Fungus is still 0.0%** -- `MTG_BP_CLASSIFY` is default OFF, which is the whole
+  reason, and flipping it globally is the live USER call in `breakpoint-condemnation-status.md`.
+* **Fungus is not in the regression suite**, so neither smoke nor regression covers its play. Its
+  only signals are the probe above and the 7 references (2 of which carry PRE-EXISTING play-drift).
+* The site-10 hand half and this ability half are now two separate arming sites answering one rule.
+  Worth asking later whether they should be one site; they are numbered separately today because
+  `BpSiteMask` is simultaneously searchability AND `bp_at` numbering, and renumbering breaks the
+  apply/executor lockstep.
