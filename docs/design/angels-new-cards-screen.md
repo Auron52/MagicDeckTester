@@ -1095,6 +1095,138 @@ been written to `decks/`. An adopted combination owes:
 4. Archival of the predecessor per CLAUDE.md (`decks/Angels/v1-<slug>/`, and its `references/` move
    with it).
 
+## 2026-09-19: the apparatus was rebuilt, and it overturned two published answers
+
+Everything above this heading was measured on `alias/`, the shipped keep table. That table asserts
+two false equivalences — Lightstall Inquisitor bucketed with a never-cast Swords to Plowshares, and
+Lyra Archangel of Dawn (3 mana) bucketed with Archangel of Thune (5 mana) — and it is stale
+(`15ae9593`, before the duplicate-legend prune fix). **Treat every number above as provisional.**
+
+### What the bias brackets measured
+
+`--with-floor U,d1_li3,p13_yv2` with `bracket: generate`, run once at 20 life and once at 2HG, each
+arm getting its own R=10 table so the shared-vs-own gap *is* the bias:
+
+| arm | own table vs shared, 1v1 | 2HG |
+|---|---|---|
+| base (incumbent) | +0.008 | +0.008 |
+| `d1_li3` (Lightstall 3) | −0.157 | −0.104 |
+| `p13_yv2` (21 lands) | −0.179 | −0.127 |
+| `U` (Lightstall 4) | −0.182 | −0.124 |
+
+The incumbent is the deck that table was fit to, so it is unbiased; every new-cards arm pays ~0.12–0.18t.
+**The bias runs AGAINST the new list, so the headline win over the incumbent is a lower bound**
+(−0.37t shared, −0.56t under own tables). More usefully, it is **not equal across arms**: the shared
+table penalises the 4-Lightstall build by **0.025t (1v1) and 0.020t (2HG) more** than the
+3-Lightstall build. That is why Lightstall kept reading as "surprisingly only 3" — replicated in
+both formats, same sign, near-same size.
+
+### The replacement apparatus, and the mistake that produced two of them
+
+`logs/angels_x/` — R=40, **K=16, 123,018 cells, commit `eb7140e0`**, Lightstall and Thune in
+singleton buckets. `mullgen.sh run` VALIDATION PASSED: keep **−0.2095t**, confounded bottoming
+**−0.0954t**, 16/16 seeds each. Staged for screening as `newtable_x/Angels.*`.
+
+Its predecessor `angels_w` was built for **bucket** coverage — "every candidate at >= 1 copy" — and
+that is the wrong criterion. A bucket's enumerated max is `min(generating count, 7)`, so a 1-of
+enumerates to max 1 and **any arm playing 2 copies falls through on 1.19% of hands**, over the 1.00%
+limit, at which point the driver drops the table from *every* arm. Ten of screen 16's fifteen arms
+tripped it. The fix is **count** coverage: 2 copies of each former singleton (covers arms up to 4 at
+<= 0.388%), the never-varying 4-ofs capped at 3 (0.007% each), and the cards that frees spent on the
+mana base so the generating list sits at **22 lands — the middle of the 21–24 span the screen walks**,
+because the table's rollouts draw from that library. Worst arm: 0.124%.
+
+Two traps this exposed, both of which silently produce a wrong run rather than an error:
+* **`--preflight`'s fall-through % is wrong whenever the table was not built on the spec's `base`** —
+  it computes `enum_cells` against the base deck, so a valid table reads as 65–81%. Check the table's
+  own `entries[].comp` maxima.
+* **`deck_compare.py:1111` refuses outright** if the table was generated on a different list than
+  `base`. Fix: make the generating list the spec's `base` (it is a real 60-card list) and give every
+  arm a FULL composition. **Do not reach for `pool_table`** — it builds a union *deck*, which is a
+  banned artifact in this repo.
+
+### Screen 16 — the single-donor ladder
+
+Twenty-four arms, seed 2600000, base `angels_x`. Ten of them sit at 24 lands and are each "the
+user's list minus exactly one card, the slot going to a Plains", so comparing two of them asks
+exactly one question. Late-weighted worth of the marginal copy, measured *over a card the sim never
+casts*:
+
+| marginal copy | worth | | marginal copy | worth |
+|---|---|---|---|---|
+| Righteous Valkyrie 4th | 0.0934 | | Youthful Valkyrie 1st | 0.0416 |
+| Seraph Sanctuary 4th | 0.0817 | | Resplendent Angel 4th | 0.0380 |
+| Lyra ArchDawn 4th | 0.0774 | | Serra 2nd | 0.0305 |
+| Lightstall Inquisitor 4th | 0.0678 | | Legion Angel | 0.0301 |
+| Giada 4th | 0.0545 | | **Bishop of Wings 4th** | **0.0299** |
+| | | | Unexpectedly Absent 3rd | 0.0000 **[FLOOR]** |
+
+**The ladder ranks but cannot prescribe** — every arm sent its slot to a 24th land, and 24 lands is
+itself worse than 23, so all arms carry that penalty equally.
+
+Three results overturned:
+1. **Giada reversed.** Screen 15: 4th Giada beat 4th Lightstall by +0.0350. Screen 16: **−0.0097
+   (t −2.8) at 40 life, −0.0256 (t −9.9) at 20**. The 4th Lyra ArchDawn survived (+0.0161, t +4.5 at
+   40 life) at half the old margin, flipping sign at 20 life. "The legend 4-ofs are confirmed" now
+   holds for **Lyra ArchDawn only**.
+2. **The land ladder was never monotone.** 24 is worse than 23 (+0.0071, t +3.5); 21 is worse than 22
+   (t +2.8..+7.9, both absorbers). 22-vs-23 depends on which card takes the slot. So: **22 or 23**.
+3. **The cards nobody revisited are the weakest.** Bishop of Wings' and Resplendent Angel's 4th
+   copies sit below the 4th Lightstall (t −11.0 and −11.3 at 40 life), while Righteous Valkyrie is
+   the most valuable card in the deck. Each had been probed exactly once, 4→3, on the broken table,
+   in screens that predate Lightstall existing.
+
+### User decisions, 2026-09-19
+
+* **Legion Angel CUT.** *"It's nice and all, but not really better than Thune or ensuring we fill in
+  our curve."* Measured −0.0110t late-weighted for Legion→Thune. Note what the goldfish cannot see:
+  the wish spends 3 sideboard slots to deliver ~3 cards over a long game, so cutting it **frees the
+  sideboard** — a factor that cuts *toward* the cut, not against it.
+* **2 Archangel of Thune.** The list is now 1 Dawnbringer / 2 Thune / 4 Lyra ArchDawn / 4 Giada /
+  1 Youthful Valkyrie / 4 Lightstall / 4 Bishop / 4 Righteous Valkyrie / 4 Resplendent / 0 Legion /
+  2 Serra / 1 Sol Ring / 1 Greaves / 2 Swords / 3 Unexpectedly Absent / 15 Plains / 4 Seraph
+  Sanctuary / 4 Remote Farm = 60, 23 lands.
+
+### The user's curve argument — a bias this apparatus cannot price
+
+> *"The higher drops are a bit underrated in our analysis because we can potentially fill in the
+> 2-drop slot with an Unexpectedly Absent."*
+
+Confirmed in the card data: Unexpectedly Absent is `{X}{W}{W}` and **the pruned search casts it at
+X=0 only**, so it *is* a 2-mana spell. The search declines it because tucking a token that ceases on
+leaving the battlefield does nothing to a passive opponent's clock — not because it is uncastable.
+
+| cmc | real play | what the sim sees |
+|---|---|---|
+| 1 | 7 | 5 |
+| 2 | 13 | 10 |
+| 3 | 12 | 12 |
+| 4 | 2 | 2 |
+| 5 | 3 | 3 |
+
+So cheap cards are over-rewarded for filling a hole that is not there, and high drops are
+under-rated. This is why the Legion slot went to Thune (−0.0110t) over the 2nd Youthful Valkyrie
+(−0.0130t) despite the sim's ranking: a 0.002t gap sits well inside the distortion.
+
+## Open, in priority order
+
+1. **Screen 17** (`spec17_rebuild_bottom.json`, seed 2700000) — spends the cheap slots on the
+   absorbers that won. Includes the decided list as `s_leg0_t2`.
+2. **Verify the Giada reversal** (user: *"I guess we should verify that"*). Screen 16 put the 4th
+   Giada below the 4th Lightstall, reversing screen 15. Under the curve argument the natural home for
+   that slot is a **3rd Thune or 2nd Dawnbringer**, not anything cheap — untested.
+3. **Direct cast-count probe on Unexpectedly Absent**, to turn "never cast" from inference into
+   measurement. If it is truly 0-for-N then 3 of 37 spells are invisible to every number here.
+4. **The World A/B curve diagnostic** — identical cheap-for-expensive swaps measured with the 2-slot
+   empty (UA 3, YV 1) and full (UA 0, YV 4), differenced. World B is an **instrument, never a
+   candidate**: the user ruled the removal stays.
+5. **`--confirm` on a disjoint block** before any adoption. Selection bias now compounds — screen 16
+   chose screen 17's arms.
+6. **Audit the value leaf**, the only un-checked half of the apparatus. 120 trees on 19 generic board
+   features (no card names, so no new-card blind spot), but fit on the incumbent at `6ab282ad`, and
+   **26 splits key on `src_u`** — blue sources, i.e. the Azorius Chancery this list cuts to zero.
+   Cheap audit: re-measure the pivotal comparisons with `leaf: none` and see if the ranking survives.
+
 ## Related
 
 * `.claude/skills/deck-screening.md` — the per-combination loop and the alias route.
