@@ -1,7 +1,9 @@
 # Auras loses a turn to the put-in-hand class, and no budget buys it back
 
-**Status:** gi20 FIXED (`e927240a`); **gi428 still open, and it is a DIFFERENT bug IN A DIFFERENT
-LAYER** -- an executor fix cannot touch it. Post-fix tiers: smoke **4 better / 0 worse**,
+**Status:** gi20 FIXED (`e927240a`); **gi428 still open.** It is a DIFFERENT bug from gi20, but
+probably the SAME FAMILY: a plan/apply mismatch. It is not reached by gi20's record/replay fix, and
+it is invisible to `[fd-diverge]` because that oracle watches only the commit-the-line executor
+boundary, not `apply_one`. Post-fix tiers: smoke **4 better / 0 worse**,
 regression **23 better / 3 worse** (3 = `hinata gi103` churn + gi428 counted at d3 and d5).
 
 The put-in-hand class was not the cause OF gi20 -- for that game it is strictly additive at the
@@ -17,9 +19,9 @@ searched, Branchloft `{G}` replayed, the recorded `Hyena Umbra {W}` stranded in 
 kill lost. Fixed by carrying the triple through the record/replay boundary; gi20 is now T4 in all
 20 ladder cells.
 
-**gi428 is unchanged by that fix and never emitted `[fd-diverge]`** -- and it is not an executor
-bug at all. It is a SEARCH-layer loss; see "gi428 IS A DIFFERENT LAYER" at the bottom, which also
-retracts two claims made about it above. The sections below were written before the fix and
+**gi428 is unchanged by that fix and never emitted `[fd-diverge]`.** Read the bottom sections for
+its verdict; they also RETRACT three claims made about it (including one this file itself committed:
+that its certificate proves an enumerator-level loss). The sections below were written before the fix and
 describe the shared investigation; read them for method, not for gi428's verdict.
 
 **Found:** 2026-09-19, while running the pre-push gate for the breakpoint-condemnation branch.
@@ -95,9 +97,9 @@ answer:
 ### The position admits T4 with the class OPEN (gi20 ONLY -- gi428 does NOT do this)
 
 **Scope warning.** Everything in this subsection is a gi20 measurement. gi428 behaves the OPPOSITE
-way on the same instrument -- its certificate moves 4 -> 5 when the class opens -- and that contrast
-is the whole reason the two games are different bugs. See "THE CERTIFICATE MOVES" below before
-reusing anything here for gi428.
+way on the same instrument -- its certificate moves 4 -> 5 when the class opens. That separates the
+two games, but do NOT read it as proving a different LAYER: the certificate is simulated play, not a
+position invariant. See "THE CERTIFICATE MOVES" below before reusing anything here for gi428.
 
 `MTG_DUMP_EWINS` / `MTG_DUMP_EWINS_TURN` certify the earliest win from a given turn. On gi20, at
 **turn 1, turn 2 and turn 3 — the turn the two lines diverge — both arms report `"earliest":4`**,
