@@ -7,7 +7,9 @@ regression **23 better / 3 worse** (3 = `hinata gi103` churn + gi428 counted at 
 The put-in-hand class was not the cause OF gi20 -- for that game it is strictly additive at the
 search level (`MTG_LEGACY_SEARCH=1` finds T4 with the class ON); it merely selected a line that
 exposed an executor defect. **That sentence does NOT generalise to gi428**, where the class costs
-the legacy search a turn too; see the bottom section. That defect: `bp_play_searched_land` played a continuation's land with the plan's
+the legacy search a turn too; see the bottom section.
+
+gi20's defect: `bp_play_searched_land` played a continuation's land with the plan's
 full triple (`fetch_target`, `land_face`, `rad_mode`) but recorded only `card_name`, and
 `replay_recorded` replayed it as `TryPlaySpecificLand(state, a.card_name)` -- front face, no fetch
 target. The searched land and the replayed land were different lands. gi20: Boulderloft `{W}`
@@ -90,11 +92,16 @@ answer:
   Harvest counts describe how much tree got walked; they do not say what was on offer at a node.
   Reading one as the other is what produced the retracted "it is a PRUNE" verdict.
 
-### The position admits T4 with the class OPEN
+### The position admits T4 with the class OPEN (gi20 ONLY -- gi428 does NOT do this)
 
-`MTG_DUMP_EWINS` / `MTG_DUMP_EWINS_TURN` certify the earliest win from a given turn. At **turn 1,
-turn 2 and turn 3 — the turn the two lines diverge — both arms report `"earliest":4`**, byte
-identical. So the T4 win is not something the class destroyed by reshuffling the game into a
+**Scope warning.** Everything in this subsection is a gi20 measurement. gi428 behaves the OPPOSITE
+way on the same instrument -- its certificate moves 4 -> 5 when the class opens -- and that contrast
+is the whole reason the two games are different bugs. See "THE CERTIFICATE MOVES" below before
+reusing anything here for gi428.
+
+`MTG_DUMP_EWINS` / `MTG_DUMP_EWINS_TURN` certify the earliest win from a given turn. On gi20, at
+**turn 1, turn 2 and turn 3 — the turn the two lines diverge — both arms report `"earliest":4`**,
+byte identical. So the T4 win is not something the class destroyed by reshuffling the game into a
 different physical shape; it is still there in the class-open world at the decision point.
 
 Be careful with that instrument: `EnumerateEarliestWins` is the clairvoyant LABEL path, and this
