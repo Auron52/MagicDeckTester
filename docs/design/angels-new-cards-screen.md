@@ -1244,6 +1244,40 @@ empty 2-slot inflates, so it should be discounted further, not acted on.
 **The 22-land arms did not win.** `s_leg0_b3_yv3_t2_p14` (−0.0116) sits behind its 23-land twin
 (−0.0132). Combined with screen 16, **23 lands** is the better-supported number.
 
+## THE DECIDED LIST (user, 2026-09-19) — authorised for adoption
+
+```
+ 1 Lyra Dawnbringer          5   user: ">= 1 curve topper"
+ 2 Archangel of Thune        5   USER DECIDED — took Legion Angel's slot
+ 4 Lyra, Archangel of Dawn   3   4-of SURVIVED the corrected apparatus (+0.0161, t +4.5 @40)
+ 4 Giada, Font of Hope       2   4th copy under verification (screen 18)
+ 1 Youthful Valkyrie         2
+ 4 Lightstall Inquisitor     1   user, over 3 — the old table was suppressing it by 0.02-0.025t
+ 4 Bishop of Wings           2   USER RULING — overrides every arm that cut it
+ 4 Righteous Valkyrie        3   measured the most valuable card in the deck
+ 4 Resplendent Angel         3
+ 2 Serra the Benevolent      4   user: keep as a late-game engine
+ 1 Sol Ring                  1
+ 1 Lightning Greaves         2
+ 2 Swords to Plowshares      1   user: "the rest of the removal should remain"
+ 3 Unexpectedly Absent       2   user: removal stays  (never cast in this sim — see the curve note)
+15 Plains / 4 Seraph Sanctuary / 4 Remote Farm      = 23 lands
+                                                    = 60 cards
+SIDEBOARD: EMPTY. Cutting the maindeck Legion Angel left the three sided copies with no fetcher
+(wish_requires_name), so they came out with it. All 15 slots are free.
+```
+
+Curve **7/13/12/2/3** in real play against **5/10/12/2/3** as the sim sees it.
+
+**Adoption was authorised by the user on 2026-09-19** (*"finish adopting the decided list overnight
+if you don't find an obviously better alternative"*), against a bar fixed before screen 18 was read:
+an alternative substitutes only if it beats the decided list on **all three** formats, survives a
+held-out `--confirm`, and violates **none** of the user's constraints. Short of all three, the
+decided list is adopted and the alternative is reported, not acted on — because three separate times
+in this campaign the sim's "better" list was one that cut a card the user then showed it
+structurally cannot see (Bishop's defensive life, Legion Angel's sideboard access, the never-cast
+removal).
+
 ## Open, in priority order
 
 1. **Screen 17** (`spec17_rebuild_bottom.json`, seed 2700000) — spends the cheap slots on the
