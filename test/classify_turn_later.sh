@@ -32,8 +32,16 @@ case "$MODE" in
   *) echo "usage: classify_turn_later.sh <smoke|regression|overnight>" >&2; exit 2 ;;
 esac
 
-BIN=./build/Release/mtg.exe; [ -f "$BIN" ] || BIN=./build/Release/mtg
-[ -f "$BIN" ] || { echo "ERROR: $BIN not found -- build first (cmake --build build --config Release)." >&2; exit 1; }
+# Resolve the binary through the SHARED resolver, exactly as regression.sh does -- this script is
+# part of that suite's pre-accept gate, so it must classify under the SAME binary the run it is
+# classifying used. It previously hand-rolled the lookup and so could only ever read
+# ./build/Release/mtg; when that tree was pinned to a different commit (a long batch holding it, a
+# worktree A/B, a bisect) the classifier silently graded the wrong engine and reported churn-vs-
+# persists for a binary nobody ran. harness_bin() also honours MTG_BIN, which is the documented way
+# to point the suite at a worktree build.
+# shellcheck source=lib/harness.sh
+. "$HERE/lib/harness.sh"
+BIN=$(harness_bin) || exit 1
 
 # shellcheck source=regression_cases.sh
 source "$HERE/regression_cases.sh"
