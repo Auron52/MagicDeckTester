@@ -1,28 +1,62 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <cockatrice_deck version="1">
-    <deckname></deckname>
-    <comments></comments>
+    <deckname>Angels</deckname>
+    <comments>Mono-white Angels tribal. 60 cards, 23 lands, empty sideboard.
+
+ADOPTED 2026-09-19 after an 18-screen settling campaign (docs/design/angels-new-cards-screen.md).
+The predecessor is archived at decks/Angels/v1-thune4-chancery/ and its 11 hand-played reference
+games moved with it to references/Angels/v1-thune4-chancery/ -- a reference belongs to the list it
+was played on.
+
+WHAT CHANGED FROM v1, and who decided each:
+  + 4 Lyra, Archangel of Dawn   MEASURED. Its 4-of survived the corrected apparatus (+0.0161,
+                                t +4.5 at 40 life). The legend rule caps it at ONE instance on the
+                                battlefield, which is why it is not simply "more Lyra Dawnbringer".
+  + 4 Lightstall Inquisitor     MEASURED, and the single biggest reason this list beats v1.
+  + 4 Remote Farm               MEASURED, part of the 24 -> 23 land move.
+  + 4 Giada, Font of Hope       MEASURED (was 2). Verified on a held-out block in screen 18.
+    4 Righteous Valkyrie        MEASURED the most valuable card in the deck (screen 16 ladder).
+  - 1 Azorius Chancery          cut with the land restructure.
+  - 1 Legion Angel (main) and the 3 sideboard copies   USER: "It's nice and all, but not really
+                                better than Thune or ensuring we fill in our curve." Cutting the
+                                maindeck copy left the sided ones with no fetcher
+                                (wish_requires_name), so the sideboard emptied with it.
+    2 Archangel of Thune        USER (was 4): "Sounds good to me. Let's keep 2 Thune."
+    4 Bishop of Wings           USER RULING, against the screens, and correctly: "The card is a real
+                                engine and has a lot of upside that is not fully captured ... Bishop
+                                makes it very difficult to lose to Aggro and gives us a chance to
+                                reach the righteous [Valkyrie breakpoint]." Two of its three value
+                                streams are invisible here -- life as a DEFENSIVE resource is
+                                structurally zero (src/core/OpponentDeck.h:119: the opponent never
+                                takes a turn, so our life only ever goes UP), and the Spirit half
+                                never fires because nothing kills our Angels.
+    1 Youthful Valkyrie         MEASURED (was 4).
+    2 Swords to Plowshares, 3 Unexpectedly Absent, 2 Serra the Benevolent   USER.
+    1 Lyra Dawnbringer          USER floor: at least one.
+
+A NOTE ON THE CURVE, because it explains why the cheap cards measure better here than they play.
+The list is 7/13/12/2/3 by real mana cost, but the sim sees 5/10/12/2/3: Unexpectedly Absent is
+{X}{W}{W} and the pruned search casts it at X=0 only, so it IS a 2-drop in a real game, while the
+autonomous search declines it (tucking a token that ceases on leaving the battlefield does nothing
+to a passive opponent's clock). The user's framing: "The higher drops are a bit underrated in our
+analysis because we can potentially fill in the 2-drop slot with an Unexpectedly Absent."</comments>
     <zone name="main">
-        <card number="3" name="Lyra Dawnbringer"/>
-        <card number="4" name="Youthful Valkyrie"/>
-        <card number="4" name="Resplendent Angel"/>
-        <card number="19" name="Plains"/>
-        <card number="1" name="Lightning Greaves"/>
+        <card number="1" name="Lyra Dawnbringer"/>
+        <card number="2" name="Archangel of Thune"/>
+        <card number="4" name="Lyra, Archangel of Dawn"/>
+        <card number="4" name="Giada, Font of Hope"/>
+        <card number="1" name="Youthful Valkyrie"/>
+        <card number="4" name="Lightstall Inquisitor"/>
         <card number="4" name="Bishop of Wings"/>
-        <card number="1" name="Legion Angel"/>
-        <card number="4" name="Seraph Sanctuary"/>
         <card number="4" name="Righteous Valkyrie"/>
-        <card number="1" name="Sol Ring"/>
-        <card number="4" name="Archangel of Thune"/>
-        <card number="1" name="Azorius Chancery"/>
-        <card number="3" name="Swords to Plowshares"/>
-        <card number="3" name="Unexpectedly Absent"/>
+        <card number="4" name="Resplendent Angel"/>
         <card number="2" name="Serra the Benevolent"/>
-        <card number="2" name="Giada, Font of Hope"/>
-    </zone>
-    <zone name="side">
-        <card number="1" name="Lyra, Archangel of Dawn"/>
-        <card number="3" name="Legion Angel"/>
-        <card number="1" name="Lightstall Inquisitor"/>
+        <card number="1" name="Sol Ring"/>
+        <card number="1" name="Lightning Greaves"/>
+        <card number="2" name="Swords to Plowshares"/>
+        <card number="3" name="Unexpectedly Absent"/>
+        <card number="15" name="Plains"/>
+        <card number="4" name="Seraph Sanctuary"/>
+        <card number="4" name="Remote Farm"/>
     </zone>
 </cockatrice_deck>
