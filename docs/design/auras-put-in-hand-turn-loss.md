@@ -278,6 +278,49 @@ More search, at unlimited budget, considering the winning card ten times more of
 worse answer. That is not effort and not a prune: opening the class changes which lines are
 **constructible**.
 
+### THE CERTIFICATE MOVES: the class costs a win in the CLAIRVOYANT ENUMERATOR, not the search
+
+This is the sharpest result on gi428 and it reframes the bug. `MTG_DUMP_EWINS_TURN` runs
+`EnumerateEarliestWins` -- the clairvoyant LABEL path, not the play search. At **turn 1**, before
+the two arms have diverged at all (both pass, both play Horizon Canopy, identical state):
+
+| arm | earliest win from T1 | from T2 | from T3 |
+|---|---|---|---|
+| `MTG_BP_PUT_IN_HAND=0` | **4** | **4** | **4** |
+| class open | **5** | **5** | **5** |
+
+A position's earliest win cannot depend on a play-search flag. It does. **Opening the class makes a
+clairvoyant enumerator fail to find a win it otherwise finds, from an identical position.** That is
+the reachability bar failing at the ENUMERATION level, and it is why no budget, depth, width, cap or
+memo touches it -- there is no amount of effort that recovers a line the enumerator cannot express.
+
+**Contrast with gi20, which is what proves these are two different bugs.** On gi20 both arms certify
+`"earliest":4` byte-identically; the position admitted T4 with the class open and the executor threw
+it away on replay. On gi428 the certificate itself moves. Same symptom, opposite layer.
+
+**This is also the cheap repro.** The turn-1 certificate reproduces the defect without playing the
+game out, so the next investigator does not need the full five-minute unlimited-budget run:
+
+```
+MTG_DUMP_EWINS=1 MTG_DUMP_EWINS_TURN=1 build/Release/mtg decks/Auras/Auras.cod \
+  --profile decks/Auras/Auras.profile.json --games 1 --seed 2430 --game-index 428 \
+  --depth 5 --budget-ms 0 --ignore-play-profile
+# class open -> "earliest":5 ; add MTG_BP_PUT_IN_HAND=0 -> "earliest":4
+```
+
+Since search, label enumerator and executor all apply plans through the same `apply_one`, and the
+site-10 arming lives there (`TurnSolver.cpp` ~26174), the shared apply path is where to look.
+
+### Ruled out on the CERTIFICATE harness, with power checks
+
+| arm | certificate | power |
+|---|---|---|
+| `MTG_LABEL_NOWIN_CACHE=0`, `MTG_LABEL_GOFF_WIDTH=999`, `MTG_LABEL_HORIZON_WIDTH=999`, all three | 5 | **byte-identical -- NO POWER.** Not negatives. The label path's own knobs do not reach this. |
+| `MTG_CONDEMN_M1_BP=0` (default is ON -- `EnvOn(..., true)`), `MTG_CONDEMN_SEARCH=0`, `MTG_CONDEMN_ALL_TURNS=0`, all three | 5 | **byte-identical -- NO POWER.** Condemnation is genuinely inert on this game. The earlier claim that "condemnation is off for this deck" is CORRECT, but nothing above had established it -- those tests moved sub-rules (`NEW_OPTION`, `NOWIN_TRUNC`, `TRUNC_COMPLETE`), never the master gate. |
+| `MTG_BP_SEARCH` 4 / 8 / 16 (continuation width; default 2) | T5 | differs -> had power. A REAL negative: width is not the cause. |
+| `MTG_PLAN_SPACE_CAP=0`, `MTG_SOLVE_SPACE_CAP=0`, both, `MTG_NO_GROUP_CAP=1` | T5 | differs -> had power. REAL negatives: the position caps are not the cause. |
+| `MTG_EXEC_DROP_REPLAN=1` | T5 | re-planning every turn does not recover it either. |
+
 ### Two code facts to start from next time (observed, NOT yet proven causal)
 
 * **Kor Spiritdancer's implementation assumes the opposite of what the class asserts.** Its
