@@ -368,13 +368,22 @@ def score(path, arms, max_turns, expect=None):
     `expect` is the per-job game count, and a short job is a REFUSAL. Everything downstream pairs on
     the intersection of game indices, so a job that died halfway just makes `n` smaller and prints a
     perfectly ordinary-looking number -- the "a truncated run reads as a result" failure CLAUDE.md
-    exists to prevent. The raw log is left intact for diagnosis."""
+    exists to prevent. The raw log is left intact for diagnosis.
+
+    NOT ANCHORED, and finditer rather than search. Many workers share one stderr with the batch
+    monitor thread, so a record can legitimately land part-way through a line if some other writer
+    left its line unterminated (the `[batch] heartbeat` beat did exactly that until BatchRunner.cpp
+    was made to build its line and write it once). An anchored `re.match` dropped such a record and
+    turned a COMPLETE 2.04M-game screen into "39,999 of 40,000 -- refusing to report a number",
+    throwing away 70 minutes of 32-core work over a lost newline. The record is present and correct
+    wherever it sits on the line, so parse it; the completeness gate above is what still catches a
+    genuinely truncated run, and it keeps its full force because it counts DISTINCT game indices."""
     got = {a: {} for a in arms}
     for line in open(path):
-        m = re.match(r"\[win\] job=(\S+) gi=(\d+) wt=(-?\d+)", line)
-        if m and m.group(1) in got:
-            wt = int(m.group(3))
-            got[m.group(1)][int(m.group(2))] = max_turns + 1 if wt < 0 else wt
+        for m in re.finditer(r"\[win\] job=(\S+) gi=(\d+) wt=(-?\d+)", line):
+            if m.group(1) in got:
+                wt = int(m.group(3))
+                got[m.group(1)][int(m.group(2))] = max_turns + 1 if wt < 0 else wt
     short = {a: len(g) for a, g in got.items() if expect is not None and len(g) != expect}
     if short:
         raise SystemExit(

@@ -498,27 +498,45 @@ private:
         // ONE stderr line per beat, utilisation FIRST. A ranked file nobody thought to open is not
         // observability: this is the line that makes "23 hours at 3 of 20 cores" impossible to miss,
         // and it costs one write every 10 minutes.
+        //
+        // BUILT AS ONE STRING AND WRITTEN ONCE, for the same reason the [cards] line below is: this
+        // monitor thread runs CONCURRENTLY with every worker, and workers emit [win]/[cards]/
+        // SLOW-GAME records on the same stderr. Emitting the beat as six separate fprintf calls --
+        // with the newline only on the LAST -- left a window in which a worker's record could be
+        // appended to the half-written beat, producing
+        //     [batch] heartbeat: 32/32 workers busy (100%)[win] job=long::g2_yv4 gi=12077 wt=5
+        // The [win] record is still there and still correct, but it is no longer at the start of a
+        // line, so deck_compare's anchored parser cannot see it -- and the driver then refuses to
+        // report the whole screen because one arm is 39,999 of 40,000. That is exactly the right
+        // refusal and it cost a 70-minute 32-core run to a formatting race. One write, no window.
         {
             const double busy = running_.empty() ? 0.0
                               : 100.0 * static_cast<double>(n_running) / static_cast<double>(running_.size());
-            std::fprintf(stderr, "[batch] heartbeat: %zu/%zu workers busy (%.0f%%)",
-                         n_running, running_.size(), busy);
+            char buf[256];
+            std::snprintf(buf, sizeof buf, "[batch] heartbeat: %zu/%zu workers busy (%.0f%%)",
+                          n_running, running_.size(), busy);
+            std::string ln = buf;
             if (!rows.empty() && rows.front().ms >= min_ms_)
             {
-                std::fprintf(stderr, "  slowest %.2fh %s gi=%d",
-                             static_cast<double>(rows.front().ms) / 3600000.0,
-                             rows.front().job.c_str(), rows.front().gi);
+                std::snprintf(buf, sizeof buf, "  slowest %.2fh ",
+                              static_cast<double>(rows.front().ms) / 3600000.0);
+                ln += buf;
+                ln += rows.front().job;
+                ln += " gi=" + std::to_string(rows.front().gi);
             }
             // Resident set + the pools' used/hiwater (src/core/MemBudget.h): the memory driver on the
             // same line as utilisation, so a run growing toward the cap is visible before it trips.
             if (const long long rss = membudget::CurrentRssBytes(); rss > 0)
             {
-                std::fprintf(stderr, "  rss=%.1fG", static_cast<double>(rss) / (1024.0 * 1024.0 * 1024.0));
+                std::snprintf(buf, sizeof buf, "  rss=%.1fG",
+                              static_cast<double>(rss) / (1024.0 * 1024.0 * 1024.0));
+                ln += buf;
                 const std::string pools = membudget::MemReport();
-                if (!pools.empty()) { std::fprintf(stderr, " %s", pools.c_str()); }
+                if (!pools.empty()) { ln += " " + pools; }
             }
-            if (!path_.empty()) { std::fprintf(stderr, "  -> %s", path_.c_str()); }
-            std::fprintf(stderr, "\n");
+            if (!path_.empty()) { ln += "  -> " + path_; }
+            ln += "\n";
+            std::fwrite(ln.data(), 1, ln.size(), stderr);
             std::fflush(stderr);
         }
         if (path_.empty()) { return; }
