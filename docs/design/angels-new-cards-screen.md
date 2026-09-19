@@ -13,8 +13,27 @@ Azorius Chancery's slot, **3 Lightstall Inquisitor**, and cut **Archangel of Thu
 largest drift of 0.0045t. Full list under *THE RECOMMENDED LIST* below.
 
 **Scale:** **16,250,000 paired games** across fourteen screens (counted from each spec's own
-`arms × formats × games`, not estimated), three formats, **fourteen disjoint seed blocks**, all arms
-deck-construction legal.
+`arms × formats × games`, not estimated), three formats, **fourteen disjoint seed blocks**, every
+arm's **mainboard** deck-construction legal.
+
+> **A correction to that last clause, because an earlier revision claimed simply "all arms
+> deck-construction legal".** `deck_compare` carries the base `.cod`'s **sideboard** onto every arm —
+> it must, because a wish deck needs it — and that side is `1 Lyra, Archangel of Dawn + 3 Legion
+> Angel + 1 Lightstall Inquisitor`, unchanged in all fourteen screens. So an arm with 4 maindeck Lyra
+> Archangel of Dawn is at **5 copies** counting the side, and likewise any arm at 4 Lightstall. My
+> spec generators assert `<= 4` on the **mainboard only**, which is where the gap came from.
+> **The measurement is unaffected and the comparisons stand:** Legion Angel's wish is
+> `wish_requires_name`-pinned to its own name at both enumeration (`TutorNumericFilterOk`) and
+> resolution (`PerformTutor`), so the sided Lyra and Lightstall are **unreachable** — mechanically
+> inert, and identically inert in every arm. What it affects is the list a human would physically
+> build, which is why *THE RECOMMENDED LIST* rebuilds the side to the 3 Legion Angels and nothing
+> else. Future spec generators should assert main + side.
+>
+> **USER RESOLUTION (2026-09-19):** *"They are not actually in the sideboard. Those can be dropped. I
+> put them there for consideration only."* So the sided Lyra and Lightstall were never a sideboard —
+> they were the user's *introduction slots*, a note-to-self that these two cards wanted testing. The
+> real sideboard is the 3 Legion Angels, the adopted list is therefore fully legal at main + side, and
+> the only live lesson is the assertion gap in the generators.
 
 **The two corrections this document had to make about itself**, both worth reading before the
 numbers, because each one reversed a conclusion:
@@ -807,7 +826,107 @@ an arm whose gain is speed collapses toward zero. `L_t0_p14` and `L_t0_yv2` — 
 ever measured here — score **0.11** and **0.02**. `L_t1_yv2` scores **0.18** and `L_t1_yv3_p14`
 **0.23**. Ranking by raw std delta ranks by how thoroughly an arm exploits the blind spot.
 
+### Screen 15 — the legend question asked PROPERLY, and two of my answers overturned
+
+18 arms + base × 3 formats × 40,000 games, seed **2500000**. Reference is the user's constrained
+list. **This is the first screen in the campaign that cut a legend into a card worth playing.**
+
+**THE CONFOUND THIS SCREEN EXISTS TO FIX.** Every legend-cut arm in screens 11–14 paid for the cut
+with a Youthful Valkyrie or an Archangel of Thune:
+
+| screen | arms | donor |
+|---|---|---|
+| 11 | `l3_yv3`, `g3_yv3`, `l3_g3_yv4`, `g2_yv4` | Youthful Valkyrie |
+| 13 | `L_lad3_yv2`, `L_g3_yv2` | Youthful Valkyrie |
+| 12 | `i4_t2_yv0_lad3`, `i4_t2_yv0_g3` | **Archangel of Thune** |
+
+Those are the two cards this same campaign calls most expendable. So "the 4-ofs are confirmed on
+four independent seed blocks" only ever established **the 4th legend beats the worst card in the
+deck**. Screen 12's arms are doubly confounded — they cut a legend *and* add a Thune, and adding a
+Thune is independently bad. This is the failure mode `isolate-the-axis-dont-difference-decks`
+already warned about, walked into anyway.
+
+**Against a GOOD donor the 4-ofs hold, and the case gets STRONGER with game length** (positive =
+worse):
+
+| trade | std | 2HG | long |
+|---|---|---|---|
+| 4th Giada → **4th Lightstall** | +0.0168 (t +6.8) | +0.0275 (t +9.9) | **+0.0350 (t +11.1)** |
+| 4th Lyra ArchDawn → **4th Lightstall** | +0.0125 (t +8.7) | +0.0213 (t +13.8) | **+0.0311 (t +17.3)** |
+| 4th Giada → 2nd Archangel of Thune | +0.0418 | +0.0399 | +0.0356 |
+| Giada back to **2** (+ LI 4, Thune 2) | +0.0785 | +0.0818 | **+0.0809** |
+
+The cost of cutting a legend **grows** from 20 to 40 life — the opposite of the Thune-cut and
+land-cut numbers, which shrank to nothing. Under a late-weighted ranking the 4-ofs get *more*
+justified, not less.
+
+**Lightstall's 4th copy is a 20-life-only gain.** vs a land: −0.0101 (t −3.9) / −0.0035 (t −1.3) /
+−0.0008 (t −0.2). vs a Youthful Valkyrie: −0.0073 (t −4.7) / +0.0006 / +0.0008. Never worse, so 4 is
+defensible — but it has **1v1 proof and no 2HG proof**. Lightstall looked strong in screens 11–14
+because it was replacing *Archangel of Thune*; with Thune pinned at 1 there is nothing good left for
+it to replace.
+
+**The Swords floor, measured in this exact frame: −0.0347 / −0.0432 / −0.0541** — and *largest at 40
+life*, because a longer game draws more dead cards. Cutting a never-cast card is manufactured gain;
+that number cannot be lined up against any other arm's.
+
+**At 40 life `v_a` and the user's list are the same deck** (−0.0026, t −0.58). Every remaining
+argument here is worth ±0.03t against a ~0.37t win already banked.
+
+### ⚠ THE APPARATUS IS MIS-BUCKETED — which makes the land and Lightstall answers PROVISIONAL
+
+Raised by the user, 2026-09-19: *"The card type changes should ideally generate a new mulligan
+profile… otherwise it is too biased."* They were right, and it is measurable.
+
+Screens 1–16 all share ONE keep table (`alias/`). Its buckets assert **two false equivalences**:
+
+```
+buckets[0] = [Lightning Greaves, Lightstall Inquisitor, Swords to Plowshares, Unexpectedly Absent]
+buckets[1] = [Archangel of Thune, Lyra, Archangel of Dawn]
+```
+
+A 1-mana 2/1 Angel — the cheapest trigger for the whole lifegain engine — is treated as
+interchangeable with a **Swords that is never cast**, and the 3-drop is treated as the 5-drop.
+**Bucket discovery on the new list returns K=16 where that table has 14: the two lumpings, counted.**
+(Individual arms differ: `U` discovers K=15.) The table is also stale — built at commit `15ae9593`,
+before `9134e4e3` changed searched play.
+
+A replacement table generated on a new-cards list (`logs/angels_w`, every candidate at ≥1 so all get
+bucketed) took **16 minutes** and passed validation: keep **−0.1903t**, bottoming **−0.0789t**, 16/16
+seeds each. **Its buckets are singletons** — Lightstall and Lyra ArchDawn separated.
+
+**Status of the results above under this defect:**
+
+* **Probably safe — the legend 4-ofs.** The arms differ by one card and the effect (t +11…+17 at 40
+  life) dwarfs any plausible table bias.
+* **PROVISIONAL — the Lightstall 4-vs-3 answer**, which is precisely the mis-bucketed card.
+* **PROVISIONAL — the entire land ladder**, including the "don't cut lands" reversal, because a
+  shared table is a hidden prior on the mana:spell ratio (`coverage-is-not-calibration`).
+
+The user's framing of the fix is the one adopted: *"we are not stuck with one profile. We can always
+run a test on multiple to help figure out how much the results could be biased… even without
+generating a mulligan profile for every potential option."* `--with-floor U,d1_li3,p13_yv2` with
+`"bracket": "generate"` gives each arm its OWN table and pools every cell in one batch, so the gap
+between an arm's delta under the shared table and under its own table **is** the bias.
+
+**Three tooling traps found while doing this, all worth knowing:**
+
+1. **`expected_buckets` is a USER ruling and `keepgen` will refuse without it.** On a K mismatch it
+   errors and instructs you to set `expected_buckets`. Do not. **Unset it** — K as discovered — which
+   declines to install a policy rather than inventing one.
+2. **`--preflight`'s fall-through % is wrong for a table not built on the spec's `base` deck.** It
+   computes `enum_cells(buckets, counts)` against the base, so a per-arm table that is *complete for
+   its own deck* reads as 65–81% fall-through. Verify against the table's own `entries[].comp`
+   maxima before believing it.
+3. **A spec's `replace` map only drives card NUMBERING** (`deck_compare.py:625`), not the keep table.
+   The bucketing — and therefore the bias — lives entirely in the table itself.
+
 ## THE RECOMMENDED LIST (`L_t1_yv2`)
+
+> **SUPERSEDED IN PART, 2026-09-19.** The section below predates screen 15 and the user's own
+> deckbuilding rulings (1 Lyra Dawnbringer, ≥1 Archangel of Thune, 4 Lightstall, 2 Swords, ≥21
+> lands, keep Serra). Its **legend counts stand and are now better supported**; its **land count and
+> Lightstall count are provisional** pending the apparatus-bias bracket above.
 
 **Read the size of the decision before reading the decision.** The core change — 4 Lyra Archangel of
 Dawn, 4 Giada, 4 Remote Farm, no Azorius Chancery, no Lyra Dawnbringer, Archangel of Thune cut down —
