@@ -24188,6 +24188,14 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
             Action la;
             la.kind      = Action::Kind::PlayLand;
             la.card_name = sp.land_to_play;
+            // Record the SAME triple we just played with. Recording only the name made the
+            // replayed land a different land from the searched one whenever any of these was
+            // non-default -- an MDFC back face, a fetchland target, a rad mode. See the field
+            // comments on Action (auras gi20: back-face {W} searched, front-face {G} replayed,
+            // stranding the recorded Hyena Umbra and losing a committed T4 kill).
+            la.land_face         = sp.land_face;
+            la.land_fetch_target = sp.fetch_target;
+            la.land_rad_mode     = sp.rad_mode;
             sink->push_back(la);
         }
     };

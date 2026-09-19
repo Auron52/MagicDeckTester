@@ -233,6 +233,25 @@ struct Action
                                        // Fiery Islet); false = cycle a land from hand (e.g. Lonely
                                        // Sandbar). card_name = the source land; cost = its
                                        // cycling_cost / sacrifice_draw_cost.
+    // Kind::PlayLand ONLY -- the land sub-decisions the SEARCH made, carried across the
+    // record/replay boundary so commit-the-line reproduces the land it actually played.
+    //
+    // WHY THESE EXIST. bp_play_searched_land plays a continuation's land with the plan's FULL
+    // triple (fetch_target, land_face, rad_mode) and used to record only `card_name`; AIEngine's
+    // replay_recorded then replayed it as `TryPlaySpecificLand(state, a.card_name)` -- front face,
+    // no fetch target, default rad. Every OTHER land-play site in the executor passes the triple
+    // (`plan.land_face` / `extra.land_face`); this one path silently dropped it. The searched land
+    // and the replayed land were then DIFFERENT LANDS, and anything the search bought with the
+    // difference was unpayable on replay.
+    //
+    // MEASURED: auras gi20 / gi428. The search played Branchloft Pathway's BACK face (Boulderloft,
+    // {W}) and recorded a Hyena Umbra {W} cast behind it; replay played the FRONT face ({G}), so
+    // the recorded cast stranded in hand. The committed line predicted a T4 kill at opp -3, the
+    // realised turn dealt 9 less and won on T5 -- and no depth or budget recovered it, because
+    // nothing about it is a search-effort problem. See docs/design/auras-put-in-hand-turn-loss.md.
+    InternedName land_face;             // MDFC face the search chose ("back" = the back face)
+    InternedName land_fetch_target;     // fetchland: the searched library target
+    int         land_rad_mode  = -1;    // LandPlayOptions::rad_mode as the search chose it
     bool        alt_cost       = false;// CastFromHand via an alternative cost (Invigorate /
                                        // Skyshroud Cutter / Reverent Silence): pay no mana and
                                        // instead make the opponent gain alt_lifegain life (-> that

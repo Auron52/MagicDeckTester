@@ -3941,7 +3941,14 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
         for (const Action& a : recs)
         {
             if (a.kind == Action::Kind::PlayLand)
-            { TryPlaySpecificLand(state, a.card_name); }
+            { // Replay the land the SEARCH played, not just a land with the same name. Passing
+              // only the name here replayed an MDFC as its FRONT face and a fetchland with no
+              // target, so a recorded cast that depended on the searched face's colour stranded
+              // (auras gi20: Boulderloft {W} searched, Branchloft {G} replayed, Hyena Umbra {W}
+              // left in hand, committed T4 kill lost). Every other land-play site in this file
+              // already passes the triple; this one did not.
+              TryPlaySpecificLand(state, a.card_name, a.land_fetch_target.str(),
+                                  a.land_face.str(), a.land_rad_mode); }
             else if (a.kind == Action::Kind::ActivateVial)
             { deploy_via_vial(a.card_name); resolve_now(); }
             else if (a.kind == Action::Kind::CastFromHand)
