@@ -285,7 +285,7 @@ More search, at unlimited budget, considering the winning card ten times more of
 worse answer. That is not effort and not a prune: opening the class changes which lines are
 **constructible**.
 
-### THE CERTIFICATE MOVES: the class costs a win in the CLAIRVOYANT ENUMERATOR, not the search
+### THE CERTIFICATE MOVES -- but it is a SIMULATED-PLAY result, not a position invariant
 
 This is the sharpest result on gi428 and it reframes the bug. `MTG_DUMP_EWINS_TURN` runs
 `EnumerateEarliestWins` -- the clairvoyant LABEL path, not the play search. At **turn 1**, before
@@ -296,14 +296,41 @@ the two arms have diverged at all (both pass, both play Horizon Canopy, identica
 | `MTG_BP_PUT_IN_HAND=0` | **4** | **4** | **4** |
 | class open | **5** | **5** | **5** |
 
-A position's earliest win cannot depend on a play-search flag. It does. **Opening the class makes a
-clairvoyant enumerator fail to find a win it otherwise finds, from an identical position.** That is
-the reachability bar failing at the ENUMERATION level, and it is why no budget, depth, width, cap or
-memo touches it -- there is no amount of effort that recovers a line the enumerator cannot express.
+**RETRACTED, same day, on the USER's challenge ("is this not still a search execution mismatch?").**
+An earlier draft of this section said: *"A position's earliest win cannot depend on a play-search
+flag. It does. Opening the class makes a clairvoyant enumerator fail to find a win it otherwise
+finds, from an identical position -- the reachability bar failing at the ENUMERATION level."*
+**That is wrong, and the dump itself refutes it.** Every candidate is a LAND choice with
+`casts:[]`, and its `win` is produced by simulating forward -- `EnumerateEarliestWins` does *"real
+applies whose payments the engine's own machinery arbitrates"*. So the certificate is a
+CLAIRVOYANT SEARCH RESULT, not a property of the position, and a flag that changes the apply path
+legitimately moves it. Reading it as a position invariant is the same error this file already
+warns about two sections up (label-path breadth read as position capability) -- committed anyway.
 
-**Contrast with gi20, which is what proves these are two different bugs.** On gi20 both arms certify
-`"earliest":4` byte-identically; the position admitted T4 with the class open and the executor threw
-it away on replay. On gi428 the certificate itself moves. Same symptom, opposite layer.
+**What the result DOES establish, which still matters:** the loss reproduces in the clairvoyant
+LABEL search, which has no play budget and a different ordering from the play search. Together with
+the legacy-engine 2x2 (both engines lose exactly one turn), that puts the defect in the **shared
+plan-apply path** rather than in any one consumer's search policy -- which is why no budget, depth,
+width, cap or memo touches it.
+
+**The contrast with gi20 still holds, but says less than claimed.** gi20's certificate is 4 vs 4
+byte-identical (re-measured on this same harness as a control, so the instrument is not simply
+moving with the flag); gi428's moves 4 -> 5. That separates the two games, but it does NOT make
+gi428 "a different layer from a search/execution mismatch" -- see the live hypothesis below.
+
+### THE LIVE HYPOTHESIS: a plan/apply mismatch that `fd-diverge` structurally cannot see
+
+`[fd-diverge]` watches exactly ONE boundary -- the commit-the-line executor replaying a committed
+plan. It does not watch `apply_one`, which is where the site-10 arming lives and which the play
+search, the label enumerator AND the executor all run through. So a plan whose APPLIED action
+sequence differs from the plan the search SCORED would be a genuine search/execution mismatch and
+would be invisible to that oracle. "No fd-diverge" therefore does not mean "no mismatch"; it means
+"no mismatch at the one boundary that is instrumented".
+
+That is the shape to test next, and it is the same family as gi20 rather than a different one:
+gi20 was a plan/apply mismatch at the record/replay boundary (a land applied with the wrong face).
+The question for gi428 is whether applying a plan under the class performs a different cast set
+than the plan specifies, because the arming splices a continuation into the middle of it.
 
 **This is also the cheap repro.** The turn-1 certificate reproduces the defect without playing the
 game out, so the next investigator does not need the full five-minute unlimited-budget run:
