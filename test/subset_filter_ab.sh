@@ -44,6 +44,14 @@
 # be better still and is NOT AVAILABLE HERE: this container has no PMU, so `perf stat -e instructions`
 # reports `<not supported>` (software events only). Arms still run concurrently on top of that.
 #
+# KEEP THE ARM COUNT AT OR UNDER THE CORE COUNT. `task-clock` stops the scheduler charging a
+# process for time it sat DESCHEDULED; it does NOT stop a contended core doing less work per
+# on-CPU second (shared cache, memory bandwidth, SMT). Measured 2026-09-19 on the SAME change:
+# 14 processes on 24 cores gave a per-game band of 0.998x-1.035x, and 32 processes on those 24
+# cores gave 0.943x-1.080x. The aggregate barely moved (1.009x vs 1.008x) -- the spread is what
+# blows out, so doubling the sample to resolve a ~1% effect achieved the exact opposite. Add games
+# by running the script twice, not by oversubscribing one invocation.
+#
 # perf's output file must be written OUTSIDE the workspace mount, which breaks it -- hence /tmp.
 #
 # usage: subset_filter_ab.sh <before-binary> <after-binary> <out-dir> <seed>:<gi> [<seed>:<gi> ...]

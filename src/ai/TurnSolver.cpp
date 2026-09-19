@@ -7637,7 +7637,9 @@ static const bool s_sac_waste_prune = !EnvOn("MTG_NO_SAC_WASTE_PRUNE");
 // Inert for every deck without two co-selected creature-sac outlets -> byte-identical.
 static bool SubsetOversubscribesSacFodder(const GameState& state,
                                           const std::vector<Action>& cands,
-                                          const std::vector<int>& sel)
+                                          const std::vector<int>& sel,
+                                          const std::vector<const CardDefinition*>* sac_src_def,
+                                          int board_persist)
 {
     // NECESSARY-CONDITION PREPASS (2026-09-19, perf). `outlets` below counts a STRICT SUBSET of the
     // selected actions that pass these two tests, so fewer than two of them makes the `outlets < 2`
@@ -7666,7 +7668,11 @@ static bool SubsetOversubscribesSacFodder(const GameState& state,
         if (a.kind != Action::Kind::SacForMana && a.kind != Action::Kind::SacCreatureOutlet)
         { continue; }
         if (a.sac_source_id == 0) { continue; }
-        const CardDefinition* sd = ControlledDefByNumber(state, a.sac_source_id);
+        // Resolved ONCE per candidate into SubsetFilterPre::sac_src_def (the board is frozen for
+        // the enumeration); the direct call is the no-table fallback. Same predicate either way.
+        const CardDefinition* sd = (sac_src_def != nullptr)
+                                 ? (*sac_src_def)[static_cast<std::size_t>(j)]
+                                 : ControlledDefByNumber(state, a.sac_source_id);
         if (sd == nullptr || !sd->params.sac_creature_outlet) { continue; }   // not a creature-sac
         ++outlets;
         const int want = a.sac_count > 1 ? a.sac_count : 1;
@@ -7692,11 +7698,19 @@ static bool SubsetOversubscribesSacFodder(const GameState& state,
     // Being conservative here is the safe direction: a missed reject leaves the pre-existing
     // (documented, executor/rollout-shared) apply-time degradation exactly as it was, whereas an
     // over-reject would delete a line the deck can really play.
-    for (const Permanent& p : state.battlefield)
+    // Hoisted to SubsetFilterPre::board_persist where available (-1 = no summary -> scan here).
+    if (board_persist >= 0)
     {
-        if (p.controller_index != me) { continue; }
-        const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
-        if (d != nullptr && d->params.persist) { return false; }
+        if (board_persist != 0) { return false; }
+    }
+    else
+    {
+        for (const Permanent& p : state.battlefield)
+        {
+            if (p.controller_index != me) { continue; }
+            const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+            if (d != nullptr && d->params.persist) { return false; }
+        }
     }
     auto plan_can_add = [&](const std::string& filt) -> bool
     {
@@ -7748,9 +7762,27 @@ static bool SubsetOversubscribesSacFodder(const GameState& state,
 
 static bool SubsetWastesCreatureSacMana(const GameState& state,
                                         const std::vector<Action>& cands,
-                                        const std::vector<int>& sel)
+                                        const std::vector<int>& sel,
+                                        const std::vector<const CardDefinition*>* sac_src_def)
 {
     if (!s_sac_waste_prune) { return false; }
+    // NECESSARY-CONDITION PREPASS (2026-09-19, perf). Returning true requires ALL of: a creature
+    // sac-for-mana selected, zero mana spent, no direct damage, and no death payoff -- so the
+    // cheapest of those decides most subsets, and it is this one. The scan below sums a ManaValue
+    // per selected action before it learns whether the subset even contains a sac-for-mana, which
+    // on a deck that HAS such an outlet (Utopia Mycon, so no SubsetFilterPre bit can skip this
+    // filter) is arithmetic done per enumerated subset to reach a foregone `false`. Byte-identical:
+    // both orders are pure tests of a necessary condition, so the conjunction is unchanged --
+    // including the direct_damage early-out, which also answers false.
+    {
+        bool any_sac_for_mana = false;
+        for (int j : sel)
+        {
+            if (cands[j].kind == Action::Kind::SacForMana && cands[j].sac_source_id != 0)
+            { any_sac_for_mana = true; break; }
+        }
+        if (!any_sac_for_mana) { return false; }
+    }
     bool      has_creature_sac = false;
     long long spend            = 0;
     for (int j : sel)
@@ -7759,7 +7791,16 @@ static bool SubsetWastesCreatureSacMana(const GameState& state,
         spend += a.cost.ManaValue();
         if (a.direct_damage > 0) { return false; }          // never touch a reach-to-lethal subset
         if (a.kind != Action::Kind::SacForMana || a.sac_source_id == 0) { continue; }
-        for (const Permanent& p : state.battlefield)        // is the source a CREATURE sac outlet?
+        // Is the source a CREATURE sac outlet? The board is frozen for the enumeration, so this
+        // resolves ONCE into SubsetFilterPre::sac_src_def; the walk below is the fallback for a
+        // caller that built no table (see the struct). Same predicate either way.
+        if (sac_src_def != nullptr)
+        {
+            const CardDefinition* sd = (*sac_src_def)[static_cast<std::size_t>(j)];
+            if (sd && sd->params.sac_creature_outlet) { has_creature_sac = true; }
+            continue;
+        }
+        for (const Permanent& p : state.battlefield)
         {
             if (p.controller_index != state.active_player_index
                 || p.card.m_number != a.sac_source_id) { continue; }
@@ -7995,9 +8036,33 @@ struct SubsetFilterPre
     bool trick_target      = true;   // SubsetHasMissingTrickTarget
     bool aura_target       = true;   // SubsetHasUnenabledRestrictedAura, SubsetHasAuraOnUncastCreature
     bool vial              = true;   // the per-charge Vial capacity loop in eval_and_push
+
+    // ---- THE SAC-SOURCE TABLE (round 3, 2026-09-19) -----------------------------------------
+    // The bits above stop a filter this deck cannot trip. They do nothing for the filters it CAN:
+    // after the bits shipped, the three survivors on a Fungus profile were
+    // SubsetHasDuplicateSacSource (7.29%), SubsetWastesCreatureSacMana (4.87%) and
+    // SubsetOversubscribesSacFodder (3.96%) -- precisely the three whose bits are true because
+    // Utopia Mycon really is a creature-sac outlet.
+    //
+    // Two of those three still had a BATTLEFIELD WALK INSIDE THE SUBSET LOOP: each resolved a
+    // selected action's `sac_source_id` to its controlled CardDefinition (a scan with a
+    // LookupCached) once per enumerated subset, to ask a question whose answer cannot change while
+    // the enumeration runs -- the board is frozen. That is the same defect as the one the bits
+    // closed, one level down. `sac_src_def[j]` resolves it ONCE per candidate.
+    //
+    // `board_persist` is hoisted from the same filter for the same reason: a persist permanent on
+    // the battlefield makes SubsetOversubscribesSacFodder bail out (a sacrificed body RETURNS, so
+    // counting current bodies would reject a legal Melira loop), and that is a board property, not
+    // a subset one.
+    //
+    // EMPTY MEANS NOT BUILT. Both filters fall back to their original in-loop resolution when
+    // `sac_src_def` is empty, so a default-constructed summary -- or any future caller that does
+    // not build one -- keeps the old behaviour exactly, which is the same contract as the bits.
+    std::vector<const CardDefinition*> sac_src_def;   // per candidate; nullptr = none/not a sac action
+    bool board_persist     = false;                   // meaningful only when sac_src_def is non-empty
 };
 
-static SubsetFilterPre BuildSubsetFilterPre(const std::vector<Action>& cands)
+static SubsetFilterPre BuildSubsetFilterPre(const GameState& state, const std::vector<Action>& cands)
 {
     SubsetFilterPre p;
     // See "INSTRUMENTS DISARM IT" above: all-true is the unoptimised chain, unchanged.
@@ -8028,7 +8093,8 @@ static SubsetFilterPre BuildSubsetFilterPre(const std::vector<Action>& cands)
                 break;
             case Action::Kind::SacForMana:
                 if (a.sac_source_id != 0) { p.creature_sac_mana = true; ++sac_actions; }
-                p.dup_source = true;                      // two sacs of one source (id 0 included: they compare equal)
+                // id 0 included on purpose: two such actions compare equal and the clause fires.
+                p.dup_source = true;
                 break;
             case Action::Kind::ActivateLoyalty:
             case Action::Kind::GarthActivate:
@@ -8053,6 +8119,28 @@ static SubsetFilterPre BuildSubsetFilterPre(const std::vector<Action>& cands)
         { p.gift_damage = true; }
     }
     p.sac_fodder = (sac_actions >= 2);
+
+    // The sac-source table (see the struct). Built only when a filter that reads it can actually
+    // run -- otherwise the walk below is itself the waste it exists to remove.
+    if (p.creature_sac_mana || p.sac_fodder)
+    {
+        p.sac_src_def.assign(cands.size(), nullptr);
+        for (std::size_t j = 0; j < cands.size(); ++j)
+        {
+            const Action& a = cands[j];
+            if (a.sac_source_id == 0) { continue; }
+            if (a.kind != Action::Kind::SacForMana && a.kind != Action::Kind::SacCreatureOutlet)
+            { continue; }
+            // Identical predicate to ControlledDefByNumber, which is what both filters called.
+            p.sac_src_def[j] = ControlledDefByNumber(state, a.sac_source_id);
+        }
+        for (const Permanent& perm : state.battlefield)
+        {
+            if (perm.controller_index != state.active_player_index) { continue; }
+            const CardDefinition* pd = CardDatabase::Instance().LookupCached(perm.card);
+            if (pd != nullptr && pd->params.persist) { p.board_persist = true; break; }
+        }
+    }
     return p;
 }
 
@@ -19897,10 +19985,15 @@ TurnSolver::Plan TurnSolver::SolveUncached(const GameState& state, bool is_pre_c
     // Which of the subset rejection filters can fire AT ALL for this candidate list (see
     // SubsetFilterPre): one pass now, in exchange for not re-deriving "this deck has no Aura" once
     // per enumerated subset. Lockstep twin in EnumeratePlans.
-    const SubsetFilterPre pre = BuildSubsetFilterPre(cands);
+    const SubsetFilterPre pre = BuildSubsetFilterPre(state, cands);
     // Provider payoff-prune opt-in, hoisted out of consider(): it is a VIRTUAL call on a per-deck
     // provider, constant for the whole enumeration, and it used to be dispatched once per subset.
     const bool payoff_prune_on = ResolveProvider(state).PrunesAcceleratorWithoutPayoff();
+    // The two sac filters read the per-candidate source table when it was built; nullptr / -1 keep
+    // their original in-loop board resolution (see SubsetFilterPre).
+    const std::vector<const CardDefinition*>* sac_tab =
+        pre.sac_src_def.empty() ? nullptr : &pre.sac_src_def;
+    const int persist_arg = pre.sac_src_def.empty() ? -1 : (pre.board_persist ? 1 : 0);
     // "{cost}, {T}" ability SELF-FUNDING debit (see PermAbilityTapDebitOf). State-only, so it is
     // built ONCE here and the per-subset path is a bool test plus a walk of the selection. Lockstep
     // twin of the scan in EnumeratePlans.
@@ -20159,11 +20252,12 @@ TurnSolver::Plan TurnSolver::SolveUncached(const GameState& state, bool is_pre_c
         // rituals-for-payoff guard already covers this on the credited/pool path; this also catches
         // the filter fallback, and keeps the rule identical on both sides. Inert without a creature
         // mana outlet -> byte-identical.
-        if (pre.creature_sac_mana && SubsetWastesCreatureSacMana(state, cands, sel)) { return; }
+        if (pre.creature_sac_mana && SubsetWastesCreatureSacMana(state, cands, sel, sac_tab)) { return; }
         // Reject a plan whose sac outlets together demand more fodder than the board has
         // (found by the Fungus Stage-5d sweep: two Saproling-gated outlets, one Saproling --
         // the second half silently no-opped at apply). Correctness, not a narrowing.
-        if (pre.sac_fodder && SubsetOversubscribesSacFodder(state, cands, sel)) { return; }
+        if (pre.sac_fodder
+            && SubsetOversubscribesSacFodder(state, cands, sel, sac_tab, persist_arg)) { return; }
         // Reject a life-paid phyrexian variant whose full-mana twin is jointly payable (weak
         // dominance -- see the helper). Inert without a phyrexian card -> byte-identical.
         if (pre.phyrexian && SubsetPhyrexianDominated(state, cands, sel)) { return; }
@@ -28750,10 +28844,14 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
     // Which subset rejection filters can fire at all (see SubsetFilterPre). Lockstep twin of the
     // build in Solve, and built HERE -- after both aura injectors have appended their candidates,
     // because the summary's whole claim is that it saw every member of `cands`.
-    const SubsetFilterPre pre = BuildSubsetFilterPre(cands);
+    const SubsetFilterPre pre = BuildSubsetFilterPre(state, cands);
     // Provider payoff-prune opt-in, hoisted out of eval_and_push: a virtual call, constant for the
     // enumeration, previously dispatched once per subset.
     const bool payoff_prune_on = ResolveProvider(state).PrunesAcceleratorWithoutPayoff();
+    // Lockstep twin of Solve's sac-table handles (see SubsetFilterPre).
+    const std::vector<const CardDefinition*>* sac_tab =
+        pre.sac_src_def.empty() ? nullptr : &pre.sac_src_def;
+    const int persist_arg = pre.sac_src_def.empty() ? -1 : (pre.board_persist ? 1 : 0);
     // "{cost}, {T}" ability SELF-FUNDING debit scan (see PermAbilityTapDebitOf). Lockstep twin of
     // the scan in Solve; inert on every board with no such ability -> byte-identical.
     std::vector<ManaPool> tap_debit;
@@ -29361,11 +29459,12 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
         // enumeration otherwise hands the search (Goblins gi44). Unlike the rituals-for-payoff guard
         // above, declining an in-play outlet keeps BOTH the outlet and the body, so there is no
         // "hold it for a later turn" trade for the search to arbitrate. See the helper.
-        if (pre.creature_sac_mana && SubsetWastesCreatureSacMana(state, cands, sel)) { return; }
+        if (pre.creature_sac_mana && SubsetWastesCreatureSacMana(state, cands, sel, sac_tab)) { return; }
         // Reject a plan whose sac outlets together demand more fodder than the board has
         // (found by the Fungus Stage-5d sweep: two Saproling-gated outlets, one Saproling --
         // the second half silently no-opped at apply). Correctness, not a narrowing.
-        if (pre.sac_fodder && SubsetOversubscribesSacFodder(state, cands, sel)) { return; }
+        if (pre.sac_fodder
+            && SubsetOversubscribesSacFodder(state, cands, sel, sac_tab, persist_arg)) { return; }
         // Reject a life-paid phyrexian variant whose full-mana twin is jointly payable (weak
         // dominance -- lockstep twin of Solve::consider's call; see the helper).
         if (pre.phyrexian && SubsetPhyrexianDominated(state, cands, sel)) { return; }

@@ -1491,6 +1491,49 @@ enumeration being redone per subset:
 | 2000564 | 519,181 | 46.6 s | 41.7 s | 1.116x |
 | **total** | | **403.7 s** | **355.2 s** | **1.136x** |
 
+## ROUND 3: the same defect one level down, and the first thing measurement REFUSED
+
+With the bits in, the three filters left on the Fungus profile were exactly the three the deck can
+genuinely trip -- no bit can skip them, because Utopia Mycon really is a creature-sac outlet:
+`SubsetHasDuplicateSacSource` 7.29%, `SubsetWastesCreatureSacMana` 4.87%,
+`SubsetOversubscribesSacFodder` 3.96%.
+
+**Two of the three still had a battlefield walk INSIDE the subset loop.** Both resolved a selected
+action's `sac_source_id` to its controlled `CardDefinition` (a board scan plus a `LookupCached`)
+once per enumerated subset, to answer a question that cannot change while the enumeration runs --
+the board is frozen. `SubsetFilterPre::sac_src_def` resolves it once per candidate, and
+`board_persist` hoists the same filter's persist scan for the same reason. `SubsetWastesCreatureSacMana`
+also got the necessary-condition prepass its sibling already had: it summed a `ManaValue` per
+selected action before learning whether the subset contained a sac-for-mana at all.
+
+**And one idea was built, measured, and thrown away.** `SubsetHasDuplicateSacSource` is eight
+independent clauses; a clause mask (which of them has a candidate that could fire it) is sound by
+the same necessary-condition argument and looked obviously worth it at 7.29%. Measured: **7.29% ->
+7.30%, i.e. nothing.** Fungus trips the live clauses, and the dead ones cost a predicted branch on
+an already-loaded field. It was reverted rather than shipped -- a no-op abstraction threaded through
+a hot correctness-critical guard is exactly the complexity that should not land.
+
+**What round 3 is worth: about 1%, and the profile is the primary evidence, not the A/B.**
+
+| evidence | before | after |
+|---|---|---|
+| `SubsetOversubscribesSacFodder` (profile share) | 3.96% | **2.33%** |
+| `SubsetWastesCreatureSacMana` (profile share) | 4.87% | **4.55%** |
+| A/B, 7 games, 14 processes on 24 cores | | **1.009x** (2 of 7 negative) |
+| A/B, 16 games, 32 processes on 24 cores | | **1.008x** (6 of 16 negative) |
+
+All three agree on ~1%, and the profile -- one process, quiet box -- is the only one of them that
+can resolve an effect that small.
+
+**OVERSUBSCRIPTION WIDENS THE PER-GAME SPREAD EVEN IN `task-clock`, which is a second measurement
+lesson on top of the first.** At 14 processes on 24 cores the per-game ratios sit in a tight band
+(round 2: 1.066x-1.217x; round 3: 0.998x-1.035x). Running 32 processes on the same 24 cores blew
+that band out to **0.943x-1.080x** for the identical change. `task-clock` fixes the scheduler
+charging a process for time it sat DESCHEDULED; it does not fix a contended core doing less work per
+on-CPU second (shared cache, memory bandwidth, SMT). So: keep the concurrent-arms design, and keep
+the arm count at or under the core count -- otherwise the harness stops being able to see a small
+effect at all, which is precisely when you most need it to.
+
 ### A unit count is NOT a cross-run fingerprint, and this run is the evidence
 
 Seed 1200328 reads 901,945 units in the table above and read **905,676** in the 1.047x table
