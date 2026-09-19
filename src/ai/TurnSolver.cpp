@@ -24139,6 +24139,17 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
         }
         // MTG_BP_ENUM_CANON / MTG_BP_BASE_CANON (levers; see the flags): two further un-branched
         // slot kinds take the value-best entry rather than EMPTY. Never inside a playout.
+        //
+        // THE PRECONDITION -- READ THIS BEFORE MASKING A NEW CLASS ON (auras gi428, 2026-09-19).
+        // This is a ONE-OPTION HEURISTIC: it hands a BASE plan cands.front() with nothing scored
+        // against it. That is only legitimate because the alternatives ARE reachable -- through the
+        // node's explicit EMPTY child where a node hosts the site, and through the wave-0 /
+        // wave-walker fan-out otherwise. Both routes select plans with PlanOpensBreakpoint, so a
+        // site with no clause there gets the canon and NONE of the alternatives, at any budget,
+        // depth or width. Site 10 (MTG_BP_PUT_IN_HAND) shipped in exactly that shape: masked on,
+        // no clause, no node -- and its unchallengeable cands.front() cost auras gi428 a turn
+        // (T4 -> T5, invariant in every effort knob, recovered by suppressing the canon at site 10
+        // alone). A class in BpSiteMask MUST have a route into the variant machinery.
         if (!resolved && class_on && g_rollout_nest == 0)
         {
             const int  bc        = BpBaseCanon();
@@ -32114,6 +32125,31 @@ static int PlanOpensBreakpoint(const GameState& state, const TurnSolver::Plan& p
             }
         }
     }
+    // Site 10 pre-scan, the general put-in-hand class's WATCHER route (Kor Spiritdancer: "whenever
+    // you cast an Aura spell, draw a card"). Same shape and same safe direction as `watcher` above:
+    // the draw belongs to the watcher, not to the Aura resolving, so it is state-keyed; and a plan
+    // that casts the watcher itself counts, because the cast order resolves a creature ahead of an
+    // Aura that would target it. See the site-10 clause in the action loop for why the class needs
+    // a clause here at all.
+    bool aura_watcher = false;
+    if (BpPutInHandEnabled())
+    {
+        for (const Permanent& perm : state.battlefield)
+        {
+            if (perm.controller_index != state.active_player_index) { continue; }
+            const CardDefinition* w = CardDatabase::Instance().LookupCached(perm.card);
+            if (w && w->params.draw_on_aura_cast) { aura_watcher = true; break; }
+        }
+        if (!aura_watcher)
+        {
+            for (const Action& a : p.actions)
+            {
+                if (a.kind != Action::Kind::CastFromHand) { continue; }
+                const CardDefinition* d = a.def ? a.def : CardDatabase::Instance().Lookup(a.card_name);
+                if (d && d->params.draw_on_aura_cast) { aura_watcher = true; break; }
+            }
+        }
+    }
     // Site 7 pre-scan: the pod chain needs TWO activatable Pod-style sources on the pre-apply
     // battlefield (the plan's activation taps one; the chain is the OTHER one saccing its fetch).
     // Counted here once, like `watcher`; the action loop below marks any plan that actually
@@ -32185,6 +32221,42 @@ static int PlanOpensBreakpoint(const GameState& state, const TurnSolver::Plan& p
         // apply-time gate then sees loyalty_activated_this_turn and stands down at zero cost.
         if (TurnSolver::PostEntryBreakpointClassOn() && CardHasPostEntryActivation(d->params))
         { mask |= 1 << 9; }
+        // Site 10: the GENERAL put-in-hand class (MTG_BP_PUT_IN_HAND). Its ARMING asks the OUTCOME
+        // -- "did the hand gain a card?" -- which is exactly what no static predicate can answer, so
+        // this clause names the ROUTES by which a cast can put a card in hand today and that no
+        // other site already claims. ParamKeyedDrawClass is the same function the arming site uses
+        // to decide the SITE NUMBER, so the two stay one definition apart, and a cast some other
+        // class owns is never double-marked here.
+        //
+        // THE BUG THIS CLOSES (auras gi428). Without a clause here NOTHING ever fanned site 10 out
+        // -- not wave 0, not the wave walker (both read this predicate), and no node hosts it
+        // (BpNodeSites cannot return bit 10, and there is no node_owns_site(10) call site). But the
+        // class IS in BpSiteMask, so `class_on` is true in bp_searched_plan and MTG_BP_BASE_CANON
+        // (default 1) handed every BASE plan cands.front() as its continuation. That is a one-option
+        // heuristic with no scored alternative at ANY budget, depth or width -- a heuristic wired as
+        // a prune. Measured: gi428 T4 -> T5, invariant across budget 0/unlimited, --depth 3..9,
+        // MTG_BP_DEPTH 2/4/8 and MTG_BP_SEARCH 4/8/16, and recovered by suppressing the canon at
+        // site 10 alone. Same shape as the Gold Rush site-5 note above -- a masked-on class whose
+        // continuation no rank can reach.
+        //
+        // WHY THE ROUTE LIST AND NOT "EVERY CAST". The maximally conservative form -- mark any cast
+        // ParamKeyedDrawClass has not claimed -- was built and MEASURED: it fires on nearly every
+        // plan of every deck, which is the site-6 cost profile applied universally, and the smoke
+        // tier came back 21 keys WORSE / 6 better at d3-d5 (small per-key deltas, i.e. the fan-out
+        // displacing budget, not finding better lines). So the clause names the routes by which a
+        // cast can actually put a card in hand today and that no other site claims: the Kor
+        // Spiritdancer WATCHER (state-keyed, exactly like site 6's Equipment watcher), the
+        // etb_self_draw family the class's own arming note names (Ice-Fang Coatl, Arcum's
+        // Astrolabe), and a plain cast_draw that the site-5 trick clause does not take. A card
+        // implemented later with a new route still ARMS (the arming is outcome-keyed and stays so);
+        // it lands here as an un-fanned plan, which is the pre-existing conservative shape for
+        // sites 6/7/8/9. If a route is ever added, ADD IT HERE TOO -- the canon note in
+        // bp_searched_plan spells out what an un-fanned site costs, and nothing enforces it.
+        if (BpPutInHandEnabled() && !TurnSolver::ParamKeyedDrawClass(state, *d)
+            && ((aura_watcher && d->params.is_aura)
+                || d->params.etb_self_draw > 0
+                || d->params.cast_draw > 0))
+        { mask |= 1 << 10; }
     }
     return mask;
 }

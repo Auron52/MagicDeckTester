@@ -1,10 +1,14 @@
 # Auras loses a turn to the put-in-hand class, and no budget buys it back
 
-**Status:** gi20 FIXED (`e927240a`); **gi428 still open.** It is a DIFFERENT bug from gi20, but
-probably the SAME FAMILY: a plan/apply mismatch. It is not reached by gi20's record/replay fix, and
-it is invisible to `[fd-diverge]` because that oracle watches only the commit-the-line executor
-boundary, not `apply_one`. Post-fix tiers: smoke **4 better / 0 worse**,
-regression **23 better / 3 worse** (3 = `hinata gi103` churn + gi428 counted at d3 and d5).
+**Status: BOTH FIXED.** gi20 (`e927240a`, a record/replay defect in the committed-line executor)
+and gi428 (this file's root-cause section, below: the class was masked ON with **no route into the
+variant machinery**, so `MTG_BP_BASE_CANON`'s one-option heuristic pick stood unchallenged at any
+budget, depth or width). They are DIFFERENT bugs, and only gi20 is a plan/apply mismatch -- the
+"same family" reading recorded here earlier is **retracted** in the root-cause section.
+
+Jump to **"ROOT CAUSE: a class in the mask with no route into the search"** for the verdict; the
+sections above it are the investigation, and are kept for method (what the negatives ruled out, and
+why every effort knob was invariant) rather than for their conclusions.
 
 The put-in-hand class was not the cause OF gi20 -- for that game it is strictly additive at the
 search level (`MTG_LEGACY_SEARCH=1` finds T4 with the class ON); it merely selected a line that
@@ -405,3 +409,157 @@ MTG_BP_PUT_IN_HAND=0 MTG_DUMP_WINS=1 build/Release/mtg decks/Auras/Auras.cod \
 ```
 
 Related: `docs/design/breakpoint-condemnation-status.md`.
+
+---
+
+# ROOT CAUSE: a class in the mask with no route into the search (2026-09-19)
+
+**gi428 is not a plan/apply mismatch.** The apply is additive and correct. The defect is that
+`MTG_BP_PUT_IN_HAND` put site 10 into `BpSiteMask()` without giving it any way to be *searched*, and
+a default-on lever then filled the gap with an unchallengeable heuristic.
+
+## The chain, one power-checked link at a time
+
+Each row was measured on the cheap turn-1 certificate
+(`MTG_DUMP_EWINS=1 MTG_DUMP_EWINS_TURN=1 … --seed 2430 --game-index 428 --depth 5 --budget-ms 0`)
+and confirmed on the full game (`[fd] T1 line win=…`).
+
+| arm | site 10 in `BpSiteMask` | site 10 ARMS + re-solves | certificate |
+|---|---|---|---|
+| `MTG_BP_PUT_IN_HAND=0` | no | no | **4** |
+| default (class on) | yes | yes | **5** |
+| `MTG_BP_PUT_NO_RESOLVE` (diagnostic) | yes | no | **4** |
+| `MTG_BP_PUT_MASK_OFF` (diagnostic) | no | yes (20,918 armings) | **4** |
+
+So the arming and the continuation are **not** the cause. `MTG_BP_PUT_MASK_OFF` is byte-identical to
+the class being off — the whole fan-out trace matches line for line — which says the site-10 greedy
+continuation does nothing on this deck. **Only the mask bit carries the loss.**
+
+Splitting the mask by consumer (three diagnostics, one per reader) named `class_on` in
+`bp_searched_plan`; the wave-site masks and the prefix-resume capture gate were both inert. And
+`class_on` reaches play through exactly one branch that does not need a variant:
+
+```cpp
+// TurnSolver.cpp, bp_searched_plan
+if (!resolved && class_on && g_rollout_nest == 0)
+{
+    const int  bc        = BpBaseCanon();                 // MTG_BP_BASE_CANON, DEFAULT 1
+    const bool base_slot = bc > 0 && g_bp_enum_depth == 0 && plan.bp_choice < 0 && …;
+    if (enum_slot || base_slot) { out = ncands.front(); resolved = true; }   // value-best entry
+}
+```
+
+`base_slot` fires for **base** plans (`bp_choice < 0`). Suppressing that block at site 10 alone
+(`MTG_BP_PUT_NOCANON`) → **certificate 4**. The instrumented fan-out trace confirms the mechanism
+needs no variants at all: at the first state the two arms disagree on (call #226, turn 4 — the
+class-on arm never enumerates a `lands=2 hand=6` turn-4 state the class-off arm visits twice) the
+running variant count is **`vars=0` in both**.
+
+Note `MTG_BP_BASE_CANON`'s own comment says *"default 0 = off"*. The code is
+`EnvInt("MTG_BP_BASE_CANON", 1)` — **the default is 1.** The comment is stale.
+
+## Why nothing could ever challenge that pick
+
+`PlanOpensBreakpoint` is the predicate **both** selection routes read — wave 0
+(`AppendBreakpointVariants`) and the deferred wave walker (`BpWaveWalker`'s constructor). It had
+clauses for sites 0, 1, 2, 3, 5, 6, 7, 8 and 9. **It had none for site 10**, and site 10 is not
+node-hosted either (`BpNodeSites()` cannot return bit 10, and there is no `node_owns_site(10)` call
+site anywhere). Site 4 has no clause either but is covered by the `BpDigFanoutPending` bypass.
+
+So site 10 was the only class in the mask with **no route into the variant machinery at all**. The
+instrumented census says it plainly — over a whole gi428 game, `PlanOpensBreakpoint` returned a
+nonzero mask **zero times** for any Auras plan (`opens_union=0x0`), and every plan that was fanned
+out got there through the dig bypass.
+
+The file already states the consequence, in the site-6 clause, two hundred lines above the gap:
+
+> *"this predicate is what earns the plan its `bp_choice` variants, so without the clause the
+> continuation would exist but be permanently GREEDY (the wave walker reads this same predicate)."*
+
+**This is the exact shape of the Gold Rush site-5 defect** recorded in the same function: a
+masked-on class whose continuation no rank can reach.
+
+## Why every negative was a negative
+
+This explains, in one sentence, the entire list of power-checked arms that measured inert: budget
+(20 ms … unlimited), `--depth` 3/5/7/9, `MTG_BP_DEPTH` 2/4/8, `MTG_BP_SEARCH` 4/8/16, every cap,
+every memo, and the plan-signature dedupe. **All of them are knobs on machinery site 10 never
+entered.** Invariance to every effort knob is the signature of a representation gap, not starvation
+— the lesson the neighbouring one-deviation note states — and it was pointing here the whole time.
+
+## The fix
+
+A site-10 clause in `PlanOpensBreakpoint`, plus the lockstep note at the canon.
+
+The maximally conservative form — mark any cast `ParamKeyedDrawClass` has not claimed — was built
+and **measured**, and it is too broad: it fires on nearly every plan of every deck (the site-6 cost
+profile applied universally) and the smoke tier came back **21 keys worse / 6 better** at d3–d5,
+with small per-key deltas, i.e. the fan-out displacing budget rather than finding better lines.
+
+The shipped clause names the routes by which a cast can actually put a card in hand today and that
+no other site claims:
+
+* the **Kor Spiritdancer watcher** (`draw_on_aura_cast` + an Aura cast) — state-keyed, exactly like
+  site 6's Equipment watcher, and pre-scanned the same way (battlefield, then the plan's own casts);
+* `etb_self_draw > 0` — the family the class's arming note names (Ice-Fang Coatl, Arcum's Astrolabe);
+* `cast_draw > 0` where the site-5 trick clause does not take it.
+
+A card implemented later with a new route still **arms** — the arming stays outcome-keyed, which is
+the whole point of the general rule — it just is not fanned out, which is the pre-existing
+conservative shape for sites 6/7/8/9.
+
+**Measured:** gi428 certificate 4, game T4, no `fd-diverge`; gi20 unchanged at T4.
+
+*Smoke* blast radius is 5 keys: `auras_smoke_d3` 4.1400→4.1367, `auras_smoke_d5`
+4.1240→4.1200, `auras2hg_smoke_d3` 4.5600→4.5200, plus `hinata_smoke_d3` /
+`hinata2hg_smoke_d3` digest-only (same win turn). **Zero worse.** Makespan 43 s vs 47 s.
+
+*Regression* blast radius is 9 keys: **4 better** (`auras_regression_d3_s3003` 4.1840→4.1720,
+`auras_regression_d5_s2002` 4.0820→4.0800, `auras_regression_d5_s3003` 4.1640→4.1560,
+`hinata_regression_d3_s3003` 5.7250→5.7200), **4 digest-only** (hinata), **1 worse**
+(`auras_regression_d3_s2002` 4.0880→4.0900). Makespan 118 s vs 114 s. The reference
+reproducibility phase is byte-identical to the baseline -- same two pre-existing Fungus
+play-drifts, same 25 ok / 298 repaired / 1 board-diverged / 10 mull-drift.
+
+### The one worse key is gi428 itself, and it is budget churn
+
+The differing game in `auras_regression_d3_s2002` is **gi=428** (500 games, Δ 0.0020 = exactly one
+game one turn later). Swept at d3, `--seed 2430 --game-index 428`:
+
+| budget | pre-fix | with fix |
+|---|---|---|
+| 10 ms *(the tier's d3 cell)* | 5 | **6** |
+| 40 ms | 5 | **4** |
+| 160 ms | 5 | **4** |
+| 640 ms | 5 | **4** |
+| 2560 ms | 5 | **4** |
+| unlimited | **6** | **4** |
+
+The curve flattens at 4x the tier budget and never comes back, which is the churn bar's test. Two
+things worth reading off the right-hand column: the fix recovers T4 at every budget the game can
+actually think in, and it also removes a **pre-existing non-monotonicity** -- the OLD engine is
+worse at unlimited budget (6) than at 10 ms (5), because more search means more chances to take the
+unchallengeable canon. Non-monotonicity in budget is the tell this defect left everywhere.
+
+## The invariant this leaves behind
+
+**A class in `BpSiteMask` must have a route into the variant machinery** — a `PlanOpensBreakpoint`
+clause, a node host, or an explicit bypass. Without one, `MTG_BP_BASE_CANON` hands it a one-option
+heuristic that no budget can challenge, which is a heuristic wired as a prune. The note now lives at
+the canon site in `bp_searched_plan`, cross-referenced from the site-10 clause.
+
+The obvious structural guard — gate the canon on the site being fan-out-able — is **not** shipped
+here: after this clause every site has a route, so the guard would be a behavioural no-op today, and
+it needs a hand-maintained site list (site 4's route is the dig bypass, not a clause). It is worth
+building if a third site ever ships without a route. See also: site 10 still has no node host, so
+`MTG_BP_NODE`-style hosting of the general class remains open work.
+
+## Retractions this section makes
+
+* **"gi428 is the same family as gi20 — a plan/apply mismatch."** No. The apply is additive and
+  correct; the defect is in plan SELECTION, and it is search-side only. (The earlier retraction, of
+  "the certificate is a position invariant", stands — the certificate is a clairvoyant search
+  result, and it moved because the search moved.)
+* **"The defect is invisible to `[fd-diverge]` because that oracle watches only the executor
+  boundary."** True of the oracle, but it was never the reason: there is no mismatch to see. The
+  search and the executor agreed the whole time — on a worse line.
