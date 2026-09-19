@@ -528,6 +528,62 @@ a dedicated 20-life build.
 single-card trades in every direction, with the two sanity arms (Sol Ring, Righteous Valkyrie)
 confirming the screen resolves real effects when they exist.
 
+### Screen 11 — legend counts AND Lightstall, on the FIXED engine (`spec11_legends_lightstall.json`)
+
+17 arms + base × 3 formats × 40,000 games (2.04 M games), seed 2100000, after the duplicate-legend
+prune fix. Deltas are **paired per game index against `v_a`**; negative is faster. This screen
+answers the user's challenge to the 4-ofs, prices their Lyra Dawnbringer preference, and re-measures
+the card the yardstick error had wrongly excluded.
+
+| arm | std | 2HG | long | reading |
+|---|---|---|---|---|
+| **(L) cut a legend** | | | | |
+| `l3_yv3` Lyra ArchDawn 4→3 | **+0.0129** | +0.0171 | +0.0244 | worse |
+| `g3_yv3` Giada 4→3 | +0.0101 | +0.0153 | +0.0191 | worse |
+| `l3_g3_yv4` both →3 | +0.0239 | +0.0311 | +0.0432 | worse |
+| `g2_yv4` Giada →2 | +0.0304 | +0.0428 | +0.0532 | worse |
+| **(L) Lyra Dawnbringer** | | | | |
+| **`d1_thune2` 1 Dawnbringer, Thune 3→2** | **−0.0015** (t −1.0) | **−0.0027** (t −1.7) | +0.0103 | **free at 20 and 30 life** |
+| `d1_yv1` paid from Youthful Valkyrie | +0.0134 | +0.0038 | +0.0118 | costs |
+| `d1_lad3` paid from Lyra ArchDawn | +0.0297 | +0.0230 | +0.0357 | expensive |
+| `d1_giada3` paid from Giada | +0.0280 | +0.0253 | +0.0339 | expensive |
+| `d2_l3_g3_yv2` two Dawnbringer | +0.0604 | +0.0544 | +0.0767 | very expensive |
+| **(I) Lightstall Inquisitor** | | | | |
+| `i1_yv1` 1, from Youthful Valkyrie | −0.0195 | −0.0088 | −0.0075 | better |
+| `i1_thune2` 1, from Thune | −0.0321 | −0.0139 | −0.0055 | better |
+| `i2_yv0` 2 | −0.0309 | −0.0121 | −0.0083 | better |
+| `i2_thune2_yv1` 2 | −0.0481 | −0.0204 | −0.0090 | better |
+| **`i3_thune2_yv0` 3** | **−0.0558** (t −20) | **−0.0216** | −0.0060 | **best arm in the screen** |
+| `i1_plains15` 1, from the 24th land | −0.0188 | −0.0078 | −0.0068 | better |
+
+**The 4-ofs survived the challenge, and by a WIDER margin than before the fix.** Every arm that cuts
+a legend count is worse in all three formats, and *the cost of cutting grows with game length* —
+which is the mechanism the prune fix restored. A redundant legend is not a blank here: it is a
+Bishop-of-Wings 4 life, a Righteous Valkyrie gain, a Seraph Sanctuary gain, a Youthful Valkyrie
+counter and a Giada counter on the way in, plus a Spirit token on the way out, and a longer game
+cashes more of them. The user's suspicion was well-founded as a question; the answer is that the
+counts were if anything *under*-supported by the old engine, not over-supported by it.
+
+**The Dawnbringer preference has a price, and the price is zero if the right slot pays.** Funding
+1 Lyra Dawnbringer out of the **third Archangel of Thune** measures −0.0015 (t = −1.0) at 20 life and
+−0.0027 (t = −1.7) at 30 — neither distinguishable from zero — against +0.0103 at 40. Funding it out
+of Lyra ArchDawn or Giada instead costs ~20× more. Since the user's stated reason is life total as a
+defensive resource on big boards — something a goldfish *cannot* price at all — a swap that is free
+on the measurable axis and positive on an unmeasurable one is a straightforward take.
+
+**Lightstall is good, and the internal control separates the card from the slot.** Cutting a Thune
+for a 5-mana Dawnbringer is ~neutral (−0.0015); cutting a Thune for a 1-mana Lightstall is −0.0321.
+The ~0.031 difference is the *card*, not the Thune cut — so this is not the "expensive to cut ⇒ the
+donor was the effect" confound. The effect decays sharply with game length (−0.056 → −0.022 →
+−0.006), exactly as a cheap enabler should: it buys early trigger density, which matters least when
+there is plenty of time.
+
+**Two things screen 11 left open**, both handled in screen 12 (seed 2200000, held out):
+1. **Lightstall is monotone to the edge of the tested range** — 3 was the most tested and 3 won.
+   This document's own central caveat says that is not a maximum. Screen 12 takes it to four.
+2. **The two winning edits were never combined.** The only combined arm (`d1_i1_yv0`, −0.0022 std)
+   paid for the Dawnbringer out of Youthful Valkyrie rather than the Thune that made it free.
+
 ## THE RECOMMENDED LIST (`v_a`)
 
 Held out on disjoint seeds with no measurable shrinkage. Pooled over **80,000 games per format**:
