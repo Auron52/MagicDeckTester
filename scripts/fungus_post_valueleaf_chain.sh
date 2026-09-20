@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
-# Unattended post-value-leaf chain for ONE deck: wait -> verify -> adoption gate -> mulligan scout
-# -> gated full mulligan gen.
+# Unattended post-value-leaf chain for ONE deck:
+#   wait -> verify -> REGRESSION ENTRY (pre-adoption) -> adoption gate -> mulligan scout
+#   -> gated full mulligan gen.
 #
 # WHY THIS EXISTS. The value-leaf run and the mulligan generation are strictly serial stages (see
 # CLAUDE.md), and the agent driving them may run out of budget between the two. That would leave the
@@ -59,7 +60,29 @@ if [ ! -e "$VLQ/done/F_mullgen" ]; then
 fi
 log "value-leaf run COMPLETE (F_mullgen present)"
 
-# ---- 3. Adoption gate -----------------------------------------------------------------------
+# ---- 3. Regression suite entry, BEFORE adoption ----------------------------------------------
+# Order matters and is not arbitrary. Ground truth accepted here is on the HEURISTIC engine, which
+# is the EXPENSIVE path -- so a case that fits now still fits once the value leaf is adopted. It
+# also means the post-adoption re-run's GT delta isolates the value leaf instead of confounding it
+# with the deck's first appearance in the suite. The box is idle at this point, which is exactly
+# what the wall-clock sizing probe needs.
+if [ "${SKIP_REGRESSION:-0}" != 1 ]; then
+    log "PHASE: regression suite entry (sized by measured wall, accepted pre-adoption)"
+    bash scripts/fungus_regression_add.sh >> "$OUT/regadd_chain.log" 2>&1
+    rrc=$?
+    log "regression-add finished rc=$rrc (see logs/${STEM}_regadd/regadd.log)"
+    case $rrc in
+      0) : ;;
+      5) log "  PERFORMANCE BLOCKER: deck too slow for the shared suite budget."
+         log "  Continuing to the mulligan stage anyway -- the blocker is a REPORT, not a stop,"
+         log "  and the scout's slow-cell output is what would be used to fix it." ;;
+      *) log "  regression-add failed -- continuing; the mulligan stage does not depend on it." ;;
+    esac
+else
+    log "SKIP_REGRESSION=1 -- skipping the suite entry step"
+fi
+
+# ---- 4. Adoption gate -----------------------------------------------------------------------
 # The mulligan generator reads mull_gen_depth / mull_gen_budget_ms / expected_buckets out of the
 # LIVE sidecar. Running before adoption inherits the play depth and measures the pre-value-leaf
 # path, which is slower by a measured 1.35x-84.8x -- a projection made there is not merely noisy,
@@ -92,7 +115,7 @@ print('mull_gen_depth=%s mull_gen_budget_ms=%s expected_buckets=%s' % (
     vp.get('mull_gen_depth'), vp.get('mull_gen_budget_ms'), vp.get('expected_buckets')))
 " 2>/dev/null || echo '(unreadable)')"
 
-# ---- 4. Mulligan SCOUT (recommend) -----------------------------------------------------------
+# ---- 5. Mulligan SCOUT (recommend) -----------------------------------------------------------
 # Bounded: discovery + exactly one rollout per cell, then project full-gen wall clock and report the
 # slowest cells. Writes NO profile, so it cannot change play. Its R=1 probe chunk is reused verbatim
 # by a later complete/fast gen, so this is the real gen's first slice rather than throwaway work.
@@ -110,7 +133,7 @@ fi
 log "--- projection ---"
 grep -E "projected|overnight target|fits|exceed|probe chunk|slowest" "$REC" | tee -a "$LOG"
 
-# ---- 5. Gated full generation ----------------------------------------------------------------
+# ---- 6. Gated full generation ----------------------------------------------------------------
 # Parse recommend's own verdict. Unparseable => STOP, which is the safe direction: an unattended
 # multi-hour gen must never start on a guess.
 RECIPE=""
