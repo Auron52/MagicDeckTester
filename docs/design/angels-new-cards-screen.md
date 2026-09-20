@@ -1497,10 +1497,72 @@ and that means nothing: the user ruled the removal stays, and the sim cannot see
 
 ## Open, in priority order
 
-1. **`leaf: none` sensitivity audit.** The staleness concern is gone — the model was regenerated on
-   the adopted list (`4e81a3e7`) — so what remains is only whether the pivotal comparisons survive
-   leafless. Note the regeneration measured leafless at **3.1x** wall cost on this deck, so
-   `leaf: none` is an audit instrument here, not a shipping candidate.
+1. **RESTORE THE LEAFLESS SINGLE-PASS SHAPE? — measured 2026-09-20, USER'S CALL.**
+   **An adopted config was silently lost.** `918c3cc2` (2026-09-17) created
+   `decks/Angels/Angels.value.json` as exactly `{"value_play": {"ladder": "single", "leaf": "none",
+   "alpha": "relaxed"}}`, adopted under the standing no-drawback rule for **2.3x CPU with identical
+   play**. The campaign's value-leaf generation then **overwrote that file** and all three keys
+   vanished: the archived v1 sidecar carries `ladder: escalation` / `leaf: model`, and the shipped
+   v2 sidecar carries neither. The deck is running the engine default today.
+
+   **And the reason this item was previously dismissed was wrong.** The old note here said
+   leafless costs this deck **3.1x**, so `leaf: none` was "an audit instrument, not a shipping
+   candidate". That 3.1x was measured against an arm with **NO SIDECAR AT ALL**, which is the
+   documented H-cell perf cliff (`value-leaf.md`: the ladder is guarded on the sidecar EXISTING, so
+   a missing model silently costs 1.35–84.8x). It is *not* what `leaf: none` does — a sidecar that
+   exists and sets `leaf: none` satisfies that guard. The two were conflated.
+
+   **Measured properly** (4,000 paired games per format, seed 5100000, budget 40, max_turns 18,
+   both arms sidecar-PRESENT, same decklist / profile / keep table — only `value_play` differs):
+
+   | format | shipped (leaf: model) | leafless single | delta | t | play differs | CPU |
+   |---|---|---|---|---|---|---|
+   | std  | 4.6783 | 4.6780 | −0.0003 | −1.0 |  2/4000 | 0.72x |
+   | 2hg  | 5.1658 | 5.1640 | −0.0018 | −2.6 |  7/4000 | 0.74x |
+   | long | 5.5080 | 5.5038 | −0.0043 | −3.5 | 33/4000 | 0.72x |
+
+   So leafless is **28% cheaper CPU and nominally FASTER on all three formats**, significantly so
+   at 40 life. Nothing regresses.
+
+   **Why it was not adopted anyway.** Staged and run through all three tiers: smoke and regression
+   are clean (regression **114/114 byte-identical**), but the overnight tier's generous budgets
+   churn 8 of 16 Angels cells — 5 digest-only at an identical average, 2 slower by 0.001–0.002, 1
+   faster by 0.002, **net +0.0010 turns**, audit `slower=3 faster=1`. Those deltas are 20–50x
+   below the per-cell SE at 500–1000 games and the 12,000-game paired measurement above is by far
+   the better instrument — but the user's bar is *"a clean win = no regression on ANY axis vs the
+   SHIPPED baseline"*, and `slower=3` is not unambiguously that. Adopting it would mean overriding
+   that bar on my own reading of which instrument to trust, which is the exact failure the
+   fresh-full revert was about. **Reverted to shipped; tree clean, 84/84 smoke green.**
+   Re-adopting is three keys in `Angels.value.json` plus a 26-key Angels rebaseline.
+## The new list vs the old one, measured head-to-head (2026-09-20)
+
+The campaign always compared arms against a shared screening apparatus, never v1 against v2 as two
+shipped decks. This is that comparison: each list played **as it actually ships** — its own
+decklist, profile, keep table and value sidecar (the engine resolves siblings directory-relative
+off the profile path, so `v1-thune4-chancery/` supplies v1's whole apparatus). 4,000 paired games
+per format, seed 5100000, budget 40, max_turns 18. Negative = v2 faster.
+
+| format | v1 (24 lands, cmc 2.86) | v2 (23 lands, cmc 2.49) | delta | t | v2 faster / slower | unwon |
+|---|---|---|---|---|---|---|
+| std (20)  | 5.2767 | 4.6783 | **−0.5985** | −38.4 | 2094 / 358 | 0 / 0 |
+| 2hg (30)  | 5.7340 | 5.1658 | **−0.5683** | −32.5 | 2017 / 469 | 0 / 0 |
+| long (40) | 6.1370 | 5.5080 | **−0.6290** | −32.3 | 2220 / 567 | 0 / 0 |
+
+**Late-weighted (.20/.30/.50): −0.6047 turns.** The new list is about six tenths of a turn faster
+on every format, and neither list ever fails to win inside 18 turns.
+
+Worth keeping in proportion: every screen in this document fought over **0.01–0.03** turns, and the
+decision that actually mattered — cutting the curve from 4-14-8-3-7 to 7-13-12-2-3 and dropping a
+land — was worth **0.60**, twenty to sixty times the margin of any single card swap that followed
+it. The per-card screens were re-optimising inside a decision that had already been made.
+
+Two caveats, both in the same direction. The apparatus is not held constant (each list brings its
+own keep table and value model, which is the point — it is what you would really play), so this
+prices the LIST PLUS ITS FITTING, not the 60 cards alone. And the sim's 0-cast blind spot applies
+to both: v1 carried 3 Unexpectedly Absent + 3 Swords, v2 carries 3 + 2, so v2 holds one fewer card
+the engine scores as an empty slot — worth roughly a third of the −0.0814/−0.1002/−0.1293 that
+screen 19 priced for the never-cast penalty, i.e. a real but minority share of the gap.
+
 ### Closed 2026-09-20 (the two items the user directed after adoption)
 
 * ~~**`angels2hg` missing from `test/regression_cases.sh`**~~ — added in `34bcb90a`, six new GT keys
