@@ -952,6 +952,11 @@ static std::atomic<long long> g_iddepth_n{0}, g_iddepth_sum{0};
 // back (their partial result discarded). Pure loss -- the pass-cost predictor's miss, and the
 // direct target of a node-aware pass-cost estimate (node passes overshoot: the [bp-node] doc).
 static std::atomic<long long> g_idwaste_units{0}, g_idwaste_passes{0}, g_idpass_starts{0};
+// LAZY LEAF telemetry (same MTG_ROLLOUT_STATS gate; see LazyLeafOn far below for the mechanism).
+// A HIT is a pass whose leaf work was skipped outright because the leafless probe already proved an
+// in-window win; a MISS is a probe that found nothing and therefore cost one extra interior walk.
+// The ratio of the two, against probe_units, IS the lever's whole cost/benefit.
+static std::atomic<long long> g_lazy_hits{0}, g_lazy_misses{0}, g_lazy_probe_units{0};
 // Committed lines that ended at an order-free memo reuse and were re-searched to completion (fill-in).
 static std::atomic<long long> g_fillin_passes{0}, g_fillin_units{0}, g_fillin_still_truncated{0};
 // Of those aborted passes, how many had ALREADY PROVEN a strictly better win than the shallower
@@ -1481,6 +1486,20 @@ namespace
                           << " waste_units=" << iw
                           << " waste_share=" << (site_tot ? static_cast<double>(iw) / site_tot : 0.0)
                           << "\n";
+            }
+            // LAZY LEAF (see LazyLeafOn): hit = a pass whose leaf work was skipped outright,
+            // miss = a probe that found no in-window win and cost an extra interior walk.
+            // hit_rate is the lever's benefit; probe_units its price. Silent when the lever is off.
+            {
+                const long long lh = g_lazy_hits.load(), lm = g_lazy_misses.load();
+                if (lh + lm > 0)
+                {
+                    std::cerr << "[rollout-stats] lazy_leaf hits=" << lh << " misses=" << lm
+                              << " hit_rate=" << (static_cast<double>(lh) / static_cast<double>(lh + lm))
+                              << " probe_units=" << g_lazy_probe_units.load()
+                              << " probe_share=" << (site_tot ? static_cast<double>(g_lazy_probe_units.load()) / site_tot : 0.0)
+                              << "\n";
+                }
             }
             {
                 long long ln = 0; for (int d = 0; d < 16; ++d) { ln += g_lad_commit_n[d].load(); }
@@ -37889,6 +37908,53 @@ struct ForceConstantLeafGuard
     ~ForceConstantLeafGuard() { g_force_constant_leaf = prev; }
 };
 
+// ---------------------------------------------------------------------------- LAZY LEAF (USER 2026-09-20)
+// > "use no leaf until we have fully searched up to our depth and only use the leaf at that point.
+// >  This way we wouldn't have to pay for any rollouts (or even value-leaf) if we found our win in
+// >  the search window."   ... "Especially for those heavy heuristic rollout leaves."
+//
+// Each iterative-deepening pass is PROBED LEAFLESS first: the horizon answers max_turns+1 (exactly
+// as MidGameEvaluator::Constant does), so the pass costs its TREE and nothing else. If that probe
+// proves a win INSIDE the horizon, the leafed pass is skipped outright -- no rollout, no feature
+// extraction, no SimulateToEnd.
+//
+// WHY THE SKIP IS SOUND, and it needs no estimate. A leaf at a horizon state s returns
+// w >= s.turn_number (FSLineWin clamps it). A leafless pass's win is PROVEN by real simulation
+// inside the horizon, so its turn T is at or before the horizon turn, and every leaf therefore
+// reports w >= T. A leaf can never beat a win the exact search already found in-window -- it can
+// only tie it. So the skip loses no win.
+//
+// WHAT IT COSTS when the probe finds nothing: one extra walk of the INTERIOR tree. That is the
+// whole downside, and it is small where this matters -- measured on unbounded Snow H5, interior
+// nodes are 4.3% of the step count, matching EDF's 95.3% and Fungus's 99.7% of work sitting at the
+// horizon edge. The benefit GROWS WITH DEPTH (deeper search finds more in-window wins) while the
+// cost is flat, and depth is exactly where the cost lives: H4+H5 were 76% of the Fungus census.
+//
+// PRIOR ART, and the reason this is not speculative: EDF already ships the restricted form as the
+// MTG_LABEL_GOFF cuts (2.57x on the yardstick, 13.4x on its worst game, play digests and label rows
+// verified IDENTICAL). Those are gated to the `earliest_only` LABEL path, which is why they do
+// nothing for the depth matrix -- EnumerateEarliestWins is simply not on the play search's route.
+// This is the same insight moved onto the path phase C actually runs.
+//
+// DIFFERENT FROM EDF'S CUT IN ONE IMPORTANT WAY. EDF's cuts STOP EARLY on the first win, which is
+// sound only where the objective is `report.earliest` alone. This DEFERS instead: the exact depth-d
+// search completes, and only the leaf work is skipped. Exactness inside the window is untouched, so
+// tie-breaking among exact lines is unaffected.
+//
+// THE TRAP -- LOSSLESS IS NOT PLAY-NEUTRAL UNDER A BUDGET. Budgets are denominated in work units
+// and SearchBudget::Consume is their sole producer, so consuming fewer units per node buys MORE
+// search for the same budget and play changes even though no win was lost. UNBOUNDED regimes (the
+// phase C matrix, label generation) are play-neutral under this cut -- same tree, same answer, less
+// work -- and are its natural target. Budgeted play needs a budget recalibration or this left off.
+// DEFAULT OFF for exactly that reason. See docs/design/per-game-wall-clock-backstop.md.
+inline bool LazyLeafOn()
+{
+    static const bool env = EnvOn("MTG_LAZY_LEAF");
+    return heurarm::Flag(heurarm::LAZY_LEAF, env);
+}
+// (Telemetry counters live with the rest of the rollout-stats block near the top of this file --
+//  the reporter is defined long before this point.)
+
 // fd-oracle diagnostic (MTG_FD_ORACLE only): the smallest WIN-CLAIMING estimate (w <= max_turns) the
 // VALUE leaf returned during the current top-level decision. The commit-only-verified doctrine reads
 // `line.win_turn <= turn + searched_depth - 1` as "this win was found by real simulation", which held
@@ -39315,7 +39381,15 @@ static TurnSolver::SearchLine FSLineWin(const GameState& state, int depth, int m
         const MidGameEvaluator* vm = (!g_force_heuristic_leaf && (UseValueModel() || g_force_value_leaf)
                                       && state.m_value_model && !state.m_value_model->empty())
                                    ? state.m_value_model : nullptr;
-        if (vm && (vm->constant || g_force_constant_leaf))
+        // NO-LEAF applies with or WITHOUT a model attached. It used to be written `vm && (...)`,
+        // which silently made g_force_constant_leaf a no-op on the pure-HEURISTIC arm -- the arm
+        // with no sidecar, where the leaf is the expensive SimulateToEnd rollout and a leafless
+        // probe is worth the most. That was invisible while the only caller was the emulated
+        // ladder (which requires an attached model by construction), and it made the lazy-leaf
+        // probe run full rollouts while reporting a 100% "hit" rate: identical units in both arms,
+        // which is what gave it away. Byte-identical for every pre-existing caller: the flag is
+        // set only by the emulated ladder's warm-ups and by the lazy-leaf probe.
+        if (g_force_constant_leaf || (vm && vm->constant))
         {
             // NO-LEAF: never a win here; the search commits only what it proves inside the horizon.
             g_fs_leaf_wt_sum += max_turns + 1;
@@ -41258,6 +41332,14 @@ TurnSolver::SearchLine TurnSolver::FullSearchLine(const GameState& state, int de
     // table): it caches draw-dependent lines, valid only under THIS call's single
     // fixed root library (library size => remaining content). See FSLineCache.
     FSLineCache line_cache;
+    // SEPARATE memo for the lazy-leaf probes (see LazyLeafOn). It must not be `line_cache`: the
+    // probe searches the SAME (state, remaining-depth) keys with a different leaf, so its entries
+    // would answer a leafed pass with leafless win turns. That is the rule the emulated ladder and
+    // the hybrid's escalation both already obey ("a heuristic RE-RUN at a depth a value pass
+    // already searched must NOT see that pass's entries -- so the fallback path hands in a fresh
+    // cache"). Shared ACROSS probes, though: keys fold the remaining depth, so probe d+1 reuses
+    // everything probe d solved, exactly as the leafed ladder does with line_cache.
+    FSLineCache leafless_cache;
 
     // Iterative deepening with a deterministic START GATE (mirrors SolveWithLookahead).
     // Search 1, 2, ... `depth` complete turns and commit the deepest pass that fits the
@@ -41838,8 +41920,43 @@ TurnSolver::SearchLine TurnSolver::FullSearchLine(const GameState& state, int de
             budget->SetOverrunLimit(used_before + std::max(beta_ceiling, kOverrunFloor));
         }
         if (s_rollout_stats) { g_idpass_starts.fetch_add(1, std::memory_order_relaxed); }
-        SearchLine attempt = FSLineWin(state, pass_depth, max_turns, max_turns + 1, second_main, tt,
-                                       &line_cache, budget);
+        // LAZY LEAF: probe this pass with no leaf at all first. A win proven inside the horizon
+        // cannot be beaten by any leaf (see LazyLeafOn), so it commits the pass and the leafed
+        // search never runs. Default off => `lazy_taken` stays false => byte-identical.
+        SearchLine attempt;
+        bool lazy_taken = false;
+        if (LazyLeafOn() && pass_depth >= 1)
+        {
+            const long long probe_before = budget ? budget->Used() : 0;
+            SearchLine probe;
+            {
+                ForceConstantLeafGuard _c(true);
+                ConstantLeafPassGuard  _clp(true);   // leafless: stop at exhaustion, never overrun on a probe
+                probe = FSLineWin(state, pass_depth, max_turns, max_turns + 1, second_main, tt,
+                                  &leafless_cache, budget);
+            }
+            // A TRUNCATED probe proved nothing (its no-wins are unmemoisable past the first
+            // truncation, so the tree it walked is not the tree it claims), and an OVERRUN one is
+            // the pass's own abort. Either way fall through to the leafed pass and let the existing
+            // machinery judge it -- never commit a partial probe.
+            const bool probe_over = (budget != nullptr && budget->Overrun());
+            if (!probe_over && !probe.truncated && probe.win_turn <= max_turns)
+            {
+                attempt = probe;
+                lazy_taken = true;
+            }
+            if (s_rollout_stats)
+            {
+                (lazy_taken ? g_lazy_hits : g_lazy_misses).fetch_add(1, std::memory_order_relaxed);
+                g_lazy_probe_units.fetch_add((budget ? budget->Used() : 0) - probe_before,
+                                             std::memory_order_relaxed);
+            }
+        }
+        if (!lazy_taken)
+        {
+            attempt = FSLineWin(state, pass_depth, max_turns, max_turns + 1, second_main, tt,
+                                &line_cache, budget);
+        }
         bool aborted = (budget != nullptr && budget->Overrun());
         if (budget != nullptr) { budget->SetOverrunLimit(0); }   // disarm
 
