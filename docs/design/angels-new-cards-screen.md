@@ -1445,21 +1445,66 @@ computed on a 32-spell deck, which is the single largest caveat on all of it.
 *(One number in the raw output is a survivorship artifact and should not be read: "life at turn 6"
 is higher in the cut arms only because slower arms have more games still alive at turn 6.)*
 
+## Screen 19 — the curve distortion, measured as a difference-in-differences
+
+`spec19_world_ab.json`, seed 3400000 (a ninth disjoint block), 6 arms, same apparatus as 16–18.
+The user's argument, finally priced: *"The higher drops are a bit underrated in our analysis because
+we can potentially fill in the 2-drop slot with an Unexpectedly Absent."*
+
+**World A** is shipped reality (UA 3, YV 1) — the 2-slot is *artificially* empty, because 3 of its
+occupants are never cast. **World B** replaces exactly those 3 cards with 3 Youthful Valkyries, so
+the 2-slot is genuinely full at the same 60 cards and the same 23 lands. The same swap is priced in
+each world and differenced per game index, so the pairing survives both subtractions.
+
+| the swap | world | std | 2hg | long |
+|---|---|---|---|---|
+| Thune 2→3, paid by a Lightstall | A (2-slot empty) | +0.0475 | +0.0357 | +0.0283 |
+| | B (2-slot full) | +0.0465 | +0.0328 | +0.0255 |
+| Dawnbringer 1→2, paid by a Lightstall | A | +0.0478 | +0.0394 | +0.0370 |
+| | B | +0.0478 | +0.0363 | +0.0349 |
+
+**DiD — the size of the artifact:**
+
+| swap | std | 2hg | long |
+|---|---|---|---|
+| Thune | −0.0010 (t −0.4) | −0.0029 (t −1.0) | −0.0029 (t −0.8) |
+| Dawnbringer | +0.0001 (t +0.0) | −0.0031 (t −1.1) | −0.0022 (t −0.6) |
+
+**The distortion is REAL IN DIRECTION AND SMALL IN SIZE.** Five of six cells are negative (the sixth
+is +0.0001, i.e. zero), so the high drops do look better once the 2-slot is genuinely full — exactly
+as predicted. But no cell reaches |t| = 1.2, and as a share of the cost it is supposed to explain
+away it is **2.1% (std), 8.3% (2hg), 10.1% (long)** for the Thune swap and −0.2% / 7.9% / 5.8% for
+the Dawnbringer swap. Correcting for it changes **no verdict in this document**: a 3rd Thune still
+costs +0.0255 at 40 life in the world where the curve objection does not apply. The caveat is
+retired as a threat to the conclusions, and retained as a ~10% haircut on late-format margins.
+
+### The bigger number, and why it does NOT undermine the campaign
+
+`B0` vs `A0` is the same 60 cards except 3 Unexpectedly Absent → 3 Youthful Valkyrie:
+
+| | std | 2hg | long |
+|---|---|---|---|
+| sim's penalty for holding 3 never-cast cards | **−0.0814** (t −27.2) | **−0.1002** (t −30.1) | **−0.1293** (t −33.2) |
+
+So the engine scores the shipped list **0.08–0.13 turns slower purely for carrying cards it never
+casts** — an order of magnitude larger than the DiD. The distinction is the whole point: that penalty
+is very nearly *constant across arms*, so it cancels in every delta this campaign actually used to
+decide anything. The blind spot is large in LEVELS and almost absent in DIFFERENCES. That is the
+strongest available defence of the method, and it is measured rather than asserted.
+
+**World B is an instrument and was never a candidate.** It scores far better than the shipped list
+and that means nothing: the user ruled the removal stays, and the sim cannot see what removal does.
+
 ## Open, in priority order
 
-1. **The World A/B curve diagnostic** — identical cheap-for-expensive swaps measured with the 2-slot
-   empty (UA 3, YV 1) and full (UA 0, YV 4), differenced. Now better motivated than ever: the probe
-   measured **0 casts of Unexpectedly Absent and 0 of Swords to Plowshares in 9,000 games**, so the
-   distortion this diagnostic prices is confirmed to exist and only its size is unknown. World B is
-   an **instrument, never a candidate**: the user ruled the removal stays.
-2. **`leaf: none` sensitivity audit.** The staleness concern is gone — the model was regenerated on
+1. **`leaf: none` sensitivity audit.** The staleness concern is gone — the model was regenerated on
    the adopted list (`4e81a3e7`) — so what remains is only whether the pivotal comparisons survive
    leafless. Note the regeneration measured leafless at **3.1x** wall cost on this deck, so
    `leaf: none` is an audit instrument here, not a shipping candidate.
-3. **`angels2hg` is missing from `test/regression_cases.sh`.** Angels is measured at 2HG throughout
+2. **`angels2hg` is missing from `test/regression_cases.sh`.** Angels is measured at 2HG throughout
    this campaign but has no 2HG regression case, unlike `antilife2hg` / `auras2hg` / `breaching2hg`.
    Predates this work; still owed.
-4. **Two Fungus references no longer replay** (`claude_s1_gi0` win_turn 5->6, `claude_s2_gi1` 6->7),
+3. **Two Fungus references no longer replay** (`claude_s1_gi0` win_turn 5->6, `claude_s2_gi1` 6->7),
    found by the regression tier's `--strict` reference check on 2026-09-19. **Not caused by the
    Angels work** — `src` is byte-identical to the `76f76796` GT accept and nothing under
    `decks/Fungus` or `references/Fungus` changed. The cause is `56c57d73`, the site-10 breakpoint
@@ -1475,6 +1520,9 @@ is higher in the cut arms only because slower arms have more games still alive a
   2nd Youthful Valkyrie and a Plains. Its mana is exercised in 27.1% of games.
 * ~~The Bishop breakpoint probe~~ — cutting the 4th delays the anthem by 0.016 turns and 1.8pp.
 * ~~The Unexpectedly Absent cast-count probe~~ — 0 casts in 9,000 games, measured not inferred.
+* ~~The World A/B curve diagnostic~~ — screen 19: the distortion is real in direction but worth only
+  2–10% of the effect, and changes no verdict. The never-cast penalty is 0.08–0.13t in LEVELS and
+  cancels in DIFFERENCES.
 * ~~Separate Giada's ramp from her body~~ — the non-land donor arm shows the 4th copy moves the first
   big Angel by 0.004 turns, i.e. it buys consistency and counters, not acceleration.
 
