@@ -281,18 +281,49 @@ The host/guest gap is Windows-side accounting: Process Explorer's **Working Set*
 resident in physical RAM, so a trimmed VM understates. The comparable column is `vmmem` **Commit
 Size / Private Bytes**, not Working Set.
 
-**HOST PAGING IS REFUTED as an explanation for the unit-rate collapse.** The hypothesis was
-appealing -- Windows trimming VM pages would give the guest `VmSwap: 0` while every access to a
-trimmed page cost a host fault, which is the shape of a game running at 0.02x the normal rate. It is
-wrong:
+**HOST PAGING: the refutation below was UNSOUND. Corrected 2026-09-20 09:40 -- the direction is
+OPEN, not closed.** The original note read:
+
+> *"**Zero major faults.** A process being paged by the host takes host-backed faults; this one
+> takes none. The degeneracy is COMPUTATIONAL. Recorded so the direction is not re-explored."*
+>
+> ```
+> mtg:    minflt 2,255,308,300    majflt 0        (over 12 h 25 m)
+> guest:  pswpout 2530 pages (~10 MB, across 4 days of uptime)
+> ```
+
+**Guest fault counters cannot observe host paging, so `majflt 0` was never evidence either way.**
+When Windows trims a guest-backing page out of the `vmmem` working set and the guest later touches
+it, the fault is serviced *below* the guest by the hypervisor. From the guest page table's point of
+view the page was resident the whole time, so `pgmajfault` does not increment. A guest can be paged
+hard by its host while reporting zero major faults indefinitely. The counters above are consistent
+with host paging, not exculpatory of it.
+
+**And the condition demonstrably exists on this box.** 2026-09-20 09:25, with the USER reporting
+Process Explorer figures alongside the guest's own:
 
 ```
-mtg:    minflt 2,255,308,300    majflt 0        (over 12 h 25 m)
-guest:  pswpout 2530 pages (~10 MB, across 4 days of uptime)
+Windows  vmmem Working Set  ~27.5 GB     <- guest pages RESIDENT in host RAM
+Windows  vmmem Private Bytes ~50   GB     <- the VM's COMMIT (== guest MemTotal); never moves
+guest    MemTotal            49,327,756 kB (50.5 GB)
+guest    AnonPages           39,789,568 kB (37.9 GiB)   <- 10+ GB more than is resident
 ```
 
-**Zero major faults.** A process being paged by the host takes host-backed faults; this one takes
-none. The degeneracy is COMPUTATIONAL. Recorded so the direction is not re-explored.
+The guest is holding ~10 GB more anonymous memory than Windows keeps resident for the whole VM.
+That gap is precisely the population of pages a guest access would fault back in invisibly.
+
+Two accounting traps this closes, both of which read as reassurance and are not:
+* **Private Bytes is the ceiling, not the usage.** `vmmem` commits the entire configured guest RAM
+  up front, so it reads ~50 GB whether the guest is using 2 GB or 45 GB. It equals guest `MemTotal`.
+* **A Working Set *below* Private Bytes is not headroom.** Here it means Windows is keeping less of
+  the guest resident than the guest is actively using -- the opposite of slack.
+
+**What still binds is the guest's `MemTotal`.** The in-guest OOM killer decides on that number
+alone and cannot borrow the host's free RAM; if it fires it takes `mtg` (by far the largest RSS),
+and Process Explorer will show a comfortable Working Set at that instant.
+
+To actually settle host paging, measure from the HOST: Windows pagefile read rate, or
+`vmmem` hard-fault delta, while a collapsed-rate game is in flight. No in-guest counter can do it.
 
 **NEW LEAD from the same data: 2.26 BILLION minor faults, ~50k/s sustained for twelve hours.**
 Minor faults are individually cheap, but that volume means the process continually touches
@@ -405,3 +436,99 @@ Note also that `units` is ONE SIMULATED TURN-STEP, so 830 units/s against a 36,4
 not "more steps taken" -- it is each step costing ~40x more. The collapse is in per-step cost, which
 is the same statement as the state explosion above and is measurable without any new machinery:
 units and wall are both already recorded per game.
+
+## THE ARM SPLIT: the value leaf is ITSELF the optimization (2026-09-20 09:30, phase C @ 81%)
+
+Census re-run at 1,481 SLOW-GAME records / 320.2 core-hours, this time SPLIT BY ARM. This is the
+single most actionable number produced by the whole investigation, and it was invisible while the
+census was read in aggregate.
+
+Every depth-cell in the matrix holds the SAME allocated job count (832 jobs / 13 depths = 64 each),
+so the columns below are directly comparable -- this is not a sampling artifact:
+
+```
+cell    slow-game cost   slow games          cell    slow-game cost   slow games
+H5         143.4 core-h        490           V8          10.6 core-h        121
+H4         100.8 core-h        404           V7           8.4 core-h         88
+H3          38.6 core-h        193           V6           7.1 core-h         76
+H2           6.1 core-h         42           V5           3.4 core-h         47
+H1           0.8 core-h          9           V4           0.9 core-h         11
+           -------------                                -------------
+H TOTAL    289.7 core-h  (90.5%)             V TOTAL     30.4 core-h  (9.5%)
+```
+
+**The value leaf cuts the pathological tail ~13x at the deep end (H5 143.4 -> V8 10.6 core-h).**
+The degeneracy this document exists to bound is overwhelmingly a property of the HEURISTIC horizon
+rollout -- which is exactly the machinery the value leaf replaces with an O(1) evaluator.
+
+### Unit-rate collapse is H-EXCLUSIVE, which identifies the mechanism
+
+```
+arm      n      p05     median      p95        min      below 5k units/s
+H     1138    3,885     27,914   52,149        318      74/1138  (6.5%)
+V      345   29,299     44,322   59,870      1,660       2/345   (0.6%)
+```
+
+The V distribution is tight. The H distribution has a collapsing low tail -- **7.5x apart at p05**.
+Not one V cell appears in the worst-12 unit-rate table. The collapse is not a property of the deck;
+it is a property of the deck RUN THROUGH THE HEURISTIC ROLLOUT.
+
+### Root cause: the UNIT IS THE WRONG DENOMINATOR
+
+`src/ai/SearchBudget.h:29-32`, emphasis added:
+
+> *"Calibrated work-units per virtual millisecond. **One unit == one simulated turn-step in a
+> rollout.**"* -- `NODES_PER_VIRTUAL_MS = 900`, and the constant is *"calibrated so a ~200 virtual-ms
+> budget is comfortably adequate **on the reference deck**"*.
+
+There is exactly ONE producer of units in the entire engine -- `SearchBudget::Consume()` at
+`SearchBudget.h:57`, reached via `ConsumeAt` (`TurnSolver.cpp:1012`) and the greedy charge
+(`TurnSolver.cpp:20763`). Every other `gamework::` reference is a reader.
+
+So a unit is a **turn-step**, and the 900 constant bakes in the assumption that a turn-step costs
+roughly the same everywhere. On Fungus it does not: per-step plan enumeration is combinatorial in
+board width, so one turn-step at a wide Saproling board costs orders of magnitude more than one on
+the reference deck. The game therefore burns enormous wall while ticking very few units.
+
+**This is the precise mechanism behind this document's founding complaint.** A 40M-unit ceiling
+intended to bound roughly an hour permitted 15.75 h, and every budget on this deck is ~25x off, for
+one reason: *the ceiling is denominated in a currency that does not track the cost it is meant to
+bound.* It is not a missing instrumentation site and not a mis-set constant -- it is the wrong unit.
+
+### Consequences for the fix, in priority order
+
+1. **Adopt the value leaf if phase E permits it.** It is independently the largest available win on
+   this deck's pathology (~13x on the deep tail), on top of whatever quality case phase E makes.
+   The tail this doc was written about largely belongs to the arm the value leaf removes.
+2. **Ship the USER's two-stage wall cap anyway.** It is the only fix here that is
+   reproducibility-neutral (see "Why stage 1 is REPRODUCIBILITY-NEUTRAL" above). It bounds the
+   damage without touching units, so it is safe to land independently of everything else.
+3. **Re-denominating the unit is a POST-ADOPTION project, and a large one.** Charging units in
+   proportion to enumeration work would fix the ceiling properly -- and would change unit counts,
+   hence budgets, hence play, hence **every generated artifact in the repo**. It cannot be slipped
+   in alongside an adoption. Treat it as its own frozen-commit effort.
+
+### The instrument already exists -- do NOT build one
+
+A previous note here called for a board-state instrument (a `src/` change) to find the combinatorial
+trigger. **That is not needed for the unit question.** `MTG_ROLLOUT_STATS` already gates a 13-site
+per-`Consume()` attribution table (`TurnSolver.cpp:885`, `namespace unitsite`) covering
+`rollout_step`, the five `FullSearchLine` loops, the four `SolveWithLookahead` loops, `esc_eval`,
+`fs_bp_node` and `fs_m2_wave` -- and per its own comment the buckets *"sum EXACTLY to the units
+cost.py reports"*. It is counters-only, no behaviour change, no play change, and it is already in
+the frozen binary. Attribution therefore needs **no rebuild**, which matters while a generation run
+holds the freeze.
+
+**Cheap repro for it.** The census yields degenerate games at low absolute cost -- the pathology
+does not require an expensive game. `--seed 8299 --game-index 291` at H2 shows a 0.03x unit-rate
+collapse (848 units/s) in **108 seconds**, versus 14.77 h for `--seed 10092 --game-index 82` at H3.
+Probe the cheap one:
+
+```
+MTG_ROLLOUT_STATS=1 MTG_VALUE_MODEL=0 build/Release/mtg decks/Fungus/Fungus.cod \
+  --profile decks/Fungus/Fungus.profile.json --ignore-play-profile \
+  --depth 2 --budget-ms 0 --max-turns 8 --seed 8299 --game-index 291 --games 1 --threads 1
+```
+
+(Run it `nice -n 19` if a generation batch owns the box: the attribution is a COUNT, so CPU
+starvation stretches the wall without distorting the measurement.)
