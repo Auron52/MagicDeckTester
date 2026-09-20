@@ -1464,9 +1464,22 @@ generation over the rest of the weekend."*
 
 | | 2026-09-09 (the deferral) | 2026-09-11 | **2026-09-20** |
 |---|---|---|---|
-| per game, like-for-like | ~0.041 core-h | 0.0391 core-h | **0.00225 core-h (8.09 s)** |
-| phase A (2,500 games) | >=35 h, throughput ~0 | ~12-24 h @24 | **5.6 core-h = ~11 min @32** |
-| worst single game | 1.8 h+, never finished | 18.2 min | **58 s** |
+| per game, 100-game even sample | ~0.041 core-h | 0.0391 core-h | **0.00225 core-h (8.09 s)** |
+| worst game IN THAT SAMPLE | 1.8 h+, never finished | 18.2 min | 58 s |
+
+> **THAT SAMPLE WAS NOT THE POPULATION, and the projection built on it ("phase A is ~11 minutes")
+> was wrong by more than an order of magnitude.** 100 games spread evenly over the 2,500 (every
+> 25th) gave a mean of 8.09 s and a worst of 58 s. The real run's first 1,200 games produced games
+> at **911 s, 863 s, 796 s**, and later a cohort of 32 that ran **1.5 h+ without finishing**. An
+> evenly-spaced 4% sample catches the FREQUENT slow games and misses the RARE enormous ones -- and
+> on a distribution this heavy it is the rare ones that set the mean. Expected monsters in a
+> 100-draw at a ~1.6% rate is 1.6, so drawing zero has probability ~20%: the sample was not
+> unlucky enough to be suspicious, which is what made it dangerous. **The ledger has now recorded
+> the heavy-tail sampling trap three times in three different disguises** (survivors vs blended
+> average, censored population, and now an even-spaced sample). On this deck, price a phase from
+> the phase, or from the slow-game log -- never from a sample that fits in a coffee break.
+
+The honest phase-A numbers are in §6 below, after the ceiling that makes it bounded.
 
 That is **18x** against the 2026-09-11 re-price and ~660x against the blended figure the deferral
 was written on. Nothing here was aimed at phase A after 4fbef3fb; the run simply got cheap. **The
@@ -1563,6 +1576,58 @@ separately and the report prints the split.
 
 *Reusable form: when a diagnostic names one cause out of a disjunction, believe the COUNT, not the
 attribution -- and test the named knob before building on it. One 100-game arm falsified it.*
+
+### 6. THE LABELS WERE NOT FREE: the watermark was also an accidental cost control
+
+Recovering the labels made phase A **slower**, and badly so -- the first restarted run reached a
+state where 32 of 32 workers held games that had been running 1.5 h without finishing. The mechanism
+is one character of control flow:
+
+```cpp
+if (rep.truncated) { g_label_positions_truncated...; return; }   // RETURN, not continue
+```
+
+A truncated report does not merely drop the position, it **abandons the remaining K samples and
+moves the game on**. So every position where condemnation fired was being abandoned at its first
+sample. That is why phase A looked cheap: it was not solving those positions, it was skipping them.
+Measured on one of the stalled games, `--seed 900445 --game-index 195`:
+
+| arm | result |
+|---|---|
+| watermark ON (old default) | **86.3 s**; `budget-ceiling=0 completeness-demoted=3` (3 of 6 positions) |
+| watermark OFF (cd00879e) | **still running at 1.00 h** |
+
+**So both behaviours were wrong, in opposite directions.** The old one dropped half the labels for a
+bogus reason; the new one grinds indefinitely on positions it ought to drop for a good one. The fix
+is the drop mechanism doing its actual job -- a per-position ceiling that BITES, so an unaffordable
+position is dropped as a genuine budget truncation and everything affordable is kept.
+
+**The ceiling already existed and had never fired.** `MTG_VALUE_LABEL_BUDGET_MS` has been there since
+`6e592633` (2026-08-05), defaulting to 1e6 virtual ms -- which at 900 nodes per virtual ms is 900M
+units, about **two hours per position** at Snow's ~128k units/s. It is a backstop against a hung
+position, not a cost control, and nothing ever reached it because the watermark was abandoning those
+positions first. *That is also why the 10x-budget A/B earlier in §4 came back byte-identical: raising
+a ceiling that is not binding changes nothing, and that result should have been read as "this is not
+the binding constraint" rather than only as "the message is wrong".*
+
+`valueleaf.sh` now sets **30,000 virtual ms** for phase A, chosen on the eight worst games in the
+population (found from the batch heartbeat's in-flight list -- including `seed 900807 gi57`, the old
+44.3 h monster):
+
+| ceiling | positions kept | the eight hardest games | worst |
+|---|---|---|---|
+| 1e6 (engine default) | 100% | **>1.5 h each, not finishing** | unbounded in practice |
+| **30,000 (adopted)** | **90.7%** (5 of 54 cut, all `budget-ceiling`) | 310-1166 s, mean 703 s | 19 min |
+| 10,000 | — | 207-296 s (2.7x cheaper) | — |
+
+Those eight are the WORST games in the deck, so 90.7% is a **floor** on coverage rather than an
+average -- an ordinary game never approaches the ceiling. Against the 46% of positions that survived
+before, this keeps more labels **and** bounds the run.
+
+**Rows are budget-independent, which is what makes the ceiling safe to change mid-generation.** A row
+is written only when the search COMPLETED, so the ceiling decides which positions are labelled and
+never what a label says. Tightening or loosening it never invalidates a banked row -- the 1,189 games
+banked before the restart carried straight over.
 
 ### 5. What this does NOT fix: phase C is still the blocker
 

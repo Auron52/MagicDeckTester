@@ -306,6 +306,41 @@ TRUST_SEEDS="620000 621000 622000 623000 624000 625000 626000 627000"
 # and deliberately so: the tolerance's ONLY job is now to gate this test.
 TRUST_TOL=0.002
 ROW_K=3
+# PER-POSITION LABEL CEILING for phase A, in VIRTUAL ms (work units, so the label SET is identical on
+# every machine -- a wall-clock ceiling would make the training data depend on the box).
+#
+# WHY THIS HAS TO BE SET AT ALL. A label is only written when the earliest-win search COMPLETES; a
+# truncated search returns max_turns+1, which is byte-identical to a real refutation, so EmitEvalRows
+# drops the position rather than teach the model that a position we could not AFFORD to solve is one
+# we cannot WIN from. That is right -- but it means the per-position budget is the only thing bounding
+# a position's cost, and the engine default (1e6 virtual ms = 900M units) is not a bound at all: on
+# Snow, measured at ~128k units/s, it is roughly TWO HOURS per position.
+#
+# It went unnoticed because a second mechanism was accidentally capping the same cost. A breakpoint
+# condemnation drop used to bump the truncation watermark, and EmitEvalRows `return`s (not
+# `continue`s) on a truncated report -- so any position where the filter fired was abandoned at its
+# first K-sample. Cheap, and wrong: the prune is lossless, so those were COMPLETE answers being thrown
+# away (53.9% of Snow's positions). cd00879e stopped the bogus drop; this line supplies the real bound
+# it was standing in for.
+#
+# 30,000 CHOSEN ON MEASUREMENT, not by feel. On the eight worst games in Snow's phase-A population
+# (found from the batch heartbeat's in-flight list, and including seed 900807 gi57 -- the ledger's old
+# 44.3 h monster):
+#
+#   ceiling          positions kept        hardest games              worst game
+#   1e6 (default)    100%                  >1.5 h each, NOT FINISHING unbounded in practice
+#   30,000           90.7% (5 of 54 cut)   310-1166 s, mean 703 s     19 min
+#   10,000           -                     207-296 s (2.7x cheaper)   -
+#
+# Those eight are the WORST games in the deck, so 90.7% is a floor on coverage, not an average -- an
+# ordinary game never approaches the ceiling. Against the 46% that survived before, this keeps more
+# labels AND bounds the run. Every drop it does cause is now an honest one, reported as
+# `budget-ceiling=N` (see the LabelTruncationReport split, same commit).
+#
+# ROWS ARE BUDGET-INDEPENDENT, which is what makes this safe to change mid-generation: a row is only
+# written when the search completed, so the ceiling decides WHICH positions are labelled and never
+# what a label says. Tightening or loosening it never invalidates rows already banked.
+LABEL_BUDGET_MS=30000
 
 # key | deck-dir | stem | matrix-key | row-seed-base | row-games -- GENERATED, never edited.
 #
@@ -674,6 +709,7 @@ phase_rows() {
     # transient scales with concurrent monster games, so fewer workers is the safe lever on a small
     # box until the enumeration transient itself is bounded engine-side.
     MTG_DUMP_VALUE_ROWS="$ALL_ROWS" MTG_EVAL_ROWS_K="$ROW_K" MTG_EVAL_ROWS_ROLLOUT=0 \
+        MTG_VALUE_LABEL_BUDGET_MS="$LABEL_BUDGET_MS" \
         ./build/Release/mtg --batch "$ALL_ROWS.manifest.json" --threads "${MTG_VLQ_ROWS_THREADS:-0}" \
         > "$VLQ/rows.batch.log" 2>&1 \
         || { local rc=$?
