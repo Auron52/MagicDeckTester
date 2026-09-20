@@ -361,3 +361,47 @@ Deferred to Monday at USER direction: development budget is nearly exhausted and
 the in-flight Fungus value-leaf run until then. There is NO quick path -- `perf` over the worst game
 is FLAT (top symbol under 8%), so this is real work rather than a one-line fix, and it is a `src/`
 change that cannot be built while the generation holds the binary and the frozen `src` tree.
+
+### The degeneracy is BIMODAL, not a tail -- and board growth is REFUTED as the driver
+
+Cost of slow games grouped by win turn (958 records, this run):
+
+```
+win_turn   games   mean_sec
+5            275      207.5
+8             35      209.3      <- the LONGEST games are among the CHEAPEST
+7            353      396.2
+6            436      437.7
+ABANDONED    136     3457.3      <- 17x every completed bucket
+```
+
+**A hypothesis worth recording because it is WRONG:** that cost comes from boards growing over the
+course of a game (Saproling tokens x Doubling Season x Mycoloth devour), which would make the
+per-simulated-turn-step cost scale with board size and explain the FLAT profile -- every symbol in it
+(`BuildSimKey`, `GameState` copy, `CardHasSubtype`, `LookupCached`, the watcher cascades,
+`CollectActivationKeys`) is per-permanent work. It predicts turn-8 games are the expensive ones.
+**They are not** -- 209 s, level with turn-5 games. Game length does not predict cost.
+
+**What the shape DOES say.** There is a 17x gap with nothing in between. A smooth cost driver gives
+a smooth distribution; bimodality means something SWITCHES ON. So the target is a combinatorial
+TRIGGER -- a board configuration where sac outlets, legal victims and devour choices are
+simultaneously live and the plan enumerator's product blows up -- not a size threshold, and not a
+hot function.
+
+**Why this matters for how the next attempt is framed.** A flat profile is normally where an
+optimisation effort concludes "no win available", and that is the likely reason repeated passes over
+this deck have not converged. The flat profile is real but it is a CONSEQUENCE: if the expensive
+mode is a state explosion, no symbol dominates because the work is spread across per-permanent
+machinery. Do not start from the profile. Start from the classification question:
+
+> What do the 136 ABANDONED games have on board that the ~1,100 merely-slow ones do not?
+
+That is a supervised question with 136 positives, ~1,100 negatives, and a self-contained
+single-game repro for every record, all in `slow_games.log` via `scripts/slow_game_census.py`.
+It needs a board-state instrument at the point the unit rate collapses -- which is a `src/` change,
+hence Monday.
+
+Note also that `units` is ONE SIMULATED TURN-STEP, so 830 units/s against a 36,439 units/s median is
+not "more steps taken" -- it is each step costing ~40x more. The collapse is in per-step cost, which
+is the same statement as the state explosion above and is measurable without any new machinery:
+units and wall are both already recorded per game.
