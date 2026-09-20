@@ -860,12 +860,18 @@ Snow, unbounded, `--threads 1 --ignore-play-profile`, `MTG_VALUE_MODEL=0`, seed 
 Units are deterministic, so these are valid despite a saturated box; wall clock is corroboration only.
 Per-game win turns dumped with `MTG_DUMP_WINS` and **identical on every game in both arms**.
 
-| depth | base units | lazy units | delta | hit rate | probe share |
-|---|---|---|---|---|---|
-| d3 | 50,502,453 | 50,114,100 | **-0.77%** | 27/137 = 19.7% | 1.00% |
-| d4 | 196,500,977 | 176,122,244 | **-10.4%** | 31/116 = 26.7% | 0.96% |
+| depth | games | base units | lazy units | delta | hit rate | probe share |
+|---|---|---|---|---|---|---|
+| d3 | 5 (s8008..) | 50,502,453 | 50,114,100 | **-0.77%** | 27/137 = 19.7% | 1.00% |
+| d4 | 5 (s8008..) | 196,500,977 | 176,122,244 | **-10.4%** | 31/116 = 26.7% | 0.96% |
+| d5 | 2 (s8010-1) | 5,352,744 | 3,382,090 | **-36.8%** | 2/4 = 50% | 1.60% |
 
-The hit rate rises with depth as predicted. But the d4 total hides the finding that matters:
+The hit rate rises with depth exactly as the user predicted -- 19.7% -> 26.7% -> 50% -- while the
+probe stays at 1-1.6% of the game. The d5 row is the SAME two games as d4's gi=2/gi=3, and their
+individual savings grow with depth too (-8% -> -22.7%, and -37.8% -> -46.2%). Note d5 is only those
+two (cheap) games: a d5 run of the tail game was deliberately not started, see below.
+
+But the d4 total hides the finding that matters:
 
 | game (d4) | base units | lazy units | delta |
 |---|---|---|---|
@@ -903,3 +909,16 @@ MECHANISM and measures nothing about COST. **The number that decides phase C doe
 Snow has no sidecar until phase B, so every Snow measurement above is against the slow H path, which
 is a MORE expensive baseline than phase C will actually have. Re-measure on Snow once its model is
 staged, in the real H-cell configuration, before turning this on for the matrix.
+
+### The one measurement deliberately NOT run, and why
+
+A d5 run of Snow's tail game (seed 8012, the gi=4 above) is the single most decision-relevant number
+left -- H5 is the dominant cell and that game is the dominant cost. It was not started. At d4 it was
+145M units and ~40 min/arm on a contended box; at d5 that is plausibly 2-3 h/arm, and it would be
+measured against the SLOW H path that phase C will not use, so the answer would have to be thrown
+away and re-measured after phase B anyway. Spending ~6 core-hours of a saturated box to produce a
+number with a known expiry is the wrong trade while phase A is running.
+
+What is already known is enough to bound the risk: on that game at d4 the lever cost **+0.15%**. So
+the downside where it does not help is ~1%, and the open question is only the size of the upside.
+That question is answerable cheaply and correctly after phase B, in one run, in the right config.
