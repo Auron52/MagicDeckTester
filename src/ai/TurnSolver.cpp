@@ -2691,9 +2691,38 @@ static int BpCondemnDropMode()
 // checked=19006, bad=0, i.e. entries the watermark used to suppress WERE stored and WERE verified.
 // Scoped to the BREAKPOINT twin only; the m2 filter's own bump (it has the working marker) is
 // untouched.
+// DEFAULT FLIPPED TO OFF, 2026-09-20. The paragraphs above made the case on COST (+25.76% on the
+// cell, a redundant second guard, the real hazard measured clean by MTG_NOWIN_VERIFY:
+// spared_demotions=1610 checked=19006 bad=0). What flipped it is that the watermark also has a
+// CORRECTNESS-shaped cost nobody had priced, because it reaches a consumer outside the search:
+//
+//   EmitEvalRows DROPS any position whose EarliestWinReport comes back truncated -- rightly, since a
+//   truncated search returns max_turns+1, which is byte-identical to a real refutation. The watermark
+//   makes a CONDEMNATION DROP look like a truncation. So on a deck that condemns, the labeller throws
+//   away every position where the filter fired.
+//
+// Measured on Snow (100 games spread evenly over phase A's 2,500-game population, phase A's exact
+// flags), the deck that ships condemnation:
+//
+//   watermark ON  (old default)   280 rows   328 of 608 positions DROPPED (53.9%)   2.01 s/row
+//   watermark OFF (this default)  608 rows   0 dropped                              1.26 s/row
+//
+// i.e. adopting MTG_SNOW_CONDEMN (93862273) cut Snow's value-leaf training set by 2.2x four days
+// before anyone tried to use it, and nothing could have caught it: Snow is not in the suite, and the
+// drop is reported on stderr as a note, not a failure.
+//
+// THE LOSSLESSNESS THIS RESTS ON WAS MEASURED, NOT ASSUMED (USER: "the feature is intended to be
+// lossless, especially at high to unlimited budget where churn is less likely"). Paired arms with
+// PLAY held identical -- condemnation live and this watermark off in both, 0 of 100 play digests
+// differing -- varying ONLY whether the filter runs inside the labeller: 608 of 608 rows
+// byte-identical. So the answers the cache is now allowed to remember are the same answers the
+// search computes either way, which is exactly what the paragraph above predicts ("it buys no
+// completeness the prune did not already spend").
+//
+// =1 restores the watermark.
 static bool BpCondemnNoWinTrunc()
 {
-    static const bool on = EnvOn("MTG_BP_CONDEMN_NOWIN_TRUNC", true);
+    static const bool on = EnvOn("MTG_BP_CONDEMN_NOWIN_TRUNC", false);
     return on;
 }
 // Names condemned during the enumeration in flight, for the MARKING modes (DEMOTE and SKIP).
@@ -3324,6 +3353,15 @@ static bool BpClassifyEnabled()
 // than one because the global lever is a MEASUREMENT tool (and measured harmful as a default -- see
 // DecisionProvider::CondemnsConsideredAtBreakpoint), while the provider route is how a deck that can
 // safely take it actually ships. State-keyed, so every caller that filters must have the state.
+//
+// THE FILTER IS NOT SCOPED OUT OF THE LABEL PATH, and that was tested rather than assumed
+// (2026-09-20). Condemnation deleting half of Snow's value-leaf labels looked at first like a reason
+// to confine it to play the way 6be6f565 confined the winless certificate. It is not: with PLAY held
+// identical (condemnation live, watermark off in both arms, 0 of 100 play digests differing) and the
+// labeller as the only variable, **608 of 608 label rows are byte-identical** whether the filter runs
+// inside EnumerateEarliestWins or not. The prune is lossless where it was suspected of being lossy,
+// so cutting it would have removed a live mechanism to fix a defect it was not causing. The defect is
+// the WATERMARK -- see BpCondemnNoWinTrunc.
 static bool BpClassifyActive(const GameState& state)
 {
     return BpClassifyEnabled() || ResolveProvider(state).CondemnsConsideredAtBreakpoint();
@@ -44049,7 +44087,9 @@ TurnSolver::EarliestWinReport TurnSolver::EnumerateEarliestWins(const GameState&
     // report cannot tell the consumer which one it is holding, so it tells it that it cannot tell.
     // See EarliestWinReport::truncated -- the consumer's job is to drop the position, not to
     // salvage a number from it.
-    report.truncated = (g_fs_trunc_events != trunc_at_entry) || budget.Overrun();
+    report.completeness_demoted = (g_fs_trunc_events != trunc_at_entry);
+    report.budget_overrun       = budget.Overrun();
+    report.truncated            = report.completeness_demoted || report.budget_overrun;
     return report;
 }
 

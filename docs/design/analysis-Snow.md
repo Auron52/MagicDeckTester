@@ -1451,6 +1451,129 @@ like "the interior-node memo is never probed" -- it is not. `PROF_INC(fsline_loo
 NON-order-free `else` branch (`TurnSolver.cpp:35523`); the label path takes the order-free memo path,
 which counts through `g_fs_memo_win_hits`. The memo is active.
 
+## §13. The value-leaf deferral is DEAD, and condemnation was deleting half the training set (2026-09-20)
+
+Session mandate: *"see whether it is practical to optimize snow so we can run the value-leaf
+generation over the rest of the weekend."*
+
+### 1. Phase A is no longer the blocker. It is ~8 minutes.
+
+100 games drawn evenly across phase A's own 2,500-game population (`seed 900000+k`, `k` stepped by
+25, chunk-faithful `game_index`), run at phase A's exact flags (`MTG_DUMP_VALUE_ROWS`,
+`MTG_EVAL_ROWS_K=3`, `MTG_EVAL_ROWS_ROLLOUT=0`), 16 threads, box idle:
+
+| | 2026-09-09 (the deferral) | 2026-09-11 | **2026-09-20** |
+|---|---|---|---|
+| per game, like-for-like | ~0.041 core-h | 0.0391 core-h | **0.00225 core-h (8.09 s)** |
+| phase A (2,500 games) | >=35 h, throughput ~0 | ~12-24 h @24 | **5.6 core-h = ~11 min @32** |
+| worst single game | 1.8 h+, never finished | 18.2 min | **58 s** |
+
+That is **18x** against the 2026-09-11 re-price and ~660x against the blended figure the deferral
+was written on. Nothing here was aimed at phase A after 4fbef3fb; the run simply got cheap. **The
+2026-09-09 deferral and its 2026-09-11 successor are both now closed on measurement.**
+
+### 2. But phase A was cheap partly because it was THROWING HALF OF ITSELF AWAY
+
+The same probe printed, and this is the finding of the session:
+
+```
+[label] DROPPED 328 of 608 positions (53.9%)
+```
+
+280 rows banked where 608 positions were visited. **A drop is not a slow label, it is no label**:
+`EmitEvalRows` discards the whole position when `EarliestWinReport::truncated` comes back, because a
+truncated search returns `max_turns+1`, which is byte-identical to a real refutation, and training on
+it teaches the model that a position we could not AFFORD to solve is one we cannot WIN from.
+
+| arm | rows | dropped | s/game | s/row |
+|---|---|---|---|---|
+| shipped (2026-09-16 onward) | 280 | **328 of 608 (53.9%)** | 5.62 | 2.01 |
+| `MTG_VALUE_LABEL_BUDGET_MS` x10 | **280** | **328 (identical)** | 5.76 | 2.06 |
+| `MTG_SNOW_CONDEMN=0` | 609 | **0** | 7.45 | 1.22 |
+| **fix: `MTG_BP_CONDEMN_NOWIN_TRUNC` default OFF** | **608** | **0** | 8.09 | **1.33** |
+
+**Every drop on this deck came through one increment**: a searched-space condemnation drop bumps
+`g_fs_trunc_events` (`BpCondemnNoWinTrunc`), the watermark that demotes a no-win from "there is no
+win" to "I ran out" -- and `EmitEvalRows` discards any position whose report comes back truncated,
+rightly, since a truncated search returns `max_turns+1` and that is byte-identical to a real
+refutation. So **adopting `MTG_SNOW_CONDEMN` (93862273, 2026-09-16) cut Snow's value-leaf training
+set by 2.2x, four days before anyone tried to use it.** The adoption's evidence -- 2 better / 0 worse
+over 2,000 paired games at play settings -- was sound and is untouched. The label path was simply not
+among the things it looked at, and nothing would have gone red: Snow is not in the suite, and the
+drop is a note on stderr rather than a failure.
+
+### 3. The first fix was the WRONG ONE, and the user's objection is why
+
+My first reading was that condemnation, being a prune over what to PLAY, has no business inside a
+ground-truth search, so I confined it to play (`MTG_BP_CONDEMN_LABEL_SCOPE`) exactly as 6be6f565
+confined the winless certificate. Gates were green and labels came back 280 -> 608, so it looked
+settled.
+
+> USER: *"Wait, why are we cutting condemnation? The feature is intended to be lossless, especially
+> at high to unlimited budget where churn is less likely."*
+
+That is right, and **the tree already said so at the flag itself**: *"The watermark does not make
+condemnation sound: the prune happens in the live search either way. It only stops the CACHE
+remembering an answer the search already computed under that prune... a redundant second guard
+costing +25.76% on the cell."* If the prune is lossless then the pruned answer IS the answer, and
+nothing downstream needs protecting from it.
+
+**Tested rather than argued, and the test is a clean isolation.** Hold PLAY fixed -- condemnation
+live and the watermark off in BOTH arms -- and vary only whether the filter runs inside
+`EnumerateEarliestWins`:
+
+| | play digests | label rows | rows differing |
+|---|---|---|---|
+| labeller WITHOUT condemnation (the unpruned reference) | — | 608 | — |
+| labeller WITH condemnation | **0 of 100 differ** | 608 | **0 of 608** |
+
+**608 of 608 byte-identical.** The prune is lossless where it was suspected of being lossy, so
+scoping it out would have removed a live mechanism to fix a defect it was not causing. Note this is
+stronger evidence than the cache verifier could give: it compares the labeller's OUTPUT against an
+unpruned reference, so it has power against a lossy prune *and* a bad memo at once.
+
+**So the fix is the watermark, not the filter:** `MTG_BP_CONDEMN_NOWIN_TRUNC` now defaults OFF.
+Condemnation stays fully live everywhere it was adopted, the labels come back, and -- since the
+watermark's whole cost is suppressed no-win memoisation -- it is a **performance** change rather than
+a behavioural one (USER: *"In that case it is pretty much a performance win"*).
+
+**Gates.** Unit 114/114. Smoke 84 passed / 0 failed, **0 configs changed, 0 play-changed**.
+Regression 114 passed / 0 failed, 0 configs changed, viewer protocol 0 play-drift / 0 enum-gap /
+0 contract-fail. Snow itself is not in the suite, so it was measured directly: **2,000 games at the
+shipped d5/b20, 0 of 4 play digests differing, avg 6.0625 both arms, units −0.10%.** Budgeted play
+barely reaches the no-win memo, which is why the saving lives in the unbounded regimes.
+
+**ONE VERIFIER HAS NO POWER HERE, and it reports a clean zero while having it.** `MTG_NOWIN_VERIFY`
+is the right instrument for the real hazard (the no-win key does not fold condemnation context) and
+the flag's own comment records `checked=19006 bad=0` at `d2/b0`. Pointed at the LABEL path it returns
+**`checked=0 bad=0`** over 20 games while `spared_demotions=107,914` -- the label path takes the
+order-free memo route and never reaches the verified site, the same structural reason §12 found
+`fsline_lookups` reading 0 there. A zero from an instrument that checked nothing is the failure mode
+that flag's own comment warns about for `MTG_LEAF_VERIFY`; it applies to this one too, in this regime.
+
+### 4. The trap that cost the first hour: AN ERROR MESSAGE THAT NAMES A KNOB IS NOT EVIDENCE
+
+The drop line said `label search hit the budget ceiling (MTG_VALUE_LABEL_BUDGET_MS) ... raise the
+budget to keep them`. It was wrong -- `report.truncated` ORs two causes and the message named only
+one -- and it is exactly the kind of wrong that is expensive, because it is specific, actionable and
+points at a knob that exists. Raising that knob 10x returned **280 rows and the same 328 drops**: the
+byte-identical-A/B signature, which here meant not "the feature did not fire" but "you are not
+touching the cause". `EarliestWinReport` now carries `budget_overrun` and `completeness_demoted`
+separately and the report prints the split.
+
+*Reusable form: when a diagnostic names one cause out of a disjunction, believe the COUNT, not the
+attribution -- and test the named knob before building on it. One 100-game arm falsified it.*
+
+### 5. What this does NOT fix: phase C is still the blocker
+
+Everything above is the LABEL path. Phase C -- the H1-5 x V1-8 x 4-seed matrix, 52 cells x 400 games
+of UNBOUNDED play -- is untouched by all of it, and
+`depth-matrix-degenerate-games.md` §"Snow (2026-09-15)" is still current: a 41% union abandon rate
+trips `--max-skip-frac` (40 skips) around offset 98, which **disarms the per-game work ceiling**,
+while `NEVER_CONDEMN=5` exempts every H rung and V1-V5 from cell-level condemnation. Neither bound
+survives, and the result is non-convergence rather than slowness. Note the abandon rate is defined
+against each cell's OWN median, so it is a shape property: no uniform speedup moves it.
+
 ## Open questions for the user (surfaced, not blocking)
 
 1. ~~`{S}` modelled as generic `{1}`~~ — **CLOSED 2026-09-06** by the real snow-mana model

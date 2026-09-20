@@ -1844,6 +1844,15 @@ public:
         // DISCARD the position rather than emit the label -- writing it would teach the model that
         // a position it could not afford to solve is a position you cannot win from.
         bool truncated = false;
+        // WHICH of the two causes fired, because they want OPPOSITE responses and the report used to
+        // name only the first. `budget_overrun` = the label search ran out of its own ceiling, which
+        // MTG_VALUE_LABEL_BUDGET_MS does raise. `completeness_demoted` = something under this report
+        // bumped the g_fs_trunc_events watermark, so a no-win is no longer a complete refutation --
+        // raising the budget does NOTHING for it, and on Snow it was 100% of the drops (a breakpoint
+        // condemnation, now confined to play; see BpCondemnLabelScoped). A drop report that named
+        // only the budget sent one session chasing a 10x budget arm that came back byte-identical.
+        bool budget_overrun = false;
+        bool completeness_demoted = false;
     };
     // rollout_label: label each candidate by a NON-CLAIRVOYANT greedy d0 rollout (apply plan ->
     // SimulateToEnd under the baseline policy) instead of the clairvoyant earliest-win SEARCH. Used

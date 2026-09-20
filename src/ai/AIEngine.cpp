@@ -432,6 +432,14 @@ inline Dumper g_dumper;
 
 static std::atomic<long long> g_label_positions_truncated{0};
 static std::atomic<long long> g_label_positions_total{0};
+static std::atomic<long long> g_label_drop_budget{0};
+static std::atomic<long long> g_label_drop_demoted{0};
+// SPLIT BY CAUSE, because the two want opposite responses and this report used to name only one of
+// them. It said "label search hit the budget ceiling (MTG_VALUE_LABEL_BUDGET_MS)" for every drop,
+// so on Snow -- where 100% of the drops were the completeness watermark, not the ceiling -- it sent
+// a session to measure a 10x budget arm that came back byte-identical (280 rows, the same 328
+// drops). An error message that names a knob reads as evidence that the knob is the cause; when it
+// is only ONE possible cause it has to say which one actually fired.
 struct LabelTruncationReport
 {
     ~LabelTruncationReport()
@@ -439,11 +447,15 @@ struct LabelTruncationReport
         const long long t = g_label_positions_truncated.load();
         if (t <= 0) { return; }
         const long long n = g_label_positions_total.load();
+        const long long b = g_label_drop_budget.load();
+        const long long d = g_label_drop_demoted.load();
         std::fprintf(stderr,
-            "[label] DROPPED %lld of %lld positions (%.1f%%): label search hit the budget ceiling "
-            "(MTG_VALUE_LABEL_BUDGET_MS). Their true win turn is unknown, so no row was written -- "
-            "raise the budget to keep them, or accept the gap.\n",
-            t, n, n ? (100.0 * static_cast<double>(t) / static_cast<double>(n)) : 0.0);
+            "[label] DROPPED %lld of %lld positions (%.1f%%): their true win turn is unknown, so no "
+            "row was written. BY CAUSE: budget-ceiling=%lld (raise MTG_VALUE_LABEL_BUDGET_MS to keep "
+            "these) completeness-demoted=%lld (a prune under the report demoted a no-win -- the "
+            "budget is IRRELEVANT to these; find what truncated and scope it out of the label path, "
+            "see MTG_BP_CONDEMN_LABEL_SCOPE).\n",
+            t, n, n ? (100.0 * static_cast<double>(t) / static_cast<double>(n)) : 0.0, b, d);
     }
 };
 static LabelTruncationReport g_label_trunc_report;
@@ -484,7 +496,15 @@ static void EmitEvalRows(const GameState& state, int max_turns, bool second_main
         // Dropping the whole position (all K samples) rather than the offending sample keeps the
         // average over an unbiased K: an expensive position tends to truncate on most of its
         // samples, so averaging the survivors would quietly re-introduce the same bias.
-        if (rep.truncated) { g_label_positions_truncated.fetch_add(1, std::memory_order_relaxed); return; }
+        if (rep.truncated)
+        {
+            g_label_positions_truncated.fetch_add(1, std::memory_order_relaxed);
+            // Both can be true on one report; count both so the shares are readable rather than
+            // attributing a mixed drop to whichever cause happens to be tested first.
+            if (rep.budget_overrun)       { g_label_drop_budget.fetch_add(1, std::memory_order_relaxed); }
+            if (rep.completeness_demoted) { g_label_drop_demoted.fetch_add(1, std::memory_order_relaxed); }
+            return;
+        }
         const int e = (rep.earliest > 0 && rep.earliest <= max_turns) ? rep.earliest : (max_turns + 1);
         earliest_sum += e; ++earliest_n;
         // Belt-and-braces against the one way B&B could corrupt training data: under B&B a losing
