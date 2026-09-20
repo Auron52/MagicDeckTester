@@ -1497,68 +1497,62 @@ and that means nothing: the user ruled the removal stays, and the sim cannot see
 
 ## Open, in priority order
 
-1. **RESTORE THE LEAFLESS SINGLE-PASS SHAPE? — measured 2026-09-20, USER'S CALL.**
-   **An adopted config was silently lost.** `918c3cc2` (2026-09-17) created
-   `decks/Angels/Angels.value.json` as exactly `{"value_play": {"ladder": "single", "leaf": "none",
-   "alpha": "relaxed"}}`, adopted under the standing no-drawback rule for **2.3x CPU with identical
-   play**. The campaign's value-leaf generation then **overwrote that file** and all three keys
-   vanished: the archived v1 sidecar carries `ladder: escalation` / `leaf: model`, and the shipped
-   v2 sidecar carries neither. The deck is running the engine default today.
+*Nothing measurable is open. The one remaining item is user-owned:*
 
-   **And the reason this item was previously dismissed was wrong.** The old note here said
-   leafless costs this deck **3.1x**, so `leaf: none` was "an audit instrument, not a shipping
-   candidate". That 3.1x was measured against an arm with **NO SIDECAR AT ALL**, which is the
-   documented H-cell perf cliff (`value-leaf.md`: the ladder is guarded on the sidecar EXISTING, so
-   a missing model silently costs 1.35–84.8x). It is *not* what `leaf: none` does — a sidecar that
-   exists and sets `leaf: none` satisfies that guard. The two were conflated.
+1. **The v2 list has no hand-played references.** All 11 moved to
+   `references/Angels/v1-thune4-chancery/` on adoption — correct, since a reference belongs to the
+   list it was played on (`server.js: refsOnArchivedList`) — but it means the claude-play sweep
+   record in `analysis-Angels.md` is now evidence about the old 65-card list. Only the user can
+   play new ones.
 
-   **Measured three ways** — same decklist, profile and KEEP TABLE, same 4,000 seeds per format,
-   budget 40, max_turns 18. Only the value sidecar differs:
+### Closed 2026-09-20 — the leafless single pass, ADOPTED (`695e8535`)
 
-   * **A** = no `Angels.value.json` at all (the H-cell guard is UNMET)
-   * **B** = SHIPPED: the generated value leaf (`leaf: model`, engine-default ladder)
-   * **C** = `918c3cc2`: `ladder: single` / `leaf: none` / `alpha: relaxed` — sidecar EXISTS, leaf unused
+**An adopted config had been silently lost.** `918c3cc2` (2026-09-17) created
+`decks/Angels/Angels.value.json` as exactly `{"value_play": {"ladder": "single", "leaf": "none",
+"alpha": "relaxed"}}`, adopted for 2.3x CPU with identical play. The campaign's value-leaf
+generation then **overwrote that file**: v1's archive kept `escalation`/`model`, shipped v2 kept
+neither, so the deck had reverted to the engine default.
 
-   | format | A avg | B avg | C avg | A cpu | B cpu | C cpu |
-   |---|---|---|---|---|---|---|
-   | std  | 4.6780 | 4.6783 | 4.6780 |  817s |  95s |  75s |
-   | 2hg  | 5.1650 | 5.1658 | 5.1640 | 1337s | 326s | 237s |
-   | long | 5.5040 | 5.5080 | 5.5038 | 1742s | 709s | 507s |
-   | **total** | | | | **3896s (3.45x)** | **1130s (1.00x)** | **819s (0.72x)** |
+**And the reason the item had been dismissed was wrong.** The note said leafless costs this deck
+**3.1x**. That was measured against an arm with **no sidecar at all** — the documented H-cell perf
+cliff (`value-leaf.md`) — which is *not* what `leaf: none` does. A three-way run settled it
+(4,000 paired games/format): no-sidecar **3.45x** / value leaf **1.00x** / leafless **0.72x** CPU,
+and the decisive cell is leafless-vs-no-sidecar at std, where **the digests are IDENTICAL (0 of
+4,000 games differ) while no-sidecar costs 10.91x**. The guard was the whole of what the value leaf
+was buying. Controlling for it, the generated `eval_model`/`value_leaf_table` does negative work:
+1.39x the CPU of not consulting it, for play nominally worse than even no-sidecar
+(+0.0040 at long, t +3.1).
 
-   **THE VALUE LEAF'S ENTIRE MEASURED WIN WAS THE GUARD, NOT THE MODEL.** The three pairwise reads:
+**Decided ON-POLICY, at the user's direction** (*"the most important are play settings … if some of
+the others are a little worse that may be acceptable"*). Angels' `value_play` sets no
+`target_depth` and `enabled` is false, so `drives()` is false and a bare run resolves to
+`BuiltinDefaultPlay()` — **d5, budget 20**. 20,000 paired games per cell, held-out seed 6200000,
+across every searched config the matrix actually uses (negative = leafless better, late-weighted):
 
-   | comparison | play delta (std / 2hg / long) | CPU |
-   |---|---|---|
-   | B − A (the campaign's) | +0.0003 / +0.0008 / **+0.0040** (t +1.0/+0.9/**+3.1**) | A costs 8.60x / 4.11x / 2.46x B |
-   | C − A (never run) | **0.0000** / −0.0010 / −0.0003 | A costs **10.91x** / 5.65x / 3.44x C |
-   | C − B (the decider) | −0.0003 / −0.0018 / **−0.0043** (t −1.0/−2.6/**−3.5**) | C costs **0.72x** B |
+| config | | late-weighted | t (std / 2hg / long) | CPU |
+|---|---|---|---|---|
+| **d5b20** | **THE PLAY SETTINGS** | **−0.0035** | −1.1 / −3.7 / **−9.5** | **0.74x** |
+| d5b40 | on-policy, big budget | −0.0022 | −2.0 / −3.0 / −7.7 | 0.71x |
+| d3b10 | OFF-POLICY (`ignore_play_profile`) | +0.0007 | +2.1 / +3.3 / +1.6 | 0.74x |
+| d3b20 | OFF-POLICY (`ignore_play_profile`) | +0.0009 | +4.1 / +1.6 / +3.7 | 0.71x |
 
-   The cleanest line in the table is **C − A at std: the digests are IDENTICAL** (0 of 4,000 games
-   differ) while A costs **10.9x** the CPU. Literally the same decisions, an order of magnitude more
-   work, purely because a file does not exist. That is the H-cell guard in its purest form, and it
-   is the whole of what the value leaf was buying.
+The split falls exactly on the on-policy / off-policy line: the d3 cells pin a depth the deck never
+plays at. CPU is 0.71–0.74x on every config, including the ones that lose a thousandth of a turn.
 
-   So **C dominates B on both axes**: 28% less CPU *and* nominally faster play on all three formats
-   (significantly at 40 life). And B is nominally *slower in play than even A* (+0.0040 at long,
-   t +3.1) — the generated `eval_model` / `value_leaf_table` is doing negative work here, costing
-   1.39x the CPU of not consulting it.
+**A correction that cost nothing but was nearly missed.** The overnight d3 slowdowns were first
+written off as "pure noise" because they sat 20–50x under the per-cell SE. At 20,000 games the
+d3b20 direction replicates at **t +4.1** — real, just tiny and confined to off-policy cells. The
+larger A/B was the user's call and it changed the finding from "noise" to "a priced trade".
 
-   Not an exotic config either: **8 of the 21 shipped decks already run `leaf: none`** (Dragons,
-   Dragonstorm, Fluctuator, Goblins, Minotaur, Mirrorwing, Stompy, treasure_hunt), all keeping the
-   model file present to satisfy the guard while bypassing it. Angels is the outlier that HAD that
-   adoption and lost it to a regeneration.
+GT: smoke 2 cells digest-only at identical average (`slower=0`); regression **114/114
+byte-identical**; overnight 8 of 16 changed (5 digest-only, +0.0020 / +0.0010 on d3, −0.0020 on a
+d5), net +0.0010, rationale recorded in the GT provenance header. Reference corpus unchanged at
+17 ok / 0 play-drift.
 
-   **Why it was not adopted anyway.** Staged and run through all three tiers: smoke and regression
-   are clean (regression **114/114 byte-identical**), but the overnight tier's generous budgets
-   churn 8 of 16 Angels cells — 5 digest-only at an identical average, 2 slower by 0.001–0.002, 1
-   faster by 0.002, **net +0.0010 turns**, audit `slower=3 faster=1`. Those deltas are 20–50x
-   below the per-cell SE at 500–1000 games and the 12,000-game paired measurement above is by far
-   the better instrument — but the user's bar is *"a clean win = no regression on ANY axis vs the
-   SHIPPED baseline"*, and `slower=3` is not unambiguously that. Adopting it would mean overriding
-   that bar on my own reading of which instrument to trust, which is the exact failure the
-   fresh-full revert was about. **Reverted to shipped; tree clean, 84/84 smoke green.**
-   Re-adopting is three keys in `Angels.value.json` plus a 26-key Angels rebaseline.
+Context: **8 of the 21 shipped decks already run `leaf: none`** — Angels was the outlier that had
+the adoption and lost it. After any value-leaf regeneration, diff the new `value_play` against the
+old for dropped shape keys; the pipeline will not tell you.
+
 ## The new list vs the old one, measured head-to-head (2026-09-20)
 
 The campaign always compared arms against a shared screening apparatus, never v1 against v2 as two
