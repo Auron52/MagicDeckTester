@@ -532,3 +532,84 @@ MTG_ROLLOUT_STATS=1 MTG_VALUE_MODEL=0 build/Release/mtg decks/Fungus/Fungus.cod 
 
 (Run it `nice -n 19` if a generation batch owns the box: the attribution is a COUNT, so CPU
 starvation stretches the wall without distorting the measurement.)
+
+## LAZY-LEAF EVALUATION (USER 2026-09-20): defer the leaf until the exact search completes
+
+> *"use no leaf until we have fully searched up to our depth and only use the leaf at that point.
+> This way we wouldn't have to pay for any rollouts (or even value-leaf) if we found our win in the
+> search window."*
+
+Recorded here because it is the best-fitting optimization yet proposed for this deck's measured
+cost shape, and because **most of it is already built and measured elsewhere in the repo.**
+
+### It is NOT speculative -- EDF already shipped the restricted form, at 2.57x-13.4x
+
+`docs/design/analysis-EldraziDisplacerFlicker.md` (~L4084-4117), the `MTG_LABEL_GOFF` cuts:
+
+* **Cut 2 -- FLOOR SHORT-CIRCUIT**: a combat-pre-pass win at the floor skips the ladder outright.
+* **Cut 3 -- IN-PASS FIRST-WIN BREAK**: every pass-dd win sits at one shared horizon edge, so the
+  first settles the minimum; stop the pass there.
+
+The stated insight is the USER's insight: *"a win on the current turn is that number's unbeatable
+floor -- yet the ladder ran the full FSLineTail sweep over every candidate even after the floor was
+achieved. The horizon-edge plan explosion (95.3% of all enumerated plans) lived exactly in those
+provably-pointless sweeps."* Measured 2.57x on the yardstick, 13.4x on the worst game, with play
+digests and label rows verified IDENTICAL.
+
+**Same cost shape as Fungus**: EDF 95.3% of enumerated plans at the horizon edge; Fungus 99.7% of
+work at horizon-edge nodes (`fungus-value-leaf-status`). A cut that removes horizon-edge work is
+aimed at ~all of this deck's cost.
+
+### What is NEW in the USER's version, and why it is the SAFER generalization
+
+The EDF cuts are **gated to the `earliest_only` label path so budgeted play is structurally
+untouched** -- they do not run in play, and phase C is *unbudgeted play*. So they do not currently
+touch the 289.7 core-h of H-arm cost measured in the arm-split section above.
+
+The USER's formulation differs in a way that makes generalising it tractable:
+
+* EDF's cuts **stop early** on the first win. Sound only where the objective is `report.earliest`
+  ALONE, which is true on the label path and not obviously true in play (play commits a LINE and
+  may tie-break among equal-turn wins).
+* The USER's version **defers** rather than stops: complete the exact depth-D search, THEN evaluate
+  only the leaves that can still matter. Exactness inside the window is fully preserved, so
+  tie-breaking among exact lines is untouched.
+
+**The skip predicate needs no estimate and no new soundness argument**: a leaf at turn `t` cannot
+win before turn `t`, so an exact win at turn `T` retires every leaf at turn `>= T` outright. (The
+existing winless certificate could retire more, but is not required for the basic cut.)
+
+### Cost/benefit shape is unusually favourable
+
+Worst case is one extra walk of the INTERIOR tree, which on this deck is ~0.3% of the work (99.7%
+being horizon-edge). Best case removes nearly all horizon work. And the benefit GROWS WITH DEPTH --
+deeper search finds more in-window wins -- while the cost is concentrated at depth: H5 143.4 core-h
++ H4 100.8 = 76% of all H-arm slow-game cost.
+
+### THE TRAP: a lossless cost cut is NOT play-neutral under a BUDGET
+
+Budgets are denominated in units (`SearchBudget::Consume` is the sole producer). Consuming fewer
+units per node therefore buys MORE search for the same budget, and play changes -- even though the
+cut is lossless. This is almost certainly why EDF confined its cuts to the unbudgeted label path.
+
+Consequence for sequencing:
+* **UNBOUNDED regimes (phase C matrix, label generation) are play-neutral** under this cut: same
+  tree, same answer, less work. That is the natural first target, and it is the regime this deck's
+  degeneracy lives in.
+* **Budgeted play needs the change to be paired with a budget recalibration**, or gated off, or
+  accepted as an artifact-invalidating change. Do not assume "lossless" implies "safe to adopt in
+  play" -- it does not.
+
+### Relationship to the unit-denominator finding above
+
+These are the same defect seen from two ends. The unit undercounts horizon-edge work (so the
+ceiling cannot bound it); the lazy leaf removes horizon-edge work (so there is less to bound).
+Doing the lazy leaf FIRST is strictly better sequencing: it shrinks the very population that makes
+the denominator wrong, and unlike re-denominating, it does not invalidate artifacts in the
+unbounded regimes.
+
+### Status
+
+Proposed by USER 2026-09-20 while phase C was at 81%. Another agent picked it up the same day; this
+section exists so that agent inherits the EDF prior art, the label-path restriction, and the
+budget-neutrality trap without re-deriving them. NOT implemented here.
