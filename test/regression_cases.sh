@@ -39,6 +39,7 @@ declare -A DECK_FILE=(
   [melira]="decks/Melira Pod/Melira Pod.cod"
   [angels]=decks/Angels/Angels.cod
   [fluctuator]=decks/Fluctuator/Fluctuator.cod
+  [snow]=decks/Snow/Snow.cod
 )
 declare -A DECK_PROF=(
   [slivers]=decks/slivers_vial/slivers_vial.profile.json
@@ -62,6 +63,7 @@ declare -A DECK_PROF=(
   [melira]="decks/Melira Pod/Melira Pod.profile.json"
   [angels]=decks/Angels/Angels.profile.json
   [fluctuator]=decks/Fluctuator/Fluctuator.profile.json
+  [snow]=decks/Snow/Snow.profile.json
 )
 
 # Seeds:  smoke=1001  regression=2002,3003  overnight=4004,5005,6006,7007
@@ -278,6 +280,29 @@ SMOKE_CASES=(
   "fluctuator 0 1001 1000 0"
   "fluctuator 3 1001  150 10"
   "fluctuator 5 1001   75 20"
+  # snow: ADDED 2026-09-20, at the USER's ask, and the sizing is the whole design question -- this
+  # is one of the most expensive decks in the repo per game and its cost is strongly SEED-dependent
+  # (measured d3 b10: 0.89 s/game at seed 1001 but 2.17-2.49 at the regression seeds; d5 b20:
+  # 1.91 at 1001, 1.78-4.38 elsewhere). So the counts are sized per TIER off the tier's own seeds,
+  # not off one measurement, and the d0 row is free (1000 games in 13 ms).
+  #
+  # THE BINDING CONSTRAINT IS THE SINGLE SLOWEST GAME, not the mean: a pooled batch's makespan
+  # cannot go below its longest game, and Snow has d5 games up to 98 s at other seeds. At seed 1001
+  # these exact counts were measured with ZERO games over the 30 s SLOW-GAME threshold, which is
+  # why the smoke tier can afford full-sized rows where the overnight tier gets the tail instead.
+  #
+  # SIZE OFF A PROBE THAT RUNS WHAT THE SUITE RUNS. A standalone `--batch` probe priced these rows
+  # at 89/96 core-s; in the tier they cost 185/195, because regression.sh passes
+  # --lookahead-bottoming at every searched depth and the probe did not. Play is identical either
+  # way (same avg, same digest) -- the 2x is bottoming-lookahead work alone. MEASURED IN THE TIER:
+  # ~380 core-s added, smoke makespan 32s -> 46s. Budget is 15 min, so this is ~5% of it.
+  #
+  # WHY IT IS WORTH IT: Snow is the deck that ships breakpoint condemnation, and a condemnation
+  # interaction silently deleted 54% of its value-leaf labels for four days (cd00879e) with nothing
+  # to go red, precisely because Snow had no suite coverage. This closes that hole.
+  "snow 0 1001 1000 0"
+  "snow 3 1001  100 10"
+  "snow 5 1001   50 20"
 )
 
 # regression: ~8-9 min pre-commit sweep -- two seeds at d3/d5, d0 single seed.
@@ -427,6 +452,17 @@ REGRESSION_CASES=(
   "fluctuator 3 3003  150 10"
   "fluctuator 5 2002   75 20"
   "fluctuator 5 3003   75 20"
+  # snow: see the SMOKE block. The regression seeds are the EXPENSIVE ones for this deck -- d3 b10
+  # measured 2.489/2.167 s/game and d5 b20 1.783/2.515 at s2002/s3003, ~2.5x the smoke seed -- so
+  # the counts are cut to 60/30 rather than carried across from smoke. MEASURED IN THE TIER:
+  # d3 119.7/113.9 core-s, d5 59.2/100.3, ~394 core-s total, makespan 69s -> 97s. Budget is 45 min.
+  # The worst single game in the measured windows is 59.6 s, under the tier's own makespan, so Snow
+  # does not become the pole.
+  "snow 0 2002 1000 0"
+  "snow 3 2002   60 10"
+  "snow 3 3003   60 10"
+  "snow 5 2002   30 20"
+  "snow 5 3003   30 20"
 )
 
 # overnight: wide multi-seed sweep -- 4 seeds, large game counts for tight statistics.
@@ -796,4 +832,24 @@ OVERNIGHT_CASES=(
   "fluctuator 5 5005  250 40"
   "fluctuator 5 6006  250 40"
   "fluctuator 5 7007  250 40"
+  # snow: see the SMOKE block. This is the tier with room -- the whole Snow block is ~5,400 core-s
+  # (1.5 core-h, doubling the bare-probe figure for --lookahead-bottoming as the smoke block
+  # explains), i.e. ~170 s of makespan on 32 cores against an 8 h budget, so the deck gets its real
+  # coverage here rather than in the two fast gates. NOTE these keys have NO GROUND TRUTH YET: they
+  # are deliberately left to be created by the next overnight run, because a value leaf for this
+  # deck would move every searched Snow row and re-accepting three tiers is cheaper once than twice.
+  # Measured at these exact counts and seeds (bare probe, so ~2x in the tier):
+  # d3 b10 1.756-2.445 s/game, d5 b20 2.786-4.376, worst single game 98.4 s (ovn_d5_s4004). Budgets
+  # stay at the GATE levels (10/20) rather than the tier's usual 20/40 -- Snow's tail is
+  # budget-driven (the d3/d5 b200 cells in the ledger reach 5-15 MINUTES per game), and this deck is
+  # where a doubled budget stops being free.
+  "snow 0 4004 1000 0"
+  "snow 3 4004  150 10"
+  "snow 3 5005  150 10"
+  "snow 3 6006  150 10"
+  "snow 3 7007  150 10"
+  "snow 5 4004  100 20"
+  "snow 5 5005  100 20"
+  "snow 5 6006  100 20"
+  "snow 5 7007  100 20"
 )
