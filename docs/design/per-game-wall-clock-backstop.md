@@ -753,3 +753,100 @@ exactly the place exempting them would leave open.
   sites -- both landed 2026-09-17 off the *same* Fungus profiling that found `CountControlledDragons`
   at 45.1% of a game. The remaining ~3% is the up-to-four `std::string == string_view` compares, so
   the actionable item is narrower than stated: migrate the hot call sites to `CardHasSubtypeId`.
+
+## PER-SITE UNIT ATTRIBUTION of a degenerate game (2026-09-20 10:15, frozen binary)
+
+The arm-split section above ends with "the instrument already exists -- do NOT build one". This
+section is that instrument's output. `MTG_ROLLOUT_STATS=1` on the census's worst game
+(`--seed 8299 --game-index 291`, H2, `--budget-ms 0 --max-turns 8`, single-threaded, `nice -n 19`).
+Log: `logs/unitsite/h2_s8299_gi291.log`.
+
+Identity check first, because the SLOW-GAME repro line prints the LOOP index, not the base offset:
+the probe reported `gi=0`, which looks like the wrong game. It is not. The census records the same
+game at H2 as `wt=7 units=86081`; the probe returned `wt=7 units=92047` (7% apart, explained by
+`--max-turns 8` and `--ignore-play-profile`). A different game would differ by orders of magnitude,
+since the median Fungus game never crosses the 30 s SLOW-GAME threshold at all.
+
+### The same game across the H ladder (from the census -- exact)
+
+| cell | wall | units | units/s |
+|------|------|-------|---------|
+| H2 | 101.5 s | 86,081 | 848 |
+| H3 | 216.7 s | 192,752 | 889 |
+| H4 | 1,874 s | 988,598 | 528 |
+| H5 | 3,485 s | 1,761,045 | 505 |
+
+**One game, 1.58 core-hours across four cells.** Note the rate degrades only ~1.7x from d2 to d5 --
+so WITHIN this game units track wall tolerably. The collapse documented earlier is a BETWEEN-game
+effect, which matters for how the fix is framed: a per-game ceiling in units mis-ranks *games*, not
+*depths*.
+
+### Where the units actually go (exact, sums to 100%)
+
+| site | units | share | what it counts (`TurnSolver.cpp:889-896`) |
+|------|-------|-------|-------------------------------------------|
+| `la_cand` | 31,891 | 34.6% | `SolveWithLookahead`: the root candidate loop |
+| `rollout_step` | 30,227 | 32.8% | `SimulateToEnd`: one simulated turn-step (the leaf) |
+| `greedy_fallback` | 29,121 | 31.6% | `SolveWithLookahead`: depth<=0 greedy fallback |
+| `fs_pre` | 808 | 0.9% | `FullSearchLine`: main pre-combat plan loop |
+
+**`SearchBudget.h:29-30` says "One unit == one simulated turn-step in a rollout". That describes
+`kRolloutStep` and nothing else -- 32.8% of this game's budget.** The other 67.2% is candidate
+scoring and greedy-fallback probes, which are not turn-steps and do not cost what a turn-step costs.
+The comment is not a small documentation slip: it is the assumption the per-game ceiling inherits.
+
+Two exact identities pin the sites to concrete operations:
+
+* `la_cand` (31,891) == `cand_scored` (31,891). One unit per candidate scored.
+* `greedy_fallback` (29,121) == solve-memo lookups (`hits 679 + misses 28,442`). One unit per
+  greedy-fallback memo probe.
+
+### The whole game is inside the heuristic ladder's COMMIT pass
+
+```
+heuristic-ladder totals: decisions=6 warm=8862 commit=83185 warm_share_of_ladder=0.0963
+```
+
+8,862 + 83,185 = 92,047 = `units_total`. **Every unit in this game is ladder work, and 90.4% of it
+is the commit pass over just SIX decisions** -- 13,864 units per decision. That figure is the
+per-game reflection of the 90.5% H-arm share measured across the whole matrix; the two were derived
+independently and agree.
+
+### The memos are not amortizing, and that is a lead
+
+| memo | hits | misses | hit rate |
+|------|------|--------|----------|
+| solve-memo | 679 | 28,442 | **2.3%** (`clears=1`) |
+| enum-memo | 48 | 1,104 | **4.2%** |
+| leaf-TT (commit pass) | -- | -- | **23.9%**, 5,052 lookups/decision |
+
+A 2.3% hit rate means the solve memo pays 29,121 hash-and-store operations to avoid 679 solves.
+`clears=1` says the table hit its 16,384-entry cap and was wiped mid-game, so a large share of those
+stores were evicted before any read. This also names a source for the allocator-churn lead in the
+memory section above: ~28k inserts per game that are never read back.
+
+**Do not reach for `MTG_BIG_SOLVE_MEMO`.** `TurnSolver.cpp:18478-18479` already records the
+measurement: on the "g88 monster" class, 262144 -> 13.2 s, 16384 -> 3.7 s, 4096 -> **2.6 s**, all
+the same T4 win. Bigger was worse; the 16384 default is deliberately ~4x off the monster class. The
+indicated direction for a degenerate board is therefore a SMALLER cap via `MTG_SOLVE_MEMO_CAP`
+(a plain `EnvInt`, `TurnSolver.cpp:20356`), not a bigger one.
+
+### Hypothesis, NOT yet measured: the wall lives in enumeration, which is charged nothing
+
+1,104 enum-memo misses produced 31,891 scored candidates -- ~29 candidates per enumeration. Plan
+enumeration is combinatorial in board width, but **no unit site charges for enumeration itself**;
+the budget charges its CONSUMERS (candidates scored). On a narrow reference board, candidate count
+is a fair proxy for enumeration cost, which is why the calibration holds there. On a wide Fungus
+board the enumerator's internal work grows while the post-dedup candidate count stays bounded, so
+the proxy decouples -- in the direction observed.
+
+This is arithmetic consistency, not a measurement. To settle it, time the enumerator directly
+(a wall-per-site instrument) and compare enumeration wall against `la_cand` units. That needs a
+rebuild and therefore must wait for the freeze to lift.
+
+### What is actionable without a rebuild
+
+The unbudgeted regime is play-neutral (a cheaper node cannot buy extra search when there is no
+budget to re-spend -- see the lazy-leaf trap section), so cache-shape levers can be A/B'd on the
+frozen binary and verified play-identical by `units_total` and win turn. Sweep in flight:
+`MTG_SOLVE_MEMO_CAP` in {1024, 4096, 16384, 65536} on this game, `logs/memocap/`.
