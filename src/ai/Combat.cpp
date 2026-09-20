@@ -5,6 +5,30 @@
 #include "../core/GameLogger.h"
 #include "../core/SpellEffects.h"
 
+// LOWER BOUND on the combat damage `p` would deal if it attacked right now, mirroring the base_pw
+// build in ResolveCombatDamage below. Two terms are deliberately omitted, BOTH of which only ever
+// ADD: the exalted bonus (it depends on the final attacker count, which is what we are still
+// deciding) and the Jitte rider. So `== 0` here is the conservative reading "this creature would
+// deal no damage"; it can never claim 0 for a creature that would actually connect.
+//
+// Its one caller is the reference-replay attacker pin. Nothing in autonomous play or the rollouts
+// reaches it.
+static int AttackerDamageLowerBound(const GameState& state, const Permanent& p, int active)
+{
+    const bool animated = p.is_animated;
+    auto [lord_pb, lord_tb] = ComputeLordBonus(p.card, state, active, animated, &p);
+    (void)lord_tb;
+    int base_pw = p.EffectivePower() + lord_pb;
+    if (const CardDefinition* adef = CardDatabase::Instance().LookupCached(p.card))
+    {
+        if (animated) { base_pw += adef->params.animate_power; }
+        base_pw += DynamicBasePower(*adef, state, active);
+    }
+    base_pw += AuraBonusFor(p, state).first;
+    base_pw += EquipBonusFor(p, state).first;
+    return base_pw;
+}
+
 std::vector<int> DeclareAttackerIndices(const GameState& state)
 {
     std::vector<int> atk_idx;
@@ -16,6 +40,30 @@ std::vector<int> DeclareAttackerIndices(const GameState& state)
     // names, consuming the multiset so duplicate names pin the right number of copies. Player 0
     // only -- the human's deck is always player 0 under --claude-play, and the recording says
     // nothing about opponent combats.
+    //
+    // THE PIN IS A SUBSET, NOT THE SET, and treating it as the set is a bug that cost two Fungus
+    // references (fixed 2026-09-20). test/viewer_protocol_check.py builds the pin by parsing the
+    // play-viewer's combat text ("attacked: A (2), B (3) - 5 to opponent"), and that text is
+    // assembled from attacker_descs, which is guarded on `power > 0` further down this very
+    // function. A 0-POWER ATTACKER THEREFORE LEAVES NO TRACE IN THE RECORDING -- so its absence
+    // from the pin carries no information at all, and forbidding its attack turns a display
+    // filter into a play decision.
+    //
+    // It bit exactly where you would predict: Fungus runs Beastmaster Ascension
+    // (quest_counter_per_attacker 1, +5/+5 at 7 counters) alongside Utopia Mycon, a 0/2 whose mana
+    // ability costs a sacrifice rather than a tap -- so attacking with it is free, and each swing
+    // is a counter. The recording's turn-4 text listed only the two Thallids that dealt damage,
+    // the pin declared only those two, the Ascension banked 2 counters instead of 4, and the
+    // anthem came online a turn late (claude_s1_gi0 win_turn 5 -> 6, claude_s2_gi1 6 -> 7). The
+    // recordings were right -- their own boards show quest4 -- and so was the engine: replaying
+    // either game with the pin removed reproduces the recorded win turn exactly.
+    //
+    // So: pinned names are declared as before, and a creature the pin does NOT name falls through
+    // to the live willingness heuristic ONLY IF it would deal no damage, which is precisely the
+    // class the recording cannot express. A creature that would connect is still governed by the
+    // pin, which is what keeps the case the pin was built for intact (FiveColour s9_gi8: a changed
+    // tap order sent a 1/2 Deathrite Shaman in on T4 and tapped a source the recorded post-combat
+    // line needed -- power 1, so the rule below does not reach it and it stays pinned out).
     if (g_play_attackers_chooser && active == 0)
     {
         if (const std::vector<std::string>* pin = (*g_play_attackers_chooser)(state.turn_number))
@@ -27,9 +75,13 @@ std::vector<int> DeclareAttackerIndices(const GameState& state)
                 if (p.controller_index != active) { continue; }
                 if (!CanAttackFull(p, state.battlefield, active)) { continue; }
                 auto it = std::find(want.begin(), want.end(), p.card.m_name.str());
-                if (it == want.end()) { continue; }
-                want.erase(it);
-                atk_idx.push_back(i);
+                if (it != want.end()) { want.erase(it); atk_idx.push_back(i); continue; }
+                // Invisible to the recording (see above): let the heuristic decide, exactly as it
+                // would on an unpinned turn. The bound is conservative -- it never reports 0 for a
+                // creature that would actually connect -- so this can only ever re-admit an
+                // attacker the recorded text had no way to mention.
+                if (AttackerDamageLowerBound(state, p, active) <= 0 && provider.AttackWith(state, p))
+                { atk_idx.push_back(i); }
             }
             return atk_idx;
         }
