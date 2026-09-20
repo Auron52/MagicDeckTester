@@ -262,3 +262,48 @@ But the flat profile also says the real win is probably NOT micro-optimisation: 
 normal unit rate is doing something structurally different, and characterising WHAT (board size?
 Saproling count? sac-outlet combinatorics?) should come before shaving percentages. The cheapest
 handle is the repro list above -- every one is a single-game, single-thread command.
+
+### Memory: 30.4 GiB is REAL, host paging is REFUTED, and allocator churn is the new lead
+
+Investigated 2026-09-20 03:45 after the USER observed that Windows Process Explorer reported the WSL
+VM using only ~25 GB working set while the guest reported ~30 GB RSS.
+
+**The guest number is real.** The RSS decomposition leaves no innocent explanation:
+
+```
+VmRSS    31,866,884 kB  (30.4 GiB)      RssFile      9,780 kB  (9.6 MiB)
+RssAnon  31,857,104 kB  <- all of it    RssShmem         0 kB
+VmHWM    32,647,056 kB  (31.1 GiB)      VmSwap           0 kB
+```
+
+Not page cache, not shared memory, not file mappings -- ~30.4 GiB of anonymous heap in one process.
+The host/guest gap is Windows-side accounting: Process Explorer's **Working Set** is only what is
+resident in physical RAM, so a trimmed VM understates. The comparable column is `vmmem` **Commit
+Size / Private Bytes**, not Working Set.
+
+**HOST PAGING IS REFUTED as an explanation for the unit-rate collapse.** The hypothesis was
+appealing -- Windows trimming VM pages would give the guest `VmSwap: 0` while every access to a
+trimmed page cost a host fault, which is the shape of a game running at 0.02x the normal rate. It is
+wrong:
+
+```
+mtg:    minflt 2,255,308,300    majflt 0        (over 12 h 25 m)
+guest:  pswpout 2530 pages (~10 MB, across 4 days of uptime)
+```
+
+**Zero major faults.** A process being paged by the host takes host-backed faults; this one takes
+none. The degeneracy is COMPUTATIONAL. Recorded so the direction is not re-explored.
+
+**NEW LEAD from the same data: 2.26 BILLION minor faults, ~50k/s sustained for twelve hours.**
+Minor faults are individually cheap, but that volume means the process continually touches
+freshly-mapped pages -- the allocator is returning memory to the kernel and re-faulting it instead
+of recycling it. Consistent with `operator new` at 2.11% in the profile, and with the standing note
+that cross-plan caching is dead but ALLOCATION is not. There is an existing `MTG_POOL_ALLOC` switch
+to A/B against it, and glibc's `M_TRIM_THRESHOLD` / `MALLOC_ARENA_MAX` are the other handles. This
+is cheap to test and independent of the search work above.
+
+**Also: RSS is no longer flat.** 27.7 GB at 15:00, 27.8 GB at 00:10, 30.4 GiB at 03:45 -- roughly
++0.7 GB/h over the last stretch, with box headroom down from 12 GB to ~8.9 GB available. An earlier
+note in this session called it "flat, definitively not a leak" on the strength of the first two
+readings; that was premature. Steady anonymous growth on a pooled batch whose games all complete is
+itself a defect signature worth chasing alongside the allocator churn.
