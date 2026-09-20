@@ -613,3 +613,34 @@ unbounded regimes.
 Proposed by USER 2026-09-20 while phase C was at 81%. Another agent picked it up the same day; this
 section exists so that agent inherits the EDF prior art, the label-path restriction, and the
 budget-neutrality trap without re-deriving them. NOT implemented here.
+
+### VERIFIED 2026-09-20: which phases actually get the EDF cuts (frozen binary ac0f1191c357)
+
+USER asked whether the cuts are live for the value leaf. Traced rather than assumed; the answer
+splits by phase, and the split is the whole point.
+
+**Phase A (label generation) -- ON.** The gate is
+`AIEngine.cpp:475: earliest_only = s_value_label_bnb && s_value_rows_path && !s_eval_rows_path`:
+
+* `MTG_VALUE_LABEL_BNB` defaults **true** (`AIEngine.cpp:262`).
+* `scripts/valueleaf.sh:676` sets `MTG_DUMP_VALUE_ROWS` and does **not** set `MTG_DUMP_EVAL_ROWS`.
+* `MTG_LABEL_GOFF` defaults **true** (`TurnSolver.cpp:37167`).
+
+=> `earliest_only == true`, so cuts 1-4 fire during phase A. Note this is the exact condition the
+comment at `AIEngine.cpp:472-474` warns about: *"With BOTH dumps on, the eval rows win and we pay
+the unpruned price."* Phase A gets it right by setting only the value-rows dump.
+
+**Phase C (the depth matrix) -- STRUCTURALLY ABSENT, not merely off.** `EnumerateEarliestWins` has
+exactly two callers in the tree:
+
+* `AIEngine.cpp:477` -- the label path (above).
+* `AIEngine.cpp:2188` -- guarded by `s_dump_ewins` (`MTG_DUMP_EWINS`), a diagnostic dump.
+
+Neither is play. Play searches via `SolveWithLookahead` / `FullSearchLine`, which contain none of
+this machinery, so **there is no flag that would enable the cuts in phase C.**
+
+**Why this matters.** Phase A of this run took ~2 h (13:24 -> 15:19). Phase C has run 18 h+ and owns
+the 289.7 core-h of H-arm cost in the arm-split section. So the cuts are enabled on the CHEAP phase
+and unavailable on the EXPENSIVE one. That gap is precisely what the USER's lazy-leaf proposal
+closes, and it is an argument for porting the idea to the play search rather than extending the
+label path further.
