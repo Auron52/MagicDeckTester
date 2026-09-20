@@ -1501,18 +1501,46 @@ and that means nothing: the user ruled the removal stays, and the sim cannot see
    the adopted list (`4e81a3e7`) — so what remains is only whether the pivotal comparisons survive
    leafless. Note the regeneration measured leafless at **3.1x** wall cost on this deck, so
    `leaf: none` is an audit instrument here, not a shipping candidate.
-2. **`angels2hg` is missing from `test/regression_cases.sh`.** Angels is measured at 2HG throughout
-   this campaign but has no 2HG regression case, unlike `antilife2hg` / `auras2hg` / `breaching2hg`.
-   Predates this work; still owed.
-3. **Two Fungus references no longer replay** (`claude_s1_gi0` win_turn 5->6, `claude_s2_gi1` 6->7),
-   found by the regression tier's `--strict` reference check on 2026-09-19. **Not caused by the
-   Angels work** — `src` is byte-identical to the `76f76796` GT accept and nothing under
-   `decks/Fungus` or `references/Fungus` changed. The cause is `56c57d73`, the site-10 breakpoint
-   fix, which widened the search in `TurnSolver.cpp` and created decision points those recorded
-   lines have no answer for (*"2 decision(s) the ref predates answered by engine default"*). It went
-   unseen because GT was accepted three minutes later, a ref-check failure does not block
-   `--accept`, and smoke skips the check entirely. **User's call**: the references are hand-played
-   and commit-only, so re-recording them or narrowing the search is not an agent's decision.
+### Closed 2026-09-20 (the two items the user directed after adoption)
+
+* ~~**`angels2hg` missing from `test/regression_cases.sh`**~~ — added in `34bcb90a`, six new GT keys
+  generated and accepted per tier (smoke 100g / regression 150g / overnight 4×150g). It went into
+  the **2HG-RELEVANT** group rather than the 50-game canary group, on an axis none of the other
+  seven qualify on: Angels is the **only deck in the repo carrying a `life_above_start_anthem_*`
+  card** (Righteous Valkyrie, ×4), so the conditional-anthem pass in `SpellEffects.h` — read by
+  every combat, board-eval and SBA site through `ComputeLordBonus` — had no 2HG coverage anywhere.
+  It compares life against `StartingLife() + 7`: 27 at std, **37 at 2HG**.
+  **Verified by injection rather than argued:** hardcoding those compares to `20 + N` moved
+  `angels2hg_smoke_d3_s1001` from `5.1900/46e221cf95fafbe2` to `5.1000/e1fbb67860ed2f9a` — at 2HG
+  the deck starts at 30 life, so the anthem switches on at turn 0 with zero lifegain, permanently,
+  for the whole team — while leaving `angels_smoke_d3_s1001` **byte-identical**. Reverting restored
+  both digests. Nothing else in the suite fails on that bug.
+
+* ~~**Two Fungus references no longer replay**~~ — root-caused and FIXED in `934f6d02`. **The
+  earlier diagnosis recorded here was wrong on every point** and is corrected for the record:
+  * It was **not** `56c57d73`'s search widening. The reference replay runs at `--depth 0`, so no
+    search is involved at all.
+  * The `"2 decision(s) the ref predates"` line was a red herring — both inserted frames land
+    *after* the recorded line is fully consumed, so neither could have caused the drift.
+  * "297 repaired" is **not** a repair path these two failed. `repaired` means the recorded line
+    *reproduced*; `scripts/ref_regenerate.py` skips every other class and gates on `win_turn`
+    matching the original anyway. There was never a mechanism to apply.
+  * **Re-recording would not have helped**, so the item was never actually the user's to action.
+
+  The real cause: `test/viewer_protocol_check.py` builds `--force-attackers` by parsing the play
+  viewer's combat text, and that text comes from `attacker_descs`, which `Combat.cpp` guards on
+  `power > 0`. **A 0-power attacker is invisible in the recording**, so its absence from the pin
+  carries no information — yet declaring "exactly the pinned names" forbade its attack, turning a
+  display filter into a play decision. Fungus is where it bites: Beastmaster Ascension counts
+  attackers (`quest_counter_per_attacker` 1, +5/+5 at 7) and Utopia Mycon is a 0/2 whose mana
+  ability costs a *sacrifice*, not a tap — so swinging is free and each swing is a counter. The
+  turn-4 text listed only the two Thallids that dealt damage, the pin declared two, the Ascension
+  banked 2 counters instead of 4, and the anthem arrived a turn late.
+  **The recordings were right all along** — their own boards show `quest4` against a two-name event
+  text — and the decisive test was replaying each with the pin removed: both reproduce their
+  recorded win turn exactly. Corpus after the fix: **15 ok / 2 play-drift → 17 ok / 0 play-drift**,
+  with repaired (297), board-diverged (1), mull-drift (10) and contract-fail (0) unchanged; the two
+  are now `ok`, not merely `repaired`. Smoke 84/84 and regression 114/114 byte-identical.
 
 ### Closed by the 2026-09-19 probes
 
