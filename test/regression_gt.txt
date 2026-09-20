@@ -1,6 +1,8 @@
-# Regression ground truth -- commit 5f923ce8  date 2026-09-20
+# Regression ground truth -- commit 91bcfd12  date 2026-09-20
 # Promoted from accepted runs by 'regression.sh --accept' -- do not hand-edit.
 # accepted-with-regressions (overnight, 2026-09-19): Angels (12 keys): decklist adopted 2026-09-19, all configs FASTER. Other 52 keys: pre-existing overnight staleness from 56c57d73 (site-10 breakpoint fix) -- 76f76796 rebaselined smoke+regression only and touched ZERO overnight keys. 26 of 52 are digest-only at identical score; auras (the fix's own target) is -0.0119; net -0.00166; 9 slower, all <=0.007t, no win became unwon.
+# accepted-with-regressions (smoke, 2026-09-20): Angels leafless shape adopted 2026-09-20 (ladder single / leaf none / alpha relaxed -- restoring 918c3cc2, which a value-leaf regeneration had silently overwritten). ON-POLICY IS BETTER: at d5/b20, the deck's real play settings (BuiltinDefaultPlay; value_play.drives() is false), 20,000 held-out games/cell at seed 6200000 give late-weighted -0.0035 turns, t -1.1/-3.7/-9.5 std/2hg/long, at 0.74x CPU. The changed cells here are the d3 ones, which carry ignore_play_profile and are OFF-POLICY coverage: they are worse by ~+0.0008 late-weighted (d3b10 t +2.1/+3.3/+1.6, d3b20 t +4.1/+1.6/+3.7) -- small but REAL, not noise. Accepted per USER 2026-09-20: 'the most important are play settings ... if some of the others are a little worse that may be acceptable.' CPU is 0.71-0.74x on every config including the off-policy ones.
+# accepted-with-regressions (overnight, 2026-09-20): OVERNIGHT, Angels only (--deck=angels,angels2hg). Angels leafless shape adopted 2026-09-20 (ladder single / leaf none / alpha relaxed -- restoring 918c3cc2, which a value-leaf regeneration had silently overwritten). ON-POLICY IS BETTER: at d5/b20, the deck's real play settings (BuiltinDefaultPlay; value_play.drives() is false), 20,000 held-out games/cell at seed 6200000 give late-weighted -0.0035 turns, t -1.1/-3.7/-9.5 std/2hg/long, at 0.74x CPU. The changed cells here are the d3 ones, which carry ignore_play_profile and are OFF-POLICY coverage: they are worse by ~+0.0008 late-weighted (d3b10 t +2.1/+3.3/+1.6, d3b20 t +4.1/+1.6/+3.7) -- small but REAL, not noise. Accepted per USER 2026-09-20: 'the most important are play settings ... if some of the others are a little worse that may be acceptable.' CPU is 0.71-0.74x on every config including the off-policy ones. The 4 d3/b20 cells here are the off-policy ones (+0.0020 s4004, +0.0010 s6006, 2 digest-only); d5/b40 is unchanged on 3 of 4 and FASTER on s7007 (-0.0020). Net over all 16 Angels cells +0.0010, which the 20,000-game held-out A/B resolves as a real off-policy effect, not noise.
 # Key: <deck>_<mode>_d<depth>_s<seed> = <avg>[/<play_digest>]   (avg = mean turn-to-win, unwon = max_turns+1)
 # Modes: smoke (<15m), regression (<45m), overnight (<8h); seeds disjoint.
 
@@ -63,7 +65,7 @@ melira_smoke_d0_s1001=6.3830/2bef1db05d71d48b
 melira_smoke_d3_s1001=4.6800/58654d0d0e8ff7bd
 melira_smoke_d5_s1001=4.7600/0d1161f806adbf73
 angels_smoke_d0_s1001=5.2470/701610dd74d055e9
-angels_smoke_d3_s1001=4.6680/4df60477ed79b23d
+angels_smoke_d3_s1001=4.6680/0e3573383cb56687
 angels_smoke_d5_s1001=4.6267/4427db66f5ce0873
 hinata2hg_smoke_d3_s1001=5.6667/7f62afa6e6f2be11
 antilife2hg_smoke_d3_s1001=3.9700/3a62229bd908ddc1
@@ -72,7 +74,7 @@ goblins2hg_smoke_d3_s1001=4.0400/55649e415bd4a125
 knights2hg_smoke_d3_s1001=5.0933/2c8289b1ed029bba
 fivecolour2hg_smoke_d3_s1001=5.4500/fc4b9fe039d67a42
 fluctuator2hg_smoke_d3_s1001=3.6267/1c51a6bd330aacd5
-angels2hg_smoke_d3_s1001=5.1900/46e221cf95fafbe2
+angels2hg_smoke_d3_s1001=5.1900/d81b0d79cbdc9046
 slivers2hg_smoke_d3_s1001=4.8200/60f7078e6e53e52d
 burn2hg_smoke_d3_s1001=5.8400/17cdfbfc7739cd84
 th2hg_smoke_d3_s1001=4.5400/1cc235cbec630c31
@@ -439,14 +441,14 @@ angels_overnight_d0_s4004=5.2840/6a4b3c4a4a908bbb
 angels_overnight_d0_s6006=5.2675/0d6d3113f30b4274
 angels_overnight_d0_s8008=5.2665/1c2117e679f04b47
 angels_overnight_d0_s10010=5.2675/a71f456a5a78200a
-angels_overnight_d3_s4004=4.6510/da157e982bf2a007
-angels_overnight_d3_s5005=4.7070/6186411f313e129e
-angels_overnight_d3_s6006=4.6780/d982b7337e07d247
-angels_overnight_d3_s7007=4.6930/60f27e87f0eebfbe
+angels_overnight_d3_s4004=4.6530/7a245aabfa71bb3c
+angels_overnight_d3_s5005=4.7070/0b52dcd32e53aeb4
+angels_overnight_d3_s6006=4.6790/4b82df26587c09c2
+angels_overnight_d3_s7007=4.6930/33e3d1467cfa3f15
 angels_overnight_d5_s4004=4.6360/0531adf1916b0f76
 angels_overnight_d5_s5005=4.6880/5f35198260808931
 angels_overnight_d5_s6006=4.6900/c22f2c10ce3accc5
-angels_overnight_d5_s7007=4.6920/64235ea68a2fb990
+angels_overnight_d5_s7007=4.6900/257f1831adaf2c56
 hinata2hg_overnight_d5_s4004=5.5200/93213a52576819ef
 hinata2hg_overnight_d5_s5005=5.3500/24b3f20d02eaa0f7
 hinata2hg_overnight_d5_s6006=5.7900/3149a758d43b129c
@@ -475,10 +477,10 @@ fluctuator2hg_overnight_d5_s4004=3.6125/75986cf649eae073
 fluctuator2hg_overnight_d5_s5005=3.5125/f1aef1e4a2f46483
 fluctuator2hg_overnight_d5_s6006=3.5000/412fb2aad63a1dc3
 fluctuator2hg_overnight_d5_s7007=3.6250/8f4fd43d9310768f
-angels2hg_overnight_d5_s4004=5.1467/2b88de332a521b34
-angels2hg_overnight_d5_s5005=5.2467/e624a2e3deaf6073
+angels2hg_overnight_d5_s4004=5.1467/af00ef0ab8b33465
+angels2hg_overnight_d5_s5005=5.2467/a1410d9b2dff3598
 angels2hg_overnight_d5_s6006=5.3333/7921add545dade2c
-angels2hg_overnight_d5_s7007=5.0733/089693f150cb91c0
+angels2hg_overnight_d5_s7007=5.0733/87492e3be9b1a72a
 fluctuator_overnight_d0_s4004=5.1455/ae9e09ca79a5b57b
 fluctuator_overnight_d0_s6006=5.2175/5a94065d77b441d4
 fluctuator_overnight_d0_s8008=5.1040/4116c85f96cb1a14

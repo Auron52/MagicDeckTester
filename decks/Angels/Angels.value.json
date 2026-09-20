@@ -13919,6 +13919,9 @@
   "note": "eval_model retrained on rows dumped at SHIPPED play WITH the deck profile, so the exhaustive keep model was live. Labels are searched K=3 for every deck (a pooled dump forces one label mode). value_leaf_table/crossover here are the OLD ones until the regenerated matrix lands."
  },
  "value_play": {
+  "ladder": "single",
+  "leaf": "none",
+  "alpha": "relaxed",
   "expected_buckets": 15,
   "mull_gen_depth": 1,
   "mull_gen_budget_ms": 3

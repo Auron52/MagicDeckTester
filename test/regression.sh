@@ -164,8 +164,14 @@ if [ "$ACCEPT" = 1 ]; then
   # stale from 56c57d73. Caught only by diffing the GT file before and after the accept.
   # A fresh --accept-with-regressions for this mode DOES supersede, filtered or not, so the drop
   # still applies whenever ACCEPT_ACK is being written.
+  # A filtered accept never supersedes the mode's note WHOLESALE even when it writes its own: the
+  # two cover different decks, and both sets of cells are still carried on their own note. So the
+  # carry-all branch is NOT conditioned on ACCEPT_ACK being empty -- scope a per-deck note in its
+  # own text instead. (Caught immediately: adopting the Angels leafless shape needed an ack, which
+  # under the ACCEPT_ACK-gated form would have re-erased the 2026-09-19 note this very guard was
+  # added to protect.)
   prior_acks=""
-  if [ -f "$GT" ] && [ -n "$DECK_ONLY" ] && [ -z "$ACCEPT_ACK" ]; then
+  if [ -f "$GT" ] && [ -n "$DECK_ONLY" ]; then
     prior_acks="$(grep -E '^# accepted-with-regressions \(' "$GT" 2>/dev/null || true)"
   elif [ -f "$GT" ]; then
     prior_acks="$(grep -E '^# accepted-with-regressions \(' "$GT" 2>/dev/null \
