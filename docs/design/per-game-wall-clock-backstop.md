@@ -949,3 +949,53 @@ there is. That is exactly the asymmetry the user named.
 **And test at DEPTH, not at d3.** d3 was a poor choice: the probe can only hit when a win falls
 inside the window, and this game wins on turn 6. The user's own framing -- benefit grows with depth --
 says the test belongs at H4/H5, which is also where 76% of the census cost sits.
+
+### MEASURED (2026-09-20, `6a68fe7b`): a MEDIAN-GAME lever, not a TAIL lever
+
+Snow, unbounded, `--threads 1 --ignore-play-profile`, `MTG_VALUE_MODEL=0`, seed base 8008, 5 games.
+Units are deterministic, so these are valid despite a saturated box; wall clock is corroboration only.
+Per-game win turns dumped with `MTG_DUMP_WINS` and **identical on every game in both arms**.
+
+| depth | base units | lazy units | delta | hit rate | probe share |
+|---|---|---|---|---|---|
+| d3 | 50,502,453 | 50,114,100 | **-0.77%** | 27/137 = 19.7% | 1.00% |
+| d4 | 196,500,977 | 176,122,244 | **-10.4%** | 31/116 = 26.7% | 0.96% |
+
+The hit rate rises with depth as predicted. But the d4 total hides the finding that matters:
+
+| game (d4) | base units | lazy units | delta |
+|---|---|---|---|
+| gi=0 | 4,405,870 | 1,967,630 | -55.3% |
+| gi=1 | 43,835,506 | 26,582,961 | -39.4% |
+| gi=2 | 1,232,833 | ~1,130,000 | -8% |
+| gi=3 | 2,134,813 | 1,327,085 | -37.8% |
+| **gi=4** | **144,891,955** | **145,106,417** | **+0.15%** |
+
+**gi=4 is 74% of the cell's cost by itself and gets nothing.** That is not noise, it is the
+mechanism: the probe pays off exactly when a win is provable INSIDE the window, and a heavy-tail game
+-- the kind that motivated this whole document -- is heavy *because* nothing is provable in-window.
+Every probe there is a miss.
+
+So the lever buys a **median-game** speedup at ~1% insurance cost on the games it cannot help. It is
+worth having (-10.4% of a cell is real when a cell is hundreds of core-hours) but it is NOT a
+substitute for the wall-clock backstop, and it must not be described as one. The two are aimed at
+disjoint populations: the backstop exists for gi=4, and gi=4 is precisely where this does nothing.
+
+**A warning about reading interim numbers.** The first four games of the d4 run showed -37% to -55%
+and were reported that way; the fifth game moved the total to -10.4%. On a heavy-tailed deck the
+dominant game can be the LAST one, so a partial paired A/B is not a small version of the answer --
+it is a different answer. Same family as the "interim reads lie" rule in the value-leaf skill.
+
+### The H-cell interaction, measured but not yet on a heavy deck
+
+Anti-Lifegain, the deck the matrix docstring names for unbounded multi-hour trees, in the exact H
+cell configuration (`MTG_VALUE_MODEL=0` + `MTG_VALUE_PROFILE` + `MTG_LADDER_VALUE_LEAF=1`), d4, 3
+games: **5,264 -> 3,395 units (-35.5%)**, `hits=3 misses=1`, same avg (4.3333) and same per-game win
+turns. So the lever still fires with the ladder value leaf attached -- the cheap warm-up passes only
+reach `depth-1`, while the probe proves things at full `depth` for free, and that gap is the win.
+
+But 5.3k units for three games is a trivial workload (the deck wins on turn 4), so this confirms the
+MECHANISM and measures nothing about COST. **The number that decides phase C does not exist yet:**
+Snow has no sidecar until phase B, so every Snow measurement above is against the slow H path, which
+is a MORE expensive baseline than phase C will actually have. Re-measure on Snow once its model is
+staged, in the real H-cell configuration, before turning this on for the matrix.
