@@ -22,7 +22,18 @@
 #
 # Safe to re-run: idempotent on the cases file; skips straight to run/accept if already present.
 
+#
+# MODES:
+#   (no arg)     add + baseline SMOKE and REGRESSION. Runs pre-adoption.
+#   --overnight  add + baseline OVERNIGHT. Runs LAST, after the mulligan stage, because Hinata's
+#                overnight block is ~4x the regression d3 volume and ~6x at d5 -- hours of box time
+#                that would otherwise delay the mulligan gen. The cost of deferring it is that this
+#                tier's baseline is taken on the ADOPTED engine, so it yields no value-leaf delta;
+#                smoke+regression already provide that, and a long-run tier arguably wants its
+#                baseline on the shipped configuration anyway.
+
 set -u
+MODE=${1:-core}
 KEY=fungus
 DECKDIR=decks/Fungus
 STEM=Fungus
@@ -33,18 +44,15 @@ mkdir -p "$OUT"
 LOG=$OUT/regadd.log
 log() { echo "[$(date -u '+%m-%d %H:%M:%S')] $*" | tee -a "$LOG"; }
 
-log "=== fungus regression-add START (Hinata sizing, local-only) ==="
+log "=== fungus regression-add START (mode=$MODE, Hinata sizing, local-only) ==="
 [ -x "$BIN" ] || { log "ABORT: $BIN missing (do NOT rebuild under a freeze)"; exit 1; }
 [ -e "$DECKDIR/$STEM.cod" ] && [ -e "$DECKDIR/$STEM.profile.json" ] \
     || { log "ABORT: deck or profile missing under $DECKDIR"; exit 1; }
 
-if grep -q "^[[:space:]]*\"$KEY " "$CASES"; then
-    log "$KEY already present in $CASES -- skipping edit, going straight to run+accept"
-else
-    log "--- inserting Hinata-sized entries into $CASES ---"
-    python3 - "$CASES" <<'PY'
+log "--- inserting Hinata-sized entries into $CASES (idempotent, per array) ---"
+python3 - "$CASES" "$MODE" <<'PY'
 import re, sys
-path = sys.argv[1]
+path, mode = sys.argv[1], sys.argv[2]
 src = open(path).read()
 
 def add_map(src, name, value):
@@ -73,26 +81,49 @@ REGRESSION = """  # fungus: Hinata's sizing (d0 full + d3/d5 at both seeds).
   "fungus  5 3003  100 20"
 """
 
+# Mirror of hinata's 12-case overnight block: d0 x4 @2000, d3 x4 @400 b10, d5 x4 @300 b20.
+OVERNIGHT = """  # fungus: Hinata's overnight sizing. Baselined AFTER the mulligan stage (see script header):
+  # this block is ~4x the regression d3 volume and ~6x at d5, so running it first would delay the
+  # mulligan gen for a tier that is run rarely.
+  "fungus  0  4004 2000 0"
+  "fungus  0  6006 2000 0"
+  "fungus  0  8008 2000 0"
+  "fungus  0 10010 2000 0"
+  "fungus  3  4004  400 10"
+  "fungus  3  5005  400 10"
+  "fungus  3  6006  400 10"
+  "fungus  3  7007  400 10"
+  "fungus  5  4004  300 20"
+  "fungus  5  5005  300 20"
+  "fungus  5  6006  300 20"
+  "fungus  5  7007  300 20"
+"""
+
 def add_cases(src, array, block):
+    """Insert once, per array -- an array that already lists fungus is left untouched."""
     m = re.search(r'%s=\(\n' % array, src)
     if not m: sys.exit("could not find %s" % array)
+    end = src.index('\n)', m.end())
+    if '"fungus ' in src[m.end():end]:
+        print("  %s: already present, untouched" % array)
+        return src
+    print("  %s: inserted" % array)
     return src[:m.end()] + block + src[m.end():]
 
-src = add_cases(src, 'SMOKE_CASES', SMOKE)
-src = add_cases(src, 'REGRESSION_CASES', REGRESSION)
+if mode == 'overnight':
+    src = add_cases(src, 'OVERNIGHT_CASES', OVERNIGHT)
+else:
+    src = add_cases(src, 'SMOKE_CASES', SMOKE)
+    src = add_cases(src, 'REGRESSION_CASES', REGRESSION)
 open(path, 'w').write(src)
-print("inserted")
 PY
-    rc=$?
-    [ $rc -eq 0 ] || { log "ABORT: cases edit failed rc=$rc"; exit 1; }
-    if ! bash -n "$CASES"; then
-        log "ABORT: $CASES no longer parses -- reverting the edit"
-        git checkout -- "$CASES"; exit 1
-    fi
-    log "entries now present:"; grep -n "\"fungus " "$CASES" | tee -a "$LOG"
-    log "NOTE: OVERNIGHT_CASES deliberately left alone -- hinata carries 12 cases there"
-    log "      (d0 x4 @2000, d3 x4 @400, d5 x4 @300); add once the smoke/regression cost is known."
+rc=$?
+[ $rc -eq 0 ] || { log "ABORT: cases edit failed rc=$rc"; exit 1; }
+if ! bash -n "$CASES"; then
+    log "ABORT: $CASES no longer parses -- reverting the edit"
+    git checkout -- "$CASES"; exit 1
 fi
+log "fungus entries now in $CASES:"; grep -n "\"fungus " "$CASES" | tee -a "$LOG"
 
 # ---- Run and baseline BOTH modes we added cases to --------------------------------------------
 # Adding cases to a mode without accepting that mode leaves it un-baselined, so the next person to
@@ -115,9 +146,14 @@ baseline_mode() {   # baseline_mode <flag> <label>
     log "$label accept rc=$arc (see $OUT/accept_$label.log)"
     return $arc
 }
-baseline_mode --smoke smoke || { log "STOP: smoke accept failed -- NOT committing"; exit 6; }
-baseline_mode --regression regression \
-    || { log "STOP: regression accept failed -- NOT committing"; exit 6; }
+if [ "$MODE" = overnight ]; then
+    baseline_mode --overnight overnight \
+        || { log "STOP: overnight accept failed -- NOT committing"; exit 6; }
+else
+    baseline_mode --smoke smoke || { log "STOP: smoke accept failed -- NOT committing"; exit 6; }
+    baseline_mode --regression regression \
+        || { log "STOP: regression accept failed -- NOT committing"; exit 6; }
+fi
 
 python3 test/check_gt_logs.py >> "$OUT/check_gt.log" 2>&1
 log "check_gt_logs rc=$? (see $OUT/check_gt.log)"
@@ -127,18 +163,23 @@ git add "$CASES" test/regression_gt.txt test/gt_logs 2>/dev/null
 if git diff --cached --quiet; then
     log "nothing staged -- no commit"
 else
-    git commit -q -m "test(fungus): add Fungus to smoke+regression at Hinata's sizing
+    git commit -q -m "test(fungus): add Fungus to the suite at Hinata's sizing ($MODE)
 
 Sized by mirroring Hinata, the suite's existing deep-search deck, rather than by
 a bespoke wall-clock probe -- the idle box is better spent on the mulligan stage,
 and this entry is deliberately NOT PUSHED, so shrinking the counts later is a
 cheap local edit rather than a history rewrite.
 
-Baseline accepted on the HEURISTIC engine, BEFORE value-leaf adoption, so a later
-re-run's GT delta isolates the value leaf. Accept narrowed with --deck=fungus, so
-it creates this deck's baseline and promotes no other deck's numbers.
+Accept narrowed with --deck=fungus, so it creates this deck's baseline and
+promotes no other deck's numbers.
 
-OVERNIGHT_CASES left alone until the smoke/regression cost is known.
+core mode (smoke+regression) is baselined on the HEURISTIC engine BEFORE
+value-leaf adoption, so a later re-run's GT delta isolates the value leaf.
+overnight mode runs LAST, after the mulligan stage: Hinata's overnight block is
+~4x the regression d3 volume and ~6x at d5, so baselining it first would delay
+the mulligan gen for a tier that is run rarely. Its baseline is therefore taken
+on the adopted engine and yields no value-leaf delta -- smoke+regression already
+provide that.
 
 Co-Authored-By: Claude Opus 5 (1M context) <noreply@anthropic.com>"
     log "committed LOCALLY (not pushed): $(git log --oneline -1)"
