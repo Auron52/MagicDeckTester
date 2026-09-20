@@ -1043,6 +1043,11 @@ def run_incremental(args):
                  "reference_games":args.reference_target,
                  "never_condemn_depth":args.never_condemn_at_or_below,
                  "max_game_sec":args.max_game_sec,
+                 # THE TWO-STAGE PER-GAME WALL-CLOCK BACKSTOP. Batch-wide, never per cell: a cap that
+                 # varied by cell would make the skip list differ by cell BY CONSTRUCTION, which is
+                 # the UNEQUAL GAME SETS hazard the unit currency exists to avoid.
+                 "max_game_predict_sec":args.max_game_predict_sec,
+                 "max_game_wall_sec":args.max_game_wall_sec,
                  "drip":args.drip}
         json.dump({"condemn":condemn, "jobs":jobs}, open(man,"w"))
         env=dict(os.environ)
@@ -1327,6 +1332,23 @@ def main():
                          "one is about a single pathological game, and sharing the number would condemn a cell "
                          "with a 5 s/game mean over one 61 s game. 0 disables. Default 3600 (a run measured "
                          "2026-08-10 had a single game at 21.4 HOURS, invisible until it finished).")
+    ap.add_argument("--max-game-wall-sec",type=float,default=0.0,
+                    help="STAGE 2 of the per-game wall-clock backstop: ABANDON a single game that has been "
+                         "running this long (see ai/GameWorkMeter.h and docs/design/per-game-wall-clock-"
+                         "backstop.md). Unlike --max-game-sec this stops the GAME, not its cell -- which is "
+                         "the whole point: a unit ceiling does not bound wall clock, and four Fungus games "
+                         "reached a 40M-unit ceiling only after 2.5-4.3 HOURS, at ~830-2,600 units/s against "
+                         "a 36,439 units/s median. 0 = off (default) = byte-identical. A wall-cut game is "
+                         "NOT a deterministic function of the data, so this is a failsafe sized to be a "
+                         "non-event, never a cost control: if it fires with any regularity, --abandon-k is "
+                         "mis-set and THAT is the bug.")
+    ap.add_argument("--max-game-predict-sec",type=float,default=0.0,
+                    help="STAGE 1 of the backstop: at this elapsed time, extrapolate from the game's own unit "
+                         "rate and cut it NOW if it cannot reach its unit ceiling before --max-game-wall-sec. "
+                         "Reproducibility-neutral given stage 2 (it only cuts games stage 2 would have killed "
+                         "anyway, for the same ABANDONED verdict and the same skip list) -- it just saves the "
+                         "hours in between. Needs a unit ceiling to extrapolate from, so it is inert on a cell "
+                         "whose ceiling is disarmed. 0 = off (default).")
     ap.add_argument("--abandon-units",type=int,default=0,
                     help="per-GAME search-work ceiling in units (see ai/GameWorkMeter.h). A game past it is "
                          "ABANDONED: no result, excluded from every cell of its (deck,seed), and BACKFILLED so "

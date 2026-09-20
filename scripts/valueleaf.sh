@@ -229,6 +229,37 @@ ABANDON_CALIB=25
 # minutes. Beyond that, I think it's okay to condemn"). The ratio remains in force for any deck whose
 # cells are expensive enough that 25 x median exceeds the floor.
 ABANDON_FLOOR_UNITS=40000000
+# PER-GAME WALL-CLOCK BACKSTOP, two stages (user, 2026-09-20: "I'm thinking 1.5-2 hours check (and
+# stop if we have a lot of work left) and 3-4 hours hard cap"). Full design and the measurements that
+# forced it: docs/design/per-game-wall-clock-backstop.md; mechanism: src/ai/GameWorkMeter.h.
+#
+# WHY EVERYTHING ABOVE IS NOT ENOUGH, which is the part that took a run to learn. Every guard in this
+# file is denominated in work UNITS, and on precisely the games they exist to stop, units and wall
+# clock come apart by an order of magnitude. Measured on Fungus phase C: four games reached the
+# 40,000,000-unit ceiling -- dead on it, correct in its own currency -- after 2.5 to 4.3 HOURS,
+# running at 830-2,600 units/s against a 36,439 units/s median over that run's own slow games. They
+# were then abandoned and their work discarded, so the 4.26 h game produced nothing at all. Across
+# that census 61% of all slow-game wall time (95.8 of 156.6 core-hours) produced nothing.
+#
+# And a cell whose ceiling is DISARMED has no bound in EITHER currency: past --max-skip-frac the
+# driver's skip_capped zeroes abandon_units, abandon_k AND abandon_floor_units together, which is
+# exactly the state Snow's matrix reaches at ~offset 98 (docs/design/depth-matrix-degenerate-games.md).
+# The backstop is the only thing that reaches those games.
+#
+# THE TWO STAGES DO DIFFERENT JOBS:
+#   STAGE 1 (predictive, 2 h) extrapolates from the game's own unit rate: if it cannot reach its unit
+#     ceiling before the hard cap, cut it now instead of spending 1.5 more hours proving it. It is
+#     REPRODUCIBILITY-NEUTRAL given stage 2 -- it only ever cuts games stage 2 would have killed
+#     anyway, for the same verdict and the same skip list -- so it is free.
+#   STAGE 2 (hard, 3.5 h) is unconditional and is the one that bounds the run.
+#
+# NOT A COST CONTROL, and the distinction is load-bearing. The unit ceiling stays the real bound: it
+# is deterministic, it is a function of the data, and it is what decides which games are kept. This
+# only catches the case where that bound has stopped working. Sized to be a NON-EVENT -- it should
+# fire on the 4 h class and never on the 1-2 h class. If it fires with any regularity, ABANDON_K is
+# mis-set for that cell and that is the bug to fix instead of tightening this.
+MAX_GAME_PREDICT_SEC=7200    # 2 h   -- stage 1, within the user's 1.5-2 h
+MAX_GAME_WALL_SEC=12600      # 3.5 h -- stage 2, within the user's 3-4 h
 # The SAME number is also passed as --abandon-units, i.e. as the ABSOLUTE cap that applies DURING the
 # calibration window. Without it a cell whose first games are all monsters never completes a
 # calibration sample, so no median exists, so no relative ceiling ever arms, so those games run
@@ -811,6 +842,7 @@ phase_matrix() {
     local keys; keys=$(staged_keys)
     [ -n "$keys" ] || { log "PHASE C ABORT: no staged models"; return 1; }
     log "PHASE C: matrix over$keys -- ONE pool, all available cores, target $MATRIX_TARGET/cell, H=[$HDEPTHS], V=[$VDEPTHS], cutoff median ${INTRACTABLE_MEDIAN_SPG}s/game, never-condemn<=$NEVER_CONDEMN, per-game ceiling ${ABANDON_K}x median of first $ABANDON_CALIB"
+    log "  wall-clock backstop: predictive cut at $((MAX_GAME_PREDICT_SEC/60)) min, hard cap at $((MAX_GAME_WALL_SEC/60)) min -- a FAILSAFE for when the unit ceiling stops bounding wall clock, not a cost control"
     MTG_SLOW_GAME_LOG="$SLOW_GAME_LOG" \
     python3 scripts/attic/valueleaf_depth_matrix.py --incremental --decks $keys \
         --hdepths $HDEPTHS --vdepths $VDEPTHS --seeds 8008 9009 10010 11011 \
@@ -820,6 +852,8 @@ phase_matrix() {
         --abandon-k "$ABANDON_K" --abandon-calib "$ABANDON_CALIB" \
         --abandon-floor-units "$ABANDON_FLOOR_UNITS" \
         --abandon-units "$ABANDON_FLOOR_UNITS" \
+        --max-game-predict-sec "$MAX_GAME_PREDICT_SEC" \
+        --max-game-wall-sec "$MAX_GAME_WALL_SEC" \
         --out "$MATRIX_TXT" >> "$VLQ/matrix.log" 2>&1
     [ -s "$MATRIX_TXT" ] || { log "PHASE C ABORT: no matrix output"; return 1; }
     log "PHASE C done"

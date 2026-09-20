@@ -208,6 +208,23 @@ struct CondemnRule
     // by something DETERMINISTIC. See the in-flight hook, rule (1).
     // 0 / absent => the in-flight rule is off.
     double max_game_sec        = 0.0;
+    // THE TWO-STAGE PER-GAME WALL-CLOCK BACKSTOP (see ai/GameWorkMeter.h for the design and the
+    // measurements). Unlike max_game_sec above, these stop the GAME rather than condemn its cell --
+    // which is the whole point. max_game_sec cannot stop a running game at all, so its only lever is
+    // to throw away a cell's remaining work, and it stands down entirely wherever a unit ceiling is
+    // armed. That left the 2.5-4.3 h Fungus games with nothing able to reach them.
+    //
+    //   max_game_predict_sec  stage 1, the PREDICTIVE cut  (USER 2026-09-20: "1.5-2 hours check")
+    //   max_game_wall_sec     stage 2, the HARD cap        (USER 2026-09-20: "3-4 hours hard cap")
+    //
+    // BATCH-WIDE rather than per job, unlike abandon_units. That is a correctness property, not a
+    // convenience: a cap that varied per cell would make the skip list differ per cell BY
+    // CONSTRUCTION, which is precisely the UNEQUAL GAME SETS hazard the unit currency was chosen to
+    // avoid. One number for the run means a wall-cut game is excluded from every cell alike.
+    //
+    // Both 0 / absent => off => every existing manifest is byte-identical (no clock is ever read).
+    double max_game_predict_sec = 0.0;
+    double max_game_wall_sec    = 0.0;
     // (A driver-written CONTROL FILE used to live here, the channel for the one verdict the engine
     // could not reach itself: quality -- "does depth d buy anything over d-1?". Removed with the rule
     // it served, 2026-08-21; see scripts/attic/valueleaf_depth_matrix.py for why the rule went.)
@@ -819,9 +836,25 @@ std::vector<BatchJobResult> BatchRunner::RunManifest(
         condemn.reference_games     = c.value("reference_games", 0);
         condemn.never_condemn_depth = c.value("never_condemn_depth", 0);
         condemn.max_game_sec        = c.value("max_game_sec", 0.0);
+        condemn.max_game_predict_sec = c.value("max_game_predict_sec", 0.0);
+        condemn.max_game_wall_sec    = c.value("max_game_wall_sec", 0.0);
         condemn.drip                = std::max(1, c.value("drip", 1));
         condemn.enabled             = (condemn.median_sec_per_game > 0.0 && condemn.reference_games > 0)
                                    || condemn.max_game_sec > 0.0;
+        // DELIBERATELY NOT folded into `enabled` above. The backstop abandons a GAME through the
+        // work meter; it never condemns a cell and never skips at dequeue, so it needs none of the
+        // condemnation machinery that flag gates. Arming it must not switch that machinery on for a
+        // manifest that asked only for a wall cap.
+    }
+    // Env override, for arming the backstop on a manifest that predates it (and for tests). Seconds;
+    // set either to 0 to force that stage OFF even where the manifest asks for it. EnvInt's own
+    // sentinel is -1 = unset, which is what makes "0 means off" work here rather than "0 means
+    // unset" -- the convention in core/EnvFlags.h.
+    {
+        const int pred = EnvInt("MTG_MAX_GAME_PREDICT_SEC", -1);
+        const int hard = EnvInt("MTG_MAX_GAME_WALL_SEC", -1);
+        if (pred >= 0) { condemn.max_game_predict_sec = static_cast<double>(pred); }
+        if (hard >= 0) { condemn.max_game_wall_sec    = static_cast<double>(hard); }
     }
 
     // Dense cell indices, so the per-game hot path indexes a vector instead of hashing a string.
@@ -1404,8 +1437,20 @@ std::vector<BatchJobResult> BatchRunner::RunManifest(
                 {
                     if (static_cast<double>(ms) <= condemn.max_game_sec * 1000.0) { continue; }
                     if (cid < 0 || cid >= n_cells) { continue; }
+                    // A WALL-CLOCK BACKSTOP bounds this game in the rule's OWN currency, which no
+                    // unit ceiling can claim -- so where one is armed, `bounded` is not a hopeful
+                    // reading of a proxy, it is the thing itself. Both responses below then become
+                    // wrong: the game will stop on its own at max_game_wall_sec, so condemning its
+                    // cell throws away the REST of the cell's work to solve a problem that is
+                    // already solved. This is what lets the backstop REPLACE the cell-condemning
+                    // compromise ("losing one cell is bad, a run that cannot terminate is worse")
+                    // instead of racing it -- at a 3600 s max_game_sec the hard-overrun branch
+                    // below fires at 3 h, which would otherwise condemn the cell just before a
+                    // 3.5 h cap abandoned the one game that deserved it.
+                    const bool wall_bounded = condemn.max_game_wall_sec > 0.0;
                     const bool bounded =
-                        cell_ceiling[static_cast<std::size_t>(cid)]->frozen.load(
+                        wall_bounded
+                        || cell_ceiling[static_cast<std::size_t>(cid)]->frozen.load(
                             std::memory_order_acquire) > 0
                         || cell_abandon_units[static_cast<std::size_t>(cid)] > 0;
                     // A WORK ceiling bounds UNITS, not SECONDS, and the two come apart on exactly
@@ -1424,8 +1469,12 @@ std::vector<BatchJobResult> BatchRunner::RunManifest(
                     // never reach it -- at the shipped 3600 s limit this fires at 3 hours, and the
                     // games that provoked it were already at six.
                     constexpr double kHardOverrunFactor = 3.0;
+                    // ...and for the same reason the hard-overrun backstop stands down under a wall
+                    // cap. It exists ONLY because a unit ceiling does not bound time; that premise
+                    // is false here.
                     const bool hard_overrun =
-                        static_cast<double>(ms) > condemn.max_game_sec * kHardOverrunFactor * 1000.0;
+                        !wall_bounded
+                        && static_cast<double>(ms) > condemn.max_game_sec * kHardOverrunFactor * 1000.0;
                     if (!bounded || hard_overrun)
                     {
                         if (hard_overrun && bounded)
@@ -1447,11 +1496,13 @@ std::vector<BatchJobResult> BatchRunner::RunManifest(
                     {
                         std::fprintf(stderr,
                             "[batch] OVER max_game_sec cell=%s: a game has been running %.1f s "
-                            "(limit %.1f) but the cell's per-game WORK ceiling is armed, so the "
-                            "game is bounded and the cell is NOT condemned. If this repeats, the "
-                            "ceiling (abandon_k) is too loose for this cell or the box is loaded.\n",
+                            "(limit %.1f) but it is bounded by %s, so the cell is NOT condemned. "
+                            "If this repeats, the ceiling (abandon_k) is too loose for this cell or "
+                            "the box is loaded.\n",
                             cell_name[static_cast<std::size_t>(cid)].c_str(),
-                            static_cast<double>(ms) / 1000.0, condemn.max_game_sec);
+                            static_cast<double>(ms) / 1000.0, condemn.max_game_sec,
+                            wall_bounded ? "the WALL-CLOCK backstop (max_game_wall_sec)"
+                                         : "the cell's per-game WORK ceiling");
                         std::fflush(stderr);
                     }
                 }
@@ -1684,6 +1735,15 @@ std::vector<BatchJobResult> BatchRunner::RunManifest(
                     (!is_calib && frozen > 0) ? frozen
                                               : (late_now > 0 ? late_now : job.abandon_units);
                 gamework::Begin(ceiling);
+                // THE WALL-CLOCK BACKSTOP, after Begin (which disarms it) and before the game runs.
+                // Applies to CALIBRATION games too, deliberately: the calibration window is where
+                // the worst game on record lived (FiveColour V5 game 6, 82.3% of its cell's total
+                // cost, inside the window where no ceiling could reach it), so exempting it would
+                // leave the hole open in exactly the place it has already cost the most.
+                if (condemn.max_game_predict_sec > 0.0 || condemn.max_game_wall_sec > 0.0)
+                {
+                    gamework::ArmDeadline(condemn.max_game_predict_sec, condemn.max_game_wall_sec);
+                }
                 // A calibration game PUBLISHES its progress and watches the cell's ceiling, so the
                 // freeze on another thread can (a) prove this game is above the sample's middle
                 // value and stop waiting for it, and (b) stop it the moment the ceiling exists.
@@ -1699,6 +1759,9 @@ std::vector<BatchJobResult> BatchRunner::RunManifest(
                 }
                 int wt = engine->RunGame(state, job.max_turns);
                 const long long g_units = gamework::Used();
+                // Read BEFORE End(), which resets both (same rule as Used() above).
+                const gamework::Cause g_cause   = gamework::AbandonCause();
+                const double          g_elapsed = gamework::Elapsed();
                 gamework::End();
                 if (wt == GameEngine::kAbandoned)
                 {
@@ -1711,13 +1774,36 @@ std::vector<BatchJobResult> BatchRunner::RunManifest(
                     // SLOW-GAME, because the skip list is per (deck, seed, offset) and is what every
                     // other cell filters on. Units, not ms: the decision was deterministic and the
                     // reader must be able to reproduce it.
+                    //
+                    // ...UNLESS the WALL-CLOCK BACKSTOP fired, in which case it was NOT deterministic
+                    // and the line says so in its own tag. Three things ride on the distinction:
+                    // a wall-cut run is not reproducible from the data alone, so an A/B against it
+                    // is not a like-for-like comparison; the backstop firing at all means the unit
+                    // ceiling (abandon_k / abandon_units) failed to bound this cell, and THAT is the
+                    // bug to fix rather than the cap to tighten; and a stage-1 PREDICT cut is the
+                    // one that can be wrong about a game (see kPredictSafety), so it has to be
+                    // findable afterwards.
+                    const char* tag = (g_cause == gamework::Cause::kWall)    ? "ABANDONED-WALL"
+                                    : (g_cause == gamework::Cause::kPredict) ? "ABANDONED-PREDICT"
+                                                                             : "ABANDONED";
                     std::fprintf(stderr,
-                                 "[goldfish] ABANDONED job=%s gi=%d units=%lld limit=%lld  repro: "
-                                 "--seed %llu --game-index %d --games 1\n",
-                                 job.name.c_str(), global_gi, g_units, ceiling,
+                                 "[goldfish] %s job=%s gi=%d units=%lld limit=%lld cause=%s "
+                                 "elapsed=%.1fs  repro: --seed %llu --game-index %d --games 1\n",
+                                 tag, job.name.c_str(), global_gi, g_units, ceiling,
+                                 gamework::CauseName(g_cause), g_elapsed,
                                  static_cast<unsigned long long>(job.seed
                                                                  + static_cast<uint64_t>(wi.game)),
                                  global_gi);
+                    if (g_cause == gamework::Cause::kWall || g_cause == gamework::Cause::kPredict)
+                    {
+                        std::fprintf(stderr,
+                            "[batch]    ^ the per-game WORK ceiling did not bound this game: %lld of "
+                            "%lld units in %.1f s (%.0f units/s). The backstop is a failsafe, not the "
+                            "primary rule -- if this repeats, abandon_k/abandon_units is mis-set for "
+                            "this cell.\n",
+                            g_units, ceiling, g_elapsed,
+                            g_elapsed > 0.0 ? static_cast<double>(g_units) / g_elapsed : 0.0);
+                    }
                     std::fflush(stderr);
                 }
                 // CALIBRATION. Fold this game into its cell's sample and, on the last one, FREEZE the
@@ -1739,6 +1825,15 @@ std::vector<BatchJobResult> BatchRunner::RunManifest(
                     // the limit and every uncut game is below it, so the ORDER is preserved and the
                     // median is identical to what the true costs would have given (unless half the
                     // sample was cut, which is a cell in far worse trouble than its ceiling).
+                    // A game cut by the WALL-CLOCK backstop instead lands here at its own g_units,
+                    // because min() below leaves it alone (it is by construction BELOW the ceiling
+                    // it never reached). That is the right entry: it is a censored observation
+                    // recorded at its censoring point, so it still orders correctly against every
+                    // uncut game and the median is unmoved unless half the sample was cut -- a cell
+                    // in far worse trouble than its ceiling. The residual is that WHICH games get
+                    // cut is load-dependent, so a frozen ceiling calibrated through a wall cut is
+                    // not bit-reproducible; that is the known price of stage 2 and the reason the
+                    // cap is sized as a non-event rather than as a tuning knob.
                     long long stat = g_units;
                     if (abandoned_at[wi.job][wi.game])
                     {
