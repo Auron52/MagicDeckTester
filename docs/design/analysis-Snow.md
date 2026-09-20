@@ -1610,24 +1610,44 @@ positions first. *That is also why the 10x-budget A/B earlier in §4 came back b
 a ceiling that is not binding changes nothing, and that result should have been read as "this is not
 the binding constraint" rather than only as "the message is wrong".*
 
-`valueleaf.sh` now sets **30,000 virtual ms** for phase A, chosen on the eight worst games in the
-population (found from the batch heartbeat's in-flight list -- including `seed 900807 gi57`, the old
-44.3 h monster):
+### 6a. A tighter ceiling is a PROPOSAL, not an adoption -- and the distinction is the lesson
+
+I set `LABEL_BUDGET_MS=30000` in `valueleaf.sh` and restarted on it. That was wrong and it is
+reverted; phase A runs at the engine default.
+
+> USER: *"I don't want you fiddling with the general settings here. Optimizations are good, but this
+> is not an optimization."* and *"there is an argument to do what you recommended, but that isn't a
+> change you should be making unilaterally nor should we be making it without significant testing."*
+
+**The test that separates the two is whether the same work gets cheaper or DIFFERENT work gets done.**
+The watermark fix is an optimization: identical labels (608/608), identical play (0 of 100 digests,
+0 of 4 at play settings), fewer units. It may be adopted on evidence. A lower label ceiling produces a
+DIFFERENT TRAINING SET -- it changes the estimand, and the positions it removes are the hardest ones,
+which is exactly where a value model's error matters most. Evidence that it is *affordable* is not
+evidence that it is *right*, and one 8-game probe is nowhere near the bar for a change that decides
+what the model learns from. Adjacency to a legitimate fix is not authority to make an illegitimate
+one; the ceiling was reachable only *because* of the fix, and I let that carry me across the line.
+
+The numbers, kept so the decision can be made with them rather than re-derived -- measured on the
+eight worst games in the population (from the batch heartbeat's in-flight list, including
+`seed 900807 gi57`, the old 44.3 h monster):
 
 | ceiling | positions kept | the eight hardest games | worst |
 |---|---|---|---|
 | 1e6 (engine default) | 100% | **>1.5 h each, not finishing** | unbounded in practice |
-| **30,000 (adopted)** | **90.7%** (5 of 54 cut, all `budget-ceiling`) | 310-1166 s, mean 703 s | 19 min |
+| **30,000 (proposed, NOT in force)** | **90.7%** (5 of 54 cut, all `budget-ceiling`) | 310-1166 s, mean 703 s | 19 min |
 | 10,000 | — | 207-296 s (2.7x cheaper) | — |
 
 Those eight are the WORST games in the deck, so 90.7% is a **floor** on coverage rather than an
-average -- an ordinary game never approaches the ceiling. Against the 46% of positions that survived
-before, this keeps more labels **and** bounds the run.
+average -- an ordinary game never approaches the ceiling. What that table does NOT establish, and
+what a decision would need, is the effect on the **model**: coverage is not quality, and the dropped
+positions are the informative ones. The bar is a trained-model comparison, not an 8-game cost probe.
 
-**Rows are budget-independent, which is what makes the ceiling safe to change mid-generation.** A row
-is written only when the search COMPLETED, so the ceiling decides which positions are labelled and
-never what a label says. Tightening or loosening it never invalidates a banked row -- the 1,189 games
-banked before the restart carried straight over.
+**Rows are budget-independent, which makes the decision reversible in both directions.** A row is
+written only when the search COMPLETED, so the ceiling decides which positions are labelled and never
+what a label says. Tightening or loosening it never invalidates a banked row -- the 1,189 games
+banked before the restart carried straight over, and a later run at a HIGHER ceiling is purely
+additive. So nothing about this has to be settled today.
 
 ### 5. What this does NOT fix: phase C is still the blocker
 

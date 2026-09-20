@@ -306,10 +306,17 @@ TRUST_SEEDS="620000 621000 622000 623000 624000 625000 626000 627000"
 # and deliberately so: the tolerance's ONLY job is now to gate this test.
 TRUST_TOL=0.002
 ROW_K=3
-# PER-POSITION LABEL CEILING for phase A, in VIRTUAL ms (work units, so the label SET is identical on
-# every machine -- a wall-clock ceiling would make the training data depend on the box).
+# PER-POSITION LABEL CEILING for phase A -- NOT SET. Left at the engine default deliberately.
 #
-# WHY THIS HAS TO BE SET AT ALL. A label is only written when the earliest-win search COMPLETES; a
+# USER, 2026-09-20: *"I don't want you fiddling with the general settings here. Optimizations are
+# good, but this is not an optimization."* Correct, and the distinction is the point: lowering this
+# does not make the same work cheaper, it CHANGES WHICH POSITIONS GET LABELLED -- i.e. it changes the
+# training set, which is a methodology decision and the deck owner's call, not an agent's. An
+# optimization may be adopted on evidence; an estimand change may not. The measurement below is kept
+# as a PROPOSAL for that decision, not as a setting.
+#
+# The measurement, so the decision has numbers under it. A label is only written when the
+# earliest-win search COMPLETES; a
 # truncated search returns max_turns+1, which is byte-identical to a real refutation, so EmitEvalRows
 # drops the position rather than teach the model that a position we could not AFFORD to solve is one
 # we cannot WIN from. That is right -- but it means the per-position budget is the only thing bounding
@@ -323,9 +330,9 @@ ROW_K=3
 # away (53.9% of Snow's positions). cd00879e stopped the bogus drop; this line supplies the real bound
 # it was standing in for.
 #
-# 30,000 CHOSEN ON MEASUREMENT, not by feel. On the eight worst games in Snow's phase-A population
+# WHAT A TIGHTER CEILING WOULD BUY, measured on the eight worst games in Snow's phase-A population
 # (found from the batch heartbeat's in-flight list, and including seed 900807 gi57 -- the ledger's old
-# 44.3 h monster):
+# 44.3 h monster). PROPOSAL ONLY -- nothing here is in force:
 #
 #   ceiling          positions kept        hardest games              worst game
 #   1e6 (default)    100%                  >1.5 h each, NOT FINISHING unbounded in practice
@@ -337,10 +344,14 @@ ROW_K=3
 # labels AND bounds the run. Every drop it does cause is now an honest one, reported as
 # `budget-ceiling=N` (see the LabelTruncationReport split, same commit).
 #
-# ROWS ARE BUDGET-INDEPENDENT, which is what makes this safe to change mid-generation: a row is only
-# written when the search completed, so the ceiling decides WHICH positions are labelled and never
-# what a label says. Tightening or loosening it never invalidates rows already banked.
-LABEL_BUDGET_MS=30000
+# ROWS ARE BUDGET-INDEPENDENT, which is what makes this decision reversible either way and safe to
+# take mid-generation: a row is only written when the search completed, so the ceiling decides WHICH
+# positions are labelled and never what a label says. Tightening or loosening it never invalidates
+# rows already banked, and a later run at a HIGHER ceiling is purely additive.
+#
+# Until the deck owner rules, phase A runs at the engine default (1e6 virtual ms) and the pipeline
+# stays knob-free. If the clock runs out inside phase A, the supported answer is `finish`, which
+# accepts the rows on disk as final and runs B..E on them -- not a quiet ceiling change.
 
 # key | deck-dir | stem | matrix-key | row-seed-base | row-games -- GENERATED, never edited.
 #
@@ -709,7 +720,6 @@ phase_rows() {
     # transient scales with concurrent monster games, so fewer workers is the safe lever on a small
     # box until the enumeration transient itself is bounded engine-side.
     MTG_DUMP_VALUE_ROWS="$ALL_ROWS" MTG_EVAL_ROWS_K="$ROW_K" MTG_EVAL_ROWS_ROLLOUT=0 \
-        MTG_VALUE_LABEL_BUDGET_MS="$LABEL_BUDGET_MS" \
         ./build/Release/mtg --batch "$ALL_ROWS.manifest.json" --threads "${MTG_VLQ_ROWS_THREADS:-0}" \
         > "$VLQ/rows.batch.log" 2>&1 \
         || { local rc=$?
