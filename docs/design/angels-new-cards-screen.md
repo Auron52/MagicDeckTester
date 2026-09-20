@@ -1512,17 +1512,42 @@ and that means nothing: the user ruled the removal stays, and the sim cannot see
    a missing model silently costs 1.35–84.8x). It is *not* what `leaf: none` does — a sidecar that
    exists and sets `leaf: none` satisfies that guard. The two were conflated.
 
-   **Measured properly** (4,000 paired games per format, seed 5100000, budget 40, max_turns 18,
-   both arms sidecar-PRESENT, same decklist / profile / keep table — only `value_play` differs):
+   **Measured three ways** — same decklist, profile and KEEP TABLE, same 4,000 seeds per format,
+   budget 40, max_turns 18. Only the value sidecar differs:
 
-   | format | shipped (leaf: model) | leafless single | delta | t | play differs | CPU |
+   * **A** = no `Angels.value.json` at all (the H-cell guard is UNMET)
+   * **B** = SHIPPED: the generated value leaf (`leaf: model`, engine-default ladder)
+   * **C** = `918c3cc2`: `ladder: single` / `leaf: none` / `alpha: relaxed` — sidecar EXISTS, leaf unused
+
+   | format | A avg | B avg | C avg | A cpu | B cpu | C cpu |
    |---|---|---|---|---|---|---|
-   | std  | 4.6783 | 4.6780 | −0.0003 | −1.0 |  2/4000 | 0.72x |
-   | 2hg  | 5.1658 | 5.1640 | −0.0018 | −2.6 |  7/4000 | 0.74x |
-   | long | 5.5080 | 5.5038 | −0.0043 | −3.5 | 33/4000 | 0.72x |
+   | std  | 4.6780 | 4.6783 | 4.6780 |  817s |  95s |  75s |
+   | 2hg  | 5.1650 | 5.1658 | 5.1640 | 1337s | 326s | 237s |
+   | long | 5.5040 | 5.5080 | 5.5038 | 1742s | 709s | 507s |
+   | **total** | | | | **3896s (3.45x)** | **1130s (1.00x)** | **819s (0.72x)** |
 
-   So leafless is **28% cheaper CPU and nominally FASTER on all three formats**, significantly so
-   at 40 life. Nothing regresses.
+   **THE VALUE LEAF'S ENTIRE MEASURED WIN WAS THE GUARD, NOT THE MODEL.** The three pairwise reads:
+
+   | comparison | play delta (std / 2hg / long) | CPU |
+   |---|---|---|
+   | B − A (the campaign's) | +0.0003 / +0.0008 / **+0.0040** (t +1.0/+0.9/**+3.1**) | A costs 8.60x / 4.11x / 2.46x B |
+   | C − A (never run) | **0.0000** / −0.0010 / −0.0003 | A costs **10.91x** / 5.65x / 3.44x C |
+   | C − B (the decider) | −0.0003 / −0.0018 / **−0.0043** (t −1.0/−2.6/**−3.5**) | C costs **0.72x** B |
+
+   The cleanest line in the table is **C − A at std: the digests are IDENTICAL** (0 of 4,000 games
+   differ) while A costs **10.9x** the CPU. Literally the same decisions, an order of magnitude more
+   work, purely because a file does not exist. That is the H-cell guard in its purest form, and it
+   is the whole of what the value leaf was buying.
+
+   So **C dominates B on both axes**: 28% less CPU *and* nominally faster play on all three formats
+   (significantly at 40 life). And B is nominally *slower in play than even A* (+0.0040 at long,
+   t +3.1) — the generated `eval_model` / `value_leaf_table` is doing negative work here, costing
+   1.39x the CPU of not consulting it.
+
+   Not an exotic config either: **8 of the 21 shipped decks already run `leaf: none`** (Dragons,
+   Dragonstorm, Fluctuator, Goblins, Minotaur, Mirrorwing, Stompy, treasure_hunt), all keeping the
+   model file present to satisfy the guard while bypassing it. Angels is the outlier that HAD that
+   adoption and lost it to a regeneration.
 
    **Why it was not adopted anyway.** Staged and run through all three tiers: smoke and regression
    are clean (regression **114/114 byte-identical**), but the overnight tier's generous budgets
