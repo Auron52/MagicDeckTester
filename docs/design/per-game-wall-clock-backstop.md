@@ -307,3 +307,57 @@ is cheap to test and independent of the search work above.
 note in this session called it "flat, definitively not a leak" on the strength of the first two
 readings; that was premature. Steady anonymous growth on a pooled batch whose games all complete is
 itself a defect signature worth chasing alongside the allocator churn.
+
+## THE DESIGN, REFINED (USER 2026-09-20): TWO STAGES, NOT ONE CAP
+
+> *"my thought is to make it 2-stage. A check at hour 1 or 2 to see how our progress is. If we have
+> a lot of work still to go, we cancel it. Then at hour 3 or 4 we have a hard cap."*
+
+* **STAGE 1 -- PREDICTIVE CUT, at hour 1-2.** Extrapolate from the work done so far: at this game's
+  observed unit rate, can it still reach its unit ceiling before the hard cap? If not, cut it now
+  instead of spending two more hours proving it.
+* **STAGE 2 -- HARD CAP, at hour 3-4.** Unconditional. Catches anything whose rate changed after the
+  stage-1 check, so no game can run unbounded regardless of what the extrapolation believed.
+
+### Why stage 1 is REPRODUCIBILITY-NEUTRAL, which resolves this doc's main objection
+
+The hazard recorded above is that a wall-clock trigger is load-dependent, so the skip list -- which
+every other cell filters on -- stops being a deterministic function of the data. **That objection
+does not apply to stage 1 once stage 2 exists.**
+
+Stage 1 only cuts a game that cannot reach its unit ceiling before the hard cap. Any such game is
+one that stage 2 would have killed anyway. **Both stages produce the same ABANDONED verdict, so the
+skip list is identical either way** -- stage 1 changes only how many hours were burned getting
+there. The reproducibility question is therefore entirely about stage 2's threshold, and stage 1 is
+free.
+
+The one way stage 1 can be wrong is cutting a game that would have COMPLETED (not merely reached the
+ceiling) -- a game whose rate was about to recover. So the extrapolation must be conservative: cut
+only when the shortfall is not close, and prefer to let stage 2 do it when in doubt. Sizing stage 1
+at hour 1-2 against a stage-2 cap at hour 3-4 builds that margin in -- the gap is the safety factor.
+
+### Why the checkpoint shape is right for THIS failure
+
+The observed pathology is not "a game that is slightly slow" but "a game running at 830-2,600
+units/s against a system assumption of 900,000" -- 25x to 1000x off. A game that far below rate is
+distinguishable from a healthy one within the first hour with enormous margin, which is exactly the
+regime a predictive check works in. It does not need to be a subtle estimator.
+
+Worked against the measured cases: a 40M ceiling at ~830 units/s implies ~13.4 h to reach it. At the
+hour-2 checkpoint such a game has done ~6M of 40M units -- 15% -- and needs 11 more hours against a
+3-4 h cap. Not a close call. The 13.42 h and 12.63 h games in this run would each have been cut at
+hour 2, for the same final verdict.
+
+### Implementation note
+
+Both stages fit the `gamework::Add` strided-clock sketch above; stage 1 needs no new state beyond the
+deadline, because `t_used` and `t_limit` are already the numerator and denominator of the
+extrapolation. Report the two distinctly (`ABANDONED-PREDICT` vs `ABANDONED-WALL`) so a run's log
+says which rule fired, and so a stage-1 cut that later proves wrong is findable.
+
+### Status / sequencing (2026-09-20)
+
+Deferred to Monday at USER direction: development budget is nearly exhausted and the box is held by
+the in-flight Fungus value-leaf run until then. There is NO quick path -- `perf` over the worst game
+is FLAT (top symbol under 8%), so this is real work rather than a one-line fix, and it is a `src/`
+change that cannot be built while the generation holds the binary and the frozen `src` tree.
