@@ -1,4 +1,4 @@
-# Regression ground truth -- commit 5e092bf8  date 2026-09-19
+# Regression ground truth -- commit 5f923ce8  date 2026-09-20
 # Promoted from accepted runs by 'regression.sh --accept' -- do not hand-edit.
 # accepted-with-regressions (overnight, 2026-09-19): Angels (12 keys): decklist adopted 2026-09-19, all configs FASTER. Other 52 keys: pre-existing overnight staleness from 56c57d73 (site-10 breakpoint fix) -- 76f76796 rebaselined smoke+regression only and touched ZERO overnight keys. 26 of 52 are digest-only at identical score; auras (the fix's own target) is -0.0119; net -0.00166; 9 slower, all <=0.007t, no win became unwon.
 # Key: <deck>_<mode>_d<depth>_s<seed> = <avg>[/<play_digest>]   (avg = mean turn-to-win, unwon = max_turns+1)
@@ -72,6 +72,7 @@ goblins2hg_smoke_d3_s1001=4.0400/55649e415bd4a125
 knights2hg_smoke_d3_s1001=5.0933/2c8289b1ed029bba
 fivecolour2hg_smoke_d3_s1001=5.4500/fc4b9fe039d67a42
 fluctuator2hg_smoke_d3_s1001=3.6267/1c51a6bd330aacd5
+angels2hg_smoke_d3_s1001=5.1900/46e221cf95fafbe2
 slivers2hg_smoke_d3_s1001=4.8200/60f7078e6e53e52d
 burn2hg_smoke_d3_s1001=5.8400/17cdfbfc7739cd84
 th2hg_smoke_d3_s1001=4.5400/1cc235cbec630c31
@@ -198,6 +199,7 @@ goblins2hg_regression_d3_s2002=4.1500/0fcfb6954e71ca43
 knights2hg_regression_d3_s2002=5.0100/40a525918b346540
 fivecolour2hg_regression_d3_s2002=5.4400/d563d879b2aecbc1
 fluctuator2hg_regression_d3_s2002=3.6000/293e83449c3bc66c
+angels2hg_regression_d3_s2002=5.1667/63b8f1d28034ba0e
 fluctuator_regression_d0_s2002=5.1670/d028d0e755828667
 fluctuator_regression_d3_s2002=3.6200/355daebaf485a381
 fluctuator_regression_d3_s3003=3.5933/09e15cc0e9556f8d
@@ -473,6 +475,10 @@ fluctuator2hg_overnight_d5_s4004=3.6125/75986cf649eae073
 fluctuator2hg_overnight_d5_s5005=3.5125/f1aef1e4a2f46483
 fluctuator2hg_overnight_d5_s6006=3.5000/412fb2aad63a1dc3
 fluctuator2hg_overnight_d5_s7007=3.6250/8f4fd43d9310768f
+angels2hg_overnight_d5_s4004=5.1467/2b88de332a521b34
+angels2hg_overnight_d5_s5005=5.2467/e624a2e3deaf6073
+angels2hg_overnight_d5_s6006=5.3333/7921add545dade2c
+angels2hg_overnight_d5_s7007=5.0733/089693f150cb91c0
 fluctuator_overnight_d0_s4004=5.1455/ae9e09ca79a5b57b
 fluctuator_overnight_d0_s6006=5.2175/5a94065d77b441d4
 fluctuator_overnight_d0_s8008=5.1040/4116c85f96cb1a14

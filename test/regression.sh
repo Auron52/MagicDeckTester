@@ -153,8 +153,21 @@ if [ "$ACCEPT" = 1 ]; then
   # exactly once (a mirrorwing smoke accept dropped minotaur's overnight note, 2026-08-29), and the
   # cost of noticing is high -- the values it explains are untouched, so nothing looks wrong.
   # An ack for the mode being accepted NOW is dropped from the carried set: this run supersedes it.
+  #
+  # ...but ONLY WHEN THIS RUN ACTUALLY SUPERSEDES IT, i.e. a FULL-tier accept. A --deck=<...>
+  # accept supersedes nothing: it re-measures a handful of one deck's keys and leaves every other
+  # key of that mode -- including all the ones the note explains -- carried on the note's basis.
+  # Dropping it there is the SAME provenance loss described above, one level deeper, and it is
+  # worse than the 2026-08-29 case because the erasing run need not touch a single cell the note
+  # covers. It fired on 2026-09-20: adding the 4 new angels2hg overnight keys under
+  # --deck=angels2hg erased the 2026-09-19 note documenting 52 unrelated overnight cells accepted
+  # stale from 56c57d73. Caught only by diffing the GT file before and after the accept.
+  # A fresh --accept-with-regressions for this mode DOES supersede, filtered or not, so the drop
+  # still applies whenever ACCEPT_ACK is being written.
   prior_acks=""
-  if [ -f "$GT" ]; then
+  if [ -f "$GT" ] && [ -n "$DECK_ONLY" ] && [ -z "$ACCEPT_ACK" ]; then
+    prior_acks="$(grep -E '^# accepted-with-regressions \(' "$GT" 2>/dev/null || true)"
+  elif [ -f "$GT" ]; then
     prior_acks="$(grep -E '^# accepted-with-regressions \(' "$GT" 2>/dev/null \
                   | grep -vE "^# accepted-with-regressions \($MODE," || true)"
   fi

@@ -208,8 +208,13 @@ SMOKE_CASES=(
   # angels: ADDED 2026-09-18 (mono-white Angels tribal; analysis-Angels.md). Full kitty/critter
   # shape because it is one of the CHEAPEST decks in the matrix -- measured single-threaded at the
   # tier's own budgets: d0 ~0 s, d3 b10 0.066 s/game, d5 b20 0.060 s/game (cf. dragons 0.98 / 2.00).
-  # Smoke's share is ~26 core-s. It ships the leafless single-pass shape (leaf: none), so the d3/d5
-  # cells WILL move if a value leaf is ever adopted -- regenerate GT then.
+  # Smoke's share is ~26 core-s. THAT PREDICTION CAME TRUE AND IS SPENT: the note here used to say
+  # the deck shipped the leafless single-pass shape (leaf: none) and that the d3/d5 cells would move
+  # if a value leaf were ever adopted. One was, on 2026-09-19 with the v2 decklist (598848fa /
+  # 4e81a3e7), and all 20 keys were rebaselined then. Angels now ships a regenerated value sidecar
+  # (0.32x the leafless cost) plus an exhaustive keep model; note its value_play block carries only
+  # expected_buckets/mull_gen_*, so enabled stays false and the d5 rows run the ENGINE default depth
+  # rather than a block-locked one -- the sidecar's mere PRESENCE is what activates the hybrid leaf.
   # Added specifically to close a hole the ledger documents: with no GT key, NOTHING in the repo
   # noticed when an engine change moved this deck's play, and its claude-play sweep record could go
   # stale silently. That had to be checked by hand once already (2026-09-18, digests, Saga work).
@@ -225,7 +230,21 @@ SMOKE_CASES=(
   # devotion x2), goblins (Chainwhirler ping x2), knights (Adeline token per head), fivecolour
   # (Deathrite drain x2), fluctuator (Drannith Stinger's "whenever you cycle another card,
   # deals 1 damage to EACH OPPONENT" -- 2 per cycle under two heads, so the kill needs ~15 cycles
-  # against 30 team life instead of 20 against 20). Every OTHER deck gets a small SEARCHED canary -- d3 at 50 games (user,
+  # against 30 team life instead of 20 against 20), and angels -- which qualifies on a DIFFERENT
+  # AXIS and is the reason this block was extended on 2026-09-20. Angels is the ONLY deck in the
+  # repo carrying a `life_above_start_anthem_*` card (Righteous Valkyrie, and it plays FOUR), so
+  # the conditional-anthem pass in SpellEffects.h (~3216-3246) -- read by every combat, board-eval
+  # and SBA site through ComputeLordBonus -- had NO 2HG coverage anywhere. That pass compares life
+  # against gamesetup::StartingLife() + 7, i.e. 27 at std but 37 at 2HG; a regression to the
+  # literal 27 is INVISIBLE at std and catastrophic at 2HG, where starting life is already 30 and
+  # the anthem would switch on at turn 0 with zero lifegain, permanently, for the whole team.
+  # VERIFIED BY INJECTION, not assumed (2026-09-20): hardcoding the two compares in
+  # SpellEffects.h to 20 + N moved angels2hg_smoke_d3_s1001 from 5.1900/46e221cf95fafbe2 to
+  # 5.1000/e1fbb67860ed2f9a (the always-on anthem is worth ~0.09 turns) while leaving
+  # angels_smoke_d3_s1001 BYTE-IDENTICAL at 4.6680/4df60477ed79b23d. Reverting restored both.
+  # So this row is the only thing in the repo that fails on that bug. Not heads-scaling: the deck has no "each opponent"
+  # effect the engine models (Lightstall Inquisitor's ETB is disclosed structurally inert), so this
+  # case is bought entirely by the starting-life axis. Every OTHER deck gets a small SEARCHED canary -- d3 at 50 games (user,
   # 2026-09-04: d0 "isn't all that useful"; fewer games at search depth instead) -- so a
   # heads-plumbing break in the search/rollout path moves a committed digest too.
   "hinata2hg     3 1001   75 10"
@@ -235,6 +254,9 @@ SMOKE_CASES=(
   "knights2hg    3 1001   75 10"
   "fivecolour2hg 3 1001   40 10"
   "fluctuator2hg 3 1001   75 10"
+  # angels2hg: antilife/minotaur sizing. Angels is one of the cheapest decks in the matrix
+  # (d3 b10 ~0.066 s/game), so the whole relevant-tier treatment costs ~7 core-s here.
+  "angels2hg     3 1001  100 10"
   "slivers2hg         3 1001 50 10"
   "burn2hg            3 1001 50 10"
   "th2hg              3 1001 50 10"
@@ -397,6 +419,8 @@ REGRESSION_CASES=(
   "knights2hg    3 2002  100 10"
   "fivecolour2hg 3 2002   50 10"
   "fluctuator2hg 3 2002  100 10"
+  # angels2hg: antilife/minotaur sizing again (~10 core-s at 0.066 s/game).
+  "angels2hg     3 2002  150 10"
   # fluctuator: gate budgets at both seeds (~14 core-min). See the SMOKE block for measured costs.
   "fluctuator 0 2002 1000 0"
   "fluctuator 3 2002  150 10"
@@ -749,6 +773,13 @@ OVERNIGHT_CASES=(
   "fluctuator2hg 5 5005  80 40"
   "fluctuator2hg 5 6006  80 40"
   "fluctuator2hg 5 7007  80 40"
+  # angels2hg: minotaur2hg's exact shape -- 150 games against the deck's own 500-game d5 rows,
+  # at the same b40. This is the tier that actually exercises Righteous Valkyrie's anthem under
+  # a 37-life threshold over a full game, rather than just tripping a digest. ~1 core-min.
+  "angels2hg     5 4004 150 40"
+  "angels2hg     5 5005 150 40"
+  "angels2hg     5 6006 150 40"
+  "angels2hg     5 7007 150 40"
   # fluctuator: breaching-shaped 4-seed sweep at 2x gate budgets. Probed at the ACTUAL overnight
   # budgets 2026-09-05: d3 b20 ~2.78 s/game, d5 b40 ~4.29 s/game, NO game over 30 s at either
   # => ~2.7 core-hours added, breaching's bracket. Counts obey the seed-spacing rule
