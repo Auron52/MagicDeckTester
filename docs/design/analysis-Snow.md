@@ -1737,3 +1737,143 @@ phase A and phase C alike, and transfers to other decks. Instrumented binary is 
    be regenerated after it.
 4. **Snow is still not in the regression suite** — a shared-budget sizing call, and an expensive
    one at 4.9 s/game mean.
+
+---
+
+# 14. THE PHASE-C WALL-CLOCK BACKSTOP, AND WHY THE LADDER LEVER IS SMALL HERE (2026-09-20)
+
+## 14.1 What landed
+
+`b38a0633` — the **two-stage per-game wall-clock backstop**, built from the Fungus session's spec in
+`docs/design/per-game-wall-clock-backstop.md` (read that for the design; this section is only Snow's
+side of it). Default off; `valueleaf.sh` phase C arms it at **2 h predictive / 3.5 h hard**, inside
+the ranges the user set (*"1.5-2 hours check (and stop if we have a lot of work left) and 3-4 hours
+hard cap"*).
+
+**Why this matters more for Snow than for the deck it was written on.** The Fungus case was a unit
+ceiling that bounded the wrong currency — games landing dead on a 40M-unit ceiling after 2.5-4.3 h.
+Snow's phase C is worse than that: `--max-skip-frac` trips at ~offset 98, `skip_capped` zeroes
+`abandon_units`, `abandon_k` **and** `abandon_floor_units` together, and from that point the cells
+have **no bound in either currency**. The second end-to-end test above is exactly that state —
+`ABANDONED-WALL ... limit=0`, a game stopped at 45.1 s that nothing in the engine could previously
+have reached.
+
+This does **not** fix phase C's non-convergence, and must not be sold as doing so. The 41% union
+abandon rate is a shape property and is untouched. What the backstop changes is the *consequence* of
+non-convergence: instead of the run sitting on multi-hour games it will discard anyway, it loses the
+game and keeps the core. Decision 2 (§13.7) is still open and still the user's.
+
+## 14.2 TWO different readings of the user's proposal -- and I measured the small one first
+
+**Read `per-game-wall-clock-backstop.md` § "LAZY-LEAF EVALUATION" before this section.** The Fungus
+session recorded the user's proposal in its full form while this section was being written, and the
+full form is NOT what the numbers below bound. The two readings:
+
+* **(i) THE LADDER READING** -- skip iterative deepening's shallower passes and go straight to the
+  target depth. This is what §14.2.1 measures, and on Snow it is **small**.
+* **(ii) THE LAZY-LEAF READING** -- the user's actual proposal: *"use no leaf until we have fully
+  searched up to our depth and only use the leaf at that point. This way we wouldn't have to pay for
+  any rollouts (or even value-leaf) if we found our win in the search window."* Run the exact
+  depth-D search with **no leaf evaluation at all**; only if it finds no win do any leaves get
+  evaluated, and then only those that can still matter (a leaf at turn `t` cannot win before turn
+  `t`, so an exact win at turn `T` retires every leaf at turn >= `T`).
+
+These are not the same lever and they do not have the same size. **(ii) is much the more promising
+of the two, and the numbers in §14.2.1 do not bound it** -- see §14.2.2.
+
+## 14.2.1 The LADDER reading, measured (and it is small here)
+
+USER 2026-09-20: *"disabling the leaf entirely up to the final depth, searching the final depth and
+only then go through the escalations [the heuristic rollout] ... we use pure search until we've
+exhausted our depth ... It is much easier to do that in this case, because it is unbounded. We know
+exactly the depth where the rollouts/value-leaf will need to occur."*
+
+**The premise is correct and the idea already exists in the engine** — `single_mode = 2`, FIT, whose
+in-code provenance credits it to the same user on 2026-09-10 (*"delay the heuristic rollouts until we
+finish with the depth"*). Two things are genuinely new in the 2026-09-20 framing:
+
+* FIT lives in `FullSearchLineHybrid`, which early-outs to plain `FullSearchLine` when there is **no
+  value model**. The matrix's **H arm has no value model**, so FIT is *unreachable in exactly the
+  cells that cost everything* (H4+H5 were 121 of 156.6 core-hours in the Fungus census).
+* Unbounded, FIT's hard part disappears. Its machinery — calibrating `R`, predicting
+  `tree(d) + R x leaves(d)`, stepping shallower on overrun — exists only to pick the deepest
+  *affordable* depth under a budget, and miscalibration is its known failure mode
+  (`fit-gate-was-miscalibrated`). With `budget_ms: 0` the answer is always "the final depth". The
+  user's words: *"we were trying to make it work with budgets. This case is the simple version."*
+
+**So the idea is sound. It is the SIZE that argues against building it for Snow.** Two unbounded
+Snow H5 games under `MTG_ROLLOUT_STATS`:
+
+```
+heuristic-ladder totals: decisions=3 warm=608,466 commit=4,395,476 warm_share_of_ladder=0.1216
+leaf-TT hit rate  commit pass d4 0.301 / d5 0.221     warm passes d4 0.348 / d5 0.238
+units.la_bp_wave      43.4%        units.rollout_step    18.8%
+units.greedy_fallback 18.6%        units.la_cand         18.4%
+```
+
+Three readings, in order of how much they matter:
+
+1. **The shallow passes are 12.2% of ladder work, not the bulk.** That is the whole ceiling on the
+   proposal, before any of it is given back.
+2. **Part of that 12.2% is not saving, it is deferral.** The warm passes hit the leaf TT *more*
+   often than the committing pass does (0.348 vs 0.301 at d4), and the committing pass inherits the
+   table they warmed. Iterative deepening is normally *cheaper* than going straight deep for exactly
+   this reason. The engine already has the counter for pricing it —
+   `heuristic-ladder leaf-TT by committed depth` — so this is measurable rather than arguable.
+3. **Deferring the ROLLOUT STEPS alone cannot beat ~19% here** -- `rollout_step` is 18.8% of units,
+   against `la_bp_wave` at 43.4%. But see §14.2.2: this is the number that does NOT transfer to the
+   lazy-leaf reading, and quoting it against that proposal would be wrong.
+
+## 14.2.2 Why those numbers do NOT bound the LAZY-LEAF reading
+
+The ladder lever removes *passes*. The lazy leaf removes *horizon-edge work*, which is a different
+and much larger population, and the same probe says so:
+
+```
+interior_nodes=111,271   turn_steps=2,473,077   interior_frac=0.0431
+```
+
+**The search tree's INTERIOR is 4.3% of the step count. Everything else is horizon-side.** That
+lines up almost exactly with the two decks where this has already been measured -- EDF at 95.3% of
+enumerated plans on the horizon edge, Fungus at 99.7% of work at horizon-edge nodes -- and it is the
+population the lazy leaf is aimed at. So the honest reading of my own probe is: the leaf's *rollout
+steps* are 18.8% of units, but the horizon EDGE as a whole is where ~95% of the work sits, and how
+much of `la_cand` (18.4%) and `la_bp_wave` (43.4%) is plan enumeration that exists ONLY to feed a
+leaf evaluation is **not something this probe separates**. Until it does, no ceiling should be
+quoted for the lazy leaf on Snow -- least of all mine.
+
+The cheap way to settle it is the one the Fungus session already documented: `unitsite`'s 13-site
+attribution is counters-only and already in the frozen binary, so the question "which sites are
+horizon-edge?" is a read of `TurnSolver.cpp:885`, not a rebuild.
+
+**Two things from the Fungus side that change the sequencing here:**
+
+* **The arm split.** H = 289.7 core-h (90.5%) vs V = 30.4 core-h (9.5%) of slow-game cost, with the
+  value leaf cutting the deep tail ~13x (H5 143.4 -> V8 10.6). Snow's blocker is the H arm, and the
+  value leaf we are generating is itself the largest fix for it.
+* **The budget trap, which is why the unbounded case is the SAFE first target.** Budgets are
+  denominated in units and `SearchBudget::Consume` is their sole producer, so a *lossless* cost cut
+  buys MORE search for the same budget and therefore CHANGES PLAY under a budget. Unbounded regimes
+  (phase C, label generation) are play-neutral under it; budgeted play is not. This is the user's
+  own point -- *"much more complex because we were trying to make it work with budgets. This case is
+  the simple version"* -- and it is also why EDF confined its shipped cuts to the label path.
+
+**CAVEAT, and it is the same trap this ledger has now fallen into three times** (see
+`heavy-tail-sampling-trap`): both probe games were cut at 240 s, so this samples the FIRST FOUR
+MINUTES of two games and n=3 decisions. Snow's cost lives in a heavy tail of late, degenerate
+states, and that tail is not in this sample. Treat the percentages as **indicative of early play,
+not as the game's cost profile**. The honest version of this measurement is the same probe with a
+cap in the hours, on games the slow-game log has already named — which needs the box, and the box is
+holding phase A.
+
+## 14.3 Why the ladder change was NOT bundled into this restart
+
+Beyond the size argument: it would change PLAY. Phase A's banked rows are labels produced by the
+search, so a search-shape change invalidates them — and `check_freeze`'s own note records that phase
+A's game-level resume *cannot* repair that ("rows cannot be partially re-derived, so a real row fix
+means moving rows/all.rows aside and re-dumping"). That is thousands of banked rows against a lever
+whose measured ceiling on this deck is under 19%.
+
+The backstop, by contrast, is **proven play-identical** (104 games, 4 configs, every digest equal),
+so the restart keeps every row. Bundling a play change with a failsafe would also have made the
+resulting matrix uninterpretable: two variables, one table.

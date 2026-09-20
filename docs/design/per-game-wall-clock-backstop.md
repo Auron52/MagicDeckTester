@@ -1,6 +1,13 @@
 # A per-game WALL-CLOCK backstop: the guard that was specified but never built
 
-**Status: OPEN, not started. Found 2026-09-19 during the Fungus value-leaf phase C run.**
+**Status: BUILT AND SHIPPED 2026-09-20 (`b38a0633`), default off.** Found 2026-09-19 during the
+Fungus value-leaf phase C run; specified here; implemented from this spec by the Snow session, whose
+phase C had not yet started and so still had a window to land it in. See
+[§ THE IMPLEMENTATION](#the-implementation-2026-09-20) at the foot of this file for what was built,
+the one interaction this spec did not anticipate, and the verification.
+
+**Everything above that section is the ORIGINAL SPEC and its evidence, preserved as written.** It is
+still the authority on *why*; the implementation section is the authority on *what exists*.
 
 ## The finding
 
@@ -644,3 +651,105 @@ the 289.7 core-h of H-arm cost in the arm-split section. So the cuts are enabled
 and unavailable on the EXPENSIVE one. That gap is precisely what the USER's lazy-leaf proposal
 closes, and it is an argument for porting the idea to the play search rather than extending the
 label path further.
+---
+
+## THE IMPLEMENTATION (2026-09-20)
+
+Built from the spec above by the **Snow** value-leaf session, at the Fungus session's request. The
+division of labour is worth recording because it is why this landed at all: the Fungus run was far
+enough into phase C that a `src/` change could not be fitted around it, while Snow's phase C had not
+started. The spec travelled; the code was written against it.
+
+Commit `b38a0633`. **Default off everywhere** -- no clock is ever read unless a manifest or env var
+arms it, so every existing manifest is byte-identical.
+
+### What exists
+
+| piece | where |
+|---|---|
+| the meter, both stages | `src/ai/GameWorkMeter.h` -- `ArmDeadline`, `CheckDeadline`, `Cause`, `Elapsed` |
+| arming + reporting | `src/runner/BatchRunner.cpp` -- `CondemnRule::max_game_{predict,wall}_sec` |
+| manifest keys | `condemn.max_game_predict_sec`, `condemn.max_game_wall_sec` (seconds, 0 = off) |
+| env override | `MTG_MAX_GAME_PREDICT_SEC`, `MTG_MAX_GAME_WALL_SEC` (0 forces a stage OFF) |
+| driver flags | `--max-game-predict-sec`, `--max-game-wall-sec` (valueleaf_depth_matrix.py) |
+| unit cover | `test/unit/test_game_work_meter.cpp`, 12 cases |
+
+**The values, USER 2026-09-20:** *"I'm thinking 1.5-2 hours check (and stop if we have a lot of work
+left) and 3-4 hours hard cap."* `valueleaf.sh` phase C ships **2 h predictive / 3.5 h hard**, the
+middle of each stated range. The 1.75x gap between them is stage 1's safety margin.
+
+`kPredictSafety = 1.5`: stage 1 cuts only when the projection misses the hard cap by half again,
+not merely by any amount. Deliberately generous -- the games this exists for project at 3-4x the cap
+(a 40M ceiling at 830 units/s implies 13.4 h against 3.5 h), so the margin is free on the real
+pathology while leaving a merely-slow game for stage 2 to judge on its own evidence.
+
+`kClockStride = 4096` units between clock reads, matching `kPublishStride`. That is ~5 s of
+granularity even at the 830 units/s pathological rate and ~0.1 s at a healthy one -- nothing against
+a bound denominated in hours, and it answers the spec's own concern that a per-call clock read would
+cost the worst game 614 million of them.
+
+### The interaction this spec did not anticipate, and it would have silently defeated the cap
+
+`max_game_sec`'s in-flight rule has a **`kHardOverrunFactor = 3.0` backstop of its own** that this
+document's analysis missed: past 3x `max_game_sec` it condemns the cell *even when the work ceiling
+is armed*, on the reasoning that "losing one cell is a bad outcome; a run that cannot terminate is a
+worse one". At the shipped `max_game_sec` of 3600 s that fires at **3 hours** -- so it would have
+thrown away the rest of the cell at 3 h, half an hour before a 3.5 h wall cap abandoned the single
+game that deserved it. The cap would have looked armed and never had the chance to act.
+
+The fix is not a re-sizing, it is a premise change. That branch exists *only* because a unit ceiling
+does not bound wall clock; where a wall cap is armed, it does. So `bounded` now includes
+`max_game_wall_sec > 0`, and the hard-overrun branch stands down under it. **The backstop REPLACES
+the cell-condemning compromise rather than racing it** -- which is strictly better than what the
+compromise bought: the cell keeps its work and only the pathological game is lost.
+
+### What did NOT need changing, and why that is load-bearing
+
+**The skip list is cause-agnostic.** It is built from `BatchJobResult::abandoned` (written from
+`abandoned_at`), not by parsing the stderr line, so a wall-cut game enters it exactly as a unit-cut
+game does and the matrix driver needed no change at all. Every cell filters on the same list however
+the verdict was reached -- which is the property the spec's "hazard that constrains the design"
+section is about.
+
+**Reported apart even so**, as the spec asks: `ABANDONED-WALL` / `ABANDONED-PREDICT` against plain
+`ABANDONED`, each carrying `cause=`, `elapsed=` and a derived units/s, plus a second line naming
+`abandon_k`. Three things ride on the distinction -- a wall-cut run is not reproducible from its data
+so an A/B against it is not like-for-like; the backstop firing *at all* means the unit ceiling failed
+to bound that cell, which is the bug rather than the cap; and a stage-1 cut is the one that can be
+wrong about a game, so it has to be findable afterwards.
+
+### Calibration-sample handling
+
+A wall-cut game inside the calibration window enters `cc.sample` at its own `g_units` (the existing
+`min(g_units, ceiling)` leaves it alone, since it is by construction below the ceiling it never
+reached). That is a censored observation recorded at its censoring point: it orders correctly against
+every uncut game, so the median is unmoved unless half the sample was cut. The residual is that
+*which* games get cut is load-dependent, so a ceiling frozen through a wall cut is not
+bit-reproducible -- the known price of stage 2, and the reason the cap is sized as a non-event.
+
+The backstop applies to calibration games deliberately. The spec's own worst case (FiveColour V5
+game 6: 82.3% of its cell's total cost, *inside* the window where no ceiling could reach it) is
+exactly the place exempting them would leave open.
+
+### Verification
+
+* **12 doctest cases** (`test/unit/test_game_work_meter.cpp`) over both firing directions, the
+  no-ceiling case (stage 1 must decline rather than invent a prediction), the false-cut guard, the
+  once-only evaluation, and deadline leakage across games on a pooled worker thread.
+* **End-to-end on a real Snow H5 game.** Stage 1 cut at 20.1 s: 684,131 units against a 1e11 ceiling
+  projects to ~813 hours. Stage 2 cut at 45.1 s with `limit=0` -- the ceiling disarmed entirely,
+  i.e. the `skip_capped` case nothing in the engine could previously reach.
+* **Play byte-identical with the cap unarmed**: 104 games over 4 configs (snow d3/b10, d5/b20, d0;
+  stompysurprise d3/b10), every play digest equal to the pre-change binary.
+
+### Two corrections to this document's optimization section, from reading the Snow tree
+
+* **`CollectActivationKeys` (target #4) does not exist in this repository.** Neither the symbol nor
+  commit `169bf491` is reachable from `origin/phase-1-2-deck-analyzer` -- that work is still
+  unpushed, so the "cheap fix, `CardHasPostEntryActivation` already exists" item cannot be actioned
+  by anyone but its author. Worth pushing if it is wanted from elsewhere.
+* **`CardHasSubtype` (target #2) is already half-fixed.** `SpellEffects.h:4366` takes a
+  `std::string_view` and allocates nothing, and `CardHasSubtypeId` gives an interned-id form for hot
+  sites -- both landed 2026-09-17 off the *same* Fungus profiling that found `CountControlledDragons`
+  at 45.1% of a game. The remaining ~3% is the up-to-four `std::string == string_view` compares, so
+  the actionable item is narrower than stated: migrate the hot call sites to `CardHasSubtypeId`.
