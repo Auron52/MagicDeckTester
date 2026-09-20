@@ -854,11 +854,12 @@ frozen binary and verified play-identical by `units_total` and win turn. Sweep i
 
 ## LAZY LEAF: FIRST ATTEMPT, AND THE MEASUREMENT THAT KILLED IT (2026-09-20, Snow session)
 
-**Status: built behind `MTG_LAZY_LEAF` (default OFF), MEASURED, and HOOKED IN THE WRONG SEARCH.**
-Keep the lever and the telemetry; move the hook. Do not quote its numbers as evidence about the
-idea -- they are evidence about the placement.
+**Status: built behind `MTG_LAZY_LEAF` (default OFF), MEASURED at +1.7%, and REBUILT -- see the
+correction two subsections below.** The first shape probed EVERY PASS; the user's design is ONE
+leafless pass at the FULL depth, before the ladder. Do not quote the numbers in this subsection as
+evidence about the idea -- they are evidence about the first shape.
 
-### What was built
+### What was built (FIRST shape -- superseded)
 
 `FullSearchLine`'s iterative-deepening loop probes each pass LEAFLESS first (`ForceConstantLeafGuard`
 + a separate `leafless_cache`, since a probe searches the same (state, remaining-depth) keys with
@@ -892,31 +893,59 @@ Snow, `--depth 3 --budget-ms 0 --seed 8008 --game-index 0`, same answer both arm
 | `fs_bp_wave` | 1,739 | 3,348 | +1,609 |
 | **total** | **487,700** | **495,863** | **+8,163** |
 
-`hits=1 misses=11`, `probe_units=8,166` -- so the entire +8,163 slowdown IS the probe, and the probe
-bought nothing.
+`hits=1 misses=11`, `probe_units=8,166` -- so the entire +8,163 slowdown IS the probe.
 
-**THE DIAGNOSIS: `FullSearchLine`'s own tree is 1.8% of this game.** The other 98.2% -- every
-rollout step, every lookahead candidate, the whole breakpoint wave -- is under **`SolveWithLookahead`**,
-which the hook never touches. So the probe walked a 1.8% tree twice and could not reach the leaf work
-it was aimed at.
+### THE DIAGNOSIS I FIRST GAVE WAS WRONG. Correcting it, because the wrong one is plausible
 
-This was in the file all along and was not read carefully enough before coding:
+I read the zero-delta rollout rows as "the hook never reaches the leaf work" and concluded the lever
+belonged in `SolveWithLookahead`. **That is not what the table says.**
 
-> *"At the root, `SolveWithLookahead` otherwise runs iterative deepening over EVERY candidate at
-> sub_depth 0..depth-1, **each pass playing rollouts to the horizon**."*  (`TurnSolver.cpp:38086`)
+* `AIEngine.cpp:191` -- `static const bool s_full_depth = !EnvOn("MTG_LEGACY_SEARCH");` -- **default
+  TRUE.** `FullSearchLineHybrid`/`FullSearchLine` IS the production route. The `SolveWithLookahead`
+  call further down is the `MTG_LEGACY_SEARCH` branch, which nothing takes.
+* The rollout sites ARE `FSLineWin`'s leaf. `depth <= 0` calls `SimulateToEnd`, and
+  `SimulateToEndImpl` calls `SolveWithLookahead` once per simulated turn (`TurnSolver.cpp:36312`).
+  A leaf's callee bills to the callee's unit site; that is all the table was reporting.
+* The probe PROVED this rather than refuting it: its 8,163 units landed **entirely** in `fs_pre` /
+  `fs_bp_wave` and **zero** in the rollout sites. `ForceConstantLeafGuard` reached those rollouts and
+  suppressed them -- which is only possible if they hang off the hook.
+* And `hits=1` saving nothing is not evidence of a dead lever either. A pass that finds an in-window
+  win tightens `cutoff` and prunes on `state.turn_number > cutoff` before reaching any `depth <= 0`
+  node, so that pass's baseline leaf cost was already zero. A hit there saves nothing by construction.
 
-And `AIEngine.cpp:3208` confirms the routing: with no value model attached, the decision goes to
-`SolveWithLookahead`, not through the hybrid to `FullSearchLine`.
+**A unit-site table tells you where units were SPENT, not which function spent them.** Confirm the
+call chain, and which branch is default-on, before concluding a hook is in the wrong place.
 
-### Next step, stated precisely
+### THE REAL DEFECT: the shape, not the placement
 
-Move the probe to **`SolveWithLookahead`'s sub_depth ladder**. The soundness argument is unchanged
-(a leaf at a horizon state reports `w >= s.turn_number`, so it cannot beat an in-window win the exact
-search already proved), and so is the memo rule (a leafless probe needs its own cache). The cost
-question changes completely: there the probe is a walk of the tree that carries ~75% of the units,
-and a hit removes rollouts that are 24% of them on this game and far more on the deep H cells.
+Probing every pass is a different lever from the one the user described, and a strictly worse one:
+on a miss the leafed pass still runs, so the ladder's cost is unchanged and every probe is pure
+addition. 11 misses x ~700 units is the whole +1.7%.
+
+The user's words were *"we use pure search until we've exhausted our depth"* and *"the bigger win is
+avoiding doing any leaf for the final depth"* -- i.e. **ONE leafless pass at the FULL depth, run
+BEFORE the ladder**, so a hit skips every pass and every leaf in the decision. Rebuilt that way:
+
+* one probe per DECISION, `FSLineWin(state, depth, ...)` under `ForceConstantLeafGuard` +
+  `leafless_cache`;
+* a hit sets the committed line and `committed_depth = depth` and the ladder never starts. This is
+  sound and needs no estimate: a leafless win is proven by real simulation inside the horizon, so it
+  is at or before the horizon turn, and every leaf reports `w >= s.turn_number` -- a leaf can tie it,
+  never beat it. It is also `fd_verified` in both arms, since a leafless win always satisfies
+  `win_turn <= turn + depth - 1`;
+* **it refuses to fire under a limited budget at all.** Units are the budget's currency, so a probe
+  under a limit buys the rest of the search less search: same answer here, different play downstream.
+  The unbounded regimes (phase C, label generation) have no such coupling. That is now enforced at
+  the call site rather than left to the operator.
+
+### Why the phase C H cell is the favourable case, specifically
+
+An H cell attaches the value sidecar and sets `MTG_LADDER_VALUE_LEAF=1`
+(`valueleaf_depth_matrix.py:95-111`), so the ladder's warm-up passes already run on the O(1) value
+leaf and **all** the expensive `SimulateToEnd` work is in the final, committing pass. The probe costs
+about one more value-leaf-priced pass; what it removes on a hit is the only heuristic-rollout pass
+there is. That is exactly the asymmetry the user named.
 
 **And test at DEPTH, not at d3.** d3 was a poor choice: the probe can only hit when a win falls
-inside the window, this game wins on turn 6, so 11 of 12 passes had no chance. The user's own framing
--- benefit grows with depth -- says the test belongs at H4/H5, which is also where 76% of the census
-cost sits.
+inside the window, and this game wins on turn 6. The user's own framing -- benefit grows with depth --
+says the test belongs at H4/H5, which is also where 76% of the census cost sits.
