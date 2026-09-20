@@ -850,3 +850,73 @@ The unbudgeted regime is play-neutral (a cheaper node cannot buy extra search wh
 budget to re-spend -- see the lazy-leaf trap section), so cache-shape levers can be A/B'd on the
 frozen binary and verified play-identical by `units_total` and win turn. Sweep in flight:
 `MTG_SOLVE_MEMO_CAP` in {1024, 4096, 16384, 65536} on this game, `logs/memocap/`.
+---
+
+## LAZY LEAF: FIRST ATTEMPT, AND THE MEASUREMENT THAT KILLED IT (2026-09-20, Snow session)
+
+**Status: built behind `MTG_LAZY_LEAF` (default OFF), MEASURED, and HOOKED IN THE WRONG SEARCH.**
+Keep the lever and the telemetry; move the hook. Do not quote its numbers as evidence about the
+idea -- they are evidence about the placement.
+
+### What was built
+
+`FullSearchLine`'s iterative-deepening loop probes each pass LEAFLESS first (`ForceConstantLeafGuard`
++ a separate `leafless_cache`, since a probe searches the same (state, remaining-depth) keys with
+different leaf semantics). A probe that proves an in-window win commits the pass and the leafed
+search never runs. Plus a `heurarm::LAZY_LEAF` slot so an A/B rides ONE pooled batch, and
+`lazy_leaf hits/misses/probe_units` under `MTG_ROLLOUT_STATS`.
+
+### A REAL BUG FOUND ON THE WAY, worth keeping regardless of where the hook ends up
+
+`g_force_constant_leaf` was read as `vm && (vm->constant || g_force_constant_leaf)` -- so NO-LEAF was
+silently a **no-op whenever no value model was attached**, i.e. on the pure-HEURISTIC arm, which is
+the arm with the expensive `SimulateToEnd` leaf and 90.5% of the census cost. The probe ran full
+rollouts while reporting a 100% hit rate. It was invisible because the only previous caller (the
+emulated ladder) requires an attached model by construction. Now `g_force_constant_leaf || (vm &&
+vm->constant)`. Byte-identical for every pre-existing caller.
+
+**What gave it away was the accounting, not a trace:** both arms reported byte-identical units. A
+lever that claims a 100% hit rate and costs exactly the same as the control has not fired.
+
+### The measurement, and why the lever did nothing
+
+Snow, `--depth 3 --budget-ms 0 --seed 8008 --game-index 0`, same answer both arms (6.0000):
+
+| unit site | base | lazy | delta |
+|---|---|---|---|
+| `rollout_step` | 119,138 | 119,138 | **0** |
+| `la_cand` | 159,261 | 159,261 | **0** |
+| `la_bp_wave` | 84,829 | 84,829 | **0** |
+| `greedy_fallback` | 115,557 | 115,557 | **0** |
+| `fs_pre` | 7,176 | 13,730 | +6,554 |
+| `fs_bp_wave` | 1,739 | 3,348 | +1,609 |
+| **total** | **487,700** | **495,863** | **+8,163** |
+
+`hits=1 misses=11`, `probe_units=8,166` -- so the entire +8,163 slowdown IS the probe, and the probe
+bought nothing.
+
+**THE DIAGNOSIS: `FullSearchLine`'s own tree is 1.8% of this game.** The other 98.2% -- every
+rollout step, every lookahead candidate, the whole breakpoint wave -- is under **`SolveWithLookahead`**,
+which the hook never touches. So the probe walked a 1.8% tree twice and could not reach the leaf work
+it was aimed at.
+
+This was in the file all along and was not read carefully enough before coding:
+
+> *"At the root, `SolveWithLookahead` otherwise runs iterative deepening over EVERY candidate at
+> sub_depth 0..depth-1, **each pass playing rollouts to the horizon**."*  (`TurnSolver.cpp:38086`)
+
+And `AIEngine.cpp:3208` confirms the routing: with no value model attached, the decision goes to
+`SolveWithLookahead`, not through the hybrid to `FullSearchLine`.
+
+### Next step, stated precisely
+
+Move the probe to **`SolveWithLookahead`'s sub_depth ladder**. The soundness argument is unchanged
+(a leaf at a horizon state reports `w >= s.turn_number`, so it cannot beat an in-window win the exact
+search already proved), and so is the memo rule (a leafless probe needs its own cache). The cost
+question changes completely: there the probe is a walk of the tree that carries ~75% of the units,
+and a hit removes rollouts that are 24% of them on this game and far more on the deep H cells.
+
+**And test at DEPTH, not at d3.** d3 was a poor choice: the probe can only hit when a win falls
+inside the window, this game wins on turn 6, so 11 of 12 passes had no chance. The user's own framing
+-- benefit grows with depth -- says the test belongs at H4/H5, which is also where 76% of the census
+cost sits.
