@@ -1659,6 +1659,34 @@ while `NEVER_CONDEMN=5` exempts every H rung and V1-V5 from cell-level condemnat
 survives, and the result is non-convergence rather than slowness. Note the abandon rate is defined
 against each cell's OWN median, so it is a shape property: no uniform speedup moves it.
 
+### 7. SESSION STATE 2026-09-20, and the two decisions that are the deck owner's
+
+Shipped and pushed (CI green on Linux, Windows and determinism parity): `cd00879e` (watermark off),
+`4d70b487` (Snow in smoke + regression), `59a3d884` (ceiling revert). Phase A is running at the
+engine default ceiling; queue `logs/vlq_snow`, freeze src `71c57f7c3f66`, resume is free and
+incremental.
+
+**DECISION 1 -- the phase-A label ceiling.** §6a. Proposal measured, not in force.
+
+**DECISION 2 -- phase C's bounding, which is the actual blocker.** USER: *"In my experience phase A
+isn't the worst part of the value-leaf anyway. If we get stuck here, we will almost certainly have
+difficulty on the Matrix."* That is right and it is already documented:
+`depth-matrix-degenerate-games.md` §"Snow (2026-09-15)" measures a 41% union abandon rate, which
+trips `--max-skip-frac` (40 skips per deck+seed) around offset 98 of 400 and **disarms the per-game
+work ceiling entirely**, while `NEVER_CONDEMN=5` exempts every H rung and V1-V5 from the cell-level
+rules. Neither bound survives, so it is a non-convergence rather than a slowness -- and the abandon
+rate is defined against each cell's OWN median, so it is a shape property that no uniform speedup
+moves. The fixes that document names (an absolute cap beside the ratio; honouring the skip list on
+the in-flight queue, worth ~107 h of its 175 h of slow-game time) all change the estimand to "games
+that complete within the ceiling", so they belong to the same class as decision 1.
+
+**The lossless route, which needs no ruling** (§12 already localised it): 92-95% of `FSLineWin`
+entries sit at depth-left 1 over a ~140-wide candidate list, and the develop closure pays a full
+apply plus a full end-of-turn simulation per candidate before discovering that 15.4% collapse to an
+end-state already seen. Terminating the generator instead of collapsing results afterwards helps
+phase A and phase C alike, and transfers to other decks. Instrumented binary is built at
+`build-instr/` (`cmake -S . -B build-instr -DMTG_PROFILE=ON -DCMAKE_BUILD_TYPE=Release`).
+
 ## Open questions for the user (surfaced, not blocking)
 
 1. ~~`{S}` modelled as generic `{1}`~~ — **CLOSED 2026-09-06** by the real snow-mana model
