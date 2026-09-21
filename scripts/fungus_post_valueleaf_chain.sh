@@ -49,16 +49,31 @@ if [ "$DRIVER_PID" != 0 ]; then
 fi
 
 # ---- 2. Verify COMPLETION by marker, never by exit code -------------------------------------
-# A driver can exit non-zero having finished, or exit zero having been killed mid-phase. F_mullgen
-# is the pipeline's last marker, so its presence is the only honest completion signal.
-if [ ! -e "$VLQ/done/F_mullgen" ]; then
-    log "STOP: $VLQ/done/F_mullgen absent -- the value-leaf run did NOT complete."
+# A driver can exit non-zero having finished, or exit zero having been killed mid-phase, so a marker
+# is the only honest completion signal.
+#
+# BUT NOT F_mullgen. This step used to demand F_mullgen and exit 2 otherwise, which DEADLOCKED the
+# whole chain (observed twice, 2026-09-21, costing 8.7 h of idle box):
+#
+#   phase F writes the gen contract into the LIVE sidecar and refuses to run without it
+#   ("phase F: no Fungus.value.json -- the value leaf must exist first")
+#   -> F_mullgen cannot exist until AFTER adoption
+#   -> but adoption is this chain's step 4, which step 2 never reached.
+#
+# The marker that actually means "measurement is finished, a human can now judge the model" is
+# E_measure -- phase E is what produces the A/B the adoption decision reads. So gate on E_measure
+# here, and let step 4b drive phase F once the sidecar is live.
+if [ -e "$VLQ/done/F_mullgen" ]; then
+    log "value-leaf run COMPLETE (F_mullgen present) -- contract already written"
+elif [ -e "$VLQ/done/E_measure" ]; then
+    log "value-leaf MEASUREMENT complete (E_measure present); F_mullgen awaits adoption -- see step 4b"
+else
+    log "STOP: neither $VLQ/done/E_measure nor F_mullgen -- the value-leaf run did NOT get far enough."
     log "      markers present: $(ls "$VLQ/done" 2>/dev/null | tr '\n' ' ')"
     log "      Resume it with:  bash scripts/valueleaf.sh run $DECKDIR"
     log "      (resume is incremental -- finished phases are skipped via their markers)"
     exit 2
 fi
-log "value-leaf run COMPLETE (F_mullgen present)"
 
 # ---- 3. Regression suite entry, BEFORE adoption ----------------------------------------------
 # Order matters and is not arbitrary. Ground truth accepted here is on the HEURISTIC engine, which
@@ -114,6 +129,22 @@ vp = (json.load(open('$LIVE')).get('value_play') or {})
 print('mull_gen_depth=%s mull_gen_budget_ms=%s expected_buckets=%s' % (
     vp.get('mull_gen_depth'), vp.get('mull_gen_budget_ms'), vp.get('expected_buckets')))
 " 2>/dev/null || echo '(unreadable)')"
+
+# ---- 4b. Complete phase F now that the sidecar is live ---------------------------------------
+# The gen contract (mull_gen_depth / mull_gen_budget_ms / expected_buckets) is written by the
+# value-leaf driver's phase F, which requires the LIVE sidecar -- so it can only run now. Without it
+# the recommend scout below inherits the PLAY depth and measures a run nobody would do.
+if [ ! -e "$VLQ/done/F_mullgen" ]; then
+    log "PHASE 4b: running the value-leaf driver's phase F to write the gen contract"
+    bash scripts/valueleaf.sh run "$DECKDIR" >> "$OUT/phaseF.log" 2>&1
+    frc=$?
+    log "  phase F driver finished rc=$frc (see $OUT/phaseF.log)"
+    if [ ! -e "$VLQ/done/F_mullgen" ]; then
+        log "STOP: phase F still did not mark F_mullgen -- refusing to project a gen off the play depth."
+        exit 5
+    fi
+    log "  F_mullgen written"
+fi
 
 # ---- 5. Mulligan SCOUT (recommend) -----------------------------------------------------------
 # Bounded: discovery + exactly one rollout per cell, then project full-gen wall clock and report the
