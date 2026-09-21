@@ -843,6 +843,10 @@ phase_matrix() {
     [ -n "$keys" ] || { log "PHASE C ABORT: no staged models"; return 1; }
     log "PHASE C: matrix over$keys -- ONE pool, all available cores, target $MATRIX_TARGET/cell, H=[$HDEPTHS], V=[$VDEPTHS], cutoff median ${INTRACTABLE_MEDIAN_SPG}s/game, never-condemn<=$NEVER_CONDEMN, per-game ceiling ${ABANDON_K}x median of first $ABANDON_CALIB"
     log "  wall-clock backstop: predictive cut at $((MAX_GAME_PREDICT_SEC/60)) min, hard cap at $((MAX_GAME_WALL_SEC/60)) min -- a FAILSAFE for when the unit ceiling stops bounding wall clock, not a cost control"
+    log "  lazy leaf: ARMED on the H arm (MTG_LAZY_LEAF=1, set per-cell by the driver). One leafless"
+    log "    full-depth pass before the ladder; answer-identical (per-game win turns verified), worth"
+    log "    -10.4% at d4 / -36.8% at d5 in units on Snow. A MEDIAN-game lever -- the tail is the"
+    log "    backstop's job, not this one. Self-disables on any budgeted cell."
     MTG_SLOW_GAME_LOG="$SLOW_GAME_LOG" \
     python3 scripts/attic/valueleaf_depth_matrix.py --incremental --decks $keys \
         --hdepths $HDEPTHS --vdepths $VDEPTHS --seeds 8008 9009 10010 11011 \

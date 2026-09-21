@@ -77,7 +77,10 @@ def run_batch(deck_file, mt, depth, seed, offset, batch, value_on, value_min_dep
     """Run global games [offset, offset+batch) for this cell's base `seed`. Returns (lp, wall_s, games)."""
     env = dict(os.environ)
     for k in ("MTG_EVAL_MODEL","MTG_EVAL_PROFILE","MTG_VALUE_MODEL","MTG_VALUE_PROFILE",
-              "MTG_NC_SEARCH","MTG_VALUE_MIN_DEPTH","MTG_VALUE_REDO_MODE","MTG_VALUE_STARTGATE_ALPHA"):
+              "MTG_NC_SEARCH","MTG_VALUE_MIN_DEPTH","MTG_VALUE_REDO_MODE","MTG_VALUE_STARTGATE_ALPHA",
+              # Popped so the arm is a property of the CELL, not of whatever the caller exported --
+              # the same reason every value-model var above is popped. Set explicitly on H below.
+              "MTG_LAZY_LEAF"):
         env.pop(k, None)
     # MTG_MATRIX_FD_LEAF_DEPTH (default ABSENT = byte-identical): per-RUN override of the engine's
     # beyond-horizon leaf fidelity (MTG_FD_LEAF_DEPTH), applied uniformly to every cell of every arm
@@ -109,6 +112,35 @@ def run_batch(deck_file, mt, depth, seed, offset, batch, value_on, value_min_dep
         if prof and os.path.exists(prof):
             env["MTG_VALUE_PROFILE"]=prof
             env["MTG_LADDER_VALUE_LEAF"]="1"
+        # LAZY LEAF (USER 2026-09-21: "Please arm it"). One leafless pass at the FULL depth before
+        # the ladder: a decision whose win is provable inside the horizon then pays for no rollout at
+        # all, and the whole leafed ladder is skipped. H ONLY, and unconditional -- unlike the ladder
+        # leaf above it needs no model, because the thing it defers IS the heuristic rollout.
+        #
+        # ANSWER-IDENTICAL, not approximately. A leafless win is proven by real simulation inside the
+        # horizon, so it lands at or before the horizon turn, and every leaf reports
+        # w >= s.turn_number -- a leaf can tie such a win, never beat it. Verified as PER-GAME win
+        # turns (MTG_DUMP_WINS), not aggregates: Snow d3/d4/d5, every game, both arms identical.
+        #
+        # MEASURED on Snow unbounded (units, which are deterministic and are this table's currency):
+        # d3 -0.77%, d4 -10.4%, d5 -36.8%; hit rate 19.7% -> 26.7% -> 50% as depth grows, probe cost
+        # flat at ~1%. Read the d4 breakdown before expecting a tail fix: its gi=4 is 74% of the
+        # cell's cost alone and moved +0.15%, because a heavy game is heavy precisely BECAUSE no win
+        # is provable in-window. This is a median-game lever; the wall-clock backstop is the tail one.
+        #
+        # SAFE ON A BUDGETED CELL BY CONSTRUCTION, so this needs no depth/budget guard here: units
+        # are the budget's currency, so the engine-side lever REFUSES to fire unless the budget is
+        # unlimited (TurnSolver LazyLeafOn + the FullSearchLine call site). Matrix cells are
+        # budget_ms 0, which is exactly the regime it is sound in.
+        #
+        # ON THE SKIP LIST: fewer units per game means fewer games hit the per-game work ceiling, so
+        # the abandoned set can only SHRINK. The union is still applied uniformly across arms, so the
+        # paired comparison holds -- this widens coverage, it does not skew it.
+        #
+        # NOT ARMED ON V. The value leaf is already O(1), so there is little to defer and the ~1%
+        # probe is most of what you would get; and leaving V untouched keeps the arm-to-arm COST read
+        # honest against every earlier run of this table. Revisit only with a V-arm measurement.
+        env["MTG_LAZY_LEAF"]="1"
     cmd=[MTG, deck_file, "--seed", str(seed+offset), "--game-index", str(offset), "--games", str(batch),
          "--max-turns", str(mt), "--threads", "1", "--ignore-play-profile", "--depth", str(depth)]
     if deck_profile: cmd += ["--profile", deck_profile]
