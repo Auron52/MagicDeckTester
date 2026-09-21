@@ -1045,7 +1045,8 @@ public:
                                    bool land_drop_reserved = false,
                                    int mana_sources_before = -1,
                                    bool site_activated = false,
-                                   int site_turn = -1);
+                                   int site_turn = -1,
+                                   bool new_only = false);
         ~CantripOrderScope();
         CantripOrderScope(const CantripOrderScope&) = delete;
         CantripOrderScope& operator=(const CantripOrderScope&) = delete;
@@ -1101,6 +1102,12 @@ public:
     // State-aware twin: the per-deck provider route (CondemnsConsideredAtBreakpoint) needs
     // the board to answer. Callers on the cast hot path all have it.
     static bool BreakpointHandSnapshotWanted(const GameState& state);
+
+    // MTG_BP_NEW_ONLY, or this deck's provider opting in (NewOnlyBreakpointContinuations): a
+    // breakpoint emits only continuations that use a card that arrived there. Public because the
+    // executor's resolve_draw_breakpoint binds the same snapshot under the same condition -- the
+    // lockstep pair -- and the reader lives with the filter in TurnSolver.cpp.
+    static bool NewOnlyBreakpointContinuationsActive(const GameState& state);
 
     // BREAKPOINT SITE 6 -- the equipment-ETB draw (Puresteel Paladin). True when resolving `def`
     // puts an Equipment onto the battlefield while the active player controls a

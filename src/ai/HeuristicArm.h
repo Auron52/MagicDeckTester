@@ -221,6 +221,7 @@ enum Slot : int
     BP_WAVEDROP_HOSTED,       // MTG_BP_WAVEDROP_HOSTED    the node's wave stand-down applies only where the node really HOSTS (default OFF)
     BP_ACQ_CLAUSE,            // MTG_BP_ACQ_CLAUSE         site 3's ACQUISITION family (tutor-to-hand/-top, Soulfire, Garth) is fanned out (default ON)
     BP_DIG_AXIS_FANOUT,       // MTG_BP_DIG_AXIS_FANOUT    a searched-dig-axis plan (dig_choice==1) gets the site-4 fan-out (default ON)
+    BP_NEW_ONLY,              // MTG_BP_NEW_ONLY           a breakpoint emits ONLY continuations that use a card that arrived there
     COUNT
 };
 
@@ -412,6 +413,7 @@ inline const char* Name(int slot)
         "MTG_BP_WAVEDROP_HOSTED",
         "MTG_BP_ACQ_CLAUSE",
         "MTG_BP_DIG_AXIS_FANOUT",
+        "MTG_BP_NEW_ONLY",
     };
     // The enum and this table are ONE mapping split across two lists: a slot added to one and not
     // the other silently shifts every lever after it (a manifest asking for lever X would set Y).

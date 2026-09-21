@@ -4050,7 +4050,8 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
                                            ResolveProvider(state).CondemnsConsideredAtBreakpoint(),
                                            karoo_deferred,
                                            TurnSolver::ManaSourceCount(state),
-                                           rdb_site_activated, state.turn_number);
+                                           rdb_site_activated, state.turn_number,
+                                           TurnSolver::NewOnlyBreakpointContinuationsActive(state));
         // Executor twin of the rollout's marker (MTG_CONDEMN_M1_BP) -- the lockstep pair. Without
         // it the executor would re-offer at a breakpoint what the rollout condemned there.
         TurnSolver::BpContinuationScope _cbs;

@@ -653,6 +653,16 @@ static bool BpCondemnNewOptSpellOnly();   // defined with the rule, next to the 
 // MTG_BP_CONDEMN_ACTIVATION firing counter: activations dropped because their slot in the
 // provider's ACTIVATION order had already passed when the site fired. Zero => the rule never fired.
 static std::atomic<long long> g_bp_condemn_act_drops{0};
+// MTG_BP_NEW_ONLY firing counters (see BpDeriveContinuationList). `lists` = continuation lists the
+// filter saw, `seen` = entries, then where each entry went: dropped, or kept because it USES a card
+// that arrived at the breakpoint / casts a card the PLAN itself still has pending. A lever with no
+// firing counter reads as "no effect" when it is really inert -- the breakpoint family's standing
+// trap.
+static std::atomic<long long> g_bp_newonly_lists{0};
+static std::atomic<long long> g_bp_newonly_seen{0};
+static std::atomic<long long> g_bp_newonly_dropped{0};
+static std::atomic<long long> g_bp_newonly_kept_new{0};
+static std::atomic<long long> g_bp_newonly_kept_plan{0};
 static bool BpCondemnActivationEnabled();   // defined with the rule, next to the other condemn flags
 static std::atomic<long long> g_bp_cond_mark_in_window{0};  // condemned entries at rank < W
 static std::atomic<long long> g_bp_cond_mark_rank0{0};      // ...lists whose VALUE-BEST entry was condemned
@@ -1168,6 +1178,16 @@ namespace
                       << " rollout=" << (bg - be)
                       << " rollout_frac=" << (bd ? static_cast<double>(bg - be) / bd : 0.0)
                       << ")\n";
+            if (g_bp_newonly_lists.load() > 0)
+            {
+                const long long ns = g_bp_newonly_seen.load();
+                const long long nd = g_bp_newonly_dropped.load();
+                std::cerr << "[rollout-stats] bp_newonly lists=" << g_bp_newonly_lists.load()
+                          << " seen=" << ns << " dropped=" << nd
+                          << " drop_rate=" << (ns ? static_cast<double>(nd) / ns : 0.0)
+                          << " kept_new=" << g_bp_newonly_kept_new.load()
+                          << " kept_plan=" << g_bp_newonly_kept_plan.load() << "\n";
+            }
             // DROP MODE FIRING COUNTERS (see BpCondemnDropMode). A lever with no firing counter
             // reads as "no effect" when it is really a no-op, which is this feature's established
             // bug signature -- and modes 1/2 are especially exposed to it, because both LOOK like
@@ -3385,6 +3405,59 @@ static bool BpClassifyEnabled()
 static bool BpClassifyActive(const GameState& state)
 {
     return BpClassifyEnabled() || ResolveProvider(state).CondemnsConsideredAtBreakpoint();
+}
+
+// ---- NEW-CARD-ONLY CONTINUATIONS (MTG_BP_NEW_ONLY) ----------------------------------------------
+// USER 2026-09-21: *"letting plans be fully formed and run without stopping at the breakpoint and
+// only do reconsideration of plans we haven't already done at the breakpoint. So, we would skip
+// plans that only use existing cards at the breakpoint reconsideration."* And: *"we would always
+// keep track of the new spells and abilities at each breakpoint and make full plans that use them.
+// Only those plans would be emitted at the breakpoint."*
+//
+// WHY IT IS A PLAN-LEVEL RULE AND NOT ANOTHER CONDEMNATION GATE. The subset enumerator emits every
+// payable subset of the hand, so for a base plan P that reaches a breakpoint, the sibling P u {X}
+// was enumerated alongside it for every old card X that P could have added. A continuation of P
+// that casts only old cards is therefore that sibling's line with an EMPTY continuation -- the same
+// cards, the same activations, the same end state -- reached a second time. Condemnation tries to
+// say this one CANDIDATE at a time and needs seven guards to avoid deleting {X, F} along with {X}
+// (the exclusive-slot exemption exists for exactly that). At the PLAN level the distinction is
+// free: {X} alone is a sibling's line and is dropped; {X, F} uses the found card F and stays.
+//
+// WHAT COUNTS AS "USES A NEW CARD": casts a card that arrived at this breakpoint, plays one as the
+// land drop, or activates an ability of one (a found Scrying Sheets played and activated in the same
+// continuation). "Arrived" is by NAME with the staged-expiry exception -- BpNamePassedOnBefore, the
+// same rule the candidate filter already applies -- so a second copy of a name the plan declined is
+// not new (USER: "a duplicate copy of X being drawn doesn't change anything").
+//
+// ONE KEEP THAT IS NOT A NEW-CARD USE, required for soundness: a cast the PLAN ITSELF still has
+// pending (BpPlanCasts, in hand before the breakpoint). At a truncating site the continuation is
+// what realises the plan's own tail, so dropping it deletes the plan's line rather than a copy.
+// Inert at a trailing site (the plan's casts are done before the activation fires).
+//
+// DELIBERATELY NO "pull-order" exception. An old draw/tutor/shuffle card cast AFTER the site's look
+// is a different library order from casting it before, and under clairvoyance the two can put
+// different cards in hand (a Skred on top whiffs the look in one order and is drawn past in the
+// other). USER 2026-09-21: that line is only "useful" because the search can see the top card --
+// *"I don't care about how effective our clairvoyance is"* -- so it is not a line to preserve, and
+// {Astrolabe} after the look is the sibling {Astrolabe, activate}'s line like any other old card.
+//
+// WHY IT IS COST AND NOT A QUALITY PRUNE: Snow's continuation lists average 8.1 entries at
+// snow_look_top with the wave walker applying every rank; 60% of those applies land on a state a
+// sibling already reached (dup_w0 26%, dup_cross 26% -- the [bp-waves] probe, seed 901283). Those
+// are the old-card continuations. Per-deck (NewOnlyBreakpointContinuations) because it changes
+// which continuation each bp_choice indexes on every deck with a breakpoint; DEFAULT OFF.
+static bool BpNewOnlyEnabled()
+{
+    static const bool on = EnvOn("MTG_BP_NEW_ONLY");
+    return heurarm::Flag(heurarm::BP_NEW_ONLY, on);
+}
+static bool BpNewOnlyActive(const GameState& state)
+{
+    return BpNewOnlyEnabled() || ResolveProvider(state).NewOnlyBreakpointContinuations();
+}
+bool TurnSolver::NewOnlyBreakpointContinuationsActive(const GameState& state)
+{
+    return BpNewOnlyActive(state);
 }
 
 // ---- LAND CONDEMNATION (MTG_BP_CONDEMN_LAND) --------------------------------------------------
@@ -11803,7 +11876,8 @@ TurnSolver::CantripOrderScope::CantripOrderScope(const CardDefinition* site,
                                                  bool land_drop_reserved,
                                                  int mana_sources_before,
                                                  bool site_activated,
-                                                 int site_turn)
+                                                 int site_turn,
+                                                 bool new_only)
     : m_saved(g_cantrip_order_site), m_saved_hand(g_bp_hand_before),
       m_saved_casts(g_bp_plan_casts), m_saved_site(g_bp_site_def),
       m_saved_reserved(g_land_drop_reserved),
@@ -11829,11 +11903,15 @@ TurnSolver::CantripOrderScope::CantripOrderScope(const CardDefinition* site,
     // itself observable -- BuildBreakpointKey folds g_bp_hand_before when it is non-null -- so
     // binding it unconditionally would move the bp-enum cache keys for every deck.
     const bool classify = BpClassifyEnabled() || classify_active;
-    if (CantripOrderEnabled() || classify) { g_bp_plan_casts = plan_casts; }
+    // MTG_BP_NEW_ONLY is the THIRD consumer of the snapshot and the cast set (BpDeriveContinuationList
+    // reads both: "arrived here" is hand-vs-snapshot, and a plan-pending cast must be kept). It binds
+    // neither the site nor the ordering watermark -- those belong to condemnation -- so the bp-enum
+    // key gains exactly the two folds the filter's output depends on and no more.
+    if (CantripOrderEnabled() || classify || new_only) { g_bp_plan_casts = plan_casts; }
     // The hand snapshot binds whenever EITHER consumer is live: the ordering ban needs it to spare
     // a drawn cantrip, and the classifier needs it to spare a drawn spell. Bound independently of
     // the site so the classifier works at a breakpoint whose cantrip is outside the ordered class.
-    if (CantripOrderEnabled() || classify) { g_bp_hand_before = hand_before; }
+    if (CantripOrderEnabled() || classify || new_only) { g_bp_hand_before = hand_before; }
     // The site itself, for the order-aware condemnation rule (BpSlotIsAfterSite). Bound under the
     // same condition as the snapshot and independently of the cantrip watermark below, because the
     // classifier must work at a breakpoint whose site is outside the ordered class.
@@ -11859,12 +11937,14 @@ TurnSolver::CantripOrderScope::~CantripOrderScope()
 // observation in both worlds. Still gated, so a ship config with every lever off pays nothing.
 bool TurnSolver::BreakpointHandSnapshotWanted()
 {
-    return CantripOrderEnabled() || BpClassifyEnabled() || BpPutInHandEnabled();
+    return CantripOrderEnabled() || BpClassifyEnabled() || BpPutInHandEnabled()
+        || BpNewOnlyEnabled();
 }
 
 bool TurnSolver::BreakpointHandSnapshotWanted(const GameState& state)
 {
-    return CantripOrderEnabled() || BpClassifyActive(state) || BpPutInHandEnabled();
+    return CantripOrderEnabled() || BpClassifyActive(state) || BpPutInHandEnabled()
+        || BpNewOnlyActive(state);
 }
 
 // ---- Breakpoint site 6: the equipment-ETB draw (Puresteel Paladin) ----------------------------
@@ -26649,7 +26729,8 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
                                                           BpClassifyActive(state), karoo_deferred,
                                                           TurnSolver::ManaSourceCount(state),
                                                           /*site_activated=*/false,
-                                                          state.turn_number);
+                                                          state.turn_number,
+                                                          BpNewOnlyActive(state));
                         TurnSolver::Plan extra;
                         bp_searched_plan(6, extra);   // resolves to the plan's continuation or EMPTY
                         bp_play_searched_land(extra, my_bp_sink);
@@ -27523,12 +27604,16 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
                         // BpClassifyActive is false for every deck, pays nothing at all and stays
                         // byte-identical.
                         std::optional<TurnSolver::CantripOrderScope> _cos8;
-                        if (BpClassifyActive(state))
+                        // ...and MTG_BP_NEW_ONLY needs the same scope for its snapshot (the found
+                        // card is "new" only relative to snow_hand_before), with classify_active
+                        // passed HONESTLY so the condemnation filter's own gate stays untouched.
+                        if (BpClassifyActive(state) || BpNewOnlyActive(state))
                         {
                             _cos8.emplace(a.def, &snow_hand_before, &plan_cast_names,
-                                          /*classify_active=*/true, karoo_deferred,
+                                          /*classify_active=*/BpClassifyActive(state), karoo_deferred,
                                           TurnSolver::ManaSourceCount(state),
-                                          /*site_activated=*/true, state.turn_number);
+                                          /*site_activated=*/true, state.turn_number,
+                                          BpNewOnlyActive(state));
                         }
                         // bp_searched_plan runs UNCONDITIONALLY so the occurrence is COUNTED even
                         // when the greedy resolve below is narrowed -- the executor twin counts
@@ -28032,7 +28117,8 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
                                            &plan_cast_names, BpClassifyActive(state),
                                            karoo_deferred,
                                            TurnSolver::ManaSourceCount(state),
-                                           /*site_activated=*/false, state.turn_number);
+                                           /*site_activated=*/false, state.turn_number,
+                                           BpNewOnlyActive(state));
         // Mark the continuation for the condemnation filter (MTG_CONDEMN_M1_BP). Same extent as
         // _cos: the searched list, the greedy Solve fallback, and the continuation's application.
         TurnSolver::BpContinuationScope _cbs;
@@ -48139,6 +48225,92 @@ static std::vector<TurnSolver::Plan> BpDeriveContinuationList(const GameState& s
     ++g_bp_enum_depth;   // suppress the fan-out: this IS the continuation list, not a new decision
     std::vector<TurnSolver::Plan> plans = EnumeratePlansWithLand(state, is_pre_combat);
     --g_bp_enum_depth;
+    // MTG_BP_NEW_ONLY (see BpNewOnlyEnabled): keep only the continuations that USE a card that
+    // arrived at this breakpoint. Applied HERE, inside the shared derivation, for the same lockstep
+    // reason the condemnation marking below gives: the executor's replay indexes this same list by
+    // position, and a list filtered in one world and not the other would replay a continuation the
+    // search never scored. Before the ranking sort, so the survivors' ranks are their true ranks.
+    // Human play is exempt (the human owns the continuation and sees the full menu). A null snapshot
+    // means no site bound one (an unarmed breakpoint), and then nothing is "new" -- stand down.
+    if (g_bp_hand_before != nullptr && !HumanPlayActive() && BpNewOnlyActive(state))
+    {
+        const Player& ap = state.ActivePlayer();
+        // The cards that ARRIVED here: not in the pre-site snapshot, and not a copy of a name the
+        // plan already passed on (BpNamePassedOnBefore -- by name, staged expiry excepted).
+        std::vector<int> new_numbers;
+        for (const Card& c : ap.hand)
+        {
+            if (BpCardWasInHandBefore(c.m_number)) { continue; }
+            if (BpNamePassedOnBefore(ap, c))       { continue; }
+            new_numbers.push_back(c.m_number);
+        }
+        auto is_new_number = [&](int n)
+        { return std::find(new_numbers.begin(), new_numbers.end(), n) != new_numbers.end(); };
+        // NEWLY ACCESSIBLE ABILITIES (USER 2026-09-21: *"The rule also needs to include abilities
+        // that are newly accessible"*). A permanent that ENTERED this turn -- cast by the plan's own
+        // prefix (Arcum's Astrolabe, a Sheets played as the base plan's drop) -- was not on the
+        // battlefield when the base plans were enumerated, so no sibling could carry its activation
+        // (site 9 exists for exactly this gap). A continuation activating it is new. Keyed on
+        // entered_this_turn, which over-keeps a main-1 entrant at a main-2 breakpoint: the safe
+        // direction (a kept duplicate costs an apply; a dropped line costs a decision).
+        std::vector<int> entered_numbers;
+        for (const Permanent& perm : state.battlefield)
+        {
+            if (perm.controller_index != state.active_player_index) { continue; }
+            if (perm.entered_this_turn) { entered_numbers.push_back(perm.card.m_number); }
+        }
+        auto is_new_source = [&](int n)
+        {
+            return is_new_number(n)
+                || std::find(entered_numbers.begin(), entered_numbers.end(), n) != entered_numbers.end();
+        };
+        // The land drop is recorded by NAME; it is new iff a new card of that name is in hand.
+        auto land_is_new = [&](const std::string& nm)
+        {
+            for (const Card& c : ap.hand)
+            { if (is_new_number(c.m_number) && c.m_name.str() == nm) { return true; } }
+            return false;
+        };
+        long long kept_new = 0, kept_plan = 0, dropped = 0;
+        auto keep = [&](const TurnSolver::Plan& p) -> bool
+        {
+            bool uses_new = false, plan_pending = false;
+            if (p.land_decided && !p.land_to_play.empty() && land_is_new(p.land_to_play))
+            { uses_new = true; }
+            for (const Action& a : p.actions)
+            {
+                if (a.kind == Action::Kind::CastFromHand)
+                {
+                    if (a.hand_index >= 0 && a.hand_index < static_cast<int>(ap.hand.size()))
+                    {
+                        const Card& c = ap.hand[static_cast<std::size_t>(a.hand_index)];
+                        if (is_new_number(c.m_number))       { uses_new = true; }
+                        else if (BpPlanCasts(c.m_name_hash)) { plan_pending = true; }
+                    }
+                }
+                // An ability of a card that arrived here (a found land played by this very
+                // continuation, then activated -- the land axis enumerates on the post-drop copy,
+                // so it is in the list), or of a permanent that entered this turn: newly accessible.
+                else if (a.sac_source_id >= 0 && is_new_source(a.sac_source_id)) { uses_new = true; }
+            }
+            if (uses_new)     { ++kept_new;  return true; }
+            if (plan_pending) { ++kept_plan; return true; }
+            ++dropped;
+            return false;
+        };
+        std::vector<TurnSolver::Plan> survivors;
+        survivors.reserve(plans.size());
+        for (TurnSolver::Plan& p : plans) { if (keep(p)) { survivors.push_back(std::move(p)); } }
+        if (count_stats && s_rollout_stats)
+        {
+            g_bp_newonly_lists.fetch_add(1, std::memory_order_relaxed);
+            g_bp_newonly_seen.fetch_add(static_cast<long long>(plans.size()), std::memory_order_relaxed);
+            g_bp_newonly_dropped.fetch_add(dropped, std::memory_order_relaxed);
+            g_bp_newonly_kept_new.fetch_add(kept_new, std::memory_order_relaxed);
+            g_bp_newonly_kept_plan.fetch_add(kept_plan, std::memory_order_relaxed);
+        }
+        plans.swap(survivors);
+    }
     // MTG_BP_CANDS_ORDER: value-best first (wins, then total_eval), so the rank window and the
     // node's budget-cut child walk reach what the deleted greedy used to pick. See the flag.
     //
