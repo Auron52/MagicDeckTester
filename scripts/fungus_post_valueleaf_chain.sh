@@ -167,26 +167,52 @@ grep -E "projected|overnight target|fits|exceed|probe chunk|slowest" "$REC" | te
 # ---- 6. Gated full generation ----------------------------------------------------------------
 # Parse recommend's own verdict. Unparseable => STOP, which is the safe direction: an unattended
 # multi-hour gen must never start on a guess.
-RECIPE=""
-if   grep -q "COMPLETE fits an overnight run"  "$REC"; then RECIPE=complete
+RECIPE=""; rc=0
+# SKIP_GEN=1 stops after the scout. The scout is bounded and its deliverable -- the wall-clock
+# projection plus the slow-rollout dumps -- is exactly what an optimization pass needs, whereas the
+# full gen occupies the box for hours. Splitting them lets the scout run now and the gen run in a
+# genuinely idle window (user, 2026-09-21: "we won't run the mulligan profile until tonight ...
+# However, we can run the scout to collect slow games").
+if [ "${SKIP_GEN:-0}" = 1 ]; then
+    log "SKIP_GEN=1 -- stopping after the scout. Slow-game evidence is banked; run the gen with:"
+    log "    bash scripts/mullgen.sh run $DECKDIR <complete|fast>"
+    log "  (the scout's R=1 probe chunk is reused byte-identically, so nothing is thrown away)"
+elif grep -q "COMPLETE fits an overnight run"  "$REC"; then RECIPE=complete
 elif grep -q "fits overnight"                  "$REC"; then RECIPE=fast
 elif grep -q "BOTH exceed overnight"           "$REC"; then
-    log "STOP: both recipes exceed the overnight window."
+    log "SKIP GEN: both recipes exceed the overnight window."
     log "      The scout's slow-cell report is the deliverable; optimize against it before gen."
     log "      Slow-rollout dumps: $(ls "$DECKDIR"/*.slow.log 2>/dev/null | tr '\n' ' ')"
-    exit 0
 fi
-if [ -z "$RECIPE" ]; then
-    log "STOP: could not parse a verdict from $REC -- not starting a gen on a guess."
-    exit 0
+if [ "${SKIP_GEN:-0}" = 1 ]; then
+    : # already reported above -- not a verdict failure, a deliberate split
+elif [ -z "$RECIPE" ]; then
+    # Note the fall-through rather than an exit: if no gen runs, the box is FREE, which makes it
+    # the right moment to spend on the overnight baseline below instead of idling until Monday.
+    log "SKIP GEN: no usable recipe verdict -- not starting a multi-hour gen on a guess."
+else
+    log "PHASE: full mulligan generation, recipe=$RECIPE (self-validating; runs both A/Bs)"
+    bash scripts/mullgen.sh run "$DECKDIR" "$RECIPE" >> "$OUT/mullgen.log" 2>&1
+    rc=$?
+    log "mullgen run finished rc=$rc (see $OUT/mullgen.log and logs/${STEM}_mullgen/)"
+    [ $rc -eq 0 ] && log "  mulligan profile generated and validated" \
+                  || log "  gen or validation failed -- profile may be quarantined"
 fi
 
-log "PHASE: full mulligan generation, recipe=$RECIPE (self-validating; runs both A/Bs)"
-bash scripts/mullgen.sh run "$DECKDIR" "$RECIPE" >> "$OUT/mullgen.log" 2>&1
-rc=$?
-log "mullgen run finished rc=$rc (see $OUT/mullgen.log and logs/${STEM}_mullgen/)"
-[ $rc -eq 0 ] && log "=== CHAIN COMPLETE: mulligan profile generated and validated ===" \
-              || log "=== CHAIN END: gen or validation failed -- profile may be quarantined ==="
+# ---- 7. Overnight tier, LAST ------------------------------------------------------------------
+# Deliberately last. Hinata's overnight block is ~4x the regression d3 volume and ~6x at d5, so
+# baselining it earlier would push the mulligan gen back by hours for a tier that is run rarely.
+# The cost of deferring: this baseline is taken on the ADOPTED engine, so it yields no value-leaf
+# delta -- smoke+regression already provide that, and a long-run tier arguably wants its baseline
+# on the shipped configuration anyway.
+if [ "${SKIP_REGRESSION:-0}" != 1 ] && [ "${SKIP_OVERNIGHT:-0}" != 1 ]; then
+    log "PHASE: overnight tier entry + baseline (last; on the adopted engine)"
+    bash scripts/fungus_regression_add.sh --overnight >> "$OUT/regadd_overnight.log" 2>&1
+    orc=$?
+    log "overnight regression-add finished rc=$orc (see logs/${STEM}_regadd/regadd.log)"
+fi
+
+log "=== CHAIN COMPLETE ==="
 log "slow-game evidence for later optimization:"
 ls -la "$DECKDIR"/*.slow.log "$OUT"/*.log 2>/dev/null | tee -a "$LOG"
 exit $rc
