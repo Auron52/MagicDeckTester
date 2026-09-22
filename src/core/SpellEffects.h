@@ -18792,12 +18792,20 @@ inline bool HasUntappedRampFeeder(const GameState& state)
 //
 // The slot is awarded in battlefield order so the answer is deterministic and executor/rollout
 // lockstep holds. Floating mana counts toward S under the same gate ramp_filter uses (the payer
-// really does feed a filter from the turn's reserve). `perm` nullptr -- a source not on the
-// battlefield -- keeps the permissive answer.
-inline int AnyColorFilterFedSlots(const GameState& state)
+// really does feed a filter from the turn's reserve).
+//
+// `pending` -- a filter NOT on the battlefield that the plan is about to cast -- is one of the F
+// filters too. Without it a hand Arcum's Astrolabe on a filter-less board read F = 0, so the quota
+// was 0 and the pending rock was credited NOTHING: the enumerator could never fund a {G} cast off
+// the Astrolabe it was casting, and Snow reached "Astrolabe, then Boreal Druid off its mana" only
+// through a breakpoint continuation (seed 1015 T5). USER 2026-09-22: *"Astrolabe should be treated
+// as a land or other mana source that is played in the current plan"*. See AnyColorFilterHasFedSlot.
+inline int AnyColorFilterFedSlots(const GameState& state, const CardDefinition* pending = nullptr)
 {
     const int active = state.active_player_index;
     int filters_free = 0, filters_nofree = 0, others = 0;
+    if (pending != nullptr && pending->params.any_color_filter)
+    { if (pending->params.filter_no_free_colorless) { ++filters_nofree; } else { ++filters_free; } }
     for (const Permanent& p : state.battlefield)
     {
         if (p.controller_index != active || p.tapped) { continue; }
@@ -18829,13 +18837,29 @@ inline int AnyColorFilterFedSlots(const GameState& state)
 }
 
 // True if `perm` (an any_color_filter) is inside AnyColorFilterFedSlots's quota.
+//
+// `perm` nullptr is a PENDING filter (in hand, cast by the plan being priced). It enters the
+// battlefield behind every filter already there, so it converts iff counting it RAISES the quota.
+// That is exact in both directions: three Islands and no filter -> the pending Astrolabe is fed
+// (quota 0 -> 1); one Island already feeding an on-board Astrolabe -> it is not (1 -> 1). The
+// pre-2026-09-22 read tested the on-board quota alone and answered "no slot" before the pending
+// branch was reached, which is how a hand Astrolabe was credited nothing at all.
+// MTG_PENDING_FILTER_SLOT: DEFAULT ON; =0 restores that legacy read (attribution only). A heurarm
+// slot so one pooled batch can run the legacy and fixed arms side by side.
 inline bool AnyColorFilterHasFedSlot(const GameState& state, const CardDefinition& def,
                                      const Permanent* perm)
 {
     if (!def.params.any_color_filter) { return false; }
+    if (perm == nullptr)
+    {
+        static const bool s_pending_slot = EnvOn("MTG_PENDING_FILTER_SLOT", true);
+        const int without = AnyColorFilterFedSlots(state);
+        if (!heurarm::Flag(heurarm::PENDING_FILTER_SLOT, s_pending_slot))
+        { return without > 0; }   // legacy: on-board quota, permissive
+        return AnyColorFilterFedSlots(state, &def) > without;
+    }
     const int slots = AnyColorFilterFedSlots(state);
     if (slots <= 0)   { return false; }
-    if (perm == nullptr) { return true; }   // not on the battlefield: stay permissive
     const int active = state.active_player_index;
     int rank = 0;
     for (const Permanent& p : state.battlefield)

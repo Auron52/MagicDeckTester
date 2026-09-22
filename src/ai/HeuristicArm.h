@@ -222,6 +222,7 @@ enum Slot : int
     BP_ACQ_CLAUSE,            // MTG_BP_ACQ_CLAUSE         site 3's ACQUISITION family (tutor-to-hand/-top, Soulfire, Garth) is fanned out (default ON)
     BP_DIG_AXIS_FANOUT,       // MTG_BP_DIG_AXIS_FANOUT    a searched-dig-axis plan (dig_choice==1) gets the site-4 fan-out (default ON)
     BP_NEW_ONLY,              // MTG_BP_NEW_ONLY           a breakpoint emits ONLY continuations that use a card that arrived there
+    PENDING_FILTER_SLOT,      // MTG_PENDING_FILTER_SLOT   a hand any-colour filter counts itself in the fed-slot quota (default ON since 2026-09-22)
     COUNT
 };
 
@@ -414,6 +415,7 @@ inline const char* Name(int slot)
         "MTG_BP_ACQ_CLAUSE",
         "MTG_BP_DIG_AXIS_FANOUT",
         "MTG_BP_NEW_ONLY",
+        "MTG_PENDING_FILTER_SLOT",
     };
     // The enum and this table are ONE mapping split across two lists: a slot added to one and not
     // the other silently shifts every lever after it (a manifest asking for lever X would set Y).
