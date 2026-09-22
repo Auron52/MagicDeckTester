@@ -3598,6 +3598,7 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
     // a real pinned choice, so the guard is != -1.
     if (plan.fling_victim_choice != -1) { state.scripted_fling_victim = plan.fling_victim_choice; }
     if (plan.tectonic_mode_choice >= 0) { state.scripted_tectonic_mode = plan.tectonic_mode_choice; }
+    if (plan.tectonic_keep_choice >= 0) { state.scripted_tectonic_keep = plan.tectonic_keep_choice; }
 
     // Cast a spell from hand by name.
     // PRE-DRAW hand for the next resolve_draw_breakpoint -- lockstep twin of ApplyPlanDirect's

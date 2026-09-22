@@ -179,7 +179,12 @@ static_assert(sizeof(Player) == 200,
 // FUTURE-DETERMINING, exactly like `scripted_cheat_choice` -- each is written during the turn's
 // plan apply and consumed in that same turn's declare-attackers step, so two states differing
 // only in a pin play out differently. BOTH are folded in Build() beside the cheat pin.
-static_assert(sizeof(GameState) == 824,
+// 824 -> 832 (2026-09-22, Giants): a THIRD int, `scripted_tectonic_keep` (which of mode B's two
+// exiled cards is staged). Same FUTURE-DETERMINING classification and the same fold in Build().
+// This time the tripwire DID fire, because the 824 slot was already full -- which is the point of
+// the note above: whether it fires is a property of struct padding, not of whether the field
+// matters. Measured, not guessed.
+static_assert(sizeof(GameState) == 832,
               "GameState changed size -- fold any new field into dominance::Build() (see the "
               "MAINTENANCE HAZARD note at the top of Dominance.h) before updating this number.");
 
@@ -460,6 +465,13 @@ inline DomSnap Build(const GameState& s, const DecisionProvider& prov,
     fold(static_cast<std::uint64_t>(s.scripted_fling_victim));
     // Tectonic Giant's searched mode pin -- same future-determining classification.
     fold(static_cast<std::uint64_t>(s.scripted_tectonic_mode));
+    // Tectonic Giant's mode-B keep pin -- same future-determining classification as the mode.
+    // Folded VALUE-GATED (the scripted_saga_target precedent below), not unconditionally: the
+    // value is -1 in every deck that runs no modal attack trigger, so gating keeps every one of
+    // them byte-for-byte identical BY CONSTRUCTION rather than leaving it to be discovered by a
+    // regression sweep. The +1 keeps a pinned keep index 0 distinguishable from "no pin".
+    if (s.scripted_tectonic_keep >= 0)
+    { fold(static_cast<std::uint64_t>(s.scripted_tectonic_keep) + 1u); }
     // scripted_vial_charge is LIVE across the end-of-turn boundary by design (set during the
     // turn's apply, consumed at the NEXT turn's upkeep -- see its GameState note), so a pending
     // searched charge is future-determining and must fold exact-match like its sibling pins.

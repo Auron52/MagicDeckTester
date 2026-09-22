@@ -849,6 +849,14 @@ public:
         // branch. Same state-pin route and reason as fling_victim_choice.
         int tectonic_mode_choice = -1;
 
+        // ...and WHICH of the two exiled cards mode B keeps. -1 (default) == the ranked pick
+        // (highest mana value, tie-break lower card number), byte-identical to no branch.
+        // This is a SUB-DECISION OF MODE B, not an independent axis: it is meaningless under mode
+        // A, so the fan-out emits {modeA}, {modeB,keep0}, {modeB,keep1} rather than a 2x2 product.
+        // Motivated by a concrete cost -- sweep GI=7 had the ranked default take Fire Diamond when
+        // Mountain was strictly better and would have been the search's fourth land.
+        int tectonic_keep_choice = -1;
+
         // Ponder-style REORDER disposition: which candidate of ReorderCandidatesNarrow the reorder
         // takes. -1 == the provider heuristic, byte-identical to no branch. Narrow by construction
         // (shuffle + one variant per distinct TOP card) because Ponder draws immediately, so only

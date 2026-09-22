@@ -9339,6 +9339,17 @@ inline void ApplyAttackModalTriggers(GameState& state, int controller,
                 || (mv_k == mv_b && examined[k].m_number < examined[best].m_number))
             { best = k; }
         }
+        // SEARCHED KEEP (Plan::tectonic_keep_choice): overrules the ranked default above. Range
+        // is checked against `examined`, not against attack_trigger_impulse_exile: a library with
+        // one card left exiles one, and an out-of-range pin must fall back to the default rather
+        // than index off the end. Consumed and cleared by the FIRST modal trigger of a combat, so
+        // a second attacking copy takes the default -- the same convention the mode pin uses.
+        if (state.scripted_tectonic_keep >= 0)
+        {
+            if (state.scripted_tectonic_keep < static_cast<int>(examined.size()))
+            { best = static_cast<std::size_t>(state.scripted_tectonic_keep); }
+            state.scripted_tectonic_keep = -1;
+        }
         if (g_play_dig_chooser != nullptr)
         {
             std::vector<int> legal;

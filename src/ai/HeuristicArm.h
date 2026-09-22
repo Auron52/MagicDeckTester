@@ -226,6 +226,13 @@ enum Slot : int
     MINT_CREDIT_EXACT,        // MTG_MINT_CREDIT_EXACT     a minted Treasure is credited at the base at its EXACT width and opens no breakpoint (default ON since 2026-09-22)
     BP_MINT_SITE,             // MTG_BP_MINT_SITE          AUDIT hatch: a Treasure-only trick payload still opens the site-5 breakpoint under the exact credit (the lean-vs-audit detector arm)
     BP_REPLAY_COST,           // MTG_BP_REPLAY_COST        a recorded continuation cast carries the cost it paid, so the executor's replay traits match the rollout's (default ON since 2026-09-22)
+    // Giants' two searched plan axes. Both shipped default-ON on the core invariant (the
+    // alternatives are genuinely distinct, so a ranked pick would be a narrowing) but WITHOUT a
+    // measurement, which the adoption bar wants. Per-job so the control and both off-arms pool
+    // into ONE batch instead of one invocation per arm.
+    FLING_AXIS,               // MTG_FLING_AXIS            Surtland Flinger's fling victim + the decline (default ON)
+    TECTONIC_AXIS,            // MTG_TECTONIC_AXIS         Tectonic Giant's attack-trigger mode A vs B (default ON)
+    TECTONIC_KEEP_AXIS,       // MTG_TECTONIC_KEEP_AXIS    ...and WHICH exiled card mode B stages (sub-decision of mode B)
     COUNT
 };
 
@@ -422,6 +429,9 @@ inline const char* Name(int slot)
         "MTG_MINT_CREDIT_EXACT",
         "MTG_BP_MINT_SITE",
         "MTG_BP_REPLAY_COST",
+        "MTG_FLING_AXIS",
+        "MTG_TECTONIC_AXIS",
+        "MTG_TECTONIC_KEEP_AXIS",
     };
     // The enum and this table are ONE mapping split across two lists: a slot added to one and not
     // the other silently shifts every lever after it (a manifest asking for lever X would set Y).

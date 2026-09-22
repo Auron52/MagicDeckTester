@@ -215,6 +215,7 @@ void GameEngine::UntapStep(GameState& state)
     state.scripted_cheat_choice = -1;   // searched Lackey put is per-turn (lockstep w/ SimulateEndAndStartNextTurn)
     state.scripted_fling_victim = -1;   // searched Flinger victim is per-turn (same lockstep)
     state.scripted_tectonic_mode = -1;  // searched Tectonic mode is per-turn (same lockstep)
+    state.scripted_tectonic_keep = -1;  // ...and its mode-B keep pin (same lockstep)
     Player& ap = state.ActivePlayer();
     ap.lands_played_this_turn    = 0;
     ap.bonus_land_drops_this_turn = 0;

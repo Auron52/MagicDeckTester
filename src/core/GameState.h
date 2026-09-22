@@ -488,6 +488,11 @@ struct GameState
     // consumed at declare-attackers. Consumed and cleared by the FIRST modal trigger of a
     // combat; a second attacking copy takes the default (the lackey_choice convention).
     int                      scripted_tectonic_mode = -1;
+    // Searched TECTONIC GIANT mode-B KEEP (Plan::tectonic_keep_choice): the index into the two
+    // exiled cards that gets staged into hand. -1 = the ranked default (highest mana value).
+    // Same state-pin shape, lifetime and first-trigger-consumes convention as the mode above;
+    // out of range for the cards actually exiled (a short library) falls back to the default.
+    int                      scripted_tectonic_keep = -1;
     // Searched CLEANUP DISCARD (Plan::discard_choice): which candidate of the provider's ranked
     // CleanupDiscardCandidates this turn's FIRST cleanup shed takes. Same state-pin shape as
     // scripted_cheat_choice and for the same reason -- the decision belongs to the turn's plan but

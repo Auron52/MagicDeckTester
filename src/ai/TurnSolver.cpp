@@ -10188,7 +10188,7 @@ static bool LackeyAxisEnabled()
 static bool FlingAxisEnabled()
 {
     static const bool on = EnvOn("MTG_FLING_AXIS", true);
-    return on;
+    return heurarm::Flag(heurarm::FLING_AXIS, on);
 }
 // Tectonic Giant's modal attack trigger ("3 damage to each opponent" vs "exile two, play one").
 // Default ON: both modes are live every turn and the crossover moves with board and life, so a
@@ -10197,7 +10197,16 @@ static bool FlingAxisEnabled()
 static bool TectonicAxisEnabled()
 {
     static const bool on = EnvOn("MTG_TECTONIC_AXIS", true);
-    return on;
+    return heurarm::Flag(heurarm::TECTONIC_AXIS, on);
+}
+// ...and WHICH of mode B's exiled cards is staged. A SUB-DECISION of the mode above, so it only
+// widens mode-B plans and is dead when TectonicAxisEnabled() is off. =0 restores the ranked
+// default (highest mana value, tie-break lower card number) that the human `dig` chooser already
+// overrides -- i.e. off, the search keeps the narrowing the human path never had.
+static bool TectonicKeepAxisEnabled()
+{
+    static const bool on = EnvOn("MTG_TECTONIC_KEEP_AXIS", true);
+    return heurarm::Flag(heurarm::TECTONIC_KEEP_AXIS, on);
 }
 // Width 2 -- the ranked top two. Measured identical to W=3 and W=4 on every held-out seed, which
 // says the search's whole contribution is "occasionally the provider's #2 is better than its #1",
@@ -10754,6 +10763,9 @@ static uint64_t BpCandFingerprint(const TurnSolver::Plan& p, bool source_blind =
     fold(static_cast<uint64_t>(p.fling_victim_choice + 3) * 67);
     // Tectonic Giant mode -- same must-fold rule as the fling above.
     fold(static_cast<uint64_t>(p.tectonic_mode_choice + 2) * 71);
+    // ...and its mode-B keep index -- same must-fold rule. Two variants differing ONLY in which
+    // exiled card they stage are distinct plans; collapsing them re-steals the decision.
+    fold(static_cast<uint64_t>(p.tectonic_keep_choice + 2) * 73);
     return h;
 }
 // Channel from the k=0 child apply's in-scope enumeration back to the node host: the number of
@@ -10803,6 +10815,7 @@ static bool IsApplyEmptyPlan(const TurnSolver::Plan& p)
         && p.lackey_choice == -1 && p.ponder_choice == -1 && p.discard_choice == -1
         && p.vial_charge_choice == -1 && p.saga_target_choice == -1
         && p.fling_victim_choice == -1 && p.tectonic_mode_choice == -1
+        && p.tectonic_keep_choice == -1
         && p.saga_ch1_choice == -1
         && !p.searched_order && p.atk_dork_release == -1
         && p.bp_choice == -1 && p.bp_at == 0 && !p.bp_all && !p.bp_wave0;
@@ -21305,6 +21318,7 @@ namespace solvememo
             || a.discard_choice != b.discard_choice || a.vial_charge_choice != b.vial_charge_choice
             || a.fling_victim_choice != b.fling_victim_choice
             || a.tectonic_mode_choice != b.tectonic_mode_choice
+            || a.tectonic_keep_choice != b.tectonic_keep_choice
             || a.saga_target_choice != b.saga_target_choice
             || a.saga_ch1_choice != b.saga_ch1_choice
             || a.dig_choice != b.dig_choice || a.bp_choice != b.bp_choice
@@ -24837,6 +24851,7 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
     if (plan.fling_victim_choice != -1) { state.scripted_fling_victim = plan.fling_victim_choice; }
     // Searched Tectonic Giant mode: same reasoning -- the trigger fires at declare-attackers.
     if (plan.tectonic_mode_choice >= 0) { state.scripted_tectonic_mode = plan.tectonic_mode_choice; }
+    if (plan.tectonic_keep_choice >= 0) { state.scripted_tectonic_keep = plan.tectonic_keep_choice; }
     // Searched cleanup discard: same reasoning -- the shed happens in SimulateEndAndStartNextTurn,
     // after this function returns, so it rides the STATE rather than a scoped guard.
     if (plan.discard_choice >= 0) { state.scripted_discard_choice = plan.discard_choice; }
@@ -29556,6 +29571,7 @@ static bool SimulateEndAndStartNextTurn(GameState& state)
     state.scripted_cheat_choice   = -1;            // searched Lackey put is per-turn (lockstep w/ GameEngine::UntapStep)
     state.scripted_fling_victim   = -1;            // searched Flinger victim is per-turn (same lockstep)
     state.scripted_tectonic_mode  = -1;            // searched Tectonic mode is per-turn (same lockstep)
+    state.scripted_tectonic_keep  = -1;            // ...and its mode-B keep pin (same lockstep)
     ap.lands_played_this_turn     = 0;
     ap.bonus_land_drops_this_turn = 0;
     ap.cards_drawn_this_turn      = 0;             // Fists of Flame drawn-count resets each turn (lockstep w/ UntapStep)
@@ -35684,12 +35700,23 @@ static void AppendSubdecisionAxes(const GameState& state, bool is_pre_combat,
     {
         const int me = state.active_player_index;
         bool modal_present = false;
+        // Mode-B keep width: how many cards the trigger exiles to choose among. Taken from the
+        // card actually on the battlefield rather than hardcoded at 2, and capped by the library
+        // -- a library with one card left exiles one, so a keep=1 variant would be a duplicate of
+        // keep=0 (the consumption site falls back to the default when the pin is out of range).
+        int n_keep = 0;
         for (const Permanent& p : state.battlefield)
         {
             if (p.controller_index != me || !p.card.IsCreature()) { continue; }
             const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
-            if (d && d->params.attack_trigger_modal) { modal_present = true; break; }
+            if (d && d->params.attack_trigger_modal)
+            {
+                modal_present = true;
+                n_keep = std::max(n_keep, d->params.attack_trigger_impulse_exile);
+            }
         }
+        n_keep = std::min(n_keep, static_cast<int>(state.players[me].library.size()));
+        const bool keep_axis = TectonicKeepAxisEnabled() && n_keep > 1;
         if (modal_present)
         {
             std::vector<TurnSolver::Plan> extra;
@@ -35701,15 +35728,37 @@ static void AppendSubdecisionAxes(const GameState& state, bool is_pre_combat,
                     || p.discard_choice >= 0 || p.vial_charge_choice >= 0
                     || p.fling_victim_choice != -1)
                 { continue; }
-                for (int k = 0; k <= 1; ++k)
+                // Mode A carries no keep choice (nothing is exiled). Mode B fans out once per
+                // exiled card, because WHICH card is staged is a real decision the ranked default
+                // (highest mana value) gets wrong -- sweep GI=7 took Fire Diamond over the
+                // Mountain that would have been the fourth land. Emitting {A, B+keep0, B+keep1}
+                // rather than the 2x2 product keeps the cost at 3 variants instead of 4 and
+                // avoids pinning a keep index under mode A, where it would be dead state that the
+                // dedup keys would nonetheless treat as distinct.
+                TurnSolver::Plan a = p;
+                a.tectonic_mode_choice = 0;
+                extra.push_back(std::move(a));
+                if (!keep_axis)
                 {
-                    TurnSolver::Plan v = p;
-                    v.tectonic_mode_choice = k;
-                    extra.push_back(std::move(v));
+                    // Hatch: exactly the pre-keep-axis shape -- one mode-B variant carrying the
+                    // ranked default, so =0 is byte-identical to the two-variant fan-out.
+                    TurnSolver::Plan b = p;
+                    b.tectonic_mode_choice = 1;
+                    extra.push_back(std::move(b));
+                }
+                else
+                {
+                    for (int keep = 0; keep < n_keep; ++keep)
+                    {
+                        TurnSolver::Plan v = p;
+                        v.tectonic_mode_choice = 1;
+                        v.tectonic_keep_choice = keep;
+                        extra.push_back(std::move(v));
+                    }
                 }
             }
-            TRACE("tectonicaxis", "T%d %zu plan(s) -> %zu mode variant(s)",
-                  state.turn_number, all.size(), extra.size());
+            TRACE("tectonicaxis", "T%d %zu plan(s) -> %zu mode variant(s) (keep width %d)",
+                  state.turn_number, all.size(), extra.size(), n_keep);
             all.insert(all.end(), std::make_move_iterator(extra.begin()),
                                   std::make_move_iterator(extra.end()));
         }
@@ -35909,6 +35958,7 @@ static void AppendSubdecisionAxes(const GameState& state, bool is_pre_combat,
                         || p.etbdig_choice >= 0 || p.lackey_choice >= 0 || p.ponder_choice >= 0
                         || p.discard_choice >= 0 || p.vial_charge_choice >= 0
                         || p.fling_victim_choice != -1 || p.tectonic_mode_choice >= 0
+                        || p.tectonic_keep_choice >= 0
                         || p.saga_target_choice >= 0 || p.saga_ch1_choice != -1
                         || !p.sac_pins.empty()) { continue; }
                     // k = 0 is the heuristic's own pick, which the base plan already carries.
@@ -36001,6 +36051,7 @@ static void AppendSubdecisionAxes(const GameState& state, bool is_pre_combat,
                         || p.etbdig_choice >= 0 || p.lackey_choice >= 0 || p.ponder_choice >= 0
                         || p.discard_choice >= 0 || p.vial_charge_choice >= 0
                         || p.fling_victim_choice != -1 || p.tectonic_mode_choice >= 0
+                        || p.tectonic_keep_choice >= 0
                         || p.saga_target_choice >= 0 || p.saga_ch1_choice != -1
                         || !p.sac_pins.empty()) { continue; }
                     // k = 0 is the heuristic's own pick, which the base plan already carries.
@@ -36236,6 +36287,7 @@ static void AppendSubdecisionAxes(const GameState& state, bool is_pre_combat,
                     || p.etbdig_choice >= 0 || p.lackey_choice >= 0 || p.ponder_choice >= 0
                     || p.discard_choice >= 0 || p.vial_charge_choice >= 0
                     || p.fling_victim_choice != -1 || p.tectonic_mode_choice >= 0
+                    || p.tectonic_keep_choice >= 0
                     || p.saga_target_choice >= 0 || p.saga_ch1_choice != -1
                     || !p.sac_pins.empty() || p.tapmode_choice != 0
                     || p.freshmode_choice != 0) { continue; }
@@ -37415,7 +37467,11 @@ namespace enummemo
 std::string enummemo::Fingerprint(const GameState& state)
 {
     std::string s;
-    char buf[96];
+    // 96 -> 128 (2026-09-22): headroom, not necessity. The pool line is ~90 bytes at full width
+    // and the `tkeep` pin is appended through this same buffer in a second pass below. snprintf
+    // TRUNCATES silently, and a truncated sim key would drop exactly the pin it carries -- i.e.
+    // collapse the two keep variants into one key, the failure the fold exists to prevent.
+    char buf[128];
     for (int pi = 0; pi < 2; ++pi)
     {
         s += "gy"; s += char('0' + pi); s += '=';
@@ -37433,6 +37489,15 @@ std::string enummemo::Fingerprint(const GameState& state)
                   state.scripted_tectonic_mode,
                   (unsigned long long)state.search_count);
     s += buf;
+    // Mode-B keep pin, appended VALUE-GATED for the same reason the dominance fold is gated: an
+    // unconditional `;tkeep=-1` would lengthen the key of every state in every deck. Appending
+    // only when the pin is set leaves all existing keys byte-identical while still separating the
+    // two keep variants, which is the whole point of the fold.
+    if (state.scripted_tectonic_keep >= 0)
+    {
+        std::snprintf(buf, sizeof buf, "tkeep=%d;", state.scripted_tectonic_keep);
+        s += buf;
+    }
     return s;
 }
 
