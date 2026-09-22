@@ -23931,6 +23931,30 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
     // Lockstep twin: AIEngine::TakeTurn captures the same set at its entry.
     const std::vector<uint64_t> pre_plan_keys = TurnSolver::SnapshotActivatableAbilities(state);
 
+    // MTG_BP_CANON_AUDIT ONLY -- ASK THE FAN-OUT'S QUESTION AT THE FAN-OUT'S STATE.
+    //
+    // The audit's whole question is "would a fan-out have selected this plan?", and the fan-out
+    // decides that on the PRE-APPLY state, right here. Asking the same predicates down in
+    // bp_searched_plan asks them MID-apply, after this plan's own casts, taps and sacrifices have
+    // already run -- and the disagreement is not symmetric, it INVENTS violations: the dig loop
+    // consumes its own source, so `HasAnyDigSource` reads false at the breakpoint on the very plan
+    // the bypass fanned out, and a Pod pre-scan that counted two untapped sources sees one.
+    //
+    // That is the same defect three times now (mirrorwing's 16,448, the ~8,000 `bp_wave0` closed,
+    // fluctuator's 194), so take the state out of the question entirely rather than patching the
+    // next symptom. Snapshotting here costs one PlanOpensBreakpoint per apply WHEN THE AUDIT IS ON
+    // and a single predictable branch when it is off, which is the same bargain the audit already
+    // makes elsewhere.
+    //
+    // `1 << 4` and not `1 << site`: BpDigFanoutPending/ForPlan return false unless bit 4 is in the
+    // mask, so the site-4 answer IS the whole answer, and the audit re-applies the `site == 4` test
+    // where it reads this back.
+    const bool canon_audit_on   = canonaudit::Enabled();
+    const int  canon_opens_pre  = canon_audit_on ? PlanOpensBreakpoint(state, plan) : 0;
+    const bool canon_dig_pre    = canon_audit_on
+                               && (BpDigFanoutPending(state, 1 << 4)
+                                   || BpDigFanoutForPlan(state, 1 << 4, plan));
+
     // ORDER-CONDEMNATION stamp (rollout/interior half of the lockstep pair -- see
     // GameState::m1_hand): the pre-combat apply IS this projected turn's m1 decision point, so
     // the hand right now is what that decision saw, and `plan.actions` is what it chose (the
@@ -24594,9 +24618,11 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
         if (canon_used && canonaudit::Enabled() && site >= 0 && site < 16)
         {
             canonaudit::g_total[site].fetch_add(1, std::memory_order_relaxed);
-            const int  opens    = PlanOpensBreakpoint(state, plan);
-            const bool dig_ok   = BpDigFanoutPending(state, 1 << site)
-                               || BpDigFanoutForPlan(state, 1 << site, plan);
+            // BOTH read back from the PRE-APPLY snapshot taken at this apply's entry, never
+            // re-derived here -- see canon_opens_pre for why the mid-apply state is the wrong one
+            // to ask. `site == 4` reproduces the old `1 << site` argument exactly.
+            const int  opens    = canon_opens_pre;
+            const bool dig_ok   = (site == 4) && canon_dig_pre;
             const bool node_ok  = node_owns_site(site);
             // ...and TWO RECORDS OF FACT, which are not re-derivations at all and must be preferred
             // wherever they exist. The state-keyed routes (the dig bypass, the watcher pre-scans)
