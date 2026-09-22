@@ -30791,6 +30791,17 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
                 }
             }
         }
+        // MTG_DBG_MULTI=<turn>: arm the same tracer for every multi-cast subset on that turn, so the
+        // `[chain]` line at scope exit names the FINAL gate. The `[dbgmulti]` reject dump below fires
+        // BEFORE the colour gates, so a subset that passes the mana checks and then dies at
+        // colour-exists / colour-exact / a late gate showed as "reject=0" and no push -- silence again,
+        // one layer further in (the Snow Astrolabe+Druid hunt, 2026-09-22).
+        {
+            static const int s_dbg_multi_arm = EnvInt("MTG_DBG_MULTI", 0);
+            if (s_dbg_multi_arm > 0 && !_ct.armed && state.turn_number == s_dbg_multi_arm
+                && sel.size() >= 2)
+            { _ct.armed = true; _ct.st = &state; _ct.cands = &cands; _ct.sel = &sel; }
+        }
         // Group-wave tranche filter FIRST (cheapest reject): a selection not touching the
         // tranche's required (rank-R) group was already emitted by wave 0 or an earlier tranche
         // -- the highest-ranked-used group assigns every plan to exactly one tranche, which is
