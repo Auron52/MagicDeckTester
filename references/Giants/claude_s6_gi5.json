@@ -1,0 +1,334 @@
+{
+  "seed": 6, "game_index": 5, "win_turn": 5, "won": true,
+  "mulligan": { "count": 0, "bottom": [] },
+  "decisions": [
+    { "chosen": 1, "decision": {
+  "decision_index": 0,
+  "type": "mulligan",
+  "turn": 0,
+  "me": { "life": 20, "battlefield": [] },
+  "opponent": { "life": 20, "battlefield": [] },
+  "mulligan_count": 0,
+  "on_the_play": true,
+  "to_bottom": 0,
+  "hand": [{ "num": 22, "name": "Mountain" }, { "num": 1, "name": "Borderland Behemoth" }, { "num": 23, "name": "Mountain" }, { "num": 49, "name": "Stinkdrinker Daredevil" }, { "num": 24, "name": "Mountain" }, { "num": 9, "name": "Hamletback Goliath" }, { "num": 19, "name": "Lightning Greaves" }],
+  "ai_choice": 1,
+  "note": "reply 1 to KEEP this hand (then bottom 0 card(s)), or 0 to mulligan again"
+}
+},
+    { "chosen": 0, "decision": {
+  "decision_index": 1,
+  "main_ordinal": 0,
+  "type": "main_phase",
+  "turn": 1,
+  "phase": "pre_main",
+  "on_the_play": true,
+  "mdfc_backs": ["Boulderloft Pathway", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [], "vial_counters": [], "hand": [{ "num": 1, "name": "Borderland Behemoth", "cost": "{5}{R}{R}", "mv": 7, "kind": "permanent", "is_creature": true }, { "num": 9, "name": "Hamletback Goliath", "cost": "{6}{R}", "mv": 7, "kind": "permanent", "is_creature": true }, { "num": 19, "name": "Lightning Greaves", "cost": "{2}", "mv": 2, "kind": "permanent" }, { "num": 22, "name": "Mountain", "cost": "", "mv": 0, "kind": "land" }, { "num": 23, "name": "Mountain", "cost": "", "mv": 0, "kind": "land" }, { "num": 24, "name": "Mountain", "cost": "", "mv": 0, "kind": "land" }, { "num": 49, "name": "Stinkdrinker Daredevil", "cost": "{2}{R}", "mv": 3, "kind": "permanent", "is_creature": true }], "graveyard": [], "library_size": 53, "land_drops_left": 1 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "2/2 Creature", "idx": 0, "num": 500000, "is_land": false }] },
+  "plans": [
+    { "index": 0, "summary": "land=Mountain; cast: (nothing)", "land": "Mountain", "casts": [], "actions": [] },
+    { "index": 1, "summary": "land=none; cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 2,
+  "type": "main_phase",
+  "turn": 1,
+  "phase": "pre_main",
+  "on_the_play": true,
+  "mdfc_backs": ["Boulderloft Pathway", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Mountain", "idx": 1, "num": 22, "is_land": true, "taps": "R" }], "vial_counters": [], "hand": [{ "num": 1, "name": "Borderland Behemoth", "cost": "{5}{R}{R}", "mv": 7, "kind": "permanent", "is_creature": true }, { "num": 9, "name": "Hamletback Goliath", "cost": "{6}{R}", "mv": 7, "kind": "permanent", "is_creature": true }, { "num": 19, "name": "Lightning Greaves", "cost": "{2}", "mv": 2, "kind": "permanent" }, { "num": 23, "name": "Mountain", "cost": "", "mv": 0, "kind": "land" }, { "num": 24, "name": "Mountain", "cost": "", "mv": 0, "kind": "land" }, { "num": 49, "name": "Stinkdrinker Daredevil", "cost": "{2}{R}", "mv": 3, "kind": "permanent", "is_creature": true }], "graveyard": [], "library_size": 53, "land_drops_left": 0 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "2/2 Creature", "idx": 0, "num": 500000, "is_land": false }] },
+  "plans": [
+    { "index": 0, "summary": "cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 3,
+  "type": "main_phase",
+  "turn": 1,
+  "phase": "post_main",
+  "on_the_play": true,
+  "mdfc_backs": ["Boulderloft Pathway", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Mountain", "idx": 1, "num": 22, "is_land": true, "taps": "R" }], "vial_counters": [], "hand": [{ "num": 1, "name": "Borderland Behemoth", "cost": "{5}{R}{R}", "mv": 7, "kind": "permanent", "is_creature": true }, { "num": 9, "name": "Hamletback Goliath", "cost": "{6}{R}", "mv": 7, "kind": "permanent", "is_creature": true }, { "num": 19, "name": "Lightning Greaves", "cost": "{2}", "mv": 2, "kind": "permanent" }, { "num": 23, "name": "Mountain", "cost": "", "mv": 0, "kind": "land" }, { "num": 24, "name": "Mountain", "cost": "", "mv": 0, "kind": "land" }, { "num": 49, "name": "Stinkdrinker Daredevil", "cost": "{2}{R}", "mv": 3, "kind": "permanent", "is_creature": true }], "graveyard": [], "library_size": 53, "land_drops_left": 0 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "2/2 Creature", "idx": 0, "num": 500000, "is_land": false }] },
+  "plans": [
+    { "index": 0, "summary": "cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
+}
+},
+    { "chosen": 0, "decision": {
+  "decision_index": 4,
+  "main_ordinal": 1,
+  "type": "main_phase",
+  "turn": 2,
+  "phase": "pre_main",
+  "on_the_play": true,
+  "drew": [{ "turn": 2, "card": "Mountain" }],
+  "mdfc_backs": ["Boulderloft Pathway", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Mountain", "idx": 1, "num": 22, "is_land": true, "taps": "R" }], "vial_counters": [], "hand": [{ "num": 1, "name": "Borderland Behemoth", "cost": "{5}{R}{R}", "mv": 7, "kind": "permanent", "is_creature": true }, { "num": 9, "name": "Hamletback Goliath", "cost": "{6}{R}", "mv": 7, "kind": "permanent", "is_creature": true }, { "num": 19, "name": "Lightning Greaves", "cost": "{2}", "mv": 2, "kind": "permanent" }, { "num": 23, "name": "Mountain", "cost": "", "mv": 0, "kind": "land" }, { "num": 24, "name": "Mountain", "cost": "", "mv": 0, "kind": "land" }, { "num": 25, "name": "Mountain", "cost": "", "mv": 0, "kind": "land" }, { "num": 49, "name": "Stinkdrinker Daredevil", "cost": "{2}{R}", "mv": 3, "kind": "permanent", "is_creature": true }], "graveyard": [], "library_size": 52, "land_drops_left": 1 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "2/2 Creature", "idx": 0, "num": 500000, "is_land": false }] },
+  "plans": [
+    { "index": 0, "summary": "land=Mountain; cast: Lightning Greaves", "land": "Mountain", "casts": ["Lightning Greaves"], "actions": [{ "card": "Lightning Greaves" }] },
+    { "index": 1, "summary": "land=Mountain; cast: (nothing)", "land": "Mountain", "casts": [], "actions": [] },
+    { "index": 2, "summary": "land=none; cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 5,
+  "type": "main_phase",
+  "turn": 2,
+  "phase": "pre_main",
+  "on_the_play": true,
+  "mdfc_backs": ["Boulderloft Pathway", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Lightning Greaves", "idx": 3, "num": 19, "is_equip": true, "is_land": false }, { "name": "Mountain", "idx": 1, "num": 22, "tapped": true, "is_land": true }, { "name": "Mountain", "idx": 2, "num": 23, "tapped": true, "is_land": true }], "vial_counters": [], "hand": [{ "num": 1, "name": "Borderland Behemoth", "cost": "{5}{R}{R}", "mv": 7, "kind": "permanent", "is_creature": true }, { "num": 9, "name": "Hamletback Goliath", "cost": "{6}{R}", "mv": 7, "kind": "permanent", "is_creature": true }, { "num": 24, "name": "Mountain", "cost": "", "mv": 0, "kind": "land" }, { "num": 25, "name": "Mountain", "cost": "", "mv": 0, "kind": "land" }, { "num": 49, "name": "Stinkdrinker Daredevil", "cost": "{2}{R}", "mv": 3, "kind": "permanent", "is_creature": true }], "graveyard": [], "library_size": 52, "land_drops_left": 0 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "2/2 Creature", "idx": 0, "num": 500000, "is_land": false }] },
+  "plans": [
+    { "index": 0, "summary": "cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 6,
+  "type": "main_phase",
+  "turn": 2,
+  "phase": "post_main",
+  "on_the_play": true,
+  "mdfc_backs": ["Boulderloft Pathway", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Lightning Greaves", "idx": 3, "num": 19, "is_equip": true, "is_land": false }, { "name": "Mountain", "idx": 1, "num": 22, "tapped": true, "is_land": true }, { "name": "Mountain", "idx": 2, "num": 23, "tapped": true, "is_land": true }], "vial_counters": [], "hand": [{ "num": 1, "name": "Borderland Behemoth", "cost": "{5}{R}{R}", "mv": 7, "kind": "permanent", "is_creature": true }, { "num": 9, "name": "Hamletback Goliath", "cost": "{6}{R}", "mv": 7, "kind": "permanent", "is_creature": true }, { "num": 24, "name": "Mountain", "cost": "", "mv": 0, "kind": "land" }, { "num": 25, "name": "Mountain", "cost": "", "mv": 0, "kind": "land" }, { "num": 49, "name": "Stinkdrinker Daredevil", "cost": "{2}{R}", "mv": 3, "kind": "permanent", "is_creature": true }], "graveyard": [], "library_size": 52, "land_drops_left": 0 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "2/2 Creature", "idx": 0, "num": 500000, "is_land": false }] },
+  "plans": [
+    { "index": 0, "summary": "cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
+}
+},
+    { "chosen": 0, "cast_order": ["*", "Stinkdrinker Daredevil", "Lightning Greaves"], "decision": {
+  "decision_index": 7,
+  "main_ordinal": 2,
+  "type": "main_phase",
+  "turn": 3,
+  "phase": "pre_main",
+  "on_the_play": true,
+  "drew": [{ "turn": 3, "card": "Surtland Flinger" }],
+  "mdfc_backs": ["Boulderloft Pathway", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Lightning Greaves", "idx": 3, "num": 19, "is_equip": true, "is_land": false }, { "name": "Mountain", "idx": 1, "num": 22, "is_land": true, "taps": "R" }, { "name": "Mountain", "idx": 2, "num": 23, "is_land": true, "taps": "R" }], "vial_counters": [], "hand": [{ "num": 1, "name": "Borderland Behemoth", "cost": "{5}{R}{R}", "mv": 7, "kind": "permanent", "is_creature": true }, { "num": 9, "name": "Hamletback Goliath", "cost": "{6}{R}", "mv": 7, "kind": "permanent", "is_creature": true }, { "num": 24, "name": "Mountain", "cost": "", "mv": 0, "kind": "land" }, { "num": 25, "name": "Mountain", "cost": "", "mv": 0, "kind": "land" }, { "num": 49, "name": "Stinkdrinker Daredevil", "cost": "{2}{R}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 57, "name": "Surtland Flinger", "cost": "{3}{R}{R}", "mv": 5, "kind": "permanent", "is_creature": true }], "graveyard": [], "library_size": 51, "land_drops_left": 1 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "2/2 Creature", "idx": 0, "num": 500000, "is_land": false }] },
+  "plans": [
+    { "index": 0, "summary": "land=Mountain; cast: Stinkdrinker Daredevil, equip Lightning Greaves → Stinkdrinker Daredevil", "land": "Mountain", "casts": ["Stinkdrinker Daredevil"], "activations": ["Lightning Greaves"], "actions": [{ "card": "Stinkdrinker Daredevil" }, { "card": "Lightning Greaves", "src_num": 19, "activate": true, "verb": "equip", "equip_host": 49, "equip_host_name": "Stinkdrinker Daredevil", "equip_src": 19 }] },
+    { "index": 1, "summary": "land=Mountain; cast: Stinkdrinker Daredevil", "land": "Mountain", "casts": ["Stinkdrinker Daredevil"], "actions": [{ "card": "Stinkdrinker Daredevil" }] },
+    { "index": 2, "summary": "land=Mountain; cast: (nothing)", "land": "Mountain", "casts": [], "actions": [] },
+    { "index": 3, "summary": "land=none; cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 8,
+  "type": "main_phase",
+  "turn": 3,
+  "phase": "pre_main",
+  "on_the_play": true,
+  "mdfc_backs": ["Boulderloft Pathway", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Lightning Greaves", "idx": 3, "num": 19, "is_equip": true, "attached_to": 49, "is_land": false }, { "name": "Mountain", "idx": 1, "num": 22, "tapped": true, "is_land": true }, { "name": "Mountain", "idx": 2, "num": 23, "tapped": true, "is_land": true }, { "name": "Mountain", "idx": 4, "num": 24, "tapped": true, "is_land": true }, { "name": "Stinkdrinker Daredevil", "idx": 5, "num": 49, "is_land": false }], "vial_counters": [], "hand": [{ "num": 1, "name": "Borderland Behemoth", "cost": "{5}{R}{R}", "mv": 7, "kind": "permanent", "is_creature": true }, { "num": 9, "name": "Hamletback Goliath", "cost": "{6}{R}", "mv": 7, "kind": "permanent", "is_creature": true }, { "num": 25, "name": "Mountain", "cost": "", "mv": 0, "kind": "land" }, { "num": 57, "name": "Surtland Flinger", "cost": "{3}{R}{R}", "mv": 5, "kind": "permanent", "is_creature": true }], "graveyard": [], "library_size": 51, "land_drops_left": 0 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "2/2 Creature", "idx": 0, "num": 500000, "is_land": false }] },
+  "plans": [
+    { "index": 0, "summary": "cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 9,
+  "type": "main_phase",
+  "turn": 3,
+  "phase": "post_main",
+  "on_the_play": true,
+  "events": [{ "turn": 3, "kind": "combat", "text": "⚔ attacked: Stinkdrinker Daredevil (1) — 1 to opponent (20→19)" }],
+  "mdfc_backs": ["Boulderloft Pathway", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Lightning Greaves", "idx": 3, "num": 19, "is_equip": true, "attached_to": 49, "is_land": false }, { "name": "Mountain", "idx": 1, "num": 22, "tapped": true, "is_land": true }, { "name": "Mountain", "idx": 2, "num": 23, "tapped": true, "is_land": true }, { "name": "Mountain", "idx": 4, "num": 24, "tapped": true, "is_land": true }, { "name": "Stinkdrinker Daredevil", "idx": 5, "num": 49, "tapped": true, "is_land": false }], "vial_counters": [], "hand": [{ "num": 1, "name": "Borderland Behemoth", "cost": "{5}{R}{R}", "mv": 7, "kind": "permanent", "is_creature": true }, { "num": 9, "name": "Hamletback Goliath", "cost": "{6}{R}", "mv": 7, "kind": "permanent", "is_creature": true }, { "num": 25, "name": "Mountain", "cost": "", "mv": 0, "kind": "land" }, { "num": 57, "name": "Surtland Flinger", "cost": "{3}{R}{R}", "mv": 5, "kind": "permanent", "is_creature": true }], "graveyard": [], "library_size": 51, "land_drops_left": 0 },
+  "opponent": { "life": 19, "battlefield": [{ "name": "2/2 Creature", "idx": 0, "num": 500000, "is_land": false }] },
+  "plans": [
+    { "index": 0, "summary": "cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
+}
+},
+    { "chosen": 0, "decision": {
+  "decision_index": 10,
+  "main_ordinal": 3,
+  "type": "main_phase",
+  "turn": 4,
+  "phase": "pre_main",
+  "on_the_play": true,
+  "drew": [{ "turn": 4, "card": "Stinkdrinker Daredevil" }],
+  "mdfc_backs": ["Boulderloft Pathway", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Lightning Greaves", "idx": 3, "num": 19, "is_equip": true, "attached_to": 49, "is_land": false }, { "name": "Mountain", "idx": 1, "num": 22, "is_land": true, "taps": "R" }, { "name": "Mountain", "idx": 2, "num": 23, "is_land": true, "taps": "R" }, { "name": "Mountain", "idx": 4, "num": 24, "is_land": true, "taps": "R" }, { "name": "Stinkdrinker Daredevil", "idx": 5, "num": 49, "is_land": false }], "vial_counters": [], "hand": [{ "num": 1, "name": "Borderland Behemoth", "cost": "{5}{R}{R}", "mv": 7, "kind": "permanent", "is_creature": true }, { "num": 9, "name": "Hamletback Goliath", "cost": "{6}{R}", "mv": 7, "kind": "permanent", "is_creature": true }, { "num": 25, "name": "Mountain", "cost": "", "mv": 0, "kind": "land" }, { "num": 50, "name": "Stinkdrinker Daredevil", "cost": "{2}{R}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 57, "name": "Surtland Flinger", "cost": "{3}{R}{R}", "mv": 5, "kind": "permanent", "is_creature": true }], "graveyard": [], "library_size": 50, "land_drops_left": 1 },
+  "opponent": { "life": 19, "battlefield": [{ "name": "2/2 Creature", "idx": 0, "num": 500000, "is_land": false }] },
+  "plans": [
+    { "index": 0, "summary": "land=Mountain; cast: Surtland Flinger", "land": "Mountain", "casts": ["Surtland Flinger"], "actions": [{ "card": "Surtland Flinger" }] },
+    { "index": 1, "summary": "land=none; cast: Surtland Flinger", "land": null, "casts": ["Surtland Flinger"], "actions": [{ "card": "Surtland Flinger" }] },
+    { "index": 2, "summary": "land=Mountain; cast: Stinkdrinker Daredevil, equip Lightning Greaves → Stinkdrinker Daredevil", "land": "Mountain", "casts": ["Stinkdrinker Daredevil"], "activations": ["Lightning Greaves"], "actions": [{ "card": "Stinkdrinker Daredevil" }, { "card": "Lightning Greaves", "src_num": 19, "activate": true, "verb": "equip", "equip_host": 50, "equip_host_name": "Stinkdrinker Daredevil", "equip_src": 19 }] },
+    { "index": 3, "summary": "land=none; cast: Stinkdrinker Daredevil, equip Lightning Greaves → Stinkdrinker Daredevil", "land": null, "casts": ["Stinkdrinker Daredevil"], "activations": ["Lightning Greaves"], "actions": [{ "card": "Stinkdrinker Daredevil" }, { "card": "Lightning Greaves", "src_num": 19, "activate": true, "verb": "equip", "equip_host": 50, "equip_host_name": "Stinkdrinker Daredevil", "equip_src": 19 }] },
+    { "index": 4, "summary": "land=Mountain; cast: Stinkdrinker Daredevil", "land": "Mountain", "casts": ["Stinkdrinker Daredevil"], "actions": [{ "card": "Stinkdrinker Daredevil" }] },
+    { "index": 5, "summary": "land=none; cast: Stinkdrinker Daredevil", "land": null, "casts": ["Stinkdrinker Daredevil"], "actions": [{ "card": "Stinkdrinker Daredevil" }] },
+    { "index": 6, "summary": "land=Mountain; cast: (nothing)", "land": "Mountain", "casts": [], "actions": [] },
+    { "index": 7, "summary": "land=none; cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
+}
+},
+    { "chosen": 0, "decision": {
+  "decision_index": 11,
+  "main_ordinal": 4,
+  "type": "main_phase",
+  "turn": 4,
+  "phase": "pre_main",
+  "on_the_play": true,
+  "mdfc_backs": ["Boulderloft Pathway", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Lightning Greaves", "idx": 3, "num": 19, "is_equip": true, "attached_to": 49, "is_land": false }, { "name": "Mountain", "idx": 1, "num": 22, "tapped": true, "is_land": true }, { "name": "Mountain", "idx": 2, "num": 23, "tapped": true, "is_land": true }, { "name": "Mountain", "idx": 4, "num": 24, "tapped": true, "is_land": true }, { "name": "Mountain", "idx": 6, "num": 25, "is_land": true, "taps": "R" }, { "name": "Stinkdrinker Daredevil", "idx": 5, "num": 49, "is_land": false }, { "name": "Surtland Flinger", "idx": 7, "num": 57, "is_land": false }], "vial_counters": [], "hand": [{ "num": 1, "name": "Borderland Behemoth", "cost": "{5}{R}{R}", "mv": 7, "kind": "permanent", "is_creature": true }, { "num": 9, "name": "Hamletback Goliath", "cost": "{6}{R}", "mv": 7, "kind": "permanent", "is_creature": true }, { "num": 50, "name": "Stinkdrinker Daredevil", "cost": "{2}{R}", "mv": 3, "kind": "permanent", "is_creature": true }], "graveyard": [], "library_size": 50, "land_drops_left": 0 },
+  "opponent": { "life": 19, "battlefield": [{ "name": "2/2 Creature", "idx": 0, "num": 500000, "is_land": false }] },
+  "plans": [
+    { "index": 0, "summary": "land=none; cast: equip Lightning Greaves → Surtland Flinger", "land": null, "casts": [], "activations": ["Lightning Greaves"], "actions": [{ "card": "Lightning Greaves", "src_num": 19, "activate": true, "verb": "equip", "equip_host": 57, "equip_host_name": "Surtland Flinger", "equip_src": 19 }] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 12,
+  "main_ordinal": 5,
+  "type": "main_phase",
+  "turn": 4,
+  "phase": "pre_main",
+  "on_the_play": true,
+  "mdfc_backs": ["Boulderloft Pathway", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Lightning Greaves", "idx": 3, "num": 19, "is_equip": true, "attached_to": 57, "is_land": false }, { "name": "Mountain", "idx": 1, "num": 22, "tapped": true, "is_land": true }, { "name": "Mountain", "idx": 2, "num": 23, "tapped": true, "is_land": true }, { "name": "Mountain", "idx": 4, "num": 24, "tapped": true, "is_land": true }, { "name": "Mountain", "idx": 6, "num": 25, "is_land": true, "taps": "R" }, { "name": "Stinkdrinker Daredevil", "idx": 5, "num": 49, "is_land": false }, { "name": "Surtland Flinger", "idx": 7, "num": 57, "is_land": false }], "vial_counters": [], "hand": [{ "num": 1, "name": "Borderland Behemoth", "cost": "{5}{R}{R}", "mv": 7, "kind": "permanent", "is_creature": true }, { "num": 9, "name": "Hamletback Goliath", "cost": "{6}{R}", "mv": 7, "kind": "permanent", "is_creature": true }, { "num": 50, "name": "Stinkdrinker Daredevil", "cost": "{2}{R}", "mv": 3, "kind": "permanent", "is_creature": true }], "graveyard": [], "library_size": 50, "land_drops_left": 0 },
+  "opponent": { "life": 19, "battlefield": [{ "name": "2/2 Creature", "idx": 0, "num": 500000, "is_land": false }] },
+  "plans": [
+    { "index": 0, "summary": "land=none; cast: equip Lightning Greaves → Stinkdrinker Daredevil", "land": null, "casts": [], "activations": ["Lightning Greaves"], "actions": [{ "card": "Lightning Greaves", "src_num": 19, "activate": true, "verb": "equip", "equip_host": 49, "equip_host_name": "Stinkdrinker Daredevil", "equip_src": 19 }] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 13,
+  "type": "sacrifice",
+  "source": "Surtland Flinger",
+  "turn": 4,
+  "mdfc_backs": ["Boulderloft Pathway", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Lightning Greaves", "idx": 3, "num": 19, "is_equip": true, "attached_to": 57, "is_land": false }, { "name": "Mountain", "idx": 1, "num": 22, "tapped": true, "is_land": true }, { "name": "Mountain", "idx": 2, "num": 23, "tapped": true, "is_land": true }, { "name": "Mountain", "idx": 4, "num": 24, "tapped": true, "is_land": true }, { "name": "Mountain", "idx": 6, "num": 25, "is_land": true, "taps": "R" }, { "name": "Stinkdrinker Daredevil", "idx": 5, "num": 49, "is_land": false }, { "name": "Surtland Flinger", "idx": 7, "num": 57, "is_land": false }], "vial_counters": [], "hand": [{ "num": 1, "name": "Borderland Behemoth", "cost": "{5}{R}{R}", "mv": 7, "kind": "permanent", "is_creature": true }, { "num": 9, "name": "Hamletback Goliath", "cost": "{6}{R}", "mv": 7, "kind": "permanent", "is_creature": true }, { "num": 50, "name": "Stinkdrinker Daredevil", "cost": "{2}{R}", "mv": 3, "kind": "permanent", "is_creature": true }], "graveyard": [], "library_size": 50, "land_drops_left": 0 },
+  "opponent": { "life": 19, "battlefield": [{ "name": "2/2 Creature", "idx": 0, "num": 500000, "is_land": false }] },
+  "heuristic_default": 0,
+  "allow_decline": true,
+  "options": [{ "index": 0, "perm_index": 5, "tapped": false, "name": "Stinkdrinker Daredevil", "label": "Stinkdrinker Daredevil" }],
+  "note": "reply an option index -- the creature to sacrifice. Default = the AI's pick. This one is OPTIONAL (\"you MAY sacrifice another creature\") -- reply -1 to DECLINE and keep the creature."
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 14,
+  "main_ordinal": 6,
+  "type": "main_phase",
+  "turn": 4,
+  "phase": "post_main",
+  "on_the_play": true,
+  "events": [{ "turn": 4, "kind": "combat", "text": "⚔ attacked: Stinkdrinker Daredevil (1), Surtland Flinger (4) — 5 to opponent (19→14)" }],
+  "mdfc_backs": ["Boulderloft Pathway", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Lightning Greaves", "idx": 3, "num": 19, "is_equip": true, "attached_to": 57, "is_land": false }, { "name": "Mountain", "idx": 1, "num": 22, "tapped": true, "is_land": true }, { "name": "Mountain", "idx": 2, "num": 23, "tapped": true, "is_land": true }, { "name": "Mountain", "idx": 4, "num": 24, "tapped": true, "is_land": true }, { "name": "Mountain", "idx": 6, "num": 25, "is_land": true, "taps": "R" }, { "name": "Stinkdrinker Daredevil", "idx": 5, "num": 49, "tapped": true, "is_land": false }, { "name": "Surtland Flinger", "idx": 7, "num": 57, "tapped": true, "is_land": false }], "vial_counters": [], "hand": [{ "num": 1, "name": "Borderland Behemoth", "cost": "{5}{R}{R}", "mv": 7, "kind": "permanent", "is_creature": true }, { "num": 9, "name": "Hamletback Goliath", "cost": "{6}{R}", "mv": 7, "kind": "permanent", "is_creature": true }, { "num": 50, "name": "Stinkdrinker Daredevil", "cost": "{2}{R}", "mv": 3, "kind": "permanent", "is_creature": true }], "graveyard": [], "library_size": 50, "land_drops_left": 0 },
+  "opponent": { "life": 14, "battlefield": [{ "name": "2/2 Creature", "idx": 0, "num": 500000, "is_land": false }] },
+  "plans": [
+    { "index": 0, "summary": "land=none; cast: equip Lightning Greaves → Stinkdrinker Daredevil", "land": null, "casts": [], "activations": ["Lightning Greaves"], "actions": [{ "card": "Lightning Greaves", "src_num": 19, "activate": true, "verb": "equip", "equip_host": 49, "equip_host_name": "Stinkdrinker Daredevil", "equip_src": 19 }] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
+}
+},
+    { "chosen": 1, "decision": {
+  "decision_index": 15,
+  "main_ordinal": 7,
+  "type": "main_phase",
+  "turn": 5,
+  "phase": "pre_main",
+  "on_the_play": true,
+  "drew": [{ "turn": 5, "card": "Mountain" }],
+  "mdfc_backs": ["Boulderloft Pathway", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Lightning Greaves", "idx": 3, "num": 19, "is_equip": true, "attached_to": 57, "is_land": false }, { "name": "Mountain", "idx": 1, "num": 22, "is_land": true, "taps": "R" }, { "name": "Mountain", "idx": 2, "num": 23, "is_land": true, "taps": "R" }, { "name": "Mountain", "idx": 4, "num": 24, "is_land": true, "taps": "R" }, { "name": "Mountain", "idx": 6, "num": 25, "is_land": true, "taps": "R" }, { "name": "Stinkdrinker Daredevil", "idx": 5, "num": 49, "is_land": false }, { "name": "Surtland Flinger", "idx": 7, "num": 57, "is_land": false }], "vial_counters": [], "hand": [{ "num": 1, "name": "Borderland Behemoth", "cost": "{5}{R}{R}", "mv": 7, "kind": "permanent", "is_creature": true }, { "num": 9, "name": "Hamletback Goliath", "cost": "{6}{R}", "mv": 7, "kind": "permanent", "is_creature": true }, { "num": 26, "name": "Mountain", "cost": "", "mv": 0, "kind": "land" }, { "num": 50, "name": "Stinkdrinker Daredevil", "cost": "{2}{R}", "mv": 3, "kind": "permanent", "is_creature": true }], "graveyard": [], "library_size": 49, "land_drops_left": 1 },
+  "opponent": { "life": 14, "battlefield": [{ "name": "2/2 Creature", "idx": 0, "num": 500000, "is_land": false }] },
+  "plans": [
+    { "index": 0, "summary": "land=Mountain; cast: Borderland Behemoth, equip Lightning Greaves → Stinkdrinker Daredevil", "land": "Mountain", "casts": ["Borderland Behemoth"], "activations": ["Lightning Greaves"], "actions": [{ "card": "Borderland Behemoth" }, { "card": "Lightning Greaves", "src_num": 19, "activate": true, "verb": "equip", "equip_host": 49, "equip_host_name": "Stinkdrinker Daredevil", "equip_src": 19 }] },
+    { "index": 1, "summary": "land=Mountain; cast: Borderland Behemoth", "land": "Mountain", "casts": ["Borderland Behemoth"], "actions": [{ "card": "Borderland Behemoth" }] },
+    { "index": 2, "summary": "land=Mountain; cast: Hamletback Goliath, equip Lightning Greaves → Stinkdrinker Daredevil", "land": "Mountain", "casts": ["Hamletback Goliath"], "activations": ["Lightning Greaves"], "actions": [{ "card": "Hamletback Goliath" }, { "card": "Lightning Greaves", "src_num": 19, "activate": true, "verb": "equip", "equip_host": 49, "equip_host_name": "Stinkdrinker Daredevil", "equip_src": 19 }] },
+    { "index": 3, "summary": "land=Mountain; cast: Hamletback Goliath", "land": "Mountain", "casts": ["Hamletback Goliath"], "actions": [{ "card": "Hamletback Goliath" }] },
+    { "index": 4, "summary": "land=Mountain; cast: Stinkdrinker Daredevil, equip Lightning Greaves → Stinkdrinker Daredevil", "land": "Mountain", "casts": ["Stinkdrinker Daredevil"], "activations": ["Lightning Greaves"], "actions": [{ "card": "Stinkdrinker Daredevil" }, { "card": "Lightning Greaves", "src_num": 19, "activate": true, "verb": "equip", "equip_host": 50, "equip_host_name": "Stinkdrinker Daredevil", "equip_src": 19 }] },
+    { "index": 5, "summary": "land=none; cast: Stinkdrinker Daredevil, equip Lightning Greaves → Stinkdrinker Daredevil", "land": null, "casts": ["Stinkdrinker Daredevil"], "activations": ["Lightning Greaves"], "actions": [{ "card": "Stinkdrinker Daredevil" }, { "card": "Lightning Greaves", "src_num": 19, "activate": true, "verb": "equip", "equip_host": 50, "equip_host_name": "Stinkdrinker Daredevil", "equip_src": 19 }] },
+    { "index": 6, "summary": "land=Mountain; cast: Stinkdrinker Daredevil, equip Lightning Greaves → Stinkdrinker Daredevil", "land": "Mountain", "casts": ["Stinkdrinker Daredevil"], "activations": ["Lightning Greaves"], "actions": [{ "card": "Stinkdrinker Daredevil" }, { "card": "Lightning Greaves", "src_num": 19, "activate": true, "verb": "equip", "equip_host": 49, "equip_host_name": "Stinkdrinker Daredevil", "equip_src": 19 }] },
+    { "index": 7, "summary": "land=none; cast: Stinkdrinker Daredevil, equip Lightning Greaves → Stinkdrinker Daredevil", "land": null, "casts": ["Stinkdrinker Daredevil"], "activations": ["Lightning Greaves"], "actions": [{ "card": "Stinkdrinker Daredevil" }, { "card": "Lightning Greaves", "src_num": 19, "activate": true, "verb": "equip", "equip_host": 49, "equip_host_name": "Stinkdrinker Daredevil", "equip_src": 19 }] },
+    { "index": 8, "summary": "land=Mountain; cast: Stinkdrinker Daredevil", "land": "Mountain", "casts": ["Stinkdrinker Daredevil"], "actions": [{ "card": "Stinkdrinker Daredevil" }] },
+    { "index": 9, "summary": "land=none; cast: Stinkdrinker Daredevil", "land": null, "casts": ["Stinkdrinker Daredevil"], "actions": [{ "card": "Stinkdrinker Daredevil" }] },
+    { "index": 10, "summary": "land=Mountain; cast: equip Lightning Greaves → Stinkdrinker Daredevil", "land": "Mountain", "casts": [], "activations": ["Lightning Greaves"], "actions": [{ "card": "Lightning Greaves", "src_num": 19, "activate": true, "verb": "equip", "equip_host": 49, "equip_host_name": "Stinkdrinker Daredevil", "equip_src": 19 }] },
+    { "index": 11, "summary": "land=none; cast: equip Lightning Greaves → Stinkdrinker Daredevil", "land": null, "casts": [], "activations": ["Lightning Greaves"], "actions": [{ "card": "Lightning Greaves", "src_num": 19, "activate": true, "verb": "equip", "equip_host": 49, "equip_host_name": "Stinkdrinker Daredevil", "equip_src": 19 }] },
+    { "index": 12, "summary": "land=Mountain; cast: (nothing)", "land": "Mountain", "casts": [], "actions": [] },
+    { "index": 13, "summary": "land=none; cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 16,
+  "main_ordinal": 8,
+  "type": "main_phase",
+  "turn": 5,
+  "phase": "pre_main",
+  "on_the_play": true,
+  "mdfc_backs": ["Boulderloft Pathway", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Borderland Behemoth", "idx": 9, "num": 1, "is_land": false }, { "name": "Lightning Greaves", "idx": 3, "num": 19, "is_equip": true, "attached_to": 57, "is_land": false }, { "name": "Mountain", "idx": 1, "num": 22, "tapped": true, "is_land": true }, { "name": "Mountain", "idx": 2, "num": 23, "tapped": true, "is_land": true }, { "name": "Mountain", "idx": 4, "num": 24, "tapped": true, "is_land": true }, { "name": "Mountain", "idx": 6, "num": 25, "tapped": true, "is_land": true }, { "name": "Mountain", "idx": 8, "num": 26, "tapped": true, "is_land": true }, { "name": "Stinkdrinker Daredevil", "idx": 5, "num": 49, "is_land": false }, { "name": "Surtland Flinger", "idx": 7, "num": 57, "is_land": false }], "vial_counters": [], "hand": [{ "num": 9, "name": "Hamletback Goliath", "cost": "{6}{R}", "mv": 7, "kind": "permanent", "is_creature": true }, { "num": 50, "name": "Stinkdrinker Daredevil", "cost": "{2}{R}", "mv": 3, "kind": "permanent", "is_creature": true }], "graveyard": [], "library_size": 49, "land_drops_left": 0 },
+  "opponent": { "life": 14, "battlefield": [{ "name": "2/2 Creature", "idx": 0, "num": 500000, "is_land": false }] },
+  "plans": [
+    { "index": 0, "summary": "land=none; cast: equip Lightning Greaves → Borderland Behemoth", "land": null, "casts": [], "activations": ["Lightning Greaves"], "actions": [{ "card": "Lightning Greaves", "src_num": 19, "activate": true, "verb": "equip", "equip_host": 1, "equip_host_name": "Borderland Behemoth", "equip_src": 19 }] },
+    { "index": 1, "summary": "land=none; cast: equip Lightning Greaves → Stinkdrinker Daredevil", "land": null, "casts": [], "activations": ["Lightning Greaves"], "actions": [{ "card": "Lightning Greaves", "src_num": 19, "activate": true, "verb": "equip", "equip_host": 49, "equip_host_name": "Stinkdrinker Daredevil", "equip_src": 19 }] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
+}
+},
+    { "chosen": 0, "decision": {
+  "decision_index": 17,
+  "type": "sacrifice",
+  "source": "Surtland Flinger",
+  "turn": 5,
+  "mdfc_backs": ["Boulderloft Pathway", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Borderland Behemoth", "idx": 9, "num": 1, "is_land": false }, { "name": "Lightning Greaves", "idx": 3, "num": 19, "is_equip": true, "attached_to": 57, "is_land": false }, { "name": "Mountain", "idx": 1, "num": 22, "tapped": true, "is_land": true }, { "name": "Mountain", "idx": 2, "num": 23, "tapped": true, "is_land": true }, { "name": "Mountain", "idx": 4, "num": 24, "tapped": true, "is_land": true }, { "name": "Mountain", "idx": 6, "num": 25, "tapped": true, "is_land": true }, { "name": "Mountain", "idx": 8, "num": 26, "tapped": true, "is_land": true }, { "name": "Stinkdrinker Daredevil", "idx": 5, "num": 49, "is_land": false }, { "name": "Surtland Flinger", "idx": 7, "num": 57, "is_land": false }], "vial_counters": [], "hand": [{ "num": 9, "name": "Hamletback Goliath", "cost": "{6}{R}", "mv": 7, "kind": "permanent", "is_creature": true }, { "num": 50, "name": "Stinkdrinker Daredevil", "cost": "{2}{R}", "mv": 3, "kind": "permanent", "is_creature": true }], "graveyard": [], "library_size": 49, "land_drops_left": 0 },
+  "opponent": { "life": 14, "battlefield": [{ "name": "2/2 Creature", "idx": 0, "num": 500000, "is_land": false }] },
+  "heuristic_default": 0,
+  "allow_decline": true,
+  "options": [{ "index": 0, "perm_index": 9, "tapped": false, "name": "Borderland Behemoth", "label": "Borderland Behemoth" }, { "index": 1, "perm_index": 5, "tapped": false, "name": "Stinkdrinker Daredevil", "label": "Stinkdrinker Daredevil" }],
+  "note": "reply an option index -- the creature to sacrifice. Default = the AI's pick. This one is OPTIONAL (\"you MAY sacrifice another creature\") -- reply -1 to DECLINE and keep the creature."
+}
+}
+  ],
+  "final_events": [
+    { "turn": 5, "kind": "damage", "text": "⚔ Surtland Flinger: sacrificed Borderland Behemoth -> 16 to opponent (doubled)" },
+    { "turn": 5, "kind": "combat", "text": "⚔ attacked: Stinkdrinker Daredevil (1), Surtland Flinger (4) — 5 to opponent (-2→-7)" }
+  ]
+}
