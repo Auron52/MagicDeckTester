@@ -1129,11 +1129,22 @@ user still had the viewer open:
    `references/Giants/` now holds **ten** user hand-played games (s1–s10, every one won, T5–T8),
    all committed. Giants is in the smoke and regression tiers, and the regression tier has been
    rebaselined under the V5 fix (`--accept`, both GT halves consistent: 506 / 0 STALE / 0 missing).
-9. **Open, needs the user: NOTHING IS PUSHED.** The V5 fix touches `src/`, so a push runs CI on
-   ubuntu-latest **and windows-latest**. The job that matters is **determinism parity** — Linux and
-   Windows must produce the same result for the same seed — and 16 GT configs moved, so a parity
-   break would show up as a whole-suite disagreement rather than a single case. Watch
-   `gh run watch` and report the per-OS result in the same message as the push.
+9. ~~**Open, needs the user: NOTHING IS PUSHED.**~~ **DONE — pushed `d665aa34..9baf8fd7`, CI
+   fully green:** `build (ubuntu-latest)` success, `build (windows-latest)` success, and the job
+   that actually matters, **`Linux/Windows determinism parity`, success** — the two platforms'
+   results compared equal, which is the check that protects `Library.h`'s open-coded MSVC shuffle.
+
+   **The push was not the trivial step it looked like.** Origin had moved **28 commits** (another
+   agent's mint-credit / breakpoint arc) touching `src/ai/TurnSolver.cpp` — the same file — plus 83
+   `gt_logs` files and `regression_gt.txt`. So both sides had changed GT, and the rebase **split the
+   two halves exactly as CLAUDE.md predicts: 24 STALE keys** (16 regression, 8 smoke). No number was
+   hand-merged: every GT conflict was resolved to upstream, the engine rebuilt, **both** tiers re-run
+   and re-accepted on the rebased binary (`check_gt_logs.py`: 506 consistent, 0 STALE). Re-measured
+   against upstream's GT the fix still pays and nothing regresses —
+   regression 10 better / 7 fp-only / **0 worse**, `[searched] slower=0 faster=9`;
+   smoke 6 better / 7 fp-only / **0 worse**. References: 335 replayed, **0 enum-gap, 0 play-drift**.
+   Upstream did not touch `EffectiveSpellCost` itself, so there was no semantic collision with the
+   call V5 added.
 10. **Open, still unstarted (needs a rebuild, so it was gated on the user pausing):** Inferno
     Titan's "3 damage divided as you choose" as a real targeting choice defaulting to the
     opponent's face. Note the gate has now lapsed — the binary has been rebuilt three times today
