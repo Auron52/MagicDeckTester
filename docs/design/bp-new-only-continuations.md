@@ -503,9 +503,17 @@ detector for the new-only filter itself (every reconsideration kept). The per-ga
 closed each gap: `MTG_FSW_TRACE=1 MTG_FSW_TURN=n MTG_FSW_LINE=1` (`[fsw]` per node plan, target,
 mint width, post-apply life), `MTG_FSW_BOARD=1` (the recorded continuation and the post-apply
 board), `MTG_BP5_TRACE=1` (`[bp5]` per site-5 consultation: choice, eligibility, list length),
-`MTG_PREPAY_PROBE`, `MTG_ORDER_RANGE_PROBE`, `MTG_EXEC_TAP_TRACE`.
+`MTG_PREPAY_PROBE`, `MTG_ORDER_RANGE_PROBE`, `MTG_EXEC_TAP_TRACE`, `MTG_DBG_MULTI=<turn>`
+(`[dbgapply]`: the realised order of every opaque apply on that turn -- hoist, enablers, land, pool
+-- and each cast's outcome as `hand=<before>-><after>` copies of the name plus the pool after it;
+read the two together, since a cast whose own draw puts another copy in hand reads before == after.
+This is the rollout's own read, where `MTG_TAPDBG` prints only under the executor), `MTG_FD_TRACE=1` (`[fd]`: each turn's
+searched line, its win turn, whether it was verified in horizon and committed, and each later turn's
+POP of the committed phase or FALLBACK to a fresh search -- the read that separates "the search never
+found it" from "it found it and did not commit it"), `MTG_FS_ROOT_DUMP=<turn>` (`[fs-root]`: every
+root plan's tail win per deepening pass).
 
-### Eight base-line gaps the audit route found (all lever-gated, flag-off byte-identical)
+### The base-line gaps the audit route found (all lever-gated, flag-off byte-identical)
 
 | # | seed | gap | fix |
 |---|---|---|---|
@@ -519,6 +527,8 @@ board), `MTG_BP5_TRACE=1` (`[bp5]` per site-5 consultation: choice, eligibility,
 | 8 | 701706, 700096 | fix 7's target resolved after payment tapped the only creature, found no ATTACKER and fizzled the whole trick, draw included | `FindBestOwnCreature` floor: a tapped creature is a legal target; only no creature at all fizzles |
 | 9 | smoke d0 (greedy) +0.032 | fix 7's "no attacker" extra variant was enumerated in subsets that cast NO body: `{Gold Rush@best}` alone on an empty T2 board, picked by the greedy for its own-pump value, fizzled -- no Treasure. The searched tiers never chose it (the rollout sees the fizzle) but paid to enumerate it | `SubsetHasMissingTrickTarget` rejects the variant in a subset without a body-making cast when no attacker exists (board fact once per enumeration in `SubsetFilterPre`) |
 | 10 | regression d3/d5 s3003 gi97 (seed 3100, 4 -> 8) | LOCKSTEP: the replay derived its payment traits from one nesting level of the record (`mana_casts=1`, Treasure held, Anger paid off the pumped Hierarch) where the rollout had paid under the whole planned continuation (`mana_casts=2`, Treasure cracked, 15-power attack) | the record carries the scope it was paid under (`rec_mana_casts` / `rec_pump_target`; `rollout-executor-lockstep.md` #8) |
+| 11 | mirrorwing 2HG seed 1012 T4 (smoke d3 gi11, 4 -> 5 at 1x, 4x and 16x budget; the T2 root's `{Needle}` projects T4 at flag-off and T9 on the arm -- the one worse smoke game that was a REACHABILITY gap, not a tie-break) | two halves. The same-plan Heroism credit was ONE copy where a magnet target fans onto the Heroism's ETB Soldier AND its trigger's Soldier: `{Heroism, Gold Rush@Dragon}` mints FOUR (the apply's own count: original, Heroism's copy, the Dragon's copies onto both Soldiers), credited two. And the credit's precondition counted EVERY hoisted enabler ahead of the minter -- Ignoble Hierarch is a creature, so Heroism + Hierarch + Gold Rush = 6 on 5 mana failed it -- where the apply's hoist would have put the Rush right after the magnets, BEFORE the Heroism (one Treasure either way). Flag-off wins through the Treasure breakpoint (`{Heroism, Gold Rush}` + continuation `{Hierarch, Fists}`); with that route closed by the rule the four-cast kill was unreachable at any budget | `SamePlanHeroismMint` counts the fanned bodies (`Action::mint_magnet` stamped at emission beside `mint_gain`); a hoisted minter waits for the LONGEST PREFIX of the hoist the base pool pays together with it (`PlaceHoistedMinters`, both apply twins -- the user's "after the Magnets at the earliest, but preferably you would be able to wait"), and the pricing twins credit exactly the Heroisms in that prefix (`MintHoistPrefixHeroism`: the same walk, so credit and realisation agree). A THIRD half surfaced once those two were in and 1012 was still T5: `[dbgapply]` showed the hoist order right (`[Heroism, Gold Rush, Hierarch]`) and Heroism paid `5(r4 g1) -> 2(r2 g0)` -- the per-cast payer's depletion "leave out if you can" hold, judged one cast at a time, kept a Needle counter and spent the FOREST on Heroism's generic pip, so Gold Rush's `{G}` was stranded (`[dbgapply]` read the Rush still in hand at an empty pool) and the whole line collapsed. The hoist up to and including the first minter is now paid JOINTLY (`BatchPrepayMintPrefix`, after `PlaceHoistedMinters` in both apply twins, through `BatchPrepayMainCasts(mint_prefix=true)`, which skips the `PP_MINT_HOLD` decline because a base-pool prefix has no later Treasure to meet). After all three: 1012 T4 at d3 b10 and b40 (Heroism `pool_after=2(g1 w1)`, Gold Rush mints four, Hierarch and Fists cast), 3100 stays T4, flag-off byte-identical |
+| 12 | mirrorwing regression d3 s3003 gi61 (seed 3064, 4 -> 5 at d3 b10, b40 and b160; BOTH arms T4 at the shipped d5 b20) | OPEN -- a d3-only reachability gap the credit exposes, pinned to the ply but not fixed. `MTG_FD_TRACE`: flag-off's T2 search commits a VERIFIED T4 line `{Crag} -> {Heroism} -> {Forest; Anger}` (Anger's Heroism copy draws Mystic and Oracle's; the breakpoint casts Oracle's, whose copy draws Gold Rush and Heroism; Gold Rush mints two; Fists off the two Treasures: 28 damage). On the arm the same T2 root reads tail=4 at the d1 and d2 passes -- the GREEDY tail finds the kill -- and tail=5 at the d3 pass, whose searched T4 ply cannot reach it, so the arm commits `{Crag} -> {Hierarch, Fists} -> {Anger, Heroism, Mystic}` and wins T5. The Anger breakpoint's continuation list is IDENTICAL on both arms (10 entries, 7 kept; `{Oracle's}` alone is kept rank 6, past W=2 and past the chain slot, which resolves to `{Fists, Mystic}`), and the line then needs a nested Gold Rush pass and a post-mint pass. The winning leaf returns before any node print, so the route flag-off's ply takes to rank 6 was not read directly. Single-flag probes on the fix-11 binary: `MINT_CREDIT_EXACT=0` alone -> T4; `BP_NEW_ONLY=0`, `BP_REPLAY_COST=0`, `MTG_BP_MINT_SITE=1` (the audit route: post-mint site re-opened -- so the closed site is NOT the whole story), `MTG_ORDER_OPAQUE=1`, `MTG_BP_NESTED_CANON_PLAYOUT=1`, `MTG_BP_DEPTH=2`, `MTG_BP_SEARCH=4` -> all T5 | none yet. Next step when picked up: a per-gate mask over the credit's fourteen `MintCreditExactOn()` readers (one build, fifteen runs of `logs/snowdiag/envpair.sh`) to name the gate the d3 ply loses the rank-6 route through; then decide whether it is the odometer credit, the fresh-hold clause or the ladder. Time-boxed out (the shipped depth is unaffected) |
 
 ### Measured (Mirrorwing, shipped d5/b20, paired: 4 x 500 games 20-life + 2 x 500 2HG)
 
@@ -583,6 +593,23 @@ The evidence, all on one binary against its own flag-off:
 * Snow's own record above (-0.0070 at d5/b20, 0.45x-0.93x units) stands; its eight keys move
   digest-only at identical scores under the global flip.
 
+The accepted build (fix 11 included, rebased onto the wave fix, 2026-09-22 v26), one binary
+against its own flag-off, flag-off identical to origin's rebaselined GT on every key but the
+Snow / FiveColour keys the earlier flag-off filter-slot fix moved:
+
+* Smoke tier: 7 keys better, 1 worse (hinata d3 +0.0067: seed 1060, the tie-break artifact
+  below), 9 digest-only, game-weighted -0.0040 at 0.75x summed case time. Mirrorwing 2HG d3
+  4.70 -> 4.64 (seed 1012 back to T4 -- gap 11 closed).
+* Regression tier: 9 better, 5 worse, 21 digest-only, game-weighted -0.0015 at 0.73x. The five
+  worse keys hold the same movers as before fix 11: hinata d3 s2002 / s3003 and hinata 2HG d3
+  (seed 2068 tie-break artifact, seven draw-divergent games), creature_giving d5 x2 (two
+  draw-divergent games). Mirrorwing d3 s3003 is BETTER (4.15 -> 4.125) and still holds seed 3064
+  (gap 12, open) and the two batch-only movers (seeds 2156 and 3037: T4 standalone on the same
+  binary, a turn later only inside the pooled tier -- the cross-game memo effect recorded below).
+* Mirrorwing paired 3,000 at shipped d5/b20: -0.0450 +/- 0.0049 (88 / 1) 20-life, -0.0650 +/-
+  0.0084 (70 / 5) 2HG at 0.80x / 0.79x units; the lean-vs-audit arms flat (5 / 3 and 2 / 3
+  moved). Seed 3100 T4 standalone.
+
 The regression tier's four worse keys were root-caused before the accept. hinata d3 s2002 gi66
 (seed 2068, and its 2HG twin) has two parts. The by-name arrival rule read a second drawn Reality
 Spasm as old when the main-2 kill `{Spasm, Spasm, Crackle}` needed both copies (the staged copy
@@ -607,7 +634,11 @@ The audit also surfaced lockstep #8 (`rollout-executor-lockstep.md`): the replay
 covered one nesting level of the record where the rollout's covered the whole planned continuation
 -- Mirrorwing seed 3100's committed T4 kill realised nothing -- fixed alongside.
 
-Still open, recorded here rather than chased: 700215 (the fan-out cap, above), the equal-projection
+Still open, recorded here rather than chased: gap 12 (Mirrorwing seed 3064, d3-only: the credit
+arm's searched depth-3 ply cannot reach a rank-6 continuation the greedy tail and flag-off's ply
+both find; shipped d5 unaffected), the non-hoisted minter's slot in `ord` (a minter that is not
+hoisted is paid by the per-cast payer under the same depletion hold that stranded 1012 -- no prefix
+prepay covers it), 700215 (the fan-out cap, above), the equal-projection
 tie-break (hinata 2068 above: flag-off "does more" through the chain slot's greedy where the
 search cannot tell, the arm "does less" because the first-ordered plan wins a tied tail -- a
 general search change with its own measurement, and Soulfire Eruption's plan value of 0 is the

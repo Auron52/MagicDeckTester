@@ -373,6 +373,11 @@ struct Action
                                        // ...and the minting cast targets a SAME-PLAN hand magnet
                                        // (cast before it), so its mint is spendable this turn even
                                        // though no magnet is on the battlefield yet.
+    bool        mint_magnet      = false;
+                                       // ...and the minting cast's target is a copy magnet at all
+                                       // (battlefield or same-plan hand: SoloTrickTargetIsMagnet),
+                                       // so a same-plan Heroism's bodies are fanned onto -- the
+                                       // SamePlanHeroismMint width. Stamped beside mint_gain.
     int         crackle_targets  = -1;
                                        // Crackle with Power (scale_x Hinata discount): searched COUNT
                                        // of extra beneficial targets BEYOND the opponent face
@@ -1366,7 +1371,26 @@ public:
     // the caller falls back to per-cast greedy -- byte-identical to the pre-batch behaviour.
     // Called identically by the rollout (ApplyPlanDirect) and the executor (AIEngine::TakeTurn)
     // so the two stay in lockstep. Off-switch: MTG_NO_BATCH_PAY.
-    static bool BatchPrepayMainCasts(GameState& state, const std::vector<Action>& acts);
+    // `mint_prefix`: the bill is a hoisted-minter line's BASE-POOL PREFIX (BatchPrepayMintPrefix
+    // below), which no later Treasure can meet -- the mint-line hold decline does not apply to it.
+    static bool BatchPrepayMainCasts(GameState& state, const std::vector<Action>& acts,
+                                     bool mint_prefix = false);
+    // MTG_MINT_CREDIT_EXACT -- the base pool's share of a HOISTED-MINTER line, paid jointly. The
+    // whole-turn prepay above cannot pay a line the mint funds (its bill exceeds the board by
+    // construction), so every such line fell to the per-cast greedy, whose "leave out if you can"
+    // holds are judged one cast at a time: Mirrorwing 2HG seed 1012 T4, {Heroism, Gold Rush@Dragon,
+    // Hierarch, Fists} on Needle + Needle + Forest -- Heroism paid with one Needle and the FOREST
+    // (holding the other Needle's counter), so the Rush's {G} was stranded, nothing minted, and the
+    // T4 kill the credit had priced was unreachable at any budget. The credit's own model (the base
+    // pool pays the hoist up to and including the first minter, the Treasures pay the rest --
+    // PlaceHoistedMinters / MintHoistPrefixHeroism) names the joint bill: `ena` (the hoist, already
+    // placed) up to and including its first minter. Paid through BatchPrepayMainCasts in
+    // mint_prefix mode with that sub-list: same decline rules, same hold ladder, and the plain
+    // unrestricted solve where every hold fails (the prefix has no Treasure to meet). Shared by
+    // ApplyPlanDirect and AIEngine::TakeTurn (lockstep). Only reached when the minter is hoisted
+    // (MintHoistAfterMagnets) -> nothing changes with the lever off.
+    static bool BatchPrepayMintPrefix(GameState& state, const std::vector<Action>& acts,
+                                      const std::vector<int>& ena);
 
     // PlanTraits builder (docs/design/mana-order-and-reserve-overhaul.md layer 3): distil what the
     // plan DOES (own-creature pump + its projected target, copy magnet, scaler food, phase, attack

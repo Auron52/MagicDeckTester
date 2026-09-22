@@ -14910,6 +14910,7 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
                 {
                     a.mint_gain = MintedTreasuresForCast(state, state.active_player_index, def,
                                                          tgt_num, strive_k);
+                    a.mint_magnet = SoloTrickTargetIsMagnet(state, state.active_player_index, tgt_num);
                     if (!hand_name.empty())
                     {
                         const CardDefinition* hd = CardDatabase::Instance().Lookup(hand_name);
@@ -19835,23 +19836,31 @@ static int LandAuraBoundCredit(const Action& a)
 // is the loosest bound, which is what the odometer gates want (an upper bound can only admit more
 // subsets to consider(), where the pricing twins credit only the Heroisms the SUBSET casts and
 // only when the minter is not itself hoisted ahead of them). Zero for every deck without one.
-static int PlanHeroismCopies(const std::vector<Action>& cands)
+// `bodies` (optional out): the ETB bodies those same Heroisms put on the board
+// (etb_self_creates_tokens) -- fanned onto by a magnet target (SamePlanHeroismMint).
+static int PlanHeroismCopies(const std::vector<Action>& cands, int* bodies = nullptr)
 {
-    int n = 0;
+    int n = 0, b = 0;
     for (const Action& a : cands)
     {
         if (a.kind != Action::Kind::CastFromHand || a.alt_cost) { continue; }
         const CardDefinition* d = a.def ? a.def : CardDatabase::Instance().Lookup(a.card_name);
-        if (d != nullptr && d->params.frontline_copy_tokens > 0) { n += d->params.frontline_copy_tokens; }
+        if (d != nullptr && d->params.frontline_copy_tokens > 0)
+        {
+            n += d->params.frontline_copy_tokens;
+            b += d->params.etb_self_creates_tokens;
+        }
     }
+    if (bodies != nullptr) { *bodies = b; }
     return n;
 }
-static int MintHeroismBonus(const Action& a, int heroism_copies)
+static int MintHeroismBonus(const Action& a, int heroism_copies, int heroism_bodies)
 {
     if (a.mint_gain <= 0 || heroism_copies <= 0) { return 0; }   // 0 with the lever off
     const CardDefinition* d = a.def ? a.def : CardDatabase::Instance().Lookup(a.card_name);
     if (d == nullptr) { return 0; }
-    return SamePlanHeroismMint(*d, a.enchant_target, a.soulfire_own_targets, heroism_copies);
+    return SamePlanHeroismMint(*d, a.enchant_target, a.soulfire_own_targets, heroism_copies,
+                               a.mint_magnet, heroism_bodies);
 }
 
 // `extra_credit` = same-turn mana the bound cannot derive from `cands` alone. Today that is only
@@ -19898,7 +19907,7 @@ static int ManaPruneBound(const ManaPool& pool, const std::vector<Action>& cands
       { return std::numeric_limits<int>::max(); } }
     long long b = pool.Total() + extra_credit;
     int gy = 0;
-    int hero = -1;   // MTG_MINT_CREDIT_EXACT: same-plan Heroism copies, counted once, only if a minter is present
+    int hero = -1, hero_bodies = 0;   // MTG_MINT_CREDIT_EXACT: same-plan Heroism copies / bodies, counted once, only if a minter is present
     for (const Action& a : cands)
     {
         b += a.ritual_float;
@@ -19906,8 +19915,8 @@ static int ManaPruneBound(const ManaPool& pool, const std::vector<Action>& cands
         b += a.mint_gain;                         // MTG_MINT_CREDIT_EXACT: the minted Treasures (0 off)
         if (a.mint_gain > 0)
         {
-            if (hero < 0) { hero = PlanHeroismCopies(cands); }
-            b += MintHeroismBonus(a, hero);       // ...and the same-plan Heroism copies' Treasures
+            if (hero < 0) { hero = PlanHeroismCopies(cands, &hero_bodies); }
+            b += MintHeroismBonus(a, hero, hero_bodies);   // ...and the same-plan Heroism copies' Treasures
         }
         b += EtbUntapBoundCredit(etb_state, a);   // ETB "untap up to N lands" -- see above
         b += LandAuraBoundCredit(a);              // "enchanted land taps for an additional {G}"
@@ -20043,13 +20052,13 @@ static bool BuildManaGateIndex(const ManaPool& pool, const std::vector<Action>& 
 
     const int m = static_cast<int>(cands.size());
     out.term.assign(m, ManaGateTerm{});
-    int hero = -1;   // MTG_MINT_CREDIT_EXACT: same-plan Heroism copies (PlanHeroismCopies), lazily
+    int hero = -1, hero_bodies = 0;   // MTG_MINT_CREDIT_EXACT: same-plan Heroism copies / bodies (PlanHeroismCopies), lazily
     for (int j = 0; j < m; ++j)
     {
         const Action& a = cands[j];
         ManaGateTerm& t = out.term[j];
         t.cost = a.cost.ManaValue();
-        if (a.mint_gain > 0 && hero < 0) { hero = PlanHeroismCopies(cands); }
+        if (a.mint_gain > 0 && hero < 0) { hero = PlanHeroismCopies(cands, &hero_bodies); }
         // The land-Aura term has to be here AS WELL AS in ManaPruneBound, and that duplication is
         // the whole lesson of this bug: the SELECTION-EXACT gate is default ON and supersedes the
         // scalar bound at the odometer, so crediting only the scalar left the credit dead. The
@@ -20059,7 +20068,7 @@ static bool BuildManaGateIndex(const ManaPool& pool, const std::vector<Action>& 
         // ...and the minted-Treasure term (MTG_MINT_CREDIT_EXACT), for the SAME reason: the
         // shipped consider() mint credit had no term in either bound, so the subset it exists to
         // admit ({Gold Rush, Fists} = 4 on a 3-mana pool) died at the odometer unpriced.
-        t.gain = a.ritual_float + a.rock_mana.Total() + a.mint_gain + MintHeroismBonus(a, hero)
+        t.gain = a.ritual_float + a.rock_mana.Total() + a.mint_gain + MintHeroismBonus(a, hero, hero_bodies)
                + EtbUntapBoundCredit(etb_state, a) + LandAuraBoundCredit(a);
         t.gy   = (a.def && a.def->params.ritual_float_gy_self_bonus) ? 1 : 0;
         t.block = ((a.def && (a.def->params.affinity_for_subtype
@@ -21826,17 +21835,15 @@ TurnSolver::Plan TurnSolver::SolveUncached(const GameState& state, bool is_pre_c
             if (mint_exact && sel_mint)
             {
                 mint_costs = first_mint;
-                ManaCost hoisted_all = first_mint;   // EVERY hoisted cast + the first minter
                 int hero_sel = 0;
+                std::vector<int> hoisted_idx;        // the subset's hoisted casts (enablers)
                 if (!mint_hoisted.empty())
                 {
                     for (int j : sel)
                     {
                         if (!mint_hoisted[j] || !cands[j].def) { continue; }
+                        hoisted_idx.push_back(j);
                         const ManaCost& hc = cands[j].cost;
-                        hoisted_all.white += hc.white; hoisted_all.blue  += hc.blue;  hoisted_all.black += hc.black;
-                        hoisted_all.red   += hc.red;   hoisted_all.green += hc.green;
-                        hoisted_all.colorless += hc.colorless; hoisted_all.generic += hc.generic;
                         if (cands[j].def->params.frontline_copy_tokens > 0
                             && cands[j].kind == Action::Kind::CastFromHand && !cands[j].alt_cost)
                         { hero_sel += cands[j].def->params.frontline_copy_tokens; }
@@ -21846,18 +21853,22 @@ TurnSolver::Plan TurnSolver::SolveUncached(const GameState& state, bool is_pre_c
                         mint_costs.colorless += hc.colorless; mint_costs.generic += hc.generic;
                     }
                 }
-                // SAME-PLAN HEROISM WIDTH (SamePlanHeroismMint; mirrorwing seed 701403 T3). The
-                // subset's Heroisms resolve BEFORE the minter exactly when the apply keeps the
-                // reviewed order -- MintHoistAfterMagnets does whenever the base pool pays every
-                // hoisted cast plus the first minter (hoisted_all), and the enabler pass then casts
-                // Heroism ahead of the ordered set. Under the hoist the minter precedes it
-                // (HoistSortKey 11 < 12) and copies nothing, so nothing is credited there.
-                if (hero_sel > 0 && pool.CanPay(hoisted_all))
+                // SAME-PLAN HEROISM WIDTH (SamePlanHeroismMint; mirrorwing seed 701403 T3). Only
+                // the Heroisms that RESOLVE BEFORE the minter copy it: the whole hoist when the
+                // apply keeps the reviewed order (the base pool pays every hoisted cast plus the
+                // first minter), else the prefix PlaceHoistedMinters lets the minter wait for
+                // (MintHoistPrefixHeroism -- the same walk, so the credit and the realisation
+                // agree; mirrorwing 2HG seed 1012 T4 was credited at two where the apply's own
+                // order could mint four).
+                int hero_pre = 0, hero_pre_bodies = 0;
+                if (hero_sel > 0
+                    && MintHoistPrefixHeroism(state, cands, hoisted_idx, first_mint, pool, hero_pre, hero_pre_bodies)
+                    && hero_pre > 0)
                 {
                     for (int j : sel)
                     {
                         if (mint_hoisted[j]) { continue; }   // a hoisted minter precedes the Heroisms
-                        const int bonus = MintHeroismBonus(cands[j], hero_sel);
+                        const int bonus = MintHeroismBonus(cands[j], hero_pre, hero_pre_bodies);
                         if (bonus > 0) { minted += bonus; hero_credit = true; }
                     }
                 }
@@ -23541,7 +23552,22 @@ PlanTraits TurnSolver::ComputePlanTraits(const GameState& state, const std::vect
     return t;
 }
 
-bool TurnSolver::BatchPrepayMainCasts(GameState& state, const std::vector<Action>& acts)
+bool TurnSolver::BatchPrepayMintPrefix(GameState& state, const std::vector<Action>& acts,
+                                       const std::vector<int>& ena)
+{
+    std::vector<Action> prefix;
+    bool has_minter = false;
+    for (int i : ena)
+    {
+        prefix.push_back(acts[i]);
+        if (HoistedMinterCast(acts[i])) { has_minter = true; break; }
+    }
+    if (!has_minter) { return false; }
+    return BatchPrepayMainCasts(state, prefix, /*mint_prefix=*/true);
+}
+
+bool TurnSolver::BatchPrepayMainCasts(GameState& state, const std::vector<Action>& acts,
+                                      bool mint_prefix)
 {
     static const bool s_enabled = !EnvOn("MTG_NO_BATCH_PAY");
     if (!s_enabled) { return false; }
@@ -23950,7 +23976,10 @@ bool TurnSolver::BatchPrepayMainCasts(GameState& state, const std::vector<Action
     // (a declined prepay routes to the per-cast fallback every declined turn already takes), shared
     // by both apply worlds -> lockstep. Only when a hold EXISTED and failed: nothing reservable
     // means nothing the joint solve could strand, so it keeps its anti-stranding pinning.
-    if (!ok && n_rungs > 0 && MintLineCanCrack(state, acts))
+    // A hoisted-minter line's BASE-POOL PREFIX (mint_prefix, BatchPrepayMintPrefix) is exactly the
+    // bill no later Treasure can meet, so the decline's premise does not hold for it: fall through
+    // to the unrestricted solve like any other line whose every hold failed.
+    if (!ok && n_rungs > 0 && !mint_prefix && MintLineCanCrack(state, acts))
     {
         return Pp(PP_MINT_HOLD);   // the failed rung already restored the state
     }
@@ -27619,8 +27648,40 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
                     return ResolveProvider(state).CastOrderRank(state, *dx)
                          < ResolveProvider(state).CastOrderRank(state, *dy);
                 });
+                // ...and the hoisted minter waits for every body the base pool still pays before
+                // it (PlaceHoistedMinters; executor twin in TakeTurn -- lockstep).
+                if (mint_hoist) { PlaceHoistedMinters(state, acts, ena); }
+                // ...and the base pool's share of the line -- the hoist up to and including that
+                // minter -- is paid JOINTLY (BatchPrepayMintPrefix; executor twin in TakeTurn --
+                // lockstep): the whole-turn prepay above could not pay a mint-funded line, and the
+                // per-cast greedy's one-cast-at-a-time holds strand the minter's colour.
+                if (mint_hoist) { TurnSolver::BatchPrepayMintPrefix(state, acts, ena); }
+                // MTG_DBG_MULTI=<turn>: the realised order of this opaque set and each cast's
+                // outcome (left_in_hand=1 -> the cast did not happen), diagnostic only.
+                static const int s_dbg_apply = EnvInt("MTG_DBG_MULTI", 0);
+                const bool dbg_apply = s_dbg_apply != 0 && s_dbg_apply == state.turn_number;
+                auto dbg_cast = [&](const char* slot, const Action& a)
+                {
+                    if (!dbg_apply) { return; }
+                    int in_hand = 0;
+                    for (const Card& c : ap.hand) { if (c.m_name == a.card_name) { ++in_hand; } }
+                    const ManaPool now = AvailableManaPool(state);
+                    std::fprintf(stderr, "[dbgapply] t%d %s %s left_in_hand=%d pool_after=%d(r%d g%d w%d)\n",
+                                 state.turn_number, slot, a.card_name.c_str(), in_hand,
+                                 now.Total(), now.red, now.green, now.wild);
+                };
+                if (dbg_apply)
+                {
+                    std::string s;
+                    for (int i : ena) { s += acts[i].card_name; s += ","; }
+                    const ManaPool now = AvailableManaPool(state);
+                    std::fprintf(stderr, "[dbgapply] t%d hoist=%d ena=[%s] land=%s pool=%d(r%d g%d w%d)\n",
+                                 state.turn_number, mint_hoist ? 1 : 0, s.c_str(),
+                                 plan.land_decided ? plan.land_to_play.c_str() : "-",
+                                 now.Total(), now.red, now.green, now.wild);
+                }
                 for (int i : ena)
-                { const Action& a = acts[i]; prep_free(a); cast_loyalty_ability = a.loyalty_ability; cast_devour_count = a.devour_count; apply_one(a.card_name, false, false, 0, a.alt_cost, a.alt_lifegain, a.tutor_target, a.chosen_x, a.soulfire_own_targets, a.ponder_keep, a.crackle_targets, a.splice_count, a.chosen_float_color, a.enchant_target, a.bestow, a.replicate_count, a.convoke_green, a.convoke_other, a.phyrexian_life, a.evoke); fire_unlock(); }
+                { const Action& a = acts[i]; prep_free(a); cast_loyalty_ability = a.loyalty_ability; cast_devour_count = a.devour_count; apply_one(a.card_name, false, false, 0, a.alt_cost, a.alt_lifegain, a.tutor_target, a.chosen_x, a.soulfire_own_targets, a.ponder_keep, a.crackle_targets, a.splice_count, a.chosen_float_color, a.enchant_target, a.bestow, a.replicate_count, a.convoke_green, a.convoke_other, a.phyrexian_life, a.evoke); fire_unlock(); dbg_cast("ena", a); }
                 // Spectacle hoist: a sac-land damage source (Shard Volley) is otherwise cast in the
                 // trailing sac loop -- AFTER the non-sac Spectacle spell (Light Up), leaving
                 // Spectacle un-triggered and Light Up paying full cost. When the set holds a
@@ -27673,6 +27734,7 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
                     const Action& a = acts[i];
                     if (is_ordered_garth(a)) { apply_garth(a); continue; }
                     prep_free(a); cast_loyalty_ability = a.loyalty_ability; cast_devour_count = a.devour_count; apply_one(a.card_name, false, false, 0, a.alt_cost, a.alt_lifegain, a.tutor_target, a.chosen_x, a.soulfire_own_targets, a.ponder_keep, a.crackle_targets, a.splice_count, a.chosen_float_color, a.enchant_target, a.bestow, a.replicate_count, a.convoke_green, a.convoke_other, a.phyrexian_life, a.evoke); fire_unlock();
+                    dbg_cast("ord", a);
                 }
             }
             else
@@ -31453,17 +31515,15 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
             if (mint_exact && sel_mint)
             {
                 mint_costs = first_mint;
-                ManaCost hoisted_all = first_mint;
                 int hero_sel = 0;
+                std::vector<int> hoisted_idx;
                 if (!mint_hoisted.empty())
                 {
                     for (int j : sel)
                     {
                         if (!mint_hoisted[j] || !cands[j].def) { continue; }
+                        hoisted_idx.push_back(j);
                         const ManaCost& hc = cands[j].cost;
-                        hoisted_all.white += hc.white; hoisted_all.blue  += hc.blue;  hoisted_all.black += hc.black;
-                        hoisted_all.red   += hc.red;   hoisted_all.green += hc.green;
-                        hoisted_all.colorless += hc.colorless; hoisted_all.generic += hc.generic;
                         if (cands[j].def->params.frontline_copy_tokens > 0
                             && cands[j].kind == Action::Kind::CastFromHand && !cands[j].alt_cost)
                         { hero_sel += cands[j].def->params.frontline_copy_tokens; }
@@ -31473,13 +31533,36 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
                         mint_costs.colorless += hc.colorless; mint_costs.generic += hc.generic;
                     }
                 }
-                if (hero_sel > 0 && pool.CanPay(hoisted_all))
+                // Lockstep twin of Solve's Heroism-width credit (see the note there).
+                int hero_pre = 0, hero_pre_bodies = 0;
+                if (hero_sel > 0
+                    && MintHoistPrefixHeroism(state, cands, hoisted_idx, first_mint, pool, hero_pre, hero_pre_bodies)
+                    && hero_pre > 0)
                 {
                     for (int j : sel)
                     {
                         if (mint_hoisted[j]) { continue; }
-                        const int bonus = MintHeroismBonus(cands[j], hero_sel);
+                        const int bonus = MintHeroismBonus(cands[j], hero_pre, hero_pre_bodies);
                         if (bonus > 0) { minted += bonus; hero_credit = true; }
+                    }
+                }
+                // MTG_DBG_MULTI=<turn>: the mint credit's inputs for this subset (diagnostic only).
+                {
+                    static const int s_dbg_mint = EnvInt("MTG_DBG_MULTI", 0);
+                    if (s_dbg_mint > 0 && state.turn_number == s_dbg_mint && sel.size() >= 3)
+                    {
+                        std::string ms;
+                        for (int j : sel)
+                        {
+                            if (cands[j].mint_gain <= 0) { continue; }
+                            ms += cands[j].card_name.str() + "#" + std::to_string(cands[j].enchant_target)
+                                + "(gain=" + std::to_string(cands[j].mint_gain)
+                                + " magnet=" + std::to_string(cands[j].mint_magnet ? 1 : 0)
+                                + " hoisted=" + std::to_string(mint_hoisted.empty() ? -1 : (int)mint_hoisted[j]) + ") ";
+                        }
+                        std::fprintf(stderr, "[dbgmint] t%d n=%zu minted=%d hero_sel=%d hero_pre=%d bodies=%d hero_credit=%d %s\n",
+                                     state.turn_number, sel.size(), minted, hero_sel, hero_pre, hero_pre_bodies,
+                                     (int)hero_credit, ms.c_str());
                     }
                 }
             }

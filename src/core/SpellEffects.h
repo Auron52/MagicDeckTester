@@ -18070,34 +18070,37 @@ inline bool PaySacSpendableNow(const GameState& state, const Permanent& p, const
 // EXACT for the current board; CONSERVATIVE about bodies the same plan puts down before the trick
 // (a creature cast earlier in the plan widens the fan and is not counted) -- the safe direction
 // for a credit, and the same conservatism the shipped one-per-cast credit already accepted.
+// Is the trick's own target a COPY MAGNET (Mirrorwing Dragon, Zada)? `target_number` on the
+// battlefield, else a same-plan HAND creature cast before the trick (a magnet iff the card is one);
+// false for a target this board does not hold (the cast-time best-attacker sentinel included -- its
+// fan is resolved at cast time, so it is credited at the base width: the safe direction).
+inline bool SoloTrickTargetIsMagnet(const GameState& state, int controller, int target_number)
+{
+    const CardDatabase& db = CardDatabase::Instance();
+    for (const Permanent& p : state.battlefield)
+    {
+        if (p.controller_index != controller || p.card.m_number != target_number) { continue; }
+        if (!p.card.IsCreature() && !p.is_animated) { continue; }
+        const CardDefinition* td = db.LookupCached(p.card);
+        return td != nullptr && td->params.copies_solo_targeted_spells;
+    }
+    for (const Card& c : state.players[controller].hand)
+    {
+        if (c.m_number != target_number) { continue; }
+        const CardDefinition* td = db.LookupCached(c);
+        return td != nullptr && td->params.copies_solo_targeted_spells;
+    }
+    return false;
+}
+
 inline int SoloTrickInstances(const GameState& state, int controller, const CardDefinition& def,
                               int target_number, int strive_extras)
 {
     if (!def.params.solo_target_trick) { return 1; }
     if (target_number == 0 || target_number == kTrickOpponentTarget) { return 1; }
     if (strive_extras > 0) { return 1 + strive_extras; }
-    const CardDatabase& db = CardDatabase::Instance();
-    bool magnet = false, found = false;
-    for (const Permanent& p : state.battlefield)
-    {
-        if (p.controller_index != controller || p.card.m_number != target_number) { continue; }
-        if (!p.card.IsCreature() && !p.is_animated) { continue; }
-        const CardDefinition* td = db.LookupCached(p.card);
-        magnet = td != nullptr && td->params.copies_solo_targeted_spells;
-        found  = true;
-        break;
-    }
-    if (!found)   // a same-plan HAND creature: a magnet iff the card is one
-    {
-        for (const Card& c : state.players[controller].hand)
-        {
-            if (c.m_number != target_number) { continue; }
-            const CardDefinition* td = db.LookupCached(c);
-            magnet = td != nullptr && td->params.copies_solo_targeted_spells;
-            break;
-        }
-    }
-    const int soldiers = HeroismCopiesLive(state, controller);
+    const bool magnet   = SoloTrickTargetIsMagnet(state, controller, target_number);
+    const int  soldiers = HeroismCopiesLive(state, controller);
     int n = 1 + soldiers;
     if (magnet)
     {
@@ -18128,13 +18131,31 @@ inline int MintedTreasuresForCast(const GameState& state, int controller, const 
 // creates_treasures x copies. Mirrorwing seed 701403 T3: {Heroism, Gold Rush, Draught, Draught} is
 // seven pips on five board mana plus TWO minted Treasures; credited at one, the kill was never
 // enumerated.
+//
+// UNDER A COPY MAGNET the same Heroism is worth THREE instances, not one (2026-09-22, mirrorwing
+// 2HG seed 1012 T4, smoke d3 gi11): the magnet copies the spell for each OTHER body, and a same-plan
+// Heroism puts two of them there before the magnet's scan -- its ETB Soldier (`heroism_bodies`,
+// etb_self_creates_tokens) and, when its trigger is taken first (MTG_FRONTLINE_FIRST, the apply's
+// default), the Soldier its trigger makes. So {Heroism, Gold Rush@Dragon} on an otherwise empty
+// board mints FOUR (the original, Heroism's copy, the Dragon's copies onto both Soldiers) -- which
+// is what the apply minted and what {Hierarch, Fists} off the Treasures needed; credited at two, the
+// four-cast T4 kill was never enumerated, and with the Treasure-only breakpoint closed by the mint
+// credit's own rule it was unreachable at any budget. SoloTrickInstances counts the LIVE Heroism's
+// ETB body as an "other creature" and its trigger Soldier under the same MTG_FRONTLINE_FIRST clause;
+// this is that arithmetic for the Heroism the plan itself casts first.
 inline int SamePlanHeroismMint(const CardDefinition& def, int target_number, int strive_extras,
-                               int heroism_copies)
+                               int heroism_copies, bool magnet_target, int heroism_bodies)
 {
     if (heroism_copies <= 0 || def.params.creates_treasures <= 0
         || !def.params.solo_target_trick) { return 0; }
     if (target_number == 0 || target_number == kTrickOpponentTarget || strive_extras > 0) { return 0; }
-    return def.params.creates_treasures * heroism_copies;
+    int instances = heroism_copies;                                   // the trigger's own copy
+    if (magnet_target)
+    {
+        instances += heroism_bodies;                                  // the ETB body, fanned onto
+        if (FrontlineTriggerFirst()) { instances += heroism_copies; } // the trigger's token, fanned onto
+    }
+    return def.params.creates_treasures * instances;
 }
 
 // Is a Treasure minted THIS TURN spendable this turn on the current board? The enumeration-side

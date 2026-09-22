@@ -132,6 +132,38 @@ bool MintHoistAfterMagnets(const GameState& state, const std::vector<Action>& ac
 // The hoist's sort key under that rule: a hoisted minter sits between the magnets (5) and every
 // other enabler. rank*2 for enablers, 11 for the minter (magnets 10, Heroism 12, creatures 20 ...).
 int  HoistSortKey(const GameState& state, const Action& a, bool minter_hoisted);
+// MTG_MINT_CREDIT_EXACT -- WHERE A HOISTED MINTER GOES (2026-09-22). MintHoistAfterMagnets says
+// whether the minter joins the hoist; this says where. "Right after the magnets" (HoistSortKey 11)
+// was the EARLIEST legal slot, and it threw away every body the base pool could still have put
+// down before the fan-out -- Frontline Heroism above all, whose Soldiers are copies AND Treasures
+// under a magnet. Mirrorwing 2HG seed 1012 T4 (smoke d3 gi11): {Heroism, Gold Rush@Dragon,
+// Hierarch, Fists} on five mana is Heroism, then Gold Rush minting FOUR, then Hierarch + Fists off
+// three of them; hoisted to 11 the Rush preceded the Heroism, minted one, and once the mint credit
+// had closed the Treasure breakpoint the T4 kill was unreachable at any budget. USER 2026-08-18:
+// the minter "should go after the Magnets at the earliest, but preferably you would be able to
+// wait" -- so it waits for the LONGEST PREFIX of the hoist (HoistSortKey order, magnets first) the
+// base pool pays together with the minter itself, and stands down only before the enabler that
+// would make it unpayable; that enabler is then funded by the mint, after it. `ena` = the hoist
+// (indices into `acts`) already sorted by HoistSortKey(.., true); rewritten in place. A second
+// minter walks the same prefix with the first already in it (its own mint is not credited to the
+// prefix: the safe direction). Shared by ApplyPlanDirect and AIEngine::TakeTurn (lockstep); the
+// enumerator's Heroism credit reads the same prefix (MintHoistPrefixHeroism). No-op without a
+// hoisted minter -> byte-identical with the lever off.
+void PlaceHoistedMinters(const GameState& state, const std::vector<Action>& acts, std::vector<int>& ena);
+// The hoist's minter test (a paid, non-alternate hand cast whose card creates Treasures) -- the
+// predicate PlaceHoistedMinters splits on, exported for the base-pool prefix prepay
+// (TurnSolver::BatchPrepayMintPrefix) so both read the same set.
+bool HoistedMinterCast(const Action& a);
+// The pricing twins' read of PlaceHoistedMinters: of the subset's hoisted casts (`hoisted` =
+// indices into `cands`, any order), which Frontline Heroisms PRECEDE the first minter. Every one
+// of them when the base pool pays all of them plus the minter (the reviewed order: the minter sits
+// in the late slot after the whole hoist), else those in the longest HoistSortKey-ordered prefix
+// the pool pays with the minter. Out: their copy count (frontline_copy_tokens) and ETB bodies
+// (etb_self_creates_tokens). Returns false when not even the magnets plus the minter are payable
+// (the hoist would not fire and the late slot cannot pay either: nothing precedes, no credit).
+bool MintHoistPrefixHeroism(const GameState& state, const std::vector<Action>& cands,
+                            const std::vector<int>& hoisted, const ManaCost& first_mint,
+                            const ManaPool& pool, int& copies, int& bodies);
 // MTG_MINT_CREDIT_EXACT -- does this plan mint Treasures its own later casts can CRACK this turn?
 // True when some cast carries a stamped mint (Action::mint_gain > 0) and the minted Treasures are
 // same-turn mana under the fresh-hold doctrine (a magnet or Heroism live, a magnet in the plan, or

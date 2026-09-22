@@ -1763,6 +1763,91 @@ int HoistSortKey(const GameState& state, const Action& a, bool minter_hoisted)
     return ResolveProvider(state).CastOrderRank(state, *d) * 2;
 }
 
+bool HoistedMinterCast(const Action& a)
+{
+    if (a.kind != Action::Kind::CastFromHand || a.alt_cost || a.free_cast) { return false; }
+    const CardDefinition* d = a.def ? a.def : CardDatabase::Instance().Lookup(a.card_name);
+    return d != nullptr && d->params.creates_treasures > 0;
+}
+
+namespace
+{
+bool CopyMagnetDef(const Action& a)
+{
+    const CardDefinition* d = a.def ? a.def : CardDatabase::Instance().Lookup(a.card_name);
+    return d != nullptr && d->params.copies_solo_targeted_spells;
+}
+}
+
+void PlaceHoistedMinters(const GameState& state, const std::vector<Action>& acts, std::vector<int>& ena)
+{
+    std::vector<int> minters, rest;
+    for (int i : ena) { (HoistedMinterCast(acts[i]) ? minters : rest).push_back(i); }
+    if (minters.empty()) { return; }
+    const ManaPool pool = AvailableManaPool(state);
+    for (int m : minters)
+    {
+        // The magnets always precede (the earliest slot the user allowed); the walk starts after
+        // them and stops at the first enabler the pool cannot pay together with the minter --
+        // CanPay is monotone in the prefix, so the first failure is the last position.
+        std::size_t lead = 0;
+        ManaCost acc;
+        while (lead < rest.size() && CopyMagnetDef(acts[rest[lead]]))
+        { acc = AddManaCosts(acc, acts[rest[lead]].cost); ++lead; }
+        std::size_t at = lead;
+        for (std::size_t p = lead; p < rest.size(); ++p)
+        {
+            const ManaCost next = AddManaCosts(acc, acts[rest[p]].cost);
+            if (!pool.CanPay(AddManaCosts(next, acts[m].cost))) { break; }
+            acc = next;
+            at  = p + 1;
+        }
+        rest.insert(rest.begin() + static_cast<std::ptrdiff_t>(at), m);
+    }
+    ena = rest;
+}
+
+bool MintHoistPrefixHeroism(const GameState& state, const std::vector<Action>& cands,
+                            const std::vector<int>& hoisted, const ManaCost& first_mint,
+                            const ManaPool& pool, int& copies, int& bodies)
+{
+    copies = 0; bodies = 0;
+    auto count = [&](int j)
+    {
+        const Action& a = cands[j];
+        if (a.kind != Action::Kind::CastFromHand || a.alt_cost) { return; }
+        const CardDefinition* d = a.def ? a.def : CardDatabase::Instance().Lookup(a.card_name);
+        if (d == nullptr || d->params.frontline_copy_tokens <= 0) { return; }
+        copies += d->params.frontline_copy_tokens;
+        bodies += d->params.etb_self_creates_tokens;
+    };
+    ManaCost all = first_mint, magnets = first_mint;
+    for (int j : hoisted)
+    {
+        all = AddManaCosts(all, cands[j].cost);
+        if (CopyMagnetDef(cands[j])) { magnets = AddManaCosts(magnets, cands[j].cost); }
+    }
+    if (pool.CanPay(all))                        // the reviewed order: the whole hoist precedes
+    {
+        for (int j : hoisted) { count(j); }
+        return true;
+    }
+    if (!pool.CanPay(magnets)) { return false; }   // the hoist cannot fire and the late slot cannot pay
+    std::vector<int> order = hoisted;             // the apply's hoist order (stable on equal keys)
+    std::stable_sort(order.begin(), order.end(), [&](int x, int y)
+    { return HoistSortKey(state, cands[x], true) < HoistSortKey(state, cands[y], true); });
+    ManaCost acc;
+    for (int j : order)
+    {
+        if (CopyMagnetDef(cands[j])) { acc = AddManaCosts(acc, cands[j].cost); count(j); continue; }
+        const ManaCost next = AddManaCosts(acc, cands[j].cost);
+        if (!pool.CanPay(AddManaCosts(next, first_mint))) { break; }
+        acc = next;
+        count(j);
+    }
+    return true;
+}
+
 bool OrderRecheckEnabled()
 {
     // ADOPTED default-on (USER, 2026-08-18): the Remedy/Silence alternation that makes the

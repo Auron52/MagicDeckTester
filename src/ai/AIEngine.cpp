@@ -4674,6 +4674,12 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
             return ResolveProvider(state).CastOrderRank(state, *dx)
                  < ResolveProvider(state).CastOrderRank(state, *dy);
         });
+        // ...and the hoisted minter waits for every body the base pool still pays before it
+        // (PlaceHoistedMinters; rollout twin in ApplyPlanDirect -- lockstep).
+        if (mint_hoist) { PlaceHoistedMinters(state, plan.actions, ena); }
+        // ...and the base pool's share of the line -- the hoist up to and including that minter --
+        // is paid JOINTLY (BatchPrepayMintPrefix; rollout twin in ApplyPlanDirect -- lockstep).
+        if (mint_hoist) { TurnSolver::BatchPrepayMintPrefix(state, plan.actions, ena); }
         for (int i : ena)
         {
             const Action& a = plan.actions[i];
