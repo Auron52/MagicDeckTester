@@ -5153,6 +5153,46 @@ bool TapForCostDirect(GameState& state, const ManaCost& cost_in, bool for_creatu
 // filter/ramp land is present, retry the subset by actually tapping real sources on a copy. Returns
 // true iff every selected cast can be paid for real. Only reached when the flat check already failed
 // AND such a land exists, so non-filter decks never run it (byte-identical) and the cost is bounded.
+// SAME-SUBSET ROCK COLOURS FOR THE COLOUR-PRESENCE GATE (MTG_SUBSET_ROCK_COLOR, DEFAULT ON since
+// 2026-09-22; =0 is the hatch). `have[]` is board-only, while the flat gate credits a selected rock's
+// production (rock_mana) -- so a subset whose missing colour comes from the rock it casts passed the
+// flat gate and died at the presence gate, unreachable at any budget (recoverability audit
+// 2026-09-03: fires on FiveColour, outcome-neutral there; staged awaiting the user). On Snow it is
+// not neutral: Arcum's Astrolabe's credit is a wild, so {Astrolabe, Boreal Druid} with three Islands
+// passed the flat gate and died here, and the base search could reach "Astrolabe, then Druid off its
+// mana" only through a breakpoint continuation (seed 1015 T5 -- which is how MTG_BP_NEW_ONLY exposed
+// it). USER 2026-09-22: *"Astrolabe should be treated as a land or other mana source that is played
+// in the current plan"* -- the adoption. ONE helper for both gates (Solve::consider and
+// EnumeratePlans) so the greedy/rollout policy and the search candidates agree on what a plan can
+// pay. Widening a NECESSARY condition is rescue-only: the real allocation is still validated
+// downstream (the count gate, the sequential walk, the apply's own payment).
+static bool SubsetRockColorEnabled()
+{
+    static const bool on = EnvOn("MTG_SUBSET_ROCK_COLOR", true);
+    return heurarm::Flag(heurarm::SUBSET_ROCK_COLOR, on);
+}
+// Returns the table to test with: `have` itself when nothing widens, else `scratch` filled with
+// `have` plus the selected rocks' colours (a wild credit is every colour).
+static const bool* WidenHaveWithSubsetRocks(const bool have[5], bool scratch[5],
+                                            const std::vector<Action>& cands, const std::vector<int>& sel)
+{
+    if (!SubsetRockColorEnabled()) { return have; }
+    bool widened = false;
+    for (int j : sel)
+    {
+        const ManaPool& rm = cands[j].rock_mana;
+        if (rm.Total() <= 0) { continue; }
+        if (!widened) { for (int ci = 0; ci < 5; ++ci) { scratch[ci] = have[ci]; } widened = true; }
+        if (rm.white > 0) { scratch[0] = true; }
+        if (rm.blue  > 0) { scratch[1] = true; }
+        if (rm.black > 0) { scratch[2] = true; }
+        if (rm.red   > 0) { scratch[3] = true; }
+        if (rm.green > 0) { scratch[4] = true; }
+        if (rm.wild  > 0) { for (int ci = 0; ci < 5; ++ci) { scratch[ci] = true; } }
+    }
+    return widened ? scratch : have;
+}
+
 static bool SubsetPayableWithFilters(const GameState& state, const std::vector<Action>& cands,
                                      const std::vector<int>& sel)
 {
@@ -21652,8 +21692,13 @@ TurnSolver::Plan TurnSolver::SolveUncached(const GameState& state, bool is_pre_c
         // every deck without a filter source or a pending land Aura. MTG_RESCUED_COLOR_GATE=1
         // restores the old unconditional check.
         static const bool s_rescued_color_gate = EnvOn("MTG_RESCUED_COLOR_GATE", false);
+        // Same-subset rock colours widen the presence table here too (MTG_SUBSET_ROCK_COLOR, the
+        // EnumeratePlans twin -- one helper, so the greedy/rollout policy plans the same
+        // "rock, then the spell its colour enables" turns the search does).
+        bool have_rock_c[5];
+        const bool* have_eff_c = WidenHaveWithSubsetRocks(have_colors, have_rock_c, cands, sel);
         if (!mc_hit && (mana_ok || s_rescued_color_gate)
-            && !SubsetPayable(have_colors, cands, sel, &colour_demand)) { mc_store_reject(); return; }
+            && !SubsetPayable(have_eff_c, cands, sel, &colour_demand)) { mc_store_reject(); return; }
         if (enumstats::Enabled()) { enumstats::g_c_color.fetch_add(1, std::memory_order_relaxed); }   // passed SubsetPayable
         // ... and the COUNT the gate above deliberately does not model: two white pips off one white
         // source. Only on the flat-pool path -- a subset rescued by SubsetPayableWithFilters was
@@ -31445,35 +31490,11 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
         // only the pre-cast board and cannot see a mid-chain refloat returning a TAPPED source's
         // colour -- defer to it (exec_feas_rescues, rescue-only).
         //
-        // MTG_SUBSET_ROCK_COLOR=1 -- measurement lever (DEFAULT OFF, recoverability audit
-        // 2026-09-03): widen the colour-PRESENCE check with the colours of same-subset mana rocks.
-        // The flat gate already credits a selected rock's production by real colour (rock_mana,
-        // stamped at emit "so the enumerator can fund the rest of the subset off it"), but have[]
-        // is board-only -- so a subset whose missing colour comes from the rock it casts passes
-        // the flat gate and dies here, unreachable at any budget (no hatch, EF default OFF).
-        // Widening a NECESSARY condition is rescue-only: the real allocation is still validated
-        // downstream. On adoption this flips default-ON with a hatch + GT rebaseline.
+        // MTG_SUBSET_ROCK_COLOR (DEFAULT ON since 2026-09-22): widen the colour-PRESENCE check with
+        // the colours of same-subset mana rocks -- see WidenHaveWithSubsetRocks, shared with
+        // Solve::consider's twin gate.
         bool have_rock[5];
-        const bool* have_eff = have_colors;
-        {
-            static const bool s_rock_color = EnvOn("MTG_SUBSET_ROCK_COLOR");
-            if (heurarm::Flag(heurarm::SUBSET_ROCK_COLOR, s_rock_color))
-            {
-                for (int ci = 0; ci < 5; ++ci) { have_rock[ci] = have_colors[ci]; }
-                for (int j : sel)
-                {
-                    const ManaPool& rm = cands[j].rock_mana;
-                    if (rm.Total() <= 0) { continue; }
-                    if (rm.white > 0) { have_rock[0] = true; }
-                    if (rm.blue  > 0) { have_rock[1] = true; }
-                    if (rm.black > 0) { have_rock[2] = true; }
-                    if (rm.red   > 0) { have_rock[3] = true; }
-                    if (rm.green > 0) { have_rock[4] = true; }
-                    if (rm.wild  > 0) { for (int ci = 0; ci < 5; ++ci) { have_rock[ci] = true; } }
-                }
-                have_eff = have_rock;
-            }
-        }
+        const bool* have_eff = WidenHaveWithSubsetRocks(have_colors, have_rock, cands, sel);
         if (!sel_col_reducer && !SubsetPayable(have_eff, cands, sel, &colour_demand))
         {
             _ct.label = "colour-exists";                    // ef-* labels overwrite on a failed rescue

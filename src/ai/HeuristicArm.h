@@ -136,7 +136,7 @@ enum Slot : int
     HEROISM_FRESH_HOLD,       // MTG_HEROISM_FRESH_HOLD    ...and unlocks same-turn spend of fresh Treasures
     ETB_TAP_YIELD,            // MTG_ETB_TAP_YIELD         ETB-untap tap-ahead takes the HIGHEST-yield lands
     CONDEMN_M1_BP,            // MTG_CONDEMN_M1_BP         m1 condemnation filter at breakpoint continuations
-    SUBSET_ROCK_COLOR,        // MTG_SUBSET_ROCK_COLOR     colour-presence gate credits same-subset rock colours
+    SUBSET_ROCK_COLOR,        // MTG_SUBSET_ROCK_COLOR     colour-presence gate credits same-subset rock colours (default ON since 2026-09-22)
     EDF_PROSPECTIVE,          // MTG_EDF_PROSPECTIVE      go-off recognizer sees a loop the PLAN assembles
     REFLOAT_WILD_C,           // MTG_REFLOAT_WILD_C       a rainbow source's float is {C}-capable (wild_c)
     REFLOAT_NEED,             // MTG_REFLOAT_NEED         tap-ahead colour commit: {C}+ability demand, coverage
