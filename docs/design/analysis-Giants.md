@@ -1091,6 +1091,23 @@ changes what the recorded plan indices MEAN. `server.js` has a session-pinned bi
 **Do not rebuild while the user is recording.** Viewer-side (`index.html` / `server.js`) edits are
 safe — they do not affect replay.
 
+**Refined 2026-09-22, having now verified the pin end to end.** The blanket rule above is stronger
+than the mechanism requires, and knowing the difference is what made the V5 fix shippable while the
+user still had the viewer open:
+
+* `sessionFor` copies the binary to `logs/play/.session/mtg-<pid>-<ts>` per game and every spawn
+  for that game uses the copy. A rebuild of `build/Release/mtg` therefore **cannot** disturb the
+  game in progress — this session's pin was taken at 10:34 and survived rebuilds at 10:48 and 11:10.
+* `gameKey` is `deck|version|seed|gameIndex|maxTurns`. Starting a NEW game re-pins from the path,
+  so it picks the rebuilt binary up **without restarting the server**.
+* The real hazard is narrower: a session that started *before* pinning existed, or a pin that
+  failed to copy (the server prints a one-time WARNING, and the save audit is the backstop).
+* **What genuinely must not be done is hitting the viewer's HTTP API with a different game key**
+  while the user is playing: `gsession` is a single global, and `sessionFor` calls
+  `killIsession(); dropPin(gsession)` on any key change — an agent "just testing the API" would
+  terminate the user's live game. Verify against the binary directly (`--validate-line` is the same
+  path the viewer's commit uses), never through the server.
+
 ## Remaining work
 
 1. ~~**RE-RUN the Stage 5d sweep with varying SEEDS**~~ — **DONE.** 16 distinct seeds, all nine
@@ -1108,7 +1125,19 @@ safe — they do not affect replay.
 7. **NOT started, correctly** — value leaf, then mulligan profile. Strictly serial, in that order,
    alone on the box, and both user-kicked-off. Finding 3 is now the strongest concrete argument
    for the mulligan stage on this deck.
-8. Nothing has been committed. No `references/Giants/` exists.
+8. ~~Nothing has been committed. No `references/Giants/` exists.~~ **SUPERSEDED.**
+   `references/Giants/` now holds **ten** user hand-played games (s1–s10, every one won, T5–T8),
+   all committed. Giants is in the smoke and regression tiers, and the regression tier has been
+   rebaselined under the V5 fix (`--accept`, both GT halves consistent: 506 / 0 STALE / 0 missing).
+9. **Open, needs the user: NOTHING IS PUSHED.** The V5 fix touches `src/`, so a push runs CI on
+   ubuntu-latest **and windows-latest**. The job that matters is **determinism parity** — Linux and
+   Windows must produce the same result for the same seed — and 16 GT configs moved, so a parity
+   break would show up as a whole-suite disagreement rather than a single case. Watch
+   `gh run watch` and report the per-OS result in the same message as the push.
+10. **Open, still unstarted (needs a rebuild, so it was gated on the user pausing):** Inferno
+    Titan's "3 damage divided as you choose" as a real targeting choice defaulting to the
+    opponent's face. Note the gate has now lapsed — the binary has been rebuilt three times today
+    and the session pin protected the live game each time, so this no longer needs to wait.
 
 
 ## Audit status (2026-09-22)
