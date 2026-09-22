@@ -27660,14 +27660,23 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
                 // outcome (left_in_hand=1 -> the cast did not happen), diagnostic only.
                 static const int s_dbg_apply = EnvInt("MTG_DBG_MULTI", 0);
                 const bool dbg_apply = s_dbg_apply != 0 && s_dbg_apply == state.turn_number;
-                auto dbg_cast = [&](const char* slot, const Action& a)
+                // hand=<before>-><after> counts copies of the NAME, so a cast whose own draw puts
+                // another copy in hand reads before==after (Fists of Flame drawing a Fists): read
+                // the pool and the count together, not the count alone.
+                auto dbg_count = [&](const Action& a) -> int
+                {
+                    if (!dbg_apply) { return 0; }
+                    int n = 0;
+                    for (const Card& c : ap.hand) { if (c.m_name == a.card_name) { ++n; } }
+                    return n;
+                };
+                auto dbg_cast = [&](const char* slot, const Action& a, int before)
                 {
                     if (!dbg_apply) { return; }
-                    int in_hand = 0;
-                    for (const Card& c : ap.hand) { if (c.m_name == a.card_name) { ++in_hand; } }
+                    const int after = dbg_count(a);
                     const ManaPool now = AvailableManaPool(state);
-                    std::fprintf(stderr, "[dbgapply] t%d %s %s left_in_hand=%d pool_after=%d(r%d g%d w%d)\n",
-                                 state.turn_number, slot, a.card_name.c_str(), in_hand,
+                    std::fprintf(stderr, "[dbgapply] t%d %s %s hand=%d->%d pool_after=%d(r%d g%d w%d)\n",
+                                 state.turn_number, slot, a.card_name.c_str(), before, after,
                                  now.Total(), now.red, now.green, now.wild);
                 };
                 if (dbg_apply)
@@ -27681,7 +27690,7 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
                                  now.Total(), now.red, now.green, now.wild);
                 }
                 for (int i : ena)
-                { const Action& a = acts[i]; prep_free(a); cast_loyalty_ability = a.loyalty_ability; cast_devour_count = a.devour_count; apply_one(a.card_name, false, false, 0, a.alt_cost, a.alt_lifegain, a.tutor_target, a.chosen_x, a.soulfire_own_targets, a.ponder_keep, a.crackle_targets, a.splice_count, a.chosen_float_color, a.enchant_target, a.bestow, a.replicate_count, a.convoke_green, a.convoke_other, a.phyrexian_life, a.evoke); fire_unlock(); dbg_cast("ena", a); }
+                { const Action& a = acts[i]; const int dbg_before = dbg_count(a); prep_free(a); cast_loyalty_ability = a.loyalty_ability; cast_devour_count = a.devour_count; apply_one(a.card_name, false, false, 0, a.alt_cost, a.alt_lifegain, a.tutor_target, a.chosen_x, a.soulfire_own_targets, a.ponder_keep, a.crackle_targets, a.splice_count, a.chosen_float_color, a.enchant_target, a.bestow, a.replicate_count, a.convoke_green, a.convoke_other, a.phyrexian_life, a.evoke); fire_unlock(); dbg_cast("ena", a, dbg_before); }
                 // Spectacle hoist: a sac-land damage source (Shard Volley) is otherwise cast in the
                 // trailing sac loop -- AFTER the non-sac Spectacle spell (Light Up), leaving
                 // Spectacle un-triggered and Light Up paying full cost. When the set holds a
@@ -27733,8 +27742,9 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
                 {
                     const Action& a = acts[i];
                     if (is_ordered_garth(a)) { apply_garth(a); continue; }
+                    const int dbg_before = dbg_count(a);
                     prep_free(a); cast_loyalty_ability = a.loyalty_ability; cast_devour_count = a.devour_count; apply_one(a.card_name, false, false, 0, a.alt_cost, a.alt_lifegain, a.tutor_target, a.chosen_x, a.soulfire_own_targets, a.ponder_keep, a.crackle_targets, a.splice_count, a.chosen_float_color, a.enchant_target, a.bestow, a.replicate_count, a.convoke_green, a.convoke_other, a.phyrexian_life, a.evoke); fire_unlock();
-                    dbg_cast("ord", a);
+                    dbg_cast("ord", a, dbg_before);
                 }
             }
             else
