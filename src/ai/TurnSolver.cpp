@@ -20261,6 +20261,12 @@ namespace enumstats
     // Greedy consider() FUNNEL: where each visited subset is rejected (Melira greedy-leaf diagnosis).
     inline std::atomic<std::uint64_t> g_c_enter{0}, g_c_rules{0}, g_c_mana{0}, g_c_color{0},
                                       g_c_feas{0}, g_c_surv{0};
+    // The real-payment RESCUE (SubsetPayableWithFilters), which copies the board per call. `armed`
+    // is a board/hand fact (a filter source, or a land Aura / filter still in HAND), so it can be
+    // true for a whole enumeration while no individual subset can use it -- and then every flat-mana
+    // failure buys a board copy that was always going to say no. Calls vs rescues is the ratio that
+    // tells those apart; `aura_sel` counts the calls whose subset actually casts the pending Aura.
+    inline std::atomic<std::uint64_t> g_c_resc_call{0}, g_c_resc_ok{0}, g_c_resc_aurasel{0};
     struct Dumper {
         ~Dumper()
         {
@@ -20273,10 +20279,13 @@ namespace enumstats
                 "  passed flat mana         : %llu\n"
                 "  passed SubsetPayable     : %llu\n"
                 "  passed ColorFeasibility  : %llu\n"
-                "  survivors (fully scored) : %llu\n",
+                "  survivors (fully scored) : %llu\n"
+                "  [rescue] SubsetPayableWithFilters calls=%llu  rescued=%llu  subset-casts-aura=%llu\n",
                 (unsigned long long)g_c_enter.load(), (unsigned long long)g_c_rules.load(),
                 (unsigned long long)g_c_mana.load(), (unsigned long long)g_c_color.load(),
-                (unsigned long long)g_c_feas.load(), (unsigned long long)g_c_surv.load());
+                (unsigned long long)g_c_feas.load(), (unsigned long long)g_c_surv.load(),
+                (unsigned long long)g_c_resc_call.load(), (unsigned long long)g_c_resc_ok.load(),
+                (unsigned long long)g_c_resc_aurasel.load());
             const double kept = (double)g_m_kept.load();
             auto ratio = [&](std::uint64_t d) { return d > 0 ? kept / (double)d : 0.0; };
             std::fprintf(stderr,
@@ -22126,7 +22135,19 @@ TurnSolver::Plan TurnSolver::SolveUncached(const GameState& state, bool is_pre_c
             mana_ok = eff.CanPay(combined) && eff_nc.CanPay(noncreature_combined);
         }
         // Filter/ramp-land color conversion the flat pool can't express -> real-payment fallback.
+        if (!mana_ok && any_filter && enumstats::Enabled())
+        {
+            enumstats::g_c_resc_call.fetch_add(1, std::memory_order_relaxed);
+            for (int j : sel)
+            {
+                const CardDefinition* ad = cands[j].def;
+                if (ad && ad->params.is_land_aura && ad->params.land_aura_extra_mana > 0)
+                { enumstats::g_c_resc_aurasel.fetch_add(1, std::memory_order_relaxed); break; }
+            }
+        }
         if (!mana_ok && !(any_filter && SubsetPayableWithFilters(state, cands, sel))) { mc_store_reject(); return; }
+        if (!mana_ok && enumstats::Enabled())
+        { enumstats::g_c_resc_ok.fetch_add(1, std::memory_order_relaxed); }   // reached here => rescued
         if (enumstats::Enabled()) { enumstats::g_c_mana.fetch_add(1, std::memory_order_relaxed); }   // passed flat mana
         if (seq_on) { apply_seq(); }   // filter-rescued survivor: keep its credited pool honest too
         if (sacrifice_count > total_lands)                   { mc_store_reject(); return; }

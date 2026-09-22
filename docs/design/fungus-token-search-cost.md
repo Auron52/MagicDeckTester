@@ -2175,13 +2175,36 @@ one quiet box.
 
 ## Two things measurement REFUSED in this round
 
-**1. The win is not one number -- it scales with BOARD WIDTH, which is the point.** A second,
-larger slow hand (`Doubling Season x1; Essence Warden x1; Forest x1; Thallid Shell-Dweller x1;
-Tukatongue Thallid x1; Wild Growth x2`, play, r=0) paired base/new x2 came back **-5.8%**
-(55,719 -> 52,497 ms), not -14.7%. That is the predicted shape, not a contradiction: the deleted
-work is `O(board width) x (scored subsets)`, so the deck's WIDEST games -- the Doubling Season +
-Utopia Mycon hands at the top of the slow log -- pay the most for it and gain the most from removing
-it. Quote the range, never the best hand.
+**1. The win is not one number -- it scales with BOARD WIDTH, and ACROSS THE TAIL IT IS -6.1%.**
+The -14.7% probe is the best hand, not the typical one. Eight captured slow rollouts spanning the
+tail, replayed base/new **strictly serially on a quiet box** (load ~1.1, one process at a time):
+
+```
+gen=  214725  base=  92499  new=  90231    -2.5%
+gen=  132604  base=  49760  new=  50084    +0.7%
+gen=  109667  base=  39742  new=  40495    +1.9%
+gen=  105091  base=  53930  new=  44298   -17.9%
+gen=   91713  base=  40813  new=  38068    -6.7%
+gen=   84083  base=  43557  new=  39361    -9.6%
+gen=   75405  base=  24935  new=  25188    +1.0%
+gen=   63483  base=  32055  new=  26648   -16.9%
+TOTAL          base= 377291  new= 354373    -6.1%
+```
+
+**-6.1% is the number to quote for the gen**, because a gen's cost is the SUM and the sum is what
+the makespan sees. The spread is the real finding: -18% to -17% on three hands and nothing
+distinguishable from zero on three others. A second hand measured separately (`Doubling Season x1;
+Essence Warden x1; Forest x1; Thallid Shell-Dweller x1; Tukatongue Thallid x1; Wild Growth x2`,
+play r=0) came back -5.8%, right on the tail-wide figure.
+
+The three small POSITIVE readings are NOT a slowdown -- a byte-identical change cannot cost time --
+they are the single-run noise floor, which even on a quiet box is about +-2% (the same probe re-run
+five times within one arm spanned 13,727-13,937 ms). Quote the TOTAL, or the range; never the best
+hand, and never a single run per arm.
+
+Why some hands gain nothing: the deleted work is `O(board width) x (scored subsets)`, so it pays
+only where the odometer walk dominates. A rollout that spends its time in `FSLineWin` /
+`ApplyPlanDirect` instead (20.5% and 12.4% inclusive on the profiled hand) barely notices.
 
 **2. Folding `SubsetHasDuplicateSacSource`'s seven tail walks into one bought NOTHING -- reverted.**
 It was the obvious next target (3.43% after the mint fix, the largest filter left) and the obvious
@@ -2201,6 +2224,18 @@ A **3-2 split with every difference under 0.7%.** The larger hand disagreed in t
 by 2.6%, i.e. noise both ways. **Reverted** -- churn in this file is not free, and the repo's bar is
 a strict improvement.
 
+**And a second candidate refused BEFORE it was built: the accumulation-loop SoA hoist.** The head of
+`consider()` sums ~10 fields per selected candidate out of a 384-byte `Action`, 34.6 M times -- the
+exact shape `ColorDemandIndex` fixed in Round 5 for `Payable`, and sitting inside the biggest
+self-time symbol left (the `consider()` lambda, 11.29%). **The pattern does not transfer, and
+`TurnSolver.h` says so in one look:** `Payable`'s fields were scattered across the struct, but the
+valuation scalars here -- `eval`, `direct_damage`, `is_noncreature`, `card_mv`,
+`vial_attack_power`, `haste_attack_power`, `haste_prowess` -- are declared CONTIGUOUSLY at
+TurnSolver.h:482-493 and already share a cache line. A packed row takes the per-candidate footprint
+from ~3 lines to ~2, not from 3 to 1, and it is Ir-neutral by construction so callgrind could not
+adjudicate it either. **Check the target struct's LAYOUT before assuming a hoist will pay** --
+"reads N scattered fields" is a claim about declaration order, and it is cheap to verify.
+
 **What the negative result TELLS the next agent**, which is why it is written down: the filter's
 3.43% is NOT the redundant tail walks. `sel` is small enough on these boards that the walks are
 short and the candidate array (~26 x 384 B = 10 KB) stays warm in L1 between calls. So the cost is
@@ -2212,7 +2247,18 @@ the stride hoist here.
 this box -- WSL2 exposes no hardware PMU -- so there is no contention-immune counter available for
 an A/B. `task-clock:u` sums every thread (the gen's discovery phase is parallel), so it does not
 isolate a replayed rollout either. Wall time with many interleaved repetitions, compared on the
-MINIMUM, is the only instrument this box actually offers.
+MINIMUM, is the only *wall-clock* instrument this box offers.
+
+**CORRECTION, same session:** that last sentence is wrong in the way that matters, and it was
+already refuted inside this repo before it was written. **`valgrind --tool=callgrind` is available
+here and its Ir count is deterministic and load-immune** -- `SubsetPayableWithFilters`' own comment
+in TurnSolver.cpp says so explicitly ("wall clock on this host drifted ~2x within one session, which
+is enough to make a neutral change read as a 1.9x win... callgrind's Ir is deterministic and
+load-immune"), and `docs/design/accelerant-ordering-and-self-funding.md`,
+`analysis-EldraziDisplacerFlicker.md` and `code-pruning-and-refactor-backlog.md` all A/B with it.
+The cost is ~90x wall, so it wants a SMALL probe, not a 14 s one. The right reading of this section
+is therefore: no PMU, wall clock untrustworthy under host load -- **so reach for callgrind Ir**, not
+for more repetitions.
 
 **And a second one, because it produced a result that is physically impossible.** A tail sweep over
 eight slow hands was first run the obvious way -- both arms of all eight hands launched at once, 16
@@ -2230,3 +2276,44 @@ process**. The load is the HOST's; nothing inside the container can see what is 
 nothing inside the container can measure through it. **Check `uptime` against your own `%CPU` before
 trusting any wall number here** -- if the gap is large, the box is not yours and the measurement is
 not real. The numbers in the table above were all taken while that gap was small.
+
+
+## Two more measurements, for the next agent's shortlist
+
+**The canonical-prefix fold is 97.2% of ALL subset-rule rejections, and it is NOT worth moving.**
+`MTG_BF_CENSUS=1 MTG_ROLLOUT_STATS=1` on the probe rollout:
+
+```
+bf_foldsite greedy calls=40,966,303 from_odometer=40,966,303 with_tag=16,070,503 rejected=6,172,592
+```
+
+Total rule rejections are 40,966,303 - 34,618,576 = 6,347,727, so **every other filter in that
+20-clause chain combined rejects 175,135 subsets (2.8%)**. The fold alone rejects 6.17 M -- 15.1% of
+everything the odometer generates is an arrangement of interchangeable sources that is provably a
+duplicate. `IndependentAccelPrefixViolated` is the precedent for collapsing such arrangements at the
+odometer instead (2^L -> L+1), and unlike that one this collapse would be byte-identical, because
+the fold ALREADY rejects exactly the non-prefix set.
+
+**It is still not worth building**, and the reason is the ordering of the chain: on Fungus every
+filter ahead of the fold is switched off by a `SubsetFilterPre` bit, so the fold is effectively the
+FIRST test that runs. A skipped position therefore saves only the cheap head of `consider()` -- the
+`sel` push_backs, the sort, one `SubsetHasDuplicateSacSource` call -- which prices out at roughly
+1-2%, under the repo's noise bar. Size the prize from WHERE in the chain the rejection happens, not
+from how many rejections there are. (If the meters ever matter: both `MTG_SOLVE_CHARGE` and
+`decisionwork` bill at `consider()` ENTRY, before the filters, so an odometer-level collapse is
+byte-identical only while they are disarmed -- which is the default and every shipped run.)
+
+**`SubsetPayableWithFilters` is 4.39% inclusive and it is REAL WORK, not a mint-style defect.** It
+looked like one: it copies the board per call, and on Fungus it is armed by `PendingLandAuraColorMask`
+-- a HAND fact (Wild Growth in hand), true for a whole enumeration regardless of what any individual
+subset does. A counter (now a permanent funnel line under `MTG_ENUM_STATS`) settles it:
+
+```
+[rescue] SubsetPayableWithFilters calls=1695688  rescued=630032  subset-casts-aura=1567110
+```
+
+**37.2% of calls rescue a subset the flat pool rejected**, and 92.4% are on subsets that genuinely
+cast the pending Wild Growth -- so the tightest available per-subset precondition would remove 7.6%
+of the calls, about 0.3% of the rollout. Leave it alone. The mint block and this one look identical
+from the outside (board-scanning work armed by a board/hand fact); what separates them is whether
+the work ever changes an answer, and only a counter can say.
