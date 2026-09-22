@@ -361,6 +361,18 @@ struct Action
                                        // Hinata cost against the mana-value damage to those
                                        // creatures. SoulfireDig picks WHICH (expendable first,
                                        // Hinata last). 0 for every non-Soulfire action.
+                                       // (Solo-target tricks reuse it as Twinflame's strive count.)
+    int         mint_gain        = 0;  // MTG_MINT_CREDIT_EXACT: the Treasures THIS cast variant
+                                       // mints on the current board (creates_treasures x the
+                                       // trick's instance count for ITS target -- magnet fan +
+                                       // Heroism copies; SoloTrickInstances). Stamped at emission,
+                                       // read by the odometer mana gates, the pricing twins and
+                                       // the funding ladder, the way ritual_float / rock_mana are.
+                                       // 0 for every non-minting action and with the lever off.
+    bool        mint_hand_magnet = false;
+                                       // ...and the minting cast targets a SAME-PLAN hand magnet
+                                       // (cast before it), so its mint is spendable this turn even
+                                       // though no magnet is on the battlefield yet.
     int         crackle_targets  = -1;
                                        // Crackle with Power (scale_x Hinata discount): searched COUNT
                                        // of extra beneficial targets BEYOND the opponent face

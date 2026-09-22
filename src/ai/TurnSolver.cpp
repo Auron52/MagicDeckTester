@@ -5176,8 +5176,17 @@ static bool SubsetRockColorEnabled()
 // Returns the table to test with: `have` itself when nothing widens, else `scratch` filled with
 // `have` plus the selected rocks' colours (a wild credit is every colour).
 static const bool* WidenHaveWithSubsetRocks(const bool have[5], bool scratch[5],
-                                            const std::vector<Action>& cands, const std::vector<int>& sel)
+                                            const std::vector<Action>& cands, const std::vector<int>& sel,
+                                            bool credited_mint = false)
 {
+    // MTG_MINT_CREDIT_EXACT: a CREDITED same-subset mint is wild -- every colour is present. (Gold
+    // Rush "fixes colours": that is a base-plan fact once the mint is credited, and the exact
+    // colour COUNT gate downstream still runs on the credited pool.)
+    if (credited_mint)
+    {
+        for (int ci = 0; ci < 5; ++ci) { scratch[ci] = true; }
+        return scratch;
+    }
     if (!SubsetRockColorEnabled()) { return have; }
     bool widened = false;
     for (int j : sel)
@@ -14768,6 +14777,53 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
                 if (max_x < 0) { max_x = 0; }
                 for (int xv : ResolveProvider(state).XCandidates(state, def, max_x))
                 { if (xv > 0) { x_values.push_back(xv); } }
+                // MTG_MINT_CREDIT_EXACT: the X a SAME-PLAN mint would fund. "Gold Rush at the magnet,
+                // then Libation for the fan" was reachable only as a post-mint continuation
+                // (Libation is an ORIGINAL-hand card, so the new-only rule rightly drops it there);
+                // the base has to offer that X itself. Potential = the widest mint any other hand
+                // minter can realise on this board (magnet on the battlefield, else a hand magnet
+                // cast in the same plan, else a plain own target). Spendability is NOT tested here:
+                // the subset gate credits the mint only where the payer will accept it, so an X
+                // offered against an unspendable mint just fails there. Only when a minter is in
+                // hand -> every other hand shape emits exactly what it did.
+                if (MintCreditExactOn())
+                {
+                    int magnet_num = 0, body_num = 0;
+                    for (const Permanent& p : state.battlefield)
+                    {
+                        if (p.controller_index != state.active_player_index) { continue; }
+                        if (!p.card.IsCreature() && !p.is_animated) { continue; }
+                        const CardDefinition* pd = CardDatabase::Instance().LookupCached(p.card);
+                        if (pd && pd->params.copies_solo_targeted_spells) { magnet_num = p.card.m_number; break; }
+                        if (body_num == 0) { body_num = p.card.m_number; }
+                    }
+                    if (magnet_num == 0)
+                    {
+                        for (const Card& hc : ap.hand)
+                        {
+                            const CardDefinition* hd = CardDatabase::Instance().LookupCached(hc);
+                            if (hd && hd->params.copies_solo_targeted_spells) { magnet_num = hc.m_number; break; }
+                        }
+                    }
+                    const int best_target = magnet_num != 0 ? magnet_num : body_num;
+                    int potential = 0;
+                    for (std::size_t k = 0; k < ap.hand.size(); ++k)
+                    {
+                        if (static_cast<int>(k) == i) { continue; }
+                        const CardDefinition* md = CardDatabase::Instance().LookupCached(ap.hand[k]);
+                        if (!md || md->params.creates_treasures <= 0) { continue; }
+                        potential = std::max(potential,
+                            MintedTreasuresForCast(state, state.active_player_index, *md, best_target, 0));
+                    }
+                    if (potential > 0)
+                    {
+                        for (int xv : ResolveProvider(state).XCandidates(state, def, max_x + potential / x_pips))
+                        {
+                            if (xv > 0 && std::find(x_values.begin(), x_values.end(), xv) == x_values.end())
+                            { x_values.push_back(xv); }
+                        }
+                    }
+                }
             }
             // hand_name: non-empty iff the target is a SAME-PLAN HAND creature (stamped on the
             // action for the cheap subset legality filter).
@@ -14800,6 +14856,18 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
                 a.enchant_target = tgt_num;
                 a.trick_hand_target = hand_name;
                 if (xv > 0) { a.cost.generic += xv * x_pips; a.chosen_x = xv; }
+                // MTG_MINT_CREDIT_EXACT: the Treasures THIS variant mints (its target's fan), the
+                // way ritual_float / rock_mana ride the Action -- see Action::mint_gain.
+                if (def.params.creates_treasures > 0 && MintCreditExactOn())
+                {
+                    a.mint_gain = MintedTreasuresForCast(state, state.active_player_index, def,
+                                                         tgt_num, strive_k);
+                    if (!hand_name.empty())
+                    {
+                        const CardDefinition* hd = CardDatabase::Instance().Lookup(hand_name);
+                        a.mint_hand_magnet = hd != nullptr && hd->params.copies_solo_targeted_spells;
+                    }
+                }
                 actions.push_back(std::move(a));
               }
             };
@@ -19703,6 +19771,7 @@ static int ManaPruneBound(const ManaPool& pool, const std::vector<Action>& cands
     {
         b += a.ritual_float;
         b += a.rock_mana.Total();
+        b += a.mint_gain;                         // MTG_MINT_CREDIT_EXACT: the minted Treasures (0 off)
         b += EtbUntapBoundCredit(etb_state, a);   // ETB "untap up to N lands" -- see above
         b += LandAuraBoundCredit(a);              // "enchanted land taps for an additional {G}"
         if (a.def && a.def->params.ritual_float_gy_self_bonus) { ++gy; }
@@ -19815,6 +19884,7 @@ static inline bool ManaGateWouldHelp(const std::vector<Action>& cands, const Gam
     for (const Action& a : cands)
     {
         if (a.ritual_float > 0 || a.rock_mana.Total() > 0
+            || a.mint_gain > 0   // MTG_MINT_CREDIT_EXACT (0 off)
             || (a.def && (a.def->params.affinity_for_subtype
                           || !a.def->params.reduces_spell_color.empty()
                           // Subtype reducers (Dragonspeaker / Incubator) -- the missing-bail fix,
@@ -19847,7 +19917,10 @@ static bool BuildManaGateIndex(const ManaPool& pool, const std::vector<Action>& 
         // subset {Wild Growth {G}, Living Wish {1}{G}} = 3 was rejected here against pool 2 + gain 0
         // and never reached a gate, a rescue, or the plan list -- which is why the user's line came
         // back "legal, not enumerated" through four separate fixes further downstream.
-        t.gain = a.ritual_float + a.rock_mana.Total() + EtbUntapBoundCredit(etb_state, a)
+        // ...and the minted-Treasure term (MTG_MINT_CREDIT_EXACT), for the SAME reason: the
+        // shipped consider() mint credit had no term in either bound, so the subset it exists to
+        // admit ({Gold Rush, Fists} = 4 on a 3-mana pool) died at the odometer unpriced.
+        t.gain = a.ritual_float + a.rock_mana.Total() + a.mint_gain + EtbUntapBoundCredit(etb_state, a)
                + LandAuraBoundCredit(a);
         t.gy   = (a.def && a.def->params.ritual_float_gy_self_bonus) ? 1 : 0;
         t.block = ((a.def && (a.def->params.affinity_for_subtype
@@ -21339,6 +21412,31 @@ TurnSolver::Plan TurnSolver::SolveUncached(const GameState& state, bool is_pre_c
     // reusable position buffer, rebuilt before every call, so the sort below may run in place.
     // Previously by value -- one heap copy per visited position (operator new + push_back were
     // ~6% of a Melira game). Temporaries at the short-circuit sites are named locals now.
+    //
+    // MTG_MINT_CREDIT_EXACT: which candidates the apply HOISTS ahead of the ordered set (the
+    // enabler hoist -- bodies, magnets, Libation, Twinflame -- and the sacrifice-land casts). The
+    // funding ladder can walk a minter no earlier than rung 6, which is AFTER every hoisted cast,
+    // so a mint can never pay for one of them: the base pool must cover the minter AND the hoisted
+    // casts before any mint is credited (mirrorwing seed 700473 T2: {Elvish Mystic, Gold Rush} on
+    // Forest + Hierarch priced as "Gold Rush first, Mystic off the Treasure", both worlds hoisted
+    // the Mystic and dropped the Rush -- a phantom plan). Empty unless a candidate mints -> zero
+    // cost for every other hand.
+    std::vector<char> mint_hoisted;
+    {
+        bool any_mint = false;
+        for (const Action& a : cands) { if (a.mint_gain > 0) { any_mint = true; break; } }
+        if (any_mint)
+        {
+            mint_hoisted.assign(cands.size(), 0);
+            for (std::size_t j = 0; j < cands.size(); ++j)
+            {
+                const Action& a = cands[j];
+                if (a.kind == Action::Kind::CastFromHand && !a.alt_cost
+                    && (a.sacrifice_land || ResolveProvider(state).CastEnablerFirst(state, a.card_name)))
+                { mint_hoisted[j] = 1; }
+            }
+        }
+    }
     auto consider = [&](std::vector<int>& sel)
     {
         // Provenance for the fold's canonical-prefix rule, TAKEN (and cleared) at entry so a
@@ -21552,19 +21650,54 @@ TurnSolver::Plan TurnSolver::SolveUncached(const GameState& state, bool is_pre_c
         // target-dependent and this model is deliberately conservative. Under-crediting only walks a
         // funding spell one rung later than it could go; over-crediting would admit a line the payer
         // then refuses. Inert unless MTG_TREASURE_PAY_SOURCE is on -> byte-identical with §2a off.
+        //
+        // MTG_MINT_CREDIT_EXACT (the paragraph above is the SHIPPED world, kept for the A/B): the
+        // width is NOT target-dependent at this point -- the target is on the Action, and
+        // Action::mint_gain carries the exact count for it (the fan + the Heroism copies), stamped
+        // at emission by SoloTrickInstances. The spendability gate becomes the payer's own
+        // (FreshMintSpendableNow: magnet live OR Heroism live -- the Heroism clause was missing
+        // here, so a mint under a Heroism alone was credited at zero while the payer accepted it),
+        // plus a same-plan HAND magnet the mint targets (cast first by rank; the mint is spendable
+        // at the payment that follows it). Note the odometer gates above now credit mint_gain too;
+        // without that this block was dead for every total-mana shortfall (EngineFlags.h).
         if (TreasurePaySourceEnabled())
         {
-            int minted = 0; ManaCost mint_costs; bool sel_mint = false;
+            const bool mint_exact = MintCreditExactOn();
+            int minted = 0; ManaCost mint_costs, first_mint; bool sel_mint = false, hand_magnet = false;
             for (int j : sel)
             {
                 const CardDefinition* md = cands[j].def;
                 if (md == nullptr || md->params.creates_treasures <= 0) { continue; }
-                minted += md->params.creates_treasures;
+                minted += mint_exact ? cands[j].mint_gain : md->params.creates_treasures;
+                if (cands[j].mint_hand_magnet) { hand_magnet = true; }
                 const ManaCost& mc = cands[j].cost;
+                if (!sel_mint || mc.ManaValue() < first_mint.ManaValue()) { first_mint = mc; }
                 mint_costs.white += mc.white; mint_costs.blue  += mc.blue;  mint_costs.black += mc.black;
                 mint_costs.red   += mc.red;   mint_costs.green += mc.green;
                 mint_costs.colorless += mc.colorless; mint_costs.generic += mc.generic;
                 sel_mint = true;
+            }
+            // Under the exact credit the precondition is SEQUENTIAL and mirrors the apply order:
+            // the FIRST minter is paid from the base pool (a later minter may ride an earlier
+            // mint -- Gold Rush into Gold Rush, mirrorwing seed 700119 T3; the joint test below
+            // covers it), together with the copy MAGNETS, which precede the minter in the hoist
+            // whenever the late slots cannot pay (MintHoistAfterMagnets, both apply paths). The
+            // remaining hoisted casts and the ordered set are what the mint funds.
+            if (mint_exact && sel_mint)
+            {
+                mint_costs = first_mint;
+                if (!mint_hoisted.empty())
+                {
+                    for (int j : sel)
+                    {
+                        if (!mint_hoisted[j] || !cands[j].def
+                            || !cands[j].def->params.copies_solo_targeted_spells) { continue; }
+                        const ManaCost& hc = cands[j].cost;
+                        mint_costs.white += hc.white; mint_costs.blue  += hc.blue;  mint_costs.black += hc.black;
+                        mint_costs.red   += hc.red;   mint_costs.green += hc.green;
+                        mint_costs.colorless += hc.colorless; mint_costs.generic += hc.generic;
+                    }
+                }
             }
             // FRESH-HOLD parity: a magnetless mint is BANKED this turn (PaySacSpendableNow), so
             // crediting it prices a fund the payer will refuse -- the same phantom-credit class as
@@ -21572,8 +21705,10 @@ TurnSolver::Plan TurnSolver::SolveUncached(const GameState& state, bool is_pre_c
             // continuation then starved, killing the T5 pump finish). Credit only when the minted
             // Treasure is actually spendable this turn: magnet live, or the hold released
             // (FreshHoldActive folds in the freshmode pin -- the fresh-spend axis's variant world).
-            if (sel_mint && minted > 0 && pool.CanPay(mint_costs)
-                && (!FreshHoldActive() || CopyMagnetLive(state, state.active_player_index)))
+            const bool spendable = mint_exact
+                ? (FreshMintSpendableNow(state, state.active_player_index) || hand_magnet)
+                : (!FreshHoldActive() || CopyMagnetLive(state, state.active_player_index));
+            if (sel_mint && minted > 0 && pool.CanPay(mint_costs) && spendable)
             { eff.wild += minted; eff_nc.wild += minted; credited = true; simul_mint_credit = minted; }
         }
         // Same-turn affinity (Hivepool): subtract the extra generic discount from same-turn slivers.
@@ -21698,7 +21833,8 @@ TurnSolver::Plan TurnSolver::SolveUncached(const GameState& state, bool is_pre_c
         // EnumeratePlans twin -- one helper, so the greedy/rollout policy plans the same
         // "rock, then the spell its colour enables" turns the search does).
         bool have_rock_c[5];
-        const bool* have_eff_c = WidenHaveWithSubsetRocks(have_colors, have_rock_c, cands, sel);
+        const bool* have_eff_c = WidenHaveWithSubsetRocks(have_colors, have_rock_c, cands, sel,
+                                                          /*credited_mint=*/simul_mint_credit > 0 && MintCreditExactOn());
         if (!mc_hit && (mana_ok || s_rescued_color_gate)
             && !SubsetPayable(have_eff_c, cands, sel, &colour_demand)) { mc_store_reject(); return; }
         if (enumstats::Enabled()) { enumstats::g_c_color.fetch_add(1, std::memory_order_relaxed); }   // passed SubsetPayable
@@ -22374,6 +22510,7 @@ TurnSolver::Plan TurnSolver::SolveUncached(const GameState& state, bool is_pre_c
     {
         if (!gate_relevant
             && (cands[j].ritual_float > 0 || cands[j].rock_mana.Total() > 0
+                || cands[j].mint_gain > 0   // MTG_MINT_CREDIT_EXACT (0 off)
                 || (cands[j].def && (cands[j].def->params.affinity_for_subtype
                                      || !cands[j].def->params.reduces_spell_color.empty()))))
         { gate_relevant = true; }
@@ -25706,6 +25843,13 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
             // re-cast the same card as a CREATURE and realise a different board (the fd-diverge
             // class the chosen_float_color note above documents).
             rec.bestow             = bestow;
+            // MTG_BP_REPLAY_COST (see EngineFlags.h): the cost this cast PAID rides the record, so
+            // the executor's replay traits (ComputePlanTraits over the records) count the same mana
+            // casts the rollout's continuation traits counted -- the one-shot hold read mana_casts=0
+            // on the replay side and held the Treasure the rollout had cracked (mirrorwing 700473
+            // T4: committed kill, realised nothing). The replay re-derives the cost from the card;
+            // only the traits builder reads this field.
+            if (BpReplayCostOn()) { rec.cost = ec; }
             sink_stack.back()->push_back(rec);
             my_bp_sink = &sink_stack.back()->back().breakpoint_casts;
         }
@@ -26780,7 +26924,12 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
             // one. A Treasure minted mid-continuation simply waits for the next decision, exactly
             // as before this feature. (A draw trick keeps the inline path: its DRAWN cards are
             // unplayable without a re-solve, which is why that trade was accepted for draws.)
-            if ((def.params.cast_draw > 0 || def.params.creates_treasures > 0) && !s_human_play)
+            // MTG_MINT_CREDIT_EXACT: a Treasure-only payload opens NO breakpoint -- the mint is
+            // credited at the base (EngineFlags.h: the rule). MintPayloadOpensBreakpoint is the
+            // one reader shared with the plan's site mask and the executor's two twins.
+            if ((def.params.cast_draw > 0
+                 || (def.params.creates_treasures > 0 && MintPayloadOpensBreakpoint()))
+                && !s_human_play)
             {
                 if (s_defer_cantrip && sink_stack.empty())
                 {
@@ -27241,11 +27390,22 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
                 // Mirrorwing needs magnet(5) -> Twinflame(8): the fan-out target must exist
                 // before the token doubler, and the doubler before the pump tricks (user,
                 // Stage-6 round 3: "cast it first so there are more critters").
+                // MTG_MINT_CREDIT_EXACT: a minter the late slots cannot pay joins the hoist right
+                // after the magnets (MintHoistAfterMagnets; executor twin in TakeTurn -- lockstep).
+                const bool mint_hoist = MintHoistAfterMagnets(state, acts);
+                auto is_hoisted_minter = [&](const Action& a)
+                {
+                    if (!mint_hoist || a.kind != Action::Kind::CastFromHand || a.alt_cost || a.free_cast) { return false; }
+                    const CardDefinition* d = a.def ? a.def : CardDatabase::Instance().Lookup(a.card_name);
+                    return d != nullptr && d->params.creates_treasures > 0;
+                };
                 std::vector<int> ena;
                 for (int i = 0; i < static_cast<int>(acts.size()); ++i)
-                { if (is_enabler(acts[i])) { ena.push_back(i); } }
+                { if (is_enabler(acts[i]) || is_hoisted_minter(acts[i])) { ena.push_back(i); } }
                 std::stable_sort(ena.begin(), ena.end(), [&](int x, int y)
                 {
+                    if (mint_hoist)
+                    { return HoistSortKey(state, acts[x], true) < HoistSortKey(state, acts[y], true); }
                     const CardDefinition* dx = CardDatabase::Instance().Lookup(acts[x].card_name);
                     const CardDefinition* dy = CardDatabase::Instance().Lookup(acts[y].card_name);
                     if (!dx || !dy) { return false; }
@@ -27289,7 +27449,8 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
                 for (int i = 0; i < static_cast<int>(acts.size()); ++i)
                 {
                     const Action& a = acts[i];
-                    if ((a.kind == Action::Kind::CastFromHand && !a.sacrifice_land && !is_enabler(a))
+                    if ((a.kind == Action::Kind::CastFromHand && !a.sacrifice_land && !is_enabler(a)
+                         && !is_hoisted_minter(a))
                         || is_ordered_garth(a))
                     { ord.push_back(i); }
                 }
@@ -28442,6 +28603,14 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
         if (PlanTraitsWanted()) { _cont_traits = TurnSolver::ComputePlanTraits(state, extra.actions); }
         PlanTraitsScope  _cont_scope(PlanTraitsWanted() ? &_cont_traits : nullptr);
         TapKeepLastScope _cont_keep(PumpTargetHoldEnabled() ? _cont_traits.pump_target_card : 0);
+        if (g_bp_trace_arm)   // MTG_BP_TRACE: the continuation's trait scope, for the executor diff
+        {
+            std::fprintf(stderr, "[bp-traits] apply T%d cont: wanted=%d mana_casts=%d pump_target=%d magnet=%d mult=%d attack=%d mid=%d acts=%d\n",
+                         state.turn_number, PlanTraitsWanted() ? 1 : 0, _cont_traits.mana_casts,
+                         _cont_traits.pump_target_card, _cont_traits.copy_magnet_live ? 1 : 0,
+                         _cont_traits.bodies_are_multipliers ? 1 : 0, _cont_traits.attack_matters ? 1 : 0,
+                         _cont_traits.mid_turn_casts ? 1 : 0, static_cast<int>(extra.actions.size()));
+        }
         // The deferred trick class (site 5) is the site this pre-loop was MISSING from: the Gold
         // Rush Treasures the deferral banks are exactly the SacForMana candidates the continuation
         // enumerates, and dropping the crack made every crack-carrying rank a no-op duplicate of
@@ -30505,6 +30674,7 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
     {
         if (!gate_relevant
             && (cands[j].ritual_float > 0 || cands[j].rock_mana.Total() > 0
+                || cands[j].mint_gain > 0   // MTG_MINT_CREDIT_EXACT (0 off)
                 || (cands[j].def && (cands[j].def->params.affinity_for_subtype
                                      || !cands[j].def->params.reduces_spell_color.empty()))
                 // ... and an ETB "untap up to N lands" cast, whose refund THIS enumerator's bound
@@ -30676,6 +30846,15 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
 
     bool have_colors[5];   // untapped-source colors -- state-only, computed once for all subsets
     ComputeAvailableColors(state, have_colors);
+    // MTG_MINT_CREDIT_EXACT: may a subset payable ONLY with its own magnetless mint be admitted as
+    // the fresh-spend (released-hold) variant? Exactly the world the post-dedup fan-out below
+    // (SEARCHED FRESH-MINT RELEASE) emits variants for, so the same host gate: FSLineWin's
+    // enumeration only (it is the one host that validates freshmode plans), the axis on, §2a on,
+    // autonomous play, and the hold actually biting (a magnet or Heroism live releases it for
+    // real, and then the ordinary credit above applies instead).
+    const bool fresh_tag_possible = MintCreditExactOn() && FreshSpendAxisEnabled() && g_fresh_axis_enum
+        && TreasurePaySourceEnabled() && !HumanPlayActive()
+        && !FreshMintSpendableNow(state, state.active_player_index);
     // Colour-EXACT affordability. Same state-only, build-once shape as the presence gate above; see
     // ManaPayment.h. TWO pools, because the flat check is two tests: the whole subset against every
     // source, and the NONCREATURE casts against the pool that drops creature-only sources.
@@ -30747,6 +30926,24 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
                      HumanSatOrderOn() ? 1 : 0);
     }
 
+    // MTG_MINT_CREDIT_EXACT: the hoisted-candidate mask -- see Solve::consider's twin for the
+    // rationale (a mint can fund only the casts the apply orders AFTER the minter).
+    std::vector<char> mint_hoisted;
+    {
+        bool any_mint = false;
+        for (const Action& a : cands) { if (a.mint_gain > 0) { any_mint = true; break; } }
+        if (any_mint)
+        {
+            mint_hoisted.assign(cands.size(), 0);
+            for (std::size_t j = 0; j < cands.size(); ++j)
+            {
+                const Action& a = cands[j];
+                if (a.kind == Action::Kind::CastFromHand && !a.alt_cost
+                    && (a.sacrifice_land || ResolveProvider(state).CastEnablerFirst(state, a.card_name)))
+                { mint_hoisted[j] = 1; }
+            }
+        }
+    }
     // Evaluate one selected combination (a list of candidate indices) and, if
     // feasible, append the resulting plan. Mirrors the former per-mask body.
     auto eval_and_push = [&](const std::vector<int>& sel)
@@ -31009,25 +31206,60 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
         // there (mw68). §2a stops emitting the SacForMana actions whose ritual_float used to carry
         // this mana, so without it a subset that funds a later cast from a Treasure it mints itself
         // reads as unpayable. Same "never funds its own cost" guard as the rock branch above.
+        //
+        // MTG_MINT_CREDIT_EXACT: exact width (Action::mint_gain) and the payer's spendability gate,
+        // as in Solve's twin -- plus THE FRESH-SPEND AXIS PRICED AT THE BASE. A magnetless mint the
+        // fresh-hold refuses to credit is remembered (`fresh_mint`); if the subset is unpayable
+        // without it and payable with it, it is admitted TAGGED freshmode_choice=1 below -- the
+        // released-hold world the axis already searches (ScriptedFreshMode at apply; FSLineWin
+        // admits it only when its line wins within the horizon). That replaces the post-mint
+        // re-solve those variants used to rely on: the spend is a base plan, not a continuation.
+        int fresh_mint = 0;
         if (TreasurePaySourceEnabled())
         {
-            int minted = 0; ManaCost mint_costs; bool sel_mint = false;
+            const bool mint_exact = MintCreditExactOn();
+            int minted = 0; ManaCost mint_costs, first_mint; bool sel_mint = false, hand_magnet = false;
             for (int j : sel)
             {
                 const CardDefinition* md = cands[j].def;
                 if (md == nullptr || md->params.creates_treasures <= 0) { continue; }
-                minted += md->params.creates_treasures;
+                minted += mint_exact ? cands[j].mint_gain : md->params.creates_treasures;
+                if (cands[j].mint_hand_magnet) { hand_magnet = true; }
                 const ManaCost& mc = cands[j].cost;
+                if (!sel_mint || mc.ManaValue() < first_mint.ManaValue()) { first_mint = mc; }
                 mint_costs.white += mc.white; mint_costs.blue  += mc.blue;  mint_costs.black += mc.black;
                 mint_costs.red   += mc.red;   mint_costs.green += mc.green;
                 mint_costs.colorless += mc.colorless; mint_costs.generic += mc.generic;
                 sel_mint = true;
             }
+            // Sequential precondition: first minter + the magnets (Solve's twin has the note).
+            if (mint_exact && sel_mint)
+            {
+                mint_costs = first_mint;
+                if (!mint_hoisted.empty())
+                {
+                    for (int j : sel)
+                    {
+                        if (!mint_hoisted[j] || !cands[j].def
+                            || !cands[j].def->params.copies_solo_targeted_spells) { continue; }
+                        const ManaCost& hc = cands[j].cost;
+                        mint_costs.white += hc.white; mint_costs.blue  += hc.blue;  mint_costs.black += hc.black;
+                        mint_costs.red   += hc.red;   mint_costs.green += hc.green;
+                        mint_costs.colorless += hc.colorless; mint_costs.generic += hc.generic;
+                    }
+                }
+            }
             // FRESH-HOLD parity -- lockstep twin of the gate in consider() (see the rationale
             // there): a magnetless mint is banked this turn, so it can fund nothing.
-            if (sel_mint && minted > 0 && pool.CanPay(mint_costs)
-                && (!FreshHoldActive() || CopyMagnetLive(state, state.active_player_index)))
-            { eff.wild += minted; eff_nc.wild += minted; credited = true; simul_mint_credit = minted; }
+            const bool spendable = mint_exact
+                ? (FreshMintSpendableNow(state, state.active_player_index) || hand_magnet)
+                : (!FreshHoldActive() || CopyMagnetLive(state, state.active_player_index));
+            if (sel_mint && minted > 0 && pool.CanPay(mint_costs))
+            {
+                if (spendable)
+                { eff.wild += minted; eff_nc.wild += minted; credited = true; simul_mint_credit = minted; }
+                else if (fresh_tag_possible) { fresh_mint = minted; }
+            }
         }
         // Same-turn HASTED dork credit. The rock credit above excludes creatures because a dork cast
         // this turn is summoning-sick -- but when THIS subset attaches a haste-granting Equipment to
@@ -31258,6 +31490,21 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
         }
         bool mana_ok = credited ? (eff.CanPay(combined) && eff_nc.CanPay(noncreature_combined))
                                  : (pool.CanPay(combined) && pool_noncreature.CanPay(noncreature_combined));
+        // FRESH-SPEND AT THE BASE (MTG_MINT_CREDIT_EXACT; see the mint block above): unpayable in
+        // the doctrine world, payable with the subset's own magnetless mint -> credit it and TAG the
+        // plan as the released-hold variant. The payability decision is made here so every gate
+        // below (sequenced ritual, colour presence, colour count, fill) runs on the credited pool.
+        bool fresh_tag = false;
+        if (!mana_ok && fresh_mint > 0)
+        {
+            ManaPool e = eff, e_nc = eff_nc;
+            e.wild += fresh_mint; e_nc.wild += fresh_mint;
+            if (e.CanPay(combined) && e_nc.CanPay(noncreature_combined))
+            {
+                eff = e; eff_nc = e_nc; credited = true; simul_mint_credit = fresh_mint;
+                mana_ok = true; fresh_tag = true;
+            }
+        }
         // SEQUENCED ritual credit, applied LAZILY. The sequenced credit is never LARGER than the
         // simultaneous one, so a position the cheap model already rejects would be rejected by the
         // sequenced model too -- only the SURVIVORS need the walk. Most odometer positions are
@@ -31529,7 +31776,8 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
         // the colours of same-subset mana rocks -- see WidenHaveWithSubsetRocks, shared with
         // Solve::consider's twin gate.
         bool have_rock[5];
-        const bool* have_eff = WidenHaveWithSubsetRocks(have_colors, have_rock, cands, sel);
+        const bool* have_eff = WidenHaveWithSubsetRocks(have_colors, have_rock, cands, sel,
+                                                        /*credited_mint=*/simul_mint_credit > 0 && MintCreditExactOn());
         if (!sel_col_reducer && !SubsetPayable(have_eff, cands, sel, &colour_demand))
         {
             _ct.label = "colour-exists";                    // ef-* labels overwrite on a failed rescue
@@ -31796,6 +32044,7 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
         TurnSolver::Plan plan;
         plan.value          = total_eval;
         plan.wins_this_turn = wins;
+        plan.freshmode_choice = fresh_tag ? 1 : 0;   // fresh-spend priced at the base (MTG_MINT_CREDIT_EXACT)
         plan.pump_waste     = SubsetPumpWasted(state, cands, sel);   // ordering-only tie-break flag
         plan.atk_forfeit    = SubsetAttackForfeit(state, cands, sel);   // ordering-only (gated OFF)
         for (int j : sel) { plan.actions.push_back(j == fill_j ? fill_action : cands[j]); }
@@ -33244,8 +33493,11 @@ static int PlanOpensBreakpoint(const GameState& state, const TurnSolver::Plan& p
         // attacker untapped (the gr-defer-land-sequencing defect, mirrorwing gi118: the greedy
         // re-solve cast Expedite off the attack-ready Hierarch, stranding two turns of chip
         // damage). Nested casts still re-solve inline at site 0, like a nested cantrip.
+        // MTG_MINT_CREDIT_EXACT: a Treasure-only payload opens no site (MintPayloadOpensBreakpoint,
+        // lockstep with the arming site and the executor's twins).
         if (d->params.solo_target_trick
-            && (d->params.cast_draw > 0 || d->params.creates_treasures > 0)) { mask |= 1 << 5; }
+            && (d->params.cast_draw > 0
+                || (d->params.creates_treasures > 0 && MintPayloadOpensBreakpoint()))) { mask |= 1 << 5; }
         // Equipment cast under a watcher -> the deferred site-6 re-solve (see the header note).
         if (watcher && d->params.is_equipment && a.kind == Action::Kind::CastFromHand)
         { mask |= 1 << 6; }
@@ -48558,8 +48810,12 @@ static std::vector<TurnSolver::Plan> BpDeriveContinuationList(const GameState& s
         // enumerator prices, so it reads as old. MTG_BP_NEW_ONLY_MANA=0 is the A/B hatch (the
         // rule as it stood before this half existed).
         static const bool s_newonly_mana = EnvOn("MTG_BP_NEW_ONLY_MANA", true);
+        // MTG_MINT_CREDIT_EXACT retires this half: the mint is credited at the base, so a
+        // continuation that spends it on an ORIGINAL-hand card is a base plan's line and the USER's
+        // rule drops it ("we should not need to reconsider things from the original hand"). A
+        // drawn mana source is a new card and keeps its line on the uses_new ground above.
         int new_paysac = 0;
-        if (s_newonly_mana)
+        if (s_newonly_mana && !MintCreditExactOn())
         {
             for (const Permanent& q : state.battlefield)
             {

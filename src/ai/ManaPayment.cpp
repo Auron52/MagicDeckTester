@@ -1644,6 +1644,9 @@ static bool MintedTreasureSpendable(const GameState& state, const std::vector<Ac
 {
     if (!TreasurePaySourceEnabled() || !FreshHoldActive()) { return true; }
     if (CopyMagnetLive(state, state.active_player_index)) { return true; }
+    // MTG_MINT_CREDIT_EXACT: the payer's own rule (PaySacSpendableNow) -- a live Heroism releases
+    // the hold too (MTG_HEROISM_FRESH_HOLD), a clause this projection lacked.
+    if (MintCreditExactOn() && FreshMintSpendableNow(state, state.active_player_index)) { return true; }
     for (const Action& a : acts)
     {
         const CardDefinition* d = a.def ? a.def : CardDatabase::Instance().Lookup(a.card_name);
@@ -1692,10 +1695,53 @@ static int FirstUnpayablePos(const GameState& state, const std::vector<Action>& 
         {
             const CardDefinition* d = a.def ? a.def : CardDatabase::Instance().Lookup(a.card_name);
             if (d && d->params.creates_treasures > 0 && MintedTreasureSpendable(state, acts))
-            { AddColorToPool(pool, std::string(), d->params.creates_treasures); }
+            {
+                // MTG_MINT_CREDIT_EXACT: the exact width rides the Action (mint_gain, stamped at
+                // emission on the pre-plan board -- conservative about bodies this plan adds first,
+                // never optimistic). 0 with the lever off -> the base count as before.
+                const int n = a.mint_gain > 0 ? a.mint_gain : d->params.creates_treasures;
+                AddColorToPool(pool, std::string(), n);
+            }
         }
     }
     return -1;
+}
+
+bool MintHoistAfterMagnets(const GameState& state, const std::vector<Action>& acts)
+{
+    if (!MintCreditExactOn()) { return false; }
+    const DecisionProvider& prov = ResolveProvider(state);
+    ManaCost hoisted, magnets, first_mint;
+    int minters = 0; bool any_ena = false;
+    for (const Action& a : acts)
+    {
+        if (a.kind != Action::Kind::CastFromHand || a.alt_cost || a.free_cast) { continue; }
+        const CardDefinition* d = a.def ? a.def : CardDatabase::Instance().Lookup(a.card_name);
+        if (!d) { continue; }
+        if (d->params.creates_treasures > 0)
+        {
+            if (minters++ == 0 || a.cost.ManaValue() < first_mint.ManaValue()) { first_mint = a.cost; }
+            continue;
+        }
+        if (a.sacrifice_land || prov.CastEnablerFirst(state, a.card_name))
+        {
+            hoisted = AddManaCosts(hoisted, a.cost);
+            any_ena = true;
+            if (d->params.copies_solo_targeted_spells) { magnets = AddManaCosts(magnets, a.cost); }
+        }
+    }
+    if (minters == 0 || !any_ena) { return false; }
+    const ManaPool pool = AvailableManaPool(state);
+    if (pool.CanPay(AddManaCosts(hoisted, first_mint))) { return false; }   // the late slot pays: keep the reviewed order
+    return pool.CanPay(AddManaCosts(magnets, first_mint));
+}
+
+int HoistSortKey(const GameState& state, const Action& a, bool minter_hoisted)
+{
+    const CardDefinition* d = a.def ? a.def : CardDatabase::Instance().Lookup(a.card_name);
+    if (!d) { return 0; }
+    if (minter_hoisted && d->params.creates_treasures > 0) { return 11; }
+    return ResolveProvider(state).CastOrderRank(state, *d) * 2;
 }
 
 bool OrderRecheckEnabled()

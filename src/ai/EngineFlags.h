@@ -886,6 +886,98 @@ inline bool FrontlineTriggerFirst()
     return v;
 }
 
+// ---- MTG_MINT_CREDIT_EXACT: a minted Treasure is CREDITED, never BREAKPOINTED ------------------
+//
+// THE GENERAL RULE (USER, 2026-09-22), stated as the test every breakpoint site has to pass:
+//
+//   A breakpoint exists for a card that ARRIVES -- something the plan could not enumerate at the
+//   base because it was not in the original hand (a draw, a dig, a reveal, a tutor). Mana a plan's
+//   own action PRODUCES is not an arrival: it is priced at the base like every other in-plan
+//   source (a ritual's float, a rock's tap, a fixed-colour sac, a hasted dork), and the plan that
+//   spends it is a BASE plan. "We make the credit work for everything else in the plan that
+//   produces mana, so following that rule we should count creation of treasures." A line that
+//   becomes payable only because a DRAWN card produces mana is a NEW line by definition -- it
+//   casts or uses something that was not in the original hand -- and the new-only continuation
+//   rule keeps it on that ground. "We should not need to reconsider things from the original hand."
+//   "Otherwise we need to randomly open breakpoints on treasure creation and worry about lines
+//   that we already deleted."
+//
+// What this lever changes (DEFAULT OFF while measured -> byte-identical off; heurarm slot so one
+// pooled batch carries every arm):
+//   1. EMISSION stamps Action::mint_gain = the EXACT Treasure count a solo-target trick's cast will
+//      realise on the current board (SoloTrickInstances: the magnet fan and the Frontline Heroism
+//      copies, per target -- the count ResolveSoloTargetTrick produces), where the shipped credit
+//      counted ONE per minting cast and its comment called the width "target-dependent". The
+//      target is on the Action, so the width is a board fact.
+//   2. BOTH mana gates at the odometer (ManaPruneBound, the selection-exact ManaGateIndex) credit
+//      that gain. Neither credited a mint at all before, so the shipped consider() credit was DEAD
+//      for exactly the total-mana shortfall it was written for: {Gold Rush {1}{G}, Fists {1}{R}}
+//      = 4 against a 3-mana pool is skipped at the odometer and never priced (the mw68 "still
+//      OPEN" mechanism in mana-order-and-reserve-overhaul.md -- "the position has to survive to be
+//      priced", the metalcraft lesson, a third time).
+//   3. The pricing twins (Solve / EnumeratePlans consider()) credit mint_gain, and their
+//      spendability gate becomes the payer's own (PaySacSpendableNow's entered_this_turn branch:
+//      magnet live, OR Heroism live under MTG_HEROISM_FRESH_HOLD -- the Heroism clause was missing
+//      from the credit, so under a Heroism alone the mint was credited at zero while the payer
+//      accepted it). The colour-presence gate treats a credited mint as every colour (it is wild).
+//   4. An {X} trick (Luxurious Libation) is also offered at the X the same-plan mint would fund,
+//      so "Gold Rush, then Libation for the fan" is a base plan and not a continuation.
+//   5. The fresh-spend axis is priced at the base: a magnetless subset payable ONLY with its own
+//      mint is admitted TAGGED freshmode_choice=1 (the released-hold world FSLineWin already
+//      validates by this-turn-lethal), instead of relying on a post-mint re-solve.
+//   6. A Treasure-only trick payload opens NO breakpoint (MintPayloadOpensBreakpoint, read at the
+//      rollout arming, the plan's site mask, the executor's d0 second pass and its node-hosted
+//      twin), and the new-only filter's "needs a minted Treasure" keep -- which reconsidered old-hand
+//      cards -- is off.
+//
+// THE AUDIT ROUTE IS DELIBERATE AND STAYS. USER: "I see a purpose to having a framework to locate
+// bugs like this one with the extra treasure token. We do not want to hide these cases, so we
+// should have a way to run things with extra breakpoints and reconsiders in order to ensure there
+// are no bugs with the full line version." / "Because the full-line version is a bit bug-prone I
+// don't want to rely on it fully in isolation." MTG_BP_MINT_SITE=1 re-opens the Treasure-only
+// breakpoint under this lever, and MTG_BP_NEW_ONLY_DRY=1 keeps every reconsideration in the list;
+// a pooled batch with a lean arm and an audit arm, read with test/paired_arms.py --list-moved, is
+// the detector: a game the audit arm wins earlier at unbounded budget is a line the base could not
+// enumerate. See docs/design/bp-new-only-continuations.md ("Audit route").
+inline bool MintCreditExactOn()
+{
+    static const bool env_on = EnvOn("MTG_MINT_CREDIT_EXACT");
+    return heurarm::Flag(heurarm::MINT_CREDIT_EXACT, env_on);
+}
+inline bool BpMintSiteOn()
+{
+    static const bool env_on = EnvOn("MTG_BP_MINT_SITE");
+    return heurarm::Flag(heurarm::BP_MINT_SITE, env_on);
+}
+// ONE predicate for every site that asks "does a Treasure-only trick payload open the deferred
+// site-5 breakpoint" -- rollout arming, plan site mask, executor d0 pass, executor node twin.
+// A draw payload (cast_draw > 0) opens it regardless: a drawn card is an arrival.
+inline bool MintPayloadOpensBreakpoint()
+{
+    return !MintCreditExactOn() || BpMintSiteOn();
+}
+
+// ---- MTG_BP_REPLAY_COST: a recorded continuation cast carries the cost it paid ----------------
+//
+// LOCKSTEP DEFECT (found 2026-09-22 on mirrorwing seed 700473 T4, MTG_BP_TRACE + [bp-traits]):
+// the rollout records a breakpoint continuation's casts into plan.breakpoint_actions as bare
+// Actions (name, target, X, ...) with NO `cost`. The executor replays them under PlanTraits
+// computed from those records (replay_recorded's _rec_traits, the lockstep twin of the rollout's
+// _cont_traits), and ComputePlanTraits counts a mana cast only when a.cost.ManaValue() > 0 -- so
+// the replay's traits read mana_casts=0 where the rollout's read 3. That flips the per-payment
+// one-shot hold (OneShotHoldMask fires on mana_casts < 2): the executor held the turn-old Treasure
+// and tapped BOTH dorks for two Fortifying Draughts; the rollout had cracked the Treasure and kept
+// the pumped Elvish Mystic to attack alone for exactly lethal. Committed T4 kill, realised no win.
+// Every committed continuation with >= 2 mana casts and an untapped pay-sac source pays in two
+// different worlds. The fix stamps the paid cost (the apply's effective cost) onto the record,
+// which only the traits builder reads (replay re-derives the cost from the card). DEFAULT OFF
+// while measured -> byte-identical off; heurarm slot for the pooled batch.
+inline bool BpReplayCostOn()
+{
+    static const bool env_on = EnvOn("MTG_BP_REPLAY_COST");
+    return heurarm::Flag(heurarm::BP_REPLAY_COST, env_on);
+}
+
 
 
 // ---- UNBUDGETED-PLAY SCOPE + the leaf memo it arms ------------------------------------------

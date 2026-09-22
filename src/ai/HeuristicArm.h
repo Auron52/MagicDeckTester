@@ -223,6 +223,9 @@ enum Slot : int
     BP_DIG_AXIS_FANOUT,       // MTG_BP_DIG_AXIS_FANOUT    a searched-dig-axis plan (dig_choice==1) gets the site-4 fan-out (default ON)
     BP_NEW_ONLY,              // MTG_BP_NEW_ONLY           a breakpoint emits ONLY continuations that use a card that arrived there
     PENDING_FILTER_SLOT,      // MTG_PENDING_FILTER_SLOT   a hand any-colour filter counts itself in the fed-slot quota (default ON since 2026-09-22)
+    MINT_CREDIT_EXACT,        // MTG_MINT_CREDIT_EXACT     a minted Treasure is credited at the base at its EXACT width and opens no breakpoint
+    BP_MINT_SITE,             // MTG_BP_MINT_SITE          AUDIT hatch: a Treasure-only trick payload still opens the site-5 breakpoint under the exact credit
+    BP_REPLAY_COST,           // MTG_BP_REPLAY_COST        a recorded continuation cast carries the cost it paid, so the executor's replay traits match the rollout's
     COUNT
 };
 
@@ -416,6 +419,9 @@ inline const char* Name(int slot)
         "MTG_BP_DIG_AXIS_FANOUT",
         "MTG_BP_NEW_ONLY",
         "MTG_PENDING_FILTER_SLOT",
+        "MTG_MINT_CREDIT_EXACT",
+        "MTG_BP_MINT_SITE",
+        "MTG_BP_REPLAY_COST",
     };
     // The enum and this table are ONE mapping split across two lists: a slot added to one and not
     // the other silently shifts every lever after it (a manifest asking for lever X would set Y).

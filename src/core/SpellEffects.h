@@ -18005,6 +18005,83 @@ inline bool PaySacSpendableNow(const GameState& state, const Permanent& p, const
     return HeroismFreshHoldOn() && HeroismCopiesLive(state, p.controller_index) > 0;
 }
 
+// ---- EXACT MINT WIDTH (MTG_MINT_CREDIT_EXACT; see EngineFlags.h for the rule) -------------------
+//
+// The number of payload instances ResolveSoloTargetTrick will realise for a cast of `def` at
+// `target_number` (0 = the up-to-one untargeted cast, kTrickOpponentTarget = their creature, else
+// an OWN creature's card number -- on the battlefield, or a same-plan HAND creature cast before the
+// trick) with `strive_extras` extra targets, on the board as it stands. Twin of that resolver's
+// recipient list:
+//   * untargeted / opponent-targeted / strive: one instance per target, no magnet trigger and no
+//     Heroism trigger (a strived spell does not "target only a single creature");
+//   * a single own target: +1 per live Frontline Heroism (its own copy, onto the Soldier it makes),
+//     and when the target is a copy magnet +1 per OTHER own body -- including those Soldiers when
+//     the Heroism trigger is taken first (MTG_FRONTLINE_FIRST), because they exist before the
+//     magnet's scan. A hand-creature target counts every battlefield body as "other".
+// EXACT for the current board; CONSERVATIVE about bodies the same plan puts down before the trick
+// (a creature cast earlier in the plan widens the fan and is not counted) -- the safe direction
+// for a credit, and the same conservatism the shipped one-per-cast credit already accepted.
+inline int SoloTrickInstances(const GameState& state, int controller, const CardDefinition& def,
+                              int target_number, int strive_extras)
+{
+    if (!def.params.solo_target_trick) { return 1; }
+    if (target_number == 0 || target_number == kTrickOpponentTarget) { return 1; }
+    if (strive_extras > 0) { return 1 + strive_extras; }
+    const CardDatabase& db = CardDatabase::Instance();
+    bool magnet = false, found = false;
+    for (const Permanent& p : state.battlefield)
+    {
+        if (p.controller_index != controller || p.card.m_number != target_number) { continue; }
+        if (!p.card.IsCreature() && !p.is_animated) { continue; }
+        const CardDefinition* td = db.LookupCached(p.card);
+        magnet = td != nullptr && td->params.copies_solo_targeted_spells;
+        found  = true;
+        break;
+    }
+    if (!found)   // a same-plan HAND creature: a magnet iff the card is one
+    {
+        for (const Card& c : state.players[controller].hand)
+        {
+            if (c.m_number != target_number) { continue; }
+            const CardDefinition* td = db.LookupCached(c);
+            magnet = td != nullptr && td->params.copies_solo_targeted_spells;
+            break;
+        }
+    }
+    const int soldiers = HeroismCopiesLive(state, controller);
+    int n = 1 + soldiers;
+    if (magnet)
+    {
+        for (const Permanent& p : state.battlefield)
+        {
+            if (p.controller_index != controller || p.card.m_number == target_number) { continue; }
+            if (p.card.IsCreature() || p.is_animated) { ++n; }
+        }
+        if (FrontlineTriggerFirst()) { n += soldiers; }
+    }
+    return n;
+}
+
+// Treasures a cast of `def` at that target mints: creates_treasures per instance (Gold Rush).
+inline int MintedTreasuresForCast(const GameState& state, int controller, const CardDefinition& def,
+                                  int target_number, int strive_extras)
+{
+    if (def.params.creates_treasures <= 0) { return 0; }
+    return def.params.creates_treasures
+         * SoloTrickInstances(state, controller, def, target_number, strive_extras);
+}
+
+// Is a Treasure minted THIS TURN spendable this turn on the current board? The enumeration-side
+// reader of exactly PaySacSpendableNow's entered_this_turn branch (one rule, two readers): the
+// fresh-hold is off (or released by the freshmode pin), a copy magnet is live, or a Heroism is
+// live under MTG_HEROISM_FRESH_HOLD.
+inline bool FreshMintSpendableNow(const GameState& state, int controller)
+{
+    if (!FreshHoldActive()) { return true; }
+    if (CopyMagnetLive(state, controller)) { return true; }
+    return HeroismFreshHoldOn() && HeroismCopiesLive(state, controller) > 0;
+}
+
 // The colours a mana source currently produces. Identical to def.params.produces (by const ref,
 // zero cost, byte-identical) for every normal source; the dynamic Reflecting-Pool union only for
 // a `reflecting` source; the dynamic colour-domain union for a `domain_mana` source (Faeburrow /

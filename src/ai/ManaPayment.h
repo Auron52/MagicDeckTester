@@ -118,6 +118,21 @@ bool OpaqueCastOrderActive(const GameState& state);
 void ApplyCastOrderRangeLadder(const GameState& state, const std::vector<Action>& actions,
                                std::vector<int>& order);
 
+// MTG_MINT_CREDIT_EXACT -- does a Treasure MINTER in `actions` join the enabler HOIST, right after
+// the copy magnets? The funding ladder (CastOrderFallbackRanks 15 -> 13 -> 6) walks a minter no
+// earlier than the ordered set, which is AFTER every hoisted enabler (bodies, Heroism, Libation,
+// Twinflame), so a mint could never pay for one of them at the base while the post-mint re-solve
+// did it freely (mirrorwing seed 700693 T3: Gold Rush, then a second Frontline Heroism off its two
+// Treasures). USER 2026-08-18: Gold Rush "should go after the Magnets at the earliest, but
+// preferably you would be able to wait" -- so the earliest slot is taken ONLY when the late slots
+// cannot pay: the base pool cannot cover every hoisted enabler PLUS the (cheapest) minter, but can
+// cover the magnets plus that minter. Shared by ApplyPlanDirect and AIEngine::TakeTurn (lockstep);
+// the enumerator's mint-credit precondition mirrors it. False with the lever off -> byte-identical.
+bool MintHoistAfterMagnets(const GameState& state, const std::vector<Action>& actions);
+// The hoist's sort key under that rule: a hoisted minter sits between the magnets (5) and every
+// other enabler. rank*2 for enablers, 11 for the minter (magnets 10, Heroism 12, creatures 20 ...).
+int  HoistSortKey(const GameState& state, const Action& a, bool minter_hoisted);
+
 // THE ENABLER/WIPE RECHECK -- the one line in the suite that a cast-ORDER cannot express.
 //
 //   USER 2026-08-18: "One tricky thing about this deck is that Tainted Remedy + Reverent Silence

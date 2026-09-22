@@ -3884,8 +3884,12 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
                   // post-cast re-solve. At depth>0 the committed line's recorded breakpoint
                   // script covers it (TakeTurn returns false under full-depth regardless of this
                   // flag).
+                  // MTG_MINT_CREDIT_EXACT: a Treasure-only payload takes no second pass -- the d0
+                  // greedy prices the mint in-plan (MintPayloadOpensBreakpoint, lockstep with the
+                  // rollout's arming site).
                   || (d->params.solo_target_trick
-                      && (d->params.cast_draw > 0 || d->params.creates_treasures > 0))
+                      && (d->params.cast_draw > 0
+                          || (d->params.creates_treasures > 0 && MintPayloadOpensBreakpoint())))
                   // MTG_ACQ_RESOLVE (mid-phase acquisition family): a tutor-to-hand fetch or a
                   // staged-exile dig acquires same-phase-castable material, so the depth-0
                   // executor gets the same second pass the rollout's deferred re-solve models.
@@ -4040,6 +4044,14 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
         if (PlanTraitsWanted()) { _rec_traits = TurnSolver::ComputePlanTraits(state, recs); }
         PlanTraitsScope  _rec_scope(PlanTraitsWanted() ? &_rec_traits : nullptr);
         TapKeepLastScope _rec_keep(PumpTargetHoldEnabled() ? _rec_traits.pump_target_card : 0);
+        if (BpTraceEnabled())   // MTG_BP_TRACE: the replay's trait scope, for the rollout diff
+        {
+            std::fprintf(stderr, "[bp-traits] exec  T%d cont: wanted=%d mana_casts=%d pump_target=%d magnet=%d mult=%d attack=%d mid=%d acts=%d\n",
+                         state.turn_number, PlanTraitsWanted() ? 1 : 0, _rec_traits.mana_casts,
+                         _rec_traits.pump_target_card, _rec_traits.copy_magnet_live ? 1 : 0,
+                         _rec_traits.bodies_are_multipliers ? 1 : 0, _rec_traits.attack_matters ? 1 : 0,
+                         _rec_traits.mid_turn_casts ? 1 : 0, static_cast<int>(recs.size()));
+        }
 
         for (const Action& a : recs)
         {
@@ -4446,7 +4458,8 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
             const int hosted = TurnSolver::BpNodeHostedSites();
             // Site 5 -- solo-target trick with a draw or Treasure payload (Gold Rush, Mirrorwing).
             if ((hosted & (1 << 5)) != 0 && d->params.solo_target_trick
-                && (d->params.cast_draw > 0 || d->params.creates_treasures > 0))
+                && (d->params.cast_draw > 0
+                    || (d->params.creates_treasures > 0 && MintPayloadOpensBreakpoint())))
             { return true; }
             // Site 6 -- an Equipment cast under a live ETB-draw watcher. Only the DEFERRED shape
             // is new here; the inline one already truncates through the clause below.
@@ -4617,17 +4630,29 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
     // Enablers apply in CastOrderRank order (stable; equal ranks keep plan order -- byte-
     // identical unless a provider ranks its enablers apart). Mirror of ApplyPlanDirect's
     // opaque path: Mirrorwing needs magnet(5) -> Twinflame(8) -> pump tricks.
+    // MTG_MINT_CREDIT_EXACT: a minter the late slots cannot pay joins the hoist right after the
+    // magnets (MintHoistAfterMagnets; rollout twin in ApplyPlanDirect -- lockstep).
+    const bool mint_hoist = MintHoistAfterMagnets(state, plan.actions);
+    auto is_hoisted_minter = [&](const Action& a)
+    {
+        if (!mint_hoist || a.kind != Action::Kind::CastFromHand || a.alt_cost || a.free_cast) { return false; }
+        const CardDefinition* d = a.def ? a.def : CardDatabase::Instance().Lookup(a.card_name);
+        return d != nullptr && d->params.creates_treasures > 0;
+    };
     {
         std::vector<int> ena;
         for (int i = 0; i < static_cast<int>(plan.actions.size()); ++i)
         {
             const Action& a = plan.actions[i];
-            if (a.kind == Action::Kind::CastFromHand && !a.sacrifice_land && !a.alt_cost
-                && ResolveProvider(state).CastEnablerFirst(state, a.card_name))
+            if ((a.kind == Action::Kind::CastFromHand && !a.sacrifice_land && !a.alt_cost
+                 && ResolveProvider(state).CastEnablerFirst(state, a.card_name))
+                || is_hoisted_minter(a))
             { ena.push_back(i); }
         }
         std::stable_sort(ena.begin(), ena.end(), [&](int x, int y)
         {
+            if (mint_hoist)
+            { return HoistSortKey(state, plan.actions[x], true) < HoistSortKey(state, plan.actions[y], true); }
             const CardDefinition* dx = CardDatabase::Instance().Lookup(plan.actions[x].card_name);
             const CardDefinition* dy = CardDatabase::Instance().Lookup(plan.actions[y].card_name);
             if (!dx || !dy) { return false; }
@@ -4681,6 +4706,7 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
         if (!a.alt_cost && (a.sacrifice_land
                             || ResolveProvider(state).CastEnablerFirst(state, a.card_name)))
         { continue; }
+        if (is_hoisted_minter(a)) { continue; }   // already cast in the hoist (MTG_MINT_CREDIT_EXACT)
         ord.push_back(i);
     }
     if (OpaqueCastOrderActive(state))
