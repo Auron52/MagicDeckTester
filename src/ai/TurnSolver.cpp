@@ -42193,6 +42193,27 @@ static TurnSolver::SearchLine FSLineWin(const GameState& state, int depth, int m
                              p.freshmode_choice,
                              s.players[1 - s.active_player_index].life,   // post-apply, post-combat
                              tail.win_turn, best.win_turn, cutoff);
+                // MTG_FSW_BOARD=1: the recorded continuation casts and the post-apply board (own
+                // bodies with power/tapped, Treasures), so a mis-priced base line can be read
+                // cast-for-cast against the realized game without committing it.
+                static const bool s_fsw_board = EnvOn("MTG_FSW_BOARD");
+                if (s_fsw_board)
+                {
+                    std::string cont, board;
+                    for (const Action& a : bp) { cont += a.card_name; cont += ","; }
+                    int treasures = 0;
+                    for (const Permanent& q : s.battlefield)
+                    {
+                        if (q.controller_index != s.active_player_index) { continue; }
+                        if (q.card.m_name == "Treasure Token") { ++treasures; continue; }
+                        if (!q.card.IsCreature()) { continue; }
+                        board += q.card.m_name.str() + "#" + std::to_string(q.card.m_number)
+                               + "(" + std::to_string(q.EffectivePower()) + (q.tapped ? "T" : "") + ") ";
+                    }
+                    std::fprintf(stderr, "[fsw-board] T%d d%d p=%s cont=[%s] treasures=%d own=%s\n",
+                                 state.turn_number, depth, sum.empty() ? "(pass)" : sum.c_str(),
+                                 cont.c_str(), treasures, board.c_str());
+                }
                 // MTG_FSW_LINE=1: also print the tail's projected WINNING line (its phase plans),
                 // so a mis-projection can be compared against the realized game cast-for-cast
                 // (diagnosis only, same gate as the trace).
