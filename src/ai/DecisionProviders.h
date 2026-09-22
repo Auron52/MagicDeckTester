@@ -1491,6 +1491,34 @@ public:
         static const bool v = EnvOn("MTG_SNOW_CONDEMN", true);
         return heurarm::Flag(heurarm::SNOW_CONDEMN, v);
     }
+
+    // NEW-ONLY BREAKPOINT CONTINUATIONS -- the per-deck route, STAGED OFF (2026-09-22; record and
+    // every measurement in docs/design/bp-new-only-continuations.md). The USER's rule: a breakpoint
+    // emits only the continuations that use a card that ARRIVED there or activate an ability that was
+    // NOT PREVIOUSLY AVAILABLE; a continuation of old cards and old abilities is a sibling base
+    // plan's line, reached a second time.
+    //
+    // WHY STAGED AND NOT ADOPTED: it is a trade-off, not a clean win, and the trade is the user's.
+    //   * Cost: 0.45x units at d2/b0, 0.90x at d3/b10, 0.93x at d5/b20; the six heaviest phase-A
+    //     label games 0.48-0.82x with every value label identical.
+    //   * Quality at the deck's play settings (d5/b20, 2,000 paired games, held-out seeds):
+    //     -0.0065 +/- 0.0026, 20 better / 7 worse, all four seed blocks better -- a win.
+    //   * Quality at the suite's shallow tier (d3/b10, 2,000 paired games, held-out seeds):
+    //     +0.0045 +/- 0.0028, 11 better / 20 worse -- a small loss, not significant, but in the
+    //     direction the suite's own keys showed (three Snow games a turn later, zero earlier; the
+    //     pre-accept classifier calls all three budget churn -- each recovers at 4x its budget).
+    // Flipping the default to true adopts it; Snow's smoke and regression keys (d3 and d5) then need
+    // a rebaseline. The condemnation filter above is independent of it (candidate level vs plan
+    // level) and the two were measured together.
+    //
+    // Per-JOB overridable through the same heurarm slot as the global lever, so a batch can pool a
+    // base arm (`"flags": {"MTG_BP_NEW_ONLY": false}`) with an adopted arm -- the SNOW_CONDEMN
+    // pattern; MTG_SNOW_BP_NEW_ONLY=1 is the per-deck switch.
+    bool NewOnlyBreakpointContinuations() const override
+    {
+        static const bool v = EnvOn("MTG_SNOW_BP_NEW_ONLY", false);
+        return heurarm::Flag(heurarm::BP_NEW_ONLY, v);
+    }
 };
 
 // Fungus (Thallid / Saproling spore-token swarm). EXISTS FOR ONE HOOK: the winless certificate.

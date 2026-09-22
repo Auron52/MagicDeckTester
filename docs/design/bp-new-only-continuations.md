@@ -256,19 +256,54 @@ keeps ~0.3% more work. Same verdict as the first cut: a quality win at 0.93x uni
 removed line the first cut was carrying. The gate ran alone on the box this time (batch ms 0.93-1.04x
 per block; take the units).
 
+### The suite's own Snow keys under adoption, and the d3/b10 gate (2026-09-22)
+
+With the per-deck route switched on, the smoke and regression tiers moved Snow's four searched keys
+(d0 untouched, every other deck untouched):
+
+| key | base | adopted | games moved |
+|---|---|---|---|
+| smoke d3 s1001 (100) | 6.1300 | 6.1500 | gi=11 6->7, gi=14 8->unwon |
+| smoke d5 s1001 (50) | 6.2400 | 6.2800 | the same two games, the same way |
+| regression d3 s2002 (60) | 6.1167 | 6.1167 | play differs, score unchanged |
+| regression d3 s3003 (60) | 6.0000 | 6.0167 | gi=8 5->6 |
+| regression d5 s2002 / s3003 | 6.0333 / 6.1333 | same | play differs, score unchanged |
+
+Three games a turn later, none earlier, out of 330 searched. `test/classify_turn_later.sh smoke` (the
+mandatory pre-accept gate) classifies every one of them as **churn**: at 4x and 16x the case budget
+the adopted arm recovers the base's turn (gi=11 -> 6, gi=14 -> 8, at d3 and d5; the regression game
+-> 5 at 40 ms and 160 ms). Nothing was deleted; the fast line is reachable. Two of the three are
+d3/b10 games, and the play gate above was d5/b20, so the shallow tier got its own gate:
+
+**d3/b10, 2,000 paired games, held-out seeds** (`logs/snowdiag/play_d3b10/`):
+
+| block | base | adopted | delta | better / worse | units |
+|---|---|---|---|---|---|
+| 9001 | 6.0200 | 6.0220 | +0.0020 | 5 / 6 | 0.887x |
+| 9501 | 6.0120 | 6.0260 | +0.0140 | 2 / 9 | 0.902x |
+| 10001 | 6.0940 | 6.0960 | +0.0020 | 2 / 3 | 0.900x |
+| 10501 | 5.9700 | 5.9700 | 0.0000 | 2 / 2 | 0.894x |
+| **all 2,000** | **6.0240** | **6.0285** | **+0.0045 +/- 0.0028** | **11 / 20, sign p = 0.15** | **0.896x** |
+
+So the lever's quality effect depends on the search setting: a win at the deck's play settings
+(d5/b20, -0.0065, 20 / 7) and a small, not-significant loss at the shallow diagnostic tier (d3/b10,
++0.0045, 11 / 20). Cost is lower at every setting. Where the three suite games diverge is
+instructive: in two of them the base wins through a continuation that casts Boreal Druid off the
+mana of an Arcum's Astrolabe the same plan cast, while the adopted arm must reach that line through
+the sibling base plan that carries the Druid, and at the case budget it does not always get there.
+
 ## Status
 
 BUILT on the user's rule with the activation half as clarified ("an ability that was not previously
 available"), DEFAULT OFF, flag-off byte-identical suite-wide (smoke 87/87, changed 0, on both cuts).
-Measured on Snow under the shipped rule: a QUALITY WIN at play settings (-0.0065 +/- 0.0026, 20 / 7,
-better on all four blocks) at 0.93x units; the phase-A label regime 0.48-0.82x units on the six
-heaviest games with at least as many positions labelled and **every one of 33 labels identical**; the
-one label the first cut moved (gi=214 turn 3) is identical again at 0.36x the base's work. Nothing
-open on the measurement side.
+The per-deck route for Snow (`SnowProvider::NewOnlyBreakpointContinuations`) is in the tree,
+**staged off** (`MTG_SNOW_BP_NEW_ONLY`, default 0); flipping its default adopts it and calls for a
+rebaseline of Snow's smoke and regression keys.
 
-Per-deck adoption for Snow would be `SnowProvider::NewOnlyBreakpointContinuations() { return true; }`
-plus a GT rebaseline of Snow's suite keys (smoke `snow 3 1001 100 10` and the regression tier).
-**Not adopted -- the user's call.** Two things to know before deciding: the filter keys only
-`ActivatePermAbility` (every Snow activation; other kinds are kept, so another deck adopting it gets
-less of the saving until its kinds are keyed), and site 9 still opens only for permanents that
-entered this turn, which is narrower than the principle the clarification states.
+**Not adopted -- it is a trade-off, and the trade is the user's:** cost 0.45x / 0.90x / 0.93x units
+at d2 / d3 / d5 and 0.36-0.82x in the label regime with every label identical; quality -0.0065 at the
+deck's play settings and +0.0045 (not significant) at the suite's d3/b10 tier. Two further things to
+know: the filter keys only `ActivatePermAbility` (every Snow activation; other kinds are kept, so
+another deck adopting it gets less of the saving until its kinds are keyed), and site 9 still opens
+only for permanents that entered this turn, which is narrower than the principle the clarification
+states.
