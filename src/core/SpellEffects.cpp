@@ -2323,6 +2323,11 @@ static bool TapForCostBacktrackWorker(GameState& state, const ManaCost& cost,
         {
             state.players[active].energy_counters -= energy_spend;
             state.battlefield[i].tapped = true;
+            // CRACK FLAG on the BACKTRACKER path (see CommitPaySacSacrifices). A pay-sac source is
+            // one of this DFS's candidates -- the two candidate-collection loops above admit it
+            // explicitly (`|| IsPaySacSource(*d)`, §2a) -- so the solver cracks Treasures here,
+            // without going through TapSourceIntoFloat.
+            if (IsPaySacSource(*def)) { g_paysac_cracked = true; }
             DecrementDepletionOnTap(state.battlefield[i]);
             if (def->params.storage_land) { state.battlefield[i].storage_counters -= storage_burn; }
             if (def->params.tap_self_damage > 0 && !painless)
@@ -3306,6 +3311,13 @@ bool TapForCostBacktrack(GameState& state, const ManaCost& cost,
                 p.tapped = true;
                 const CardDefinition* td = CardDatabase::Instance().LookupCached(p.card);
                 if (!td) { continue; }
+                // CRACK FLAG on the REPLAY path. A cache hit re-taps the stored tap-set here rather
+                // than through TapForCostSharedOnce, so a cached solution that cracked a Treasure
+                // would otherwise leave g_paysac_cracked clear and CommitPaySacSacrifices would skip
+                // an erase it must perform. Found by MTG_PAYSAC_VERIFY on Mirrorwing, which is
+                // exactly the deck whose Gold Rush / Twinflame Treasures make this path hot -- the
+                // flag's first completeness argument named only TapSourceIntoFloat and was WRONG.
+                if (IsPaySacSource(*td)) { g_paysac_cracked = true; }
                 // tap_self_damage is NOT replayed per tap: a painland's {C}-mode tap is painless,
                 // and which mode each tap took is not in the entry -- the aggregate e.self_life
                 // (the solve's observed delta) is applied once, after this loop.

@@ -18422,6 +18422,13 @@ inline bool IsPaySacSource(const CardDefinition& def)
         && TreasurePaySourceEnabled();
 }
 
+// "Some payment on this thread has TAPPED a pay-sac source since the last commit." Set by the one
+// tap helper that can crack one (TapSourceIntoFloat), consumed and cleared by
+// CommitPaySacSacrifices, which is the only eraser. Deliberately NOT cleared on a failed payment:
+// leaving it set costs one wasted scan and can never skip a needed erase, so every error is in the
+// conservative direction. See CommitPaySacSacrifices for the guard's argument and its measurement.
+inline thread_local bool g_paysac_cracked = false;
+
 // Cracking a Treasure SACRIFICES it; the payment path can only tap. Erasing mid-payment is unsafe
 // (the source loops hold `Permanent&` and derive the reserved-mask index from
 // `&p - battlefield.data()`; ApplySacForMana carries the same warning), so the tap marks it TAPPED
@@ -18431,6 +18438,30 @@ inline bool IsPaySacSource(const CardDefinition& def)
 // source" means exactly "cracked during this payment", and a FAILED payment restores the untapped
 // state from its `bf_pre` snapshot before this is ever reached. Inert (and byte-identical) when the
 // flag is off, because IsPaySacSource is then always false.
+//
+// THE CRACK FLAG (perf, 2026-09-22) -- see g_paysac_cracked. The erase loop below runs on EVERY
+// successful payment and, for every tapped permanent the payer controls, pays a
+// CardDatabase::LookupCached probe to ask a question whose answer is "no" for every deck that runs
+// no Treasure and no Eldrazi Spawn -- which, in the current card database, is every deck whose
+// cards.json entries lack `sac_for_mana_amount: 1` with empty `produces` (exactly two cards match:
+// "Treasure Token" and "0/1 Eldrazi Spawn Token", both TOKENS). Snow pays ~135M times a game with
+// ~15 permanents on board, so this is ~1e9 wasted probes: perf puts the function at 2.17% self and
+// its probes are part of the 11.8% `carddb` class on top. MEASURED on Snow's heavy game
+// (--seed 8043 --game-index 35 --depth 4) with MTG_TREASURE_PAY_SOURCE=0, which short-circuits the
+// same loop: play byte-identical (16,807,204 units, same win turn) and wall 267,556 -> 254,748 ms,
+// -4.8%. See docs/design/snow-payment-solver-cost.md §7.
+//
+// The guard is exact, not heuristic: the loop can only ever erase a permanent that is BOTH tapped
+// and a pay-sac source, and the paragraph above establishes that such a permanent exists only
+// because THIS payment cracked it. So a payment that cracked nothing has nothing to erase.
+// MTG_PAYSAC_VERIFY=1 runs the loop anyway whenever the flag is clear and reports (loudly, once)
+// if it would have erased something -- i.e. it tests the completeness of the flag's set-sites
+// rather than arguing it. Same pattern as MTG_ENUM_MEMO_VERIFY / MTG_BP_ENUM_VERIFY.
+inline bool PaySacVerifyEnabled()
+{
+    static const bool v = EnvOn("MTG_PAYSAC_VERIFY");
+    return v;
+}
 inline void CommitPaySacSacrifices(GameState& state, int controller)
 {
     // §2b first: fodder eaten through a sac-for-mana outlet is a REAL sacrifice, so it goes
@@ -18465,13 +18496,37 @@ inline void CommitPaySacSacrifices(GameState& state, int controller)
         break;
     }
     if (!TreasurePaySourceEnabled()) { return; }
+    // See the crack-flag note in this function's header. `verify` is the harness that tests the
+    // guard instead of trusting it: with the flag clear it walks the loop anyway and shouts if it
+    // finds an erasable source, which would mean some tap site cracks one without setting the flag.
+    const bool cracked = g_paysac_cracked;
+    const bool verify  = PaySacVerifyEnabled();
+    g_paysac_cracked = false;
+    if (!cracked && !verify) { return; }
     for (int i = static_cast<int>(state.battlefield.size()) - 1; i >= 0; --i)
     {
         const Permanent& p = state.battlefield[static_cast<std::size_t>(i)];
         if (p.controller_index != controller || !p.tapped) { continue; }
         const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
         if (d && IsPaySacSource(*d))
-        { state.battlefield.erase(state.battlefield.begin() + i); }
+        {
+            if (!cracked)
+            {
+                // The guard would have skipped a REAL erase -- a rules bug, not a slowdown. Loud,
+                // once, and it names what to fix.
+                static std::atomic<bool> said{false};
+                bool expected = false;
+                if (said.compare_exchange_strong(expected, true))
+                {
+                    std::fprintf(stderr,
+                        "[paysac-verify] UNSOUND GUARD: '%s' is a tapped pay-sac source but no tap "
+                        "site set g_paysac_cracked. Some crack path bypasses TapSourceIntoFloat -- "
+                        "set the flag there too (see CommitPaySacSacrifices).\n",
+                        p.card.m_name.str().c_str());
+                }
+            }
+            state.battlefield.erase(state.battlefield.begin() + i);
+        }
     }
 }
 

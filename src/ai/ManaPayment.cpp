@@ -213,6 +213,14 @@ void TapSourceIntoFloat(GameState& state, int active, Permanent& p, const CardDe
                      def.card.m_name.str().c_str(), (int)col,
                      state.players[active].energy_counters); } }
     p.tapped = true;
+    // CRACK FLAG: a pay-sac source (Treasure / Eldrazi Spawn) is SACRIFICED, not left tapped, and
+    // the erase is deferred to CommitPaySacSacrifices -- which uses this flag to skip its whole
+    // battlefield walk on the overwhelmingly common board that cracked nothing. Set here because
+    // this is the tap helper a pay-sac source goes through: it produces no mana of its own, so the
+    // filter / ramp-filter / untap-burst branches in TapForCostSharedOnce all skip it (each
+    // requires `is_filter`, `any_color_filter`, or a non-empty `produces`). MTG_PAYSAC_VERIFY=1
+    // tests that claim rather than resting on it.
+    if (IsPaySacSource(def)) { g_paysac_cracked = true; }
     DecrementDepletionOnTap(p);
     // Aether Hub: "{T}, Pay {E}: Add one mana of any color." Energy is part of the ACTIVATION
     // cost, so it is spent here beside the depletion counter. Only the COLOURED mode costs it --
