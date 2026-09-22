@@ -1155,9 +1155,15 @@ user still had the viewer open:
     CI green incl. determinism parity.
 12. **Value leaf: STARTED then STOPPED by the user**, 7 of 9 phases banked at freeze `e0d60938`.
     See the run section above for the resume cost (phase E restarts: ~1–1.5 h wall) and the
-    slow-game census. **Resumable only while `HEAD:src` is unchanged** — `bash
-    scripts/valueleaf.sh run decks/Giants`. The lossless keep-axis name-dedup, if it is ever done,
-    must land BEFORE a resume, because it would break the freeze and force a full restart.
+    slow-game census. Resume with `bash scripts/valueleaf.sh run decks/Giants`.
+    **A moved `src/` does NOT force a restart** — the freeze is softer than it looks: `run`
+    re-checks the **play digests** and continues either way (digest unchanged keeps every game;
+    changed keeps the completed full sets and re-runs the rest). So a play-NEUTRAL commit
+    landing on top costs nothing. `src/` has already moved once (upstream's Treasure-mint perf
+    change, play-neutral for a deck with no Treasure) and the banked phases survived.
+    The keep-axis name-dedup would genuinely change play, so it would re-run the affected sets —
+    still worth landing before a resume rather than after, but it is not the all-or-nothing
+    freeze break stated earlier.
 13. **Then** the mulligan profile, for which Finding 3 is the concrete argument.
 10. **Open, still unstarted (needs a rebuild, so it was gated on the user pausing):** Inferno
     Titan's "3 damage divided as you choose" as a real targeting choice defaulting to the
