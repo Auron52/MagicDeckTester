@@ -19777,7 +19777,10 @@ inline bool FungusCertStatsOn()
     return v;
 }
 
-// MTG_FUNGUS_CERT_JOINT -- DEFAULT OFF. Applies the JOINT SAPROLING BUDGET as the real damage
+// MTG_FUNGUS_CERT_JOINT -- DEFAULT ON (ADOPTED cd85196a, 1.178x on the label path, labels
+// identical). The reader below is EnvOn(..., true); this comment said "DEFAULT OFF" until
+// 2026-09-22, which reads as available headroom when the lever is already paid in. =0 reverts.
+// Applies the JOINT SAPROLING BUDGET as the real damage
 // bound instead of today's "attack with everything AND draw with everything". Admissible by
 // construction (<= today's bound at every node), so switching it on can only make the certificate
 // fire MORE -- it can never certify a node today's bound refused to.

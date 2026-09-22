@@ -1131,7 +1131,12 @@ METHOD NOTE, and it is the one this doc already records: label dumps were writte
 compared SORTED, and the dump's own seed column was checked (`24 distinct` for a 24-game run). The
 append-mode trap that turned 128 rows into "222" is one reused `/tmp` name away at all times.
 
-## Item 3: the joint Saproling budget -- BUILT BEHIND `MTG_FUNGUS_CERT_JOINT` (default OFF)
+## Item 3: the joint Saproling budget -- ADOPTED, `MTG_FUNGUS_CERT_JOINT` DEFAULT ON
+
+**Status corrected 2026-09-22.** This heading said "default OFF" long after `cd85196a` adopted
+the lever (1.178x on the label path, labels identical). The reader is `EnvOn(..., true)`. It is
+paid in, NOT available headroom -- which is exactly how a stale default reads when someone is
+hunting for a speedup. `=0` reverts.
 
 The user's "your idea": the certificate's remaining looseness. Per this doc's own standing rule --
 and it has now killed three ranked guesses on this deck -- the candidate was instrumented as a
