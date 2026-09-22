@@ -11216,6 +11216,19 @@ static thread_local int g_bp_seen_last = 0;
 // every breakpoint site routes through; reset by the caller before the apply, same
 // one-apply-measures-the-list convention.
 static thread_local int g_bp_fired_last = 0;
+// Same event as g_bp_fired_last -- "a breakpoint occurrence happened", any class, any plan kind --
+// but MONOTONIC: nothing ever resets it, and readers take a BEFORE/AFTER DELTA across the apply
+// they care about (see MTG_BP_WAVE_NOBP).
+//
+// WHY NOT A RESET, which is the convention g_bp_cands_last and g_bp_fired_last both use. A reset
+// makes the counter describe "the most recent apply", and an apply here is not a leaf: a
+// node-hosted breakpoint searches under ApplyPlanDirect, so the candidate loop can re-enter
+// itself. The inner entry's reset would then land on the OUTER apply's reading and report zero
+// occurrences for a plan that had one -- which for the NOBP gate is the unsafe direction (it would
+// decline a slot that has real continuations). g_bp_fired_last already has a second owner in the
+// m2 fixpoint for exactly this reason; a delta on a counter with no owner cannot collide with
+// anyone.
+static thread_local std::uint64_t g_bp_any_last = 0;
 
 // Lockstep trace arming flag (MTG_BP_TRACE, diagnosis only). ApplyPlanDirect runs millions of times
 // inside rollouts, so an unconditional print is useless; this is set ONLY around the fd-trace's
@@ -22583,9 +22596,17 @@ namespace
         std::atomic<uint64_t> nested[kBpSites]{};    // NESTED (2nd+ breakpoint of an apply) -> still greedy
         // WHY the greedy fell through, split into the two populations that need OPPOSITE treatment:
         //   overrun  -- eligible, but bp_choice >= cands.size(). Wave 0 emits a FIXED depth*W
-        //               variants regardless of how long the continuation list really is, so these
-        //               are provably WASTED NODES: duplicates of the base plan (see the comment at
-        //               the fallback). Deletable outright -- widening W manufactures more of them.
+        //               variants regardless of how long the continuation list really is.
+        //
+        //               THESE ARE NOT ALL WASTE, AND THE CLAIM THAT THEY WERE OUTLIVED THE CODE.
+        //               This field used to read "provably WASTED NODES: duplicates of the base
+        //               plan". That was true while the fallback was a greedy TurnSolver::Solve.
+        //               Since the greedy deletion (2026-09-17) an unresolved continuation is
+        //               EMPTY -- byte-for-byte what kBpEmptyChoice builds -- so the FIRST overrun
+        //               of a slot scores "I am done acting in this phase", a line no other rank
+        //               produces. Only the SECOND and later overruns of the same slot duplicate
+        //               it. `ovr_dup` splits them; see BpHit.
+        std::atomic<uint64_t> ovr_dup[kBpSites]{};   // subset of `overrun` that re-scores EMPTY
         //   untarget -- this plan is not the variant exploring THIS breakpoint (bp_choice < 0, i.e.
         //               the base plan itself, or bp_at addressing a different occurrence). These are
         //               real scoring positions whose continuation is decided greedily, so the base
@@ -22605,7 +22626,7 @@ namespace
                 if (n) { std::fprintf(stderr,
                                       "[bp-probe] %-58s total=%-10llu empty-default=%-10llu searched=%-10llu"
                                       " nested-unsearchable=%-10llu (%.1f%% searched, committed-line: %llu)"
-                                      "  [empty-default split: overrun=%llu untarget=%llu]\n",
+                                      "  [empty-default split: overrun=%llu (dup=%llu) untarget=%llu]\n",
                                       kBpSiteName[i], static_cast<unsigned long long>(n),
                                       static_cast<unsigned long long>(n - q),
                                       static_cast<unsigned long long>(q),
@@ -22613,6 +22634,7 @@ namespace
                                       n ? (100.0 * static_cast<double>(q) / static_cast<double>(n)) : 0.0,
                                       static_cast<unsigned long long>(c),
                                       static_cast<unsigned long long>(overrun[i].load(std::memory_order_relaxed)),
+                                      static_cast<unsigned long long>(ovr_dup[i].load(std::memory_order_relaxed)),
                                       static_cast<unsigned long long>(untarget[i].load(std::memory_order_relaxed))); }
             }
         }
@@ -22623,7 +22645,7 @@ namespace
     // greedy reaches 0 -- total alone cannot show that, and rises simply because more plans are
     // applied. See docs/design/post-breakpoint-search.md.
     inline void BpHit(int i, bool on_committed_line, bool resolved_by_search, bool nested_blocked,
-                      bool eligible = false)
+                      bool eligible = false, bool overrun_dup = false)
     {
         static const bool on = EnvOn("MTG_BP_PROBE");
         if (!on) { return; }
@@ -22638,6 +22660,8 @@ namespace
         {
             (eligible ? g_bp_probe.overrun[i] : g_bp_probe.untarget[i])
                 .fetch_add(1, std::memory_order_relaxed);
+            if (eligible && overrun_dup)
+            { g_bp_probe.ovr_dup[i].fetch_add(1, std::memory_order_relaxed); }
         }
     }
 
@@ -24429,6 +24453,7 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
         // would shift every later index and silently change play, which is why BpSiteMask is one
         // global value that the executor's replay reads as well.
         ++g_bp_fired_last;   // any occurrence, any class, any plan (see the declaration)
+        ++g_bp_any_last;     // ...and the monotonic twin the NOBP gate reads (see g_bp_any_last)
         const bool class_on    = (BpSiteMask() & (1 << site)) != 0;
         const int  seen_before = (plan.bp_choice >= 0 && class_on) ? bp_seen++ : -1;
         // bp_all: the deviation is a POLICY for the whole apply, so every breakpoint is eligible,
@@ -24519,8 +24544,15 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
                     resolved = true;
                 }
             }
-            // Fewer continuations than variants -> fall back to greedy, making this variant a
-            // duplicate of its base plan (a wasted node, never a wrong answer).
+            // Fewer continuations than variants -> the rank OVERRUNS the list and falls through.
+            //
+            // WHAT IT FALLS THROUGH TO CHANGED UNDERNEATH THIS COMMENT, which used to read "fall
+            // back to greedy, making this variant a duplicate of its base plan (a wasted node,
+            // never a wrong answer)". Since the greedy deletion (2026-09-17) an unresolved
+            // continuation is EMPTY (see the unconditional fallback below) -- so the FIRST overrun
+            // of a slot scores a line no in-list rank produces, and only the SECOND and later ones
+            // are duplicates. Two things were still costed off the old reading and are fixed:
+            // BpProbe::overrun's field comment, and MTG_BP_WAVE_NSKIP's skip test (W0Len::max_k).
             else if (plan.bp_choice < static_cast<int>(cands.size()))
             {
                 out      = cands[plan.bp_choice];
@@ -24681,7 +24713,16 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
                          state.turn_number, site, seen_before, plan.bp_at, plan.bp_choice,
                          resolved_by_plan ? 1 : 0, class_on ? "" : " (class off)");
         }
-        BpHit(site, out_breakpoint != nullptr, resolved_by_plan, nested_blocked, eligible);
+        // A plain rank variant that overran the list by MORE than one re-scores a continuation an
+        // earlier rank of the same slot already produced: every rank past cands.size() resolves to
+        // the same EMPTY. Rank == cands.size() is the FIRST overrun and is the only one that adds a
+        // line. (g_bp_cands_last was written by the `eligible` branch above, so it describes THIS
+        // breakpoint.) Measurement only -- BpHit is inert unless MTG_BP_PROBE is set.
+        const bool overrun_dup = eligible && !resolved_by_plan
+                              && plan.bp_choice >= 0 && plan.bp_choice < kBpEmptyChoice
+                              && !plan.bp_all && plan.bp_choice > g_bp_cands_last;
+        BpHit(site, out_breakpoint != nullptr, resolved_by_plan, nested_blocked, eligible,
+              overrun_dup);
         return resolved_by_plan;
     };
     // Play a continuation's SEARCHED land drop and record it for commit-the-line replay. Inert for
@@ -33442,10 +33483,25 @@ namespace
         // than W. The apply's only product is learning `n` -- which an EARLIER apply of the same
         // base plan already observed (g_bp_cands_last at wave 0). Avoidable losslessly.
         std::atomic<uint64_t> slots_stillborn{0};
+        // ...SPLIT BY WHETHER THE APPLY ACTUALLY PRODUCED A NEW LINE, which "avoidable losslessly"
+        // above quietly assumes it never does. Since the greedy deletion (2026-09-17) a rank past
+        // the end resolves to EMPTY, not to a copy of the base plan. So at n < k0 wave 0 already
+        // scored EMPTY (it reached rank n <= k0-1 = W-1) and this slot really is pure rediscovery;
+        // at n == k0 EXACTLY, wave 0's ranks 0..W-1 were all real and THIS apply is the first and
+        // only one to score EMPTY for the slot. MTG_BP_WAVE_NSKIP's `n <= k0` test skips both.
+        std::atomic<uint64_t> stillborn_dup{0};    // n <  k0 -- EMPTY already scored by wave 0
+        std::atomic<uint64_t> stillborn_first{0};  // n == k0 -- the slot's ONLY EMPTY
         // ...and how many of them MTG_BP_WAVE_NSKIP actually declined to open. This is the lever's
         // FIRING counter: a byte-identical A/B on a change you just added is a red flag, so the
         // arm has to be able to say it did something. Counted whether or not the probe is on.
         std::atomic<uint64_t> nskip_slots{0};
+        // Why a k0>0 slot was NOT skipped, so the residual can be attributed rather than guessed.
+        std::atomic<uint64_t> nskip_nomemo{0};   // walker built without a memo at all
+        std::atomic<uint64_t> nskip_miss{0};     // memo present, no entry for this (base, at)
+        std::atomic<uint64_t> nskip_live{0};     // entry says the slot still has real ranks
+        // MTG_BP_WAVE_NOBP: base plans declined outright because their own apply reached no
+        // breakpoint at all, so every rank of the slot would duplicate the base plan.
+        std::atomic<uint64_t> nobp_slots{0};
         // ORDINARY base plans (bp_choice < 0) whose post-apply state duplicates an already-scored
         // sibling. Today they are RECORDED and still searched in full -- the skip is deliberately
         // scoped to bp_choice >= 0 variants so a deck with no variants stays byte-identical. The
@@ -33467,7 +33523,9 @@ namespace
                          " improved=%llu budget-stopped=%llu max-rank=%d"
                          " nested-slots=%llu nested-scored=%llu max-at=%d"
                          " | slots barren=%llu/%llu applies barren=%llu fertile=%llu"
-                         " stillborn=%llu nskip=%llu | pre-plans dup=%llu/%llu\n",
+                         " stillborn=%llu(dup=%llu first-empty=%llu)"
+                         " nskip=%llu(nomemo=%llu miss=%llu live=%llu) nobp=%llu"
+                         " | pre-plans dup=%llu/%llu\n",
                          static_cast<unsigned long long>(nodes.load()),
                          static_cast<unsigned long long>(no_slots.load()),
                          static_cast<unsigned long long>(slots.load()),
@@ -33489,7 +33547,13 @@ namespace
                          static_cast<unsigned long long>(barren_applies.load()),
                          static_cast<unsigned long long>(fertile_applies.load()),
                          static_cast<unsigned long long>(slots_stillborn.load()),
+                         static_cast<unsigned long long>(stillborn_dup.load()),
+                         static_cast<unsigned long long>(stillborn_first.load()),
                          static_cast<unsigned long long>(nskip_slots.load()),
+                         static_cast<unsigned long long>(nskip_nomemo.load()),
+                         static_cast<unsigned long long>(nskip_miss.load()),
+                         static_cast<unsigned long long>(nskip_live.load()),
+                         static_cast<unsigned long long>(nobp_slots.load()),
                          static_cast<unsigned long long>(pre_dup.load()),
                          static_cast<unsigned long long>(pre_seen.load()));
         }
@@ -33565,10 +33629,36 @@ namespace
         static const bool v = EnvOn("MTG_BP_NSKIP_ATPLAY");
         return v;
     }
+    // THE SCOPE IS GONE (2026-09-22), BECAUSE THE TEST THAT NEEDED IT IS FIXED.
+    //
+    // Everything above this line describes the lever as it shipped: `n <= k0`, scoped to unbudgeted
+    // work. That test was sound when it was written and stopped being sound underneath it. The
+    // greedy deletion (2026-09-17) changed what a past-the-end rank RESOLVES TO -- from a copy of
+    // the base plan to EMPTY -- so "the slot can only hand out ranks past the end" stopped meaning
+    // "the slot can only hand out something already scored". See W0Len::max_k for the two slots the
+    // length-only test was discarding, and the "LOSSLESS by construction" claim above, which is the
+    // claim that lapsed. The 133-improvements A/B that backed it predates the deletion.
+    //
+    // With `max_k >= n` the skip declines only a slot whose every continuation is an EMPTY THIS NODE
+    // HAS ALREADY SCORED, so the node's scored candidate SET is unchanged and the unbudgeted scope
+    // has nothing left to protect. What the scope really bought was the budget being spent the same
+    // way; that is a GT-churn argument, not a loss argument, and it is settled by measurement rather
+    // than by fencing the lever out of the only regime anybody ships. Measured at play settings,
+    // stompy 300 games d3/b10: 139,423 wave slots, 137,230 of them stillborn, 130,904 of THOSE pure
+    // rediscovery -- against `improved=0` for the entire wave phase.
+    //
+    // MTG_BP_WAVE_NSKIP=0 is the A/B hatch and restores the pre-lever behaviour outright.
+    // MTG_BP_WAVE_NOBP -- decline a wave slot whose base plan's own apply reached no breakpoint.
+    // See the gate in BpWaveWalker's constructor for why that is lossless.
+    inline bool BpWaveNoBpOn()
+    {
+        static const bool on = EnvOn("MTG_BP_WAVE_NOBP", true);
+        return on;
+    }
     inline bool BpWaveNSkipOn()
     {
         static const bool on = EnvOn("MTG_BP_WAVE_NSKIP", true);
-        return on && (UnbudgetedWorkScopeActive() || BpNSkipScopeLifted());
+        return on;
     }
 
     // ---- THE SAME LENGTH, LEARNED ONCE INSTEAD OF ONCE PER NODE (MTG_BP_NSKIP_GLOBAL) ----------
@@ -33706,14 +33796,33 @@ public:
     // (BpWave0SiteMask) is a cost prune precisely because its plans are picked up here at rank 0.
     // (BpWaveSiteMask == BpSiteMask except under MTG_BP_NODE, where site 3 is the node's, not
     // the walker's -- its continuations were already searched in full at the node.)
-    // `known_n` (MTG_BP_WAVE_NSKIP; nullptr = off) maps (base plan index << 8 | bp_at) to the
-    // continuation list length wave 0's k=0 variant already measured there. See BpWaveNSkipOn.
-    using KnownLens = std::unordered_map<uint64_t, int>;
+    // `known_n` (MTG_BP_WAVE_NSKIP; nullptr = off) maps (base plan index << 8 | bp_at) to what wave
+    // 0 already learned about that slot. See BpWaveNSkipOn.
+    //
+    // `max_k` IS LOAD-BEARING, NOT BOOKKEEPING -- it is the half that makes the skip lossless, and
+    // the half the original lever did not have. Knowing the list is short is NOT enough to decline a
+    // slot: since the greedy deletion (2026-09-17) a past-the-end rank resolves to EMPTY, a line no
+    // in-list rank produces. The slot is only redundant if wave 0 ACTUALLY APPLIED a past-the-end
+    // rank itself -- i.e. `max_k >= n`. Two cases where it did not, both of which the length alone
+    // would have silently discarded:
+    //   * n == W exactly: wave 0's ranks 0..W-1 were every one of them in-list, so the walker's
+    //     rank W is the slot's FIRST and ONLY EMPTY.
+    //   * the past-the-end wave-0 variant was beam-cut before it applied, so nothing scored EMPTY.
+    struct W0Len
+    {
+        int n     = -1;   // continuation list length the apply observed (g_bp_cands_last)
+        int max_k = -1;   // highest rank wave 0 actually APPLIED for this slot
+    };
+    using KnownLens = std::unordered_map<uint64_t, W0Len>;
     // `node_key` (MTG_BP_NSKIP_GLOBAL; nullptr = off) is this node's state dedup key, the half of the
     // cross-node length memo's key the walker cannot derive from `plans`. See BpNSkipGlobalMode.
+    //
+    // `no_bp` (MTG_BP_WAVE_NOBP; nullptr = off) holds the indices of base plans whose OWN apply
+    // reached no breakpoint occurrence at all. See the gate in the loop.
     BpWaveWalker(const GameState& state, const std::vector<TurnSolver::Plan>& plans,
                  std::size_t limit, const KnownLens* known_n = nullptr,
-                 const TranspositionTable::Key* node_key = nullptr)
+                 const TranspositionTable::Key* node_key = nullptr,
+                 const std::unordered_set<std::size_t>* no_bp = nullptr)
         : m_known_n(known_n), m_node_key(node_key)
     {
         const int  sites  = BpWaveSiteMask(state);
@@ -33725,6 +33834,29 @@ public:
             if (p.bp_choice >= 0) { continue; }                                  // a wave-0 variant
             if (!dig_bp && !BpDigFanoutForPlan(state, sites, p)
                 && (PlanOpensBreakpoint(state, p) & sites) == 0) { continue; }
+            // ---- THE PREDICATE SAID YES AND THE APPLY SAID NO (MTG_BP_WAVE_NOBP) --------------
+            // PlanOpensBreakpoint is an OVER-APPROXIMATION: it asks whether a plan LOOKS like it
+            // opens a breakpoint, from the plan and the pre-apply board. The apply is what settles
+            // it, and this node already ran that apply -- for the base plan itself, in the
+            // candidate loop above.
+            //
+            // WHY A VARIANT CANNOT DISAGREE WITH ITS BASE PLAN HERE. Next() builds every variant as
+            // `out = plans[sl.base]` with only bp_choice/bp_at overwritten, so it carries the
+            // IDENTICAL action list. bp_choice decides what to do AT a breakpoint; it cannot create
+            // one. The apply is deterministic in (state, actions), so if the base plan's apply
+            // reached zero breakpoint occurrences, every variant of it reaches zero too, resolves
+            // nothing, and is a byte-identical duplicate of the base plan the node already scored.
+            // Opening the slot buys one apply per rank and cannot buy a line.
+            //
+            // CONSERVATIVE BY CONSTRUCTION: the counter is incremented for ANY occurrence of ANY
+            // class (g_bp_any_last), not just the searchable ones, so `== 0` is strictly stronger
+            // than "reached no eligible breakpoint" and the gate declines strictly less than it
+            // safely could. A miss (base plan not in the set) opens the slot exactly as today.
+            if (no_bp != nullptr && no_bp->count(i) != 0)
+            {
+                g_bp_wave_probe.nobp_slots.fetch_add(1, std::memory_order_relaxed);
+                continue;
+            }
             m_bases.push_back(i);
             AddSlots(plans, m_bases.size() - 1, BpSearchDepth());
         }
@@ -33772,8 +33904,9 @@ public:
     // get ADDED, and only for indices not already covered, so the walk stays finite and each
     // (base, at) is offered exactly one rank sequence.
     //
-    // Returns true when the rank was past the end -- the continuation fell back to greedy, making
-    // the variant a copy of its own base plan, which is also what terminates the walk for this slot.
+    // Returns true when the rank was past the end, which is what terminates the walk for this slot:
+    // every further rank resolves to the same EMPTY. NOT "a copy of its own base plan" -- that was
+    // true of the deleted greedy fallback only; see the overrun comment in bp_searched_plan.
     bool Report(const std::vector<TurnSolver::Plan>& plans, int n, int seen)
     {
         Slot& sl = m_slots[m_last];
@@ -33786,7 +33919,12 @@ public:
             // Retired on its FIRST hand-out: the list was already shorter than the rank this slot
             // opened at, so the apply bought nothing but `n`. See slots_stillborn.
             if (BpWaveProbeOn() && m_last_k == sl.k0)
-            { g_bp_wave_probe.slots_stillborn.fetch_add(1); }
+            {
+                g_bp_wave_probe.slots_stillborn.fetch_add(1);
+                // See stillborn_dup / stillborn_first: only n < k0 is rediscovery.
+                (n < sl.k0 ? g_bp_wave_probe.stillborn_dup
+                           : g_bp_wave_probe.stillborn_first).fetch_add(1);
+            }
         }
         // ...AND REMEMBER `n` FOR EVERY OTHER NODE (MTG_BP_NSKIP_GLOBAL). THIS is the record site
         // that matters: the walker learns the real length on EVERY variant it hands out, whereas
@@ -33836,17 +33974,28 @@ private:
         {
             const int k0 = (w0 && at < BpSearchDepth()) ? wid : 0;
             // STILLBORN SKIP (see BpWaveNSkipOn): wave 0 already measured this breakpoint's list,
-            // and every rank from k0 up is past its end -- so the slot has nothing to hand out and
-            // opening it buys only one apply's worth of rediscovery. A miss falls through.
+            // every rank from k0 up is past its end, AND wave 0 already applied a past-the-end rank
+            // itself -- so every continuation this slot could hand out is an EMPTY the node has
+            // already scored. A miss falls through and the slot opens exactly as it does today.
+            //
+            // BOTH CONJUNCTS ARE REQUIRED. `n <= k0` alone was the shipped test and it is lossy
+            // post-greedy-deletion: see W0Len::max_k for the two slots it silently discarded.
+            if (k0 > 0 && m_known_n == nullptr)
+            { g_bp_wave_probe.nskip_nomemo.fetch_add(1, std::memory_order_relaxed); }
             if (m_known_n != nullptr && k0 > 0)
             {
                 const auto it = m_known_n->find((static_cast<uint64_t>(idx) << 8)
                                                 | static_cast<uint64_t>(at & 0xFF));
-                if (it != m_known_n->end() && it->second <= k0)
+                if (it == m_known_n->end())
+                { g_bp_wave_probe.nskip_miss.fetch_add(1, std::memory_order_relaxed); }
+                else if (it->second.n >= 0
+                         && it->second.n <= k0 && it->second.max_k >= it->second.n)
                 {
                     g_bp_wave_probe.nskip_slots.fetch_add(1, std::memory_order_relaxed);
                     continue;
                 }
+                else
+                { g_bp_wave_probe.nskip_live.fetch_add(1, std::memory_order_relaxed); }
             }
             // ...and the SAME QUESTION ASKED OF EVERY OTHER NODE (MTG_BP_NSKIP_GLOBAL). The block
             // above can only answer for a length THIS node's own wave 0 happened to measure; this one
@@ -33862,7 +34011,25 @@ private:
                 if (git != gm.end())
                 {
                     g_bplen_hits.fetch_add(1, std::memory_order_relaxed);
-                    if (git->second <= k0 && !BpNSkipGlobalVerify())
+                    // TWO DIFFERENT SKIPS, and collapsing them into one `<=` is what made the old
+                    // test lossy:
+                    //   n <  k0  -- every rank this slot offers is past the end, and wave 0's own
+                    //               ranks 0..W-1 reached rank n, so EMPTY is already scored.
+                    //               STRICTLY less: at n == k0 the walker's rank k0 is the slot's
+                    //               ONLY EMPTY (see W0Len::max_k).
+                    //   n == 0 at k0 == 0 -- mode 2's case, and it survives on its own argument
+                    //               rather than the EMPTY one: a length of 0 means the apply
+                    //               reached NO eligible breakpoint, so the variant never resolves
+                    //               anything and is identical to its base plan. Writing this as
+                    //               `n < k0` would silently make mode 2 dead code (n < 0 is
+                    //               impossible), which is exactly the kind of quiet lever death
+                    //               the `<=` -> `<` fix could have caused.
+                    // The memo is cross-node so it cannot carry max_k (whether THIS node applied a
+                    // past-the-end rank), which leaves the beam-cut case uncovered -- one more
+                    // reason this mode stays default 0.
+                    const bool g_skip = (k0 > 0) ? (git->second < k0)
+                                                 : (gmode >= 2 && git->second == 0);
+                    if (g_skip && !BpNSkipGlobalVerify())
                     {
                         g_bplen_skips.fetch_add(1, std::memory_order_relaxed);
                         g_bp_wave_probe.nskip_slots.fetch_add(1, std::memory_order_relaxed);
@@ -33919,6 +34086,10 @@ static const bool s_legacy_land_sig    = !s_complete_land_sig;
 static void AppendSubdecisionAxes(const GameState& state, bool is_pre_combat,
                                   std::vector<TurnSolver::Plan>& all)
 {
+    // Where `all` ended before the axes ran. Everything appended past here is a CLONE of some plan
+    // already in the list, and the loop at the end of this function un-stamps the one field a clone
+    // must not inherit. See the note there.
+    const std::size_t n_before_axes = all.size();
     const Player& ap = state.ActivePlayer();
     // SEARCHED land-ETB scry/surveil (MTG_SCRY_SEARCH, opt-in). The disposition resolves inline
     // inside the land's ETB, so it cannot be an Action -- instead emit one plan variant per
@@ -34936,6 +35107,33 @@ static void AppendSubdecisionAxes(const GameState& state, bool is_pre_combat,
         branchstats::RecordAxis("axis: cleanup-discard", disc);
         branchstats::RecordAxis("axis: sac-land", sac);
         branchstats::RecordAxis("axis: fresh-spend", fresh);
+    }
+
+    // ---- A CLONE DID NOT INHERIT WAVE 0's FAN-OUT (MTG_BP_AXIS_W0_CLEAR) ----------------------
+    // `bp_wave0` is a record of a FACT ABOUT ONE PLAN: "wave 0 emitted ranks 0..W-1 for this plan,
+    // so its continuations below W are already scored". Every axis above builds its variants with
+    // `Plan v = p`, and this function runs AFTER AppendBreakpointVariants, so each clone carried a
+    // mark earned by the plan it was copied FROM -- while no rank variant anywhere points at the
+    // clone. Two things read the mark and both were misled:
+    //   * BpWaveWalker::AddSlots opens a marked plan's slot at k0 = W, so for a clone the walker
+    //     started at rank 2 and ranks 0..W-1 were unreachable AT ANY BUDGET OR DEPTH. That is
+    //     precisely the ceiling the deferred waves exist to remove ("no rank is unreachable at an
+    //     unbounded budget"), reintroduced by a copy constructor.
+    //   * the unchallengeable-canon audit counts `plan.bp_wave0` as proof the plan was offered to
+    //     the variant machinery. For a clone that proof was borrowed.
+    // Measured on stompy 300 games d3/b10: 35,534 of 83,887 marked base plans reaching the walker
+    // were axis clones.
+    //
+    // Clearing it is the whole fix -- a cleared clone opens at rank 0 and the walker covers it
+    // exactly as it covers any plan wave 0 did not fan out, which is the design's own answer to a
+    // class wave 0 skips ("a cost prune precisely because its plans are picked up here at rank 0").
+    {
+        static const bool clear_w0 = EnvOn("MTG_BP_AXIS_W0_CLEAR", true);
+        if (clear_w0)
+        {
+            for (std::size_t i = n_before_axes; i < all.size(); ++i)
+            { all[i].bp_wave0 = false; }
+        }
     }
 }
 
@@ -41006,9 +41204,20 @@ static TurnSolver::SearchLine FSLineWin(const GameState& state, int depth, int m
         // bp_at -- and the wave slot's rank-W apply walks the IDENTICAL prefix (the two plans
         // differ only in what they do AT that breakpoint), so it will be told the same thing.
         // An earlier draft required `> 0` here and caught only 3.5% of the stillborn slots.
-        if (nskip_here && p.bp_choice == 0 && !p.bp_all && p.bp_base >= 0)
-        { bp_known_n[(static_cast<uint64_t>(p.bp_base) << 8)
-                     | static_cast<uint64_t>(p.bp_at & 0xFF)] = g_bp_cands_last; }
+        //
+        // EVERY PLAIN RANK, not just k == 0, because W0Len::max_k needs the HIGHEST rank wave 0
+        // actually applied and only the ranks themselves can report that. `n` is the same for all of
+        // them by the enum memo's premise (the W variants of one base plan re-reach the same
+        // breakpoint state), so the repeated writes agree; max_k accumulates.
+        if (nskip_here && p.bp_choice >= 0 && p.bp_choice < kBpEmptyChoice && !p.bp_all
+            && p.bp_base >= 0)
+        {
+            BpWaveWalker::W0Len& e =
+                bp_known_n[(static_cast<uint64_t>(p.bp_base) << 8)
+                           | static_cast<uint64_t>(p.bp_at & 0xFF)];
+            e.n     = g_bp_cands_last;
+            e.max_k = std::max(e.max_k, p.bp_choice);
+        }
         // ...and the same fact, keyed so every OTHER node can use it (MTG_BP_NSKIP_GLOBAL). Content
         // key, not position: (node state, base plan fingerprint, bp_at). Recorded on the same
         // condition as the node-local memo above, so the two always learn from the same applies.
@@ -45693,6 +45902,38 @@ TurnSolver::Plan TurnSolver::SolveWithLookahead(const GameState& state, bool is_
         bool bp_variants_here = false;
         for (const Plan& p : candidates) { if (p.bp_choice >= 0) { bp_variants_here = true; break; } }
         std::unordered_set<TranspositionTable::Key, TranspositionTable::KeyHash> bp_seen_states;
+        // What wave 0 learned about each (base plan, bp_at) slot, for the wave walker's stillborn
+        // skip -- see BpWaveWalker::W0Len. FSLineWin has kept this since 2026-09-15; THIS loop, which
+        // runs every rollout turn and is where the doc says the searched-breakpoint gain actually
+        // comes from, never did, so its walker opened every stillborn slot blind. That is most of
+        // them: with the memo wired only at FSLineWin the skip reached 14,890 of stompy's 130,904
+        // redundant slots.
+        //
+        // NO bp_self REMAP IS NEEDED HERE, unlike FSLineWin's. On this path
+        // EnumeratePlansWithLandUncached stable_sorts `all` BEFORE it calls AppendBreakpointVariants
+        // and returns it untouched afterwards, so bp_base is stamped against the final order. (That
+        // is a property of where the sort sits; if a reorder is ever added after the append, this
+        // memo acquires FSLineWin's stale-index hazard and needs the same witness.)
+        BpWaveWalker::KnownLens bp_w0_lens;
+        const bool w0len_here = BpWaveNSkipOn();
+        // Base plans whose own apply reached NO breakpoint occurrence -- see the gate in
+        // BpWaveWalker's constructor. Indexed by position in `candidates`, which is also how the
+        // walker addresses base plans, and this list is not reordered after enumeration.
+        std::unordered_set<std::size_t> bp_nobp;
+        const bool nobp_here = BpWaveNoBpOn();
+        std::size_t cand_index = 0;
+        std::uint64_t any_before = 0;
+        auto w0len_record = [&](const Plan& pl)
+        {
+            if (nobp_here && pl.bp_choice < 0 && g_bp_any_last == any_before)
+            { bp_nobp.insert(cand_index); }
+            if (!w0len_here || pl.bp_base < 0 || pl.bp_all) { return; }
+            if (pl.bp_choice < 0 || pl.bp_choice >= kBpEmptyChoice) { return; }
+            BpWaveWalker::W0Len& e = bp_w0_lens[(static_cast<uint64_t>(pl.bp_base) << 8)
+                                                | static_cast<uint64_t>(pl.bp_at & 0xFF)];
+            e.n     = g_bp_cands_last;
+            e.max_k = std::max(e.max_k, pl.bp_choice);
+        };
         // EOT dominance (MTG_DOM_CENSUS / MTG_DOM_PRUNE): the per-pass end-of-turn sibling frontier.
         // Per PASS, not per decision: every candidate in this loop reaches its boundary having
         // consumed the SAME draws, which is the comparability precondition. See the helper above.
@@ -45737,9 +45978,15 @@ TurnSolver::Plan TurnSolver::SolveWithLookahead(const GameState& state, bool is_
             PROF_INC(gamestate_copies);
             if (s_rollout_stats) { g_cand_scored.fetch_add(1, std::memory_order_relaxed); }
             GameState copy = state;
+            // Make g_bp_cands_last describe THIS apply (same reset FSLineWin does, same reason).
+            if (w0len_here) { g_bp_cands_last = 0; }
+            // ...and the same one-apply-measures-it convention for the no-breakpoint gate.
+            cand_index = static_cast<std::size_t>(&plan - candidates.data());
+            any_before = g_bp_any_last;   // DELTA, not a reset -- see g_bp_any_last
             if (is_pre_combat)
             {
                 ApplyPlanDirect(copy, plan, true);
+                w0len_record(plan);
                 if (candcensus::On())
                 {
                     candcensus::g_cands[census_slot].fetch_add(1, std::memory_order_relaxed);
@@ -45866,6 +46113,7 @@ TurnSolver::Plan TurnSolver::SolveWithLookahead(const GameState& state, bool is_
                 // happened this turn, so apply the candidate as a post-combat play
                 // and DON'T re-simulate combat (that would be a phantom second one).
                 ApplyPlanDirect(copy, plan, false);
+                w0len_record(plan);
                 if (OpponentHasLost(copy)) { report(state.turn_number, depth - 1); return plan; }
                 if (candcensus::On())
                 {
@@ -46060,7 +46308,10 @@ TurnSolver::Plan TurnSolver::SolveWithLookahead(const GameState& state, bool is_
         if (!pass_aborted && BpWavesHere(budget))
         {
             // A pass that was not aborted scanned every candidate, so no limit applies here.
-            BpWaveWalker walker(state, candidates, candidates.size());
+            BpWaveWalker walker(state, candidates, candidates.size(),
+                                bp_w0_lens.empty() ? nullptr : &bp_w0_lens,
+                                nullptr,
+                                bp_nobp.empty() ? nullptr : &bp_nobp);
             if (walker.Empty())
             {
                 if (BpWaveProbeOn()) { g_bp_wave_probe.no_slots.fetch_add(1); }
