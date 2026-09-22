@@ -14974,7 +14974,10 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
             //   * the pre-plan best attacker is a MANA DORK: the cast-time pick REPLACES that
             //     explicit target (best_dork_num is skipped below). It is the shipped route's own
             //     post-breakpoint re-aim -- the dork when it is still the best untapped body, the
-            //     Soldier when the payment tapped it -- so keeping both only doubled the plans:
+            //     Soldier when the payment tapped it, and the tapped dork itself when no other body
+            //     exists (the resolver's FindBestOwnCreature floor: a replacement that could fizzle
+            //     where the explicit target resolves is a regression, 701706) -- so keeping both
+            //     only doubled the plans:
             //     measured 3,000 paired games at 1.29x the work for no quality the replacement
             //     lacks, and the extra plans starved the fixed play budget (14 worse 2HG games).
             //   * NO attacker at all: Heroism's own Soldier is the only body the trick can use, and

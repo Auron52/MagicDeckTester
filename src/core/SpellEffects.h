@@ -2247,6 +2247,27 @@ inline int FindBestOwnAttacker(const GameState& state, int controller_index)
     return ranked.empty() ? -1 : ranked.front();
 }
 
+// Battlefield index of the controller's best own creature REGARDLESS of attack eligibility (tapped
+// or summoning-sick bodies included; same provider ranking, ties by battlefield order), or -1. The
+// legal-target floor under FindBestOwnAttacker: "target creature you control" resolves on a tapped
+// creature just fine, so a cantrip trick whose payment tapped the only body must still land its
+// draw there rather than fizzle for want of an ATTACKER.
+inline int FindBestOwnCreature(const GameState& state, int controller_index)
+{
+    std::vector<int> mine;
+    for (int i = 0; i < static_cast<int>(state.battlefield.size()); ++i)
+    {
+        const Permanent& p = state.battlefield[i];
+        if (p.controller_index != controller_index) { continue; }
+        if (!p.card.IsCreature() && !p.is_animated) { continue; }
+        mine.push_back(i);
+    }
+    if (mine.empty()) { return -1; }
+    const std::vector<int> ranked =
+        ResolveProvider(state).OwnPumpTargetCandidates(state, controller_index, mine);
+    return ranked.empty() ? -1 : ranked.front();
+}
+
 // Target selection for the controller-lifegain removal (Swords to Plowshares). Its rider makes the
 // EXILED creature's controller gain life equal to its power, which a Tainted Remedy / Plague Drone
 // (RemedyActive) turns into that much life LOSS on the opponent. So against a PASSIVE goldfish opponent
@@ -10660,11 +10681,19 @@ inline bool ResolveSoloTargetTrick(GameState& state, int controller, const CardD
     // kTrickBestOwnTarget: the best own attacker on the board NOW -- after every body the plan
     // put down ahead of this cast (see the sentinel's note). The same picker the plan traits and
     // the Invigorate auto-target use, so a tapped-for-mana dork is never chosen over a hasty
-    // Soldier. No attacker at all -> the spell fizzles, exactly as a vanished declared target
-    // does (unreachable in a fresh plan: the variant is emitted only where a body can arrive).
+    // Soldier.
+    //
+    // No ATTACKER is not "no target": the variant REPLACES the explicit dork target (the
+    // enumeration's best_dork_num rule), so wherever that target would have resolved this one
+    // must too -- a tapped creature is a legal "creature you control". Without the floor, a turn
+    // whose only body is the dork that paid for the trick fizzled the whole spell, draw included
+    // (Mirrorwing 701706 T2: Anger paid off the Hierarch, found no attacker, drew nothing; the
+    // Game Trail arrived a turn late). Only no own creature at all fizzles, as a vanished declared
+    // target does.
     if (target_number == kTrickBestOwnTarget)
     {
         ti = FindBestOwnAttacker(state, controller);
+        if (ti < 0) { ti = FindBestOwnCreature(state, controller); }
         if (ti < 0) { return false; }
     }
     else if (target_number != 0)
