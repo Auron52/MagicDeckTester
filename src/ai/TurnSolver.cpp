@@ -23205,14 +23205,16 @@ namespace
 namespace
 {
 enum PrepayOutcome { PP_OK = 0, PP_DIG, PP_FLOOD, PP_FLOAT_NZ, PP_PRODUCER, PP_NO_DEF, PP_XSPELL,
-                     PP_SOULFIRE, PP_HINATA, PP_FEW_CASTS, PP_UNPAYABLE, PP_WILD, PP_OK_MIXED, PP_N };
+                     PP_SOULFIRE, PP_HINATA, PP_FEW_CASTS, PP_UNPAYABLE, PP_WILD, PP_OK_MIXED,
+                     PP_MINT_HOLD, PP_N };
 const char* const kPrepayName[PP_N] = {
     "PREPAID (no per-cast search)", "declined: dig-draw", "declined: flood engine",
     "declined: float non-empty", "declined: producer (ritual/rock)", "declined: no card def",
     "declined: {X} spell", "declined: soulfire discount", "declined: hinata discount",
     "declined: <2 casts (single-cast turn)", "declined: combined UNPAYABLE",
     "declined: wild -> pip pinning ambiguous",
-    "PREPAID mixed two-stage (MTG_PREPAY_MIXED)" };
+    "PREPAID mixed two-stage (MTG_PREPAY_MIXED)",
+    "declined: every hold failed on a mint line (MTG_MINT_CREDIT_EXACT)" };
 struct PrepayProbe
 {
     std::atomic<std::uint64_t> n[PP_N];
@@ -23312,7 +23314,14 @@ PlanTraits TurnSolver::ComputePlanTraits(const GameState& state, const std::vect
         if (!d) { continue; }
         // Scarce-colour rank-tier gate: a mint opens the deferred breakpoint, a flood engine
         // draws new castables -- either can add a cast this plan's lists cannot see.
-        if (d->params.creates_treasures > 0 || d->tmpl == CardTemplate::DrawUntilNonland)
+        // MTG_MINT_CREDIT_EXACT: a Treasure-only payload opens NO breakpoint (the base line already
+        // holds every cast), so a minter no longer flags it. Left on, the sole-colour tier demoted
+        // the board's only Mountain behind the fresh Treasures for a generic pip nobody's later cast
+        // needed, and the second Gold Rush cracked two Treasures its own pump then could not count
+        // (mirrorwing seed 701456 T3: 16 damage where Mountain + one Treasure is the 20-point kill).
+        // The audit hatch (MTG_BP_MINT_SITE) re-opens the breakpoint and with it this flag.
+        if ((d->params.creates_treasures > 0 && MintPayloadOpensBreakpoint())
+            || d->tmpl == CardTemplate::DrawUntilNonland)
         { t.mid_turn_casts = true; }
         // Line {C} hold, the "assembles a loop" triggers (see board_outlet_c above): the plan
         // casts a blink outlet with a {C} activation, or casts an ETB-untap payload while such an
@@ -23761,6 +23770,23 @@ bool TurnSolver::BatchPrepayMainCasts(GameState& state, const std::vector<Action
             state.opponent_lost_life_this_turn = oll;
             produced = ManaPool{};
         }
+    }
+    // MINT-LINE HOLD DECLINE (MTG_MINT_CREDIT_EXACT). Every rung above judged "payable with this
+    // hold" against the turn's BOARD sources -- the joint solve cannot see the Treasures a minter in
+    // this very line puts on the board mid-turn. On a line that mints and may crack (the base credit
+    // priced it that way), a hold that fails HERE can still succeed in play: the per-cast payer pays
+    // the minter from the lands and meets the Treasures when the later cast pays, spending them
+    // (rank 26, ahead of the kept dork) instead of the pump target. Running the unrestricted joint
+    // solve instead would tap that body now -- mirrorwing seed 701456 T3: {Forest, Gold Rush x2},
+    // Mystic the target of both, joint solve taps the Mystic for the second Gold Rush, 11 damage
+    // where Gold Rush then Mountain + Treasure is 20. Same shape the post-mint breakpoint re-solve
+    // recovered under the audit route (MTG_BP_MINT_SITE); this is its base-line twin. Payment only
+    // (a declined prepay routes to the per-cast fallback every declined turn already takes), shared
+    // by both apply worlds -> lockstep. Only when a hold EXISTED and failed: nothing reservable
+    // means nothing the joint solve could strand, so it keeps its anti-stranding pinning.
+    if (!ok && n_rungs > 0 && MintLineCanCrack(state, acts))
+    {
+        return Pp(PP_MINT_HOLD);   // the failed rung already restored the state
     }
     if (!ok)   // nothing reservable, or every hold failed: the original unrestricted solve
     {
@@ -42154,13 +42180,18 @@ static TurnSolver::SearchLine FSLineWin(const GameState& state, int depth, int m
                     if (a.soulfire_own_targets > 0)
                     { sum += "#V" + std::to_string(a.soulfire_own_targets); }
                     if (!a.tutor_target.empty()) { sum += ">" + a.tutor_target; }
+                    // trick/aura target number and the stamped mint width (mint-credit forensics)
+                    if (a.enchant_target != 0) { sum += "@" + std::to_string(a.enchant_target); }
+                    if (a.mint_gain > 0)       { sum += "m" + std::to_string(a.mint_gain); }
                     sum += ",";
                 }
-                std::fprintf(stderr, "[fsw] T%d d%d oppL=%d tc=%d p=%s tail=%d best=%d cutoff=%d\n",
+                std::fprintf(stderr, "[fsw] T%d d%d oppL=%d tc=%d p=%s fresh=%d after=%d tail=%d best=%d cutoff=%d\n",
                              state.turn_number, depth,
                              state.players[1 - state.active_player_index].life,
                              p.tutor_choice,
                              sum.empty() ? "(pass)" : sum.c_str(),
+                             p.freshmode_choice,
+                             s.players[1 - s.active_player_index].life,   // post-apply, post-combat
                              tail.win_turn, best.win_turn, cutoff);
                 // MTG_FSW_LINE=1: also print the tail's projected WINNING line (its phase plans),
                 // so a mis-projection can be compared against the realized game cast-for-cast

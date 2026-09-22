@@ -132,6 +132,16 @@ bool MintHoistAfterMagnets(const GameState& state, const std::vector<Action>& ac
 // The hoist's sort key under that rule: a hoisted minter sits between the magnets (5) and every
 // other enabler. rank*2 for enablers, 11 for the minter (magnets 10, Heroism 12, creatures 20 ...).
 int  HoistSortKey(const GameState& state, const Action& a, bool minter_hoisted);
+// MTG_MINT_CREDIT_EXACT -- does this plan mint Treasures its own later casts can CRACK this turn?
+// True when some cast carries a stamped mint (Action::mint_gain > 0) and the minted Treasures are
+// same-turn mana under the fresh-hold doctrine (a magnet or Heroism live, a magnet in the plan, or
+// the plan's fresh-spend tag). The whole-turn prepay reads it: its hold ladder judges "payable
+// without the dork" against the turn's BOARD sources only, so a line the mint would fund past the
+// hold releases every hold and taps the pump target -- the very body the trick lands on -- while
+// the per-cast payer, meeting the Treasures once they exist, cracks one and keeps the body up
+// (mirrorwing seed 701456 T3: {Forest, Gold Rush x2} tapped the Mystic for the second Gold Rush,
+// 11 damage; Gold Rush then Mountain + Treasure is 20 and the kill). False with the lever off.
+bool MintLineCanCrack(const GameState& state, const std::vector<Action>& actions);
 
 // THE ENABLER/WIPE RECHECK -- the one line in the suite that a cast-ORDER cannot express.
 //

@@ -1736,6 +1736,18 @@ bool MintHoistAfterMagnets(const GameState& state, const std::vector<Action>& ac
     return pool.CanPay(AddManaCosts(magnets, first_mint));
 }
 
+bool MintLineCanCrack(const GameState& state, const std::vector<Action>& acts)
+{
+    if (!MintCreditExactOn() || !TreasurePaySourceEnabled()) { return false; }
+    bool any_mint = false;
+    for (const Action& a : acts)
+    {
+        if (a.kind == Action::Kind::CastFromHand && !a.alt_cost && !a.free_cast && a.mint_gain > 0)
+        { any_mint = true; break; }
+    }
+    return any_mint && MintedTreasureSpendable(state, acts);
+}
+
 int HoistSortKey(const GameState& state, const Action& a, bool minter_hoisted)
 {
     const CardDefinition* d = a.def ? a.def : CardDatabase::Instance().Lookup(a.card_name);
@@ -1922,9 +1934,19 @@ void ApplyCastOrderRangeLadder(const GameState& state, const std::vector<Action>
         // No prefix victim: a FUNDING spell after the failure whose next rung moves it EARLIER
         // (Gold Rush late -> earlier) can put its output in front of the failing cast. Take the
         // one closest after the failure -- the minimal reorder that can fund it.
+        //
+        // MTG_MINT_CREDIT_EXACT: the FAILING cast itself is a candidate when it is the funder.
+        // {Oracle's Restoration, Gold Rush} on Needle(RR)+Forest(G): Oracle's first takes the
+        // Forest, Gold Rush (pos 1 = fail) then has no {G}; the only paying order is Gold Rush
+        // first, Oracle's off the Treasure. The prefix loop above only walks a spell LATER and
+        // this loop began one past the failure, so the funder was never walked and the ladder
+        // stopped at its ideal rung -- the executor then DROPPED the minter the base had priced
+        // (700252 T3). The same gap ships with the lever off; it is gated here only so the
+        // flag-off binary stays byte-identical.
         if (victim < 0)
         {
-            for (int pos = fail + 1; pos < static_cast<int>(order.size()); ++pos)
+            for (int pos = MintCreditExactOn() ? fail : fail + 1;
+                 pos < static_cast<int>(order.size()); ++pos)
             {
                 const int i = order[pos];
                 if (can_step(i) && rungs[i][step[i] + 1] < eff(i)) { victim = i; break; }
