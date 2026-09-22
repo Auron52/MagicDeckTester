@@ -862,6 +862,19 @@ could have been caught by it, and all four surfaced within minutes of a human op
 **The lesson is the gap, not the bugs: `test/regression.sh:289` says to run
 `bash test/viewer_checks.sh` after touching `tools/play/`, and I did not.**
 
+**And it would have caught V2 instantly.** That suite carries a check built for exactly this
+failure, whose message names the user's symptom verbatim:
+
+```
+FAIL: 1 engine decision type(s) missing from SUBDECISIONS in tools/play/index.html
+      -- the viewer hides the panel and the game stalls unanswerable
+```
+
+It fired on the very first run I finally gave it. So this was not an unguarded class that needed a
+new gate designing — it was a guarded class whose guard I skipped, which is worse. (Post-fix the
+check passes, and the line-builder now reconstructs **330** references including the user's five
+Giants games, 0 FAIL.)
+
 | # | defect | cause | fix |
 |---|---|---|---|
 | V1 | **The entire viewer script was dead** ("none of the deck names load") | my `attack_mode` handler was inserted as a 2nd statement inside a brace-less `else if`, ending the if-chain -> `SyntaxError: Unexpected token 'else'` | gave it its own `else if` |
