@@ -394,6 +394,55 @@ many positions in each game (one more in four of them: the cheaper arm fits anot
 the same ceiling). gi=214 at the 120 s ceiling, both arms: 0.37x units (55.3M -> 20.2M), 572 s ->
 290 s wall, 7 / 7 positions, all seven labels identical.
 
+### The suite's keys on the fixed engine, route off and on (2026-09-22)
+
+Every Snow key moves under the enumerator fix alone (a hand Astrolabe is now a mana source, so
+every searched game re-plans), and FiveColour's smoke d0 key moves under the rock-colour widening
+(52121d78) at an identical score; every other suite key is byte-identical to ground truth. The
+route on top of the fix changes play in every Snow key but the score in only one:
+
+| key | ground truth | fix, route off | fix, route on |
+|---|---|---|---|
+| snow smoke d0 s1001 (1,000) | 6.7210 | 6.7050 | 6.7050 |
+| snow smoke d3 s1001 (100) | 6.1300 | 6.1400 (gi=2, 6 -> 7) | 6.1400 (same game) |
+| snow smoke d5 s1001 (100) | 6.2400 | 6.2600 (gi=2, 6 -> 7) | 6.2600 (same game) |
+| snow regression d0 s2002 (1,000) | 6.7210 | 6.6930 | 6.6930 |
+| snow regression d3 s2002 (60) | 6.1167 | 6.1167, no game moved | 6.1167 |
+| snow regression d3 s3003 (60) | 6.0000 | 6.0000, no game moved | 6.0167 (gi=8, 5 -> 6) |
+| snow regression d5 s2002 (30) | 6.0333 | 6.0333, no game moved | 6.0333 |
+| snow regression d5 s3003 (30) | 6.1333 | 6.1333, no game moved | 6.1333 |
+| fivecolour smoke d0 s1001 (1,000) | 5.5690 | 5.5690, digest only | -- |
+| fivecolour regression, all 5 | -- | byte-identical | -- |
+
+The route's one score change, regression d3 s3003 gi=8, is seed 3011: the game probed above, which
+recovers to 5 at four and sixteen times the budget and at unbounded budget on both arms (churn).
+The two games the FIX moves at searched depth are both smoke gi=2 (seed 1003), and they are the hole
+itself seen from the other side. Turn 2, two Snow-Covered Islands, Frost Augur out, Astrolabe and
+Boreal Druid in hand: the legacy enumerator could not cast the Druid (no Forest; the Astrolabe's
+mana was invisible), so it activated the Augur, which put a Snow-Covered Island into hand. The fixed
+enumerator casts the Druid off the Astrolabe and attacks for one. From there the fixed line is one
+library card behind at every draw, Abominable Treefolk arrives a turn later, and the game ends a
+turn later. At d5/b20 the fixed engine recovers to 6 at 16x budget (churn). At d3 the classifier's
+4x and 16x re-runs still say 7, but at 1,000x (`--budget-ms 10000`) the fixed engine takes the
+Augur line itself and wins on 6, identical to the legacy game to the last turn -- so this too is
+budget churn, only with a recovery point the classifier's two rungs do not reach. It is a judgment
+the legacy engine never had to make; across the 2,000 paired d3 games the fix is
+-0.0005 +/- 0.0018, and at d5 -0.0025 +/- 0.0021.
+
+**An open oddity of the UNBOUNDED path, not of the fix (recorded, not chased).** The same game at
+d3 with `--budget-ms 0` on the fixed engine wins on 8: it takes the Druid line at T2 and then, on
+T6, with Abominable Treefolk just drawn, three Islands, Rimewood Falls, Scrying Sheets, Coldsteel
+Heart, the Druid and the Astrolabe all untapped and six lands in hand, its main phases do
+NOTHING -- no land drop, no cast -- and it casts the Treefolk on T7 (`logs/snowdiag/
+b0_fixed_1003_trace6/`). The fix's code is not on that path (no rock in hand at T6; the pending
+branch is reachable only through a hand rock), and the bounded 10 s run above does not do it.
+`MTG_TRACE_SOLVE_TURN=6` shows every traced T6 decision is a depth-1 rollout leaf (33,398 of them,
+committing "Treefolk, win 7" in 18,022), and no root-level T6 block at all: the unbounded root runs
+through `FullSearchLine`, which that tracer does not cover. Repro:
+`./build/Release/mtg decks/Snow/Snow.cod --cards-json src/cards/data/cards.json --profile
+decks/Snow/Snow.profile.json --games 1 --seed 1003 --depth 3 --budget-ms 0 --ignore-play-profile
+--threads 1 --log-dir <dir>`. Unbounded budget is not a production setting for any deck.
+
 ## Status
 
 BUILT on the user's rule with the activation half as clarified ("an ability that was not previously
@@ -402,13 +451,16 @@ The per-deck route for Snow (`SnowProvider::NewOnlyBreakpointContinuations`) is 
 **staged off** (`MTG_SNOW_BP_NEW_ONLY`, default 0); flipping its default adopts it and calls for a
 rebaseline of Snow's smoke and regression keys.
 
-**Not yet adopted -- the pre-fix trade-off is void and the re-measurement is running.** The
-pre-fix numbers were cost 0.45x / 0.90x / 0.93x units at d2 / d3 / d5 and 0.36-0.82x in the label
-regime with every label identical; quality -0.0065 at the deck's play settings and +0.0045 (not
-significant) at the suite's d3/b10 tier. The d3 loss was traced to the enumerator hole above, which
-is now closed (af84217a) -- so every cell is being re-measured on the fixed engine with the legacy
-enumerator as a third arm (`logs/snowdiag/chain_v5.sh`), and the adoption call is the user's on
-those numbers. Two further things to know: the filter keys only `ActivatePermAbility` (every Snow
-activation; other kinds are kept, so another deck adopting it gets less of the saving until its
-kinds are keyed), and site 9 still opens only for permanents that entered this turn, which is
-narrower than the principle the clarification states (the other agent owns that side).
+**Not yet adopted -- the re-measurement on the fixed engine is complete and the call is the
+user's.** The pre-fix trade-off (a d5 win against a d3 loss) is void: the d3 loss was the enumerator
+hole, now closed (af84217a). On the fixed engine the route is -0.0070 +/- 0.0022 at d5/b20 (17 / 3,
+p = 0.003), -0.0010 +/- 0.0022 at d3/b10 (11 / 9), at 0.93x / 0.90x units, 0.45x at d2/b0 and
+0.37-0.86x in the label regime with every label identical, and it moves one suite score (regression
+d3 s3003, one game, churn). Flipping `MTG_SNOW_BP_NEW_ONLY` to default on adopts it; Snow's eight
+keys then need one more accept. The enumerator fix itself is adopted (default on, a correctness fix
+under the user's ruling) and its rebaseline of Snow's keys and FiveColour's smoke d0 key is
+recorded in the section above. Two further things to know: the filter keys only
+`ActivatePermAbility` (every Snow activation; other kinds are kept, so another deck adopting it gets
+less of the saving until its kinds are keyed), and site 9 still opens only for permanents that
+entered this turn, which is narrower than the principle the clarification states (the other agent
+owns that side).
