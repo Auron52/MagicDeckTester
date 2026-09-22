@@ -36,7 +36,25 @@ SEED=${SEED:-7700001}
 THREADS=${THREADS:-2}
 EXTRA=${EXTRA:-}
 
-log "=== canon audit START (HEAD $(git rev-parse --short HEAD)) games=$GAMES seed=$SEED extra='$EXTRA' ==="
+# THE DECK LIST IS THE SUITE'S OWN, not a list of this script's. It used to be read from a
+# hand-made /tmp/decks.txt -- untracked, outside the repo, gone on reboot, and nobody else's
+# machine had it. It silently went stale the moment a deck joined the suite: Fungus was added to
+# smoke and regression on 2026-09-22 and was simply never audited, so "ZERO unchallengeable on
+# every deck" would have been a verdict about 22 of 23 decks without ever saying so. An
+# enforcement instrument that quietly stops covering new work is worse than none.
+#
+# DECK_FILE in test/regression_cases.sh is the single source of truth for what the suite plays, so
+# read it. A deck can now only escape this audit by leaving the suite.
+DECKS_TSV=$OUT/decks.tsv
+bash -c 'source test/regression_cases.sh
+         for t in "${!DECK_FILE[@]}"; do printf "%s\t%s\n" "$t" "${DECK_FILE[$t]}"; done' \
+    | sort > "$DECKS_TSV"
+if [ ! -s "$DECKS_TSV" ]; then
+    log "RESULT: INVALID -- could not read DECK_FILE from test/regression_cases.sh"
+    exit 1
+fi
+
+log "=== canon audit START (HEAD $(git rev-parse --short HEAD)) games=$GAMES seed=$SEED extra='$EXTRA' decks=$(wc -l < "$DECKS_TSV") ==="
 
 pids=()
 while IFS=$'\t' read -r tag file; do
@@ -54,7 +72,7 @@ while IFS=$'\t' read -r tag file; do
     env MTG_BP_CANON_AUDIT=1 MTG_BATCH_HEARTBEAT=0 $EXTRA \
         "$BIN" "${args[@]}" > "$OUT/$tag.log" 2>&1 &
     pids+=($!)
-done < /tmp/decks.txt
+done < "$DECKS_TSV"
 
 for p in "${pids[@]}"; do wait "$p"; done
 log "all decks finished"
@@ -81,7 +99,7 @@ while IFS=$'\t' read -r tag file; do
     [ "${n:-0}" -gt 0 ] && bad=$((bad+1))
     log "$(printf '%-16s %s' "$tag" "$hdr")"
     grep 'NO ROUTE INTO THE VARIANT MACHINERY' "$OUT/$tag.log" 2>/dev/null | sed 's/^/                 /' | tee -a "$LOG"
-done < /tmp/decks.txt
+done < "$DECKS_TSV"
 
 log ""
 if [ "$missing" -gt 0 ]; then
