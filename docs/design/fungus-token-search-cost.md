@@ -2046,3 +2046,187 @@ the root. Two shapes worth measuring:
 
 Related: `fungus-second-main-and-devour.md` (devour's *semantics* and the main-phase placement the
 user steered), which is the other half of this card's story.
+
+---
+
+# Round 6 (2026-09-22): the MULLIGAN slow games, and a Treasure check walking a Saproling board
+
+**Trigger.** The USER: *"let's pick up the fungus deck optimizations, especially for the slow games
+in the mulligan profile. I would like to start with ones that are lossless before considering
+anything else including changes related to budgeting."* So: byte-identical work only, and measured
+on the mulligan path rather than the regression tier.
+
+## The mulligan slow games are a DIFFERENT SHAPE from `gi83`, and the funnel says so
+
+The cancelled `complete` gen left 205 streamed slow rollouts in
+`decks/Fungus/Fungus.keepmodel.exhaustive.raw.json.slow.log` -- **23,172 s of rollout time, worst
+single rollout 1,514 s (25 min)**. Ranked by time, **Doubling Season is in almost every one of the
+top entries** (`Doubling Season x3; Forest x2; Psychotrope Thallid x1; Wild Growth x1` and the
+like). That is the atom: Doubling Season doubles the Saproling count, so these are the WIDEST
+boards the deck ever reaches.
+
+`MTG_KEEP_REPLAY` replays one of them exactly (README in `test/slow_repro/`); the capture line's
+`seed=` reproduces byte-for-byte, which is how every number below is paired.
+
+The funnel (`MTG_ENUM_STATS=1`) on that rollout is **not** Round 5's funnel:
+
+```
+entered                    : 40,966,303
+  passed subset rules      : 34,618,576
+  passed flat mana         : 33,552,920
+  passed SubsetPayable     : 33,552,920     <- 0 rejections
+  passed ColorFeasibility  : 33,546,800     <- 6,120 rejections
+  survivors (fully scored) : 26,751,857     <- 65% of everything entered
+```
+
+Round 5's `gi83` spent a third of the game rejecting 17 subsets out of 413 million. Here **almost
+nothing is rejected at all** -- 65% of enumerated subsets are scored in full. The cost is not a
+funnel that fails to cut; it is the **per-subset scoring work itself**, paid 26.7 million times.
+Optimising the payability funnel further would have been optimising the wrong path, which is why
+this round re-profiled instead of continuing Round 5's list.
+
+## The defect: `FreshMintSpendableNow` walks the whole battlefield, per scored subset, on a deck with no Treasures
+
+`perf` (Profile build, the replayed rollout):
+
+```
+11.56%  consider() lambda
+ 5.12%  EnumeratePlanPositions
+ 3.37%  FreshMintSpendableNow          <-- Fungus's list contains no Treasure at all
+ 3.28%  ManaPool::CanPayFlat
+ 2.85%  SubsetHasDuplicateSacSource
+ 2.60%  CardDatabase::LookupCached  (+0.93% a second clone)
+ 2.04%  ColorFeasibility::Payable      <-- 19.9% before Round 5
+ ...
+ 0.97%  WidenHaveWithSubsetRocks       <-- Fungus's list contains no mana rock either
+```
+
+Per-source-line attribution puts `SpellEffects.h:18433 / 18447 / 18448` -- the loop bodies of
+`CopyMagnetLive` and `HeroismCopiesLive` -- at **2.3%**, with the `CardDatabase.h:2673-2682`
+`LookupCached` they each call adding **~2.8%** on top.
+
+The mint-credit block in both subset walkers opens with a walk of `sel` for a minting candidate and
+then computes
+
+```cpp
+const bool spendable = mint_exact
+    ? (FreshMintSpendableNow(state, state.active_player_index) || hand_magnet || ...)
+    : (!FreshHoldActive() || CopyMagnetLive(state, state.active_player_index));
+if (sel_mint && minted > 0 && pool.CanPay(mint_costs) && spendable) { ... }
+```
+
+`spendable` is computed **before** anything tests `sel_mint`, and `FreshMintSpendableNow` ->
+`CopyMagnetLive` / `HeroismCopiesLive` **scan the entire battlefield with a `LookupCached` per
+permanent**. On a deck that mints nothing, `sel_mint` is false on every subset and that scan decides
+nothing, every time.
+
+**It costs most exactly where it can help least.** The scan is O(board width), so it is cheapest on
+an empty board and most expensive on a wide one -- and a wide board is the state a token deck spends
+its long games in. That is why this surfaced on the mulligan tail specifically and not in Round 5's
+profile: these are the Doubling Season games.
+
+`WidenHaveWithSubsetRocks` is the same class one order of magnitude smaller, plus a second defect:
+its result feeds only the `SubsetPayable` call on the next line, which is guarded by
+`!mc_hit && (mana_ok || s_rescued_color_gate)` -- so on every mana-cache hit the widen ran for a
+value that was immediately discarded.
+
+## The fix (shipped, byte-identical)
+
+1. **`SubsetFilterPre::mint`** -- one more bit in the per-enumeration summary Round 2 built, set by
+   exactly the block's own entry test (`def->params.creates_treasures > 0`). False makes `sel_mint`
+   unreachable, so skipping the whole block is byte-identical by construction. Both walkers gated
+   (`consider`, `eval_and_push`) -- lockstep, as their comments require. The summary's
+   instruments-disarm rule carries over unchanged: armed instruments get an all-true summary and
+   see every callsite they saw before.
+2. **`WidenHaveWithSubsetRocks`** -- moved INSIDE its guard, and given the callers' existing
+   `any_rock` per-enumeration scan as `any_rock_cand`. With no rock candidate every `rm.Total() <=
+   0`, so the loop's verdict is a foregone `return have`.
+
+Note which shape the fix takes: **not** a lazy `spendable`. A lazy `spendable` would have removed
+the board scan but left the per-subset `sel` walk. The `pre` bit removes both, and it removes them
+for every deck in the repo that holds no Treasure, not just this one.
+
+## Measured
+
+`MTG_KEEP_REPLAY` of `Doubling Season x1; Simic Growth Chamber x1; Thallid x1; Thallid Shell-Dweller
+x2; Utopia Mycon x2` (draw, r=1), interleaved base/new x3 on a quiet box:
+
+| arm | run 1 | run 2 | run 3 | mean |
+|---|---|---|---|---|
+| base | 16,318 ms | 16,296 ms | 16,220 ms | 16,278 ms |
+| new  | 14,018 ms | 13,854 ms | 13,783 ms | **13,885 ms** |
+
+**-14.7%.** Identity: `win_turn=7` on all six runs, and `enum-memo hits=31 misses=14556` /
+`solve-memo hits=36499 misses=238460 clears=3` identical in every arm -- same nodes, same memo
+traffic, same answer. Smoke **93 passed / 0 failed, 0 configs changed, 0 play-changed** across all
+22 decks, Mirrorwing (the deck that actually mints) included. `test/scenarios.sh` 103/103.
+
+The win is larger than the 3.37%+0.97% the flat profile attributes to the two symbols, because
+deleting `CopyMagnetLive` also deletes its `LookupCached` calls and the cache pressure of walking
+the battlefield vector once per scored subset.
+
+## Method note worth keeping
+
+The first timing of this rollout came back at **37.4 s** for what the paired A/B then measured at
+16.3 s on the same binary and the same seed -- a 2.3x swing with nothing changed but the hour. This
+box is a WSL2 guest and its `loadavg` is the HOST's, so an un-paired before/after here would have
+"measured" anything you liked. Every number above is base-and-new interleaved, in one command, on
+one quiet box.
+
+## Two things measurement REFUSED in this round
+
+**1. The win is not one number -- it scales with BOARD WIDTH, which is the point.** A second,
+larger slow hand (`Doubling Season x1; Essence Warden x1; Forest x1; Thallid Shell-Dweller x1;
+Tukatongue Thallid x1; Wild Growth x2`, play, r=0) paired base/new x2 came back **-5.8%**
+(55,719 -> 52,497 ms), not -14.7%. That is the predicted shape, not a contradiction: the deleted
+work is `O(board width) x (scored subsets)`, so the deck's WIDEST games -- the Doubling Season +
+Utopia Mycon hands at the top of the slow log -- pay the most for it and gain the most from removing
+it. Quote the range, never the best hand.
+
+**2. Folding `SubsetHasDuplicateSacSource`'s seven tail walks into one bought NOTHING -- reverted.**
+It was the obvious next target (3.43% after the mint fix, the largest filter left) and the obvious
+defect shape: seven separate `for (b = a+1; ...)` loops, each re-reading `cands[sel[b]].kind` at a
+random 384-byte stride, walking the tail twice whenever `a` is both a free cast and a clause-owning
+kind. The restructure -- one walk per `a`, `a`'s fields hoisted -- is byte-identical (the function
+is a disjunction over pairs, so pair order cannot change the bool).
+
+Six interleaved rounds on the quiet probe:
+
+```
+before: 13937  13875  13903  13754  13727     (min 13727)
+after:  13848  13848  13814  13788  13778     (min 13778)
+```
+
+A **3-2 split with every difference under 0.7%.** The larger hand disagreed in the other direction
+by 2.6%, i.e. noise both ways. **Reverted** -- churn in this file is not free, and the repo's bar is
+a strict improvement.
+
+**What the negative result TELLS the next agent**, which is why it is written down: the filter's
+3.43% is NOT the redundant tail walks. `sel` is small enough on these boards that the walks are
+short and the candidate array (~26 x 384 B = 10 KB) stays warm in L1 between calls. So the cost is
+the per-CALL overhead and the work that is proportional to `|sel|` itself -- which means the lever
+that would actually move it is **calling it less often**, not making each call leaner. Do not retry
+the stride hoist here.
+
+**A measurement note that cost an hour:** `perf stat -e instructions:u` reports `<not supported>` on
+this box -- WSL2 exposes no hardware PMU -- so there is no contention-immune counter available for
+an A/B. `task-clock:u` sums every thread (the gen's discovery phase is parallel), so it does not
+isolate a replayed rollout either. Wall time with many interleaved repetitions, compared on the
+MINIMUM, is the only instrument this box actually offers.
+
+**And a second one, because it produced a result that is physically impossible.** A tail sweep over
+eight slow hands was first run the obvious way -- both arms of all eight hands launched at once, 16
+processes on 24 cores. It reported the byte-identical change as **SLOWER on three of the eight
+hands** (+0.6%, +2.0%, +3.3%) and -3.3% overall. None of that is real: each replay's discovery phase
+is itself multithreaded (~1.5 CPUs), so 16 of them saturated the box, and the two arms of a pair did
+not overlap in time, so they did not share conditions. Re-run strictly serially the same hands
+moved by tens of percent (`Doubling Season x4; Utopia Mycon x1; Wild Growth x2`: 84.9 s parallel ->
+49.2 s serial). **A parallel fan-out is the right shape for a WORK queue and the wrong shape for a
+TIMING A/B** -- the repo's pooling rule is about throughput, not about measurement.
+
+That serial re-run was then abandoned too, and this is worth knowing: it began returning a
+byte-identical arm at **+68%** while `uptime` showed **load average 23 against 1.7 CPUs of guest
+process**. The load is the HOST's; nothing inside the container can see what is causing it, and
+nothing inside the container can measure through it. **Check `uptime` against your own `%CPU` before
+trusting any wall number here** -- if the gap is large, the box is not yours and the measurement is
+not real. The numbers in the table above were all taken while that gap was small.

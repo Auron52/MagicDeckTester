@@ -5180,9 +5180,14 @@ static bool SubsetRockColorEnabled()
 }
 // Returns the table to test with: `have` itself when nothing widens, else `scratch` filled with
 // `have` plus the selected rocks' colours (a wild credit is every colour).
+// `any_rock_cand` is the callers' own per-enumeration "does ANY candidate carry rock mana" scan (the
+// same `any_rock` both walkers already compute). False makes the loop below a foregone `return have`
+// -- every `rm.Total() <= 0` -- so skipping it is byte-identical, and it takes a per-subset stride
+// over the 384-byte Action off the hot path for every deck without a mana rock. Defaulted true so a
+// caller that does not pass it keeps the unconditional walk.
 static const bool* WidenHaveWithSubsetRocks(const bool have[5], bool scratch[5],
                                             const std::vector<Action>& cands, const std::vector<int>& sel,
-                                            bool credited_mint = false)
+                                            bool credited_mint = false, bool any_rock_cand = true)
 {
     // MTG_MINT_CREDIT_EXACT: a CREDITED same-subset mint is wild -- every colour is present. (Gold
     // Rush "fixes colours": that is a base-plan fact once the mint is credited, and the exact
@@ -5192,7 +5197,7 @@ static const bool* WidenHaveWithSubsetRocks(const bool have[5], bool scratch[5],
         for (int ci = 0; ci < 5; ++ci) { scratch[ci] = true; }
         return scratch;
     }
-    if (!SubsetRockColorEnabled()) { return have; }
+    if (!any_rock_cand || !SubsetRockColorEnabled()) { return have; }
     bool widened = false;
     for (int j : sel)
     {
@@ -8886,6 +8891,18 @@ struct SubsetFilterPre
     bool trick_target      = true;   // SubsetHasMissingTrickTarget
     bool aura_target       = true;   // SubsetHasUnenabledRestrictedAura, SubsetHasAuraOnUncastCreature
     bool vial              = true;   // the per-charge Vial capacity loop in eval_and_push
+    // The TreasurePaySource same-turn MINT-CREDIT block (both walkers). Its whole effect is guarded
+    // by `sel_mint`, which no selection can set without a candidate that mints -- so with this bit
+    // false the block is a walk of `sel` plus a SPENDABILITY probe whose answer is discarded.
+    //
+    // That probe is why this bit is worth its own line rather than a lazy `spendable`.
+    // FreshMintSpendableNow -> CopyMagnetLive / HeroismCopiesLive WALK THE WHOLE BATTLEFIELD with a
+    // LookupCached per permanent, once per SCORED SUBSET. It costs the most exactly where it can
+    // help the least: on a wide board, which is the state a token deck spends its long games in.
+    // Measured on a Fungus keep-rollout (26.7M scored subsets, 2026-09-22 profile):
+    // FreshMintSpendableNow 3.37% + the two scan lines 2.3% + their LookupCached ~2.8% of the whole
+    // rollout, to decide nothing, on a deck whose list contains no Treasure at all.
+    bool mint              = true;   // the TreasurePaySourceEnabled() mint-credit block
     // SubsetHasMissingTrickTarget's cast-time-target board fact (see its comment): -1 = not built,
     // the filter computes it per subset (the unoptimised, instruments-armed contract).
     int  best_needs_body   = -1;
@@ -8925,7 +8942,7 @@ static SubsetFilterPre BuildSubsetFilterPre(const GameState& state, const std::v
     // without a matching `false` here keeps its member initialiser -- i.e. stays TRUE, the
     // unoptimised behaviour -- so forgetting one costs speed, never correctness.
     p = SubsetFilterPre{ false, false, false, false, false, false, false, false, false,
-                         false, false, false, false, false, false, false, false };
+                         false, false, false, false, false, false, false, false, false };
     int sac_actions = 0;   // sac_fodder needs TWO: `outlets` there counts a subset of these
     bool best_target = false;   // a kTrickBestOwnTarget cand (MTG_MINT_CREDIT_EXACT, Mirrorwing)
     for (const Action& a : cands)
@@ -8968,6 +8985,9 @@ static SubsetFilterPre BuildSubsetFilterPre(const GameState& state, const std::v
         if (a.alt_cost)           { p.alt_payload = true; }
         if (a.phyrexian_life > 0) { p.phyrexian = true; }
         if (d == nullptr) { continue; }
+        // Exactly the block's own entry test (`md->params.creates_treasures > 0` after the null
+        // check), so the bit is the block's necessary condition, not a weaker proxy.
+        if (d->params.creates_treasures > 0) { p.mint = true; }
         if (d->params.controller_lifegain_equals_power) { p.lifegain_removal = true; }
         if (d->params.etb_opponent_lifegain > 0)        { p.etb_gift = true; }
         if (d->tmpl == CardTemplate::DirectDamage && d->params.opponent_lifegain > 0)
@@ -21929,7 +21949,10 @@ TurnSolver::Plan TurnSolver::SolveUncached(const GameState& state, bool is_pre_c
         // plus a same-plan HAND magnet the mint targets (cast first by rank; the mint is spendable
         // at the payment that follows it). Note the odometer gates above now credit mint_gain too;
         // without that this block was dead for every total-mana shortfall (EngineFlags.h).
-        if (TreasurePaySourceEnabled())
+        // `pre.mint` (see SubsetFilterPre): with no minting candidate in `cands` no selection can
+        // set sel_mint, so the whole block is a walk plus a discarded board scan -- byte-identical
+        // to skip. Lockstep twin in EnumeratePlans.
+        if (pre.mint && TreasurePaySourceEnabled())
         {
             const bool mint_exact = MintCreditExactOn();
             int minted = 0; ManaCost mint_costs, first_mint; bool sel_mint = false, hand_magnet = false;
@@ -22130,11 +22153,17 @@ TurnSolver::Plan TurnSolver::SolveUncached(const GameState& state, bool is_pre_c
         // Same-subset rock colours widen the presence table here too (MTG_SUBSET_ROCK_COLOR, the
         // EnumeratePlans twin -- one helper, so the greedy/rollout policy plans the same
         // "rock, then the spell its colour enables" turns the search does).
-        bool have_rock_c[5];
-        const bool* have_eff_c = WidenHaveWithSubsetRocks(have_colors, have_rock_c, cands, sel,
-                                                          /*credited_mint=*/simul_mint_credit > 0 && MintCreditExactOn());
-        if (!mc_hit && (mana_ok || s_rescued_color_gate)
-            && !SubsetPayable(have_eff_c, cands, sel, &colour_demand)) { mc_store_reject(); return; }
+        // Computed INSIDE the guard, not before it: `have_eff_c` is read by nothing but the
+        // SubsetPayable call, and on a mana-cache hit (or a filter-rescued !mana_ok subset) that
+        // call does not happen -- so the widen used to run for a value that was then dropped.
+        if (!mc_hit && (mana_ok || s_rescued_color_gate))
+        {
+            bool have_rock_c[5];
+            const bool* have_eff_c = WidenHaveWithSubsetRocks(have_colors, have_rock_c, cands, sel,
+                                                              /*credited_mint=*/simul_mint_credit > 0 && MintCreditExactOn(),
+                                                              /*any_rock_cand=*/any_rock);
+            if (!SubsetPayable(have_eff_c, cands, sel, &colour_demand)) { mc_store_reject(); return; }
+        }
         if (enumstats::Enabled()) { enumstats::g_c_color.fetch_add(1, std::memory_order_relaxed); }   // passed SubsetPayable
         // ... and the COUNT the gate above deliberately does not model: two white pips off one white
         // source. Only on the flat-pool path -- a subset rescued by SubsetPayableWithFilters was
@@ -31655,7 +31684,9 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
         // admits it only when its line wins within the horizon). That replaces the post-mint
         // re-solve those variants used to rely on: the spend is a base plan, not a continuation.
         int fresh_mint = 0;
-        if (TreasurePaySourceEnabled())
+        // `pre.mint`: Solve's twin carries the note. No minting candidate -> sel_mint can never be
+        // set, so `minted`/`fresh_mint` stay 0 and nothing below this block observes a difference.
+        if (pre.mint && TreasurePaySourceEnabled())
         {
             const bool mint_exact = MintCreditExactOn();
             int minted = 0; ManaCost mint_costs, first_mint; bool sel_mint = false, hand_magnet = false;
@@ -32261,7 +32292,8 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
         // Solve::consider's twin gate.
         bool have_rock[5];
         const bool* have_eff = WidenHaveWithSubsetRocks(have_colors, have_rock, cands, sel,
-                                                        /*credited_mint=*/simul_mint_credit > 0 && MintCreditExactOn());
+                                                        /*credited_mint=*/simul_mint_credit > 0 && MintCreditExactOn(),
+                                                        /*any_rock_cand=*/any_rock);
         if (!sel_col_reducer && !SubsetPayable(have_eff, cands, sel, &colour_demand))
         {
             _ct.label = "colour-exists";                    // ef-* labels overwrite on a failed rescue
