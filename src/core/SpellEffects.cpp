@@ -143,6 +143,12 @@ void PerformTutor(GameState& state, int controller_index, const CardParams& pp,
         std::vector<std::string> cands = ResolveProvider(state).TutorCandidates(state, controller_index, pp);
         if (cands.empty()) { return; }
         want = cands.front();
+        // "You MAY search" declined by the SEARCH (kTutorDeclineChoice). Checked BEFORE the clamp
+        // below, which would otherwise fold the sentinel onto the last candidate. Gated on
+        // tutor_optional, so a card that must search is unaffected. This matters most for a
+        // tutor_to_top like Giant Harbinger: it SPENDS the next draw step, so declining is a real
+        // line in a way it is not for a to-hand fetch (where searching is pure gain).
+        if (pp.tutor_optional && scripted_pick == kTutorDeclineChoice) { return; }
         if (scripted_pick >= 0)
         {
             // The ranking above ran on the TRUE resolution state -- the whole point of the index

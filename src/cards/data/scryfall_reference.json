@@ -422,6 +422,17 @@
     "toughness": null,
     "type_line": "Artifact — Equipment"
   },
+  "Borderland Behemoth": {
+    "cmc": 7.0,
+    "keywords": [
+      "Trample"
+    ],
+    "mana_cost": "{5}{R}{R}",
+    "oracle_text": "Trample\nThis creature gets +4/+4 for each other Giant you control.",
+    "power": "4",
+    "toughness": "4",
+    "type_line": "Creature — Giant Warrior"
+  },
   "Boreal Druid": {
     "cmc": 1.0,
     "keywords": [],
@@ -1312,6 +1323,15 @@
     "toughness": "2",
     "type_line": "Legendary Creature — Angel"
   },
+  "Giant Harbinger": {
+    "cmc": 5.0,
+    "keywords": [],
+    "mana_cost": "{4}{R}",
+    "oracle_text": "When this creature enters, you may search your library for a Giant card, reveal it, then shuffle and put that card on top.",
+    "power": "3",
+    "toughness": "4",
+    "type_line": "Creature — Giant Shaman"
+  },
   "Gladecover Scout": {
     "cmc": 1.0,
     "keywords": [
@@ -1507,6 +1527,15 @@
     "toughness": null,
     "type_line": "Enchantment — Aura"
   },
+  "Hamletback Goliath": {
+    "cmc": 7.0,
+    "keywords": [],
+    "mana_cost": "{6}{R}",
+    "oracle_text": "Whenever another creature enters, you may put X +1/+1 counters on this creature, where X is that creature's power.",
+    "power": "6",
+    "toughness": "6",
+    "type_line": "Creature — Giant Warrior"
+  },
   "Hatchery Sliver": {
     "cmc": 2.0,
     "keywords": [
@@ -1683,6 +1712,15 @@
     "power": null,
     "toughness": null,
     "type_line": "Sorcery"
+  },
+  "Inferno Titan": {
+    "cmc": 6.0,
+    "keywords": [],
+    "mana_cost": "{4}{R}{R}",
+    "oracle_text": "{R}: This creature gets +1/+0 until end of turn.\nWhenever this creature enters or attacks, it deals 3 damage divided as you choose among one, two, or three targets.",
+    "power": "6",
+    "toughness": "6",
+    "type_line": "Creature — Giant"
   },
   "Inferno of the Star Mounts": {
     "cmc": 6.0,
@@ -1980,6 +2018,17 @@
     "toughness": null,
     "type_line": "Artifact — Equipment"
   },
+  "Lightstall Inquisitor": {
+    "cmc": 1.0,
+    "keywords": [
+      "Vigilance"
+    ],
+    "mana_cost": "{W}",
+    "oracle_text": "Vigilance\nWhen this creature enters, each opponent exiles a card from their hand and may play that card for as long as it remains exiled. Each spell cast this way costs {1} more to cast. Each land played this way enters tapped.",
+    "power": "2",
+    "toughness": "1",
+    "type_line": "Creature — Angel Wizard"
+  },
   "Lion Umbra": {
     "cmc": 2.0,
     "keywords": [
@@ -2073,6 +2122,17 @@
     "power": "5",
     "toughness": "5",
     "type_line": "Legendary Creature — Angel"
+  },
+  "Lyra, Archangel of Dawn": {
+    "cmc": 3.0,
+    "keywords": [
+      "Flying"
+    ],
+    "mana_cost": "{2}{W}",
+    "oracle_text": "Flying\nWhenever you gain life, put a +1/+1 counter on each Angel you control.",
+    "power": "3",
+    "toughness": "3",
+    "type_line": "Legendary Creature — Angel Knight"
   },
   "Maelstrom Archangel": {
     "cmc": 5.0,
@@ -2596,6 +2656,15 @@
     "power": null,
     "toughness": null,
     "type_line": "Instant"
+  },
+  "Pyroclasm": {
+    "cmc": 2.0,
+    "keywords": [],
+    "mana_cost": "{1}{R}",
+    "oracle_text": "Pyroclasm deals 2 damage to each creature.",
+    "power": null,
+    "toughness": null,
+    "type_line": "Sorcery"
   },
   "Rageblood Shaman": {
     "cmc": 3.0,
@@ -3330,6 +3399,15 @@
     "toughness": "2",
     "type_line": "Creature — Goblin Warrior"
   },
+  "Stinkdrinker Daredevil": {
+    "cmc": 3.0,
+    "keywords": [],
+    "mana_cost": "{2}{R}",
+    "oracle_text": "Giant spells you cast cost {2} less to cast.",
+    "power": "1",
+    "toughness": "3",
+    "type_line": "Creature — Goblin Rogue"
+  },
   "Stomping Ground": {
     "cmc": 0.0,
     "keywords": [],
@@ -3365,6 +3443,24 @@
     "power": null,
     "toughness": null,
     "type_line": "Instant"
+  },
+  "Sunrise Sovereign": {
+    "cmc": 6.0,
+    "keywords": [],
+    "mana_cost": "{5}{R}",
+    "oracle_text": "Other Giant creatures you control get +2/+2 and have trample.",
+    "power": "5",
+    "toughness": "5",
+    "type_line": "Creature — Giant Warrior"
+  },
+  "Surtland Flinger": {
+    "cmc": 5.0,
+    "keywords": [],
+    "mana_cost": "{3}{R}{R}",
+    "oracle_text": "Whenever this creature attacks, you may sacrifice another creature. When you do, this creature deals damage equal to the sacrificed creature's power to any target. If the sacrificed creature was a Giant, this creature deals twice that much damage instead.",
+    "power": "4",
+    "toughness": "6",
+    "type_line": "Creature — Giant Berserker"
   },
   "Suture Priest": {
     "cmc": 2.0,
@@ -3410,6 +3506,15 @@
     "power": null,
     "toughness": null,
     "type_line": "Enchantment"
+  },
+  "Tectonic Giant": {
+    "cmc": 4.0,
+    "keywords": [],
+    "mana_cost": "{2}{R}{R}",
+    "oracle_text": "Whenever this creature attacks or becomes the target of a spell an opponent controls, choose one —\n• This creature deals 3 damage to each opponent.\n• Exile the top two cards of your library. Choose one of them. Until the end of your next turn, you may play that card.",
+    "power": "3",
+    "toughness": "4",
+    "type_line": "Creature — Elemental Giant"
   },
   "Temple Garden": {
     "cmc": 0.0,

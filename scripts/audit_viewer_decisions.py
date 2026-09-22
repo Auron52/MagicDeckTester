@@ -76,6 +76,17 @@ MANIFEST = {
     "etb_dig_count":         ("dig",                  positive),
     "upkeep_adds_charge":    ("vial_charge",          truthy),
     "retrace":               ("retrace_discard",      truthy),
+    # ---- Giants (2026-09-22) ----
+    # Tectonic Giant's "choose one" attack trigger -> the NEW `attack_mode` decision type
+    # (chooser g_play_attack_mode_chooser in ApplyAttackModalTriggers, emitter
+    # WriteAttackModeDecisionJson, GUI attackModePanelHtml). The MODE is also a searched plan
+    # axis (Plan::tectonic_mode_choice) for the autonomous engine.
+    "attack_trigger_modal":  ("attack_mode",          truthy),
+    # Mode B's "choose one of them" reuses the existing dig chooser.
+    "attack_trigger_impulse_exile": ("dig",           positive),
+    # Surtland Flinger's "you may sacrifice another creature" reuses the existing `sacrifice`
+    # board-click type (g_play_sacrifice_chooser), with a negative reply as the DECLINE.
+    "attack_sac_fling":      ("sacrifice",            truthy),
     # ---- BreachingDragonstorm (real-stack cascade family, 2026-09-03) -----------------------
     # Cascade's "you may cast it" now SURFACES as a `free_cast` decision at the cascade
     # trigger's resolution (EffectHandler::ResolveCascadeTrigger -> g_play_free_cast_chooser,
@@ -414,6 +425,17 @@ def _cost_mv(card, cost_from):
 # one dangerous error; under-listing just yields a longer, safe review list.
 # ---------------------------------------------------------------------------
 INERT_PARAMS = {
+    # ---- Giants (2026-09-22) ----
+    "attack_trigger_damage_any": "Inferno Titan's attack half -- automatic 3 damage; 'divided among one, two, or three targets' collapses to the opponent's face in the goldfish (the opponent never blocks and its spawns are worth 0, so the face is strictly optimal). The etb_damage_any / dragon_ping_on_enter precedent. DISCLOSED in 6a",
+    "attack_trigger_damage_each_opponent": "Tectonic Giant mode A payload -- automatic once the MODE is chosen; the mode itself is the decision and rides attack_trigger_modal -> attack_mode",
+    "attack_trigger_impulse_playable": "how many of the exiled cards become playable (1) -- a constant of the card, not a choice; WHICH one rides attack_trigger_impulse_exile -> dig",
+    "attack_trigger_impulse_expiry_next_turn": "staged-card duration ('until the end of your next turn') -- a constant, not a choice",
+    "attack_sac_fling_double_subtype": "which subtype DOUBLES the fling damage ('was a Giant') -- a legality/payload rider, not a choice; the victim pick rides attack_sac_fling -> sacrifice",
+    "damage_all_creatures": "Pyroclasm -- an untargeted symmetric sweep ('each creature'), so there is no target, no mode, no division and no optional 'may'. The only decision is whether to cast it, which is the always-wired main_phase plan",
+    "any_creature_enters_self_counters_power": "Hamletback Goliath -- the 'you may' is free and strictly dominated in the yes direction (bigger body, bigger fling, survives Pyroclasm), so it is auto-yes by DOMINANCE, not by heuristic; X is fixed by the entrant's power and the counters go on this creature, so there is nothing to pick",
+    "static_self_pump_per_other_subtype": "Borderland Behemoth -- a static continuous self-buff; no choice",
+    "static_self_pump_power": "Borderland Behemoth self-pump magnitude -- a constant",
+    "static_self_pump_tough": "Borderland Behemoth self-pump magnitude -- a constant",
     # ---- Melira Pod (2026-09-04) ----
     "tutor_max_mv": "tutor target FILTER (Ranger of Eos 'mana value 1 or less') -- legality, not a choice; the pick rides tutor_to_hand -> sac_tutor/main_phase",
     "tutor_max_toughness": "tutor target FILTER (Recruiter 'toughness 2 or less') -- legality, not a choice; the pick rides tutor_to_hand -> main_phase/tutor_etb",

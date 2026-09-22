@@ -835,6 +835,20 @@ public:
         // step -- a guard around the plan apply would be gone before the trigger fires.
         int lackey_choice = -1;
 
+        // SURTLAND FLINGER attack-trigger fling: the CARD NUMBER of the creature to sacrifice,
+        // -2 = DECLINE, -1 (default) == the ranked default (FlingVictimCandidates' front), which
+        // is byte-identical to no branch. Copied onto GameState::scripted_fling_victim rather
+        // than pinned by a scoped guard, for the same reason as lackey_choice: it is decided in
+        // the main phase and consumed in the DECLARE-ATTACKERS step, after the apply has
+        // returned. A card NUMBER rather than a rank, because a lord entering between plan-time
+        // and combat re-ranks the candidate list and a rank would then resolve to the wrong body.
+        int fling_victim_choice = -1;
+
+        // TECTONIC GIANT modal attack trigger: 0 = "3 damage to each opponent", 1 = "exile the
+        // top two, play one", -1 (default) == ResolveAttackModalMode, byte-identical to no
+        // branch. Same state-pin route and reason as fling_victim_choice.
+        int tectonic_mode_choice = -1;
+
         // Ponder-style REORDER disposition: which candidate of ReorderCandidatesNarrow the reorder
         // takes. -1 == the provider heuristic, byte-identical to no branch. Narrow by construction
         // (shuffle + one variant per distinct TOP card) because Ponder draws immediately, so only

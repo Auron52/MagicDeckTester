@@ -194,12 +194,27 @@ with open(OUT, "w", encoding="utf-8") as f:
         f.write(f"### {ident} | prefix={n}\n{raw}\n")
 
 types = {}
-for _, _, raw in records:
+unparseable = []
+for ident, n, raw in records:
     try:
         t = json.loads(raw).get("type", "?")
-    except Exception:
+    except Exception as e:
         t = "<unparseable>"
+        unparseable.append((ident, n, str(e), raw[:400]))
     types[t] = types.get(t, 0) + 1
+
+# A decision frame that does not PARSE is never acceptable -- this is a wire protocol and
+# tools/play/server.js does a bare JSON.parse on every frame, so an unparseable one means the deck
+# simply cannot be hand-played past that point. This used to be recorded as a `<unparseable>` type
+# and counted alongside the real ones, which let a malformed emitter ride along inside a green
+# capture. It did: `attack_mode` shipped emitting a doubled comma and a missing one (Giants, 2026-09),
+# and no gate objected. Fail loudly instead.
+if unparseable:
+    print(f"\nFAIL: {len(unparseable)} decision frame(s) are not valid JSON.")
+    for ident, n, err, head in unparseable[:10]:
+        print(f"  {ident} prefix={n}: {err}")
+        print(f"    {head}")
+    sys.exit(1)
 print(f"captured {len(records)} frames ({len(refs)} refs x2 passes"
       + (f" + {len(sweeps)} sweeps" if SWEEP else "") + f") -> {OUT}")
 print("decision types covered: " + ", ".join(f"{t}={n}" for t, n in sorted(types.items())))

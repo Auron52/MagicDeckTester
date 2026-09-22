@@ -170,7 +170,16 @@ static_assert(sizeof(Player) == 200,
 // stamped once in StampDeckTraits and never written again, so they are identical across every pair
 // of states Build() could ever compare -- nothing to fold, exactly like deck_reads_endstep_lifegain
 // and deck_reads_mv_cast above. (The same classification the three earlier deck_has_* gates carry.)
-static_assert(sizeof(GameState) == 816,
+// 816 -> 824 (2026-09-22, Giants): GameState gained TWO ints, `scripted_fling_victim` (Surtland
+// Flinger's searched fling victim / decline) and `scripted_tectonic_mode` (Tectonic Giant's
+// searched attack-trigger mode). They share one 8-byte slot -- the first consumed 4 bytes plus
+// 4 of padding, the second filled that padding -- so the size moved only once. NOTE that means
+// the tripwire did NOT fire for the second field: size is a proxy, not a proof (the header says
+// so), and a same-slot addition is exactly the case it cannot catch. Classification for BOTH:
+// FUTURE-DETERMINING, exactly like `scripted_cheat_choice` -- each is written during the turn's
+// plan apply and consumed in that same turn's declare-attackers step, so two states differing
+// only in a pin play out differently. BOTH are folded in Build() beside the cheat pin.
+static_assert(sizeof(GameState) == 824,
               "GameState changed size -- fold any new field into dominance::Build() (see the "
               "MAINTENANCE HAZARD note at the top of Dominance.h) before updating this number.");
 
@@ -445,6 +454,12 @@ inline DomSnap Build(const GameState& s, const DecisionProvider& prov,
     fold(static_cast<std::uint64_t>(s.free_casts_available));
     fold(static_cast<std::uint64_t>(s.scripted_cheat_choice));
     fold(static_cast<std::uint64_t>(s.scripted_discard_choice));
+    // Surtland Flinger's searched victim pin: written during the turn's apply, consumed in the
+    // declare-attackers step of that same turn, so it is future-determining exactly like the
+    // cheat pin above and must fold (the key is fail-closed by declaration).
+    fold(static_cast<std::uint64_t>(s.scripted_fling_victim));
+    // Tectonic Giant's searched mode pin -- same future-determining classification.
+    fold(static_cast<std::uint64_t>(s.scripted_tectonic_mode));
     // scripted_vial_charge is LIVE across the end-of-turn boundary by design (set during the
     // turn's apply, consumed at the NEXT turn's upkeep -- see its GameState note), so a pending
     // searched charge is future-determining and must fold exact-match like its sibling pins.

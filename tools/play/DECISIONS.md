@@ -76,6 +76,9 @@ bottom prompt (`promptPanelHtml`). Line numbers are hints — anchor on the symb
 | `firebreathe` | `g_play_firebreathe_chooser` (`FirebreatheChooser`) | `AIEngine::Firebreathe` (combat, `GameEngine.cpp:361`) | `WriteFirebreatheDecisionJson` | `firebreathePanelHtml` | modal |
 | `lackey_put` | `g_play_lackey_chooser` (`LackeyChooser`) | `FireCombatDamageCheatIntoPlay` (SpellEffects.h, shared executor+rollout) | `WriteLackeyDecisionJson` | `lackeyPanelHtml` | modal |
 | `free_cast` | `g_play_free_cast_chooser` (`FreeCastChooser`) | `AIEngine` post-combat main, before the plan menu (Maelstrom Archangel) **+ the trigger resolvers in `EffectHandler`** — `ResolveCascadeTrigger` (cascade "you may cast it"; decline bottoms), `ResolveEtbExileFreeCast` (Breaching Dragonstorm; decline → hand), `ResolveShuffleRevealFreecast` (Creative Technique; decline stays exiled). `source` on the chooser/JSON names the offering trigger; `walked` on the chooser/JSON lists the walk's skipped (non-hit) cards in walk order, rendered dimmed in the dialog with the mechanic's disposition, and the same walk reaches the history via each site's `EmitReveal` (2026-09-03). | `WriteFreeCastDecisionJson` | `freeCastPanelHtml` | modal |
+| `attack_mode` | `g_play_attack_mode_chooser` (`AttackModeChooser`) | `ApplyAttackModalTriggers` (SpellEffects.h, shared executor+rollout combat) — Tectonic Giant's "choose one" at declare-attackers, before the damage loop | `WriteAttackModeDecisionJson` | `attackModePanelHtml` | modal (2-option, demonstrate's centred shape) |
+| `sacrifice` (reuse: **Surtland Flinger's attack-trigger fling victim**) | same `g_play_sacrifice_chooser` | `FireAttackSacFling` (SpellEffects.h, shared) — candidates are the ranked legal victims as battlefield indices; a NEGATIVE reply is the "you may" DECLINE | `WriteBounceDecisionJson` | `promptPanelHtml` | board |
+| `dig` (reuse: **Tectonic Giant mode B, "choose one of them"**) | same `g_play_dig_chooser` | `ApplyAttackModalTriggers` impulse branch (SpellEffects.h, shared) | `WriteDigDecisionJson` | `digPanelHtml` | modal |
 | `demonstrate` | `g_play_demonstrate_chooser` (`DemonstrateChooser`) | `EffectHandler::ResolveDemonstrate` (Creative Technique's cast trigger; the copy resolves before the original) | `WriteDemonstrateDecisionJson` | `demonstratePanelHtml` | modal (yes/no, echo's shape) |
 | `attach_host` | `g_play_attach_host_chooser` (`BounceChooser` shape) | `FireAttackDigAttach` (SpellEffects.cpp, shared executor+rollout combat) | `WriteAttachHostDecisionJson` | `promptPanelHtml` (attach_host case) | board |
 | `jitte` | `g_play_jitte_chooser` (`FirebreatheChooser` shape) | `ResolveCombatDamage` (Combat.cpp, shared executor+rollout) | `WriteJitteDecisionJson` | `jittePanelHtml` | modal (turn-keyed `--jitte` side-channel, like `firebreathe`) |
@@ -479,6 +482,16 @@ fully wired (all four sites) regardless of the menu default.
 
 - **Modal "choose one/two" (non-damage)** — e.g. Reality Spasm tap-vs-untap. Needs an
   engine-model change (de-abstract the untap float into literal targets), not viewer wiring.
+  <!-- NARROWED 2026-09-22 (Giants): a modal TRIGGER is no longer a blanket gap. Tectonic Giant's
+       "choose one" attack trigger is wired as the `attack_mode` type (see Registry) AND is a
+       searched plan axis (Plan::tectonic_mode_choice), so the search branches on the mode rather
+       than inheriting a heuristic. Reality Spasm stays a gap for a DIFFERENT reason: its untap is
+       modelled as an abstract mana float, so there are no literal permanents to choose among --
+       that is the engine-model change above, not a missing chooser. -->
+- **Which of several exiled impulse cards to keep** (Tectonic Giant mode B) is surfaced to the
+  HUMAN (reuses `dig`) but is not yet a searched axis for the autonomous engine — it takes a
+  ranked default (highest mana value). Disclosed in the Giants Stage 6a; a second axis is the
+  follow-up.
 - **Cascade / Retrace SEARCH target** — which card the flip casts. Heuristic-picked today;
   build a type only when a deck needs it.
   <!-- Light-Paws fetch target is now the wired `lightpaws` type (see Registry), no longer a gap. -->

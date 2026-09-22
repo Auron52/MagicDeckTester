@@ -245,6 +245,34 @@ public:
 // is exactly the misroute class scripts/provider_audit.py exists to catch. Derive from the provider
 // the deck ACTUALLY ROUTES TO TODAY; change that only with a measurement.
 
+// Giants (mono-red Giant tribal: Inferno Titan / Sunrise Sovereign / Hamletback Goliath).
+// EMPTY derivation -- play-neutral by construction, inheriting every judgement hook from
+// GenericProvider, which is what this deck WOULD have ridden had its signature not collided with
+// somebody else's.
+//
+// It exists because Giants is the SEVENTH deck to hit the archetype-neutral misroute class
+// documented in DetectDecisionProvider (after Mirrorwing, StompySurprise, Minotaur, Dragons,
+// Melira Pod and Fungus). Two independent params send it somewhere it does not belong:
+//   * Stinkdrinker Daredevil's `reduces_spell_subtype` ("Giant spells cost {2} less") ALONE sets
+//     the `goblin` signature -- the same param that misrouted Dragons via Dragonspeaker Shaman.
+//   * Giant Harbinger's `tutor_to_top` ALONE sets the `anti` signature.
+// So removing either card would not fix it; the deck must be routed ABOVE both branches.
+// The harm was not hypothetical: GoblinsProvider narrows TutorSearchWidth, and this deck has
+// SEVEN distinct Giant names for Giant Harbinger to find, so a Goblin-tuned ranking would have
+// silently decided which Giant was unreachable.
+class GiantsProvider : public DeckProvider
+{
+public:
+    CertStance Certificate() const override
+    { return { CertState::NotAssessed,
+               "NOT ASSESSED. Test: is combat the ONLY route to the opponent's life? It is NOT -- "
+               "Inferno Titan's enters/attacks trigger, Tectonic Giant's mode-A and Surtland "
+               "Flinger's fling all deal damage outside the combat-damage step, and Lightning "
+               "Greaves grants haste, so a winless-this-turn proof must model all four. See "
+               "SnowProvider/FungusProvider for the worked shape." }; }
+    const char* Name() const override { return "Giants"; }
+};
+
 // Angels (Giada / Lyra / Righteous Valkyrie lifegain-angels). Rode GenericProvider.
 class AngelsProvider : public DeckProvider
 {

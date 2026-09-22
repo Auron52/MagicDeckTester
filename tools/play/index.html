@@ -3264,6 +3264,7 @@ function renderDecisionPanel(d, dec){
                   : dec==='lackey_put' ? lackeyPanelHtml(d)
                   : dec==='free_cast' ? freeCastPanelHtml(d)
                   : dec==='demonstrate' ? demonstratePanelHtml(d)
+                  : dec==='attack_mode' ? attackModePanelHtml(d)
                   : dec==='tutor_etb' ? tutorPanelHtml(d)
                   : dec==='echo' ? echoPanelHtml(d)
                   : dec==='lightpaws' ? lightPawsPanelHtml(d)
@@ -3938,6 +3939,7 @@ function wireDecisionPanel(d, dec){
   }
   else if (dec==='demonstrate')
     panel.querySelectorAll('[data-demo]').forEach(b=>b.onclick=()=>commitDemonstrate(d, +b.dataset.demo));
+    panel.querySelectorAll('[data-atkmode]').forEach(b=>b.onclick=()=>commitAttackMode(d, +b.dataset.atkmode));
   else if (dec==='tutor_etb')
     panel.querySelectorAll('[data-opt]').forEach(b=>b.onclick=()=>commitTutor(d, +b.dataset.opt));
   else if (dec==='echo')
@@ -4051,6 +4053,32 @@ function demonstratePanelHtml(d){
      `<button class="primary" data-demo="1">Copy it${copy===1?'  ·  AI':''}</button>`+
      `<button class="ghost" data-demo="0">Don't copy${copy===0?'  ·  AI':''}</button></div>`;
   return h;
+}
+// Tectonic Giant's "choose one" attack trigger. A MODE, not a card, so it uses the two-button
+// centred shape (demonstrate's) rather than an art grid -- but the triggering creature's art is
+// shown so the choice is anchored to the permanent that caused it, per the play-viewer principle
+// that decisions live in the dialog with images, never as text in the history panel.
+function attackModePanelHtml(d){
+  const def = (d.heuristic_default===1) ? 1 : 0;
+  const opts = d.options || [
+    {index:0, text:'Deal 3 damage to each opponent'},
+    {index:1, text:'Exile the top two cards; play one until end of your next turn'}
+  ];
+  let h=`<h3>Choose one — ${esc(d.source||'')}</h3>`;
+  h+=`<div class="sub">${esc(d.source||'This creature')} attacked. Pick a mode; it resolves <b>before</b> combat damage.</div>`;
+  h+=`<div class="cardrow" style="justify-content:center;margin:8px 0">${cardMini(d.source||'', '', 'normal')}</div>`;
+  h+=`<div class="pbtns" style="justify-content:center;flex-direction:column;align-items:center;gap:6px">`;
+  opts.forEach(o=>{
+    const cls = (o.index===def) ? 'primary' : 'ghost';
+    h+=`<button class="${cls}" data-atkmode="${o.index}">${esc(o.text)}${o.index===def?'  ·  AI':''}</button>`;
+  });
+  h+=`</div>`;
+  return h;
+}
+function commitAttackMode(d, v){
+  const opts = d.options || [];
+  const o = opts.find(x=>x.index===v);
+  pushChoice(d, v, `${d.source||'Attack trigger'}: ${o?o.text:(v===1?'impulse mode':'damage mode')}`);
 }
 function commitDemonstrate(d, v){
   pushChoice(d, v, `${d.source||'Demonstrate'}: ${v?'copied the spell':'declined the copy'}`);

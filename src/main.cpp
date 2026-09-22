@@ -2221,7 +2221,7 @@ static void WriteTargetDecisionJson(std::ostream& os, const GameState& s, const 
 // permanent on the board) plus the land's name/tap state. `heuristic_default` indexes into `legal`.
 static void WriteBounceDecisionJson(std::ostream& os, const GameState& s, const std::string& source,
                                     const std::vector<int>& legal, int heuristic_default, int decision_index,
-                                    bool sacrifice = false)
+                                    bool sacrifice = false, bool allow_decline = false)
 {
     DecisionJson d(os, decision_index);
     // A `sacrifice` variant reuses the identical board-land picker as the Karoo bounce, but the land
@@ -2252,7 +2252,11 @@ static void WriteBounceDecisionJson(std::ostream& os, const GameState& s, const 
         if (all_land) { noun = "land"; } else if (all_creature) { noun = "creature"; }
     }
     d.Note(std::string("reply an option index -- the ") + noun + " to "
-           + (sacrifice ? "sacrifice" : "return to your hand") + ". Default = the AI's pick.");
+           + (sacrifice ? "sacrifice" : "return to your hand") + ". Default = the AI's pick."
+           + (allow_decline
+              ? " This one is OPTIONAL (\"you MAY sacrifice another creature\") -- reply -1 to"
+                " DECLINE and keep the creature."
+              : ""));
 }
 
 // Felidar flicker decision (PUT path only -- a cast variant carries the searched target): the
@@ -2488,6 +2492,33 @@ static void WriteDemonstrateDecisionJson(std::ostream& os, const GameState& s,
      .HeuristicDefault(heuristic_default ? 1 : 0);
     EmitRevealsField(os, reveals);   // pending walk reveals stay current mid-chain (see helper)
     d.Note("reply 1 to copy the spell (the copy resolves first, with its own free cast), or 0 to decline. Default = copy.");
+}
+
+// Tectonic Giant's modal attack trigger (CR 700.2, "choose one"): asked at declare-attackers,
+// once per attacking copy, BEFORE the combat-damage step -- so a mode-0 kill lands before combat
+// and a mode-1 card reaches hand in time for the post-combat main. Reply 0 = "deals 3 damage to
+// each opponent", 1 = "exile the top two cards, play one of them". Enumerated indices, so it
+// rides the existing integer --choices stream with no new input model.
+static void WriteAttackModeDecisionJson(std::ostream& os, const GameState& s,
+                                        const std::string& source, int heuristic_default,
+                                        int decision_index,
+                                        const std::vector<PlayReveal>& reveals = {})
+{
+    DecisionJson d(os, decision_index);
+    d.Type("attack_mode").Source(source).Turn(s.turn_number).Board(s)
+     .HeuristicDefault(heuristic_default);
+    // DecisionJson contract (see the class comment): the PRECEDING field already wrote its own
+    // ",\n", and this one must write its own trailing ",\n" so Note() can close the object. An
+    // earlier draft opened with ",\"options\"" and closed with a bare "]", which emitted a
+    // DOUBLE comma before the array and NO separator after it -- invalid JSON, so
+    // tools/play/server.js's JSON.parse threw on every Tectonic Giant attack and the deck could
+    // not be hand-played past one. Caught by two independent Stage 5d sweep agents.
+    os << "  \"options\":[";
+    os << "{\"index\":0,\"text\":\"Deal 3 damage to each opponent\"},";
+    os << "{\"index\":1,\"text\":\"Exile the top two cards; play one until end of your next turn\"}";
+    os << "],\n";
+    EmitRevealsField(os, reveals);
+    d.Note("reply 0 for the damage mode or 1 for the impulse mode. The card you keep in mode 1 is a separate `dig` decision.");
 }
 
 // Tutor pick: the player picks WHICH card to search up, or declines. TWO routes reach here.
@@ -3142,6 +3173,8 @@ g_play_rummage_chooser = nullptr;
 g_play_lackey_chooser = nullptr;
 g_play_free_cast_chooser = nullptr;
 g_play_demonstrate_chooser = nullptr;
+g_play_attack_mode_chooser = nullptr;
+g_play_fling_chooser = nullptr;
 g_play_tutor_chooser = nullptr;
 g_play_lightpaws_chooser = nullptr;
 g_play_firebreathe_chooser = nullptr;
@@ -3398,6 +3431,8 @@ struct ClaudePlayHarness
     LackeyChooser         lackey_chooser;
     FreeCastChooser       free_cast_chooser;
     DemonstrateChooser    demonstrate_chooser;
+    AttackModeChooser     attack_mode_chooser;
+    BounceChooser         fling_chooser;
     TutorChooser          tutor_chooser;
     DragonChooser         dragon_chooser;
     SacTutorChooser       sac_tutor_chooser;
@@ -4221,6 +4256,47 @@ void ClaudePlayHarness::InstallCardChoosers(AIEngine& ai)
         };
     g_play_sacrifice_chooser = &sacrifice_chooser;
 
+    // Surtland Flinger's attack-trigger fling. A SEPARATE chooser from sacrifice_chooser above,
+    // clamping with `chosen < -1` (the flicker chooser's precedent) so a reply of -1 survives as
+    // the "you MAY sacrifice another creature" DECLINE. sacrifice_chooser must keep its `< 0`
+    // clamp because its consumers -- Shard Volley's land-sac additional cost, Natural Order,
+    // Mycoloth devour -- are MANDATORY. Reusing it here made the engine's decline branch dead
+    // code on the human path while the SEARCH could still decline (Plan::fling_victim_choice
+    // = -2): a search/human capability asymmetry found by the Stage-5d sweep, 2026-09-22.
+    fling_chooser =
+        [this](const GameState& s, int controller, const std::string& source,
+            const std::vector<int>& legal, int heuristic_pick) -> int
+        {
+            (void)controller;
+            int di = static_cast<int>(cursor);
+        claude_retry_fling:
+            if (cursor < choices.size())
+            {
+                int chosen = choices[cursor++];
+                ++decisions_made;
+                if (chosen < -1 || chosen >= static_cast<int>(legal.size()))
+                { chosen = heuristic_pick; }
+                if (!log_dir.empty())
+                {
+                    std::ostringstream ss;
+                    ss << "{ \"chosen\": " << chosen << ", \"decision\": ";
+                    WriteBounceDecisionJson(ss, s, source, legal, heuristic_pick, di,
+                                            /*sacrifice=*/true, /*allow_decline=*/true);
+                    ss << "}";
+                    trace.push_back(ss.str());
+                }
+                return chosen;
+            }
+            std::cout << "<<<CLAUDE_DECISION>>>\n";
+            WriteBounceDecisionJson(std::cout, s, source, legal, heuristic_pick, di,
+                                    /*sacrifice=*/true, /*allow_decline=*/true);
+            std::cout << "<<<END_DECISION>>>\n";
+            std::cout.flush();
+            if (AwaitMoreChoices()) { goto claude_retry_fling; }
+            std::exit(70);
+        };
+    g_play_fling_chooser = &fling_chooser;
+
     // ETB dig (Acclaimed Contender): the player picks which examined card enters hand (or declines).
     // Shares the --choices stream; the reply is an examined index, or -1 to take nothing. Default =
     // the engine's heuristic pick (the first legal match).
@@ -4439,6 +4515,42 @@ void ClaudePlayHarness::InstallCardChoosers(AIEngine& ai)
             std::exit(70);
         };
     g_play_demonstrate_chooser = &demonstrate_chooser;
+
+    // Tectonic Giant's "choose one" attack trigger. Wired at the SHARED resolution site
+    // (ApplyAttackModalTriggers in SpellEffects.h, called from both GameEngine::CombatPhase and
+    // TurnSolver::SimulateCombat), not the autonomous path -- a chooser added only to the
+    // autonomous side compiles, stays byte-identical, and never fires in the viewer.
+    attack_mode_chooser =
+        [this](const GameState& s, int controller, const std::string& source,
+               int heuristic_default) -> int
+        {
+            (void)controller;
+            int di = static_cast<int>(cursor);
+        claude_retry_am:  // --interactive: new picks arrived on stdin
+            if (cursor < choices.size())
+            {
+                int chosen = choices[cursor++];
+                ++decisions_made;
+                const int mode = (chosen == 1) ? 1 : (chosen == 0 ? 0 : heuristic_default);
+                if (!log_dir.empty())
+                {
+                    std::ostringstream ss;
+                    ss << "{ \"chosen\": " << mode << ", \"decision\": ";
+                    WriteAttackModeDecisionJson(ss, s, source, heuristic_default, di, reveal_log);
+                    ss << "}";
+                    trace.push_back(ss.str());
+                }
+                reveal_log.clear();
+                return mode;
+            }
+            std::cout << "<<<CLAUDE_DECISION>>>\n";
+            WriteAttackModeDecisionJson(std::cout, s, source, heuristic_default, di, reveal_log);
+            std::cout << "<<<END_DECISION>>>\n";
+            std::cout.flush();
+            if (AwaitMoreChoices()) { goto claude_retry_am; }
+            std::exit(70);
+        };
+    g_play_attack_mode_chooser = &attack_mode_chooser;
 
     // Tutor pick: the human picks WHICH card to search up, or -1 to decline ("you MAY search").
     // Fires both for an ETB off a PUT (Lackey cheat / Vial deploy / Muxus reveal drops a Goblin

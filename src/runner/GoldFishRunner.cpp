@@ -112,6 +112,16 @@ bool GoldFishRunner::DeckUsesSecondMain(const Decklist& deck)
         //     engine silently wastes the trigger every turn.
         if (def->params.attack_draw_cards > 0) { return true; }
 
+        //   * TECTONIC GIANT (modal attack trigger, impulse mode): "exile the top two cards of
+        //     your library ... until the end of your next turn you may play that card" -- the
+        //     staged card is a resource GENERATED DURING COMBAT, exactly the attack_draw_cards
+        //     shape above, and it is only spendable in a post-combat main THIS turn. Without the
+        //     second main the card is not lost (it survives to the next turn's main 1), but a
+        //     full turn of tempo is, and -- the sharper cost -- the searched MODE axis would be
+        //     rigged: it would compare "3 damage now" against a card the deck structurally
+        //     cannot use this turn, systematically collapsing the branch toward the damage mode.
+        if (def->params.attack_trigger_impulse_exile > 0) { return true; }
+
         //   * MAELSTROM ARCHANGEL (combat-damage free cast): connecting banks a free cast
         //     (free_casts_available) that is only spendable in the post-combat main -- without the
         //     second main the resource silently evaporates each turn.

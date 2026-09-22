@@ -1,0 +1,59 @@
+{
+  "card_scores": {
+    "Borderland Behemoth": [
+      -0.24296023509280928
+    ],
+    "Fire Diamond": [
+      0.39447241657403165
+    ],
+    "Giant Harbinger": [
+      -0.1365777814147604
+    ],
+    "Hamletback Goliath": [
+      -0.34838551559340747
+    ],
+    "Inferno Titan": [
+      0.10786416826660084,
+      -0.6177161654135341
+    ],
+    "Lightning Bolt": [
+      -0.2253604674516687,
+      0.01734075570225091
+    ],
+    "Lightning Greaves": [
+      -0.1501747192843501
+    ],
+    "Pyroclasm": [
+      -0.5353367331305128
+    ],
+    "Sol Ring": [
+      1.3380310457516345
+    ],
+    "Stinkdrinker Daredevil": [
+      0.7395080416272464,
+      -0.16571428571428548
+    ],
+    "Sunrise Sovereign": [
+      -0.17610062893081846,
+      -0.05600539811066074
+    ],
+    "Surtland Flinger": [
+      0.13746826481788865
+    ],
+    "Tectonic Giant": [
+      0.21421373676573374
+    ]
+  },
+  "hand_score_threshold": -1e+18,
+  "mulligan": {
+    "bottom_order": "count_first",
+    "curve_check": "two_drop",
+    "max_lands": 5,
+    "min_color_sources": {},
+    "min_lands": 1,
+    "min_playable": 0,
+    "required_pieces": [],
+    "stop_at": 4
+  },
+  "version": 1
+}

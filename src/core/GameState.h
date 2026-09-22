@@ -473,6 +473,21 @@ struct GameState
     // Consumed by the first cheat trigger and reset at the start of each turn, so it cannot leak
     // into a later combat.
     int                      scripted_cheat_choice = -1;
+    // Searched SURTLAND FLINGER victim (Plan::fling_victim_choice): the CARD NUMBER of the
+    // creature this turn's first fling sacrifices, -2 = DECLINE ("you may sacrifice"), -1 = the
+    // ranked default (FlingVictimCandidates' front). Same state-pin shape as
+    // scripted_cheat_choice and for the same reason -- the decision belongs to the turn's plan
+    // but fires in the DECLARE-ATTACKERS step, after the plan apply has returned, so a scoped
+    // guard would already be gone. A card number rather than a rank so the pin cannot be
+    // mis-resolved if the candidate ORDER shifts between plan-time and combat (a lord entering
+    // re-ranks the list). Consumed and cleared by the first fling, so it cannot leak.
+    int                      scripted_fling_victim = -1;
+    // Searched TECTONIC GIANT attack-trigger MODE (Plan::tectonic_mode_choice): 0 = "3 damage to
+    // each opponent", 1 = "exile the top two, play one", -1 = the provider default. Same
+    // state-pin shape and lifetime as scripted_fling_victim -- decided in the main phase,
+    // consumed at declare-attackers. Consumed and cleared by the FIRST modal trigger of a
+    // combat; a second attacking copy takes the default (the lackey_choice convention).
+    int                      scripted_tectonic_mode = -1;
     // Searched CLEANUP DISCARD (Plan::discard_choice): which candidate of the provider's ranked
     // CleanupDiscardCandidates this turn's FIRST cleanup shed takes. Same state-pin shape as
     // scripted_cheat_choice and for the same reason -- the decision belongs to the turn's plan but

@@ -666,6 +666,17 @@ CardParams CardDatabase::BuildParamsFromJson(const json& params) const
     p.multicolor_cast_damage_per_color = params.value("multicolor_cast_damage_per_color", false);
     p.colored_cast_lifegain = params.value("colored_cast_lifegain", false);
     p.attack_draw_cards = params.value("attack_draw_cards", 0);
+    p.attack_trigger_damage_any = params.value("attack_trigger_damage_any", 0);
+    p.attack_trigger_modal = params.value("attack_trigger_modal", false);
+    p.attack_trigger_damage_each_opponent =
+        params.value("attack_trigger_damage_each_opponent", 0);
+    p.attack_trigger_impulse_exile    = params.value("attack_trigger_impulse_exile", 0);
+    p.attack_trigger_impulse_playable = params.value("attack_trigger_impulse_playable", 0);
+    p.attack_trigger_impulse_expiry_next_turn =
+        params.value("attack_trigger_impulse_expiry_next_turn", false);
+    p.attack_sac_fling = params.value("attack_sac_fling", false);
+    p.attack_sac_fling_double_subtype =
+        params.value("attack_sac_fling_double_subtype", std::string());
     p.graveyard_replace_shuffle_library = params.value("graveyard_replace_shuffle_library", false);
     p.protection_from_everything        = params.value("protection_from_everything", false);
     p.combat_damage_free_cast = params.value("combat_damage_free_cast", false);
@@ -744,6 +755,7 @@ CardParams CardDatabase::BuildParamsFromJson(const json& params) const
     p.demonstrate                = params.value("demonstrate",                false);
     p.enter_as_copy_of_entrant   = params.value("enter_as_copy_of_entrant",   false);
     p.damage_opp_creatures_mv_cast = params.value("damage_opp_creatures_mv_cast", false);
+    p.damage_all_creatures       = params.value("damage_all_creatures", 0);
     p.self_bounce_on_etb_subtype = params.value("self_bounce_on_etb_subtype", std::string());
     p.retrace             = params.value("retrace",             false);
 
@@ -867,6 +879,7 @@ CardParams CardDatabase::BuildParamsFromJson(const json& params) const
     p.destroy_all_enchantments  = params.value("destroy_all_enchantments", false);
     p.tutor_to_hand             = params.value("tutor_to_hand", false);
     p.tutor_to_top              = params.value("tutor_to_top", false);
+    p.tutor_optional            = params.value("tutor_optional", false);
     for (const std::string& s : params.value("tutor_types", json::array()))
         p.tutor_types.push_back(s);
     p.tutor_to_battlefield      = params.value("tutor_to_battlefield", false);
@@ -1062,6 +1075,9 @@ CardParams CardDatabase::BuildParamsFromJson(const json& params) const
     p.attack_self_pump_per_other_subtype   = params.value("attack_self_pump_per_other_subtype", std::string());
     p.attack_self_pump_power    = params.value("attack_self_pump_power", 0);
     p.attack_self_pump_tough    = params.value("attack_self_pump_tough", 0);
+    p.static_self_pump_per_other_subtype   = params.value("static_self_pump_per_other_subtype", std::string());
+    p.static_self_pump_power    = params.value("static_self_pump_power", 0);
+    p.static_self_pump_tough    = params.value("static_self_pump_tough", 0);
     p.dies_watch_subtype        = params.value("dies_watch_subtype", std::string());
     p.dies_watch_includes_self  = params.value("dies_watch_includes_self", false);
     p.dies_trigger_damage       = params.value("dies_trigger_damage", 0);
@@ -1163,6 +1179,8 @@ CardParams CardDatabase::BuildParamsFromJson(const json& params) const
         params.value("own_creature_enters_lifegain_toughness", false);
     p.own_creature_enters_self_counters =
         params.value("own_creature_enters_self_counters", 0);
+    p.any_creature_enters_self_counters_power =
+        params.value("any_creature_enters_self_counters_power", false);
     p.other_subtype_enters_counters_subtype =
         params.value("other_subtype_enters_counters_subtype", std::string());
     p.other_subtype_enters_counters_per_each =

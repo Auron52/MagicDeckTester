@@ -5988,6 +5988,14 @@ static int PendingAttackDamage(const GameState& state)
         attackers.push_back(&p);
     }
     dmg += CountAttackTriggerLifeLoss(state.battlefield, active, attackers);
+    // Inferno Titan: 3 per attacking copy. Without this the search under-rates attacking with the
+    // Titan by 3 a copy and mis-sequences Lightning Greaves (which makes both halves of the
+    // trigger fire on the landing turn).
+    dmg += CountAttackTriggerDamageAny(attackers);
+    // Tectonic Giant: 3 to each opponent, but ONLY when the resolved mode is the damage one --
+    // resolved through the same ResolveAttackModalMode the combat uses, so the projection cannot
+    // credit damage a mode-B trigger will not deal (the overshoot/fd-diverge class).
+    dmg += CountAttackTriggerModalDamage(state, active, attackers);
 
     // Exalted (Ignoble Hierarch): a creature attacking ALONE gets +1/+1 per Exalted ability.
     if (static_cast<int>(attackers.size()) == 1)
@@ -10173,6 +10181,24 @@ static bool LackeyAxisEnabled()
     static const bool on = EnvOn("MTG_LACKEY_AXIS", true);
     return on;
 }
+// Surtland Flinger's attack-trigger fling victim (and the DECLINE). Default ON: the ranked
+// default can only price the immediate net face damage, while the real trade -- one-shot damage
+// now against a body that keeps attacking every future turn -- is exactly what the search can
+// evaluate and a local rank cannot. =0 falls back to the pure ranked pick for the A/B.
+static bool FlingAxisEnabled()
+{
+    static const bool on = EnvOn("MTG_FLING_AXIS", true);
+    return on;
+}
+// Tectonic Giant's modal attack trigger ("3 damage to each opponent" vs "exile two, play one").
+// Default ON: both modes are live every turn and the crossover moves with board and life, so a
+// static rule would be a narrowing wearing a heuristic's clothes. =0 falls back to
+// ResolveAttackModalMode alone for the A/B.
+static bool TectonicAxisEnabled()
+{
+    static const bool on = EnvOn("MTG_TECTONIC_AXIS", true);
+    return on;
+}
 // Width 2 -- the ranked top two. Measured identical to W=3 and W=4 on every held-out seed, which
 // says the search's whole contribution is "occasionally the provider's #2 is better than its #1",
 // not a deep re-ranking. Costs +12% makespan on goblins; no other deck has a cheat source, so no
@@ -10722,6 +10748,12 @@ static uint64_t BpCandFingerprint(const TurnSolver::Plan& p, bool source_blind =
     fold(static_cast<uint64_t>(p.saga_ch1_choice + 3) * 61);
     fold(static_cast<uint64_t>(p.vial_charge_choice + 2) * 53
          + static_cast<uint64_t>(p.searched_order ? 1 : 0));
+    // Surtland Flinger victim. MUST be folded: omitting it collapses the fling variants back to
+    // one and silently re-steals the decision the axis exists to give the search (the 2026-06-30
+    // plan_signature tutor precedent). +3 because -2 (decline) is a live value here.
+    fold(static_cast<uint64_t>(p.fling_victim_choice + 3) * 67);
+    // Tectonic Giant mode -- same must-fold rule as the fling above.
+    fold(static_cast<uint64_t>(p.tectonic_mode_choice + 2) * 71);
     return h;
 }
 // Channel from the k=0 child apply's in-scope enumeration back to the node host: the number of
@@ -10770,6 +10802,7 @@ static bool IsApplyEmptyPlan(const TurnSolver::Plan& p)
         && p.sac_pins.empty() && p.tapmode_choice == 0 && p.freshmode_choice == 0
         && p.lackey_choice == -1 && p.ponder_choice == -1 && p.discard_choice == -1
         && p.vial_charge_choice == -1 && p.saga_target_choice == -1
+        && p.fling_victim_choice == -1 && p.tectonic_mode_choice == -1
         && p.saga_ch1_choice == -1
         && !p.searched_order && p.atk_dork_release == -1
         && p.bp_choice == -1 && p.bp_at == 0 && !p.bp_all && !p.bp_wave0;
@@ -15943,6 +15976,21 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
                                       p.card.HasKeyword(Keyword::Haste), sc, /*in_hand=*/false });
                 }
             }
+            // One in-hand host per NAME, not per copy. Two copies of the same creature in hand are
+            // interchangeable as an equip host, but they carry different m_numbers, so the old code
+            // emitted one Equip variant per copy -- and casting collapses to ONE of them (the first
+            // matching hand card). The variant pinned to the copy that did NOT get cast then had a
+            // host that never became a permanent, so ApplyEquip refused and the equip silently
+            // no-opped: the plan summary still advertised "equip Greaves -> Inferno Titan", the
+            // Titan got no haste, and its attack trigger never fired (21 damage promised, 13 dealt).
+            // Found by the Giants Stage 5d sweep (GI=4, two Inferno Titans in hand).
+            //
+            // This is lossless DEDUP, not narrowing: the two variants are not distinct alternatives
+            // -- same card, same characteristics, same resulting board -- so collapsing them steals
+            // no decision. Battlefield hosts are deliberately NOT deduped by name: two Kor Duelists
+            // already on the battlefield can differ in damage, counters and attachments, and the
+            // viewer's equip_src/equip_host pair exists precisely to tell them apart.
+            std::vector<std::string> seen_hand_hosts;
             for (const Card& c : ap.hand)
             {
                 const CardDefinition* d = CardDatabase::Instance().LookupCached(c);
@@ -15952,6 +16000,12 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
                 {
                     // Protection from everything: never a legal equip host (see battlefield loop).
                     if (d->params.protection_from_everything) { continue; }
+                    {
+                        const std::string& hn = c.m_name.str();
+                        if (std::find(seen_hand_hosts.begin(), seen_hand_hosts.end(), hn)
+                            != seen_hand_hosts.end()) { continue; }
+                        seen_hand_hosts.push_back(hn);
+                    }
                     // A hand host only becomes a real host if the plan also CASTS it this turn, so
                     // ranking it on printed power alone lets an unaffordable fatty win the single
                     // Equip slot and strand it. FiveColour seed 4200000 gi119: Progenitus
@@ -21198,6 +21252,8 @@ namespace solvememo
             || a.tapmode_choice != b.tapmode_choice || a.freshmode_choice != b.freshmode_choice
             || a.lackey_choice != b.lackey_choice || a.ponder_choice != b.ponder_choice
             || a.discard_choice != b.discard_choice || a.vial_charge_choice != b.vial_charge_choice
+            || a.fling_victim_choice != b.fling_victim_choice
+            || a.tectonic_mode_choice != b.tectonic_mode_choice
             || a.saga_target_choice != b.saga_target_choice
             || a.saga_ch1_choice != b.saga_ch1_choice
             || a.dig_choice != b.dig_choice || a.bp_choice != b.bp_choice
@@ -24725,6 +24781,11 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
     // fires later, in this turn's combat-damage step. Only a real variant writes it, so a plan that
     // did not branch on the axis leaves any outer value alone.
     if (plan.lackey_choice >= 0) { state.scripted_cheat_choice = plan.lackey_choice; }
+    // Searched Surtland Flinger victim: same reasoning -- the fling fires at declare-attackers,
+    // after this function returns. -2 (decline) is a real pinned choice, so the guard is != -1.
+    if (plan.fling_victim_choice != -1) { state.scripted_fling_victim = plan.fling_victim_choice; }
+    // Searched Tectonic Giant mode: same reasoning -- the trigger fires at declare-attackers.
+    if (plan.tectonic_mode_choice >= 0) { state.scripted_tectonic_mode = plan.tectonic_mode_choice; }
     // Searched cleanup discard: same reasoning -- the shed happens in SimulateEndAndStartNextTurn,
     // after this function returns, so it rides the STATE rather than a scoped guard.
     if (plan.discard_choice >= 0) { state.scripted_discard_choice = plan.discard_choice; }
@@ -26298,7 +26359,11 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
                     for (int bi = static_cast<int>(state.battlefield.size()) - 1; bi >= 0; --bi)
                     {
                         Permanent& p = state.battlefield[bi];
-                        if (p.card.IsCreature() && p.damage > 0 && p.damage >= p.EffectiveToughness())
+                        // LethalToughness, NOT the bare EffectiveToughness: this is the rollout's
+                        // SBA and it must kill exactly what GameEngine::CheckStateBasedActions
+                        // kills, or the run reports [fd-diverge]. See the helper's comment.
+                        if (p.card.IsCreature() && p.damage > 0
+                            && p.damage >= LethalToughness(p, state))
                         {
                             state.players[p.owner_index].graveyard.push_back(p.card);
                             state.battlefield.erase(state.battlefield.begin() + bi);
@@ -26801,6 +26866,15 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
             // Custom-spell resolution, lockstep). Its cascades already resolved above as cast
             // triggers, so their free-cast MVs are in the accumulator, per the oracle timing.
             PerformMvCastDamageOppCreatures(state, state.active_player_index, def);
+        }
+        else if (def.params.damage_all_creatures > 0)
+        {
+            // Pyroclasm (shared helper -- executor twin in EffectHandler's Custom-spell
+            // resolution, lockstep). OMITTING this branch would make the rollout score a
+            // 2-mana spell that does NOTHING, which for a symmetric sweeper whose only live
+            // effect in this deck is a DRAWBACK would bias the search toward casting it.
+            PerformDamageAllCreatures(state, state.active_player_index, def,
+                                      def.params.damage_all_creatures);
         }
         else if (def.tmpl == CardTemplate::Removal && def.params.tuck_to_library)
         {
@@ -29156,6 +29230,14 @@ static void SimulateCombat(GameState& state)
     // (CR 508.4) and must not trigger it. Mirrors GameEngine::CombatPhase (executor). Gated inert.
     ApplyAttackQuestCounters(state, active, atk_idx);
 
+    // Inferno Titan's attack half: 3 to the opponent's face per attacking copy. Fired HERE,
+    // before the Adeline token block, for the same CR 508.4 reason as the quest counters above.
+    // Mirrors GameEngine::CombatPhase (executor) -- lockstep.
+    ApplyAttackTriggerDamage(state, active, atk_idx);
+
+    // Tectonic Giant's modal attack trigger. Mirrors GameEngine::CombatPhase (lockstep).
+    ApplyAttackModalTriggers(state, active, atk_idx);
+
     // Attack-trigger tokens (Adeline), tapped and attacking this combat, then persist.
     if (!atk_idx.empty())
     {
@@ -29207,6 +29289,10 @@ static void SimulateCombat(GameState& state)
     // the damage loop reads power. Mirrors GameEngine::CombatPhase (lockstep); the human choosers
     // inside are nulled by RevealLogPause, so rollouts always take the provider picks.
     FireAttackDigAttach(state, active, atk_idx);
+
+    // Surtland Flinger's attack-trigger fling. Mirrors GameEngine::CombatPhase (lockstep);
+    // mutates atk_idx, since the sacrifice shifts battlefield indices.
+    FireAttackSacFling(state, active, atk_idx);
 
     // Damage, attack triggers, Utvara tokens and the Goblin Lackey cheat are shared with the
     // executor (ResolveCombatDamage, Combat.cpp). The rollout wants no play-viewer descriptions.
@@ -29417,6 +29503,8 @@ static bool SimulateEndAndStartNextTurn(GameState& state)
     state.hand_size_at_combat   = -1;              // post-combat productivity markers are per turn (see
     state.battlefield_at_combat = -1;              // GameState); lockstep with GameEngine's turn start
     state.scripted_cheat_choice   = -1;            // searched Lackey put is per-turn (lockstep w/ GameEngine::UntapStep)
+    state.scripted_fling_victim   = -1;            // searched Flinger victim is per-turn (same lockstep)
+    state.scripted_tectonic_mode  = -1;            // searched Tectonic mode is per-turn (same lockstep)
     ap.lands_played_this_turn     = 0;
     ap.bonus_land_drops_this_turn = 0;
     ap.cards_drawn_this_turn      = 0;             // Fists of Flame drawn-count resets each turn (lockstep w/ UntapStep)
@@ -35140,6 +35228,17 @@ static void AppendSubdecisionAxes(const GameState& state, bool is_pre_combat,
                     v.tutor_choice = static_cast<int>(c);
                     extra.push_back(std::move(v));
                 }
+                // "You MAY search": one extra variant that DECLINES. Only for a card whose data
+                // says the search is optional, so every other tutor deck keeps exactly the
+                // variants it had. Declining is a real line for a tutor_to_top -- the fetch costs
+                // the next draw step -- which is why it is not merely a dominated duplicate of
+                // fetching the worst candidate.
+                if (d->params.tutor_optional)
+                {
+                    TurnSolver::Plan v = p;
+                    v.tutor_choice = kTutorDeclineChoice;
+                    extra.push_back(std::move(v));
+                }
                 break;   // vary ONE tutor per variant; the first to resolve consumes the pin
             }
         }
@@ -35469,6 +35568,102 @@ static void AppendSubdecisionAxes(const GameState& state, bool is_pre_combat,
         }
     }
 
+    // SEARCHED SURTLAND FLINGER VICTIM (and the DECLINE) -- the post-dedup fan-out that makes the
+    // "you may sacrifice another creature" trigger a real decision instead of a ranked guess. The
+    // ranking in FlingVictimCandidates can only see this turn's net face damage; whether trading
+    // a permanent body for a one-shot burst is right depends on whether the game ends soon, which
+    // is precisely what the search evaluates. So the base plan carries the ranked default and
+    // this emits DECLINE plus one variant per legal victim. Skipped in human play, where the
+    // viewer surfaces the choice through the `sacrifice` decision instead.
+    if (FlingAxisEnabled() && !HumanPlayActive())
+    {
+        const int me = state.active_player_index;
+        int  fling_src_id = -1;
+        for (const Permanent& p : state.battlefield)
+        {
+            if (p.controller_index != me || !p.card.IsCreature()) { continue; }
+            const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+            if (d && d->params.attack_sac_fling) { fling_src_id = p.card.m_number; break; }
+        }
+        if (fling_src_id >= 0)
+        {
+            const CardDefinition* sd = CardDatabase::Instance().Lookup("Surtland Flinger");
+            const std::string dsub =
+                (sd != nullptr) ? sd->params.attack_sac_fling_double_subtype : std::string();
+            // No attacker set is known yet at plan time, so rank as if nothing is attacking --
+            // the pin is a CARD NUMBER, so a shifted ranking cannot mis-resolve it.
+            const std::vector<int> cands =
+                FlingVictimCandidates(state, me, fling_src_id, dsub, std::vector<int>{});
+            if (!cands.empty())
+            {
+                std::vector<TurnSolver::Plan> extra;
+                for (const TurnSolver::Plan& p : all)
+                {
+                    // Base plans only -- one axis at a time, so cost stays additive.
+                    if (p.scry_choice >= 0 || p.bp_choice >= 0 || p.etbdig_choice >= 0
+                        || p.lackey_choice >= 0 || p.ponder_choice >= 0
+                        || p.discard_choice >= 0 || p.vial_charge_choice >= 0)
+                    { continue; }
+                    {   // DECLINE -- keep the body.
+                        TurnSolver::Plan v = p;
+                        v.fling_victim_choice = -2;
+                        extra.push_back(std::move(v));
+                    }
+                    for (int id : cands)
+                    {
+                        TurnSolver::Plan v = p;
+                        v.fling_victim_choice = id;
+                        extra.push_back(std::move(v));
+                    }
+                }
+                TRACE("flingaxis", "T%d %zu plan(s) x %zu victim(s)+decline -> %zu variant(s)",
+                      state.turn_number, all.size(), cands.size(), extra.size());
+                all.insert(all.end(), std::make_move_iterator(extra.begin()),
+                                      std::make_move_iterator(extra.end()));
+            }
+        }
+    }
+
+    // SEARCHED TECTONIC GIANT MODE -- the 2-way post-dedup fan-out that keeps "choose one" a real
+    // decision. Mode A is 3 to the face now; mode B is two cards deep in a deck whose entire plan
+    // is resolving expensive Giants and whose only other card selection is Giant Harbinger. Which
+    // is better depends on whether the game ends soon, so the base plan carries
+    // ResolveAttackModalMode's default and these two variants let the search overrule it.
+    if (TectonicAxisEnabled() && !HumanPlayActive())
+    {
+        const int me = state.active_player_index;
+        bool modal_present = false;
+        for (const Permanent& p : state.battlefield)
+        {
+            if (p.controller_index != me || !p.card.IsCreature()) { continue; }
+            const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+            if (d && d->params.attack_trigger_modal) { modal_present = true; break; }
+        }
+        if (modal_present)
+        {
+            std::vector<TurnSolver::Plan> extra;
+            for (const TurnSolver::Plan& p : all)
+            {
+                // Base plans only -- one axis at a time, so cost stays additive.
+                if (p.scry_choice >= 0 || p.bp_choice >= 0 || p.etbdig_choice >= 0
+                    || p.lackey_choice >= 0 || p.ponder_choice >= 0
+                    || p.discard_choice >= 0 || p.vial_charge_choice >= 0
+                    || p.fling_victim_choice != -1)
+                { continue; }
+                for (int k = 0; k <= 1; ++k)
+                {
+                    TurnSolver::Plan v = p;
+                    v.tectonic_mode_choice = k;
+                    extra.push_back(std::move(v));
+                }
+            }
+            TRACE("tectonicaxis", "T%d %zu plan(s) -> %zu mode variant(s)",
+                  state.turn_number, all.size(), extra.size());
+            all.insert(all.end(), std::make_move_iterator(extra.begin()),
+                                  std::make_move_iterator(extra.end()));
+        }
+    }
+
     // SEARCHED PONDER KEEP-vs-SHUFFLE -- the post-dedup fan-out that makes the decision real. Both
     // ponder_keep values are always legal, so unlike the tutor/dig axes there is no candidate list to
     // size: emit the two pinned alternatives and let the base plan carry the heuristic. One of the
@@ -35662,6 +35857,7 @@ static void AppendSubdecisionAxes(const GameState& state, bool is_pre_combat,
                     if (p.scry_choice >= 0 || p.bp_choice >= 0 || p.tutor_choice >= 0
                         || p.etbdig_choice >= 0 || p.lackey_choice >= 0 || p.ponder_choice >= 0
                         || p.discard_choice >= 0 || p.vial_charge_choice >= 0
+                        || p.fling_victim_choice != -1 || p.tectonic_mode_choice >= 0
                         || p.saga_target_choice >= 0 || p.saga_ch1_choice != -1
                         || !p.sac_pins.empty()) { continue; }
                     // k = 0 is the heuristic's own pick, which the base plan already carries.
@@ -35753,6 +35949,7 @@ static void AppendSubdecisionAxes(const GameState& state, bool is_pre_combat,
                     if (p.scry_choice >= 0 || p.bp_choice >= 0 || p.tutor_choice >= 0
                         || p.etbdig_choice >= 0 || p.lackey_choice >= 0 || p.ponder_choice >= 0
                         || p.discard_choice >= 0 || p.vial_charge_choice >= 0
+                        || p.fling_victim_choice != -1 || p.tectonic_mode_choice >= 0
                         || p.saga_target_choice >= 0 || p.saga_ch1_choice != -1
                         || !p.sac_pins.empty()) { continue; }
                     // k = 0 is the heuristic's own pick, which the base plan already carries.
@@ -35987,6 +36184,7 @@ static void AppendSubdecisionAxes(const GameState& state, bool is_pre_combat,
                 if (p.scry_choice >= 0 || p.bp_choice >= 0 || p.tutor_choice >= 0
                     || p.etbdig_choice >= 0 || p.lackey_choice >= 0 || p.ponder_choice >= 0
                     || p.discard_choice >= 0 || p.vial_charge_choice >= 0
+                    || p.fling_victim_choice != -1 || p.tectonic_mode_choice >= 0
                     || p.saga_target_choice >= 0 || p.saga_ch1_choice != -1
                     || !p.sac_pins.empty() || p.tapmode_choice != 0
                     || p.freshmode_choice != 0) { continue; }
@@ -37177,9 +37375,11 @@ std::string enummemo::Fingerprint(const GameState& state)
     for (const Card& c : state.exile) { s += c.m_name; s += ','; }
     s += ';';
     const ManaPool mp = AvailableManaPool(state);
-    std::snprintf(buf, sizeof buf, "pool=%d.%d.%d.%d.%d.%d.%d;cheat=%d;sc=%llu;",
+    std::snprintf(buf, sizeof buf,
+                  "pool=%d.%d.%d.%d.%d.%d.%d;cheat=%d;fling=%d;tmode=%d;sc=%llu;",
                   mp.white, mp.blue, mp.black, mp.red, mp.green, mp.colorless, mp.wild,
-                  state.scripted_cheat_choice,
+                  state.scripted_cheat_choice, state.scripted_fling_victim,
+                  state.scripted_tectonic_mode,
                   (unsigned long long)state.search_count);
     s += buf;
     return s;

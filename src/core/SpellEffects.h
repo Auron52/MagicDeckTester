@@ -801,12 +801,30 @@ inline void ApplyBlink(GameState&, int controller, int source_id, int target_id,
 inline void FireLeavesBattlefieldTriggers(GameState&, int controller, const Card& left);
 inline void DestroyLargestOppCreature(GameState&, int controller);
 inline void TapLargestOppCreature(GameState&, int controller);
+// The lethal-damage SBA's toughness (CR 704.5g) -- see the definition for why it is shared.
+// Forward-declared because Pyroclasm's sweep (PerformDamageAllCreatures) needs it well before
+// DynamicBaseToughness, one of its three inputs, is defined.
+inline int LethalToughness(const Permanent& p, const GameState& state);
 inline void FireOwnEtbTriggers(GameState&, int controller, int entered_index,
                            const std::string& chosen_tutor, int etb_kx);
 // etb_kx sentinel: "PUT entry with no searched destroy-K axis -- pick heuristically at
 // resolution" (full rationale at kEtbKxHeuristic's consumers near HeuristicEtbDestroyK).
 constexpr int kEtbKxHeuristic = -2;
 extern thread_local int g_scripted_tutor_choice;   // defined below (ScriptedTutor)
+
+// "You MAY search" -- the DECLINE arm of the searched tutor axis (CardParams::tutor_optional).
+//
+// Deliberately a large POSITIVE sentinel rather than a negative one. Every fan-out and dedup site
+// in TurnSolver tests `tutor_choice >= 0` to mean "this plan is a tutor VARIANT" (vs -1 = base
+// plan, which resolves to the provider's front). A negative sentinel would read as a base plan at
+// all ~10 of those sites and silently re-seed the other axes off it; a positive one is classified
+// correctly everywhere with no edit. PerformTutor checks for it BEFORE its clamp -- the clamp maps
+// an out-of-range index onto the last candidate, which would otherwise swallow the decline.
+//
+// Only reachable for a card whose data carries `tutor_optional`, so every deck without it is
+// byte-identical. Note the human path could ALREADY decline (TutorAskResult::Declined); this
+// closes the opposite asymmetry -- the SEARCH could not.
+inline constexpr int kTutorDeclineChoice = 1000000;
 inline int PermanentManaYield(const GameState&, const Permanent&, const CardDefinition&);   // defined below
 inline void EtbUntapLands(GameState&, int controller, int count, bool log_ledger = true);    // defined below
 inline void EtbUntapTapAheadIntoFloat(GameState&, int controller, int count,
@@ -3090,6 +3108,39 @@ inline std::pair<int,int> ComputeLordBonus(
             pb += sdef->params.life_threshold_pump_power;
             tb += sdef->params.life_threshold_pump_tough;
         }
+        // Borderland Behemoth: "This creature gets +4/+4 for each other Giant you control" -- the
+        // STATIC twin of attack_self_pump_per_other_subtype. Counts BODIES you control carrying
+        // the subtype, never their power, so it is independent of any lord's +N/+N (CR 613.8 --
+        // no dependency: a lord changes P/T in layer 7c and grants abilities in layer 6, neither
+        // of which changes a permanent's subtype, its controller or its existence) and the two
+        // effects simply ADD in either order. "OTHER" is by permanent ADDRESS, so the deck's
+        // copies stack correctly (two Behemoths each see the other). For a HAND-card evaluation
+        // (self == nullptr) there is nothing to exclude and the projection is EXACT -- strictly
+        // better than domain_self_pump's documented hand-eval under-count above. Same sdef lookup
+        // as the two blocks above, so no extra LookupCached on this hot path; a card without the
+        // param pays one empty() check and never walks the battlefield. The subtype scan is
+        // open-coded because CardHasSubtype is defined later in this file (the same three scans
+        // below already do this) and because SubtypeRegistry::Id() would heap-allocate per call.
+        if (sdef && !sdef->params.static_self_pump_per_other_subtype.empty())
+        {
+            int n = 0;
+            for (const Permanent& other : battlefield)
+            {
+                if (other.controller_index != controller_index) { continue; }
+                if (self != nullptr && &other == self) { continue; }   // "OTHER", by address
+                bool m = other.is_animated;                            // animated land = all types
+                if (!m)
+                {
+                    for (const std::string& cs : other.card.m_subtypes)
+                    {
+                        if (cs == sdef->params.static_self_pump_per_other_subtype) { m = true; break; }
+                    }
+                }
+                if (m) { ++n; }
+            }
+            pb += sdef->params.static_self_pump_power * n;
+            tb += sdef->params.static_self_pump_tough * n;
+        }
     }
 
     // Body for one candidate lord permanent. Returns early (the old `continue`) when the permanent
@@ -3716,6 +3767,35 @@ inline void FireCreatureEnterWatchers(GameState& state, int entered_controller, 
                               + std::to_string(wp.own_creature_enters_self_counters) + "/+"
                               + std::to_string(wp.own_creature_enters_self_counters)
                               + " counter (Angel entered)");
+            }
+        }
+        // Hamletback Goliath: "Whenever another creature enters, you may put X +1/+1 counters on
+        // this creature, where X is that creature's power." Deliberately has NO
+        // `w.controller_index == entered_controller` gate -- the oracle says only "another
+        // creature", with no "you control" qualifier, so this is the any_creature_enters_lifegain
+        // lane's scope rather than the own_* lane's directly above. ("Another" is the loop's
+        // existing i == entered_index skip, so a Goliath never counters its own enter.) X is
+        // entered_power_now(): the entrant's LIVE effective power (printed + counters + temp +
+        // ComputeLordBonus), which is the rules-correct "power as it exists on the battlefield"
+        // (CR 608.2) -- so a Giant entering under a Sunrise Sovereign is correctly worth 2 more.
+        // The "you may" is always taken: it costs nothing and is strictly dominated in the yes
+        // direction, so this is auto-yes by dominance, not a heuristic (contrast Emiel below,
+        // whose may costs {G/W} and therefore IS a choice). Written through state.battlefield[i],
+        // not the const ref `w`; AddPlusCounters (never a raw push_back) so counters merge.
+        if (wp.any_creature_enters_self_counters_power && enters_subtype_ok(wp))
+        {
+            const int x = entered_power_now();   // CR 608.2: live battlefield power
+            if (x > 0)
+            {
+                const std::string wname = w.card.m_name.str();
+                const std::string ename = state.battlefield[entered_index].card.m_name.str();
+                AddPlusCounters(state.battlefield[i], x);
+                if (log)
+                {
+                    EmitPlayEvent(state.turn_number, "ability",
+                                  "\xE2\x9E\x95 " + wname + ": +" + std::to_string(x) + "/+"
+                                  + std::to_string(x) + " counters (" + ename + " entered)");
+                }
             }
         }
         // "Whenever a creature an opponent controls enters, that player loses N" (Suture Priest
@@ -7470,10 +7550,275 @@ inline void SacrificePermanentAt(GameState& state, int controller, int idx)
     const Card dead     = state.battlefield[idx].card;
     const bool was_tok  = state.battlefield[idx].is_token;
     const int  dead_m1  = MinusCountersOn(state.battlefield[idx]);
+    // Attachments fall off a sacrificed host (CR 301.5c), exactly as they do on every other death
+    // path. This was MISSING here, and this is the SHARED sac chokepoint -- the combat-death SBA
+    // (GameEngine.cpp) only walks creatures the SBA ITSELF destroyed, so a sacrificed host was
+    // covered by nothing and left a DANGLING equipped_to (an Equipment still pointing at a card in
+    // the graveyard). Found by the Giants Stage 5d sweep via Surtland Flinger's fling; the other
+    // five death paths (two above, the legend rule, Pyroclasm's sweep, the rollout's combat) all
+    // already did this, so this line makes the set complete rather than introducing a new rule.
+    const int dead_num = dead.m_number;
+    for (Permanent& q : state.battlefield)
+    {
+        if (q.equipped_to      == dead_num) { q.equipped_to      = 0; }
+        if (q.aura_attached_to == dead_num) { q.aura_attached_to = 0; }
+    }
     state.players[controller].graveyard.push_back(dead);
     state.battlefield.erase(state.battlefield.begin() + idx);
     FireSacrificeWatchers(state, controller);   // Slaughter-Priest ("whenever YOU sacrifice ...")
     OnCreatureDies(state, controller, dead, was_tok, dead_m1);
+}
+
+// Pyroclasm: "deals N damage to each creature" -- a SYMMETRIC untargeted sweep over BOTH sides.
+// The opponent-only twin is PerformMvCastDamageOppCreatures; this one can kill OUR creatures, so
+// it additionally owes the two things that twin never needed: equipment detach from a dead host
+// (CR 301.5c -- this deck runs 3x Lightning Greaves) and OnCreatureDies for our own deaths.
+//
+// TWO-PASS, and that is the rules-correct shape, not a style choice: the damage is simultaneous
+// (CR 608.2), and only afterwards is lethality checked once, so every creature that ends up with
+// lethal damage dies together. A one-pass walk would let an earlier death's trigger change a
+// later creature's toughness mid-sweep. Deaths are collected and resolved after the erase loop
+// because OnCreatureDies may APPEND tokens to the battlefield.
+//
+// LETHALITY TEST: `LethalToughness(q, state)` -- the SHARED helper, which is also what the
+// executor's SBA and the rollout's inline SBA now use. Matching them is mandatory: the rollout
+// runs no SBA pass, so this helper is the only killer there, and disagreeing with the executor in
+// EITHER direction generates [fd-diverge].
+//
+// HISTORY (kept because the reasoning reads backwards otherwise): this deliberately used the bare
+// `q.EffectiveToughness()` to mirror an SBA that itself under-counted -- it excluded the lord
+// bonus for any creature whose raw toughness was already > 0, so a Giant Harbinger under a Sunrise
+// Sovereign was treated as 3/4 rather than its real 5/6. Two wrongs kept the worlds in lockstep.
+// The SBA has since been corrected to the lord/CDA/equipment-inclusive value, so mirroring the old
+// behaviour here would now be the thing that desyncs them.
+inline void PerformDamageAllCreatures(GameState& state, int controller,
+                                      const CardDefinition& def, int dmg)
+{
+    if (dmg <= 0) { return; }
+    (void)controller;
+    struct SweptDeath { Card card; int controller; bool was_token; int minus_counters; };
+    std::vector<SweptDeath> died;
+    int hit = 0;
+
+    // Pass 1 -- simultaneous damage to EVERY creature, both controllers (no controller filter:
+    // that omission is the whole difference from the opponent-only twin).
+    for (Permanent& q : state.battlefield)
+    {
+        if (!q.card.IsCreature()) { continue; }
+        ++hit;
+        q.damage += dmg;
+    }
+
+    // Pass 2 -- one lethality check, then remove the dead together.
+    for (std::size_t i = state.battlefield.size(); i-- > 0; )
+    {
+        Permanent& q = state.battlefield[i];
+        if (!q.card.IsCreature()) { continue; }
+        if (q.damage < LethalToughness(q, state)) { continue; }
+        if (q.card.HasKeyword(Keyword::Indestructible)) { continue; }
+        died.push_back({ q.card, q.controller_index, q.is_token, MinusCountersOn(q) });
+        state.players[q.owner_index].graveyard.push_back(q.card);
+        state.battlefield.erase(state.battlefield.begin()
+                                + static_cast<std::ptrdiff_t>(i));
+    }
+
+    // Equipment falls off a dead host (CR 301.5c). The executor's SBA does this, but an inline
+    // prune bypasses SBA and the rollout has no SBA at all -- so it must be done here.
+    for (const SweptDeath& d : died)
+    {
+        for (Permanent& q : state.battlefield)
+        {
+            if (q.equipped_to      == d.card.m_number) { q.equipped_to      = 0; }
+            if (q.aura_attached_to == d.card.m_number) { q.aura_attached_to = 0; }
+        }
+    }
+
+    for (const SweptDeath& d : died)
+    {
+        OnCreatureDies(state, d.controller, d.card, d.was_token, d.minus_counters);
+        if (d.controller != controller) { FireOppCreatureDies(state, d.controller); }
+    }
+
+    if (hit > 0 && g_play_event_sink)   // nulled by RevealLogPause -> autonomous byte-identity
+    {
+        EmitPlayEvent(state.turn_number, "damage",
+                      "\xE2\x9B\x88 " + def.card.m_name.str() + ": " + std::to_string(dmg)
+                      + " to each creature (" + std::to_string(hit) + " hit, "
+                      + std::to_string(died.size()) + " died)");
+    }
+}
+
+// ---- Surtland Flinger: attack-trigger fling -----------------------------------------------------
+// Enumerate the legal fling victims for `source_id`, RANKED best-first. This does NOT narrow: it
+// returns EVERY legal victim (the core invariant's requirement), and the ordering supplies only
+// the searched axis's DEFAULT (rank 0). Legal = a creature you control that is not the source
+// ("another creature"); a second Flinger is legal fodder.
+//
+// Ranking = immediate NET face damage, which is the only thing a goldfish can price locally:
+//   flung damage      = live power (EffectivePower + ComputeLordBonus), doubled for `double_sub`
+//   minus, if the victim is itself a declared attacker, the combat damage it will no longer deal.
+// So a non-attacking Giant of power P nets 2P, an attacking Giant nets P, and an attacking
+// non-Giant nets 0. Ties break on lower card number (deterministic). What the rank deliberately
+// does NOT price is the loss of the body on FUTURE turns -- that is exactly what the searched
+// axis is for, which is why declining is a real variant rather than a ranking artefact.
+inline std::vector<int> FlingVictimCandidates(const GameState& state, int controller,
+                                              int source_id, const std::string& double_sub,
+                                              const std::vector<int>& attacker_indices)
+{
+    std::vector<std::pair<int,int>> scored;   // (net damage, card number)
+    for (int bi = 0; bi < static_cast<int>(state.battlefield.size()); ++bi)
+    {
+        const Permanent& v = state.battlefield[bi];
+        if (v.controller_index != controller || !v.card.IsCreature()) { continue; }
+        if (v.card.m_number == source_id) { continue; }          // "ANOTHER creature"
+        int pw = v.EffectivePower()
+               + ComputeLordBonus(v.card, state, v.controller_index, v.is_animated, &v).first;
+        if (pw < 0) { pw = 0; }
+        int dmg = pw;
+        if (!double_sub.empty() && CardHasSubtype(v.card, double_sub)) { dmg *= 2; }
+        bool attacking = false;
+        for (int ai : attacker_indices) { if (ai == bi) { attacking = true; break; } }
+        const int net = dmg - (attacking ? pw : 0);
+        scored.push_back({ net, v.card.m_number });
+    }
+    std::sort(scored.begin(), scored.end(),
+              [](const std::pair<int,int>& a, const std::pair<int,int>& b)
+              { if (a.first != b.first) { return a.first > b.first; } return a.second < b.second; });
+    std::vector<int> out;
+    out.reserve(scored.size());
+    for (const std::pair<int,int>& s : scored) { out.push_back(s.second); }
+    return out;
+}
+
+// Fire the attack-trigger fling for every attacking Flinger, in BOTH worlds
+// (GameEngine::CombatPhase + TurnSolver::SimulateCombat), AFTER the attack pumps have set power
+// and BEFORE ResolveCombatDamage -- so the victim's power is read at its buffed value and a
+// SACRIFICED ATTACKER correctly deals no combat damage.
+//
+// `attacker_indices` is taken by MUTABLE REFERENCE and REPAIRED after every sacrifice. This is
+// not defensive coding: SacrificePermanentAt erases from the battlefield, which shifts every
+// index above the victim down by one, and those indices are consumed later by
+// ResolveCombatDamage. Indexing a shifted vector is bit-for-bit the 2026-09-06 FiveColour
+// pay-sac overnight crash. The repair is the documented house pattern (ApplyFirebreathing's
+// find_by_id): snapshot card numbers, re-derive indices by id. It also gives the
+// "a sacrificed attacker stops dealing combat damage" rule for free -- the dead id is simply not
+// found and drops out of the vector.
+inline void FireAttackSacFling(GameState& state, int controller,
+                               std::vector<int>& attacker_indices)
+{
+    if (attacker_indices.empty()) { return; }
+    const int bf0 = static_cast<int>(state.battlefield.size());
+
+    // Collect the fling SOURCES by card number (indices will move under us).
+    std::vector<int> src_ids;
+    for (int idx : attacker_indices)
+    {
+        if (idx < 0 || idx >= bf0) { continue; }
+        const Permanent& s = state.battlefield[idx];
+        if (s.controller_index != controller) { continue; }
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(s.card);
+        if (d && d->params.attack_sac_fling) { src_ids.push_back(s.card.m_number); }
+    }
+    if (src_ids.empty()) { return; }   // gated inert -> every other deck byte-identical
+
+    auto find_by_id = [&state](int id) {
+        for (int bi = 0; bi < static_cast<int>(state.battlefield.size()); ++bi)
+        { if (state.battlefield[bi].card.m_number == id) { return bi; } }
+        return -1;
+    };
+
+    for (int src_id : src_ids)
+    {
+        const int si = find_by_id(src_id);
+        if (si < 0) { continue; }                      // the source itself already left
+        const CardDefinition* sd =
+            CardDatabase::Instance().LookupCached(state.battlefield[si].card);
+        if (!sd) { continue; }
+        const std::string double_sub = sd->params.attack_sac_fling_double_subtype;
+        const std::string src_name   = state.battlefield[si].card.m_name.str();
+
+        const std::vector<int> cands =
+            FlingVictimCandidates(state, controller, src_id, double_sub, attacker_indices);
+        if (cands.empty()) { continue; }               // nothing else to sacrifice
+
+        // Which victim (or decline). Precedence: the searched pin, then the human chooser on a
+        // real resolution, then the ranking's default.  -2 = decline.
+        int want = state.scripted_fling_victim;
+        if (want != -1) { state.scripted_fling_victim = -1; }   // consumed by the FIRST fling
+        if (want == -1 && g_play_fling_chooser != nullptr)
+        {
+            // Emits the existing `sacrifice` decision TYPE (board-click) but through a
+            // DEDICATED chooser pointer. The shared g_play_sacrifice_chooser was the original
+            // wiring and it was WRONG: its main.cpp lambda clamps `chosen < 0` to the heuristic
+            // pick, because its other consumers (Shard Volley's land-sac additional cost,
+            // Natural Order, Mycoloth devour) are MANDATORY -- so the decline below was dead
+            // code on the human path while the search could still decline. Found by the
+            // Stage-5d sweep, 2026-09-22. g_play_fling_chooser clamps `< -1` instead.
+            // Options are the ranked candidates as battlefield indices; a negative return is
+            // the "you MAY" DECLINE.
+            std::vector<int> legal;
+            legal.reserve(cands.size());
+            for (int id : cands) { const int bi = find_by_id(id); if (bi >= 0) { legal.push_back(bi); } }
+            if (!legal.empty())
+            {
+                const int pick =
+                    (*g_play_fling_chooser)(state, controller, src_name, legal, 0);
+                if (pick < 0) { want = -2; }
+                else if (pick < static_cast<int>(legal.size()))
+                { want = state.battlefield[legal[pick]].card.m_number; }
+            }
+        }
+        if (want == -1) { want = cands.front(); }
+        if (want == -2) { continue; }                  // declined ("you MAY sacrifice")
+
+        const int vi = find_by_id(want);
+        if (vi < 0) { continue; }
+        const Permanent& v = state.battlefield[vi];
+        if (v.controller_index != controller || !v.card.IsCreature()
+            || v.card.m_number == src_id) { continue; }
+
+        // LAST-KNOWN INFORMATION: read power BEFORE the erase (CR 608.2 + the card's past tense).
+        int pw = v.EffectivePower()
+               + ComputeLordBonus(v.card, state, v.controller_index, v.is_animated, &v).first;
+        if (pw < 0) { pw = 0; }
+        int dmg = pw;
+        const bool doubled = !double_sub.empty() && CardHasSubtype(v.card, double_sub);
+        if (doubled) { dmg *= 2; }
+        const std::string vname = v.card.m_name.str();
+
+        const std::vector<int> atk_ids = [&]() {
+            std::vector<int> ids;
+            for (int ai : attacker_indices)
+            {
+                if (ai >= 0 && ai < static_cast<int>(state.battlefield.size()))
+                { ids.push_back(state.battlefield[ai].card.m_number); }
+            }
+            return ids;
+        }();
+
+        SacrificePermanentAt(state, controller, vi);
+
+        // Repair the attacker indices by id (see the contract note above).
+        attacker_indices.clear();
+        for (int id : atk_ids)
+        {
+            const int bi = find_by_id(id);
+            if (bi >= 0) { attacker_indices.push_back(bi); }
+        }
+
+        if (dmg > 0)
+        {
+            state.players[1 - controller].life -= dmg;
+            state.opponent_lost_life_this_turn = true;
+        }
+        if (g_play_event_sink)   // nulled by RevealLogPause -> autonomous byte-identity
+        {
+            EmitPlayEvent(state.turn_number, "damage",
+                          "\xE2\x9A\x94 " + src_name + ": sacrificed " + vname + " -> "
+                          + std::to_string(dmg) + " to opponent"
+                          + (doubled ? " (doubled)" : ""));
+        }
+    }
 }
 
 // ---- DEVOUR (CR 702.81; Mycoloth "Devour 2") ----------------------------------------------------
@@ -8858,6 +9203,190 @@ inline void ApplyAttackDrawTriggers(GameState& state, int controller,
     }
 }
 
+// ---- Inferno Titan: "Whenever this creature ... attacks, it deals 3 damage ..." -----------------
+// Self-only attack-trigger DAMAGE (CardParams::attack_trigger_damage_any), once per attacking copy
+// at declare-attackers, in BOTH worlds (GameEngine::CombatPhase + TurnSolver::SimulateCombat) so
+// search and execution agree on what an attack does. "Divided as you choose among one, two, or
+// three targets" collapses to the opponent's FACE -- provably optimal against a passive opponent
+// whose only creatures are non-blocking, non-attacking spawns (the etb_damage_any convention).
+// x1, NOT scaled by OpponentHeads(): a divided-target effect is not an "each opponent" effect.
+// Gated: an attacker leaving attack_trigger_damage_any at 0 is untouched -> other decks identical.
+inline void ApplyAttackTriggerDamage(GameState& state, int controller,
+                                     const std::vector<int>& attacker_indices)
+{
+    if (attacker_indices.empty()) { return; }
+    const int bf_size = static_cast<int>(state.battlefield.size());
+    const int opp = 1 - controller;
+    for (int idx : attacker_indices)
+    {
+        if (idx < 0 || idx >= bf_size) { continue; }
+        const Permanent& self = state.battlefield[idx];
+        if (self.controller_index != controller) { continue; }
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(self.card);
+        if (!d || d->params.attack_trigger_damage_any <= 0) { continue; }
+        const int dmg = d->params.attack_trigger_damage_any;
+        state.players[opp].life -= dmg;
+        state.opponent_lost_life_this_turn = true;
+        if (g_play_event_sink)   // nulled by RevealLogPause -> autonomous byte-identity
+        {
+            EmitPlayEvent(state.turn_number, "damage",
+                          "\xE2\x9A\x94 " + self.card.m_name.str() + " attack trigger: "
+                          + std::to_string(dmg) + " to opponent");
+        }
+    }
+}
+
+// ---- Tectonic Giant: modal attack trigger ------------------------------------------------------
+// Resolve WHICH mode a modal attack trigger takes: 0 = "deals N damage to each opponent",
+// 1 = "exile the top two, play one". Shared by the combat resolution AND the search's
+// attack-damage projection, so the two cannot disagree about whether the damage happens (an
+// over- or under-projection here is the fd-diverge/overshoot class).
+//
+// The searched pin (Plan::tectonic_mode_choice) wins when set; this function supplies only the
+// branch's DEFAULT. That default is "take the damage if it alone is lethal, otherwise take the
+// cards" -- deliberately simple, because the axis is what makes the real decision; a cleverer
+// static rule would just be a narrowing wearing a heuristic's clothes.
+inline int ResolveAttackModalMode(const GameState& state, int controller,
+                                  const CardDefinition& d)
+{
+    if (state.scripted_tectonic_mode >= 0) { return state.scripted_tectonic_mode; }
+    const int dmg = d.params.attack_trigger_damage_each_opponent;
+    if (dmg > 0 && state.players[1 - controller].life <= dmg) { return 0; }
+    return (d.params.attack_trigger_impulse_exile > 0) ? 1 : 0;
+}
+
+// Projection twin of ApplyAttackTriggerDamage for PendingAttackDamage's const fast path. Must
+// agree EXACTLY with what the function above does, or the search over/under-projects lethal
+// (the fd-diverge / overshoot class).
+inline int CountAttackTriggerDamageAny(
+    const std::vector<const Permanent*>& attackers)
+{
+    int total = 0;
+    for (const Permanent* atk : attackers)
+    {
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(atk->card);
+        if (d && d->params.attack_trigger_damage_any > 0)
+        { total += d->params.attack_trigger_damage_any; }
+    }
+    return total;
+}
+
+// Fire the modal attack trigger for every attacking Tectonic Giant, in BOTH worlds, at
+// declare-attackers (before the damage loop, so a lethal mode-A trigger ends the game before
+// combat damage and a mode-B land reaches hand in time for the post-combat main).
+inline void ApplyAttackModalTriggers(GameState& state, int controller,
+                                     const std::vector<int>& attacker_indices)
+{
+    if (attacker_indices.empty()) { return; }
+    const int bf_size = static_cast<int>(state.battlefield.size());
+    Player& ap = state.players[controller];
+    for (int idx : attacker_indices)
+    {
+        if (idx < 0 || idx >= bf_size) { continue; }
+        const Permanent& self = state.battlefield[idx];
+        if (self.controller_index != controller) { continue; }
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(self.card);
+        if (!d || !d->params.attack_trigger_modal) { continue; }
+
+        int mode = ResolveAttackModalMode(state, controller, *d);
+        if (state.scripted_tectonic_mode >= 0) { state.scripted_tectonic_mode = -1; }  // consumed
+        if (g_play_attack_mode_chooser != nullptr)   // real human resolution only
+        {
+            const int pick = (*g_play_attack_mode_chooser)(
+                state, controller, self.card.m_name.str(), mode);
+            if (pick == 0 || pick == 1) { mode = pick; }
+        }
+
+        if (mode == 0)
+        {
+            // "deals N damage to each opponent" -- an EACH-OPPONENT effect, so it scales with
+            // the number of opposing heads (CLAUDE.md's latent-2HG rule).
+            const int dmg = d->params.attack_trigger_damage_each_opponent;
+            if (dmg <= 0) { continue; }
+            const int heads = gamesetup::OpponentHeads();
+            state.players[1 - controller].life -= dmg * heads;
+            state.opponent_lost_life_this_turn = true;
+            if (g_play_event_sink)
+            {
+                EmitPlayEvent(state.turn_number, "damage",
+                              "\xE2\x9A\x94 " + self.card.m_name.str() + " attack trigger: "
+                              + std::to_string(dmg) + " to each opponent");
+            }
+            continue;
+        }
+
+        // Mode B: "Exile the top two cards of your library. Choose one of them. Until the end of
+        // your next turn, you may play that card." The chosen card is staged into hand with the
+        // Light Up the Stage / Rundvelt duration; the OTHER stays exiled and inert (nothing reads
+        // exile in a goldfish -> deck thinning), which is the faithful reading of "choose one".
+        const int n_exile = d->params.attack_trigger_impulse_exile;
+        if (n_exile <= 0 || ap.library.empty()) { continue; }
+        std::vector<Card> examined;
+        for (int k = 0; k < n_exile && !ap.library.empty(); ++k)
+        { examined.push_back(ap.library.DrawTop()); }
+        if (examined.empty()) { continue; }
+
+        // Default pick: the highest mana value, tie-break lower card number (deterministic).
+        // DISCLOSED NARROWING: unlike the MODE, which card to keep is not yet a searched axis --
+        // see docs/design/analysis-Giants.md. The human path DOES surface it (the `dig` chooser
+        // below), so this default binds only the autonomous search.
+        std::size_t best = 0;
+        for (std::size_t k = 1; k < examined.size(); ++k)
+        {
+            const int mv_k = examined[k].m_mana_cost.ManaValue();
+            const int mv_b = examined[best].m_mana_cost.ManaValue();
+            if (mv_k > mv_b
+                || (mv_k == mv_b && examined[k].m_number < examined[best].m_number))
+            { best = k; }
+        }
+        if (g_play_dig_chooser != nullptr)
+        {
+            std::vector<int> legal;
+            for (std::size_t k = 0; k < examined.size(); ++k) { legal.push_back(static_cast<int>(k)); }
+            const int pick = (*g_play_dig_chooser)(state, controller, self.card.m_name.str(),
+                                                   examined, legal, static_cast<int>(best));
+            if (pick >= 0 && pick < static_cast<int>(examined.size()))
+            { best = static_cast<std::size_t>(pick); }
+        }
+
+        // attack_trigger_impulse_playable is 1 for this card ("Choose ONE of them"); the loop
+        // below stages exactly the chosen index and exiles the rest.
+        for (std::size_t k = 0; k < examined.size(); ++k)
+        {
+            if (k != best) { state.exile.push_back(examined[k]); continue; }
+            Card c = examined[k];
+            c.m_is_staged     = true;
+            c.m_staged_expiry = state.turn_number
+                              + (d->params.attack_trigger_impulse_expiry_next_turn ? 1 : 0);
+            // m_impulse_no_land deliberately NOT set: the card says "you may PLAY that card".
+            ap.hand.push_back(std::move(c));
+        }
+        if (g_play_event_sink)
+        {
+            EmitPlayEvent(state.turn_number, "ability",
+                          "\xF0\x9F\x94\xA5 " + self.card.m_name.str() + " attack trigger: exiled "
+                          + std::to_string(examined.size()) + ", playing "
+                          + examined[best].m_name.str());
+        }
+    }
+}
+
+// Projection twin of the mode-A half, for PendingAttackDamage. Resolves the mode exactly as
+// ApplyAttackModalTriggers does (minus the human chooser, which never fires in a projection).
+inline int CountAttackTriggerModalDamage(const GameState& state, int controller,
+                                         const std::vector<const Permanent*>& attackers)
+{
+    int total = 0;
+    for (const Permanent* atk : attackers)
+    {
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(atk->card);
+        if (!d || !d->params.attack_trigger_modal) { continue; }
+        if (ResolveAttackModalMode(state, controller, *d) != 0) { continue; }
+        total += d->params.attack_trigger_damage_each_opponent * gamesetup::OpponentHeads();
+    }
+    return total;
+}
+
 // ---- Goblin Lackey: cheat a Goblin permanent into play on combat damage --------------------------
 // "Whenever this creature deals combat damage to a player, you may put a Goblin permanent card from
 // your hand onto the battlefield." Fired at the combat-damage step (both worlds) for each of the
@@ -10226,6 +10755,35 @@ inline int DynamicBaseToughness(const CardDefinition& def, const GameState& stat
     if (def.params.pt_equals_snow_permanents_on_battlefield)
     { return SnowPermanentCount(state, -1); }
     return 0;
+}
+
+// The toughness a LETHAL-DAMAGE state-based action must compare against (CR 704.5g).
+//
+// `Permanent::EffectiveToughness()` is printed + temp bonus + counters ONLY. THREE static sources
+// of toughness live outside it, and every one of them is real at the moment the SBA runs:
+//   * lord anthems      -- ComputeLordBonus (also covers self-scaling, e.g. Borderland Behemoth)
+//   * characteristic P/T -- DynamicBaseToughness (Faeburrow's domain, Voice of Resurgence's token)
+//   * Equipment          -- EquipBonusFor (Grafted Wargear +3/+2)
+//
+// Why this is a SHARED helper rather than three copies: the executor's SBA
+// (GameEngine::CheckStateBasedActions) and the rollout's inline SBA (TurnSolver) must kill exactly
+// the same creatures, or the run reports [fd-diverge]. They previously agreed only by both being
+// wrong the same way (both read the bare value); correcting one without the other would have
+// swapped a silent modelling bug for a loud divergence. Pyroclasm's sweep
+// (PerformDamageAllCreatures) is a third site that must agree, because it prunes inline and the
+// rollout has no SBA to clean up after it.
+//
+// Callers that merely PREDICT a death (scoring/targeting heuristics) still use the bare value in
+// places; that makes them mispredict a lord-buffed creature's survival, but it cannot desync the
+// two worlds. Migrating them is a separate, lower-risk follow-up.
+inline int LethalToughness(const Permanent& p, const GameState& state)
+{
+    int t = p.EffectiveToughness();
+    t += ComputeLordBonus(p.card, state, p.controller_index, p.is_animated, &p).second;
+    const CardDefinition* cd = CardDatabase::Instance().LookupCached(p.card);
+    if (cd) { t += DynamicBaseToughness(*cd, state, p.controller_index); }
+    t += EquipBonusFor(p, state).second;
+    return t;
 }
 
 // Ravenous Chupacabra ("When this creature enters, destroy target creature an opponent

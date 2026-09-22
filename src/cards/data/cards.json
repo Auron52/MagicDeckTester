@@ -8485,6 +8485,194 @@
      "Angel"
     ]
    }
+  },
+  {
+   "name": "Sunrise Sovereign",
+   "mana_cost": "{5}{R}",
+   "types": [
+    "Creature"
+   ],
+   "subtypes": [
+    "Giant",
+    "Warrior"
+   ],
+   "keywords": [],
+   "power": 5,
+   "toughness": 5,
+   "oracle_text": "Other Giant creatures you control get +2/+2 and have trample. [Standard lord, Rageblood Shaman's shape: +2/+2 to OTHER Giants via lord_effect + subtypes_affected [\"Giant\"] + lord_excludes_self, applied inside ComputeLordBonus -- the one shared P/T site that combat, the lethal-damage SBA and board eval all read, so executor and rollout are lockstep. NON-LEGENDARY and itself a Giant, so copies stack: two Sovereigns are 7/7 each. Reaches Inferno Titan, Giant Harbinger, Borderland Behemoth, Hamletback Goliath, Surtland Flinger and Tectonic Giant, but NOT Stinkdrinker Daredevil (Goblin Rogue). LIVE ON THE TURN IT ENTERS -- a static continuous ability needs no untap step -- so it pumps attackers that turn even though its own body is summoning sick. [PARTIAL: the TRAMPLE grant is not modelled -- Keyword::Trample has no read site anywhere in the engine (3 hits, all writes) and src/ai/Combat.cpp has no blocker path at all, so trample can only matter when a blocker absorbs damage and this sim models no blocking. WHY inert: structural. Same disclosure as Rageblood Shaman (Minotaur deferral D3) and Craterhoof Behemoth.]]",
+   "template": "lord_effect",
+   "parameters": {
+    "subtypes_affected": [
+     "Giant"
+    ],
+    "power_bonus": 2,
+    "tough_bonus": 2,
+    "lord_excludes_self": true
+   }
+  },
+  {
+   "name": "Stinkdrinker Daredevil",
+   "mana_cost": "{2}{R}",
+   "types": [
+    "Creature"
+   ],
+   "subtypes": [
+    "Goblin",
+    "Rogue"
+   ],
+   "keywords": [],
+   "power": 1,
+   "toughness": 3,
+   "oracle_text": "Giant spells you cast cost {2} less to cast. [Cost reduction via reduces_spell_subtype 'Giant' + reduces_spell_subtype_amount 2 (the Goblin Warchief reducer, scaled from {1} to {2}), exactly as Dragonspeaker Shaman does for Dragons. Applies to ANY Giant spell (reduces_spell_subtype_creature_only stays false) -- every Giant in this deck is a creature, so the two coincide here. Reduces GENERIC only, floored at 0, stacking per copy: one copy takes Inferno Titan {4}{R}{R} to {2}{R}{R}, two take it to {R}{R}, and no number of copies reduces the coloured pips (CR 601.2f). The Daredevil is a Goblin Rogue, NOT a Giant, so it never discounts itself or another copy and the reducer's self-exclusion never fires. The card has NO prowl -- that is Stinkdrinker BANDIT, a different card.]",
+   "template": "vanilla_creature",
+   "parameters": {
+    "reduces_spell_subtype": "Giant",
+    "reduces_spell_subtype_amount": 2
+   }
+  },
+  {
+   "name": "Giant Harbinger",
+   "mana_cost": "{4}{R}",
+   "types": [
+    "Creature"
+   ],
+   "subtypes": [
+    "Giant",
+    "Shaman"
+   ],
+   "keywords": [],
+   "power": 3,
+   "toughness": 4,
+   "oracle_text": "When this creature enters, you may search your library for a Giant card, reveal it, then shuffle and put that card on top. [ETB tutor to TOP on the Goblin Matron / Recruiter of the Guard machinery (tutor_to_top + tutor_types [Giant] + tutor_shuffle_after). 'Giant' resolves through CardMatchesTypeName's SUBTYPE fallback, so every Giant in this deck must carry \"Giant\" in its cards.json subtypes or the candidate pool silently shrinks. PerformTutor erases the found card, ShuffleAfterSearch's (CR 701.19c, deterministic CRN), THEN inserts at the library front -- the oracle's 'shuffle and put that card on top' order exactly -- and stamps top_stacked_turn/top_stacked_card_number. 'Reveal it' is emitted to the viewer as a one-card reveal with disposition 'to top'. WHICH Giant is a searched main_phase plan variant (the tutor axis); in human play every distinct library Giant appears as its own named cast variant. [PARTIAL: 'you MAY search' -- DECLINING is not modelled; the engine always searches when a legal Giant exists. Same treatment as Goblin Matron / Recruiter of the Guard / Ranger-Captain of Eos, but the cost is strictly larger than theirs: a to-TOP fetch CONSUMES the next draw step, so keeping a known-good top card (a needed Mountain on a 3-land board) is a real if rare line, whereas a to-HAND fetch is pure card advantage. WHY deferred: matches three shipped precedents; a param-gated tutor_optional opt-in is specced in docs/design/analysis-Giants.md. PROVISIONAL -- awaiting user sign-off.]]",
+   "template": "custom",
+   "parameters": {
+    "tutor_to_top": true,
+    "tutor_types": [
+     "Giant"
+    ],
+    "tutor_shuffle_after": true,
+    "tutor_optional": true
+   }
+  },
+  {
+   "name": "Pyroclasm",
+   "mana_cost": "{1}{R}",
+   "types": [
+    "Sorcery"
+   ],
+   "subtypes": [],
+   "keywords": [],
+   "oracle_text": "Pyroclasm deals 2 damage to each creature. [damage_all_creatures 2 -- a SYMMETRIC untargeted sweep: real marked damage to every creature on BOTH sides, indestructible respected, deaths resolved in a second pass (the rollout has no SBA pass) mirroring PerformMvCastDamageOppCreatures. Own-side deaths additionally detach equipment (CR 301.5c, Lightning Greaves) and fire OnCreatureDies. Damage wears off in CleanupStep (CR 514.2), so it does NOT accumulate across turns -- but it DOES within one turn, and this deck runs 2 copies: 4 damage kills our own Stinkdrinker Daredevil (1/3, a Goblin Rogue that Sunrise Sovereign's 'other Giant' pump never reaches) and unpumped Giant Harbinger / Tectonic Giant (3/4). A SINGLE copy kills nothing of ours (min toughness 3). The lethality test uses EffectiveToughness(), matching the executor's SBA exactly -- that excludes the lord bonus for a creature with positive printed toughness, a PRE-EXISTING engine-wide under-count vs CR 613 which is reproduced here deliberately so executor and rollout cannot diverge. OUTCOME-INERT FOR THE CLOCK, disclosed not simplified: it kills opponent spawn creatures in 6 of the 10 spawn patterns (GoldFishRunner::PopulateOpponentSpawns), but spawns never attack or block and no card in this deck watches opponent creature deaths -- so the board is faithful while the win turn is unchanged. Same standing as Call Forth the Tempest's damage clause.]",
+   "template": "custom",
+   "parameters": {
+    "damage_all_creatures": 2
+   }
+  },
+  {
+   "name": "Hamletback Goliath",
+   "mana_cost": "{6}{R}",
+   "types": [
+    "Creature"
+   ],
+   "subtypes": [
+    "Giant",
+    "Warrior"
+   ],
+   "keywords": [],
+   "power": 6,
+   "toughness": 6,
+   "oracle_text": "Whenever another creature enters, you may put X +1/+1 counters on this creature, where X is that creature's power. [any_creature_enters_self_counters_power, a new lane in the shared FireCreatureEnterWatchers cascade -- the universal enter site for executor and rollout, so the counters land identically in a real game and in every projected one. \"ANOTHER\" is the loop's existing i == entered_index skip (a Goliath never counters its own enter); there is deliberately NO controller gate, because the oracle says only \"another creature\" -- this is the any_creature_enters_lifegain (Soul Warden) lane, not the own_creature_enters_* (Youthful Valkyrie) lane. A SEPARATE param from own_creature_enters_self_counters on purpose: reusing that one would trip the ANGELS archetype signature and route this mono-red deck to AngelsProvider. In this goldfish the opponent controls only non-blocking spawns, so the opponent half is faithful-but-inert rather than dropped. X is entered_power_now(): the entrant's LIVE effective power (printed + counters + temp + ComputeLordBonus), the rules-correct \"power as it exists on the battlefield\" (CR 608.2), and load-bearing here -- Sunrise Sovereign's +2/+2 makes every entering Giant worth 2 more counters, and Borderland Behemoth enters at 4 + 4 per other Giant. Stinkdrinker Daredevil is a Goblin Rogue, not pumped, worth exactly 1. NOT LEGENDARY, so both copies coexist and compound. The \"YOU MAY\" is always taken: unlike Emiel the Blessed's other_creature_etb_counter_cost this may has NO cost, so declining is strictly dominated -- auto-yes by dominance, not by heuristic, and therefore NOT a play-viewer decision. Added through the AddPlusCounters chokepoint so counters MERGE into one entry (un-merged entries would split BuildSimKey's transposition key). X <= 0 puts no counters. Artifacts entering (Sol Ring, Fire Diamond, Lightning Greaves) correctly do not trigger it: the cascade's IsCreature() gate sits above the call. [PARTIAL: the 2012-07-01 ruling's LAST-KNOWN-INFORMATION branch (if the entrant has already left, use its last known power) is structurally unreachable -- this engine resolves enter-watchers INLINE with no stack, so the entrant is always still on the battlefield when X is read. WHY inert: structural, not a simplification.]]",
+   "template": "custom",
+   "parameters": {
+    "any_creature_enters_self_counters_power": true
+   }
+  },
+  {
+   "name": "Borderland Behemoth",
+   "mana_cost": "{5}{R}{R}",
+   "types": [
+    "Creature"
+   ],
+   "subtypes": [
+    "Giant",
+    "Warrior"
+   ],
+   "keywords": [
+    "Trample"
+   ],
+   "power": 4,
+   "toughness": 4,
+   "oracle_text": "Trample\nThis creature gets +4/+4 for each other Giant you control. [The +4/+4-per-other-Giant clause is a CONTINUOUS layer-7c SELF modification (CR 611.3), modelled as static_self_pump_per_other_subtype \"Giant\" / _power 4 / _tough 4 and evaluated inside ComputeLordBonus's self-pump block beside domain_self_pump and life_threshold_pump_life -- the one shared P/T site combat, board eval, the SBA and the viewer all read, so executor and rollout are lockstep. It is NOT a CDA: the printed 4/4 is real, so DynamicBasePower/DynamicBaseToughness is deliberately untouched. It is NOT template lord_effect: the bonus applies only to itself, so power_bonus/tough_bonus/subtypes_affected are deliberately left UNSET and IsLordPermanent stays false (modelling it as lord_effect + scales_per_matching would buff every Giant on the board). \"Other\" is by per-permanent address identity, so the deck's 3 copies stack correctly. The count is of BODIES with the Giant subtype, never of their power, so it is independent of Sunrise Sovereign's +2/+2 (CR 613.8: no dependency) and the two effects simply ADD in any order. Sunrise Sovereign is itself a Giant and DOES count toward this total, while also granting this creature +2/+2 as an \"other Giant\". Recomputed live at every read rather than cached at ETB. For a HAND-card evaluation (self == nullptr) there is nothing to exclude and the projection is EXACT, unlike domain_self_pump's documented under-count. [PARTIAL: TRAMPLE is parsed (Keyword::Trample) but structurally INERT -- Keyword::Trample has no reader in combat and there is no blocker path in src/ai/Combat.cpp, so trample can never change an outcome. WHY inert: structural, the Rageblood Shaman / Craterhoof Behemoth disclosure class.]]",
+   "template": "vanilla_creature",
+   "parameters": {
+    "static_self_pump_per_other_subtype": "Giant",
+    "static_self_pump_power": 4,
+    "static_self_pump_tough": 4
+   }
+  },
+  {
+   "name": "Inferno Titan",
+   "mana_cost": "{4}{R}{R}",
+   "types": [
+    "Creature"
+   ],
+   "subtypes": [
+    "Giant"
+   ],
+   "keywords": [],
+   "power": 6,
+   "toughness": 6,
+   "oracle_text": "{R}: This creature gets +1/+0 until end of turn.\nWhenever this creature enters or attacks, it deals 3 damage divided as you choose among one, two, or three targets. [Firebreathing '{R}: +1/+0' via firebreathing_cost/firebreathing_power -- the plain Shivan Dragon / Scourge of Valkas shape, spent with LEFTOVER combat mana by the shared ApplyFirebreathing converter (no discard/lifelink rider, so it correctly stays in the converter rather than the searched ActivatePump). The ENTERS-or-ATTACKS trigger is ONE printed trigger with two conditions, modelled as two params: etb_damage_any 3 (fired from the universal FireOwnEtbTriggers cascade, so any enter route triggers) and attack_trigger_damage_any 3 (fired at DECLARE-ATTACKERS in both worlds by ApplyAttackTriggerDamage, before the Adeline token block per CR 508.4, and projected by PendingAttackDamage so the search does not under-rate attacking). 'Divided as you choose among one, two, or three targets' collapses to 3 at the opponent's face: PROVABLY OPTIMAL, not an approximation -- the passive opponent never blocks or attacks, so its spawn creatures are worth 0 and only face damage moves the metric (the etb_damage_any / sac_outlet_damage precedent). Dealt as real life loss and flagged opponent_lost_life_this_turn so the rollout's win projection counts it toward lethal. x1, NOT multiplied by OpponentHeads() -- this is a divided-among-targets effect, not 'each opponent'. NOT legendary: four copies coexist and each entering/attacking copy triggers independently. With Lightning Greaves' haste both halves fire on the turn it lands (3 + 3 face before 6 combat damage). [PARTIAL: the human's divided-damage ALLOCATION is auto-resolved to the face rather than surfaced as a `divide` decision. WHY inert: the only alternative targets are opponent spawn creatures (worth 0, they never block or attack) and our own creatures; the face is strictly optimal. Same accepted-collapse class as etb_damage_any and dragon_ping_on_enter.]]",
+   "template": "vanilla_creature",
+   "parameters": {
+    "firebreathing_cost": "{R}",
+    "firebreathing_power": 1,
+    "etb_damage_any": 3,
+    "attack_trigger_damage_any": 3
+   }
+  },
+  {
+   "name": "Surtland Flinger",
+   "mana_cost": "{3}{R}{R}",
+   "types": [
+    "Creature"
+   ],
+   "subtypes": [
+    "Giant",
+    "Berserker"
+   ],
+   "keywords": [],
+   "power": 4,
+   "toughness": 6,
+   "oracle_text": "Whenever this creature attacks, you may sacrifice another creature. When you do, this creature deals damage equal to the sacrificed creature's power to any target. If the sacrificed creature was a Giant, this creature deals twice that much damage instead. [NOT an MDFC -- verified against Scryfall (layout=normal, no card_faces, one print khm 377); any claim of a land back face is wrong. Attack trigger via attack_sac_fling, fired per attacking copy at declare-attackers by FireAttackSacFling in BOTH worlds (GameEngine::CombatPhase + TurnSolver::SimulateCombat), AFTER the attack pumps so the victim's power is read buffed and BEFORE ResolveCombatDamage so a sacrificed ATTACKER correctly deals no combat damage. The sacrifice is an action taken ON RESOLUTION, not an additional cost (CR 601.2h does not apply); 'When you do' is a reflexive trigger (CR 603.2c) resolved inline, as every trigger in this stackless engine is. 'ANOTHER creature' -> the victim filter excludes the source by m_number, so a SECOND Flinger is legal fodder. Damage = the victim's EffectivePower() + ComputeLordBonus read as LAST-KNOWN INFORMATION immediately before the erase, so Sunrise Sovereign's +2/+2 and Borderland Behemoth's self-scaling are both counted -- that is most of the card's output here, not a rounding detail. attack_sac_fling_double_subtype 'Giant' doubles it ('was a Giant' = past tense = LKI on the dead card); every creature in this deck is a Giant EXCEPT Stinkdrinker Daredevil. Power <= 0 deals 0. 'ANY TARGET' collapses to the opponent's FACE -- the standing convention for the phrase (etb_damage_any, sac_outlet_damage), provably optimal against a passive opponent whose only creatures are non-blocking spawns. WHICH creature to fling, and WHETHER to fling at all, are a SEARCHED plan axis (Plan::fling_victim_choice -> GameState::scripted_fling_victim; -2 = decline), not a heuristic pick: the ranked default can only price this turn's net face damage, while the real trade is a one-shot burst against a body that keeps attacking. MTG_FLING_AXIS=0 falls back to the ranked pick. DELIBERATELY DOES NOT SET sac_creature_outlet: this is a TRIGGER, not an activated outlet, and that param alone sets the Goblin routing signature. Not second-main relevant (generates no mana, cards or permanents -- only damage).]",
+   "template": "vanilla_creature",
+   "parameters": {
+    "attack_sac_fling": true,
+    "attack_sac_fling_double_subtype": "Giant"
+   }
+  },
+  {
+   "name": "Tectonic Giant",
+   "mana_cost": "{2}{R}{R}",
+   "types": [
+    "Creature"
+   ],
+   "subtypes": [
+    "Elemental",
+    "Giant"
+   ],
+   "keywords": [],
+   "power": 3,
+   "toughness": 4,
+   "oracle_text": "Whenever this creature attacks or becomes the target of a spell an opponent controls, choose one —\n• This creature deals 3 damage to each opponent.\n• Exile the top two cards of your library. Choose one of them. Until the end of your next turn, you may play that card. [MODAL ATTACK TRIGGER, fired per attacking copy at declare-attackers in BOTH worlds (ApplyAttackModalTriggers; GameEngine::CombatPhase + TurnSolver::SimulateCombat lockstep), BEFORE the damage loop -- so a lethal mode-A trigger ends the game before combat damage and a mode-B land reaches hand for the post-combat main. THE MODE IS SEARCHED, not heuristic-picked: Plan::tectonic_mode_choice (0 = damage, 1 = impulse; -1 = ResolveAttackModalMode's default) is copied onto GameState::scripted_tectonic_mode -- the lackey_choice/vial_charge_choice state-pin shape, required because the choice is made in the pre-combat main and consumed in the declare-attackers step where a scoped guard would already be gone. MTG_TECTONIC_AXIS=0 restores the pure default. MODE A: 3 DAMAGE (not life loss) to each opposing head, x gamesetup::OpponentHeads() per the etb_damage_each_opponent pattern, and added to PendingAttackDamage through the SAME ResolveAttackModalMode the combat uses so the projection can never credit damage a mode-B trigger will not deal. MODE B: exile the top 2; ONE is staged into hand with m_is_staged / m_staged_expiry = turn_number + 1 -- the SAME primitive and duration as Light Up the Stage's stages_cards and Rundvelt's dies_impulse_expiry_next_turn -- and the OTHER stays exiled and inert (deck thinning), which is the faithful reading of 'choose one'. m_impulse_no_land is deliberately NOT set: the card says 'you may PLAY that card', so an exiled Mountain is playable (Apex of Power's no-land bit is for its 'cast SPELLS' wording only). FLIPS DeckUsesSecondMain -- the staged card is a resource generated DURING combat. [PARTIAL: the trigger's second half, 'or becomes the target of a spell AN OPPONENT CONTROLS', is NOT implemented -- WHY structurally unreachable on two independent grounds: (1) the passive goldfish opponent casts no spells at all (its board comes from PopulateOpponentSpawns), and (2) the clause requires a spell an OPPONENT controls, so this deck's own Lightning Bolt aimed at its own Giant would not trigger it either, and Pyroclasm does not target. Lightning Greaves' shroud is irrelevant to this clause for the same reason.] [PARTIAL: WHICH of the two exiled cards to keep is not yet a searched axis for the autonomous engine -- the default is highest mana value, tie-break lower card number. The HUMAN path does surface it (the `dig` chooser), so this binds only the search. Disclosed narrowing; a second axis is the follow-up.]]",
+   "template": "vanilla_creature",
+   "parameters": {
+    "attack_trigger_modal": true,
+    "attack_trigger_damage_each_opponent": 3,
+    "attack_trigger_impulse_exile": 2,
+    "attack_trigger_impulse_playable": 1,
+    "attack_trigger_impulse_expiry_next_turn": true
+   }
   }
  ]
 }

@@ -9771,6 +9771,7 @@ namespace
     const StompyProvider         g_stompy;
     const MinotaurProvider       g_minotaur;
     const DragonsProvider        g_dragons;
+    const GiantsProvider         g_giants;
     const SnowProvider           g_snow;
     const FungusProvider         g_fungus;
     const CritterLifegainProvider g_critter;
@@ -9794,6 +9795,10 @@ const DecisionProvider& DetectDecisionProvider(const Decklist& deck)
     bool stompy = false;   // StompySurprise (elf ramp) -- routes to Generic BEFORE the anti check
     bool minotaur = false; // Minotaur tribal -- routes to Generic BEFORE the goblin check
     bool dragons = false;  // Mono-red Dragons ramp -- routes to Generic BEFORE the goblin check
+    bool giants = false;   // Mono-red Giant tribal -- MUST route ABOVE both goblin AND anti
+                           // (Stinkdrinker Daredevil's reduces_spell_subtype sets goblin;
+                           //  Giant Harbinger's tutor_to_top sets anti). Seventh occurrence
+                           // of the archetype-neutral misroute class.
     bool melira_pod = false; // Persist combo -- routes to MeliraPodProvider BEFORE the goblin check
     bool fungus = false;   // Thallid/Saproling tokens -- routes to Generic BEFORE the goblin check
     bool aura = false;     // Bogle Auras -- Light-Paws' aura_cast_tutor_attach is unique to it
@@ -9972,6 +9977,41 @@ const DecisionProvider& DetectDecisionProvider(const Decklist& deck)
         // Deliberately EXCLUDES Lightning Greaves' equip_grants_haste/shroud: those are colourless
         // staples that any deck may add, and keying on them would recreate this very bug pointing
         // the other way.
+        // GIANTS (mono-red Giant tribal). MUST be detected and MUST return ABOVE BOTH the goblin
+        // check AND the anti check -- the SEVENTH occurrence of the archetype-neutral misroute
+        // class already recorded here for Mirrorwing, StompySurprise, Minotaur, Dragons, Melira
+        // Pod and Fungus, and the first to trip TWO neutral signatures at once:
+        //   * Stinkdrinker Daredevil carries reduces_spell_subtype ("Giant spells you cast cost
+        //     {2} less") -- the SAME param that misrouted Dragons via Dragonspeaker Shaman. It
+        //     sets `goblin` on its own.
+        //   * Giant Harbinger carries tutor_to_top -- it sets `anti` on its own (the Worldly
+        //     Tutor / Enlightened Tutor path).
+        // So cutting either card does NOT fix the routing; it just changes which wrong provider
+        // the deck lands on. The harm is concrete rather than theoretical: GoblinsProvider
+        // overrides TutorSearchWidth, and this deck has SEVEN distinct Giant names for Giant
+        // Harbinger to fetch, so a Goblin-tuned ranking would silently decide which Giant is
+        // unreachable -- a narrowing never measured for this deck.
+        //
+        // Routes to GiantsProvider, an EMPTY DeckProvider derivation: per the always-own-a-
+        // provider rule the deck gets a name and a certificate answer, and per the "no unmeasured
+        // narrowing" rule it gets no heuristics at all until one is proposed and measured.
+        //
+        // Signature = Giants-only gated params OR'd across FIVE different cards (Inferno Titan,
+        // Borderland Behemoth, Hamletback Goliath, Surtland Flinger, Tectonic Giant) so a
+        // deckbuilding swap that cuts one card cannot silently lose it. Every one is new and
+        // gated (0/false/empty inert), so no existing deck can set them. Deliberately EXCLUDES
+        // reduces_spell_subtype (the neutral param causing the bug) and Lightning Greaves'
+        // equip_grants_haste/shroud (a colourless staple any deck may add -- the exclusion the
+        // Dragons block makes for exactly this reason).
+        if (p.attack_trigger_damage_any > 0
+            || !p.static_self_pump_per_other_subtype.empty()
+            || p.any_creature_enters_self_counters_power
+            || p.attack_sac_fling
+            || p.attack_trigger_modal)
+        {
+            giants = true;
+        }
+
         if (p.dragon_ping_on_enter
             || p.attack_per_matching_creates_tokens > 0
             || p.haste_on_flying_enter
@@ -10235,6 +10275,9 @@ const DecisionProvider& DetectDecisionProvider(const Decklist& deck)
     // own. It was routed to g_generic when that misroute was fixed, because a deck earns its own
     // provider only once it has a MEASURED hook to hold; the bucket policy is that hook.
     if (dragons) { return g_dragons; }
+    // Giants: must WIN OVER goblin (Stinkdrinker Daredevil's reduces_spell_subtype) AND over anti
+    // (Giant Harbinger's tutor_to_top) -- see the detection block above.
+    if (giants)  { return g_giants; }
     // Melira Pod: MeliraPodProvider (Generic-inheriting). Must WIN OVER goblin -- its free sac
     // outlets set that signature on their own (see the detection block note).
     if (melira_pod) { return g_melira_pod; }

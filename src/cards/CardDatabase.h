@@ -74,6 +74,62 @@ struct CardParams
     // DeckUsesSecondMain (cards drawn in combat are a combat-generated resource, 2c-bis).
     int attack_draw_cards = 0;
 
+    // Inferno Titan: "Whenever this creature enters OR ATTACKS, it deals 3 damage divided as you
+    // choose among one, two, or three targets." The ENTERS half is etb_damage_any; this is the
+    // ATTACKS half -- self-only, once per attacking copy, applied at declare-attackers in BOTH
+    // worlds (GameEngine::CombatPhase + TurnSolver::SimulateCombat) and projected by
+    // PendingAttackDamage so the search does not under-rate attacking.
+    // "Divided as you choose" COLLAPSES to the opponent's face: the passive opponent never blocks
+    // or attacks, so its spawn creatures are worth 0 and the face is strictly optimal (the
+    // established etb_damage_any / sac_outlet_damage convention).
+    // x1 -- deliberately NOT multiplied by gamesetup::OpponentHeads(): this is a divided-among-
+    // targets effect, not an "each opponent" effect (contrast attack_trigger_damage_each_opponent).
+    // Real DAMAGE, and it does NOT flip DeckUsesSecondMain (damage is not a castable resource).
+    int attack_trigger_damage_any = 0;
+
+    // Surtland Flinger: "Whenever this creature attacks, you may sacrifice another creature. When
+    // you do, this creature deals damage equal to the sacrificed creature's power to any target.
+    // If the sacrificed creature was a Giant, this creature deals twice that much damage instead."
+    // The sacrifice is an action taken ON RESOLUTION, not an additional cost (CR 601.2h does not
+    // apply); "When you do" is a reflexive trigger (CR 603.2c) resolved inline, as every trigger
+    // in this stackless engine is. "ANOTHER creature" -> the victim filter excludes the source by
+    // m_number, so a SECOND Flinger is legal fodder. Damage = the victim's EffectivePower() +
+    // ComputeLordBonus read as LAST-KNOWN INFORMATION immediately BEFORE the erase, so a lord's
+    // +N/+N is counted. "Any target" collapses to the opponent's FACE (the etb_damage_any
+    // convention). Deliberately does NOT set sac_creature_outlet: this is a TRIGGER, not an
+    // activated outlet, and that param alone sets the Goblin routing signature.
+    // Tectonic Giant: "Whenever this creature attacks [or becomes the target of a spell an
+    // opponent controls], CHOOSE ONE -- * deals 3 damage to each opponent; * exile the top two
+    // cards of your library, choose one of them, until the end of your next turn you may play
+    // that card." The MODE is a SEARCHED plan axis (Plan::tectonic_mode_choice ->
+    // GameState::scripted_tectonic_mode), never a heuristic pick: both modes are live every
+    // turn and the crossover moves with board and life.
+    //   attack_trigger_modal                    -- gates the 2-way axis (kept explicit so a
+    //                                              future single-mode impulse card does not
+    //                                              accidentally open one).
+    //   attack_trigger_damage_each_opponent     -- mode A. Real DAMAGE, x OpponentHeads() (this
+    //                                              IS an "each opponent" effect, unlike
+    //                                              attack_trigger_damage_any above), so a
+    //                                              pre-2HG card is not silently single-head.
+    //   attack_trigger_impulse_exile            -- mode B: how many to exile off the top.
+    //   attack_trigger_impulse_playable         -- how many of those become playable (the rest
+    //                                              stay exiled and inert = deck thinning).
+    //   attack_trigger_impulse_expiry_next_turn -- "until the end of your NEXT turn".
+    // m_impulse_no_land is deliberately NOT set: the card says "you may PLAY that card", so an
+    // exiled land is playable (Apex of Power's no-land bit is for its "cast SPELLS" wording).
+    // attack_trigger_impulse_exile FLIPS DeckUsesSecondMain -- the staged card is a resource
+    // generated DURING combat and is only spendable in a post-combat main.
+    bool        attack_trigger_modal = false;
+    int         attack_trigger_damage_each_opponent = 0;
+    int         attack_trigger_impulse_exile = 0;
+    int         attack_trigger_impulse_playable = 0;
+    bool        attack_trigger_impulse_expiry_next_turn = false;
+
+    bool        attack_sac_fling = false;
+    // Non-empty = the subtype that DOUBLES the damage ("was a Giant" -- past tense, so it is
+    // checked on the dead card's last-known characteristics).
+    std::string attack_sac_fling_double_subtype;
+
     // Progenitus: "If ~ would be put into a graveyard from anywhere, reveal it and shuffle it
     // into its owner's library instead." Wired at the cleanup-discard sites (executor
     // CleanupStep + rollout scripted-discard mirror) -- the only graveyard path reachable for
@@ -384,6 +440,16 @@ struct CardParams
     // this is live board contact; it cannot change the CLOCK in a deck without opponent-death
     // watchers (spawns never block/attack), which is why it was once deferred as inert.
     bool damage_opp_creatures_mv_cast = false;
+
+    // Pyroclasm: "deals N damage to each creature". SYMMETRIC -- both controllers, which is the
+    // ONLY thing distinguishing it from damage_opp_creatures_mv_cast directly above, and the
+    // likeliest thing to be miscopied. Untargeted (no decision surface), real MARKED damage with
+    // inline lethal pruning (the rollout has no SBA pass), indestructible respected. Because it
+    // can kill OUR creatures it must also detach equipment from a dead host (CR 301.5c) and fire
+    // OnCreatureDies -- neither of which the opponent-only twin ever needed. Damage clears in
+    // CleanupStep (CR 514.2), so it does not accumulate across turns but DOES within one turn.
+    // 0 = inert.
+    int damage_all_creatures = 0;
 
     // Breaching Dragonstorm clause 2: "When a Dragon you control enters, return this
     // enchantment to its owner's hand." Non-empty = the watched subtype ("Dragon"). Fires from
@@ -823,6 +889,15 @@ struct CardParams
     // Tutor (artifact/enchantment -> top).
     bool                     tutor_to_hand = false;
     bool                     tutor_to_top  = false;
+    // "You MAY search" -- opens a DECLINE arm on the searched tutor axis
+    // (kTutorDeclineChoice, SpellEffects.h). Default false keeps every existing tutor deck
+    // byte-identical, so this is opt-in per card rather than a blanket behaviour change.
+    //
+    // Worth setting for a tutor_to_top, where the fetch SPENDS the next draw step and declining
+    // can be right; much weaker for a to-hand fetch, where searching is close to pure gain --
+    // which is why Goblin Matron / Recruiter of the Guard / Ranger-Captain of Eos are left off
+    // for now. Flipping them on is a one-line data change plus a measurement.
+    bool                     tutor_optional = false;
     std::vector<std::string> tutor_types;
     // Numeric target filters, applied as EXTRA CONJUNCTS at all three tutor filter sites
     // (SpellEffects.h TutorCandidates' unpruned + heuristic branches, GenericProvider::
@@ -1637,6 +1712,19 @@ struct CardParams
     std::string attack_self_pump_per_other_subtype;
     int         attack_self_pump_power = 0;
     int         attack_self_pump_tough = 0;
+    // STATIC twin of the three fields above (Borderland Behemoth: "This creature gets +4/+4 for
+    // each other Giant you control"). A CONTINUOUS layer-7c self-modification (CR 611.3), NOT an
+    // attack trigger and NOT a lord: it buffs only itself, so power_bonus/tough_bonus/
+    // subtypes_affected are deliberately left unset and IsLordPermanent stays false (modelling it
+    // as lord_effect + scales_per_matching would buff every Giant on the board). Evaluated inside
+    // ComputeLordBonus beside domain_self_pump, so every combat/eval/SBA/viewer call site picks it
+    // up and executor and rollout stay in lockstep. Self-excluded by permanent ADDRESS, so copies
+    // stack correctly. Counts BODIES with the subtype, never their power -- so it is independent
+    // of any lord's +N/+N (CR 613.8: no dependency) and the two simply add. Non-empty subtype
+    // gates it. The field name must contain "subtype" so the loader's pre-intern walk interns it.
+    std::string static_self_pump_per_other_subtype;
+    int         static_self_pump_power = 0;
+    int         static_self_pump_tough = 0;
 
     // Permanent death-watcher ("Whenever [this or] another <subtype> you control dies, ...").
     // Fired from the SBA creature-death site (executor) and the rollout death path (lockstep) for
@@ -2067,6 +2155,16 @@ struct CardParams
     // counters MERGE into one entry -- BuildSimKey folds each Counter entry separately, so
     // un-merged entries would split the transposition key for boards that are actually identical.
     int  own_creature_enters_self_counters = 0;
+    // Hamletback Goliath: "Whenever another creature enters, you may put X +1/+1 counters on this
+    // creature, where X is that creature's power." Distinct from own_creature_enters_self_counters
+    // directly above in BOTH respects: the scope is ANY controller (the oracle has no "you
+    // control" qualifier -- this is the any_creature_enters_lifegain lane, not the own_* lane),
+    // and the amount is the ENTRANT's live effective power via entered_power_now() (printed +
+    // counters + temp + ComputeLordBonus), which is the rules-correct "power as it exists on the
+    // battlefield" (CR 608.2). A SEPARATE param deliberately: setting own_creature_enters_self_
+    // counters instead would silently trip the ANGELS archetype signature in
+    // DetectDecisionProvider and route the whole deck to AngelsProvider. false = inert.
+    bool any_creature_enters_self_counters_power = false;
 
     // Vaultborn Tyrant: "When this creature dies, if it's not a token, create a token that's a
     // copy of it ..." -> a token copy of the card (same name -> the copy's own params stay live:

@@ -326,6 +326,16 @@ extern thread_local BounceChooser* g_play_bounce_chooser;
 // graveyard and the viewer says "sacrifice" not "return". Nulled by RevealLogPause for search.
 extern thread_local BounceChooser* g_play_sacrifice_chooser;
 
+// ---- Human-play FLING chooser (Surtland Flinger's attack-trigger sacrifice) -----------------
+// Same BounceChooser shape as the sacrifice chooser above, but a SEPARATE pointer because this
+// one is OPTIONAL: "you MAY sacrifice another creature" (CR 603.2c). Its main.cpp lambda clamps
+// with `chosen < -1` (the flicker chooser's precedent) so a reply of -1 survives as a DECLINE,
+// whereas g_play_sacrifice_chooser must keep clamping `chosen < 0` because its consumers --
+// Shard Volley's land-sac ADDITIONAL COST, Natural Order, Mycoloth devour -- are MANDATORY and
+// declining them is illegal. Reusing the mandatory chooser here made the engine's own decline
+// branch dead code on the human path (found by the Stage-5d sweep, 2026-09-22).
+extern thread_local BounceChooser* g_play_fling_chooser;
+
 // ---- Human-play Felidar flicker chooser (which own permanent to exile-and-return) -----------
 // Felidar Guardian's ETB on a PUT path (Pod / Chord / a Reveillark return) has no cast variant
 // to carry the searched target, so the provider's FlickerTarget resolves it autonomously; under
@@ -713,6 +723,17 @@ using DemonstrateChooser = std::function<bool(const GameState& state, int contro
                                               const Card& spell, bool heuristic_default)>;
 extern thread_local DemonstrateChooser* g_play_demonstrate_chooser;
 
+// ---- Human-play modal attack-trigger chooser (Tectonic Giant's "choose one") ----------------
+// "Whenever this creature attacks ... choose one -- * 3 damage to each opponent; * exile the top
+// two cards, play one of them." `source` names the triggering creature; `heuristic_default` is
+// the branch's default (ResolveAttackModalMode), which is also what the searched pin resolves to
+// when the axis picked it. Returns 0 (damage) or 1 (impulse); any other value keeps the default.
+// Nulled by RevealLogPause for every search/rollout scope, so the autonomous engine keeps the
+// searched/provider mode and stays byte-identical.
+using AttackModeChooser = std::function<int(const GameState& state, int controller,
+                                            const std::string& source, int heuristic_default)>;
+extern thread_local AttackModeChooser* g_play_attack_mode_chooser;
+
 // ---- Human-play ETB tutor chooser (Goblin Matron entering OFF a cast) ----------------------
 // A tutor resolved from a CAST already has its target decided: the search enumerates one plan
 // variant per candidate, so the human picks it in the viewer's variant dialog and PerformTutor
@@ -858,7 +879,9 @@ inline bool AllPlayHooksNull()
         && g_play_storage_hold_chooser == nullptr && g_play_tutor_chooser == nullptr
         && g_play_attach_host_chooser == nullptr && g_play_jitte_chooser == nullptr
         && g_play_attackers_chooser == nullptr && g_play_tap_pref_chooser == nullptr
-        && g_play_loyalty_chooser == nullptr;
+        && g_play_loyalty_chooser == nullptr
+        && g_play_attack_mode_chooser == nullptr
+        && g_play_fling_chooser == nullptr;
 }
 
 // 0 = flag fast path (DEFAULT). 1 = MTG_PAUSE_HOOK_FLAG=0, the original 26-pointer scan (identical
@@ -901,6 +924,8 @@ struct RevealLogPause
     LackeyChooser* saved_lackeychooser;
     FreeCastChooser* saved_freecastchooser;
     DemonstrateChooser* saved_demochooser = nullptr;
+    AttackModeChooser* saved_atkmodechooser = nullptr;
+    BounceChooser* saved_flingchooser = nullptr;
     LightPawsChooser* saved_lpchooser;
     FirebreatheChooser* saved_fbchooser;
     CastOrderChooser* saved_cochooser;
@@ -949,6 +974,8 @@ struct RevealLogPause
         saved_lackeychooser = g_play_lackey_chooser;
         saved_freecastchooser = g_play_free_cast_chooser;
         saved_demochooser = g_play_demonstrate_chooser;
+        saved_atkmodechooser = g_play_attack_mode_chooser;
+        saved_flingchooser = g_play_fling_chooser;
         saved_lpchooser = g_play_lightpaws_chooser;
         saved_fbchooser = g_play_firebreathe_chooser;
         saved_cochooser = g_play_cast_order_chooser;
@@ -970,6 +997,8 @@ struct RevealLogPause
         g_play_flicker_chooser = nullptr; g_play_rummage_chooser = nullptr;
         g_play_lackey_chooser = nullptr; g_play_free_cast_chooser = nullptr;
         g_play_demonstrate_chooser = nullptr;
+        g_play_attack_mode_chooser = nullptr;
+        g_play_fling_chooser = nullptr;
         g_play_lightpaws_chooser = nullptr; g_play_firebreathe_chooser = nullptr;
         g_play_cast_order_chooser = nullptr; g_play_storage_hold_chooser = nullptr;
         g_play_tutor_chooser = nullptr;
@@ -995,6 +1024,8 @@ struct RevealLogPause
                         g_play_lackey_chooser = saved_lackeychooser;
                         g_play_free_cast_chooser = saved_freecastchooser;
                         g_play_demonstrate_chooser = saved_demochooser;
+                        g_play_attack_mode_chooser = saved_atkmodechooser;
+                        g_play_fling_chooser = saved_flingchooser;
                         g_play_lightpaws_chooser = saved_lpchooser;
                         g_play_firebreathe_chooser = saved_fbchooser;
                         g_play_cast_order_chooser = saved_cochooser;
@@ -1042,6 +1073,7 @@ struct ComboOffApplyPause
     RummageChooser* c16; LackeyChooser* c17; FreeCastChooser* c18; DemonstrateChooser* c19;
     LightPawsChooser* c20; FirebreatheChooser* c21; StorageHoldChooser* c22; TutorChooser* c23;
     BounceChooser* c24; FirebreatheChooser* c25; TapPrefChooser* c26; LoyaltyTargetChooser* c27;
+    AttackModeChooser* c28; BounceChooser* c29;
     ComboOffApplyPause()
     {
         c0 = g_play_top_chooser;        c1 = g_play_target_chooser;
@@ -1058,6 +1090,8 @@ struct ComboOffApplyPause
         c22 = g_play_storage_hold_chooser; c23 = g_play_tutor_chooser;
         c24 = g_play_attach_host_chooser;  c25 = g_play_jitte_chooser;
         c26 = g_play_tap_pref_chooser;  c27 = g_play_loyalty_chooser;
+        c28 = g_play_attack_mode_chooser;
+        c29 = g_play_fling_chooser;
         g_play_top_chooser = nullptr;        g_play_target_chooser = nullptr;
         g_play_bounce_chooser = nullptr;     g_play_dig_chooser = nullptr;
         g_play_discard_chooser = nullptr;    g_play_ei_chooser = nullptr;
@@ -1072,6 +1106,8 @@ struct ComboOffApplyPause
         g_play_storage_hold_chooser = nullptr; g_play_tutor_chooser = nullptr;
         g_play_attach_host_chooser = nullptr;  g_play_jitte_chooser = nullptr;
         g_play_tap_pref_chooser = nullptr;   g_play_loyalty_chooser = nullptr;
+        g_play_attack_mode_chooser = nullptr;
+        g_play_fling_chooser = nullptr;
     }
     ~ComboOffApplyPause()
     {
@@ -1089,6 +1125,8 @@ struct ComboOffApplyPause
         g_play_storage_hold_chooser = c22; g_play_tutor_chooser = c23;
         g_play_attach_host_chooser = c24;  g_play_jitte_chooser = c25;
         g_play_tap_pref_chooser = c26;  g_play_loyalty_chooser = c27;
+        g_play_attack_mode_chooser = c28;
+        g_play_fling_chooser = c29;
     }
     ComboOffApplyPause(const ComboOffApplyPause&)            = delete;
     ComboOffApplyPause& operator=(const ComboOffApplyPause&) = delete;

@@ -213,6 +213,8 @@ void GameEngine::UntapStep(GameState& state)
     state.hand_size_at_combat   = -1;   // post-combat productivity markers are per turn (see GameState);
     state.battlefield_at_combat = -1;   // -1 = no combat yet this turn = "assume productive"
     state.scripted_cheat_choice = -1;   // searched Lackey put is per-turn (lockstep w/ SimulateEndAndStartNextTurn)
+    state.scripted_fling_victim = -1;   // searched Flinger victim is per-turn (same lockstep)
+    state.scripted_tectonic_mode = -1;  // searched Tectonic mode is per-turn (same lockstep)
     Player& ap = state.ActivePlayer();
     ap.lands_played_this_turn    = 0;
     ap.bonus_land_drops_this_turn = 0;
@@ -597,6 +599,17 @@ void GameEngine::CombatPhase(GameState& state)
     // (CR 508.4) and must not trigger it. Mirrors TurnSolver::SimulateCombat (lockstep). Gated inert.
     ApplyAttackQuestCounters(state, state.active_player_index, atk_idx);
 
+    // Inferno Titan's attack half ("whenever this creature enters or attacks, it deals 3 damage"):
+    // 3 to the opponent's face per attacking copy. Fired HERE, before the Adeline token block, for
+    // the same CR 508.4 reason the quest counters above are -- a token PUT onto the battlefield
+    // attacking was never declared and must not trigger it. Mirrors TurnSolver::SimulateCombat.
+    ApplyAttackTriggerDamage(state, state.active_player_index, atk_idx);
+
+    // Tectonic Giant's modal attack trigger ("choose one -- 3 damage to each opponent; or exile
+    // the top two and play one"). Same CR 508.4 position as the two calls above. The MODE is the
+    // searched Plan::tectonic_mode_choice pin. Mirrors TurnSolver::SimulateCombat.
+    ApplyAttackModalTriggers(state, state.active_player_index, atk_idx);
+
     // Attack triggers that create tapped-and-attacking tokens (Adeline). Fire only when at
     // least one creature is attacking; the new tokens deal damage this combat too.
     if (!atk_idx.empty())
@@ -627,12 +640,24 @@ void GameEngine::CombatPhase(GameState& state)
     int exalted_bonus = (static_cast<int>(atk_idx.size()) == 1)
                         ? CountExalted(state.battlefield, state.active_player_index) : 0;
 
-    const int opp_life_before = opp.life;                  // play-viewer event: "(before->after)"
 
     // Armored Skyhunter attack-trigger dig-and-attach: fired AFTER attack pumps/draws and BEFORE
     // the damage loop reads power, so a put-and-attached Colossus Hammer swings this combat.
     // Mirrors TurnSolver::SimulateCombat (lockstep). Param-gated inert for every other deck.
     FireAttackDigAttach(state, state.active_player_index, atk_idx);
+
+    // Surtland Flinger's attack-trigger fling: sacrifice another creature, deal its power (doubled
+    // for a Giant) to the opponent's face. AFTER the pumps so the victim's power is read buffed,
+    // BEFORE ResolveCombatDamage so a sacrificed attacker deals no combat damage. Mutates atk_idx
+    // (the sacrifice shifts battlefield indices) -- see the contract note on the function.
+    FireAttackSacFling(state, state.active_player_index, atk_idx);
+
+    // Captured HERE, after every declare-attackers trigger has resolved, so the combat-damage
+    // event's "(before->after)" range reports COMBAT DAMAGE ONLY. It used to be captured before
+    // FireAttackSacFling, which made a 4-power attacker's log line read as a 16-point life swing
+    // on a turn the Flinger also flung (life totals were always correct; only the annotation
+    // paired the wrong two numbers). Flagged by several Stage-5d sweep agents, 2026-09-22.
+    const int opp_life_before = opp.life;                  // play-viewer event: "(before->after)"
 
     // Damage, attack triggers, Utvara tokens and the Goblin Lackey cheat are shared with the
     // rollout (ResolveCombatDamage, Combat.cpp) so the two can never disagree on what an attack
@@ -854,27 +879,29 @@ void GameEngine::CheckStateBasedActions(GameState& state)
             if (is_creature)
             {
                 int tough = p.EffectiveToughness();
-                if (tough <= 0)
-                {
-                    // Characteristic P/T (Faeburrow Elder, base 0/0 + domain self-pump): the SBA
-                    // must see the same static buffs combat/eval do (ComputeLordBonus), or a
-                    // freshly-cast Faeburrow dies on ETB despite always counting its own G/W.
-                    // Entered only when the raw toughness is already <= 0 -> byte-identical for
-                    // every ordinary creature (their damage check keeps the raw value).
-                    tough += ComputeLordBonus(p.card, state,
-                                              p.controller_index, p.is_animated, &p).second;
-                    // Voice of Resurgence's Elemental token (toughness = creatures you control):
-                    // same rationale as the domain self-pump above -- the SBA must see the CDA.
-                    {
-                        const CardDefinition* cd = CardDatabase::Instance().LookupCached(p.card);
-                        if (cd) { tough += DynamicBaseToughness(*cd, state, p.controller_index); }
-                    }
-                    tough += EquipBonusFor(p, state).second;   // Grafted Wargear +3/+2 etc. --
-                                                               // equipment toughness must be seen
-                                                               // here or a Jitte -1/-1'd 0-tough
-                                                               // host dies through its equipment
-                    if (tough <= 0) { destroy = true; }
-                }
+                // `EffectiveToughness()` is printed + temp bonus + counters ONLY. Three sources of
+                // static toughness are NOT in it: lord anthems (ComputeLordBonus, which also
+                // covers self-scaling creatures like Borderland Behemoth), characteristic-defining
+                // toughness (DynamicBaseToughness -- Faeburrow Elder's domain, Voice of
+                // Resurgence's Elemental) and Equipment (EquipBonusFor -- Grafted Wargear +3/+2).
+                //
+                // These used to be added ONLY when the raw value was already <= 0, which left the
+                // DAMAGE test below comparing against the RAW toughness. So a 3/4 Giant Harbinger
+                // under a Sunrise Sovereign is really a 5/6 but died to 4 damage, and any creature
+                // holding Grafted Wargear died 2 damage early. Found during the Giants analysis
+                // (reachable there on a double-Pyroclasm turn).
+                //
+                // Gated on "could this possibly change the verdict" so the overwhelmingly common
+                // case keeps the old fast path and stays byte-identical: with no damage marked and
+                // a positive raw toughness, neither test below can fire whatever the bonus is.
+                // ASSUMPTION: the static bonus is never NEGATIVE. True of the entire card pool
+                // today -- no entry carries a negative power_bonus / tough_bonus /
+                // static_self_pump_tough -- but a future -X/-X anthem MUST revisit this gate,
+                // because such a creature could need to die with zero damage marked.
+                if (p.damage > 0 || tough <= 0) { tough = LethalToughness(p, state); }
+                // CR 704.5a (toughness 0 -> graveyard) is NOT destruction, so Indestructible does
+                // not save it; CR 704.5g (lethal damage) IS, so it does. Keep them separate.
+                if (tough <= 0) { destroy = true; }
                 if (p.damage >= tough
                     && !p.card.HasKeyword(Keyword::Indestructible)) { destroy = true; }
             }

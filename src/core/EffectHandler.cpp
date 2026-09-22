@@ -480,6 +480,13 @@ bool EffectHandler::ResolveImpl(GameState& state, const StackEntry& entry, const
                 {
                     PerformMvCastDamageOppCreatures(state, entry.controller_index, def);
                 }
+                // Pyroclasm: "deals N damage to each creature" -- SYMMETRIC (shared helper;
+                // rollout twin in apply_one's sorcery dispatch, lockstep).
+                if (def.params.damage_all_creatures > 0)
+                {
+                    PerformDamageAllCreatures(state, entry.controller_index, def,
+                                              def.params.damage_all_creatures);
+                }
                 // Reality Spasm / Irencrag Feat -- mana RITUAL. On resolution, add its floating
                 // mana to the turn-scoped reserve so a later same-turn cast (Crackle) can spend
                 // it (the Hinata combo). Modelled as floating, NOT a literal untap, so this stays

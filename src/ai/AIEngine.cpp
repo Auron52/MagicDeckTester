@@ -3594,6 +3594,10 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
     // Same for the searched Lackey put -- executor/rollout lockstep: without it the search would
     // score one Goblin entering and the real game would put a different one.
     if (plan.lackey_choice >= 0) { state.scripted_cheat_choice = plan.lackey_choice; }
+    // Searched Surtland Flinger victim -- lockstep twin of ApplyPlanDirect's pin. -2 (decline) is
+    // a real pinned choice, so the guard is != -1.
+    if (plan.fling_victim_choice != -1) { state.scripted_fling_victim = plan.fling_victim_choice; }
+    if (plan.tectonic_mode_choice >= 0) { state.scripted_tectonic_mode = plan.tectonic_mode_choice; }
 
     // Cast a spell from hand by name.
     // PRE-DRAW hand for the next resolve_draw_breakpoint -- lockstep twin of ApplyPlanDirect's
