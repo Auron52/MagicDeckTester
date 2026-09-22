@@ -15923,8 +15923,38 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
             // Castability gate for HAND hosts (see the push_back below). Default ON; =0 restores
             // the printed-power-only ranking for A/B.
             static const bool s_afford_gate = EnvOn("MTG_EQUIP_HOST_AFFORD", true);
+            // THE BOUND MUST ACTUALLY BE AN UPPER BOUND ON THIS TURN'S MANA. The gate calls itself
+            // one ("so it never excludes a reachable host"), and when it is not, it does not merely
+            // rank hosts differently -- it deletes a line the search AND the human can never
+            // express, because the viewer renders exactly the plans the enumerator produces. Two
+            // leaks, both found by the user hand-playing Giants seed 6 ("I could not drag Lightning
+            // Greaves onto newly played giants"):
+            //
+            //   * THE LAND DROP. SpareUntappedMana is the pool BEFORE the drop, but the plans built
+            //     right here TAKE it: decision 15 of references/Giants/claude_s6_gi5.json enumerates
+            //     `land=Mountain; cast: Hamletback Goliath` off four untapped Mountains, while the
+            //     gate priced the same Goliath against those four alone. Credit the best yield among
+            //     lands in hand; one that enters tapped adds nothing THIS turn. An MDFC back is a
+            //     land drop too, and is credited at 1 without consulting the synthesized back-face
+            //     definition -- over-crediting is the safe direction for an upper bound.
+            //   * COST REDUCTION -- see the EffectiveCost call at the gate itself, below.
+            int drop_headroom = 0;
+            if (s_afford_gate && ap.lands_played_this_turn < ap.LandDropsAvailable())
+            {
+                for (const Card& c : ap.hand)
+                {
+                    const CardDefinition* ld = CardDatabase::Instance().LookupCached(c);
+                    if (!ld) { continue; }
+                    const bool mdfc_land = !ld->params.mdfc_back_name.empty();
+                    if (!ld->card.IsLand() && !mdfc_land)          { continue; }
+                    if (ld->card.IsLand() && ld->params.enters_tapped) { continue; }
+                    drop_headroom = std::max(drop_headroom,
+                                             mdfc_land ? 1 : std::max(1, ld->params.produces_amount));
+                }
+            }
             const int spare_mana = s_afford_gate
-                                 ? SpareUntappedMana(state, state.active_player_index) : 0;
+                                 ? SpareUntappedMana(state, state.active_player_index) + drop_headroom
+                                 : 0;
             // The "and/or EFFECT creature" half of the ranking rule (user-directed 2026-08-08).
             // Haste's value is not just the body swinging -- on a creature whose payoff triggers
             // on ATTACKING it also pulls that payoff a full turn forward, which is why Maelstrom
@@ -16013,7 +16043,17 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
                     // in nearly every state, so the Archangel free-cast line was never offered and
                     // the game took a turn longer. Gate on the turn's whole untapped pool -- an
                     // upper bound on what we could cast, so it never excludes a reachable host.
-                    if (s_afford_gate && d->card.m_mana_cost.ManaValue() > spare_mana) { continue; }
+                    // PRICED AT THE REDUCED COST, never the printed one. Stinkdrinker Daredevil makes
+                    // Giant spells cost {2} less, so Surtland Flinger ({3}{R}{R}, MV 5) really costs 3
+                    // -- and decision 10 of the seed-6 reference enumerated `cast: Surtland Flinger`
+                    // while this gate, reading MV 5, denied that same Flinger the Greaves that would
+                    // have given it haste. A deck of discounted fatties plus a haste equipment is
+                    // exactly the shape that makes printed MV wrong, and Giants is that deck.
+                    // EffectiveCost credits reducers ALREADY on the battlefield; one cast in the same
+                    // subset is still priced at full -- a disclosed conservative bound of the same
+                    // shape as the equip cost's own same-turn-metalcraft note below.
+                    if (s_afford_gate
+                        && EffectiveCost(*d, state).ManaValue() > spare_mana) { continue; }
                     // In hand there is no Permanent yet, so the body is the printed power (a
                     // domain_self_pump card reads 0 here and is ranked on its mana instead).
                     const bool src = (d->tmpl == CardTemplate::ManaDork) || d->params.mana_rock;
@@ -16150,6 +16190,17 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
             {
                 for (const Host& h : hosts)
                 {
+                    // BATTLEFIELD ONLY. The doctrine's whole argument for the Kemba park is her
+                    // UPKEEP trigger -- "literally a free 2/2 next turn" per attached equipment --
+                    // and a Kemba still in HAND triggers nothing: she has to be cast first, so the
+                    // "free" park costs a card and the turn's mana, which is a different trade
+                    // entirely. KembaLoopKind already restricts itself to battlefield hosts
+                    // (ControlledDefByNumber); this is the same rule at the other site that names
+                    // her. Latent until the host affordability bound was corrected below, which is
+                    // what first let an in-hand Kemba reach `hosts` at all -- it cost kitty gi157
+                    // and gi214 a turn each (T4 -> T5), both spending turn 3 casting Kemba instead
+                    // of deploying Bonesplitter + Shadowspear onto a Puresteel Paladin.
+                    if (h.in_hand) { continue; }
                     const HostStats st = host_stats(h.id);
                     if (st.def && st.def->params.upkeep_tokens_per_equipment)
                     { kemba_id = h.id; break; }

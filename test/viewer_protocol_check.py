@@ -1219,6 +1219,21 @@ def check_reference(path, collect=None):
             if isinstance(cur_opts, list) and isinstance(ref_opts, list) and cur_opts and ref_opts:
                 for x in rec_list:
                     x = int(x)
+                    # DECLINE IS A SENTINEL, NOT AN INDEX -- the same rule the plan branch above
+                    # already applies (`if p == -1: pass / cast-nothing is always legal`). Every
+                    # "Decline" / "Take nothing" / "Fetch nothing" button in the viewer pushes -1,
+                    # and -1 does not name an option: the guard below correctly refuses to read
+                    # ref_opts[-1], but then hands find_option a None that can never match, and the
+                    # miss is reported as an ENUMERATION GAP -- i.e. as the engine having silently
+                    # stopped offering a play. Latent until a human first declined something: of the
+                    # 106 recorded `sacrifice` answers in references/, the 104 that TOOK the sacrifice
+                    # all replayed and the 2 that declined both failed, which is the whole population.
+                    # Both are Surtland Flinger, whose decline only became reachable from the GUI when
+                    # `allow_decline` was surfaced earlier this session -- so the fix that let a human
+                    # decline is what created an answer this replayer could not express.
+                    if x < 0:
+                        resolved.append(x)
+                        continue
                     rec_opt = ref_opts[x] if 0 <= x < len(ref_opts) else None
                     q = find_option(rec_opt, cur_opts, recorded_index=x)
                     if q is None:

@@ -855,10 +855,12 @@ types `attack_mode`, `dig`, `discard`, `sacrifice`, `target`. One disclosed narr
 
 ---
 
-## Hand-play session (2026-09-22) — four more defects, found by the USER recording references
+## Hand-play session (2026-09-22) — five more defects, found by the USER recording references
 
 The Stage 5d sweep drives the `--choices` protocol; it never touches the GUI. So none of these
-could have been caught by it, and all four surfaced within minutes of a human opening the viewer.
+could have been caught by it, and all five surfaced within minutes of a human opening the viewer.
+Four are viewer defects; **V5 is a SEARCH defect the viewer merely made visible**, and it is the
+most serious thing this deck's analysis has turned up.
 **The lesson is the gap, not the bugs: `test/regression.sh:289` says to run
 `bash test/viewer_checks.sh` after touching `tools/play/`, and I did not.**
 
@@ -881,6 +883,7 @@ Giants games, 0 FAIL.)
 | V2 | **Tectonic Giant's dialog never surfaced; the game got stuck** | a decision type needs **FOUR** viewer wiring sites; I did two. The missing `SUBDECISIONS` entry is the registry that makes a frame a decision at all | registered in `SUBDECISIONS` + the centred-modal list |
 | V3 | **Surtland Flinger's optional sacrifice could not be declined from the GUI** | `allow_decline` existed ONLY as prose in the `note`, which the viewer does not parse | emit it as a real field; gate a Decline button on it |
 | V4 | **Every game containing a firebreathe was unsaveable** | see below — the big one | exempt side-channel types from the save audit |
+| V5 | **Lightning Greaves could not be equipped to a Giant cast in the same line** | NOT a viewer bug: the in-hand equip-host gate priced the host at PRINTED mana value and against the pool BEFORE the land drop, so the engine never enumerated the pair. The search could not play it either | make the gate's bound a real upper bound (`EffectiveCost` + land-drop headroom) |
 
 ### V3 is the same bug I already "fixed" once
 
@@ -928,6 +931,157 @@ made the audit always pass would be worse than the bug:
 * the failing game now saves: **18 positional decisions VERIFIED, 2 unverified** (exactly the two
   firebreathe entries);
 * **negative control:** a genuinely tampered plan stream is still **REFUSED**.
+
+### V5 — "I can't drag Greaves onto a newly played Giant": a SEARCH bug wearing a GUI costume
+
+**Reported twice** and I filed them as two things. They are one defect:
+
+* *"For the Seed 4 reference I found I could not drag Lightning Greaves to my new creature on
+  turns 7 and 8."*
+* *"I still hit issues with dragging Lightning Greaves on to newly played giants … (seed 6
+  reference is an example where I had to use a breakpoint in order to manage this)."*
+
+The breakpoint workaround is the tell: splitting the main phase lets the Giant RESOLVE, after which
+it is an ordinary battlefield host. So the missing case is precisely **equipment already in play,
+host still in hand** — a creature being cast in the same line.
+
+**It is not a viewer gap.** The viewer already handles this shape: `LB.stampPlanNums` stamps the
+hand copy's `m_number` onto every queued entry, `plannedThumb` emits it as `data-num`, and the
+`#playfield` drop handler accepts a planned thumb like any other. `equipTargetsFor` then just reads
+whatever `(equipment, host)` pairs the engine enumerated. **The engine never enumerated the pair**,
+so there was nothing for the drag to hit — and the search could not play the line either.
+
+**Root cause** — `src/ai/TurnSolver.cpp`, the castability gate on in-hand equip hosts:
+
+```cpp
+if (s_afford_gate && d->card.m_mana_cost.ManaValue() > spare_mana) { continue; }
+```
+
+The gate exists for a good reason (FiveColour: unaffordable Progenitus, score 10, kept winning the
+single haste-equip slot over Maelstrom Archangel and stranding it). Its comment claims the pool is
+*"an upper bound on what we could cast, so it never excludes a reachable host."* **It is not an
+upper bound, in two independent ways:**
+
+1. **COST REDUCTION.** It prices the host at PRINTED mana value. Stinkdrinker Daredevil makes Giant
+   spells cost {2} less, so Surtland Flinger (`{3}{R}{R}`, MV 5) really costs 3.
+2. **THE LAND DROP.** `SpareUntappedMana` is the pool *before* the drop — but the plans built in
+   this very loop take it (`land=Mountain; cast: Hamletback Goliath`).
+
+This is the worst shape a "ranking heuristic" can have: it does not reorder candidates, it **deletes
+a rules-legal line from the decision space**, so no budget, depth or width can recover it. The
+old binary's own `--validate-line` rejection says so outright:
+
+```
+rules-legal in your cast order (a same-turn cost reducer makes it payable),
+but the search never enumerated this line
+```
+
+**Measured, on the user's own references** (replay to the exact decision; `MTG_EQUIP_HOST_AFFORD=0`
+isolates the gate with no rebuild):
+
+| frame | before | after |
+|---|---|---|
+| seed 6 gi 5, decision 10 (T4) | `cast: Surtland Flinger` — **no equip offered** | `cast: Surtland Flinger, equip Lightning Greaves → Surtland Flinger` |
+| seed 4 gi 3, decision 23 (T7) | 81 plans, **one** distinct equip host: Stinkdrinker Daredevil | 155 plans, hosts: Hamletback Goliath, **Sunrise Sovereign**, Stinkdrinker Daredevil |
+
+The seed-4 frame is the damning one: three Lightning Greaves and two Stinkdrinkers in play (Giants
+cost {4} less — Hamletback 3 mana, Sunrise Sovereign 2), and **every one of 81 plans piled all
+three Greaves onto a 1/3 Stinkdrinker**, because the only Giants that could carry them were in hand
+and priced at 7 and 6. That is not a UI annoyance; it is the deck's whole haste plan deleted.
+
+**Fix:** make the bound a real bound — price the host with `EffectiveCost` (credits reducers already
+on the battlefield) and add the land-drop headroom (best yield among lands in hand; one entering
+tapped adds nothing this turn; an MDFC back counts, credited at 1 without consulting the synthesized
+back face, since over-crediting is the safe direction here).
+
+**Residual, disclosed:** a reducer cast in the SAME subset is still priced at full, so a host made
+affordable only by a same-turn Stinkdrinker is still missed. That is the same conservative bound the
+equip cost itself already carries for same-turn metalcraft, and it errs toward the old behaviour.
+
+**Cost note:** the 81 → 155 plan growth is a HUMAN-PLAY number — `open_all` is true under
+`HumanPlayActive()`, so the viewer emits every legal pair. Autonomous search still caps the haste
+ranking at `EquipHostWidth` (1, or 2 for `EquipmentProvider`), so it gains no candidates; it simply
+ranks the Giant above the Stinkdrinker. Priced by the regression tier before push.
+
+**Why the Stage 5d sweep missed it.** The sweep drives `--choices`, choosing among the plans the
+engine offers. A missing plan is invisible to any consumer of the plan list — sweep, oracle and
+viewer alike. Only a human with an intention the menu could not express could find this, which is
+exactly what happened, twice.
+
+#### V5b — the widening exposed a second defect: `kemba_id` could name a Kemba IN HAND
+
+First suite run after the bound fix: 10 cells better, **2 searched games slower** (kitty gi157 and
+gi214, both T4 → T5, both `PERSISTS at 4x and 16x` so not budget churn, both "kept hand + draws
+IDENTICAL -> a clean like-for-like LINE change"). Root-caused rather than accepted as noise:
+
+Kitty runs **no cost reducer**, so `EffectiveCost == printed MV` there and only the *land-drop* half
+of the bound could have moved it. Kemba, Kha Regent is `{1}{W}{W}` (MV 3); at the T3 decision the
+board has 2 untapped Plains, so the old bound (2) excluded her and the new bound (2 + 1 drop = 3)
+admits her. She then became `kemba_id` — and `kemba_id` is a **privileged** host: the consolidation
+doctrine always keeps it in the rider set and a haste equip always offers the Kemba park.
+
+But the doctrine's entire argument for that privilege is Kemba's **upkeep** trigger — "literally a
+free 2/2 next turn" per attached equipment — and a Kemba in HAND triggers nothing. She must be cast
+first, so the "free" park costs a card and the turn's mana: a different trade altogether.
+`KembaLoopKind` already restricts itself to battlefield hosts (`ControlledDefByNumber`); the
+`kemba_id` loop did not. Restricting it to `!h.in_hand` recovered both games.
+
+#### Measured — `bash test/regression.sh`, 129 cases, vs committed GT
+
+| | cells better | fingerprint-only | **worse** |
+|---|---|---|---|
+| bound fix alone | 10 | 3 | **2** |
+| **+ `kemba_id` battlefield-only** | **14** | **2** | **0** |
+
+Final: `[searched] slower=0  faster=39  play-changed=122`; net sum of cell deltas **−0.3310**
+(d0/greedy, explicitly a lighter bar: `slower=11 faster=93`). Giants −0.0400 … −0.0720 per cell.
+
+**Causal attribution — every changed deck, and a control that did not change:**
+
+| deck | equipment | reducer | verdict |
+|---|---|---|---|
+| giants | Lightning Greaves | Stinkdrinker Daredevil | all 5 cells better |
+| dragons | Lightning Greaves | Dragonspeaker Shaman | all 5 cells better |
+| kitty | Bonesplitter, Colossus Hammer, Grafted Wargear, … | — | 3 better, 1 fp-only |
+| fivecolour2hg | Lightning Greaves | — | fingerprint-only |
+| **goblins** | **none** | **Goblin Warchief** | **unchanged** |
+
+**No deck without Equipment moved.** Goblins is the control that matters: it carries the reducer
+but no equipment and is byte-identical, which is what proves the change is confined to the
+equip-host path rather than leaking into cost computation generally. Angels (Greaves, no reducer)
+also unchanged — the land-drop half only bites when a host sits just above the untapped pool.
+
+#### V5c — a THIRD defect, found by the reference sweep: a declined option read as an ENUM-GAP
+
+The suite's `--strict` reference replay then failed on two of the user's own Giants references:
+
+```
+ENUM-GAP  Giants/claude_s6_gi5.json: recorded option None no longer offered
+          at ('sacrifice', 4, None, 'Surtland Flinger') (noptions 1->1)
+```
+
+**Checked for pre-existence before blaming the change** — and it was right to: re-running against
+the *pre-fix* binary (still on disk as the viewer's session pin) reproduced **both** gaps
+identically. Not caused by the equip fix.
+
+It is still mine, from earlier this session. `test/viewer_protocol_check.py` re-anchors an auxiliary
+decision's recorded answer by CONTENT: `rec_opt = ref_opts[x] if 0 <= x < len(ref_opts) else None`.
+But **−1 is the decline/pass sentinel, not an index** — every "Decline" / "Take nothing" button in
+the viewer pushes −1. The guard correctly refuses `ref_opts[-1]`, then hands `find_option` a `None`
+that can never match, and the miss is reported as *the engine having stopped offering a play*.
+
+The population is the proof: of **106** recorded `sacrifice` answers across all of `references/`,
+the **104** that took the sacrifice all replay and the **2** that declined both failed. Those 2 are
+Surtland Flinger, whose decline only became reachable from the GUI when V3 surfaced
+`allow_decline` — **so the fix that let a human decline created an answer the replayer could not
+express.** The plan branch already had the right rule ten lines up (`if p == -1: pass / cast-nothing
+is always legal`); the auxiliary branch simply lacked it. Mirrored.
+
+After the fix all 10 Giants references replay (8 ok, 2 repaired, 0 enum-gap) — and the two
+"repaired" entries independently corroborate V5: `s6_gi5` turn 4 pre_main repaired index **0 → 2**
+(the two new `equip → Surtland Flinger` plans inserted ahead of it) and `s4_gi3` turn 7 pre_main
+**79 → 153** (the 81 → 155 fan-out). Content-anchored replay absorbed the shift and reproduced the
+identical line and win turn, which is the intent-replay design working as documented.
 
 ### Process note — a rebuild during a recording session is destructive
 
