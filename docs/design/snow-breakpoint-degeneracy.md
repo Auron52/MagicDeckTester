@@ -74,8 +74,12 @@ inapplicable. Measured: `bp_condemn_seen=1,249,500 drops=5,447` = **0.44%**, all
 
 * `MTG_BP_CONDEMN_ACTIVATION` = **0, off entirely** -- no activated ability is ever condemned, and
   Snow's cost is entirely activations.
-* `MTG_BP_CONDEMN_MANA_SITE_EXEMPT` = **on** -- if the card that opened the breakpoint made mana,
-  condemn nothing there. Scrying Sheets is a land that taps `{C}`; Astrolabe is a mana rock.
+* `MTG_BP_CONDEMN_MANA_SITE_EXEMPT` = **on** -- if the card that opened the breakpoint ADDED mana,
+  condemn nothing there. (Corrected 2026-09-21: an earlier version of this line said the exemption
+  fires because "Scrying Sheets is a mana land / Astrolabe is a mana rock". It does not --
+  `BpSiteAddedMana` keys on a ritual float, an untap-X effect or a Treasure mint only, and the
+  whynot census reads `manasite=0` on Snow. The exemption is inert here; the two live blockers are
+  the ones the census names below: `noplancast` and `managrew`.)
 
 There is no condemnation tuning that fixes this.
 

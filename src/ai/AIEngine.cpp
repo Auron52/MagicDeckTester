@@ -2142,6 +2142,9 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
     // BREAKPOINT SITE 9 input (lockstep twin of ApplyPlanDirect's capture): the permanents this
     // phase's plan starts from. Empty when the class is off.
     const std::vector<uint64_t> pre_plan_keys = TurnSolver::SnapshotActivatableAbilities(state);
+    // MTG_BP_NEW_ONLY input (lockstep twin of ApplyPlanDirect's pre_plan_acts): the activations the
+    // phase's plan could have carried, captured at the same entry point. Empty when the lever is off.
+    const std::vector<std::uint64_t> pre_plan_acts = TurnSolver::PrePlanActivationKeys(state);
     // M2 FIXPOINT exit stamp (see WantsSecondMainReentry): did THIS call's execution DRAW cards?
     // The executor's plain-cantrip/EI draws resolve inline (no breakpoint-machinery hook fires
     // for a non-committed plan), so the honest signal is the per-turn draw counter the engine
@@ -4051,7 +4054,8 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
                                            karoo_deferred,
                                            TurnSolver::ManaSourceCount(state),
                                            rdb_site_activated, state.turn_number,
-                                           TurnSolver::NewOnlyBreakpointContinuationsActive(state));
+                                           TurnSolver::NewOnlyBreakpointContinuationsActive(state),
+                                           &pre_plan_acts);
         // Executor twin of the rollout's marker (MTG_CONDEMN_M1_BP) -- the lockstep pair. Without
         // it the executor would re-offer at a breakpoint what the rollout condemned there.
         TurnSolver::BpContinuationScope _cbs;

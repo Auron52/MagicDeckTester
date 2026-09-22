@@ -663,6 +663,8 @@ static std::atomic<long long> g_bp_newonly_seen{0};
 static std::atomic<long long> g_bp_newonly_dropped{0};
 static std::atomic<long long> g_bp_newonly_kept_new{0};
 static std::atomic<long long> g_bp_newonly_kept_plan{0};
+static std::atomic<long long> g_bp_newonly_kept_act{0};      // kept by a newly AVAILABLE activation
+static std::atomic<long long> g_bp_newonly_kept_unknown{0};  // kept because the kind is not keyed
 static bool BpCondemnActivationEnabled();   // defined with the rule, next to the other condemn flags
 static std::atomic<long long> g_bp_cond_mark_in_window{0};  // condemned entries at rank < W
 static std::atomic<long long> g_bp_cond_mark_rank0{0};      // ...lists whose VALUE-BEST entry was condemned
@@ -1186,6 +1188,8 @@ namespace
                           << " seen=" << ns << " dropped=" << nd
                           << " drop_rate=" << (ns ? static_cast<double>(nd) / ns : 0.0)
                           << " kept_new=" << g_bp_newonly_kept_new.load()
+                          << " kept_act=" << g_bp_newonly_kept_act.load()
+                          << " kept_unknown=" << g_bp_newonly_kept_unknown.load()
                           << " kept_plan=" << g_bp_newonly_kept_plan.load() << "\n";
             }
             // DROP MODE FIRING COUNTERS (see BpCondemnDropMode). A lever with no firing counter
@@ -2287,6 +2291,13 @@ static thread_local const std::vector<int>* g_bp_hand_before = nullptr;
 // continuation is what realises it. Dropping those would delete the plan's own line rather than a
 // duplicate.
 static thread_local const std::vector<std::uint64_t>* g_bp_plan_casts = nullptr;
+
+// MTG_BP_NEW_ONLY: the activations that were AVAILABLE when the base plan was enumerated (sorted
+// BpActivationKey values; TurnSolver::PrePlanActivationKeys), bound by the same scope. An activation
+// in a continuation is NEW iff its key is absent here -- the source entered during the plan, or it
+// was on the battlefield but could not be activated then (summoning-sick, tapped, short of counters,
+// unaffordable) and can be now. nullptr = no snapshot bound: every activation reads as new.
+static thread_local const std::vector<std::uint64_t>* g_bp_acts_before = nullptr;
 
 static bool BpPlanCasts(std::uint64_t name_hash)
 {
@@ -3424,10 +3435,32 @@ static bool BpClassifyActive(const GameState& state)
 // free: {X} alone is a sibling's line and is dropped; {X, F} uses the found card F and stays.
 //
 // WHAT COUNTS AS "USES A NEW CARD": casts a card that arrived at this breakpoint, plays one as the
-// land drop, or activates an ability of one (a found Scrying Sheets played and activated in the same
-// continuation). "Arrived" is by NAME with the staged-expiry exception -- BpNamePassedOnBefore, the
-// same rule the candidate filter already applies -- so a second copy of a name the plan declined is
-// not new (USER: "a duplicate copy of X being drawn doesn't change anything").
+// land drop, or ACTIVATES AN ABILITY THAT WAS NOT PREVIOUSLY AVAILABLE. "Arrived" is by NAME with
+// the staged-expiry exception -- BpNamePassedOnBefore, the same rule the candidate filter already
+// applies -- so a second copy of a name the plan declined is not new (USER: "a duplicate copy of X
+// being drawn doesn't change anything").
+//
+// THE ACTIVATION RULE (USER 2026-09-21, clarifying the first cut, which keyed on the source having
+// ENTERED this turn): *"the activation rule should be: 'activates an ability that was not previously
+// available' just like the rule for when breakpoints occur. For example if you gave something haste
+// or added counters to a Fungus so it can now activate, that activation should be a possible
+// continuation."* "Previously" is the state the BASE PLANS were enumerated from -- every activation
+// is enumerated against the battlefield the plan started from, so that is exactly the set a sibling
+// could carry. PrePlanActivationKeys captures it at ApplyPlanDirect / TakeTurn entry (the site-9
+// capture points) with the enumerator's own availability test: untapped and able to tap for a {T}
+// mode (summoning sickness and haste included), counters in hand for a spore pop, the effective
+// cost payable from the pre-plan pool by colour, and the gated look's top-card test. A continuation's
+// activation whose key is NOT in that set is new: the source entered during the plan (an Astrolabe
+// the plan cast), or it was there but blocked and something the plan did unblocked it (haste, a
+// counter, the mana it needed). One whose key IS in the set was enumerable at the base, so the
+// sibling that carries it exists, and the continuation is that sibling's line.
+//
+// KEYED KINDS. Only ActivatePermAbility is keyed today -- its availability test is the one read off
+// the enumerator above (and it is every activation the Snow deck has). Every other activation kind
+// is KEPT unconditionally (kept_unknown): the safe direction, since a sibling-coverage claim needs
+// the emission test mirrored exactly, and the kinds with a target axis (blink, pod, an outlet's
+// victim, a walker's Elk target) become emittable when the plan supplies the target, which a
+// source-keyed snapshot cannot see. Key another kind only with its emission test in front of you.
 //
 // ONE KEEP THAT IS NOT A NEW-CARD USE, required for soundness: a cast the PLAN ITSELF still has
 // pending (BpPlanCasts, in hand before the breakpoint). At a truncating site the continuation is
@@ -3458,6 +3491,104 @@ static bool BpNewOnlyActive(const GameState& state)
 bool TurnSolver::NewOnlyBreakpointContinuationsActive(const GameState& state)
 {
     return BpNewOnlyActive(state);
+}
+
+// (permanent, ability) -> one key. The permanent is its card.m_number (the stable per-instance id
+// every activation Action carries as sac_source_id); the ability is the PermAbilityMode value. Tokens
+// (m_number 0) are never keyed: the filter keeps their activations (a Clue cracked in a continuation
+// cannot be told from a pre-plan Clue by number, and keeping is the safe direction).
+static std::uint64_t BpActivationKey(int number, int ability)
+{
+    return (static_cast<std::uint64_t>(static_cast<std::uint32_t>(number)) << 8)
+         | static_cast<std::uint64_t>(ability & 0xFF);
+}
+
+// The enumerator's availability test for the "{cost}[, {T}]: <effect>" modes, mirrored from the
+// ModeSpec loop in CollectActions (search "permanent abilities" there) for ONE permanent against
+// ONE pool: which PermAbilityMode values would it emit an ActivatePermAbility for right now?
+//   * a {T} mode needs an untapped source that can tap (summoning sickness, haste);
+//   * the effective activation cost (EffectiveActivationCost, the Rad discount on a tap-draw) must
+//     be payable from `pool` BY COLOUR -- the enumerator's CanPay, not site 9's total-only test,
+//     because a Snow-Covered pip a plan's own Astrolabe supplies is exactly the availability change
+//     the rule is about;
+//   * the gated look (tap_draw_requires_top_supertype) is emitted only over a matching top card.
+//     Mirrored because the question is "could a sibling carry it", and the enumerator's answer is
+//     no when the top is wrong -- this is the emission test, not a pull-order exception;
+//   * IceCounter needs a useful (non-snow) target somewhere on the battlefield;
+//   * a spore pop needs the counters (no {T}, no mana).
+// Returns a bitmask over PermAbilityMode. Mirrors the emission CONDITIONS only; the K axis, the
+// interchangeable-source fold and the condemnation gate change which VARIANTS emit, never whether
+// the ability is available.
+static std::uint32_t BpAvailablePermAbilityModes(const GameState& state, const Permanent& src,
+                                                  const CardDefinition& sd, const ManaPool& pool)
+{
+    std::uint32_t bits = 0;
+    struct ModeSpec { PermAbilityMode mode; const std::optional<ManaCost>* cost; };
+    const ModeSpec modes[] = {
+        { PermAbilityMode::TapDamage,      &sd.params.tap_damage_cost         },
+        { PermAbilityMode::TapInvestigate, &sd.params.tap_investigate_cost    },
+        { PermAbilityMode::TapDraw,        &sd.params.tap_draw_cost           },
+        { PermAbilityMode::SacDraw,        &sd.params.sac_draw_cost           },
+        { PermAbilityMode::Drain,          &sd.params.drain_cost              },
+        { PermAbilityMode::ExileTop,       &sd.params.exile_opponent_top_cost },
+        { PermAbilityMode::IceCounter,     &sd.params.ice_counter_cost        },
+        { PermAbilityMode::GrantLifelink,  &sd.params.lifelink_grant_cost     },
+    };
+    const int ctrl = state.active_player_index;
+    for (const ModeSpec& m : modes)
+    {
+        if (!m.cost->has_value()) { continue; }
+        if (PermAbilityTaps(m.mode) && (src.tapped || !src.CanTap())) { continue; }
+        ManaCost cost = EffectiveActivationCost(state, ctrl, src.card, m.cost->value());
+        if (m.mode == PermAbilityMode::TapDraw && sd.params.tap_draw_cost_less_per_rad)
+        { cost.generic = std::max(0, cost.generic - state.players[ctrl].rad_counters); }
+        if (!pool.CanPay(cost)) { continue; }
+        if (m.mode == PermAbilityMode::TapDraw
+            && !sd.params.tap_draw_requires_top_supertype.empty() && !HumanPlayActive())
+        {
+            const Player& lap = state.players[ctrl];
+            if (lap.library.empty()) { continue; }
+            const CardDefinition* topd = CardDatabase::Instance().LookupCached(lap.library.front());
+            if (!topd || !CardHasSupertypeNamed(topd->card, sd.params.tap_draw_requires_top_supertype))
+            { continue; }
+        }
+        if (m.mode == PermAbilityMode::IceCounter)
+        {
+            const bool grants = IceGrantsSnow(state);
+            bool useful = false;
+            for (const Permanent& q : state.battlefield)
+            {
+                if (q.card.HasSupertype(Supertype::Snow) || (grants && q.ice_counters > 0)) { continue; }
+                useful = true; break;
+            }
+            if (!useful) { continue; }
+        }
+        bits |= 1u << static_cast<int>(m.mode);
+    }
+    if (sd.params.spore_saproling_cost > 0 && src.spore_counters >= sd.params.spore_saproling_cost)
+    { bits |= 1u << static_cast<int>(PermAbilityMode::SporeSaproling); }
+    return bits;
+}
+
+std::vector<std::uint64_t> TurnSolver::PrePlanActivationKeys(const GameState& state)
+{
+    std::vector<std::uint64_t> out;
+    if (!BpNewOnlyActive(state)) { return out; }   // ship config: no scan, no pool
+    ManaPool pool = AvailableManaPool(state);
+    pool.AddPool(state.floating_mana);
+    for (const Permanent& p : state.battlefield)
+    {
+        if (p.controller_index != state.active_player_index || p.card.m_number == 0) { continue; }
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+        if (d == nullptr) { continue; }
+        const std::uint32_t bits = BpAvailablePermAbilityModes(state, p, *d, pool);
+        for (int mode = 1; mode < 32; ++mode)
+        {
+            if (bits & (1u << mode)) { out.push_back(BpActivationKey(p.card.m_number, mode)); }
+        }
+    }
+    std::sort(out.begin(), out.end());
+    return out;
 }
 
 // ---- LAND CONDEMNATION (MTG_BP_CONDEMN_LAND) --------------------------------------------------
@@ -11877,9 +12008,10 @@ TurnSolver::CantripOrderScope::CantripOrderScope(const CardDefinition* site,
                                                  int mana_sources_before,
                                                  bool site_activated,
                                                  int site_turn,
-                                                 bool new_only)
+                                                 bool new_only,
+                                                 const std::vector<std::uint64_t>* acts_before)
     : m_saved(g_cantrip_order_site), m_saved_hand(g_bp_hand_before),
-      m_saved_casts(g_bp_plan_casts), m_saved_site(g_bp_site_def),
+      m_saved_casts(g_bp_plan_casts), m_saved_acts(g_bp_acts_before), m_saved_site(g_bp_site_def),
       m_saved_reserved(g_land_drop_reserved),
       m_saved_mana_before(g_bp_mana_sources_before),
       m_saved_activated(g_bp_site_activated),
@@ -11908,6 +12040,10 @@ TurnSolver::CantripOrderScope::CantripOrderScope(const CardDefinition* site,
     // neither the site nor the ordering watermark -- those belong to condemnation -- so the bp-enum
     // key gains exactly the two folds the filter's output depends on and no more.
     if (CantripOrderEnabled() || classify || new_only) { g_bp_plan_casts = plan_casts; }
+    // The pre-plan activation set is the new-only filter's alone (the activation half of its rule),
+    // so it binds only under that lever: no other consumer reads it, and the bp-enum key folds it
+    // only when bound.
+    if (new_only) { g_bp_acts_before = acts_before; }
     // The hand snapshot binds whenever EITHER consumer is live: the ordering ban needs it to spare
     // a drawn cantrip, and the classifier needs it to spare a drawn spell. Bound independently of
     // the site so the classifier works at a breakpoint whose cantrip is outside the ordered class.
@@ -11924,6 +12060,7 @@ TurnSolver::CantripOrderScope::~CantripOrderScope()
     g_cantrip_order_site = m_saved;
     g_bp_hand_before     = m_saved_hand;
     g_bp_plan_casts      = m_saved_casts;
+    g_bp_acts_before     = m_saved_acts;
     g_bp_site_def        = m_saved_site;
     g_land_drop_reserved = m_saved_reserved;
     g_bp_mana_sources_before = m_saved_mana_before;
@@ -24058,6 +24195,10 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
     const bool canon_dig_pre    = canon_audit_on
                                && (BpDigFanoutPending(state, 1 << 4)
                                    || BpDigFanoutForPlan(state, 1 << 4, plan));
+    // MTG_BP_NEW_ONLY input, captured at the same point for the same reason: the activations the
+    // base plan could have carried (empty when the lever is off). Bound on every breakpoint scope
+    // this apply opens; AIEngine::TakeTurn captures the same set at its entry.
+    const std::vector<std::uint64_t> pre_plan_acts = TurnSolver::PrePlanActivationKeys(state);
 
     // ORDER-CONDEMNATION stamp (rollout/interior half of the lockstep pair -- see
     // GameState::m1_hand): the pre-combat apply IS this projected turn's m1 decision point, so
@@ -26730,7 +26871,7 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
                                                           TurnSolver::ManaSourceCount(state),
                                                           /*site_activated=*/false,
                                                           state.turn_number,
-                                                          BpNewOnlyActive(state));
+                                                          BpNewOnlyActive(state), &pre_plan_acts);
                         TurnSolver::Plan extra;
                         bp_searched_plan(6, extra);   // resolves to the plan's continuation or EMPTY
                         bp_play_searched_land(extra, my_bp_sink);
@@ -27613,7 +27754,7 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
                                           /*classify_active=*/BpClassifyActive(state), karoo_deferred,
                                           TurnSolver::ManaSourceCount(state),
                                           /*site_activated=*/true, state.turn_number,
-                                          BpNewOnlyActive(state));
+                                          BpNewOnlyActive(state), &pre_plan_acts);
                         }
                         // bp_searched_plan runs UNCONDITIONALLY so the occurrence is COUNTED even
                         // when the greedy resolve below is narrowed -- the executor twin counts
@@ -28118,7 +28259,7 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
                                            karoo_deferred,
                                            TurnSolver::ManaSourceCount(state),
                                            /*site_activated=*/false, state.turn_number,
-                                           BpNewOnlyActive(state));
+                                           BpNewOnlyActive(state), &pre_plan_acts);
         // Mark the continuation for the condemnation filter (MTG_CONDEMN_M1_BP). Same extent as
         // _cos: the searched list, the greedy Solve fallback, and the continuation's application.
         TurnSolver::BpContinuationScope _cbs;
@@ -47877,6 +48018,15 @@ static bool BpEnumBuildKey(const GameState& state, bool is_pre_combat,
             for (int num : *g_bp_hand_before) { Fold(key, static_cast<uint64_t>(num)); }
         }
     }
+    // MTG_BP_NEW_ONLY's pre-plan activation set, for the same reason as the hand snapshot: the
+    // filter drops a continuation whose activation was available at the base, so two states
+    // identical mid-turn but reached from bases where different things were activatable emit
+    // different lists. Sorted, so the fold is order-stable in both worlds.
+    if (g_bp_acts_before != nullptr && !s_snapshot_none)
+    {
+        Fold(key, 0xAC75ull);
+        for (std::uint64_t k : *g_bp_acts_before) { Fold(key, k); }
+    }
     // A RESERVED (deferred Karoo) drop is not a declined one, so it changes which lands
     // MTG_BP_CONDEMN_LAND emits -- and it is NOT visible in the state, which is exactly why it
     // has to be folded. The two worlds are otherwise byte-identical mid-turn: a plan that
@@ -48246,55 +48396,87 @@ static std::vector<TurnSolver::Plan> BpDeriveContinuationList(const GameState& s
         }
         auto is_new_number = [&](int n)
         { return std::find(new_numbers.begin(), new_numbers.end(), n) != new_numbers.end(); };
-        // NEWLY ACCESSIBLE ABILITIES (USER 2026-09-21: *"The rule also needs to include abilities
-        // that are newly accessible"*). A permanent that ENTERED this turn -- cast by the plan's own
-        // prefix (Arcum's Astrolabe, a Sheets played as the base plan's drop) -- was not on the
-        // battlefield when the base plans were enumerated, so no sibling could carry its activation
-        // (site 9 exists for exactly this gap). A continuation activating it is new. Keyed on
-        // entered_this_turn, which over-keeps a main-1 entrant at a main-2 breakpoint: the safe
-        // direction (a kept duplicate costs an apply; a dropped line costs a decision).
-        std::vector<int> entered_numbers;
-        for (const Permanent& perm : state.battlefield)
-        {
-            if (perm.controller_index != state.active_player_index) { continue; }
-            if (perm.entered_this_turn) { entered_numbers.push_back(perm.card.m_number); }
-        }
-        auto is_new_source = [&](int n)
-        {
-            return is_new_number(n)
-                || std::find(entered_numbers.begin(), entered_numbers.end(), n) != entered_numbers.end();
-        };
-        // The land drop is recorded by NAME; it is new iff a new card of that name is in hand.
-        auto land_is_new = [&](const std::string& nm)
+        // A hand card named by an action (the land drop, a Vial/Stoneforge put) is new iff a NEW
+        // card of that name is in hand.
+        auto name_is_new = [&](const std::string& nm)
         {
             for (const Card& c : ap.hand)
             { if (is_new_number(c.m_number) && c.m_name.str() == nm) { return true; } }
             return false;
         };
-        long long kept_new = 0, kept_plan = 0, dropped = 0;
+        // AN ABILITY THAT WAS NOT PREVIOUSLY AVAILABLE (the USER's activation rule; header note at
+        // BpNewOnlyEnabled). The pre-plan set is bound by the scope; an activation whose key is
+        // absent from it was not enumerable when the base plans were made -- its source entered
+        // during the plan, or was there but could not be activated (sick, tapped, short of
+        // counters or mana) -- so no sibling carries it and the continuation is new. No set bound
+        // at all = every activation is new (the safe direction). A source with no number (token)
+        // is never keyed and always reads as new, for the same reason.
+        auto activation_was_available = [&](int number, int ability) -> bool
+        {
+            if (number <= 0 || g_bp_acts_before == nullptr) { return false; }
+            return std::binary_search(g_bp_acts_before->begin(), g_bp_acts_before->end(),
+                                      BpActivationKey(number, ability));
+        };
+        long long kept_new = 0, kept_act = 0, kept_unknown = 0, kept_plan = 0, dropped = 0;
         auto keep = [&](const TurnSolver::Plan& p) -> bool
         {
-            bool uses_new = false, plan_pending = false;
-            if (p.land_decided && !p.land_to_play.empty() && land_is_new(p.land_to_play))
+            bool uses_new = false, new_act = false, unknown = false, plan_pending = false;
+            if (p.land_decided && !p.land_to_play.empty() && name_is_new(p.land_to_play))
             { uses_new = true; }
             for (const Action& a : p.actions)
             {
-                if (a.kind == Action::Kind::CastFromHand)
+                switch (a.kind)
                 {
+                case Action::Kind::CastFromHand:
                     if (a.hand_index >= 0 && a.hand_index < static_cast<int>(ap.hand.size()))
                     {
                         const Card& c = ap.hand[static_cast<std::size_t>(a.hand_index)];
                         if (is_new_number(c.m_number))       { uses_new = true; }
                         else if (BpPlanCasts(c.m_name_hash)) { plan_pending = true; }
                     }
+                    break;
+                // The other from-HAND actions (suspend, channel, cycle, discard-to): the same
+                // sibling argument as a cast -- the enumerator offered the old card's action at
+                // the base -- so they are new iff the card is.
+                case Action::Kind::Suspend:
+                case Action::Kind::Channel:
+                case Action::Kind::DigDraw:
+                case Action::Kind::DiscardToLandsEdge:
+                    if (a.hand_index >= 0 && a.hand_index < static_cast<int>(ap.hand.size())
+                        && is_new_number(ap.hand[static_cast<std::size_t>(a.hand_index)].m_number))
+                    { uses_new = true; }
+                    break;
+                case Action::Kind::PlayLand:
+                    if (name_is_new(a.card_name)) { uses_new = true; }
+                    break;
+                // Puts a NAMED hand card onto the battlefield: new if that card is. Otherwise the
+                // activation itself is not keyed (the put's availability depends on the hand, which
+                // a source-keyed snapshot cannot see), so it is kept as unknown.
+                case Action::Kind::ActivateVial:
+                case Action::Kind::PutFromHandAbility:
+                    if (name_is_new(a.card_name)) { uses_new = true; }
+                    else                          { unknown = true; }
+                    break;
+                // THE KEYED ACTIVATION KIND. A found Scrying Sheets played and activated by this
+                // very continuation is new by number (the land axis enumerates on the post-drop
+                // copy, so it is in the list, and it was never on the pre-plan battlefield); an
+                // Astrolabe the plan cast is new the same way; a Sheets that was there and
+                // activatable is not.
+                case Action::Kind::ActivatePermAbility:
+                    if (!activation_was_available(a.sac_source_id, static_cast<int>(a.ability_mode)))
+                    { new_act = true; }
+                    break;
+                // Every other activation kind is unkeyed: kept, and counted so a deck that leans
+                // on one shows up in the stats as the place to extend the mirror.
+                default:
+                    unknown = true;
+                    break;
                 }
-                // An ability of a card that arrived here (a found land played by this very
-                // continuation, then activated -- the land axis enumerates on the post-drop copy,
-                // so it is in the list), or of a permanent that entered this turn: newly accessible.
-                else if (a.sac_source_id >= 0 && is_new_source(a.sac_source_id)) { uses_new = true; }
             }
-            if (uses_new)     { ++kept_new;  return true; }
-            if (plan_pending) { ++kept_plan; return true; }
+            if (uses_new)     { ++kept_new;     return true; }
+            if (new_act)      { ++kept_act;     return true; }
+            if (unknown)      { ++kept_unknown; return true; }
+            if (plan_pending) { ++kept_plan;    return true; }
             ++dropped;
             return false;
         };
@@ -48307,6 +48489,8 @@ static std::vector<TurnSolver::Plan> BpDeriveContinuationList(const GameState& s
             g_bp_newonly_seen.fetch_add(static_cast<long long>(plans.size()), std::memory_order_relaxed);
             g_bp_newonly_dropped.fetch_add(dropped, std::memory_order_relaxed);
             g_bp_newonly_kept_new.fetch_add(kept_new, std::memory_order_relaxed);
+            g_bp_newonly_kept_act.fetch_add(kept_act, std::memory_order_relaxed);
+            g_bp_newonly_kept_unknown.fetch_add(kept_unknown, std::memory_order_relaxed);
             g_bp_newonly_kept_plan.fetch_add(kept_plan, std::memory_order_relaxed);
         }
         plans.swap(survivors);

@@ -1046,7 +1046,8 @@ public:
                                    int mana_sources_before = -1,
                                    bool site_activated = false,
                                    int site_turn = -1,
-                                   bool new_only = false);
+                                   bool new_only = false,
+                                   const std::vector<std::uint64_t>* acts_before = nullptr);
         ~CantripOrderScope();
         CantripOrderScope(const CantripOrderScope&) = delete;
         CantripOrderScope& operator=(const CantripOrderScope&) = delete;
@@ -1054,6 +1055,7 @@ public:
         const CardDefinition*   m_saved;
         const std::vector<int>* m_saved_hand;
         const std::vector<std::uint64_t>* m_saved_casts;
+        const std::vector<std::uint64_t>* m_saved_acts;   // MTG_BP_NEW_ONLY: pre-plan activations
         const CardDefinition*   m_saved_site;   // order-aware condemnation: the breakpoint's site
         bool                    m_saved_reserved;   // ...and whether the drop was RESERVED, not passed
         int                     m_saved_mana_before;   // ...and the mana-source count at the cast
@@ -1108,6 +1110,14 @@ public:
     // executor's resolve_draw_breakpoint binds the same snapshot under the same condition -- the
     // lockstep pair -- and the reader lives with the filter in TurnSolver.cpp.
     static bool NewOnlyBreakpointContinuationsActive(const GameState& state);
+    // ...and the activations that were AVAILABLE when the phase's plan started (USER 2026-09-21:
+    // a continuation's activation is new iff it "activates an ability that was not previously
+    // available"). One sorted key per (permanent, ability) the enumerator would have emitted at the
+    // pre-plan state; empty when the lever is off. Captured at ApplyPlanDirect entry and TakeTurn
+    // entry -- the same two points that capture site 9's pre_plan_numbers -- and bound on the scope
+    // above, so both worlds filter against the same set. Keys are BpActivationKey values, private
+    // to TurnSolver.cpp: callers only carry the vector.
+    static std::vector<std::uint64_t> PrePlanActivationKeys(const GameState& state);
 
     // BREAKPOINT SITE 6 -- the equipment-ETB draw (Puresteel Paladin). True when resolving `def`
     // puts an Equipment onto the battlefield while the active player controls a
