@@ -20957,6 +20957,9 @@ TurnSolver::Plan TurnSolver::SolveUncached(const GameState& state, bool is_pre_c
     // source, and the NONCREATURE casts against the pool that drops creature-only sources.
     const ColorFeasibility colour_feas    = BuildColorFeasibility(state);
     const ColorFeasibility colour_feas_nc = BuildColorFeasibility(state, /*noncreature=*/true);
+    // Per-candidate half of the same test, hoisted out of the per-subset walk (ManaPayment.h).
+    ColorDemandIndex colour_demand;
+    BuildColorDemandIndex(cands, colour_demand);
 
     // Learned mid-game evaluator (per-deck, MTG_EVAL_MODEL-gated): when attached it RANKS non-lethal
     // plans by predicted win-turn in place of the EvalCard sum. nullptr in every default run
@@ -21352,10 +21355,11 @@ TurnSolver::Plan TurnSolver::SolveUncached(const GameState& state, bool is_pre_c
         // judged by a real payment, and colour_feas is unusable on a filter board anyway.
         if (!mc_hit && mana_ok
             && ((colour_feas.usable
-                 && !colour_feas.Payable(cands, sel, PoolCredit(pool, eff)))
+                 && !colour_feas.Payable(cands, sel, PoolCredit(pool, eff),
+                                         /*noncreature_only=*/false, &colour_demand))
              || (colour_feas_nc.usable
                  && !colour_feas_nc.Payable(cands, sel, PoolCredit(pool_noncreature, eff_nc),
-                                            /*noncreature_only=*/true))))
+                                            /*noncreature_only=*/true, &colour_demand))))
         {
             if (ColorExactProbeOn()) { ProbeColorExactReject(state, cands, sel); }
             mc_store_reject();
@@ -30221,6 +30225,9 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
     // source, and the NONCREATURE casts against the pool that drops creature-only sources.
     const ColorFeasibility colour_feas    = BuildColorFeasibility(state);
     const ColorFeasibility colour_feas_nc = BuildColorFeasibility(state, /*noncreature=*/true);
+    // Per-candidate half of the same test, hoisted out of the per-subset walk (ManaPayment.h).
+    ColorDemandIndex colour_demand;
+    BuildColorDemandIndex(cands, colour_demand);
 
     // Per-candidate FILL eligibility + draw flag, computed ONCE -- the lockstep twin of the
     // SolveUncached precompute (see that site for the g88 profile evidence): the surplus-FILL
@@ -31090,10 +31097,11 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
         // only: the filter fallback and the cost reframe both judge by other means.
         if (mana_ok && !sel_col_reducer && exec_feas != 1
             && ((colour_feas.usable
-                 && !colour_feas.Payable(cands, sel, PoolCredit(pool, eff)))
+                 && !colour_feas.Payable(cands, sel, PoolCredit(pool, eff),
+                                         /*noncreature_only=*/false, &colour_demand))
              || (colour_feas_nc.usable
                  && !colour_feas_nc.Payable(cands, sel, PoolCredit(pool_noncreature, eff_nc),
-                                            /*noncreature_only=*/true)))
+                                            /*noncreature_only=*/true, &colour_demand)))
             && !exec_feas_rescues())
         {
             if (ColorExactProbeOn()) { ProbeColorExactReject(state, cands, sel); }

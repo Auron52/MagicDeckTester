@@ -2228,9 +2228,78 @@ ColorFeasibility BuildColorFeasibility(const GameState& state, bool noncreature,
     return f;
 }
 
-bool ColorFeasibility::Payable(const std::vector<Action>& cands, const std::vector<int>& sel,
-                               const ManaPool& credit, bool noncreature_only) const
+void BuildColorDemandIndex(const std::vector<Action>& cands, ColorDemandIndex& out)
 {
+    out.uniform = false;
+    out.mono_mask = 0;
+    const int m = static_cast<int>(cands.size());
+    unsigned seen = 0;
+    for (int j = 0; j < m; ++j)
+    {
+        const Action& a = cands[j];
+        // A hybrid pip is stored baked into its first colour and has to be peeled against the other
+        // half -- a two-colour demand by construction. Leave those to the general path.
+        if (a.cost.hybrid_count != 0) { return; }
+        const int p[5] = { a.cost.white, a.cost.blue, a.cost.black, a.cost.red, a.cost.green };
+        for (int i = 0; i < 5; ++i) { if (p[i] > 0) { seen |= 1u << i; } }
+        if ((seen & (seen - 1)) != 0) { return; }   // two colours demanded somewhere: not uniform
+    }
+    int colour = -1;
+    for (int i = 0; i < 5; ++i) { if (seen & (1u << i)) { colour = i; break; } }
+    out.mono_mask = seen;   // 0 when nothing coloured is cast; then every `pips` below is 0 too
+    out.pips.assign(static_cast<size_t>(m), 0);
+    out.prod_mv.assign(static_cast<size_t>(m), 0);
+    out.flags.assign(static_cast<size_t>(m), 0);
+    for (int j = 0; j < m; ++j)
+    {
+        const Action& a = cands[j];
+        if (colour >= 0)
+        {
+            const int p[5] = { a.cost.white, a.cost.blue, a.cost.black, a.cost.red, a.cost.green };
+            out.pips[static_cast<size_t>(j)] = p[colour];
+        }
+        unsigned char fl = 0;
+        if (a.kind == Action::Kind::ActivateVial) { fl |= 1u; }
+        if (a.is_noncreature)                     { fl |= 2u; }
+        if (a.ritual_float > 0 || a.rock_mana.Total() > 0)
+        {
+            fl |= 4u;
+            out.prod_mv[static_cast<size_t>(j)] = a.cost.ManaValue();
+        }
+        out.flags[static_cast<size_t>(j)] = fl;
+    }
+    out.uniform = true;
+}
+
+bool ColorFeasibility::Payable(const std::vector<Action>& cands, const std::vector<int>& sel,
+                               const ManaPool& credit, bool noncreature_only,
+                               const ColorDemandIndex* idx) const
+{
+    // UNIFORM fast path -- identical arithmetic to the general path below, reading the hoisted
+    // arrays instead of re-walking 384-byte Actions. With one demand mask the Hall scan has exactly
+    // one binding set (see the union argument there), so the whole test is one comparison.
+    if (idx && idx->uniform)
+    {
+        int prod = 0;
+        for (int j : sel) { prod += idx->prod_mv[static_cast<size_t>(j)]; }
+        if (!SeqProducerCreditEnabled()) { prod = 0; }
+        int need = 0;
+        for (int j : sel)
+        {
+            const unsigned char fl = idx->flags[static_cast<size_t>(j)];
+            if (fl & 1u) { continue; }                                   // ActivateVial: no mana cost
+            if (noncreature_only && !(fl & 2u)) { continue; }
+            if (prod > 0 && (fl & 4u)) { continue; }                     // charged via `prod` instead
+            need += idx->pips[static_cast<size_t>(j)];
+        }
+        if (need < 2) { return true; }          // also covers mono_mask == 0 (nothing coloured cast)
+        const unsigned s = idx->mono_mask;
+        int have = cover[s] + credit.wild;
+        const int cred_u[5] = { credit.white, credit.blue, credit.black, credit.red, credit.green };
+        for (int i = 0; i < 5; ++i) { if (s & (1u << i)) { have += cred_u[i]; } }
+        if (prod > 0) { have -= std::max(0, prod - (total - cover[s])); }
+        return need <= have;
+    }
     // Demands, keyed by the MASK of colours that may pay them. At most nine distinct masks (five
     // singletons plus up to four hybrid pairs), so the Hall scan below stays a short walk.
     int masks[16]; int counts[16]; int ndm = 0;
@@ -2294,8 +2363,39 @@ bool ColorFeasibility::Payable(const std::vector<Action>& cands, const std::vect
     if (total_pips < 2) { return true; }
 
     const int cred[5] = { credit.white, credit.blue, credit.black, credit.red, credit.green };
-    for (unsigned s = 1; s < 32; ++s)
+    // Hall scan over the colour sets that can BIND -- and only a UNION OF DEMAND MASKS can. For any
+    // set S, let S' be the union of the masks contained in S. Every mask inside S is inside S' and
+    // vice versa, so need(S') == need(S) exactly; and have() is non-decreasing in S, because adding
+    // a colour adds cover[] and cred[] while the producer deduction can grow by at most the cover
+    // gain (max(0,x+d) - max(0,x) <= d), leaving the credit gain. So need(S) > have(S) implies
+    // need(S') > have(S'): scanning the unions alone returns the same verdict as the full 31-set
+    // walk, rejecting the same subsets.
+    //
+    // Why it is worth the branch: `usable` is armed by the SOURCE side alone (has_multi), so a deck
+    // that merely OWNS a dual pays the full scan even when nothing it casts has two colours to
+    // compete over. A mono-colour demand set is ndm == 1 -- one check instead of 31. Measured on
+    // Fungus (mono-green, holding a Simic Growth Chamber and Utopia Mycon): 413M subsets through
+    // the full scan to find 17 rejections, with Payable at 19.9% of the game.
+    //
+    // The closure is only taken while it is provably smaller than the scan it replaces: ndm <= 3
+    // bounds it at 2^3-1 = 7 sets. Wider demand sets keep the flat walk.
+    unsigned scan[8];
+    int      nscan = 0;
+    if (ndm <= 3)
     {
+        unsigned seen = 0;
+        for (int t = 1; t < (1 << ndm); ++t)
+        {
+            unsigned v = 0;
+            for (int i = 0; i < ndm; ++i)
+            { if (t & (1 << i)) { v |= static_cast<unsigned>(masks[i]); } }
+            if (v != 0 && ((seen >> v) & 1u) == 0) { seen |= 1u << v; scan[nscan++] = v; }
+        }
+    }
+    const int nsets = nscan ? nscan : 31;
+    for (int k = 0; k < nsets; ++k)
+    {
+        const unsigned s = nscan ? scan[k] : static_cast<unsigned>(k + 1);
         int need = 0;
         for (int i = 0; i < ndm; ++i)
         { if ((static_cast<unsigned>(masks[i]) & ~s) == 0) { need += counts[i]; } }   // payable only from s

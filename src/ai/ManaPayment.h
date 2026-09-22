@@ -226,9 +226,40 @@ struct ColorFeasibility
     // `credit` is the same-turn mana the caller folded on top of the board pool (PoolCredit below).
     // `noncreature_only` scores just the subset's NONCREATURE casts, to pair with the pool built by
     // BuildColorFeasibility(state, /*noncreature=*/true).
+    // `idx` is the optional per-candidate hoist below -- same verdict either way, see its note.
     bool Payable(const std::vector<Action>& cands, const std::vector<int>& sel,
-                 const ManaPool& credit, bool noncreature_only = false) const;
+                 const ManaPool& credit, bool noncreature_only = false,
+                 const struct ColorDemandIndex* idx = nullptr) const;
 };
+
+// PER-CANDIDATE DEMAND HOIST (perf; byte-identical verdicts).
+//
+// Payable rebuilds its demand set by walking `cands[j]` for every j in every subset, and an Action
+// is 384 bytes: the walk touches three cache lines per candidate at a random index, millions of
+// times per game. Profiling Fungus put the single load of `a.kind` at 14% of the function -- a
+// stall, not arithmetic.
+//
+// Everything Payable reads off an Action is FIXED for the whole enumeration, so it is lifted here
+// once into parallel arrays of 4/4/1 bytes. The whole index for a 30-candidate board is ~270 bytes
+// and stays resident.
+//
+// `uniform` is the case worth specialising: every candidate's coloured demand sits in ONE shared
+// colour and nothing is hybrid -- every mono-colour deck, and the usual state of a two-colour one
+// whose cheap half is on the board. Then the demand set is a single mask, the Hall scan is one
+// comparison, and the per-candidate read is a single int. When it does not hold the index is left
+// unset and Payable runs its general path unchanged.
+struct ColorDemandIndex
+{
+    bool     uniform   = false;   // false -> Payable ignores this entirely
+    unsigned mono_mask = 0;       // the one demanded colour bit (0 when nothing coloured is cast)
+    std::vector<int>           pips;      // per candidate: pips of mono_mask's colour
+    std::vector<int>           prod_mv;   // per candidate: cost.ManaValue() when it produces mana
+    std::vector<unsigned char> flags;     // 1 = ActivateVial, 2 = is_noncreature, 4 = producer
+};
+
+// Built once per enumeration, alongside BuildColorFeasibility. Leaves `uniform` false -- which is
+// simply the un-optimised path -- on any board it cannot represent exactly.
+void BuildColorDemandIndex(const std::vector<Action>& cands, ColorDemandIndex& out);
 
 // Built ONCE per enumeration from the board (state-only, exactly like ComputeAvailableColors) and
 // reused for every subset; only the per-subset credit varies. `noncreature` builds the counterpart

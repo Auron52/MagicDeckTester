@@ -1927,3 +1927,122 @@ The 2026-09-22 `fast` generation was run WITH the lever on, because at 16.8 h th
 not fit the window at all. If the lever is ultimately rejected, that table was fitted under an engine
 0.1% different from the one that ships -- far inside the table's own noise, but it is a real caveat
 and it is recorded here rather than discovered later.
+
+---
+
+# Round 5 (2026-09-22): the payability block, and the devour axis under it
+
+**Trigger.** The USER, on being shown that `ColorFeasibility::Payable` was 19.9% of a slow Fungus
+game: *"Payability is the limitation on a mono-colored deck? That suggests we have a bug of some
+sort."* That read was right, and it is the reason this round exists.
+
+Fungus is mono-green. Every spell in the list is generic + `{G}`; the only sources are Forest,
+Simic Growth Chamber, Wild Growth and Utopia Mycon. There is no colour to get wrong.
+
+## What the funnel said
+
+`MTG_ENUM_STATS=1` on the worst game in the regression tier
+(`--seed 2085 --game-index 83 --depth 3 --budget-ms 10`):
+
+```
+entered                    : 453,588,641
+  passed subset rules      : 413,362,363
+  passed flat mana         : 413,362,363     <- 0 rejections
+  passed SubsetPayable     : 413,362,363     <- 0 rejections
+  passed ColorFeasibility  : 413,362,346     <- 17 rejections, out of 413 MILLION
+```
+
+Against a `perf` profile in which the payability family -- `Payable` 19.9%, `CanPayFlat` 5.5%,
+`SubsetPayable` 5.5%, `SequencedRitualCredit` 3.2%, `AddCostCarryingHybrids` 3.0%,
+`CreditFixedColorSac` 1.2%, `CanPay` 1.0%, `PoolCredit` 0.8% -- was **36.6% of the game**.
+
+Roughly a third of the run, to reject seventeen subsets.
+
+## Defect 1: `usable` is armed by the SOURCE side alone
+
+`BuildColorFeasibility` sets `usable` from `has_multi` -- *does the board hold a multi-colour
+source?* Fungus holds two (Simic Growth Chamber, Utopia Mycon's "any colour"), so the test arms.
+Nothing ever asks the other half of the question: **can the DEMAND side make it bite?** The test
+exists to catch two differently-coloured pips competing for one dual. With every pip the same
+colour there is no competition to find, and the Hall scan walks all 31 colour subsets to discover
+that.
+
+**Fix (shipped, byte-identical).** Only a **union of demand masks** can bind. For any set `S`, let
+`S'` be the union of the masks contained in `S`: every mask inside `S` is inside `S'` and vice
+versa, so `need(S') == need(S)` exactly, while `have()` is non-decreasing in `S` -- adding a colour
+adds `cover[]` and `cred[]`, and the producer deduction can grow by at most the cover gain
+(`max(0,x+d) - max(0,x) <= d`), leaving the credit gain. So `need(S) > have(S)` implies
+`need(S') > have(S')`, and scanning the unions returns the same verdict on the same subsets.
+
+A mono-colour demand set has `ndm == 1`: **one check instead of 31.** Gated at `ndm <= 3` so the
+closure is never larger than the scan it replaces; wider demand sets keep the flat walk.
+
+## Defect 2: the test re-reads a 384-byte struct per candidate per subset
+
+The scan fix alone bought only 4-6%, which said the scan was not where the time went. `perf
+annotate` put **14% of the whole function on one instruction** -- the branch on `a.kind`, i.e. the
+load. `sizeof(Action) == 384` (`shl $0x7` + `lea (%rax,%rax,2)` in the addressing), and `Payable`
+strides that vector at a random index, touching three cache lines per candidate, 453 million times.
+It is a memory problem, not an arithmetic one.
+
+**Fix (shipped, byte-identical).** `ColorDemandIndex` (`ManaPayment.h`) hoists everything `Payable`
+reads off an `Action` -- pips, producer mana value, vial/noncreature/producer flags -- into parallel
+arrays of 4/4/1 bytes, built once per enumeration next to `BuildColorFeasibility`. For a
+30-candidate board the whole index is ~270 bytes and stays resident. The `uniform` case (all
+coloured demand in one shared colour, no hybrids -- every mono-colour deck, and a two-colour one
+whose cheap half is on board) then reduces the entire test to two tight array walks and one
+comparison. When it does not hold the index is left unset and the general path runs unchanged.
+
+## Measured
+
+Three slowest regression games, single-threaded, idle box, paired:
+
+| game | before | + scan fix | + demand hoist | net |
+|---|---|---|---|---|
+| `seed 2085 gi83` | 188.11 s | 180.45 s | **137.09 s** | **-27.1%** |
+| `seed 2031 gi29` | 69.16 s | 64.68 s | **46.11 s** | **-33.3%** |
+| `seed 3095 gi92` | 28.71 s | 28.30 s | **22.92 s** | **-20.2%** |
+
+Byte-identical everywhere: unit counts unchanged per game, and smoke **90/0 ALL PASS with 0 configs
+changed and 0 play-changed** across all 22 decks. Smoke makespan 112s -> 103s, so the gain is not
+Fungus-only -- any deck whose demand set is mono-colour on a given board takes the fast path.
+
+## THE REMAINING MULTIPLIER: the devour axis
+
+An `MTG_ODOM_SHAPE` instrument (temporary, reverted) over gi83 found the cost is one repeated
+odometer shape:
+
+```
+[odom] pos=16384 m=26 num_ind=3 ngroups=8 sizes=1,1,1,1,15,1,1,1
+ grp4: Mycoloth x15, all (kind=CastFromHand, tag0, ord0)
+```
+
+48,908 calls of this shape carry **458.7M of the game's 508M odometer positions**. The group of 15
+is **Mycoloth's devour axis** -- one candidate per number of creatures devoured -- and that digit
+multiplies the whole rest of the odometer by 16. Strip it to cast/don't-cast and the shape is 2,048
+positions instead of 16,384.
+
+**This explains the shape of the tail that nothing else did.** gi29 and gi83 run near-identical
+d3 unit counts (428,070 vs 423,477) for 2.2x the wall time -- gi83's cost is per-node, not
+node-count. The devour axis is exactly a per-node cost that **scales with board width**, and Fungus
+is a deck whose whole plan is to go wide. That is why the expensive games are the wide ones.
+
+**It is not free to narrow, and must not be narrowed by assumption.** Devour `k` is a genuinely
+distinct outcome (Mycoloth enters `(4+2k)/(4+2k)` and makes `2k` Saprolings per upkeep), the
+victims come out of the same fodder pool Utopia Mycon sacrifices for mana, and Beastmaster Ascension
+counts *attacking* bodies -- so "devour everything" is not obviously right even in a goldfish. This
+is a search-restriction question in the sense of `heuristic-optimization.md`: it changes play, so it
+needs a measured A/B on train seeds and a held-out confirm, and it belongs in a deck provider, not
+the root. Two shapes worth measuring:
+
+1. **Bound the axis by reachable states** rather than by victim count -- the `labeller-no-lossy-
+   restrictions` lesson. Devouring `k` fungible Saprolings is one state per `k`, which is already
+   the minimum; the question is whether the *ends and a midpoint* separate outcomes enough.
+2. **Make the axis payoff-only.** Devour costs no mana, so the mana verdict is identical across all
+   16 digit values -- but the fodder predicates (`SubsetOversubscribesSacFodder`,
+   `SubsetWastesCreatureSacMana`) do read it, so this needs the interaction checked before any
+   verdict can be cached across the digit. If it holds it is byte-identical and worth ~16x on the
+   payability half of this board.
+
+Related: `fungus-second-main-and-devour.md` (devour's *semantics* and the main-phase placement the
+user steered), which is the other half of this card's story.
