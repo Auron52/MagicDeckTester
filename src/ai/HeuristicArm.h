@@ -218,6 +218,9 @@ enum Slot : int
     ETB_WATCHER_GATES,        // MTG_ETB_WATCHER_GATES     per-deck presence gates on the two ETB-cascade scans whose param test is INSIDE the walk (default ON)
     LAZY_LEAF,                // MTG_LAZY_LEAF             probe each pass LEAFLESS first; an in-window win needs no leaf at all (default OFF)
     BP_HAND_ENTRY,            // MTG_BP_HAND_ENTRY         a card entering hand OUTSIDE a cast apply arms site 10 too (default OFF)
+    BP_WAVEDROP_HOSTED,       // MTG_BP_WAVEDROP_HOSTED    the node's wave stand-down applies only where the node really HOSTS (default OFF)
+    BP_ACQ_CLAUSE,            // MTG_BP_ACQ_CLAUSE         site 3's ACQUISITION family (tutor-to-hand/-top, Soulfire, Garth) is fanned out (default ON)
+    BP_DIG_AXIS_FANOUT,       // MTG_BP_DIG_AXIS_FANOUT    a searched-dig-axis plan (dig_choice==1) gets the site-4 fan-out (default ON)
     COUNT
 };
 
@@ -406,6 +409,9 @@ inline const char* Name(int slot)
         "MTG_ETB_WATCHER_GATES",
         "MTG_LAZY_LEAF",
         "MTG_BP_HAND_ENTRY",
+        "MTG_BP_WAVEDROP_HOSTED",
+        "MTG_BP_ACQ_CLAUSE",
+        "MTG_BP_DIG_AXIS_FANOUT",
     };
     // The enum and this table are ONE mapping split across two lists: a slot added to one and not
     // the other silently shifts every lever after it (a manifest asking for lever X would set Y).

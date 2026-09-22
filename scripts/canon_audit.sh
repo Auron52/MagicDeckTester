@@ -46,8 +46,12 @@ while IFS=$'\t' read -r tag file; do
     args=("$file")
     [ -f "$prof" ] && args+=(--profile "$prof")
     args+=(--seed "$SEED" --games "$GAMES" --threads "$THREADS")
+    # `env` and NOT a bare `$EXTRA` prefix: bash decides what is an assignment SYNTACTICALLY, before
+    # expansion, so `MTG_X=1 MTG_Y=1 $EXTRA "$BIN"` runs $EXTRA's first word as the COMMAND. That
+    # silently turned every deck into "command not found" while the verdict below still printed
+    # "ZERO unchallengeable ... on every deck" (2026-09-22) -- hence the did-not-run gate too.
     # shellcheck disable=SC2086
-    MTG_BP_CANON_AUDIT=1 MTG_BATCH_HEARTBEAT=0 $EXTRA \
+    env MTG_BP_CANON_AUDIT=1 MTG_BATCH_HEARTBEAT=0 $EXTRA \
         "$BIN" "${args[@]}" > "$OUT/$tag.log" 2>&1 &
     pids+=($!)
 done < /tmp/decks.txt
@@ -58,17 +62,31 @@ log "all decks finished"
 log ""
 log "=== VERDICT (nonzero UNCHALLENGEABLE = a heuristic wired as a prune) ==="
 bad=0
+missing=0
 while IFS=$'\t' read -r tag file; do
-    [ -f "$OUT/$tag.log" ] || continue
-    hdr=$(grep -m1 'CANON AUDIT' "$OUT/$tag.log")
+    [ -n "$tag" ] || continue
+    [ -f "$file" ] || continue
+    hdr=""
+    [ -f "$OUT/$tag.log" ] && hdr=$(grep -m1 'CANON AUDIT' "$OUT/$tag.log")
+    # A DECK THAT DID NOT RUN IS A FAILED AUDIT, NOT A CLEAN ONE. The audit prints its header
+    # unconditionally when MTG_BP_CANON_AUDIT=1, so a missing header means the process never got
+    # there -- and silence from a counter is not the same as a counter reading zero.
+    if [ -z "$hdr" ]; then
+        missing=$((missing+1))
+        log "$(printf '%-16s %s' "$tag" "*** DID NOT RUN -- no audit line ***")"
+        [ -f "$OUT/$tag.log" ] && head -3 "$OUT/$tag.log" | sed 's/^/                 /' | tee -a "$LOG"
+        continue
+    fi
     n=$(grep -c 'NO ROUTE INTO THE VARIANT MACHINERY' "$OUT/$tag.log" 2>/dev/null || true)
     [ "${n:-0}" -gt 0 ] && bad=$((bad+1))
-    log "$(printf '%-16s %s' "$tag" "${hdr:-(no audit line -- deck did not run)}")"
+    log "$(printf '%-16s %s' "$tag" "$hdr")"
     grep 'NO ROUTE INTO THE VARIANT MACHINERY' "$OUT/$tag.log" 2>/dev/null | sed 's/^/                 /' | tee -a "$LOG"
 done < /tmp/decks.txt
 
 log ""
-if [ "$bad" -eq 0 ]; then
+if [ "$missing" -gt 0 ]; then
+    log "RESULT: INVALID -- $missing deck(s) produced NO audit line. Fix the run before reading any verdict."
+elif [ "$bad" -eq 0 ]; then
     log "RESULT: ZERO unchallengeable canon defaults on every deck."
 else
     log "RESULT: $bad deck(s) have a site whose canon default NO RANK CAN CHALLENGE -- fix the clause."

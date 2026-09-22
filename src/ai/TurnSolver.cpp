@@ -3925,25 +3925,56 @@ namespace canonaudit
 inline bool Enabled() { static const bool v = EnvOn("MTG_BP_CANON_AUDIT"); return v; }
 inline std::atomic<uint64_t> g_total[16]{};        // canon applications per site
 inline std::atomic<uint64_t> g_unreachable[16]{};  // ...where PlanOpensBreakpoint never marks it
+// WHICH ARMING ROUTE produced each unreachable default. The site number alone is not actionable,
+// because ONE site number serves several arming routes: site 3 is the deferred resolve's DEFAULT
+// index, taken by the plain cantrip AND by the whole acquisition family (ETB tutor-to-hand, tutor
+// SPELL to hand, tutor-to-top, Soulfire's stage, Garth's Braingeyser/Regrowth) -- and
+// PlanOpensBreakpoint's bit-3 clause covers only the cantrip. Without this histogram the audit says
+// "site 3" and the obvious reading ("the cantrip class") is the wrong one: measured 2026-09-22, the
+// cantrip is not the carrier on a single one of the 100%-unreachable decks.
+inline std::atomic<uint64_t> g_unmarked[16]{};     // ...plan selected elsewhere, site has no clause
+inline std::mutex g_who_mtx;
+inline std::map<std::string, uint64_t> g_who;      // "<tier> site N <arming card>" -> count
+inline void RecordWho(int site, const char* name, bool hard)
+{
+    char key[96];
+    std::snprintf(key, sizeof(key), "%s site %-2d %s", hard ? "UNCHALLENGEABLE" : "site-unmarked  ",
+                  site, (name && *name) ? name : "(inline cast)");
+    std::lock_guard<std::mutex> lk(g_who_mtx);
+    ++g_who[key];
+}
 struct Dumper
 {
     ~Dumper()
     {
         if (!Enabled()) { return; }
-        uint64_t bad = 0, all = 0;
+        uint64_t bad = 0, all = 0, um = 0;
         for (int i = 0; i < 16; ++i)
-        { all += g_total[i].load(); bad += g_unreachable[i].load(); }
+        { all += g_total[i].load(); bad += g_unreachable[i].load(); um += g_unmarked[i].load(); }
         if (all == 0) { std::fprintf(stderr, "=== CANON AUDIT: no canon defaults applied ===\n"); return; }
-        std::fprintf(stderr, "=== CANON AUDIT: %llu canon defaults, %llu UNCHALLENGEABLE (%.2f%%) ===\n",
+        std::fprintf(stderr,
+                     "=== CANON AUDIT: %llu canon defaults, %llu UNCHALLENGEABLE (%.2f%%),"
+                     " %llu site-unmarked (%.2f%%) ===\n",
                      static_cast<unsigned long long>(all), static_cast<unsigned long long>(bad),
-                     100.0 * static_cast<double>(bad) / static_cast<double>(all));
+                     100.0 * static_cast<double>(bad) / static_cast<double>(all),
+                     static_cast<unsigned long long>(um),
+                     100.0 * static_cast<double>(um) / static_cast<double>(all));
         for (int i = 0; i < 16; ++i)
         {
-            const uint64_t t = g_total[i].load(), u = g_unreachable[i].load();
+            const uint64_t t = g_total[i].load(), u = g_unreachable[i].load(), n = g_unmarked[i].load();
             if (t == 0) { continue; }
-            std::fprintf(stderr, "[canon-audit]   site %-3d total=%-12llu UNCHALLENGEABLE=%-12llu %s\n",
+            std::fprintf(stderr,
+                         "[canon-audit]   site %-3d total=%-12llu UNCHALLENGEABLE=%-12llu"
+                         " unmarked=%-12llu %s\n",
                          i, static_cast<unsigned long long>(t), static_cast<unsigned long long>(u),
-                         u ? "<-- NO ROUTE INTO THE VARIANT MACHINERY" : "ok");
+                         static_cast<unsigned long long>(n),
+                         u ? "<-- NO ROUTE INTO THE VARIANT MACHINERY" : (n ? "(positional only)" : "ok"));
+        }
+        std::lock_guard<std::mutex> lk(g_who_mtx);
+        for (const auto& kv : g_who)
+        {
+            std::fprintf(stderr, "[canon-armed-by] %-40s %llu\n",
+                         kv.first.c_str(), static_cast<unsigned long long>(kv.second));
         }
     }
 };
@@ -10117,6 +10148,66 @@ static int BpNodeWaveDrop()
     return drop;
 }
 
+// DOES THE NODE ACTUALLY HOST HERE? -- the predicate the wave drop above was missing.
+//
+// THE DEFECT (MTG_BP_CANON_AUDIT, 2026-09-22). BpNodeWaveDrop removes site 3 from BOTH wave masks
+// UNCONDITIONALLY, on the premise that the node searches those continuations in full so the ranks
+// would only duplicate them. But the node's hosting is CONDITIONAL: BpNodeRootTurnOnly (default ON)
+// hosts only on the turn the outermost solve is choosing (+1 under BpNodeHost2), and BpNodeD0Only
+// narrows it further. On every OTHER searched turn the premise is false -- the node is absent, the
+// waves have already stood down, and site 3 has no variants, no waves and no node. The continuation
+// is then whatever MTG_BP_BASE_CANON hands it, with nothing scored against it at any budget, depth
+// or width: a heuristic wired as a prune, which is exactly what the doctrine forbids and what cost
+// auras gi428 a turn at site 10.
+//
+// BpNodeWaveDrop's own header already named this ("dropping a site from the wave masks
+// unconditionally leaves it with no variants, no waves AND no node at every other depth -- purely
+// greedy, which is a reachability LOSS bought for a node at one depth"); MTG_BP_CANON_AUDIT is what
+// finally MEASURED it. It is the dominant cause in the audit: creature_giving 35,662 of 35,662
+// (100%), antilife 2,118 (100%), critter 2,722 (100%), melira 13,049, hinata 37,298, kitty 6,904,
+// fivecolour 1,543, goblins 148 -- every one of them site 3.
+//
+// THE SAFE DIRECTION IS "NO NODE". A drop is only sound where the node really hosts, so anything
+// this predicate cannot see must read as not-hosting: that restores rank coverage (at worst
+// duplicate work, never a wrong answer), where the opposite mistake deletes reachability. Depth is
+// not available at the two mask sites, so MTG_BP_NODE_D0ONLY reads as not-hosting outright -- it is
+// default OFF, so that costs nothing today.
+//
+// NOTE WHAT THIS DOES *NOT* UNDO: MTG_BP_SITE3_DEFER still keeps site 3 out of WAVE 0 (a measured
+// re-ordering -- eager site-3 fan-out cost hinata +0.0228 on 1.51x the units). What comes back is
+// the DEFERRED wave walker, which is the sanctioned route (USER 2026-08-19: "the re-ordering of
+// when we visit nodes can be workable, but skipping them entirely ... is not").
+static bool BpNodeRootTurnOnly();
+static bool BpNodeD0Only();
+static bool BpNodeHostsThisTurn(const GameState& state)
+{
+    if (!BpNodeEnabled())  { return false; }
+    if (BpNodeD0Only())    { return false; }   // depth unknown here; not-hosting is the safe read
+    if (BpNodeRootTurnOnly() && g_condemn_root_turn >= 0
+        && state.turn_number != g_condemn_root_turn
+        && !(BpNodeHost2() && state.turn_number == g_condemn_root_turn + 1))
+    { return false; }
+    return true;
+}
+
+// MTG_BP_WAVEDROP_HOSTED -- gate the node's wave stand-down on the node actually hosting this turn.
+// Default OFF for the A/B only; the doctrine answer is ON, because a red measurement here is a
+// BUDGET problem to remedy, never authorization to keep an unchallengeable default
+// (USER 2026-09-05 / 09-17; docs/design/greedy-continuation-deletion-route.md).
+static bool BpWaveDropHostedOnly()
+{
+    static const bool on = EnvOn("MTG_BP_WAVEDROP_HOSTED");
+    return heurarm::Flag(heurarm::BP_WAVEDROP_HOSTED, on);
+}
+
+// The node's wave stand-down AS IT APPLIES AT `state` -- BpNodeWaveDrop where the node hosts,
+// nothing where it does not. See BpNodeHostsThisTurn.
+static int BpNodeWaveDropAt(const GameState& state)
+{
+    if (BpWaveDropHostedOnly() && !BpNodeHostsThisTurn(state)) { return 0; }
+    return BpNodeWaveDrop();
+}
+
 // The node's explicit EMPTY continuation: resume the prefix and cast nothing more (no drop, no
 // casts -- the trailing passes still run). bp_choice >= 0 keeps the bp_seen counting/eligibility
 // machinery identical to a ranked resume; bp_searched_plan special-cases the value BEFORE the
@@ -10189,6 +10280,19 @@ static int PlanOpensBreakpoint(const GameState& state, const TurnSolver::Plan& p
 // dig, every plan is fanned out regardless of PlanOpensBreakpoint. Forward-declared so the
 // canon audit can count it as a real route rather than reporting a false violation.
 static bool BpDigFanoutPending(const GameState& state, int sites);
+static bool BpDigFanoutForPlan(const GameState& state, int sites, const TurnSolver::Plan& p);
+
+// MTG_BP_ACQ_CLAUSE (=0 hatch) -- site 3's ACQUISITION half in PlanOpensBreakpoint: the tutor-to-hand
+// cast (spell AND creature ETB), the tutor-to-top re-arm, Soulfire Eruption's stage, and Garth's
+// Braingeyser/Regrowth. All four ARM the deferred re-solve at site 3 and none had a clause, so no
+// fan-out route selected their plans and their continuations were unchallengeable. Default ON: this
+// is a doctrine fix, and a red measurement on it is a budget problem to remedy, not a reason to put
+// a heuristic back in front of a branch (USER 2026-09-05 / 09-17).
+static bool BpAcqClauseOn()
+{
+    static const bool on = EnvOn("MTG_BP_ACQ_CLAUSE", true);
+    return heurarm::Flag(heurarm::BP_ACQ_CLAUSE, on);
+}
 
 // Resolve kBpChainChoice + j -> the index of the j-th continuation that opens a further breakpoint,
 // or -1 when the list holds fewer than j+1 of them (caller then falls through to greedy, making the
@@ -10874,7 +10978,7 @@ static bool BpNestDiscover()
 // a class dropped here is still fully searchable -- the deferred wave phase picks its plans up at
 // rank 0, exactly as it does for a plan MTG_BP_MAXBASE dropped. Default = the full mask (no prune);
 // set e.g. 0x17 to keep the plain-cantrip class out of wave 0 while leaving it reachable.
-static int BpWave0SiteMask()
+static int BpWave0SiteMask(const GameState& state)
 {
     static const int m = []() -> int
     {
@@ -10943,17 +11047,21 @@ static int BpWave0SiteMask()
     // is not a re-ordering -- the wave walker is excluded too (see BpWaveSiteMask).
     // Under MTG_BP_NODE_D56 the same argument covers sites 5 and 6: whatever the node hosts, the
     // rank machinery must stand down for, or the two cover the same continuations twice.
-    if (BpNodeEnabled()) { out &= ~BpNodeWaveDrop(); }
+    // ...and only where the node really hosts (BpNodeWaveDropAt / MTG_BP_WAVEDROP_HOSTED): with the
+    // gate off this is the old unconditional drop, byte-identical.
+    if (BpNodeEnabled()) { out &= ~BpNodeWaveDropAt(state); }
     return out;
 }
 
 // The site mask the DEFERRED WAVE machinery walks (BpWaveWalker slots + nested discovery). The
-// full BpSiteMask, minus the sites the node lever owns: such a slot would start the node-hosted
-// plans at rank 0 and re-search continuations the node already searched in full.
-static int BpWaveSiteMask()
+// full BpSiteMask, minus the sites the node lever owns AT THIS STATE: such a slot would start the
+// node-hosted plans at rank 0 and re-search continuations the node already searched in full --
+// but only where the node is really hosting. This is the mask the site-3 fix acts on
+// (BpNodeWaveDropAt / MTG_BP_WAVEDROP_HOSTED); with the gate off it is the old unconditional drop.
+static int BpWaveSiteMask(const GameState& state)
 {
     const int m = BpSiteMask();
-    return BpNodeEnabled() ? (m & ~BpNodeWaveDrop()) : m;
+    return BpNodeEnabled() ? (m & ~BpNodeWaveDropAt(state)) : m;
 }
 
 // Re-entrancy guard: the breakpoint's OWN enumeration must not emit further bp_choice variants.
@@ -24245,6 +24353,11 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
     // costs spare budget rather than being a horizon. An apply still resolves at most ONE of them --
     // a line needing two simultaneous non-greedy continuations is the deliberate L*W-not-W^L trade.
     int  bp_seen = 0;
+    // MTG_BP_CANON_AUDIT only: the card whose arming produced the breakpoint about to resolve.
+    // Carried separately because the deferred dispatch NULLS deferred_cantrip_site before calling
+    // bp_searched_plan (CantripOrderScope has already taken it), and the arming CARD is the whole
+    // content of the audit's "which route" question -- see canonaudit::RecordWho.
+    const CardDefinition* canon_arm = nullptr;
     auto bp_searched_plan = [&](int site, TurnSolver::Plan& out) -> bool
     {
         // bp_seen counts only breakpoints of an ENABLED class, and only for a plan that carries a
@@ -24411,26 +24524,59 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
             }
         }
         // THE ENFORCEMENT (MTG_BP_CANON_AUDIT; see the canonaudit namespace). A canon default is
-        // only legitimate while the ALTERNATIVES are reachable, and both fan-out routes select
-        // plans with PlanOpensBreakpoint -- so asking it here answers "could a variant for this
-        // site have existed?" exactly, with no proxy. Nonzero `unreachable` means a heuristic is
-        // wired as a prune at that site: fix the site's clause, never the audit.
+        // only legitimate while the ALTERNATIVES are reachable.
+        //
+        // SELECTION IS PER-PLAN, AND THE SLOT INDEX IS POSITIONAL -- which is why this asks for ANY
+        // masked bit and not `>> site & 1`. Both fan-out routes decide ONE thing about a plan:
+        // whether to emit variants for it at all (`PlanOpensBreakpoint(state, p) & sites`). What a
+        // variant then carries is `bp_at = k`, an INDEX into the enabled-class breakpoints this
+        // apply happens to reach, so a selected plan's k-th breakpoint is challengeable whatever
+        // site it turns out to be. The first cut asked `>> site & 1` and reported mirrorwing's
+        // 16,448 site-0 defaults as violations; every one of them is a NESTED cantrip inside a
+        // Gold Rush / Fists of Flame continuation, on a plan the site-5 clause already selects, and
+        // the wave walker's nested discovery does open a slot at that index. Over-reporting is not
+        // the safe direction here: it buries the real ones (a site-3 tutor plan that opens NOTHING).
+        //
+        // The three routes, unchanged:
+        //   1. the wave-0 / wave-walker fan-out, selecting plans with PlanOpensBreakpoint;
+        //   2. the DIG BYPASS, which fans out every plan when site 4 is in the mask and the board
+        //      is about to dig (BpDigFanoutPending -- both fan-out loops carry it);
+        //   3. the NODE, which hosts an explicit EMPTY child plus the full enumeration.
+        //
+        // Two counters, because they need different fixes and must not be added together:
+        //   UNCHALLENGEABLE -- the plan opens NO masked site at all. No variant of it is ever
+        //      emitted, so this default has no alternative at any budget, depth or width. THE
+        //      DOCTRINE VIOLATION, and the auras gi428 shape exactly.
+        //   SITE-UNMARKED   -- the plan IS selected (on some other site), so the waves do reach
+        //      this slot positionally, but this site has no clause of its own. Not a violation;
+        //      it is what makes the coverage incidental rather than intended, so it is the queue
+        //      for clause work and it is reported separately rather than quietly folded in.
         if (canon_used && canonaudit::Enabled() && site >= 0 && site < 16)
         {
             canonaudit::g_total[site].fetch_add(1, std::memory_order_relaxed);
-            // ALL THREE routes by which an alternative to this default can exist, or the audit
-            // reports false violations. Found the hard way: a first cut asked only the first one
-            // and flagged fluctuator's 49,627 site-4 defaults, every one of which the dig bypass
-            // does in fact fan out.
-            //   1. the wave-0 / wave-walker fan-out, gated on PlanOpensBreakpoint;
-            //   2. the DIG BYPASS, which fans out every plan when site 4 is in the mask and the
-            //      board is about to dig (BpDigFanoutPending -- both fan-out loops carry it);
-            //   3. the NODE, which hosts an explicit EMPTY child plus the full enumeration.
-            const bool reachable = ((PlanOpensBreakpoint(state, plan) >> site) & 1) != 0
-                                || BpDigFanoutPending(state, 1 << site)
-                                || node_owns_site(site);
-            if (!reachable)
-            { canonaudit::g_unreachable[site].fetch_add(1, std::memory_order_relaxed); }
+            const int  opens    = PlanOpensBreakpoint(state, plan);
+            const bool dig_ok   = BpDigFanoutPending(state, 1 << site)
+                               || BpDigFanoutForPlan(state, 1 << site, plan);
+            const bool node_ok  = node_owns_site(site);
+            // ...and `bp_wave0`, which is not a re-derivation at all but a RECORD OF FACT: wave 0
+            // sets it on every base plan it actually fanned out. It matters because the two
+            // state-keyed routes (the dig bypass, the watcher pre-scans) are evaluated by the
+            // fan-out on the PRE-APPLY state and by this audit on the MID-APPLY one, and those can
+            // disagree in the direction that invents violations -- the dig loop CONSUMES its source,
+            // so `HasAnyDigSource` can read false here on the very plan the bypass fanned out.
+            // Prefer the recorded fact wherever it exists.
+            const bool selected = plan.bp_wave0 || (opens & BpSiteMask()) != 0 || dig_ok || node_ok;
+            const char* who     = canon_arm ? canon_arm->card.m_name.c_str() : nullptr;
+            if (!selected)
+            {
+                canonaudit::g_unreachable[site].fetch_add(1, std::memory_order_relaxed);
+                canonaudit::RecordWho(site, who, /*hard=*/true);
+            }
+            else if (((opens >> site) & 1) == 0 && !dig_ok && !node_ok)
+            {
+                canonaudit::g_unmarked[site].fetch_add(1, std::memory_order_relaxed);
+                canonaudit::RecordWho(site, who, /*hard=*/false);
+            }
         }
         if (!resolved)
         {
@@ -27763,6 +27909,7 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
         // Mark the continuation for the condemnation filter (MTG_CONDEMN_M1_BP). Same extent as
         // _cos: the searched list, the greedy Solve fallback, and the continuation's application.
         TurnSolver::BpContinuationScope _cbs;
+        canon_arm             = deferred_cantrip_site;   // audit only; see canonaudit::RecordWho
         deferred_cantrip_site = nullptr;
         if (out_breakpoint) { sink_stack.push_back(out_breakpoint); }
         TurnSolver::Plan extra;
@@ -32454,6 +32601,31 @@ static int PlanOpensBreakpoint(const GameState& state, const TurnSolver::Plan& p
             }
         }
     }
+    // Site 10 pre-scan, the CREATURE-ENTERS watcher (Vaultborn Tyrant: "whenever another creature
+    // you control enters, you gain 3 life and draw a card"). Third watcher of the same shape, and
+    // the one the audit found carrying 100% of stompy's unchallengeable site-10 defaults: the draw
+    // belongs to the watcher, so the card that ENTERS carries no draw param whatsoever -- a vanilla
+    // Apex Altisaur arms site 10 here. A plan casting the watcher itself counts for the reason the
+    // Aura note gives (cast order resolves the watcher creature ahead of the bodies that follow it).
+    bool creature_watcher = false;
+    if (BpPutInHandEnabled())
+    {
+        for (const Permanent& perm : state.battlefield)
+        {
+            if (perm.controller_index != state.active_player_index) { continue; }
+            const CardDefinition* w = CardDatabase::Instance().LookupCached(perm.card);
+            if (w && w->params.own_creature_enters_draw > 0) { creature_watcher = true; break; }
+        }
+        if (!creature_watcher)
+        {
+            for (const Action& a : p.actions)
+            {
+                if (a.kind != Action::Kind::CastFromHand) { continue; }
+                const CardDefinition* d = a.def ? a.def : CardDatabase::Instance().Lookup(a.card_name);
+                if (d && d->params.own_creature_enters_draw > 0) { creature_watcher = true; break; }
+            }
+        }
+    }
     // Site 7 pre-scan: the pod chain needs TWO activatable Pod-style sources on the pre-apply
     // battlefield (the plan's activation taps one; the chain is the OTHER one saccing its fetch).
     // Counted here once, like `watcher`; the action loop below marks any plan that actually
@@ -32495,6 +32667,16 @@ static int PlanOpensBreakpoint(const GameState& state, const TurnSolver::Plan& p
             const CardDefinition* td = a.def ? a.def : CardDatabase::Instance().Lookup(a.card_name);
             if (td && !td->params.tap_draw_requires_top_supertype.empty()) { mask |= 1 << 8; }
         }
+        // Site 3, the acquisition family's NON-CAST route: Garth's conjure-and-cast reaches
+        // Braingeyser (draw X) and Regrowth (graveyard -> hand), and its arming (ApplyPlanDirect,
+        // the GarthActivate branch) sets no trick/equip/put flag, so deferred_site_index returns 3.
+        // Same two names the arming and the executor's second pass both special-case -- one list,
+        // three places, which is the drift hazard site 10's clause already warns about.
+        if (BpAcqClauseOn() && a.kind == Action::Kind::GarthActivate)
+        {
+            const std::string gt = a.tutor_target.str();
+            if (gt == "Braingeyser" || gt == "Regrowth") { mask |= 1 << 3; }
+        }
         if (a.kind != Action::Kind::CastFromHand && a.kind != Action::Kind::CastFromGraveyard)
         { continue; }
         const CardDefinition* d = a.def ? a.def : CardDatabase::Instance().Lookup(a.card_name);
@@ -32504,6 +32686,35 @@ static int PlanOpensBreakpoint(const GameState& state, const TurnSolver::Plan& p
         {
             // Staging / EI re-solve inline (site 0); a plain cantrip defers to site 3.
             mask |= (d->params.stages_cards || d->params.expressive_iteration) ? (1 << 0) : (1 << 3);
+        }
+        // SITE 3'S OTHER HALF -- THE ACQUISITION FAMILY, and it is the single biggest thing this
+        // predicate was missing (MTG_BP_CANON_AUDIT, 2026-09-22).
+        //
+        // Site 3 is not "the plain cantrip class". It is the DEFAULT INDEX deferred_site_index
+        // returns for every deferred re-solve that is not the trick (5), the equipment draw (6) or
+        // the general put-in-hand (10) -- and FIVE separate armings land on it: the plain cantrip,
+        // the ETB tutor-to-hand (Ranger-Captain of Eos / Goblin Matron / Stoneforge Mystic), the
+        // tutor SPELL to hand (Gamble / Idyllic Tutor / Sylvan Scrying), the tutor-to-TOP re-arm,
+        // and Soulfire Eruption's stage. Only the cantrip had a clause, so every other route was
+        // selected by NEITHER fan-out and took an unchallengeable cands.front(): measured at
+        // creature_giving 35,662 of 35,662 (100%, Sylvan Scrying), hinata 37,048 (Gamble), kitty
+        // 6,904 (Stoneforge Mystic), melira 12,484 (Recruiter of the Guard / Ranger of Eos),
+        // antilife 2,118 (Idyllic Tutor), fivecolour 1,332, goblins 146 (Goblin Matron).
+        //
+        // THIS IS THE gi428 SHAPE AGAIN, one site over: the class is in BpSiteMask, so `class_on`
+        // holds and MTG_BP_BASE_CANON hands the base plan cands.front() with nothing scored against
+        // it at any budget, depth or width. "Tutoring to hand should open a breakpoint if the
+        // engine is implemented correctly" (USER 2026-09-08) is the arming half of that statement;
+        // this is the half that makes the opened breakpoint actually searchable.
+        //
+        // Gated on the SAME flags as the armings so the predicate cannot claim a breakpoint that
+        // was never armed, and conservative in the sites-6/7/9 direction otherwise: a marked plan
+        // whose fetch turns out stranded just yields variants that collapse onto their base plan.
+        if (BpAcqClauseOn())
+        {
+            if (AcqResolveEnabled() && (d->params.tutor_to_hand || d->params.damage_equals_top_mv))
+            { mask |= 1 << 3; }
+            if (TopResolveEnabled() && d->params.tutor_to_top) { mask |= 1 << 3; }
         }
         if (d->params.impulse_exile > 0) { mask |= 1 << 2; }
         // Zada/Mirrorwing trick with a draw payload -- or a Treasure payload (Gold Rush), whose
@@ -32561,6 +32772,46 @@ static int PlanOpensBreakpoint(const GameState& state, const TurnSolver::Plan& p
                 || d->params.etb_self_draw > 0
                 || d->params.cast_draw > 0))
         { mask |= 1 << 10; }
+        // ...AND THE ROUTES THE AUDIT NAMED (MTG_BP_CANON_AUDIT, 2026-09-22). Each of these really
+        // does arm site 10 -- the arming is OUTCOME-keyed ("did the hand gain a card?"), so it fires
+        // whatever the route -- and each was left unmarked, i.e. unchallengeable:
+        //   stompy     393 of 393 (100%): Apex Altisaur, Natural Order, Turntimber Symbiosis,
+        //              Vaultborn Tyrant, World War Hulk -- ONE cause, the creature-enters WATCHER.
+        //   melira     5,300: Chord of Calling 4,737, Celes 1,350, Felidar Guardian 212.
+        //   fivecolour 237: Unite the Coalition (modal draw).
+        if (BpPutInHandEnabled() && !TurnSolver::ParamKeyedDrawClass(state, *d))
+        {
+            // A modal spell with a DRAW mode (Unite the Coalition): the draw is a mode choice, so
+            // no draw-template or cast_draw param names it.
+            if (d->params.modal_draw_per_choice > 0) { mask |= 1 << 10; }
+            // Celes: the ETB discards any number and draws that many plus a bonus.
+            if (d->params.etb_discard_any_draw_bonus > 0) { mask |= 1 << 10; }
+            // A blink re-fires an ETB, and the ETB it re-fires can be a draw (Felidar Guardian).
+            // Conservative: keyed on the blink, not on the blinked permanent, because the target is
+            // chosen at resolution.
+            if (d->params.etb_blink_permanent) { mask |= 1 << 10; }
+            // A tutor-to-BATTLEFIELD whose fetched creature gains cards (Chord of Calling into a
+            // tutor body). Same shape and same key as the Pod/Vial clause below -- the variant
+            // already names the fetch in tutor_target.
+            if (d->params.tutor_to_battlefield_single)
+            {
+                const std::string& ft = a.tutor_target.str();
+                const CardDefinition* fd = ft.empty() ? nullptr : CardDatabase::Instance().Lookup(ft);
+                if (fd && (fd->params.tutor_to_hand || fd->params.etb_dig_count > 0
+                           || fd->params.etb_self_draw > 0 || fd->params.own_creature_enters_draw > 0))
+                { mask |= 1 << 10; }
+            }
+            // THE CREATURE-ENTERS WATCHER (Vaultborn Tyrant, "whenever another creature you control
+            // enters, draw a card"). State-keyed exactly like the equipment and Aura watchers above,
+            // and it is the whole of stompy's site-10 traffic: the draw belongs to the WATCHER, so
+            // the entering card carries no draw param at all and a vanilla Apex Altisaur arms it.
+            if (creature_watcher
+                && (d->card.IsCreature() || d->params.tutor_to_battlefield_single
+                    || d->params.etb_blink_permanent
+                    || d->params.look_top_put_creature_count > 0
+                    || !d->params.saga_ch1_free_cast_creature_colors.empty()))
+            { mask |= 1 << 10; }
+        }
     }
     // MTG_BP_HAND_ENTRY's routes -- THE NON-CAST HALF, and it is here because the clause above
     // ends with "If a route is ever added, ADD IT HERE TOO". The section-level arming
@@ -32649,6 +32900,33 @@ static bool BpDigFanoutPending(const GameState& state, int sites)
     return prov.HasAnyDigSource(state) && prov.ShouldConsiderDig(state);
 }
 
+// ...AND THE SEARCHED DIG AXIS, which the state-only form above cannot see (MTG_BP_CANON_AUDIT,
+// 2026-09-22). The dig LOOP runs while `plan.dig_choice == 1 || ShouldConsiderDig(state)` -- the
+// searched axis (DigDecisionSearched: Auras, Fluctuator, Dragons) fans a dig-while-affordable
+// variant per base plan precisely so the rollout can dig where the HEURISTIC would not. On exactly
+// those plans the bypass above returns false, so site 4 got no fan-out from either route and its
+// continuation was an unchallengeable cands.front(): fluctuator 13,977, auras 10,404, dragons 3,398.
+//
+// STRICTLY ADDITIVE -- it only ever turns false into true, never the reverse. A dig_choice == 0
+// plan is deliberately NOT excluded here even though its dig loop is suppressed: narrowing is the
+// unsafe direction, and an extra fanned plan is a wasted node, never a wrong answer.
+static bool BpDigFanoutForPlan(const GameState& state, int sites, const TurnSolver::Plan& p)
+{
+    if ((sites & (1 << 4)) == 0 || p.dig_choice == 0) { return false; }
+    static const bool on = EnvOn("MTG_BP_DIG_AXIS_FANOUT", true);   // =0 restores the old bypass
+    if (!heurarm::Flag(heurarm::BP_DIG_AXIS_FANOUT, on)) { return false; }
+    // NOTE WHAT IS *NOT* ASKED HERE: ShouldConsiderDig. That is the DIG HEURISTIC -- the very
+    // decision the searched dig axis exists to second-guess -- so using it to gate the FAN-OUT
+    // makes it unchallengeable: on a turn the heuristic says "don't dig", no variant of any plan
+    // could ever score digging. The loop's real precondition is a SOURCE (`HasAnyDigSource`), and
+    // a source can only be ADDED by a plan's own casts, never removed, so asking it pre-apply is
+    // conservative in the safe direction. Requiring dig_choice == 1 was the first cut and it closed
+    // only fluctuator (13,977 -> 2,087) while auras and dragons kept theirs, because their
+    // site-4 breakpoints fire on BASE plans (dig_choice == -1) whose mid-apply state considers the
+    // dig even though the pre-apply state did not.
+    return ResolveProvider(state).HasAnyDigSource(state);
+}
+
 // Append the SEARCHED-BREAKPOINT variants (MTG_BP_SEARCH=W; see Plan::bp_choice). For every plan
 // that opens a breakpoint, add W copies tagged bp_choice = 0..W-1 so the outer rollout scores W
 // distinct post-breakpoint continuations (land drop AND casts) instead of trusting the greedy
@@ -32670,7 +32948,7 @@ static void AppendBreakpointVariants(const GameState& state, std::vector<TurnSol
     if (w <= 0 || g_bp_enum_depth > BpNestFanoutDepth() || plans.empty()) { return; }
     if (!g_bp_root_enum && !BpSearchInRollouts()) { return; }   // committed decision only
     const int  s_max_base = BpMaxBase();
-    const int  sites  = BpWave0SiteMask();   // wave-0 SELECTION only; the wave phase uses the full mask
+    const int  sites  = BpWave0SiteMask(state);   // wave-0 SELECTION only; the wave phase uses the full mask
     const bool dig_bp = BpDigFanoutPending(state, sites);
     std::vector<TurnSolver::Plan> variants;
     int fanned = 0;
@@ -32684,7 +32962,8 @@ static void AppendBreakpointVariants(const GameState& state, std::vector<TurnSol
         // MTG_EQUIP_DRAW_BP_DEFER) measures inert, this is not the reason: look at `class_on` in
         // bp_searched_plan, which gates the EnumerateBreakpointPlans cost off the FULL BpSiteMask
         // and is not reached by this mask at all.
-        if (!dig_bp && (PlanOpensBreakpoint(state, p) & sites) == 0) { continue; }
+        if (!dig_bp && !BpDigFanoutForPlan(state, sites, p)
+            && (PlanOpensBreakpoint(state, p) & sites) == 0) { continue; }
         if (s_max_base > 0 && fanned++ >= s_max_base) { break; }
         p.bp_wave0 = true;   // covered by wave 0; the wave phase starts this plan at rank W, not 0
         for (int at = 0; at < BpSearchDepth(); ++at)
@@ -33219,14 +33498,15 @@ public:
                  const TranspositionTable::Key* node_key = nullptr)
         : m_known_n(known_n), m_node_key(node_key)
     {
-        const int  sites  = BpWaveSiteMask();
+        const int  sites  = BpWaveSiteMask(state);
         const bool dig_bp = BpDigFanoutPending(state, sites);
         if (limit > plans.size()) { limit = plans.size(); }
         for (std::size_t i = 0; i < limit; ++i)
         {
             const TurnSolver::Plan& p = plans[i];
             if (p.bp_choice >= 0) { continue; }                                  // a wave-0 variant
-            if (!dig_bp && (PlanOpensBreakpoint(state, p) & sites) == 0) { continue; }
+            if (!dig_bp && !BpDigFanoutForPlan(state, sites, p)
+                && (PlanOpensBreakpoint(state, p) & sites) == 0) { continue; }
             m_bases.push_back(i);
             AddSlots(plans, m_bases.size() - 1, BpSearchDepth());
         }
