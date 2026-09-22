@@ -48505,21 +48505,55 @@ static std::vector<TurnSolver::Plan> BpDeriveContinuationList(const GameState& s
                                       BpActivationKey(number, ability));
         };
         long long kept_new = 0, kept_act = 0, kept_unknown = 0, kept_plan = 0, dropped = 0;
+        // THE HAND A PLAN'S hand_index INDEXES. A land-carrying plan was enumerated on a COPY of the
+        // state with its land already played (EnumeratePlansWithLandUncached: PlayLandByName(copy)
+        // then EnumeratePlans(copy)), so its hand_index counts the POST-drop hand. Reading it against
+        // the pre-drop hand shifts every card behind the land's slot by one -- and the card that
+        // ARRIVED is the last card in hand (drawn), so it was the one mis-read as its older
+        // neighbour: every new-card continuation that also played a land was dropped as old
+        // (Hinata seed 1129 T2 "{Ornithopter + Mystic Monastery}" dropped beside "{Ornithopter}"
+        // kept; Mirrorwing seed 1020 T3 the same for "{Hierarch + Game Trail}"; the 2026-09-22
+        // all-deck batch read Mirrorwing +0.0455 and Hinata +0.0075 with the lever on, both from
+        // this). Mirror PlayLandByName's pick (staged copy, else first playable match) to map the
+        // index back; a post-drop index that has no pre-drop card (a bounced-back land appended by
+        // a karoo) reads as unknown, the safe direction.
+        auto land_pick_index = [&](const TurnSolver::Plan& p) -> int
+        {
+            if (!p.land_decided || p.land_to_play.empty()) { return -1; }
+            int first = -1;
+            for (std::size_t i = 0; i < ap.hand.size(); ++i)
+            {
+                const Card& c = ap.hand[i];
+                if (c.m_name != p.land_to_play || c.m_impulse_no_land) { continue; }
+                if (!PlayableAsLand(CardDatabase::Instance().LookupCached(c))) { continue; }
+                if (first < 0)    { first = static_cast<int>(i); }
+                if (c.m_is_staged) { return static_cast<int>(i); }
+            }
+            return first;
+        };
+        auto hand_card_of = [&](const TurnSolver::Plan& p, int removed, int hand_index) -> const Card*
+        {
+            if (hand_index < 0) { return nullptr; }
+            (void)p;
+            const int pre = (removed >= 0 && hand_index >= removed) ? hand_index + 1 : hand_index;
+            if (pre >= static_cast<int>(ap.hand.size())) { return nullptr; }
+            return &ap.hand[static_cast<std::size_t>(pre)];
+        };
         auto keep = [&](const TurnSolver::Plan& p) -> bool
         {
             bool uses_new = false, new_act = false, unknown = false, plan_pending = false;
             if (p.land_decided && !p.land_to_play.empty() && name_is_new(p.land_to_play))
             { uses_new = true; }
+            const int removed = land_pick_index(p);
             for (const Action& a : p.actions)
             {
                 switch (a.kind)
                 {
                 case Action::Kind::CastFromHand:
-                    if (a.hand_index >= 0 && a.hand_index < static_cast<int>(ap.hand.size()))
+                    if (const Card* c = hand_card_of(p, removed, a.hand_index))
                     {
-                        const Card& c = ap.hand[static_cast<std::size_t>(a.hand_index)];
-                        if (is_new_number(c.m_number))       { uses_new = true; }
-                        else if (BpPlanCasts(c.m_name_hash)) { plan_pending = true; }
+                        if (is_new_number(c->m_number))       { uses_new = true; }
+                        else if (BpPlanCasts(c->m_name_hash)) { plan_pending = true; }
                         // NO "was it castable at the base" clause here, by the USER's ruling
                         // (2026-09-22): an old card that only the plan's own Astrolabe makes
                         // castable is the ENUMERATOR's business (PendingFilterInHand arms the
@@ -48530,6 +48564,7 @@ static std::vector<TurnSolver::Plan> BpDeriveContinuationList(const GameState& s
                         // (adopted arm unable to reach the base's line at any budget) is how to
                         // find one.
                     }
+                    else { unknown = true; }   // no pre-drop card behind this index: keep (safe)
                     break;
                 // The other from-HAND actions (suspend, channel, cycle, discard-to): the same
                 // sibling argument as a cast -- the enumerator offered the old card's action at
@@ -48538,9 +48573,9 @@ static std::vector<TurnSolver::Plan> BpDeriveContinuationList(const GameState& s
                 case Action::Kind::Channel:
                 case Action::Kind::DigDraw:
                 case Action::Kind::DiscardToLandsEdge:
-                    if (a.hand_index >= 0 && a.hand_index < static_cast<int>(ap.hand.size())
-                        && is_new_number(ap.hand[static_cast<std::size_t>(a.hand_index)].m_number))
-                    { uses_new = true; }
+                    if (const Card* c = hand_card_of(p, removed, a.hand_index))
+                    { if (is_new_number(c->m_number)) { uses_new = true; } }
+                    else { unknown = true; }
                     break;
                 case Action::Kind::PlayLand:
                     if (name_is_new(a.card_name)) { uses_new = true; }
@@ -48576,9 +48611,34 @@ static std::vector<TurnSolver::Plan> BpDeriveContinuationList(const GameState& s
             ++dropped;
             return false;
         };
+        // MTG_BP_NEW_ONLY_TRACE=<turn> (diagnosis only, print-only, unset = off): every entry of
+        // every list the filter sees on that turn, with its verdict, the cards that arrived and the
+        // plan's pending casts. The counters above say HOW MANY entries a deck drops; this says WHICH
+        // -- the read that names a lost line (a continuation the adopted arm cannot reach through a
+        // sibling base plan, i.e. the next enumerator gap) instead of guessing it from the game log.
+        static const int s_newonly_trace_turn = EnvInt("MTG_BP_NEW_ONLY_TRACE", 0);
+        const bool trace_here = s_newonly_trace_turn > 0 && state.turn_number == s_newonly_trace_turn;
+        if (trace_here)
+        {
+            std::string arrived;
+            for (const Card& c : ap.hand)
+            { if (is_new_number(c.m_number)) { arrived += (arrived.empty() ? "" : ","); arrived += c.m_name.str(); } }
+            std::cerr << "[bp-newonly] T" << state.turn_number << (is_pre_combat ? " main1" : " main2")
+                      << " list=" << plans.size() << " arrived=[" << arrived << "]\n";
+        }
         std::vector<TurnSolver::Plan> survivors;
         survivors.reserve(plans.size());
-        for (TurnSolver::Plan& p : plans) { if (keep(p)) { survivors.push_back(std::move(p)); } }
+        for (TurnSolver::Plan& p : plans)
+        {
+            const bool k = keep(p);
+            if (trace_here)
+            {
+                std::cerr << "   " << (k ? "KEEP " : "DROP ") << PlanDesc(p)
+                          << (p.land_decided && !p.land_to_play.empty() ? ("  land[" + p.land_to_play + "]") : "")
+                          << "\n";
+            }
+            if (k) { survivors.push_back(std::move(p)); }
+        }
         if (count_stats && s_rollout_stats)
         {
             g_bp_newonly_lists.fetch_add(1, std::memory_order_relaxed);
