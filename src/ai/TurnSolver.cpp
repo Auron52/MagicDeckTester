@@ -664,6 +664,7 @@ static std::atomic<long long> g_bp_newonly_dropped{0};
 static std::atomic<long long> g_bp_newonly_kept_new{0};
 static std::atomic<long long> g_bp_newonly_kept_plan{0};
 static std::atomic<long long> g_bp_newonly_kept_act{0};      // kept by a newly AVAILABLE activation
+static std::atomic<long long> g_bp_newonly_kept_mana{0};     // kept because its casts NEED a source minted this turn
 static std::atomic<long long> g_bp_newonly_kept_unknown{0};  // kept because the kind is not keyed
 static bool BpCondemnActivationEnabled();   // defined with the rule, next to the other condemn flags
 static std::atomic<long long> g_bp_cond_mark_in_window{0};  // condemned entries at rank < W
@@ -1189,6 +1190,7 @@ namespace
                           << " drop_rate=" << (ns ? static_cast<double>(nd) / ns : 0.0)
                           << " kept_new=" << g_bp_newonly_kept_new.load()
                           << " kept_act=" << g_bp_newonly_kept_act.load()
+                          << " kept_mana=" << g_bp_newonly_kept_mana.load()
                           << " kept_unknown=" << g_bp_newonly_kept_unknown.load()
                           << " kept_plan=" << g_bp_newonly_kept_plan.load() << "\n";
             }
@@ -24417,6 +24419,27 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
     // makes a new card first-class (see docs/design/breakpoint-phase-classification.md). Empty is
     // the SAFE value: every card then reads as new, so both consumers stand down.
     std::vector<int> deferred_hand_before;
+    // MTG_BP_NEW_ONLY: the deferred site's snapshot is the hand at the FIRST arming cast of the
+    // pass, not the last. Every arming site below overwrites deferred_hand_before with its own
+    // pre-cast hand, so a plan that casts two draw tricks (Mirrorwing: Fists of Flame, then
+    // Ancestral Anger) snapshots the hand AFTER the first trick's draw, and the card it drew reads
+    // as OLD at the deferred breakpoint -- the continuation that casts it is dropped as a sibling's
+    // line when no sibling can hold a card that was not in hand when the base plans were made
+    // (seed 700176 T3: "DROP spells[Oracle's Restoration]" with arrived=[]; 4 of the 14 residual
+    // Mirrorwing losses in the 2026-09-22 batch reproduce at b0 on this shape). The other two
+    // consumers of the snapshot (condemnation, the cantrip-order ban) keep the last-cast capture
+    // they were measured under: the pin is live only under the lever. Reset when the deferred
+    // re-solve fires, so a nested pass pins its own first arming cast. The executor's twin is the
+    // pin on rdb_hand in AIEngine (pin_rdb_hand / bound_hand) -- lockstep pair.
+    const bool newonly_pin = BpNewOnlyActive(state);
+    bool deferred_hand_pinned = false;
+    auto deferred_snapshot = [&](const std::vector<int>& at_cast) -> const std::vector<int>&
+    {
+        if (!newonly_pin)          { return at_cast; }
+        if (deferred_hand_pinned)  { return deferred_hand_before; }
+        deferred_hand_pinned = true;
+        return at_cast;
+    };
     // Name hashes of every hand cast THIS PLAN makes. Bound with the snapshot so the breakpoint
     // filter can tell "the plan declined this card" from "the plan casts it later" -- the latter is
     // still in hand at the breakpoint, and the continuation is what realises it. Gated: not built
@@ -25778,7 +25801,7 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
                 // (AcqResolveEnabled / MTG_ACQ_RESOLVE, same family as the tutor fetch above).
                 if (AcqResolveEnabled() && !s_human_play && sink_stack.empty())
                 { deferred_cantrip_resolve = true; deferred_cantrip_site = &def;
-                  deferred_hand_before = hand_at_cast; }
+                  deferred_hand_before = deferred_snapshot(hand_at_cast); }
             }
 
             if (t == Targeting::Any || t == Targeting::Player)
@@ -26117,7 +26140,7 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
             if (AcqResolveEnabled() && def.params.tutor_to_hand && !s_human_play
                 && sink_stack.empty())
             { deferred_cantrip_resolve = true; deferred_cantrip_site = &def;
-              deferred_hand_before = hand_at_cast; }
+              deferred_hand_before = deferred_snapshot(hand_at_cast); }
 
             // Breaching Dragonstorm enter trigger (recorded just above when this creature IS a
             // copy of it): resolve now, lockstep with the executor's post-resolution drain.
@@ -26324,7 +26347,7 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
             {
                 deferred_cantrip_resolve = true;
                 deferred_cantrip_site    = &def;
-                deferred_hand_before     = hand_at_cast;
+                deferred_hand_before     = deferred_snapshot(hand_at_cast);
                 // THE PARTITION IS *DEFER* + TRUNCATE, NOT INLINE + TRUNCATE. Measured on Hinata,
                 // 60 games: deferred 5.7000; inline without truncation 6.0333; inline WITH
                 // truncation 7.0333. So moving the resolve inline is itself worth +0.33 before
@@ -26599,7 +26622,7 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
             if (AcqResolveEnabled() && def.params.tutor_to_hand && !s_human_play
                 && sink_stack.empty())
             { deferred_cantrip_resolve = true; deferred_cantrip_site = &def;
-              deferred_hand_before = hand_at_cast; }
+              deferred_hand_before = deferred_snapshot(hand_at_cast); }
             // Tutor-to-TOP reset (TopResolveEnabled / MTG_TOP_RESOLVE, EngineFlags.h -- the
             // USER's combo, 2026-08-21): the tutor is a LIBRARY WRITE that re-arms every
             // top-of-library consumer, so arm the same deferred re-solve -- the continuation
@@ -26763,7 +26786,7 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
                 {
                     deferred_cantrip_resolve = true;
                     deferred_cantrip_site    = &def;
-                    deferred_hand_before     = hand_at_cast;
+                    deferred_hand_before     = deferred_snapshot(hand_at_cast);
                     deferred_trick_armed     = true;   // site 5, not the plain-cantrip site 3
                     // The node hosts this class (MTG_BP_NODE_D56): partition HERE, exactly as the
                     // plain-cantrip branch does. Everything still unapplied belongs to the
@@ -26979,7 +27002,7 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
                 {
                     deferred_cantrip_resolve = true;
                     deferred_cantrip_site    = &def;
-                    deferred_hand_before     = hand_at_cast;
+                    deferred_hand_before     = deferred_snapshot(hand_at_cast);
                     deferred_equip_armed     = true;   // site 6, not the plain-cantrip site 3
                     // Node-hosted (MTG_BP_NODE_D56): partition here. Note the INLINE arm above
                     // already truncates -- after its continuation's own apply -- so this is the
@@ -27054,7 +27077,7 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
         {
             deferred_cantrip_resolve = true;
             deferred_cantrip_site    = &def;
-            deferred_hand_before     = hand_at_cast;
+            deferred_hand_before     = deferred_snapshot(hand_at_cast);
             deferred_put_armed       = true;   // site 10, its own bit (see deferred_site_index)
         }
     };
@@ -27207,7 +27230,7 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
                     {
                         deferred_cantrip_resolve = true;
                         deferred_cantrip_site    = CardDatabase::Instance().Lookup(a.tutor_target);
-                        deferred_hand_before     = hand_before;
+                        deferred_hand_before     = deferred_snapshot(hand_before);
                     }
                 }
             };
@@ -28049,7 +28072,7 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
                                    a.card_name.str().c_str(), state.turn_number); }
                     deferred_cantrip_resolve = true;
                     deferred_cantrip_site    = put_def;
-                    deferred_hand_before     = hand_before_put;
+                    deferred_hand_before     = deferred_snapshot(hand_before_put);
                     deferred_equip_armed     = true;   // site 6, not the plain-cantrip site 3
                     // NO node partition on the PUT arm, deliberately -- unlike the cast-side
                     // site-6 arm above. The executor's PutFromHandAbility branch (AIEngine) does
@@ -28344,6 +28367,7 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
             return;
         }
         deferred_cantrip_resolve = false;
+        deferred_hand_pinned     = false;   // the nested pass pins its own first arming cast
         // MTG_CANTRIP_ORDER: bind the continuation to its site for the whole re-solve (the
         // searched list, the greedy fallback, and the continuation's own application). The
         // executor's twin binding is in AIEngine::resolve_draw_breakpoint -- lockstep pair.
@@ -48504,7 +48528,90 @@ static std::vector<TurnSolver::Plan> BpDeriveContinuationList(const GameState& s
             return std::binary_search(g_bp_acts_before->begin(), g_bp_acts_before->end(),
                                       BpActivationKey(number, ability));
         };
-        long long kept_new = 0, kept_act = 0, kept_unknown = 0, kept_plan = 0, dropped = 0;
+        // THE PAYMENT-NATIVE HALF OF THE ACTIVATION RULE (2026-09-22). A Treasure is an ability
+        // that was not previously available -- "{T}, sacrifice: add one mana of any colour" -- but
+        // under §2a (MTG_TREASURE_PAY_SOURCE) it is spent by the PAYER, not by a plan action, so
+        // no ActivatePermAbility ever names it and the keyed rule below cannot see it. At Gold
+        // Rush's site-5 breakpoint (a Treasure payload: no card arrives, only mana) every entry
+        // therefore read as old and the whole list was emptied, `<pass>` included -- and the base
+        // plan that is Gold Rush ALONE, whose canon continuation (Fists + Draught off the
+        // Treasures, then Hierarch off Fists' draw) is Mirrorwing's T3 kill on seed 1020, was left
+        // with nothing. The base enumerator credits ONE minted Treasure per minting cast, net (the
+        // §2a MINTED TREASURE credit), never the magnet / Frontline Heroism fan's extras, so those
+        // lines have no base sibling and the breakpoint IS the engine's route to them: the
+        // 2026-09-22 all-deck batch on the index-fixed filter read Mirrorwing +0.0435 (6 better /
+        // 86 worse, 2,000 paired games) from exactly this.
+        //
+        // The test is the sibling test the whole rule rests on: a continuation whose casts are
+        // payable from the sources the base plans could see is a sibling's line; one that NEEDS a
+        // source minted this turn is not. "Minted this turn" = an untapped pay-sac source with
+        // entered_this_turn (state-derived, so the executor's replay of this same list reads the
+        // identical verdict). The old pool is AvailableManaPool with those sources held back
+        // (tapped on a scratch copy -- §2a's own "cracked" convention), plus the continuation's
+        // own land drop played on that copy exactly as the land axis plays it, and the
+        // payability test is the enumerator's own pool.CanPay on the summed costs
+        // (AddCostCarryingHybrids, the helper the subset scorer uses). A cast the sum cannot
+        // price (X, an alternative cost, splice, replicate, bestow) reads as unknown: kept, the
+        // safe direction. Lands played this turn are NOT new sources here, by the USER's ruling
+        // (a land or Astrolabe played in the current plan is the enumerator's business), and a
+        // Treasure that was already on the board when the plan started is a §2a source the base
+        // enumerator prices, so it reads as old. MTG_BP_NEW_ONLY_MANA=0 is the A/B hatch (the
+        // rule as it stood before this half existed).
+        static const bool s_newonly_mana = EnvOn("MTG_BP_NEW_ONLY_MANA", true);
+        int new_paysac = 0;
+        if (s_newonly_mana)
+        {
+            for (const Permanent& q : state.battlefield)
+            {
+                if (q.controller_index != state.active_player_index || q.tapped || !q.entered_this_turn)
+                { continue; }
+                const CardDefinition* qd = CardDatabase::Instance().LookupCached(q.card);
+                if (qd != nullptr && IsPaySacSource(*qd)) { ++new_paysac; }
+            }
+        }
+        std::map<std::string, ManaPool> old_pools;   // keyed by the continuation's land drop ("" = none)
+        auto old_pool_for = [&](const TurnSolver::Plan& p) -> const ManaPool&
+        {
+            const bool with_land = p.land_decided && !p.land_to_play.empty();
+            const std::string key = with_land
+                ? p.land_to_play + "|" + p.fetch_target + "|" + p.land_face : std::string{};
+            auto it = old_pools.find(key);
+            if (it != old_pools.end()) { return it->second; }
+            GameState copy = state;
+            for (Permanent& q : copy.battlefield)
+            {
+                if (q.controller_index != copy.active_player_index || q.tapped || !q.entered_this_turn)
+                { continue; }
+                const CardDefinition* qd = CardDatabase::Instance().LookupCached(q.card);
+                if (qd != nullptr && IsPaySacSource(*qd)) { q.tapped = true; }   // held back
+            }
+            ManaPool pool;   // a land drop the copy refuses leaves the pool empty: unpayable = new
+            if (!with_land || PlayLandByName(copy, p.land_to_play, p.fetch_target, true, p.land_face))
+            {
+                pool = AvailableManaPool(copy);
+                if (!FloatLeftoverManaEnabled()) { pool.AddPool(copy.floating_mana); }
+            }
+            return old_pools.emplace(key, pool).first->second;
+        };
+        // 1 = needs minted mana (new), 0 = payable from the base's sources (old), -1 = unpriceable.
+        auto needs_minted_mana = [&](const TurnSolver::Plan& p) -> int
+        {
+            ManaCost combined;
+            bool any = false;
+            for (const Action& a : p.actions)
+            {
+                if (a.kind == Action::Kind::PlayLand) { continue; }
+                if (a.kind != Action::Kind::CastFromHand) { return -1; }
+                if (a.alt_cost || a.free_cast || a.chosen_x > 0 || a.splice_count > 0
+                    || a.replicate_count > 0 || a.bestow) { return -1; }
+                AddCostCarryingHybrids(combined, a.cost);
+                any = true;
+            }
+            if (!any) { return 0; }
+            return old_pool_for(p).CanPay(combined) ? 0 : 1;
+        };
+        long long kept_new = 0, kept_act = 0, kept_mana = 0, kept_unknown = 0, kept_plan = 0, dropped = 0;
+        const char* last_why = "";   // the trace's verdict reason (set by keep)
         // THE HAND A PLAN'S hand_index INDEXES. A land-carrying plan was enumerated on a COPY of the
         // state with its land already played (EnumeratePlansWithLandUncached: PlayLandByName(copy)
         // then EnumeratePlans(copy)), so its hand_index counts the POST-drop hand. Reading it against
@@ -48604,11 +48711,18 @@ static std::vector<TurnSolver::Plan> BpDeriveContinuationList(const GameState& s
                     break;
                 }
             }
-            if (uses_new)     { ++kept_new;     return true; }
-            if (new_act)      { ++kept_act;     return true; }
-            if (unknown)      { ++kept_unknown; return true; }
-            if (plan_pending) { ++kept_plan;    return true; }
+            if (uses_new)     { ++kept_new;     last_why = "new";     return true; }
+            if (new_act)      { ++kept_act;     last_why = "act";     return true; }
+            if (unknown)      { ++kept_unknown; last_why = "unknown"; return true; }
+            if (plan_pending) { ++kept_plan;    last_why = "plan";    return true; }
+            if (new_paysac > 0)
+            {
+                const int r = needs_minted_mana(p);
+                if (r > 0) { ++kept_mana;    last_why = "mana";     return true; }
+                if (r < 0) { ++kept_unknown; last_why = "unpriced"; return true; }
+            }
             ++dropped;
+            last_why = "";
             return false;
         };
         // MTG_BP_NEW_ONLY_TRACE=<turn> (diagnosis only, print-only, unset = off): every entry of
@@ -48618,13 +48732,19 @@ static std::vector<TurnSolver::Plan> BpDeriveContinuationList(const GameState& s
         // sibling base plan, i.e. the next enumerator gap) instead of guessing it from the game log.
         static const int s_newonly_trace_turn = EnvInt("MTG_BP_NEW_ONLY_TRACE", 0);
         const bool trace_here = s_newonly_trace_turn > 0 && state.turn_number == s_newonly_trace_turn;
+        // MTG_BP_NEW_ONLY_DRY=1 (diagnosis only, default off): compute and print every verdict but
+        // DROP NOTHING, so a game plays the unfiltered line while the trace says which of the
+        // entries that line actually used would have been dropped -- the direct read for "which
+        // continuation did the filter cost this game", without guessing it from two game logs.
+        static const bool s_newonly_dry = EnvOn("MTG_BP_NEW_ONLY_DRY");
         if (trace_here)
         {
             std::string arrived;
             for (const Card& c : ap.hand)
             { if (is_new_number(c.m_number)) { arrived += (arrived.empty() ? "" : ","); arrived += c.m_name.str(); } }
             std::cerr << "[bp-newonly] T" << state.turn_number << (is_pre_combat ? " main1" : " main2")
-                      << " list=" << plans.size() << " arrived=[" << arrived << "]\n";
+                      << " list=" << plans.size() << " arrived=[" << arrived << "]"
+                      << " minted=" << new_paysac << "\n";
         }
         std::vector<TurnSolver::Plan> survivors;
         survivors.reserve(plans.size());
@@ -48635,9 +48755,10 @@ static std::vector<TurnSolver::Plan> BpDeriveContinuationList(const GameState& s
             {
                 std::cerr << "   " << (k ? "KEEP " : "DROP ") << PlanDesc(p)
                           << (p.land_decided && !p.land_to_play.empty() ? ("  land[" + p.land_to_play + "]") : "")
+                          << (k ? std::string("  <") + last_why + ">" : std::string{})
                           << "\n";
             }
-            if (k) { survivors.push_back(std::move(p)); }
+            if (k || s_newonly_dry) { survivors.push_back(std::move(p)); }
         }
         if (count_stats && s_rollout_stats)
         {
@@ -48646,6 +48767,7 @@ static std::vector<TurnSolver::Plan> BpDeriveContinuationList(const GameState& s
             g_bp_newonly_dropped.fetch_add(dropped, std::memory_order_relaxed);
             g_bp_newonly_kept_new.fetch_add(kept_new, std::memory_order_relaxed);
             g_bp_newonly_kept_act.fetch_add(kept_act, std::memory_order_relaxed);
+            g_bp_newonly_kept_mana.fetch_add(kept_mana, std::memory_order_relaxed);
             g_bp_newonly_kept_unknown.fetch_add(kept_unknown, std::memory_order_relaxed);
             g_bp_newonly_kept_plan.fetch_add(kept_plan, std::memory_order_relaxed);
         }

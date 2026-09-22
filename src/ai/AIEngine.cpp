@@ -2092,6 +2092,19 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
     // makes budgeted play structurally -- not merely measurably -- untouched. Scoped, because
     // BottomEvalScope re-enters with a different budget.
     UnbudgetedPlayScope _unbudgeted_play(m_budget_ms <= 0);
+    {   // MTG_EXEC_TAP_TRACE: the REAL state at TakeTurn entry (diagnosis only, default off)
+        static const bool s_tr = EnvOn("MTG_EXEC_TAP_TRACE");
+        if (s_tr)
+        {
+            const ManaPool& f = state.floating_mana;
+            std::string own;
+            for (const Permanent& p : state.battlefield)
+            { if (p.controller_index == state.active_player_index) { own += " " + p.card.m_name.str() + (p.tapped ? "(T)" : ""); } }
+            std::fprintf(stderr, "[exec-tap] T%d entry pre=%d float{w%d u%d b%d r%d g%d c%d *%d} own:%s\n",
+                         state.turn_number, is_pre_combat_main ? 1 : 0, f.white, f.blue, f.black,
+                         f.red, f.green, f.colorless, f.wild, own.c_str());
+        }
+    }
     // NO GENERIC MANA IN A HUMAN-PLAY POOL, committed at the DECISION BOUNDARY (see
     // ConcreteDeferScope). One TakeTurn = "emit a decision, apply the plan the human picked", so
     // its exit is exactly the moment the pool becomes something a human looks at again. Holding
@@ -3226,6 +3239,19 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
                                                       m_shared_tt,
                                                       &committed_win, &committed_sub_depth);
             }
+            {   // MTG_EXEC_TAP_TRACE: the REAL state right after the solve (diagnosis only)
+                static const bool s_tr = EnvOn("MTG_EXEC_TAP_TRACE");
+                if (s_tr)
+                {
+                    const ManaPool& f = state.floating_mana;
+                    std::string own;
+                    for (const Permanent& p : state.battlefield)
+                    { if (p.controller_index == state.active_player_index) { own += " " + p.card.m_name.str() + (p.tapped ? "(T)" : ""); } }
+                    std::fprintf(stderr, "[exec-tap] T%d after-solve pre=%d float{w%d u%d b%d r%d g%d c%d *%d} own:%s\n",
+                                 state.turn_number, is_pre_combat_main ? 1 : 0, f.white, f.blue, f.black,
+                                 f.red, f.green, f.colorless, f.wild, own.c_str());
+                }
+            }
             PROF_ADD_NODES(budget.Used());
             PROF_RECORD_DECISION(state.turn_number, is_pre_combat_main, budget.Used());
             if (s_decision_progress)
@@ -3579,6 +3605,17 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
     // Name hashes of the committed plan's hand casts -- lockstep twin of ApplyPlanDirect's
     // plan_cast_names. A card the plan casts is never "declined", so the breakpoint filter keeps it.
     std::vector<std::uint64_t> rdb_plan_casts;
+    // MTG_BP_NEW_ONLY: the snapshot the deferred re-solve binds is the hand at the FIRST arming
+    // cast of the pass (rollout twin: deferred_snapshot in ApplyPlanDirect). rdb_hand itself keeps
+    // its per-cast meaning -- put_in_hand_armed reads it as "the hand before THIS cast" -- so the
+    // pin is a copy taken when a cast arms a site, and released when the re-solve binds it.
+    const bool rdb_newonly = TurnSolver::NewOnlyBreakpointContinuationsActive(state);
+    std::vector<int> rdb_hand_pass;
+    bool rdb_hand_pinned = false;
+    auto pin_rdb_hand = [&]()
+    {
+        if (rdb_newonly && !rdb_hand_pinned) { rdb_hand_pass = rdb_hand; rdb_hand_pinned = true; }
+    };
 
     // Same-turn loyalty activation carried on a CAST action (Action::loyalty_ability >= 0 on a
     // CastFromHand of a planeswalker; rollout twin: apply_one's post-legend-rule call in
@@ -3680,9 +3717,40 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
         }
         if (it == ap.hand.end()) { return; }
         ManaPool available = AvailableManaPool(state);
+        // MTG_EXEC_TAP_TRACE=1 (diagnosis only, default off): which permanents this EXECUTOR cast
+        // tapped, and the float it left -- the executor-only twin of MTG_FLOAT_TRACE, which prints
+        // nothing outside the viewer (its gate is the play hooks).
+        static const bool s_exec_tap_trace = EnvOn("MTG_EXEC_TAP_TRACE");
+        std::vector<bool> tapped_before;
+        if (s_exec_tap_trace)
+        {
+            for (const Permanent& p : state.battlefield) { tapped_before.push_back(p.tapped); }
+            const ManaPool& f0 = state.floating_mana;
+            std::fprintf(stderr, "[exec-tap] T%d before %s: float{w%d u%d b%d r%d g%d c%d *%d} untapped:",
+                         state.turn_number, it->m_name.str().c_str(), f0.white, f0.blue, f0.black,
+                         f0.red, f0.green, f0.colorless, f0.wild);
+            for (const Permanent& p : state.battlefield)
+            { if (!p.tapped) { std::fprintf(stderr, " %s", p.card.m_name.str().c_str()); } }
+            std::fprintf(stderr, "\n");
+        }
+        const std::string cast_name = it->m_name.str();
         CastSpellFromHand(state, *it, available, 0, tutor_target, chosen_x, own_targets, ponder_keep,
                           crackle_targets, splice_count, chosen_float_color, enchant_target, free_cast,
                           bestow, replicate_count, convoke_green, convoke_other, phyrexian_life, evoke);
+        if (s_exec_tap_trace)
+        {
+            std::string line = "[exec-tap] T" + std::to_string(state.turn_number) + " " + cast_name + " tapped:";
+            for (std::size_t i = 0; i < state.battlefield.size(); ++i)
+            {
+                const bool was = i < tapped_before.size() ? tapped_before[i] : false;
+                if (state.battlefield[i].tapped && !was) { line += " " + state.battlefield[i].card.m_name.str(); }
+            }
+            const ManaPool& f = state.floating_mana;
+            line += "  float{w" + std::to_string(f.white) + " u" + std::to_string(f.blue) + " b" + std::to_string(f.black)
+                  + " r" + std::to_string(f.red) + " g" + std::to_string(f.green) + " c" + std::to_string(f.colorless)
+                  + " *" + std::to_string(f.wild) + "}";
+            std::fprintf(stderr, "%s\n", line.c_str());
+        }
     };
 
     // Cast a spell from hand via its alternative cost (Invigorate / Skyshroud Cutter /
@@ -4049,7 +4117,12 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
         // karoo_deferred: the executor reserves a Karoo drop for after the main cast loop exactly as
         // ApplyPlanDirect does, so it must tell the breakpoint enumeration the same thing -- a
         // RESERVED drop is not a declined one (MTG_BP_CONDEMN_LAND). Lockstep pair.
-        TurnSolver::CantripOrderScope _cos(rdb_site, &rdb_hand, &rdb_plan_casts,
+        // The pinned first-arming-cast hand under MTG_BP_NEW_ONLY (see pin_rdb_hand), else the
+        // per-cast snapshot. A COPY, so a nested cast re-pinning during this continuation's
+        // application cannot move the list this re-solve was derived under.
+        const std::vector<int> bound_hand = (rdb_newonly && rdb_hand_pinned) ? rdb_hand_pass : rdb_hand;
+        rdb_hand_pinned = false;
+        TurnSolver::CantripOrderScope _cos(rdb_site, &bound_hand, &rdb_plan_casts,
                                            ResolveProvider(state).CondemnsConsideredAtBreakpoint(),
                                            karoo_deferred,
                                            TurnSolver::ManaSourceCount(state),
@@ -4265,6 +4338,7 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
                 if (is_draw_engine(a.card_name) || put_armed_c)
                 {
                     rdb_site = CardDatabase::Instance().Lookup(a.card_name);
+                    pin_rdb_hand();
                     rdb_site_activated = false;   // a CAST-armed site
                     if (TurnSolver::BreakpointHandSnapshotWanted(state))
                     {
@@ -4503,6 +4577,7 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
                 else
                 {
                     rdb_site = CardDatabase::Instance().Lookup(a.card_name);
+                    pin_rdb_hand();
                     rdb_site_activated = false;   // a CAST-armed site
                     if (TurnSolver::BreakpointHandSnapshotWanted(state))
                     {
@@ -4652,6 +4727,7 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
                 else
                 {
                     rdb_site = CardDatabase::Instance().Lookup(a.card_name);
+                    pin_rdb_hand();
                     rdb_site_activated = false;   // a CAST-armed site
                     if (TurnSolver::BreakpointHandSnapshotWanted(state))
                     {
@@ -4735,6 +4811,7 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
             else
             {
                 rdb_site = CardDatabase::Instance().Lookup(a.card_name);
+                pin_rdb_hand();
                 rdb_site_activated = false;   // a CAST-armed site
                 if (TurnSolver::BreakpointHandSnapshotWanted(state))
                 {
@@ -6199,6 +6276,16 @@ void AIEngine::CastSpellFromHand(GameState& state, Card& hand_card, ManaPool& av
         if (def->params.untap_x_mana_sources && SpasmUntapLiteralOn())
         {
             RitualTapAheadIntoFloat(state, chosen_x);
+            {   // MTG_EXEC_TAP_TRACE: the tap-ahead's float (diagnosis only, default off)
+                static const bool s_tr = EnvOn("MTG_EXEC_TAP_TRACE");
+                if (s_tr)
+                {
+                    const ManaPool& f = state.floating_mana;
+                    std::fprintf(stderr, "[exec-tap] T%d tap-ahead for %s X=%d -> float{w%d u%d b%d r%d g%d c%d *%d}\n",
+                                 state.turn_number, def->card.m_name.str().c_str(), chosen_x,
+                                 f.white, f.blue, f.black, f.red, f.green, f.colorless, f.wild);
+                }
+            }
             available = AvailableManaPool(state);
         }
         // Same manoeuvre for an ETB-untap creature (Peregrine Drake / Cloud of Faeries): its
