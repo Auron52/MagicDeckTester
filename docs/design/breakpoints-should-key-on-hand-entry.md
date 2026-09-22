@@ -1,8 +1,14 @@
 # Breakpoints should key on CARDS ENTERING HAND, not on what was cast
 
-**Status: OPEN, audited 2026-08-25, not started.** USER design direction: *"it makes sense to audit
-when the draws are happening or perhaps even to go so far as designing breakpoints around when we
-put cards in hand."* This doc is the audit that motivates it and is self-contained.
+**Status: STEPS 1 AND 2 BUILT 2026-09-22 — step 1 ADOPTED (byte-identical), step 2 DEFAULT OFF
+pending a held-out confirm. Step 3's hazard is closed by construction.** See the 2026-09-22 section
+at the end of this document for what was built, what the census measured, and what is owed. The
+text below is the original audit, kept because it is the argument; read the 2026-09-22 section for
+current state, and note that **the audit's "30 sites" undercounted** — see there for why.
+
+USER design direction: *"it makes sense to audit when the draws are happening or perhaps even to go
+so far as designing breakpoints around when we put cards in hand."* This doc is the audit that
+motivates it and is self-contained.
 
 ## The defect class
 
@@ -344,3 +350,127 @@ exists this is *reasoned, not measured*.
   Worth asking later whether they should be one site; they are numbered separately today because
   `BpSiteMask` is simultaneously searchability AND `bp_at` numbering, and renumbering breaks the
   apply/executor lockstep.
+
+## 2026-09-22 — STEPS 1 AND 2 BUILT. What the census actually says, and what is owed.
+
+USER 2026-09-22: *"Let's compact and then implement it."* Two commits: the choke point
+(`dbc101b2`, byte-identical, adopted) and the arming (`8ebbee6f`, `MTG_BP_HAND_ENTRY`, default OFF).
+
+### Step 1 — `EnterHand`, and the correction the audit needs
+
+`src/core/HandEntry.h` holds one `EnterHand(state, player_index, card, HandEntryReason)` with two
+overloads (rvalue / const-ref), so a site that moved still moves and one that copied still copies.
+Every engine hand-entry site routes through it. Verified byte-identical: smoke run key-for-key
+against the same binary at HEAD, **all 87 digests equal**.
+
+**THE AUDIT'S "30 SITES" UNDERCOUNTED, and the miss is the same defect one level up.** The
+enumeration came from `grep 'hand\.push_back\|hand\.insert'`. `Library::DrawN(n, p.hand)` appends
+straight into the destination vector and never writes that token — and it is how nearly every
+`cast_draw` / ETB-draw / trigger-draw in the engine draws. **Sixteen further routes** came from
+there, including the whole `etb_self_draw` family this document elsewhere names as the motivating
+gap. An inventory maintained by pattern-matching drifts from the thing it inventories; that is
+precisely the argument for a choke point, now demonstrated on the audit itself. `DrawIntoHand` is
+the second entry point, and the two are the complete set.
+
+Three reasons are routed but **excluded** from the arming sequence, because none is a new option:
+`Opening` (setup), `DrawStep` (precedes the main phase — the audit's own "n/a" row), and
+`StagedMerge` (`staged_cards -> hand` is bookkeeping between two representations of one
+availability).
+
+### The census — `MTG_HAND_ENTRY_CENSUS=1`, and it settles the doc's own question
+
+The doc asks: *"a counter at the unarmed routes, run over all suite decks ... decides whether this
+is a Goblins fix or an everything fix."* Here it is. 40 games/deck, d3 b10, seed 1001; counts are
+rollout-inclusive, so read the SHARES. "OUTSIDE" = entries of new material that happen outside any
+cast apply, which is the only window today's arming can see. The Karoo land-bounce route is excluded
+throughout: a land returning to hand after the land drop is spent is not a new castable option.
+
+| deck | route | OUTSIDE / total | share |
+|---|---|---|---|
+| **fungus** | draw | 43,055 / 43,055 | **100%** |
+| **goblins** | stage | 7,401 / 7,401 | **100%** |
+| **goblins** | tutor | 2,384 / 3,257 | **73%** |
+| **melira** | tutor | 68,478 / 86,272 | **79%** |
+| melira | draw | 13,442 / 19,793 | 68% |
+| knights | dig | 4,096 / 21,566 | 19% |
+| kitty | draw | 4,316 / 154,030 | 2.8% |
+| th | reveal | 1,726 / 670,263 | 0.26% |
+| hinata | all routes | ~312 / ~889,000 | 0.03% |
+| mirrorwing | draw | 150 / 311,861 | 0.05% |
+
+**It is a Goblins-class fix, not an everything fix** — the cantrip decks are already covered by site
+10, exactly as designed. Three findings are worth stating on their own:
+
+* **Fungus is at 100%.** The deck's only draw is Psychotrope Thallid (`{1}, Sacrifice a Saproling:
+  Draw a card`), an ACTIVATED ability. It has never once opened a breakpoint. This is the same
+  conclusion the 2026-09-19 `MTG_BP_PROBE` section reached from the other end (every Fungus
+  breakpoint came from site 9, none from a draw) — now measured directly at the effect.
+* **Goblins' Matron case is confirmed live**, 73% of its tutors, exactly as this document predicted
+  from the code in August.
+* **Goblins' `stage` route at 100% is a row this audit did not have**: a death trigger's impulse
+  exile. The table above lists `OnCreatureDies` as "NO" but never named what it puts there.
+
+**Instrument limit, stated rather than buried:** the in-cast marker is installed in the ROLLOUT's
+`apply_one` only, so executor-side entries count as OUTSIDE even when they are inside a cast. The
+executor is ~one real turn per game against ~200k rollout applies, so the distortion is small — but
+the absolute "OUTSIDE" counts are an upper bound, not an exact figure.
+
+### Step 2 — one placement, and step 3's hazard closed by construction
+
+The rollout takes a section-level hand snapshot at the top of `ApplyPlanDirect` and reads it once,
+immediately before the deferred re-solve loop — **after** the site-9 pass, which is exactly where
+the executor's site-9 twin sits, so the two worlds agree on the ORDER of occurrences and not merely
+on their existence. It fires only when NO class armed for the whole section, so it catches precisely
+the hole and nothing else.
+
+**Step 3 ("keep `BpSiteMask` numbering intact ... the single largest hazard") is satisfied by
+construction, not by care:** the new arming sets `deferred_put_armed`, i.e. it arms the EXISTING
+site 10. No bit is added, no site renumbered, and a class that already worked cannot be renumbered
+because the arm stands down whenever anything else armed. At full depth the continuation is recorded
+into `plan.breakpoint_actions` and replayed by the executor's site-agnostic post-loop catch-all, so
+no bp index is consumed on the executor side; its twin only sets `cast_draw_engine`, the depth-0
+second pass. This also **subsumes `MTG_SF_PUT_BP`** — the hand-patched Equipment-PUT route whose own
+comment admits "the executor's PutFromHandAbility branch does not arm a deferred re-solve at all".
+
+The monotone `g_hand_entry_seq` is a **pre-filter, never the answer**. The rollout speculates on
+COPIES of `GameState` on the same thread and those bump the same thread-local, so `seq` unchanged
+proves nothing entered (skip the diff), while `seq` changed only means "ask the exact question" —
+`HandGainedACard`, a content diff on the live state, immune by construction. Do not optimise the
+diff away.
+
+### Measured, and what is NOT yet established
+
+Paired, one pooled batch, d3 b10, avg win turn (lower is better):
+
+| deck | games | base | `MTG_BP_HAND_ENTRY=1` | delta | wall |
+|---|---|---|---|---|---|
+| fungus | 200 | 5.6850 | **5.6700** | **-0.0150** | +2.4% |
+| melira | 300 | 4.6667 | **4.6633** | **-0.0034** | -2.0% |
+| knights | 300 | 4.3033 | 4.3067 | +0.0034 | +0.0% |
+| goblins | 300 | 3.7800 | 3.7800 | 0.0000 | -3.9% |
+| kitty | 300 | 4.3467 | 4.3467 | 0.0000 | +0.4% |
+
+Every digest moved, so the lever binds on all five. Direction is positive on the two decks with the
+largest measured hole; cost is ~flat, which is the notable part given the doc's own warning that
+*"arming on every hand-entry is strictly more armings than today"* — it is not, because the arm is
+gated on nothing else having armed.
+
+**NOT ADOPTED, and the reason is the repo's own rule that one run's average is not evidence** (this
+codebase has seen +2.36 then -2.07 on the same binary). What is owed before an adoption call:
+
+1. A **held-out confirm on fresh seeds** at larger n — launched 2026-09-22 (seeds 480001+, 6,000
+   games over fungus/melira/knights/goblins). The knights sign in particular is within noise of zero
+   and needs settling in the same pass.
+2. **Per-game paired deltas**, not just the arm averages, so the comparison is game-for-game.
+3. Fungus is **not in the regression suite**, so neither smoke nor regression covers its play. Its
+   only signals are this A/B and the 7 references (2 of which carry pre-existing play-drift).
+
+### Still open after this
+
+* The **additive half of the ability rule** remains *reasoned, not measured* — see the 2026-09-19
+  HONEST GAP section, unchanged by this work.
+* Condemnation (`MTG_BP_CLASSIFY`, default OFF) is untouched, and the USER has judged it *"a smaller
+  win here"*.
+* Whether sites 9 and 10 should be ONE site is still the open question the 2026-09-19 section
+  raises. This change makes the case stronger — they now answer one rule at one point in the turn —
+  but renumbering still breaks the apply/executor lockstep, so it stays a separate, deliberate move.
