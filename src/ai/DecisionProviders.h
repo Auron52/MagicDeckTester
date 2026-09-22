@@ -1498,15 +1498,16 @@ public:
     // NOT PREVIOUSLY AVAILABLE; a continuation of old cards and old abilities is a sibling base
     // plan's line, reached a second time.
     //
-    // WHY STAGED AND NOT ADOPTED: it is a trade-off, not a clean win, and the trade is the user's.
-    //   * Cost: 0.45x units at d2/b0, 0.90x at d3/b10, 0.93x at d5/b20; the six heaviest phase-A
-    //     label games 0.48-0.82x with every value label identical.
-    //   * Quality at the deck's play settings (d5/b20, 2,000 paired games, held-out seeds):
-    //     -0.0065 +/- 0.0026, 20 better / 7 worse, all four seed blocks better -- a win.
-    //   * Quality at the suite's shallow tier (d3/b10, 2,000 paired games, held-out seeds):
-    //     +0.0045 +/- 0.0028, 11 better / 20 worse -- a small loss, not significant, but in the
-    //     direction the suite's own keys showed (three Snow games a turn later, zero earlier; the
-    //     pre-accept classifier calls all three budget churn -- each recovers at 4x its budget).
+    // WHY STAGED AND NOT ADOPTED: the adoption is the user's call on the post-fix numbers.
+    //   * Pre-fix (first engine): cost 0.45x units at d2/b0, 0.90x at d3/b10, 0.93x at d5/b20; the
+    //     six heaviest phase-A label games 0.48-0.82x with every value label identical; quality
+    //     -0.0065 +/- 0.0026 at d5/b20 (20 better / 7 worse) and +0.0045 +/- 0.0028 at d3/b10
+    //     (11 / 20), 2,000 paired games each on held-out seeds.
+    //   * The d3 loss was NOT churn: the base reached "Astrolabe, then Boreal Druid off its mana"
+    //     only through a continuation, because a hand Astrolabe was credited no mana at all
+    //     (AnyColorFilterHasFedSlot, fixed in af84217a -- MTG_PENDING_FILTER_SLOT). The user's
+    //     ruling was to fix the enumerator, not to widen the rule. Every cell is re-measured on the
+    //     fixed engine (docs/design/bp-new-only-continuations.md, "The d3/b10 loss was a hole").
     // Flipping the default to true adopts it; Snow's smoke and regression keys (d3 and d5) then need
     // a rebaseline. The condemnation filter above is independent of it (candidate level vs plan
     // level) and the two were measured together.

@@ -285,12 +285,66 @@ d3/b10 games, and the play gate above was d5/b20, so the shallow tier got its ow
 | 10501 | 5.9700 | 5.9700 | 0.0000 | 2 / 2 | 0.894x |
 | **all 2,000** | **6.0240** | **6.0285** | **+0.0045 +/- 0.0028** | **11 / 20, sign p = 0.15** | **0.896x** |
 
-So the lever's quality effect depends on the search setting: a win at the deck's play settings
+So the lever's quality effect depended on the search setting: a win at the deck's play settings
 (d5/b20, -0.0065, 20 / 7) and a small, not-significant loss at the shallow diagnostic tier (d3/b10,
-+0.0045, 11 / 20). Cost is lower at every setting. Where the three suite games diverge is
-instructive: in two of them the base wins through a continuation that casts Boreal Druid off the
-mana of an Arcum's Astrolabe the same plan cast, while the adopted arm must reach that line through
-the sibling base plan that carries the Druid, and at the case budget it does not always get there.
++0.0045, 11 / 20). Cost is lower at every setting. The user's read of that split: *"this is still
+somewhat unexpected for searching further to give us worse results ... this seems more of a signal
+than expected."* It was.
+
+### The d3/b10 loss was a hole, not churn (2026-09-22)
+
+The classifier's "churn" verdict only says the arm reaches the base's *turn* at a higher budget; it
+does not say the base's *line* is reachable. The b0 probe does. Seed 1015, T5 (three Islands and a
+Frost Augur; hand Boreal Druid x2, Abominable Treefolk, Rimefeather Owl, Arcum's Astrolabe): the
+base wins through "cast Astrolabe (draw Ice-Fang Coatl), Augur ability, then Boreal Druid off the
+Astrolabe's {1}: any colour", and that line existed ONLY as a breakpoint continuation -- no base
+plan carried the Druid, because {G} has no green source on that board. Under the rule the Druid is
+an old card, so the continuation is dropped and the line is unreachable at any budget, unbounded
+included. Seeds 1012 (T3) and 3011 (T5) had the same shape.
+
+The sibling-coverage argument behind the rule ("a continuation that casts only old cards is the
+sibling base plan's line") holds only when that sibling is a *payable* subset at the base. It is not
+when the old card is castable only via mana the plan's own cast provides. Two ways to close that:
+keep a continuation whose old cast was not castable at the base (built, then removed), or make the
+enumerator offer the sibling. The user's ruling: *"we don't want to add extra breakpoints or required
+resolves for no reason"*; *"Astrolabe should be treated as a land or other mana source that is played
+in the current plan"* (*"though I guess it is actually a filter, not a mana generation source ... But
+it doesn't change the ruling"*). So: casts stay new by ARRIVAL only, and the enumerator is fixed.
+
+Why the enumerator could not offer {Astrolabe, Boreal Druid}, in the order the gates were bisected:
+
+1. `MTG_DBG_MULTI=5` showed the pair PASSING the mana gates (`reject=0`) and never being pushed.
+   The reject dump fires before the colour gates, so the tracer was extended (`[chain]` line at scope
+   exit, armed under the same toggle) and named the final gate: `ef-no-interact`, i.e. the
+   colour-PRESENCE check `SubsetPayable` rejected the pair and the sequenced-walk rescue declined.
+2. `MTG_SUBSET_ROCK_COLOR` (staged 2026-09-03 for exactly this hole, now default ON and shared by
+   both colour-presence gates) widens the board's colour table with the selected rocks' `rock_mana`
+   -- but the Astrolabe's `rock_mana` was EMPTY.
+3. Root cause, in `AnyColorFilterHasFedSlot` (SpellEffects.h): the fed-slot quota
+   `k = min(F, floor((F + S) / 2))` counted filters ON THE BATTLEFIELD only, and the function
+   returned "no slot" when that quota was zero BEFORE reaching its "not on the battlefield: stay
+   permissive" branch. A hand Astrolabe on a filter-less board therefore read F = 0, quota 0, and was
+   credited nothing at all: not by the flat gate, not by the colour widening, not by the count gate.
+
+The fix (af84217a, `MTG_PENDING_FILTER_SLOT`, default ON, `=0` legacy, a heurarm slot): a pending
+filter counts itself as one of the F filters and gets a slot iff adding it RAISES the quota, since it
+enters behind every filter already there. Exact in both directions: three Islands and no filter ->
+the pending Astrolabe is fed (0 -> 1); one Island already feeding an on-board Astrolabe -> it is not
+(1 -> 1). The amount side was already right (`wild_phantom` marks the unit as a conversion of a
+feeder the pool counts, so {Astrolabe, X} on one Island still fails the amount precheck). Only Snow
+holds an `any_color_filter` rock; Capital City is a land and is on the battlefield by the time the
+enumerator runs. An earlier piece (54666bf4, `PendingFilterInHand` arming the filter-aware payment
+fallback) stays: it lets the real-payment simulation see a castable filter in hand and on its own
+moved Snow's d0 key 6.7210 -> 6.7040.
+
+Probes at d3/b10, base / new-only: 1012 6/6, 1015 8/8 (the Druid is now cast BEFORE the Augur
+activation, as part of the plan), 3011 5/6 -- and 3011 recovers at unbounded budget on both arms
+(5/5), so that one is churn. Flag-off smoke on the fix: snow d0 6.7050 (was 6.7210), snow d3 6.1400
+and d5 6.2600 (both from gi=2 6 -> 7: T2 now casts Astrolabe + Druid and attacks instead of
+activating the Augur, the draws diverge from T3 -- a different physical game), plus the play-changed
+FiveColour d0 key from the rock-colour flip and the other agent's five. Re-measurement of every cell
+on the fixed engine, with the legacy enumerator as a third arm: `logs/snowdiag/chain_v5.sh`
+(in progress at the time of writing; the tables above are the PRE-fix numbers).
 
 ## Status
 
@@ -300,10 +354,13 @@ The per-deck route for Snow (`SnowProvider::NewOnlyBreakpointContinuations`) is 
 **staged off** (`MTG_SNOW_BP_NEW_ONLY`, default 0); flipping its default adopts it and calls for a
 rebaseline of Snow's smoke and regression keys.
 
-**Not adopted -- it is a trade-off, and the trade is the user's:** cost 0.45x / 0.90x / 0.93x units
-at d2 / d3 / d5 and 0.36-0.82x in the label regime with every label identical; quality -0.0065 at the
-deck's play settings and +0.0045 (not significant) at the suite's d3/b10 tier. Two further things to
-know: the filter keys only `ActivatePermAbility` (every Snow activation; other kinds are kept, so
-another deck adopting it gets less of the saving until its kinds are keyed), and site 9 still opens
-only for permanents that entered this turn, which is narrower than the principle the clarification
-states.
+**Not yet adopted -- the pre-fix trade-off is void and the re-measurement is running.** The
+pre-fix numbers were cost 0.45x / 0.90x / 0.93x units at d2 / d3 / d5 and 0.36-0.82x in the label
+regime with every label identical; quality -0.0065 at the deck's play settings and +0.0045 (not
+significant) at the suite's d3/b10 tier. The d3 loss was traced to the enumerator hole above, which
+is now closed (af84217a) -- so every cell is being re-measured on the fixed engine with the legacy
+enumerator as a third arm (`logs/snowdiag/chain_v5.sh`), and the adoption call is the user's on
+those numbers. Two further things to know: the filter keys only `ActivatePermAbility` (every Snow
+activation; other kinds are kept, so another deck adopting it gets less of the saving until its
+kinds are keyed), and site 9 still opens only for permanents that entered this turn, which is
+narrower than the principle the clarification states (the other agent owns that side).
