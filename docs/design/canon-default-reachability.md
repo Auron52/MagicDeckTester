@@ -1,11 +1,14 @@
-# Canon-default reachability: what is left, and what it takes to close it
+# Canon-default reachability: closed, and the four ways it hid
 
-**Status (2026-09-22):** ~124,000 unchallengeable canon defaults → **1,273 on 4 decks**, and the
-audit that measures them is finally asking its question at the right state. The remainder is more
-clause work, in three named shapes — see THE OPEN ITEM. An earlier revision of this doc concluded
-the opposite ("not clause work; it needs a caller"); that conclusion rested on a measurement
-artifact and is corrected in place below rather than deleted, because the way it went wrong is the
-most reusable thing here.
+**Status (2026-09-22): ZERO unchallengeable canon defaults on all 23 suite decks.** ~124,000 → 0.
+The audit that measures them (`MTG_BP_CANON_AUDIT`, `scripts/canon_audit.sh`) is the enforcement and
+should keep running: two of the last four gaps were opened by changes with nothing to do with
+breakpoints — an adopted tutor lever that stopped filling a field a clause read, and a card added to
+a deck — and neither was findable by reading the code.
+
+An earlier revision concluded the remainder was "not clause work; it needs a caller". That rested on
+a measurement artifact; it is corrected in place below rather than deleted, because the way it went
+wrong is the most reusable thing here.
 
 ## The rule this is all enforcing
 
@@ -112,54 +115,65 @@ Result: **~124,000 unchallengeable defaults → ~3,600; 15 of 22 decks affected 
 faster (net −0.3101 over 21 moved keys; fluctuator 5 of 5 cells, hinata 3 of 3, creature_giving
 4 of 4), cost +10% makespan, no game genuinely worse (22 of 24 slower games recover at 4×/16×).
 
-## THE OPEN ITEM — 1,273, and they are CLAUSE work after all
+## CLOSED — ZERO unchallengeable canon defaults, 23 of 23 decks
 
-Measured 2026-09-22 at 60 games/deck, with the audit asking pre-apply:
+The 1,273 that remained once the audit asked pre-apply resolved into **four clause gaps**, not the
+missing *caller* an earlier revision of this section concluded. All four are closed
+(`MTG_BP_DIG_SELF_SOURCE`, `MTG_BP_TUTOR_BF_UNNAMED`, `PutBodyGainsCards`,
+`MTG_BP_WATCHER_SELF_PUT`, `MTG_BP_CASCADE_CLAUSE`; each has a `=0` hatch).
 
 ```
-auras     site 4   [NOHOST]  467   (inline cast)
-melira    site 10  [NOHOST]  466   Chord of Calling
-stompy    site 10  [NOHOST]  291   Natural Order 178 / World War Hulk 68 / Turntimber Symbiosis 45
-th        site 1   [NOHOST]   41   (inline cast)
-th        site 4   [NOHOST]    8   (inline cast)
-                             -----
-                             1,273   on 4 decks;  [capture] = 0 and [variant] = 0 everywhere
+auras   site 4   467   the plan's own LAND DROP is the dig source (Horizon Canopy)
+melira  site 10  466   one question, three hand-rolled fetch lists, already drifted (Celes)
+stompy  site 10  291   178 a clause keyed on a field an adopted lever stopped filling
+                       113 the watcher arrives PUT, not cast (Vaultborn Tyrant is self-inclusive)
+th      site 1    41   CASCADE -- the breakpoint belongs to a card the plan cannot see
+th      site 4     8   as auras (Fiery Islet)
+                 -----
+                 1,273 -> 0        and ~124,000 -> 0 since the class was first measured
 ```
 
-**A PREVIOUS VERSION OF THIS SECTION SAID THE OPPOSITE AND WAS WRONG.** It claimed 3,400 of the
-remainder were `[NOHOST]` and therefore needed a *caller*, citing a site-7 widening that moved
-melira's `unmarked` 13,079 → 4,476 while leaving `UNCHALLENGEABLE` at 1,079. Two errors compounded:
+**The four causes are worth reading as one family**, because none of them is "we forgot a card":
 
-1. **The 1,079 were never real.** They are zero once the audit asks pre-apply. The widening looked
-   inert because the thing it was being judged against was measuring the wrong state.
-2. **`[NOHOST]` does not mean "a clause cannot help".** A base plan's variants are scored as
-   **sibling candidates**, not as children of the apply that reached the breakpoint. Marking the
-   plan is therefore exactly what makes the alternatives reachable, whether or not a node could
-   have hosted this particular apply. The tag separates *node hosting* from *reachability*, and
-   those were conflated.
+1. **A predicate asked of the BOARD when the answer is a property of the PLAN.**
+   `HasAnyDigSource` is a board question, and its own note says a source "can only be ADDED by a
+   plan's own casts, never removed" — true, and safe for the dig LOOP, which is why it read as
+   harmless. For the FAN-OUT it is the entire hole: the plan that adds the source is precisely the
+   plan whose dig nothing ever offers a variant for.
+2. **A clause keyed on a field an ADOPTED LEVER STOPPED FILLING.** The site-10
+   tutor-to-battlefield branch reads `Action::tutor_target`; `MTG_TUTOR_AXIS_RESOLVE` (adopted,
+   default ON) "binds NO name at all" and moved the pick to `Plan::tutor_choice`. The branch has
+   been **dead code on every deck** since that lever shipped, and nothing anywhere would have said
+   so. This is the quietest way for the class to come back.
+3. **One question, three hand-rolled lists.** "Does the fetched body gain a card?" was asked at
+   three sites with three different lists, none holding `etb_discard_any_draw_bonus`. Now one
+   `PutBodyGainsCards()` — the drift hazard the site-10 clause's own note warned about, made
+   structural instead of remembered.
+4. **The plan brings the thing the predicate is looking for.** Both the dig source and the
+   creature-enters watcher arrive *during* the apply the fan-out is deciding about. Vaultborn
+   Tyrant is self-inclusive, so it arms on its own entry — and on stompy it never gets cast, it
+   gets **put** (Turntimber's look, World War Hulk's free chapter-I cast, Natural Order's fetch).
 
-So the remedy for all 1,273 is the same kind of work that took ~124,000 down to this: name the
-route in `PlanOpensBreakpoint`. Three distinct shapes remain, and each is a **play change** needing
-its own GT rebaseline:
+Every new clause is keyed on a **Plan field or a card param, never on board state**. That is
+deliberate: all four audit over-reports came from predicates whose answer moved between the
+fan-out's state and the apply's, and a clause with the same property would simply relocate the bug.
 
-* **`stompy` site 10 (291) — put-in-hand the static predicate cannot see.** Natural Order,
-  Turntimber Symbiosis, World War Hulk. Site 10's arming asks the *outcome* ("did the hand gain a
-  card?"), which is why the clause has to name routes; these three are routes it does not name.
-* **`auras`/`th` site 4 (475) — a plan that creates its OWN dig source.** `BpDigFanoutForPlan` asks
-  `HasAnyDigSource` on the pre-apply board, and the header already notes a source "can only be
-  ADDED by a plan's own casts, never removed" — which is conservative for the fan-out and is
-  precisely the hole: the plan whose cast *adds* the source is never fanned out. The fix is a
-  plan-**action** test (does this plan cast a dig source?), which is state-independent and so
-  cannot regress into the trap above.
-* **`melira` site 10 (466) — Chord of Calling**, and **`th` site 1 (41) — `DrawUntilNonland`** on
-  an apply whose plan does not cast Treasure Hunt (a dug Treasure Hunt cast inside the dig's own
-  re-solve is the likely shape).
+**Cascade is the one that cannot be answered precisely, and says so.** The hit is chosen during
+resolution by a walk down a hidden library, so naming its site would be inventing knowledge. The
+clause marks the cast-reachable SET (bits 0–3). Over-marking is free in the fan-out — both routes
+only test the mask for nonzero — and a variant for a class the hit does not arm collapses onto its
+base plan.
 
-**Hosting is a separate axis, not the remedy for these.** It is still worth costing on its own
-merits — `MTG_BP_NODE_ROOTTURN=0` hosts every searched turn (priced in
-`greedy-continuation-deletion-route.md` Addendum B: recovers hinata at +24% units) and
-`MTG_BP_NODE_HOST2` buys a third for ~2% — but it is about giving a slot a node *in place*, not
-about whether its alternatives exist at all.
+## Hosting is a separate axis, and it is still open
+
+It is worth costing on its own merits — `MTG_BP_NODE_ROOTTURN=0` hosts every searched turn (priced
+in `greedy-continuation-deletion-route.md` Addendum B: recovers hinata at +24% units) and
+`MTG_BP_NODE_HOST2` buys a third for ~2% — but it is about giving a slot a node **in place**, not
+about whether its alternatives exist at all. Those are now all reachable.
+
+**Keep running the audit.** Two of the four gaps above were created by changes that had nothing to
+do with breakpoints (an adopted tutor lever; a card added to a deck), and neither would have been
+found by reading the code.
 
 ## Built, measured, NOT adopted: `MTG_BP_WAVEDROP_HOSTED`
 
