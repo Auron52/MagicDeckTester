@@ -50,6 +50,7 @@ hold different physical copies (#4 below was invisible until the trace showed `I
 | 4 | rollout did not stamp a played LAND's per-copy `m_number`; the executor always has | **FIXED** (below) |
 | 5 | Gamble's "discard a card at random" indexes the hand AS STORED | **built, opt-in, NOT default** (below) |
 | 6 | a cast recorded INSIDE a breakpoint continuation lost `chosen_float_color` / `enchant_target` | **FIXED** (below) |
+| 7 | a cast recorded INSIDE a breakpoint continuation carried no `cost`, so the executor's replay TRAITS read `mana_casts=0` and paid in a different world | **built behind `MTG_BP_REPLAY_COST`, default OFF while measured** (below) |
 
 Rate per 500 games (seed 4004, 8 decks, 4000 games) after 1-4: **0 everywhere, Hinata included.**
 (Dragonstorm was 4-5 at the suite gate budgets before #1; Auras was 3 before #2; Hinata was 4 before
@@ -143,6 +144,30 @@ overnight 84/84 ALL PASS, zero configs changed) — W=2 does not reach such a co
 committed line. `enchant_target` had the same gap and is fixed alongside; no case exercises it today
 (Auras casts its auras from the main plan, not from a breakpoint continuation), so it is a
 latent-bug fix, not a measured one.
+
+## #7 — a recorded continuation cast carried no cost, so the replay's PAYMENT traits differed (2026-09-22)
+
+Same recorder as #6, one field further along. The rollout records a continuation's casts into
+`plan.breakpoint_actions` as bare Actions (name, target, X, float colour ...) with **no `cost`**. The
+executor replays them under `PlanTraits` computed from those records (`replay_recorded`'s
+`_rec_traits`, the lockstep twin of the rollout's `_cont_traits`), and `ComputePlanTraits` counts a
+mana cast only when `a.cost.ManaValue() > 0`. So the replay's traits read `mana_casts = 0` where the
+rollout's read 3.
+
+That flips the per-payment one-shot hold: `OneShotHoldMask` fires on `mana_casts < 2`, so the
+executor **held** the turn-old Treasure and tapped BOTH dorks for two Fortifying Draughts, where the
+rollout had cracked the Treasure and kept the pumped Elvish Mystic untapped to attack alone for
+exactly lethal. Committed T4 kill, realised no win.
+
+Repro: Mirrorwing seed 700473 T4, `MTG_BP_TRACE=1` plus the `[bp-traits]` line (prints both sides'
+trait vectors at the replay). Every committed continuation with two or more mana casts and an
+untapped pay-sac source pays in two different worlds; it surfaced here because the mint-credit work
+(`bp-new-only-continuations.md`, "Mint credit") makes such continuations common on Mirrorwing.
+
+The fix stamps the paid cost (the apply's effective cost) onto the record. Only the traits builder
+reads it (the replay still re-derives the cost from the card), so the recorded script is unchanged.
+`MTG_BP_REPLAY_COST` (heurarm slot `BP_REPLAY_COST`), **default OFF while measured**, byte-identical
+off; it rides with `MTG_MINT_CREDIT_EXACT` in every mint-credit arm and is part of that adoption.
 
 ## Both remaining leads: ROOT-CAUSED, and NEITHER is a lockstep bug
 

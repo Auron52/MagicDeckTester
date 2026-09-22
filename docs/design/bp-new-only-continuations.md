@@ -443,6 +443,124 @@ through `FullSearchLine`, which that tracer does not cover. Repro:
 decks/Snow/Snow.profile.json --games 1 --seed 1003 --depth 3 --budget-ms 0 --ignore-play-profile
 --threads 1 --log-dir <dir>`. Unbounded budget is not a production setting for any deck.
 
+## Mint credit: `MTG_MINT_CREDIT_EXACT` (2026-09-22)
+
+The first Mirrorwing measurement of the new-only rule lost games whose kill needed a Treasure that
+a Gold Rush in the SAME plan had just minted: the continuation that spent it cast only old-hand
+cards, so the filter dropped it, and a "needs a minted Treasure" keep was added to spare it. The
+user ruled that keep the wrong layer:
+
+> *"The right fix might be to credit it correctly instead."* *"We make the credit work for
+> everything else in the plan that produces mana, so following that rule we should count creation
+> of treasures."* *"We should not need to reconsider things from the original hand."* *"Otherwise
+> we need to randomly open breakpoints on treasure creation and worry about lines that we already
+> deleted."*
+
+So the general test every breakpoint site has to pass: **a breakpoint exists for a card that
+ARRIVES** (a draw, a dig, a reveal, a tutor -- something the base could not enumerate because it
+was not in the original hand). Mana a plan's own action PRODUCES is not an arrival; it is priced
+at the base like a ritual's float or a rock's tap, and the plan that spends it is a base plan. A
+line payable only because a DRAWN card produces mana is new by definition, and the new-only rule
+keeps it on that ground.
+
+And the audit half, also the user's: *"I see a purpose to having a framework to locate bugs like
+this one with the extra treasure token. We do not want to hide these cases, so we should have a way
+to run things with extra breakpoints and reconsiders in order to ensure there are no bugs with the
+full line version."* / *"Because the full-line version is a bit bug-prone I don't want to rely on
+it fully in isolation."*
+
+### What the lever changes (`MTG_MINT_CREDIT_EXACT`, heurarm slot, default OFF, byte-identical off)
+
+1. Emission stamps `Action::mint_gain` = the exact Treasure count the cast will realise on the
+   current board (`MintedTreasuresForCast`: the magnet fan and the Frontline Heroism copies, per
+   target). The shipped credit counted one per minting cast.
+2. Both odometer mana gates (`ManaPruneBound`, the selection-exact `BuildManaGateIndex`) credit it.
+   Neither credited a mint before, so the shipped consider() credit was dead for exactly the
+   total-mana shortfall it was written for: `{Gold Rush, Fists}` = 4 pips against a 3-mana pool
+   was skipped at the odometer and never priced.
+3. Both pricing twins (Solve / EnumeratePlans consider()) credit it, with the payer's own
+   spendability gate (magnet live, or Heroism live under the fresh hold) and a sequential
+   first-minter precondition (the minter itself is paid from the board).
+4. An `{X}` trick is offered at the X the same-plan mint funds.
+5. A magnetless subset payable only with its own mint is admitted tagged `freshmode_choice = 1`.
+6. A Treasure-only trick payload opens NO breakpoint (`MintPayloadOpensBreakpoint`, one predicate
+   read at the rollout arming, the plan's site mask, the executor's d0 pass and its node twin); a
+   draw payload still opens it (a drawn card is an arrival). The "needs a minted Treasure" keep is
+   off under the lever.
+
+`MTG_BP_MINT_SITE` (slot) re-opens the Treasure-only breakpoint under the lever: **the audit arm**.
+`MTG_BP_REPLAY_COST` (slot) is a lockstep fix the work surfaced (`rollout-executor-lockstep.md`
+#7) and rides with the lever in every arm.
+
+### The audit route, as a recipe
+
+One pooled batch, three arms on paired seeds: `base` (no flags), `exact` (`MTG_MINT_CREDIT_EXACT`
++ `MTG_BP_REPLAY_COST`) and `exactsite` (the same + `MTG_BP_MINT_SITE`). Read with
+`test/paired_arms.py --base exact --arm exactsite --list-moved`. A game the audit arm wins earlier
+is a line the base could not enumerate or price: a bug in the full-line version, to be root-caused
+in the base (never fixed by re-opening the breakpoint). `MTG_BP_NEW_ONLY_DRY=1` is the same
+detector for the new-only filter itself (every reconsideration kept). The per-game reads that
+closed each gap: `MTG_FSW_TRACE=1 MTG_FSW_TURN=n MTG_FSW_LINE=1` (`[fsw]` per node plan, target,
+mint width, post-apply life), `MTG_FSW_BOARD=1` (the recorded continuation and the post-apply
+board), `MTG_BP5_TRACE=1` (`[bp5]` per site-5 consultation: choice, eligibility, list length),
+`MTG_PREPAY_PROBE`, `MTG_ORDER_RANGE_PROBE`, `MTG_EXEC_TAP_TRACE`.
+
+### Eight base-line gaps the audit route found (all lever-gated, flag-off byte-identical)
+
+| # | seed | gap | fix |
+|---|---|---|---|
+| 1 | 700252 | the funding ladder walked the wrong cast when the MINTER was the one failing | ladder walks the failing minter earlier |
+| 2 | 701456 | the whole-turn prepay paid a mint line by tapping the pump target | prepay declines a mint line when every hold rung fails (`PP_MINT_HOLD`), so the per-cast payer cracks the Treasure |
+| 3 | 701456 | `mid_turn_casts` flagged by a minter with no open breakpoint burned Treasures the pump counts | flagged only while the mint breakpoint is open |
+| 4 | 700628 | the reviewed cast order paid Oracle's off the last Forest and Gold Rush then tapped the target | the ladder projects with the pump target HELD first, plain projection as fallback |
+| 5 | 700628 | the per-cast payer's equal-rank dork tie was battlefield order = the target | pump-target narrow rung in `TapForCostSharedImpl` |
+| 6 | 701403 | seven pips on five board mana + two minted was never enumerated: the same-plan Heroism copies were not credited | `SamePlanHeroismMint` in both gates and both twins; Heroism releases the fresh hold; `FirstUnpayablePos` reads the live width |
+| 7 | 701403, 700799 | every explicit trick target was the Hierarch the payment must tap; the Soldiers a same-plan Heroism makes have no number at enumeration | cast-time target `kTrickBestOwnTarget` resolved by `FindBestOwnAttacker` in the shared resolver; REPLACES the explicit target when the pre-plan best attacker is a mana dork (adding it instead cost 1.32x and starved the budget) |
+| 8 | 701706, 700096 | fix 7's target resolved after payment tapped the only creature, found no ATTACKER and fizzled the whole trick, draw included | `FindBestOwnCreature` floor: a tapped creature is a legal target; only no creature at all fizzles |
+| 9 | smoke d0 (greedy) +0.032 | fix 7's "no attacker" extra variant was enumerated in subsets that cast NO body: `{Gold Rush@best}` alone on an empty T2 board, picked by the greedy for its own-pump value, fizzled -- no Treasure. The searched tiers never chose it (the rollout sees the fizzle) but paid to enumerate it | `SubsetHasMissingTrickTarget` rejects the variant in a subset without a body-making cast when no attacker exists (board fact once per enumeration in `SubsetFilterPre`) |
+
+### Measured (Mirrorwing, shipped d5/b20, paired: 4 x 500 games 20-life + 2 x 500 2HG)
+
+| build | lean vs base (mw) | 2HG | units | audit vs lean |
+|---|---|---|---|---|
+| v13 (fixes 1-3) | -0.024 (52 / 5) | -- | 0.91x | 52/1 == |
+| v15 | -0.028 (56 / 3) | -0.035 (39 / 4) | 0.91x | == |
+| v17 (fix 7 as an EXTRA variant) | -0.0345 (74 / 7) | -- | **1.32x** | == |
+| v19 (fix 7 REPLACING) | -0.0395 (83 / 6) | -0.052 (63 / 11) | 1.07x | 5/5, 4/5 |
+| v20 (fix 8) | -0.0410 +/- 0.0048 (84 / 4) | -0.0600 +/- 0.0082 (65 / 5) | 1.07x / 1.09x | 5/6, 2/5 (flat) |
+| **v21 (fix 9)** | **-0.0430 +/- 0.0048 (84 / 1)** | **-0.0610 +/- 0.0080 (64 / 3)** | **0.92x / 0.93x** | 5/4, 2/3 (flat) |
+| v21 + `MTG_BP_NEW_ONLY` | **-0.0445 (87 / 1)** | **-0.0620 (67 / 5)** | **0.83x / 0.83x** | 7/4, 6/5 vs lean |
+
+Lean and audit are flat against each other at every build (the detector finds nothing left), and
+new-only on top of the lever is the best arm at the lowest work. Remaining lean-worse games at v21:
+700215 (a base-plan fan-out cap case, below) and three 2HG games (700001 gi214 = the same seed,
+gi283 7 -> 8, 700501 gi271 4 -> 5; unexamined).
+
+### The suite's smoke tier, v21 binary, env-flag arms against flag-off (2026-09-22)
+
+Three sequential `regression.sh --smoke` runs on one binary (the suite is the A/B; the five red
+d3 keys another agent owns fail identically in all three and are excluded here):
+
+| arm | keys better | worse | digest-only | game-weighted delta | total case ms |
+|---|---|---|---|---|---|
+| lever (`MINT_CREDIT_EXACT` + `BP_REPLAY_COST`) | 4 (mirrorwing d0 -0.100, d3 -0.047, d5 -0.040, 2hg d3 -0.020) | 0 | 3 (antilife d3/d5/2hg d3) | -0.0037 | 0.99x |
+| lever + `MTG_BP_NEW_ONLY` everywhere | 10 (the four above plus auras d3, creature_giving d3/d5, critter d3, hinata d5, hinata2hg d3) | 0 | 8 | -0.0040 | 1.02x |
+
+The antilife digest moves are the pump-target hold (fixes 4/5) firing on a deck with own pumps;
+replay-cost alone is byte-identical there. Before fix 9 the same runs showed mirrorwing d0 at
++0.032 (the fizzle), which is what found it.
+
+### The fan-out cap is not the answer (measured)
+
+700215's lean loss is `MTG_BP_MAXBASE` (16): only the first 16 breakpoint-opening base plans in
+sorted order get wave-0 variants, the lever's extra payable three-cast mint plans outrank the T2
+cantrip plan, and its CHAIN SLOT (the continuation that opens a further breakpoint) vanishes --
+the deferred wave walker starts a capped plan at rank 0 but hands out numeric ranks only, so the
+chain slot, the empty arm and the uniform arm are wave-0-only. Cap 256 wins the game. Cap 32,
+measured on the same 3,000 paired games: base 0 / 1 moved, lean 1 / 0 moved, +1-2% units, 700215
+not flipped. Not adopted. The targeted remedy, if ever worth it, is to hand a capped plan its chain
+slot before rank 0 in the waves.
+
 ## Status
 
 BUILT on the user's rule with the activation half as clarified ("an ability that was not previously

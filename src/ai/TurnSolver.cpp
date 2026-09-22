@@ -8757,18 +8757,51 @@ static bool SubsetHasIllegalSplice(const GameState& state,
 // arbitrary copy of the name, so the resolved permanent's m_number may differ from the variant's
 // -- ResolveSoloTargetTrick's name fallback mirrors this). Inert without a targeted trick
 // selected -> byte-identical for every other deck.
+//
+// The CAST-TIME target (kTrickBestOwnTarget, MTG_MINT_CREDIT_EXACT) has the same legality question
+// in its "no attacker" shape: it is emitted there BECAUSE a same-plan body-maker (a Frontline
+// Heroism in hand) could give the trick a Soldier, so a subset that casts no body alongside it has
+// no target for it -- the spell fizzles at resolution, Treasure and draw included. That is not a
+// hypothetical: the smoke d0 tier (greedy, no rollout to see the fizzle) picked `{Gold Rush@best}`
+// on an empty board at T2 for its own-pump value and realised NOTHING, +0.032 over 1,000 games.
+// `best_needs_body` is the board fact computed once per enumeration (BuildSubsetFilterPre):
+// 1 = no attack-eligible own creature now, so the variant needs a body cast in this subset;
+// 0 = an attacker exists (the variant REPLACED an explicit dork target and is always legal);
+// -1 = not built (instruments armed), compute it here. When a body exists but cannot attack, the
+// resolver's FindBestOwnCreature floor makes the bodyless variant a duplicate of the explicit
+// target, so rejecting it there is dedup, not deletion.
 static bool SubsetHasMissingTrickTarget(const GameState& state,
                                         const std::vector<Action>& cands,
-                                        const std::vector<int>& sel)
+                                        const std::vector<int>& sel,
+                                        int best_needs_body = -1)
 {
-    (void)state;
     // Battlefield-target tricks are always legal (the target exists at this node); only a trick
     // whose target is a SAME-PLAN HAND creature (trick_hand_target, stamped at emission) needs the
     // subset to also cast that creature. A pure name compare -- no zone scans (profiled at 3.7%).
     for (int j : sel)
     {
-        if (cands[j].trick_hand_target.empty()
-            || cands[j].kind != Action::Kind::CastFromHand) { continue; }
+        if (cands[j].kind != Action::Kind::CastFromHand) { continue; }
+        if (cands[j].enchant_target == kTrickBestOwnTarget)
+        {
+            int needs = best_needs_body;
+            if (needs < 0)
+            { needs = FindBestOwnAttacker(state, state.active_player_index) < 0 ? 1 : 0; }
+            if (needs == 0) { continue; }
+            bool body = false;
+            for (int k : sel)
+            {
+                if (k == j || cands[k].kind != Action::Kind::CastFromHand) { continue; }
+                const CardDefinition* kd = cands[k].def;
+                if (kd == nullptr) { continue; }
+                if (kd->card.IsCreature() || kd->params.frontline_copy_tokens > 0
+                    || kd->params.etb_self_creates_tokens > 0
+                    || kd->params.cast_trigger_instant_sorcery_tokens > 0)
+                { body = true; break; }
+            }
+            if (!body) { return true; }
+            continue;
+        }
+        if (cands[j].trick_hand_target.empty()) { continue; }
         bool found = false;
         for (int k : sel)
         {
@@ -8840,6 +8873,9 @@ struct SubsetFilterPre
     bool trick_target      = true;   // SubsetHasMissingTrickTarget
     bool aura_target       = true;   // SubsetHasUnenabledRestrictedAura, SubsetHasAuraOnUncastCreature
     bool vial              = true;   // the per-charge Vial capacity loop in eval_and_push
+    // SubsetHasMissingTrickTarget's cast-time-target board fact (see its comment): -1 = not built,
+    // the filter computes it per subset (the unoptimised, instruments-armed contract).
+    int  best_needs_body   = -1;
 
     // ---- THE SAC-SOURCE TABLE (round 3, 2026-09-19) -----------------------------------------
     // The bits above stop a filter this deck cannot trip. They do nothing for the filters it CAN:
@@ -8878,6 +8914,7 @@ static SubsetFilterPre BuildSubsetFilterPre(const GameState& state, const std::v
     p = SubsetFilterPre{ false, false, false, false, false, false, false, false, false,
                          false, false, false, false, false, false, false, false };
     int sac_actions = 0;   // sac_fodder needs TWO: `outlets` there counts a subset of these
+    bool best_target = false;   // a kTrickBestOwnTarget cand (MTG_MINT_CREDIT_EXACT, Mirrorwing)
     for (const Action& a : cands)
     {
         const CardDefinition* d = a.def;   // exactly the pointer each filter reads (null -> skipped there too)
@@ -8908,6 +8945,7 @@ static SubsetFilterPre BuildSubsetFilterPre(const GameState& state, const std::v
             case Action::Kind::CastFromHand:
                 if (a.enchant_target > 0)                     { p.aura_target = true; }
                 if (!a.trick_hand_target.empty())             { p.trick_target = true; }
+                if (a.enchant_target == kTrickBestOwnTarget)  { p.trick_target = true; best_target = true; }
                 if (d != nullptr && d->params.splice_onto_arcane) { p.splice = true; }
                 break;
             default: break;
@@ -8923,6 +8961,11 @@ static SubsetFilterPre BuildSubsetFilterPre(const GameState& state, const std::v
         { p.gift_damage = true; }
     }
     p.sac_fodder = (sac_actions >= 2);
+    // The cast-time target's board fact, once per enumeration (the board is frozen for its whole
+    // length). A board read, unlike the bits above -- but it is the exact answer the filter would
+    // compute per subset, not a weaker precondition, so it cannot err in either direction.
+    if (best_target)
+    { p.best_needs_body = FindBestOwnAttacker(state, state.active_player_index) < 0 ? 1 : 0; }
 
     // The sac-source table (see the struct). Built only when a filter that reads it can actually
     // run -- otherwise the walk below is itself the waste it exists to remove.
@@ -15099,7 +15142,9 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
                     break;
                 }
             }
-            // The cast-time target (see best_dork_num / best_is_none above the target loops).
+            // The cast-time target (see best_dork_num / best_is_none above the target loops). In
+            // the best_is_none shape it is legal only in a subset that also casts a body
+            // (SubsetHasMissingTrickTarget) -- alone it is the fizzle the d0 smoke tier found.
             if (best_dork_num != 0 || best_is_none) { emit(kTrickBestOwnTarget, 0); }
             // USER rule (2026-08-12): with a magnet out, the untargeted "bank the Treasure, no
             // trigger" variant is dominated by targeting the magnet (same mana, strictly more
@@ -21603,7 +21648,7 @@ TurnSolver::Plan TurnSolver::SolveUncached(const GameState& state, bool is_pre_c
         if (pre.splice && SubsetHasIllegalSplice(state, cands, sel)) { return; }
         // Reject a targeted trick whose target is neither on the battlefield nor cast by this
         // same subset (CR 601.2c). Inert without a targeted trick -> byte-identical.
-        if (pre.trick_target && SubsetHasMissingTrickTarget(state, cands, sel)) { return; }
+        if (pre.trick_target && SubsetHasMissingTrickTarget(state, cands, sel, pre.best_needs_body)) { return; }
         if (enumstats::Enabled()) { enumstats::g_c_rules.fetch_add(1, std::memory_order_relaxed); }   // passed the rules
         int mask = 0;
         for (int j : sel) { mask |= (1 << j); }
@@ -31236,7 +31281,7 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
         if (pre.splice && SubsetHasIllegalSplice(state, cands, sel)) { return; }
         // Reject a targeted trick whose target is neither on the battlefield nor cast by this
         // same subset (CR 601.2c). Inert without a targeted trick -> byte-identical.
-        if (pre.trick_target && SubsetHasMissingTrickTarget(state, cands, sel)) { return; }
+        if (pre.trick_target && SubsetHasMissingTrickTarget(state, cands, sel, pre.best_needs_body)) { return; }
         // Reject a sequenced restricted aura (injected above) with no in-subset enabler on its target.
         // No-op unless AppendSequencedAuraCandidates injected such a candidate (aura decks) -> byte-identical
         // otherwise. Gated by SeqAuraOrderingEnabled() (default on; MTG_LEGACY_NO_SEQ_AURA = viewer-only).
