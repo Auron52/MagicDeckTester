@@ -1860,3 +1860,65 @@ narrowed* by deliberate design (`bp_choice` "pins a breakpoint continuation ... 
 than narrowed"). On a deck whose real decision set is six wide they are most of the plan count, so
 they are the obvious next question -- but changing them is a QUALITY decision the repo has already
 taken once, not an oversight to clean up.
+
+---
+
+# THE SPORE POOL, MEASURED ON THE MULLIGAN PATH (2026-09-22): 2.08x
+
+The owed held-out confirm for `MTG_FUNGUS_SPORE_POOL` arrived from an unplanned direction: the
+mulligan `recommend` scout, run twice on a quiet box, pool OFF then ON. This is a genuinely held-out
+workload -- the lever was developed against the LABEL path and the play census, never against keep
+rollouts -- and it is the workload that actually gated a decision.
+
+| | pool OFF | pool ON | ratio |
+|---|---|---|---|
+| projected COMPLETE (full bottom, R40) | 33.7 h | **16.2 h** | 2.08x |
+| projected FAST (adaptive, R30) | 16.8 h | **8.1 h** | 2.07x |
+| the scout's own floor-pass wall | 3,030 s | **1,458 s** | 2.08x |
+
+Three independent measures agreeing to within 1% is the useful part: the projection is derived from
+measured rollout rates, so its agreeing with the scout's own wall says the model and the clock see
+the same thing.
+
+## Why the mulligan path is where this lever pays most
+
+`decks/Fungus/Fungus.keepmodel.exhaustive.raw.json.slow.log`, pool OFF: **250 slow keep-rollouts,
+6.58 core-h, worst single rollout 1,324 s -- against a 3 ms budget (441,000x over).**
+
+| card | in N of 250 | % |
+|---|---|---|
+| **Utopia Mycon** | 214 | **86%** |
+| Psychotrope Thallid | 130 | 52% |
+| Doubling Season | 123 | 49% |
+| Thallid Shell-Dweller | 119 | 48% |
+| Sporesower Thallid | 114 | 46% |
+
+Interchangeable spore BODIES per slow hand -- the `2^n` axis the pool collapses to `n+1`:
+
+| bodies | hands | share | selections |
+|---|---|---|---|
+| 3 | 47 | 18.8% | 8 -> 4 |
+| 4 | 77 | 30.8% | 16 -> 5 |
+| 5 | 59 | 23.6% | 32 -> 6 |
+| 6 | 30 | 12.0% | 64 -> 7 |
+| 7 | 5 | 2.0% | 128 -> 8 |
+
+**68.4% of slow keep-rollouts hold four or more spore bodies.** A keep rollout starts from a kept
+seven, so spore-dense hands are over-represented relative to a mid-game board -- which is exactly why
+this path pays more than play (2.08x) and about as much as the label path (2.60x).
+
+Doubling Season is in half of them, compounding the COUNT axis on top of the SOURCE axis. The pool
+collapses only the source; the count axis is preserved deliberately, and this data is the reason that
+distinction matters rather than being pedantry.
+
+## Status
+
+Still DEFAULT OFF. The `heuristic-optimization.md` adoption decision is the user's and has not been
+made. What the evidence now covers: cost on three separate workloads (label 2.60x, play tail 46% of
+hours, mulligan 2.08x) and play-neutrality on two (400/400 identical digests at d5/b20; 13 of 12,000
+paired win turns differ in the 24,000-game census, average moving the right way but inside noise).
+
+The 2026-09-22 `fast` generation was run WITH the lever on, because at 16.8 h the pool-OFF gen did
+not fit the window at all. If the lever is ultimately rejected, that table was fitted under an engine
+0.1% different from the one that ships -- far inside the table's own noise, but it is a real caveat
+and it is recorded here rather than discovered later.
