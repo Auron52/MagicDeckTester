@@ -2144,7 +2144,7 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
     const std::vector<uint64_t> pre_plan_keys = TurnSolver::SnapshotActivatableAbilities(state);
     // MTG_BP_NEW_ONLY input (lockstep twin of ApplyPlanDirect's pre_plan_acts): the activations the
     // phase's plan could have carried, captured at the same entry point. Empty when the lever is off.
-    const std::vector<std::uint64_t> pre_plan_acts = TurnSolver::PrePlanActivationKeys(state);
+    const std::vector<std::uint64_t> pre_plan_acts = TurnSolver::PrePlanAvailabilityKeys(state);
     // M2 FIXPOINT exit stamp (see WantsSecondMainReentry): did THIS call's execution DRAW cards?
     // The executor's plain-cantrip/EI draws resolve inline (no breakpoint-machinery hook fires
     // for a non-committed plan), so the honest signal is the per-turn draw counter the engine

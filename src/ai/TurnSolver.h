@@ -1117,7 +1117,7 @@ public:
     // entry -- the same two points that capture site 9's pre_plan_numbers -- and bound on the scope
     // above, so both worlds filter against the same set. Keys are BpActivationKey values, private
     // to TurnSolver.cpp: callers only carry the vector.
-    static std::vector<std::uint64_t> PrePlanActivationKeys(const GameState& state);
+    static std::vector<std::uint64_t> PrePlanAvailabilityKeys(const GameState& state);
 
     // BREAKPOINT SITE 6 -- the equipment-ETB draw (Puresteel Paladin). True when resolving `def`
     // puts an Equipment onto the battlefield while the active player controls a

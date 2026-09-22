@@ -2293,7 +2293,7 @@ static thread_local const std::vector<int>* g_bp_hand_before = nullptr;
 static thread_local const std::vector<std::uint64_t>* g_bp_plan_casts = nullptr;
 
 // MTG_BP_NEW_ONLY: the activations that were AVAILABLE when the base plan was enumerated (sorted
-// BpActivationKey values; TurnSolver::PrePlanActivationKeys), bound by the same scope. An activation
+// BpActivationKey values; TurnSolver::PrePlanAvailabilityKeys), bound by the same scope. An activation
 // in a continuation is NEW iff its key is absent here -- the source entered during the plan, or it
 // was on the battlefield but could not be activated then (summoning-sick, tapped, short of counters,
 // unaffordable) and can be now. nullptr = no snapshot bound: every activation reads as new.
@@ -3446,7 +3446,7 @@ static bool BpClassifyActive(const GameState& state)
 // or added counters to a Fungus so it can now activate, that activation should be a possible
 // continuation."* "Previously" is the state the BASE PLANS were enumerated from -- every activation
 // is enumerated against the battlefield the plan started from, so that is exactly the set a sibling
-// could carry. PrePlanActivationKeys captures it at ApplyPlanDirect / TakeTurn entry (the site-9
+// could carry. PrePlanAvailabilityKeys captures it at ApplyPlanDirect / TakeTurn entry (the site-9
 // capture points) with the enumerator's own availability test: untapped and able to tap for a {T}
 // mode (summoning sickness and haste included), counters in hand for a spore pop, the effective
 // cost payable from the pre-plan pool by colour, and the gated look's top-card test. A continuation's
@@ -3454,6 +3454,19 @@ static bool BpClassifyActive(const GameState& state)
 // the plan cast), or it was there but blocked and something the plan did unblocked it (haste, a
 // counter, the mana it needed). One whose key IS in the set was enumerable at the base, so the
 // sibling that carries it exists, and the continuation is that sibling's line.
+//
+// WHAT ABOUT A CAST THAT WAS NOT CASTABLE AT THE BASE? (2026-09-22.) Boreal Druid's {G} with three
+// Islands is not payable until the plan's own Arcum's Astrolabe can filter green -- so no base plan
+// carried it, the base search reached "Astrolabe, Augur, Druid" only through a continuation, and the
+// filter dropped that continuation (seed 1015 T5: unreachable at ANY budget, b0 included; the suite's
+// d3/b10 tier read +0.0045 while d5/b20 read -0.0065). The USER's ruling is that this is the
+// ENUMERATOR's gap, not a reason to keep the continuation: *"Astrolabe should be treated as a land or
+// other mana source that is played in the current plan"* and *"we don't want to add extra breakpoints
+// or required resolves for no reason"*. Fixed at the base (PendingFilterInHand arms the filter-aware
+// payment simulation, in which the cast Astrolabe joins the board and pays the Druid), so the sibling
+// exists and the old-card continuation is once again a duplicate. A cast is therefore new by ARRIVAL
+// only; a line reachable only through an old-card continuation is a base-model gap, and the b0 probe
+// (the adopted arm unable to reach the base's line at any budget) is how to find the next one.
 //
 // KEYED KINDS. Only ActivatePermAbility is keyed today -- its availability test is the one read off
 // the enumerator above (and it is every activation the Snow deck has). Every other activation kind
@@ -3570,26 +3583,8 @@ static std::uint32_t BpAvailablePermAbilityModes(const GameState& state, const P
     return bits;
 }
 
-std::vector<std::uint64_t> TurnSolver::PrePlanActivationKeys(const GameState& state)
-{
-    std::vector<std::uint64_t> out;
-    if (!BpNewOnlyActive(state)) { return out; }   // ship config: no scan, no pool
-    ManaPool pool = AvailableManaPool(state);
-    pool.AddPool(state.floating_mana);
-    for (const Permanent& p : state.battlefield)
-    {
-        if (p.controller_index != state.active_player_index || p.card.m_number == 0) { continue; }
-        const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
-        if (d == nullptr) { continue; }
-        const std::uint32_t bits = BpAvailablePermAbilityModes(state, p, *d, pool);
-        for (int mode = 1; mode < 32; ++mode)
-        {
-            if (bits & (1u << mode)) { out.push_back(BpActivationKey(p.card.m_number, mode)); }
-        }
-    }
-    std::sort(out.begin(), out.end());
-    return out;
-}
+// PrePlanAvailabilityKeys (the snapshot builder) is defined beside PostEntryActivationPending, the
+// site-9 gate whose capture points it shares.
 
 // ---- LAND CONDEMNATION (MTG_BP_CONDEMN_LAND) --------------------------------------------------
 // The land drop as a SLOT IN THE CAST ORDER, which is the piece the USER's specification was
@@ -5768,6 +5763,29 @@ static bool HasUntappedFilterSource(const GameState& state)
         // Three Tree City's scaled tap is a colour conversion (feed {2} -> N chosen colour) the flat
         // pool cannot fully express, so it too needs the real-payment affordability retry.
         if (d && (IsManaConversionSource(d->params) || IsScaledManaLand(*d))) { return true; }
+    }
+    return false;
+}
+
+// A CASTABLE FILTER IN HAND opens the same door (USER 2026-09-22: *"Astrolabe should be treated as
+// a land or other mana source that is played in the current plan"*). SubsetPayableWithFilters
+// already lets a freshly-cast rock join the board so its mana funds the later casts of the same
+// subset -- and Arcum's Astrolabe IS a mana_rock ({1},{T}: one mana of any colour), so once it is on
+// that simulated board the Druid's {G} pays through it exactly as the executor pays it in the real
+// game. What never happened is REACHING that simulation: the fallback is armed by
+// HasUntappedFilterSource, a battlefield scan, so with the only filter still in hand the flat
+// pool's colour rejection stood and {Astrolabe, Boreal Druid} was never a plan. The base search
+// could then reach "Astrolabe, then Druid off its mana" ONLY through a breakpoint continuation --
+// which is how the new-only filter exposed it (seed 1015 T5, unreachable at every budget with the
+// continuation dropped). The land-Aura clause below is the precedent for arming on a HAND card whose
+// supply the flat pool cannot see. Same is_rock predicate as the simulation's own join.
+static bool PendingFilterInHand(const GameState& state)
+{
+    for (const Card& c : state.ActivePlayer().hand)
+    {
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(c);
+        if (d == nullptr || d->card.IsCreature() || d->params.enters_tapped) { continue; }
+        if (d->params.mana_rock && IsManaConversionSource(d->params)) { return true; }
     }
     return false;
 }
@@ -11196,6 +11214,34 @@ bool TurnSolver::PostEntryActivationPending(const GameState& state,
         }
     }
     return false;
+}
+
+// MTG_BP_NEW_ONLY: every ACTIVATION that was available when the phase's plan started -- one
+// (permanent, PermAbilityMode) key per activation the enumerator would emit right now
+// (BpAvailablePermAbilityModes -- tap state, sickness, counters, cost by colour, the gated look's
+// top card), sorted. See the header note at BpNewOnlyEnabled for the rule it serves. Casts are NOT
+// keyed: a cast is new by arrival only (USER 2026-09-22 -- a card the plan's own Astrolabe makes
+// castable is the enumerator's business, see PendingFilterInHand). Defined beside the site-9 gate
+// whose capture points it shares.
+std::vector<std::uint64_t> TurnSolver::PrePlanAvailabilityKeys(const GameState& state)
+{
+    std::vector<std::uint64_t> out;
+    if (!BpNewOnlyActive(state)) { return out; }   // ship config: no scan, no pool
+    ManaPool pool = AvailableManaPool(state);
+    pool.AddPool(state.floating_mana);
+    for (const Permanent& p : state.battlefield)
+    {
+        if (p.controller_index != state.active_player_index || p.card.m_number == 0) { continue; }
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+        if (d == nullptr) { continue; }
+        const std::uint32_t bits = BpAvailablePermAbilityModes(state, p, *d, pool);
+        for (int mode = 1; mode < 32; ++mode)
+        {
+            if (bits & (1u << mode)) { out.push_back(BpActivationKey(p.card.m_number, mode)); }
+        }
+    }
+    std::sort(out.begin(), out.end());
+    return out;
 }
 
 // A/B hatch for the NESTING axis alone (MTG_BP_NEST_DISCOVER=0). The wave walker learns how many
@@ -21095,8 +21141,10 @@ TurnSolver::Plan TurnSolver::SolveUncached(const GameState& state, bool is_pre_c
     // cannot see (it is not on the battlefield yet) and whose availability depends on WHICH sources
     // paid for the Aura -- an ordering only the real-payment sim can settle. See
     // SubsetPayableWithFilters' is_aura branch and PendingLandAuraColorMask.
+    // A castable FILTER in hand (Arcum's Astrolabe) too -- see PendingFilterInHand.
     const bool any_filter = HasUntappedFilterSource(state)
-                         || PendingLandAuraColorMask(state) != 0;
+                         || PendingLandAuraColorMask(state) != 0
+                         || PendingFilterInHand(state);
 
     // Lands in hand -- a generic feasibility input (a plan cannot discard more lands than it
     // holds for retrace / Land's Edge additional costs; see the discard_lands_used check below).
@@ -24198,7 +24246,7 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
     // MTG_BP_NEW_ONLY input, captured at the same point for the same reason: the activations the
     // base plan could have carried (empty when the lever is off). Bound on every breakpoint scope
     // this apply opens; AIEngine::TakeTurn captures the same set at its entry.
-    const std::vector<std::uint64_t> pre_plan_acts = TurnSolver::PrePlanActivationKeys(state);
+    const std::vector<std::uint64_t> pre_plan_acts = TurnSolver::PrePlanAvailabilityKeys(state);
 
     // ORDER-CONDEMNATION stamp (rollout/interior half of the lockstep pair -- see
     // GameState::m1_hand): the pre-combat apply IS this projected turn's m1 decision point, so
@@ -30306,10 +30354,11 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
         for (const Action& ra : cands)
         { if (ra.ritual_float > 0 && ra.kind == Action::Kind::SacForMana) { has_ind_accel = true; break; } }
     }
-    // Filter/ramp land present, or a land Aura in hand? (mirrors Solve) Enables the real-payment
-    // affordability fallback.
+    // Filter/ramp land present, a land Aura in hand, or a castable filter in hand? (mirrors Solve)
+    // Enables the real-payment affordability fallback.
     const bool any_filter = HasUntappedFilterSource(state)
-                         || PendingLandAuraColorMask(state) != 0;
+                         || PendingLandAuraColorMask(state) != 0
+                         || PendingFilterInHand(state);
 
     int m = static_cast<int>(cands.size());
     std::vector<TurnSolver::Plan> plans;
@@ -48433,6 +48482,15 @@ static std::vector<TurnSolver::Plan> BpDeriveContinuationList(const GameState& s
                         const Card& c = ap.hand[static_cast<std::size_t>(a.hand_index)];
                         if (is_new_number(c.m_number))       { uses_new = true; }
                         else if (BpPlanCasts(c.m_name_hash)) { plan_pending = true; }
+                        // NO "was it castable at the base" clause here, by the USER's ruling
+                        // (2026-09-22): an old card that only the plan's own Astrolabe makes
+                        // castable is the ENUMERATOR's business (PendingFilterInHand arms the
+                        // filter-aware payment so the sibling base plan exists), not a reason to
+                        // keep a continuation -- *"we don't want to add extra breakpoints or
+                        // required resolves for no reason"*. A line reachable only through an
+                        // old-card continuation is a model gap to fix at the base, and the b0 probe
+                        // (adopted arm unable to reach the base's line at any budget) is how to
+                        // find one.
                     }
                     break;
                 // The other from-HAND actions (suspend, channel, cycle, discard-to): the same
