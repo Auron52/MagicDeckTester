@@ -4501,8 +4501,28 @@ static void ComputeAvailableColors(const GameState& state, bool have[5])
 }
 
 static bool SubsetPayable(const bool have[5], const std::vector<Action>& cands,
-                          const std::vector<int>& sel)
+                          const std::vector<int>& sel,
+                          const ColorDemandIndex* idx = nullptr)
 {
+    // UNIFORM fast path (ManaPayment.h): every candidate's coloured demand is in one shared colour
+    // and nothing is hybrid, so `need` can only ever be that one colour. When the board HAS it the
+    // answer is yes without looking at the subset at all -- this walk reads a 384-byte Action per
+    // candidate per subset, and on a mono-colour deck it was re-deriving a state-only fact 413
+    // million times a game. Same verdict either way.
+    if (idx && idx->uniform)
+    {
+        if (idx->mono_mask == 0) { return true; }          // nothing coloured is ever cast
+        int colour = 0;
+        while (colour < 5 && !(idx->mono_mask & (1u << colour))) { ++colour; }
+        if (colour >= 5 || have[colour]) { return true; }
+        // The board cannot make it: unpayable exactly when something selected demands it.
+        for (int j : sel)
+        {
+            if (idx->flags[static_cast<size_t>(j)] & 1u) { continue; }   // ActivateVial: no mana cost
+            if (idx->pips[static_cast<size_t>(j)] > 0)   { return false; }
+        }
+        return true;
+    }
     // Colors required by the chosen casts (Vial deploys cost no mana).
     bool need[5] = {false,false,false,false,false};  // W,U,B,R,G ({C}/generic via CanPay)
     bool any = false;
@@ -21348,7 +21368,7 @@ TurnSolver::Plan TurnSolver::SolveUncached(const GameState& state, bool is_pre_c
         // restores the old unconditional check.
         static const bool s_rescued_color_gate = EnvOn("MTG_RESCUED_COLOR_GATE", false);
         if (!mc_hit && (mana_ok || s_rescued_color_gate)
-            && !SubsetPayable(have_colors, cands, sel)) { mc_store_reject(); return; }
+            && !SubsetPayable(have_colors, cands, sel, &colour_demand)) { mc_store_reject(); return; }
         if (enumstats::Enabled()) { enumstats::g_c_color.fetch_add(1, std::memory_order_relaxed); }   // passed SubsetPayable
         // ... and the COUNT the gate above deliberately does not model: two white pips off one white
         // source. Only on the flat-pool path -- a subset rescued by SubsetPayableWithFilters was
@@ -31087,7 +31107,7 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
                 have_eff = have_rock;
             }
         }
-        if (!sel_col_reducer && !SubsetPayable(have_eff, cands, sel))
+        if (!sel_col_reducer && !SubsetPayable(have_eff, cands, sel, &colour_demand))
         {
             _ct.label = "colour-exists";                    // ef-* labels overwrite on a failed rescue
             if (!exec_feas_rescues()) { return; }
