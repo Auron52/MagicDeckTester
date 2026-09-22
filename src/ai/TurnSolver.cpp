@@ -32594,6 +32594,29 @@ static void AppendHumanPlayDigPlans(const GameState& state, std::vector<TurnSolv
     }
 }
 
+// Does a creature PUT onto the battlefield -- fetched by a tutor, by a Pod/Vial activation, or off
+// a Turntimber look -- gain its controller a card as it arrives? That is the site-10 question for
+// every "put a body" route, and PlanOpensBreakpoint was asking it at THREE separate places with
+// three hand-rolled lists that had already drifted apart:
+//
+//   tutor-to-battlefield : tutor_to_hand | etb_dig_count | etb_self_draw | own_creature_enters_draw
+//   Pod / Vial / put     : tutor_to_hand | etb_dig_count | etb_self_draw
+//   (neither)            : etb_discard_any_draw_bonus -- named in the CAST clause, in no fetch list
+//
+// The gap cost melira 466 unchallengeable site-10 canon defaults, every one a Chord of Calling
+// fetching CELES, RUNE KNIGHT, whose ETB discards any number and draws that many plus one. It is
+// exactly the drift the site-10 clause's own note warns about ("one list, three places"), so make
+// it one list in one place: add a route here and all three sites get it.
+static bool PutBodyGainsCards(const CardParams& p)
+{
+    return p.tutor_to_hand
+        || p.etb_dig_count > 0
+        || p.etb_self_draw > 0
+        || p.own_creature_enters_draw > 0      // a watcher: self-inclusive ones draw on their OWN entry
+        || p.etb_discard_any_draw_bonus > 0    // Celes, Rune Knight
+        || p.etb_blink_permanent;              // re-fires an ETB, and that ETB can be a draw
+}
+
 // Does this plan cast something that opens a mid-turn breakpoint (a spell whose resolution reveals
 // NEW castables, so ApplyPlanDirect re-decides the rest of the turn)? Mirrors the ApplyPlanDirect
 // branches that call TurnSolver::Solve: DrawUntilNonland (Treasure Hunt), staged exile / EI / plain
@@ -32813,6 +32836,32 @@ static int PlanOpensBreakpoint(const GameState& state, const TurnSolver::Plan& p
             if (TopResolveEnabled() && d->params.tutor_to_top) { mask |= 1 << 3; }
         }
         if (d->params.impulse_exile > 0) { mask |= 1 << 2; }
+        // CASCADE -- the breakpoint belongs to a card this plan does not name and cannot see
+        // (MTG_BP_CANON_AUDIT, 2026-09-22). Cascade exiles until it finds a cheaper nonland card
+        // and FREE-CASTS it through the same apply_one recursion as any other cast, so the hit
+        // arms whatever class it belongs to. On treasure_hunt that hit is Treasure Hunt itself:
+        // Throes of Chaos cascades into it, DrawUntilNonland re-solves INLINE at site 1, and the
+        // plan -- which casts only Throes -- opened nothing, so the continuation was an
+        // unchallengeable cands.front(). All 41 of the suite's last unchallengeable canon defaults
+        // were this one shape, from hand and via retrace alike.
+        //
+        // WHICH BITS, and why a set rather than one. The hit is chosen during RESOLUTION by a walk
+        // down a hidden library, so naming the site would be pretending to know something this
+        // predicate cannot; what IS knowable is that the hit is a CAST, and therefore arms one of
+        // the cast-reachable classes. Mark that set. Over-marking here is free in the fan-out (both
+        // routes only test the mask for nonzero) and is the same conservative direction every other
+        // clause in this function takes -- a variant for a class the hit turns out not to arm
+        // collapses onto its base plan.
+        {
+            static const bool casc = EnvOn("MTG_BP_CASCADE_CLAUSE", true);
+            if (casc && d->params.cascade_max_mv > 0)
+            {
+                mask |= (1 << 0)    // a staged / EI draw spell, re-solved inline
+                     |  (1 << 1)    // DrawUntilNonland -- the measured case
+                     |  (1 << 2)    // impulse exile
+                     |  (1 << 3);   // the deferred resolve's default index (cantrip, acquisition)
+            }
+        }
         // Zada/Mirrorwing trick with a draw payload -- or a Treasure payload (Gold Rush), whose
         // tokens are same-turn mana for the re-solve: SAME deferred main-level breakpoint shape as
         // the plain cantrip, but its OWN site (5), so its searchability is not chained to the
@@ -32889,13 +32938,32 @@ static int PlanOpensBreakpoint(const GameState& state, const TurnSolver::Plan& p
             // A tutor-to-BATTLEFIELD whose fetched creature gains cards (Chord of Calling into a
             // tutor body). Same shape and same key as the Pod/Vial clause below -- the variant
             // already names the fetch in tutor_target.
+            //
+            // ...EXCEPT THAT IT DOES NOT, AND THIS BRANCH WAS DEAD CODE (2026-09-22). Under
+            // MTG_TUTOR_AXIS_RESOLVE -- ADOPTED, default ON -- the enumerator emits ONE cast action
+            // that "binds NO name at all" and moves the pick to `Plan::tutor_choice`, resolved at
+            // the true mid-plan state. So `a.tutor_target` is EMPTY on every tutor-to-battlefield
+            // cast on every deck, `fd` is always null, and the test below could never fire once.
+            // Measured cost of that: melira 466 (Chord of Calling) and stompy 178 (Natural Order)
+            // unchallengeable canon defaults. A clause keyed on a field an adopted lever stopped
+            // filling is the quietest way for this class to come back, which is the whole reason
+            // MTG_BP_CANON_AUDIT exists -- it caught this one with no code archaeology at all.
+            //
+            // Mark the unnamed form. The fetch is genuinely unknown here (that is the point of
+            // resolve mode: the pick is made later, at a state this predicate cannot see), so
+            // asking WHICH creature is not an option; the choice is to mark or to leave the
+            // continuation unchallengeable, and marking is the direction every other clause in
+            // this function already takes -- a marked plan whose fetch turns out not to gain a
+            // card yields variants that collapse onto their base plan. NOT a library scan: that
+            // would re-introduce a state-keyed answer, which is the defect this whole round is
+            // about. =0 restores the (dead) named-only form.
             if (d->params.tutor_to_battlefield_single)
             {
                 const std::string& ft = a.tutor_target.str();
                 const CardDefinition* fd = ft.empty() ? nullptr : CardDatabase::Instance().Lookup(ft);
-                if (fd && (fd->params.tutor_to_hand || fd->params.etb_dig_count > 0
-                           || fd->params.etb_self_draw > 0 || fd->params.own_creature_enters_draw > 0))
-                { mask |= 1 << 10; }
+                if (fd && PutBodyGainsCards(fd->params)) { mask |= 1 << 10; }
+                static const bool unnamed_ok = EnvOn("MTG_BP_TUTOR_BF_UNNAMED", true);
+                if (ft.empty() && unnamed_ok) { mask |= 1 << 10; }
             }
             // THE CREATURE-ENTERS WATCHER (Vaultborn Tyrant, "whenever another creature you control
             // enters, draw a card"). State-keyed exactly like the equipment and Aura watchers above,
@@ -32907,6 +32975,33 @@ static int PlanOpensBreakpoint(const GameState& state, const TurnSolver::Plan& p
                     || d->params.look_top_put_creature_count > 0
                     || !d->params.saga_ch1_free_cast_creature_colors.empty()))
             { mask |= 1 << 10; }
+            // ...AND THE WATCHER THE PLAN BRINGS ITSELF (MTG_BP_CANON_AUDIT, 2026-09-22).
+            //
+            // Vaultborn Tyrant is SELF-INCLUSIVE -- "whenever THIS creature or another creature you
+            // control with power 4 or greater enters" -- so the watcher's own arrival is already a
+            // hand entry. On stompy it arrives by being PUT, never cast from hand: Turntimber
+            // Symbiosis puts it from the top seven, World War Hulk's chapter I casts it for free
+            // out of the re-solve. Neither is a CastFromHand of a watcher, so the pre-scan above
+            // finds nothing and the clause it gates never marks the plan.
+            //
+            // That is 113 of stompy's 291 unchallengeable site-10 defaults (World War Hulk 68,
+            // Turntimber Symbiosis 45; Natural Order's 178 are the unnamed-tutor clause above).
+            // Note WHY it was invisible until now: the audit used to re-derive this predicate
+            // MID-apply, by which time the Tyrant was on the battlefield and `creature_watcher`
+            // read true -- the wrong state was CONCEALING the violation, not inventing one.
+            //
+            // Marked on the put ROUTE, not on which creature it finds: the put is chosen later
+            // (Turntimber's look has not happened; the free cast is a deferred re-solve), so there
+            // is no honest way to ask here. A separate mark rather than setting `creature_watcher`,
+            // which would also switch on the `IsCreature()` arm above and mark every creature in
+            // the plan. =0 restores the pre-2026-09-22 behaviour.
+            {
+                static const bool self_put = EnvOn("MTG_BP_WATCHER_SELF_PUT", true);
+                if (self_put
+                    && (d->params.look_top_put_creature_count > 0
+                        || !d->params.saga_ch1_free_cast_creature_colors.empty()))
+                { mask |= 1 << 10; }
+            }
         }
     }
     // MTG_BP_HAND_ENTRY's routes -- THE NON-CAST HALF, and it is here because the clause above
@@ -32946,9 +33041,7 @@ static int PlanOpensBreakpoint(const GameState& state, const TurnSolver::Plan& p
                                                                           : a.tutor_target.str();
                 const CardDefinition* fd = fetched.empty() ? nullptr
                                                            : CardDatabase::Instance().Lookup(fetched);
-                if (fd && (fd->params.tutor_to_hand || fd->params.etb_dig_count > 0
-                           || fd->params.etb_self_draw > 0))
-                { mask |= 1 << 10; continue; }
+                if (fd && PutBodyGainsCards(fd->params)) { mask |= 1 << 10; continue; }
             }
             // Garth's conjure-and-cast reaches Braingeyser (draw X) and Regrowth (graveyard -> hand);
             // the executor already special-cases exactly those two names for its second pass.
@@ -33020,7 +33113,36 @@ static bool BpDigFanoutForPlan(const GameState& state, int sites, const TurnSolv
     // only fluctuator (13,977 -> 2,087) while auras and dragons kept theirs, because their
     // site-4 breakpoints fire on BASE plans (dig_choice == -1) whose mid-apply state considers the
     // dig even though the pre-apply state did not.
-    return ResolveProvider(state).HasAnyDigSource(state);
+    if (ResolveProvider(state).HasAnyDigSource(state)) { return true; }
+    // ...AND THE DIG SOURCE THIS PLAN BRINGS ITSELF (MTG_BP_CANON_AUDIT, 2026-09-22).
+    //
+    // `HasAnyDigSource` asks the BOARD: a cycler in hand, or an UNTAPPED SAC-DRAW LAND IN PLAY. The
+    // note just above is right that a source "can only be ADDED by a plan's own casts, never
+    // removed" -- but that is conservative in the safe direction only for the LOOP. For the FAN-OUT
+    // it IS the hole: the plan that adds the source is exactly the plan whose dig nothing ever
+    // offers a variant for, so its continuation is the unchallengeable cands.front() this audit
+    // exists to catch.
+    //
+    // Auras is the clean case: the deck's ONLY dig source is HORIZON CANOPY, a LAND. Every dig that
+    // follows this turn's own land drop was therefore unreachable at any budget, depth or width --
+    // 467 of the suite's remaining unchallengeable canon defaults, plus th's 8 off Fiery Islet.
+    //
+    // Keyed on the PLAN'S OWN land drop, so it is state-INDEPENDENT, and that is deliberate: every
+    // over-report this audit spent four rounds killing came from a predicate whose answer moved
+    // between the fan-out's state and the apply's. A field of the Plan cannot move. Strictly
+    // additive like the rest of this function -- an extra fanned plan is a wasted node, never a
+    // wrong answer -- so a land that enters tapped, or a dig the loop then declines, costs at most
+    // one duplicate variant. =0 restores the pre-2026-09-22 behaviour.
+    static const bool self_src = EnvOn("MTG_BP_DIG_SELF_SOURCE", true);
+    if (!self_src) { return false; }
+    const std::string* lands[2] = { &p.land_to_play, &p.land_face };
+    for (const std::string* ln : lands)
+    {
+        if (ln->empty()) { continue; }
+        const CardDefinition* ld = CardDatabase::Instance().Lookup(*ln);
+        if (ld && ld->params.sacrifice_draw_cost.has_value()) { return true; }
+    }
+    return false;
 }
 
 // Append the SEARCHED-BREAKPOINT variants (MTG_BP_SEARCH=W; see Plan::bp_choice). For every plan
