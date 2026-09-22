@@ -3887,6 +3887,68 @@ struct Dumper
 inline Dumper g_dumper;
 }
 
+// =================================================================================================
+// THE UNCHALLENGEABLE-CANON AUDIT (MTG_BP_CANON_AUDIT=1, default OFF)
+// =================================================================================================
+//
+// WHAT THIS CATCHES, and why a counter reading "no greedy Solve()" does not catch it. The greedy
+// breakpoint fallback is deleted (2026-09-17) -- there is no `Solve()` inside `bp_searched_plan`
+// and no hatch back. What replaced it is a DEFAULT: at an un-branched slot the continuation is the
+// value-best enumerated entry (`MTG_BP_NESTED_CANON`, `MTG_BP_BASE_CANON`). The doctrine permits a
+// heuristic as a BRANCH'S DEFAULT and forbids it as a substitute for branching, so that default is
+// legitimate **only while the alternatives are genuinely reachable** -- through the node's explicit
+// EMPTY child where a node hosts the site, and through the wave-0 / wave-walker fan-out otherwise.
+//
+// BOTH fan-out routes select plans with `PlanOpensBreakpoint`. So a site whose class is masked ON
+// but which `PlanOpensBreakpoint` never marks gets the default and **NONE of the alternatives, at
+// any budget, depth or width**. That is a heuristic wired as a prune — indistinguishable in effect
+// from the greedy this repo spent months deleting, and invisible to every greedy counter, because
+// no `Solve()` is involved.
+//
+// IT HAS ALREADY HAPPENED ONCE, WHICH IS WHY THIS EXISTS. Site 10 (`MTG_BP_PUT_IN_HAND`) shipped
+// masked-on with no clause and no node; its unchallengeable `cands.front()` cost auras gi428 a turn
+// (T4 -> T5), invariant across budget 0/unlimited, depth 3..9, `MTG_BP_DEPTH` 2/4/8 and
+// `MTG_BP_SEARCH` 4/8/16. The clause that closed it ends with: *"If a route is ever added, ADD IT
+// HERE TOO -- nothing enforces it."* **This is the enforcement.** A rule kept by remembering is a
+// rule that comes back; the USER's standing complaint is precisely that these resurface.
+//
+// HOW. At every canon application we already know the site and the plan, and `PlanOpensBreakpoint`
+// is the exact predicate both fan-out routes use. Asking it here answers "could a variant for this
+// site have existed for this plan?" with no modelling and no proxy. `PlanOpensBreakpoint` scans the
+// battlefield and the plan's actions, so it is NOT free — hence the audit is flag-gated and costs a
+// single predictable branch when off.
+//
+// READ THE OUTPUT AS: any nonzero `unreachable` is a doctrine violation to fix by giving that site a
+// clause (or a node), never by suppressing the audit.
+namespace canonaudit
+{
+inline bool Enabled() { static const bool v = EnvOn("MTG_BP_CANON_AUDIT"); return v; }
+inline std::atomic<uint64_t> g_total[16]{};        // canon applications per site
+inline std::atomic<uint64_t> g_unreachable[16]{};  // ...where PlanOpensBreakpoint never marks it
+struct Dumper
+{
+    ~Dumper()
+    {
+        if (!Enabled()) { return; }
+        uint64_t bad = 0, all = 0;
+        for (int i = 0; i < 16; ++i)
+        { all += g_total[i].load(); bad += g_unreachable[i].load(); }
+        if (all == 0) { std::fprintf(stderr, "=== CANON AUDIT: no canon defaults applied ===\n"); return; }
+        std::fprintf(stderr, "=== CANON AUDIT: %llu canon defaults, %llu UNCHALLENGEABLE (%.2f%%) ===\n",
+                     static_cast<unsigned long long>(all), static_cast<unsigned long long>(bad),
+                     100.0 * static_cast<double>(bad) / static_cast<double>(all));
+        for (int i = 0; i < 16; ++i)
+        {
+            const uint64_t t = g_total[i].load(), u = g_unreachable[i].load();
+            if (t == 0) { continue; }
+            std::fprintf(stderr, "[canon-audit]   site %-3d total=%-12llu UNCHALLENGEABLE=%-12llu %s\n",
+                         i, static_cast<unsigned long long>(t), static_cast<unsigned long long>(u),
+                         u ? "<-- NO ROUTE INTO THE VARIANT MACHINERY" : "ok");
+        }
+    }
+};
+inline Dumper g_dumper;
+}
 
 namespace m2yield
 {
@@ -10123,6 +10185,10 @@ static int BpChainSlots()
 
 // Defined with the wave-0 selector far below; the chain slot reads the same predicate.
 static int PlanOpensBreakpoint(const GameState& state, const TurnSolver::Plan& p);
+// The wave-0 / wave-walker DIG BYPASS: when site 4 is in the mask and the board is about to
+// dig, every plan is fanned out regardless of PlanOpensBreakpoint. Forward-declared so the
+// canon audit can count it as a real route rather than reporting a false violation.
+static bool BpDigFanoutPending(const GameState& state, int sites);
 
 // Resolve kBpChainChoice + j -> the index of the j-th continuation that opens a further breakpoint,
 // or -1 when the list holds fewer than j+1 of them (caller then falls through to greedy, making the
@@ -24202,6 +24268,8 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
         const bool nested_blocked = plan.bp_choice >= 0 && class_on
                                  && seen_before >= BpSearchDepth();
         bool resolved = false;
+        // Set by either canon branch below, read by the unchallengeable-canon audit at the end.
+        bool canon_used = false;
         if (eligible && plan.bp_choice == kBpEmptyChoice)
         {
             // MTG_BP_NODE's explicit EMPTY continuation: cast nothing more, play no land (the
@@ -24311,7 +24379,7 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
             // By reference: read immediately, one Plan copied out, no re-entry between.
             const std::vector<TurnSolver::Plan>& ncands =
                 TurnSolver::EnumerateBreakpointPlansRef(state, is_pre_combat);
-            if (!ncands.empty()) { out = ncands.front(); resolved = true; }
+            if (!ncands.empty()) { out = ncands.front(); resolved = true; canon_used = true; }
         }
         // MTG_BP_ENUM_CANON / MTG_BP_BASE_CANON (levers; see the flags): two further un-branched
         // slot kinds take the value-best entry rather than EMPTY. Never inside a playout.
@@ -24339,8 +24407,30 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
                 // By reference: read immediately, one Plan copied out, no re-entry between.
                 const std::vector<TurnSolver::Plan>& ncands =
                     TurnSolver::EnumerateBreakpointPlansRef(state, is_pre_combat);
-                if (!ncands.empty()) { out = ncands.front(); resolved = true; }
+                if (!ncands.empty()) { out = ncands.front(); resolved = true; canon_used = true; }
             }
+        }
+        // THE ENFORCEMENT (MTG_BP_CANON_AUDIT; see the canonaudit namespace). A canon default is
+        // only legitimate while the ALTERNATIVES are reachable, and both fan-out routes select
+        // plans with PlanOpensBreakpoint -- so asking it here answers "could a variant for this
+        // site have existed?" exactly, with no proxy. Nonzero `unreachable` means a heuristic is
+        // wired as a prune at that site: fix the site's clause, never the audit.
+        if (canon_used && canonaudit::Enabled() && site >= 0 && site < 16)
+        {
+            canonaudit::g_total[site].fetch_add(1, std::memory_order_relaxed);
+            // ALL THREE routes by which an alternative to this default can exist, or the audit
+            // reports false violations. Found the hard way: a first cut asked only the first one
+            // and flagged fluctuator's 49,627 site-4 defaults, every one of which the dig bypass
+            // does in fact fan out.
+            //   1. the wave-0 / wave-walker fan-out, gated on PlanOpensBreakpoint;
+            //   2. the DIG BYPASS, which fans out every plan when site 4 is in the mask and the
+            //      board is about to dig (BpDigFanoutPending -- both fan-out loops carry it);
+            //   3. the NODE, which hosts an explicit EMPTY child plus the full enumeration.
+            const bool reachable = ((PlanOpensBreakpoint(state, plan) >> site) & 1) != 0
+                                || BpDigFanoutPending(state, 1 << site)
+                                || node_owns_site(site);
+            if (!reachable)
+            { canonaudit::g_unreachable[site].fetch_add(1, std::memory_order_relaxed); }
         }
         if (!resolved)
         {
@@ -32471,6 +32561,56 @@ static int PlanOpensBreakpoint(const GameState& state, const TurnSolver::Plan& p
                 || d->params.etb_self_draw > 0
                 || d->params.cast_draw > 0))
         { mask |= 1 << 10; }
+    }
+    // MTG_BP_HAND_ENTRY's routes -- THE NON-CAST HALF, and it is here because the clause above
+    // ends with "If a route is ever added, ADD IT HERE TOO". The section-level arming
+    // (ApplyPlanDirect) fires site 10 for a card that enters hand with NO cast responsible, so not
+    // one clause in the cast loop above can mark it, and an un-marked site-10 occurrence is exactly
+    // the unchallengeable `cands.front()` that cost auras gi428 a turn. MTG_BP_CANON_AUDIT is the
+    // enforcement that catches this class now; this is the clause that keeps it at zero for the
+    // routes the census measured firing.
+    //
+    // Conservative in the same safe direction as sites 6/7/9: a marked plan whose route ends up
+    // producing no hand entry just yields variants that collapse into duplicates of their base
+    // plan -- wasted nodes, never a wrong answer. Naming ROUTES rather than "any non-cast action"
+    // is the same call the cast clause made after measuring the maximally-conservative form 21
+    // keys worse.
+    if (BpHandEntryEnabled())
+    {
+        for (const Action& a : p.actions)
+        {
+            // A sac outlet whose payload DRAWS -- Psychotrope Thallid, "{1}, Sacrifice a Saproling:
+            // Draw a card". The census measured this as 100% of Fungus's hand entries and the deck
+            // holds no other draw at all, so without this clause the deck's only card-advantage
+            // engine gets a default no rank can challenge.
+            if (a.kind == Action::Kind::SacCreatureOutlet)
+            {
+                const CardDefinition* sd = ControlledDefByNumber(state, a.sac_source_id);
+                if (sd && sd->params.sac_outlet_draw > 0) { mask |= 1 << 10; continue; }
+            }
+            // A PUT whose fetched permanent's ETB puts a card in hand -- Birthing Pod fetching a
+            // creature that tutors (melira, 79% of its tutors), and the Goblin Matron case this
+            // document's design doc names (a Matron put onto the battlefield tutors a Goblin).
+            // Keyed on the FETCHED card, which the variant already names in tutor_target.
+            if (a.kind == Action::Kind::ActivatePod || a.kind == Action::Kind::ActivateVial
+                || a.kind == Action::Kind::PutFromHandAbility)
+            {
+                const std::string& fetched = a.tutor_target.str().empty() ? a.card_name.str()
+                                                                          : a.tutor_target.str();
+                const CardDefinition* fd = fetched.empty() ? nullptr
+                                                           : CardDatabase::Instance().Lookup(fetched);
+                if (fd && (fd->params.tutor_to_hand || fd->params.etb_dig_count > 0
+                           || fd->params.etb_self_draw > 0))
+                { mask |= 1 << 10; continue; }
+            }
+            // Garth's conjure-and-cast reaches Braingeyser (draw X) and Regrowth (graveyard -> hand);
+            // the executor already special-cases exactly those two names for its second pass.
+            if (a.kind == Action::Kind::GarthActivate)
+            {
+                const std::string t = a.tutor_target.str();
+                if (t == "Braingeyser" || t == "Regrowth") { mask |= 1 << 10; continue; }
+            }
+        }
     }
     return mask;
 }
