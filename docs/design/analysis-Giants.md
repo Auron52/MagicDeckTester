@@ -745,22 +745,26 @@ still stands (one real engine bug found and fixed); the COVERAGE claim does not.
 
 ## Approved deferrals
 
-Deferrals proposed during this run are **PROVISIONAL** until the user signs them off (skill 2a:
-"An unanswered deferral is PROVISIONAL, never approved"). None has been signed off yet.
+**D1, D2 and D3 were SIGNED OFF by the user on 2026-09-22.** They are no longer provisional.
+D4 never needed a sign-off in the end — it was implemented instead (`tutor_optional`, measured at
+−0.0167 turns), which is why it does not appear below.
 
-| # | card | clause | why proposed inert | status |
+| # | card | clause | why inert | status |
 |---|---|---|---|---|
-| D1 | Sunrise Sovereign | "and have trample" | Structural, verified: `Keyword::Trample` has zero read sites and `Combat.cpp` models no blocking, so trample can never change a damage total. Identical to the already-accepted Rageblood Shaman deferral. | **PROVISIONAL** |
+| D1 | Sunrise Sovereign | "and have trample" | Structural, verified: `Keyword::Trample` has zero read sites and `Combat.cpp` models no blocking, so trample can never change a damage total. Identical to the already-accepted Rageblood Shaman deferral. | **APPROVED 2026-09-22** |
+| D2 | Borderland Behemoth | "Trample" | Same clause, same structural evidence. | **APPROVED 2026-09-22** |
+| D3 | Tectonic Giant | "or becomes the target of a spell an opponent controls" | Unreachable on two independent grounds: the passive opponent casts no spells at all, and the clause requires a spell an *opponent* controls, so this deck's own Lightning Bolt on its own Giant would not trigger it either. | **APPROVED 2026-09-22** |
+
+Note what the sign-off does and does not cover: all three are inert **against the passive goldfish
+opponent**. D1/D2 would become live the moment a blocker path exists, and D3 the moment the
+opponent casts spells — so a future 1v1 mode must revisit all three rather than inherit them.
 
 ## Open questions for the user (surfaced, NOT blocking — defaults taken, work continued)
 
-1. **D1 Sunrise Sovereign trample** — provisional inert deferral (verified: zero read sites, no
-   blocker path). Matches the accepted Rageblood Shaman precedent. Needs sign-off.
-2. **D2 Borderland Behemoth trample** — same, same evidence.
-3. **D3 Tectonic Giant's "or becomes the target of a spell an opponent controls"** — provisional
-   Tier-4 deferral on *unreachability*, on two independent grounds: the passive opponent casts no
-   spells at all, AND the clause requires a spell an OPPONENT controls, so our own Lightning Bolt
-   aimed at our own Giant would not trigger it either. Needs sign-off.
+1. ~~**D1 Sunrise Sovereign trample**~~ — **APPROVED 2026-09-22.**
+2. ~~**D2 Borderland Behemoth trample**~~ — **APPROVED 2026-09-22.**
+3. ~~**D3 Tectonic Giant's "or becomes the target of a spell an opponent controls"**~~ —
+   **APPROVED 2026-09-22.**
 4. **D4 Giant Harbinger's "you MAY search"** — decline not modelled; the engine always searches
    when a legal Giant exists. Deferred to match three shipped precedents (Goblin Matron,
    Recruiter of the Guard, Ranger-Captain of Eos) — but note the argument does NOT transfer
@@ -768,13 +772,11 @@ Deferrals proposed during this run are **PROVISIONAL** until the user signs them
    fetch that SPENDS the next draw step, so declining is a real (if rare) line in a 24-Mountain
    deck. **I recommend implementing it** as a param-gated `tutor_optional` (cheap, byte-identical
    for existing decks). Took the deferral as the documented default; your call.
-5. **Two new SEARCHED axes ship default-ON** (`MTG_FLING_AXIS`, `MTG_TECTONIC_AXIS`). The core
-   invariant required branching rather than a heuristic pick, but a default-on axis is normally
-   adopted only with a measurement. Both have `=0` A/B hatches. Worth a regression A/B before
-   these are considered settled.
-6. **Tectonic Giant mode-B card pick is NOT yet a searched axis** for the autonomous engine
-   (ranked default: highest mana value). The human path DOES surface it via `dig`. Disclosed
-   narrowing; a second axis is the follow-up.
+5. ~~**Two new SEARCHED axes ship default-ON** (`MTG_FLING_AXIS`, `MTG_TECTONIC_AXIS`)... worth a
+   regression A/B before these are considered settled.~~ **MEASURED 2026-09-22 — both KEPT.**
+   See "Axis A/B" below.
+6. ~~**Tectonic Giant mode-B card pick is NOT yet a searched axis**~~ — **BUILT 2026-09-22.**
+   See "Mode-B keep axis" below.
 7. **Pre-existing engine issue, NOT introduced here and NOT fixed here:** the lethal-damage SBA
    (`GameEngine.cpp`) tests `p.damage >= p.EffectiveToughness()`, which EXCLUDES `ComputeLordBonus`
    for any creature whose printed toughness is already > 0. So a Giant Harbinger (3/4) under a
@@ -1120,8 +1122,11 @@ user still had the viewer open:
 4. ~~Regression suite (smoke)~~ **DONE — 83/83 PASS**, 0 configs changed, every play digest
    byte-identical. The Giants engine changes are fully param-gated.
 5. ~~Stage 6a disclosure + Stage 6 report~~ **DONE** (above).
-6. **Open, needs the user:** whether to take the two pre-existing engine fixes (Findings 1 and 2)
-   now with their own regression pass, or schedule them. Until then `claude_sweep` stays red.
+6. ~~**Open, needs the user:** whether to take the two pre-existing engine fixes (Findings 1 and 2)
+   now~~ **SUPERSEDED — both were taken.** See "Fixes applied (all four, after the sweep)": Finding 1
+   detaches at `SacrificePermanentAt`, Finding 2 dedups in-hand equip hosts by name, both with their
+   GT rebaseline (0 slower games at any depth in either tier). `claude_sweep` now reads
+   **PASS, 0 unresolved flags**.
 7. **NOT started, correctly** — value leaf, then mulligan profile. Strictly serial, in that order,
    alone on the box, and both user-kicked-off. Finding 3 is now the strongest concrete argument
    for the mulligan stage on this deck.
@@ -1145,11 +1150,226 @@ user still had the viewer open:
    smoke 6 better / 7 fp-only / **0 worse**. References: 335 replayed, **0 enum-gap, 0 play-drift**.
    Upstream did not touch `EffectiveSpellCost` itself, so there was no semantic collision with the
    call V5 added.
+11. **NEXT: freeze, then the value leaf.** Tier-1 engine work is complete as of 2026-09-22 (both
+    axes measured and kept; the mode-B keep axis built, measured and adopted; both GT tiers
+    re-accepted; every blocking gate green). The deck is ready to freeze for
+    `bash scripts/valueleaf.sh run decks/Giants`, which owns the box, and the mulligan profile
+    after it. Note the keep axis's +18.4% wall is paid by that generation — the lossless
+    name-dedup above is the way to claw a slice of it back, and is best done BEFORE the freeze if
+    it is done at all, since a later play-logic change invalidates the artifact.
 10. **Open, still unstarted (needs a rebuild, so it was gated on the user pausing):** Inferno
     Titan's "3 damage divided as you choose" as a real targeting choice defaulting to the
     opponent's face. Note the gate has now lapsed — the binary has been rebuilt three times today
     and the session pin protected the live game each time, so this no longer needs to wait.
 
+
+## Axis A/B (2026-09-22) — both searched axes MEASURED, both KEPT
+
+Open item 5 closed. Both axes shipped default-ON on the core invariant but without a number; this
+is the number.
+
+**Method.** `scripts/deck_avg_arms.py`, **ONE pooled batch of 480 jobs / 4800 games**, three arms
+interleaved arm-minor so the pool has a single tail (never one batch per arm — the starvation
+lesson). 1600 games per arm, d3 b200 max_turns 8, seed bases 960001/961001/962001/963001 x 400
+games, chunk 10 → **160 paired chunks**; every arm plays the identical games, so draw-order luck
+cancels. Verified from the emitted manifest rather than assumed: all 480 jobs report
+`(depth, budget_ms, max_turns) = (3, 200, 8)`.
+
+**Firing evidence collected BEFORE the run** (a byte-identical A/B on a lever is a red flag, so the
+null had to be a real null rather than a dead flag): `MTG_TRACE=flingaxis,tectonicaxis` over 40
+games emits **6,736 fling-axis** and **22,731 tectonic-axis** fan-outs. Neither is a no-op.
+
+| arm | mean | paired delta vs ctl | chunks better / worse / tied | t | wall |
+|---|---|---|---|---|---|
+| ctl (both ON, shipped) | **5.9956** | — | — | — | — |
+| `MTG_FLING_AXIS=0` | 5.9962 | +0.0006 | 0 / 1 / 159 | 1.00 | −3.1% |
+| `MTG_TECTONIC_AXIS=0` | 6.0437 | **+0.0481** | **0 / 64 / 96** | **9.18** | −9.4% |
+
+**`MTG_TECTONIC_AXIS` — KEPT, decisively.** Switching it off costs +0.0481 turns across 64 of 160
+chunks with **not one chunk improving**, t=9.18. It pays for its 9.4% wall many times over. This
+one is now settled on evidence, not just on the invariant.
+
+**`MTG_FLING_AXIS` — KEPT, but on the invariant rather than on the number.** The honest reading is
+that the axis is worth ~nothing measurable: 159 of 160 chunks are tied and the point estimate is
++0.0006 with t=1.00. What it is **not** is harmful — the single chunk that moved moved *against*
+the off-arm, so across 1600 games the axis was never once worse and occasionally better, for +3.1%
+wall.
+
+That asymmetry is why it stays. Switching it off does not "save 3%" — it re-installs a **ranked
+heuristic pick** over two genuinely distinct outcomes (a one-shot burst now vs a body that keeps
+attacking), which is exactly the narrowing the search-primary invariant forbids, and the
+measurement supplies no evidence to buy an exception. Cost is not a counter-argument to soundness
+here; it would be a different conversation if the axis were measurably *worse*, and it is not.
+
+**The result does carry a real signal, though, and it is about cost, not correctness:** 6,736
+fan-outs per 40 games to change one chunk in 160 says the ranked default is very nearly always
+right. The follow-up worth having is a **cheaper formulation** — fan out only when the ranked pick
+is close — which keeps the decision in the search while paying for it far less often. That is an
+optimisation, not a deletion, and it is not done.
+
+**Mechanism note.** Both levers were read through `static const bool ... = EnvOn(...)`, i.e. a
+process can only ever BE one arm, which forces one `mtg --batch` per arm — the pattern CLAUDE.md
+forbids. Both are now `heurarm` slots (`FLING_AXIS`, `TECTONIC_AXIS`), so the arms ride the
+manifest's per-job `flags` block and pool into one queue. `scripts/deck_avg_arms.py` also gained
+`--depth` / `--budget-ms`: without them it could only ever measure at the manifest default of d0,
+so any deck with no `value_play` block (Giants has none — no value leaf yet) would have been
+A/B'd greedy, at settings it never ships at.
+
+## Mode-B keep axis (2026-09-22) — the last disclosed search narrowing, now searched
+
+Open item 6 closed. Tectonic Giant's mode B exiles two cards and stages one; **which** one was a
+ranked default (highest mana value, tie-break lower card number) for the autonomous search, while
+the human path already surfaced it as a `dig` decision. Sweep GI=7 showed the concrete cost: the
+default took Fire Diamond when Mountain was strictly better and would have been the search's
+fourth land.
+
+**Shape: a SUB-DECISION of mode B, not an independent axis.** A keep index is meaningless under
+mode A, so the fan-out emits `{A, B+keep0, B+keep1}` — three variants — rather than the 2x2
+product. That keeps the cost at 3 instead of 4 and avoids pinning dead state under mode A that the
+dedup keys would nonetheless treat as distinct. Width comes from the card
+(`attack_trigger_impulse_exile`), not a hardcoded 2, and is capped by the library, so a one-card
+library cannot emit a duplicate variant.
+
+Folded into the same full set the mode axis uses — `BpCandFingerprint`, the base-plan predicate,
+the plan-equality compare, the three fan-out base-plan predicates, the dominance key and the sim
+key — plus the per-turn reset and the apply-side pin **in both worlds**. Omitting any one would
+silently collapse the variants.
+
+**Both new keys are VALUE-GATED** (the `scripted_saga_target` precedent), not folded
+unconditionally: the pin is -1 in every deck without a modal attack trigger, so gating keeps every
+other deck byte-identical **by construction** rather than leaving it to be discovered by a sweep.
+The `Dominance.h` size guard fired this time (824 -> 832, measured not guessed) — worth noting
+because it did *not* fire for the second of the two fields added earlier in this run, which is the
+header's own point: whether the tripwire fires is a property of struct padding, not of whether the
+field matters.
+
+### Measured — 3200 games, one pooled batch, 160 paired chunks
+
+`MTG_TECTONIC_KEEP_AXIS=0` is the hatch and reproduces the pre-change two-variant fan-out.
+
+| arm | mean | paired delta | chunks better / worse / tied | t | wall |
+|---|---|---|---|---|---|
+| `keepoff` (pre-change) | 5.9956 | — | — | — | — |
+| `keepon` (shipped) | **5.9881** | **−0.0075** | **12 / 0 / 148** | −3.59 | +18.4% |
+
+**Hatch equivalence VERIFIED, not assumed:** `keepoff` returned **5.9956**, matching the earlier
+axis-A/B control arm to four decimals on the same seeds. So `=0` really is the old engine, which
+is what makes the delta attributable to the axis rather than to anything else that changed.
+
+**Quality: clears the adoption bar.** Never worse in 1600 games, better in 12 chunks, t=−3.59.
+
+**Cost: +18.4% wall, which is a lot for −0.0075 turns** — a far worse ratio than the mode axis
+above (−0.0481 for +9.4%). That is exactly the shape the budget-churn bar and the "BP-NODE +0.014
+was FUNDED by +35% overshoot" lesson warn about: at a fixed `b200` the wider arm does more work per
+decision, so a gain can be the extra search rather than the better decision.
+
+### Budget-persistence check — the gain is a REPRESENTATION gain, not overshoot
+
+Four arms, ONE pooled batch, 320 jobs / 3200 games, 80 paired chunks, d3, `budget_ms` as the
+per-arm ladder so the budget comparison pairs against the lever comparison in the same pool.
+
+| arm | mean | vs `keepoff_b200` | chunks better / worse / tied |
+|---|---|---|---|
+| `keepoff` b200 | 6.0350 | — | — |
+| `keepon` b200 | **6.0288** | −0.0062 | 5 / 0 / 75 |
+| `keepoff` **b800** (4x budget) | 6.0350 | **+0.0000** | **0 / 0 / 80** |
+| `keepon` **b800** | **6.0288** | −0.0062 | 5 / 0 / 75 |
+
+**Quadrupling the budget buys EXACTLY NOTHING on either arm** — `keepoff` b800 reproduces
+`keepoff` b200 to four decimals with not one chunk moving, and `keepon` b800 reproduces `keepon`
+b200 including the identical 5 moved chunks. So:
+
+1. The baseline is **budget-SATURATED at b200**, not starved. The extra wall the axis costs
+   therefore cannot be what produced the gain — there was no unused search for it to buy, and
+   handing the old arm 4x the budget instead yields zero.
+2. The axis's gain is **invariant to the effort knob**, which is the signature of a
+   REPRESENTATION gap rather than a starvation one: the ranked default cannot reach these lines at
+   *any* budget, because the alternative was never enumerated. Widening the space is the only
+   thing that reaches them.
+
+That is what justifies the wall cost here. The trade is not "spend 18% more for a small gain"; it
+is "spend 18% more for a gain that no amount of extra budget can otherwise obtain". **ADOPTED,
+default ON**, with `MTG_TECTONIC_KEEP_AXIS=0` as the hatch.
+
+Honest residual: the effect is small (−0.006 to −0.008 turns) and rests on 12 of 160 chunks. It is
+never negative in 2400 measured games across the two runs, but it is not a large win, and the
++18.4% wall will be paid by the value-leaf generation that follows.
+
+### Suite gates — both tiers, per-difference verdicts
+
+**No deck without a modal attack trigger moved, in either tier** — 126 of 129 regression cells and
+91 of 93 smoke cells byte-identical. That is the value-gating working as designed: it was a
+property of the code, not a result to be discovered.
+
+| tier | cells changed | better | fingerprint-only | worse |
+|---|---|---|---|---|
+| regression | 3 of 129 (all `giants_*`) | **2** (−0.0334, −0.0533) | 1 | **0** |
+| smoke | 2 of 93 (all `giants_*`) | 0 | 1 | **1** (+0.0067) |
+
+**The one worse cell is CHURN, classified rather than asserted.** `test/classify_turn_later.sh
+smoke` re-runs each slower game at 4x and 16x its case budget:
+
+```
+GAME                        OLD  NEW   CLASSIFICATION
+giants_smoke_d3_s1001 gi88   7    8    churn (recovers to 7: 4x=7 16x=7)
+```
+
+The smoke tier runs a deliberately tiny 10 ms budget, and a fan-out 18.4% wider tips one marginal
+game over it. Two independent facts say this is the tight budget and not the axis: the game
+recovers at 4x **and** 16x, and at the deck's actual play budget the axis is never worse in 1600
+paired games. Accepted via `--accept-with-regressions` with that reasoning recorded into the GT
+rather than promoted silently. Both tiers re-accepted; `gt_logs` consistent 129 / 93, 0 STALE.
+
+**Churn bar, honestly.** The user's standing rule is that churn is minimized, not excused, so the
+mitigation is named rather than waved at: **the two exiled cards are frequently the SAME CARD** in
+a deck running 24 Mountains, and two keep variants over identical cards are the identical plan.
+Dropping one is a **lossless dedup by name** — the Finding-2 equip-host precedent, not a heuristic
+prune — and the search is already clairvoyant over the library, so it may legitimately look. That
+would cut a meaningful slice of the +18.4% at exactly zero quality cost. **NOT implemented** (it is
+past the scope of this pass); recorded as the concrete next optimisation, alongside the same
+"fan out only when it can matter" idea the fling axis wants.
+
+### Gates after the change
+
+`verify_deck.py`: **every blocking gate PASS** — `coverage`, `card_fields`, `viewer`,
+`viewer_wiring`, `mismatch`, `play_invariants`, `claude_sweep`. The one that matters most here is
+**`mismatch`: 0 `[nonconv]` and 0 `[fd-diverge]` over 2 seeds x 60 games**, because this change
+touched shared `GameState`, the dominance key and the sim key — the three places an
+executor/rollout divergence would surface.
+
+Advisory carried forward, not suppressed: the gate notes the claude-play sweep was recorded at
+`76f76796` and **play has changed since**. The sweep's card-mechanic coverage is unaffected (no
+card behaviour changed), but its per-game lines are now stale; `play_invariants` and the smoke
+digests track play live, which is what the gate leans on.
+
+## Gate status re-check (2026-09-22, post-push)
+
+`python3 scripts/verify_deck.py decks/Giants/Giants.cod --no-network` re-run on the pushed tree.
+Every blocking gate PASS — `card_fields` (407 cards), `viewer_wiring` (4 types: `attack_mode`,
+`dig`, `sacrifice`, `target`), `mismatch` (0 nonconv / 0 fd-diverge, seeds 7001+7002 x 60),
+`play_invariants` (8 games / 1412 decisions), `claude_sweep` (0 unresolved flags) — **except one
+that had gone red since the ledger was written**:
+
+**`viewer` FAIL — `tutor_optional` was an UNCLASSIFIED param.** The D4 decline arm was added to
+`CardParams`, `cards.json` and the search late in this run, but never registered with
+`scripts/audit_viewer_decisions.py`. The auditor's self-guard is exactly right to fail on it: a new
+choice-shaped param that no one has classified is the shape that ships an unreachable decision.
+
+**Classified as a DECISION, not inert** — so this needed no sign-off, only the correct mapping.
+`TurnSolver.cpp:35287` emits an extra DECLINE **plan variant**
+(`v.tutor_choice = kTutorDeclineChoice`) alongside the per-target tutor variants, so it rides the
+same `main_phase` plan list as the tutor pick it belongs to, exactly like the `tutor_to_hand` /
+`tutor_to_top` entries it now sits beside. It is emphatically not its own decision type and not a
+no-op: the human path could already decline (`TutorAskResult::Declined`), and this param is what let
+the SEARCH decline too — the two sides now express the same choice. Auditor `rc=0` for Giants after
+the one-line MANIFEST addition; Goblins and Angels re-checked unchanged (the edit only *adds* a key,
+so it can only make the self-guard more permissive).
+
+**Unrelated red gate found in passing, NOT fixed here:** Knights fails the same self-guard on
+`colored_creature_ability_ok` (Secluded Courtyard). Different deck, different card, pre-existing,
+and the likely classification (a mana-legality filter → `INERT_PARAMS`) is a claim about a card I
+have not researched, so it wants its own look plus the sign-off `INERT_PARAMS` entries carry.
+Recorded rather than drive-by fixed.
 
 ## Audit status (2026-09-22)
 
