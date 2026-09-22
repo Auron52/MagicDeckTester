@@ -53,9 +53,31 @@ inline bool UpkeepRevealTopEnabled()
     return env_on;
 }
 
-// MTG_FUNGUS_SPORE_POOL (DEFAULT OFF -> byte-identical; heurarm slot so one pooled batch carries
-// both arms) -- treat every interchangeable spore outlet as ONE POOL, spent oldest-first, so the
-// only enumerated axis is HOW MANY Saprolings to make and never WHICH body pays.
+// MTG_FUNGUS_SPORE_POOL (ADOPTED 2026-09-22, DEFAULT ON; =0 reverts, heurarm slot so one pooled
+// batch carries both arms) -- treat every interchangeable spore outlet as ONE POOL, spent
+// oldest-first, so the only enumerated axis is HOW MANY Saprolings to make and never WHICH body pays.
+//
+// ---- WHY IT WAS ADOPTED, AND WHAT IT IS WORTH -------------------------------------------------
+// It shipped default-OFF on 2026-09-18 and sat there, which made it dead code by the repo's own
+// rule. What moved it was the MULLIGAN GEN: Fungus keep-generation is dominated by a tail of
+// degenerate cells, and 348 rollouts (0.056% of all of them) were consuming 31.4% of the machine,
+// with a single keep-rollout reaching 22.1 MINUTES against a 3 ms budget. Those rollouts are all
+// Doubling Season / Utopia Mycon / Thallid hands -- i.e. exactly the boards where "which body pays"
+// multiplies out.
+//
+// ROOT CAUSE, for anyone tempted to look at the budget instead: the greedy rollout leaf's subset
+// enumeration is NOT budgeted. One degenerate game scored 12,578,432 subsets where a typical one
+// scores 3,120 (4,031x) while the search's own units_total saw only 458,797 -- the budget cannot
+// see that work, so it cannot bound it. Pooling collapses the powerset at the EMISSION site, which
+// is why it reaches a cost the budget never could: 12.6M -> 3.3M subsets on that same game.
+//
+// MEASURED (HELD OUT, 3,200 fresh games over 4 seeds, both settings):
+//   gen settings  d1/b3 : avg win turn IDENTICAL on every seed, wall -40.1% (1.67x)
+//   play settings d3/b10: avg win turn IDENTICAL on every seed, wall  -8.4% (1.09x)
+//   tail (400 games d1/b3): games over 2 s 15 -> 5, worst game 12,966 ms -> 6,296 ms
+// The play SHAPE changes (digest moves) -- it picks a different body to pay -- but on 3,200 games
+// the outcome never did. That is the shape the user's ruling predicts, and it is the evidence for
+// adopting a HEURISTIC rather than a proof.
 //
 // USER 2026-09-18: *"we should de-duplicate the choice of which source a saproling comes from, the
 // oldest entry that has 3 counters first"*, and the licence that makes it admissible:
@@ -80,7 +102,7 @@ inline bool UpkeepRevealTopEnabled()
 // that pooled and an apply that did not would spend the wrong bodies.
 inline bool SporeSourcePoolEnabled()
 {
-    static const bool env_on = EnvOn("MTG_FUNGUS_SPORE_POOL");
+    static const bool env_on = EnvOn("MTG_FUNGUS_SPORE_POOL", true);
     return heurarm::Flag(heurarm::FUNGUS_SPORE_POOL, env_on);
 }
 
