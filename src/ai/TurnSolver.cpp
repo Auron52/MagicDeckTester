@@ -3935,11 +3935,20 @@ inline std::atomic<uint64_t> g_unreachable[16]{};  // ...where PlanOpensBreakpoi
 inline std::atomic<uint64_t> g_unmarked[16]{};     // ...plan selected elsewhere, site has no clause
 inline std::mutex g_who_mtx;
 inline std::map<std::string, uint64_t> g_who;      // "<tier> site N <arming card>" -> count
-inline void RecordWho(int site, const char* name, bool hard)
+// `hosted` = this apply had a capture pointer or carried a bp_choice, i.e. SOMEBODY was offering
+// it a search node. It separates the two remedies, which are not interchangeable:
+//   hosted + unchallengeable   -> a missing CLAUSE. The fan-out was available and did not select
+//                                 this plan. Fixable here, in PlanOpensBreakpoint.
+//   unhosted                   -> a missing HOST. A capture is passed at 2 of the engine's ~42
+//                                 ApplyPlanDirect sites, so no clause anywhere can help: there is
+//                                 no fan-out at this apply to be selected BY. That is the
+//                                 greedysite::kNoHost class and it needs a caller, not a predicate.
+inline void RecordWho(int site, const char* name, bool hard, bool hosted)
 {
-    char key[96];
-    std::snprintf(key, sizeof(key), "%s site %-2d %s", hard ? "UNCHALLENGEABLE" : "site-unmarked  ",
-                  site, (name && *name) ? name : "(inline cast)");
+    char key[128];
+    std::snprintf(key, sizeof(key), "%s site %-2d %-8s %s",
+                  hard ? "UNCHALLENGEABLE" : "site-unmarked  ", site,
+                  hosted ? "[hosted]" : "[NOHOST]", (name && *name) ? name : "(inline cast)");
     std::lock_guard<std::mutex> lk(g_who_mtx);
     ++g_who[key];
 }
@@ -24567,15 +24576,18 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
             // Prefer the recorded fact wherever it exists.
             const bool selected = plan.bp_wave0 || (opens & BpSiteMask()) != 0 || dig_ok || node_ok;
             const char* who     = canon_arm ? canon_arm->card.m_name.c_str() : nullptr;
+            // Was ANY search node on offer at this apply? (The same pair node_owns_site tests,
+            // without the site mask -- see canonaudit::RecordWho for why the two remedies differ.)
+            const bool  host_here = (bp_capture != nullptr || plan.bp_choice >= 0);
             if (!selected)
             {
                 canonaudit::g_unreachable[site].fetch_add(1, std::memory_order_relaxed);
-                canonaudit::RecordWho(site, who, /*hard=*/true);
+                canonaudit::RecordWho(site, who, /*hard=*/true, host_here);
             }
             else if (((opens >> site) & 1) == 0 && !dig_ok && !node_ok)
             {
                 canonaudit::g_unmarked[site].fetch_add(1, std::memory_order_relaxed);
-                canonaudit::RecordWho(site, who, /*hard=*/false);
+                canonaudit::RecordWho(site, who, /*hard=*/false, host_here);
             }
         }
         if (!resolved)
@@ -32640,6 +32652,12 @@ static int PlanOpensBreakpoint(const GameState& state, const TurnSolver::Plan& p
         if (d && d->params.pod_mv_delta != 0 && (!d->params.pod_taps || !perm.tapped))
         { if (++pod_srcs >= 2) { break; } }
     }
+    // A "count the Pod sources THIS PLAN casts too" widening was built and MEASURED here on
+    // 2026-09-22 and deliberately NOT kept: it moved melira's site-7 `unmarked` 13,079 -> 4,476 but
+    // its UNCHALLENGEABLE count not at all (1,079 -> 1,079), because every one of those is
+    // [NOHOST] -- an apply with no capture and no carried choice, where there is no fan-out to be
+    // selected by in the first place. Extra marking there buys intent, not reachability, and it
+    // costs a wider candidate set. See docs/design/canon-default-reachability.md.
     for (const Action& a : p.actions)
     {
         // Site 7: a Pod activation with a REAL fetch while a second Pod stands by -- the fetch
