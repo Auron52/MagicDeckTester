@@ -455,15 +455,66 @@ largest measured hole; cost is ~flat, which is the notable part given the doc's 
 *"arming on every hand-entry is strictly more armings than today"* — it is not, because the arm is
 gated on nothing else having armed.
 
-**NOT ADOPTED, and the reason is the repo's own rule that one run's average is not evidence** (this
-codebase has seen +2.36 then -2.07 on the same binary). What is owed before an adoption call:
+### THE HELD-OUT CONFIRM DID NOT CONFIRM — and that is the finding
 
-1. A **held-out confirm on fresh seeds** at larger n — launched 2026-09-22 (seeds 480001+, 6,000
-   games over fungus/melira/knights/goblins). The knights sign in particular is within noise of zero
-   and needs settling in the same pass.
-2. **Per-game paired deltas**, not just the arm averages, so the comparison is game-for-game.
+Fresh seeds (480001+), larger n, same settings. Read this against the table above:
+
+| deck | games | base | `=1` | held-out delta | train delta |
+|---|---|---|---|---|---|
+| fungus | 600 | 5.6500 | 5.6483 | **-0.0017** | -0.0150 |
+| melira | 800 | 4.7337 | 4.7400 | **+0.0063** | -0.0034 |
+| goblins | 800 | 3.8475 | 3.8487 | +0.0012 | 0.0000 |
+| knights | 800 | 4.3875 | 4.3887 | +0.0012 | +0.0034 |
+
+Fungus shrinks by an order of magnitude to effectively zero; **melira flips sign**. This is the
+repo's own "one run's t-stat is not evidence" rule landing on exactly the numbers that looked
+promising. Do not quote the train table without this one beside it.
+
+**And it is not the budget.** Re-run at d3 **b40**, 4x the budget, on the same held-out seeds:
+
+| deck | games | base | `=1` | delta | wall |
+|---|---|---|---|---|---|
+| fungus | 400 | 5.6300 | 5.6300 | **0.0000** | +6.3% |
+| melira | 500 | 4.7040 | 4.7080 | +0.0040 | +1.3% |
+
+### WHY it is flat — measure the behaviour, not just the outcome
+
+`MTG_BP_PROBE=1`, Fungus, 12 games, seed 70900 — the mechanism fires, and hard:
+
+| site | `=0` | `=1` |
+|---|---|---|
+| 10 `put_in_hand` | **0** | **37,682**, of which **only 1,848 (4.9%) resolved by SEARCH** |
+| 9 `post_entry_act` | 19,270 (78.3% searched) | 19,726 (75.7% searched), `untarget` 0 -> 670 |
+| 3 `deferred_cantrip` | 0 | 440 |
+
+So the hole closes exactly as designed — the Psychotrope draw goes from opening **zero** breakpoints
+to opening 37,682 — and then **95% of those new continuations are decided GREEDILY**
+(`empty-default` 35,834: `overrun` 9,944, `untarget` 25,890). A greedy continuation re-solves over
+the plan's own tail, so opening a class the search cannot reach is not free: it is the same
+reachability ceiling this repo has measured everywhere else (*"45-90% of all continuations are
+unreachable"* at shipped widths). Site 10 on Fungus is at 95%.
+
+**That is the blocker, and it is named rather than guessed: nothing hosts or waves site 10.**
+`BpNodeSites()` is site 3 alone, and `MTG_BP_NODE_D56` adds sites 5 and 6 — not 10. Until site 10
+has the hosting sites 3/5/6 have, arming it more widely buys reachability the search then throws
+away greedily.
+
+### Verdict and what is owed
+
+**NOT ADOPTED. `MTG_BP_HAND_ENTRY` stays DEFAULT OFF.** What it has going for it is the
+correctness/reachability argument, not a measured win — which is the USER's own no-lossy bar and the
+asymmetry this document already states (*a missing ARM is unreachable at any budget and silent, an
+unhelpful arm is only cost*). It now costs ~2-6% wall to close the hole, and that price is payable
+whenever the user wants the correctness rather than the average.
+
+Owed before any adoption call:
+
+1. **Give site 10 a host or a wave** (the `BpNodeSites` / `BpSiteMask` wave machinery) and re-measure.
+   This is the one change with a reason to expect a different answer; everything else is re-rolling
+   the same dice.
+2. **Per-game paired deltas**, not arm averages, so the comparison is game-for-game.
 3. Fungus is **not in the regression suite**, so neither smoke nor regression covers its play. Its
-   only signals are this A/B and the 7 references (2 of which carry pre-existing play-drift).
+   only signals are these A/Bs and the 7 references (2 of which carry pre-existing play-drift).
 
 ### Still open after this
 
