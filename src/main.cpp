@@ -2228,6 +2228,14 @@ static void WriteBounceDecisionJson(std::ostream& os, const GameState& s, const 
     // goes to the graveyard (Shard Volley's additional cost) and the viewer says "sacrifice".
     d.Type(sacrifice ? "sacrifice" : "bounce").Source(source).Turn(s.turn_number)
      .Board(s).HeuristicDefault(heuristic_default);
+    // MACHINE-READABLE decline flag. This used to live only in the prose `note` below, which the
+    // play viewer does not parse -- so Surtland Flinger's "you MAY sacrifice another creature"
+    // rendered as a bare board-click picker with no way to say "none", and a human was FORCED to
+    // fling. (The search could always decline via Plan::fling_victim_choice = -2, and the
+    // --choices path accepts -1; it was only the GUI that had no route.) The viewer gates its
+    // Decline button on this field, so the mandatory consumers -- Shard Volley's land-sac
+    // additional cost, Natural Order, Mycoloth devour -- keep showing no decline, as they must.
+    d.Bool("allow_decline", allow_decline);
     d.Array("options", legal.size(), [&](std::size_t i)
     {
         const Permanent& p = s.battlefield[legal[i]];

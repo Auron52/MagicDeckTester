@@ -1716,7 +1716,7 @@ function zoneRow(items, cls='') { return `<div class="row ${cls}">${items.length
 // `dec` null, so the panel is hidden and the decision is unanswerable — the game just stalls on a
 // dead board (how lackey_put/echo/land_entry shipped: panel + wiring + commit written, whitelist
 // never updated). test/viewer_decision_types_check.js pins this list against src/main.cpp.
-const SUBDECISIONS = ['scry','reorder','surveil','target','vial_charge','bounce','sacrifice','dig','discard','divide','expressive_iteration','retrace_discard','replicate','mulligan','bottom','dragon','lightpaws','firebreathe','storage_hold','lackey_put','free_cast','demonstrate','echo','land_entry','tutor_etb','sac_tutor','revive','rummage','attach_host','flicker','jitte','choose_color'];
+const SUBDECISIONS = ['scry','reorder','surveil','target','vial_charge','bounce','sacrifice','dig','discard','divide','expressive_iteration','retrace_discard','replicate','mulligan','bottom','dragon','lightpaws','firebreathe','storage_hold','lackey_put','free_cast','demonstrate','echo','land_entry','tutor_etb','sac_tutor','revive','rummage','attach_host','flicker','jitte','choose_color','attack_mode'];
 // The plan the engine flagged as a go-off, or null.
 //
 // TWO STRENGTHS, and the button says which (USER 2026-09-10: *"we require a much more aggressive,
@@ -3240,6 +3240,7 @@ function renderDecisionPanel(d, dec){
                 || dec==='replicate' || dec==='mulligan' || dec==='bottom' || dec==='land_entry' || dec==='dragon' || dec==='sac_tutor' || dec==='revive' || dec==='rummage'
                 || dec==='lightpaws' || dec==='firebreathe' || dec==='storage_hold' || dec==='jitte' || dec==='choose_color'
                 || dec==='lackey_put' || dec==='demonstrate' || dec==='echo' || dec==='tutor_etb' // centered card-image modals
+                || dec==='attack_mode'   // Tectonic Giant's modal attack trigger -- centred, like demonstrate
                 // free_cast is a modal ONLY for the walk-based sites (cascade / Breaching
                 // Dragonstorm / Creative Technique), whose card is in no visible zone. A from-hand
                 // charge (zone:"hand" -- World War Hulk chapter I, Maelstrom Archangel) is a bottom
@@ -3834,10 +3835,20 @@ function promptPanelHtml(d, dec){
     const kinds=(d.options||[]).map(o=>{const p=bf.find(b=>b.idx===o.perm_index);return p?!!p.is_land:null;});
     const noun=kinds.length&&kinds.every(k=>k===true)?'land'
              :(kinds.length&&kinds.every(k=>k===false)?'creature':'permanent');
+    // OPTIONAL sacrifice ("you MAY sacrifice another creature" -- Surtland Flinger). Gated on the
+    // engine's machine-readable allow_decline, so the MANDATORY consumers of this same panel
+    // (Shard Volley's land-sac additional cost, Natural Order, Mycoloth devour) still offer no way
+    // out, as the rules require. Without this the human was FORCED to sacrifice while the search
+    // could decline -- a search/human capability asymmetry, and the second time this exact pair
+    // has been wrong for this card.
+    const mayDecline = !!d.allow_decline;
     return `<h3>Sacrifice a ${noun} — ${esc(d.source||'')}</h3>`+
-      `<div class="sub">Click a ${noun} on your board to sacrifice (${esc(d.source||'this spell')}'s cost). Eligible ${noun}s are highlighted; ✓ marks your pick.</div>`+
+      `<div class="sub">Click a ${noun} on your board to sacrifice (${esc(d.source||'this spell')}'s cost). Eligible ${noun}s are highlighted; ✓ marks your pick.`+
+      (mayDecline?` This one is <b>optional</b> — you may decline and keep the ${noun}.`:'')+`</div>`+
       `<div class="pbtns"><span class="pcount">Sacrificing: <b>${opt?esc(opt.name):`(pick a ${noun})`}</b></span>`+
-      `<span class="spacer"></span><button id="decconfirm" class="primary" ${sel.length?'':'disabled'}>Confirm</button></div>`;
+      `<span class="spacer"></span>`+
+      (mayDecline?`<button id="sacdecline" class="ghost">Decline — sacrifice nothing</button>`:'')+
+      `<button id="decconfirm" class="primary" ${sel.length?'':'disabled'}>Confirm</button></div>`;
   }
   if (dec==='attach_host'){
     const sel=[...(S.boardSel||[])];
@@ -3939,6 +3950,7 @@ function wireDecisionPanel(d, dec){
   }
   else if (dec==='demonstrate')
     panel.querySelectorAll('[data-demo]').forEach(b=>b.onclick=()=>commitDemonstrate(d, +b.dataset.demo));
+  else if (dec==='attack_mode')
     panel.querySelectorAll('[data-atkmode]').forEach(b=>b.onclick=()=>commitAttackMode(d, +b.dataset.atkmode));
   else if (dec==='tutor_etb')
     panel.querySelectorAll('[data-opt]').forEach(b=>b.onclick=()=>commitTutor(d, +b.dataset.opt));
@@ -3996,6 +4008,11 @@ function wireDecisionPanel(d, dec){
   }
   else {
     const cb=panel.querySelector('#decconfirm'); if (cb) cb.onclick=()=>commitBoardSel(d, dec);
+    // Optional sacrifice ("you MAY sacrifice another creature" -- Surtland Flinger): reply -1 to
+    // decline. Rendered only when the engine sets allow_decline, so a mandatory sacrifice has no
+    // such button. Same -1 shape as #decnoattach below.
+    const sd=panel.querySelector('#sacdecline');
+    if (sd) sd.onclick=()=>pushChoice(d, -1, `${d.source||'Sacrifice'}: declined — sacrificed nothing`);
     // attach_host: "Leave unattached" replies -1 (the equipment stays on the battlefield loose).
     // flicker reuses the same button as its "Decline" (reply -1 = no flicker at all).
     const na=panel.querySelector('#decnoattach');

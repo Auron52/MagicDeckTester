@@ -1069,6 +1069,11 @@ function recordFrame(p, d) {
 // PURE, so it is testable without a filesystem or a server (test/viewer_save_parity_check.js).
 // `frames` is a Map<decision_index, fingerprint> (may be empty -- then only the self-contained
 // out-of-range check runs, and everything else is reported as unverified rather than as passing).
+// Decision types answered through a turn-keyed SIDE-CHANNEL rather than the positional --choices
+// stream. They do not consume a choice slot, so they share a decision_index with the next real
+// decision and cannot be aligned against the live frame ledger. See the note in auditTrace.
+const SIDE_CHANNEL_DECISIONS = new Set(['firebreathe', 'jitte', 'storage_hold']);
+
 function auditTrace(traceObj, frames) {
   const problems = [];
   const decs = (traceObj && traceObj.decisions) || [];
@@ -1091,6 +1096,29 @@ function auditTrace(traceObj, frames) {
       }
     }
     // (2) LIVE-FRAME MISMATCH.
+    //
+    // SIDE-CHANNEL decisions are exempt, and must be: firebreathe / jitte / storage_hold are
+    // answered through a TURN-KEYED map (--firebreathe 5:1, --jitte, --storage-hold), NOT the
+    // positional --choices stream. Answering one therefore does NOT advance the engine's cursor --
+    // but the --log-dir writer still stamps its trace entry with that cursor value (`di = cursor`,
+    // main.cpp). So the side-channel entry and the NEXT real decision carry the SAME
+    // decision_index, while this ledger -- keyed by that index -- holds only the positional
+    // frame (the live session recorded the firebreathe frame there first, then OVERWROTE it once
+    // the side-channel answer made the engine stop asking).
+    //
+    // Comparing them comes down to comparing two different moments of the same turn: the
+    // firebreathe prompt sits BEFORE combat and the main_phase frame AFTER it, so the opponent's
+    // life alone guarantees a mismatch. It fired as
+    //   decision 15 (turn 5): [live main_phase|5|post_main|20|3|...] != [replay firebreathe|5||20|13|...]
+    // and made EVERY hand-played game containing a firebreathe unsaveable -- reproduced end-to-end
+    // on a clean session (Giants seed 8 gi 7, 2026-09-22), so it is NOT the mid-session-rebuild
+    // cause this refusal's message guesses at.
+    //
+    // Skipping is the correct fix rather than a widened comparison: these entries are not
+    // positional decisions and have no frame of their own to be checked against. The positional
+    // decisions -- every plan pick, which is what a diverged replay actually corrupts -- are still
+    // fully audited, so the guard keeps its teeth.
+    if (SIDE_CHANNEL_DECISIONS.has(d.type)) { unverified++; continue; }
     const want = frames && typeof frames.get === 'function' ? frames.get(i) : undefined;
     if (want === undefined) { unverified++; continue; }
     checked++;
