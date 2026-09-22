@@ -18,6 +18,7 @@
 # profile, and sibling models live in decks/<name>/. The engine resolves sibling artifacts
 # (value/eval/constraints/keepmodel.exhaustive) directory-relative off the profile path.
 declare -A DECK_FILE=(
+  [fungus]=decks/Fungus/Fungus.cod
   [slivers]=decks/slivers_vial/slivers_vial.txt
   [burn]=decks/burn/burn.txt
   [th]=decks/treasure_hunt/treasure_hunt.txt
@@ -42,6 +43,7 @@ declare -A DECK_FILE=(
   [snow]=decks/Snow/Snow.cod
 )
 declare -A DECK_PROF=(
+  [fungus]=decks/Fungus/Fungus.profile.json
   [slivers]=decks/slivers_vial/slivers_vial.profile.json
   [burn]=decks/burn/burn.profile.json
   [th]=decks/treasure_hunt/treasure_hunt.profile.json
@@ -77,6 +79,15 @@ declare -A DECK_PROF=(
 # into turn 11 -- legal but volatile), and slivers actively spins on its heavy tail. The
 # deeper/generous budgets live in OVERNIGHT instead. See search-perf-investigation memory.
 SMOKE_CASES=(
+  # fungus: Hinata's sizing, adopted wholesale rather than probed (user call 2026-09-20).
+  # MEASURED 2026-09-22 before adopting: this deck is the suite's most expensive by a clear margin
+  # -- 281.8s CPU here (2nd behind snow's 520.5s) and 1,331.1s in REGRESSION, where it is 1st at
+  # 2.6x snow. Smoke makespan 71s -> 112s, regression 159s -> 318s; both well inside their 15 min /
+  # 45 min budgets, which is why it goes in now and the cost is an optimization target rather than
+  # a blocker (USER: "Fungus should be in the suite unless there is a performance blocker").
+  "fungus  0 1001 1000 0"
+  "fungus  3 1001  150 10"
+  "fungus  5 1001   75 20"
   "slivers 0 1001 1000 0"
   "slivers 3 1001  250 10"
   "slivers 5 1001  150 20"
@@ -311,6 +322,14 @@ SMOKE_CASES=(
 # (see SMOKE block). slivers must stay low regardless -- it spins on its heavy tail (s2002 d5
 # was 16.5 min at budget 200) for zero benefit. d0 has no search. Only antilife is new here.
 REGRESSION_CASES=(
+  # fungus: Hinata's sizing (d0 full + d3/d5 at both seeds). 1,331.1s CPU = the suite's heaviest.
+  # HALF OF IT IS SIX GAMES: seeds 2085/2031/3095 are pathological at BOTH d3 and d5 (d3_s2002
+  # gi83 alone is 208s of that case's 507s). See docs/design/fungus-token-search-cost.md.
+  "fungus  0 2002 1000 0"
+  "fungus  3 2002  200 10"
+  "fungus  3 3003  200 10"
+  "fungus  5 2002  100 20"
+  "fungus  5 3003  100 20"
   "slivers 0 2002 1000 0"
   "slivers 3 2002  400 10"
   "slivers 3 3003  400 10"
@@ -486,6 +505,12 @@ REGRESSION_CASES=(
 # See .claude/skills/regression-testing.md rule 7 and
 # docs/design/searched-design-audit-blind-spots.md ("Method trap: overlapping seed bases").
 OVERNIGHT_CASES=(
+  # fungus: the OVERNIGHT block is deliberately NOT here yet. Its sizing is ready
+  # (scripts/fungus_regression_add.sh: d0 x4 @2000, d3 x4 @400 b10, d5 x4 @300 b20, ~1.8 CPU-hours
+  # at this deck's measured rates), but adding cases without baselining them in the same change is
+  # the exact gap d41561a0 was written to close -- it strands NEW keys for whoever runs that mode
+  # next. It goes in with its baseline once the Fungus cost work settles, since that work moves
+  # every digest anyway.
   "slivers 0 4004 2000 0"
   "slivers 0  6006 2000 0"
   "slivers 0  8008 2000 0"
