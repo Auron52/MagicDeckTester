@@ -31,6 +31,13 @@ def main():
     ap.add_argument("--games", type=int, default=50, help="games per seed base")
     ap.add_argument("--chunk", type=int, default=10, help="games per job")
     ap.add_argument("--max-turns", type=int, default=12)
+    # Search depth for EVERY arm (a lever A/B compares arms at one depth; a depth ladder is what
+    # --arm's budget_ms token is for). Omitted => the manifest default, which is d0 -- fine for a
+    # deck whose profile carries a value_play block that owns the depth, but a deck WITHOUT one
+    # (no value leaf yet) would otherwise be measured greedy, at settings it never ships at.
+    ap.add_argument("--depth", type=int, default=None)
+    ap.add_argument("--budget-ms", type=int, default=None,
+                    help="search budget for every arm (a per-arm ladder still overrides it)")
     ap.add_argument("--threads", type=int, default=0)
     ap.add_argument("--log-root", required=True)
     ap.add_argument("--stats", action="store_true")
@@ -66,7 +73,15 @@ def main():
                  "games": args.chunk, "seed": s + c, "game_index": c, "max_turns": args.max_turns}
             if flags:
                 j["flags"] = flags
-            if budget is not None:
+            if args.depth is not None:
+                # An explicit depth needs the profile override too: a profile that LOCKS
+                # target_depth (value_play) otherwise rejects it (the leaf_tiebreak_check
+                # precedent).
+                j["depth"] = args.depth
+                j["ignore_play_profile"] = True
+            if args.budget_ms is not None:
+                j["budget_ms"] = args.budget_ms
+            if budget is not None:            # per-arm ladder wins over the global default
                 j["budget_ms"] = budget
             jobs.append(j)
     os.makedirs(args.log_root, exist_ok=True)

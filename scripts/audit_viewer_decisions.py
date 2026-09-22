@@ -121,6 +121,12 @@ MANIFEST = {
     # listed here so the self-guard treats them as MAPPED (not unknown choice params).
     "tutor_to_hand":         ("main_phase",           truthy),
     "tutor_to_top":          ("main_phase",           truthy),
+    # "You MAY search" (Giant Harbinger). This is a real decision, not inert: TurnSolver.cpp
+    # emits an extra DECLINE plan variant (`v.tutor_choice = kTutorDeclineChoice`) alongside the
+    # per-target variants, so it rides the same main_phase plan list as the tutor pick it
+    # belongs to. The human path could already decline (TutorAskResult::Declined); this param is
+    # what let the SEARCH decline too, so both sides now express the same choice.
+    "tutor_optional":        ("main_phase",           truthy),
     # Zada/Mirrorwing solo-target trick: WHICH creature the trick targets is a plan-variant
     # sub-decision (an `enchant`-kind choose sub, one main_phase variant per legal target incl.
     # same-plan hand creatures; Action::enchant_target reused). Twinflame's strive extra-target
