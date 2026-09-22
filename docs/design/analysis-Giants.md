@@ -1150,13 +1150,15 @@ user still had the viewer open:
    smoke 6 better / 7 fp-only / **0 worse**. References: 335 replayed, **0 enum-gap, 0 play-drift**.
    Upstream did not touch `EffectiveSpellCost` itself, so there was no semantic collision with the
    call V5 added.
-11. **NEXT: freeze, then the value leaf.** Tier-1 engine work is complete as of 2026-09-22 (both
-    axes measured and kept; the mode-B keep axis built, measured and adopted; both GT tiers
-    re-accepted; every blocking gate green). The deck is ready to freeze for
-    `bash scripts/valueleaf.sh run decks/Giants`, which owns the box, and the mulligan profile
-    after it. Note the keep axis's +18.4% wall is paid by that generation — the lossless
-    name-dedup above is the way to claw a slice of it back, and is best done BEFORE the freeze if
-    it is done at all, since a later play-logic change invalidates the artifact.
+11. **Tier-1 engine work COMPLETE and pushed** (2026-09-22): both axes measured and kept, the
+    mode-B keep axis built/measured/adopted, both GT tiers re-accepted, every blocking gate green,
+    CI green incl. determinism parity.
+12. **Value leaf: STARTED then STOPPED by the user**, 7 of 9 phases banked at freeze `e0d60938`.
+    See the run section above for the resume cost (phase E restarts: ~1–1.5 h wall) and the
+    slow-game census. **Resumable only while `HEAD:src` is unchanged** — `bash
+    scripts/valueleaf.sh run decks/Giants`. The lossless keep-axis name-dedup, if it is ever done,
+    must land BEFORE a resume, because it would break the freeze and force a full restart.
+13. **Then** the mulligan profile, for which Finding 3 is the concrete argument.
 10. **Open, still unstarted (needs a rebuild, so it was gated on the user pausing):** Inferno
     Titan's "3 damage divided as you choose" as a real targeting choice defaulting to the
     opponent's face. Note the gate has now lapsed — the binary has been rebuilt three times today
@@ -1341,6 +1343,76 @@ Advisory carried forward, not suppressed: the gate notes the claude-play sweep w
 `76f76796` and **play has changed since**. The sweep's card-mechanic coverage is unaffected (no
 card behaviour changed), but its per-game lines are now stale; `play_invariants` and the smoke
 digests track play live, which is what the gate leans on.
+
+## Value-leaf run 2026-09-22 — STOPPED BY THE USER at phase E, 7 of 9 phases banked
+
+Started 21:33 PDT frozen at `e0d60938` (`HEAD:src` = `0dcce19ecf07`), **stopped on the user's
+instruction** ~22:24. Queue `logs/vlq_giants` (gitignored). **Nothing was adopted** —
+`decks/Giants/` still holds only the decklist and profile, no `.value.json`, so play is unchanged.
+The sidecar-presence trap was never armed.
+
+| phase | state |
+|---|---|
+| 0 freeze+build, A rows, A split, B train, C matrix, C.5 risk gate, D metadata | **DONE** 21:33 → 22:06 (33 min) |
+| E measure | started, killed ~17 min in |
+| F mullgen set | not started |
+
+14,884 labelled rows from 2500 games; **held-out RMSE 0.7204**; staged, not live.
+
+**It is far cheaper than the skill's generic "tens of hours" suggests — that figure is for big
+decks.** Giants did 7 of 9 phases in 33 minutes.
+
+### PHASE E DOES NOT RESUME — the one thing worth knowing before restarting
+
+`valueleaf.sh:1006` redirects with `>` into `measure.log`, and the script says so itself:
+*"partial measure.log. Re-run to redo the phase."* Phases 0–D are marker-guarded and **are**
+skipped on resume, but phase E restarts all **48 jobs / 40,000 games** from scratch. So an
+interrupted phase E costs its whole elapsed time, unlike phase A whose rows dedupe on (seed,turn).
+
+**Completion estimate for a restart**, from the 9 phase-E jobs that did finish (≈21.4 effective
+cores measured):
+
+| arm | games | ms/game | core-h |
+|---|---|---|---|
+| `live` (no sidecar — the SLOW horizon-rollout path) | 8000 | 3731 *(measured)* | 8.3 |
+| `staged` / `trustON` / `trustOFF` | 24000 | ~1550 *(extrapolated from V8)* | ~10.3 |
+| `dflt` / `d4` / `d5` / `d6` ladder | 8000 | 1563 at d6 *(measured)* | ~2.6 |
+
+**≈21 core-hours ⇒ roughly 1–1.5 h wall**, then phase F (trivial). Confidence moderate: three of
+the eight arms are extrapolated, and the tail is the uncertain part — phase E contains the
+no-sidecar arm where the degenerate games below are worst.
+
+### Slow games — a real degenerate tail, but the guard held
+
+126 `SLOW-GAME` events over **57 distinct physical games**, 3.6 core-hours, median 55 s. Cost
+concentrates in the deep horizon cells: **H3/H4/H5 = 78%** of the slow-game time (V cells are far
+cheaper, which is the value leaf doing its job).
+
+**One outlier, and it is worth keeping the numbers** — seed 9149 game-index 140, the same physical
+game across the whole ladder:
+
+```
+V3   2.3M units    32s  wt=6        H2   3.0M units    71s  wt=6
+V5  11.8M units   177s  wt=6        H3  40.0M units   906s  ABANDONED
+V8  34.7M units   513s  wt=6        H4  40.0M units   928s  ABANDONED
+                                    H5  40.0M units   930s  ABANDONED
+```
+
+It **wins on turn 6 in eight cells** and only blows up in the three deepest — so it is not an
+unwinnable game, it is one whose deep-horizon search explodes. The three H cells stop dead on
+`ABANDON_FLOOR_UNITS=40000000` (`valueleaf.sh:231`) and return `wt = INT_MIN`, the abandon
+sentinel — not a corrupt label.
+
+**The mechanism worked, on 1 game in 400**, backfilled the cell, and disclosed the filter rather
+than hiding it:
+
+```
+~~ FILTERED: 1 degenerate game(s) abandoned at the per-game work ceiling and backfilled
+~~   s9009: [140,141)
+```
+
+That is the opposite of the Snow value-leaf outcome, where the degenerate tail was the blocker. A
+useful repro if the tail is ever investigated: `--seed 9149 --game-index 140 --games 1`.
 
 ## Gate status re-check (2026-09-22, post-push)
 
