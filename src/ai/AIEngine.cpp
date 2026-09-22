@@ -673,7 +673,7 @@ void AIEngine::HandleMulligan(GameState& state, int max_turns)
     state.m_model_feat_mask = dominance::ModelFeatureMask(state.m_evaluator)
                             | dominance::ModelFeatureMask(state.m_value_model);
 
-    ap.library.DrawN(7, ap.hand);
+    DrawIntoHand(state, state.active_player_index, 7, HandEntryReason::Opening);
 
     // New game: reset the per-game non-convergence baseline.
     m_nonconv_best_win  = max_turns + 1;
@@ -751,7 +751,7 @@ void AIEngine::HandleMulligan(GameState& state, int max_turns)
         ap.library.Shuffle(SaltSeed(state.game_seed + static_cast<uint64_t>(mulligan_count),
                                     state.shuffle_salt_opening));
         ++mulligan_count;
-        ap.library.DrawN(7, ap.hand);
+        DrawIntoHand(state, state.active_player_index, 7, HandEntryReason::Opening);
     }
 
     m_last_mulligan_count = mulligan_count;
@@ -2175,7 +2175,7 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
         if (sc.expiry_turn < state.turn_number) { continue; }  // end-of-next-turn expiry (CR 406)
         sc.card.m_is_staged     = true;
         sc.card.m_staged_expiry = sc.expiry_turn;  // travels with the card so the rollout can expire it
-        ap_ref.hand.push_back(sc.card);
+        EnterHand(state, state.active_player_index, sc.card, HandEntryReason::StagedMerge);
     }
 
     // Echo upkeep resolution -- IDEMPOTENT BACKSTOP. The real resolution now runs at true upkeep
@@ -3946,7 +3946,7 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
             if (sc.expiry_turn < state.turn_number) { continue; }
             sc.card.m_is_staged     = true;
             sc.card.m_staged_expiry = sc.expiry_turn;
-            rp.hand.push_back(sc.card);
+            EnterHand(state, state.active_player_index, sc.card, HandEntryReason::StagedMerge);
         }
 
         // CONTINUATION TRAITS (lockstep with ApplyPlanDirect's deferred-continuation apply): pay
@@ -4050,7 +4050,7 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
             if (sc.expiry_turn < state.turn_number) { continue; }
             sc.card.m_is_staged     = true;
             sc.card.m_staged_expiry = sc.expiry_turn;
-            rp.hand.push_back(sc.card);
+            EnterHand(state, state.active_player_index, sc.card, HandEntryReason::StagedMerge);
         }
         // Honour the plan's SEARCHED breakpoint continuation. The search ranked this turn assuming
         // candidate k of the breakpoint's own plan list, so the executor must play candidate k --
@@ -5793,7 +5793,7 @@ bool AIEngine::PerformDig(GameState& state, const std::string& source, bool is_s
     const CardDefinition* ddef = CardDatabase::Instance().LookupCached(drawn);
     bool drew_land = ddef ? ddef->card.IsLand() : drawn.IsLand();
     if (m_logger) { m_logger->LogDraw(drawn.m_number, drawn.m_name); }
-    ap.hand.push_back(std::move(drawn));
+    EnterHand(state, state.active_player_index, std::move(drawn), HandEntryReason::Draw);
     return drew_land;
 }
 

@@ -451,7 +451,7 @@ void GameEngine::DrawStep(GameState& state)
         hand.push_back(drawn.m_number);
         m_logger->CommitPhase(ap.life, state.Opponent().life, bf, hand, obf, gy, staged);
     }
-    ap.hand.push_back(std::move(drawn));
+    EnterHand(state, state.active_player_index, std::move(drawn), HandEntryReason::DrawStep);
     // SAGA (CR 714.2b): "after your draw step, add a lore counter" -- each Saga we control gains
     // one and the chapter it reaches resolves, the final one sacrificing it (CR 714.4). Lockstep
     // with the rollout's identical call after its draw. Param-gated -> byte-identical for every

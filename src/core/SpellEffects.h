@@ -9,6 +9,7 @@
 #include "EnvFlags.h"
 #include "GameSetup.h"                 // OpponentHeads(): 2HG second-face targeting + "each opponent"
 #include "GameState.h"
+#include "HandEntry.h"                 // EnterHand: THE choke point every hand entry routes through
 #include "ManaPool.h"
 #include "GameLogger.h"                // g_reveal_logger: capture scry/dig reveals (real play only)
 #include "OpponentDeck.h"               // TakeFromTop: THE mill primitive (sets opponent_decked)
@@ -2962,7 +2963,7 @@ inline void FireOnCastTriggers(GameState& state, const CardDefinition& cast_def)
             if (!kp.library.empty())
             {
                 std::size_t before = kp.hand.size();
-                kp.library.DrawN(1, kp.hand);
+                DrawIntoHand(state, active, 1, HandEntryReason::Draw);
                 kp.cards_drawn_this_turn += static_cast<int>(kp.hand.size() - before);
                 if (g_play_draw_sink)
                 {
@@ -3627,7 +3628,7 @@ inline void FireCreatureEnterWatchers(GameState& state, int entered_controller, 
         for (int k = 0; k < n_draw && !wp_player.library.empty(); ++k)
         {
             std::size_t before = wp_player.hand.size();
-            wp_player.library.DrawN(1, wp_player.hand);
+            DrawIntoHand(state, who, 1, HandEntryReason::Draw);
             wp_player.cards_drawn_this_turn += static_cast<int>(wp_player.hand.size() - before);
             if (g_play_draw_sink && !g_tap_speculating)
             {
@@ -4699,7 +4700,7 @@ inline void FireEtbWatchers(GameState& state, int controller, int entered_index)
                 for (int k = 0; k < draws && !kp.library.empty(); ++k)
                 {
                     std::size_t before = kp.hand.size();
-                    kp.library.DrawN(1, kp.hand);
+                    DrawIntoHand(state, ectrl, 1, HandEntryReason::Draw);
                     kp.cards_drawn_this_turn += static_cast<int>(kp.hand.size() - before);
                     if (g_play_draw_sink)
                     {
@@ -5104,7 +5105,7 @@ inline void DrainPendingSelfBounces(GameState& state)
                               "\xF0\x9F\x94\x99 " + q.card.m_name.str()
                               + ": returned to hand (a Dragon entered)");
             }
-            state.players[q.owner_index].hand.push_back(q.card);
+            EnterHand(state, q.owner_index, q.card, HandEntryReason::Bounce);
             state.battlefield.erase(state.battlefield.begin()
                                     + static_cast<std::ptrdiff_t>(i));
             break;   // one bounce per record; a duplicate record finds nothing next pass
@@ -5364,7 +5365,7 @@ inline void FireOwnEtbTriggers(GameState& state, int controller, int entered_ind
         for (int k = 0; k < p.etb_self_draw && !dp.library.empty(); ++k)
         {
             std::size_t before = dp.hand.size();
-            dp.library.DrawN(1, dp.hand);
+            DrawIntoHand(state, controller, 1, HandEntryReason::Draw);
             dp.cards_drawn_this_turn += static_cast<int>(dp.hand.size() - before);
             if (g_play_draw_sink && !g_tap_speculating)
             {
@@ -5696,7 +5697,7 @@ inline void FireOwnEtbTriggers(GameState& state, int controller, int entered_ind
         for (int k = 0; k < n_draw && !cp_.library.empty(); ++k)
         {
             std::size_t before = cp_.hand.size();
-            cp_.library.DrawN(1, cp_.hand);
+            DrawIntoHand(state, controller, 1, HandEntryReason::Draw);
             cp_.cards_drawn_this_turn += static_cast<int>(cp_.hand.size() - before);
             if (g_play_draw_sink && !g_tap_speculating)
             {
@@ -6175,7 +6176,7 @@ inline void OnCreatureDies(GameState& state, int dead_controller, const Card& de
             {
                 c.m_is_staged     = true;
                 c.m_staged_expiry = state.turn_number + (wp.dies_impulse_expiry_next_turn ? 1 : 0);
-                ap.hand.push_back(std::move(c));
+                EnterHand(state, dead_controller, std::move(c), HandEntryReason::Stage);
             }
         }
     }
@@ -6283,7 +6284,7 @@ inline void ApplyGarthActivate(GameState& state, int controller, int garth_id,
         Player& pl = state.players[controller];
         std::size_t before = pl.hand.size();
         for (int k = 0; k < braingeyser_x && !pl.library.empty(); ++k)
-        { pl.library.DrawN(1, pl.hand); }
+        { DrawIntoHand(state, controller, 1, HandEntryReason::Draw); }
         pl.cards_drawn_this_turn += static_cast<int>(pl.hand.size() - before);
         if (g_play_draw_sink)
         {
@@ -6303,7 +6304,7 @@ inline void ApplyGarthActivate(GameState& state, int controller, int garth_id,
         }
         if (best >= 0)
         {
-            state.players[controller].hand.push_back(gy[best]);
+            EnterHand(state, controller, gy[best], HandEntryReason::Recur);
             gy.erase(gy.begin() + best);
         }
     }
@@ -6667,14 +6668,14 @@ inline void ApplyLoyaltyAbility(GameState& state, int controller, int walker_id,
             Card back = gy[best];
             gy.erase(gy.begin() + best);
             const bool all5 = ZoneCard(back).ColorCount() == 5;
-            state.players[controller].hand.push_back(std::move(back));
+            EnterHand(state, controller, std::move(back), HandEntryReason::Recur);
             if (all5)
             {
                 Player& pl = state.players[controller];
                 if (!pl.library.empty())
                 {
                     std::size_t before = pl.hand.size();
-                    pl.library.DrawN(1, pl.hand);
+                    DrawIntoHand(state, controller, 1, HandEntryReason::Draw);
                     pl.cards_drawn_this_turn += static_cast<int>(pl.hand.size() - before);
                     if (g_play_draw_sink)
                     {
@@ -7242,7 +7243,7 @@ inline void ApplyGraveyardReturnAbility(GameState& state, int controller, int so
     std::vector<Card>& gy2 = state.players[controller].graveyard;
     const Card returned = gy2[static_cast<std::size_t>(pick)];
     gy2.erase(gy2.begin() + pick);
-    state.players[controller].hand.push_back(returned);
+    EnterHand(state, controller, returned, HandEntryReason::Recur);
     if (g_play_event_sink && !g_tap_speculating)
     {
         EmitPlayEvent(state.turn_number, "ability",
@@ -8825,7 +8826,7 @@ inline void ApplyAttackDrawTriggers(GameState& state, int controller,
         {
             if (pl.library.empty()) { state.player_lost_on_draw = true; return; }
             std::size_t before = pl.hand.size();
-            pl.library.DrawN(1, pl.hand);
+            DrawIntoHand(state, controller, 1, HandEntryReason::Draw);
             pl.cards_drawn_this_turn += static_cast<int>(pl.hand.size() - before);
             if (g_play_draw_sink)
             {
@@ -10427,7 +10428,7 @@ inline void TrickDraw(GameState& state, int controller, int n)
     if (n <= 0) { return; }
     Player& pl = state.players[controller];
     std::size_t before = pl.hand.size();
-    int drew = pl.library.DrawN(n, pl.hand);
+    int drew = DrawIntoHand(state, controller, n, HandEntryReason::Draw);
     pl.cards_drawn_this_turn += drew;
     if (drew < n) { state.player_lost_on_draw = true; }
     if (g_play_draw_sink)
@@ -11455,7 +11456,7 @@ inline void StageTopLibraryCard(GameState& state)
     ap.library.erase(ap.library.begin());
     c.m_is_staged     = true;
     c.m_staged_expiry = state.turn_number + 1;
-    ap.hand.push_back(std::move(c));
+    EnterHand(state, state.active_player_index, std::move(c), HandEntryReason::Stage);
 }
 
 // Apex of Power impulse-exile: remove the top `n` cards of `controller`'s library and return them as
@@ -11796,7 +11797,7 @@ inline SoulfireResult SoulfireDig(GameState& state, int controller, int own_targ
         if (capture) { flip_nums.push_back(c.m_number); flip_names.push_back(c.m_name); }
         c.m_is_staged     = true;
         c.m_staged_expiry = state.turn_number + 1;
-        ap.hand.push_back(std::move(c));
+        EnterHand(state, controller, std::move(c), HandEntryReason::Stage);
     }
 
     // Assign cards to the CHOSEN targets POSITIONALLY (top card -> first chosen target, canonical
@@ -13849,7 +13850,7 @@ inline void ApplyPermAbility(GameState& state, int controller, int source_id, Pe
                     {
                         Card c = ap.library.DrawTop();
                         const std::string cname = c.m_name.str();
-                        ap.hand.push_back(std::move(c));
+                        EnterHand(state, controller, std::move(c), HandEntryReason::Reveal);
                         if (g_play_event_sink)
                         {
                             EmitPlayEvent(state.turn_number, "tutor",

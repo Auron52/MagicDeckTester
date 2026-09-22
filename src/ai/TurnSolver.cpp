@@ -24777,7 +24777,8 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
             if (take && state.casts_remaining_this_turn != 0)
             {
                 const std::string fname = found.m_name.str();
-                ap.hand.push_back(std::move(found));
+                EnterHand(state, state.active_player_index, std::move(found),
+                          HandEntryReason::Reveal);
                 cascade_free = true;   // free cast (one-shot, consumed by the recursion)
                 apply_one(fname, false, false, 0, false, 0, std::string{}, 0, 0, -1, -1, 0,
                           std::string{}, 0, false, -1, 0, 0, 0, false);
@@ -24868,7 +24869,8 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
                 if (take && state.casts_remaining_this_turn != 0)
                 {
                     const std::string hname = hit.m_name.str();
-                    ap.hand.push_back(std::move(hit));
+                    EnterHand(state, state.active_player_index, std::move(hit),
+                              HandEntryReason::Reveal);
                     cascade_free = true;   // free cast (one-shot, consumed by the recursion)
                     apply_one(hname, false, false, 0, false, 0, std::string{}, 0, 0, -1, -1, 0,
                               std::string{}, 0, false, -1, 0, 0, 0, false);
@@ -24932,12 +24934,14 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
                     if (take && state.casts_remaining_this_turn != 0)
                     {
                         const std::string fname = found.m_name.str();
-                        state.players[pe.controller].hand.push_back(std::move(found));
+                        EnterHand(state, pe.controller, std::move(found),
+                                  HandEntryReason::Reveal);
                         cascade_free = true;
                         apply_one(fname, false, false, 0, false, 0, std::string{}, 0, 0, -1, -1,
                                   0, std::string{}, 0, false, -1, 0, 0, 0, false);
                     }
-                    else { state.players[pe.controller].hand.push_back(std::move(found)); }
+                    else { EnterHand(state, pe.controller, std::move(found),
+                                     HandEntryReason::Reveal); }
                 }
             }
         };
@@ -25324,7 +25328,8 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
             if (def.params.cast_draw > 0)
             {
                 std::size_t before = ap.hand.size();
-                ap.library.DrawN(def.params.cast_draw, ap.hand);
+                DrawIntoHand(state, state.active_player_index, def.params.cast_draw,
+                             HandEntryReason::Draw);
                 ap.cards_drawn_this_turn += static_cast<int>(ap.hand.size() - before);
                 // Human-play accurate draw reporting (nulled by RevealLogPause during search).
                 if (g_play_draw_sink)
@@ -25570,7 +25575,8 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
                     // the viewer. Nulled by RevealLogPause during search/rollout -> byte-identical.
                     if (!staged_names.empty()) { staged_names += ", "; }
                     staged_names += c.m_name.str();
-                    ap.hand.push_back(std::move(c));
+                    EnterHand(state, state.active_player_index, std::move(c),
+                              HandEntryReason::Stage);
                 }
                 if (g_play_event_sink && !staged_names.empty())
                 {
@@ -25582,7 +25588,7 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
             else
             {
                 std::size_t before = ap.hand.size();
-                ap.library.DrawN(n, ap.hand);
+                DrawIntoHand(state, state.active_player_index, n, HandEntryReason::Draw);
                 ap.cards_drawn_this_turn += static_cast<int>(ap.hand.size() - before);
                 // Human-play accurate draw reporting (nulled by RevealLogPause during search).
                 if (g_play_draw_sink)
@@ -25656,7 +25662,8 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
                 bool is_land = cdef ? cdef->card.IsLand() : c.IsLand();
                 // Human-play accurate draw reporting (nulled by RevealLogPause during search).
                 if (g_play_draw_sink) { g_play_draw_sink->push_back({ state.turn_number, c.m_name.str() }); }
-                ap.hand.push_back(std::move(c));
+                EnterHand(state, state.active_player_index, std::move(c),
+                          HandEntryReason::Reveal);
                 if (!is_land) { break; }
             }
             // Draw breakpoint: play a DEFERRED land now that the draw is seen, then re-solve
@@ -25864,7 +25871,7 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
             const int draws = (def.params.modal_choose_n - sN) * def.params.modal_draw_per_choice;
             std::size_t before = ap.hand.size();
             for (int k = 0; k < draws && !ap.library.empty(); ++k)
-            { ap.library.DrawN(1, ap.hand); }
+            { DrawIntoHand(state, state.active_player_index, 1, HandEntryReason::Draw); }
             ap.cards_drawn_this_turn += static_cast<int>(ap.hand.size() - before);
             if (g_play_draw_sink)
             {
@@ -25994,7 +26001,8 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
             {
                 if (!staged_names.empty()) { staged_names += ", "; }
                 staged_names += ec.m_name.str();
-                ap.hand.push_back(std::move(ec));
+                EnterHand(state, state.active_player_index, std::move(ec),
+                          HandEntryReason::Stage);
             }
             if (g_play_event_sink && !staged_names.empty())
             {
@@ -26733,7 +26741,8 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
                 ap.cards_drawn_this_turn += 1;   // cycle/sac dig = a real draw
                 // Human-play accurate draw reporting (nulled by RevealLogPause during search).
                 if (g_play_draw_sink) { g_play_draw_sink->push_back({ state.turn_number, drawn.m_name.str() }); }
-                ap.hand.push_back(std::move(drawn));
+                EnterHand(state, state.active_player_index, std::move(drawn),
+                          HandEntryReason::Draw);
             }
         }
 
@@ -27767,7 +27776,8 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
             ap.cards_drawn_this_turn += 1;   // cycle/sac dig = a real draw
             const CardDefinition* ddef = CardDatabase::Instance().LookupCached(drawn);
             bool drew_land = ddef ? ddef->card.IsLand() : drawn.IsLand();
-            ap.hand.push_back(std::move(drawn));
+            EnterHand(state, state.active_player_index, std::move(drawn),
+                      HandEntryReason::Draw);
 
             std::vector<Action>* my_bp_sink = out_breakpoint;
             if (out_breakpoint)
@@ -28449,7 +28459,7 @@ static bool SimulateEndAndStartNextTurn(GameState& state)
 
     // Draw
     if (ap.library.empty()) { return false; }
-    ap.hand.push_back(ap.library.DrawTop());
+    EnterHand(state, state.active_player_index, ap.library.DrawTop(), HandEntryReason::DrawStep);
     ap.cards_drawn_this_turn += 1;   // the draw step is a real CR-121 draw (lockstep w/ DrawStep)
     // SAGA lore counter + chapter, CR 714.2b -- the lockstep twin of GameEngine::DrawStep's call.
     // Must stay on THIS side of the draw: a chapter that reads the hand (chapter I's free cast)

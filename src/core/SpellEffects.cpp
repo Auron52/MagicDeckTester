@@ -280,7 +280,8 @@ void PerformTutor(GameState& state, int controller_index, const CardParams& pp,
     // later fetch's deterministic reshuffle, so one wish would silently re-order every subsequent
     // fetch in the game.
     if (!wish) { ShuffleAfterSearch(state, controller_index); }
-    if (pp.tutor_to_hand)     { ap.hand.push_back(std::move(c)); }
+    if (pp.tutor_to_hand)     { EnterHand(state, controller_index, std::move(c),
+                                          HandEntryReason::Tutor); }
     else if (pp.tutor_to_top)
     {
         ap.library.insert(ap.library.begin(), std::move(c));
@@ -703,7 +704,8 @@ bool PerformEtbDig(GameState& state, int controller_index,
     }
 
     bool took = false;
-    if (take >= 0) { ap.hand.push_back(examined[take]); took = true; }
+    if (take >= 0) { EnterHand(state, controller_index, examined[take], HandEntryReason::Dig);
+                     took = true; }
     for (int i = 0; i < static_cast<int>(examined.size()); ++i)
     {
         if (i == take) { continue; }
@@ -1038,14 +1040,16 @@ void ResolveExpressiveIteration(GameState& state)
     // is unambiguous.
     std::vector<int> kept_nums, bottom_nums;
     kept_nums.push_back(cards[hand_idx].m_number);
-    ap.hand.push_back(cards[hand_idx]);                       // [hand_idx] -> hand (banked)
+    EnterHand(state, state.active_player_index, cards[hand_idx],
+              HandEntryReason::Dig);                          // [hand_idx] -> hand (banked)
     if (exile_idx >= 0)
     {
         Card s = cards[exile_idx];
         s.m_is_staged     = true;
         s.m_staged_expiry = state.turn_number;   // this turn only (vs turn+1 for Light Up / Soulfire)
         kept_nums.push_back(s.m_number);
-        ap.hand.push_back(std::move(s));                      // [exile_idx] -> exiled, playable now
+        EnterHand(state, state.active_player_index, std::move(s),
+                  HandEntryReason::Stage);                    // [exile_idx] -> exiled, playable now
     }
     for (int i = 0; i < look; ++i)                            // the leftover -> bottom
     {
@@ -1188,7 +1192,7 @@ void BounceKarooLand(GameState& state, int controller, int self_index)
     }
     c.m_is_staged = false;
     c.m_def = nullptr;
-    state.players[controller].hand.push_back(c);
+    EnterHand(state, controller, c, HandEntryReason::Bounce);
     state.battlefield.erase(state.battlefield.begin() + pick);
 }
 
@@ -3666,7 +3670,7 @@ void PerformEtbTutorToHandMulti(GameState& state, int controller_index, const Ca
             {
                 Card c = ap.library[i];
                 ap.library.erase(ap.library.begin() + i);
-                ap.hand.push_back(std::move(c));
+                EnterHand(state, controller_index, std::move(c), HandEntryReason::Tutor);
                 ++put;
                 if (g_play_event_sink && !g_tap_speculating)
                 {

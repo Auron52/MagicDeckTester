@@ -457,7 +457,7 @@ bool EffectHandler::ResolveImpl(GameState& state, const StackEntry& entry, const
                     std::size_t before = mp.hand.size();
                     std::size_t mp_before = mp.hand.size();
                     for (int k = 0; k < draws && !mp.library.empty(); ++k)
-                    { mp.library.DrawN(1, mp.hand); }
+                    { DrawIntoHand(state, entry.controller_index, 1, HandEntryReason::Draw); }
                     mp.cards_drawn_this_turn += static_cast<int>(mp.hand.size() - mp_before);
                     if (g_play_draw_sink)
                     {
@@ -634,7 +634,8 @@ void EffectHandler::ResolveDirectDamage(GameState& state, const StackEntry& entr
     {
         Player& cp = state.players[entry.controller_index];
         const std::size_t before = cp.hand.size();
-        cp.cards_drawn_this_turn += cp.library.DrawN(def.params.cast_draw, cp.hand);
+        cp.cards_drawn_this_turn += DrawIntoHand(state, entry.controller_index,
+                                                 def.params.cast_draw, HandEntryReason::Draw);
         // g_reveal_logger is null in every search/rollout scope (RevealLogPause), so this fires only
         // for the REAL game's resolution -- the same guard every reveal site uses.
         if (g_reveal_logger != nullptr)
@@ -766,7 +767,7 @@ void EffectHandler::ResolveDrawSpell(GameState& state, const StackEntry& entry,
         // loses (CR 104.3c, drawing from an empty library). Routed through the same loss flag the
         // draw step uses, so PlayOut ends the game. Reachable on this combo deck once a deep
         // Soulfire/cantrip dig has emptied the library; harmless for decks that never deck out.
-        int drew = controller.library.DrawN(n, controller.hand);
+        int drew = DrawIntoHand(state, entry.controller_index, n, HandEntryReason::Draw);
         controller.cards_drawn_this_turn += drew;
         if (drew < n) { state.player_lost_on_draw = true; }
     }
@@ -782,7 +783,8 @@ void EffectHandler::ResolveDrawX(GameState& state, const StackEntry& entry,
     int n = entry.chosen_x.value_or(0);
     if (n > 0)
     {
-        controller.cards_drawn_this_turn += controller.library.DrawN(n, controller.hand);
+        controller.cards_drawn_this_turn += DrawIntoHand(state, entry.controller_index, n,
+                                                         HandEntryReason::Draw);
     }
     MoveToGraveyard(state, entry);
 }
@@ -826,7 +828,7 @@ void EffectHandler::ResolveDrawUntilNonland(GameState& state, const StackEntry& 
             is_land = cdef ? cdef->card.IsLand() : c.IsLand();
         }
         if (capture) { revealed_nums.push_back(c.m_number); revealed_names.push_back(c.m_name); }
-        controller.hand.push_back(std::move(c));
+        EnterHand(state, entry.controller_index, std::move(c), HandEntryReason::Reveal);
         if (!is_land) { break; }
     }
     if (capture && !revealed_nums.empty())
@@ -1008,7 +1010,7 @@ void EffectHandler::ResolveEtbExileFreeCast(GameState& state, const StackEntry& 
     // "If you don't, put that card into your hand."
     if (!take || !PushFreeCast(state, found, entry.controller_index))
     {
-        state.players[entry.controller_index].hand.push_back(found);
+        EnterHand(state, entry.controller_index, found, HandEntryReason::Reveal);
     }
 }
 
