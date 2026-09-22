@@ -855,6 +855,75 @@ types `attack_mode`, `dig`, `discard`, `sacrifice`, `target`. One disclosed narr
 
 ---
 
+## Hand-play session (2026-09-22) — four more defects, found by the USER recording references
+
+The Stage 5d sweep drives the `--choices` protocol; it never touches the GUI. So none of these
+could have been caught by it, and all four surfaced within minutes of a human opening the viewer.
+**The lesson is the gap, not the bugs: `test/regression.sh:289` says to run
+`bash test/viewer_checks.sh` after touching `tools/play/`, and I did not.**
+
+| # | defect | cause | fix |
+|---|---|---|---|
+| V1 | **The entire viewer script was dead** ("none of the deck names load") | my `attack_mode` handler was inserted as a 2nd statement inside a brace-less `else if`, ending the if-chain -> `SyntaxError: Unexpected token 'else'` | gave it its own `else if` |
+| V2 | **Tectonic Giant's dialog never surfaced; the game got stuck** | a decision type needs **FOUR** viewer wiring sites; I did two. The missing `SUBDECISIONS` entry is the registry that makes a frame a decision at all | registered in `SUBDECISIONS` + the centred-modal list |
+| V3 | **Surtland Flinger's optional sacrifice could not be declined from the GUI** | `allow_decline` existed ONLY as prose in the `note`, which the viewer does not parse | emit it as a real field; gate a Decline button on it |
+| V4 | **Every game containing a firebreathe was unsaveable** | see below — the big one | exempt side-channel types from the save audit |
+
+### V3 is the same bug I already "fixed" once
+
+Earlier in this run I fixed the Flinger decline for the `--choices` path and verified it there
+(reply `-1` -> opponent life 16). The GUI half was still broken, because the decline was advertised
+only in prose. **The search could decline and the human could not — the identical asymmetry, twice,
+because I kept verifying the machine path and never opened the GUI.**
+
+Note the mirror image in D4: for the *tutor*, the human could already decline
+(`TutorAskResult::Declined`) and the SEARCH could not. Same class, opposite direction.
+
+### V4 — the save-refusal, and a wrong diagnosis I repeated to the user
+
+**Symptom:** `SAVE REFUSED -- the replay diverged from the game you played`, on
+`decision 15 (turn 5): [live main_phase|5|post_main|20|3|...] != [replay firebreathe|5||20|13|...]`.
+
+**I first blamed a mid-session rebuild** — because the refusal message says that is the most likely
+cause, and because I *had* rebuilt while the user was recording (which I had promised not to do).
+That was wrong. The user reported it still failed on a fresh restart, and reproducing it end-to-end
+on a clean session confirmed a real bug with no rebuild involved.
+
+**Root cause.** `firebreathe` / `jitte` / `storage_hold` are answered through a **turn-keyed
+side-channel** (`--firebreathe 5:1`), not the positional `--choices` stream, so answering one does
+NOT advance the engine's cursor — yet the `--log-dir` writer still stamps the trace entry with that
+cursor (`di = cursor`, `main.cpp`). So the side-channel entry and the **next real decision share a
+`decision_index`**. `auditTrace` keys the live-frame ledger by that index, and the live session
+records the firebreathe frame there and then **overwrites** it with the positional frame once the
+side-channel answer stops the engine asking. The audit thus compares the firebreathe prompt
+(pre-combat) against the main_phase frame (post-combat); the opponent's life alone guarantees a
+mismatch. Proof, from a direct binary probe:
+
+```
+FIREBREATHE prompt:                    decision_index=15  turn=5  opp_life=13
+NEXT decision after side-channel answer: main_phase  decision_index=15  opp_life=3
+```
+
+**Latent for as long as the side-channel has existed**; first hit now because **Inferno Titan is
+the first firebreathing creature in a deck anyone has hand-recorded.** It is NOT Giants-specific —
+it would refuse any deck's firebreathe/jitte/storage-hold game.
+
+**Fix** (`tools/play/server.js`, server-side only so no engine rebuild disturbs a live session):
+exempt side-channel types from the frame comparison — they are not positional decisions and have no
+frame of their own to check against. Verified BOTH directions, which matters because a fix that
+made the audit always pass would be worse than the bug:
+* the failing game now saves: **18 positional decisions VERIFIED, 2 unverified** (exactly the two
+  firebreathe entries);
+* **negative control:** a genuinely tampered plan stream is still **REFUSED**.
+
+### Process note — a rebuild during a recording session is destructive
+
+Replay is stateless: every `/api/step` re-derives the whole game, so a new binary mid-session
+changes what the recorded plan indices MEAN. `server.js` has a session-pinned binary
+(`sessionBin`) for exactly this, but it cannot protect a session that started before the pin.
+**Do not rebuild while the user is recording.** Viewer-side (`index.html` / `server.js`) edits are
+safe — they do not affect replay.
+
 ## Remaining work
 
 1. ~~**RE-RUN the Stage 5d sweep with varying SEEDS**~~ — **DONE.** 16 distinct seeds, all nine
