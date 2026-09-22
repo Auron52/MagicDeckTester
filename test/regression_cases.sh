@@ -41,6 +41,7 @@ declare -A DECK_FILE=(
   [angels]=decks/Angels/Angels.cod
   [fluctuator]=decks/Fluctuator/Fluctuator.cod
   [snow]=decks/Snow/Snow.cod
+  [giants]=decks/Giants/Giants.cod
 )
 declare -A DECK_PROF=(
   [fungus]=decks/Fungus/Fungus.profile.json
@@ -66,6 +67,7 @@ declare -A DECK_PROF=(
   [angels]=decks/Angels/Angels.profile.json
   [fluctuator]=decks/Fluctuator/Fluctuator.profile.json
   [snow]=decks/Snow/Snow.profile.json
+  [giants]=decks/Giants/Giants.profile.json
 )
 
 # Seeds:  smoke=1001  regression=2002,3003  overnight=4004,5005,6006,7007
@@ -291,6 +293,16 @@ SMOKE_CASES=(
   "fluctuator 0 1001 1000 0"
   "fluctuator 3 1001  150 10"
   "fluctuator 5 1001   75 20"
+  # giants: mono-red Giant tribal (Stinkdrinker cost reduction into Inferno Titan / Surtland
+  # Flinger fling / Tectonic Giant modal). Measured single-thread at the GATE budgets 2026-09-22,
+  # post-rebase: d0 1000 games in 2 ms (free), d3 b10 0.521 s/game, d5 b20 1.098 s/game, and NO
+  # game over 30 s across 1400 games -- no heavy tail. th/hinata counts => ~2.7 core-min added.
+  # Cost note: the deck carries TWO searched axes of its own (MTG_FLING_AXIS, MTG_TECTONIC_AXIS)
+  # plus a tutor decline arm; measured at these budgets the two axes are +9% wall at d3 / +26% at
+  # d5 and buy -0.060 / -0.067 turns, so the sizing above already includes them.
+  "giants 0 1001 1000 0"
+  "giants 3 1001  150 10"
+  "giants 5 1001   75 20"
   # snow: ADDED 2026-09-20, at the USER's ask, and the sizing is the whole design question -- this
   # is one of the most expensive decks in the repo per game and its cost is strongly SEED-dependent
   # (measured d3 b10: 0.89 s/game at seed 1001 but 2.17-2.49 at the regression seeds; d5 b20:
@@ -471,6 +483,16 @@ REGRESSION_CASES=(
   "fluctuator 3 3003  150 10"
   "fluctuator 5 2002   75 20"
   "fluctuator 5 3003   75 20"
+  # giants: see the SMOKE block. Unlike Snow, this deck is NOT seed-sensitive -- the regression
+  # seeds are actually CHEAPER than the smoke seed, so the smoke counts carry across unchanged.
+  # MEASURED IN THE TIER'S OWN SEEDS 2026-09-22: d3 b10 63.3/61.0 core-s at s2002/s3003
+  # (0.422/0.407 s/game), d5 b20 79.3/51.4 (1.057/0.685). ~255 core-s total; budget is 45 min.
+  # No game over 30 s, so it does not become the pole.
+  "giants 0 2002 1000 0"
+  "giants 3 2002  150 10"
+  "giants 3 3003  150 10"
+  "giants 5 2002   75 20"
+  "giants 5 3003   75 20"
   # snow: see the SMOKE block. The regression seeds are the EXPENSIVE ones for this deck -- d3 b10
   # measured 2.489/2.167 s/game and d5 b20 1.783/2.515 at s2002/s3003, ~2.5x the smoke seed -- so
   # the counts are cut to 60/30 rather than carried across from smoke. MEASURED IN THE TIER:
