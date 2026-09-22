@@ -151,30 +151,46 @@ namespace handentry
         return on;
     }
 
+    // Nesting depth of cast applies on this thread; see HandEntryCastScope below.
+    inline thread_local int g_in_cast_apply = 0;
+
     struct Census
     {
         std::atomic<uint64_t> n[static_cast<int>(HandEntryReason::Count)]{};
+        std::atomic<uint64_t> in_cast[static_cast<int>(HandEntryReason::Count)]{};
         ~Census()
         {
             if (!CensusOn()) { return; }
-            uint64_t total = 0, material = 0;
+            uint64_t total = 0, material = 0, mat_in = 0;
             for (int i = 0; i < static_cast<int>(HandEntryReason::Count); ++i)
             {
                 const uint64_t v = n[i].load(std::memory_order_relaxed);
                 total += v;
-                if (HandEntryIsNewMaterial(static_cast<HandEntryReason>(i))) { material += v; }
+                if (HandEntryIsNewMaterial(static_cast<HandEntryReason>(i)))
+                { material += v; mat_in += in_cast[i].load(std::memory_order_relaxed); }
             }
             if (total == 0) { return; }
-            std::fprintf(stderr, "[hand-entry] %llu entries, %llu of them new material\n",
+            std::fprintf(stderr,
+                         "[hand-entry] %llu entries; %llu new material, of which %llu inside a cast"
+                         " apply and %llu OUTSIDE it (%.2f%% -- the unarmed hole)\n",
                          static_cast<unsigned long long>(total),
-                         static_cast<unsigned long long>(material));
+                         static_cast<unsigned long long>(material),
+                         static_cast<unsigned long long>(mat_in),
+                         static_cast<unsigned long long>(material - mat_in),
+                         material ? 100.0 * static_cast<double>(material - mat_in)
+                                          / static_cast<double>(material) : 0.0);
+            std::fprintf(stderr, "[hand-entry] %-52s %12s %12s %12s\n",
+                         "route", "total", "in-cast", "OUTSIDE");
             for (int i = 0; i < static_cast<int>(HandEntryReason::Count); ++i)
             {
                 const uint64_t v = n[i].load(std::memory_order_relaxed);
                 if (v == 0) { continue; }
-                std::fprintf(stderr, "[hand-entry]   %-52s %llu\n",
+                const uint64_t c = in_cast[i].load(std::memory_order_relaxed);
+                std::fprintf(stderr, "[hand-entry]   %-50s %12llu %12llu %12llu\n",
                              HandEntryReasonName(static_cast<HandEntryReason>(i)),
-                             static_cast<unsigned long long>(v));
+                             static_cast<unsigned long long>(v),
+                             static_cast<unsigned long long>(c),
+                             static_cast<unsigned long long>(v - c));
             }
         }
     };
@@ -185,9 +201,33 @@ namespace handentry
         if (player_index == state.active_player_index && HandEntryIsNewMaterial(why))
         { ++g_hand_entry_seq; }
         if (CensusOn())
-        { g_census.n[static_cast<int>(why)].fetch_add(1, std::memory_order_relaxed); }
+        {
+            g_census.n[static_cast<int>(why)].fetch_add(1, std::memory_order_relaxed);
+            if (g_in_cast_apply > 0)
+            { g_census.in_cast[static_cast<int>(why)].fetch_add(1, std::memory_order_relaxed); }
+        }
     }
 }
+
+// THE SPLIT THAT SIZES THE HOLE. Today's arming can only see a hand entry that happens INSIDE a
+// cast's apply window: both the param-keyed sites and the general site-10 rule hang off a
+// before/after comparison bracketing one cast (`hand_at_cast` in the rollout, `rdb_hand` in the
+// executor). An entry outside that window -- a combat-damage trigger, an activated ability, a death
+// trigger, an upkeep put -- arms NOTHING, at any depth or budget.
+//
+// So `total - in_cast` is the size of the remaining hole, per route, per deck, and it is the number
+// that decides how much of step 2 is worth building. The design doc asks for exactly this before
+// the refactor ("Size the hole first ... a counter at the unarmed routes, run over all suite decks,
+// says which of them actually fire and how often. That decides whether this is a Goblins fix or an
+// everything fix"). Diagnostic only, and gated, so a ship config never touches the counter.
+struct HandEntryCastScope
+{
+    const bool on;
+    HandEntryCastScope() : on(handentry::CensusOn()) { if (on) { ++handentry::g_in_cast_apply; } }
+    ~HandEntryCastScope()                            { if (on) { --handentry::g_in_cast_apply; } }
+    HandEntryCastScope(const HandEntryCastScope&) = delete;
+    HandEntryCastScope& operator=(const HandEntryCastScope&) = delete;
+};
 
 // THE CHOKE POINT. Two overloads rather than a by-value parameter so that a call site that moved
 // still moves and one that copied still copies -- this step has to be byte-identical AND free.

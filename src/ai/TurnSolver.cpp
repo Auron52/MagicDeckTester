@@ -23854,6 +23854,22 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
             plan_cast_names.push_back(std::hash<std::string>{}(pa.card_name));
         }
     }
+    // THE SECTION-LEVEL WINDOW (MTG_BP_HAND_ENTRY, default OFF -- the full argument and the
+    // measured hole are at BpHandEntryEnabled in EngineFlags.h). Site 10's window brackets a CAST,
+    // so a card entering hand any other way -- an activated ability (Psychotrope Thallid, Birthing
+    // Pod), a death trigger, an ETB off a PUT (Goblin Matron under a Lackey) -- arms nothing at any
+    // depth or budget. This is the same observation over the whole SECTION: captured here, before
+    // any of the plan's actions are applied, and read ONCE below, immediately before the deferred
+    // re-solve loop, which is where every deferred class already resolves.
+    //
+    // `seq_at_section` is the cheap pre-filter, NOT the answer: rollout speculation on COPIES of
+    // GameState bumps the same thread-local counter, so an unchanged sequence proves nothing
+    // entered (skip the diff) while a changed one only means "ask the exact question". See
+    // core/HandEntry.h.
+    std::vector<int> hand_at_section;
+    const uint32_t   seq_at_section = g_hand_entry_seq;
+    if (BpHandEntryEnabled()) { hand_at_section = TurnSolver::HandCardNumbers(state); }
+
     // Which CLASS armed the deferred re-solve: a solo-target trick with a draw/Treasure payload is
     // site 5 (searchable by default), a plain cantrip is site 3 (the admitted quality prune). One
     // deferred breakpoint per apply; if BOTH classes armed it, the trick class owns the numbering
@@ -24448,6 +24464,9 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
         std::vector<int> hand_at_cast;
         if (TurnSolver::BreakpointHandSnapshotWanted(state))
         { hand_at_cast = TurnSolver::HandCardNumbers(state); }
+        // MTG_HAND_ENTRY_CENSUS only: mark the window inside which today's arming can SEE a hand
+        // entry, so the census can report what happens outside it. Inert (and untouched) otherwise.
+        HandEntryCastScope _hec;
 
         std::vector<Card>& zone = from_graveyard ? ap.graveyard : ap.hand;
         // Choose WHICH copy of `name` to cast: prefer the EARLIEST-EXPIRING copy, so a staged
@@ -27545,6 +27564,31 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
     // Pass 1 runs for ANY armer (the historical single pass); pass N+1 runs ONLY when pass N's
     // continuation cast a tutor-to-top (deferred_top_rearm, flag-gated) -- a cantrip re-arm in
     // scoring mode must NOT loop (see the deferred_top_rearm declaration).
+    // THE REST OF THE GENERAL RULE, armed HERE (MTG_BP_HAND_ENTRY, default OFF). Read the section
+    // window captured at the top of this function: did the active player's hand gain a card that no
+    // arming class accounted for? If so the turn acquired castable material and was never
+    // re-decided on it. Placed after the site-9 trailing pass and before this loop, which is the
+    // same point in the turn the executor's site-9 twin sits at -- so the two worlds agree on the
+    // ORDER of occurrences, not merely on their existence.
+    //
+    // `!deferred_cantrip_resolve` is what makes this strictly the HOLE and nothing else: if any
+    // param-keyed class or site 10's own cast window already armed, this stands down, so no class
+    // that already worked is renumbered. It arms the EXISTING site 10 (deferred_put_armed), so
+    // BpSiteMask numbering is untouched -- the design doc's "single largest hazard".
+    //
+    // `sink_stack.empty()` and `!s_human_play` are the two conditions every deferred arming site
+    // carries: a re-solve already inside a continuation re-solves inline, and human play stops for
+    // the chooser instead of arming. Sequence check first -- it is one thread-local load, and it
+    // short-circuits the O(hand x snapshot) content diff on every apply that gained nothing.
+    if (BpHandEntryEnabled() && !deferred_cantrip_resolve && !s_human_play && sink_stack.empty()
+        && g_hand_entry_seq != seq_at_section
+        && TurnSolver::HandGainedACard(hand_at_section, state))
+    {
+        deferred_cantrip_resolve = true;
+        deferred_hand_before     = hand_at_section;
+        deferred_put_armed       = true;   // site 10 -- see deferred_site_index
+    }
+
     int  top_reset_passes = 0;
     bool top_first_pass   = true;
     // THE PARTITION NEEDS THE LOOP (MTG_BP_PARTITION_CANTRIP). USER 2026-08-29: "We have to

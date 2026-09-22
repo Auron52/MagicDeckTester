@@ -217,6 +217,7 @@ enum Slot : int
     FUNGUS_SPORE_POOL,        // MTG_FUNGUS_SPORE_POOL     spore sources are ONE pool: canonical (oldest) first, count is the only axis
     ETB_WATCHER_GATES,        // MTG_ETB_WATCHER_GATES     per-deck presence gates on the two ETB-cascade scans whose param test is INSIDE the walk (default ON)
     LAZY_LEAF,                // MTG_LAZY_LEAF             probe each pass LEAFLESS first; an in-window win needs no leaf at all (default OFF)
+    BP_HAND_ENTRY,            // MTG_BP_HAND_ENTRY         a card entering hand OUTSIDE a cast apply arms site 10 too (default OFF)
     COUNT
 };
 
@@ -404,6 +405,7 @@ inline const char* Name(int slot)
         "MTG_FUNGUS_SPORE_POOL",
         "MTG_ETB_WATCHER_GATES",
         "MTG_LAZY_LEAF",
+        "MTG_BP_HAND_ENTRY",
     };
     // The enum and this table are ONE mapping split across two lists: a slot added to one and not
     // the other silently shifts every lever after it (a manifest asking for lever X would set Y).

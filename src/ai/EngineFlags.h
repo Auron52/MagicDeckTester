@@ -554,6 +554,59 @@ inline bool BpPutInHandEnabled()
     return v;
 }
 
+// MTG_BP_HAND_ENTRY=1 -- THE REST OF THE GENERAL RULE (DEFAULT OFF, measuring).
+//
+// WHAT SITE 10 ALREADY DOES, and what it cannot. BpPutInHandEnabled asks the outcome instead of the
+// card -- but it asks it in ONE window: bracketing a CAST (`hand_at_cast` in the rollout,
+// `rdb_hand` in the executor). A card that enters hand outside a cast's apply arms nothing, at any
+// depth or budget, silently. So the rule is general over CARDS and still a taxonomy over EVENTS.
+//
+// THE HOLE IS MEASURED, not argued (MTG_HAND_ENTRY_CENSUS, 40 games/deck d3 b10, seed 1001;
+// rollout-inclusive counts, so read the shares, not the absolutes). Entries of NEW MATERIAL that
+// happen OUTSIDE any cast apply, excluding the Karoo land-bounce route (a land returning after the
+// land drop is spent is not a new castable option):
+//
+//     fungus   draw   43,055 of 43,055  = 100%   <- the deck's ONLY draw is Psychotrope Thallid's
+//                                                   "{1}, Sacrifice a Saproling: Draw a card" --
+//                                                   an ACTIVATED ability, so it has never once
+//                                                   opened a breakpoint on any turn
+//     goblins  stage   7,401 of  7,401  = 100%   <- a death trigger's impulse exile
+//     goblins  tutor   2,384 of  3,257  =  73%   <- Matron's ETB off a Lackey/Muxus PUT: the
+//                                                   design doc's named live instance, confirmed
+//     melira   tutor  68,478 of 86,272  =  79%   <- the pod chain's ETB tutors (pod is ACTIVATED)
+//     melira   draw   13,442 of 19,793  =  68%
+//     knights  dig     4,096 of 21,566  =  19%
+//     kitty    draw    4,316 of 154,030 =   2.8%
+//     th       reveal  1,726 of 670,263 =   0.26%
+//     hinata   all       ~312 of ~889k  =   0.03%
+//     mirrorwing draw     150 of 311,861=   0.05%
+//
+// So this is NOT an everything fix -- the cantrip decks are already covered by site 10 -- and the
+// design doc's own question ("a Goblins fix or an everything fix?") resolves to: a Goblins-class
+// fix, whose largest case is the deck currently being optimised.
+//
+// HOW IT ARMS, and why this is one placement rather than thirty. The rollout takes ONE section-level
+// hand snapshot at the top of ApplyPlanDirect and checks it once, immediately before the deferred
+// re-solve loop -- the point every deferred class already resolves at. It fires only when NO class
+// armed for the whole section, so it catches exactly the hole and renumbers nothing: it arms the
+// EXISTING site 10 (deferred_put_armed), keeping BpSiteMask numbering intact, which the design doc
+// calls "the single largest hazard in this change".
+//
+// EXACT, not the counter. g_hand_entry_seq (core/HandEntry.h) is only a pre-filter: the rollout
+// speculates on COPIES of GameState on the same thread and those bump the same counter, so a
+// changed sequence means "ask the exact question". The exact question is HandGainedACard, a content
+// diff on the live state. See the header for the full argument.
+//
+// DEFAULT OFF because arming on every hand entry is STRICTLY MORE armings than today (the design
+// doc's own warning), and a breakpoint that opens is work whether or not it pays. The asymmetry
+// that decides the eventual adoption is the USER's: a missing arm is unreachable at any budget and
+// silent, an unhelpful arm is only cost.
+inline bool BpHandEntryEnabled()
+{
+    static const bool v = EnvOn("MTG_BP_HAND_ENTRY");   // DEFAULT OFF (measuring); =1 enables
+    return heurarm::Flag(heurarm::BP_HAND_ENTRY, v);
+}
+
 // MTG_LEGACY_STATIC_TAPPED=1: classify land tapped-ness from the STATIC enters_tapped flag in the
 // land-priority passes, as before the dynamic fix (byte-identical A/B hatch). See
 // AIEngine::TryPlayLand and TurnSolver's greedy_land_name -- the two implement the same passes

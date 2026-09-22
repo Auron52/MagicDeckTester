@@ -2109,6 +2109,18 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
         if (resolve_stack && !state.stack.empty()) { resolve_stack(state); }
     };
     bool cast_draw_engine = false;
+    // SECTION WINDOW for the rest of the general rule (MTG_BP_HAND_ENTRY, default OFF -- see
+    // BpHandEntryEnabled in EngineFlags.h). The EXECUTOR twin of ApplyPlanDirect's `hand_at_section`,
+    // captured at the same point (before any of this pass's actions) and read at the same point
+    // (after the trailing activations and the site-9 twin, before the Karoo play), so the two worlds
+    // observe the same thing in the same order. At DEPTH 0 this is the only route -- there is no
+    // committed continuation to replay -- and its effect is the second pass, exactly as
+    // note_draw_engine's is. At full depth the rollout's arming is recorded into
+    // plan.breakpoint_actions and replayed by the site-agnostic post-loop catch-all below, so no
+    // bp index is consumed here and no numbering moves.
+    std::vector<int> exec_hand_at_section;
+    const uint32_t   exec_seq_at_section = g_hand_entry_seq;
+    if (BpHandEntryEnabled()) { exec_hand_at_section = TurnSolver::HandCardNumbers(state); }
     // MTG_EXEC_DROP_REPLAN (LEVER, default OFF, 2026-09-17): a REAL-play cast of this pass was
     // dropped as unpayable, so the rest of the committed line was priced on a board that did not
     // happen (hinata s1001 gi392 d5 T5: Crackle with Power declared at X=4 for 12 mana with 11
@@ -5496,6 +5508,23 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
             { if (ca.kind == Action::Kind::CastFromHand && ca.sacrifice_land) { pe_cast(ca); } }
             exec_trailing_activations(extra.actions);
         }
+    }
+
+    // THE REST OF THE GENERAL RULE, executor twin (MTG_BP_HAND_ENTRY, default OFF). Read the section
+    // window captured at the top of this pass: did the hand gain a card that no arming class
+    // accounted for? Same question, same point in the turn, as ApplyPlanDirect's twin -- after the
+    // site-9 pass, before the Karoo play.
+    //
+    // ONLY the second-pass side effect, deliberately: `cast_draw_engine` is note_draw_engine's own
+    // output, and at depth 0 -- the only depth where this is the live route -- the second pass IS
+    // the re-solve. Full depth returns false from TakeTurn regardless, and its continuation arrives
+    // through the committed script, so this must not (and does not) consume a breakpoint index.
+    // Human play never auto-continues: the main-phase re-prompt is the human's own breakpoint.
+    if (BpHandEntryEnabled() && !HumanPlayActive() && !cast_draw_engine
+        && g_hand_entry_seq != exec_seq_at_section
+        && TurnSolver::HandGainedACard(exec_hand_at_section, state))
+    {
+        cast_draw_engine = true;
     }
 
     // Play the deferred Karoo bounce land now (mirror of ApplyPlanDirect): the main casts have
