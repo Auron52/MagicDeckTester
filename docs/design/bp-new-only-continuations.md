@@ -343,8 +343,56 @@ activation, as part of the plan), 3011 5/6 -- and 3011 recovers at unbounded bud
 and d5 6.2600 (both from gi=2 6 -> 7: T2 now casts Astrolabe + Druid and attacks instead of
 activating the Augur, the draws diverge from T3 -- a different physical game), plus the play-changed
 FiveColour d0 key from the rock-colour flip and the other agent's five. Re-measurement of every cell
-on the fixed engine, with the legacy enumerator as a third arm: `logs/snowdiag/chain_v5.sh`
-(in progress at the time of writing; the tables above are the PRE-fix numbers).
+on the fixed engine, with the legacy enumerator as a third arm: `logs/snowdiag/chain_v5.sh` (the
+tables above are the PRE-fix numbers; the post-fix ones follow).
+
+### Post-fix: both play gates, three arms in one pooled batch (2026-09-22)
+
+One `mtg --batch` of 12,000 games (`logs/snowdiag/play_gates_v5.json`): the d3/b10 seed blocks
+9001-10501 and the d5/b20 blocks 880000-881500, 500 games each, arms `legacy` (enumerator hole
+open), `base` (hole closed) and `newonly` (hole closed + the route). Paired on the same seeds.
+
+**The enumerator fix on its own (`base` vs `legacy`)** -- what "treat the Astrolabe as a mana
+source played in the plan" costs or buys at searched depth:
+
+| cell | legacy | fixed | delta | better / worse | units |
+|---|---|---|---|---|---|
+| d3/b10, 2,000 | 6.0245 | 6.0240 | -0.0005 +/- 0.0018 | 7 / 6 | 0.987x |
+| d5/b20, 2,000 | 6.0615 | 6.0590 | -0.0025 +/- 0.0021 | 11 / 6 | 0.993x |
+
+Neutral at d3, slightly better at d5 (not significant), better at d0 (the suite's 1,000-game key:
+6.7210 -> 6.7050), and no cost. Not a trade-off: it is a correctness fix that happens to measure
+well.
+
+**The route on the fixed engine (`newonly` vs `base`)** -- the numbers the adoption call is made on:
+
+| cell | base | new-only | delta | better / worse | sign p | units |
+|---|---|---|---|---|---|---|
+| d3/b10, 2,000 | 6.0240 | 6.0230 | -0.0010 +/- 0.0022 | 11 / 9 | 0.82 | 0.898x |
+| d5/b20, 2,000 | 6.0590 | 6.0520 | -0.0070 +/- 0.0022 | 17 / 3 | 0.003 | 0.932x |
+| d2/b0, 40 | 5.9750 | 6.0000 | +0.0250 (one game) | 0 / 1 | -- | 0.453x |
+
+The d3 loss is gone (was +0.0045, 11 / 20; now -0.0010, 11 / 9): it was the hole, exactly as the
+user read it. The d5 win holds (was -0.0065, 20 / 7; now -0.0070, 17 / 3) and every seed block is
+better. Against the legacy enumerator the two together are -0.0015 (17 / 14) at d3 and -0.0095
+(26 / 7, p = 0.001) at d5, at 0.887x / 0.925x units.
+
+**The label regime on the fixed engine** (the six heaviest phase-A games at a 30 s label ceiling,
+both arms concurrent; `logs/snowdiag/heavy6_v5/`):
+
+| gi | base units | new-only units | ratio | base s | new s | positions b / n | labels |
+|---|---|---|---|---|---|---|---|
+| 33 | 18,687,285 | 9,377,508 | 0.50 | 265 | 142 | 7 / 7 | identical (7) |
+| 214 | 29,381,043 | 20,204,570 | 0.69 | 334 | 293 | 6 / 7 | identical (6) |
+| 13 | 20,483,931 | 11,474,256 | 0.56 | 253 | 175 | 5 / 5 | identical (5) |
+| 195 | 29,277,306 | 25,205,010 | 0.86 | 336 | 369 | 5 / 6 | identical (5) |
+| 64 | 30,263,071 | 14,831,266 | 0.49 | 304 | 187 | 5 / 6 | identical (5) |
+| 61 | 42,162,523 | 20,362,819 | 0.48 | 430 | 253 | 6 / 7 | identical (6) |
+
+Every label the base produced, the new-only arm produced identically, and it labelled at least as
+many positions in each game (one more in four of them: the cheaper arm fits another position under
+the same ceiling). gi=214 at the 120 s ceiling, both arms: 0.37x units (55.3M -> 20.2M), 572 s ->
+290 s wall, 7 / 7 positions, all seven labels identical.
 
 ## Status
 
