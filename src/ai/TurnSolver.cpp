@@ -3935,20 +3935,27 @@ inline std::atomic<uint64_t> g_unreachable[16]{};  // ...where PlanOpensBreakpoi
 inline std::atomic<uint64_t> g_unmarked[16]{};     // ...plan selected elsewhere, site has no clause
 inline std::mutex g_who_mtx;
 inline std::map<std::string, uint64_t> g_who;      // "<tier> site N <arming card>" -> count
-// `hosted` = this apply had a capture pointer or carried a bp_choice, i.e. SOMEBODY was offering
-// it a search node. It separates the two remedies, which are not interchangeable:
-//   hosted + unchallengeable   -> a missing CLAUSE. The fan-out was available and did not select
-//                                 this plan. Fixable here, in PlanOpensBreakpoint.
-//   unhosted                   -> a missing HOST. A capture is passed at 2 of the engine's ~42
-//                                 ApplyPlanDirect sites, so no clause anywhere can help: there is
-//                                 no fan-out at this apply to be selected BY. That is the
-//                                 greedysite::kNoHost class and it needs a caller, not a predicate.
-inline void RecordWho(int site, const char* name, bool hard, bool hosted)
+// `host_tag` = WHAT, if anything, was offering this apply a search node. THREE states, not two,
+// because the original two-way [hosted]/[NOHOST] split lumped together the one case that needs a
+// clause and the one case that proves no clause is needed:
+//   [NOHOST]  -- no capture pointer and no carried choice. A missing HOST: a capture is passed at
+//                2 of the engine's ~42 ApplyPlanDirect sites, so no clause anywhere can help --
+//                there is no fan-out at this apply to be selected BY. greedysite::kNoHost; it
+//                needs a caller, not a predicate.
+//   [capture] -- a capture pointer, but the plan carries no choice (bp_choice < 0). The fan-out WAS
+//                available and did not select this plan: a missing CLAUSE, fixable in
+//                PlanOpensBreakpoint. This is the only tier a clause can close.
+//   [variant] -- the plan ITSELF carries bp_choice >= 0, i.e. it is a variant that some fan-out
+//                emitted. That is a RECORD OF FACT that the base plan WAS selected, and it is
+//                strictly better evidence than re-deriving PlanOpensBreakpoint here: the audit
+//                sits MID-apply and the fan-out asked PRE-apply. Writing a clause for this tier
+//                would be buying intent, not reachability. See the `selected` test.
+inline void RecordWho(int site, const char* name, bool hard, const char* host_tag)
 {
     char key[128];
-    std::snprintf(key, sizeof(key), "%s site %-2d %-8s %s",
+    std::snprintf(key, sizeof(key), "%s site %-2d %-9s %s",
                   hard ? "UNCHALLENGEABLE" : "site-unmarked  ", site,
-                  hosted ? "[hosted]" : "[NOHOST]", (name && *name) ? name : "(inline cast)");
+                  host_tag, (name && *name) ? name : "(inline cast)");
     std::lock_guard<std::mutex> lk(g_who_mtx);
     ++g_who[key];
 }
@@ -24591,27 +24598,44 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
             const bool dig_ok   = BpDigFanoutPending(state, 1 << site)
                                || BpDigFanoutForPlan(state, 1 << site, plan);
             const bool node_ok  = node_owns_site(site);
-            // ...and `bp_wave0`, which is not a re-derivation at all but a RECORD OF FACT: wave 0
-            // sets it on every base plan it actually fanned out. It matters because the two
-            // state-keyed routes (the dig bypass, the watcher pre-scans) are evaluated by the
-            // fan-out on the PRE-APPLY state and by this audit on the MID-APPLY one, and those can
-            // disagree in the direction that invents violations -- the dig loop CONSUMES its source,
-            // so `HasAnyDigSource` can read false here on the very plan the bypass fanned out.
-            // Prefer the recorded fact wherever it exists.
-            const bool selected = plan.bp_wave0 || (opens & BpSiteMask()) != 0 || dig_ok || node_ok;
+            // ...and TWO RECORDS OF FACT, which are not re-derivations at all and must be preferred
+            // wherever they exist. The state-keyed routes (the dig bypass, the watcher pre-scans)
+            // are evaluated by the fan-out on the PRE-APPLY state and by this audit on the MID-APPLY
+            // one, and they disagree in the direction that INVENTS violations -- the dig loop
+            // CONSUMES its source, so `HasAnyDigSource` reads false here on the very plan the bypass
+            // fanned out. Four over-reports have now come from re-deriving instead of recording.
+            //
+            //   bp_wave0        -- wave 0 sets it on every BASE plan it actually fanned out.
+            //   bp_choice >= 0  -- the plan IS a variant, and the only three things that set a
+            //                      bp_choice are fan-outs: AppendBreakpointVariants (wave 0),
+            //                      BpWaveWalker::Next, and the node's children. Each emits ONLY for
+            //                      a base plan it selected (the walker re-tests the same predicate
+            //                      at its ctor). So a carried choice is direct evidence that this
+            //                      plan's base is inside the variant machinery -- strictly stronger
+            //                      than asking a mid-apply predicate whether it could have been.
+            //
+            // This is what settled fluctuator's site-4 residue: 194 of 194 were [variant], i.e. the
+            // audit flagging plans the wave walker had itself handed out. Wave 0's marker could not
+            // see them because a variant deliberately clears it ("the marker belongs to the base
+            // plan only") and the walker stamps nothing at all. Measured 2026-09-22; it is also the
+            // whole of th's site-1 [variant] entry. A clause written for these would have bought
+            // intent and not one unit of reachability -- exactly the reverted site-7 widening.
+            const bool selected = plan.bp_wave0 || plan.bp_choice >= 0
+                               || (opens & BpSiteMask()) != 0 || dig_ok || node_ok;
             const char* who     = canon_arm ? canon_arm->card.m_name.c_str() : nullptr;
-            // Was ANY search node on offer at this apply? (The same pair node_owns_site tests,
-            // without the site mask -- see canonaudit::RecordWho for why the two remedies differ.)
-            const bool  host_here = (bp_capture != nullptr || plan.bp_choice >= 0);
+            // Was ANY search node on offer at this apply, and of WHICH kind? The three tiers carry
+            // different remedies and must not be added together -- see canonaudit::RecordWho.
+            const char* host_tag = plan.bp_choice >= 0 ? "[variant]"
+                                 : (bp_capture != nullptr ? "[capture]" : "[NOHOST] ");
             if (!selected)
             {
                 canonaudit::g_unreachable[site].fetch_add(1, std::memory_order_relaxed);
-                canonaudit::RecordWho(site, who, /*hard=*/true, host_here);
+                canonaudit::RecordWho(site, who, /*hard=*/true, host_tag);
             }
             else if (((opens >> site) & 1) == 0 && !dig_ok && !node_ok)
             {
                 canonaudit::g_unmarked[site].fetch_add(1, std::memory_order_relaxed);
-                canonaudit::RecordWho(site, who, /*hard=*/false, host_here);
+                canonaudit::RecordWho(site, who, /*hard=*/false, host_tag);
             }
         }
         if (!resolved)
