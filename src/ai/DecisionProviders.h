@@ -1506,11 +1506,15 @@ public:
     //   * The d3 loss was NOT churn: the base reached "Astrolabe, then Boreal Druid off its mana"
     //     only through a continuation, because a hand Astrolabe was credited no mana at all
     //     (AnyColorFilterHasFedSlot, fixed in af84217a -- MTG_PENDING_FILTER_SLOT). The user's
-    //     ruling was to fix the enumerator, not to widen the rule. Every cell is re-measured on the
-    //     fixed engine (docs/design/bp-new-only-continuations.md, "The d3/b10 loss was a hole").
-    // Flipping the default to true adopts it; Snow's smoke and regression keys (d3 and d5) then need
-    // a rebaseline. The condemnation filter above is independent of it (candidate level vs plan
-    // level) and the two were measured together.
+    //     ruling was to fix the enumerator, not to widen the rule.
+    //   * Post-fix (every cell re-measured, docs/design/bp-new-only-continuations.md "Post-fix"):
+    //     quality -0.0070 +/- 0.0022 at d5/b20 (17 / 3, p = 0.003) and -0.0010 +/- 0.0022 at
+    //     d3/b10 (11 / 9), 2,000 paired games each; cost 0.45x / 0.90x / 0.93x units at d2 / d3 /
+    //     d5, 0.37-0.86x in the label regime with every label identical. No trade-off remains; the
+    //     flip is still the user's to make because it changes what the search collects.
+    // Flipping the default to true adopts it; Snow's eight smoke and regression keys then need one
+    // filtered accept (the fix's own rebaseline landed in 73a2d47d). The condemnation filter above
+    // is independent of it (candidate level vs plan level) and the two were measured together.
     //
     // Per-JOB overridable through the same heurarm slot as the global lever, so a batch can pool a
     // base arm (`"flags": {"MTG_BP_NEW_ONLY": false}`) with an adopted arm -- the SNOW_CONDEMN

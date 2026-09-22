@@ -45998,9 +45998,15 @@ TurnSolver::Plan TurnSolver::SolveWithLookahead(const GameState& state, bool is_
         const bool trace_this = trace_t1 || trace_t2 || trace_tn;
         if (trace_this)
         {
+            // depth and the phase are printed too: under an UNBOUNDED budget enforce_budget is
+            // false at the root as well, so "top-level" vs "rollout" alone cannot tell the turn-n
+            // root decision (depth == the play depth) from the same turn reached inside a rollout
+            // of an earlier root (a smaller depth) -- 33,000 T6 blocks and no way to find the one
+            // that mattered (seed 1003 d3/b0, 2026-09-22).
             std::cerr << "[trace] T" << state.turn_number
                       << (enforce_budget ? " top-level" : " rollout")
-                      << " sub_depth=" << sub_depth
+                      << " depth=" << depth << " sub_depth=" << sub_depth
+                      << (is_pre_combat ? " main1" : " main2")
                       << "  candidates=" << candidates.size() << "\n";
         }
 
