@@ -1813,6 +1813,14 @@ void RunExhaustiveKeep(std::ostream& os, const Decklist& deck, const MulliganPro
         std::atomic<long long> frozen{ 0 };  // size-7 cell-sides settled (freeze path + resume seed)
         std::atomic<long long> cells{ 0 };   // total size-7 cell-sides (2*NC); 0 until the pool starts
         std::atomic<long long> subwave{ 0 }; // adaptive sub-refine waves dispatched (kind 2)
+        // PRECOMPUTE (kind -1). `pre` is how much work the old code would have spent IDLE; `prehit` is how
+        // much of it refine actually consumed. Both are reported because they answer different questions:
+        // pre>0 says the filler engaged at all (without it an identity A/B is vacuous -- it would be
+        // comparing two runs that never speculated), and prehit/pre is how much of the speculation was
+        // useful rather than thrown away at a freeze.
+        std::atomic<long long> pre{ 0 };     // kind -1 tasks enqueued
+        std::atomic<long long> prehit{ 0 };  // kind 0 tasks served from the memo instead of rolling
+        std::atomic<long long> prebad{ 0 };  // memo values that FAILED the verify re-roll (must be 0)
         std::atomic<long long> subwsz{ 0 };  // cells marked by the LAST sub-refine wave. The sub half has no
                                              // frozen/total ratio to read (its work is the shrinking set of
                                              // still-ambiguous bottoming argmins, not a fixed cell count), so
@@ -1923,6 +1931,11 @@ void RunExhaustiveKeep(std::ostream& os, const Decklist& deck, const MulliganPro
                     const long long jn  = gp.jrecs.load(std::memory_order_relaxed);
                     const long long jage = (gp.now_ms() - gp.jms.load(std::memory_order_relaxed)) / 1000;
                     std::cerr << "  journal=" << jn << " (" << jage << "s ago)";
+                    // Precompute, reported only once it has engaged (silent on a run that never idled).
+                    if (const long long pq = gp.pre.load(std::memory_order_relaxed); pq > 0)
+                    { std::cerr << "  pre=" << pq << " hit=" << gp.prehit.load(std::memory_order_relaxed);
+                      if (const long long pb = gp.prebad.load(std::memory_order_relaxed); pb > 0)
+                      { std::cerr << " MISMATCH=" << pb; } }
                     std::cerr << "  cap=" << gp.cap.load(std::memory_order_relaxed) << "\n" << std::flush;
                     // Feeding work while the journal is silent IS the violation of "resumable at any
                     // point", so name it rather than leaving the operator to infer it from an mtime.
@@ -3340,6 +3353,38 @@ void RunExhaustiveKeep(std::ostream& os, const Decklist& deck, const MulliganPro
         const std::size_t SL = static_cast<std::size_t>(NC) * 2 * static_cast<std::size_t>(r_max);
         std::vector<double> slot(SL, 0.0);
         std::vector<char>   have(SL, 0);
+        // PRECOMPUTE CACHE (kind -1 tasks). The merge bound below is deterministic and therefore FINITE:
+        // once every live cell has been fed to it there is nothing left to enqueue, and the box goes idle
+        // waiting on whichever straggler is holding `floor_incomplete`. Measured on Fungus 2026-09-22:
+        // 85 minutes at 2.88 of 24 cores, with 2 of 62,444 sub-batches outstanding and `frozen` at 0.
+        //
+        // The fix is a MEMO, not a scheduling change to the fold. run_one is a pure function of
+        // (seed_base, r, w, pd) -- the filler below says so and the whole design rests on it -- so a
+        // rollout computed early is bit-identical to the same rollout computed later. A kind -1 task
+        // computes one and parks it here; a kind 0 worker checks here before rolling. Nothing else moves:
+        // fed[], the fold, compute_refs' reconcile window and vg are all untouched, so the generated raw
+        // is byte-identical to a run that never speculated. That matters because a profile is the
+        // apparatus a DECKLIST comparison is measured against (user, 2026-09-22) -- speculation must buy
+        // wall-clock, never a different table.
+        //
+        // Sized like slot[], and skipped entirely when that would be too large to be worth it: the cache
+        // is pure optimisation, so declining it is always safe.
+        // MTG_KEEP_PRECOMPUTE=0 disables it. Kept as a real lever, not a constant, for two reasons: it is
+        // the A/B that PROVES the byte-identity claim above (same binary, same seed, one arm with the memo
+        // and one without -- the raws must match exactly), and it is the escape hatch if the memo ever
+        // turns out to cost more in memory than the idle it removes.
+        const bool pre_on = EnvOn("MTG_KEEP_PRECOMPUTE", true)
+                         && (SL * sizeof(double)) <= (2ULL << 30);
+        // MTG_KEEP_PRECOMPUTE_VERIFY=1: on every memo HIT, roll the rollout anyway and assert the memo
+        // matches. This converts "byte-identical because run_one is pure in (seed_base, r, w, pd)" from
+        // an argument into something a run CHECKS, which matters because the filler only engages when a
+        // straggler starves the queue -- a condition a small deck never reaches, so an end-to-end A/B on
+        // one is inert and proves nothing about this path. Costs exactly the saving it verifies, so it
+        // is a gate to run deliberately, never a default.
+        const bool pre_verify = EnvOn("MTG_KEEP_PRECOMPUTE_VERIFY");
+        std::vector<double>            pre_val(pre_on ? SL : 0, 0.0);
+        std::vector<std::atomic<char>> pre_have(pre_on ? SL : 0);
+        for (auto& pf : pre_have) { pf.store(0, std::memory_order_relaxed); }   // explicit: atomics
         std::vector<long long> fed(static_cast<std::size_t>(NC) * 2, 0);
         std::vector<std::atomic<char>> afroze(static_cast<std::size_t>(NC) * 2);   // lock-free view for producer
         // Floor snapshot (sum/sumsq/cnt at exactly c==r0), captured at the r0-crossing under fold_mtx. vg_ref
@@ -3453,6 +3498,23 @@ void RunExhaustiveKeep(std::ostream& os, const Decklist& deck, const MulliganPro
                     task = q.front(); q.pop_front();
                 }
                 q_nf.notify_one();
+                if (task[0] < 0)    // PRECOMPUTE (kind -1): fill the memo, fold NOTHING. See pre_val.
+                {
+                    if (!pre_on) { continue; }   // cache declined (too large) -> nothing enqueues these
+                    // Deliberately outside every accumulator: no fold_mtx, no in_flight, no roll7, no
+                    // journal. This task cannot advance the run and must not be able to -- its only
+                    // effect is that a later kind-0 task for the same (i, pd, r) skips its rollout.
+                    // A kind-0 racing it just rolls the value itself and both write the same number.
+                    const int pi = static_cast<int>(task[1]), ppd = static_cast<int>(task[2]);
+                    const std::size_t ps = SLOT(pi, ppd, task[3]);
+                    if (!pre_have[ps].load(std::memory_order_acquire))
+                    {
+                        const double pv = run_one(ai, work_idx[0][pi], ppd, task[3], nullptr);
+                        pre_val[ps] = pv;
+                        pre_have[ps].store(1, std::memory_order_release);   // value BEFORE the flag
+                    }
+                    continue;
+                }
                 if (task[0] >= 1)   // sub-table batch (fusion filler): whole batch on one thread, self-committing
                 {
                     run_batch(ai, static_cast<int>(task[1]), static_cast<int>(task[2]), task[3], task[4]);
@@ -3469,7 +3531,33 @@ void RunExhaustiveKeep(std::ostream& os, const Decklist& deck, const MulliganPro
                 }
                 const int i = static_cast<int>(task[1]), pd = static_cast<int>(task[2]);
                 const long long r = task[3];
-                const double wt = run_one(ai, work_idx[0][i], pd, r, trace_on ? &w_hit : nullptr);
+                // Take the precomputed value when one is parked (see pre_val). Bit-identical by
+                // construction -- run_one is pure in (seed_base, r, w, pd) -- so this is a pure
+                // wall-clock saving and cannot move the table. NOT under trace_on: the trace needs
+                // run_one to populate w_hit, which the memo does not carry, and a silently empty
+                // touched-set is the exact failure documented on this worker above.
+                double wt;
+                const std::size_t wsl = SLOT(i, pd, r);
+                if (pre_on && !trace_on && pre_have[wsl].load(std::memory_order_acquire))
+                {
+                    wt = pre_val[wsl];
+                    gen_prog.prehit.fetch_add(1, std::memory_order_relaxed);
+                    if (pre_verify)   // see MTG_KEEP_PRECOMPUTE_VERIFY
+                    {
+                        const double live = run_one(ai, work_idx[0][i], pd, r, nullptr);
+                        if (live != wt)
+                        {
+                            gen_prog.prebad.fetch_add(1, std::memory_order_relaxed);
+                            std::cerr << "[keepgen] PRECOMPUTE MISMATCH i=" << i << " pd=" << pd
+                                      << " r=" << r << ": memo=" << wt << " live=" << live
+                                      << " -- run_one is NOT pure in (seed_base, r, w, pd) on this"
+                                         " path; the memo is unsound, do not ship it\n" << std::flush;
+                            wt = live;   // trust the live roll
+                        }
+                    }
+                }
+                else
+                { wt = run_one(ai, work_idx[0][i], pd, r, trace_on ? &w_hit : nullptr); }
                 if (trace_on)   // fold this rollout's cards into the cell's union (same lock as the commit)
                 {
                     std::lock_guard<std::mutex> tk(acc_mtx);
@@ -3724,6 +3812,11 @@ void RunExhaustiveKeep(std::ostream& os, const Decklist& deck, const MulliganPro
         bool        spec_active = false;    // a sweep has started and has not yet saturated
         bool        spec_resweep = false;   // this sweep skipped a not-yet-floored cell -> sweep again
         bool        spec_saturated = false; // every live cell-side has been fed to r0+spec_budget
+        // PRECOMPUTE sweep state. Picks up exactly where speculation saturates -- i.e. at the moment the
+        // old code had nothing left to enqueue and let the cores go idle. Walks (cell-side, r) pairs from
+        // fed[] up to r_max filling pre_val; enqueues nothing that any accumulator can see.
+        std::size_t pre_cursor = 0;   // next cell-side index the precompute sweep will visit
+        long long   pre_r      = -1;  // next r within that cell (-1 = not yet started on this cell)
         // Feeds per producer iteration during the sweep. A few QCAP's worth: big enough that the queue
         // never drains between iterations (the workers see one continuous stream), small enough that
         // sub_refine_step() runs on a seconds-scale clock rather than a per-sweep one.
@@ -3894,6 +3987,42 @@ void RunExhaustiveKeep(std::ostream& os, const Decklist& deck, const MulliganPro
                     {
                         if (spec_resweep) { spec_cursor = 0; spec_resweep = false; }   // stragglers
                         else              { spec_saturated = true; spec_active = false; }
+                    }
+                }
+                // PRECOMPUTE FILLER. Runs exactly where the box used to idle: speculation has saturated
+                // (nothing further may be MERGED before refs fix) while the floor is still incomplete --
+                // i.e. a straggler is holding the phase and every other core has run out of admissible
+                // work. There is still work that is certainly useful: the rollouts refine will ask for
+                // once refs publish. Compute them now into the memo; merge nothing.
+                //
+                // BACKFILL ONLY, and that is the interlock. It declines to push unless the queue is under
+                // a quarter full, so kind 0/1/2 always have room and feed_upto never queues behind a
+                // precompute. A filler that can outrun the progress step it fills for is the FiveColour
+                // failure recorded above; this one cannot, because it yields the moment real work appears.
+                if (pre_on && floor_spec && spec_saturated && floor_incomplete)
+                {
+                    const std::size_t NS2 = static_cast<std::size_t>(NC) * 2;
+                    long long budget = spec_chunk;
+                    while (budget > 0 && pre_cursor < NS2)
+                    {
+                        const std::size_t k = pre_cursor;
+                        const int i = static_cast<int>(k >> 1), pd = static_cast<int>(k & 1);
+                        if (afroze[k].load()) { ++pre_cursor; pre_r = -1; continue; }
+                        if (pre_r < 0)        { pre_r = fed[k]; }
+                        if (pre_r >= r_max)   { ++pre_cursor; pre_r = -1; continue; }
+                        const std::size_t ps = SLOT(i, pd, pre_r);
+                        if (!pre_have[ps].load(std::memory_order_acquire))
+                        {
+                            std::unique_lock<std::mutex> lk(qmtx);
+                            if (q.size() >= QCAP / 4) { break; }   // headroom for real work -- see above
+                            q.push_back({ -1, static_cast<long long>(i),
+                                          static_cast<long long>(pd), pre_r, 0 });
+                            lk.unlock();
+                            q_ne.notify_one();
+                            gen_prog.pre.fetch_add(1, std::memory_order_relaxed);
+                            --budget;
+                        }
+                        ++pre_r;
                     }
                 }
             }
