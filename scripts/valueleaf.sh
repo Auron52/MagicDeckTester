@@ -859,6 +859,13 @@ phase_matrix() {
         --max-game-predict-sec "$MAX_GAME_PREDICT_SEC" \
         --max-game-wall-sec "$MAX_GAME_WALL_SEC" \
         --out "$MATRIX_TXT" >> "$VLQ/matrix.log" 2>&1
+    local mrc=$?
+    # The driver exits 3 when the pooled batch died before reporting every chunk (Snow 2026-09-22:
+    # the pool was gone after 63 min with 32 games in flight, and this phase was marked done over a
+    # 51-game table, which then starved D of rows and shipped a sidecar with no value_play at all).
+    # Banked chunks stay on disk; a re-run resumes. Marking done here would be the one thing that
+    # could not be undone by a resume.
+    [ "$mrc" = 0 ] || { log "PHASE C ABORT: matrix driver exit $mrc (pool died early? see $VLQ/matrix.log) -- NOT marked done, re-run to resume"; return 1; }
     [ -s "$MATRIX_TXT" ] || { log "PHASE C ABORT: no matrix output"; return 1; }
     log "PHASE C done"
     mark C_matrix

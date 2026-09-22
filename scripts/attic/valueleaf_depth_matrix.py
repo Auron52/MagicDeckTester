@@ -1091,19 +1091,23 @@ def run_incremental(args):
             env.pop(k, None)
         env.setdefault("MTG_BATCH_HEARTBEAT", os.path.join(os.path.dirname(args.out) or ".",
                                                            "heartbeat.txt"))
-        # MEMORY BOUND, not a tuning knob. The matrix runs UNBOUNDED search on every worker at once,
-        # and the transposition table is an unbounded memoization of SimulateToEnd -- so the pool's
-        # footprint grows without limit. Measured 2026-08-11 on FiveColour: one `mtg --batch` reached
-        # 43.9 GB RES / 93.3% of a 47 GB box with 0 GB available, i.e. one bad game away from the OOM
-        # killer taking a 13-hour run with it.
+        # MEMORY BOUND -- and the engine now owns it. The transposition table is an unbounded
+        # memoization of SimulateToEnd, so a 32-worker pool's footprint grows without limit unless the
+        # table is capped (measured 2026-08-11 on FiveColour: 43.9 GB RES on a 47 GB box). The cap is
+        # RESULT-NEUTRAL by construction (see TranspositionTable::Cap): a refused store just recomputes.
         #
-        # The cap is RESULT-NEUTRAL by construction (see TranspositionTable::Cap): the table is a pure
-        # memoization, so refusing to store past the cap trades recompute for bounded memory and every
-        # decision is unchanged. Early shallow high-reuse leaves are stored first and kept; only the
-        # deep long tail is dropped. An entry is ~64 B (16 B key + 4 B value + node/bucket overhead),
-        # so 8M entries is ~0.5 GB per live table -- roughly 12-24 GB across 24 workers, which leaves
-        # real headroom on this box instead of running to the ceiling.
-        env.setdefault("MTG_TT_CAP", "8000000")
+        # This driver used to pin `MTG_TT_CAP=8000000` here, sized for that 47 GB / 24-worker box
+        # (~0.5 GB per table). Since 2026-09-15 the engine derives the cap itself from the machine's
+        # RAM and worker count (src/core/MemBudget.h: budget = MemTotal/2, TT = (cache/workers)/3/64 B)
+        # and an explicit env value ALWAYS wins -- so the pin silently overrode the derivation. On the
+        # 23.5 GB / 32-thread box that is 16 GB of table under the engine's own 17.6 GB RSS watchdog
+        # (3/4 of RAM): Snow's phase-C pool grew 14.7 -> 17.9 GB and was _Exit(137)'d by the watchdog
+        # TWICE (2026-09-22, at 63 and 39 min), and the message went only to stderr, which this driver
+        # then dropped. Nothing is set here now: the engine's per-box derivation is the bound, and
+        # MTG_MEM_BUDGET_MB / MTG_TT_CAP in the launching environment remain the documented overrides.
+        if "MTG_TT_CAP" in env:
+            print("  MTG_TT_CAP=%s inherited from the environment (the engine would derive %s-aware "
+                  "defaults otherwise)" % (env["MTG_TT_CAP"], "RAM"), flush=True)
         games=sum(j["games"] for j in jobs)
         nH=sum(1 for j in jobs if not j.get("value_model"))
         print("ONE pool: %d chunks (%d H, %d V), %d games, %d threads; condemn %s"
@@ -1121,6 +1125,15 @@ def run_incremental(args):
         winsdir=os.path.join(os.path.dirname(args.out) or ".", "wins")
         os.makedirs(winsdir, exist_ok=True)
         cmd=[MTG,"--batch",man,"--game-log-dir",winsdir]+(["--threads",str(args.workers)] if args.workers>0 else [])
+        # DIAGNOSTIC ONLY, not a matrix knob: VL_POOL_WRAP="strace -f ... -o <file>" (any argv prefix)
+        # runs the pool under a tracer. The pool's arguments, games and results are untouched. It exists
+        # because a pool that vanishes leaves no record of WHICH signal or exit took it: Snow 2026-09-22,
+        # 63 min in, 32 games in flight, no fatal signal in the kernel log, no exit path in the engine.
+        wrap=os.environ.get("VL_POOL_WRAP","").strip()
+        if wrap:
+            import shlex
+            cmd=shlex.split(wrap)+cmd
+            print("  pool wrapped (VL_POOL_WRAP): %s" % wrap, flush=True)
         # stderr carries the engine's SLOW-GAME and CONDEMNED lines (each SLOW-GAME a
         # self-contained repro, tagged job=<cell>_off<offset>). Drained on its own thread so a full
         # pipe can never block the pool, and handled as it arrives rather than collected at exit --
@@ -1175,10 +1188,22 @@ def run_incremental(args):
                     if "OVER max_game_sec" in l:
                         print(l.rstrip(), flush=True)
                         continue
-                    if "SLOW-GAME" not in l: continue
+                    if "SLOW-GAME" not in l:
+                        # Everything else the pool says on stderr used to be DROPPED here -- including
+                        # "terminate called after throwing ..." when a game's exception escapes the
+                        # worker thread and takes the whole pool down (Snow 2026-09-22: 832 chunks
+                        # queued, the pool gone after 63 min with 32 games in flight, and this log
+                        # saying nothing but "generation complete"). Keep a short tail for the exit
+                        # report below; heartbeats are their own file and are skipped.
+                        if "heartbeat" not in l:
+                            with _slow_lock:
+                                stderr_tail.append(l.rstrip())
+                                if len(stderr_tail) > 40: del stderr_tail[0]
+                        continue
                     with _slow_lock:
                         with open(slow_path,"a") as fh: fh.write("%s %s\n" % (tag, l.strip()))
             except Exception: pass
+        stderr_tail=[]
         # CONDEMNED lines come back on the same stream; mirror them into the cell state so the table
         # and the resume logic agree with what the pool actually did.
         st=threading.Thread(target=drain_slow, args=(pr.stderr, "pool"), daemon=True)
@@ -1276,6 +1301,21 @@ def run_incremental(args):
                 print("... %d chunks, %d games total" % (done, tot), flush=True)
         pr.wait()
         st.join(timeout=5)
+        # THE POOL'S EXIT IS A RESULT. A pool that dies early leaves every in-flight chunk unbanked
+        # and the table looking merely "short"; without this line the only trace of a crashed pool
+        # was 20,000 missing games. Non-zero / signal exits are printed with the stderr tail the drain
+        # kept, and the run is NOT declared complete over them (see done_batches below).
+        pool_rc = pr.returncode
+        if pool_rc != 0:
+            print("  !! POOL EXITED rc=%s (%s) with %d/%d chunks reported -- NOT complete. stderr tail:"
+                  % (pool_rc, ("signal %d" % -pool_rc) if pool_rc < 0 else "error", done, len(jobs)),
+                  flush=True)
+            with _slow_lock:
+                for l in stderr_tail: print("     | " + l, flush=True)
+        elif done < len(jobs):
+            print("  !! POOL EXITED rc=0 but reported only %d/%d chunks -- NOT complete" % (done, len(jobs)),
+                  flush=True)
+        return pool_rc == 0 and done >= len(jobs)
 
     # ONE pass. No floor wave: the pool judges tractability as it runs (running mean including
     # in-flight games, plus a single-game limit checked while the game is still running) and skips a
@@ -1286,8 +1326,13 @@ def run_incremental(args):
         print("queue: %d chunks of <=%d games to target, slowest first: %s"
               % (len(q), args.batch,
                  "%s%d s%s" % (q[0]["c"]["arm"], q[0]["c"]["depth"], q[0]["c"]["seed"])), flush=True)
-        run_pool(q)
+        pool_ok = run_pool(q)
         write_state()
+        if not pool_ok:
+            # Everything banked is on disk and resumable; what must NOT happen is the caller reading
+            # "complete" and marking the phase done over a table that is 0.2% full.
+            print("=== incremental generation INCOMPLETE: the pool exited early; %d cells; re-run to resume ===" % len(cells), flush=True)
+            sys.exit(3)
 
     done_batches=total_chunks
     print("=== incremental generation complete: %d batches, %d cells (%d intractable) ===" % (
