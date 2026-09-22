@@ -4042,8 +4042,23 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
         // resolve_draw_breakpoint's twin install). Null scope (levers off) = unchanged.
         PlanTraits _rec_traits;
         if (PlanTraitsWanted()) { _rec_traits = TurnSolver::ComputePlanTraits(state, recs); }
+        // LOCKSTEP #8: a record carries the scope the rollout PAID it under (Action::rec_mana_casts
+        // / rec_pump_target, stamped under MTG_BP_REPLAY_COST). The rollout's scope was the whole
+        // continuation it planned; the records at this nesting level can be a strict subset of
+        // that (a nested breakpoint realised the planned tail one level down), so traits derived
+        // from the records alone read FEWER mana casts and arm the one-shot hold the rollout never
+        // had (Mirrorwing seed 3100 T4: committed kill, realised nothing). Recorded values win;
+        // an unrecorded (0) field keeps the derived one.
+        int rec_mc = 0, rec_pt = 0;
+        for (const Action& a : recs)
+        {
+            rec_mc = std::max(rec_mc, a.rec_mana_casts);
+            if (rec_pt == 0 && a.rec_pump_target != 0) { rec_pt = a.rec_pump_target; }
+        }
+        if (PlanTraitsWanted() && rec_mc > 0) { _rec_traits.mana_casts = rec_mc; }
         PlanTraitsScope  _rec_scope(PlanTraitsWanted() ? &_rec_traits : nullptr);
-        TapKeepLastScope _rec_keep(PumpTargetHoldEnabled() ? _rec_traits.pump_target_card : 0);
+        TapKeepLastScope _rec_keep(PumpTargetHoldEnabled()
+                                       ? (rec_pt != 0 ? rec_pt : _rec_traits.pump_target_card) : 0);
         if (BpTraceEnabled())   // MTG_BP_TRACE: the replay's trait scope, for the rollout diff
         {
             std::fprintf(stderr, "[bp-traits] exec  T%d cont: wanted=%d mana_casts=%d pump_target=%d magnet=%d mult=%d attack=%d mid=%d acts=%d\n",

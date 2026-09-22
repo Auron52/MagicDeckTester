@@ -1492,38 +1492,11 @@ public:
         return heurarm::Flag(heurarm::SNOW_CONDEMN, v);
     }
 
-    // NEW-ONLY BREAKPOINT CONTINUATIONS -- the per-deck route, STAGED OFF (2026-09-22; record and
-    // every measurement in docs/design/bp-new-only-continuations.md). The USER's rule: a breakpoint
-    // emits only the continuations that use a card that ARRIVED there or activate an ability that was
-    // NOT PREVIOUSLY AVAILABLE; a continuation of old cards and old abilities is a sibling base
-    // plan's line, reached a second time.
-    //
-    // WHY STAGED AND NOT ADOPTED: the adoption is the user's call on the post-fix numbers.
-    //   * Pre-fix (first engine): cost 0.45x units at d2/b0, 0.90x at d3/b10, 0.93x at d5/b20; the
-    //     six heaviest phase-A label games 0.48-0.82x with every value label identical; quality
-    //     -0.0065 +/- 0.0026 at d5/b20 (20 better / 7 worse) and +0.0045 +/- 0.0028 at d3/b10
-    //     (11 / 20), 2,000 paired games each on held-out seeds.
-    //   * The d3 loss was NOT churn: the base reached "Astrolabe, then Boreal Druid off its mana"
-    //     only through a continuation, because a hand Astrolabe was credited no mana at all
-    //     (AnyColorFilterHasFedSlot, fixed in af84217a -- MTG_PENDING_FILTER_SLOT). The user's
-    //     ruling was to fix the enumerator, not to widen the rule.
-    //   * Post-fix (every cell re-measured, docs/design/bp-new-only-continuations.md "Post-fix"):
-    //     quality -0.0070 +/- 0.0022 at d5/b20 (17 / 3, p = 0.003) and -0.0010 +/- 0.0022 at
-    //     d3/b10 (11 / 9), 2,000 paired games each; cost 0.45x / 0.90x / 0.93x units at d2 / d3 /
-    //     d5, 0.37-0.86x in the label regime with every label identical. No trade-off remains; the
-    //     flip is still the user's to make because it changes what the search collects.
-    // Flipping the default to true adopts it; Snow's eight smoke and regression keys then need one
-    // filtered accept (the fix's own rebaseline landed in 73a2d47d). The condemnation filter above
-    // is independent of it (candidate level vs plan level) and the two were measured together.
-    //
-    // Per-JOB overridable through the same heurarm slot as the global lever, so a batch can pool a
-    // base arm (`"flags": {"MTG_BP_NEW_ONLY": false}`) with an adopted arm -- the SNOW_CONDEMN
-    // pattern; MTG_SNOW_BP_NEW_ONLY=1 is the per-deck switch.
-    bool NewOnlyBreakpointContinuations() const override
-    {
-        static const bool v = EnvOn("MTG_SNOW_BP_NEW_ONLY", false);
-        return heurarm::Flag(heurarm::BP_NEW_ONLY, v);
-    }
+    // NEW-ONLY BREAKPOINT CONTINUATIONS were staged here as a per-deck route (MTG_SNOW_BP_NEW_ONLY)
+    // while Snow measured them: -0.0070 +/- 0.0022 at d5/b20 (17 / 3), -0.0010 +/- 0.0022 at d3/b10
+    // (11 / 9), 0.45x / 0.90x / 0.93x units at d2 / d3 / d5 (docs/design/bp-new-only-continuations.md).
+    // The rule is GLOBAL and default ON since 2026-09-22 (TurnSolver's BpNewOnlyEnabled; per-job via
+    // the BP_NEW_ONLY heurarm slot), so this provider no longer carries a switch for it.
 };
 
 // Fungus (Thallid / Saproling spore-token swarm). EXISTS FOR ONE HOOK: the winless certificate.

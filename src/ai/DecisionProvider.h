@@ -803,14 +803,9 @@ public:
     // and had ZERO before it existed, so nothing else can be filtered. Default false ->
     // byte-identical. See docs/design/equipment-etb-draw-breakpoint.md.
     virtual bool CondemnsConsideredAtBreakpoint() const { return false; }
-
-    // NewOnlyBreakpointContinuations -- the per-deck route for MTG_BP_NEW_ONLY (TurnSolver's
-    // BpDeriveContinuationList): a breakpoint emits only continuations that USE a card that arrived
-    // at it. A continuation built from cards that were already in hand is the sibling base plan
-    // that cast them with an EMPTY continuation, so it is enumerated once there and not again here.
-    // Per-deck for the same reason as the hook above: it changes play wherever a breakpoint fires,
-    // so a deck adopts it on its own paired measurement. Default false -> byte-identical.
-    virtual bool NewOnlyBreakpointContinuations() const { return false; }
+    // (The new-only breakpoint continuation rule -- MTG_BP_NEW_ONLY -- was a per-deck hook here
+    // while Snow measured it; it is global and default ON since 2026-09-22, see TurnSolver's
+    // BpNewOnlyEnabled.)
 
     // ActivationOrderRank -- relative order of this card's BOARD ACTIVATION within the trailing
     // activation pass (LOWER = activated earlier). 0 = no opinion.

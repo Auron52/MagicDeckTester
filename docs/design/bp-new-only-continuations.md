@@ -518,6 +518,7 @@ board), `MTG_BP5_TRACE=1` (`[bp5]` per site-5 consultation: choice, eligibility,
 | 7 | 701403, 700799 | every explicit trick target was the Hierarch the payment must tap; the Soldiers a same-plan Heroism makes have no number at enumeration | cast-time target `kTrickBestOwnTarget` resolved by `FindBestOwnAttacker` in the shared resolver; REPLACES the explicit target when the pre-plan best attacker is a mana dork (adding it instead cost 1.32x and starved the budget) |
 | 8 | 701706, 700096 | fix 7's target resolved after payment tapped the only creature, found no ATTACKER and fizzled the whole trick, draw included | `FindBestOwnCreature` floor: a tapped creature is a legal target; only no creature at all fizzles |
 | 9 | smoke d0 (greedy) +0.032 | fix 7's "no attacker" extra variant was enumerated in subsets that cast NO body: `{Gold Rush@best}` alone on an empty T2 board, picked by the greedy for its own-pump value, fizzled -- no Treasure. The searched tiers never chose it (the rollout sees the fizzle) but paid to enumerate it | `SubsetHasMissingTrickTarget` rejects the variant in a subset without a body-making cast when no attacker exists (board fact once per enumeration in `SubsetFilterPre`) |
+| 10 | regression d3/d5 s3003 gi97 (seed 3100, 4 -> 8) | LOCKSTEP: the replay derived its payment traits from one nesting level of the record (`mana_casts=1`, Treasure held, Anger paid off the pumped Hierarch) where the rollout had paid under the whole planned continuation (`mana_casts=2`, Treasure cracked, 15-power attack) | the record carries the scope it was paid under (`rec_mana_casts` / `rec_pump_target`; `rollout-executor-lockstep.md` #8) |
 
 ### Measured (Mirrorwing, shipped d5/b20, paired: 4 x 500 games 20-life + 2 x 500 2HG)
 
@@ -563,22 +564,57 @@ slot before rank 0 in the waves.
 
 ## Status
 
-BUILT on the user's rule with the activation half as clarified ("an ability that was not previously
-available"), DEFAULT OFF, flag-off byte-identical suite-wide (smoke 87/87, changed 0, on both cuts).
-The per-deck route for Snow (`SnowProvider::NewOnlyBreakpointContinuations`) is in the tree,
-**staged off** (`MTG_SNOW_BP_NEW_ONLY`, default 0); flipping its default adopts it and calls for a
-rebaseline of Snow's smoke and regression keys.
+**ADOPTED GLOBALLY 2026-09-22** under the user's quality-and-speed rule (adopt when better or
+neutral on both quality and speed and no win is made unreachable; discard when worse; bring a
+net-positive trade to the user): `MTG_BP_NEW_ONLY`, `MTG_MINT_CREDIT_EXACT` and
+`MTG_BP_REPLAY_COST` all default ON, in one adoption. The per-deck Snow route
+(`MTG_SNOW_BP_NEW_ONLY`) and the new-only filter's "needs a minted Treasure" keep are deleted; the
+lever's `=0` forms are the A/B hatches; `MTG_BP_MINT_SITE` stays as the audit arm.
 
-**Not yet adopted -- the re-measurement on the fixed engine is complete and the call is the
-user's.** The pre-fix trade-off (a d5 win against a d3 loss) is void: the d3 loss was the enumerator
-hole, now closed (af84217a). On the fixed engine the route is -0.0070 +/- 0.0022 at d5/b20 (17 / 3,
-p = 0.003), -0.0010 +/- 0.0022 at d3/b10 (11 / 9), at 0.93x / 0.90x units, 0.45x at d2/b0 and
-0.37-0.86x in the label regime with every label identical, and it moves one suite score (regression
-d3 s3003, one game, churn). Flipping `MTG_SNOW_BP_NEW_ONLY` to default on adopts it; Snow's eight
-keys then need one more accept. The enumerator fix itself is adopted (default on, a correctness fix
-under the user's ruling) and its rebaseline of Snow's keys and FiveColour's smoke d0 key is
-recorded in the section above. Two further things to know: the filter keys only
-`ActivatePermAbility` (every Snow activation; other kinds are kept, so another deck adopting it gets
-less of the saving until its kinds are keyed), and site 9 still opens only for permanents that
-entered this turn, which is narrower than the principle the clarification states (the other agent
-owns that side).
+The evidence, all on one binary against its own flag-off:
+
+* Mirrorwing paired 3,000 at shipped settings (the deck the mint credit exists for): lean
+  -0.043 (84 / 1) 20-life and -0.061 (64 / 3) 2HG at 0.92x units; with new-only -0.0445 (87 / 1)
+  and -0.062 (67 / 5) at 0.83x; lean == audit.
+* Smoke tier: 10 keys better, 0 worse, 8 digest-only at 1.02x case time. Regression tier: 11
+  better, 4 worse, 20 digest-only, game-weighted -0.0013 at 1.11x summed case time (per-case ms
+  in a pooled batch is scheduling, not compute: the hinata d0 cell that read 6.85x takes 0.2 s
+  either way; the batch makespans were 100 s both).
+* Snow's own record above (-0.0070 at d5/b20, 0.45x-0.93x units) stands; its eight keys move
+  digest-only at identical scores under the global flip.
+
+The regression tier's four worse keys were root-caused before the accept. hinata d3 s2002 gi66
+(seed 2068, and its 2HG twin) has two parts. The by-name arrival rule read a second drawn Reality
+Spasm as old when the main-2 kill `{Spasm, Spasm, Crackle}` needed both copies (the staged copy
+from Soulfire's exile and the copy Ponder then drew; no sibling base plan has two) -- fixed by the
+COUNT-AWARE arrival test (a name cast more times than the old hand holds copies is an arrival),
+which the executor's main-2 derivation now keeps (`KEEP {Crackle, Spasm, Spasm} <new>` in the
+`MTG_BP_NEW_ONLY_TRACE=5` read). The game's own 5 -> 6 is NOT that drop, though: it is a
+TIE-BREAK ARTIFACT at T5 main 1. `MTG_FSW_TRACE` shows every T5 plan projecting a T6 win in BOTH
+arms, at b10 and at b160 (no `tail=5` anywhere: the search never sees the main-2 kill from main
+1). Flag-off wins T5 because its first-ordered plan `{Island, Ponder}` carries the CHAIN-SLOT
+greedy continuation that casts the old Soulfire Eruption in main 1 (`after=15`), and the real
+main-2 root, with the seven staged cards in hand, then finds the kill. On the arm that
+continuation is an old card and is dropped, correctly; the equivalent base plan `{Island, Ponder,
+Soulfire}` is in the list at the same T6 projection but later in order (Soulfire's greedy plan
+value is 0, so the plan with it never outranks the plan without), and the strict `<` on the tail
+keeps the first. The win is reachable; the tie-break does not pick it. That is a search
+tie-break question (prefer the plan that does more at an equal projection, or give a seven-card
+dig a plan value), recorded below, not a new-only defect. The other hinata movers are
+draw-divergent (a fetch/shuffle resolved differently: variance, not a line lost); th d5 s3003
+gi164 recovers at 4x budget (churn).
+The audit also surfaced lockstep #8 (`rollout-executor-lockstep.md`): the replay's payment traits
+covered one nesting level of the record where the rollout's covered the whole planned continuation
+-- Mirrorwing seed 3100's committed T4 kill realised nothing -- fixed alongside.
+
+Still open, recorded here rather than chased: 700215 (the fan-out cap, above), the equal-projection
+tie-break (hinata 2068 above: flag-off "does more" through the chain slot's greedy where the
+search cannot tell, the arm "does less" because the first-ordered plan wins a tied tail -- a
+general search change with its own measurement, and Soulfire Eruption's plan value of 0 is the
+Hinata-specific half), three 2HG games in the lean's worse list, the standalone-vs-batch disagreement on a few seeds (a cross-game memo effect
+in one process; classify with the harness's own numbers), the prepay generic-placeholder laundering
+(`prepay-generic-placeholder-laundering.md`, a shipped-arm illegal line that flatters flag-off on
+Hinata), and site 9's entered-this-turn gate (the other agent's side). Two things to know when
+extending: the filter keys only `ActivatePermAbility` (other activation kinds are kept, so a deck
+that leans on one gets less of the saving until its kinds are keyed), and the "no attacker"
+cast-time trick target is legal only in a subset that casts a body.

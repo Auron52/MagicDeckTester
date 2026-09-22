@@ -902,8 +902,11 @@ inline bool FrontlineTriggerFirst()
 //   "Otherwise we need to randomly open breakpoints on treasure creation and worry about lines
 //   that we already deleted."
 //
-// What this lever changes (DEFAULT OFF while measured -> byte-identical off; heurarm slot so one
-// pooled batch carries every arm):
+// What this lever changes (DEFAULT ON since 2026-09-22 -- adopted under the user's quality+speed
+// rule on the v21 build: Mirrorwing paired 3,000 at shipped settings -0.043 (84 / 1) 20-life,
+// -0.061 (64 / 3) 2HG at 0.92x units; smoke tier 4 keys better / 0 worse / 3 digest-only at
+// 0.99x case time, lean == audit; =0 is the A/B hatch; heurarm slot so one pooled batch carries
+// every arm):
 //   1. EMISSION stamps Action::mint_gain = the EXACT Treasure count a solo-target trick's cast will
 //      realise on the current board (SoloTrickInstances: the magnet fan and the Frontline Heroism
 //      copies, per target -- the count ResolveSoloTargetTrick produces), where the shipped credit
@@ -941,7 +944,7 @@ inline bool FrontlineTriggerFirst()
 // enumerate. See docs/design/bp-new-only-continuations.md ("Audit route").
 inline bool MintCreditExactOn()
 {
-    static const bool env_on = EnvOn("MTG_MINT_CREDIT_EXACT");
+    static const bool env_on = EnvOn("MTG_MINT_CREDIT_EXACT", true);
     return heurarm::Flag(heurarm::MINT_CREDIT_EXACT, env_on);
 }
 inline bool BpMintSiteOn()
@@ -970,11 +973,12 @@ inline bool MintPayloadOpensBreakpoint()
 // the pumped Elvish Mystic to attack alone for exactly lethal. Committed T4 kill, realised no win.
 // Every committed continuation with >= 2 mana casts and an untapped pay-sac source pays in two
 // different worlds. The fix stamps the paid cost (the apply's effective cost) onto the record,
-// which only the traits builder reads (replay re-derives the cost from the card). DEFAULT OFF
-// while measured -> byte-identical off; heurarm slot for the pooled batch.
+// which only the traits builder reads (replay re-derives the cost from the card). DEFAULT ON
+// since 2026-09-22 (adopted with MTG_MINT_CREDIT_EXACT; byte-identical on every smoke key on its
+// own, antilife included); =0 is the A/B hatch; heurarm slot for the pooled batch.
 inline bool BpReplayCostOn()
 {
-    static const bool env_on = EnvOn("MTG_BP_REPLAY_COST");
+    static const bool env_on = EnvOn("MTG_BP_REPLAY_COST", true);
     return heurarm::Flag(heurarm::BP_REPLAY_COST, env_on);
 }
 

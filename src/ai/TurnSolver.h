@@ -511,6 +511,17 @@ struct Action
     // non-draw cards and for decks/turns with no breakpoint. See
     // project-full-depth-search (TH oracle class).
     std::vector<Action> breakpoint_casts;
+    // LOCKSTEP #8 (MTG_BP_REPLAY_COST; docs/design/rollout-executor-lockstep.md): the PlanTraits
+    // the rollout PAID this recorded cast under -- its scope's mana_casts and the pump-target hold
+    // that was live. The replay computes its traits from the records of ONE nesting level, but the
+    // rollout's scope was the whole continuation it planned: a two-cast continuation whose first
+    // cast opens a nested breakpoint realises the second cast INSIDE that nest, so the record nests
+    // it and the replay's outer level reads mana_casts=1 where the rollout paid under 2 -- the
+    // one-shot hold then fires only on the replay side (Mirrorwing seed 3100 T4: Anger paid off
+    // the pumped Hierarch instead of the Treasure, five pumps realised nothing; committed T4 kill,
+    // realised no win). 0 = not recorded (legacy record / lever off): the replay keeps its own.
+    int rec_mana_casts  = 0;
+    int rec_pump_target = 0;
 };
 
 // Finds the optimal set of spells to cast in one main phase by exhaustive
@@ -1117,10 +1128,10 @@ public:
     // the board to answer. Callers on the cast hot path all have it.
     static bool BreakpointHandSnapshotWanted(const GameState& state);
 
-    // MTG_BP_NEW_ONLY, or this deck's provider opting in (NewOnlyBreakpointContinuations): a
-    // breakpoint emits only continuations that use a card that arrived there. Public because the
-    // executor's resolve_draw_breakpoint binds the same snapshot under the same condition -- the
-    // lockstep pair -- and the reader lives with the filter in TurnSolver.cpp.
+    // MTG_BP_NEW_ONLY (default ON since 2026-09-22): a breakpoint emits only continuations that
+    // use a card that arrived there. Public because the executor's resolve_draw_breakpoint binds
+    // the same snapshot under the same condition -- the lockstep pair -- and the reader lives with
+    // the filter in TurnSolver.cpp.
     static bool NewOnlyBreakpointContinuationsActive(const GameState& state);
     // ...and the activations that were AVAILABLE when the phase's plan started (USER 2026-09-21:
     // a continuation's activation is new iff it "activates an ability that was not previously

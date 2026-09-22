@@ -664,7 +664,6 @@ static std::atomic<long long> g_bp_newonly_dropped{0};
 static std::atomic<long long> g_bp_newonly_kept_new{0};
 static std::atomic<long long> g_bp_newonly_kept_plan{0};
 static std::atomic<long long> g_bp_newonly_kept_act{0};      // kept by a newly AVAILABLE activation
-static std::atomic<long long> g_bp_newonly_kept_mana{0};     // kept because its casts NEED a source minted this turn
 static std::atomic<long long> g_bp_newonly_kept_unknown{0};  // kept because the kind is not keyed
 static bool BpCondemnActivationEnabled();   // defined with the rule, next to the other condemn flags
 static std::atomic<long long> g_bp_cond_mark_in_window{0};  // condemned entries at rank < W
@@ -1190,7 +1189,6 @@ namespace
                           << " drop_rate=" << (ns ? static_cast<double>(nd) / ns : 0.0)
                           << " kept_new=" << g_bp_newonly_kept_new.load()
                           << " kept_act=" << g_bp_newonly_kept_act.load()
-                          << " kept_mana=" << g_bp_newonly_kept_mana.load()
                           << " kept_unknown=" << g_bp_newonly_kept_unknown.load()
                           << " kept_plan=" << g_bp_newonly_kept_plan.load() << "\n";
             }
@@ -3492,16 +3490,23 @@ static bool BpClassifyActive(const GameState& state)
 // WHY IT IS COST AND NOT A QUALITY PRUNE: Snow's continuation lists average 8.1 entries at
 // snow_look_top with the wave walker applying every rank; 60% of those applies land on a state a
 // sibling already reached (dup_w0 26%, dup_cross 26% -- the [bp-waves] probe, seed 901283). Those
-// are the old-card continuations. Per-deck (NewOnlyBreakpointContinuations) because it changes
-// which continuation each bp_choice indexes on every deck with a breakpoint; DEFAULT OFF.
+// are the old-card continuations.
+//
+// DEFAULT ON EVERYWHERE since 2026-09-22 (the per-deck Snow route it started as is gone). Adopted
+// under the user's quality+speed rule together with MTG_MINT_CREDIT_EXACT, whose credit is what
+// made the rule sound on a Treasure deck: smoke tier on the v21 build vs flag-off, lever + this =
+// 10 keys better / 0 worse / 8 digest-only (auras, creature_giving, critter, hinata, kitty,
+// mirrorwing, snow) at 1.02x case time; Mirrorwing paired 3,000 at shipped settings -0.0445
+// (87 / 1) 20-life, -0.062 (67 / 5) 2HG at 0.83x units; Snow's own record is in
+// docs/design/bp-new-only-continuations.md. =0 is the A/B hatch; per-job via the heurarm slot.
 static bool BpNewOnlyEnabled()
 {
-    static const bool on = EnvOn("MTG_BP_NEW_ONLY");
+    static const bool on = EnvOn("MTG_BP_NEW_ONLY", true);
     return heurarm::Flag(heurarm::BP_NEW_ONLY, on);
 }
-static bool BpNewOnlyActive(const GameState& state)
+static bool BpNewOnlyActive(const GameState&)
 {
-    return BpNewOnlyEnabled() || ResolveProvider(state).NewOnlyBreakpointContinuations();
+    return BpNewOnlyEnabled();
 }
 bool TurnSolver::NewOnlyBreakpointContinuationsActive(const GameState& state)
 {
@@ -26041,7 +26046,17 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
             // on the replay side and held the Treasure the rollout had cracked (mirrorwing 700473
             // T4: committed kill, realised nothing). The replay re-derives the cost from the card;
             // only the traits builder reads this field.
-            if (BpReplayCostOn()) { rec.cost = ec; }
+            if (BpReplayCostOn())
+            {
+                rec.cost = ec;
+                // ...and the scope it was PAID under (Action::rec_mana_casts / rec_pump_target):
+                // the live traits are the continuation the rollout planned, which may be wider
+                // than the records at this nesting level (a nested breakpoint realises the
+                // planned tail one level down). The replay installs these instead of re-deriving
+                // them from a narrower record set -- seed 3100 T4, see the field's note.
+                if (const PlanTraits* pt = CurrentPlanTraits()) { rec.rec_mana_casts = pt->mana_casts; }
+                rec.rec_pump_target = g_tap_keep_last_card;
+            }
             sink_stack.back()->push_back(rec);
             my_bp_sink = &sink_stack.back()->back().breakpoint_casts;
         }
@@ -49068,64 +49083,17 @@ static std::vector<TurnSolver::Plan> BpDeriveContinuationList(const GameState& s
         // Treasure that was already on the board when the plan started is a §2a source the base
         // enumerator prices, so it reads as old. MTG_BP_NEW_ONLY_MANA=0 is the A/B hatch (the
         // rule as it stood before this half existed).
-        static const bool s_newonly_mana = EnvOn("MTG_BP_NEW_ONLY_MANA", true);
-        // MTG_MINT_CREDIT_EXACT retires this half: the mint is credited at the base, so a
-        // continuation that spends it on an ORIGINAL-hand card is a base plan's line and the USER's
-        // rule drops it ("we should not need to reconsider things from the original hand"). A
-        // drawn mana source is a new card and keeps its line on the uses_new ground above.
-        int new_paysac = 0;
-        if (s_newonly_mana && !MintCreditExactOn())
-        {
-            for (const Permanent& q : state.battlefield)
-            {
-                if (q.controller_index != state.active_player_index || q.tapped || !q.entered_this_turn)
-                { continue; }
-                const CardDefinition* qd = CardDatabase::Instance().LookupCached(q.card);
-                if (qd != nullptr && IsPaySacSource(*qd)) { ++new_paysac; }
-            }
-        }
-        std::map<std::string, ManaPool> old_pools;   // keyed by the continuation's land drop ("" = none)
-        auto old_pool_for = [&](const TurnSolver::Plan& p) -> const ManaPool&
-        {
-            const bool with_land = p.land_decided && !p.land_to_play.empty();
-            const std::string key = with_land
-                ? p.land_to_play + "|" + p.fetch_target + "|" + p.land_face : std::string{};
-            auto it = old_pools.find(key);
-            if (it != old_pools.end()) { return it->second; }
-            GameState copy = state;
-            for (Permanent& q : copy.battlefield)
-            {
-                if (q.controller_index != copy.active_player_index || q.tapped || !q.entered_this_turn)
-                { continue; }
-                const CardDefinition* qd = CardDatabase::Instance().LookupCached(q.card);
-                if (qd != nullptr && IsPaySacSource(*qd)) { q.tapped = true; }   // held back
-            }
-            ManaPool pool;   // a land drop the copy refuses leaves the pool empty: unpayable = new
-            if (!with_land || PlayLandByName(copy, p.land_to_play, p.fetch_target, true, p.land_face))
-            {
-                pool = AvailableManaPool(copy);
-                if (!FloatLeftoverManaEnabled()) { pool.AddPool(copy.floating_mana); }
-            }
-            return old_pools.emplace(key, pool).first->second;
-        };
-        // 1 = needs minted mana (new), 0 = payable from the base's sources (old), -1 = unpriceable.
-        auto needs_minted_mana = [&](const TurnSolver::Plan& p) -> int
-        {
-            ManaCost combined;
-            bool any = false;
-            for (const Action& a : p.actions)
-            {
-                if (a.kind == Action::Kind::PlayLand) { continue; }
-                if (a.kind != Action::Kind::CastFromHand) { return -1; }
-                if (a.alt_cost || a.free_cast || a.chosen_x > 0 || a.splice_count > 0
-                    || a.replicate_count > 0 || a.bestow) { return -1; }
-                AddCostCarryingHybrids(combined, a.cost);
-                any = true;
-            }
-            if (!any) { return 0; }
-            return old_pool_for(p).CanPay(combined) ? 0 : 1;
-        };
-        long long kept_new = 0, kept_act = 0, kept_mana = 0, kept_unknown = 0, kept_plan = 0, dropped = 0;
+        //
+        // RETIRED 2026-09-22 by MTG_MINT_CREDIT_EXACT (default ON): the mint is credited at the base
+        // at its exact width, so a continuation that spends it on an ORIGINAL-hand card is a base
+        // plan's line and the USER's rule drops it ("we should not need to reconsider things from
+        // the original hand"). The "needs a source minted this turn" keep that stood here (the
+        // MTG_BP_NEW_ONLY_MANA half: hold back the entered-this-turn pay-sac sources on a scratch
+        // copy, replay the continuation's land drop, CanPay the summed costs) reconsidered old-hand
+        // cards, which the user ruled the wrong layer -- *"the right fix might be to credit it
+        // correctly instead"*. A drawn mana source is a new card and keeps its line on the uses_new
+        // ground above.
+        long long kept_new = 0, kept_act = 0, kept_unknown = 0, kept_plan = 0, dropped = 0;
         const char* last_why = "";   // the trace's verdict reason (set by keep)
         // THE HAND A PLAN'S hand_index INDEXES. A land-carrying plan was enumerated on a COPY of the
         // state with its land already played (EnumeratePlansWithLandUncached: PlayLandByName(copy)
@@ -49226,16 +49194,34 @@ static std::vector<TurnSolver::Plan> BpDeriveContinuationList(const GameState& s
                     break;
                 }
             }
+            // COUNT-AWARE ARRIVAL (2026-09-22, Hinata seed 2068 T5 main 2, regression d3 s2002
+            // gi66 and its 2HG twin). The by-name rule above says a drawn copy of a name the plan
+            // DECLINED is not new -- true for a continuation that casts ONE copy (the sibling
+            // base plan that cast the declined copy exists), FALSE when it casts MORE copies than
+            // the old hand held: main 2's Ponder drew a second Reality Spasm beside the staged
+            // first (Soulfire's exile), and {Spasm, Spasm, Crackle} -- the T5 kill -- needs both;
+            // no sibling base plan has two. So a name cast more times than the old hand holds
+            // copies uses an arrived card. Evaluated only when the plan would otherwise be
+            // dropped (every other keep is cheaper). (That seed's own 5 -> 6 is a separate
+            // main-1 tie-break artifact, not this drop -- see bp-new-only-continuations.md.)
+            if (!uses_new && !new_act && !unknown && !plan_pending)
+            {
+                for (const Action& a : p.actions)
+                {
+                    if (a.kind != Action::Kind::CastFromHand) { continue; }
+                    int casts = 0, old = 0;
+                    for (const Action& b : p.actions)
+                    { if (b.kind == Action::Kind::CastFromHand && b.card_name == a.card_name) { ++casts; } }
+                    if (casts < 2) { continue; }   // one copy: the by-name rule stands (see above)
+                    for (const Card& c : ap.hand)
+                    { if (c.m_name == a.card_name && BpCardWasInHandBefore(c.m_number)) { ++old; } }
+                    if (casts > old) { uses_new = true; break; }
+                }
+            }
             if (uses_new)     { ++kept_new;     last_why = "new";     return true; }
             if (new_act)      { ++kept_act;     last_why = "act";     return true; }
             if (unknown)      { ++kept_unknown; last_why = "unknown"; return true; }
             if (plan_pending) { ++kept_plan;    last_why = "plan";    return true; }
-            if (new_paysac > 0)
-            {
-                const int r = needs_minted_mana(p);
-                if (r > 0) { ++kept_mana;    last_why = "mana";     return true; }
-                if (r < 0) { ++kept_unknown; last_why = "unpriced"; return true; }
-            }
             ++dropped;
             last_why = "";
             return false;
@@ -49258,8 +49244,7 @@ static std::vector<TurnSolver::Plan> BpDeriveContinuationList(const GameState& s
             for (const Card& c : ap.hand)
             { if (is_new_number(c.m_number)) { arrived += (arrived.empty() ? "" : ","); arrived += c.m_name.str(); } }
             std::cerr << "[bp-newonly] T" << state.turn_number << (is_pre_combat ? " main1" : " main2")
-                      << " list=" << plans.size() << " arrived=[" << arrived << "]"
-                      << " minted=" << new_paysac << "\n";
+                      << " list=" << plans.size() << " arrived=[" << arrived << "]\n";
         }
         std::vector<TurnSolver::Plan> survivors;
         survivors.reserve(plans.size());
@@ -49282,7 +49267,6 @@ static std::vector<TurnSolver::Plan> BpDeriveContinuationList(const GameState& s
             g_bp_newonly_dropped.fetch_add(dropped, std::memory_order_relaxed);
             g_bp_newonly_kept_new.fetch_add(kept_new, std::memory_order_relaxed);
             g_bp_newonly_kept_act.fetch_add(kept_act, std::memory_order_relaxed);
-            g_bp_newonly_kept_mana.fetch_add(kept_mana, std::memory_order_relaxed);
             g_bp_newonly_kept_unknown.fetch_add(kept_unknown, std::memory_order_relaxed);
             g_bp_newonly_kept_plan.fetch_add(kept_plan, std::memory_order_relaxed);
         }

@@ -50,7 +50,8 @@ hold different physical copies (#4 below was invisible until the trace showed `I
 | 4 | rollout did not stamp a played LAND's per-copy `m_number`; the executor always has | **FIXED** (below) |
 | 5 | Gamble's "discard a card at random" indexes the hand AS STORED | **built, opt-in, NOT default** (below) |
 | 6 | a cast recorded INSIDE a breakpoint continuation lost `chosen_float_color` / `enchant_target` | **FIXED** (below) |
-| 7 | a cast recorded INSIDE a breakpoint continuation carried no `cost`, so the executor's replay TRAITS read `mana_casts=0` and paid in a different world | **built behind `MTG_BP_REPLAY_COST`, default OFF while measured** (below) |
+| 7 | a cast recorded INSIDE a breakpoint continuation carried no `cost`, so the executor's replay TRAITS read `mana_casts=0` and paid in a different world | **FIXED** behind `MTG_BP_REPLAY_COST`, default ON since 2026-09-22 (below) |
+| 8 | the replay derives its traits from the records of ONE nesting level, but the rollout paid under the WHOLE continuation it planned -- a nested breakpoint realises the planned tail one level down, so the outer level's `mana_casts` reads 1 where the rollout paid under 2 and the one-shot hold fires only on the replay side | **FIXED** (below): the record carries the scope it was paid under |
 
 Rate per 500 games (seed 4004, 8 decks, 4000 games) after 1-4: **0 everywhere, Hinata included.**
 (Dragonstorm was 4-5 at the suite gate budgets before #1; Auras was 3 before #2; Hinata was 4 before
@@ -166,8 +167,42 @@ untapped pay-sac source pays in two different worlds; it surfaced here because t
 
 The fix stamps the paid cost (the apply's effective cost) onto the record. Only the traits builder
 reads it (the replay still re-derives the cost from the card), so the recorded script is unchanged.
-`MTG_BP_REPLAY_COST` (heurarm slot `BP_REPLAY_COST`), **default OFF while measured**, byte-identical
-off; it rides with `MTG_MINT_CREDIT_EXACT` in every mint-credit arm and is part of that adoption.
+`MTG_BP_REPLAY_COST` (heurarm slot `BP_REPLAY_COST`), **default ON since 2026-09-22** (adopted with
+`MTG_MINT_CREDIT_EXACT`; byte-identical on every smoke key on its own), `=0` the A/B hatch.
+
+## #8 — the replay's traits cover one nesting level; the rollout's covered the whole planned continuation (2026-09-22)
+
+Found by the regression tier's per-game audit on the adoption binary: Mirrorwing regression d3
+and d5 s3003 gi97 (seed 3100) went 4 -> 8 in both cells. `[fd]` shows a two-phase committed line
+(T3 Gold Rush + Anger + Hierarch; T4 Forest + Oracle's + Fists + Fists) predicting `opp_life=0` at
+T4, and the executor's T4 casting all five tricks with no combat at all.
+
+`MTG_BP_TRACE` on both sides:
+
+```
+[bp-traits] apply T4 cont: mana_casts=2 pump_target=39 acts=2     <- rollout: {Anger, Draught}
+[bp-traits] exec  T4 cont: mana_casts=1 pump_target=39 acts=1     <- replay:  {Anger}
+[bp-traits] exec  T4 cont: mana_casts=1 pump_target=40 acts=1     <- replay:   nested {Draught}
+```
+
+The rollout's continuation after the second Fists' draw was `{Anger, Draught}`. Anger's own draw
+opens a nested breakpoint whose inline re-solve casts Draught, so the RECORD nests Draught under
+Anger and the outer level holds one cast. The replay derives `PlanTraits` from each level's records:
+`mana_casts = 1`, which arms the per-payment one-shot hold (`OneShotHoldMask` fires on `< 2`), so
+the executor held the Treasure and paid Anger off Hierarch #39 -- the creature every pump had
+targeted -- then Draught off #40. The rollout, under `mana_casts = 2`, had no hold: it paid Anger
+with the Treasure and kept #39 untapped for a 15-power exalted attack.
+
+`MTG_EXEC_TAP_TRACE` shows the executor's payments verbatim: `Ancestral Anger tapped: Ignoble
+Hierarch` then `[trick] Ancestral Anger -> Ignoble Hierarch#39(tapped)`, and the Treasure still
+untapped at end of turn.
+
+Fix: the record carries the scope the rollout paid it under -- `Action::rec_mana_casts` and
+`Action::rec_pump_target`, stamped from the live `CurrentPlanTraits()` / `g_tap_keep_last_card` at
+record time (under `MTG_BP_REPLAY_COST`), and `replay_recorded` installs the recorded values over
+its derived ones (an unrecorded 0 keeps the derived value, so legacy records replay as before).
+The rollout's inline nested re-solve pays under the OUTER scope (it installs none of its own), and
+the record captures exactly that, so the nested Draught replays under `mana_casts = 2` too.
 
 ## Both remaining leads: ROOT-CAUSED, and NEITHER is a lockstep bug
 
