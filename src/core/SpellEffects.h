@@ -10420,6 +10420,16 @@ inline bool IsSoloTargetTrick(const CardParams& p) { return p.solo_target_trick;
 // (never a real m_number) keeps every existing `enchant_target > 0` aura/trick guard untouched.
 inline constexpr int kTrickOpponentTarget = -1;
 
+// Action::enchant_target sentinel for a solo-target trick aimed at "the best own attacker WHEN THE
+// TRICK RESOLVES" (MTG_MINT_CREDIT_EXACT). Bodies the same plan makes before the trick -- Frontline
+// Heroism's ETB Soldier, the Soldier its copy of an earlier trick lands on, a Libation token -- do
+// not exist at enumeration, so no explicit m_number can name them; the shipped route re-aims at them
+// in a post-mint breakpoint re-solve, and under the lever (no Treasure-only breakpoint) the base plan
+// has to say it itself. Resolved by FindBestOwnAttacker in ResolveSoloTargetTrick -- one shared
+// resolver, so the rollout and the executor pick the same body (lockstep). Negative like the
+// opponent sentinel, so every `enchant_target > 0` aura/trick guard stays untouched.
+inline constexpr int kTrickBestOwnTarget = -2;
+
 // A real CR-121 DRAW of n cards for `controller`: counts Player::cards_drawn_this_turn (the Fists
 // of Flame pump reads it), feeds the viewer draw sink, and flags deck-out (CR 104.3c) exactly as
 // ResolveDrawSpell does.
@@ -10647,7 +10657,17 @@ inline bool ResolveSoloTargetTrick(GameState& state, int controller, const CardD
         ApplyTrickPayload(state, controller, def, ti, chosen_x);
         return true;
     }
-    if (target_number != 0)
+    // kTrickBestOwnTarget: the best own attacker on the board NOW -- after every body the plan
+    // put down ahead of this cast (see the sentinel's note). The same picker the plan traits and
+    // the Invigorate auto-target use, so a tapped-for-mana dork is never chosen over a hasty
+    // Soldier. No attacker at all -> the spell fizzles, exactly as a vanished declared target
+    // does (unreachable in a fresh plan: the variant is emitted only where a body can arrive).
+    if (target_number == kTrickBestOwnTarget)
+    {
+        ti = FindBestOwnAttacker(state, controller);
+        if (ti < 0) { return false; }
+    }
+    else if (target_number != 0)
     {
         for (int i = 0; i < static_cast<int>(state.battlefield.size()); ++i)
         {
@@ -18069,6 +18089,23 @@ inline int MintedTreasuresForCast(const GameState& state, int controller, const 
     if (def.params.creates_treasures <= 0) { return 0; }
     return def.params.creates_treasures
          * SoloTrickInstances(state, controller, def, target_number, strive_extras);
+}
+
+// MTG_MINT_CREDIT_EXACT: the EXTRA Treasures a minter gets from Frontline Heroisms cast IN THE SAME
+// PLAN ahead of it. The emission stamp above counts only the Heroisms live on the pre-plan board,
+// and a plan that casts Heroism first (it is an enabler: hoisted ahead of the ordered set) then
+// Gold Rush gets one more copy -- and one more Treasure -- per Heroism. One copy per solo-target
+// instance, on exactly the shape the trigger copies (a single own target, no strive), so
+// creates_treasures x copies. Mirrorwing seed 701403 T3: {Heroism, Gold Rush, Draught, Draught} is
+// seven pips on five board mana plus TWO minted Treasures; credited at one, the kill was never
+// enumerated.
+inline int SamePlanHeroismMint(const CardDefinition& def, int target_number, int strive_extras,
+                               int heroism_copies)
+{
+    if (heroism_copies <= 0 || def.params.creates_treasures <= 0
+        || !def.params.solo_target_trick) { return 0; }
+    if (target_number == 0 || target_number == kTrickOpponentTarget || strive_extras > 0) { return 0; }
+    return def.params.creates_treasures * heroism_copies;
 }
 
 // Is a Treasure minted THIS TURN spendable this turn on the current board? The enumeration-side

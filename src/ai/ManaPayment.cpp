@@ -1661,10 +1661,12 @@ static bool MintedTreasureSpendable(const GameState& state, const std::vector<Ac
 // That is safe here in a way it would not be at a payment site: a wrong answer picks a DIFFERENT
 // legal order, never an illegal one, because every rung of the ladder is an order the engine would
 // have been willing to execute anyway.
+// `hold` (MTG_MINT_CREDIT_EXACT): project as if this source were already tapped -- the pump
+// target the payment layer is holding (see the hold-aware pass in ApplyCastOrderRangeLadder).
 static int FirstUnpayablePos(const GameState& state, const std::vector<Action>& acts,
-                             const std::vector<int>& order)
+                             const std::vector<int>& order, const Permanent* hold = nullptr)
 {
-    ManaPool pool = AvailableManaPool(state);   // already includes the turn-scoped float
+    ManaPool pool = AvailableManaPool(state, hold);   // already includes the turn-scoped float
     for (int pos = 0; pos < static_cast<int>(order.size()); ++pos)
     {
         const Action& a = acts[order[pos]];
@@ -1696,10 +1698,15 @@ static int FirstUnpayablePos(const GameState& state, const std::vector<Action>& 
             const CardDefinition* d = a.def ? a.def : CardDatabase::Instance().Lookup(a.card_name);
             if (d && d->params.creates_treasures > 0 && MintedTreasureSpendable(state, acts))
             {
-                // MTG_MINT_CREDIT_EXACT: the exact width rides the Action (mint_gain, stamped at
-                // emission on the pre-plan board -- conservative about bodies this plan adds first,
-                // never optimistic). 0 with the lever off -> the base count as before.
-                const int n = a.mint_gain > 0 ? a.mint_gain : d->params.creates_treasures;
+                // MTG_MINT_CREDIT_EXACT: the exact width, re-read off the LIVE board (the ladder
+                // runs after the enabler pass, so a Heroism this plan cast ahead of the minter is
+                // on the battlefield here and its copy's Treasure counts -- SamePlanHeroismMint's
+                // apply-side twin). The stamp (mint_gain, pre-plan board) is only the lever test.
+                // 0 with the lever off -> the base count as before.
+                const int n = a.mint_gain > 0
+                            ? MintedTreasuresForCast(state, state.active_player_index, *d,
+                                                     a.enchant_target, a.soulfire_own_targets)
+                            : d->params.creates_treasures;
                 AddColorToPool(pool, std::string(), n);
             }
         }
@@ -1907,16 +1914,53 @@ void ApplyCastOrderRangeLadder(const GameState& state, const std::vector<Action>
     // Total demotion steps available bounds the walk (one step per iteration that fails).
     std::size_t max_steps = 1;
     for (int i : base) { max_steps += rungs[i].size() - 1; }
+
+    // HOLD-AWARE PROJECTION (MTG_MINT_CREDIT_EXACT). "Unpayable" above means "the whole untapped
+    // board cannot pay" -- so a line the board pays only by TAPPING THE PUMP TARGET reads as paying
+    // at its ideal rung, and the funding spell whose output would have spared that body is never
+    // walked. Mirrorwing seed 700628 T3, {Frontline Heroism, Gold Rush -> Mystic, Oracle's
+    // Restoration} on Forest + Needle(RR) + Forest + two Mystics: six board mana for six pips, so
+    // the reviewed order (Oracle's 14, Gold Rush 15) pays and Oracle's takes the last Forest;
+    // Gold Rush then has only the two Mystics and taps the target, which forfeits its own +6
+    // (17 damage where the mint breakpoint's Heroism-then-Gold-Rush order realises 23). Gold
+    // Rush first mints the Treasures that pay Oracle's and the drawn Draught, and the target stays
+    // up. The whole-turn prepay judges every hold rung the same way (and declines this line to
+    // the per-cast payer -- PP_MINT_HOLD); the ORDER is what has to change, so the ladder first
+    // walks against the board WITHOUT the held target and only falls back to the plain projection
+    // when no rung pays with the hold. Same "a wrong answer picks a DIFFERENT legal order" safety
+    // as FirstUnpayablePos itself: pass 1 is exactly today's walk. Scoped to a line that mints and
+    // may crack (MintLineCanCrack -- the only shape whose funding rung can spare the body) and to
+    // a target that is actually a mana source (else the hold changes nothing and pass 0 would just
+    // repeat pass 1). Lever off -> hold == nullptr -> the single plain pass, byte-identical.
+    const Permanent* hold = nullptr;
+    if (MintCreditExactOn() && PumpTargetHoldEnabled() && g_tap_keep_last_card != 0
+        && MintLineCanCrack(state, acts))
+    {
+        for (const Permanent& p : state.battlefield)
+        {
+            if (p.controller_index == state.active_player_index && !p.tapped
+                && p.card.m_number == g_tap_keep_last_card) { hold = &p; break; }
+        }
+        if (hold != nullptr
+            && AvailableManaPool(state, hold).Total() == AvailableManaPool(state).Total())
+        { hold = nullptr; }   // not a mana source: nothing to hold
+    }
+    for (int pass = (hold != nullptr ? 0 : 1); pass < 2; ++pass)
+    {
+    const Permanent* skip = (pass == 0) ? hold : nullptr;
+    std::fill(step.begin(), step.end(), 0);
     for (std::size_t rung = 0; rung < max_steps + 1; ++rung)
     {
         order = base;
         std::stable_sort(order.begin(), order.end(), [&](int x, int y)
         { return CastOrderLessRanked(state, acts[x], eff(x), acts[y], eff(y)); });
 
-        const int fail = FirstUnpayablePos(state, acts, order);
+        const int fail = FirstUnpayablePos(state, acts, order, skip);
         if (fail < 0)
         {
-            probe(rung == 0 ? "ideal order pays" : "stepped-down order pays");
+            probe(skip != nullptr
+                      ? (rung == 0 ? "ideal order pays (target held)" : "stepped-down order pays (target held)")
+                      : (rung == 0 ? "ideal order pays" : "stepped-down order pays"));
             return;   // this rung pays -- the most ideal order that does
         }
 
@@ -1955,11 +1999,15 @@ void ApplyCastOrderRangeLadder(const GameState& state, const std::vector<Action>
         if (victim < 0) { break; }   // nothing left to walk: this is the terminal rung
         if (s_probe)
         {
-            std::fprintf(stderr, "[order-range] turn=%d fail_pos=%d demote=%s %d->%d\n",
+            std::fprintf(stderr, "[order-range] turn=%d fail_pos=%d demote=%s %d->%d%s\n",
                          state.turn_number, fail, acts[victim].card_name.str().c_str(),
-                         eff(victim), rungs[victim][step[victim] + 1]);
+                         eff(victim), rungs[victim][step[victim] + 1],
+                         skip != nullptr ? " (target held)" : "");
         }
         ++step[victim];
+    }
+    // The held pass ended at its terminal rung: no order pays while the target is held, so the
+    // plain projection decides (pass 1) -- exactly the walk the line would have had without it.
     }
 }
 
@@ -3001,7 +3049,10 @@ static bool TapForCostSharedImpl(GameState& state, const ManaCost& cost_in, bool
                               | OneShotHoldMask(state) | PayloadReserveMask(state)
                               | ScarceColorHoldMask(state, cost_in)
                               | LineColorlessHoldMask(state, cost_in);
-    if (rmask != 0)
+    // One HELD attempt: pay with `mask` reserved; on failure restore everything the attempt
+    // touched (battlefield pay fields, float, the executor's accounting pool, the graveyard --
+    // a Deathrite tap's exile -- both lives and the opponent-lost-life flag) and report false.
+    auto held_attempt = [&](std::uint64_t mask, const char* tag) -> bool
     {
         const int a = state.active_player_index;
         PaySnapScratch<PermPaySnap> _bf_snap_scratch;                        // see PaySnapScratch
@@ -3017,17 +3068,48 @@ static bool TapForCostSharedImpl(GameState& state, const ManaCost& cost_in, bool
         const int  la  = state.players[a].life;
         const int  lo  = state.players[1 - a].life;
         const bool oll = state.opponent_lost_life_this_turn;
-        if (TapForCostSharedOnce(state, cost_in, for_creature, rmask, available, honor_legacy_cco))
+        if (TapForCostSharedOnce(state, cost_in, for_creature, mask, available, honor_legacy_cco))
         { return true; }
         RestorePayFields(state.battlefield, bf_snap);
         if (g_pay_snap_verify)
-        { VerifyPaySnapRestore(state.battlefield, bf_snap_full, "impl.rmask"); }
+        { VerifyPaySnapRestore(state.battlefield, bf_snap_full, tag); }
         state.floating_mana                = fm_snap;
         if (available) { *available = av_snap; }
         state.players[a].graveyard         = gy_snap;
         state.players[a].life              = la;
         state.players[1 - a].life          = lo;
         state.opponent_lost_life_this_turn = oll;
+        return false;
+    };
+    if (rmask != 0 && held_attempt(rmask, "impl.rmask")) { return true; }
+    // PUMP-TARGET NARROW RUNG (MTG_MINT_CREDIT_EXACT). The whole-turn prepay's reserve ladder
+    // retreats from "hold every dork" to "hold the projected pump target alone" before it
+    // releases everything (ReserveCreatureHold); this per-cast path had no such rung, so on a
+    // turn the prepay declines (a mint line -- PP_MINT_HOLD -- or any single-cast turn) a payment
+    // that needs ONE body's mana fell straight to the unrestricted greedy, whose equal-rank dork
+    // tie is battlefield order: the older Mystic, which is the body the trick targets. Mirrorwing
+    // seed 700628 T3: Gold Rush {1}{G} first (the hold-aware ladder above), Forest + two Mystics
+    // up, and the greedy tapped the target for the generic pip with an identical untargeted
+    // Mystic beside it -- the +6 the cast just paid for, forfeited by its own payment. Same
+    // reserve-then-fallback contract as the rung above: a payment that genuinely needs the target
+    // still gets it on the unrestricted retry. The backtracker already reaches for this body last
+    // (g_tap_keep_last_card's partition); this is the greedy's twin. Lever off -> byte-identical.
+    if (MintCreditExactOn() && PumpTargetHoldEnabled() && g_tap_keep_last_card != 0)
+    {
+        const int n = static_cast<int>(state.battlefield.size());
+        std::uint64_t narrow = 0;
+        for (int i = 0; i < n && i < 64; ++i)
+        {
+            const Permanent& p = state.battlefield[static_cast<std::size_t>(i)];
+            if (p.controller_index != state.active_player_index || p.tapped
+                || p.card.m_number != g_tap_keep_last_card) { continue; }
+            // Only a body that IS a mana source can be held (a Dragon target is never in the tap
+            // set, and holding it would just repeat the unrestricted attempt below).
+            const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+            if (d != nullptr && d->tmpl == CardTemplate::ManaDork) { narrow = 1ull << i; }
+            break;
+        }
+        if (narrow != 0 && narrow != rmask && held_attempt(narrow, "impl.narrow")) { return true; }
     }
     return TapForCostSharedOnce(state, cost_in, for_creature, /*reserved_mask=*/0, available,
                                 honor_legacy_cco);

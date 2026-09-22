@@ -14929,10 +14929,13 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
             // mana-coupling corners). Opened with the tricktarget family gate.
             const bool k_max_only = !DecisionUnpruned(UnprunedGate::TrickTarget)
                 && ResolveProvider(state).StriveCountMaxOnly(state, def);
+            // `plain`: emit the single-target (k=0) variant; false = STRIVE variants only, for a
+            // target whose plain form the cast-time pick replaces (best_dork_num, below).
             auto emit_with_strive = [&](int tgt_num, bool on_battlefield,
-                                        const std::string& hand_name = std::string())
+                                        const std::string& hand_name = std::string(),
+                                        bool plain = true)
             {
-                emit(tgt_num, 0, hand_name);
+                if (plain) { emit(tgt_num, 0, hand_name); }
                 if (!on_battlefield || !def.params.strive_cost.has_value()) { return; }
                 if (magnet_on_bf) { return; }   // fan-out dominates every strive count (above)
                 if (k_max_only)
@@ -14956,6 +14959,49 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
                     emit(tgt_num, k);
                 }
             };
+            // MTG_MINT_CREDIT_EXACT: the CAST-TIME target (kTrickBestOwnTarget -- "the best own
+            // attacker when this trick resolves", FindBestOwnAttacker in the shared resolver). The
+            // bodies this plan makes BEFORE the trick -- Frontline Heroism's ETB Soldier, the Soldier
+            // its copy of an earlier trick lands on -- do not exist here, so no explicit target can
+            // name them, and under the lever there is no post-mint breakpoint to re-aim at them the
+            // way the shipped route does. Mirrorwing seed 701403 T3, {Heroism, Gold Rush, Draught,
+            // Draught} on five board mana: every explicit target is the Hierarch, which the payment
+            // must tap, so the Draughts realise 14 where the Soldiers realise 26.
+            //
+            // Offered only where a body can arrive ahead of the trick -- a Heroism in hand or live
+            // (every trick after it makes a Soldier) -- and never with a magnet out, where the
+            // explicit magnet target dominates (fan-out). Two shapes:
+            //   * the pre-plan best attacker is a MANA DORK: the cast-time pick REPLACES that
+            //     explicit target (best_dork_num is skipped below). It is the shipped route's own
+            //     post-breakpoint re-aim -- the dork when it is still the best untapped body, the
+            //     Soldier when the payment tapped it -- so keeping both only doubled the plans:
+            //     measured 3,000 paired games at 1.29x the work for no quality the replacement
+            //     lacks, and the extra plans starved the fixed play budget (14 worse 2HG games).
+            //   * NO attacker at all: Heroism's own Soldier is the only body the trick can use, and
+            //     nothing explicit names it -- an extra variant (there is no twin to replace).
+            // Priced conservatively (no fan: SoloTrickInstances sees no target).
+            int  best_dork_num  = 0;
+            bool best_is_none   = false;
+            if (MintCreditExactOn() && !magnet_on_bf)
+            {
+                bool body_maker = HeroismCopiesLive(state, state.active_player_index) > 0;
+                for (std::size_t k = 0; !body_maker && k < ap.hand.size(); ++k)
+                {
+                    const CardDefinition* hd = CardDatabase::Instance().LookupCached(ap.hand[k]);
+                    if (hd && hd->params.frontline_copy_tokens > 0) { body_maker = true; }
+                }
+                if (body_maker)
+                {
+                    const int best = FindBestOwnAttacker(state, state.active_player_index);
+                    if (best < 0) { best_is_none = true; }
+                    else
+                    {
+                        const Permanent& bp_ = state.battlefield[static_cast<std::size_t>(best)];
+                        const CardDefinition* bd = CardDatabase::Instance().LookupCached(bp_.card);
+                        if (bd != nullptr && bd->tmpl == CardTemplate::ManaDork) { best_dork_num = bp_.card.m_number; }
+                    }
+                }
+            }
             // Provider narrowing (MirrorwingProvider::TrickTargetCandidates -- the 5f perf prune,
             // opened by MTG_UNPRUNED/tricktarget). Empty = no narrowing (enumerate all legal).
             std::vector<int> narrow;
@@ -14977,7 +15023,9 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
                         for (const Card& hc : ap.hand)
                         { if (hc.m_number == num) { hn = hc.m_name.str(); break; } }
                     }
-                    emit_with_strive(num, on_bf, hn);
+                    // The best dork's plain form is replaced by the cast-time pick (above); its
+                    // strive variants (Twinflame) keep the explicit target.
+                    emit_with_strive(num, on_bf, hn, /*plain=*/num != best_dork_num);
                 }
             }
             else
@@ -14994,7 +15042,10 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
                           + (p.temp_haste ? "h" : "") + (p.temp_lifelink ? "L" : "")
                           + "/c" + std::to_string(p.counters.size());
                 if (!seen_equiv.insert(eq).second) { continue; }
-                emit_with_strive(p.card.m_number, true);
+                // The best dork's plain form is replaced by the cast-time pick (above); its strive
+                // variants (Twinflame) keep the explicit target.
+                emit_with_strive(p.card.m_number, true, std::string(),
+                                 /*plain=*/p.card.m_number != best_dork_num);
             }
             // Same-plan hand-creature targets (deduped by name; the subset filter + creature-
             // before-trick canonical order make these the "cast it, then point the trick at it"
@@ -15045,6 +15096,8 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
                     break;
                 }
             }
+            // The cast-time target (see best_dork_num / best_is_none above the target loops).
+            if (best_dork_num != 0 || best_is_none) { emit(kTrickBestOwnTarget, 0); }
             // USER rule (2026-08-12): with a magnet out, the untargeted "bank the Treasure, no
             // trigger" variant is dominated by targeting the magnet (same mana, strictly more
             // Treasures + pumps) -- suppressed under the same tricktarget gate (magnet_on_bf is
@@ -19723,6 +19776,31 @@ static int LandAuraBoundCredit(const Action& a)
     return SeqLandAuraEnabled() ? a.def->params.land_aura_extra_mana : 0;
 }
 
+// MTG_MINT_CREDIT_EXACT -- SAME-PLAN HEROISM WIDTH (see SamePlanHeroismMint). The Frontline
+// Heroism copies a candidate list could put on the board before a minter resolves: every Heroism
+// it holds (the enabler hoist casts them ahead of the ordered set). Summed over ALL candidates it
+// is the loosest bound, which is what the odometer gates want (an upper bound can only admit more
+// subsets to consider(), where the pricing twins credit only the Heroisms the SUBSET casts and
+// only when the minter is not itself hoisted ahead of them). Zero for every deck without one.
+static int PlanHeroismCopies(const std::vector<Action>& cands)
+{
+    int n = 0;
+    for (const Action& a : cands)
+    {
+        if (a.kind != Action::Kind::CastFromHand || a.alt_cost) { continue; }
+        const CardDefinition* d = a.def ? a.def : CardDatabase::Instance().Lookup(a.card_name);
+        if (d != nullptr && d->params.frontline_copy_tokens > 0) { n += d->params.frontline_copy_tokens; }
+    }
+    return n;
+}
+static int MintHeroismBonus(const Action& a, int heroism_copies)
+{
+    if (a.mint_gain <= 0 || heroism_copies <= 0) { return 0; }   // 0 with the lever off
+    const CardDefinition* d = a.def ? a.def : CardDatabase::Instance().Lookup(a.card_name);
+    if (d == nullptr) { return 0; }
+    return SamePlanHeroismMint(*d, a.enchant_target, a.soulfire_own_targets, heroism_copies);
+}
+
 // `extra_credit` = same-turn mana the bound cannot derive from `cands` alone. Today that is only
 // EnumeratePlans' hasted-dork unlock (a dork cast this turn taps once this plan equips haste onto
 // it); Solve passes 0, so its bound is byte-identical. This is an UPPER bound on the turn's mana, so
@@ -19767,11 +19845,17 @@ static int ManaPruneBound(const ManaPool& pool, const std::vector<Action>& cands
       { return std::numeric_limits<int>::max(); } }
     long long b = pool.Total() + extra_credit;
     int gy = 0;
+    int hero = -1;   // MTG_MINT_CREDIT_EXACT: same-plan Heroism copies, counted once, only if a minter is present
     for (const Action& a : cands)
     {
         b += a.ritual_float;
         b += a.rock_mana.Total();
         b += a.mint_gain;                         // MTG_MINT_CREDIT_EXACT: the minted Treasures (0 off)
+        if (a.mint_gain > 0)
+        {
+            if (hero < 0) { hero = PlanHeroismCopies(cands); }
+            b += MintHeroismBonus(a, hero);       // ...and the same-plan Heroism copies' Treasures
+        }
         b += EtbUntapBoundCredit(etb_state, a);   // ETB "untap up to N lands" -- see above
         b += LandAuraBoundCredit(a);              // "enchanted land taps for an additional {G}"
         if (a.def && a.def->params.ritual_float_gy_self_bonus) { ++gy; }
@@ -19906,11 +19990,13 @@ static bool BuildManaGateIndex(const ManaPool& pool, const std::vector<Action>& 
 
     const int m = static_cast<int>(cands.size());
     out.term.assign(m, ManaGateTerm{});
+    int hero = -1;   // MTG_MINT_CREDIT_EXACT: same-plan Heroism copies (PlanHeroismCopies), lazily
     for (int j = 0; j < m; ++j)
     {
         const Action& a = cands[j];
         ManaGateTerm& t = out.term[j];
         t.cost = a.cost.ManaValue();
+        if (a.mint_gain > 0 && hero < 0) { hero = PlanHeroismCopies(cands); }
         // The land-Aura term has to be here AS WELL AS in ManaPruneBound, and that duplication is
         // the whole lesson of this bug: the SELECTION-EXACT gate is default ON and supersedes the
         // scalar bound at the odometer, so crediting only the scalar left the credit dead. The
@@ -19920,8 +20006,8 @@ static bool BuildManaGateIndex(const ManaPool& pool, const std::vector<Action>& 
         // ...and the minted-Treasure term (MTG_MINT_CREDIT_EXACT), for the SAME reason: the
         // shipped consider() mint credit had no term in either bound, so the subset it exists to
         // admit ({Gold Rush, Fists} = 4 on a 3-mana pool) died at the odometer unpriced.
-        t.gain = a.ritual_float + a.rock_mana.Total() + a.mint_gain + EtbUntapBoundCredit(etb_state, a)
-               + LandAuraBoundCredit(a);
+        t.gain = a.ritual_float + a.rock_mana.Total() + a.mint_gain + MintHeroismBonus(a, hero)
+               + EtbUntapBoundCredit(etb_state, a) + LandAuraBoundCredit(a);
         t.gy   = (a.def && a.def->params.ritual_float_gy_self_bonus) ? 1 : 0;
         t.block = ((a.def && (a.def->params.affinity_for_subtype
                               || !a.def->params.reduces_spell_color.empty()
@@ -21683,19 +21769,43 @@ TurnSolver::Plan TurnSolver::SolveUncached(const GameState& state, bool is_pre_c
             // covers it), together with the copy MAGNETS, which precede the minter in the hoist
             // whenever the late slots cannot pay (MintHoistAfterMagnets, both apply paths). The
             // remaining hoisted casts and the ordered set are what the mint funds.
+            bool hero_credit = false;   // same-plan Heroism width credited (below)
             if (mint_exact && sel_mint)
             {
                 mint_costs = first_mint;
+                ManaCost hoisted_all = first_mint;   // EVERY hoisted cast + the first minter
+                int hero_sel = 0;
                 if (!mint_hoisted.empty())
                 {
                     for (int j : sel)
                     {
-                        if (!mint_hoisted[j] || !cands[j].def
-                            || !cands[j].def->params.copies_solo_targeted_spells) { continue; }
+                        if (!mint_hoisted[j] || !cands[j].def) { continue; }
                         const ManaCost& hc = cands[j].cost;
+                        hoisted_all.white += hc.white; hoisted_all.blue  += hc.blue;  hoisted_all.black += hc.black;
+                        hoisted_all.red   += hc.red;   hoisted_all.green += hc.green;
+                        hoisted_all.colorless += hc.colorless; hoisted_all.generic += hc.generic;
+                        if (cands[j].def->params.frontline_copy_tokens > 0
+                            && cands[j].kind == Action::Kind::CastFromHand && !cands[j].alt_cost)
+                        { hero_sel += cands[j].def->params.frontline_copy_tokens; }
+                        if (!cands[j].def->params.copies_solo_targeted_spells) { continue; }
                         mint_costs.white += hc.white; mint_costs.blue  += hc.blue;  mint_costs.black += hc.black;
                         mint_costs.red   += hc.red;   mint_costs.green += hc.green;
                         mint_costs.colorless += hc.colorless; mint_costs.generic += hc.generic;
+                    }
+                }
+                // SAME-PLAN HEROISM WIDTH (SamePlanHeroismMint; mirrorwing seed 701403 T3). The
+                // subset's Heroisms resolve BEFORE the minter exactly when the apply keeps the
+                // reviewed order -- MintHoistAfterMagnets does whenever the base pool pays every
+                // hoisted cast plus the first minter (hoisted_all), and the enabler pass then casts
+                // Heroism ahead of the ordered set. Under the hoist the minter precedes it
+                // (HoistSortKey 11 < 12) and copies nothing, so nothing is credited there.
+                if (hero_sel > 0 && pool.CanPay(hoisted_all))
+                {
+                    for (int j : sel)
+                    {
+                        if (mint_hoisted[j]) { continue; }   // a hoisted minter precedes the Heroisms
+                        const int bonus = MintHeroismBonus(cands[j], hero_sel);
+                        if (bonus > 0) { minted += bonus; hero_credit = true; }
                     }
                 }
             }
@@ -21705,8 +21815,11 @@ TurnSolver::Plan TurnSolver::SolveUncached(const GameState& state, bool is_pre_c
             // continuation then starved, killing the T5 pump finish). Credit only when the minted
             // Treasure is actually spendable this turn: magnet live, or the hold released
             // (FreshHoldActive folds in the freshmode pin -- the fresh-spend axis's variant world).
+            // A same-plan Heroism is live by the time the mint is spent, so it releases the hold
+            // the way a live one does (HeroismFreshHoldOn -- PaySacSpendableNow's own clause).
             const bool spendable = mint_exact
-                ? (FreshMintSpendableNow(state, state.active_player_index) || hand_magnet)
+                ? (FreshMintSpendableNow(state, state.active_player_index) || hand_magnet
+                   || (hero_credit && HeroismFreshHoldOn()))
                 : (!FreshHoldActive() || CopyMagnetLive(state, state.active_player_index));
             if (sel_mint && minted > 0 && pool.CanPay(mint_costs) && spendable)
             { eff.wild += minted; eff_nc.wild += minted; credited = true; simul_mint_credit = minted; }
@@ -24946,6 +25059,9 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
     // bp_searched_plan (CantripOrderScope has already taken it), and the arming CARD is the whole
     // content of the audit's "which route" question -- see canonaudit::RecordWho.
     const CardDefinition* canon_arm = nullptr;
+    // MTG_BP5_TRACE inputs (diagnostic only): what the last bp_searched_plan saw.
+    int  dbg_bp_seen_before = -2, dbg_bp_cands = -1;
+    bool dbg_bp_eligible = false, dbg_bp_class_on = false;
     auto bp_searched_plan = [&](int site, TurnSolver::Plan& out) -> bool
     {
         // bp_seen counts only breakpoints of an ENABLED class, and only for a plan that carries a
@@ -24961,6 +25077,8 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
         // cross product worth buying back.
         const bool eligible    = plan.bp_choice >= 0 && class_on
                               && (plan.bp_all || seen_before == plan.bp_at);
+        dbg_bp_seen_before = seen_before; dbg_bp_eligible = eligible; dbg_bp_class_on = class_on;
+        dbg_bp_cands = -1;
         // Report the running count so the wave walker can open a slot for each nested breakpoint it
         // discovers (see g_bp_seen_last). Written per breakpoint rather than once at the end so it
         // survives every early exit out of this apply.
@@ -28590,6 +28708,12 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
                 std::string line = std::string("[bp5] T") + std::to_string(state.turn_number)
                                  + " site=" + std::to_string(deferred_site_index())
                                  + (bp5_from_rank ? " rank" : " empty")
+                                 + " choice=" + std::to_string(plan.bp_choice)
+                                 + " at=" + std::to_string(plan.bp_at)
+                                 + " seen=" + std::to_string(dbg_bp_seen_before)
+                                 + " class=" + (dbg_bp_class_on ? "1" : "0")
+                                 + " elig=" + (dbg_bp_eligible ? "1" : "0")
+                                 + " cands=" + std::to_string(dbg_bp_cands)
                                  + " pool=" + std::to_string(AvailableManaPool(state).Total())
                                  + " tre=" + std::to_string(n_tre)
                                  + " land!=" + std::to_string(n_untapped_land)
@@ -31258,27 +31382,50 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
                 mint_costs.colorless += mc.colorless; mint_costs.generic += mc.generic;
                 sel_mint = true;
             }
-            // Sequential precondition: first minter + the magnets (Solve's twin has the note).
+            // Sequential precondition: first minter + the magnets (Solve's twin has the note), and
+            // the SAME-PLAN HEROISM WIDTH (Solve's twin has that note too): credited only when the
+            // base pool pays every hoisted cast plus the first minter, i.e. when the apply keeps
+            // the reviewed order and the enabler pass casts Heroism ahead of the minter.
+            bool hero_credit = false;
             if (mint_exact && sel_mint)
             {
                 mint_costs = first_mint;
+                ManaCost hoisted_all = first_mint;
+                int hero_sel = 0;
                 if (!mint_hoisted.empty())
                 {
                     for (int j : sel)
                     {
-                        if (!mint_hoisted[j] || !cands[j].def
-                            || !cands[j].def->params.copies_solo_targeted_spells) { continue; }
+                        if (!mint_hoisted[j] || !cands[j].def) { continue; }
                         const ManaCost& hc = cands[j].cost;
+                        hoisted_all.white += hc.white; hoisted_all.blue  += hc.blue;  hoisted_all.black += hc.black;
+                        hoisted_all.red   += hc.red;   hoisted_all.green += hc.green;
+                        hoisted_all.colorless += hc.colorless; hoisted_all.generic += hc.generic;
+                        if (cands[j].def->params.frontline_copy_tokens > 0
+                            && cands[j].kind == Action::Kind::CastFromHand && !cands[j].alt_cost)
+                        { hero_sel += cands[j].def->params.frontline_copy_tokens; }
+                        if (!cands[j].def->params.copies_solo_targeted_spells) { continue; }
                         mint_costs.white += hc.white; mint_costs.blue  += hc.blue;  mint_costs.black += hc.black;
                         mint_costs.red   += hc.red;   mint_costs.green += hc.green;
                         mint_costs.colorless += hc.colorless; mint_costs.generic += hc.generic;
                     }
                 }
+                if (hero_sel > 0 && pool.CanPay(hoisted_all))
+                {
+                    for (int j : sel)
+                    {
+                        if (mint_hoisted[j]) { continue; }
+                        const int bonus = MintHeroismBonus(cands[j], hero_sel);
+                        if (bonus > 0) { minted += bonus; hero_credit = true; }
+                    }
+                }
             }
             // FRESH-HOLD parity -- lockstep twin of the gate in consider() (see the rationale
-            // there): a magnetless mint is banked this turn, so it can fund nothing.
+            // there): a magnetless mint is banked this turn, so it can fund nothing. A same-plan
+            // Heroism releases the hold the way a live one does.
             const bool spendable = mint_exact
-                ? (FreshMintSpendableNow(state, state.active_player_index) || hand_magnet)
+                ? (FreshMintSpendableNow(state, state.active_player_index) || hand_magnet
+                   || (hero_credit && HeroismFreshHoldOn()))
                 : (!FreshHoldActive() || CopyMagnetLive(state, state.active_player_index));
             if (sel_mint && minted > 0 && pool.CanPay(mint_costs))
             {
@@ -32677,6 +32824,14 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
                         // byte-identical (the #S/#V/#K precedent).
                         + (act.devour_count >= 0
                            ? ("#D" + std::to_string(act.devour_count)) : "")
+                        // CAST-TIME trick target (kTrickBestOwnTarget, MTG_MINT_CREDIT_EXACT): "the
+                        // best attacker when the trick resolves" and an explicit pre-plan target
+                        // are DISTINCT plans -- the explicit one aims at the body the payment then
+                        // taps, this one at the Soldier Heroism makes (mirrorwing seed 701403 T3).
+                        // Same eval, so the name-only fold kept the explicit twin (enumerated first)
+                        // and the variant never reached a rollout. Gated on the sentinel, which only
+                        // exists under the lever -> every other deck's signature is byte-identical.
+                        + (act.enchant_target == kTrickBestOwnTarget ? "#B" : "")
                         // Planeswalker cast + same-turn loyalty activation (CritterLifegain's Ajani):
                         // the plain cast and each "cast + activate #k" variant are DISTINCT plans
                         // (core invariant; the name-only dedup would keep the first and hide the
@@ -32876,7 +33031,10 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
                 // only in placement survive as distinct variants instead of collapsing to the first-enumerated
                 // target. Autonomous dedup keys only on cast NAMES (the 's' bucket), so distinct targets
                 // collapse to the heuristic's best-first pick there -- exactly the tutor_target precedent.
-                if (act.enchant_target > 0)      { sub.push_back("e" + act.card_name + ">" + std::to_string(act.enchant_target)); }
+                // kTrickBestOwnTarget (MTG_MINT_CREDIT_EXACT) is a distinct target too -- it must
+                // not collapse into the untargeted (0) variant of an up-to-one trick.
+                if (act.enchant_target > 0 || act.enchant_target == kTrickBestOwnTarget)
+                { sub.push_back("e" + act.card_name + ">" + std::to_string(act.enchant_target)); }
             }
             std::sort(sub.begin(), sub.end());
             for (const std::string& x : sub) { sig += '#'; sig += x; }
@@ -42181,7 +42339,8 @@ static TurnSolver::SearchLine FSLineWin(const GameState& state, int depth, int m
                     { sum += "#V" + std::to_string(a.soulfire_own_targets); }
                     if (!a.tutor_target.empty()) { sum += ">" + a.tutor_target; }
                     // trick/aura target number and the stamped mint width (mint-credit forensics)
-                    if (a.enchant_target != 0) { sum += "@" + std::to_string(a.enchant_target); }
+                    if (a.enchant_target == kTrickBestOwnTarget) { sum += "@best"; }
+                    else if (a.enchant_target != 0) { sum += "@" + std::to_string(a.enchant_target); }
                     if (a.mint_gain > 0)       { sum += "m" + std::to_string(a.mint_gain); }
                     sum += ",";
                 }
