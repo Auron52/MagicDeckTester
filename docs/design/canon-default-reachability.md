@@ -1,6 +1,10 @@
 # Canon-default reachability: closed, and the four ways it hid
 
 **Status (2026-09-22): ZERO unchallengeable canon defaults on all 23 suite decks.** ~124,000 → 0.
+**Read the two caveats before quoting that number:** the audit asks whether a plan was *offered* to
+the variant machinery, not whether the machinery had a second option (26% of these lists hold
+exactly one continuation — see THE COST, ROOT-SOURCED); and the rebaseline cost +0.0014 avg win
+turn, traced to one clause on one deck and to a pre-existing wave-0 defect.
 The audit that measures them (`MTG_BP_CANON_AUDIT`, `scripts/canon_audit.sh`) is the enforcement and
 should keep running: two of the last four gaps were opened by changes with nothing to do with
 breakpoints — an adopted tutor lever that stopped filling a field a clause read, and a card added to
@@ -163,6 +167,78 @@ resolution by a walk down a hidden library, so naming its site would be inventin
 clause marks the cast-reachable SET (bits 0–3). Over-marking is free in the fan-out — both routes
 only test the mask for nonzero — and a variant for a class the hit does not arm collapses onto its
 base plan.
+
+## THE COST, ROOT-SOURCED — and the pre-existing defect it exposed
+
+The rebaseline moved the suite +0.0014 avg win turn (8 keys, ~4.1 baseline). Flat is not the bar:
+**we want it break-even or better.** Attributed per clause with the `=0` hatches (avg win turn is
+DETERMINISTIC, so this needs no quiet box — only enough games):
+
+```
+MTG_BP_DIG_SELF_SOURCE     -0.0020   BETTER  (improves 3 keys, costs 2)
+MTG_BP_TUTOR_BF_UNNAMED    +0.0034   WORSE   (stompy d3_s3003, ONE game)
+MTG_BP_WATCHER_SELF_PUT     0.0000
+MTG_BP_CASCADE_CLAUSE       0.0000
+                           -------
+                           +0.0014   = exactly the GT delta
+```
+
+**Held out on 4,000 fresh games** (stompy, seeds 5005/7007/9009/11011, d3 b10), because one game in
+300 is not a signal: **+0.0005 — two flipped games, and never better on any seed.**
+
+### Why: wave 0 has no stillborn skip, and a quarter of these lists have ONE entry
+
+`MTG_BP_PROBE`, stompy 300 games, site 10:
+
+```
+                    clause off   clause on     delta
+  searched              7,124       7,633       +509
+  ...on committed line  6,399       7,410     +1,011
+  OVERRUN               6,243       8,181     +1,938     <-- 3.8 wasted applies per usable one
+```
+
+An *overrun* is a variant whose rank is past the end of its continuation list: it reaches the
+breakpoint it targets, finds nothing there, and collapses to EMPTY — a whole apply spent
+rediscovering its own base plan. `MTG_BP_CANDS_PROBE` says why there are so many:
+
+```
+  len: 1=798  2=1069  3=394  4=405  5-8=236  9-16=131  17-32=14  33-64=4
+       mean 3.19   capped=1184 (38.8%)   unreachable=4440 (45.6% of all continuations)
+```
+
+**26.2% of site-10 breakpoints have exactly ONE continuation.** `AppendBreakpointVariants` emits W
+ranks per marked plan unconditionally, so for those every rank >= 1 is a guaranteed overrun and rank
+0 duplicates the canon default. **This is pre-existing** — 6,243 overruns before any clause landed
+— and the `BpWaveWalker` already has the countermeasure (`BpLenMemo` / `MTG_BP_NSKIP_GLOBAL`
+stillborn skip) that wave 0 simply does not have. The clause is not the defect; it is the first
+thing to pay enough into it to show up in GT.
+
+### A QUALIFICATION ON "ZERO" — read this before trusting the headline
+
+The audit asks *"was this plan offered to the variant machinery?"* It does **not** ask *"did the
+machinery have a second option to offer?"* For the 798 len-1 slots above, rank 0 IS the canon
+default and the only genuine alternative is EMPTY — and `MTG_BP_EMPTY_ARM` is **default OFF**. By
+the USER's own rule (2026-09-16, *"Empty needs to be a valid option ... for every segment"*) that
+slot is still a one-option decision. ZERO is true for what it measures and narrower than it sounds.
+
+### Two things already tried, so do not re-derive them
+
+* **Gate the unnamed-tutor clause on "the LIBRARY holds a hand-gaining body"** — built and
+  **REFUTED by the audit**: stompy went straight back to **184 unchallengeable**. A plan can add a
+  body to its own library mid-apply (Natural Order's sacrificed Worldspine Wurm shuffles in and is
+  a legal fetch target), so the gate has an unsound direction. Reverted. Note this is the audit
+  earning its keep on a change made *after* it went green.
+* **Drop site 10 from wave 0 and let the walker take it** (`MTG_BP_W0_SITES`) — the same move was
+  measured on site 6 (2026-08-20) and refuted: quality identical, **cost WORSE** (+89.1% vs
+  +79.0%), because the deferred phase re-derives what wave 0 already had.
+
+### The real follow-ups, in order of prize
+
+1. **Stillborn skip in wave 0.** More than half of stompy's site-10 fan-out work is already
+   stillborn. Fixing it pays for this clause many times over and helps every deck. Needs its own
+   A/B; the walker's `BpLenMemo` is the model.
+2. **`MTG_BP_EMPTY_ARM` for len-1 slots.** Closes the qualification above AND replaces W-1
+   overruns with one genuinely different line. Changes every deck's GT.
 
 ## Hosting is a separate axis, and it is still open
 
