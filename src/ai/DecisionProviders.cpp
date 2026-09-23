@@ -20173,7 +20173,16 @@ bool FungusProvider::FodderSacUseful(const GameState& s, const Permanent& src,
 std::vector<int> FungusProvider::DevourCountCandidates(const GameState& s, const CardDefinition&,
                                                        int own) const
 {
-    static const bool env_on = EnvOn("MTG_FUNGUS_DEVOUR_CANDS");
+    // ADOPTED default-ON 2026-09-23 (USER sign-off, Rule 0b). The measurement that licensed it:
+    // 600 games with ZERO win-turn changes -- 480 held-out on fresh seeds (0 at d0, 0 at d1b3, 0 at
+    // d2b20) plus a 124-game train block whose digests are byte-identical -- while removing 37-42%
+    // of the devour variants. MTG_FUNGUS_DEVOUR_CANDS=0 is the hatch.
+    //
+    // ADOPTED ON ITS REAL TERMS, WHICH ARE MODEST (ledger Round 10g): this is a quality-free
+    // enumeration cut worth ~6.6% at d1/b3 (the mulligan-generation regime) and ~1% in searched
+    // play. It is NOT a fix for the slow rollouts -- dropping 42.5% of the variants on the
+    // generation's worst keep-rollout bought 2.4% of its wall. Do not cite it as one.
+    static const bool env_on = EnvOn("MTG_FUNGUS_DEVOUR_CANDS", true);
     if (!heurarm::Flag(heurarm::FUNGUS_DEVOUR_CANDS, env_on)) { return {}; }   // full fan
 
     // MTG_DEVOUR_TRACE names WHY a board fell back to the full fan. Without it a bail is

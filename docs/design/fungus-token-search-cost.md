@@ -3104,7 +3104,8 @@ regime, which is where the 503,917-variant measurement came from and where mulli
 
 ### 10f. Status
 
-`MTG_FUNGUS_DEVOUR_CANDS` **default OFF**, `MTG_FUNGUS_DEVOUR_BIG_EXEMPT` default OFF (sub-mode).
+`MTG_FUNGUS_DEVOUR_CANDS` **ADOPTED default ON 2026-09-23** (USER sign-off, Rule 0b);
+`MTG_FUNGUS_DEVOUR_BIG_EXEMPT` default OFF (sub-mode). `=0` hatches each.
 Full fan preserved under human play and `MTG_UNPRUNE=devourcount` (new gate). OFF arm verified
 byte-identical: scenarios 103/103, smoke 93/93 with **0 configs changed**.
 
@@ -3189,3 +3190,30 @@ not concentrated in plan enumeration, and no single axis found so far accounts f
 `search-cost-attribution-method`). Every time this ledger has reasoned from counts to wall it has
 been wrong by an order of magnitude, and every time it has measured wall directly it has been right.
 Price the axis, then build.
+
+
+### 10h. ADOPTED (2026-09-23), and the reason the timing mattered
+
+Flipped default-ON immediately before the Fungus mulligan generation, on the USER's call. The
+timing was the substantive part, not the 6.6%: a keep table is an engine-state fingerprint, and
+adopting a play-logic change AFTER generating would formally invalidate the fresh table and cost a
+~4.7 h regen. The run had been going 10 min 36 s, so restarting it was the cheap side of that fork
+by two orders of magnitude. Stop early or not at all.
+
+GT re-accept, both tiers: **4 configs changed, every one with an IDENTICAL average**
+(fungus d0 s2002 6.1450, d3 s2002 5.6650, d3 s3003 5.6900, d5 s3003 5.6300) and smoke's
+fungus d3 s1001 at 5.6400. Per-game audit: **slower=0, faster=0**, 12 line changes and no win turn
+moved anywhere. Scenarios 103/103; `check_gt_logs` 506 consistent, 0 stale. Viewer-protocol drift
+counts unchanged from baseline (1 board-diverged, 10 mull-drift, 0 play-drift, 0 contract-fail).
+
+One accepted line, quoted because it shows the shape of the change rather than its size --
+same kept hand, same draws, same win turn, a cleaner curve:
+
+```
+  T2   old: land Forest; Thallid Shell-Dweller; ATTACK   [opp 19]
+  T2   new: land Forest; Sporecrown Thallid; ATTACK      [opp 18]
+  T3   old: land Forest; Sporecrown Thallid; Utopia Mycon; ATTACK   [opp 17]
+  T3   new: land Forest; Utopia Mycon; Thallid Shell-Dweller; ATTACK   [opp 14]
+  T5   old: land Forest; Mycoloth; ATTACK   [opp -15]
+  T5   new: land Forest; Mycoloth; ATTACK   [opp -18]
+```
