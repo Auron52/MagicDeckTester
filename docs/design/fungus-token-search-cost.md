@@ -2317,3 +2317,148 @@ cast the pending Wild Growth -- so the tightest available per-subset preconditio
 of the calls, about 0.3% of the rollout. Leave it alone. The mint block and this one look identical
 from the outside (board-scanning work armed by a board/hand fact); what separates them is whether
 the work ever changes an answer, and only a counter can say.
+---
+
+# Round 7 (2026-09-22): WHY the greedy walk is expensive — a powerset over interchangeable mana outlets
+
+**USER, opening this round:** *"Why is the greedy walk so expensive in the first place. That is
+where I would start."* … *"Rather than just cutting the cost."*
+
+That reframing is the whole round. `MTG_SOLVE_CHARGE`
+(`slow-rollout-tail-and-the-uncharged-greedy-walk.md`) treats the walk's cost as legitimate and
+rations it. The question here is whether it is legitimate at all. **It is not.** On the slow
+mulligan cells the walk spends most of its positions enumerating a distinction that does not exist.
+
+## The measurement that shows it
+
+`MTG_ENUM_STATS=1 MTG_ENUM_STATS_MIN=1000` on the replay of a 30 s slow rollout
+(`size6 draw r=39`, hand `Psychotrope Thallid x1; Thallid Shell-Dweller x1; Utopia Mycon x4`).
+`ReportEnumBound` prints the odometer's shape — `bound = 2^|independent| * Π(1+|group|)` — whenever
+it crosses an escalating watermark. The last three:
+
+```
+bound=2.05e+03 groups=8 ind=3  … (k7 Utopia Mycon) x3
+bound=1.23e+04 groups=7 ind=6  … (k7 Utopia Mycon) x6
+bound=4.92e+04 groups=6 ind=8  … [g5 k26 Utopia Mycon] (k7 Utopia Mycon) x8
+```
+
+**Every independent bit is `k7 Utopia Mycon`** — `Action::Kind::SacForMana`, the *"Sacrifice a
+Saproling: Add one mana of any color"* outlet. Eight of them, from **four** physical Mycons (one
+single-sac + one demand-driven burst each). Eight independent bits is **2^8 = 256 positions**.
+
+The last line is the finding in one line, because it shows **both abilities of the same card side
+by side**:
+
+| | emitted as | positions |
+|---|---|---|
+| `[g5 k26 Utopia Mycon]` — the spore pop | ONE group of 5 | 6 |
+| `(k7 Utopia Mycon) x8` — the mana outlet | 8 INDEPENDENT bits | 256 |
+
+Same card, same board, same enumeration. One ability is pooled; the other is a powerset.
+
+## Why the outlet is a powerset, and why that is redundant
+
+`ActionFoldSig` folds a non-hand-cast on every field **except** `sac_source_id` — exactly the axis
+that distinguishes two copies of one outlet. So the four Mycons' single-sac actions differ in
+nothing the fold looks at. They ought to collapse. Two independent reasons they do not:
+
+1. **The sac-outlet block never tags at all.** Only two sites in `TurnSolver.cpp` call
+   `ActivationEquivTag` (~17731 and ~17847) and **both are the spore-pop path**. The mana-outlet
+   emission (~18090-18260) assigns no `equiv_tag`, so its actions cannot enter a fold class.
+2. **Even tagged, `FinalizeFoldTags` CONDITION 2 would drop them.** It kills any class whose source
+   emitted more than one action, counting *every* action sharing the source key, tagged or not. A
+   Utopia Mycon emits a spore pop *and* a single-sac *and* a burst — always > 1 — so the class dies
+   by construction. This is the same wall `MTG_FOLD_COUNTER_SOURCES` hit (it *"moved `units_total` by
+   ZERO … drop_src=116,427"`, recorded in `EngineFlags.h`).
+
+**The general fold structurally cannot reach this.** That is not a bug in the fold; it is why the
+spore half was fixed by *pooling at the emission site* (`MTG_FUNGUS_SPORE_POOL`, 12.6M -> 3.3M
+subsets) rather than by the fold.
+
+### And the redundancy here is an IDENTITY, not a heuristic
+
+This is the part that makes it worth fixing losslessly. The spore pool needed a **user ruling**
+because it is genuinely approximate: popping Thallid A's counters rather than B's leaves a different
+*residual distribution* of counters, and a later turn could in principle care.
+
+The mana outlet has no such residue. The activation
+* **does not tap the source** (`a.cost = ManaCost{}`; *"The source stays"*),
+* **does not touch its counters** or any other field of it,
+* takes its victim from `CanonicalSacVictim`, which returns the **same** Saproling for every Mycon.
+
+So sacrificing a Saproling through Mycon #1 versus Mycon #3 leaves **literally the same game
+state**. The 2^8 walk is not exploring 256 futures; it is visiting one future up to 256 times.
+`k` interchangeable sources cost `2^k` selections to express `k+1` outcomes — which is precisely
+what this file's own `EngineFlags.h` note already says about the spore half.
+
+A sharper way to put it: because the ability never exhausts its source, **four Mycons are not four
+resources, they are one resource**. The enumerator is using the four physical copies as a *unary
+repetition counter* — which is both wasteful (2^4 arrangements for 5 counts) and, separately,
+*inexpressive*: with one Mycon on the board the single-sac path can never represent more than one
+activation, no matter how many Saprolings are available.
+
+## Sizing the axis
+
+`MTG_SAC_OUTLET_PAY=1` (below) deletes this axis outright, so it bounds the prize. Replayed on the
+same cell, census armed on both arms:
+
+```
+census armed  MTG_SAC_OUTLET_PAY=0   win_turn=8   replay elapsed=39,063 ms
+census armed  MTG_SAC_OUTLET_PAY=1   win_turn=8   replay elapsed=   201 ms
+CLEAN         MTG_SAC_OUTLET_PAY=0   win_turn=8   replay elapsed=31,554 ms
+CLEAN         MTG_SAC_OUTLET_PAY=1   win_turn=8   replay elapsed=   205 ms     -> 154x
+```
+
+The clean pair (no census — arming it forces `SubsetFilterPre` all-true and inflates both arms) is
+**31,554 ms -> 205 ms, 154x, at an unchanged win turn**, on one cell. **Treat it as an upper bound
+on the axis, not as a shipped number** — it is one hand, and the lever that produced it is not a
+ship path (below). Note also that the subset counters move the *opposite* way
+(`greedy_subsets` 13.8M -> 110.5M), which is
+a process-wide artifact: the replay is ~30 s of a ~298 s process and **discovery dominates the
+counters**. Only `[replay] DONE elapsed=` isolates the rollout.
+
+## The two candidate fixes, and why the lossless one is not built
+
+**(a) `MTG_SAC_OUTLET_PAY` — built 2026-09-18, DEFAULT OFF, A/B never run.**
+`docs/design/sac-mana-outlet-as-deferred-source.md`. Moves the outlet's fodder to the mana-payment
+side as a last-ranked source, deleting the branching axis entirely. It is the user's own proposal
+(2026-09-17) and it is **a model change, not a lossless one** — user: *"this is a cost change that
+we are aiming to not cost any quality"*, and *any win-turn regression is disqualifying*.
+**It is also incomplete**: its own §"STILL MISSING" records that the *plan-added fodder credit* is
+unimplemented at ENUMERATION time, so a subset whose mana comes from a body the same subset creates
+scores unpayable and is never offered — which is exactly the Doubling-Season-off-an-activated-
+Saproling line these hands are built on. Do not read the 194x above as this lever being ready.
+
+**(b) Pool the outlet at the emission site — LOSSLESS, NOT BUILT.** The same move the spore pool
+made, one ability over, with a stronger argument behind it (identity, not heuristic). Emit, in place
+of one single-sac action per source, **one action per activation COUNT** `j = 1..N` over the `N`
+interchangeable live outlets, all carrying the oldest outlet's `sac_source_id` so
+`ActivationFamilyKey` buckets them into ONE mutually-exclusive group. That reproduces exactly
+today's reachable count set `{0..N}` while costing `N+1` positions instead of `2^N`.
+
+Three things to get right when building it:
+* **Gate on a singleton colour fan.** With a wide `ChosenFloatColorCandidates` the outcome depends
+  on the colour *multiset*, not just the count, so pooling is only an identity when the fan is one
+  colour (it is `{G}` on Fungus). Outside that, leave today's emission.
+* **The bursts pool too, but do not lose their combinations.** Today's `N` bursts are separate
+  independent bits, so `{burst_1, burst_2}` is a reachable `2k`-sac outcome. Pool to the set of
+  reachable TOTALS, not to a single burst.
+* **Digest will move, outcomes must not.** Like the spore pool, this changes *which body pays*, so
+  `play-changed` is the wrong bar; the bar is avg win turn over a held-out sweep, plus
+  `MTG_FOLD_VERIFY`-style reasoning that every collapsed arrangement has a twin.
+* **REQUIRE THE CANONICAL VICTIMS TO AGREE — the identity argument is not universal.**
+  `CanonicalSacVictim` takes the *source's* id, so an outlet that can eat **itself or its own kind**
+  may pick a different victim per source. Utopia Mycon is safe by type (it requires `Saproling` and
+  is a Fungus, so it is never a legal victim and all four copies return the same Saproling), but
+  **Skirk Prospector is a Goblin that sacrifices Goblins** — two Skirks are *not* trivially
+  interchangeable, because eating Skirk A is a different board from eating Skirk B. Pool only when
+  the per-source canonical victims are equal; otherwise this stops being an identity and becomes the
+  same kind of heuristic the spore pool needed a ruling for.
+
+## What this says about `MTG_SOLVE_CHARGE`
+
+It does not refute charging the walk — an unbudgeted loop should still be bounded. But it reorders
+the work. The charge rations a walk whose positions are **mostly duplicates**; calibrating an
+exchange rate against duplicate work prices the wrong thing, and truncating it trades real quality
+to avoid work that never needed doing. Collapse the redundancy first, then decide what the residual
+walk is worth.
