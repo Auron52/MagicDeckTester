@@ -1163,10 +1163,9 @@ user still had the viewer open:
     contract (**`mull_gen_depth: 1`, `mull_gen_budget_ms: 3`, `expected_buckets: 13`**; K=13 is
     binding). **The `recommend` probe is DONE and the verdict is FEASIBLE: `complete` projects
     ~6.9 h against the ~8 h overnight window, with no degenerate cell** (slowest rollout 11.0 s vs
-    a 30 s threshold nothing tripped). See the probe section. **Awaiting the user's go-ahead to
-    start the overnight generation** — not started, since the user said they may not want to run
-    the full thing yet. Route: `.claude/skills/mulligan-profile.md`, alone on the box, freeze the
-    binary first.
+    a 30 s threshold nothing tripped). See the probe section. **HANDED OFF to the secondary
+    machine** at the user's direction (2026-09-23) — see the HANDOFF section for the freeze commit
+    `aaad47b3`, the driver command, and what comes back. Not run on this box.
 14. **Open, not started: the lossless keep-axis name-dedup.** 24 Mountains ⇒ Tectonic's two exiled
     cards are frequently the SAME CARD, and two keep variants over identical cards are the
     identical plan (the Finding-2 equip-host precedent). It would claw back part of the keep axis's
@@ -1493,17 +1492,78 @@ has come back healthy, after the value-leaf census.
   58 s, landing on the same K=13.
 * Both scratch artifacts are gitignored; nothing to commit.
 
-### To launch the overnight run
+## HANDOFF — the overnight generation runs on the SECONDARY MACHINE (2026-09-23)
+
+The user is handing this run to another box. **Everything the secondary needs is in git**; nothing
+is stranded on this machine.
+
+### Freeze commit
+
+**`aaad47b3`** (`fix(search): scope the sac-fodder guard to pooled outlets`), the branch tip of
+`phase-1-2-deck-analyzer`. Rule 0: generate on ONE frozen commit.
+
+Two engine commits from the Fungus arc landed after the value leaf was adopted (`cdc4cc70`,
+`aaad47b3`). **Both were verified play-neutral here, not assumed:** rebuilt and re-ran smoke after
+each — `93 passed, 0 failed, configs changed: 0, slower=0 faster=0 play-changed=0` both times, and
+`check_gt_logs.py` 506/0/0. So the adopted value model, the accepted GT and the probe's projection
+all still stand at this tip.
+
+### The command — use the DRIVER, not the bare binary
 
 ```bash
-cp build/Release/mtg-analyze logs/mullgen_giants/mtg-analyze.frozen     # freeze the binary FIRST
-./build/Release/mtg-analyze decks/Giants/Giants.cod \
-    --cards-json src/cards/data/cards.json --gen-mulligan complete
+git checkout aaad47b3 && ./build.sh
+bash scripts/mullgen.sh run decks/Giants complete
 ```
 
-Freezing matters because the journal's resume gate refuses (loudly, since `6fa7dba0`) to resume
-across a play-identity change — correct behaviour, but it costs the run's remaining resumability.
-Re-running the identical command resumes; there is no resume flag.
+**This corrects a bare-binary invocation given earlier in this session.** The skill is explicit —
+*"Use this, not the bare binary"* — because generation and validation are ONE operation: keep is
+**presence-gated**, so the profile file existing IS adoption. On 2026-08-28 a 3.9 h StompySurprise
+generation landed a **LIVE** profile with zero games ever played against it for exactly this
+reason. `mullgen.sh run` generates, then runs the first-version gates (keep exhaustive-vs-static
+**and** the confounded bottoming A/B), then the regression suite, and **quarantines** to
+`.profile.DISABLED.json` on failure. An instruction an agent has to remember is not a gate.
+
+`status` reports progress: `bash scripts/mullgen.sh status decks/Giants`.
+
+### What the secondary needs, and what it does not
+
+| needed | where |
+|---|---|
+| `decks/Giants/Giants.cod` | committed |
+| `decks/Giants/Giants.profile.json` | committed |
+| `decks/Giants/Giants.value.json` | committed — **required**, it carries the gen settings AND guards the H-cell ladder |
+| `src/cards/data/cards.json` | committed |
+
+**Not transferred, and that is fine:** `Giants.keepmodel.exhaustive.raw.json.probe` (5 MB) and
+`Giants.keepmodel.gencache.json` are gitignored, so the secondary repays the r=0 slice and
+re-discovers buckets — about 10 min of a 6.9 h run. Not worth breaking the raw-artifact policy for.
+
+**It should land on K=13.** If `K check OK: K=13 matches value_play.expected_buckets` does not
+print, stop: `ExhaustiveKeep` refuses to generate on a K mismatch, and that refusal is the point.
+
+### Practical notes for an overnight run
+
+* **Freeze the binary first** — `cp build/Release/mtg-analyze <logdir>/mtg-analyze.frozen` and
+  resume with that copy. Since `6fa7dba0` both resume paths gate on play identity and a rebuilt
+  binary is **refused loudly** rather than silently mixing two engines' rollouts. Correct
+  behaviour, but it costs the run's remaining resumability — and this branch demonstrably takes
+  engine commits overnight (two landed during this session alone).
+* **Re-running the identical command resumes.** There is no resume flag and no driver script for
+  it; every completed cell is journalled as it commits.
+* **Expect ~6.9 h** (upper bound; adaptive keep trims it), no degenerate cell, slowest rollout
+  11.0 s against a 30 s threshold nothing tripped.
+
+### Coming back
+
+Commit `Giants.keepmodel.exhaustive.profile.json` **and** the gzipped
+`Giants.keepmodel.exhaustive.raw.json.gz`; the uncompressed raw is gitignored. If the gates
+quarantined the profile, the `.DISABLED.json` name is what deactivates it — do not "fix" that by
+renaming it back.
+
+**If a second machine were ever pooled** (not the plan here — this is one whole run), the parity
+checklist is `play_digest` / `bucket_fp` / `deck_fp` / `K` matching with **distinct `--seed`**, and
+pooling gates on the **play digest, not the commit string**. This deck's gen play digest at d1/b3
+is **`e3e609b4c53d22ec`**.
 
 ## Value-leaf COMPLETED and ADOPTED (2026-09-23)
 
