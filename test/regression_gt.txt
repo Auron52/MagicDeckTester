@@ -1,4 +1,4 @@
-# Regression ground truth -- commit 0038794b  date 2026-09-23
+# Regression ground truth -- commit 262a6fe2  date 2026-09-23
 # Promoted from accepted runs by 'regression.sh --accept' -- do not hand-edit.
 # accepted-with-regressions (overnight, 2026-09-19): Angels (12 keys): decklist adopted 2026-09-19, all configs FASTER. Other 52 keys: pre-existing overnight staleness from 56c57d73 (site-10 breakpoint fix) -- 76f76796 rebaselined smoke+regression only and touched ZERO overnight keys. 26 of 52 are digest-only at identical score; auras (the fix's own target) is -0.0119; net -0.00166; 9 slower, all <=0.007t, no win became unwon.
 # accepted-with-regressions (overnight, 2026-09-20): OVERNIGHT, Angels only (--deck=angels,angels2hg). Angels leafless shape adopted 2026-09-20 (ladder single / leaf none / alpha relaxed -- restoring 918c3cc2, which a value-leaf regeneration had silently overwritten). ON-POLICY IS BETTER: at d5/b20, the deck's real play settings (BuiltinDefaultPlay; value_play.drives() is false), 20,000 held-out games/cell at seed 6200000 give late-weighted -0.0035 turns, t -1.1/-3.7/-9.5 std/2hg/long, at 0.74x CPU. The changed cells here are the d3 ones, which carry ignore_play_profile and are OFF-POLICY coverage: they are worse by ~+0.0008 late-weighted (d3b10 t +2.1/+3.3/+1.6, d3b20 t +4.1/+1.6/+3.7) -- small but REAL, not noise. Accepted per USER 2026-09-20: 'the most important are play settings ... if some of the others are a little worse that may be acceptable.' CPU is 0.71-0.74x on every config including the off-policy ones. The 4 d3/b20 cells here are the off-policy ones (+0.0020 s4004, +0.0010 s6006, 2 digest-only); d5/b40 is unchanged on 3 of 4 and FASTER on s7007 (-0.0020). Net over all 16 Angels cells +0.0010, which the 20,000-game held-out A/B resolves as a real off-policy effect, not noise.
@@ -7,7 +7,7 @@
 
 # --- smoke ---
 fungus_smoke_d0_s1001=6.0980/eabacb09207f80b4
-fungus_smoke_d3_s1001=5.6400/77c2eb7d920508bb
+fungus_smoke_d3_s1001=5.6400/06124593c5603b19
 fungus_smoke_d5_s1001=5.6267/cbb0438e4306bded
 slivers_smoke_d0_s1001=4.6400/ecb48ca9a240322b
 slivers_smoke_d3_s1001=4.2480/d6e6ed28a06bcf71
@@ -101,11 +101,11 @@ snow_smoke_d3_s1001=6.1400/e2fcb0421ab06141
 snow_smoke_d5_s1001=6.2600/4773941839a0ed4b
 
 # --- regression ---
-fungus_regression_d0_s2002=6.1450/3036387b1ae75ef1
-fungus_regression_d3_s2002=5.6650/a64b07a5e4b8db04
-fungus_regression_d3_s3003=5.6900/80487bedf24710bd
+fungus_regression_d0_s2002=6.1450/edb7c8906ec67858
+fungus_regression_d3_s2002=5.6650/b6908b4315d2695f
+fungus_regression_d3_s3003=5.6900/aef8fdf33bc5e0d7
 fungus_regression_d5_s2002=5.6300/e594ba64b638ad8c
-fungus_regression_d5_s3003=5.6300/f918b20bb0daa2f7
+fungus_regression_d5_s3003=5.6300/fbcb666161b81073
 slivers_regression_d0_s2002=4.6790/990aaa21c4bc567e
 slivers_regression_d3_s2002=4.2200/0493b2974b991d9d
 slivers_regression_d3_s3003=4.2500/9f500362b03da9d1
