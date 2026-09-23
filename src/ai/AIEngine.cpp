@@ -47,6 +47,73 @@
 // nothing on any inner loop. Play is byte-identical -- this only reads counters and prints.
 static const bool s_decision_progress = EnvOn("MTG_DECISION_PROGRESS");
 
+// ---- WHAT DOES LONDON BOTTOMING ACTUALLY COST? (MTG_ROLLOUT_STATS; counters only) -------------
+//
+// Lookahead bottoming evaluates every candidate removal with a full clairvoyant rollout, and the
+// header above BottomCards calls it "~2x slower" -- but 2x of WHAT share of a game was never
+// measured, and three obvious instruments all fail to answer it:
+//   * the depth-0 baseline cannot, because bottoming is DERIVED FROM DEPTH (on iff depth>0), so a
+//     d0 run measures the keep decision and nothing else. Reading a d0 number as "mulligans are
+//     0.003% of cost" is exactly the mistake this counter exists to stop.
+//   * there is deliberately no env flag to A/B (see LookaheadBottoming's header), so the usual
+//     on/off diff is unavailable by design.
+//   * Profiler (MTG_PROFILE) has no site here, and perf does not work in the dev container.
+// So: accumulate wall time inside BottomCards, which is the SOLE entry point and runs only when
+// mulligan_count > 0. Summed across threads, so compare it against total USER cpu, not wall.
+// Off by default; when on it is one clock read per bottoming decision (a handful per GAME), never
+// on an inner loop, and it only reads counters -- play is byte-identical either way.
+static std::atomic<unsigned long long> g_bottom_calls{0};
+static std::atomic<unsigned long long> g_bottom_cards{0};
+static std::atomic<unsigned long long> g_bottom_ns{0};
+
+static bool BottomCostStatsOn()
+{
+    static const bool on = EnvOn("MTG_ROLLOUT_STATS");
+    return on;
+}
+
+// RAII because BottomCards has nine returns; a scope guard cannot miss one the way a hand-placed
+// stop at the bottom of the function would.
+struct BottomCostScope
+{
+    std::chrono::steady_clock::time_point t0;
+    int                                   cards;
+    bool                                  on;
+    explicit BottomCostScope(int n) : cards(n), on(BottomCostStatsOn())
+    { if (on) { t0 = std::chrono::steady_clock::now(); } }
+    ~BottomCostScope()
+    {
+        if (!on) { return; }
+        const auto dt = std::chrono::steady_clock::now() - t0;
+        g_bottom_ns.fetch_add(
+            static_cast<unsigned long long>(
+                std::chrono::duration_cast<std::chrono::nanoseconds>(dt).count()),
+            std::memory_order_relaxed);
+        g_bottom_calls.fetch_add(1, std::memory_order_relaxed);
+        g_bottom_cards.fetch_add(static_cast<unsigned long long>(cards > 0 ? cards : 0),
+                                 std::memory_order_relaxed);
+    }
+};
+
+// Reports at exit, like the other MTG_ROLLOUT_STATS blocks. Silent when bottoming never ran, so a
+// depth-0 run prints nothing rather than printing a zero that could be misread as "free".
+struct BottomCostReport
+{
+    ~BottomCostReport()
+    {
+        if (!BottomCostStatsOn()) { return; }
+        const unsigned long long calls = g_bottom_calls.load();
+        if (calls == 0) { return; }
+        const double secs = static_cast<double>(g_bottom_ns.load()) / 1e9;
+        std::fprintf(stderr,
+                     "[bottom-cost] decisions=%llu cards=%llu cpu=%.3fs (%.3f ms/decision)"
+                     "  -- compare against TOTAL USER cpu, this is summed over threads\n",
+                     calls, g_bottom_cards.load(), secs,
+                     calls ? 1000.0 * secs / static_cast<double>(calls) : 0.0);
+    }
+};
+static BottomCostReport g_bottom_cost_report;
+
 // Non-convergence detector gate, read once. When set (MTG_FLAG_NONCONV in the
 // environment), TakeTurn checks each committed decision and prints a [nonconv]
 // record whenever a later turn's verified win turn exceeds one proved earlier.
@@ -1516,6 +1583,7 @@ int AIEngine::RolloutKeepWinTurn(GameState trial, int mulligan_count, int max_tu
 
 void AIEngine::BottomCards(GameState& state, int count, int max_turns)
 {
+    BottomCostScope _bcs(count);   // MTG_ROLLOUT_STATS cost attribution; see BottomCostScope
     Player& ap = state.ActivePlayer();
 
     // Blind exhaustive-policy bottoming: when the deck carries an exhaustive keep/bottom table and it
