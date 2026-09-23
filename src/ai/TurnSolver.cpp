@@ -7634,6 +7634,39 @@ static bool SacOutletPoolEnabled()
     return heurarm::Flag(heurarm::SAC_OUTLET_POOL, env_on);
 }
 
+// RESERVE THE FODDER (MTG_SAC_FODDER_RESERVE). SubsetOversubscribesSacFodder answers a yes/no
+// question -- "could this plan conceivably make a matching body?" -- and on yes it allows the
+// subset unconditionally. That is a SUPPLY question answered as an EXISTENCE question, and the
+// difference is the whole bug: one Saproling on board plus a Mycoloth in the subset reads as
+// unlimited Saprolings, because Mycoloth's `upkeep_token_subtypes` says it makes them. It makes
+// them AT THE BEGINNING OF YOUR UPKEEP -- a phase this main phase has already passed -- so its
+// contribution to fodder THIS TURN is exactly zero. The guard nonetheless bailed out on it, went
+// inert across the whole deck, and let a pooled count=2 be scored as 2 floating mana off one body
+// (fungus gi120: `[sac] T5 burst 2/2 vid=-1`, Mycoloth stranded, game lost).
+//
+// With this arm on, the same walk COUNTS instead: every activation reserves one body, supply is
+// the board's matching creatures plus the bodies co-selected actions genuinely put onto the
+// battlefield this turn, and a subset that comes up short is rejected -- the line is skipped
+// rather than scored for mana it cannot float. USER, 2026-09-23: *"if we are over-promising fodder
+// then those fodder need to be reserved. And if that then makes the line unviable we skip it."*
+//
+// EVERY CREDIT IS EITHER EXACTLY COUNTABLE OR UNBOUNDED -- there is no estimate in between, and an
+// uncountable one keeps today's allow. That asymmetry is deliberate: an under-counted supply
+// deletes a line the deck can really play (the failure mode this guard's comments have warned
+// about since it shipped), whereas an over-counted one merely leaves the pre-existing apply-time
+// degradation exactly as it is. So the arm only ever REMOVES an unbounded bail-out where the
+// quantity is known for certain, and the upkeep clause above is the case that motivated it.
+//
+// This is what unblocks MTG_SAC_OUTLET_POOL, and the dependency runs one way: pooling N outlets
+// onto a count axis is sound exactly when the count is policed. Without the reserve the pool turns
+// a self-limiting failure (each unpooled sac degrades on its own for 1 mana) into a k-mana
+// shortfall that strands the cast the plan was built around.
+static bool SacFodderReserveEnabled()
+{
+    static const bool env_on = EnvOn("MTG_SAC_FODDER_RESERVE");
+    return heurarm::Flag(heurarm::SAC_FODDER_RESERVE, env_on);
+}
+
 // HAND CASTS (MTG_FOLD_HAND_CASTS, the second half of the same fold). Two copies of one card in
 // hand are the same decision: "cast a Coldsteel Heart", not "cast the one in slot 3". The census
 // put cast_from_hand at 77.4% of Snow's candidate mass -- four times the activation slice the
@@ -8517,8 +8550,13 @@ static bool SubsetOversubscribesSacFodder(const GameState& state,
     // with ONE Saproling on board, `[sac] T5 burst 2/2 vid=-1` at apply, Mycoloth left uncast and
     // the game lost. The burst emitted by the per-source path is not affected: it caps its own k at
     // the live victim count, so it cannot outrun its fodder the way a pooled count can.
+    // A DEVOUR CAST IS A SECOND CONSUMER OF THE SAME BODIES, so under MTG_SAC_FODDER_RESERVE one
+    // outlet beside one devour already competes and the "needs two outlets" shape no longer holds.
+    // Scanned only when that arm is on, so the OFF arm keeps the prepass it was measured with.
+    const bool reserve = SacFodderReserveEnabled();
     int sac_actions = 0;
     bool pooled_multi = false;
+    bool devour_rival = false;
     for (int j : sel)
     {
         const Action& a = cands[j];
@@ -8528,8 +8566,10 @@ static bool SubsetOversubscribesSacFodder(const GameState& state,
             ++sac_actions;
             if (a.pooled_sac && a.sac_count > 1) { pooled_multi = true; }
         }
+        if (reserve && a.devour_count > 0) { devour_rival = true; }
     }
-    if (sac_actions < 2 && !pooled_multi) { return false; }   // outlets <= sac_actions
+    const bool multi_consumer = pooled_multi || (devour_rival && sac_actions >= 1);
+    if (sac_actions < 2 && !multi_consumer) { return false; }   // outlets <= sac_actions
 
     // (victim subtype filter, demand). Empty filter = "any creature you control".
     std::vector<std::pair<std::string, int>> demand;
@@ -8554,7 +8594,7 @@ static bool SubsetOversubscribesSacFodder(const GameState& state,
         { if (d.first == filt) { d.second += want; found = true; break; } }
         if (!found) { demand.emplace_back(filt, want); }
     }
-    if (outlets < 2 && !pooled_multi) { return false; }   // one UNPOOLED outlet cannot oversubscribe itself
+    if (outlets < 2 && !multi_consumer) { return false; }   // one UNPOOLED outlet cannot oversubscribe itself
     const int me = state.active_player_index;
 
     // BAIL OUT WHERE FODDER CAN BE REPLENISHED MID-PLAN. This guard counts the board as it is now,
@@ -8628,17 +8668,135 @@ static bool SubsetOversubscribesSacFodder(const GameState& state,
         return false;
     };
 
-    for (const auto& d : demand)
+    auto board_supply = [&](const std::string& filt) -> int
     {
-        if (plan_can_add(d.first)) { continue; }   // supply is not fixed -> cannot judge, allow
         int supply = 0;
         for (const Permanent& p : state.battlefield)
         {
             if (p.controller_index != me || !p.card.IsCreature()) { continue; }
-            if (!d.first.empty() && !CardHasSubtype(p.card, d.first)) { continue; }
+            if (!filt.empty() && !CardHasSubtype(p.card, filt)) { continue; }
             ++supply;
         }
-        if (supply < d.second) { return true; }   // physically impossible -> reject
+        return supply;
+    };
+
+    // ---- THE RESERVATION LEDGER (MTG_SAC_FODDER_RESERVE) --------------------------------------
+    // See SacFodderReserveEnabled for why this exists. `plan_can_add` above answers EXISTENCE;
+    // this answers SUPPLY, and each activation reserves one body against it.
+    if (SacFodderReserveEnabled())
+    {
+        // Bodies the plan genuinely puts onto the battlefield THIS TURN. `unbounded` restores the
+        // historical bail-out for any credit whose size cannot be named exactly -- an under-count
+        // would delete a line the deck can really play, so every uncertain credit stays infinite.
+        auto plan_fodder_credit = [&](const std::string& filt, bool& unbounded) -> int
+        {
+            int credit = 0;
+            for (int j : sel)
+            {
+                const Action& a = cands[j];
+                const CardDefinition* d = a.def;
+                if (d == nullptr && !static_cast<const std::string&>(a.card_name).empty())
+                { d = CardDatabase::Instance().Lookup(static_cast<const std::string&>(a.card_name)); }
+                if (d == nullptr) { unbounded = true; return 0; }   // unknown -> do not reject
+                auto matches = [&](const std::vector<std::string>& subs)
+                {
+                    if (filt.empty()) { return !subs.empty(); }
+                    for (const std::string& s : subs) { if (s == filt) { return true; } }
+                    return false;
+                };
+                // The sac activation itself adds nothing (see the same clause in plan_can_add).
+                if (a.kind == Action::Kind::SacForMana
+                    || a.kind == Action::Kind::SacCreatureOutlet) { continue; }
+                // COUNTABLE: casting a matching creature puts EXACTLY ONE body on the battlefield.
+                // Anything it additionally creates falls through to the clauses below.
+                if (a.kind == Action::Kind::CastFromHand && d->card.IsCreature()
+                    && (filt.empty() || CardHasSubtype(d->card, filt))) { credit += 1; }
+                // COUNTABLE: a spore pop carries its own yield. k is a searched axis living in
+                // chosen_x, and with MTG_FUNGUS_SPORE_POOL on it is the POOL's capacity, so this
+                // one action can be the whole Saproling supply for the turn.
+                if (a.kind == Action::Kind::ActivatePermAbility
+                    && a.ability_mode == Action::AbilityMode::SporeSaproling
+                    && matches(d->params.spore_token_subtypes))
+                {
+                    credit += std::max(1, a.chosen_x)
+                            * std::max(1, d->params.spore_creates_tokens);
+                    continue;
+                }
+                // ZERO, AND DELIBERATELY NOT UNBOUNDED -- the two credits that are certainly not
+                // available to a sac in THIS main phase:
+                //   * upkeep_token_subtypes: those tokens arrive at the beginning of the NEXT
+                //     upkeep. Mycoloth is the card, fungus gi120 is the game, and reading this as
+                //     "can make Saprolings" is what made the whole guard inert on Fungus.
+                //   * spore_token_subtypes on anything that is NOT the pop above: the spore ability
+                //     is its own enumerated action, so its yield is either counted there or not
+                //     taken at all. A freshly cast Thallid holds zero counters and can pop nothing.
+                // Neither is skipped as an approximation; both are exactly zero.
+                if (matches(d->params.dies_token_subtypes)
+                    || matches(d->params.sac_outlet_token_subtypes)
+                    || matches(d->params.etb_created_token_subtypes)
+                    || matches(d->params.tap_token_subtypes)
+                    || matches(d->params.cast_token_subtypes)
+                    || matches(d->params.attack_token_subtypes))
+                { unbounded = true; return 0; }
+            }
+            return credit;
+        };
+
+        static const bool s_fodder_trace = EnvOn("MTG_FODDER_TRACE");
+        auto trace = [&](const char* why, const std::string& filt, int sup, int cr, int dem)
+        {
+            if (!s_fodder_trace) { return; }
+            std::string acts;
+            for (int j : sel)
+            {
+                const Action& a = cands[j];
+                acts += " " + static_cast<const std::string&>(a.card_name)
+                      + "/k" + std::to_string(static_cast<int>(a.kind));
+                if (a.sac_count > 1 || a.pooled_sac) { acts += "/sc" + std::to_string(a.sac_count); }
+                if (a.devour_count > 0) { acts += "/dv" + std::to_string(a.devour_count); }
+                if (a.chosen_x > 0) { acts += "/x" + std::to_string(a.chosen_x); }
+            }
+            std::fprintf(stderr, "[fodder] %s filt=%s sup=%d cr=%d dem=%d |%s\n",
+                         why, filt.empty() ? "*" : filt.c_str(), sup, cr, dem, acts.c_str());
+        };
+
+        // Per-filter: two outlets wanting different subtypes do not compete for the same bodies.
+        for (const auto& d : demand)
+        {
+            bool unb = false;
+            const int credit = plan_fodder_credit(d.first, unb);
+            if (unb) { continue; }                                  // cannot judge -> allow
+            if (board_supply(d.first) + credit < d.second)
+            { trace("REJECT", d.first, board_supply(d.first), credit, d.second); return true; }
+        }
+
+        // ACROSS filters, and against the OTHER consumer of the same bodies. Devour (Mycoloth,
+        // CR 702.81) sacrifices any number of creatures you control as the spell resolves, and k
+        // is a searched axis on the cast -- so a plan can select "devour 2" alongside a sac outlet
+        // and have both promised the same lone Saproling. Every subtype pool is a subset of "any
+        // creature you control", so total consumption <= total bodies is a necessary condition for
+        // the whole plan; failing it is impossible regardless of which outlet eats what. The
+        // honest k is enumerated as its own cast variant, so rejecting the over-promised one never
+        // costs the line, only the arithmetic that could not have happened.
+        // Sub-lever: the union check is the half that can reject a plan no single filter can fault,
+        // so it is separable for attribution (MTG_SAC_FODDER_RESERVE_DEVOUR=0 keeps the per-filter
+        // reservation and drops the cross-consumer one).
+        static const bool s_union_check = EnvOn("MTG_SAC_FODDER_RESERVE_DEVOUR", true);
+        if (!s_union_check) { return false; }
+        int total_demand = 0;
+        for (const auto& d : demand) { total_demand += d.second; }
+        for (int j : sel)
+        { if (cands[j].devour_count > 0) { total_demand += cands[j].devour_count; } }
+        bool unb_any = false;
+        const int credit_any = plan_fodder_credit(std::string{}, unb_any);
+        if (!unb_any && board_supply(std::string{}) + credit_any < total_demand) { return true; }
+        return false;
+    }
+
+    for (const auto& d : demand)
+    {
+        if (plan_can_add(d.first)) { continue; }   // supply is not fixed -> cannot judge, allow
+        if (board_supply(d.first) < d.second) { return true; }   // physically impossible -> reject
     }
     return false;
 }

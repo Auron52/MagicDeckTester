@@ -234,6 +234,7 @@ enum Slot : int
     TECTONIC_AXIS,            // MTG_TECTONIC_AXIS         Tectonic Giant's attack-trigger mode A vs B (default ON)
     TECTONIC_KEEP_AXIS,       // MTG_TECTONIC_KEEP_AXIS    ...and WHICH exiled card mode B stages (sub-decision of mode B)
     SAC_OUTLET_POOL,          // MTG_SAC_OUTLET_POOL      N interchangeable sac-for-mana outlets are ONE pool: the COUNT is the only axis (default OFF)
+    SAC_FODDER_RESERVE,       // MTG_SAC_FODDER_RESERVE   sac fodder is RESERVED per activation: count the bodies the plan can really have THIS TURN, skip the line if short (default OFF)
     COUNT
 };
 
@@ -434,6 +435,7 @@ inline const char* Name(int slot)
         "MTG_TECTONIC_AXIS",
         "MTG_TECTONIC_KEEP_AXIS",
         "MTG_SAC_OUTLET_POOL",
+        "MTG_SAC_FODDER_RESERVE",
     };
     // The enum and this table are ONE mapping split across two lists: a slot added to one and not
     // the other silently shifts every lever after it (a manifest asking for lever X would set Y).

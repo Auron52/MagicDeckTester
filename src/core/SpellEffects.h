@@ -10233,6 +10233,61 @@ inline void ApplySacForMana(GameState& state, int controller, int sac_source_id,
                 return;
             }
         }
+        // ---- PHANTOM FLOAT (MTG_SAC_NO_PHANTOM_FLOAT) -------------------------------------------
+        // THE MANA IS FLOATED BEFORE ANYONE ASKS WHETHER THE COST CAN BE PAID. Below, a skirk-style
+        // outlet whose baked victim is gone falls through every branch to a bare `return` -- the
+        // sacrifice no-ops, exactly as the stale-victim comment intends, but `amount` mana is
+        // already in the pool and pays for a spell. The activation's cost is "sacrifice a creature"
+        // (CR 601.2h): with no legal victim the ability is never activated at all, so it produces
+        // nothing. What we ship today is free mana conjured out of a failed premise.
+        //
+        // This is what makes over-promising fodder PROFITABLE rather than merely wasteful, and it
+        // is why a plan the guard should reject still wins. fungus gi120 T5: two Utopia Mycon
+        // single-sacs are co-selected against ONE Saproling; the first eats it, the second finds
+        // nothing, floats {G} anyway, and that phantom green is the fifth mana that casts Mycoloth
+        // a turn early. The whole turn-8 win rests on it. The multi-sac BURST path above already
+        // gets this right (`if (vid < 0) break;` precedes its float), so this only brings the
+        // single-sac path into line with its own twin.
+        //
+        // Ordering is the entire fix: resolve the victim first, float only if one was found. Every
+        // activation that HAS a victim is byte-identical -- same float, same victim, same order --
+        // so only the failed premise changes, and it changes to nothing happening.
+        static const bool s_no_phantom_float = EnvOn("MTG_SAC_NO_PHANTOM_FLOAT");
+        if (s_no_phantom_float && skirk && victim_id != 0)
+        {
+            int      vid  = victim_id;
+            int      bidx = ChooseSacOutletVictimIndex(state, controller, sac_source_id,
+                                                       need_sub, vid, src_name);
+            if (bidx < 0)
+            {
+                // Same stale-victim walk as below, but resolving an INDEX instead of sacrificing:
+                // a token victim (id >= 1000, legacy 0) is fungible and re-picks; a missing
+                // real-card victim is a failed plan premise and does not substitute.
+                const bool victim_was_token = (vid == 0 || vid >= 1000);
+                for (int attempt = 0; attempt < 2; ++attempt)
+                {
+                    for (int j = 0; j < static_cast<int>(state.battlefield.size()); ++j)
+                    {
+                        const Permanent& q = state.battlefield[j];
+                        if (q.controller_index != controller || q.card.m_number != vid) { continue; }
+                        bidx = j; break;
+                    }
+                    if (bidx >= 0 || attempt > 0 || !victim_was_token) { break; }
+                    vid = CanonicalSacVictim(state, controller, sac_source_id, need_sub);
+                    if (vid < 0) { break; }
+                }
+            }
+            if (bidx < 0) { return; }   // no legal victim -> the ability was never activated
+            AddChosenColorFloat(state, color, amount);
+            if (g_play_event_sink)
+            {
+                EmitPlayEvent(state.turn_number, "mana",
+                              "\xF0\x9F\xAA\xB7 " + src_name + " -- sacrifice: add "
+                              + std::to_string(amount) + " " + (color.empty() ? "wild" : color));
+            }
+            SacrificePermanentAt(state, controller, bidx);
+            return;
+        }
         AddChosenColorFloat(state, color, amount);   // float the chosen colour into state.floating_mana
         if (g_play_event_sink)   // nulled during search/rollout -> byte-identical
         {

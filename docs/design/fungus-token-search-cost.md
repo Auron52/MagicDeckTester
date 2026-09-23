@@ -2467,6 +2467,10 @@ walk is worth.
 
 # Round 7b (2026-09-23): the count-pool was BUILT, and MEASUREMENT REFUTED IT
 
+> **THE REFUTATION DID NOT HOLD — see Round 8.** The 7 lost games below were measured against a
+> baseline that floats mana for a sacrifice it never performs. Read 7b/7c for the mechanisms
+> (both are still accurate about what the code does); do not read the verdict.
+
 `MTG_SAC_OUTLET_POOL` / `heurarm::SAC_OUTLET_POOL`, **DEFAULT OFF and byte-identical** (smoke 93/93,
 `configs changed: 0`, `play-changed=0`, scenarios 103/103). Kept, off, as the reproducible A/B for
 the next attempt — the same status `MTG_SAC_OUTLET_PAY` and `MTG_FOLD_COUNTER_SOURCES` hold.
@@ -2525,6 +2529,10 @@ positions without being `2^N` arrangements. That is a different mechanism from t
 ---
 
 # Round 7c (2026-09-23): the count-pool's losses are a GUARD leak, not a property of counts
+
+> **PARTLY RIGHT — see Round 8.** The guard leak is real and is now fixed
+> (`MTG_SAC_FODDER_RESERVE`), but fixing it did NOT recover gi120, because the baseline's turn-8
+> win is bought with phantom mana. The guard was half the story; the executor was the other half.
 
 **This CORRECTS Round 7b's conclusion.** 7b said "an activation count is not a free-standing
 quantity" and blamed plan ORDER. That named the wrong cause. **USER:** *"it might still be worth
@@ -2592,3 +2600,162 @@ Build that first; both this pool and `MTG_SAC_OUTLET_PAY` unblock behind it.
 **Do not spend more on the count SET.** With the V cap, the capped set is too small (gi120's count=2
 is unreachable and Mycoloth still misses); without it, the set is right and the guard cannot police
 it. Neither end works until supply is modelled.
+
+---
+
+# Round 8 (2026-09-23): the baseline was being PAID for over-promising, and that is what the pool "lost"
+
+**This corrects the VERDICT of Rounds 7b and 7c.** Both measured the count-pool against
+`fungus gi120`'s turn-8 baseline. That baseline win is powered by **one green mana the engine
+conjures out of a sacrifice that never happens**. The pool did not delete a line; it declined to
+cheat, and the harness scored that as a regression.
+
+**USER, 2026-09-23** — the directive that produced this round:
+> *"I suppose if we are over-promising fodder then those fodder need to be reserved. And if that
+> then makes the line unviable we skip it."*
+
+That is right, and it needs **both** halves. Reserving at enumeration is useless while the executor
+pays out on a premise that failed.
+
+## The defect: `ApplySacForMana` floats the mana before it knows the cost can be paid
+
+`src/core/SpellEffects.h`, the single-sac path. The order is:
+
+```cpp
+AddChosenColorFloat(state, color, amount);      // <-- the mana exists NOW
+...
+if (victim_id != 0 && skirk) {
+    ...                                          // find the baked victim
+    return;                                      // not found -> sacrifice no-ops. Mana stays.
+}
+```
+
+The stale-victim comment already states the intent — *"A missing REAL-card victim is a failed plan
+premise ... and must NO-OP"* — but only the **sacrifice** no-ops. `amount` mana is already in the
+pool and pays for a spell. The activation's cost is *"Sacrifice a Saproling"* (CR 601.2h): with no
+legal victim the ability was never activated, so it produces nothing.
+
+**Two of the three sibling paths in this same file already get it right**, which is what makes this
+a defect rather than a modelling choice:
+
+| path | order | correct? |
+|---|---|---|
+| `ApplySacForMana`, multi-sac burst (`count > 1`) | `if (vid < 0) break;` **precedes** the float | yes |
+| `ApplySacCreatureOutlet` (value outlets) | `if (!found) { return; }` **precedes** the payload | yes |
+| `ApplySacForMana`, single-sac (`count == 1`) | floats first, resolves victim second | **no** |
+
+## gi120, re-traced: the turn-8 win is bought with phantom mana
+
+`MTG_EXEC_TAP_TRACE=1` on the OFF arm, turn 5 — three Forests untapped, Simic Growth Chamber entered
+tapped, and Mycoloth costs `{3}{G}{G}`:
+
+```
+[exec-tap] T5 before Mycoloth: float{w0 u0 b0 r0 g2 c0 *0} untapped: Thallid Forest Utopia Mycon Forest Utopia Mycon Forest
+[exec-tap] T5 Mycoloth tapped: Forest Forest Forest   float{...g0...}
+```
+
+**`g2` floating, from two Utopia Mycon single-sacs, against ONE Saproling on the board.** The first
+ate it; the second found nothing, floated `{G}` anyway, and that phantom green is the fifth mana.
+The board confirms the arithmetic: four creatures before, one after — one Saproling sacrificed,
+three devoured (6 upkeep tokens = 3 x devour 2), and the second Mycon still standing having "paid"
+nothing.
+
+Set `MTG_SAC_NO_PHANTOM_FLOAT=1` on the **OFF** arm and gi120 goes `8 -> 9` on its own. So:
+
+* Round 7b's headline — *"7 win turns changed, EVERY ONE WORSE, three to a LOSS"* — was measured
+  against a baseline cashing free mana on exactly this deck.
+* Round 7c's cause (the guard's three bail-outs) was **real and worth fixing**, but it was not the
+  whole story: with the guard fixed, gi120 still lost, because the honest line genuinely cannot cast
+  Mycoloth on turn 5. Only the baseline could, and only by cheating.
+* The pooled burst path was **never the unsound half**. It is the half that already checked.
+
+## What was built
+
+Three levers, all **default OFF**, OFF arm byte-identical (scenarios 103/103, smoke 93/93,
+`configs changed: 0`, `play-changed=0`).
+
+**1. `MTG_SAC_NO_PHANTOM_FLOAT`** (`SpellEffects.h`) — resolve the victim first, float only if one
+was found. Every activation that HAS a victim is byte-identical: same float, same victim, same
+order. Only the failed premise changes, and it changes to nothing happening.
+
+**2. `MTG_SAC_FODDER_RESERVE`** / `heurarm::SAC_FODDER_RESERVE` (`SubsetOversubscribesSacFodder`) —
+the reservation ledger. The old guard answers an EXISTENCE question (*"could this plan conceivably
+make a matching body?"*) and allows on yes; this answers a SUPPLY question, and every activation
+reserves one body against it. **Every credit is either exactly countable or unbounded** — there is
+no estimate in between, and an uncountable credit keeps today's allow, so the arm can only ever
+remove a bail-out where the quantity is certain:
+
+| credit | value | why |
+|---|---|---|
+| `upkeep_token_subtypes` | **0** | those tokens arrive at the NEXT upkeep; this main phase is past it. **Mycoloth is the card that made the whole guard inert on Fungus.** |
+| `spore_token_subtypes` on a non-pop action | **0** | the spore ability is its own enumerated action; a freshly cast Thallid holds no counters |
+| spore pop (`AbilityMode::SporeSaproling`) | `chosen_x * spore_creates_tokens` | the action states its own yield; with `MTG_FUNGUS_SPORE_POOL` this is the pool's whole capacity |
+| casting a matching creature | **1** | exactly one body |
+| `dies` / `sac_outlet` / `etb_created` / `tap` / `cast` / `attack` token subtypes | **unbounded** | genuinely replenishable this turn, or the count is not local — keep allowing |
+
+Plus a cross-consumer check: **devour is a second consumer of the same bodies** (Mycoloth, CR
+702.81 — `Action::devour_count` is a searched axis on the cast), so a plan can promise the same lone
+Saproling to an outlet and to devour. Every subtype pool is a subset of *"any creature you
+control"*, so `total consumption <= total bodies` is a necessary condition for the whole plan.
+Separable as `MTG_SAC_FODDER_RESERVE_DEVOUR=0` for attribution.
+
+`MTG_FODDER_TRACE=1` prints each reject with its filter, supply, credit and demand. On gi120 it
+prints exactly seven, all of the form `filt=Saproling sup=1 cr=0 dem=2` — the guard is now precise,
+not permissive.
+
+**3. `MTG_SAC_OUTLET_POOL`** — unchanged from Round 7b, re-measured on an honest baseline.
+
+## Measured: smoke, five arms, per-cell avg win turn
+
+**Only 4 of 93 cells move under ANY arm.** Every other deck in the suite is untouched — the phantom
+float is a Fungus-only phenomenon here (Goblins' Skirk Prospector never strands a victim in these
+games), which is itself worth knowing.
+
+| cell | OFF (GT) | POOL only | NP only | NP+RES | **NP+RES+POOL** |
+|---|---|---|---|---|---|
+| `fungus_smoke_d0` | 6.0950 | +0.0090 | +0.0080 | +0.0030 | **+0.0030** |
+| `fungus_smoke_d3` | 5.6400 | +0.0067 | +0.0067 | +0.0067 | **+0.0000** |
+| `goblins_smoke_d0` | 4.0680 | +0.0010 | 0 | 0 | **+0.0010** |
+| `goblins_smoke_d3` | 3.6467 | 0 | 0 | 0 | **0** |
+| `fungus_smoke_d5` | 5.6267 | 0 | 0 | 0 | **0** |
+
+Reading it, searched tiers first (per the user's standing note that d0 is the side-note):
+
+* **The full stack is EXACTLY the ground-truth baseline at `fungus d3`, `fungus d5` and
+  `goblins d3`** — and it gets there while removing a free-mana bug. Every *partial* arm is worse at
+  d3 than the full one; the three changes only land together.
+* At `fungus d0` the honest cost is **+0.0030**, less than half of either the pool alone (+0.0090)
+  or the phantom fix alone (+0.0080). The reservation is what pays that back.
+* `goblins d0` +0.0010 is one game and belongs to the pool's own churn, unchanged by the other two.
+
+Structurally, over 200 fungus d0 games the worst odometer shape falls **4.61e+03 -> 2.02e+03** and
+`ind` goes to **0** — the independent Mycon bits are gone, which was Round 7's whole claim. (The
+**31,554 ms -> 181 ms / 174x** slow-cell figure is Round 7b's, measured on the pool alone; it has
+not been re-run with the reserve on.)
+
+## What this round actually settles
+
+1. **The user's instinct held through three rounds of contrary measurement.** *"I still see no
+   reason to not collapse those abilities"* — there wasn't one. The collapse was being judged
+   against a baseline that had an extra mana the collapse refused to fake.
+2. **A guard that is "conservative in the safe direction" can be conservative in the WRONG
+   direction.** `SubsetOversubscribesSacFodder`'s own comment argued a missed reject only *"leaves
+   the pre-existing apply-time degradation exactly as it was"*. That is true for a VALUE outlet
+   (Psychotrope Thallid loses its draw) and **false for a MANA outlet**, which gains a mana. The
+   degradation was not neutral, so permissiveness was not safe.
+3. **Measure the failing arm against an honest baseline, not against ground truth.** GT encodes the
+   engine's current behaviour including its bugs. Two rounds were spent explaining why a correct
+   change looked worse than an incorrect one.
+
+## Not done
+
+* **Shipping decision.** All three are default OFF pending the user's call. The phantom-float fix is
+  a correctness fix and the weakest candidate for staying off; note that adopting it requires a GT
+  rebaseline of two fungus cells.
+* **The reservation is order-blind.** It credits a co-selected spore pop whether or not the pop
+  precedes the sac in the plan's action order. That over-credits, which is the safe direction and
+  matches today's behaviour, but it is the obvious next tightening.
+* `MTG_SAC_OUTLET_PAY` has still never been A/B'd. Its blocker (the *plan-added fodder credit*,
+  `sac-mana-outlet-as-deferred-source.md` stage 2) is what the reservation ledger now partially
+  implements — a credit for bodies the plan itself creates — so that lever is closer than the doc
+  says.
