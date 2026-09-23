@@ -2561,6 +2561,13 @@ static bool HasteDorkCreditEnabled() { return !g_no_haste_dork_credit; }
 // MTG_CONSIDER_STATS context tags (diagnosis only -- see namespace considerstats below the
 // groupwave block). Declared here because the two functions that bump them are defined early.
 static thread_local int g_cs_m2solve_nest = 0;   // inside SolveSecondMainInSearch (either path)
+// Are we inside a ROLLOUT? SimulateToEnd is not a cheap policy playout in this engine -- it calls
+// SolveWithLookahead once per simulated turn (s_fd_leaf_depth, default 1), which re-enters
+// FullSearchLine and so can host breakpoint NODES. That makes "is the node's cost search work or
+// rollout work?" a real question the depth/turn buckets cannot answer, so count it directly.
+// (Hoisted up here from RolloutNestGuard so the main-phase filter, defined earlier, can read it --
+// see the PLAYOUT carve-out in MainPhaseFilterActive.)
+static thread_local int g_rollout_nest = 0;
 
 // GREEDY-WALK BUDGET CHARGING (MTG_SOLVE_CHARGE, default OFF = byte-identical everywhere).
 // SearchBudget counts one unit per simulated turn-step, but the greedy subset walk inside
@@ -4374,6 +4381,25 @@ static KembaLoop KembaLoopKindUncounted(const GameState& state, const Action& a,
 // narrowed. Cheap by construction: two int compares, no scan, no allocation.
 static bool MainPhaseFilterActive(const GameState& state);   // fwd (defined with the filter)
 
+// Diagnostic/perf lever for the ROLLOUT's per-turn second-main apply; see the call site in
+// SimulateToEndImpl for what it skips and why the old "0.0%" reading is not evidence.
+static bool M2SkipEmptyApplyOn()
+{
+    // ADOPTED default ON 2026-09-23: byte-identical by digest at d0/d1/d3/d5 and -3.1% of the
+    // second-main arm, single-threaded and interleaved. =0 restores the apply for the A/B.
+    static const bool on = EnvOn("MTG_M2_SKIP_EMPTY_APPLY", true);
+    return on;
+}
+
+// REJECTED BY THE USER, 2026-09-23 -- recorded so it is not re-derived. The obvious way to delete
+// the rollout's per-turn second-main cost is to stand the phase filter down inside a playout, so a
+// rollout casts the deferred card in main 1 as the single-main engine does. It measured 1.07x. It
+// is WRONG: *"I don't want to cast it in main 1 in either situation. That makes no sense
+// whatsoever. The purpose of casting it second main is to have the attack phase in-between."*
+// A rollout that devours before the Saprolings swing does not score the line the search is
+// choosing -- it scores its opposite. The rollout's second main must stay a second main; only its
+// PRICE is negotiable. See docs/design/fungus-second-main-and-devour.md §8.
+
 static bool SecondMainUnproductive(const GameState& state)
 {
     static const bool s_kill  = EnvOn("MTG_NO_M2_PRODUCTIVE");
@@ -4587,6 +4613,14 @@ namespace m2yield
 {
     inline bool Enabled() { static const bool v = EnvOn("MTG_M2_YIELD_STATS"); return v; }
     inline std::atomic<uint64_t> g_solves{0}, g_empty{0}, g_actions{0};
+    // WALL inside the solve itself (ns). 747 solves in 30 games is a small COUNT, and a count is
+    // not a cost: a post-combat greedy walk runs on a board whose attackers are now sac fodder,
+    // so one call can be milliseconds. Two chrono reads per call, only under the stats flag.
+    inline std::atomic<uint64_t> g_solve_ns{0};
+    // OUTERMOST-rollout wall (ns) and count. Nested rollouts are excluded so the total is a clean
+    // share of the run rather than a double-counted sum: SimulateToEndImpl re-enters
+    // SolveWithLookahead, which can start another rollout.
+    inline std::atomic<uint64_t> g_rollout_ns{0}, g_rollout_n{0};
     // WHICH PATH the interior m2 actually took. g_solves counts BOTH, so it cannot answer "is the
     // searched m2 live on this deck" -- and a provider hook reading ON while the searched branch
     // never runs is exactly the "no effect and never fired look identical" trap. Split by the two
@@ -4660,6 +4694,16 @@ namespace m2yield
                          (unsigned long long)s, (unsigned long long)e,
                          s ? 100.0 * static_cast<double>(e) / static_cast<double>(s) : 0.0,
                          (unsigned long long)g_actions.load());
+            const uint64_t ns = g_solve_ns.load();
+            std::fprintf(stderr,
+                         "=== M2 SOLVE WALL: %.3f s total, %.1f us mean over %llu solves ===\n",
+                         double(ns) / 1e9, s ? double(ns) / 1e3 / double(s) : 0.0,
+                         (unsigned long long)s);
+            const uint64_t rns = g_rollout_ns.load(), rn = g_rollout_n.load();
+            std::fprintf(stderr,
+                         "=== ROLLOUT WALL: %.3f s over %llu outermost rollouts (%.1f us mean) ===\n",
+                         double(rns) / 1e9, (unsigned long long)rn,
+                         rn ? double(rns) / 1e3 / double(rn) : 0.0);
             const uint64_t sr = g_searched.load(), gh = g_greedy_hook.load(), gd = g_greedy_depth.load();
             std::fprintf(stderr,
                          "=== M2 PATH: SEARCHED %llu (%.2f%%) | greedy-by-hook %llu | "
@@ -4940,10 +4984,20 @@ static TurnSolver::Plan SolveSecondMainInSearch(const GameState& state, int dept
     const bool greedy_here = !searched;
     const int eff_depth    = d0_searched ? 1 : m2_depth;
     m2yield::RecordPath(!greedy_here, depth_out, in_rollout, d0_searched);
+    const bool time_it = m2yield::Enabled();
+    const std::chrono::steady_clock::time_point _t0 =
+        time_it ? std::chrono::steady_clock::now() : std::chrono::steady_clock::time_point{};
     const TurnSolver::Plan p =
         greedy_here
             ? TurnSolver::Solve(state, false)
             : SearchedSecondMainMemoized(state, eff_depth, max_turns, budget, second_main, tt);
+    if (time_it)
+    {
+        m2yield::g_solve_ns.fetch_add(
+            (uint64_t)std::chrono::duration_cast<std::chrono::nanoseconds>(
+                std::chrono::steady_clock::now() - _t0).count(),
+            std::memory_order_relaxed);
+    }
     m2yield::Record(p);
     return p;
 }
@@ -13270,6 +13324,10 @@ static bool MainPhaseFilterActive(const GameState& state)
     if (ResolveProvider(state).PhaseFilterRootTurnOnly()
         && g_condemn_root_turn >= 0 && state.turn_number != g_condemn_root_turn)
     { return false; }
+    // NO PLAYOUT CARVE-OUT HERE, and that is a USER RULING rather than an omission: standing the
+    // filter down inside a rollout would have a playout cast the deferred card PRE-combat, which
+    // scores the opposite of the line being chosen (devour before the swing). See the rejection
+    // note beside SecondMainUnproductive. Make the rollout's second main CHEAPER, never earlier.
     return !DecisionUnpruned(UnprunedGate::MainPhase);
 }
 
@@ -25489,11 +25547,6 @@ static bool BpNodeD0Only()
 }
 
 static inline int BpDepthBucket(int d) { return d < 0 ? 0 : (d > 7 ? 7 : d); }
-// Are we inside a ROLLOUT? SimulateToEnd is not a cheap policy playout in this engine -- it calls
-// SolveWithLookahead once per simulated turn (s_fd_leaf_depth, default 1), which re-enters
-// FullSearchLine and so can host breakpoint NODES. That makes "is the node's cost search work or
-// rollout work?" a real question the depth/turn buckets cannot answer, so count it directly.
-static thread_local int g_rollout_nest = 0;
 struct RolloutNestGuard
 {
     RolloutNestGuard()  { ++g_rollout_nest; }
@@ -39464,6 +39517,21 @@ static int SimulateToEndImpl(GameState& state, int depth, int max_turns,
     const int first_turn_depth = (g_rollout_nest == 0
                                   && !(s_fd_leaf_depth_env != nullptr && *s_fd_leaf_depth_env))
                                ? t_search_leaf_first_turn_depth : -1;
+    const bool _ro_time = m2yield::Enabled() && g_rollout_nest == 0;
+    const std::chrono::steady_clock::time_point _ro_t0 =
+        _ro_time ? std::chrono::steady_clock::now() : std::chrono::steady_clock::time_point{};
+    struct RoTimer
+    {
+        bool on; std::chrono::steady_clock::time_point t0;
+        ~RoTimer()
+        {
+            if (!on) { return; }
+            m2yield::g_rollout_ns.fetch_add(
+                (uint64_t)std::chrono::duration_cast<std::chrono::nanoseconds>(
+                    std::chrono::steady_clock::now() - t0).count(), std::memory_order_relaxed);
+            m2yield::g_rollout_n.fetch_add(1, std::memory_order_relaxed);
+        }
+    } _ro_timer{ _ro_time, _ro_t0 };
     RolloutNestGuard _rollout_nest;   // see g_rollout_nest: this rollout re-enters SolveWithLookahead
     GreedyChargeGuard _gcg(budget);   // MTG_SOLVE_CHARGE: greedy walks inside this rollout bill here
     if (s_rollout_stats) { g_rollout_calls.fetch_add(1, std::memory_order_relaxed); }   // deterministic telemetry
@@ -39640,7 +39708,21 @@ static int SimulateToEndImpl(GameState& state, int depth, int max_turns,
             }
             const bool m2fix_here = M2FixModeFor(state) != 0;   // per-deck (DecisionProviders.h)
             if (m2fix_here) { g_bp_fired_last = 0; }
-            ApplyPlanDirect(state, post_plan, false);
+            // EMPTY-PLAN APPLY SKIP (MTG_M2_SKIP_EMPTY_APPLY, default OFF pending measurement).
+            // The rollout runs this apply EVERY simulated turn once the deck has a second main,
+            // including the overwhelmingly common case where the solve returned nothing to do. An
+            // apply with no action, no land and no breakpoint has no effect on `state`, so skipping
+            // it must be byte-identical -- which is the test, not the assumption.
+            //
+            // An earlier note recorded this site as "0.0% effect, reverted". That measurement used
+            // per-job `ms` from a pooled --batch, which was later shown to swing 24% run-to-run on a
+            // BYTE-IDENTICAL arm, so it never had the resolution to see an effect this size. It is
+            // being re-measured single-threaded and interleaved; do not re-cite the old number.
+            const bool m2_apply_empty = post_plan.actions.empty()
+                                     && post_plan.land_to_play.empty()
+                                     && !post_plan.land_decided;
+            if (!(M2SkipEmptyApplyOn() && m2_apply_empty))
+            { ApplyPlanDirect(state, post_plan, false); }
             if (g_fs_sim_trace > 0)
             {
                 std::fprintf(stderr, "[fs-sim]    t%d m2 %s | opp=%d\n", state.turn_number,
@@ -41705,6 +41787,10 @@ namespace m2stats
     inline std::atomic<uint64_t> g_scanned_at[8] = {};
     inline std::atomic<uint64_t> g_fix_decisions{0}, g_fix_scanned{0};
     inline std::atomic<uint64_t> g_rollout_scanned{0};
+    // ...of `scanned`, how many took the 0-COST EMPTY path (no state copy, no apply -- see the
+    // empty-second-main block in FSLineTail). A decision counted here costs the recursion and
+    // nothing else, so `scanned - empty_fast` is the plan work the phase actually does.
+    inline std::atomic<uint64_t> g_empty_fast{0};
     struct Dumper
     {
         ~Dumper()
@@ -41713,6 +41799,7 @@ namespace m2stats
             std::cerr << "[rollout-stats] fs_main2 decomp: decisions=" << g_decisions.load()
                       << " plans_enum=" << g_plans_enum.load()
                       << " scanned=" << g_scanned.load()
+                      << " empty_fast=" << g_empty_fast.load()
                       << " in_rollout=" << g_rollout_scanned.load()
                       << " fixpoint(decisions=" << g_fix_decisions.load()
                       << ",scanned=" << g_fix_scanned.load() << ") by_depth=";
@@ -41740,6 +41827,19 @@ static bool M2WavesEnabled()
 {
     static const bool env_on = EnvOn("MTG_M2_WAVES");
     return heurarm::Flag(heurarm::M2_WAVES, env_on);
+}
+
+// ---- EMPTY-SECOND-MAIN FAST PATH (MTG_M2_EMPTY_FAST, default ON) -------------------------------
+// When the deferred-cast gate has already proven the post-combat main can do nothing, the plan loop
+// still ran one iteration for the do-nothing plan: a GameState copy, an apply that applies nothing,
+// a dedup key over the whole board, and the loop bookkeeping -- per horizon-edge node, per turn of
+// the horizon. This lets that decision cost the recursion and nothing else. =0 restores the loop,
+// which is the A/B that proves the two are byte-identical (they must be: the empty plan's
+// post-state IS the pre-state). See the block in FSLineTail for what it reproduces.
+static bool M2EmptyFastOn()
+{
+    static const bool on = EnvOn("MTG_M2_EMPTY_FAST", true);
+    return heurarm::Flag(heurarm::M2_EMPTY_FAST, on);
 }
 
 // ---- FIRST-VERIFIED-WIN HORIZON EXIT (MTG_FS_HORIZON_EXIT, default ON = shipped behaviour) ------
@@ -41883,6 +41983,77 @@ static TurnSolver::SearchLine FSLineTail(const GameState& state, int depth, int 
         // 184k fires with a ~0 saving on EldraziDisplacerFlicker, which is single-main.
         if (WinlessCertificateActive(state, cutoff, winlesscert::Site::M2))
         { return { max_turns + 1, {} }; }
+        // ---- EMPTY SECOND MAIN: THE 0-COST PATH ------------------------------------------------
+        // USER INVARIANT (2026-09-23): "second main when Mycoloth is not available should be
+        // 0-cost". The deferred-cast gate below used to skip only the ENUMERATION and then still
+        // run the plan loop for the single do-nothing plan -- a GameState copy, an ApplyPlanDirect
+        // that applies nothing, a dedup key over a 20-40 wide Saproling board, and the loop's own
+        // bookkeeping -- at EVERY horizon-edge node, on EVERY turn of the horizon. That residue is
+        // what measured 1.70x with the phase doing literally nothing (the `struct` arm), and it is
+        // pure overhead: the empty plan's post-state IS `state`, so everything the loop computes
+        // for it is already computed by the single-main tail at the bottom of this function.
+        //
+        // This path reproduces that iteration EXACTLY -- same budget unit (kFsMain2), same stats,
+        // same ConstantLeafExhausted truncation, same EOT closure, same dominance probe, same
+        // recursion, and the same {false, do-nothing} phase prepended to the committed line (the
+        // executor pops one phase entry per real phase; drop it and main 2 falls through to the
+        // full-lookahead fallback) -- minus the copy and the empty apply. Byte-identical by
+        // construction and verified by digest; MTG_M2_EMPTY_FAST=0 restores the loop for the A/B.
+        //
+        // Scoped to the exotic-hosting-free configuration: the m2 fixpoint (M2FixModeFor) and the
+        // deferred waves (M2WavesEnabled) both re-host the empty plan, so they keep the loop. Both
+        // are default OFF, so the decks that opt into the deferred-cast gate take this path.
+        const bool m2_deferred_only = ResolveProvider(state).SecondMainNeedsDeferredCast();
+        if (m2_deferred_only && M2EmptyFastOn() && M2FixModeFor(state) == 0 && !M2WavesEnabled()
+            && SecondMainUnproductive(state))
+        {
+            if (ConstantLeafExhausted(budget)) { ++g_fs_trunc_events; return { max_turns + 1, {} }; }
+            ConsumeAt(budget, unitsite::kFsMain2);   // the one interior node this decision is worth
+            if (s_rollout_stats)
+            {
+                m2stats::g_decisions.fetch_add(1, std::memory_order_relaxed);
+                m2stats::g_plans_enum.fetch_add(1, std::memory_order_relaxed);
+                m2stats::g_scanned.fetch_add(1, std::memory_order_relaxed);
+                m2stats::g_scanned_at[BpDepthBucket(depth)].fetch_add(1, std::memory_order_relaxed);
+                m2stats::g_empty_fast.fetch_add(1, std::memory_order_relaxed);
+                if (g_m2fix_nest > 0)
+                {
+                    m2stats::g_fix_decisions.fetch_add(1, std::memory_order_relaxed);
+                    m2stats::g_fix_scanned.fetch_add(1, std::memory_order_relaxed);
+                }
+                if (g_rollout_nest > 0)
+                { m2stats::g_rollout_scanned.fetch_add(1, std::memory_order_relaxed); }
+            }
+            // The loop's own per-plan guard, on a state the empty apply cannot have changed.
+            if (state.ActivePlayer().life <= 0) { return { max_turns + 1, {} }; }
+            // `best.win_turn` is max_turns+1 for the loop's single iteration, so every cutoff it
+            // derives is std::min(cutoff, max_turns + 1).
+            const int m2_cut = std::min(cutoff, max_turns + 1);
+            GameState s2 = state;
+            if (!SimulateEndAndStartNextTurn(s2)) { return { max_turns + 1, {} }; }
+            ExpireStagedCards(s2);
+            if (eot_seen != nullptr
+                && !eot_seen->Visit(BuildDedupKey(s2), s2, m2_cut, depth, max_turns))
+            { return { max_turns + 1, {} }; }
+            domin::Probe dprobe;
+            if (DomActive() && dom_arch)
+            {
+                dprobe = domin::Check(*dom_arch, s2);
+                if (dprobe.prune) { return { max_turns + 1, {} }; }
+            }
+            TurnSolver::SearchLine sub =
+                FSLineWin(s2, depth, max_turns, m2_cut, second_main, tt, lc, budget);
+            if (DomActive() && dom_arch) { domin::RecordWin(*dom_arch, dprobe, sub.win_turn); }
+            if (sub.win_turn >= max_turns + 1) { return { max_turns + 1, {} }; }
+            TurnSolver::SearchLine out;
+            out.win_turn = sub.win_turn;
+            TurnSolver::Plan q;
+            q.land_decided = M2DropLive(state);   // the do-nothing plan the loop pushed
+            out.phases.push_back({ false, std::move(q) });
+            out.phases.insert(out.phases.end(), sub.phases.begin(), sub.phases.end());
+            out.truncated = sub.truncated;
+            return out;
+        }
         // With the main-2 land drop open (Main2DropEnabled, EngineFlags.h) the second main's
         // enumeration folds the still-unused drop exactly like the first main's -- this is the
         // search-side half of the rules fix (the executor's greedy main-2 land play was suppressed
@@ -41903,7 +42074,10 @@ static TurnSolver::SearchLine FSLineTail(const GameState& state, int depth, int 
         // predicate also answers for SkipsUnproductiveSecondMain decks (KittyEquipment), which
         // never had this site gated and whose adoption measurement did not include it. No other
         // provider opts in, so every other deck is byte-identical here by construction.
-        const bool m2_deferred_only = ResolveProvider(state).SecondMainNeedsDeferredCast();
+        //
+        // REACHED ONLY BY THE EXOTIC CONFIGURATIONS. The 0-cost path above already returned for the
+        // shipped one; what survives here is the m2 fixpoint / deferred waves, which re-host the
+        // empty plan and so still need it in `post`. Skipping the enumeration is all this can do.
         if (m2_deferred_only && SecondMainUnproductive(state))
         {
             // Fall through to the do-nothing plan pushed below. WHAT THIS GIVES UP is the same

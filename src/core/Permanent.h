@@ -125,6 +125,25 @@ struct Permanent
     // payment attempt (set and cleared inside one, restored by PermPaySnap on every failure
     // path), and never set at all while the lever is off -> byte-identical.
     bool      pay_sac_eaten          = false;
+    // "LookupCached(card) is KNOWN to return nullptr for this permanent" -- i.e. its name is not in
+    // the card DB at all, which is the ordinary case for a TOKEN (see the tokens-have-no-definition
+    // note on CreateTokenOnce). Purely a SHORT-CIRCUIT for the many board walks whose first act is
+    //     const CardDefinition* d = LookupCached(p.card); if (!d) { continue; }
+    // -- it lets them skip the call and reach the same `continue`, so it can only ever reproduce
+    // the existing behaviour.
+    //
+    // DEFAULTS FALSE = "not known", i.e. do the lookup, i.e. today's behaviour. That direction is
+    // the whole safety argument, exactly as for GameState's ETB presence gates: a permanent created
+    // by any site that does not set this flag keeps the full path, so a missed creation site costs
+    // a lookup rather than dropping a trigger. Only ever set it true where the lookup has actually
+    // been done and came back null.
+    //
+    // WHY IT IS WORTH A BOOL: the per-enter watcher walk is O(board width), boards on a Saproling
+    // deck reach 200+ permanents, and a 150-game Fungus run walks 2.9 BILLION permanents that way
+    // (measured 2026-09-23) -- of which all but a handful are tokens that resolve to nothing. The
+    // DB lookup is already memoized down to a sentinel compare, but it is an out-of-line call; a
+    // bool on the permanent we are already iterating is not.
+    bool      def_absent             = false;
     bool      storage_hold_this_turn = false; // #6 human-play tap-vs-charge: when the non-clairvoyant
                                            // human elects to HOLD a charged storage land this turn (build
                                            // the battery rather than burst now), this flags it not-live

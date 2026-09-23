@@ -3623,8 +3623,69 @@ inline bool PayOptionalTriggerCost(GameState& state, const ManaCost& cost)
     return remaining.ManaValue() == 0;
 }
 
+// TOKEN-VOLUME COUNTERS (MTG_TOKEN_STATS, diagnosis only; no-op and byte-identical unset).
+// Token creation is the dominant cost on a Saproling deck -- perf on Fungus 2026-09-23 puts
+// CreateToken at 52.7% inclusive -- and the per-token work is O(board width) because every enter
+// runs the ETB cascade. So the question "did this change make the search slower, or did it just
+// make MORE TOKENS?" is the one that decides whether a cost is waste or the feature working, and
+// no timing can answer it. `bf_visits` is the quadratic term itself: the board width summed over
+// every enter, i.e. the number of permanents the cascade actually walks.
+namespace tokenstats
+{
+    inline std::atomic<unsigned long long> g_tokens{0};      // CreateTokenOnce calls
+    inline std::atomic<unsigned long long> g_bf_visits{0};   // sum of battlefield size per enter
+    inline std::atomic<unsigned long long> g_enters{0};      // FireEtbWatchers calls (ALL enters)
+    inline std::atomic<unsigned long long> g_enter_bf{0};    // ...board width summed over those
+    inline std::atomic<unsigned long long> g_bound{0};       // UntappedManaUpperBound calls
+    inline std::atomic<unsigned long long> g_bound_bf{0};    // ...board width summed over those
+    inline std::atomic<unsigned long long> g_outlet{0};      // LiveSacPayOutlet calls
+    inline std::atomic<unsigned long long> g_fodder{0};      // SacPayFodderCount calls
+    inline std::atomic<unsigned long long> g_tok_absent{0};  // tokens whose name is NOT in the DB
+    // NAMESPACE-SCOPE, not a function-local static, and that is deliberate: On() is called from
+    // CreateTokenOnce and FireEtbWatchers, i.e. tens of millions of times per run, and the Meyers
+    // form emits a guard-variable acquire load on EVERY call -- the same ~6% trap CardDatabase::
+    // Instance() documents. An inline variable is initialised once at startup and read as a plain
+    // load. (getenv at static-init time is safe; nothing here runs before main.)
+    inline const bool g_on = EnvOn("MTG_TOKEN_STATS");
+    inline bool On() { return g_on; }
+    struct Dumper
+    {
+        ~Dumper()
+        {
+            if (!On() || g_tokens.load() == 0) { return; }
+            const unsigned long long t = g_tokens.load(), v = g_bf_visits.load();
+            const unsigned long long e = g_enters.load(), eb = g_enter_bf.load();
+            std::fprintf(stderr,
+                "[token-stats] tokens=%llu bf_visits=%llu mean_board=%.1f | enters=%llu "
+                "enter_bf=%llu mean_enter_board=%.1f\n",
+                t, v, t ? double(v) / double(t) : 0.0,
+                e, eb, e ? double(eb) / double(e) : 0.0);
+            std::fprintf(stderr,
+                "[token-stats] manabound=%llu bound_bf=%llu | live_outlet=%llu fodder_count=%llu "
+                "tok_def_absent=%llu\n",
+                g_bound.load(), g_bound_bf.load(), g_outlet.load(), g_fodder.load(),
+                g_tok_absent.load());
+        }
+    };
+    inline Dumper g_dumper;
+}
+
 inline void FireCreatureEnterWatchers(GameState& state, int entered_controller, int entered_index)
 {
+    // MTG_NO_ENTER_WATCHERS=1 -- DIAGNOSTIC BOUND ONLY, default off (byte-identical unset). Fire
+    // nothing, so the walk below costs zero. This is the upper bound on what ANY optimisation of
+    // this site could buy, in the same spirit as MTG_NO_M2_SOLVE. It CHANGES PLAY (no watcher
+    // lifegain), so the number it produces is a ceiling, not a speedup -- never quote it as one.
+    // Why the site is worth bounding: it walks the WHOLE battlefield with a LookupCached per
+    // permanent on EVERY creature that enters, and CreateToken routes through it, so on a deck that
+    // makes tokens in bulk the cost is O(tokens x board width). perf on Fungus (2026-09-23) puts it
+    // at 21.9% inclusive / 12.41% self, with LookupCached the hottest leaf in the profile at 12.75%.
+    static const bool s_no_enter_watchers = EnvOn("MTG_NO_ENTER_WATCHERS");
+    if (s_no_enter_watchers) { return; }
+    if (tokenstats::On())
+    {
+        tokenstats::g_bf_visits.fetch_add(state.battlefield.size(), std::memory_order_relaxed);
+    }
     // Play-viewer history (viewer issue #11): this is the DRAIN ENGINE, and it used to move life
     // totals silently -- so a Creature Giving game read as if the engine were inventing damage
     // (issue #10: Suture Priest x2 x (Orchard Spirits + Varchild's Survivors) is exactly the 12->6
@@ -3715,6 +3776,7 @@ inline void FireCreatureEnterWatchers(GameState& state, int entered_controller, 
     {
         if (i == entered_index) { continue; }   // "another creature"
         const Permanent& w = state.battlefield[i];
+        if (w.def_absent) { continue; }   // known not in the DB -> the !wd continue below, no call
         const CardDefinition* wd = CardDatabase::Instance().LookupCached(w.card);
         if (!wd) { continue; }
         const CardParams& wp = wd->params;
@@ -4198,6 +4260,7 @@ inline int DoublerShift(const GameState& state, int controller, bool for_tokens)
     for (const Permanent& p : state.battlefield)
     {
         if (p.controller_index != controller) { continue; }
+        if (p.def_absent) { continue; }   // see Permanent::def_absent (same `continue`, no call)
         const CardDefinition* d = db.LookupCached(p.card);
         if (d == nullptr) { continue; }
         if (for_tokens ? d->params.doubles_tokens : d->params.doubles_counters) { ++n; }
@@ -4218,6 +4281,7 @@ inline void CreateTokenOnce(
     const std::string&               color,    // default given at the forward declaration above
     const std::vector<std::string>&  keywords) // ditto
 {
+    if (tokenstats::On()) { tokenstats::g_tokens.fetch_add(1, std::memory_order_relaxed); }
     Permanent token;
     // Token colour (StompySurprise: green Insect/Wurm/Elephant tokens are legal "sacrifice a
     // green creature" fodder for Natural Order). Empty = the historical colourless token --
@@ -4265,6 +4329,12 @@ inline void CreateTokenOnce(
     token.owner_index      = controller_index;
     token.entered_this_turn = true;
     token.is_token          = true;   // Lathliss "nontoken Dragon" gate reads this (loop-safe)
+    // Short-circuit flag for the board walks (see Permanent::def_absent). A token's name is
+    // normally absent from the DB, and this is the one place we already know it: do the lookup
+    // ONCE here, at creation, instead of once per permanent per enter for the rest of the game.
+    token.def_absent = (CardDatabase::Instance().LookupCached(token.card) == nullptr);
+    if (tokenstats::On() && token.def_absent)
+    { tokenstats::g_tok_absent.fetch_add(1, std::memory_order_relaxed); }
     state.battlefield.push_back(token);
     // A token Dragon (Lathliss 5/5, Utvara 6/6) entering also fires the Dragonstorm cascade: it
     // re-pings every Scourge (via FireEtbWatchers step 2) but, being a token, never re-triggers
@@ -4618,6 +4688,11 @@ inline void FireSnowEnterWatchers(GameState& state, int entered_index)
 inline void FireEtbWatchers(GameState& state, int controller, int entered_index)
 {
     if (entered_index < 0 || entered_index >= static_cast<int>(state.battlefield.size())) { return; }
+    if (tokenstats::On())
+    {
+        tokenstats::g_enters.fetch_add(1, std::memory_order_relaxed);
+        tokenstats::g_enter_bf.fetch_add(state.battlefield.size(), std::memory_order_relaxed);
+    }
     // Devotion-gated creature-ness (Heliod, Sun-Crowned) re-evaluated at the universal enter
     // cascade, ABOVE the IsCreature() gate below: a Heliod entering into devotion >= 5 IS a
     // creature as it enters (fires Soul Warden), one entering below 5 is not (CR 603.6d); and a
@@ -18300,11 +18375,13 @@ struct SacPayOutlet
 // free for every deck that cannot contain one.
 inline SacPayOutlet LiveSacPayOutlet(const GameState& state, int controller)
 {
+    if (tokenstats::On()) { tokenstats::g_outlet.fetch_add(1, std::memory_order_relaxed); }
     SacPayOutlet out;
     if (!state.deck_has_sac_mana_outlet || !SacOutletPayEnabled()) { return out; }
     for (const Permanent& p : state.battlefield)
     {
         if (p.controller_index != controller || p.pay_sac_eaten) { continue; }
+        if (p.def_absent) { continue; }   // see Permanent::def_absent (same `continue`, no call)
         const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
         if (!d || !IsSacManaOutlet(d->params)) { continue; }
         // The FIRST live outlet is enough: a deck runs copies of ONE such card (4 Skirk, 2 Mycon),
@@ -18392,11 +18469,13 @@ inline int SacPayFodderRank(const GameState& state, const Permanent& p, const Sa
 inline int SacPayFodderCount(const GameState& state, int controller, const SacPayOutlet& outlet,
                              const Permanent* skip = nullptr, bool no_attackers = false)
 {
+    if (tokenstats::On()) { tokenstats::g_fodder.fetch_add(1, std::memory_order_relaxed); }
     if (!outlet.valid()) { return 0; }
     int n = 0;
     for (const Permanent& p : state.battlefield)
     {
         if (&p == skip || p.controller_index != controller) { continue; }
+        if (p.def_absent) { continue; }   // see Permanent::def_absent (same `continue`, no call)
         const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
         if (!d || !IsSacPayFodder(p, *d, outlet)) { continue; }
         if (no_attackers && SacPayFodderCostsAttack(state, p)) { continue; }
@@ -22546,6 +22625,11 @@ inline int UntappedManaUpperBound(const GameState& state, bool for_creature,
                                   std::uint64_t reserved_mask, int stop_at = -1,
                                   const std::vector<std::pair<int, int>>* aura_fold = nullptr)
 {
+    if (tokenstats::On())
+    {
+        tokenstats::g_bound.fetch_add(1, std::memory_order_relaxed);
+        tokenstats::g_bound_bf.fetch_add(state.battlefield.size(), std::memory_order_relaxed);
+    }
     const int active = state.active_player_index;
     const int n      = static_cast<int>(state.battlefield.size());
     int total = 0;
@@ -22555,6 +22639,7 @@ inline int UntappedManaUpperBound(const GameState& state, bool for_creature,
         const Permanent& p = state.battlefield[i];
         if (p.controller_index != active || p.tapped) { continue; }
         if (reserved_mask & (1ull << i)) { continue; }   // reservation audit: held source unavailable
+        if (p.def_absent) { continue; }   // see Permanent::def_absent (same `continue`, no call)
         const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
         if (!d) { continue; }
         const bool is_src = (d->tmpl == CardTemplate::BasicLand)

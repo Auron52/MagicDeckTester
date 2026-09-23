@@ -486,3 +486,115 @@ same conjunction, same answers. Likewise the main-phase filter's two classifier 
 `MainPhaseOverride` first, so a provider that classifies its whole deck per card never reads either,
 while the old eager form paid both battlefield walks at every node. Both are byte-identical
 everywhere and help any token-wide deck that turns the filter on.
+
+---
+
+## 8. THE COST ATTRIBUTION IN §7d WAS WRONG (2026-09-23, USER-PROMPTED)
+
+The USER read §7d and asked the obvious question: *"Do we really need to do the GameState copy like
+this in general? It seems insane that having that adds so much cost. Do we do the same copy at every
+breakpoint and for main 1 as well?"* The answer to the second half is **yes** — `LoadPlanState` is
+the universal unit at the main-1 plan loop, both breakpoint-node child loops, the m2 loop and its
+condemned tranche, the rollout leaves, and the payability probes. The answer to the first half is
+that **the copy was never the cost**, and §7d's claim that it was does not survive measurement.
+
+### 8a. The direct refutation
+
+A `MTG_M2_EMPTY_FAST` path was built so a PROVEN-EMPTY second main costs the recursion and nothing
+else — no `GameState` copy, no apply, no dedup key, no plan loop. It is byte-identical by digest at
+d0/d1/d3/d5, and it fires on **98.3%** of second-main scans (6,126 of 6,232 in 30 games).
+
+It bought **0.3% of wall.**
+
+Two further exact figures kill the rest of the §7d story. Over 150 games the two arms differ by
+**+1.9% of search units** (229,051 -> 233,473) against **+48% of wall**; and all 24,236 second-main
+solves together take **12.06 s of a 31 s run** at 498 us each, while `GameState`'s copy constructor
+does not reach 1% of a perf profile. The phase was not paying for copies, applies or nodes.
+
+### 8b. WHAT THE COST ACTUALLY IS: 2.2x AS MANY SAPROLINGS
+
+Deterministic counters (`MTG_TOKEN_STATS`), 150 games, d1/b3:
+
+| | base (Mycoloth in main 1) | second main | ratio |
+|---|---|---|---|
+| CPU | 20.44 s | 31.06 s | 1.52x |
+| rollout wall | 19.80 s | 30.36 s | 1.53x |
+| **tokens created** | 5,911,746 | **13,138,123** | **2.22x** |
+| ETB enters | 6,783,841 | 14,083,034 | 2.08x |
+| **permanents walked by the enter cascade** | **1.19 billion** | **2.89 billion** | **2.42x** |
+| mean board width at an enter | 202 | 220 | 1.09x |
+
+Devouring AFTER combat eats the attackers, so Mycoloth is bigger, so it makes **more than twice as
+many Saprolings**. That is the feature working, and it is most of the 1.4-1.5x. The USER's second
+invariant ("when it is available it should add almost no cost") therefore cannot mean "a bigger
+Mycoloth is free"; what it can mean is that **per-token work should be O(1), not O(board)**.
+
+### 8c. MEASURE THE TAIL, NOT THE MEAN -- the methodology trap that cost this session hours
+
+The same two arms on a **30-game** subset of the same seed run **1.91 s vs 2.00 s (1.05x)**. On
+**150** games they run **1.48x**. Every counter comparison made on the 30-game set pointed the wrong
+way: it showed the second-main arm creating FEWER tokens, doing FEWER board visits and FEWER solves,
+which is true of that subset and false of the workload. The cost of this feature lives entirely in a
+handful of wide-board games -- the same Doubling Season tail as
+`fungus-doubling-season-rollout-tail.md`. **Size a Fungus cost experiment by whether it contains the
+tail; a "representative" small sample of this deck is not representative of its cost.**
+
+### 8d. REJECTED BY THE USER: deferring only in the decision space
+
+The obvious way to delete the rollout's per-turn second main is to stand the phase filter down
+inside a playout (`g_rollout_nest > 0`), so a rollout casts the deferred card in main 1 as the
+single-main engine does. It was built and measured at **1.07x**. The USER rejected it outright:
+
+> *"I don't want to cast it in main 1 in either situation. That makes no sense whatsoever. The
+> purpose of casting it second main is to have the attack phase in-between."*
+
+That is right, and it generalises: a rollout that devours before the Saprolings swing does not score
+the line the search is choosing, it scores its opposite. The rollout's second main must stay a
+second main. Only its PRICE is negotiable. The code carries this note so it is not re-derived; the
+same objection applies to `MTG_FUNGUS_M2_ROOT` (§7e) wherever it would reach a rollout.
+
+### 8e. WHAT WAS ADOPTED, AND WHAT IT IS WORTH
+
+All three are **byte-identical by digest** (base `d30c843184162462`, second main `9782c501ef6edee6`
+at d1/b3, and unchanged at d0/d3/d5):
+
+1. **`MTG_M2_EMPTY_FAST`** (default ON) -- a proven-empty second main costs the recursion only. The
+   USER's first invariant, in the strict per-node sense. Worth 0.3%; adopted because the invariant
+   is right even where the wall is not, and because it makes the phase's cost honest.
+2. **`MTG_M2_SKIP_EMPTY_APPLY`** (default ON) -- the rollout no longer runs an `ApplyPlanDirect`
+   with no action, no land and no breakpoint on every simulated turn. Worth **-3.1%** on its own.
+   An earlier note recorded this site as "0.0%, reverted"; that reading came from per-job `ms` in a
+   pooled `--batch`, which swings 24% on a byte-identical arm and never had the resolution to see
+   it. **Do not re-cite the old number.**
+3. **`Permanent::def_absent`** -- the deck-wide one. A permanent whose name is not in the card DB
+   (every token: they are named "1/1 Saproling Token" and no such card exists) carries a bool
+   saying so, and the hot board walks test it instead of calling `LookupCached`. Applied to
+   `FireCreatureEnterWatchers`, `DoublerShift`, `LiveSacPayOutlet`, `SacPayFodderCount` and
+   `UntappedManaUpperBound` -- between them billions of visits per run. Worth **-4.7%** on the
+   second-main arm and **-2.6%** on base, and it helps EVERY token deck, not just this one.
+   It defaults FALSE ("not known, do the lookup") so a creation site that forgets to set it costs a
+   lookup rather than dropping a trigger.
+
+4. **Namespace-scope flag reads.** The diagnostic counters added here are consulted from
+   `CreateTokenOnce` and `FireEtbWatchers` -- tens of millions of calls -- and the Meyers
+   function-local-static form emits a guard-variable acquire load on EVERY call. Moved to an inline
+   namespace-scope variable, the same fix `CardDatabase::Instance()` already documents at ~6%.
+   Worth a further **-2.7%** here, and a reminder that a "free" `static const bool` on a hot path
+   is not free.
+
+Net: base **20.26 s -> 19.74 s** (-2.6%), second main **29.76 s -> 27.87 s** (-6.4%), so the phase
+costs **1.41x** instead of 1.48x. Verified by `test/scenarios.sh` 103/103, `regression.sh --smoke`
+93/93 with **0 configs changed**, and `--regression` 129/129 with **0 configs changed and 0 play
+changes**; reference reproducibility unchanged (0 play-drift, the same 1 board-diverged / 10
+mull-drift). No ground-truth re-accept was needed, which is the point of byte-identity.
+
+### 8f. THE REAL PRIZE IS STILL ON THE TABLE
+
+`def_absent` removes the CALL from the hot walks; it does not remove the WALK. `FireCreatureEnterWatchers`
+is still O(board) per enter, and Fungus contains exactly **one** enter-watcher (Essence Warden) on
+boards of 200+ permanents -- 2.9 billion permanent inspections to find one card, 14 million times.
+Maintaining the watcher set incrementally (or an index of "permanents that can ever be watchers")
+turns that into ~14 million. A diagnostic bound is in place: `MTG_NO_ENTER_WATCHERS=1` fires nothing
+at all, and PLAY IS UNCHANGED under it (avg 5.6067 either way, all four arms) -- so the whole walk is
+addressable without touching a decision. It is not free to build: invalidation has to cover every
+battlefield mutation, and the safe direction (err towards scanning) must be preserved.

@@ -240,6 +240,7 @@ enum Slot : int
     FUNGUS_M2_GATE,           // MTG_FUNGUS_M2_GATE       ...and only SOLVE the second main on turns the hand actually holds a PAYABLE Main2 cast (ADOPTED default ON)
     FUNGUS_M2_ROOT,           // MTG_FUNGUS_M2_ROOT       ...and defer only at REAL decision turns: a projected future turn keeps Mycoloth in main 1 (measured NEUTRAL, default OFF)
     FUNGUS_DEVOUR_BIG_EXEMPT, // MTG_FUNGUS_DEVOUR_BIG_EXEMPT  ...and the ladder STOPS at the first big body (Sporesower/Sporecrown never eaten) instead of giving each a rung (default OFF; sub-mode of the above)
+    M2_EMPTY_FAST,            // MTG_M2_EMPTY_FAST        a PROVEN-EMPTY second main costs the recursion and nothing else: no state copy, no apply, no dedup key (ADOPTED default ON; =0 runs the do-nothing plan through the loop, which must be byte-identical)
     COUNT
 };
 
@@ -446,6 +447,7 @@ inline const char* Name(int slot)
         "MTG_FUNGUS_M2_GATE",
         "MTG_FUNGUS_M2_ROOT",
         "MTG_FUNGUS_DEVOUR_BIG_EXEMPT",
+        "MTG_M2_EMPTY_FAST",
     };
     // The enum and this table are ONE mapping split across two lists: a slot added to one and not
     // the other silently shifts every lever after it (a manifest asking for lever X would set Y).
