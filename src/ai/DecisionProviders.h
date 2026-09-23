@@ -1651,6 +1651,12 @@ public:
     bool ClassifiesMainPhases() const override;
     std::optional<MainPhase> MainPhaseOverride(const GameState&, const CardDefinition&) const override;
     bool SecondMainNeedsDeferredCast() const override;
+    // ...and the THIRD cost arm: defer only where a real decision is being made. A projected future
+    // turn inside a rollout is played by the greedy tail, which gains nothing from the split (it
+    // devours whatever the ladder hands it either way) but pays a whole extra post-combat solve per
+    // projected turn. Priced separately because AL measured this same hook's quality effect as a
+    // REJECTION there (mixed semantics: filtered root candidates scored by unfiltered futures).
+    bool PhaseFilterRootTurnOnly() const override;
 };
 
 // CritterLifegain (mono-white "whenever you gain life" aggro: Soul Warden / Soul's Attendant /

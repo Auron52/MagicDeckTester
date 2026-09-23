@@ -20400,14 +20400,14 @@ std::vector<int> FungusProvider::DevourCountCandidates(const GameState& s, const
 // they MUST: ClassifiesMainPhases without DeckUsesSecondMain deletes the cast instead of moving it.
 bool FungusProvider::ClassifiesMainPhases() const
 {
-    static const bool on = EnvOn("MTG_FUNGUS_M2_DEVOUR");
+    static const bool on = EnvOn("MTG_FUNGUS_M2_DEVOUR", true);
     return heurarm::Flag(heurarm::FUNGUS_M2_DEVOUR, on);
 }
 
 std::optional<DecisionProvider::MainPhase>
 FungusProvider::MainPhaseOverride(const GameState&, const CardDefinition& def) const
 {
-    static const bool env_on = EnvOn("MTG_FUNGUS_M2_DEVOUR");
+    static const bool env_on = EnvOn("MTG_FUNGUS_M2_DEVOUR", true);
     if (!heurarm::Flag(heurarm::FUNGUS_M2_DEVOUR, env_on)) { return std::nullopt; }
     // The one card that wants the later phase.
     if (def.params.devour > 0) { return MainPhase::Main2; }
@@ -20421,8 +20421,16 @@ FungusProvider::MainPhaseOverride(const GameState&, const CardDefinition& def) c
 // activation on Mycoloth-less turns for the 3.57x, so it has to be priced separately.
 bool FungusProvider::SecondMainNeedsDeferredCast() const
 {
-    static const bool on = EnvOn("MTG_FUNGUS_M2_GATE");
+    static const bool on = EnvOn("MTG_FUNGUS_M2_GATE", true);
     return heurarm::Flag(heurarm::FUNGUS_M2_GATE, on);
+}
+
+// Third cost arm (MTG_FUNGUS_M2_ROOT). See the declaration; measured alongside the other two rather
+// than folded in, because the SAME hook was measured and rejected on Anti-Lifegain.
+bool FungusProvider::PhaseFilterRootTurnOnly() const
+{
+    static const bool on = EnvOn("MTG_FUNGUS_M2_ROOT");
+    return heurarm::Flag(heurarm::FUNGUS_M2_ROOT, on);
 }
 
 bool FungusProvider::ProvenWinlessThisTurn(const GameState& s, int me) const

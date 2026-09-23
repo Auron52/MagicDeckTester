@@ -4372,6 +4372,8 @@ static KembaLoop KembaLoopKindUncounted(const GameState& state, const Action& a,
 // as PRODUCTIVE; a hand or battlefield that GREW during combat is productive (mid-combat draw, a
 // put Equipment); and human play is exempt via the provider default, since the viewer must never be
 // narrowed. Cheap by construction: two int compares, no scan, no allocation.
+static bool MainPhaseFilterActive(const GameState& state);   // fwd (defined with the filter)
+
 static bool SecondMainUnproductive(const GameState& state)
 {
     static const bool s_kill  = EnvOn("MTG_NO_M2_PRODUCTIVE");
@@ -4384,15 +4386,47 @@ static bool SecondMainUnproductive(const GameState& state)
     const DecisionProvider& m2prov = ResolveProvider(state);
     if (m2prov.SecondMainNeedsDeferredCast())
     {
+        // THE GATE MUST AGREE WITH THE FILTER THAT DEFERS. MainPhaseOverride answers a per-card
+        // doctrine question and says Main2 unconditionally; whether the cast was actually WITHHELD
+        // from main 1 is MainPhaseFilterActive's answer, and the two come apart wherever the filter
+        // stands down -- at d0 (unsearched play), under MTG_NO_PHASE_CLASSIFY, and at a projected
+        // future turn under PhaseFilterRootTurnOnly. In every one of those states main 1 already
+        // offered the card, so opening a post-combat phase for it is pure duplicate enumeration.
+        if (!MainPhaseFilterActive(state)) { return true; }
         const Player& ap = state.ActivePlayer();
         for (const Card& c : ap.hand)
         {
             const CardDefinition* d = CardDatabase::Instance().LookupCached(c);
             if (d == nullptr) { return false; }        // unknown -> assume the phase is needed
-            if (m2prov.MainPhaseOverride(state, *d) == DecisionProvider::MainPhase::Main2)
-            { return false; }                          // a deferred cast is waiting: solve it
+            if (m2prov.MainPhaseOverride(state, *d) != DecisionProvider::MainPhase::Main2)
+            { continue; }
+            // ...AND THE DEFERRED CAST MUST BE PAYABLE. Holding the card is not the condition the
+            // phase exists for -- CASTING it is. Measured (MTG_M2_YIELD_STATS, 60 Fungus games):
+            // 181,528 interior m2 solves, 80,738 of them (44.5%) returning an EMPTY plan, almost
+            // all on turns where Mycoloth sat in hand from turn 1 with nowhere near five mana. An
+            // empty solve is not free: it re-enumerates the whole post-combat main and prices the
+            // EMPTY plan with its own lookahead, which is the duplicate the split was supposed to
+            // avoid (USER: *"we are not doing any additional branching and all cards are only
+            // allowed to be played in one phase"* -- so the cost should be ~that of the original).
+            //
+            // PaymentManaCovers false is a PROOF of unpayability (an upper bound on every tap
+            // ordering), so this can only skip solves that had no cast to find.
+            //
+            // NO DELETE HAZARD, and it has to be checked rather than assumed: the pre-combat
+            // filter drops the cast from main 1 on the PRE-combat state while this asks on the
+            // POST-combat one, so a bound that shrank across combat would strand the card. It
+            // cannot shrink here -- combat taps creatures, never lands, and the fodder term
+            // (SacPayFodderCount) deliberately counts TAPPED bodies while LiveSacPayOutlet never
+            // tests `tapped`, because "attack, then eat the attackers for mana" is the line the
+            // sac-outlet credit was built for. What combat does change (mana already spent in
+            // main 1) shrank the pre-combat bound too, so those turns could not have cast it
+            // either way.
+            const int need = d->card.m_mana_cost.ManaValue()
+                           - static_cast<int>(state.floating_mana.Total());
+            if (PaymentManaCovers(state, d->card.IsCreature(), need))
+            { return false; }                          // a payable deferred cast: solve it
         }
-        return true;                                   // nothing deferred -> the phase is empty
+        return true;                                   // nothing castable -> the phase is empty
     }
     if (!s_force && !m2prov.SkipsUnproductiveSecondMain()) { return false; }
     if (state.hand_size_at_combat < 0 || state.battlefield_at_combat < 0) { return false; }
@@ -6402,10 +6436,16 @@ static int CountProwessAttackers(const GameState& state)
     int count = 0;
     for (const Permanent& p : state.battlefield)
     {
+        // KEYWORD FIRST, and it matters. The two tests after it are the expensive ones --
+        // CanAttackFull re-reads the whole battlefield for lord/static effects, so the old order
+        // made this walk O(n^2) in board width, and the main-phase filter calls it on EVERY
+        // enumeration. On a token deck (Fungus: 20-40 Saprolings) that dominated the filter's
+        // cost while answering 0 every time, because the deck has no prowess card at all. Pure
+        // && reorder: the conjunction is unchanged, and the keyword is a bitmask test.
         if (p.controller_index == state.active_player_index
+            && p.card.HasKeyword(Keyword::Prowess)
             && CanAttackFull(p, state.battlefield, state.active_player_index)
-            && ResolveProvider(state).AttackWith(state, p)
-            && p.card.HasKeyword(Keyword::Prowess))
+            && ResolveProvider(state).AttackWith(state, p))
         {
             ++count;
         }
@@ -19480,8 +19520,29 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
     if (is_pre_combat && !actions.empty() && MainPhaseFilterActive(state))
     {
         const DecisionProvider& prov = ResolveProvider(state);
-        const bool haste_access     = HasteAccessThisTurn(state);
-        const bool scaling_attacker = BoardHasScalingAttacker(state);
+        // LAZY CLASSIFIER INPUTS. Both are battlefield walks and both are consumed ONLY by the
+        // generic template classifier -- ClassifyMainPhase consults prov.MainPhaseOverride first
+        // and returns on any answer. A provider that classifies its whole deck per card (Fungus:
+        // devour -> Main2, everything else -> Main1) therefore never reads either, while the old
+        // eager form paid both walks on EVERY enumeration, at every node, on a 20-40 wide token
+        // board. Same values, computed at most once, and only if something actually asks.
+        bool inputs_ready     = false;
+        bool haste_access     = false;
+        bool scaling_attacker = false;
+        auto classifier_inputs = [&]() -> void
+        {
+            if (inputs_ready) { return; }
+            haste_access     = HasteAccessThisTurn(state);
+            scaling_attacker = BoardHasScalingAttacker(state);
+            inputs_ready     = true;
+        };
+        auto classify = [&](const Action& a)
+        {
+            if (a.kind == Action::Kind::CastFromHand && a.def != nullptr)
+            { if (auto o = prov.MainPhaseOverride(state, *a.def)) { return *o; } }
+            classifier_inputs();
+            return ClassifyMainPhase(state, prov, a, haste_access, scaling_attacker);
+        };
         // PROWESS access: a prowess attacker available THIS turn makes EVERY cast a combat
         // feeder (each noncreature spell pumps it pre-combat), so the whole hand is the USER's
         // doubt class -> Main1 -> the filter stands down for this state. Board attackers, plus a
@@ -19494,8 +19555,9 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
             for (const Card& hc : state.ActivePlayer().hand)
             {
                 const CardDefinition* hd = CardDatabase::Instance().LookupCached(hc);
-                if (hd && hd->card.HasKeyword(Keyword::Prowess)
-                    && (hd->card.HasKeyword(Keyword::Haste) || haste_access))
+                if (!hd || !hd->card.HasKeyword(Keyword::Prowess)) { continue; }
+                classifier_inputs();   // only a prowess card in hand can need haste_access here
+                if (hd->card.HasKeyword(Keyword::Haste) || haste_access)
                 { prowess_access = true; break; }
             }
         }
@@ -19503,11 +19565,46 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
         {
             actions.erase(std::remove_if(actions.begin(), actions.end(),
                 [&](const Action& a)
-                {
-                    return ClassifyMainPhase(state, prov, a, haste_access, scaling_attacker)
-                           == DecisionProvider::MainPhase::Main2;
-                }), actions.end());
+                { return classify(a) == DecisionProvider::MainPhase::Main2; }), actions.end());
         }
+    }
+
+    // THE POST-COMBAT HALF OF THE SAME SPLIT -- "all cards are only allowed to be played in one
+    // phase" (USER, 2026-09-23). The pre-combat filter alone is only half a split: main 1 stops
+    // offering the deferred cast, but main 2 goes on offering EVERYTHING, so every card the deck
+    // holds is branched TWICE per turn. On a deck whose whole second main exists to place ONE card
+    // that is pure duplication, and it is not a small one -- it is the dominant cost of opening the
+    // phase at all. Measured on Fungus at d1/b3 (150 games, single-threaded, interleaved): 2.28x
+    // with the second main on and this half missing. It is NOT the interior m2 SOLVES, which is
+    // where the cost was first looked for: gating those on a PAYABLE deferred cast cut them 8.2x
+    // (181,528 -> 22,097, and 44.5% -> 0% empty) and moved wall by ~5%. The time is in the
+    // horizon-edge tail (FSLineTail's second_main branch), which fans every m1 plan out over this
+    // enumeration -- and on Fungus 99.7% of search work sits at those nodes.
+    //
+    // ONLY CASTS ARE DROPPED. Activations survive by construction (the filter tests
+    // Action::Kind::CastFromHand), which is what keeps the USER's step-10 post-combat play -- the
+    // leftover Psychotrope draw, Utopia Mycon mana on a Saproling that has already attacked -- and
+    // the land drop, which main 1 may deliberately have deferred (defer-the-drop). Dropping those
+    // as well is what made the blunt "skip the whole phase" version lose 0.03-0.04 turns.
+    //
+    // Scoped to SecondMainNeedsDeferredCast: a provider says with that hook that its post-combat
+    // main exists for the deferred cast alone, which is exactly the premise this filter needs. No
+    // other provider opts in, so every other deck is byte-identical here. Deliberately NOT the
+    // order-condemnation filter below: that one asks "did the m1 SNAPSHOT see and decline this
+    // card", which needs the stamp, has its own exemption machinery and its own adoption history.
+    // This asks the far simpler question the provider already answers per card.
+    if (!is_pre_combat && !actions.empty() && MainPhaseFilterActive(state)
+        && ResolveProvider(state).SecondMainNeedsDeferredCast())
+    {
+        const DecisionProvider& prov = ResolveProvider(state);
+        actions.erase(std::remove_if(actions.begin(), actions.end(),
+            [&](const Action& a)
+            {
+                if (a.kind != Action::Kind::CastFromHand || a.def == nullptr) { return false; }
+                const std::optional<DecisionProvider::MainPhase> ov =
+                    prov.MainPhaseOverride(state, *a.def);
+                return ov.has_value() && *ov == DecisionProvider::MainPhase::Main1;
+            }), actions.end());
     }
 
     // ORDER CONDEMNATION -- the post-combat half (USER model 2026-08-19: the search decides
@@ -41792,6 +41889,28 @@ static TurnSolver::SearchLine FSLineTail(const GameState& state, int depth, int 
         // at depth>0 PRECISELY because this path could not model a land, AIEngine::TakeTurn
         // gi=141 note). Off => the historical cast-only enumeration, byte-identical.
         std::vector<TurnSolver::Plan> post;
+        // DEFERRED-CAST GATE -- THE HORIZON-EDGE HALF, AND THE ONE THAT CARRIES THE COST. Measured
+        // by elimination at d1/b3 (150 games, single-threaded, interleaved, +-0.8% run to run):
+        // second main on with NOTHING deferred and every interior m2 solve skipped still costs
+        // 1.70x, and gating THIS site is what takes it back to 1.09x. Nothing else moved it -- not
+        // the interior solves (a payability gate cut them 8.2x, 181,528 -> 22,097 with 44.5% -> 0%
+        // empty, for ~5% of wall), not the classifier's board walks, not the per-turn empty apply.
+        // The reason is that each plan here costs a GameState COPY plus an apply, and on a 20-40
+        // wide Saproling board those are the most expensive operations the engine has; `units`
+        // undercounts them badly (fs_main2 reads 3-5% of units while carrying most of the delta).
+        //
+        // Scoped to SecondMainNeedsDeferredCast, not to SecondMainUnproductive as a whole: that
+        // predicate also answers for SkipsUnproductiveSecondMain decks (KittyEquipment), which
+        // never had this site gated and whose adoption measurement did not include it. No other
+        // provider opts in, so every other deck is byte-identical here by construction.
+        const bool m2_deferred_only = ResolveProvider(state).SecondMainNeedsDeferredCast();
+        if (m2_deferred_only && SecondMainUnproductive(state))
+        {
+            // Fall through to the do-nothing plan pushed below. WHAT THIS GIVES UP is the same
+            // thing the interior gate gives up and no more -- a post-combat ACTIVATION at a
+            // horizon-edge node on a turn with no payable deferred cast (§3c step 10).
+        }
+        else
         {
             EnumTimeScope _ets;
             // Group-cap accounting (audit §6.2a): this host has NO wave phase, so a group the

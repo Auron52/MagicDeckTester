@@ -363,3 +363,126 @@ note the devour victim ruling in §3c/§5 (*"Never devour: Sporecrown, Sporesowe
 SUPERSEDED on 2026-09-23 -- see `fungus-token-search-cost.md` Round 10: Sporesower/Sporecrown are
 now both SEARCHED (measured lossless; exempting them costs a turn on 8 of 480 games) and Psychotrope
 is the rung with the strongest claim rather than an exemption.
+
+## 7. THE 2.45x, AND WHY IT WAS NEVER THE BRANCHING (2026-09-23, second pass)
+
+§6d priced adoption at **2.45x** in the d1/b3 generation regime and treated that as the price of the
+phase. The USER rejected the premise outright:
+
+> *"Wait, why is the cost 2.45x? That is a red flag. It shouldn't be that big a multiple just from
+> moving it to second main when we prevent everything else from running there. The cost should be ~
+> that of the original if this is done correctly. Since we are disallowing main 1 mycoloth and
+> enabling main 2 mycoloth and changing nothing else."* — and later — *"Since we are not doing any
+> additional branching and all cards are only allowed to be played in one phase."*
+
+The premise was right and the implementation did not honour it. Three separate defects were found.
+The lever now costs **1.47x**, and what remains is structural rather than waste.
+
+### 7a. FIRST, THE MEASUREMENT WAS WRONG
+
+**Per-job `ms` from a pooled `--batch` is not a cost metric.** Two runs of the byte-identical arm
+(digest `aff67f86425a7556`) reported 191,958 ms and 237,406 ms — a 24% spread — purely because an
+8-job pool and a 9-job pool leave the box under different load as arms retire. Every "1.2x / 1.7x /
+2.45x" in §6 is drawn from that column and none of it is reliable; the d3/d5 ratios there are
+noise-dominated. This is the standing wall-A/B lesson (aggregate right, per-item signs wrong) and it
+was ignored because the pooled run was cheap.
+
+**What replaced it:** `/usr/bin/time %U` over a single-threaded 150-game run at d1/b3, arms
+interleaved, 2-3 reps. Reproducible to **±0.8%**, which is what makes the decomposition below
+readable at all.
+
+### 7b. DEFECT 1 — the phase opened for a card that could not be cast
+
+The deferred-cast gate asked *"is a Main2-classified card in HAND"*. Mycoloth is in the opening hand
+about a third of the time and costs five; the gate therefore opened the phase from turn 1.
+`MTG_M2_YIELD_STATS` over 60 games: **181,528 interior m2 solves, 80,738 of them (44.5%) returning
+an EMPTY plan**.
+
+Fixed by requiring the deferred cast to be **payable** — `PaymentManaCovers`, whose `false` is a
+proof of unpayability over every tap ordering, so the skip can only ever drop a solve that had
+nothing to find. Result: **181,528 → 22,097 solves, 44.5% → 0.0% empty.**
+
+**And it bought ~5% of wall.** The solves were never where the time was. Recording this because the
+count was so persuasive: an 8.2x reduction in the thing being counted moved the thing being paid for
+by almost nothing, and two further rounds were spent before that was believed.
+
+### 7c. DEFECT 2 — main 2 re-offered the whole hand
+
+The split shipped as **half a split**. `ClassifiesMainPhases` filters the PRE-combat enumeration, and
+by deliberate design (`MainPhaseOverride`'s contract: a Main2 class must never be able to DELETE a
+line) the post-combat enumeration was never filtered at all. So main 1 dropped one card and main 2
+went on offering every other one — every card in hand branched **twice per turn**. That is precisely
+the duplication the USER said was not supposed to exist.
+
+Fixed with a post-combat half of the same filter, scoped to `SecondMainNeedsDeferredCast` (a
+provider asserting its second main exists for the deferred cast alone). **Only casts are dropped** —
+the predicate tests `Action::Kind::CastFromHand`, so activations and the land drop survive, which is
+what keeps §3c step 10 (the leftover Psychotrope draw, Utopia Mycon mana on a Saproling that has
+already attacked). Measured after: **1.23 m2 plans per m2 decision** — the fan-out is now minimal.
+
+### 7d. DEFECT 3 — the cost was at the HORIZON EDGE, not in the solves
+
+With both of the above in, the lever still cost 1.85x. The decomposition that found it:
+
+| arm | what is on | d1/b3 CPU (150 games) | ratio |
+|---|---|---|---|
+| base | single main | 20.0 s | 1.00x |
+| `struct` | second main exists; NOTHING deferred; every interior m2 solve skipped | 33.9 s | **1.70x** |
+| `gate` | full lever, before the edge gate | 37.1 s | 1.85x |
+
+**1.70x with the phase doing nothing at all.** The only site left is `FSLineTail`'s `second_main`
+branch — the forward-search tail, where 99.7% of this deck's work sits — which fans EVERY m1 plan
+out over the m2 enumeration at every horizon-edge node, each plan costing a `GameState` copy plus an
+apply. On a 20-40 wide Saproling board those are the most expensive operations the engine has, and
+`units` undercounts them badly: `units.fs_main2` reads **3-5%** while carrying most of the delta.
+(That mis-read is why the search went to the interior solves first.)
+
+Fixed by applying the same deferred-cast gate at that site. Same scope rule as 7c, so
+`SkipsUnproductiveSecondMain` decks — KittyEquipment — are untouched: that hook's adoption
+measurement never included this site.
+
+**Two things that were measured and were NOT the cause**, recorded so they are not re-tried: the
+per-turn empty-plan `ApplyPlanDirect` in the rollout (skipping it changed the wall by 0.0%), and the
+main-phase classifier's board walks. The latter were still worth fixing on their own — see 7f.
+
+### 7e. WHERE IT LANDED
+
+Cost, single-threaded d1/b3, interleaved, 2 reps:
+
+| | base | **adopted** | root-turn-only |
+|---|---|---|---|
+| CPU | 20.05 s | **29.39 s (1.47x)** | 21.4 s (1.07x) |
+
+Quality, 6,720 games, train and HELD-OUT seed blocks (lower is better):
+
+| cell | base tr | **adopted** tr | base **ho** | **adopted ho** | root ho |
+|---|---|---|---|---|---|
+| d0        | 6.1000 | **6.0525** | 6.1725 | **6.1000** | 6.1000 |
+| d1/b3     | 5.6100 | **5.5950** | 5.6825 | **5.6600** | 5.6800 |
+| d3/b10    | 5.6650 | **5.6600** | 5.5850 | 5.5900 | 5.5850 |
+| d5/b20    | 5.6250 | **5.6000** | 5.6000 | **5.5917** | 5.6000 |
+
+Better on **7 of 8 cells**; the one exception (d3/b10 held-out, +0.005) is a single game. ADOPTED
+default ON: `MTG_FUNGUS_M2_DEVOUR`, `MTG_FUNGUS_M2_GATE`.
+
+`MTG_FUNGUS_M2_ROOT` — defer only at real decision turns, so a projected future turn keeps Mycoloth
+in main 1 — is BUILT and **default OFF**: it is nearly free (1.07x) but gives up essentially the
+whole gain at every searched depth (d1/b3 held-out 5.6800 vs base 5.6825), so it buys nothing. It
+stays as the instrument that isolates 7d, and it is the arm to reach for if the 1.47x ever has to
+come down. Note AL measured the same hook as a quality REJECTION for its own reasons.
+
+**The residual 1.47x is the phase itself.** The branching is now provably minimal (1.23 plans per m2
+decision; main 1 and main 2 offer disjoint cast sets), so what is left is the engine executing one
+more main phase per simulated turn on its most board-wide deck. It is not waste, and there is no
+further factor-of-two hiding in it.
+
+### 7f. A GENERAL FIX THAT FELL OUT
+
+`CountProwessAttackers` tested `CanAttackFull` (which re-reads the whole battlefield for lord/static
+effects) and the provider's `AttackWith` BEFORE the prowess keyword — making it O(n^2) in board
+width, on every enumeration, for a deck with no prowess card at all. The `&&` is now keyword-first;
+same conjunction, same answers. Likewise the main-phase filter's two classifier inputs
+(`HasteAccessThisTurn`, `BoardHasScalingAttacker`) are computed LAZILY: `ClassifyMainPhase` consults
+`MainPhaseOverride` first, so a provider that classifies its whole deck per card never reads either,
+while the old eager form paid both battlefield walks at every node. Both are byte-identical
+everywhere and help any token-wide deck that turns the filter on.

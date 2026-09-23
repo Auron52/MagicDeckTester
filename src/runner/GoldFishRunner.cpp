@@ -100,7 +100,7 @@ bool GoldFishRunner::DeckUsesSecondMain(const Decklist& deck)
         // reached only ONE half would drop Mycoloth from the pre-combat set with no post-combat main
         // to catch it -- DELETING the cast rather than moving it. Safe because BatchRunner installs
         // heurarm::t_arm immediately before it precomputes second_main (BatchRunner.cpp ~789-790).
-        static const bool s_m2_devour = EnvOn("MTG_FUNGUS_M2_DEVOUR");
+        static const bool s_m2_devour = EnvOn("MTG_FUNGUS_M2_DEVOUR", true);
         if (heurarm::Flag(heurarm::FUNGUS_M2_DEVOUR, s_m2_devour) && def->params.devour > 0)
         { return true; }
         // MTG_AL_SINGLE_MAIN=1: measurement lever (2026-08-21, USER: "skipping main 2 is not
