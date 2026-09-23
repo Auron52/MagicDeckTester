@@ -3150,14 +3150,26 @@ Saprolings per upkeep), so this is exactly the wide-board regime the width table
 
 **Dropping 42.5% of the devour variants on this rollout buys 2.4% of its wall.**
 
-**3. Searched play (d3/d5), per game, 8 threads.** The narrowing is wall-NEUTRAL and the tail does
-not move: the d5 cell's slowest game (gi29, 17.7 s) is unchanged, and the top-10 slowest games --
-63% of the cell's cost -- come in at +0.5%.
+**3. Searched play (d3/d5), 8 threads, arms INTERLEAVED over 4 reps.** Small and positive, and the
+tail does not move: the d5 cell's slowest game (gi29, 17.7 s) is unchanged.
 
-| cell | all games | top-10 slowest |
-|---|---|---|
-| fungus d5 s2002 (100 g) | +1.2% | +0.5% |
-| fungus d3 s2002 (200 g) | -0.7% | +3.6% |
+| cell | OFF mean | ON mean | |
+|---|---|---|---|
+| fungus d5 s2002 (100 g) | 93,342 ms | 92,074 ms | **-1.4%** |
+| fungus d3 s2002 (200 g) | 103,877 ms | 102,865 ms | **-1.0%** |
+
+**A first, non-interleaved pass of this same cell pair read +1.2% / -0.7% and was reported as "d3 is
+actually WORSE".** It is not: the OFF arm alone drifts 102,253 -> 104,635 ms across four reps, which
+is larger than the effect being signed. This is the repo's standing `box-is-shared-interleave-ab-arms`
+rule (3 A/Bs, 3 answers, one with a reversed sign) and `wall-ab-aggregate-right-signs-wrong`, walked
+into again. **Interleave the arms, repeat, and quote the spread -- a single sequential pair cannot
+carry a 1% claim.** Note a slowdown WOULD be mechanically possible here (the hook pays a ranked sort
+plus a battlefield and hand scan per enumeration, in full, on every board where it then bails -- 
+9,766 "did not narrow" bails on the tail rollout alone); it just is not what happens.
+
+Digests at these cells: d5 s2002 byte-identical both arms; d3 s2002 DIFFERS with the average
+unchanged (5.6650) -- same win turns, different lines. Ground truth is unaffected either way, since
+the suite runs the arm OFF.
 
 **What this overturns.** Round 9 measured 87,702 enumerations x mean width 5.75 = 503,917 devour
 variants on a 239 s rollout and treated that as a cost attribution. It is a COUNT, and counting
@@ -3168,7 +3180,7 @@ the wave-slot finding (-65.6% of wave slots for -0.9% wall).
 
 **The honest status of the hook:** it is quality-free (600 games, zero win-turn changes), it removes
 37-42% of devour variants, and it is worth ~6.6% at d1/b3 block scale, ~2.4% on the worst tail
-rollout and ~0% in searched play. It is worth adopting on those terms. **It is not a fix for the
+rollout and ~1% in searched play. It is worth adopting on those terms. **It is not a fix for the
 slow games, and the slow games remain unexplained** -- Round 9's own profile split (rollout_step
 34.9% / greedy_fallback 32.7% / la_cand 28.8%) says the cost is spread across the rollout machinery,
 not concentrated in plan enumeration, and no single axis found so far accounts for it.
