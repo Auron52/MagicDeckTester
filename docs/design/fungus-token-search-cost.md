@@ -3108,7 +3108,72 @@ regime, which is where the 503,917-variant measurement came from and where mulli
 Full fan preserved under human play and `MTG_UNPRUNE=devourcount` (new gate). OFF arm verified
 byte-identical: scenarios 103/103, smoke 93/93 with **0 configs changed**.
 
-Adoption (default-ON) is the USER's call and is **recommended**: lossless on 600 games, -37.5%
-devour variants, -6.6% wall in the generation regime. The one open item is that no measurement yet
-prices the hook on the `gi24` 239 s rollout directly -- the width table argues it should be the
-biggest winner there, but that is an inference, not a measurement.
+Adoption (default-ON) is the USER's call and is **recommended, but on quality-neutrality and a
+modest wall gain -- NOT as a fix for the slow games.** See 10g, which measures the claim this
+paragraph originally made and refutes it.
+
+
+### 10g. CORRECTION -- the devour fan is a big COUNT, not a big COST (2026-09-23)
+
+Round 10f closed by inferring, from the width table in 10e, that the hook "should be the biggest
+winner" on the pathological rollouts. **That inference was wrong, and the direct measurement refutes
+it.**
+
+> **USER:** *"Does it only help 6.6% on those tough games, though? I would hope it would be more
+> than that."*
+
+The right question, and the 6.6% was not even the tough-game number -- it was a 120-game block
+average over boards of 3-5 creatures. Three measurements, worst-first:
+
+**1. The worst hand in the real tail.** `Fungus.keepmodel.exhaustive.raw.json.slow.log` holds the
+generation's slowest keep-rollouts; the worst is 467 s under the contended 32-thread gen, which
+replays single-threaded at 238 s (the same rollout class as the `gi24` figure Round 9 quoted). Every
+one of the worst hands holds **Doubling Season** -- boards explode (4 counters per devoured body, 8
+Saprolings per upkeep), so this is exactly the wide-board regime the width table says pays most:
+
+| arm | elapsed | win turn |
+|---|---|---|
+| OFF | 238,173 ms | 7 |
+| ON | 232,496 ms | 7 |
+| | **-2.4%** | unchanged |
+
+**2. The hook is definitely firing there** -- this is not a dead-path result. Same rollout, traced:
+
+| own | sites | full fan | narrowed | saved |
+|---|---|---|---|---|
+| 0-4 | 44,418 | 165,882 | 133,795 | 19.3% |
+| 5-9 | 21,353 | 153,596 | 83,334 | 45.7% |
+| 10-14 | 5,444 | 67,454 | 21,136 | 68.7% |
+| 20-24 | 210 | 4,669 | 638 | 86.3% |
+| 30-34 | 357 | 17,014 | 1,071 | **93.7%** |
+| **all** | **72,361** | **420,628** | **241,831** | **42.5%** |
+
+**Dropping 42.5% of the devour variants on this rollout buys 2.4% of its wall.**
+
+**3. Searched play (d3/d5), per game, 8 threads.** The narrowing is wall-NEUTRAL and the tail does
+not move: the d5 cell's slowest game (gi29, 17.7 s) is unchanged, and the top-10 slowest games --
+63% of the cell's cost -- come in at +0.5%.
+
+| cell | all games | top-10 slowest |
+|---|---|---|
+| fungus d5 s2002 (100 g) | +1.2% | +0.5% |
+| fungus d3 s2002 (200 g) | -0.7% | +3.6% |
+
+**What this overturns.** Round 9 measured 87,702 enumerations x mean width 5.75 = 503,917 devour
+variants on a 239 s rollout and treated that as a cost attribution. It is a COUNT, and counting
+enumerated variants does not price them: the variants this hook removes are ones the odometer's
+prune bound was already discarding cheaply, so removing them earlier saves the enumeration and
+almost nothing else. Same shape as the standing `credit-unreachable-behind-prune-bound` result and
+the wave-slot finding (-65.6% of wave slots for -0.9% wall).
+
+**The honest status of the hook:** it is quality-free (600 games, zero win-turn changes), it removes
+37-42% of devour variants, and it is worth ~6.6% at d1/b3 block scale, ~2.4% on the worst tail
+rollout and ~0% in searched play. It is worth adopting on those terms. **It is not a fix for the
+slow games, and the slow games remain unexplained** -- Round 9's own profile split (rollout_step
+34.9% / greedy_fallback 32.7% / la_cand 28.8%) says the cost is spread across the rollout machinery,
+not concentrated in plan enumeration, and no single axis found so far accounts for it.
+
+**Method note, third time in this ledger.** A variant/node COUNT is not a cost attribution (cf.
+`search-cost-attribution-method`). Every time this ledger has reasoned from counts to wall it has
+been wrong by an order of magnitude, and every time it has measured wall directly it has been right.
+Price the axis, then build.

@@ -1745,6 +1745,14 @@ public:
     // drops only 3.1% of them. The cost is frequency times a modest factor, not a fat tail, so
     // only a narrowing of the TYPICAL fan pays.
     //
+    // AND THE PAYOFF IS SMALLER THAN THAT REASONING SUGGESTS -- measured 2026-09-23, ledger Round
+    // 10g. Dropping 42.5% of the devour variants on the generation's WORST keep-rollout (238 s
+    // single-threaded) bought 2.4% of its wall; searched play is wall-neutral. 503,917 variants was
+    // a COUNT, not a cost: the odometer's prune bound was already discarding them cheaply, so
+    // removing them earlier saves the enumeration and little else. The hook earns its place on
+    // quality-neutrality (600 games, zero win-turn changes) plus a modest gain in the keep-rollout
+    // regime -- NOT as a fix for the slow games, which remain unexplained.
+    //
     // WHAT MAKES A SHORT LIST COHERENT AT ALL. Victims are picked by a fixed ranking
     // (SacExpendabilityRank, sorted, first k taken), so the variants are strictly NESTED --
     // V(0) subset V(1) subset ... subset V(own), each step eating exactly the next-most-expendable
