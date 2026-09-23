@@ -1488,7 +1488,16 @@ static bool TapFlowInfeasible(const GameState& state, const ManaCost& cost, bool
         // handling. A drip land additionally offers a {C} mode, so add Colorless there.
         if (def->params.reflecting && !rp_ready)
         { rp_colors = &ReflectedColors(state, active, /*in_hand=*/false); rp_ready = true; }
-        const std::vector<Color>& produces = def->params.reflecting ? *rp_colors : def->params.produces;
+        // ...and, like the worker below, a locked etb_choose_color permanent offers its ONE colour.
+        // Still a superset of what the fixed worker can do (it is now exactly that), so the prune
+        // stays lossless -- and without it the oracle would price a Snow board as five-colour while
+        // the DFS it guards is two-colour, which is the one direction that costs nodes rather than
+        // correctness. Param-gated on the single card that carries it -> byte-identical elsewhere.
+        const std::vector<Color>& produces =
+              def->params.reflecting                                  ? *rp_colors
+            : (def->params.etb_choose_color && EtbBtLockEnabled())
+                  ? EffectiveProducesFor(state, active, *def, &state.battlefield[i], /*in_hand=*/false)
+                  : def->params.produces;
         std::uint8_t bits = 0;
         // ENERGY-GATED COLOURS (Aether Hub). This site INLINES its own produces resolution and so
         // bypasses EffectiveProduces entirely -- gating only there would leave the oracle claiming
@@ -1688,7 +1697,12 @@ static bool TapForCostBacktrackWorker(GameState& state, const ManaCost& cost,
                                 int untapped_max,
                                 std::uint64_t reserved_mask,
                                 ManaPool* out_full_pool,
-                                const std::vector<std::pair<int, const CardDefinition*>>* src_cands)
+                                const std::vector<std::pair<int, const CardDefinition*>>* src_cands,
+                                // PER-COLOUR capacity still extractable from the untapped sources,
+                                // indexed by Color ordinal; nullptr at the top level = compute here
+                                // and thread down (the same shape `untapped_max` uses). See
+                                // TapColorGateEnabled / SourceColorCapLive.
+                                const int* colcap = nullptr)
 {
     TapSpeculationScope _spec;   // suppress phantom drip-land life events from speculative taps
     if (floating.CanPay(cost))
@@ -2049,6 +2063,36 @@ static bool TapForCostBacktrackWorker(GameState& state, const ManaCost& cost,
         }
     }
 
+    // PER-COLOUR CAPACITY for the interior gate (see TapColorGateEnabled). Built at the top level
+    // over the FINAL candidate order -- after the flow/spare-body permutations and beside the
+    // dup-collapse chain, for the same reason that one is built here: index `ci` must mean the same
+    // thing to this node's loop, to activate()'s decrement and to every deeper node. Thread-local
+    // like s_dup_of_buf and read by the whole subtree through the same `cands` pointer; the running
+    // totals travel as `colcap`, which activate() decrements by the tapped source's own share.
+    static thread_local std::vector<std::pair<std::uint8_t, int>> s_colcap_src_buf;
+    const bool colgate = TapColorGateEnabled() || TapColorProbeEnabled();
+    int colcap_local[6] = { 0, 0, 0, 0, 0, 0 };
+    if (colgate && top_level)
+    {
+        s_colcap_src_buf.assign(cands.size(), { 0, 0 });
+        for (std::size_t cq = 0; cq < cands.size(); ++cq)
+        {
+            const Permanent& pc = state.battlefield[cands[cq].first];
+            std::uint8_t m = 0; int a = 0;
+            SourceColorCapLive(state, pc, *cands[cq].second, m, a);
+            s_colcap_src_buf[cq] = { m, a };
+            // Already tapped or reserved -> contributes nothing to what is still extractable. Every
+            // OTHER per-source filter the loop applies (RestrictedManaUsable, storage charge,
+            // Deathrite fuel, Arbor Elf's Forest, a sick dork) is deliberately NOT applied: leaving
+            // those sources in can only over-credit, which is the direction the bound must err in.
+            if (pc.tapped) { continue; }
+            if (reserved_mask & (1ull << cands[cq].first)) { continue; }
+            for (int c = 0; c < 6; ++c)
+            { if (m & (1u << c)) { colcap_local[c] += a; } }
+        }
+        colcap = colcap_local;
+    }
+
     std::pair<std::uint64_t, std::uint64_t> key{0, 0};
     if (fail_memo)
     {
@@ -2120,6 +2164,39 @@ static bool TapForCostBacktrackWorker(GameState& state, const ManaCost& cost,
         {
             if (fail_memo) { fail_memo->insert(key); }
             return false;
+        }
+    }
+
+    // ...and the COLOUR half of the same gate. The bound above asks "is there enough mana left"; this
+    // asks "is there enough of the RIGHT mana left", which is the question a colour-constrained board
+    // fails. Lossless by construction: SourceColorCapLive over-counts supply and MonoColorDemand
+    // under-counts demand (hybrid/Phyrexian pips carry an alternative and are dropped), and `wild` is
+    // credited against every colour, so a subtree that could have paid is never cut. Recording the
+    // prune in the fail memo matches the B&B gate directly above -- a revisit of this exact
+    // (tapped-set, floating) state is provably dead for the same reason.
+    if (colgate && colcap != nullptr)
+    {
+        int need[6];
+        MonoColorDemand(cost, need);
+        const int fl[6] = { floating.white, floating.blue, floating.black,
+                            floating.red,   floating.green, floating.colorless };
+        bool dead = false;
+        for (int c = 0; c < 6; ++c)
+        {
+            if (need[c] <= 0) { continue; }
+            if (fl[c] + floating.wild + colcap[c] < need[c]) { dead = true; break; }
+        }
+        if (dead)
+        {
+            if (TapColorGateEnabled())
+            {
+                if (tapstats::Enabled())
+                { tapstats::g_colgate_prune.fetch_add(1, std::memory_order_relaxed); }
+                if (fail_memo) { fail_memo->insert(key); }
+                return false;
+            }
+            if (tapstats::Enabled())
+            { tapstats::g_colgate_probe.fetch_add(1, std::memory_order_relaxed); }
         }
     }
 
@@ -2254,7 +2331,19 @@ static bool TapForCostBacktrackWorker(GameState& state, const ManaCost& cost,
         // source -> its static produces[]. (Inlined EffectiveProduces so the union is reused.)
         if (def->params.reflecting && !rp_ready)
         { rp_colors = &ReflectedColors(state, active, /*in_hand=*/false); rp_ready = true; }
-        const std::vector<Color>& produces_base = def->params.reflecting ? *rp_colors : def->params.produces;
+        // ...and an etb_choose_color permanent (Coldsteel Heart) reports its LOCKED colour, not the
+        // definition's five-colour menu -- the resolution the greedy payer has always done through
+        // ProducesForPayment(.., &perm) and this fallback did not. See EtbBtLockEnabled: param-gated
+        // on the one card in the database that carries it, so every other deck reads the raw vector
+        // exactly as before. EffectiveProducesFor returns a function-local static for a locked
+        // permanent and `def.params.produces` for an unlocked one, so the reference is stable for
+        // the whole loop body (no thread_local aliasing -- the reflecting branch above is the only
+        // buffer-returning shape and it is taken first).
+        const std::vector<Color>& produces_base =
+              def->params.reflecting                                  ? *rp_colors
+            : (def->params.etb_choose_color && EtbBtLockEnabled())
+                  ? EffectiveProducesFor(state, active, *def, &state.battlefield[i], /*in_hand=*/false)
+                  : def->params.produces;
         // colored_creature_only (Unclaimed Territory / Cavern of Souls): a non-creature spell may take
         // only {C} from this source (its coloured mana is creature-only). Strip the colours here so the
         // pip-matching below can pay a generic pip with {C} but never a coloured pip. Keeps the reflecting
@@ -2384,6 +2473,21 @@ static bool TapForCostBacktrackWorker(GameState& state, const ManaCost& cost,
             ManaPool next_with_aura = next;
             if (LandAuraBonus(state, state.battlefield[i]) > 0)
             { LandAuraAddToPool(next_with_aura, state, state.battlefield[i]); }
+            // Per-colour capacity for the child: this source is now tapped, so drop its whole share
+            // from every colour it could have made. Mirrors the `untapped_max - src_max_net` subtract
+            // on the line below, and stays an over-count for the same reason (one tap makes one
+            // colour, but the bound credits `amt` to each -- removing all of them is exactly the
+            // inverse and cannot under-credit what remains).
+            int nextcap[6];
+            const int* child_cap = colcap;
+            if (colcap != nullptr && ci < s_colcap_src_buf.size())
+            {
+                const std::uint8_t m = s_colcap_src_buf[ci].first;
+                const int a = s_colcap_src_buf[ci].second;
+                for (int c = 0; c < 6; ++c)
+                { nextcap[c] = colcap[c] - ((m & (1u << c)) ? a : 0); }
+                child_cap = nextcap;
+            }
             if (TapForCostBacktrackWorker(state, cost, for_creature, next_with_aura, rp_colors, fail_memo, out_leftover,
                                     // memo bit = this source's POSITION in `cands` (see key.first
                                     // above). The `& 63` keeps the shift defined when the mask is
@@ -2392,7 +2496,7 @@ static bool TapForCostBacktrackWorker(GameState& state, const ManaCost& cost,
                                     tapped_mask | (1ull << ((TapMemoBattlefieldGate()
                                                              ? static_cast<std::size_t>(i) : ci) & 63)),
                                     untapped_max < 0 ? -1 : untapped_max - src_max_net,
-                                    reserved_mask, out_full_pool, src_cands)) { return true; }
+                                    reserved_mask, out_full_pool, src_cands, child_cap)) { return true; }
             state.battlefield[i].tapped = tapped_snap;   // only this source was touched at this level
             if (has_counters) { state.battlefield[i].counters = counters_snap; }
             state.battlefield[i].storage_counters = storage_snap;
@@ -2496,13 +2600,54 @@ static bool TapForCostBacktrackWorker(GameState& state, const ManaCost& cost,
                 // payments the deck really makes ({C}{C} + this land really does cast {1}{R}).
                 static const Color kFeeds[] = { Color::White, Color::Blue,  Color::Black,
                                                 Color::Red,   Color::Green, Color::Colorless };
+                // COLOUR COLLAPSE FOR THE FILTER'S OWN TWO AXES (MTG_FILTER_COLOR_COLLAPSE, default
+                // ON). The plain-source loop below already folds the colours a source can make that
+                // the cost never demands as a coloured pip into ONE representative branch; this
+                // branch was left out of it, and it is the WIDER of the two -- 7 feeds x 5 outputs
+                // = 35 children per filter, against a 5-colour source's 5. The argument is the one
+                // `collapse_colors` already states verbatim: such a colour can only ever be spent as
+                // GENERIC, one generic mana is interchangeable with any other for every downstream
+                // CanPay of this FIXED cost, so the subtrees are isomorphic -- same success/failure
+                // at every node, same set of sources left tapped. Colorless stays special (it is in
+                // special_mask unconditionally), so {C} pips are still paid exactly, and `wild` is
+                // its own branch either way. Guarded by collapse_colors, i.e. out_leftover == null,
+                // for the same reason: a surfaced leftover is later drained colour-sensitively.
+                //
+                // SOUND FOR AN any_color_filter SPECIFICALLY because its own feed is GENERIC -- the
+                // loop right here tries every colour present plus wild -- so a recoloured float
+                // feeds exactly the same set of later filters it would have. Deliberately NOT
+                // extended to the is_filter branch above, whose feed under FilterFeedStrictOn must
+                // be one of THAT filter's own colours: there a recolour really could refuse a feed.
+                // Snow (4 Arcum's Astrolabe) is the deck this was written for; no deck in the repo
+                // pairs an any-colour filter with a strict one.
+                static const bool s_filter_collapse = EnvOn("MTG_FILTER_COLOR_COLLAPSE", true);
+                const bool collapse_filter = collapse_colors && s_filter_collapse;
+                bool feed_rep_done = false;
                 for (int fi = 0; fi <= 6; ++fi)          // each concrete colour, then wild
                 {
                     ManaPool base = floating;
-                    if (fi < 6) { if (!ConsumeFloating(base, kFeeds[fi])) { continue; } }
-                    else        { if (base.wild <= 0) { continue; } --base.wild; }
+                    if (fi < 6)
+                    {
+                        // Consume FIRST, collapse second: the representative has to be a feed colour
+                        // actually present in the float, or a colour that was never there would
+                        // consume the one slot and suppress the feeds that exist.
+                        if (!ConsumeFloating(base, kFeeds[fi])) { continue; }
+                        if (collapse_filter
+                            && !(special_mask & (1u << static_cast<int>(kFeeds[fi]))))
+                        {
+                            if (feed_rep_done) { continue; }
+                            feed_rep_done = true;
+                        }
+                    }
+                    else { if (base.wild <= 0) { continue; } --base.wild; }
+                    bool out_rep_done = false;   // per feed: the output choice is free at each one
                     for (Color out : produces)
                     {
+                        if (collapse_filter && !(special_mask & (1u << static_cast<int>(out))))
+                        {
+                            if (out_rep_done) { continue; }
+                            out_rep_done = true;
+                        }
                         ManaPool f = base;
                         f.Add(out, 1);
                         if (activate(f)) { return true; }
@@ -2673,6 +2818,17 @@ static bool TapForCostBacktrackWorker(GameState& state, const ManaCost& cost,
                     if (activate(f, /*drip_ok=*/true, storage_burn, espend,
                                  /*painless=*/PainlandCModeEnabled() && c == Color::Colorless))
                     {
+                        // ETB-COLOUR FORENSICS (MTG_ETB_BT_AUDIT, see EtbBtLockEnabled): the DFS is
+                        // unwinding a SUCCESS, so this tap is part of the payment actually returned.
+                        // A locked permanent tapped for a colour it cannot make is an illegal payment
+                        // the greedy would have refused. Must read zero with the fix on.
+                        if (EtbBtAuditOn() && def->params.etb_choose_color
+                            && state.battlefield[i].chosen_color >= 0)
+                        {
+                            EtbBtAuditTaps().fetch_add(1, std::memory_order_relaxed);
+                            if (static_cast<int>(c) != state.battlefield[i].chosen_color)
+                            { EtbBtAuditViolations().fetch_add(1, std::memory_order_relaxed); }
+                        }
                         // LEGACY-KAROO FORENSICS: this branch just took `amt` mana of ONE colour off a
                         // multi-colour bundle source, and the recursion found a full payment from it --
                         // so the accepted payment CONTAINS an illegal tap. Recorded (never in the fixed

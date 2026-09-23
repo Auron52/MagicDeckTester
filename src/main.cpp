@@ -6623,6 +6623,8 @@ int main(int argc, char* argv[])
     if (argc >= 2 && std::string(argv[1]) == "--list-flags") { PrintFlagRegistry(std::cout); return 0; }
     // Arm the colored_creature_only legality audit's exit dump (MTG_CCO_AUDIT); no-op when unset.
     CcoAuditDumper();
+    // ...and the backtracker's etb_choose_color legality audit (MTG_ETB_BT_AUDIT); no-op when unset.
+    EtbBtAuditDumper();
     if (argc < 2)
     {
         PrintUsage(argv[0]);

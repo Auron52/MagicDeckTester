@@ -236,3 +236,201 @@ the repo — 25 decks x 32 games, 0 shouts**. Same pattern as `MTG_ENUM_MEMO_VER
 `MTG_BP_ENUM_VERIFY`, and the reason to reach for it here was that this file's history is exactly
 subtle payment bugs. A completeness argument is worth what the sweep that failed to break it is
 worth; this one was worth nothing until the sweep ran.
+
+---
+
+# SESSION 2 (2026-09-22, same day): the payment class, closed
+
+The user's direction: *"we should first close the payment class. Snow should be a relatively easy
+case because it only has 2 relevant colours (Skred is the only Red and we don't cast it) and
+everything produces snow mana."*
+
+That framing is right, and following it found a **correctness bug** rather than a perf problem: the
+engine did not see two colours. It saw five.
+
+## 10. CORRECTNESS: the backtracker never honoured Coldsteel Heart's locked colour
+
+Coldsteel Heart is *"As this enters, choose a color. {T}: Add one mana of the chosen color."* The
+choice has been modelled since 2026-09-08 (`MTG_ETB_COLOR_LOCK`, `Permanent::chosen_color`,
+`EffectiveProducesFor(.., &perm)`), and every pool builder and the **greedy** payer resolve it. The
+shared **backtracker** did not: `TapForCostBacktrackWorker` read `def->params.produces` raw, which
+for this card is the definition's full `W U B R G` menu.
+
+Two defects in one read, and they point opposite ways:
+
+* **LEGALITY.** The fallback could pay a pip the greedy correctly refused, so the two payers
+  disagreed about what the board can cast — in the direction that lets the search commit to a line
+  the executor cannot realise. `MTG_ETB_BT_AUDIT` counts, on the DFS's **success unwind only** (i.e.
+  inside the payment actually returned), taps of a locked permanent for a colour it cannot make.
+  16 Snow games at play settings: **213,753 of 237,812 such taps were illegal — 89.9%.** With the
+  fix: **0**.
+* **BRANCHING.** Four Hearts each fanned the DFS over four colours they never had. Beside four
+  Arcum's Astrolabes, a two-colour manabase searched like a five-colour one.
+
+The flow-prune oracle had the same raw read, and is fixed with it. Over-crediting there was *sound*
+(the oracle only ever claims INFEASIBLE, so a loose colour set can only refuse to prune) but it
+priced a Snow board as five-colour while the DFS it guards is two-colour.
+
+**Blast radius is exactly one deck.** Coldsteel Heart is the only `etb_choose_color` card in
+`cards.json` and Snow the only decklist holding it, so the param gate is unreachable elsewhere and
+every other deck is byte-identical by construction. `MTG_ETB_BT_LOCK=0` is the one-binary A/B hatch,
+deliberately separate from `MTG_ETB_COLOR_LOCK` (which gates the CHOICE, consumes a human `--choices`
+slot, and so is not a control for this).
+
+### What it costs, stated plainly
+
+The illegal five-colour Heart was a **universal joker that terminated the DFS early**, so removing
+it makes the search work harder for the legal answer. Same play, more nodes:
+
+| | shipped (joker) | fixed |
+|---|---|---|
+| smoke key `snow 3 1001 100 10`, nodes | 30.8M | **49.8M (+61%)** |
+| ...nodes/entry | 23.4 | 39.4 |
+| ...**outcome** | | **byte-identical** |
+| heavy d4 game, nodes | 155.65M | 155.81M (+0.1%) |
+| d0, 1,000 games, avg turns | 6.7050 | **6.7090** (2 games lost) |
+
+The two games lost at d0 were **won on illegal mana**; that is the fix working, not a regression to
+trade away. Wall cost of the correctness fix alone: **+2.0%** (§12).
+
+## 11. Two byte-identical levers, and one of them is large
+
+**(a) `MTG_FILTER_COLOR_COLLAPSE` (default ON).** The worker already folds the colours a plain source
+can make that the cost never demands as a coloured pip into ONE representative branch
+(`collapse_colors` / `special_mask`). The `any_color_filter` branch was never included in it — and it
+is the **wider** of the two axes: 7 feeds x 5 outputs = 35 children per Astrolabe, against a
+five-colour land's 5. Same argument verbatim (such a colour is only ever spendable as generic; one
+generic unit is interchangeable with any other for every downstream `CanPay` of this fixed cost;
+Colorless stays special so `{C}` pips are exact). Sound for an any-colour filter **specifically**
+because its own feed is generic — the loop tries every colour present plus wild — so a recoloured
+float feeds the same set of later filters. Deliberately NOT extended to `is_filter`, whose strict
+feed must be one of that filter's own colours; no deck in the repo pairs the two shapes.
+**−11.8% nodes, byte-identical.**
+
+**(b) `MTG_TAP_COLOR_GATE` (default ON) — the per-colour interior bound.** The worker's branch-and-
+bound gate bounded the TOTAL mana still extractable and nothing else, so a DFS on a colour-
+constrained board taps four colourless sources and discovers only at the leaf that it never had the
+green. `SourceColorCapLive` + `MonoColorDemand` add the colour half: supply over-counted per source,
+demand under-counted (hybrid and Phyrexian pips carry an alternative and are dropped), `wild`
+credited against every colour, threaded down like `untapped_max` and decremented by `activate()`.
+Lossless, so it only cuts provably-dead subtrees.
+
+| heavy d4 game | nodes | nodes/payable entry |
+|---|---|---|
+| fixed, no levers | 155.81M | 60.9 |
+| + filter collapse | 137.41M | 53.7 |
+| + colour gate | **45.83M** | **17.6** |
+
+**−70.6% nodes overall**, output byte-identical at both the heavy game and the 100-game smoke key.
+The gate fires 23.7M times = 51.6% of all nodes; the `MTG_TAP_COLOR_PROBE` arm (test evaluated, not
+acted on) read the 42.3% ceiling on the unchanged engine *before* the gate was trusted — the
+discipline `g_bound_probe` already established, and the reason `MTG_FLOW_ORDER` stayed plausible for
+a month without it.
+
+**The bound's one forbidden error is under-counting supply, and the unit suite caught exactly that.**
+`test_mana_payment`'s *"attaching a land aura splits the key"* case failed on the first build: a land
+Aura adds colours the HOST's `produces` does not list (Trace of Abundance on Adarkar Wastes is that
+board's only route to green) and the Aura permanent is not itself a mana source, so it never enters
+the candidate list to contribute its bits. Fixed by folding `LandAuraColorMask` — the reader the two
+existing colour gates already share. A matching audit then found two more gross-vs-net gaps of the
+same shape: Three Tree City adds N of the chosen colour and eats its feeder from float (colour gain
+is N, not N − feeder), and Wirewood Lodge adds `by` of the feed colour. Both now take a `max`.
+Unit 126/126 (2,634,506 assertions), scenarios 103/103 including the
+`coldsteel_heart_color_{locked,honored}` discriminating pair.
+
+## 12. THE CORRECTION THAT MATTERS: the payment solver's DEPTH is not Snow's cost
+
+Wall, 1,000 games at the smoke tier's own d3/b10, 12 threads, arms strictly sequential, **run twice
+in opposite order** so a drifting box shows up as a disagreement rather than a result:
+
+| arm | pass 1 | pass 2 | mean |
+|---|---|---|---|
+| **P** shipped engine | 260.9 s | 258.8 s | 259.9 s |
+| **A** correct, no levers | 265.9 s | 264.2 s | 265.1 s |
+| **B** correct + both levers | 258.8 s | 258.8 s | **258.8 s** |
+
+* the two levers: **A → B = −2.4%**, and the two B passes agree to **0.01%**, so this is real.
+* the correctness fix: **P → A = +2.0%**.
+* **net vs shipped: −0.4%**, inside P's own spread. The engine becomes **correct at no cost.**
+
+Now put those two numbers together, because this is the finding: **−70.6% of backtracker nodes
+bought −2.4% of wall.** So the DFS is ~4% of Snow's runtime — not the 41.5% §3 attributed to "the
+payment solver". §3's class is not wrong, it is mis-read. What is inside it is **call volume**:
+
+```
+one heavy d4 game:  215,908,069 payment questions (impl)   = 12.8 per unit
+                    170,909,468 greedy attempts (once)     = 77.4% solved by the greedy outright
+                     38,705,894 fall through                = 22.6%
+                      3,782,537 reach the DFS               = the mana cache absorbs 92.9%
+```
+
+`perf` on the FIXED engine confirms it symbol by symbol (`mana_pay` now 36.4%, was 41.5%):
+
+| symbol | self |
+|---|---|
+| `TapForCostSharedOnce`'s per-pip `pay` lambda | 4.59% |
+| `TapForCostSharedOnce` | 3.09% |
+| **`TapForCostBacktrack` (the WRAPPER — mana-cache key build + replay, 53.4M consultations)** | **3.57%** |
+| `TapForCostSharedOnce` lambda #2 | 1.74% |
+| `ColorFeasibility::Payable` | 1.61% |
+| `EffectiveProduces` / `EffectiveProducesFor` | 1.31% / 1.05% |
+| `TapForCostSharedImpl` | 1.24% |
+| `UntappedManaUpperBound` | 1.23% |
+| `GenericProvider::ManaSourceRank` | 1.07% |
+| **`TapForCostBacktrackWorker` (the recursion itself)** | **1.05%** |
+
+The recursive worker is **1.05%**. Its own cache's key-building wrapper costs **3.4x more than the
+search it avoids**, and the GREEDY — called 170.9M times, succeeding 77.4% of the time — is
+~12% all by itself. That is why §6's 1.38x ceiling, which was derived from "close the 41.5%
+gap", overstates what solver work can buy: the part of the class that responds to making the
+SOLVER smarter is ~4 points, and it is now spent.
+
+### What is left, and whose call it is
+
+1. **The greedy's per-call cost** (~12% of wall, 170.9M calls). Its per-pip `pay` lambda re-resolves
+   source colours (`pay_produces` → `EffectiveProducesFor`) and re-ranks sources
+   (`ManaSourceRank`) inside the pip loop. Hoisting a per-payment source list out of the pip loop is
+   an optimisation on the biggest single slice in the profile — byte-identity risk is real (the rank
+   order IS the payment chosen), so it wants the same probe-first treatment as §11(b).
+2. **The mana cache's key wrapper at 3.57%** against a 1.05% worker. A cheaper key — or a cheaper
+   consult decision — is worth more than any further pruning. Consulting 53.4M times to avoid 3.78M
+   solves is the wrong ratio.
+3. **The call volume itself: 215.9M questions, ~73 per breakpoint consultation.** This is search
+   shape, not payment, and per `optimization-vs-estimand-change` it is the user's call.
+
+### Also settled here
+* **`MTG_FLOW_ORDER` stays refuted**, now on the fixed engine too: nodes 155.8M → 138.2M (−11%) but
+  wall 273 s → 279 s. It pays a max-flow per entry to reorder a search that is 1% of the profile.
+* **The breakpoint duplication fix is applied properly** (`MTG_BP_NEW_ONLY`, default ON since
+  `773e327f`). On Snow at d4 unbudgeted it drops **73.9%** of continuation entries (4.90M of 6.64M);
+  the survivors are 76% `kept_new` (a card that arrived), 20% `kept_act` (an ability newly
+  available), 4% the plan's own pending tail, 4 entries `kept_unknown`. Residual duplicate post-apply
+  states are **0.31%** of scored nodes (682 of 218,180) with the filter on, 0.52% with it off. So the
+  branching that remains is not re-work — it is Snow having 8 permanents that each genuinely put a
+  new card in hand, which is what the user's rule allows through by design.
+
+### Apparatus
+`logs/snowopt/` — `etbbt_audit.sh` (the legality audit, two arms one binary), `etbbt_heavy.sh` /
+`payclass_ab.sh` / `colgate_ab.sh` (the node A/Bs), `etbbt_gtkey.sh` (play impact on Snow's own GT
+keys), `wall_ab.sh` (the 1,000-game two-pass wall), `bp_dup_probe.sh` (the breakpoint residual),
+`profile_heavy.sh` + `perf_flat_fixed_s8043_gi35_d4.txt` (the fixed-engine profile).
+
+### Smoke gate: 90 passed, 3 failed, 0 new (makespan 73 s)
+
+The three failures are **exactly the three Snow keys** — nothing else in the suite moved, which is the
+param gate's blast-radius claim (§10) confirmed on 93 configs rather than argued.
+
+| key | expected | got | reading |
+|---|---|---|---|
+| `snow_smoke_d0_s1001` | 6.7050 | **6.7090** | 5 slower / 1 faster / 28 play-changed. The two lost wins were **paid with illegal mana**. |
+| `snow_smoke_d3_s1001` | 6.1400 | **6.1400** | digest-only: score IDENTICAL, line differs |
+| `snow_smoke_d5_s1001` | 6.2600 | **6.2600** | digest-only: 8 searched play-changed, every one at the **same score** |
+
+So at both SEARCHED tiers the correctness fix is free on the aggregate and only changes which line
+realises the same turn (`explain_game` confirms identical kept hand + draws on the ones it printed —
+clean like-for-like line changes). The whole measured cost of removing the illegal payments is
+**0.004 avg turns at d0**, which is the bug leaving.
+
+**GT for those three keys is NOT yet accepted** — that promotion is the remaining step, and it is a
+deliberate pause rather than an oversight: a rebaseline that records a d0 regression should be taken
+with the reason attached, which is this section.

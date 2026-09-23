@@ -19140,6 +19140,52 @@ struct CcoAuditDump
 };
 inline CcoAuditDump& CcoAuditDumper() { static CcoAuditDump d; return d; }
 
+// ---- etb_choose_color IN THE BACKTRACKER (MTG_ETB_BT_LOCK, default ON) -----------------------
+// The greedy payer resolves a locked Coldsteel Heart through ProducesForPayment(.., &perm) and so
+// offers it for ONE colour; the shared backtracker read `def->params.produces` raw and offered it
+// for all five. That is two defects in one read:
+//   * LEGALITY. The fallback could pay a pip the greedy correctly refused -- a Heart locked to {U}
+//     tapped for {G} -- so the two payers disagreed about what the board can cast, in the direction
+//     that lets the search take a line the executor cannot realise.
+//   * BRANCHING, which is why it showed up in the Snow optimization session. Each Heart fans the DFS
+//     over every colour it never had, and Snow runs four of them beside four Arcum's Astrolabes, so
+//     a two-colour manabase searched like a five-colour one.
+// Coldsteel Heart is the ONLY etb_choose_color card in the database and Snow the only deck running
+// it (verified against cards.json + every decklist), so this is byte-identical everywhere else by
+// construction -- the param gate is never reached. The hatch is separate from MTG_ETB_COLOR_LOCK
+// because that one gates the CHOICE ITSELF (it consumes a human `--choices` slot, so flipping it
+// shifts the recorded decision stream and is not a control for this); this one gates only the
+// backtracker's READ, which is what makes it a clean one-binary A/B.
+inline bool EtbBtLockEnabled()
+{
+    static const bool v = EnvOn("MTG_ETB_BT_LOCK", true);
+    return v;
+}
+
+// VERIFY HARNESS for the above (MTG_ETB_BT_AUDIT; measurement only). Counts, on the SUCCESS unwind
+// only -- i.e. the payment the DFS actually returned -- taps of a locked etb_choose_color permanent
+// for a colour it cannot make. Same shape as NoteIllegalBundleTap and the filter feed-audit, and it
+// exists for the reason the pay-sac guard's sweep taught: an argument about which code paths can
+// reach a source is worth exactly the run that failed to break it. With the fix ON this must read
+// zero; with MTG_ETB_BT_LOCK=0 it sizes the defect the fix removes.
+inline std::atomic<long long>& EtbBtAuditTaps()
+{ static std::atomic<long long> n{0}; return n; }
+inline std::atomic<long long>& EtbBtAuditViolations()
+{ static std::atomic<long long> n{0}; return n; }
+inline bool EtbBtAuditOn()
+{ static const bool on = EnvOn("MTG_ETB_BT_AUDIT"); return on; }
+struct EtbBtAuditDump
+{
+    ~EtbBtAuditDump()
+    {
+        if (!EtbBtAuditOn()) { return; }
+        std::fprintf(stderr, "[etb-bt-audit] locked-source taps in accepted payments=%lld  "
+                             "ILLEGAL(colour the permanent cannot make)=%lld\n",
+                     EtbBtAuditTaps().load(), EtbBtAuditViolations().load());
+    }
+};
+inline EtbBtAuditDump& EtbBtAuditDumper() { static EtbBtAuditDump d; return d; }
+
 // ---- Breakpoint payment trace (MTG_BP_TRACE; DIAGNOSIS ONLY, no behaviour) -------------------
 // Print the mana situation immediately BEFORE a cast pays, from BOTH the rollout (ApplyPlanDirect's
 // apply_one) and the real executor (CastSpellFromHand), so the two can be diffed cast-for-cast.
@@ -22091,6 +22137,13 @@ namespace tapstats
     inline std::atomic<std::uint64_t> g_pay_greedy_ok{0};
     inline std::atomic<std::uint64_t> g_bound_prune{0};
     inline std::atomic<std::uint64_t> g_bound_probe{0};
+    // PER-COLOUR interior gate (see TapColorGateEnabled). `colgate_prune` = recursion nodes cut
+    // because no untapped source can still make a colour the cost demands; `colgate_probe` = the
+    // same test evaluated but NOT acted on (MTG_TAP_COLOR_PROBE), which is how the ceiling is read
+    // on the unmodified engine. Both are node counts, so the share to compare them against is
+    // `total nodes` -- a prune also removes the subtree below, so the realised saving is larger.
+    inline std::atomic<std::uint64_t> g_colgate_prune{0};
+    inline std::atomic<std::uint64_t> g_colgate_probe{0};
     struct Dumper {
         ~Dumper()
         {
@@ -22185,6 +22238,12 @@ namespace tapstats
                 (unsigned long long)g_bound_probe.load(),
                 pim ? 100.0 * (double)g_bound_probe.load() / (double)pim : 0.0);
             std::fprintf(stderr,
+                "=== COLOUR GATE: interior prunes=%llu (%.1f%% of nodes)  would-prune probe=%llu (%.1f%%) ===\n",
+                (unsigned long long)g_colgate_prune.load(),
+                nodes ? 100.0 * (double)g_colgate_prune.load() / (double)nodes : 0.0,
+                (unsigned long long)g_colgate_probe.load(),
+                nodes ? 100.0 * (double)g_colgate_probe.load() / (double)nodes : 0.0);
+            std::fprintf(stderr,
                 "=== MEMO BUCKETS: max retained=%llu (%.1f KB memset per clear at that size)  "
                 "clears: empty=%llu (%.1f%% -- memset of an all-zero array) full=%llu  resets=%llu ===\n",
                 (unsigned long long)g_memo_max_buckets.load(),
@@ -22200,6 +22259,22 @@ namespace tapstats
 // Default ON: it is LOSSLESS (an upper bound only ever short-circuits provably-unpayable costs).
 inline bool MaxManaGateEnabled()
 { static const bool v = !EnvOn("MTG_NO_MAXMANA_GATE"); return v; }
+
+// The COLOUR twin of that gate (MTG_TAP_COLOR_GATE). The total-mana bound above proves a subtree dead
+// on AMOUNT; this one proves it dead on a COLOUR nobody untapped can still make. Lossless by the same
+// argument -- SourceColorCapLive over-counts supply, MonoColorDemand under-counts demand, so a
+// surviving subtree is never pruned -- and it is the gate the Snow board wants: the DFS's expensive
+// half is the PAYABLE entries (50+ nodes each against 1.0 for unpayable), i.e. orderings that strand a
+// colour deep and unwind. Default decided by measurement, not assumed; the probe below counts the
+// nodes it WOULD cut with it off, which is the same discipline g_bound_probe uses for the entry
+// fail-fast (a gate whose benefit was never measured is how MTG_FLOW_ORDER stayed plausible for a
+// month). See TapForCostBacktrackWorker for the threading.
+inline bool TapColorGateEnabled()
+{ static const bool v = EnvOn("MTG_TAP_COLOR_GATE", true); return v; }
+// PROBE (MTG_TAP_COLOR_PROBE): run the test but do NOT act on it, so the ceiling is readable on the
+// unmodified engine before the gate is trusted. Counts nodes where the bound proves the subtree dead.
+inline bool TapColorProbeEnabled()
+{ static const bool v = EnvOn("MTG_TAP_COLOR_PROBE"); return v; }
 
 // FAILURE-MEMO INDEX SPACE. The memo's 64-bit key indexes the active player's tappable mana SOURCES,
 // so the "won't fit in a bitmask" limit is a limit on the SOURCE COUNT -- but until 2026-08-16 it was
@@ -22347,6 +22422,94 @@ inline int SourceMaxNetLive(const GameState& state, const Permanent& pp, const C
     // Land aura (Wild Growth / Overgrowth): additive, the bonus rides on whatever the host yields.
     b += aura_fold ? LandAuraBonusFolded(*aura_fold, pp) : LandAuraBonus(state, pp);
     return b;
+}
+
+// ---- PER-COLOUR capacity, the colour twin of SourceMaxNetLive -------------------------------
+// The backtracker's B&B gate bounds the TOTAL mana still extractable and nothing else, so a DFS on a
+// colour-constrained board taps four colourless sources and only discovers at the leaf that it never
+// had the green. That is the shape of Snow (8 colourless-only sources -- 4 Scrying Sheets, 4 Boreal
+// Druid -- against a two-colour spell list), and it is why the payable half of its entries costs 50+
+// nodes each while the unpayable half costs 1.
+//
+// Returns (colour bitmask, per-colour upper bound) for ONE source: "tapping this can add at most
+// `amt` mana of each colour in `mask`". Deliberately an OVER-count on both axes -- the bound's only
+// duty is that it never UNDER-counts, since a loose bound merely fails to prune while a tight one
+// prunes a payable cost (the same contract SourceMaxNetLive states, and the reason the Karoo's two
+// mana are credited to BOTH its colours here even though one tap makes one of each).
+//
+// The mask is `produces` plus Colorless (every source with a {C} mode, and the cost's generic pips
+// are not what this gate tests anyway), widened to ALL SIX for the shapes whose realised colours are
+// not in `produces`: reflecting (empty produces, colours come from the other lands), domain, a
+// scaled land's chosen colour, and an untap burst's feed colour. `amt` takes the filter's GROSS
+// output, not SourceMaxNetLive's net -- a fed Cascade Bluffs nets +1 but puts 2 into one colour, and
+// crediting the net would under-count that colour.
+inline void SourceColorCapLive(const GameState& state, const Permanent& pp, const CardDefinition& dd,
+                               std::uint8_t& mask, int& amt)
+{
+    constexpr std::uint8_t kAll = (1u << static_cast<int>(Color::White))
+                                | (1u << static_cast<int>(Color::Blue))
+                                | (1u << static_cast<int>(Color::Black))
+                                | (1u << static_cast<int>(Color::Red))
+                                | (1u << static_cast<int>(Color::Green))
+                                | (1u << static_cast<int>(Color::Colorless));
+    // GROSS, not net. SourceMaxNetLive is a bound on a tap's NET mana, and three shapes put more than
+    // that into ONE colour because they consume a feed first -- so using the net figure here would
+    // under-credit exactly the colour the gate is about to test, which is the one error this bound is
+    // not allowed to make:
+    //   is_filter        -- "{U/R},{T}: Add two" nets +1 but can add TWO of a single colour (the
+    //                       worker's c1/c2 loops include c1 == c2).
+    //   ramp/any-colour  -- net 0 or +1, one unit of the chosen colour either way.
+    //   scaled land      -- Three Tree City adds N of the chosen colour and eats its feeder from
+    //                       float, so the colour gain is N, not N - feeder.
+    //   untap burst      -- Wirewood Lodge adds `by` of the feed colour for one of them back.
+    amt = SourceMaxNetLive(state, pp, dd);
+    if (dd.params.is_filter)    { amt = std::max(amt, 2); }
+    if (dd.params.ramp_filter || dd.params.any_color_filter) { amt = std::max(amt, 1); }
+    if (IsScaledManaLand(dd))   { amt = std::max(amt, ScaledManaCreatureCount(state)); }
+    if (dd.params.untap_creature_cost.has_value())
+    {
+        amt = std::max(amt, UntapBurstBestYield(state, pp.controller_index, dd,
+                                                /*require_tapped=*/false));
+    }
+    if (amt < 1) { amt = 1; }   // never under-credit a live source
+    if (dd.params.reflecting || dd.params.domain_mana || IsScaledManaLand(dd)
+        || dd.params.untap_creature_cost.has_value())
+    { mask = kAll; return; }
+    mask = static_cast<std::uint8_t>(1u << static_cast<int>(Color::Colorless));
+    for (Color c : dd.params.produces)
+    { mask |= static_cast<std::uint8_t>(1u << static_cast<int>(c)); }
+    // LAND AURAS add colours the HOST's `produces` does not list (Trace of Abundance on Adarkar
+    // Wastes is the only route to green on that board), and the Aura permanent is not itself a mana
+    // source so it never appears in the candidate list to contribute its own bits. SourceMaxNetLive
+    // already folds the aura's AMOUNT in above; this folds its COLOURS, from the one reader the two
+    // existing colour gates share. Caught by test_mana_payment's "attaching a land aura splits the
+    // key" case, which is exactly the under-count-prunes-a-payable-cost failure this bound forbids.
+    mask |= static_cast<std::uint8_t>(LandAuraColorMask(state, pp) & 0x1F);
+}
+
+// The cost side of the same gate: how many pips of each colour MUST be paid with that colour.
+// Hybrid and Phyrexian pips are baked into the flat colour ints (see ManaCost), and both carry an
+// alternative -- the other half of the hybrid, or life -- so they are SUBTRACTED here. Under-stating
+// the demand is the safe direction for a prune, exactly as over-stating the supply is above.
+inline void MonoColorDemand(const ManaCost& cost, int out[6])
+{
+    out[static_cast<int>(Color::White)]     = cost.white;
+    out[static_cast<int>(Color::Blue)]      = cost.blue;
+    out[static_cast<int>(Color::Black)]     = cost.black;
+    out[static_cast<int>(Color::Red)]       = cost.red;
+    out[static_cast<int>(Color::Green)]     = cost.green;
+    out[static_cast<int>(Color::Colorless)] = cost.colorless;
+    for (int h = 0; h < cost.hybrid_count; ++h)
+    {
+        const int first = cost.hybrid_pair[h] >> 4;
+        if (first >= 0 && first < 6) { --out[first]; }
+    }
+    for (int q = 0; q < cost.phyrexian_count; ++q)
+    {
+        const int c = cost.phyrexian_color[q];
+        if (c >= 0 && c < 6) { --out[c]; }
+    }
+    for (int c = 0; c < 6; ++c) { if (out[c] < 0) { out[c] = 0; } }
 }
 
 // UPPER bound on the TOTAL mana the active player can still extract from their UNTAPPED sources --
