@@ -2789,6 +2789,25 @@ created — Mycon eats Saprolings only, so **three of that four are conjured**, 
 `{3}{G}{G}` is paid one Forest plus four phantom-heavy green. So every searched-depth win-turn
 "regression" traced across both tiers is the baseline losing illegal mana.
 
+### Re-measured after the rebase onto the wave-0 + payment changes
+
+The adoption landed on top of `9109ff6c` / `43bbed27`, whose own GT accept had moved the baseline,
+so both tiers were re-run and re-accepted on the COMBINED binary (GT is a measurement, not a file to
+merge). Smoke's delta was unchanged. The regression tier moved slightly, to **searched +1.0
+turn-unit over 1700 games** (d0 unchanged at −1.0 over 2000), and surfaced a **third** instance of
+the same defect:
+
+* `fungus gi74` at d5 s2002, **8 → loss** — the maximal slowdown, and a hand the *old* GT had as a
+  loss too until the upstream changes won it. Each of the three levers flips it **on its own**, so
+  the win was knife-edge. It is also phantom-funded: at T7 before Mycoloth the float is `{G}{G}{G}`
+  while the untapped board is `1/1 Creature, Tukatongue Thallid, Forest, Forest, Thallid
+  Shell-Dweller, Utopia Mycon, Thallid Shell-Dweller, Utopia Mycon` — **two Mycons, ONE Saproling**,
+  so at most one sacrifice is legal and **two of the three green are conjured**.
+* `fungus gi127` 7→6 and `goblins gi22` 5→4 still improve; `fungus gi24` 5→6 as above.
+
+**So all three searched-depth win-turn regressions across both tiers — gi120, gi24, gi74 — are the
+baseline losing mana it never paid for.** None is a deleted line.
+
 **METHOD TRAP, recorded because it produced a wrong answer.** `test/classify_turn_later.sh` re-runs
 each slower game at 4x/16x budget **in the caller's environment**. Run it without the arm's env
 vars set and it re-measures the BASELINE, not the arm: it reported `gi24` as *"churn (recovers to 5:
