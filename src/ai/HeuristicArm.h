@@ -233,8 +233,8 @@ enum Slot : int
     FLING_AXIS,               // MTG_FLING_AXIS            Surtland Flinger's fling victim + the decline (default ON)
     TECTONIC_AXIS,            // MTG_TECTONIC_AXIS         Tectonic Giant's attack-trigger mode A vs B (default ON)
     TECTONIC_KEEP_AXIS,       // MTG_TECTONIC_KEEP_AXIS    ...and WHICH exiled card mode B stages (sub-decision of mode B)
-    SAC_OUTLET_POOL,          // MTG_SAC_OUTLET_POOL      N interchangeable sac-for-mana outlets are ONE pool: the COUNT is the only axis (default OFF)
-    SAC_FODDER_RESERVE,       // MTG_SAC_FODDER_RESERVE   sac fodder is RESERVED per activation: count the bodies the plan can really have THIS TURN, skip the line if short (default OFF)
+    SAC_OUTLET_POOL,          // MTG_SAC_OUTLET_POOL      N interchangeable sac-for-mana outlets are ONE pool: the COUNT is the only axis (ADOPTED default ON)
+    SAC_FODDER_RESERVE,       // MTG_SAC_FODDER_RESERVE   sac fodder is RESERVED per activation: count the bodies the plan can really have THIS TURN, skip the line if short (ADOPTED default ON)
     COUNT
 };
 

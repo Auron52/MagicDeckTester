@@ -7957,9 +7957,16 @@ static bool FoldActSourcesOn()
 // Utopia Mycon is safe by type (it requires Saproling and is a Fungus, so it is never a legal
 // victim), but SKIRK PROSPECTOR IS A GOBLIN THAT SACRIFICES GOBLINS -- eating Skirk A is not
 // eating Skirk B. Members must therefore agree on the canonical victim or the pool does not form.
+// ADOPTED 2026-09-23 (user call). DEFAULT ON; MTG_SAC_OUTLET_POOL=0 disables. Adopted jointly with
+// SacFodderReserveEnabled and MTG_SAC_NO_PHANTOM_FLOAT -- the three are not independent (see
+// Round 8): pooling N outlets onto a count axis is sound exactly when the count is policed by the
+// reservation ledger, and the ledger only bites once the executor stops paying out on a failed
+// premise. Measured on the heaviest searched cell, 12 threads, interleaved, two reps:
+// fungus d3 s2002 25.1s -> 11.0s (2.29x), the whole fungus searched block 1.32x, at NO cost to
+// avg win turn on held-out seeds (net 0.0 turn-units over 1700 searched games).
 static bool SacOutletPoolEnabled()
 {
-    static const bool env_on = EnvOn("MTG_SAC_OUTLET_POOL");
+    static const bool env_on = EnvOn("MTG_SAC_OUTLET_POOL", true);
     return heurarm::Flag(heurarm::SAC_OUTLET_POOL, env_on);
 }
 
@@ -7990,9 +7997,10 @@ static bool SacOutletPoolEnabled()
 // onto a count axis is sound exactly when the count is policed. Without the reserve the pool turns
 // a self-limiting failure (each unpooled sac degrades on its own for 1 mana) into a k-mana
 // shortfall that strands the cast the plan was built around.
+// ADOPTED 2026-09-23 (user call). DEFAULT ON; MTG_SAC_FODDER_RESERVE=0 disables.
 static bool SacFodderReserveEnabled()
 {
-    static const bool env_on = EnvOn("MTG_SAC_FODDER_RESERVE");
+    static const bool env_on = EnvOn("MTG_SAC_FODDER_RESERVE", true);
     return heurarm::Flag(heurarm::SAC_FODDER_RESERVE, env_on);
 }
 

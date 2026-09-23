@@ -10252,7 +10252,9 @@ inline void ApplySacForMana(GameState& state, int controller, int sac_source_id,
         // Ordering is the entire fix: resolve the victim first, float only if one was found. Every
         // activation that HAS a victim is byte-identical -- same float, same victim, same order --
         // so only the failed premise changes, and it changes to nothing happening.
-        static const bool s_no_phantom_float = EnvOn("MTG_SAC_NO_PHANTOM_FLOAT");
+        // ADOPTED 2026-09-23 (user call). DEFAULT ON; MTG_SAC_NO_PHANTOM_FLOAT=0 restores the
+        // float-first order, which is the only way to reproduce a pre-2026-09-23 ground truth.
+        static const bool s_no_phantom_float = EnvOn("MTG_SAC_NO_PHANTOM_FLOAT", true);
         if (s_no_phantom_float && skirk && victim_id != 0)
         {
             int      vid  = victim_id;

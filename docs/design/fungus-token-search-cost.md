@@ -2747,11 +2747,55 @@ not been re-run with the reserve on.)
    engine's current behaviour including its bugs. Two rounds were spent explaining why a correct
    change looked worse than an incorrect one.
 
-## Not done
+## ADOPTED 2026-09-23 — all three DEFAULT ON, both GT tiers re-accepted
 
-* **Shipping decision.** All three are default OFF pending the user's call. The phantom-float fix is
-  a correctness fix and the weakest candidate for staying off; note that adopting it requires a GT
-  rebaseline of two fungus cells.
+**USER:** *"Assuming this is notably faster let's move to adopt."* It is, so they are. Each keeps a
+`=0` hatch (`MTG_SAC_NO_PHANTOM_FLOAT=0` is the only way to reproduce a pre-2026-09-23 ground
+truth). GT rebaselined: smoke 93 keys, regression 129 keys, `check_gt_logs.py` 506 consistent / 0
+stale.
+
+### The speed, measured for the adoption (12 threads, interleaved arms, two reps)
+
+| fungus cell | OFF | ON | |
+|---|---|---|---|
+| **d3 s2002 (200 g)** | 25.10 / 25.15 s | **11.18 / 10.97 s** | **2.29x** |
+| d5 s2002 (100 g) | 19.32 / 19.51 s | 18.32 / 17.80 s | 1.10x |
+| d5 s3003 (100 g) | 12.49 / 12.16 s | 12.18 / 11.77 s | 1.03x |
+| d3 s3003 (200 g) | 11.29 / 11.20 s | 11.44 / 11.10 s | 1.01x |
+| d0 s2002 (1000 g) | 0.05 s | 0.07 s | free either way |
+
+**1.32x across the whole fungus searched block, and the win is concentrated exactly where Round 7
+said it would be** — one cell halves while the rest are flat, because the powerset only explodes on
+particular hands. CPU (`user`) moves just 1.07x against wall 1.32x: this is killing the makespan
+TAIL, which is what matters on the suite's heaviest deck.
+
+### Held-out quality (regression tier, seeds 2002/3003, disjoint from smoke's 1001)
+
+Games-weighted: **searched (d3+d5) = +0.0 turn-units over 1700 games**; d0 = **−1.0** over 2000
+(i.e. one game better). Only three distinct hands move at searched depth — `fungus d3 s2002 gi127`
+7→6 and `goblins d3 s3003 gi22` 5→4 better, `fungus gi24` 5→6 worse (counted twice, it sits in both
+the d3 and d5 s3003 cells).
+
+**`gi24` is `gi120`'s defect at searched depth, not a deleted line.** Draws are IDENTICAL between
+the arms, and the old line is bought with phantom mana:
+
+```
+[exec-tap] T4 before Mycoloth: float{... g4 ...} untapped: 1/1 Creature Thallid Forest Utopia Mycon Tukatongue Thallid Utopia Mycon Utopia Mycon Utopia Mycon
+[exec-tap] T4 Mycoloth tapped: Forest   float{... g0 ...}
+```
+
+Four Utopia Mycons float `{G}{G}{G}{G}` against the **one** Saproling the turn's Thallid pop
+created — Mycon eats Saprolings only, so **three of that four are conjured**, and Mycoloth's
+`{3}{G}{G}` is paid one Forest plus four phantom-heavy green. So every searched-depth win-turn
+"regression" traced across both tiers is the baseline losing illegal mana.
+
+**METHOD TRAP, recorded because it produced a wrong answer.** `test/classify_turn_later.sh` re-runs
+each slower game at 4x/16x budget **in the caller's environment**. Run it without the arm's env
+vars set and it re-measures the BASELINE, not the arm: it reported `gi24` as *"churn (recovers to 5:
+4x=5 16x=5)"*, which is simply the old behaviour winning on turn 5 again. With the levers actually
+on it reports `PERSISTS (4x=6 16x=6)`, which is correct — and the real explanation is the phantom
+float above, not churn. **Classify with the arm engaged, or you are classifying the thing you are
+comparing against.**
 * **The reservation is order-blind.** It credits a co-selected spore pop whether or not the pop
   precedes the sac in the plan's action order. That over-credits, which is the safe direction and
   matches today's behaviour, but it is the obvious next tightening.
