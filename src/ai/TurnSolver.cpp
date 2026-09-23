@@ -7599,6 +7599,41 @@ static bool FoldActSourcesOn()
     return on;
 }
 
+// MTG_SAC_OUTLET_POOL / heurarm SAC_OUTLET_POOL -- DEFAULT OFF (-> byte-identical everywhere).
+//
+// N INTERCHANGEABLE SAC-FOR-MANA OUTLETS ARE ONE POOL; THE COUNT IS THE ONLY AXIS. Round 7 of
+// fungus-token-search-cost.md: on the slow mulligan cells EVERY independent bit of the greedy
+// odometer is Utopia Mycon's "Sacrifice a Saproling: Add one mana of any color" -- eight bits from
+// FOUR physical Mycons (a single-sac and a demand-driven burst each), i.e. 2^8 = 256 positions to
+// express 9 outcomes. The same enum-stats line shows the SAME CARD's spore ability already pooled
+// into one group of 5, which is what makes this a defect rather than search:
+//     bound=4.92e+04 groups=6 ind=8 ... [g5 k26 Utopia Mycon] (k7 Utopia Mycon) x8
+//
+// WHY THE CANONICAL-PREFIX FOLD CANNOT DO IT, two independent reasons: the sac-outlet emission
+// never calls ActivationEquivTag at all (only the spore path does), and FinalizeFoldTags CONDITION
+// 2 would drop the class anyway because a Mycon emits more than one action per source. That is the
+// same wall MTG_FOLD_COUNTER_SOURCES hit for zero gain (EngineFlags.h). Emission-site pooling is
+// the route -- exactly what MTG_FUNGUS_SPORE_POOL took for the other half of this same card.
+//
+// AND HERE IT IS AN IDENTITY, NOT A HEURISTIC. The spore pool needed a user ruling because it is
+// genuinely approximate: popping Thallid A's counters rather than B's leaves a different residual
+// DISTRIBUTION of counters. This ability has no residue -- it does not tap its source, does not
+// touch its counters, and every copy resolves the SAME CanonicalSacVictim -- so sacrificing through
+// Mycon #1 and through Mycon #3 leave literally the same state. Because the ability never exhausts
+// its source, N Mycons are not N resources; the enumerator was using the physical copies as a UNARY
+// REPETITION COUNTER.
+//
+// THE VICTIM GATE IS LOAD-BEARING AND IS WHY THIS IS NOT UNCONDITIONAL. CanonicalSacVictim takes
+// the SOURCE's id, so an outlet that can eat ITS OWN KIND resolves a source-DEPENDENT victim:
+// Utopia Mycon is safe by type (it requires Saproling and is a Fungus, so it is never a legal
+// victim), but SKIRK PROSPECTOR IS A GOBLIN THAT SACRIFICES GOBLINS -- eating Skirk A is not
+// eating Skirk B. Members must therefore agree on the canonical victim or the pool does not form.
+static bool SacOutletPoolEnabled()
+{
+    static const bool env_on = EnvOn("MTG_SAC_OUTLET_POOL");
+    return heurarm::Flag(heurarm::SAC_OUTLET_POOL, env_on);
+}
+
 // HAND CASTS (MTG_FOLD_HAND_CASTS, the second half of the same fold). Two copies of one card in
 // hand are the same decision: "cast a Coldsteel Heart", not "cast the one in slot 3". The census
 // put cast_from_hand at 77.4% of Snow's candidate mass -- four times the activation slice the
@@ -18088,6 +18123,123 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
             if (sd->params.sac_outlet_self_only && !HumanPlayActive()
                 && !SelfSacHasDeathPayoff(state, state.active_player_index, src.card.m_number))
             { continue; }
+            // ---- POOLED SAC-FOR-MANA OUTLETS (MTG_SAC_OUTLET_POOL) --------------------------
+            // Replace the per-source POWERSET with a single COUNT axis. Emits nothing for a
+            // non-canonical member and the family once for the canonical (oldest) one, so every
+            // variant shares one sac_source_id and lands in ONE ActivationFamilyKey group --
+            // |counts|+1 positions where the per-source form costs 2^(2N). See SacOutletPoolEnabled.
+            if (is_mana_outlet && SacOutletPoolEnabled())
+            {
+                // THE COLOUR FAN MUST BE A SINGLETON. With several candidate colours the outcome
+                // depends on the colour MULTISET and not on the count alone, so a count axis would
+                // not be the same enumeration. Those boards stay on the per-source path.
+                std::vector<std::string> pool_cols;
+                if (sd->params.sac_outlet_add_mana_any_color)
+                { pool_cols = ChosenFloatColorCandidates(state); }
+                else
+                { pool_cols.push_back(sd->params.sac_outlet_add_mana_color); }
+                bool pooled = false;
+                if (pool_cols.size() == 1)
+                {
+                    // Members: same card DEFINITION (hence identical params), same controller, past
+                    // the same per-source gate -- and the load-bearing one, the SAME canonical
+                    // victim (see SacOutletPoolEnabled's Skirk Prospector note). Battlefield order
+                    // is entry order, so the first member is the OLDEST copy.
+                    std::vector<int> pool_ids;
+                    bool victims_agree = true;
+                    for (const Permanent& q : state.battlefield)
+                    {
+                        if (q.controller_index != state.active_player_index) { continue; }
+                        if (CardDatabase::Instance().LookupCached(q.card) != sd) { continue; }
+                        if (is_pre_combat && !HumanPlayActive()
+                            && ResolveProvider(state).DeferSacOutletPreCombat(state, q, is_mana_outlet))
+                        { continue; }
+                        const int qv = CanonicalSacVictim(state, state.active_player_index,
+                                                          q.card.m_number, need_sub,
+                                                          sd->params.sac_outlet_allows_enchantment,
+                                                          sd->params.sac_outlet_excludes_self);
+                        if (qv < 0) { continue; }
+                        if (qv != victim_id) { victims_agree = false; break; }
+                        pool_ids.push_back(q.card.m_number);
+                    }
+                    if (victims_agree && !pool_ids.empty())
+                    {
+                        // Not the canonical member: the oldest copy emits for the whole family.
+                        if (pool_ids.front() != src.card.m_number) { continue; }
+                        const int N   = static_cast<int>(pool_ids.size());
+                        const int per = std::max(1, sd->params.sac_outlet_add_mana_amount);
+                        int V = 0;
+                        for (const Permanent& v : state.battlefield)
+                        {
+                            if (v.controller_index != state.active_player_index
+                                || !v.card.IsCreature()) { continue; }
+                            if (!need_sub.empty() && !CardHasSubtype(v.card, need_sub)) { continue; }
+                            ++V;
+                        }
+                        // The demand-driven burst count, computed EXACTLY as the per-source burst
+                        // below computes it, so the pooled set reproduces today's reachable totals
+                        // rather than a set of its own.
+                        const int base = AvailableManaPool(state).Total();
+                        int reach_mv = 0;
+                        for (const Card& hc : ap.hand)
+                        {
+                            const CardDefinition* hd = CardDatabase::Instance().LookupCached(hc);
+                            if (!hd || hd->card.IsLand()) { continue; }
+                            const int mv = hd->card.m_mana_cost.ManaValue();
+                            if (mv > base && mv <= base + V * per && mv > reach_mv) { reach_mv = mv; }
+                        }
+                        int kb = (reach_mv > base) ? (reach_mv - base + per - 1) / per : 0;
+                        if (kb > V) { kb = V; }
+                        if (kb < 2)  { kb = 0; }   // no burst is emitted today -> singles only
+                        // Today a subset may take one single-sac AND one burst from EACH of the N
+                        // sources, so the reachable sac TOTALS are { a + b*kb : a,b in [0,N] }.
+                        //
+                        // DO NOT CAP THIS AT V. `V` counts the fodder on the PLAN-START battlefield,
+                        // and a subset may sacrifice Saprolings THE SAME SUBSET CREATES -- spore
+                        // activations co-selected ahead of the outlet, doubled again by Doubling
+                        // Season. That is why SubsetOversubscribesSacFodder bails out entirely when
+                        // a co-selected action can add a matching creature, and it is the whole
+                        // Doubling-Season-off-an-activated-Saproling line. Capping here deleted it:
+                        // smoke put fungus gi120 and gi177 at 8 -> LOSS. (kb keeps its own V cap
+                        // only because the per-source burst below caps k at V identically.)
+                        const int maxc = N + N * kb;
+                        static thread_local std::vector<bool> reach;
+                        reach.assign(static_cast<std::size_t>(maxc) + 1, false);
+                        for (int ai = 0; ai <= N; ++ai)
+                        {
+                            for (int bi = 0; bi <= (kb >= 2 ? N : 0); ++bi)
+                            {
+                                const int c = ai + bi * kb;
+                                if (c >= 1 && c <= maxc) { reach[static_cast<std::size_t>(c)] = true; }
+                            }
+                        }
+                        for (int c = 1; c <= maxc; ++c)
+                        {
+                            if (!reach[static_cast<std::size_t>(c)]) { continue; }
+                            Action p;
+                            p.kind               = Action::Kind::SacForMana;
+                            p.card_name          = src.card.m_name;
+                            p.hand_index         = -1;
+                            p.sac_source_id      = src.card.m_number;   // the canonical (oldest) member
+                            // COUNT 1 MUST CARRY A BAKED VICTIM. ApplySacForMana derives its count
+                            // from ritual_float and only count>1 takes the burst loop (which picks
+                            // each victim canonically at apply); count==1 falls through to the
+                            // single-sac branch, where victim 0 means "sacrifice the SOURCE" -- the
+                            // Lotus Bloom contract, and a silent wrong sacrifice if we shipped it.
+                            p.sac_victim_id      = (c == 1) ? victim_id : 0;
+                            p.sac_count          = c;
+                            p.cost               = ManaCost{};
+                            p.ritual_float       = c * per;
+                            p.chosen_float_color = pool_cols.front();
+                            p.eval               = 0;
+                            p.is_noncreature     = true;
+                            actions.push_back(std::move(p));
+                        }
+                        pooled = true;
+                    }
+                }
+                if (pooled) { continue; }   // the family is emitted; skip the per-source form below
+            }
             Action a;
             a.card_name      = src.card.m_name;
             a.hand_index     = -1;
@@ -19102,18 +19254,34 @@ static int PlanGroupKey(const Action& a, const std::vector<int>& multi_sac)
 // burst), but all in "R" -- grouping those reordered goblins' enumeration (2 same-score digest
 // churns in the regression tier). True COLOUR-variant families (FiveColour's conjured Black
 // Lotus / Treasure: one variant per colour, 2^5 independent bits) are the atom this collapses.
+//
+// UNDER MTG_SAC_OUTLET_POOL, a differing sac_COUNT groups too -- and it MUST. The pooled emission
+// (see SacOutletPoolEnabled) replaces N sources' powerset with one source carrying one variant per
+// activation COUNT, all in the deck's single float colour. Judged on colour alone those variants are
+// same-colour and stay INDEPENDENT BITS, which is both the wrong cost (2^counts instead of
+// counts+1) and the wrong semantics: the counts are alternatives, so co-selecting count=1 and
+// count=2 would sum their ritual_float and sac three bodies through a "pick one" axis. Gated on the
+// lever, so the goblins ordering the colour-only rule protects is untouched while it is off.
+struct MultiSacSeen { int id; const std::string* color; int count; };
 static void CollectMultiVariantSacSources(const std::vector<Action>& cands, std::vector<int>& out)
 {
+    // Isolation gate for the diagnosis below: =0 keeps the pooled COUNT variants as independent
+    // bits, so a smoke run can separate "the pool emits the wrong SET" from "the counts must not be
+    // mutually exclusive".
+    static const bool s_pool_group = EnvOn("MTG_SAC_OUTLET_POOL_GROUP", true);
+    const bool pool_on = SacOutletPoolEnabled() && s_pool_group;
     out.clear();
-    std::vector<std::pair<int, const std::string*>> seen;   // (id, first colour); tiny -> linear scan
+    std::vector<MultiSacSeen> seen;   // (id, first colour, first count); tiny -> linear scan
     for (const Action& a : cands)
     {
         if (a.kind != Action::Kind::SacForMana) { continue; }
         const auto it = std::find_if(seen.begin(), seen.end(),
-                                     [&](const auto& s) { return s.first == a.sac_source_id; });
-        if (it == seen.end()) { seen.push_back({ a.sac_source_id, &a.chosen_float_color.str() }); continue; }
-        if (*it->second != a.chosen_float_color
-            && std::find(out.begin(), out.end(), a.sac_source_id) == out.end())
+                                     [&](const MultiSacSeen& s) { return s.id == a.sac_source_id; });
+        if (it == seen.end())
+        { seen.push_back({ a.sac_source_id, &a.chosen_float_color.str(), a.sac_count }); continue; }
+        const bool differs = (*it->color != a.chosen_float_color)
+                          || (pool_on && it->count != a.sac_count);
+        if (differs && std::find(out.begin(), out.end(), a.sac_source_id) == out.end())
         { out.push_back(a.sac_source_id); }
     }
     std::sort(out.begin(), out.end());

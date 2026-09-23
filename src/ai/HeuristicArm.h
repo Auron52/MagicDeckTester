@@ -233,6 +233,7 @@ enum Slot : int
     FLING_AXIS,               // MTG_FLING_AXIS            Surtland Flinger's fling victim + the decline (default ON)
     TECTONIC_AXIS,            // MTG_TECTONIC_AXIS         Tectonic Giant's attack-trigger mode A vs B (default ON)
     TECTONIC_KEEP_AXIS,       // MTG_TECTONIC_KEEP_AXIS    ...and WHICH exiled card mode B stages (sub-decision of mode B)
+    SAC_OUTLET_POOL,          // MTG_SAC_OUTLET_POOL      N interchangeable sac-for-mana outlets are ONE pool: the COUNT is the only axis (default OFF)
     COUNT
 };
 
@@ -432,6 +433,7 @@ inline const char* Name(int slot)
         "MTG_FLING_AXIS",
         "MTG_TECTONIC_AXIS",
         "MTG_TECTONIC_KEEP_AXIS",
+        "MTG_SAC_OUTLET_POOL",
     };
     // The enum and this table are ONE mapping split across two lists: a slot added to one and not
     // the other silently shifts every lever after it (a manifest asking for lever X would set Y).

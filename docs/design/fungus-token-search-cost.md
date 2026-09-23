@@ -2429,7 +2429,7 @@ unimplemented at ENUMERATION time, so a subset whose mana comes from a body the 
 scores unpayable and is never offered — which is exactly the Doubling-Season-off-an-activated-
 Saproling line these hands are built on. Do not read the 194x above as this lever being ready.
 
-**(b) Pool the outlet at the emission site — LOSSLESS, NOT BUILT.** The same move the spore pool
+**(b) Pool the outlet at the emission site — BUILT AND REFUTED, see the next section.** The same move the spore pool
 made, one ability over, with a stronger argument behind it (identity, not heuristic). Emit, in place
 of one single-sac action per source, **one action per activation COUNT** `j = 1..N` over the `N`
 interchangeable live outlets, all carrying the oldest outlet's `sac_source_id` so
@@ -2462,3 +2462,62 @@ the work. The charge rations a walk whose positions are **mostly duplicates**; c
 exchange rate against duplicate work prices the wrong thing, and truncating it trades real quality
 to avoid work that never needed doing. Collapse the redundancy first, then decide what the residual
 walk is worth.
+
+---
+
+# Round 7b (2026-09-23): the count-pool was BUILT, and MEASUREMENT REFUTED IT
+
+`MTG_SAC_OUTLET_POOL` / `heurarm::SAC_OUTLET_POOL`, **DEFAULT OFF and byte-identical** (smoke 93/93,
+`configs changed: 0`, `play-changed=0`, scenarios 103/103). Kept, off, as the reproducible A/B for
+the next attempt — the same status `MTG_SAC_OUTLET_PAY` and `MTG_FOLD_COUNTER_SOURCES` hold.
+
+**It does exactly what Round 7 predicted to the ENUMERATION, and it is a large win on cost.** The
+independent Mycon bits collapse into one group, the worst odometer shape falls **4.92e+04 -> 1.54e+03
+(32x)**, and the slow-cell replay goes **31,554 ms -> 181 ms (174x)** at an unchanged win turn:
+
+```
+[enum-stats] bound=1.54e+03 groups=10 ind=0 ... [g1 k26 Utopia Mycon] [g2 k7 Utopia Mycon]
+```
+
+**And it loses games.** Fungus d0, 1000 games, vs committed GT — **7 win turns changed, EVERY ONE
+WORSE, three of them to a LOSS**; avg **6.0950 -> 6.1040**. Nothing improved:
+
+```
+gi120: 8 -> loss    gi177: 8 -> loss    gi978: 7 -> loss
+gi340: 7 -> 8       gi506: 6 -> 7       gi798: 7 -> 8      gi811: 6 -> 8
+```
+
+A strictly one-directional change is the signature of **deleted reachable lines**, not of a
+re-ordering. So the Round 7 identity argument is TRUE ABOUT THE SOURCE and FALSE ABOUT THE COUNT.
+
+## What was ruled out, by measurement rather than argument
+
+* **The `V` cap — ruled out.** The first cut capped the count at the plan-START fodder, which is
+  wrong (a subset may sacrifice Saprolings THE SAME SUBSET CREATES — that is why
+  `SubsetOversubscribesSacFodder` bails out entirely when a co-selected action can add a matching
+  creature). Removing the cap was necessary and **changed nothing**: the same 7 games still lost.
+* **Mutual exclusivity — ruled out.** `MTG_SAC_OUTLET_POOL_GROUP=0` keeps the pooled counts as
+  independent bits instead of one group. **The same 7 games still lost** (avg 6.1030). So grouping
+  the counts is not what costs the lines, and the grouping half is sound on its own.
+
+## What is left, and it is the lesson
+
+The remaining difference is the **action SHAPE**: a count-`c` action performs all `c` sacrifices
+**atomically** inside `ApplySacForMana`'s burst loop, whereas today's `c` separate activations each
+apply at their own position in the plan's action order — with token-CREATING actions able to run
+between them. On this deck the fodder is manufactured mid-plan (spore pops, doubled by Doubling
+Season), so a lump sac that runs before its fodder exists simply finds `vid < 0` and floats less
+mana than the plan was scored on.
+
+**AN ACTIVATION COUNT IS NOT A FREE-STANDING QUANTITY.** It is only separable from the plan when the
+fodder it consumes is already on the battlefield. That is the same hole
+`sac-mana-outlet-as-deferred-source.md` records as its own STILL-MISSING stage 2 — two different
+designs, one underlying fact, and it is now measured rather than predicted.
+
+**For the next attempt.** Do not re-derive the flat count axis; it is refuted. What the evidence
+still supports is the narrower half: the **source** axis is genuinely redundant (N untapped outlets
+resolving one canonical victim are one resource) while the **count** axis is not. A fix that keeps
+`c` separate single-sac actions — so plan order and mid-plan fodder creation survive — but stops the
+`N` physical copies each contributing their own, would need those `c` actions to be distinguishable
+positions without being `2^N` arrangements. That is a different mechanism from this one, and the
+`bf_width` census (`copyaxis_share=0.403`, `collapse=1.76x`) is the instrument that bounds it.
