@@ -2521,3 +2521,74 @@ resolving one canonical victim are one resource) while the **count** axis is not
 `N` physical copies each contributing their own, would need those `c` actions to be distinguishable
 positions without being `2^N` arrangements. That is a different mechanism from this one, and the
 `bf_width` census (`copyaxis_share=0.403`, `collapse=1.76x`) is the instrument that bounds it.
+
+---
+
+# Round 7c (2026-09-23): the count-pool's losses are a GUARD leak, not a property of counts
+
+**This CORRECTS Round 7b's conclusion.** 7b said "an activation count is not a free-standing
+quantity" and blamed plan ORDER. That named the wrong cause. **USER:** *"it might still be worth
+looking at why this is causing so much trouble. That doesn't seem to make much sense."* It doesn't,
+and the game says so.
+
+## The failing game, traced
+
+`fungus_smoke_d0` gi120 — repro needs BOTH flags (`--seed base+gi`, see
+`single-game-repro-needs-game-index`) plus the manifest's `--ignore-play-profile`:
+
+```
+./build/Release/mtg decks/Fungus/Fungus.cod --profile decks/Fungus/Fungus.profile.json \
+  --cards-json src/cards/data/cards.json --games 1 --seed 1121 --game-index 120 \
+  --depth 0 --budget-ms 0 --threads 1 --ignore-play-profile        # OFF 8, ON 9 (loss)
+```
+
+The game log diff is NOT a preference change. At turn 5 the OFF arm plays Simic Growth Chamber and
+**casts Mycoloth `{3}{G}{G}`**; the ON arm plays the land and **casts nothing**. `MTG_SAC_TRACE=1`
+says why:
+
+```
+[sac] T5 burst 1/2 src=Utopia Mycon vid=1000 (1/1 Saproling Token) bf=8
+[sac] T5 burst 2/2 src=Utopia Mycon vid=-1 ((none)) bf=7
+```
+
+The pooled `count=2` action floated **1** mana, not 2, with one Saproling on board. Mycoloth came up
+short and the turn was wasted. **Control: the OFF arm emits no burst at all** — that count is
+reachable today only by co-selecting two single-sacs.
+
+## Why nothing rejected it: `SubsetOversubscribesSacFodder` is inert on this deck
+
+Three independent bail-outs, each sound on its own terms, and pooling has to clear all three:
+
+1. **`sac_actions < 2` / `outlets < 2`** — *"one outlet can never oversubscribe itself"*. True only
+   while one outlet means ONE activation; a pooled action is one outlet standing for up to `N+N*k`.
+   **Fixed** (`pooled_multi`).
+2. **`plan_can_add` counts the SAC ACTION'S OWN CARD.** Utopia Mycon both makes and eats Saprolings,
+   so its `spore_token_subtypes` made the bail-out fire on every Mycon plan. **Fixed** (a sac
+   activation creates nothing), and **it did not fix the game**, because:
+3. **Mycoloth's `upkeep_token_subtypes` is `['Saproling']`** — so *casting Mycoloth* still makes
+   `plan_can_add` true, even though those tokens arrive NEXT UPKEEP. Not fixed, and not fixable
+   locally: the predicate is "this card can ever make a matching token", by design.
+
+The guard's own comment states the intent — *"Being conservative here is the safe direction: a
+missed reject leaves the pre-existing (documented, executor/rollout-shared) apply-time degradation
+exactly as it was"*. **So the guard is deliberately permissive, and on Fungus it is effectively
+inert: it can never reject a Mycon plan for over-promising fodder.**
+
+## The actual lesson
+
+Over-promising fodder is **already happening today** — it is just benign, because each single-sac
+action degrades independently and costs **1 mana**. Collapsing N activations into one action turns
+that into a **k-mana** shortfall that strands the cast the whole plan was built around. The pool did
+not introduce the unsoundness; **it changed a self-limiting failure into a catastrophic one, against
+a guard that was never built to be precise.**
+
+So the collapse is still right. What it needs is not a better count SET but a real supply model:
+the pooled count must be bounded by fodder the plan can actually have **this turn** = board fodder
+plus tokens co-selected actions create **before** the sac. That is exactly the *plan-added fodder
+credit* `sac-mana-outlet-as-deferred-source.md` lists as its own missing stage 2 — **the same
+blocker, now reached from the opposite direction and with a traced failing game to test against.**
+Build that first; both this pool and `MTG_SAC_OUTLET_PAY` unblock behind it.
+
+**Do not spend more on the count SET.** With the V cap, the capped set is too small (gi120's count=2
+is unreachable and Mycoloth still misses); without it, the set is right and the guard cannot police
+it. Neither end works until supply is modelled.

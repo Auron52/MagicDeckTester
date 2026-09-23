@@ -321,6 +321,14 @@ struct Action
                                        // >1 = the multi-sac BURST (Siege-Gang saccing the swarm for
                                        // sac_count*damage lethal): the apply loops the canonical victim
                                        // pick sac_count times; cost/direct_damage are pre-scaled by k.
+    bool        pooled_sac     = false; // MTG_SAC_OUTLET_POOL: this SacForMana is one COUNT variant of
+                                       // a POOLED family (N >= 2 interchangeable outlets collapsed onto
+                                       // the oldest one's sac_source_id). Read only by
+                                       // CollectMultiVariantSacSources, which groups count-variants of a
+                                       // pooled family but must NOT group an ordinary source's
+                                       // single-sac + burst pair -- those also differ in sac_count, and
+                                       // grouping them reordered goblins' enumeration (14 d0 games, 11
+                                       // worse). False for every action while the lever is off.
     int         gy_exile_mode  = 0;    // GraveyardExileAbility: 1 = exile instant/sorcery -> opponent
                                        // loses N (Deathrite {B}); 2 = exile creature -> gain N ({G}).
     int         loyalty_ability = -1;  // ActivateLoyalty: index into the walker's loyalty_abilities.

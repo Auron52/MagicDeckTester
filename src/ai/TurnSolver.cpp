@@ -7821,6 +7821,7 @@ static std::uint64_t ActionFoldSig(const Action& a)
     if (!src_is_sac) { FoldMix(h, static_cast<std::uint64_t>(a.sac_source_id)); }
     FoldMix(h, static_cast<std::uint64_t>(a.sac_victim_id));
     FoldMix(h, static_cast<std::uint64_t>(a.sac_count));
+    FoldMix(h, a.pooled_sac ? 1u : 0u);
     FoldMix(h, static_cast<std::uint64_t>(a.gy_exile_mode));
     FoldMix(h, static_cast<std::uint64_t>(a.loyalty_ability));
     FoldMix(h, a.free_cast ? 1u : 0u);
@@ -8507,14 +8508,28 @@ static bool SubsetOversubscribesSacFodder(const GameState& state,
     // multi-outlet sac plan it is the whole function. Measured at 2.6% of a Fungus slow game -- the
     // one filter in this chain the deck really does run, because Utopia Mycon IS a creature-sac
     // outlet, which is exactly why the cheap half had to come first.
+    // A POOLED MULTI-SAC ACTION DEFEATS BOTH EARLY-OUTS BELOW, and that is load-bearing.
+    // "One outlet can never oversubscribe itself" is sound only while one outlet means ONE
+    // activation. MTG_SAC_OUTLET_POOL collapses N interchangeable outlets onto a single
+    // sac_source_id carrying the COUNT, so one outlet now stands for up to N + N*k activations --
+    // and with the early-outs intact the guard went blind to exactly the subsets it exists to
+    // reject. Measured (fungus gi120, d0): the pooled count=2 action was scored as floating 2 mana
+    // with ONE Saproling on board, `[sac] T5 burst 2/2 vid=-1` at apply, Mycoloth left uncast and
+    // the game lost. The burst emitted by the per-source path is not affected: it caps its own k at
+    // the live victim count, so it cannot outrun its fodder the way a pooled count can.
     int sac_actions = 0;
+    bool pooled_multi = false;
     for (int j : sel)
     {
         const Action& a = cands[j];
         if ((a.kind == Action::Kind::SacForMana || a.kind == Action::Kind::SacCreatureOutlet)
-            && a.sac_source_id != 0) { ++sac_actions; }
+            && a.sac_source_id != 0)
+        {
+            ++sac_actions;
+            if (a.pooled_sac && a.sac_count > 1) { pooled_multi = true; }
+        }
     }
-    if (sac_actions < 2) { return false; }   // outlets <= sac_actions, and outlets < 2 returns false
+    if (sac_actions < 2 && !pooled_multi) { return false; }   // outlets <= sac_actions
 
     // (victim subtype filter, demand). Empty filter = "any creature you control".
     std::vector<std::pair<std::string, int>> demand;
@@ -8539,7 +8554,7 @@ static bool SubsetOversubscribesSacFodder(const GameState& state,
         { if (d.first == filt) { d.second += want; found = true; break; } }
         if (!found) { demand.emplace_back(filt, want); }
     }
-    if (outlets < 2) { return false; }   // one outlet can never oversubscribe itself
+    if (outlets < 2 && !pooled_multi) { return false; }   // one UNPOOLED outlet cannot oversubscribe itself
     const int me = state.active_player_index;
 
     // BAIL OUT WHERE FODDER CAN BE REPLENISHED MID-PLAN. This guard counts the board as it is now,
@@ -8589,6 +8604,17 @@ static bool SubsetOversubscribesSacFodder(const GameState& state,
             {
                 if (filt.empty() || CardHasSubtype(d->card, filt)) { return true; }
             }
+            // THE SAC ACTIVATION ITSELF ADDS NOTHING. These `params` describe what the CARD can do,
+            // not what this action does -- and Utopia Mycon both MAKES and EATS Saprolings, so the
+            // sac action's own card carries spore_token_subtypes and made this bail-out fire on
+            // every Mycon plan. The guard was therefore inert on Fungus: it could never reject a
+            // plan for over-promising fodder, which is what let a pooled count=2 be scored as 2 mana
+            // with one Saproling on board (fungus gi120). A co-selected SPORE POP still qualifies --
+            // it is an ActivatePermAbility, not this branch. Gated on the pool lever so the OFF arm
+            // stays byte-identical; if the pool ever ships, this clause ships with it.
+            if (SacOutletPoolEnabled()
+                && (a.kind == Action::Kind::SacForMana
+                    || a.kind == Action::Kind::SacCreatureOutlet)) { continue; }
             // Any token the action creates that carries the filter subtype.
             if (matches(d->params.spore_token_subtypes)
                 || matches(d->params.upkeep_token_subtypes)
@@ -18162,7 +18188,13 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
                         if (qv != victim_id) { victims_agree = false; break; }
                         pool_ids.push_back(q.card.m_number);
                     }
-                    if (victims_agree && !pool_ids.empty())
+                    // N >= 2 OR THERE IS NOTHING TO POOL. A lone outlet collapses no powerset, but
+                    // routing its single-sac + burst from two independent bits into a GROUP still
+                    // reorders the enumeration -- which is precisely the churn the colour-only rule
+                    // in CollectMultiVariantSacSources was written to avoid. Measured: with N==1
+                    // engaged, goblins (one Skirk Prospector, which never pools anyway because it
+                    // eats its own kind) moved 14 d0 games, 11 of them worse.
+                    if (victims_agree && pool_ids.size() >= 2)
                     {
                         // Not the canonical member: the oldest copy emits for the whole family.
                         if (pool_ids.front() != src.card.m_number) { continue; }
@@ -18228,6 +18260,7 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
                             // Lotus Bloom contract, and a silent wrong sacrifice if we shipped it.
                             p.sac_victim_id      = (c == 1) ? victim_id : 0;
                             p.sac_count          = c;
+                            p.pooled_sac         = true;   // groups by COUNT; see CollectMultiVariantSacSources
                             p.cost               = ManaCost{};
                             p.ritual_float       = c * per;
                             p.chosen_float_color = pool_cols.front();
@@ -19262,25 +19295,33 @@ static int PlanGroupKey(const Action& a, const std::vector<int>& multi_sac)
 // counts+1) and the wrong semantics: the counts are alternatives, so co-selecting count=1 and
 // count=2 would sum their ritual_float and sac three bodies through a "pick one" axis. Gated on the
 // lever, so the goblins ordering the colour-only rule protects is untouched while it is off.
-struct MultiSacSeen { int id; const std::string* color; int count; };
+struct MultiSacSeen { int id; const std::string* color; int count; bool pooled; };
 static void CollectMultiVariantSacSources(const std::vector<Action>& cands, std::vector<int>& out)
 {
-    // Isolation gate for the diagnosis below: =0 keeps the pooled COUNT variants as independent
-    // bits, so a smoke run can separate "the pool emits the wrong SET" from "the counts must not be
-    // mutually exclusive".
+    // Isolation gate for the diagnosis in Round 7b: =0 keeps the pooled COUNT variants as
+    // independent bits, so a smoke run can separate "the pool emits the wrong SET" from "the counts
+    // must not be mutually exclusive".
     static const bool s_pool_group = EnvOn("MTG_SAC_OUTLET_POOL_GROUP", true);
-    const bool pool_on = SacOutletPoolEnabled() && s_pool_group;
     out.clear();
-    std::vector<MultiSacSeen> seen;   // (id, first colour, first count); tiny -> linear scan
+    std::vector<MultiSacSeen> seen;   // (id, first colour, first count, pooled); tiny -> linear scan
     for (const Action& a : cands)
     {
         if (a.kind != Action::Kind::SacForMana) { continue; }
         const auto it = std::find_if(seen.begin(), seen.end(),
                                      [&](const MultiSacSeen& s) { return s.id == a.sac_source_id; });
         if (it == seen.end())
-        { seen.push_back({ a.sac_source_id, &a.chosen_float_color.str(), a.sac_count }); continue; }
+        {
+            seen.push_back({ a.sac_source_id, &a.chosen_float_color.str(),
+                             a.sac_count, a.pooled_sac });
+            continue;
+        }
+        // The count clause is keyed on `pooled_sac`, NOT on the lever: an ORDINARY source's
+        // single-sac + burst pair also differs in sac_count, and grouping that pair is exactly the
+        // reordering the colour-only rule above exists to avoid (measured: 14 goblins d0 games, 11
+        // worse, from a Skirk Prospector that never pooled at all).
         const bool differs = (*it->color != a.chosen_float_color)
-                          || (pool_on && it->count != a.sac_count);
+                          || (s_pool_group && it->pooled && a.pooled_sac
+                              && it->count != a.sac_count);
         if (differs && std::find(out.begin(), out.end(), a.sac_source_id) == out.end())
         { out.push_back(a.sac_source_id); }
     }
