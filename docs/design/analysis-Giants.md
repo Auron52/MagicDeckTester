@@ -1153,18 +1153,28 @@ user still had the viewer open:
 11. **Tier-1 engine work COMPLETE and pushed** (2026-09-22): both axes measured and kept, the
     mode-B keep axis built/measured/adopted, both GT tiers re-accepted, every blocking gate green,
     CI green incl. determinism parity.
-12. **Value leaf: STARTED then STOPPED by the user**, 7 of 9 phases banked at freeze `e0d60938`.
-    See the run section above for the resume cost (phase E restarts: ~1–1.5 h wall) and the
-    slow-game census. Resume with `bash scripts/valueleaf.sh run decks/Giants`.
-    **A moved `src/` does NOT force a restart** — the freeze is softer than it looks: `run`
-    re-checks the **play digests** and continues either way (digest unchanged keeps every game;
-    changed keeps the completed full sets and re-runs the rest). So a play-NEUTRAL commit
-    landing on top costs nothing. `src/` has already moved once (upstream's Treasure-mint perf
-    change, play-neutral for a deck with no Treasure) and the banked phases survived.
-    The keep-axis name-dedup would genuinely change play, so it would re-run the affected sets —
-    still worth landing before a resume rather than after, but it is not the all-or-nothing
-    freeze break stated earlier.
-13. **Then** the mulligan profile, for which Finding 3 is the concrete argument.
+12. ~~**Value leaf: STARTED then STOPPED by the user**~~ — **DONE and ADOPTED** (2026-09-23).
+    All 9 phases complete; `decks/Giants/Giants.value.json` is live. Phase E: **−0.00312 turns,
+    t = −4.08, 7/0/1 seeds, 0.14x cost** on 8000 games/arm. No enabled play policy, trust UNSET.
+    Both GT tiers re-accepted with `slower=0` in each. See *Value-leaf COMPLETED and ADOPTED*.
+    The phase-E restart cost **36 min**, not the 1–1.5 h estimated — the estimate's three
+    extrapolated arms all carry the sidecar and run far cheaper than `live`.
+13. **NEXT: the mulligan profile**, for which Finding 3 is the concrete argument. Phase F has
+    already written its contract: **`mull_gen_depth: 1`, `mull_gen_budget_ms: 3`,
+    `expected_buckets: 13`** — K=13 is binding, and `ExhaustiveKeep` refuses to generate if
+    discovery disagrees. Route: `.claude/skills/mulligan-profile.md`, alone on the box.
+14. **Open, not started: the lossless keep-axis name-dedup.** 24 Mountains ⇒ Tectonic's two exiled
+    cards are frequently the SAME CARD, and two keep variants over identical cards are the
+    identical plan (the Finding-2 equip-host precedent). It would claw back part of the keep axis's
+    +18.4% wall at zero quality cost. **It changes play**, so landing it now would invalidate the
+    adopted value model — it needs a value-leaf regeneration afterwards. That is no longer the
+    cheap "land it before the resume" it was while the run was paused; sequence it deliberately.
+    The same "fan out only when it can matter" idea applies to the fling axis.
+15. **Latent, in shared infrastructure:** `derive_mullgen_setting.write_mull_gen` finds the
+    `value_play` block by a TEXT search for `"value_play"` rather than a top-level key lookup, so
+    any sidecar whose text contains that string earlier splices the mull-gen keys into the wrong
+    object. Its post-write `assert` catches it (nothing is corrupted), but the class is removable.
+    Not changed here — shared generation code, and this run had no mandate to touch it.
 10. **Open, still unstarted (needs a rebuild, so it was gated on the user pausing):** Inferno
     Titan's "3 damage divided as you choose" as a real targeting choice defaulting to the
     opponent's face. Note the gate has now lapsed — the binary has been rebuilt three times today
@@ -1352,6 +1362,11 @@ digests track play live, which is what the gate leans on.
 
 ## Value-leaf run 2026-09-22 — STOPPED BY THE USER at phase E, 7 of 9 phases banked
 
+> **Superseded 2026-09-23:** the user restarted it and all nine phases are now complete; the model
+> is **adopted**. See *Value-leaf COMPLETED and ADOPTED* below. This section is kept because its
+> phase-E restart estimate was the basis for restarting, and it is worth knowing how that estimate
+> scored.
+
 Started 21:33 PDT frozen at `e0d60938` (`HEAD:src` = `0dcce19ecf07`), **stopped on the user's
 instruction** ~22:24. Queue `logs/vlq_giants` (gitignored). **Nothing was adopted** —
 `decks/Giants/` still holds only the decklist and profile, no `.value.json`, so play is unchanged.
@@ -1419,6 +1434,157 @@ than hiding it:
 
 That is the opposite of the Snow value-leaf outcome, where the degenerate tail was the blocker. A
 useful repro if the tail is ever investigated: `--seed 9149 --game-index 140 --games 1`.
+
+## Value-leaf COMPLETED and ADOPTED (2026-09-23)
+
+Restarted 23:40 PDT on the user's instruction and ran to completion. **All 9 phases done.**
+`decks/Giants/Giants.value.json` is now **live** — this deck's first value model.
+
+### The resume kept every banked game, because PLAY did not move
+
+`src/` had moved since the freeze (`0dcce19ecf07` → `5974c56c5fba`: upstream's Treasure-mint perf
+change and the enum-stats diag line). `check_freeze` ran the smoke suite and folded the per-case
+play digests:
+
+```
+src/ moved (0dcce19ecf07 -> 5974c56c5fba); checking whether PLAY moved...
+  PLAY UNCHANGED (smoke digests fold to 1804f0359d7e) -- keeping every game.
+```
+
+So phases 0–D were kept whole and only E and F ran. **This is also the post-rebase byte-identity
+check CLAUDE.md requires** — and it is a strictly stronger instrument than a pass/fail count, since
+it compares every smoke cell's play digest rather than its average.
+
+**One prerequisite that is easy to miss:** phase 0 is marker-guarded, so a resume **does not
+rebuild**. The binary was stale (`src/ai/TurnSolver.cpp` newer than `build/Release/mtg` after the
+second rebase), and `check_freeze` computes its fingerprint from whatever binary is on disk. Run
+`./build.sh` before resuming, or the play comparison is made with the *old* engine and "PLAY
+UNCHANGED" means nothing.
+
+### Phase E — the adoption gate
+
+48 jobs / 40,000 games in ONE pooled queue, **24/24 workers busy (100%)** on the heartbeat,
+**36 minutes wall** (23:42 → 00:18). The ≈1–1.5 h estimate above was conservative by ~2x; the
+error was on the three extrapolated arms, all of which carry the sidecar and so run much cheaper
+than `live`.
+
+```
+=== giants: regenerated value-leaf vs live ===
+arm          avg        delta      paired t   better/worse/tied    same-digest  core-s    vs-base
+live (base)  6.00300    -          -          -                    -            31073     -
+staged       5.99988    -0.00312   -4.08      7/0/1                0/8          4434      0.14x
+```
+
+8000 games/arm over 8 paired held-out seeds. **Better play AND 7x cheaper** — quality −0.00312
+turns at t = −4.08 with zero worse seeds, at 0.14x the cost. This is the "clear win" case the skill
+says is roughly one model in nine; adoption is not the default outcome and was not assumed.
+
+**No play policy is enabled.** The depth sweep says the shipped default is already the right point:
+
+```
+d4    +0.00200   t=+1.73   2.10x cost
+d5    +0.00000   BYTE-IDENTICAL to baseline (arm not engaging)   0.90x
+d6    -0.00050   t=-1.00   1.51x cost
+dflt  (base)                                                     1.00x
+```
+
+d4 is worse and dearer; d6 is statistically tied (|t|=1.00) at 1.51x. The cheapest arm wins, so the
+sidecar ships with no `enabled` block. Note d5 coming back byte-identical is the trap-3 signature —
+here it is benign and informative: the built-in default already plays d5 b20, so an enabled d5
+block is a genuine no-op rather than a sweep that tested nothing.
+
+**`value_trust_depth` ships UNSET.** The d5 candidate was byte-identical on 8/8 held-out seeds at
+0.99x cost, so the driver rejected it as never having engaged:
+
+> *"A non-inferiority test passes trivially on a dead experiment, and no evidence is not evidence
+> of safety."*
+
+UNSET leaves every line eligible to escalate, which is the side that cannot cost quality. Because
+no trust depth moved, the skill's overnight-tier requirement does not apply — smoke + regression is
+the gate.
+
+### Phase F — the mulligan-generation contract
+
+```
+deck=Giants  play=d5 b20  [BuiltinDefaultPlay (deck ships no enabled value_play)]
+
+arm             rho   units/roll     cost_x
+d1  b3      0.9994         3169      0.460
+d2  b3      0.9993         4224      0.613
+d3  b3      0.9995         5507      0.799
+d3  b20     0.9997        18062      2.622
+d5  b20     1.0000         6888      1.000
+
+PICK: d1 b3  (rho 0.9994 >= floor 0.990, cheapest clearing it; 0.46x the play cost)
+```
+
+`value_play` = `{mull_gen_depth: 1, mull_gen_budget_ms: 3, expected_buckets: 13}`. **K=13 is now
+binding** — `ExhaustiveKeep` refuses to generate if discovery disagrees with it.
+
+#### A self-inflicted failure worth recording, because the trap is general
+
+Phase F failed on its first attempt with `KeyError: 'value_play'` — *after* its measurement had
+succeeded. The cause was mine: on adoption I wrote a human-readable provenance summary containing a
+sub-key literally named `value_play`, and `derive_mullgen_setting.write_mull_gen` locates the block
+by a **text search for `"value_play"`**, then brace-matches from the next `{`. With `sort_keys=True`
+the `provenance` object precedes the real top-level key, so it matched my note, spliced the
+mull-gen keys into an unrelated object, and the post-write `assert` caught it before
+`write_text` ran. Nothing was corrupted, which is the assert earning its keep.
+
+Fixed by renaming the provenance keys (`play_policy`, `trust_depth`). **The latent fragility is
+still in the script** and will bite any sidecar whose text contains `"value_play"` ahead of the real
+key — a top-level-key lookup on the parsed JSON would remove the class. Not changed here: it is
+shared generation infrastructure and this run had no mandate to touch it.
+
+### Gates
+
+Trust did not move, so the standing gate is smoke + regression (no overnight tier required).
+
+| tier | result | per-game audit (searched) |
+|---|---|---|
+| smoke, 93 cells | **91 pass / 2 fail / 0 new** | **`slower=0  faster=2  play-changed=9`** |
+| regression, 129 cells | **125 pass / 4 fail / 0 new** | **`slower=0  faster=2  play-changed=7`** |
+
+`d0` is `0/0/0` in both tiers. **Every failing cell is a Giants cell — no other deck moved in
+either tier**, which is the blast radius a deck-scoped sidecar should have, and it is the
+value-gated-fold discipline paying off again.
+
+```
+smoke       giants_smoke_d3_s1001        exp=6.1600  got=6.1467   <- BETTER  (gi88 8->7, gi90 6->5)
+            giants_smoke_d5_s1001        exp=6.0400  got=6.0400   <- same score, play differs
+regression  giants_regression_d3_s3003   exp=5.9467  got=5.9400   <- BETTER
+            giants_regression_d5_s3003   exp=6.0133  got=6.0000   <- BETTER
+            giants_regression_d3_s2002   exp=5.7733  got=5.7733   <- same score, play differs
+            giants_regression_d5_s2002   exp=5.8400  got=5.8400   <- same score, play differs
+```
+
+**Zero games got slower in either tier.** Every same-score change reports `kept hand + draws
+IDENTICAL -> a clean like-for-like LINE change` — a different evaluator reaching the same turn by
+another route, which is what a value leaf is supposed to do. No win became a loss anywhere.
+
+Accepted with `--accept`, **not** `--accept-with-regressions`: the net loss-penalized delta is an
+improvement in both tiers, so there is no regression to excuse. `check_gt_logs.py` → **506
+consistent, 0 STALE, 0 missing** (both GT halves in sync).
+
+#### Reference replay — attributed by CONTROL, not by argument
+
+The regression tier reported `25 ok, 299 repaired, 0 play-drift, 0 shuffle-dead, 1 board-diverged,
+0 enum-gap, 10 mull-drift, 0 contract-fail (335 refs)`. The hard gates (`--strict` fails only on
+contract-fail / play-drift / enum-gap) are all zero, and the two nonzero counts match the
+pre-Giants baselines of 2026-09-16 exactly — but that is reasoning, and this ledger already records
+one occasion where reasoning about reference drift got the attribution backwards.
+
+So it was measured. Because the whole change is one file, the control is simply the check with the
+sidecar moved aside:
+
+```
+with sidecar     25 ok, 299 repaired, 0 play-drift, 0 shuffle-dead, 1 board-diverged, 0 enum-gap, 10 mull-drift, 0 contract-fail
+without sidecar  25 ok, 299 repaired, 0 play-drift, 0 shuffle-dead, 1 board-diverged, 0 enum-gap, 10 mull-drift, 0 contract-fail
+```
+
+Byte-identical ⇒ **the adoption caused zero reference regressions**; the board-diverge and the ten
+mull-drifts are pre-existing and untouched. A single-file change makes this control far cheaper
+than the worktree route used earlier in this arc — worth remembering.
 
 ## Gate status re-check (2026-09-22, post-push)
 

@@ -1,8 +1,7 @@
-# Regression ground truth -- commit 75b209af  date 2026-09-22
+# Regression ground truth -- commit ac4b8965  date 2026-09-23
 # Promoted from accepted runs by 'regression.sh --accept' -- do not hand-edit.
 # accepted-with-regressions (overnight, 2026-09-19): Angels (12 keys): decklist adopted 2026-09-19, all configs FASTER. Other 52 keys: pre-existing overnight staleness from 56c57d73 (site-10 breakpoint fix) -- 76f76796 rebaselined smoke+regression only and touched ZERO overnight keys. 26 of 52 are digest-only at identical score; auras (the fix's own target) is -0.0119; net -0.00166; 9 slower, all <=0.007t, no win became unwon.
 # accepted-with-regressions (overnight, 2026-09-20): OVERNIGHT, Angels only (--deck=angels,angels2hg). Angels leafless shape adopted 2026-09-20 (ladder single / leaf none / alpha relaxed -- restoring 918c3cc2, which a value-leaf regeneration had silently overwritten). ON-POLICY IS BETTER: at d5/b20, the deck's real play settings (BuiltinDefaultPlay; value_play.drives() is false), 20,000 held-out games/cell at seed 6200000 give late-weighted -0.0035 turns, t -1.1/-3.7/-9.5 std/2hg/long, at 0.74x CPU. The changed cells here are the d3 ones, which carry ignore_play_profile and are OFF-POLICY coverage: they are worse by ~+0.0008 late-weighted (d3b10 t +2.1/+3.3/+1.6, d3b20 t +4.1/+1.6/+3.7) -- small but REAL, not noise. Accepted per USER 2026-09-20: 'the most important are play settings ... if some of the others are a little worse that may be acceptable.' CPU is 0.71-0.74x on every config including the off-policy ones. The 4 d3/b20 cells here are the off-policy ones (+0.0020 s4004, +0.0010 s6006, 2 digest-only); d5/b40 is unchanged on 3 of 4 and FASTER on s7007 (-0.0020). Net over all 16 Angels cells +0.0010, which the 20,000-game held-out A/B resolves as a real off-policy effect, not noise.
-# accepted-with-regressions (smoke, 2026-09-22): giants_smoke_d3_s1001 gi88 T7->T8 is BUDGET CHURN, not a line regression: classify_turn_later.sh recovers it to T7 at both 4x and 16x. Cause: MTG_TECTONIC_KEEP_AXIS widens the mode-B fan-out 2->3 variants (+18.4% wall), which tips one marginal game at the smoke tier's 10ms budget. At the deck's play budget (d3 b200) the axis is never worse in 1600 paired games, and a 4x budget on the OLD arm buys exactly 0.0000 -- the deck is budget-saturated there, so this is confined to the tight smoke budget. Regression tier: 2 cells better, 0 worse.
 # Key: <deck>_<mode>_d<depth>_s<seed> = <avg>[/<play_digest>]   (avg = mean turn-to-win, unwon = max_turns+1)
 # Modes: smoke (<15m), regression (<45m), overnight (<8h); seeds disjoint.
 
@@ -95,8 +94,8 @@ fluctuator_smoke_d0_s1001=5.0850/e3eb10426016ab34
 fluctuator_smoke_d3_s1001=3.5533/6400bf0c9ccccc0e
 fluctuator_smoke_d5_s1001=3.5333/b5c09923da1548ab
 giants_smoke_d0_s1001=6.5650/df89675e8d8962ba
-giants_smoke_d3_s1001=6.1600/0b32b6266dc1214a
-giants_smoke_d5_s1001=6.0400/55bd77e639a5a8ec
+giants_smoke_d3_s1001=6.1467/ce7a6e51b3fcdf3a
+giants_smoke_d5_s1001=6.0400/4310a9f5889a1b76
 snow_smoke_d0_s1001=6.7050/05d6c96c40a33241
 snow_smoke_d3_s1001=6.1400/d53504b847e1648d
 snow_smoke_d5_s1001=6.2600/bfa34e3df82fbc42
@@ -222,10 +221,10 @@ fluctuator_regression_d3_s3003=3.5200/e5bd8433183f6973
 fluctuator_regression_d5_s2002=3.6667/f3ac5fba67e7792e
 fluctuator_regression_d5_s3003=3.5600/d4757dcda4391ae0
 giants_regression_d0_s2002=6.5380/e72682925fb3f337
-giants_regression_d3_s2002=5.7733/31036746f1b28494
-giants_regression_d3_s3003=5.9467/ec22a8daafa92f41
-giants_regression_d5_s2002=5.8400/508724aaf67ad781
-giants_regression_d5_s3003=6.0133/d36ed1ca118df17d
+giants_regression_d3_s2002=5.7733/100349af5526be4f
+giants_regression_d3_s3003=5.9400/e16ad1f3f58356f5
+giants_regression_d5_s2002=5.8400/5a7bed43051dfce9
+giants_regression_d5_s3003=6.0000/1c732556744977c5
 snow_regression_d0_s2002=6.6930/3404966c3f0fea10
 snow_regression_d3_s2002=6.1167/bd75b862a9ce185e
 snow_regression_d3_s3003=6.0000/0185a974352b1c97
