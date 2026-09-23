@@ -118,6 +118,11 @@ enum class UnprunedGate
                   // callsites read `unpruned || provider-opts-in`, the inverse of DigResolve's
                   // `provider-opts-in && !unpruned`. On Fluctuator the 16-cap alone makes a T3 kill
                   // arithmetically impossible with one Drannith Stinger (16 pings < 20 life).
+    DevourCount,  // devour (CR 702.81) count fan restored to the full k = 0..(own creatures) instead
+                  // of DecisionProvider::DevourCountCandidates' short list. The candidates are points
+                  // on ONE nested ladder (DevourRankOrder), so opening this adds back the rungs
+                  // between them -- the fodder the provider argued is strictly worse kept. Human
+                  // play always keeps the full fan, so a person picks the count themselves.
     _Count
 };
 
@@ -1583,6 +1588,51 @@ public:
     // decides is where the residual counters sit, which is what the ruling above waives.
     // Behind heurarm FUNGUS_SPORE_POOL, default OFF -> byte-identical until the A/B is accepted.
     bool FoldSporeSourceIdentity() const override { return true; }
+
+    // USER RULING 2026-09-23 (quoted in full in docs/design/fungus-token-search-cost.md Round 9):
+    // *"Saprolings are a pretty safe bet. Thallid and extra Utopia Mycons also, Tukatongue, Thallid
+    // Shell-Dweller and Essence Warden are also easy targets. ... Psychotrope and Sporecrown are
+    // worth searching as they may be better to keep on-board. The only potential case where you may
+    // want to keep the extra one-drop bodies in goldfishing is with multiple Sporecrown out."* and
+    // *"Sporesower Thallid would be fine to just leave on board, since it is a 4/4. You want to
+    // remove 1/1's without a key ability (like 1 Utopia Mycon) because Mycoloth gets +2/+2 for each
+    // and produces extra saprolings."*
+    //
+    // THE DOMINANCE ARGUMENT, which is what licenses the prune: devour 2 puts TWO +1/+1 counters
+    // per body and upkeep_tokens_per_plus_one_counter makes a Saproling per counter, so each
+    // devoured body is +2/+2 AND 2 SAPROLINGS AT EVERY LATER UPKEEP (4 and 8 with a Doubling Season
+    // out -- it doubles the counters placed and the tokens created). Keeping a vanilla 1/1 buys one
+    // point of clock, once. Eating it buys +2 permanent clock plus two recurring bodies a turn,
+    // which are themselves fodder. No board state makes the vanilla body the better half of that
+    // trade, which is the "cannot be better" Rule 0b asks for.
+    //
+    // SUPERSEDED ON ONE POINT (2026-09-23, same day): "Sporecrown searched, Sporesower exempt" is
+    // NOT EXPRESSIBLE. A devour count takes a PREFIX of DevourRankOrder, which defers the scaling
+    // lord hardest -- Sporecrown (rank 1002) sits ABOVE Sporesower (rank 4), so reaching the lord
+    // means eating the 4/4 first. The USER reopened it rather than have the ranking bent for one
+    // deck: *"It is possible that both should be exempt or possibly that both should be searched.
+    // We can test it out."* Both of THOSE are prefixes. Measured (Round 10d): searching both is
+    // lossless on 600 games; exempting both costs a turn on 8 of 480 held-out games for a further
+    // 3.2% of wall. Hence the default searches both, and MTG_FUNGUS_DEVOUR_BIG_EXEMPT keeps the
+    // other mode measurable.
+    //
+    // AND ONE ADDITION: BEASTMASTER ASCENSION IS WHY A VANILLA 1/1 IS NOT ALWAYS FODDER. USER:
+    // *"If we need x critters next turn, we should leave that many up."* Quest counters come from
+    // DECLARED ATTACKERS and the anthem applies to the combat that crossed the threshold, so a body
+    // eaten precombat is a counter removed from this combat -- repaid only as summoning-sick
+    // Saprolings next upkeep. The reserve is counted over THIS turn and NEXT and no further
+    // (*"since the turn after the sapros are active"*), from hand and battlefield only -- a library
+    // copy is discounted as clairvoyance (*"I'm okay being slower in the clairvoyant draw of
+    // beastmaster case"*). It ADDS rungs; it never caps the ladder.
+    //
+    // THE LAST UTOPIA MYCON IS SEARCHED, NOT KEPT. USER: *"I still think a single utopia mycon
+    // should be searchable ... it becomes a very powerful source of mana the next turn. Since we
+    // can sacrifice a bunch of the extra saprolings produced as needed."* Its value depends on the
+    // size of the Saproling board next upkeep, which is itself a function of how many bodies THIS
+    // devour ate -- so a rule either way prices a quantity the plan has not computed. Surplus
+    // copies stay fodder: a second Mycon adds no mana the first cannot already make on a wide board.
+    std::vector<int> DevourCountCandidates(const GameState& s, const CardDefinition& def,
+                                           int own) const override;
 };
 
 // CritterLifegain (mono-white "whenever you gain life" aggro: Soul Warden / Soul's Attendant /

@@ -16044,12 +16044,27 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
             // `static const bool`, not a bare EnvOn: EnvOn calls getenv EVERY time and this sits
             // inside CollectActions, which runs per search node. The repo idiom for a hot flag.
             static const bool s_devour_trace = EnvOn("MTG_DEVOUR_TRACE");
+            // The provider's short list, per the hook named in the comment above. Empty keeps the
+            // full fan, which is the base for every deck that does not override it. Human play and
+            // MTG_UNPRUNE=devourcount always get the full fan: a person picks their own count, and
+            // the gate is what lets the losslessness A/B measure the rungs this drops.
+            std::vector<int> ks;
+            if (!HumanPlayActive() && !DecisionUnpruned(UnprunedGate::DevourCount))
+            { ks = ResolveProvider(state).DevourCountCandidates(state, def, own); }
+            if (ks.empty())
+            {
+                ks.reserve(static_cast<std::size_t>(own) + 1);
+                for (int k = 0; k <= own; ++k) { ks.push_back(k); }
+            }
             if (s_devour_trace)
             {
-                std::fprintf(stderr, "[devour-enum] %s: pushing k=0..%d (%d variants)\n",
-                             a.card_name.str().c_str(), own, own + 1);
+                std::fprintf(stderr, "[devour-enum] %s: own=%d pushing %d variants k={",
+                             a.card_name.str().c_str(), own, static_cast<int>(ks.size()));
+                for (std::size_t z = 0; z < ks.size(); ++z)
+                { std::fprintf(stderr, "%s%d", z ? "," : "", ks[z]); }
+                std::fprintf(stderr, "}\n");
             }
-            for (int k = 0; k <= own; ++k)
+            for (int k : ks)
             {
                 Action v = a;
                 v.devour_count = k;

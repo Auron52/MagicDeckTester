@@ -1732,6 +1732,35 @@ public:
     // the deck is actually built around.
     virtual bool FoldSporeSourceIdentity() const { return false; }
 
+    // DevourCountCandidates -- propose a SHORT list of devour counts (CR 702.81) in place of the
+    // enumerator's full k = 0..(own creatures) fan. Return EMPTY to keep the full fan, which is the
+    // base behaviour and therefore byte-identical for every deck that does not override this.
+    //
+    // WHY THIS IS A PROVIDER HOOK AND NOT A CAP IN THE ENUMERATOR. CollectActions' own comment says
+    // it: "A generic cap here would be precisely the forbidden thing -- a non-provider limiter
+    // picking a winner among real alternatives -- so if this fan proves too wide on a 40-token
+    // board, the fix is a FungusProvider::DevourCountCandidates hook measured by the 5f unpruned
+    // A/B." A cap is also the WRONG fix on the measurement: on fungus gi24's 239 s rollout the fan
+    // is 87,702 enumerations x mean width 5.75 = 503,917 variants, and capping the width at 16
+    // drops only 3.1% of them. The cost is frequency times a modest factor, not a fat tail, so
+    // only a narrowing of the TYPICAL fan pays.
+    //
+    // WHAT MAKES A SHORT LIST COHERENT AT ALL. Victims are picked by a fixed ranking
+    // (SacExpendabilityRank, sorted, first k taken), so the variants are strictly NESTED --
+    // V(0) subset V(1) subset ... subset V(own), each step eating exactly the next-most-expendable
+    // body. It is a walk along ONE ranked ladder, not a subset space. Proposing a few k values is
+    // therefore proposing a few points on a chain; proposing a few SUBSETS would not be meaningful.
+    //
+    // RULE 0b (USER BAR, 2026-08-14) GOVERNS THIS: narrowing k removes branches, so an override
+    // survives only as the "reasoned dominance prune" shape -- an argument why the dropped branch
+    // cannot be better, measurement confirming losslessness PER GAME rather than on the average, an
+    // open switch, and user sign-off. An override that cannot make that argument must not be here.
+    // Callers keep the full fan under MTG_UNPRUNED and under human play regardless.
+    virtual std::vector<int> DevourCountCandidates(const GameState& /*s*/,
+                                                   const CardDefinition& /*def*/,
+                                                   int /*own*/) const
+    { return {}; }
+
     // HoldsSacLandBurnUntilLethal -- opt IN to the sac-land burn hold (Shard Volley). A spell whose
     // additional cost is "sacrifice a land" spends a permanent mana source for a fixed lump of damage,
     // which in a goldfish is worth the same on any later turn -- so the enumerators drop plans that cast

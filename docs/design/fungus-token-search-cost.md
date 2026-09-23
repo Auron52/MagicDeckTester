@@ -2822,3 +2822,293 @@ comparing against.**
   `sac-mana-outlet-as-deferred-source.md` stage 2) is what the reservation ledger now partially
   implements — a credit for bodies the plan itself creates — so that lever is closer than the doc
   says.
+
+---
+
+# Round 9 (2026-09-23): the devour axis, and the USER's ruling on which bodies are fodder
+
+## Why the axis is expensive (measured, on `fungus gi24`'s 239 s rollout)
+
+`CollectActions` fans **one full cast variant per k = 0..(own creatures)**, deliberately uncapped
+(its comment names `FungusProvider::DevourCountCandidates` as the sanctioned fix "if this fan proves
+too wide on a 40-token board" — it does). `MTG_DEVOUR_TRACE` on one rollout:
+
+```
+devour enumerations : 87,702
+variants emitted    : 503,917      (mean fan 5.75, max 103)
+```
+
+**The fat tail is NOT the cost, which rules out the obvious fix.** Capping the width buys almost
+nothing, because the wide boards are rare:
+
+| cap | variants dropped | share |
+|---|---|---|
+| 4 | 181,169 | 36.0% |
+| 8 | 58,257 | 11.6% |
+| **16** | **15,456** | **3.1%** |
+| 32 | 5,623 | 1.1% |
+
+The expense is **87,702 enumerations each multiplying their odometer by ~5.75**, compounding with
+Utopia Mycon's spore (`k26`) and sac (`k7`) groups and Psychotrope's (`k9`) — observed
+`bound=6.27e+03`, `[g18 k0 Mycoloth]`. Frequency x a modest factor, not a fat tail.
+
+**And unlike Round 7's outlet powerset there is no identity to exploit.** Four Mycons were ONE
+resource pretending to be four. Devour 3 and devour 7 are genuinely different games, which is why
+the dedup signature was *fixed* to stop collapsing them (`#D<k>`): collapsing made the search blind
+to everything except "devour your whole board". So the only route is a reasoned dominance prune.
+
+## The ladder — what makes a small candidate set possible at all
+
+Victims are chosen by the SHARED `SacExpendabilityRank` (the same ranking `CanonicalSacVictim` and
+the payment-side outlet ordering use), sorted, **first k taken**. So the variants are strictly
+NESTED: `V(0) ⊂ V(1) ⊂ … ⊂ V(own)`, each step eating exactly the next-most-expendable body. It is a
+walk along one ranked ladder, not a subset space — so proposing a few k values is coherent, where
+proposing a few *subsets* would not be.
+
+## THE USER'S RULING (2026-09-23) — quote it, do not paraphrase it
+
+> *"Saprolings are a pretty safe bet. Thallid and extra Utopia Mycons also, Tukatongue, Thallid
+> Shell-Dweller and Essence Warden are also easy targets. Naturally, any spore counter multiples of
+> 3 should be used from them first. The rest could be searched or we could exempt Sporesower
+> Thallid. Psychotrope and Sporecrown are worth searching as they may be better to keep on-board.
+> The only potential case where you may want to keep the extra one-drop bodies in goldfishing is
+> with multiple Sporecrown out."*
+
+> *"Sporesower Thallid would be fine to just leave on board, since it is a 4/4. You want to remove
+> 1/1's without a key ability (like 1 Utopia Mycon) because Mycoloth gets +2/+2 for each and
+> produces extra saprolings."* … *"Converts it to +2/+2 and 2 saprolings."*
+
+**The arithmetic behind it.** `devour 2` puts TWO +1/+1 counters per body, and
+`upkeep_tokens_per_plus_one_counter` makes one Saproling per counter — so each devoured body is
+**+2/+2 and 2 Saprolings at EVERY later upkeep**. With a Doubling Season out it is 4 counters and 8
+Saprolings per upkeep (DS doubles the counters placed AND the tokens created). Keeping a vanilla
+1/1 buys one point of clock once; devouring it buys +2 permanent clock plus two recurring bodies a
+turn, which are themselves fodder. That asymmetry is the dominance argument, and it is what
+licenses a prune under Rule 0b.
+
+## The classification, against the deck's REAL stats (read from cards.json, not recalled)
+
+| creature | P/T | key ability | class |
+|---|---|---|---|
+| Saproling token | 1/1 | — | **floor** (always devour) |
+| Essence Warden | 1/1 | — | **floor** |
+| Tukatongue Thallid | 1/1 | dies -> Saproling | **floor** |
+| Thallid | 1/1 | spore | **floor** |
+| Thallid Shell-Dweller | **0/5** | spore | **floor** (0 power = no clock) |
+| Utopia Mycon | **0/2** | mana outlet | SURPLUS = **floor**; the LAST one = **searched** |
+| Psychotrope Thallid | 1/1 | draw outlet | **searched** |
+| Sporecrown Thallid | **2/2** | Fungus/Saproling lord | **searched** |
+| Sporesower Thallid | **4/4** | spore on each Fungus | **EXEMPT** (never devour) |
+| Mycoloth | 4/4 | devour | keep |
+
+## What the existing ranking already gets right, and the two places it does not
+
+```
+-999  Saproling token, Tukatongue          OK  floor, eaten first
+   0  Utopia Mycon, Thallid Shell-Dweller  OK  floor
+   1  Essence Warden, Thallid              OK  floor
+   1  Psychotrope Thallid                  WRONG -- sits INSIDE the floor, must be contested
+   4  Sporesower Thallid, Mycoloth         WRONG -- eaten BEFORE Sporecrown, must be exempt
+1002  Sporecrown Thallid                   OK  kept last
+```
+
+Six of ten already agree. The gap is two terms, not a rewrite — and because the hook takes the
+FIRST k in rank order, both gaps are load-bearing: Psychotrope would be auto-eaten by any floor
+reaching the 1/1s, and Sporesower would be eaten before the lord.
+
+## The build (all default OFF; Rule 0b requires per-game losslessness, not an average)
+
+1. **`SacExpendabilityRank`: spore-loaded defer.** The ranking has ZERO spore terms today, while
+   `ChooseDevourVictimIndices`'s own comment says feeding a spore-loaded Thallid "throws away a
+   Saproling engine two upkeeps from paying out". Popping first is STRICTLY better when the body is
+   going to be devoured anyway: counters are a cost (not mana), they are lost either way, and the
+   resulting Saproling — two, under Doubling Season — is itself devourable. Separate lever, because
+   this ranking is SHARED and will move sac-outlet victim picks too.
+2. **`SacExpendabilityRank`: key-ability defer**, with the "extras are free" carve-out, so
+   `Utopia Mycon x4 -> devour 3` falls out of the rule rather than being hardcoded by name.
+3. **`FungusProvider::DevourCountCandidates`** returning `{0} u {floor + j : j = 0..contested}`,
+   contested = **the last Utopia Mycon** + Psychotrope + Sporecrown.
+
+   **USER, 2026-09-23, on why the surviving Mycon is SEARCHED and not an automatic keep:**
+   > *"I still think a single utopia mycon should be searchable. The reason is because it becomes a
+   > very powerful source of mana the next turn. Since we can sacrifice a bunch of the extra
+   > saprolings produced as needed."*
+
+   That is the one body on the ladder whose value cannot be ruled on: it converts the Saproling
+   board into arbitrary coloured mana, and the size of that board is itself a function of how many
+   bodies this very devour just ate. A rule either way would price a quantity the plan has not
+   computed yet, which is precisely the decision the search exists to make. SURPLUS copies stay
+   floor -- a second Mycon adds no mana the first cannot already make on a wide board. **Two to five candidates instead of up to 104, independent
+   of board width.** Guard: **>= 2 Sporecrown on board reopens the full fan** — the USER's own
+   exception, and the state in which the 1/1s stop being free.
+4. Full fan preserved under `MTG_UNPRUNED` and human play, per the repo idiom.
+
+**Rule 0b (USER BAR, 2026-08-14) governs this.** Narrowing k removes branches, so it survives only
+as the "reasoned dominance prune" shape: an argument why the dropped branch cannot be better (above),
+measurement confirming losslessness **per game, not on the average**, an open switch, and user
+sign-off. A generic cap in the enumerator is the forbidden form; the provider hook is the sanctioned
+one.
+
+---
+
+## Round 10 -- the devour narrowing, BUILT and MEASURED (2026-09-23)
+
+Round 9 designed the hook; this round built it, and two things changed the design in ways the paper
+version had wrong.
+
+### 10a. The ladder is `DevourRankOrder`, and that made the Sporesower/Sporecrown split unbuildable
+
+Round 9 proposed ordering the candidate ladder **by clock**, on the reasoning that
+`SacExpendabilityRank` defers a scaling lord hardest (+1000) and therefore ranks **Sporecrown
+Thallid (2/2 lord, rank 1002) above Sporesower Thallid (4/4, rank 4)** -- the opposite of the user's
+first ruling, which wanted Sporecrown searched and Sporesower never eaten.
+
+**That reasoning was right about the conflict and wrong about the fix.** A devour count selects *the
+first k of the order the APPLY uses*. Classifying against any other order names a different set of
+bodies than the one that then dies -- the identical defect `FodderSacUseful` had to be repaired for
+in Round 5 ("a heuristic that gates one decision must be evaluated on the object the decision
+actually consumes"). A clock-ordered ladder would have produced counts that quietly ate the wrong
+creatures.
+
+So the order became a shared helper, `DevourRankOrder` (`src/core/SpellEffects.h`), split out of
+`ChooseDevourVictimIndices` and called by both. One implementation, no drift. For this deck it is:
+
+| rank | bodies |
+|---|---|
+| -999 | Saproling token, Tukatongue Thallid (token / self-replacing) |
+| 0 | Utopia Mycon, Thallid Shell-Dweller (0 power) |
+| 1 | Thallid, Essence Warden, Psychotrope Thallid |
+| 4 | Sporesower Thallid, a second Mycoloth |
+| 1002 | Sporecrown Thallid (scaling lord, deferred hardest) |
+
+Sporecrown sits **above** Sporesower, so "search Sporecrown, never eat Sporesower" is not a prefix
+of this ladder and therefore **not expressible as a count at all**. The USER settled it directly:
+
+> *"It is difficult to say what we should do with sporesower and sporecrown. It is possible that both
+> should be exempt or possibly that both should be searched. We can test it out."*
+
+Both of those ARE prefixes, so the split became a measured mode (`MTG_FUNGUS_DEVOUR_BIG_EXEMPT`)
+rather than a re-ranking. Re-ranking was the alternative and it is the worse trade:
+`SacExpendabilityRank` is shared with `CanonicalSacVictim` and the payment-side outlet ordering, so
+bending it here moves **Goblins'** sac victims for a Fungus reason.
+
+### 10b. Beastmaster Ascension -- the reason a vanilla 1/1 is not always fodder
+
+> **USER:** *"we need to keep Beastmaster Ascension in mind. So, perhaps it does make sense to
+> calculate the damage. If we need x critters next turn, we should leave that many up."*
+
+Quest counters come from **declared attackers** (one trigger each, CR 508.2) and the triggers resolve
+*in* the declare-attackers step, so crossing 7 pumps the very combat that crossed it. Devour happens
+as Mycoloth enters, in the precombat main, and Mycoloth is summoning-sick that turn: **every body
+eaten is a counter removed from this combat**, repaid only as sick Saprolings next upkeep. Eating
+through the quest can cost a turn outright. Doubling Season is counted, not assumed away -- each
+trigger is a separate event, so four attackers under one Season already cross the threshold.
+
+Two rungs, each a single integer: the **this-turn** floor (keep `need` bodies that can actually
+swing) and the **next-turn** floor (`own + 1 - need`; everything left is unsick by then and Mycoloth
+swings too). Both ADD a rung -- they never cap the ladder, so "eat everything" stays on the table.
+
+**The window is this turn and next, and no further:**
+
+> **USER:** *"If we can't activate it next turn, then there is no need to worry about it (since the
+> turn after the sapros are active)."*
+
+Beyond the window the 2 Saprolings per eaten body are live and supply the attackers themselves.
+
+**Hand and battlefield only; a library copy is discounted:**
+
+> **USER:** *"I'm okay being slower in the clairvoyant draw of beastmaster case ... If it's just
+> clairvoyance then we can discount it."*
+
+The deck runs no shuffle effects, so its library is a fixed permutation from setup and the search's
+draws are structurally clairvoyant (same property that forced Round 5's `FodderSacUseful` rule).
+Reserving against a card we only "know" we will draw would fit the heuristic to information a real
+game does not have.
+
+### 10c. The bug that made the hook nearly dead -- tokens have no `CardDefinition`
+
+First probe, fungus d2 s2002, 6 games: **1,900 of 5,106 enumerations fell back to the full fan with
+reason `unknown body`.** There is no `"Saproling"` entry in `cards.json` -- tokens are minted with
+power/toughness/subtypes and nothing else -- so `LookupCached` returns null for **the single most
+common body on the board**, and the "unclassifiable -> bail" guard fired precisely where the fodder
+floor is widest. The hook was disabled exactly where it was supposed to pay.
+
+A token has no definition, which *is* the classification: no definition means no sac outlet and no
+lord static, so the only open question is whether it carries a clock. Classify from the
+`Permanent`. A **non-token** permanent with no definition is still a genuine anomaly and still bails.
+
+| | enumerations narrowed | variants |
+|---|---|---|
+| before the token fix | 51.1% | -16.0% |
+| after | **87.9%** | **-33.3%** |
+
+This is the third instrument in this ledger that only earned its keep by naming *why* it declined
+(cf. the `MTG_DEVOUR_TRACE` note in `ChooseDevourVictimIndices`). A bail counter without a reason
+string would have read as "these boards have nothing to narrow".
+
+### 10d. Measurement -- the mode question, answered
+
+Arms: OFF (full fan) / ON (both big bodies searched, the default) / ON+`BIG_EXEMPT` (ladder stops at
+the first big body). Single-threaded where wall is quoted.
+
+**Keep-rollout regime (d1/b3, the regime mulligan generation runs in), 120 games, seed 7007:**
+
+| arm | wall (2 reps) | vs OFF | games whose WIN TURN changed |
+|---|---|---|---|
+| OFF | 11,641 / 11,548 ms | -- | -- |
+| **ON** | **10,847 / 10,816 ms** | **-6.6%** | **0 / 120** |
+| ON + `BIG_EXEMPT` | 10,469 / 10,453 ms | -9.8% | **1 / 120** (game 75: turn 5 -> 6) |
+
+**Held-out, fresh seeds (91001 / 92001 / 93001), 480 games across d1b3 / d2b20 / d0:**
+
+| arm | games whose WIN TURN changed |
+|---|---|
+| **ON** | **0 / 480** (0 at d0, 0 at d1b3, 0 at d2b20) |
+| ON + `BIG_EXEMPT` | 8 / 480 (7 at d0, 1 at d1b3) |
+
+**Train block (2002 / 3003 / 4004, 124 games, d2 / d3 / d0):** ON is **byte-identical to OFF on all
+three digests** -- not merely equal on the average.
+
+**So: 600 games, zero win-turn changes, and the aggregate digest unchanged wherever it was checked.**
+That is the losslessness Rule 0b asks for -- per game, not on the average.
+
+**The mode question is therefore settled empirically, in the direction the ladder already forced:
+SEARCH BOTH.** Exempting the two big Thallids buys a further 3.2% of wall and costs a turn on 1 game
+in 120 and 8 in 480. (Curiously `BIG_EXEMPT` is *better* at d0 -- 6.0417 vs 6.1083 -- and worse at
+d1; it is acting as a better greedy default where there is no search to overrule it. Not pursued.)
+
+### 10e. Where the saving actually is -- it scales with board width
+
+Variant reduction by creature count, d1/b3, 125,500 enumerations:
+
+| own | sites | full fan | narrowed | saved |
+|---|---|---|---|---|
+| <= 1 | 9,765 | 17,205 | 17,205 | 0.0% |
+| 4 | 27,361 | 136,805 | 101,544 | 25.8% |
+| 7 | 6,235 | 49,880 | 23,783 | 52.3% |
+| 10 | 1,294 | 14,234 | 3,728 | 73.8% |
+| 13 | 1,088 | 15,232 | 2,864 | 81.2% |
+| >= 20 | 126 | 3,374 | 464 | **86.2%** |
+| **all** | **125,500** | **672,740** | **420,135** | **37.5%** |
+
+This is the shape Round 9's cap measurement predicted and a cap could not deliver: capping width at
+16 dropped only 3.1% of variants because the cost is frequency x a modest factor. The narrowing
+instead takes a **constant-size** list at every width, so it pays ~26% on the common 4-creature board
+and **80%+ on exactly the wide boards that made `gi24` a 239 s rollout**.
+
+**Wall is regime-dependent, and this matters for how it is sold.** At the regression cells
+(d2/d3, budget 20 ms) the narrowing is byte-identical *and* wall-neutral: that play is budget-bound,
+so removing variants the odometer was already pruning buys nothing (the standing
+"removing search waste buys quality, not wall" result). The 6.6% is real in the **keep-rollout**
+regime, which is where the 503,917-variant measurement came from and where mulligan generation lives.
+
+### 10f. Status
+
+`MTG_FUNGUS_DEVOUR_CANDS` **default OFF**, `MTG_FUNGUS_DEVOUR_BIG_EXEMPT` default OFF (sub-mode).
+Full fan preserved under human play and `MTG_UNPRUNE=devourcount` (new gate). OFF arm verified
+byte-identical: scenarios 103/103, smoke 93/93 with **0 configs changed**.
+
+Adoption (default-ON) is the USER's call and is **recommended**: lossless on 600 games, -37.5%
+devour variants, -6.6% wall in the generation regime. The one open item is that no measurement yet
+prices the hook on the `gi24` 239 s rollout directly -- the width table argues it should be the
+biggest winner there, but that is an inference, not a measurement.

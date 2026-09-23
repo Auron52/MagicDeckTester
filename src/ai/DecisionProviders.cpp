@@ -83,6 +83,7 @@ static const std::pair<const char*, UnprunedGate> kGateNames[] = {
     {"replicate",  UnprunedGate::Replicate},
     {"digresolve", UnprunedGate::DigResolve},
     {"digchain",   UnprunedGate::DigChain},
+    {"devourcount",UnprunedGate::DevourCount},
 };
 
 const char* GateName(UnprunedGate g)
@@ -20137,6 +20138,253 @@ bool FungusProvider::FodderSacUseful(const GameState& s, const Permanent& src,
         return !CanAttackFull(p, s.battlefield, me);
     }
     return GenericProvider::FodderSacUseful(s, src, def);   // victim not on the battlefield: unchanged
+}
+
+// See the ruling and the dominance argument quoted on the declaration (DecisionProviders.h), and
+// docs/design/fungus-token-search-cost.md Round 9 for the measurement that motivated it.
+//
+// THE LADDER IS DevourRankOrder, NOT AN ORDER OF OUR OWN. The count this returns selects "the first
+// k" of the order the APPLY uses (SacExpendabilityRank, ascending), so it must be classified against
+// that same order or it names a different set of bodies than the one that then dies. That is the
+// bug FodderSacUseful already had to be repaired for -- a heuristic gating a decision must be
+// evaluated on the objects the decision actually consumes -- so the order is now a shared helper
+// rather than two implementations that can drift.
+//
+// WHAT THAT ORDER IS FOR THIS DECK (rank in brackets):
+//     Saproling token, Tukatongue Thallid  [-999]   (token / self-replacing)
+//     Utopia Mycon [0], Thallid Shell-Dweller [0]   (0 power)
+//     Thallid, Essence Warden, Psychotrope Thallid  [1]
+//     Sporesower Thallid, a second Mycoloth  [4]
+//     Sporecrown Thallid  [1002]                    (scaling lord, deferred hardest)
+//
+// AND THE CONSEQUENCE THAT DECIDED THE DESIGN: Sporecrown sits ABOVE Sporesower, so "search
+// Sporecrown but never eat Sporesower" is NOT EXPRESSIBLE as a count on this ladder -- reaching the
+// lord means eating the 4/4 first. The USER settled that directly (2026-09-23): *"It is possible
+// that both should be exempt or possibly that both should be searched. We can test it out."* Those
+// are exactly the two prefixes the ladder does express, so the split becomes a measured mode
+// (MTG_FUNGUS_DEVOUR_BIG_EXEMPT) instead of a reordering. Re-ranking was the alternative and it is
+// the worse trade: SacExpendabilityRank is shared with CanonicalSacVictim and the payment-side
+// outlet ordering, so bending it here would move Goblins' sac victims for a Fungus reason.
+//
+// The two standing arguments, from the USER: Sporesower *"always does 4 damage which is pretty good
+// even compared to the devour payoff"*; Sporecrown *"may only do 3 on a board with just Mycoloth and
+// itself, so the sacrifice could be better with doubling season out"*. They point opposite ways,
+// which is why neither is hard-coded.
+std::vector<int> FungusProvider::DevourCountCandidates(const GameState& s, const CardDefinition&,
+                                                       int own) const
+{
+    static const bool env_on = EnvOn("MTG_FUNGUS_DEVOUR_CANDS");
+    if (!heurarm::Flag(heurarm::FUNGUS_DEVOUR_CANDS, env_on)) { return {}; }   // full fan
+
+    // MTG_DEVOUR_TRACE names WHY a board fell back to the full fan. Without it a bail is
+    // indistinguishable from a board that genuinely has nothing to narrow, which is precisely the
+    // "the hook compiles, is byte-identical and never fires" failure ChooseDevourVictimIndices'
+    // own trace exists to catch.
+    static const bool s_trace = EnvOn("MTG_DEVOUR_TRACE");
+    const auto bail = [&](const char* why) -> std::vector<int>
+    {
+        if (s_trace) { std::fprintf(stderr, "[devour-cands] own=%d FULL-FAN (%s)\n", own, why); }
+        return {};
+    };
+
+    if (own <= 1) { return bail("own<=1"); }
+
+    // Mode axis, not a verdict -- see the block comment. OFF (default): a big body is a CONTESTED
+    // rung, so both Sporesower and Sporecrown stay searched and the list is merely short. ON: the
+    // ladder STOPS at the first big body, so neither is ever eaten. The aggressive arm is the one
+    // that carries the flag, per the repo's default-off convention.
+    static const bool big_exempt_env = EnvOn("MTG_FUNGUS_DEVOUR_BIG_EXEMPT");
+    const bool big_exempt = heurarm::Flag(heurarm::FUNGUS_DEVOUR_BIG_EXEMPT, big_exempt_env);
+
+    const int me = s.active_player_index;
+    const std::vector<int> ladder = DevourRankOrder(s, me);
+    if (static_cast<int>(ladder.size()) != own) { return bail("ladder!=own"); }
+
+    // THE BEASTMASTER ASCENSION RESERVE. USER 2026-09-23: *"we need to keep Beastmaster Ascension in
+    // mind ... If we need x critters next turn, we should leave that many up."*
+    //
+    // This is the one thing that stops a vanilla 1/1 from being obvious fodder, and it is arithmetic
+    // rather than judgement, so the heuristic can and should do it. Quest counters come from
+    // DECLARED ATTACKERS (one trigger per attacker, CR 508.2), the anthem is a conditional static
+    // read live, and the triggers resolve IN the declare-attackers step -- so crossing the threshold
+    // pumps the very combat that crossed it. Devour happens as Mycoloth enters, in the precombat
+    // main, and Mycoloth is summoning-sick the turn it arrives: every body eaten is an attacker
+    // (hence a counter) removed from THIS combat, paid back only as sick Saprolings next upkeep.
+    // Eating through the quest can therefore cost a turn outright.
+    //
+    // Doubling Season is in the count, not assumed away: each trigger is a separate event, so it
+    // doubles each, and four attackers under one Season already cross 7.
+    //
+    // THE WINDOW IS THIS TURN AND NEXT, AND NO FURTHER -- USER: *"If we can't activate it next turn,
+    // then there is no need to worry about it (since the turn after the sapros are active)."* Devour
+    // pays back 2 Saprolings per body at the NEXT upkeep, and those are summoning-sick, so they
+    // first attack the turn after that -- which is exactly when a quest we could not have finished
+    // by next turn would come due anyway. Beyond the window the bodies eaten are replaced several
+    // times over by the bodies eating them bought, so there is nothing to reserve.
+    //
+    // HAND COUNTS TOO (USER, same message): an uncast Ascension in hand is the normal case on the
+    // turn Mycoloth lands, and it starts at zero counters. A battlefield copy is never further from
+    // online than a hand copy, so a hand copy only sets the floor when no copy is out yet.
+    int need_attackers = 0;
+    bool quest_live    = false;
+    const auto consider_quest = [&](const CardDefinition* qd, int counters)
+    {
+        if (qd == nullptr || qd->params.quest_anthem_threshold <= 0
+            || qd->params.quest_counter_per_attacker <= 0) { return; }
+        const int missing = qd->params.quest_anthem_threshold - counters;
+        if (missing <= 0) { return; }                       // already online: nothing to reserve
+        const int per = qd->params.quest_counter_per_attacker
+                        << DoublerShift(s, me, /*for_tokens=*/false);
+        if (per <= 0) { return; }
+        const int n = (missing + per - 1) / per;
+        // Several Ascensions: the one CLOSEST to online flips first, and its floor is the binding one.
+        if (!quest_live || n < need_attackers) { need_attackers = n; quest_live = true; }
+    };
+    bool quest_on_battlefield = false;
+    for (const Permanent& p : s.battlefield)
+    {
+        if (p.controller_index != me) { continue; }
+        const CardDefinition* qd = CardDatabase::Instance().LookupCached(p.card);
+        if (qd == nullptr || qd->params.quest_anthem_threshold <= 0) { continue; }
+        quest_on_battlefield = true;
+        consider_quest(qd, p.quest_counters);
+    }
+    if (!quest_on_battlefield)
+    {
+        for (const Card& c : s.players[static_cast<std::size_t>(me)].hand)
+        {
+            const CardDefinition* qd = CardDatabase::Instance().LookupCached(c);
+            if (qd != nullptr && qd->params.quest_anthem_threshold > 0)
+            { consider_quest(qd, 0); }
+        }
+    }
+
+    // Classify every body ONCE, in ladder order, so the "surplus vs last copy" test below can look
+    // ahead along the same order the apply eats.
+    struct Body { const CardDefinition* def; bool key; bool big; bool atk; };
+    std::vector<Body> bodies;
+    bodies.reserve(ladder.size());
+    int lords = 0, att_avail = 0;
+    for (int idx : ladder)
+    {
+        const Permanent& p = s.battlefield[static_cast<std::size_t>(idx)];
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+        // A TOKEN HAS NO CARD DEFINITION, AND THAT IS NOT AN ANOMALY. There is no "Saproling" entry
+        // in cards.json -- the tokens are minted with power/toughness/subtypes and nothing else --
+        // so LookupCached returns null for the single most common body on this board. Treating that
+        // as unclassifiable made the narrowing bail on 1,900 of 5,106 enumerations in the first
+        // probe: it fell back to the full fan precisely where the fodder floor is widest, i.e. it
+        // was dead exactly where it was supposed to pay. Classify from the PERMANENT instead, which
+        // is all a token has: no definition means no sac outlet and no lord static, so the only
+        // question left is whether it carries a clock.
+        //
+        // A non-token permanent with no definition IS an anomaly, and still bails.
+        if (d == nullptr && !p.is_token) { return bail("unknown non-token body"); }
+        const bool lord = d != nullptr
+                          && !d->params.subtypes_affected.empty()
+                          && (d->params.power_bonus > 0 || d->params.tough_bonus > 0);
+        // "Key ability" in the USER's sense: a repeatable outlet whose payload is mana or a card --
+        // Utopia Mycon and Psychotrope Thallid. A plain spore body is NOT one (every Fungus has
+        // spores, so it separates nothing), which is what leaves Thallid and Shell-Dweller as fodder.
+        //
+        // PSYCHOTROPE IS THE RUNG WITH THE STRONGEST CLAIM -- USER: *"The most searchable is
+        // Psychotrope. That said, if sacrificing it makes the win a turn earlier ... I would
+        // probably go for that. It's unlikely drawing into things will do better."* Which is
+        // precisely what a rung buys: both branches get priced and the faster win wins. The draw
+        // outlet is also the one payoff this deck cannot price honestly (its library is a fixed
+        // permutation -- see FodderSacUseful above), so it is the last rung to give up.
+        const bool key = d != nullptr
+                         && d->params.sac_creature_outlet
+                         && (d->params.sac_outlet_draw > 0
+                             || d->params.sac_outlet_add_mana_amount > 0
+                             || d->params.sac_outlet_add_mana_any_color);
+        // A real clock, or a lord whose loss de-buffs the rest of the board. Mycoloth pays +2/+2 AND
+        // 2 Saprolings per upkeep per body eaten, so a 1/1 with no ability is strictly worse kept --
+        // a 2-power body is not, and that is the whole boundary.
+        if (lord) { ++lords; }
+        // Can it swing THIS combat? Only a declared attacker puts a quest counter on the Ascension,
+        // so a summoning-sick Saproling is free to eat on that axis and an attacking one is not.
+        // (Power is irrelevant here -- the 0/5 Shell-Dweller banks a counter exactly like a 1/1.)
+        const bool atk = CanAttackFull(p, s.battlefield, me);
+        if (atk) { ++att_avail; }
+        bodies.push_back(Body{ d, key, !key && (lord || p.EffectivePower() >= 2), atk });
+    }
+
+    // THE USER'S OWN EXCEPTION: *"The only potential case where you may want to keep the extra
+    // one-drop bodies in goldfishing is with mulitiple sporecrown out."* Two lords stack, the 1/1s
+    // stop being free, and the dominance argument above no longer holds -- so hand the full fan
+    // back. This is the state that makes the prune sound rather than merely convenient.
+    if (lords >= 2) { return bail("2+ lords (user exception)"); }
+
+    // THE QUEST RUNGS. Two counts matter, and both are a single integer:
+    //   THIS TURN  -- keep `need_attackers` bodies that can actually swing now, so the counters land
+    //                 in this combat and the +5/+5 applies to it. Only offered when the quest is
+    //                 reachable this turn at all (att_avail >= need); a quest that cannot finish now
+    //                 has nothing to protect here.
+    //   NEXT TURN  -- keep own + 1 - need bodies: everything left is unsick by then and Mycoloth
+    //                 swings too, so k <= own + 1 - need still gets there.
+    // Outside that window there is no rung, per the USER's cutoff: by the turn after, the 2 Saprolings
+    // per eaten body are active and supply the attackers themselves.
+    //
+    // A LIBRARY Ascension is deliberately NOT counted. USER: *"I'm okay being slower in the
+    // clairvoyant draw of beastmaster case ... If it's just clairvoyance then we can discount it."*
+    // This deck runs no shuffle effects, so its library is a fixed permutation from setup and the
+    // search's draws are structurally clairvoyant -- reserving against a card we only "know" we will
+    // draw would be fitting the heuristic to information a real game does not have.
+    // Walk the ladder once. A CONTESTED body contributes the rung that KEEPS it (eat everything
+    // before it, stop); an EXEMPT body ends the ladder outright; fodder contributes nothing.
+    std::vector<int> cands{ 0 };          // declining is frequently right; always offered
+    if (quest_live && need_attackers > 0)
+    {
+        const int kn = own + 1 - need_attackers;
+        if (kn > 0 && kn < own) { cands.push_back(kn); }
+    }
+    int end = static_cast<int>(bodies.size());
+    int eaten_att  = 0;
+    bool quest_rung = !(quest_live && need_attackers > 0 && att_avail >= need_attackers);
+    for (int i = 0; i < static_cast<int>(bodies.size()); ++i)
+    {
+        // Eating body i would drop this combat's attacker count below the quest's floor -> k = i is
+        // the largest count that still completes the quest THIS turn. Emitted once, and the walk
+        // continues: this ADDS a rung, it does not cap the ladder, so "eat everything" stays on the
+        // table for the lines where Mycoloth's engine beats the Ascension to the kill.
+        if (!quest_rung && bodies[static_cast<std::size_t>(i)].atk
+            && att_avail - (eaten_att + 1) < need_attackers)
+        {
+            cands.push_back(i);
+            quest_rung = true;
+        }
+        if (bodies[static_cast<std::size_t>(i)].atk) { ++eaten_att; }
+
+        bool contested = false;
+        if (bodies[static_cast<std::size_t>(i)].key)
+        {
+            // SURPLUS copies of an outlet are fodder; the LAST one on the ladder is the searched
+            // rung. USER: *"I still think a single utopia mycon should be searchable... it becomes a
+            // very powerful source of mana the next turn."* Copies share a rank, so "last" is a
+            // look-ahead for the same definition rather than a position.
+            const CardDefinition* d = bodies[static_cast<std::size_t>(i)].def;
+            contested = true;
+            for (int j = i + 1; j < static_cast<int>(bodies.size()); ++j)
+            {
+                if (bodies[static_cast<std::size_t>(j)].def == d) { contested = false; break; }
+            }
+        }
+        else if (bodies[static_cast<std::size_t>(i)].big)
+        {
+            if (big_exempt) { end = i; break; }
+            contested = true;
+        }
+        if (contested) { cands.push_back(i); }
+    }
+    cands.push_back(end);                 // eat the whole floor, plus every contested body
+
+    std::sort(cands.begin(), cands.end());
+    cands.erase(std::unique(cands.begin(), cands.end()), cands.end());
+    while (!cands.empty() && cands.back() > own) { cands.pop_back(); }
+    // A narrowing that did not narrow is churn: fall back rather than reorder the enumeration.
+    if (static_cast<int>(cands.size()) >= own + 1) { return bail("did not narrow"); }
+    return cands;
 }
 
 bool FungusProvider::ProvenWinlessThisTurn(const GameState& s, int me) const

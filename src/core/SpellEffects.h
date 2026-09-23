@@ -7858,11 +7858,17 @@ struct DevourDeath { Card card; bool was_token; int minus_counters; };
 //
 // Returns the chosen battlefield indices, in no particular order. `k` is a MAXIMUM -- fewer
 // candidates than k is legal ("you MAY sacrifice any number").
-inline std::vector<int> ChooseDevourVictimIndices(GameState& state, int controller, int k,
-                                                  const std::string& source_name)
+// The devour LADDER: every creature this player controls, ordered by expendability, most-expendable
+// first. Devour takes a PREFIX of this order, so the variants a devour count fans over are strictly
+// nested -- V(0) subset V(1) subset ... -- and a count is a point on one chain, not a subset.
+//
+// Split out of ChooseDevourVictimIndices (2026-09-23) so that a provider proposing devour COUNTS
+// (DecisionProvider::DevourCountCandidates) walks the exact order the apply will eat. A count
+// computed against any other ordering names a different set of bodies than the one that then dies,
+// which is the silent-divergence bug FodderSacUseful already had to be repaired for once: a
+// heuristic that gates a decision must be evaluated on the objects the decision actually consumes.
+inline std::vector<int> DevourRankOrder(const GameState& state, int controller)
 {
-    // Heuristic order first: it IS the answer when no human is attached, and it is the per-pick
-    // DEFAULT when one is, so holding enter reproduces the autonomous line exactly.
     std::vector<std::pair<int,int>> ranked;   // (expendability rank, battlefield index)
     for (int i = 0; i < static_cast<int>(state.battlefield.size()); ++i)
     {
@@ -7871,6 +7877,18 @@ inline std::vector<int> ChooseDevourVictimIndices(GameState& state, int controll
         ranked.emplace_back(SacExpendabilityRank(v, /*source_id=*/0), i);
     }
     std::sort(ranked.begin(), ranked.end());
+    std::vector<int> order;
+    order.reserve(ranked.size());
+    for (const auto& r : ranked) { order.push_back(r.second); }
+    return order;
+}
+
+inline std::vector<int> ChooseDevourVictimIndices(GameState& state, int controller, int k,
+                                                  const std::string& source_name)
+{
+    // Heuristic order first: it IS the answer when no human is attached, and it is the per-pick
+    // DEFAULT when one is, so holding enter reproduces the autonomous line exactly.
+    std::vector<int> ranked = DevourRankOrder(state, controller);
     if (static_cast<int>(ranked.size()) > k) { ranked.resize(static_cast<std::size_t>(k)); }
 
     std::vector<int> picked;
@@ -7890,7 +7908,7 @@ inline std::vector<int> ChooseDevourVictimIndices(GameState& state, int controll
     }
     if (!g_play_sacrifice_chooser)
     {
-        for (const auto& r : ranked) { picked.push_back(r.second); }
+        picked = ranked;
         return picked;                       // search / rollout / autonomous -- byte-identical
     }
 
@@ -7920,7 +7938,7 @@ inline std::vector<int> ChooseDevourVictimIndices(GameState& state, int controll
         int def_opt = 0;
         for (int c = 0; c < static_cast<int>(cands.size()); ++c)
         {
-            if (cands[c] == ranked[static_cast<std::size_t>(n)].second) { def_opt = c; break; }
+            if (cands[c] == ranked[static_cast<std::size_t>(n)]) { def_opt = c; break; }
         }
         const std::string prompt = source_name + " (devour " + std::to_string(n + 1)
                                  + " of " + std::to_string(want) + ")";
