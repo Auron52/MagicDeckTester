@@ -1159,10 +1159,14 @@ user still had the viewer open:
     Both GT tiers re-accepted with `slower=0` in each. See *Value-leaf COMPLETED and ADOPTED*.
     The phase-E restart cost **36 min**, not the 1–1.5 h estimated — the estimate's three
     extrapolated arms all carry the sidecar and run far cheaper than `live`.
-13. **NEXT: the mulligan profile**, for which Finding 3 is the concrete argument. Phase F has
-    already written its contract: **`mull_gen_depth: 1`, `mull_gen_budget_ms: 3`,
-    `expected_buckets: 13`** — K=13 is binding, and `ExhaustiveKeep` refuses to generate if
-    discovery disagrees. Route: `.claude/skills/mulligan-profile.md`, alone on the box.
+13. **NEXT: the mulligan profile**, for which Finding 3 is the concrete argument. Phase F wrote its
+    contract (**`mull_gen_depth: 1`, `mull_gen_budget_ms: 3`, `expected_buckets: 13`**; K=13 is
+    binding). **The `recommend` probe is DONE and the verdict is FEASIBLE: `complete` projects
+    ~6.9 h against the ~8 h overnight window, with no degenerate cell** (slowest rollout 11.0 s vs
+    a 30 s threshold nothing tripped). See the probe section. **Awaiting the user's go-ahead to
+    start the overnight generation** — not started, since the user said they may not want to run
+    the full thing yet. Route: `.claude/skills/mulligan-profile.md`, alone on the box, freeze the
+    binary first.
 14. **Open, not started: the lossless keep-axis name-dedup.** 24 Mountains ⇒ Tectonic's two exiled
     cards are frequently the SAME CARD, and two keep variants over identical cards are the
     identical plan (the Finding-2 equip-host precedent). It would claw back part of the keep axis's
@@ -1434,6 +1438,72 @@ than hiding it:
 
 That is the opposite of the Snow value-leaf outcome, where the degenerate tail was the blocker. A
 useful repro if the tail is ever investigated: `--seed 9149 --game-index 140 --games 1`.
+
+## Mulligan `recommend` probe (2026-09-23) — COMPLETE FITS AN OVERNIGHT RUN
+
+Run **after** the value leaf was adopted and **alone on the box**, which is the only way this
+verdict is worth recording: the skill is explicit that a projection measured without the sidecar
+attached is worthless (the H-cell ladder is guarded on the sidecar existing, so a probe run early
+times the slow path and is pessimistic by up to 84.8x). The settings came from the contract phase F
+wrote, not from inherited play depth:
+
+```
+rollout depth   : 1  (source: value_play.mull_gen_depth)
+rollout budget  : 3 ms  (source: value_play.mull_gen_budget_ms)
+[keepgen] K check OK: K=13 matches value_play.expected_buckets
+rollout-config play digest (d1/b3, 64-game battery): e3e609b4c53d22ec
+```
+
+**The deck compresses well — 13 buckets over 60 cards**, the 24 Mountains collapsing to one, which
+is what makes exhaustive evaluation tractable at all:
+
+```
+distinct hands: size7=36113 size6=14749 size5=5343 size4=1675 size3=438 size2=90 size1=13  (total 58421)
+```
+
+### The projection
+
+```
+floor pass: 619s @ 188 rollouts/s;  116842 cells (both pd)
+projected COMPLETE (full bottom, R40): ~6.9 h   (upper bound; adaptive keep trims it)
+projected FAST     (adaptive,   R30): ~3.4 h   (rough guide)
+overnight target: ~8.0 h  ->  COMPLETE fits an overnight run.
+```
+
+**`complete` is the call.** It fits with headroom (6.9 h is an upper bound that adaptive keep
+trims), it is the definitive profile, and `fast` would trade ≤~0.02t of quality for a ~22–38%
+saving this deck does not need.
+
+### No degenerate cell — the thing the probe exists to catch
+
+Slowest rollout through the entire floor pass was **11.0 s**, against the 30 s slow-log threshold
+that **nothing tripped**. The tail is a smooth 6–11 s spread over ordinary Giants hands (Greaves +
+Fire Diamond / Sol Ring / Tectonic openers), not a blow-up. **This is the opposite of the Snow
+finding**, where the degenerate tail was the blocker — and it is the second time this deck's tail
+has come back healthy, after the value-leaf census.
+
+### Hygiene the probe handled itself
+
+* `decks/Giants/Giants.keepmodel.exhaustive.raw.json.probe` (R=1, every cell) is written and **a
+  later `complete`/`fast` gen reuses it**, skipping r=0 per cell — the probe's 10 minutes are not
+  repaid.
+* It then **removed its journal** deliberately: *"an R=1 scout must not be resumed by a later full
+  generation."*
+* The phase-F gencache mismatched on fingerprint (different discovery params) and re-discovered in
+  58 s, landing on the same K=13.
+* Both scratch artifacts are gitignored; nothing to commit.
+
+### To launch the overnight run
+
+```bash
+cp build/Release/mtg-analyze logs/mullgen_giants/mtg-analyze.frozen     # freeze the binary FIRST
+./build/Release/mtg-analyze decks/Giants/Giants.cod \
+    --cards-json src/cards/data/cards.json --gen-mulligan complete
+```
+
+Freezing matters because the journal's resume gate refuses (loudly, since `6fa7dba0`) to resume
+across a play-identity change — correct behaviour, but it costs the run's remaining resumability.
+Re-running the identical command resumes; there is no resume flag.
 
 ## Value-leaf COMPLETED and ADOPTED (2026-09-23)
 
