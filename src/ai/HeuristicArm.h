@@ -236,6 +236,8 @@ enum Slot : int
     SAC_OUTLET_POOL,          // MTG_SAC_OUTLET_POOL      N interchangeable sac-for-mana outlets are ONE pool: the COUNT is the only axis (ADOPTED default ON)
     SAC_FODDER_RESERVE,       // MTG_SAC_FODDER_RESERVE   sac fodder is RESERVED per activation: count the bodies the plan can really have THIS TURN, skip the line if short (ADOPTED default ON)
     FUNGUS_DEVOUR_CANDS,      // MTG_FUNGUS_DEVOUR_CANDS  Mycoloth's devour k is a SHORT candidate list (fodder floor + the contested bodies), not 0..own (ADOPTED default ON)
+    FUNGUS_M2_DEVOUR,
+    FUNGUS_M2_GATE,           // MTG_FUNGUS_M2_GATE       ...and only SOLVE the second main on turns the hand actually holds a Main2 cast (default OFF)         // MTG_FUNGUS_M2_DEVOUR     Mycoloth (and ONLY Mycoloth) is cast in the SECOND MAIN: attack first, then devour the bodies (default OFF)
     FUNGUS_DEVOUR_BIG_EXEMPT, // MTG_FUNGUS_DEVOUR_BIG_EXEMPT  ...and the ladder STOPS at the first big body (Sporesower/Sporecrown never eaten) instead of giving each a rung (default OFF; sub-mode of the above)
     COUNT
 };
@@ -439,6 +441,8 @@ inline const char* Name(int slot)
         "MTG_SAC_OUTLET_POOL",
         "MTG_SAC_FODDER_RESERVE",
         "MTG_FUNGUS_DEVOUR_CANDS",
+        "MTG_FUNGUS_M2_DEVOUR",
+        "MTG_FUNGUS_M2_GATE",
         "MTG_FUNGUS_DEVOUR_BIG_EXEMPT",
     };
     // The enum and this table are ONE mapping split across two lists: a slot added to one and not

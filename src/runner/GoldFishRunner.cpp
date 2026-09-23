@@ -79,6 +79,30 @@ bool GoldFishRunner::DeckUsesSecondMain(const Decklist& deck)
         // otherwise reduces to "castable in both mains" in this engine; the real end-of-opponent-
         // turn Chord is a disclosed Tier-4 gap -- no opponent-turn priority window exists.)
         if (def->params.pod_mv_delta != 0 || def->params.convoke) { return true; }
+        // MYCOLOTH / DEVOUR (2026-09-23). Devour sacrifices bodies as an ADDITIONAL COST as the
+        // creature enters (CR 702.81), so casting it pre-combat forfeits the attack of every body
+        // eaten: the search's only choices are "devour and lose those attacks" or "do not devour
+        // at all". That is precisely Birthing Pod's case immediately above -- a single main forces
+        // the trade -- and it is sharper here, because each body eaten pre-combat is ALSO a
+        // Beastmaster Ascension quest counter lost from that same combat (counters come from
+        // DECLARED attackers, and the anthem pumps the combat that crosses the threshold).
+        //
+        // USER 2026-09-23: *"doing mycoloth in the second main is important, because you want to
+        // attack with existing creatures and then sacrifice them."*
+        //
+        // Behind a lever: opening a second main makes every turn solve twice, and the blunt
+        // MTG_FORCE_USES_M2 arm measured 4.25x at d1/b3 (the mulligan-generation regime) for
+        // -0.060 avg win turn. The shippable form is this whitelist entry PLUS
+        // FungusProvider's classifier, which defers ONLY the devour creature -- USER: *"Only
+        // Mycoloth should go in the second main ... Everything else can be skipped."*
+        // heurarm, not a bare env read, and it MUST be: the classifier half
+        // (FungusProvider::MainPhaseOverride) reads the same slot, and a per-job manifest flag that
+        // reached only ONE half would drop Mycoloth from the pre-combat set with no post-combat main
+        // to catch it -- DELETING the cast rather than moving it. Safe because BatchRunner installs
+        // heurarm::t_arm immediately before it precomputes second_main (BatchRunner.cpp ~789-790).
+        static const bool s_m2_devour = EnvOn("MTG_FUNGUS_M2_DEVOUR");
+        if (heurarm::Flag(heurarm::FUNGUS_M2_DEVOUR, s_m2_devour) && def->params.devour > 0)
+        { return true; }
         // MTG_AL_SINGLE_MAIN=1: measurement lever (2026-08-21, USER: "skipping main 2 is not
         // terrible as long as it doesn't cause anything to regress") -- drop the lifegain_to_loss
         // trigger so the deck plays a single main, the A/B arm against the enforced m1/m2 split

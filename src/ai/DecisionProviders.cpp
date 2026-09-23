@@ -20396,6 +20396,35 @@ std::vector<int> FungusProvider::DevourCountCandidates(const GameState& s, const
     return cands;
 }
 
+// See the declaration for the ruling and the dominance argument. Both halves ride ONE lever, and
+// they MUST: ClassifiesMainPhases without DeckUsesSecondMain deletes the cast instead of moving it.
+bool FungusProvider::ClassifiesMainPhases() const
+{
+    static const bool on = EnvOn("MTG_FUNGUS_M2_DEVOUR");
+    return heurarm::Flag(heurarm::FUNGUS_M2_DEVOUR, on);
+}
+
+std::optional<DecisionProvider::MainPhase>
+FungusProvider::MainPhaseOverride(const GameState&, const CardDefinition& def) const
+{
+    static const bool env_on = EnvOn("MTG_FUNGUS_M2_DEVOUR");
+    if (!heurarm::Flag(heurarm::FUNGUS_M2_DEVOUR, env_on)) { return std::nullopt; }
+    // The one card that wants the later phase.
+    if (def.params.devour > 0) { return MainPhase::Main2; }
+    // USER: *"Everything else can be skipped."* Pinning Main1 overrides the base template rule
+    // that would send a summoning-sick vanilla body to Main2 -- this deck's 1/1s are spore engines
+    // and Mycoloth fodder, and holding them past combat buys nothing while paying for the phase.
+    return MainPhase::Main1;
+}
+
+// Own arm (MTG_FUNGUS_M2_GATE), NOT folded into the placement lever: it trades a post-combat
+// activation on Mycoloth-less turns for the 3.57x, so it has to be priced separately.
+bool FungusProvider::SecondMainNeedsDeferredCast() const
+{
+    static const bool on = EnvOn("MTG_FUNGUS_M2_GATE");
+    return heurarm::Flag(heurarm::FUNGUS_M2_GATE, on);
+}
+
 bool FungusProvider::ProvenWinlessThisTurn(const GameState& s, int me) const
 {
     if (!FungusCertOn())  { return false; }

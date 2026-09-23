@@ -1,7 +1,8 @@
 # Fungus: the second main, card placement, and implementing devour properly
 
-**Status:** deferred, with a user steer on the shape of the answer. Recorded here per the CLAUDE.md
-rule that deferred work lives in `docs/design/`, not private agent memory.
+**Status:** MEASURED 2026-09-23 (§6). The second main is a REAL quality win on every cell and is
+BUILT behind `MTG_FUNGUS_M2_DEVOUR` / `MTG_FUNGUS_M2_GATE`, both default OFF pending adoption.
+Adoption cascades into the value leaf -- see §6d before deciding.
 
 **Origin.** This is the Fungus ledger's **Q1** (`analysis-Fungus.md`), which shipped
 first-main-only as the documented default. The user weighed in on 2026-09-17:
@@ -267,3 +268,98 @@ What "properly" would add:
 * **The post-combat sequencing** in §1 — unrepresentable until the second main exists, and listed
   in the Stage 6a disclosure as **NOT inert**: a real under-rating of Mycoloth, bounded to one
   decision per copy per game.
+
+
+---
+
+## 6. MEASURED, 2026-09-23 -- the second main is worth a real turn fraction
+
+§4 prescribed the order and it was followed exactly: force-lever A/B first, then the whitelist +
+placement, then the cost gate. All arms pooled into ONE batch per round (per-job `flags`), fresh
+held-out seeds (81001/82001/83001/84001), 3,360 games per round.
+
+### 6a. Does a second main help at all? (§4 step 1)
+
+Yes, on every cell. `MTG_FORCE_USES_M2=1`, no placement change:
+
+| cell | base | forced m2 | delta | cost |
+|---|---|---|---|---|
+| d0 (400 g) | 6.1000 | 6.0525 | -0.048 | -- |
+| d1/b3 (400 g) | 5.6100 | 5.5500 | **-0.060** | **4.25x** |
+| d3/b10 (200 g) | 5.6650 | 5.6250 | -0.040 | 2.76x |
+| d5/b20 (120 g) | 5.6250 | 5.5417 | **-0.083** | 1.90x |
+
+§4's warning was right and then some -- it predicted "roughly DOUBLES"; d1/b3 measured 4.25x.
+
+### 6b. Placement (§4 steps 2-3): `devour` on the whitelist + a FungusProvider classifier
+
+Built as §1-§3 specified: `p.devour > 0` joins `pod_mv_delta`/`convoke` on `DeckUsesSecondMain`,
+and `FungusProvider::MainPhaseOverride` sends devour to Main2 and pins **everything else** to Main1.
+
+> **USER 2026-09-23:** *"Only Mycoloth should go in the second main in my understanding. Everything
+> else can be skipped."* and *"doing mycoloth in the second main is important, because you want to
+> attack with existing creatures and then sacrifice them."*
+
+Pinning the rest Main1 is not just the user's rule, it is the cheaper AND better arm -- the base
+template classifier would otherwise send this deck's summoning-sick 1/1 bodies to Main2 as well,
+paying for a phase they have no use for. It also closes §3's noted gap for Beastmaster Ascension
+(the quest params are in no attack-helping list, so the template would drop it to Main2 and waste
+the turn): the Main1 pin covers it without needing a `ClassifyMainPhase` quest rule.
+
+| cell | base | forced m2 | **Mycoloth-only** |
+|---|---|---|---|
+| d0 | 6.1000 | 6.0525 | **6.0525** |
+| d1/b3 | 5.6100 | 5.5500 | **5.5475** |
+| d3/b10 | 5.6650 | 5.6250 | **5.6100** |
+| d5/b20 | 5.6250 | 5.5417 | **5.5417** |
+
+Better than the blunt lever at d1/b3 and d3, equal elsewhere, and cheaper: d3 1.52x vs 2.66x.
+
+### 6c. The cost gate -- solve m2 only when a Main2 cast is in hand
+
+Fungus runs 2 Mycoloth in 60, so most turns defer nothing and the post-combat solve re-prices a
+main 1 the search already did. `DecisionProvider::SecondMainNeedsDeferredCast`
+(`MTG_FUNGUS_M2_GATE`) skips the phase on those turns.
+
+It is deliberately NOT `SkipsUnproductiveSecondMain`: that gate asks *"did combat create
+anything"*, which on a deck with no attack triggers is false EVERY turn -- so on Fungus it would
+skip the second main always and DELETE the cast the phase was opened for. Same structural trap as
+the `DeferSacOutletPreCombat` misroute in §2.
+
+| cell | base | myco | **myco + gate** | gate cost |
+|---|---|---|---|---|
+| d0 | 6.1000 | 6.0525 | **6.0525** | -- |
+| d1/b3 | 5.6100 | 5.5475 | **5.5500** | **2.45x** (from 3.95x) |
+| d3/b10 | 5.6650 | 5.6100 | **5.6100** | **1.20x** (from 1.51x) |
+| d5/b20 | 5.6250 | 5.5417 | **5.5500** | 1.74x |
+
+Keeps essentially all the quality (-0.060 vs -0.063 at d1/b3, identical at d0/d3) for a third less
+cost. What it gives up is a post-combat ACTIVATION on Mycoloth-less turns -- step 10 of the §3c
+ordering, the leftover Psychotrope draw / Utopia Mycon mana. That is a real loss, which is why it
+carries its own arm.
+
+### 6d. WHAT ADOPTION COSTS -- read this before deciding
+
+Everything above is default OFF and byte-identical (scenarios 103/103, smoke 93/93, 0 configs
+changed). Turning it on is a PLAY-LOGIC change, and the artifacts cascade:
+
+1. **The value leaf is invalidated first.** `Fungus.value.json` was fitted to single-main play, and
+   it is UPSTREAM -- the mulligan generator reads `mull_gen_depth`/`mull_gen_budget_ms` from it.
+   Value-leaf regeneration is hours and must run alone.
+2. **Then the mulligan table**, which at 2.45x in the d1/b3 gen regime turns the measured 4.7 h
+   `fast` projection into roughly 11-12 h. That is past the overnight window the `fast` recipe was
+   chosen to fit.
+
+So the honest trade is: **-0.06 avg win turn against a multi-stage regeneration**, versus shipping
+a mulligan table now that is fitted to play we already know is ~0.06 turns worse. Still to do
+before adoption either way, per §4 step 4: held-out validation on a second seed block.
+
+### 6e. Still open from §3c (unbuilt)
+
+The phase split is only the first line of the turn ordering. Unbuilt: `CastOrderRank` for
+Doubling-Season-before-everything (§3c step 2), the spore-activation placement (step 6), attacking
+with Utopia Mycon when Beastmaster is out (step 7), and the §3c step 8-vs-9 search question. Also
+note the devour victim ruling in §3c/§5 (*"Never devour: Sporecrown, Sporesower, Psychotrope"*) was
+SUPERSEDED on 2026-09-23 -- see `fungus-token-search-cost.md` Round 10: Sporesower/Sporecrown are
+now both SEARCHED (measured lossless; exempting them costs a turn on 8 of 480 games) and Psychotrope
+is the rung with the strongest claim rather than an exemption.

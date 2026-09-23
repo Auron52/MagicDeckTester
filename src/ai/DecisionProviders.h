@@ -1633,6 +1633,24 @@ public:
     // copies stay fodder: a second Mycon adds no mana the first cannot already make on a wide board.
     std::vector<int> DevourCountCandidates(const GameState& s, const CardDefinition& def,
                                            int own) const override;
+
+    // ONLY MYCOLOTH DEFERS. USER 2026-09-23: *"Only Mycoloth should go in the second main in my
+    // understanding. Everything else can be skipped."* + *"doing mycoloth in the second main is
+    // important, because you want to attack with existing creatures and then sacrifice them."*
+    //
+    // Devour pays its cost as the creature ENTERS, so a pre-combat Mycoloth eats bodies that have
+    // not attacked yet -- forfeiting their damage AND their Beastmaster quest counters. Post-combat
+    // it eats the same bodies after they have swung: strictly more, in a goldfish where nothing
+    // blocks. So the devour creature is Main2 and everything else is pinned Main1, which is both
+    // the user's rule and the cheap one -- the base template classifier would otherwise send this
+    // deck's sick 1/1 bodies to Main2 as well and pay for a second main it has no use for.
+    //
+    // Requires DeckUsesSecondMain to fire (devour is on that whitelist behind the same lever): the
+    // filter only MOVES a cast, so without a post-combat main it would DELETE Mycoloth outright.
+    // Both halves are gated on MTG_FUNGUS_M2_DEVOUR so the arm is one switch.
+    bool ClassifiesMainPhases() const override;
+    std::optional<MainPhase> MainPhaseOverride(const GameState&, const CardDefinition&) const override;
+    bool SecondMainNeedsDeferredCast() const override;
 };
 
 // CritterLifegain (mono-white "whenever you gain life" aggro: Soul Warden / Soul's Attendant /

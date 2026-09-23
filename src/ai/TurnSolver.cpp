@@ -4377,7 +4377,24 @@ static bool SecondMainUnproductive(const GameState& state)
     static const bool s_kill  = EnvOn("MTG_NO_M2_PRODUCTIVE");
     static const bool s_force = EnvOn("MTG_M2_PRODUCTIVE");
     if (s_kill || HumanPlayActive()) { return false; }
-    if (!s_force && !ResolveProvider(state).SkipsUnproductiveSecondMain()) { return false; }
+    // DEFERRED-CAST GATE (see DecisionProvider::SecondMainNeedsDeferredCast). Asked FIRST and
+    // independently of the productivity rule below: the two answer different questions, and on a
+    // deck with no attack triggers the productivity rule is true every turn -- which would delete
+    // the deferred cast instead of skipping an empty phase.
+    const DecisionProvider& m2prov = ResolveProvider(state);
+    if (m2prov.SecondMainNeedsDeferredCast())
+    {
+        const Player& ap = state.ActivePlayer();
+        for (const Card& c : ap.hand)
+        {
+            const CardDefinition* d = CardDatabase::Instance().LookupCached(c);
+            if (d == nullptr) { return false; }        // unknown -> assume the phase is needed
+            if (m2prov.MainPhaseOverride(state, *d) == DecisionProvider::MainPhase::Main2)
+            { return false; }                          // a deferred cast is waiting: solve it
+        }
+        return true;                                   // nothing deferred -> the phase is empty
+    }
+    if (!s_force && !m2prov.SkipsUnproductiveSecondMain()) { return false; }
     if (state.hand_size_at_combat < 0 || state.battlefield_at_combat < 0) { return false; }
     if (static_cast<int>(state.ActivePlayer().hand.size()) > state.hand_size_at_combat)
     { return false; }

@@ -1429,6 +1429,28 @@ public:
     // MTG_NO_M2_PRODUCTIVE=1 kills it; human play never sees it (the gate is search-only).
     virtual bool SkipsUnproductiveSecondMain() const { return false; }
 
+    // SecondMainNeedsDeferredCast -- opt IN to solving the post-combat main ONLY on turns where the
+    // hand actually holds a cast this provider classifies Main2.
+    //
+    // For a deck whose second main was opened to PLACE ONE CARD, solving the whole phase on every
+    // turn is almost pure waste: Fungus runs 2 Mycoloth in 60, so the overwhelming majority of
+    // turns defer nothing and the post-combat solve re-prices a main 1 the search has already done.
+    // Measured there at 3.57x the per-turn cost at d1/b3 (the mulligan-generation regime), which is
+    // the difference between a ~5 h generation and a ~17 h one.
+    //
+    // NOT the same question as SkipsUnproductiveSecondMain, and it must not be confused with it:
+    // that gate asks "did COMBAT create anything", which on a deck with no attack triggers is false
+    // every turn -- so on Fungus it would skip the second main ALWAYS and DELETE the very cast the
+    // phase was opened for. This one keys on the deferred cast being present, which is the
+    // condition that made the phase worth having.
+    //
+    // WHAT IT GIVES UP, stated plainly: a post-combat ACTIVATION on a turn with no Main2 cast in
+    // hand (Fungus: a leftover Psychotrope draw or Utopia Mycon mana spent on a Saproling that
+    // already attacked -- step 10 of the turn ordering in
+    // docs/design/fungus-second-main-and-devour.md). That is a real loss, not a free win, so it
+    // carries its own arm and its own measurement rather than riding the placement lever.
+    virtual bool SecondMainNeedsDeferredCast() const { return false; }
+
     // MainPhaseOverride -- per-card doctrine consulted BEFORE the engine's template rules (deck
     // knowledge lives in the provider, like the discard doctrines). nullopt = defer to the base
     // template classifier (DirectDamage/spectacle -> Main2, Draw* -> Both, sick Vanilla/ManaDork
