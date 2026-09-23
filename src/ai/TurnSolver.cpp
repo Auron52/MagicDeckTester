@@ -269,6 +269,122 @@ static std::atomic<long long> g_dedup_exactdup_nb{0}, g_dedup_exactfalse_nb{0};
 // these is a line a signature-based dedup would wrongly delete. It must be 0 before the signature can
 // be used as a skip rather than a diagnostic.
 static std::atomic<long long> g_dedup_namefalse{0};
+// WHY DO DISTINCT PLANS CONVERGE ON ONE STATE? (same MTG_DEDUP_CENSUS gate, counters only.)
+//
+// dedup_census answers "how many" (66.3% on Snow with both folds ON) and copy_perm answers "are they
+// copy permutations" -- but bf_width now says the copy axis is DEAD (copyaxis_share 3.0%, collapse
+// 1.03x, repeat_share 0), and dedup_exact says there are ZERO literal plan repeats. So two thirds of
+// candidates are genuinely DIFFERENT plans landing on the SAME state, and no identity rule reaches
+// them. That leaves one structural explanation worth testing before any lever is designed:
+//
+//   SUBSET OPTIMISM. The enumerator offers "all feasible hand subsets" against a DELIBERATELY
+//   over-credited cost model (see the ritual_float / blink-credit contract: "an over-credited plan's
+//   unpayable follow-up is dropped by the pay path and scores honestly"). When a subset's extra cast
+//   cannot really be paid, ApplyPlanDirect DROPS it -- and the post-apply state is then identical to
+//   the smaller subset's, by construction. Every such pair is a duplicate the enumerator created and
+//   could have refused.
+//
+// g_dropped_cast_count already counts exactly that drop, per thread, monotonically. Cross-tabbing it
+// against the dup flag turns the hypothesis into a number: if drop_dup is most of dup, the lever is
+// enumerator-side payability and it is LOSSLESS (the executor already refuses those casts). If
+// nodrop_dup dominates, subset optimism is NOT the mechanism and the search shape is the only thing
+// left -- which is the user's call, not an optimization.
+//
+// bp/nobp splits the same duplicates by whether they are breakpoint variants, because those are
+// 64.3% of candidate mass and a positional bp_choice is a different mechanism from an unpayable tail.
+static std::atomic<long long> g_dedup_drop_dup{0};      // duplicate AND the apply dropped a cast
+static std::atomic<long long> g_dedup_drop_uniq{0};     // dropped a cast but still reached a NEW state
+static std::atomic<long long> g_dedup_nodrop_dup{0};    // duplicate with NOTHING dropped
+static std::atomic<long long> g_dedup_dup_bp{0};        // ...of the duplicates, breakpoint variants
+static std::atomic<long long> g_dedup_dup_nobp{0};      // ...and plain plans
+static std::atomic<long long> g_dedup_drops_total{0};   // casts dropped across all scored candidates
+// ...and the ACTIVATION twin (see g_stranded_activation_count). A stranded activation is invisible to
+// the cast counters, so these are what decide whether subset optimism is really absent or was just
+// being measured on the wrong event.
+static std::atomic<long long> g_dedup_strand_dup{0};    // duplicate AND an activation stranded
+static std::atomic<long long> g_dedup_strand_uniq{0};   // stranded but still reached a NEW state
+static std::atomic<long long> g_dedup_strand_total{0};  // activations stranded, all candidates
+static std::atomic<long long> g_dedup_strand_tapdraw{0};// ...of which tap-draws (Sheets / Augur)
+// WHICH CANDIDATE DID THE DUPLICATE COLLIDE WITH? (same MTG_DEDUP_CENSUS gate.)
+//
+// 93.1% of duplicates are breakpoint variants, and there are exactly two shapes that can produce,
+// with OPPOSITE fixes:
+//
+//   TRANSPOSITION (different families). Base plan B1 already casts the card the breakpoint is about,
+//   because the enumerator planned past the breakpoint; base plan B2 is shorter and its CONTINUATION
+//   casts the same card. Different `bp_base`, same end state. The fix is enumerator-side -- stop
+//   emitting the past-the-breakpoint base plan (truncate-at-emission).
+//
+//   SELF-COLLISION (same family). A variant lands where its OWN base plan, or a sibling variant of
+//   the same base, already landed. Then the continuation changed nothing observable and the fix is a
+//   cheap LOCAL test at the wave walker, no payment model required.
+//
+// `census_seen` therefore stores the first reacher's family instead of just occupancy.
+//
+// THE FAMILY ID IS CONTENT, NOT `bp_base`. The obvious id is Plan::bp_base, and it is WRONG here:
+// AppendBreakpointVariants stamps it on the RANK variants only -- the uniform-deviation arm
+// (bp_all) and the chain slot both leave it at -1, and those are 3 of the 5 variants it emits per
+// base plan at the shipped W=2 / depth=1 / chain=1. Keying on it therefore files 60% of variants as
+// their own family and reads every one of their duplicates as a transposition. The id used instead
+// is the candidate's content fingerprint with the three bp_* fields left OUT (`efp_base` below),
+// which is exactly "the base plan this variant was cloned from" -- and it is safe to key on because
+// dedup_exact measures ZERO literal plan repeats, so distinct base plans have distinct content.
+static std::atomic<long long> g_dedup_dup_samefam{0};   // duplicate of a candidate from the SAME base plan
+static std::atomic<long long> g_dedup_dup_difffam{0};   // ...from a DIFFERENT base plan
+static std::atomic<long long> g_dedup_dup_ownbase{0};   // ...specifically of that base plan ITSELF
+static std::atomic<long long> g_dedup_dup_firstvar{0};  // first reacher was itself a bp variant
+// ...and WHICH EMISSION ARM the duplicate came from. AppendBreakpointVariants has four independent
+// arms and they are separately switchable, so a duplicate rate that is concentrated in one of them
+// is an A/B away from being priced:
+//   base    -- an ordinary plan (bp_choice < 0).
+//   rank    -- a wave-0 rank variant, bp_at = k. Ranks past the continuation list resolve to EMPTY.
+//   unif    -- MTG_BP_UNIFORM_DEV (bp_all): take rank k at EVERY breakpoint. When an apply reaches
+//              exactly ONE breakpoint this is the rank variant, identically -- so on a deck whose
+//              applies open one breakpoint it is a duplicate BY CONSTRUCTION.
+//   chain   -- MTG_BP_CHAIN_SLOT: the j-th continuation that opens a FURTHER breakpoint. When none
+//              does, BpChainCandIndex returns -1 and the slot resolves to EMPTY = the base plan.
+//   empty   -- MTG_BP_EMPTY_ARM (default off).
+enum class BpArm { Base = 0, Rank, Unif, Chain, Empty, kCount };
+static std::atomic<long long> g_dedup_arm_all[static_cast<int>(BpArm::kCount)];
+static std::atomic<long long> g_dedup_arm_dup[static_cast<int>(BpArm::kCount)];
+static const char* const kBpArmName[] = { "base", "rank", "unif", "chain", "empty" };
+// THE RANK-0 IDENTITY, which is a claim about the CANON DEFAULTS and not about Snow.
+//
+// With MTG_BP_BASE_CANON=1 and MTG_BP_NESTED_CANON=1 (both shipped defaults since the greedy
+// deletion, 2026-09-17), in a searched apply (g_rollout_nest == 0, g_bp_enum_depth == 0):
+//   * a BASE plan takes `ncands.front()` at every breakpoint it reaches (the base canon);
+//   * rank variant (at, k=0) takes `cands[0]` at breakpoint `at` -- the same entry of the same
+//     memoised list -- and `ncands.front()` at every OTHER breakpoint (the nested canon);
+//   * uniform variant k=0 takes `cands[0]` at EVERY breakpoint, which is again the same entry.
+// So all three are the SAME CANDIDATE, and wave 0 applies each of them. That is 2 redundant applies
+// per selected base plan out of the 6 candidates the node scores for it -- a third of the node's
+// work, on every deck, not just this one.
+//
+// It is an argument from reading the resolver, so it is MEASURED before anything is built on it:
+// these count rank-0 / uniform-0 candidates and how many duplicate THEIR OWN base plan specifically.
+// Anything short of ~100% means the reading is wrong somewhere and the skip must not be written.
+// MEASURED AT 58.7% AND THEREFORE REFUTED AS STATED (Snow, 100 games d3/b10): 11.6% of choice-0
+// variants reach a state NOTHING had reached. The reading above is missing a condition, and the
+// candidate is `g_rollout_nest`: the base canon and the nested canon BOTH stand down inside a
+// playout, where a base plan falls to EMPTY while rank 0 still takes cands[0]. So the cells are
+// split [rank|unif] x [searched apply | inside a playout]. The identity is only claimable in the
+// cell where it measures ~1, and the skip may only be gated the same way.
+static std::atomic<long long> g_dedup_k0_all[2][2];       // [unif?][nest0?]
+static std::atomic<long long> g_dedup_k0_ownbase[2][2];
+static std::atomic<long long> g_dedup_k0_dup_other[2][2]; // duplicate, but of something ELSE
+// MTG_BP_W0_UNIF_COLLAPSE's firing counter -- see the skip site.
+static std::atomic<long long> g_w0_unif_collapsed{0};
+// ...and MTG_BP_W0_NOBP's.
+static std::atomic<long long> g_w0_nobp_skipped{0};
+// CHAIN-SLOT OUTCOME (see g_bp_chain_ci_last). The three cells want three different answers:
+//   covered = the scan landed INSIDE wave 0's own window (ci < W), so rank ci already scored that
+//             exact continuation -> a pure duplicate, losslessly skippable.
+//   past_w  = ci >= W, the case the slot was BUILT for (Dragonstorm's rank 32 of 47) -> must stay.
+//   empty   = ci < 0, nothing chainable -> resolves to EMPTY at every breakpoint, which since the
+//             greedy deletion is NOT the base plan, and which MTG_BP_EMPTY_ARM (off) does not
+//             otherwise provide -> dropping it removes an OPTION, not a duplicate.
+static std::atomic<long long> g_chain_covered{0}, g_chain_past_w{0}, g_chain_empty{0};
+static std::atomic<long long> g_chain_covered_dup{0}, g_chain_past_w_dup{0}, g_chain_empty_dup{0};
 static bool DedupCensusOn()
 {
     static const bool on = EnvOn("MTG_DEDUP_CENSUS");
@@ -936,6 +1052,104 @@ thread_local std::uint64_t g_dropped_cast_count = 0;
 // other path, so the drop site pays one null check and the search's rollouts allocate nothing.
 thread_local std::vector<std::string>* g_enum_drop_names = nullptr;
 
+// STRANDED ACTIVATIONS -- the twin of g_dropped_cast_count, and the gap it leaves.
+//
+// g_dropped_cast_count counts a declared CAST the apply could not pay. An ACTIVATION that cannot
+// pay is a different event entirely: ApplyPlanDirect's ActivatePermAbility arm checks the source is
+// live, pre-taps it, and then, if TapForCostDirect fails, silently untaps and moves on. No cast is
+// dropped, so every existing instrument reads that plan as having applied cleanly.
+//
+// That matters on Snow specifically, because Snow's cost IS activations: the two tap-draws carry
+// 77.5% of candidate mass, and a plan that asks for "cast Skred, cast Frost Augur, activate Scrying
+// Sheets" against three available mana needs four. When the activation strands, the plan's
+// post-apply state equals that of the same plan WITHOUT the activation -- a duplicate the enumerator
+// manufactured, and exactly the subset-optimism mechanism that a cast-only counter cannot see.
+// (Measured at 0.74% on casts, which is what sent the first investigation down the wrong road.)
+thread_local std::uint64_t g_stranded_activation_count = 0;
+thread_local std::uint64_t g_stranded_tapdraw_count    = 0;
+
+// Cross-tab for the dedup census (see g_dedup_drop_dup). Called once per scored candidate, only when
+// MTG_DEDUP_CENSUS is armed, so it costs nothing in a shipped run.
+static void DedupWhyRecord(bool is_dup, std::uint64_t dropped, int bp_choice,
+                           std::uint64_t stranded, std::uint64_t stranded_td)
+{
+    g_dedup_drops_total.fetch_add(static_cast<long long>(dropped), std::memory_order_relaxed);
+    g_dedup_strand_total.fetch_add(static_cast<long long>(stranded), std::memory_order_relaxed);
+    g_dedup_strand_tapdraw.fetch_add(static_cast<long long>(stranded_td),
+                                     std::memory_order_relaxed);
+    if (is_dup)
+    {
+        if (dropped > 0) { g_dedup_drop_dup.fetch_add(1, std::memory_order_relaxed); }
+        else             { g_dedup_nodrop_dup.fetch_add(1, std::memory_order_relaxed); }
+        if (stranded > 0) { g_dedup_strand_dup.fetch_add(1, std::memory_order_relaxed); }
+        if (bp_choice >= 0) { g_dedup_dup_bp.fetch_add(1, std::memory_order_relaxed); }
+        else                { g_dedup_dup_nobp.fetch_add(1, std::memory_order_relaxed); }
+    }
+    else
+    {
+        if (dropped > 0)  { g_dedup_drop_uniq.fetch_add(1, std::memory_order_relaxed); }
+        if (stranded > 0) { g_dedup_strand_uniq.fetch_add(1, std::memory_order_relaxed); }
+    }
+}
+
+// The first reacher of a state, for the family cross-tab above. `fam` is the base plan's CONTENT
+// fingerprint (see the note there); `bp` is that candidate's own bp_choice (< 0 = it IS a base plan).
+struct DedupFirstSeen
+{
+    std::uint64_t fam;
+    int           bp;
+};
+// Which emission arm produced this candidate. Declared here, defined with the sentinels far below.
+static BpArm DedupArmOf(const TurnSolver::Plan& plan);
+// Called once per scored candidate, only under MTG_DEDUP_CENSUS. `first` is meaningful only when
+// is_dup.
+// `nest0` = the apply happened OUTSIDE a playout (g_rollout_nest == 0), passed in because that
+// thread_local is declared far below this point.
+static void DedupFamRecord(bool is_dup, const DedupFirstSeen& first, std::uint64_t fam,
+                           const TurnSolver::Plan& plan, bool nest0, int ci, int w)
+{
+    const int arm = static_cast<int>(DedupArmOf(plan));
+    g_dedup_arm_all[arm].fetch_add(1, std::memory_order_relaxed);
+    // The rank-0 identity (see g_dedup_k0_all): rank and uniform variants at choice 0, and whether
+    // each one duplicates its OWN base plan -- not merely "some sibling", which would not prove it.
+    const bool k0 = (arm == static_cast<int>(BpArm::Rank) || arm == static_cast<int>(BpArm::Unif))
+                 && plan.bp_choice == 0;
+    if (k0)
+    {
+        const int u = (arm == static_cast<int>(BpArm::Unif)) ? 1 : 0;
+        const int n = nest0 ? 1 : 0;
+        g_dedup_k0_all[u][n].fetch_add(1, std::memory_order_relaxed);
+        if (is_dup && first.fam == fam && first.bp < 0)
+        { g_dedup_k0_ownbase[u][n].fetch_add(1, std::memory_order_relaxed); }
+        else if (is_dup)
+        { g_dedup_k0_dup_other[u][n].fetch_add(1, std::memory_order_relaxed); }
+    }
+    // Chain-slot outcome (see g_chain_covered). `ci` is what the scan found on this apply; `w` is
+    // wave 0's own width, i.e. how far the plain rank variants already reached.
+    if (arm == static_cast<int>(BpArm::Chain) && ci != -2)
+    {
+        if (ci < 0)     { g_chain_empty.fetch_add(1, std::memory_order_relaxed);
+                          if (is_dup) { g_chain_empty_dup.fetch_add(1, std::memory_order_relaxed); } }
+        else if (ci < w){ g_chain_covered.fetch_add(1, std::memory_order_relaxed);
+                          if (is_dup) { g_chain_covered_dup.fetch_add(1, std::memory_order_relaxed); } }
+        else            { g_chain_past_w.fetch_add(1, std::memory_order_relaxed);
+                          if (is_dup) { g_chain_past_w_dup.fetch_add(1, std::memory_order_relaxed); } }
+    }
+    if (!is_dup) { return; }
+    g_dedup_arm_dup[arm].fetch_add(1, std::memory_order_relaxed);
+    if (first.fam == fam)
+    {
+        g_dedup_dup_samefam.fetch_add(1, std::memory_order_relaxed);
+        // The first reacher was the base plan itself -> this variant's continuation is unobservable.
+        if (first.bp < 0) { g_dedup_dup_ownbase.fetch_add(1, std::memory_order_relaxed); }
+    }
+    else
+    {
+        g_dedup_dup_difffam.fetch_add(1, std::memory_order_relaxed);
+    }
+    if (first.bp >= 0) { g_dedup_dup_firstvar.fetch_add(1, std::memory_order_relaxed); }
+}
+
 // MTG_IRENCRAG_WASTE relevance counters (print-only, MTG_ROLLOUT_STATS). The question they answer:
 // of the subsets the waste gate drops, how many hold a payoff that Irencrag's float COULD have paid
 // for if the order let it follow him (Magma Opus / Soulfire, both ranked BEFORE him today)? That is
@@ -1143,6 +1357,19 @@ namespace
                     }
                 }
             }
+            if (g_w0_nobp_skipped.load() > 0)
+            {
+                std::cerr << "[rollout-stats] w0_nobp skipped=" << g_w0_nobp_skipped.load()
+                          << "  (variants whose base plan's apply reached NO breakpoint, so they"
+                             " ARE that base plan)\n";
+            }
+            if (g_w0_unif_collapsed.load() > 0)
+            {
+                std::cerr << "[rollout-stats] w0_unif_collapse skipped="
+                          << g_w0_unif_collapsed.load()
+                          << "  (uniform variants that ARE their rank sibling: the apply reached"
+                             " <= 1 enabled-class breakpoint)\n";
+            }
             if (DedupCensusOn())
             {
                 const long long ds = g_dedup_seen.load(), dd = g_dedup_dup.load();
@@ -1154,6 +1381,108 @@ namespace
                           << " copy_FALSE=" << g_dedup_namefalse.load()
                           << " (dup = post-apply state a sibling already reached; copy_perm = of"
                              " those, the ones recognisable from the PLAN alone)\n";
+                // WHY they converge. drop_dup/dup is the share of duplicates the ENUMERATOR
+                // manufactured by offering a subset whose cast the apply then could not pay: those
+                // are losslessly refusable at the enumerator. nodrop_dup is the residue that needs a
+                // different explanation, and if it dominates then no payability tightening reaches
+                // this cost.
+                const long long wdd = g_dedup_drop_dup.load();
+                const long long wnd = g_dedup_nodrop_dup.load();
+                const long long wdu = g_dedup_drop_uniq.load();
+                std::cerr << "[rollout-stats] dedup_why drop_dup=" << wdd
+                          << " nodrop_dup=" << wnd
+                          << " drop_dup_share_of_dup=" << (dd ? static_cast<double>(wdd) / dd : 0.0)
+                          << " drop_but_UNIQUE=" << wdu
+                          << " dropped_casts_total=" << g_dedup_drops_total.load()
+                          << " dup_bp=" << g_dedup_dup_bp.load()
+                          << " dup_nobp=" << g_dedup_dup_nobp.load() << "\n";
+                const long long wsd = g_dedup_strand_dup.load();
+                const long long wsu = g_dedup_strand_uniq.load();
+                std::cerr << "[rollout-stats] dedup_why_act strand_dup=" << wsd
+                          << " strand_but_UNIQUE=" << wsu
+                          << " strand_dup_share_of_dup=" << (dd ? static_cast<double>(wsd) / dd : 0.0)
+                          << " stranded_activations=" << g_dedup_strand_total.load()
+                          << " of_which_tapdraw=" << g_dedup_strand_tapdraw.load()
+                          << "  (an activation the apply could not pay; INVISIBLE to the cast"
+                             " counters above)\n";
+                // WHO they collided with. difffam = TRANSPOSITION (two base plans reach the same
+                // turn, one past-the-breakpoint and one via its continuation) -> the fix is
+                // enumerator-side. samefam = the continuation changed nothing its own family had
+                // not already reached -> a local test at the wave walker suffices.
+                const long long fsame = g_dedup_dup_samefam.load();
+                const long long fdiff = g_dedup_dup_difffam.load();
+                std::cerr << "[rollout-stats] dedup_why_fam same_base=" << fsame
+                          << " diff_base=" << fdiff
+                          << " diff_share_of_dup=" << (dd ? static_cast<double>(fdiff) / dd : 0.0)
+                          << " of_same: vs_OWN_base=" << g_dedup_dup_ownbase.load()
+                          << " first_was_variant=" << g_dedup_dup_firstvar.load() << "\n";
+                if (fsame + fdiff == 0)
+                {
+                    std::cerr << "  NO POWER -- no duplicates recorded, so the family cross-tab"
+                                 " says nothing.\n";
+                }
+                // The chain slot's three outcomes (see g_chain_covered). `covered` is the only cell
+                // with a lossless skip in it; `empty` is an option nothing else in wave 0 provides.
+                const long long cc = g_chain_covered.load(), cp = g_chain_past_w.load();
+                const long long ce = g_chain_empty.load();
+                if (cc + cp + ce > 0)
+                {
+                    const double tot = static_cast<double>(cc + cp + ce);
+                    std::cerr << "[rollout-stats] dedup_why_chain W=" << BpSearchWidth()
+                              << "  covered(ci<W)=" << cc << "/dup=" << g_chain_covered_dup.load()
+                              << " (" << (cc / tot) << " of chain applies)"
+                              << "  past_W(ci>=W)=" << cp << "/dup=" << g_chain_past_w_dup.load()
+                              << "  EMPTY(ci<0)=" << ce << "/dup=" << g_chain_empty_dup.load()
+                              << "\n  covered = rank ci already scored it, losslessly skippable;"
+                                 " past_W = what the slot EXISTS for; EMPTY = an option no other"
+                                 " wave-0 variant provides\n";
+                }
+                // ...and by EMISSION ARM, which is what an A/B can actually reach.
+                std::cerr << "[rollout-stats] dedup_why_arm";
+                for (int ai = 0; ai < static_cast<int>(BpArm::kCount); ++ai)
+                {
+                    const long long aa = g_dedup_arm_all[ai].load();
+                    const long long ad = g_dedup_arm_dup[ai].load();
+                    if (aa == 0) { continue; }
+                    std::cerr << "  " << kBpArmName[ai] << "=" << aa << "/dup=" << ad
+                              << "(" << (static_cast<double>(ad) / aa) << ")";
+                }
+                std::cerr << "\n";
+                // The rank-0 identity, per cell. own_base_share is the number a skip would rest on,
+                // and it has to be ~1 in the cell the skip is gated to -- nowhere else matters.
+                for (int u = 0; u < 2; ++u)
+                {
+                    for (int n = 0; n < 2; ++n)
+                    {
+                        const long long k0a = g_dedup_k0_all[u][n].load();
+                        if (k0a == 0) { continue; }
+                        const long long k0o = g_dedup_k0_ownbase[u][n].load();
+                        std::cerr << "[rollout-stats] dedup_why_k0 " << (u ? "unif0" : "rank0")
+                                  << (n ? " searched" : " in-playout")
+                                  << " n=" << k0a << " dup_of_OWN_base=" << k0o
+                                  << " own_base_share=" << (static_cast<double>(k0o) / k0a)
+                                  << " dup_of_something_else="
+                                  << g_dedup_k0_dup_other[u][n].load() << "\n";
+                    }
+                }
+                if (wsd + wsu == 0)
+                {
+                    std::cerr << "  NO POWER -- no scored candidate stranded an activation, so the"
+                                 " enumerator is NOT offering unaffordable activation lines.\n";
+                }
+                if (wdd + wdu == 0)
+                {
+                    std::cerr << "  NO POWER -- no scored candidate dropped a cast at all, so subset"
+                                 " optimism is NOT the mechanism behind dup (and this cross-tab"
+                                 " cannot speak to it either way).\n";
+                }
+                else if (wdu > 0)
+                {
+                    std::cerr << "  NOTE -- " << wdu << " candidates dropped a cast and STILL reached"
+                                 " a new state, so 'dropped a cast' is not by itself a duplicate"
+                                 " predicate; an enumerator refusal must test payability, not"
+                                 " droppedness.\n";
+                }
                 const long long xd = g_dedup_exactdup.load(), xf = g_dedup_exactfalse.load();
                 std::cerr << "[rollout-stats] dedup_exact repeats=" << (xd + xf)
                           << " share_of_seen=" << (ds ? static_cast<double>(xd + xf) / ds : 0.0)
@@ -10884,6 +11213,17 @@ static constexpr int kBpEmptyChoice = TurnSolver::kBpEmptyChoice;
 // The sentinel and its resolver are declared on TurnSolver (the header) so the executor shares them.
 static constexpr int kBpChainChoice = TurnSolver::kBpChainChoice;
 
+// Which arm of AppendBreakpointVariants emitted this candidate (dedup census; see BpArm). Order
+// matters: the chain sentinel is larger than the empty one, so it has to be tested first.
+static BpArm DedupArmOf(const TurnSolver::Plan& plan)
+{
+    if (plan.bp_choice < 0)                  { return BpArm::Base; }
+    if (plan.bp_choice >= kBpChainChoice)    { return BpArm::Chain; }
+    if (plan.bp_choice == kBpEmptyChoice)    { return BpArm::Empty; }
+    if (plan.bp_all)                         { return BpArm::Unif; }
+    return BpArm::Rank;
+}
+
 // How many chain continuations get a reserved slot (MTG_BP_CHAIN_SLOT, 0 = off = byte-identical).
 //
 // ONE, MEASURED -- not assumed. The guess was that 2 would be needed (a payable-but-worse chain
@@ -11863,6 +12203,18 @@ static thread_local int g_bp_fired_last = 0;
 // m2 fixpoint for exactly this reason; a delta on a counter with no owner cannot collide with
 // anyone.
 static thread_local std::uint64_t g_bp_any_last = 0;
+// ...and the same event restricted to an ENABLED class (BpSiteMask), also monotonic, also read as a
+// before/after delta. This is the count the UNIFORM COLLAPSE needs and `g_bp_any_last` cannot give:
+// `bp_all` only ever differs from a plain rank variant at a breakpoint whose index is not `bp_at`,
+// and only ENABLED-class occurrences carry an index at all (see the `seen_before` ternary in
+// bp_searched_plan -- a class-off breakpoint is never counted and never shifts a later index). So a
+// delta of <= 1 here is exactly the condition under which the two arms are the same candidate,
+// whereas a delta of <= 1 on g_bp_any_last would be neither necessary nor sufficient.
+static thread_local std::uint64_t g_bp_classon_last = 0;
+// Where the CHAIN SCAN landed on this apply (MTG_DEDUP_CENSUS only): -2 = no chain slot resolved
+// here, -1 = the scan found no chainable continuation (so the slot fell through to EMPTY), >= 0 =
+// the index it took. Reset by the candidate loop before each apply, like g_bp_cands_last.
+static thread_local int g_bp_chain_ci_last = -2;
 
 // Lockstep trace arming flag (MTG_BP_TRACE, diagnosis only). ApplyPlanDirect runs millions of times
 // inside rollouts, so an unconditional print is useless; this is set ONLY around the fd-trace's
@@ -25697,6 +26049,7 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
         ++g_bp_fired_last;   // any occurrence, any class, any plan (see the declaration)
         ++g_bp_any_last;     // ...and the monotonic twin the NOBP gate reads (see g_bp_any_last)
         const bool class_on    = (BpSiteMask() & (1 << site)) != 0;
+        if (class_on) { ++g_bp_classon_last; }   // monotonic; delta-read by the uniform collapse
         const int  seen_before = (plan.bp_choice >= 0 && class_on) ? bp_seen++ : -1;
         // bp_all: the deviation is a POLICY for the whole apply, so every breakpoint is eligible,
         // not just the one at bp_at. See Plan::bp_all for why a uniform repeat is the slice of the
@@ -25782,6 +26135,15 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
             {
                 const int ci = TurnSolver::BpChainCandIndex(state, cands,
                                                             plan.bp_choice - kBpChainChoice);
+                // MEASUREMENT (MTG_DEDUP_CENSUS): WHICH index did the chain scan land on? The slot
+                // exists for a chainable continuation ranked PAST W (Dragonstorm's rank 32 of 47);
+                // at ci < W wave 0's own rank variant already scored that exact entry and this
+                // variant is a pure duplicate, while ci < 0 resolves to EMPTY -- which since the
+                // greedy deletion is NOT a copy of the base plan and, with MTG_BP_EMPTY_ARM off, is
+                // provided by nothing else in wave 0. Those two need opposite treatment, so the
+                // share decides whether the chain arm has a lossless skip at all. Only the FIRST
+                // breakpoint of an apply is recorded (-2 = this apply never resolved a chain slot).
+                if (DedupCensusOn() && g_bp_chain_ci_last == -2) { g_bp_chain_ci_last = ci; }
                 if (ci >= 0)
                 {
                     out      = cands[ci];
@@ -28913,8 +29275,17 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
                         }
                     }
                 }
-                else if (taps)
-                { SetPermTapped(state, state.active_player_index, a.sac_source_id, false); }
+                else
+                {
+                    // STRANDED: the plan asked for this ability and the mana was not there. Counted
+                    // because nothing else counts it -- see g_stranded_activation_count. Behaviour
+                    // is unchanged: the tap is restored exactly as before.
+                    ++g_stranded_activation_count;
+                    if (a.ability_mode == Action::AbilityMode::TapDraw)
+                    { ++g_stranded_tapdraw_count; }
+                    if (taps)
+                    { SetPermTapped(state, state.active_player_index, a.sac_source_id, false); }
+                }
             }
         }
         else if (a.kind == Action::Kind::ActivatePump)
@@ -34774,6 +35145,15 @@ static void AppendBreakpointVariants(const GameState& state, std::vector<TurnSol
         // ...plus ONE uniform-policy variant per candidate: take k at EVERY breakpoint rather than
         // at a single index. Additive (+W per base plan), and it is the only shape in which a turn
         // whose payoff needs the SAME decision repeated down a chain becomes expressible at all.
+        //
+        // THE UNIFORM ARM IS THE RANK ARM WHENEVER AN APPLY REACHES ONE BREAKPOINT. "Take k at every
+        // breakpoint" and "take k at breakpoint 0" are the same instruction when there is only a
+        // breakpoint 0, so on a deck whose applies open one breakpoint this arm is a duplicate BY
+        // CONSTRUCTION -- measured at 99.2% duplicate on Snow, 25.7% of every candidate the node
+        // applies. It is NOT dead weight in general: turning it off regresses fluctuator by
+        // +0.100 / +0.067 / +0.053 turns across its three smoke cases, so the arm earns its keep and
+        // the fix is to skip the redundant MEMBER, not the arm. See the collapse in the candidate
+        // loop (MTG_BP_W0_UNIF_COLLAPSE) and docs/design/snow-branching-residual.md §9.
         if (BpUniformDevEnabled())
         {
             for (int k = 0; k < w; ++k)
@@ -34783,6 +35163,13 @@ static void AppendBreakpointVariants(const GameState& state, std::vector<TurnSol
                 v.bp_at     = 0;
                 v.bp_all    = true;
                 v.bp_wave0  = false;
+                // STAMPED, where it was left at -1 before. INERT TO PLAY: every reader of bp_base
+                // except the FSLineWin remap (which just renumbers whatever is there) requires
+                // `!p.bp_all`, and this arm sets bp_all. What it buys is a family id for the
+                // collapse below, which would otherwise have to re-fingerprint the plan. The census
+                // that first cross-tabbed duplicates by bp_base read 60% of variants as their own
+                // family for exactly this omission -- see g_dedup_dup_samefam.
+                v.bp_base   = static_cast<int>(base_i);
                 variants.push_back(std::move(v));
             }
         }
@@ -34797,6 +35184,7 @@ static void AppendBreakpointVariants(const GameState& state, std::vector<TurnSol
             v.bp_at     = 0;
             v.bp_all    = true;
             v.bp_wave0  = false;
+            v.bp_base   = static_cast<int>(base_i);   // as the uniform arm above: inert, for the census
             variants.push_back(std::move(v));
         }
     }
@@ -35157,6 +35545,94 @@ namespace
     inline bool BpWaveNSkipOn()
     {
         static const bool on = EnvOn("MTG_BP_WAVE_NSKIP", true);
+        return on;
+    }
+    // ---- MTG_BP_W0_UNIF_COLLAPSE: the same stillborn argument, applied to WAVE 0 ----------------
+    //
+    // NSKIP above declines a WAVE slot whose ranks can only hand out something already scored. Wave 0
+    // has never had the equivalent test, and it is where the redundancy actually is: measured on Snow,
+    // the uniform arm applies 1,323,758 candidates and 99.2% of them land on a state a sibling already
+    // reached (unbudgeted: 99.6%). See docs/design/snow-branching-residual.md §9.3.
+    //
+    // THE IDENTITY, and it is exact rather than statistical. `bp_all` means "take rank k at EVERY
+    // breakpoint"; a plain rank variant means "take rank k at breakpoint bp_at, canon elsewhere". The
+    // two differ only at a breakpoint whose index is not bp_at -- so when an apply reaches ONE
+    // enabled-class breakpoint (index 0, which is every rank variant's bp_at at the shipped
+    // MTG_BP_DEPTH=1), uniform k and rank k are the SAME CANDIDATE and their applies walk the same
+    // path. Zero breakpoints likewise: both resolve nothing.
+    //
+    // HOW WAVE 0 CAN KNOW IT BEFORE APPLYING. It cannot, from the plan -- the breakpoint count depends
+    // on the base plan's own casts and is only knowable at apply time (the lesson g_bp_cands_last was
+    // written for). But it does not have to: AppendBreakpointVariants emits the RANK variants first,
+    // so by the time the candidate loop reaches uniform k, rank k of the same base plan has already
+    // been applied and reported its count. For the SAME k the two applies take the same continuation
+    // at breakpoint 0, so rank k's count is exactly uniform k's count -- not an estimate of it.
+    //
+    // WHAT THIS IS NOT. It is NOT "turn MTG_BP_UNIFORM_DEV off". That measures 21% cheaper on Snow
+    // with byte-identical play, and it is still wrong as a default: the smoke suite regresses
+    // fluctuator by +0.100 / +0.067 / +0.053 turns across its three cases, because on a deck whose
+    // applies DO open a second breakpoint the arm expresses a line nothing else can. This skips only
+    // the members the identity covers, so those decks keep every option they had.
+    //
+    // ORDER DEPENDENCE, stated because it is a real hazard and it is inherited, not introduced. The
+    // memo is keyed positionally on (bp_base, k), which is sound only while `candidates` keeps base
+    // plans before their variants and variants in emission order -- true on this path because
+    // EnumeratePlansWithLandUncached sorts BEFORE it appends and returns the result untouched (the
+    // same property W0Len's memo already depends on, and the same note applies: a reorder added after
+    // the append breaks both).
+    //
+    // DEFAULT ON (adopted 2026-09-23; MTG_BP_W0_UNIF_COLLAPSE=0 is the A/B hatch). A missing memo
+    // entry never skips, so the arm can only ever decline a candidate it has positive evidence about.
+    //
+    // EVIDENCE. Snow 100 games d3/b10, alone: -12.0% CPU / -16.8% units. With MTG_BP_W0_NOBP (they
+    // compose; NOBP is tested first because it covers all three variant arms): -16.7% CPU / -28.4%
+    // units, 249.74s -> 206.68s. Deleting the two ARMS outright is -21.2% / -28.7%, so the pair
+    // recovers the whole units saving and ~80% of the CPU while keeping every option. SOUNDNESS was
+    // proved UNBUDGETED (budget_ms 0 + --max-turns, where no saved work can be re-spent): byte-
+    // identical play digests on all 7 decks -- burn, fivecolour, fluctuator, kitty, mirrorwing, snow,
+    // treasure_hunt. Under a budget the play DOES move, and that is budget re-spend rather than the
+    // identity breaking.
+    inline bool BpW0UnifCollapseOn()
+    {
+        static const bool on = EnvOn("MTG_BP_W0_UNIF_COLLAPSE", true);
+        return on;
+    }
+    // ---- MTG_BP_W0_NOBP: the wave walker's NOBP gate, finally applied to WAVE 0 -----------------
+    //
+    // BpWaveNoBpOn (above, DEFAULT ON since it was built) declines a WAVE slot whose base plan's own
+    // apply reached no breakpoint, because every rank of that slot would duplicate the base plan.
+    // Wave 0 fans out the SAME base plans and has never made the same test, so it applies all five
+    // of its variants into a turn that has nothing for them to decide.
+    //
+    // THE IDENTITY IS THE STRONGEST ONE IN THIS FILE, and unlike the rank-0 identity (§9.6 of
+    // docs/design/snow-branching-residual.md, refuted at 0.587) it does not depend on a canon flag,
+    // a rollout depth, or which entry a list ranks first. A variant differs from its base plan ONLY
+    // at a breakpoint: bp_choice, bp_at and bp_all are read nowhere else in an apply. No breakpoint
+    // occurrence therefore means no read, which means the identical action list applied to the
+    // identical state -- the identical result. There is nothing for a missing condition to hide in.
+    //
+    // WHY WAVE 0 CAN KNOW IT. `candidates` holds every base plan before any variant
+    // (AppendBreakpointVariants appends), so by the time the loop reaches a variant its base plan has
+    // already been applied and `bp_nobp` already records whether that apply saw any occurrence
+    // (g_bp_any_last delta -- ANY class, which is strictly stronger than the enabled-class count the
+    // uniform collapse uses, and deliberately so).
+    //
+    // HOW BIG. Selection is by PlanOpensBreakpoint, a PRE-APPLY predicate on the plan, so a selected
+    // base plan can still reach no breakpoint -- the cast may be dropped, the source may be gone, the
+    // site may be masked off. Measured on Snow: of 661,872 chain-slot candidates only 414,510 applies
+    // ever reached a chain slot, so ~37% of selected base plans reach no eligible breakpoint at all,
+    // and each of those carries five variants.
+    //
+    // DEFAULT ON (adopted 2026-09-23; MTG_BP_W0_NOBP=0 is the A/B hatch), and a base plan absent from
+    // the memo never skips.
+    //
+    // EVIDENCE. Snow 100 games d3/b10, alone: -11.5% CPU / -19.4% units; with the uniform collapse,
+    // -16.7% / -28.4% (see BpW0UnifCollapseOn for the joint numbers). Byte-identical play on 7 decks
+    // unbudgeted with the gate firing 3,243,385 times -- which is the shape of proof this identity
+    // deserves: it fired three million times and changed nothing.
+    inline bool BpW0NoBpOn()
+    {
+        static const bool on = EnvOn("MTG_BP_W0_NOBP", true);
         return on;
     }
 
@@ -47517,6 +47993,25 @@ TurnSolver::Plan TurnSolver::SolveWithLookahead(const GameState& state, bool is_
                     std::string s = static_cast<const std::string&>(a.card_name);
                     s += "|k" + std::to_string(static_cast<int>(a.kind));
                     if (a.chosen_x > 0) { s += "|x" + std::to_string(a.chosen_x); }
+                    // The remaining Action fields BpCandFingerprint folds. Needed because the plan
+                    // -level axes all print EMPTY on Snow while the census still reads every
+                    // candidate as fingerprint-distinct -- so whatever separates two
+                    // identical-looking plans has to be one of these. `chosen_float_color` is the
+                    // prime suspect on this deck (Arcum's Astrolabe any_color_filter + 4 Coldsteel
+                    // Heart): it pins HOW a cost was paid, which is invisible in the action list and
+                    // collapses to the same state once the mana is spent.
+                    if (!a.chosen_float_color.str().empty())
+                    { s += "|fc" + a.chosen_float_color.str(); }
+                    if (!a.tutor_target.str().empty()) { s += "|tt" + a.tutor_target.str(); }
+                    if (a.sac_victim_id != 0) { s += "|sv" + std::to_string(a.sac_victim_id); }
+                    if (a.sac_count != 0)     { s += "|sc" + std::to_string(a.sac_count); }
+                    if (a.splice_count != 0)  { s += "|sp" + std::to_string(a.splice_count); }
+                    if (a.alt_cost)       { s += "|alt"; }
+                    if (a.free_cast)      { s += "|free"; }
+                    if (a.sacrifice_land) { s += "|sacland"; }
+                    if (a.dig_sacrifice)  { s += "|digsac"; }
+                    if (a.enchant_target != 0) { s += "|et" + std::to_string(a.enchant_target); }
+                    if (a.gy_exile_mode != -1) { s += "|gy" + std::to_string(a.gy_exile_mode); }
                     return s;
                 };
                 // The ALPHABET: distinct name|kind|x, and for each, which physical copies were named.
@@ -47544,6 +48039,52 @@ TurnSolver::Plan TurnSolver::SolveWithLookahead(const GameState& state, bool is_
                              enforce_budget ? "top-level" : "rollout",
                              is_pre_combat ? "pre-combat" : "post-combat",
                              alpha.size(), repeats);
+                // THE STATE, so a width can be argued about rather than just counted: what is in
+                // hand, what is on the board, how much mana is actually available, and what the
+                // clairvoyant top of library is (the tap-draws only fire on a SNOW top card, so the
+                // top is part of why a draw line exists at all).
+                {
+                    const Player& dap = state.players[state.active_player_index];
+                    ManaPool avail = AvailableManaPool(state);
+                    avail.AddPool(state.floating_mana);
+                    std::string hs;
+                    for (std::size_t i = 0; i < dap.hand.size(); ++i)
+                    {
+                        if (!hs.empty()) { hs += ", "; }
+                        hs += "h" + std::to_string(i) + ":"
+                              + static_cast<const std::string&>(dap.hand[i].m_name);
+                    }
+                    std::string bs;
+                    int untapped_srcs = 0;
+                    for (const Permanent& p : state.battlefield)
+                    {
+                        if (p.controller_index != state.active_player_index) { continue; }
+                        if (!bs.empty()) { bs += ", "; }
+                        bs += static_cast<const std::string&>(p.card.m_name);
+                        bs += p.tapped ? "(T)" : "";
+                        const CardDefinition* pd = CardDatabase::Instance().LookupCached(p.card);
+                        if (!p.tapped && pd != nullptr && !pd->params.produces.empty())
+                        { ++untapped_srcs; }
+                    }
+                    std::string tops;
+                    for (std::size_t i = 0; i < dap.library.size() && i < 4; ++i)
+                    {
+                        const CardDefinition* td = CardDatabase::Instance().LookupCached(dap.library[i]);
+                        const bool sn = td && td->card.HasSupertype(Supertype::Snow);
+                        if (!tops.empty()) { tops += ", "; }
+                        tops += static_cast<const std::string&>(dap.library[i].m_name);
+                        tops += sn ? "[SNOW]" : "[non]";
+                    }
+                    std::fprintf(stderr,
+                                 "  STATE life=%d/%d  mana_avail=%d (W%d U%d B%d R%d G%d C%d wild%d)"
+                                 "  untapped_sources=%d\n    HAND(%zu): %s\n    BOARD(%zu): %s\n"
+                                 "    LIB_TOP: %s\n",
+                                 dap.life, state.players[1 - state.active_player_index].life,
+                                 static_cast<int>(avail.Total()), avail.white, avail.blue,
+                                 avail.black, avail.red, avail.green, avail.colorless, avail.wild,
+                                 untapped_srcs, dap.hand.size(), hs.c_str(),
+                                 state.battlefield.size(), bs.c_str(), tops.c_str());
+                }
                 for (const auto& kv : alpha)
                 {
                     std::fprintf(stderr, "  ALPHA %-40s in %5lld plans | srcs=%zu hands=%zu\n",
@@ -47562,7 +48103,32 @@ TurnSolver::Plan TurnSolver::SolveWithLookahead(const GameState& state, bool is_
                         s += "[s" + std::to_string(a.sac_source_id)
                            + ",h" + std::to_string(a.hand_index) + "]";
                     }
-                    std::fprintf(stderr, "  PLAN bp=%d %s\n", q.bp_choice,
+                    // THE PLAN-LEVEL AXES, printed because the action list alone cannot explain the
+                    // width. Snow shows alphabet=5 against width=154 -- 5x MORE than the powerset of
+                    // its own alphabet -- while the census reads repeat_share=0, i.e. every candidate
+                    // is fingerprint-DISTINCT. Both can only be true if the distinction lives in a
+                    // field BpCandFingerprint folds and this dump did not print. These are that
+                    // field list (see BpCandFingerprint): a plan carries a land drop, a tap mode, a
+                    // scry/ponder/discard pin and the rest, none of which appear in `actions`.
+                    // Printed only when set, so a deck that uses none of them reads as before.
+                    std::string ax;
+                    auto ax_i = [&ax](const char* n, int v, int off)
+                    { if (v != off) { ax += " "; ax += n; ax += "="; ax += std::to_string(v); } };
+                    if (q.land_decided)           { ax += " land_decided"; }
+                    if (!q.land_to_play.empty())  { ax += " land=" + q.land_to_play; }
+                    if (!q.land_face.empty())     { ax += " face=" + q.land_face; }
+                    if (!q.fetch_target.empty())  { ax += " fetch=" + q.fetch_target; }
+                    ax_i("scry",     q.scry_choice,        -1);
+                    ax_i("etbdig",   q.etbdig_choice,      -1);
+                    ax_i("tutor",    q.tutor_choice,       -1);
+                    ax_i("tapmode",  q.tapmode_choice,     -1);
+                    ax_i("ponder",   q.ponder_choice,      -1);
+                    ax_i("discard",  q.discard_choice,     -1);
+                    ax_i("freshmode", q.freshmode_choice,  -1);
+                    ax_i("bp_at",    q.bp_at,               0);
+                    ax_i("bp_base",  q.bp_base,            -1);
+                    if (q.searched_order) { ax += " searched_order"; }
+                    std::fprintf(stderr, "  PLAN bp=%d%s %s\n", q.bp_choice, ax.c_str(),
                                  s.empty() ? "(empty)" : s.c_str());
                 }
             }
@@ -47578,7 +48144,9 @@ TurnSolver::Plan TurnSolver::SolveWithLookahead(const GameState& state, bool is_
         // Measurement twin of reframe_seen (MTG_DEDUP_CENSUS). Separate set so the census observes
         // the FULL duplicate rate even on a run where the live dedup is off and therefore never
         // populated reframe_seen. Untouched when disarmed.
-        std::unordered_set<TranspositionTable::Key, TranspositionTable::KeyHash> census_seen;
+        // ...a MAP, not a set, so a duplicate can name the family it collided with (DedupFamRecord).
+        std::unordered_map<TranspositionTable::Key, DedupFirstSeen, TranspositionTable::KeyHash>
+            census_seen;
         // Copy-permutation census: the same plan with hand_index (and only hand_index) erased.
         std::unordered_set<std::string> census_names;
         // EXACT-REPEAT census: the same plan, nothing erased -- full BpCandFingerprint plus the two
@@ -47614,12 +48182,31 @@ TurnSolver::Plan TurnSolver::SolveWithLookahead(const GameState& state, bool is_
         // walker addresses base plans, and this list is not reordered after enumeration.
         std::unordered_set<std::size_t> bp_nobp;
         const bool nobp_here = BpWaveNoBpOn();
+        // WAVE-0 UNIFORM COLLAPSE (MTG_BP_W0_UNIF_COLLAPSE; see the flag for the identity and why it
+        // is not "turn the arm off"). (bp_base, k) -> how many ENABLED-class breakpoints that rank
+        // variant's apply reached. Written by the rank variants, read by the uniform ones, which
+        // wave 0 emits afterwards. Per pass, like every other set here.
+        std::unordered_map<std::uint64_t, int> w0_unif_nbp;
+        const bool unifcollapse_here = BpW0UnifCollapseOn();
+        // ...and the wave-0 NOBP skip (MTG_BP_W0_NOBP), which reads `bp_nobp` below. It needs that
+        // memo populated, so it forces the recording on even where BpWaveNoBpOn would not.
+        const bool w0nobp_here = BpW0NoBpOn();
         std::size_t cand_index = 0;
         std::uint64_t any_before = 0;
+        std::uint64_t classon_before = 0;
         auto w0len_record = [&](const Plan& pl)
         {
-            if (nobp_here && pl.bp_choice < 0 && g_bp_any_last == any_before)
+            if ((nobp_here || w0nobp_here) && pl.bp_choice < 0 && g_bp_any_last == any_before)
             { bp_nobp.insert(cand_index); }
+            // Record what THIS apply saw, for the uniform sibling that has not run yet. Rank
+            // variants only (`!bp_all`, a real rank), which is exactly the arm emitted first.
+            if (unifcollapse_here && pl.bp_base >= 0 && !pl.bp_all && pl.bp_at == 0
+                && pl.bp_choice >= 0 && pl.bp_choice < kBpEmptyChoice)
+            {
+                w0_unif_nbp[(static_cast<std::uint64_t>(pl.bp_base) << 24)
+                            | static_cast<std::uint64_t>(pl.bp_choice)] =
+                    static_cast<int>(g_bp_classon_last - classon_before);
+            }
             if (!w0len_here || pl.bp_base < 0 || pl.bp_all) { return; }
             if (pl.bp_choice < 0 || pl.bp_choice >= kBpEmptyChoice) { return; }
             BpWaveWalker::W0Len& e = bp_w0_lens[(static_cast<uint64_t>(pl.bp_base) << 8)
@@ -47663,6 +48250,41 @@ TurnSolver::Plan TurnSolver::SolveWithLookahead(const GameState& state, bool is_
                 }
             }
 
+            // WAVE-0 NOBP SKIP (MTG_BP_W0_NOBP). The base plan this variant was cloned from reached
+            // no breakpoint occurrence of ANY class, and a variant differs from its base plan only
+            // at a breakpoint -- so it would re-apply the same actions to the same state for the
+            // same result. Covers every arm at once (rank, uniform, chain), which is why it is
+            // tested before the uniform collapse.
+            if (w0nobp_here && plan.bp_choice >= 0 && plan.bp_base >= 0
+                && bp_nobp.count(static_cast<std::size_t>(plan.bp_base)) != 0)
+            {
+                g_w0_nobp_skipped.fetch_add(1, std::memory_order_relaxed);
+                ++candidates_done;
+                continue;
+            }
+
+            // WAVE-0 UNIFORM COLLAPSE (MTG_BP_W0_UNIF_COLLAPSE). BEFORE the unit charge and before
+            // the GameState copy, because avoiding the APPLY is the entire point: a duplicate is
+            // already kept out of its rollout by bp_seen_states below, so what it still costs is the
+            // copy plus ApplyPlanDirect. The rank sibling with this same k has already run and told
+            // us how many enabled-class breakpoints the path reaches; at <= 1 this uniform variant IS
+            // that rank variant. No memo entry -> no skip.
+            if (unifcollapse_here && plan.bp_all && plan.bp_base >= 0
+                && plan.bp_choice >= 0 && plan.bp_choice < kBpEmptyChoice)
+            {
+                auto it = w0_unif_nbp.find((static_cast<std::uint64_t>(plan.bp_base) << 24)
+                                           | static_cast<std::uint64_t>(plan.bp_choice));
+                if (it != w0_unif_nbp.end() && it->second <= 1)
+                {
+                    // Firing counter: a byte-identical A/B on a change just added is a red flag, so
+                    // the arm has to be able to say it did something (the lesson in
+                    // digest-equality-can-mean-broken). Counted whether or not stats are on.
+                    g_w0_unif_collapsed.fetch_add(1, std::memory_order_relaxed);
+                    ++candidates_done;
+                    continue;
+                }
+            }
+
             // One work unit for this candidate's inline first turn (combat + post
             // main); the remaining turns are counted inside SimulateToEnd.
             ConsumeAt(budget, unitsite::kLookaheadCand);
@@ -47670,12 +48292,24 @@ TurnSolver::Plan TurnSolver::SolveWithLookahead(const GameState& state, bool is_
             const unsigned long long esc_drops_before = g_condemn_drops;   // escalation window
             PROF_INC(gamestate_copies);
             if (s_rollout_stats) { g_cand_scored.fetch_add(1, std::memory_order_relaxed); }
+            // Dedup-census cross-tab (see g_dedup_drop_dup): snapshot the per-thread dropped-cast
+            // counter so each census block below can ask whether THIS apply dropped one of its own
+            // casts -- i.e. whether the duplicate state was manufactured by subset optimism.
+            const std::uint64_t dd_drops_before = DedupCensusOn() ? g_dropped_cast_count : 0;
+            const std::uint64_t dd_strand_before =
+                DedupCensusOn() ? g_stranded_activation_count : 0;
+            const std::uint64_t dd_strand_td_before =
+                DedupCensusOn() ? g_stranded_tapdraw_count : 0;
             GameState copy = state;
             // Make g_bp_cands_last describe THIS apply (same reset FSLineWin does, same reason).
             if (w0len_here) { g_bp_cands_last = 0; }
             // ...and the same one-apply-measures-it convention for the no-breakpoint gate.
             cand_index = static_cast<std::size_t>(&plan - candidates.data());
             any_before = g_bp_any_last;   // DELTA, not a reset -- see g_bp_any_last
+            classon_before = g_bp_classon_last;   // ...and its enabled-class twin
+            // Chain-scan outcome is per-apply, so it RESETS (unlike the two monotonic counters
+            // above): -2 means this apply never reached a chain slot at all.
+            if (DedupCensusOn()) { g_bp_chain_ci_last = -2; }
             if (is_pre_combat)
             {
                 ApplyPlanDirect(copy, plan, true);
@@ -47720,11 +48354,23 @@ TurnSolver::Plan TurnSolver::SolveWithLookahead(const GameState& state, bool is_
                     // on bp_choice ALONE this read 75,668 repeats (25.1%); bp_base takes it to 0,
                     // because two variants derived from DIFFERENT base plans are different entries
                     // however alike their action lists look.
+                    // EVERYTHING ABOVE IS THE BASE PLAN'S CONTENT and nothing below is: that is the
+                    // family id the cross-tab needs (see g_dedup_dup_samefam for why bp_base is not).
+                    const std::uint64_t dd_fam = efp;
                     efp = efp * 1099511628211ull + static_cast<std::uint64_t>(plan.bp_choice + 2);
                     efp = efp * 1099511628211ull + static_cast<std::uint64_t>(plan.bp_at + 2);
                     efp = efp * 1099511628211ull + static_cast<std::uint64_t>(plan.bp_base + 2);
                     const bool exact_dup = !census_exact.insert(efp).second;
-                    if (!census_seen.insert(BuildDedupKey(copy)).second)
+                    auto dd_ins = census_seen.emplace(BuildDedupKey(copy),
+                                                      DedupFirstSeen{dd_fam, plan.bp_choice});
+                    const bool state_dup = !dd_ins.second;
+                    DedupFamRecord(state_dup, dd_ins.first->second, dd_fam, plan, g_rollout_nest == 0,
+                                   g_bp_chain_ci_last, BpSearchWidth());
+                    DedupWhyRecord(state_dup, g_dropped_cast_count - dd_drops_before,
+                                   plan.bp_choice,
+                                   g_stranded_activation_count - dd_strand_before,
+                                   g_stranded_tapdraw_count - dd_strand_td_before);
+                    if (state_dup)
                     {
                         g_dedup_dup.fetch_add(1, std::memory_order_relaxed);
                         if (name_dup) { g_dedup_namedup.fetch_add(1, std::memory_order_relaxed); }
@@ -47848,11 +48494,23 @@ TurnSolver::Plan TurnSolver::SolveWithLookahead(const GameState& state, bool is_
                     // on bp_choice ALONE this read 75,668 repeats (25.1%); bp_base takes it to 0,
                     // because two variants derived from DIFFERENT base plans are different entries
                     // however alike their action lists look.
+                    // EVERYTHING ABOVE IS THE BASE PLAN'S CONTENT and nothing below is: that is the
+                    // family id the cross-tab needs (see g_dedup_dup_samefam for why bp_base is not).
+                    const std::uint64_t dd_fam = efp;
                     efp = efp * 1099511628211ull + static_cast<std::uint64_t>(plan.bp_choice + 2);
                     efp = efp * 1099511628211ull + static_cast<std::uint64_t>(plan.bp_at + 2);
                     efp = efp * 1099511628211ull + static_cast<std::uint64_t>(plan.bp_base + 2);
                     const bool exact_dup = !census_exact.insert(efp).second;
-                    if (!census_seen.insert(BuildDedupKey(copy)).second)
+                    auto dd_ins = census_seen.emplace(BuildDedupKey(copy),
+                                                      DedupFirstSeen{dd_fam, plan.bp_choice});
+                    const bool state_dup = !dd_ins.second;
+                    DedupFamRecord(state_dup, dd_ins.first->second, dd_fam, plan, g_rollout_nest == 0,
+                                   g_bp_chain_ci_last, BpSearchWidth());
+                    DedupWhyRecord(state_dup, g_dropped_cast_count - dd_drops_before,
+                                   plan.bp_choice,
+                                   g_stranded_activation_count - dd_strand_before,
+                                   g_stranded_tapdraw_count - dd_strand_td_before);
+                    if (state_dup)
                     {
                         g_dedup_dup.fetch_add(1, std::memory_order_relaxed);
                         if (name_dup) { g_dedup_namedup.fetch_add(1, std::memory_order_relaxed); }
