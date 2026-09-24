@@ -598,3 +598,121 @@ turns that into ~14 million. A diagnostic bound is in place: `MTG_NO_ENTER_WATCH
 at all, and PLAY IS UNCHANGED under it (avg 5.6067 either way, all four arms) -- so the whole walk is
 addressable without touching a decision. It is not free to build: invalidation has to cover every
 battlefield mutation, and the safe direction (err towards scanning) must be preserved.
+
+---
+
+## 9. THE 1.41x WAS MEASURED ON A DECK THAT NO LONGER EXISTS (2026-09-24)
+
+USER, on being shown the 1.41x: *"Wait, so the second main is still 1.41x the price? If so we need
+to fix that."*
+
+It is not. **It is 1.00x on the deck we ship.** The 1.41x in section 8 is a correct measurement of a
+deck that stopped existing about four hours after it was taken.
+
+### 9a. The measurement
+
+One binary (HEAD `a0877f59`, i.e. the SAME build that produced the 1.41x), one manifest shape
+(`logs/m2fast/t_d1b3.json`, 150 games, d1/b3, `--threads 1`, `/usr/bin/time %U`), arms interleaved,
+3 reps. The only variable is which sidecars sit next to the decklist. `logs/m2fast/nokeep/` is a
+sibling-free copy of `decks/Fungus/` -- the same `.cod`, the same `.profile.json`, the same
+`.value.json`, and **no `.keepmodel.exhaustive.*`** -- so it reproduces the deck exactly as it stood
+when section 8 was written.
+
+| deck artifacts | base (single main) | second main | ratio | avg win turn |
+|---|---|---|---|---|
+| **without** the keep table (= the section-8 deck) | 19.29 s | 27.72 s | **1.44x** | 5.6067 |
+| **with** the adopted keep table (= what we ship) |  2.79 s |  2.76 s | **0.99x** | 5.4533 / 5.4333 |
+
+The no-keep row reproduces section 8's numbers to within a percent, including its avg of 5.6067 --
+which is what makes this a controlled comparison rather than two unrelated runs.
+
+### 9b. Why adopting a MULLIGAN table deleted a SEARCH cost
+
+Because Fungus's cost was never spread across its games. `fungus-suite-entry-and-cost.md` recorded
+it years-of-sessions ago: **half the deck's cost is 6 games.** Those are the hands that cannot
+deploy, so the game runs long, so Mycoloth devours a wide board, so the board reaches 200+
+permanents and every subsequent enter pays O(board). The second main's marginal cost rode on exactly
+those games and only those -- it is 2.2x the Saprolings, but 2.2x of a number that is only large in
+the disaster tail.
+
+The adopted keep table refuses those hands. The user had already seen it from the other side:
+*"our Psychotrope kept showing up in the slowest hands."* Removing the hands removed the boards,
+and removing the boards removed both the base cost (7x) and the second main's marginal cost
+(to nothing). The second main is now, if anything, marginally FASTER than single-main (2.76 vs
+2.79 s) while also being better play (5.4333 vs 5.4533).
+
+**This is the general lesson and it is worth more than the number: a perf ratio is scoped to the
+ARTIFACTS the deck was carrying when it was taken, not just to the commit.** The freeze discipline
+in this repo covers `HEAD:src`; it does not cover the sidecars, and a keep table or a value leaf can
+move a cost ratio by more than any engine change in this document.
+
+### 9c. What was still worth fixing, and was
+
+The enter cascade is real regardless -- it is what makes the tail quadratic, and the tail is still
+there on any deck without a keep table, in deep rollouts, and on every other token deck. Re-reading
+it turned up three defects, all of the same family as the 2026-09-19 pair and all fixed
+**byte-identically** (digests `d30c8431...` / `9782c501...` unchanged on both arms of the heavy
+workload):
+
+1. **`CardDefinition::enter_watcher`** -- a derived per-definition bool, computed in
+   `RebuildInternedIndex`. The watcher loop probed **six** separate `CardParams` fields, hundreds of
+   bytes apart in a very large struct, for every non-token permanent on every enter, to reach the
+   answer "no". That is ~5 cache lines per permanent per enter; it is now one byte adjacent to
+   `params`. Kept in lockstep with the loop by the shared `DefHasCreatureEnterWatcher()`.
+2. **`GameState::deck_has_self_bounce_etb`** -- the 2026-09-19 audit's inventory of "watcher scans
+   already gated on the entrant" was INCOMPLETE. It missed the self-bounce scan (Breaching
+   Dragonstorm clause 2), which has no entrant gate of any kind, does not even take the
+   `def_absent` short-circuit, and therefore ran a full battlefield walk with a `LookupCached` per
+   permanent for EVERY permanent entering on EVERY deck in the repo. A Saproling board paid ~200
+   lookups per token created.
+3. **`DoublerShift`'s guard was DEAD.** It tested `CardDatabase::HasTokenDoubler()` and its comment
+   claimed "the MaxHandSizeAnthemMax idiom". It is not that idiom -- `MaxHandSizeAnthemMax` compares
+   a DB constant to a LIVE GAME VALUE and can be false, while `HasTokenDoubler` is a bare predicate
+   over all 387 cards in `cards.json` and is unconditionally true. This is precisely the trap
+   `GameState.h`'s own presence-gate block documents, reintroduced one function away from it. So
+   DoublerShift walked the battlefield on every token-creation event on every deck. Now stamped per
+   game (`deck_has_token_doubler` / `deck_has_counter_doubler`). **Fungus is unaffected** -- it
+   really does play Doubling Season, and it is the ONLY deck in the repo that plays any doubler, so
+   every other deck was walking the board to discover it owns none.
+
+   **But do not claim a win for this one.** Measured on Goblins (80 games, d3/b10, the repo's other
+   heavy token deck), three binaries interleaved, 2 reps: 2.665 s -> 2.640 s, i.e. **-0.9%**, which
+   at 2 reps is inside the noise. The reason is the same one section 9b is about -- Goblins' games
+   end on turn 3.8, so its boards never get wide enough for an O(board) walk to cost anything. The
+   gate is kept because it is free, byte-identical (digest `d159fa66...` on all three binaries) and
+   repairs a guard that `GameState.h` already documents as a trap, NOT because it was measured to
+   pay. The honest summary is that fixes 1-3 are worth ~13% where boards are wide and ~1% where
+   they are not, and no shipped deck currently has wide boards.
+
+Measured on the heavy (`nokeep`) workload, where this cost is visible at all -- 4 arms interleaved,
+2 reps, same `%U` protocol:
+
+| arm | before | after | delta |
+|---|---|---|---|
+| base (single main) | 19.29 s | 17.86 s | **-7.4%** |
+| second main | 27.72 s | 24.15 s | **-12.9%** |
+| ratio | 1.437x | **1.352x** | |
+
+Larger on the second-main arm exactly as predicted: more tokens, more enters, more walk. On the
+SHIPPED deck the same change is worth about -1.8%, because the shipped deck no longer builds the
+boards that make it matter.
+
+### 9d. Section 8f is hereby CLOSED, and deliberately NOT built
+
+8f proposed maintaining the watcher set incrementally to turn 2.9 billion permanent inspections into
+~14 million. **Do not build it.** Its payoff was computed against the 200-permanent boards of the
+pre-keep-table deck; on the deck we ship those boards do not occur, and the three fixes above
+already took the per-visit cost down to a single byte. What remains is an array stride, which is
+near the floor for a scan.
+
+The cost it WOULD carry is not near the floor: a sound index has to cover 45 distinct
+`battlefield.push_back/insert/emplace` sites across 10 files, and the failure direction is a
+**dropped trigger** -- the opposite of the safe direction every presence gate in this file was
+careful to preserve (`default true == do the scan == old behaviour`). That is a bad trade for a
+few percent of a workload we no longer run.
+
+If it is ever reopened -- a new token deck without a keep table, say -- the design that survived
+review is a `uint64_t` OR-reduction of per-definition property bits held on `GameState`, sound as an
+UPPER BOUND (stale-high is harmless because the walk is authoritative; only a missed INSERT is
+unsafe), defaulting to all-ones so an unstamped state scans, with a `MTG_VALIDATE_BF_MASK` debug
+mode that recomputes from scratch at every consumer and aborts on a missing bit.
