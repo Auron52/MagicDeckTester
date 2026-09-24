@@ -1,5 +1,100 @@
 # Fungus list revision — candidate B vs the shipped list (opened 2026-09-24)
 
+## ⇥ RESUME HERE (state as of 2026-09-24, post-screen-1)
+
+**SCREEN 1 IS DONE AND REPORTED** — see "SCREEN 1 RESULT" below. Saproling Burst is committed
+(`72f72d30`): Release 152/152 doctest, 103/103 scenarios, smoke ALL PASS with `play-changed=0`
+on both searched and d0.
+
+**THE NEXT STEPS, in order:**
+1. **Brightcap Badger — USER SAID BUILD IT (2026-09-24).** Screen 1 independently agrees: the
+   Crossroads axis is the one clean winner, which is the evidence the sequencing call below said
+   to wait for. **The user also reframed the card:** *"The adventure is a useful part of the badger
+   when you don't have a 3-drop so it has upside… In fact, without that I wouldn't have even
+   considered it."* So **Fungus Frolic is load-bearing, not a rider** — the sequencing call below
+   costed this card as "the mana grant, 2-3 days" and barely weighed the adventure. Re-cost it.
+2. **Screen 2** (design below): base + candidate **B′** + per-card marginals off B′, read with
+   `screen_marginals.py --ref final`. Second direction of the user's question. **Revise the B′
+   bucket assignment** — screen 1 says B′ should probably not be measured as written (below).
+3. `--confirm crossroads4` on disjoint seeds. It is the selection-biased winner of a 9-arm screen.
+
+**Already committed:** `476df8c3` (Hickory Woodlot, Concordant Crossroads, the Doubling Season ×
+depletion fix), `c7c75010` (Shroofus Sproutsire), `1ff33a02` (Slimefoot), `9fdbced1` (Vitaspore +
+Deathspore), `72f72d30` (Saproling Burst).
+
+**USER SIGN-OFF RECEIVED (2026-09-24) on the provisional deferrals** — Shroofus's inert Trample
+and "to a player"; Saproling Burst's "can't be regenerated" and instant-speed activation;
+Concordant Crossroads' opponent-half and the unmodelled World rule; Slimefoot's inert lifegain
+and the 2-copies + Doubling Season loop. **Conditional on one thing, which holds:** *"as long as
+Crossroads still provides haste for the current player."* It does — both halves of CR 302.6,
+attacking and `{T}`, tested at `test/unit/test_fungus_revision.cpp:267-278`. The deferred half is
+only the opponent's side, inert against a goldfish opponent that never attacks or blocks.
+
+## SCREEN 1 RESULT — the control arm reversed the reading
+
+20,000 paired games per cell, d5/20 ms, one pooled batch at 24/24 workers.
+`logs/fungus2/screen1.json` → `screen1.out`. **Levels are apparatus-relative; read the ranking.**
+
+**The headline is about the SHIPPED list, not the new one.** Cutting the four Thallid
+Shell-Dwellers for basic Forests is worth **−0.1163** (t = −33.5) on its own — a larger effect
+than any new card in either direction. Six arms donated that slot, so against `base` seven of
+eight arms "work"; against `cut_shell` almost none do.
+
+Four arms kept some Shell-Dwellers and are therefore confounded by the donor, not by their card.
+Corrected below at `0.1163/4` per retained copy — **an assumption of linearity across the four
+copies, not a measurement**, hence `est`:
+
+| package | contribution vs. the Forest it displaced | basis |
+|---|---|---|
+| **Cut 4 Thallid Shell-Dweller** | **−0.1163** | exact |
+| Undercellar Myconid ×4 (over Sporesower ×4) | **−0.0575** | exact — never touched the donor |
+| **Concordant Crossroads ×4** | **−0.0425** | exact, *on top of* the cut (t = −11.04) |
+| Hickory Woodlot ×4 (over Forest ×4) | −0.0261 | exact — never touched the donor |
+| Concordant Crossroads ×1 | −0.0174 | est |
+| Sol Ring ×1 | −0.0034 | est — noise |
+| Shroofus Sproutsire ×4 | **+0.0471** | exact — worse than a Forest |
+| Mycoloth 2→4 | **+0.0527** | est — worse than a Forest |
+| Slimefoot 1 + Deathspore 2 + 4 Blooming Marsh | **+0.0631** | est — worse than a Forest |
+
+**What this settles.**
+* **Thallid Shell-Dweller loses its slot** to a basic land. So does **Sporesower Thallid**, to
+  Undercellar Myconid. Two shipped cards cut on exact, unconfounded measurements.
+* **Concordant Crossroads ×4 is the one clear addition**, and the ×1 arm shows the axis is
+  quantity-dependent: the donor-corrected per-copy value barely moves (−0.0174 for the first vs
+  −0.0106 averaged over four), so it is roughly linear and mildly diminishing — the apparent
+  cliff between `crossroads1` (+0.0698) and `crossroads4` (−0.0425) is **entirely the donor**,
+  not a threshold effect. Do not report it as one.
+* **Shroofus ×4 and Mycoloth 2→4 are refuted** as additions to the shipped shell.
+* **The black package's verdict is NOT settled and must not be read off this screen.** That arm
+  pays for 4 Blooming Marsh and adds exactly one sac outlet, so it measures Slimefoot *without*
+  the engine that makes Slimefoot good (Vitaspore/Deathspore in numbers, Mycoloth devour, Utopia
+  Mycon). The structural finding — that candidate B wins by non-combat drain, not by attacking —
+  predicts the black package only pays inside B's shell. Screen 2 is what tests it.
+
+**Consequence for screen 2's B′ assignment (below): it is now suspect.** B′ as written keeps
+Shroofus 1 and Mycoloth 4, both refuted here, and drops to 4 Forest. Reconsider before launching.
+
+### Screen 2 bucket assignment (worked out, not yet written)
+
+Candidate **B′** = candidate B with the Brightcap Badger slot returned to a 3rd Tukatongue Thallid,
+still exactly 60. Aliases that keep every bucket total within base's cap — note these DIFFER from
+screen 1's, so **the two screens' levels are not comparable** (their deltas are each self-contained):
+
+| bucket (base count) | B′ contents |
+|---|---|
+| Forest (19) | Forest 4 + Hickory Woodlot 4 + Secluded Courtyard 4 + Peat Bog 4 + Blooming Marsh 4 = 20 — safe, the bucket is already cap-saturated at `min(19,7)=7` |
+| Thallid (4) | **Saproling Burst 4** |
+| Thallid Shell-Dweller (4) | Slimefoot 1 + Deathspore 2 + Concordant Crossroads 1 |
+| Sporesower Thallid (4) | Undercellar Myconid 4 |
+| Beastmaster Ascension (4) | Beastmaster 2 + Vitaspore 2 |
+| Essence Warden (1) | Shroofus Sproutsire 1 |
+| Simic Growth Chamber (3) | Sol Ring 1 |
+| Mycoloth (2) | Mycoloth 4 — the one raise, ~0.4% fall-through |
+
+The constraint that forced this shape: **no single bucket had 4 free slots for Saproling Burst**
+until Vitaspore was moved off Thallid's bucket and onto Beastmaster's.
+
+
 Per-deck ledger for the in-flight work, per `.claude/skills/analyze-deck.md` ("the per-deck ledger
 — durable state across compaction AND handoffs"). Context is disposable; this file is the memory.
 
@@ -61,16 +156,50 @@ Peat Bog, Blooming Marsh, and every carried-over Fungus card.
 
 ### Card status
 
-| card | tier | effort | status |
-|---|---|---|---|
-| Hickory Woodlot | 1 | — | **DONE** — byte-identical to the committed Peat Bog entry with the colour letter changed (`produces ["G"]`, `produces_amount 2`, `enters_tapped`, `enters_tapped_with_depletion 2`). No C++. |
-| Concordant Crossroads | TBD | — | research out |
-| Vitaspore Thallid | TBD | — | research out |
-| Deathspore Thallid | TBD | — | research out |
-| Shroofus Sproutsire | TBD | — | research out |
-| **Slimefoot, the Stowaway** | **3** | ~1 session | drafted — needs `PermAbilityMode::PayToken` + 2 dies-watcher params |
-| **Saproling Burst** | **3** | ~2 sessions, 14 files | drafted — first fading card; needs a counter kind, a CDA token def, and token provenance |
-| **Brightcap Badger // Fungus Frolic** | **3** | **multi-day** | drafted — **DEFERRED TO LAST, see the sequencing call below** |
+| card | tier | status |
+|---|---|---|
+| Hickory Woodlot | 1 | **DONE** — the green Peat Bog, byte-identical params with the colour letter changed. No C++. |
+| Concordant Crossroads | 1 | **DONE** — `grants_haste` + `affects_all_creatures`, the Maelstrom Wanderer shape. **Zero C++**. |
+| Shroofus Sproutsire | 2 | **DONE** — `FireCombatDamageTokens`, the first combat-damage token trigger |
+| Slimefoot, the Stowaway | 3 | **DONE** — new `PermAbilityMode::PayToken` + 2 dies-watcher params |
+| Vitaspore Thallid | 2 | **DONE** — `sac_outlet_grants_haste`, shared targeted-outlet resolution |
+| Deathspore Thallid | 2 | **DONE** — `sac_outlet_minus_power/-tough` + `ShrinkCreatureUntilEot` |
+| Saproling Burst | 3 | **DONE** — the engine's first fading card |
+| **Brightcap Badger // Fungus Frolic** | 3 | **NOT STARTED — deferred to last, see the sequencing call below** |
+
+### Saproling Burst — what shipped, and the three things it would have got silently wrong
+
+* **The off-by-one.** Fading counts DOWN and the sacrifice is on **failure to remove** (CR 702.32),
+  so Fading 7 takes seven decrements and dies on the **eighth** upkeep. Reading it as "sacrifice
+  when removing one reaches zero" costs the card a whole turn of life. Pinned by a test that walks
+  all eight upkeeps.
+* **The token P/T tie** is a CDA (CR 604.3) pointing at *another permanent's* counter total, so all
+  of a Burst's tokens shrink together and an activation at seven leaves six and mints a **6/6**.
+  Modelled as a **refresh at the two sites the count can change** (the activation and the fading
+  upkeep) rather than a read-time computation — equivalent, because those are the only two
+  mutations, and it avoids threading a battlefield lookup into `EffectivePower` (the hottest
+  function in the engine) on the deck with 40-token boards. The token keeps a printed 0/0 so
+  `CreateTokenOnce` names it once and the name never goes stale, and it stays **definition-less**,
+  preserving the `def_absent` short-circuit this deck depends on. That also dissolves the perf risk
+  the research draft raised about giving the token a `cards.json` definition.
+* **The LTB clause is the card's real cost.** Without it the card reads as eight free Saprolings.
+  In a goldfish the fading sacrifice is the ONLY way the Burst leaves, so every token it made dies
+  with it — and each death routes through `OnCreatureDies`, so **a Slimefoot on board drains for
+  all seven**: the Burst expiring is a burst of DAMAGE, not a board wipe. It is largely redundant
+  with the 0/0 SBA *except* under a Sporecrown Thallid or a live Ascension, which lift the tokens
+  off zero and make this clause the thing that kills them — which is the case the test covers.
+
+Two consequences worth carrying into the screen: **Doubling Season is worth 4x on this card**
+(fourteen counters AND two tokens per activation), and **K is a genuine interior optimum** — K
+activations off C counters leave K bodies of `(C-K)/(C-K)`, maximised near `C/2`, so "pop
+everything" mints a pile of 0/0s that die on the spot. That is why K is searched and why the two
+Bursts are **not** pooled the way the five spore outlets are (different counter totals mint
+different-sized tokens, so they are genuinely distinct sources).
+
+A maintenance guard earned its keep mid-build: `Dominance.h`'s `sizeof(Permanent)` static assert
+fired the moment the two new fields landed. `fade_counters` is folded as a directional axis
+(`MoreDominates`); `created_by_number` deliberately is **not** an axis — it is identity, not a
+resource, and a board is not better for its tokens having come from a particular Burst.
 
 ### Drafted implementation specs
 
@@ -327,6 +456,67 @@ Apparatus rules that bind here:
   directory-relative off the profile path, and detaching the value leaf is worth 1.35–84.8x.
 * **The floor goes unmeasured on the alias route** (`--with-floor` generates). Say so; do not
   report `t` as a verdict.
+
+## Screen 1 — the additive marginals, run on the five landed cards
+
+`logs/fungus2/screen1.json`. Question: **does each candidate-B package earn a slot in the SHIPPED
+deck?** Every arm is a small declared edit to `decks/Fungus/Fungus.cod`, so the shared-apparatus
+premise actually holds — unlike a head-to-head against candidate B, which differs in 33 of 60 cards
+and is two decks rather than an edit.
+
+Run now rather than held for the last two cards, because five of seven are in and the result
+de-risks the remaining build: if the Slimefoot package or the depletion mana comes back flat, that
+changes what is worth paying for next.
+
+### Apparatus
+
+The shipped R=30 table with **8 names aliased into existing buckets**
+(`scripts/alias_card_into_bucket.py`, the USER-approved 2026-09-02 no-regeneration route). K stays
+**14** and entries stay **55,262**:
+
+| bucket | after aliasing |
+|---|---|
+| Forest | `Blooming Marsh, Forest, Hickory Woodlot` |
+| Sporesower Thallid | `Sporesower Thallid, Undercellar Myconid` |
+| Thallid Shell-Dweller | `Concordant Crossroads, Deathspore Thallid, Shroofus Sproutsire, Slimefoot, Sol Ring, Thallid Shell-Dweller` |
+
+Every arm preserves its host bucket's **total**, so each arm's composition space is identical to
+base's and coverage is exact. The single exception is `mycoloth4`, which raises a 2-bucket to 4 —
+the driver measured **0.39% of hands**, well under the 1% default.
+
+**Forest is the universal filler** because its bucket sits at 19, so `cap = min(19, 7) = 7` is
+already saturated: adding or removing Forests cannot create an untabled composition. Any other
+card raised past 4 would.
+
+### The arms, and why each is there
+
+| arm | edit | question |
+|---|---|---|
+| `cut_shell` | −4 Thallid Shell-Dweller, +4 Forest | **the control.** Six arms cut the 0/5 defender as their donor, so if it is itself bad they are ALL flattered by its removal. Every other arm must be read against this, not against base. |
+| `black_pkg` | +1 Slimefoot, +2 Deathspore, −3 Shell-Dweller; −4 Forest +4 Blooming Marsh | the non-combat clock, **measured with its enablers and with the black mana it actually costs** — not as a free splash |
+| `crossroads4` | +4 Concordant Crossroads, −4 Shell-Dweller | is haste-for-tokens worth anything? At 4, not B's 1, so the effect can resolve at all |
+| `shroofus4` | +4 Shroofus Sproutsire, −4 Shell-Dweller | the exponential combat engine, likewise at a resolvable count |
+| `mycoloth4` | Mycoloth 2→4, −2 Shell-Dweller | B's single biggest count change |
+| `undercellar4` | +4 Undercellar Myconid, −4 Sporesower Thallid | B's other 4-of swap, and the deck's only other black source |
+| `woodlot` | −4 Forest, +4 Hickory Woodlot | the depletion-ramp thesis **in isolation from the curve** |
+| `solring` | +1 Sol Ring, −1 Shell-Dweller | B has it; expect unresolved (see the 1-of note above) |
+
+**Counts deliberately differ from candidate B's** on three arms. B runs Crossroads and Shroofus as
+1-ofs, which cannot resolve against any realistic floor — a large per-game effect on 12% of games
+is a small effect on the average. Screening them at 4 answers *"does this axis matter at all"*,
+which is the prior question; if it does, how many is a follow-up.
+
+### What this screen cannot say
+
+* **The floor is unmeasured.** `--with-floor` generates a table, which the approved route forbids,
+  so `t` is not a verdict here. The mitigation is an argument, not a measurement: every arm runs
+  the same table over the same composition space, so the apparatus asymmetry the floor exists to
+  bracket is far smaller by construction than under a pool table.
+* **Nothing about Saproling Burst or Brightcap Badger**, which are not implemented. Candidate B
+  itself is therefore not an arm. Screen 2 adds both.
+* **Nothing about the wall-clock cost of the retired certificate** — that lands on the value-leaf
+  label ladder (`WinlessCertificateActive` is gated on `LabelSearchScopeActive()`), which a screen
+  never runs. A clean screen must NOT be read as "cheap to adopt".
 
 ## Open questions (surfaced, NOT blocking — CLAUDE.md)
 
