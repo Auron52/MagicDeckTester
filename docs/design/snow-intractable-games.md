@@ -454,6 +454,96 @@ the rest, 75.8 base plans and 36.3 slots per node, 225,471 wave applies, 67,696 
 WAVE 0 or an ordinary plan already reached, which is the opposite of gi26's cross-dominated split
 at d3.
 
+## 2b. The filter rescue re-derives the same "yes" 300 million times (2026-09-24)
+
+### CHARGED vs UNCHARGED work -- read this before judging any Snow optimisation
+
+Section 2's cell A/B found a lossless 11.5% win on completing games that read as a 1.8% REGRESSION at
+the cell level, because 90.2% of the cell's wall is games pinned at `abandon_units`. That is only
+half the rule. The other half is which KIND of work a change removes:
+
+* **CHARGED work** (`SearchBudget::Consume` -- search branching, wave applies, rollout steps). A
+  ceiling-bound game spends its ceiling either way, so removing charged work buys COVERAGE, not
+  seconds. This is why `MTG_FOLD_SEARCH_ODO` rescued `g26` and still cost 3.2% on ceiling-bound games.
+* **UNCHARGED work** (the greedy subset walk and everything it calls -- `MTG_SOLVE_CHARGE` is DEFAULT
+  OFF, so `consider()` and its payability checks consume nothing). Removing this lowers the wall per
+  unit, so a ceiling-bound game reaches the same 40M units SOONER. **It shrinks the cell, including
+  the 90% of it that banks nothing.**
+
+The scale of the uncharged half, measured on the whole 49-game cell (`MTG_ENUM_STATS`):
+**7,985,627,146 greedy `consider()` visits against 287M charged units on the 12-game chunk** -- the
+ceiling that decides which games are discarded is denominated in a quantity that excludes the single
+largest consumer of wall. So uncharged work is where Snow's matrix cost actually is.
+
+### The funnel
+
+    entered                    : 7,985,627,146
+      passed subset rules      : 4,650,064,904   -3,335,562,242
+      passed flat mana         : 3,526,345,144   -1,123,719,760
+      passed SubsetPayable     : 3,504,690,267   -21,654,877   (0.6%)
+      passed ColorFeasibility  : 3,497,964,207   -6,726,060    (0.2%)
+      survivors (fully scored) : 3,497,964,207
+      [rescue] calls=1,308,927,499  rescued=299,864,980  subset-casts-aura=0
+
+On the 12-game chunk the `subset rules` drop was **exactly** the fold's `guard_reject` (909,313,023 to
+the unit), so the canonical-prefix fold is the largest single filter in the greedy walk -- which is
+independent confirmation of section 2's lever. The two colour gates reject 0.6% and 0.2%: effectively
+inert on this deck while costing per-visit work.
+
+### Where the payment cost is: the SUCCESSFUL rescues, not the failures
+
+`SubsetPayableWithFilters` copies the board and runs a REAL payment through `TapForCostDirect`. It is
+armed by `any_filter`, a BOARD fact -- and Snow runs 4 Arcum's Astrolabe, so once one is untapped
+every flat-mana failure pays for a real payment for the rest of the game. 1.31 BILLION calls.
+
+The instinct is to attack the 1.01 billion FAILURES. That is the wrong half: an unpayable cost is
+refuted by the top-level flow oracle in ~1 backtracker node, while proving a cost PAYABLE takes ~60.
+So the cost is the **299,864,980 successful rescues**, and that is where the degenerate game's 28.7%
+in `TapForCostBacktrackWorker` lives.
+
+**The mechanism is a modelling gap, not a search problem.** Astrolabe is modelled as
+`{1}, {T}: Add one mana of any color` -- one mana in, one out, pure re-colouring. The flat
+`AvailableManaPool` cannot express that, so it reports "cannot pay" for a subset that is in fact
+payable; the rescue then re-derives the same "yes" by full backtracking, 300 million times, for a
+board fact that does not change within a turn.
+
+**NEXT LEVER (not built): teach the flat pool the conversion.** With N untapped Astrolabes, up to N
+units of the pool can become any colour at net zero total cost (pay {1}, get 1, and the `{T}` bounds
+it at N). Modelled exactly -- not optimistically -- `mana_ok` becomes true for most of those 299.9M
+subsets and the real payment is never called. This must be EXACT: a permissive flat pool would admit
+unpayable subsets and change play, so it is a mana-modelling change to design deliberately, not a
+skip to bolt on.
+
+### A sound shortcut that turned out not to be worth much (measured, kept default OFF)
+
+`MTG_RESCUE_TOTAL_GATE` + `ConversionTotalPreserving`. The argument: a re-colouring filter cannot
+conjure mana, so a subset the board cannot fund AT ALL is beyond the rescue's help. The predicate
+refuses that argument for every source that can RAISE the total (a filter land's `{1}->{W}{W}`, Three
+Tree City's scaled tap, a pending land Aura's unseen bonus), so it is conservative by construction.
+
+**The first formulation was UNSOUND and its own self-check caught it.** The probe counts, alongside
+each candidate clause, how many calls it would skip that the real payment then RESCUED -- a number
+that must be 0. Over the 49-game cell:
+
+| clause | would skip | rescued anyway |
+|---|---:|---:|
+| raw pool, `combined.ManaValue() > pool.Total()` | 83,275,603 | **0** |
+| debited `eff` | 346,662,936 | 54,226,702 |
+| noncreature pool | 81,574,815 | 22,598,684 |
+
+The original test OR'd all three and would have deleted ~54M payable subsets. `tap_debit` SUBTRACTS
+from `eff` to reserve a source for another use, so `eff.Total()` is not a bound on what the real
+payment may tap; and the noncreature pool is a deliberately restricted pool answering a different
+question. **Only the raw-pool clause is sound** -- zero counterexamples in 7.99 billion visits -- and
+it covers just **6.4%** of rescue calls, all of them from the CHEAP (failing) half. So it is worth a
+fraction of a percent. Kept default OFF because it is proven sound and may matter on a filter-LAND
+deck, where the raising cases are real; it is not a Snow answer.
+
+**The lesson worth keeping is the method.** A shortcut over billions of events is not adjudicated by
+an A/B -- a 0.25% wall change is indistinguishable from noise, and an unsound gate that deletes 4% of
+payable subsets could easily have read as a win. Pairing every candidate clause with a
+"rejected-but-actually-rescued" counter settled soundness and size in ONE run, before any play moved.
+
 ## 3. London bottoming, on the 17.6% of these games that mulligan
 
 `[bottom-cost]`: **682 SECONDS per bottoming decision** at d3 unbudgeted (af6ecbf8 measured 4.8 s at

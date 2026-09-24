@@ -6274,6 +6274,59 @@ static bool HasUntappedFilterSource(const GameState& state)
 // which is how the new-only filter exposed it (seed 1015 T5, unreachable at every budget with the
 // continuation dropped). The land-Aura clause below is the precedent for arming on a HAND card whose
 // supply the flat pool cannot see. Same is_rock predicate as the simulation's own join.
+// Can the filter rescue ever raise the TOTAL mana available, or can it only RE-COLOUR what is
+// already there?
+//
+// WHY THIS QUESTION IS WORTH ASKING. SubsetPayableWithFilters is armed by a BOARD/HAND fact
+// (`any_filter`), so once one conversion source is on the battlefield it retries a REAL PAYMENT --
+// a GameState copy plus a full TapForCost backtrack -- for every flat-mana failure for the rest of
+// the game. Measured on Snow's H5 chunk off25 (MTG_ENUM_STATS): 374,951,283 calls, 80,150,698
+// rescued. **78.6% buy that board copy to be told "no"**, and the flat profile of the degenerate
+// game puts 28.7% of its wall in TapForCostBacktrackWorker. The rescue's own comment predicted this
+// exactly -- "`armed` is a board/hand fact, so it can be true for a whole enumeration while no
+// individual subset can use it".
+//
+// THE SHORTCUT. The rescue exists for COLOUR the flat pool cannot express. A subset the flat pool
+// rejects because the board cannot produce enough mana AT ALL is therefore beyond its help -- but
+// only when every arming reason is total-PRESERVING, and they are not all alike:
+//
+//   any_color_filter  Arcum's Astrolabe, "{1}, {T}: Add one mana of any color" -- one in, one out.
+//                     Total-preserving; pure re-colouring. This is Snow's case (4 copies, and
+//                     `subset-casts-aura=0` confirms nothing else arms it there).
+//   is_filter /       a filter land, "{1}, {T}: Add {W}{W}" -- one in, TWO out. Total RISES.
+//   ramp_filter
+//   IsScaledManaLand  Three Tree City, feed {2} -> N chosen colour. Total RISES.
+//   a pending land    its bonus is supply not yet on the battlefield, which is the whole reason the
+//   AURA in hand      flat pool cannot see it. Total RISES.
+//
+// So the skip is sound exactly when the only arming reasons are any_color_filter sources. Anything
+// unrecognised, and any of the three raising cases, returns false and nothing is skipped -- the same
+// conservative-by-construction shape as PermIsPlainForFold. The search side already relies on the
+// same argument in `exec_feas_rescues` ("scalar reject"), which adds `aura_bonus` for precisely the
+// case this predicate refuses.
+static bool ConversionTotalPreserving(const GameState& state)
+{
+    if (PendingLandAuraColorMask(state) != 0) { return false; }
+    for (const Permanent& p : state.battlefield)
+    {
+        if (p.controller_index != state.active_player_index || p.tapped) { continue; }
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+        if (d == nullptr) { continue; }
+        if (d->params.is_filter || d->params.ramp_filter) { return false; }
+        if (IsScaledManaLand(*d)) { return false; }
+    }
+    // A filter still in HAND arms the rescue too (PendingFilterInHand). Casting it cannot raise the
+    // total either -- paying its cost and converting one-for-one is net zero -- but a filter LAND or
+    // ramp filter in hand would, so hold those to the same test as the battlefield scan.
+    for (const Card& c : state.ActivePlayer().hand)
+    {
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(c);
+        if (d == nullptr) { continue; }
+        if (d->params.is_filter || d->params.ramp_filter) { return false; }
+    }
+    return true;
+}
+
 static bool PendingFilterInHand(const GameState& state)
 {
     for (const Card& c : state.ActivePlayer().hand)
@@ -21279,6 +21332,27 @@ namespace enumstats
     // failure buys a board copy that was always going to say no. Calls vs rescues is the ratio that
     // tells those apart; `aura_sel` counts the calls whose subset actually casts the pending Aura.
     inline std::atomic<std::uint64_t> g_c_resc_call{0}, g_c_resc_ok{0}, g_c_resc_aurasel{0};
+    // ...and the TOTAL-SHORTFALL split of those calls (see ConversionTotalPreserving /
+    // MTG_RESCUE_TOTAL_GATE). `tot_short` counts rescue calls the board provably cannot fund at all
+    // -- not a colour question, so beyond a re-colouring filter's help. `tot_short_rescued` is the
+    // SOUNDNESS SELF-CHECK and must stay 0: a call that was total-short and yet got rescued would
+    // mean the shortcut's argument is wrong, and the gate must not ship. Reported, not asserted, so
+    // one run answers "how big" and "is it safe" together.
+    inline std::atomic<std::uint64_t> g_c_resc_tot{0}, g_c_resc_tot_ok{0};
+    // FIRST FORMULATION FAILED ITS OWN CHECK (49-game H5 cell): 346,662,289 total-short calls of
+    // which 54,226,344 were rescued anyway. So `Total()` on the pools `mana_ok` uses is NOT an upper
+    // bound on what the real payment can pay. Two suspects, measured apart rather than guessed at:
+    //   _eff  -- the DEBITED main pool (tap_debit subtracts from `eff`, so eff.Total() can understate
+    //            what the real payment may tap; the debit models a source reserved for another use).
+    //   _nc   -- the NONCREATURE-only pool, a deliberately RESTRICTED pool for a different question.
+    //            A subset can fail eff_nc on total and still be payable outright.
+    //   _pool -- the raw UNDEBITED main pool, the most optimistic of the three and the only one with
+    //            a chance of being a true bound.
+    // Each carries its own rescued-anyway counter; whichever reads 0 is the sound form, and if none
+    // does the shortcut has no sound form and the thread ends.
+    inline std::atomic<std::uint64_t> g_c_rt_pool{0}, g_c_rt_pool_ok{0},
+                                      g_c_rt_eff{0},  g_c_rt_eff_ok{0},
+                                      g_c_rt_nc{0},   g_c_rt_nc_ok{0};
     struct Dumper {
         ~Dumper()
         {
@@ -21292,12 +21366,22 @@ namespace enumstats
                 "  passed SubsetPayable     : %llu\n"
                 "  passed ColorFeasibility  : %llu\n"
                 "  survivors (fully scored) : %llu\n"
-                "  [rescue] SubsetPayableWithFilters calls=%llu  rescued=%llu  subset-casts-aura=%llu\n",
+                "  [rescue] SubsetPayableWithFilters calls=%llu  rescued=%llu  subset-casts-aura=%llu\n"
+                "  [rescue] of those, TOTAL-short (unrescuable by a re-colouring filter): %llu\n"
+                "  [rescue]   ...and rescued anyway (MUST BE 0 -- soundness self-check): %llu\n"
+                "  [rescue] per-clause: raw pool   short=%llu  rescued-anyway=%llu\n"
+                "  [rescue]             debited eff short=%llu  rescued-anyway=%llu\n"
+                "  [rescue]             noncreature   short=%llu  rescued-anyway=%llu\n",
                 (unsigned long long)g_c_enter.load(), (unsigned long long)g_c_rules.load(),
                 (unsigned long long)g_c_mana.load(), (unsigned long long)g_c_color.load(),
                 (unsigned long long)g_c_feas.load(), (unsigned long long)g_c_surv.load(),
                 (unsigned long long)g_c_resc_call.load(), (unsigned long long)g_c_resc_ok.load(),
-                (unsigned long long)g_c_resc_aurasel.load());
+                (unsigned long long)g_c_resc_aurasel.load(),
+                (unsigned long long)g_c_resc_tot.load(),
+                (unsigned long long)g_c_resc_tot_ok.load(),
+                (unsigned long long)g_c_rt_pool.load(), (unsigned long long)g_c_rt_pool_ok.load(),
+                (unsigned long long)g_c_rt_eff.load(),  (unsigned long long)g_c_rt_eff_ok.load(),
+                (unsigned long long)g_c_rt_nc.load(),   (unsigned long long)g_c_rt_nc_ok.load());
             const double kept = (double)g_m_kept.load();
             auto ratio = [&](std::uint64_t d) { return d > 0 ? kept / (double)d : 0.0; };
             std::fprintf(stderr,
@@ -22570,6 +22654,12 @@ TurnSolver::Plan TurnSolver::SolveUncached(const GameState& state, bool is_pre_c
     const bool any_filter = HasUntappedFilterSource(state)
                          || PendingLandAuraColorMask(state) != 0
                          || PendingFilterInHand(state);
+    // ...and whether that conversion can only RE-COLOUR (see ConversionTotalPreserving). Hoisted
+    // here, once per enumeration: it is a board/hand fact, and the per-subset test it guards runs
+    // billions of times.
+    const bool conv_total_preserving = any_filter && ConversionTotalPreserving(state);
+    const bool rescue_total_gate     = heurarm::Flag(heurarm::RESCUE_TOTAL_GATE,
+                                                     EnvOn("MTG_RESCUE_TOTAL_GATE"));
 
     // Lands in hand -- a generic feasibility input (a plan cannot discard more lands than it
     // holds for retrace / Land's Edge additional costs; see the discard_lands_used check below).
@@ -23157,7 +23247,37 @@ TurnSolver::Plan TurnSolver::SolveUncached(const GameState& state, bool is_pre_c
                 { enumstats::g_c_resc_aurasel.fetch_add(1, std::memory_order_relaxed); break; }
             }
         }
+        // TOTAL-SHORTFALL shortcut (see ConversionTotalPreserving). A re-colouring filter cannot
+        // conjure mana that is not there, so when the board provably cannot fund this subset AT ALL
+        // the real payment is a foregone conclusion. Mirrors the `mana_ok` computation exactly --
+        // same pool, same credited/uncredited choice -- so it can never call a payable subset short.
+        const bool rt_armed = !mana_ok && any_filter && conv_total_preserving;
+        const bool rt_pool = rt_armed && combined.ManaValue() > static_cast<int>(pool.Total());
+        const bool rt_eff  = rt_armed
+                          && combined.ManaValue() > static_cast<int>((credited ? eff : pool).Total());
+        const bool rt_nc   = rt_armed
+                          && noncreature_combined.ManaValue()
+                               > static_cast<int>((credited ? eff_nc : pool_noncreature).Total());
+        // The gate now rides the RAW-POOL clause alone -- the only one that can be a true bound.
+        const bool resc_tot_short = rt_pool;
+        if (enumstats::Enabled())
+        {
+            if (resc_tot_short) { enumstats::g_c_resc_tot.fetch_add(1, std::memory_order_relaxed); }
+            if (rt_pool) { enumstats::g_c_rt_pool.fetch_add(1, std::memory_order_relaxed); }
+            if (rt_eff)  { enumstats::g_c_rt_eff.fetch_add(1, std::memory_order_relaxed); }
+            if (rt_nc)   { enumstats::g_c_rt_nc.fetch_add(1, std::memory_order_relaxed); }
+        }
+        if (resc_tot_short && rescue_total_gate) { mc_store_reject(); return; }
         if (!mana_ok && !(any_filter && SubsetPayableWithFilters(state, cands, sel))) { mc_store_reject(); return; }
+        // Reached here on a !mana_ok subset => the real payment RESCUED it. If that subset was also
+        // total-short the shortcut's argument is false; say so loudly rather than silently shipping.
+        if (enumstats::Enabled())
+        {
+            if (resc_tot_short) { enumstats::g_c_resc_tot_ok.fetch_add(1, std::memory_order_relaxed); }
+            if (rt_pool) { enumstats::g_c_rt_pool_ok.fetch_add(1, std::memory_order_relaxed); }
+            if (rt_eff)  { enumstats::g_c_rt_eff_ok.fetch_add(1, std::memory_order_relaxed); }
+            if (rt_nc)   { enumstats::g_c_rt_nc_ok.fetch_add(1, std::memory_order_relaxed); }
+        }
         if (!mana_ok && enumstats::Enabled())
         { enumstats::g_c_resc_ok.fetch_add(1, std::memory_order_relaxed); }   // reached here => rescued
         if (enumstats::Enabled()) { enumstats::g_c_mana.fetch_add(1, std::memory_order_relaxed); }   // passed flat mana
@@ -32179,6 +32299,10 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
     const bool any_filter = HasUntappedFilterSource(state)
                          || PendingLandAuraColorMask(state) != 0
                          || PendingFilterInHand(state);
+    // ...and the total-preserving twin of Solve's hoist (see ConversionTotalPreserving).
+    const bool conv_total_preserving = any_filter && ConversionTotalPreserving(state);
+    const bool rescue_total_gate     = heurarm::Flag(heurarm::RESCUE_TOTAL_GATE,
+                                                     EnvOn("MTG_RESCUE_TOTAL_GATE"));
 
     int m = static_cast<int>(cands.size());
     std::vector<TurnSolver::Plan> plans;
@@ -33324,7 +33448,14 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
             return exec_feas == 1;
         };
         // Filter/ramp-land color conversion the flat pool can't express -> real-payment fallback.
-        bool mana_reject = !mana_ok && !(any_filter && SubsetPayableWithFilters(state, cands, sel));
+        // TOTAL-SHORTFALL shortcut, same argument as Solve's (see ConversionTotalPreserving): a
+        // re-colouring filter cannot fund a subset the board cannot pay for at all, so skip the
+        // board copy + TapForCost backtrack instead of buying a foregone "no".
+        const bool resc_tot_short =
+            !mana_ok && any_filter && conv_total_preserving && rescue_total_gate
+            && combined.ManaValue() > static_cast<int>((credited ? eff : pool).Total());
+        bool mana_reject = resc_tot_short
+                        || (!mana_ok && !(any_filter && SubsetPayableWithFilters(state, cands, sel)));
         if (mana_reject) { _ct.label = "flat-pool"; }
         if (mana_reject && exec_feas_rescues()) { mana_reject = false; _ct.label = "early-gate"; }
         // MTG_DBG_MULTI=<turn> -- print every MULTI-CAST odometer position considered on that turn and
