@@ -74,6 +74,78 @@ copies, not a measurement**, hence `est`:
 **Consequence for screen 2's B′ assignment (below): it is now suspect.** B′ as written keeps
 Shroofus 1 and Mycoloth 4, both refuted here, and drops to 4 Forest. Reconsider before launching.
 
+## BRIGHTCAP BADGER — BUILT (2026-09-24). The sequencing call's cost model was inverted.
+
+USER: *"yes we should build Brightcap Badger"*, plus the reframing that changed the work:
+*"The adventure is a useful part of the badger when you don't have a 3-drop so it has upside…
+In fact, without that I wouldn't have even considered it."*
+
+Committed as `95609224` (adventure + grant foundation) and `c216d983` (the grant's second half).
+
+**THE LEDGER HAD THE COST BACKWARDS, and had missed an ability.** Scryfall-verified: the Badger has
+**three** abilities, not two — the mana grant, *and* "At the beginning of your end step, create a
+1/1 green Saproling creature token", which the sequencing call never mentions. And the split:
+
+| | sequencing call | verified |
+|---|---|---|
+| the mana grant | "2–3 days", framed as the whole cost | **3–5 days** |
+| the adventure (Fungus Frolic) | barely weighed | **~0.5–1 day** |
+
+None of the three things that make the grant expensive — ~20 open-coded mana sites, `ManaCacheKey`,
+tokens having no `CardDefinition` — touches the adventure. **The half the user says the card exists
+for is the cheap half, and it was never what was blocking this.**
+
+**Three recorded claims did not survive verification:**
+* `ManaCacheKey` is **not** a new stale-hit hole. It already walks the same source predicate, so
+  fixing the predicate fixes the key — no new hash term. It must move in the SAME commit, though.
+* **Badger × Crossroads needed no new code.** `CanTapNow` already consults the shared haste oracle.
+* **Reason 3 of the sequencing call ("the risk is not contained to this deck") is FALSE.**
+  `GameState::deck_has_mana_grant`, stamped from the decklist, makes every deck that plays no grant
+  source byte-identical *by construction*. Smoke confirms: `play-changed=0`. Reasons 1, 2 and 4 stand.
+
+**Two costs nobody had budgeted, both now handled:** the backtracker's failure memo switches off
+above 64 sources (the guard against a documented 14-hour blow-up), so the candidate build admits at
+most `cost.ManaValue()` granted **Saprolings** — lossless, because a payment taps at most that many
+and the tokens are interchangeable; granted **Fungi** are not capped, being real cards with their
+own abilities. And `CanTapNow` goes O(board²) under Crossroads, hoisted into the grant's one board
+walk via `blanket_haste`.
+
+### The three defects the TESTS caught, all the same mistake
+
+**One rule with two readers that must agree.** None was found by review.
+
+1. **The grant reached only HALF its population.** The design is built on "tokens have no
+   `CardDefinition`" — the fact the card hinges on — and that turned into treating *having* a
+   definition as "already handled". It is not: **Thallid, Sporecrown Thallid, Mycoloth, Sporesower
+   Thallid and Utopia Mycon are all Fungi with real definitions and no mana ability at all**, and
+   the resolver skipped every one. Utopia Mycon is the sharpest: its mana ability costs a
+   *sacrifice*, not `{T}`, so the granted tap does not even compete with it.
+2. **A segfault in the payer.** The selection loop learned the grant; the execution half re-derived
+   the def with a bare `LookupCached` and dereferenced null on the first payment off a token.
+3. **The §2b fodder branch needed the REAL definition.** The payer now carries two pointers — what
+   the permanent *is*, and what it is *for mana*. The synthetic face is not a creature, so feeding
+   it there would have silently stopped a tapped Fungus being legal fodder for Utopia Mycon.
+
+### An unrelated live bug this turned up — NOT fixed, deliberately
+
+`MTG_SAC_OUTLET_PAY` (§2b) is **already dead on Fungus**, for exactly the reason the grant would
+have been. Utopia Mycon's *"Sacrifice a Saproling: Add one mana of any color"* cannot see a single
+legal body, because three separate sites bail on `def_absent` / `!def` before the fodder test runs
+(`LiveSacPayOutlet` `SpellEffects.h:18996`, `SacPayFodderCount` `:19090`, the payer's own branch
+`ManaPayment.cpp:660`) — and every Saproling is a token. **Code-read, not yet measured**; one
+`MTG_SAC_TRACE=1` run on a Fungus game would confirm it in minutes. Fixing it here would make a perf
+or quality movement in either change impossible to bisect, so it is its own item.
+
+Also found and **not** fixed: unguarded `1ull << i` shifts on boards wider than 64
+(`SpellEffects.cpp:2043`, `:2303`, `:3219`, `SpellEffects.h:23253`, plus six mask *builds*). On x86
+the shift count is taken mod 64, so a reservation meant for index 70 silently reserves index 6. Live
+on Fungus today at 364 permanents whenever `reserved_mask != 0`. Its own ~30-minute item.
+
+**Left as measured-heuristic follow-ups, classified rather than forgotten:** the prepay reservation
+masks (AttackerReserve / DorkReserve) and the filter-feeder chain. Those only decide *which* source
+to spare, so a stale answer costs ranking, not correctness — whether a granted Saproling should be
+held back as an attacker is a provider question for `heuristic-optimization.md`, not part of the grant.
+
 ## SCREEN 1b RESULT — the estimates become measurements, and the winners STACK
 
 `logs/fungus2/screen1b.json`, 20,000 paired games × 10 cells, **disjoint seeds** (940000+, against
