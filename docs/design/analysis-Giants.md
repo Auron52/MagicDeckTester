@@ -1928,3 +1928,66 @@ depths alone it is 6 wins lost against 13 gained. There is no slowdown to excuse
 > **Fix worth making:** `run_regression` should filter the audit to the deck it ran, or refuse to
 > state a direction when `--deck=` was used. Printing another deck's stale numbers is a reporting
 > nit; *branching* on them to pick a causal narrative is how a wrong story gets into a ledger.
+
+## GT rebaselined (2026-09-24) — and the whole move is the PROFILE, established by control
+
+Rebaselined both tiers after pulling 19 upstream commits (the Fungus arc: fodder reservation +
+sac-outlet pool, devour narrowing, the Mycoloth second main, three ETB cascade walks). Rebuilt
+first — CLAUDE.md's rule after a rebase that replays engine changes — then re-ran and accepted
+smoke and regression, deck-scoped to `giants`.
+
+```
+smoke       giants_smoke_d0_s1001       6.5650 -> 6.0750   (-0.4900)
+            giants_smoke_d3_s1001       6.1467 -> 5.7800   (-0.3667)
+            giants_smoke_d5_s1001       6.0400 -> 5.7067   (-0.3333)
+regression  giants_regression_d0_s2002  6.5380 -> 6.0550   (-0.4830)
+            giants_regression_d3_s2002  5.7733 -> 5.6067   (-0.1667)
+            giants_regression_d3_s3003  5.9400 -> 5.6267   (-0.3133)
+            giants_regression_d5_s2002  5.8400 -> 5.5467   (-0.2933)
+            giants_regression_d5_s3003  6.0000 -> 5.7467   (-0.2533)
+```
+
+`check_gt_logs.py` -> **506 consistent, 0 STALE, 0 missing**. Diffed `regression_gt.txt` before and
+after each accept: **no key outside `giants_*` moved**, which is the guard the angels2hg incident
+asked for.
+
+**Attribution by control, not by inference.** Nineteen commits landed between generation and
+rebaseline, several of them real play changes, so "the GT move is the profile" needed proving. With
+**both** sidecars moved aside, smoke reproduces committed GT **byte-identically** (d0
+`df89675e8d8962ba`, d3 `ce7a6e51b3fcdf3a`, d5 `4310a9f5889a1b76`) — so upstream's commits are
+play-neutral for this deck and the entire move above is the mulligan profile. Independently
+corroborated: the regression digests are identical to those the validation run produced at
+`57d57cfb`, a day and 19 commits earlier.
+
+### The control trap that cost two runs: a `.gz` sidecar is ALSO presence-gated
+
+The first attempt at that control moved only `Giants.keepmodel.exhaustive.profile.json` aside and
+concluded — wrongly — that upstream was *not* play-neutral, because the "control" still diverged
+from GT. It had not disabled anything. The **`.gz` committed minutes earlier was still present**,
+the runtime loads it, and the tell was in the keep-table cache:
+
+```
+~/.cache/mtg/keeptable/Giants.keepmodel.exhaustive.profile.json-8ed1472db7a79b08.keeptable      (validation A/Bs)
+~/.cache/mtg/keeptable/Giants.keepmodel.exhaustive.profile.json.gz-207ad86b914c030f.keeptable   (the "control" run)
+```
+
+A second cache entry, keyed on the `.gz`, built *by the control itself*. The giveaway in the results
+was that control and profile-live runs came back **byte-identical** — two arms of an A/B agreeing to
+the digest is a broken experiment, not a finding.
+
+> **Rule: to deactivate a presence-gated sidecar you must move EVERY form of it** — `.json` *and*
+> `.json.gz`. This is sharper than the documented `.DISABLED.json` rename, which only ever
+> contemplated the uncompressed file; once a deck's artifact is committed (always as `.gz`), a repo
+> checkout has **two** live copies and renaming one is a no-op. Check
+> `ls decks/<D>/ | grep exhaustive.profile` reads 0 before trusting a control.
+
+### References unchanged
+
+```
+25 ok, 299 repaired, 0 play-drift, 0 shuffle-dead, 1 board-diverged,
+0 enum-gap, 10 mull-drift, 0 contract-fail   (335 refs)
+```
+
+Identical to the pre-Giants baseline. All three `--strict` hard gates zero, and **`mull-drift` held
+at 10** — worth stating explicitly, because this change replaces the deck's mulligan policy and
+mull-drift is the counter that would have moved if reference keeps had gone out of sync.
