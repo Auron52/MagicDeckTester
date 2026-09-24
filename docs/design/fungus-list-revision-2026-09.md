@@ -153,6 +153,28 @@ masks (AttackerReserve / DorkReserve) and the filter-feeder chain. Those only de
 to spare, so a stale answer costs ranking, not correctness — whether a granted Saproling should be
 held back as an attacker is a provider question for `heuristic-optimization.md`, not part of the grant.
 
+## SCREEN 2 — IN FLIGHT (2026-09-24), and one spec defect to not repeat
+
+`logs/fungus2/screen2.json` → `screen2.out`. Base = candidate B **with Mycoloth 2** (forced: the
+shipped table enumerates at most 2, and a base at 4 leaves 2,026 of 53,649 hand cells unanswered, so
+the driver refuses). `logs/fungus2/FungusB.txt` is left exactly as the user wrote it; the screen base
+is the separate `FungusB_myc2.txt`.
+
+**SPEC DEFECT, recorded so the next one avoids it: `"full": {}` DUPLICATES the driver's own `base`
+job.** `deck_compare.py` always runs the unmodified base, so an empty-combination arm is a second
+identical cell — 11 cells instead of 10, i.e. 20,000 games (9% of the run) spent twice. Not killed:
+it was noticed past the 10-minute window on a user-facing run. **Use `--ref base`, never add a
+no-op arm.** The duplicate is not useless — `base` and `full` share a decklist AND seeds, so they
+must come out byte-identical, which makes them a free determinism cross-check on the job labelling.
+
+**PERF SIGNAL WORTH READING WITH THE RESULT.** Candidate B is far more expensive than the shipped
+list: 46 SLOW-GAMEs (>30 s) in the first ten minutes, a slowest game of 0.06 h, and the plan cache at
+**2,037 MB of a 2,400 MB cap** — 85% saturated, where screen 1 sat at 496–1,155 MB. The hypothesis to
+test against the arms, not to assume: the mana grant turns every Fungus and Saproling into a payment
+source, which multiplies payment permutations and therefore plans. **`no_badger` vs `full` ms/game is
+the direct measurement** and it is already in the screen. If the grant is the cause, that is a real
+adoption cost and belongs beside the card's quality delta, not buried.
+
 ## SCREEN 1b RESULT — the estimates become measurements, and the winners STACK
 
 `logs/fungus2/screen1b.json`, 20,000 paired games × 10 cells, **disjoint seeds** (940000+, against
