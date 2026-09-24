@@ -221,11 +221,41 @@ phase -- which this document treated as the cost centre -- is 0.6%. Attributed:
 
 Together those say the 3.07M duplicates are **different plans converging on the same state** -- the
 inference the codebase has twice refuted as unsound to assume, but which is here the measured
-majority of all wave work. That is the population any further lossless work has to address, and
-`dup_cross` (a different SLOT got there first) is 56.8% of it. Next concrete test: whether those
-colliding plans are order-permutations of one another, i.e. whether an order-free canonical plan key
-identifies them BEFORE the apply -- the same shape of argument that made the mana payment cache's
-canonical key sound, and testable the same way (byte-identical digests or it is not lossless).
+majority of all wave work.
+
+A third candidate died the same way. `dup_cross` splits `sameb=261,495 / diffb=1,475,976`, so 85% of
+cross-slot duplicates are DIFFERENT BASE PLANS, not the nested `bp_at` axis. That suggested keying
+the wave's prefix cache on the breakpoint STATE rather than the slot, since the enum memo's premise
+is that one breakpoint state yields one cands list. Measured: `prefix-snaps=323,293
+state-dup=43,242` -- only **13.4%** of prefixes repeat a state. The converging plans diverge at the
+breakpoint and only meet at end of turn, so a state-keyed prefix cache does not reach them.
+
+### What the duplicates ARE: an unfolded physical-source axis
+
+`BpCandFingerprint`'s `source_blind` mode zeroes exactly the physical-identity fields
+(`sac_source_id`, `hand_index`) covered by the USER's 2026-09-09 ruling -- *"It doesn't matter
+whether you tap Scrying Sheets 1, 2, 3 or 4 first. They are interchangeable. Same with the Frost
+Augurs"* -- the premise `MTG_FOLD_ACT_SOURCES` (default ON since 2026-09-09) ships on. Comparing
+each duplicate against the plan that first reached its state:
+
+    dup src-blind same=975,749   diff=1,385,061
+
+**41.3% of attributed duplicates differ from an already-scored plan ONLY in physical source
+identity.** Since the list census puts within-list fingerprint duplication at 0.0%, these are not
+the same plan enumerated twice -- they are distinct plans separated by precisely the axis the user
+ruled irrelevant. Roughly a million of them per game, on one game.
+
+This also joins mechanism 1 to mechanism 2 rather than leaving them as two coincidences: the
+13-source board that makes each payment question cost 251.5 backtracker nodes is the same board that
+makes plan space degenerate by physical source. One property of this deck, priced twice.
+
+**What this does NOT license.** `source_blind` is a CLASSIFIER, and the comment above it says so
+explicitly: *"Never use this for a SKIP -- two sacrifices of different creatures are genuinely
+different plans and this cannot tell them apart."* So the next step is not to skip on this
+fingerprint. It is to find which axis `MTG_FOLD_ACT_SOURCES` leaves unfolded -- the fold covers
+ACTIVATION sources, and these variants survive it -- and extend the fold there, under the same
+provably-plain predicate (`PermIsPlainForFold`) that makes the existing one sound, with
+byte-identical digests as the gate.
 
 ## 3. London bottoming, on the 17.6% of these games that mulligan
 

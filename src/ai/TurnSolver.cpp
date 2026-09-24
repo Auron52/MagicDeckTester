@@ -35614,6 +35614,31 @@ namespace
         std::atomic<uint64_t> retired{0};
         std::atomic<uint64_t> dupstate{0};
         std::atomic<uint64_t> la_scored{0}, la_rolled{0}, la_retired{0}, la_dupstate{0};
+        // dup_cross, split by whether the slot that got there first shares this variant's BASE PLAN.
+        // A slot is (base, bp_at), so a cross-slot duplicate is one of two quite different things:
+        //   sameb = SAME base plan, different bp_at -- the nested-discovery axis. bp_at = 1 is
+        //           re-reaching a state bp_at = 0's ranks already produced, which is redundancy in
+        //           how the breakpoint INDEX is enumerated and is a property of one plan.
+        //   diffb = genuinely different base plans converging after their continuations.
+        // They need different fixes and the aggregate cannot distinguish them.
+        std::atomic<uint64_t> dupx_sameb{0}, dupx_diffb{0};
+        // PREFIX STATES. The wave's prefix cache is keyed by SLOT -- (base plan, bp_at) -- so two
+        // base plans that walk to the SAME breakpoint state each pay their own prefix and each
+        // re-derive the same continuation list. That is the shape `dupx_diffb` describes, and a
+        // cache keyed on the breakpoint STATE instead of the slot would collapse it losslessly (the
+        // enum memo's own premise is that the same breakpoint state yields the same cands list).
+        // These two count whether the population exists: snaps taken, and how many of them repeat a
+        // breakpoint state the same node already snapped.
+        std::atomic<uint64_t> prefix_snaps{0}, prefix_state_dup{0};
+        // Are the CONVERGING PLANS physical-source variants of one another? BpCandFingerprint's
+        // `source_blind` mode zeroes exactly the physical identity fields (sac_source_id,
+        // hand_index) that the USER's 2026-09-09 ruling calls interchangeable -- "it doesn't matter
+        // whether you tap Scrying Sheets 1, 2, 3 or 4 first". MTG_FOLD_ACT_SOURCES already folds
+        // that axis for ACTIVATIONS, so if the duplicates still fingerprint source-blind-EQUAL
+        // there is an unfolded physical-source axis left and it is fixable in the enumerator; if
+        // they fingerprint source-blind-DIFFERENT, the plans genuinely differ and the convergence
+        // happens deeper than any plan-level key can see.
+        std::atomic<uint64_t> dup_sbsame{0}, dup_sbdiff{0};
         // ...and WHOSE state the duplicate repeats, which decides where a fix belongs:
         //   dup_self  = an earlier RANK OF THE SAME SLOT (same base plan, same bp_at). The
         //               continuation LIST is internally redundant -> fix in the continuation
@@ -35682,7 +35707,9 @@ namespace
                          " stillborn=%llu(dup=%llu first-empty=%llu)"
                          " nskip=%llu(nomemo=%llu miss=%llu live=%llu) nobp=%llu"
                          " | pre-plans dup=%llu/%llu"
-                         " | lookahead-share scored=%llu rolled=%llu retired=%llu dupstate=%llu\n",
+                         " | lookahead-share scored=%llu rolled=%llu retired=%llu dupstate=%llu"
+                         " | dup_cross sameb=%llu diffb=%llu prefix-snaps=%llu state-dup=%llu"
+                         " | dup src-blind same=%llu diff=%llu\n",
                          static_cast<unsigned long long>(nodes.load()),
                          static_cast<unsigned long long>(no_slots.load()),
                          static_cast<unsigned long long>(slots.load()),
@@ -35716,7 +35743,13 @@ namespace
                          static_cast<unsigned long long>(la_scored.load()),
                          static_cast<unsigned long long>(la_rolled.load()),
                          static_cast<unsigned long long>(la_retired.load()),
-                         static_cast<unsigned long long>(la_dupstate.load()));
+                         static_cast<unsigned long long>(la_dupstate.load()),
+                         static_cast<unsigned long long>(dupx_sameb.load()),
+                         static_cast<unsigned long long>(dupx_diffb.load()),
+                         static_cast<unsigned long long>(prefix_snaps.load()),
+                         static_cast<unsigned long long>(prefix_state_dup.load()),
+                         static_cast<unsigned long long>(dup_sbsame.load()),
+                         static_cast<unsigned long long>(dup_sbdiff.load()));
         }
     };
     BpWaveProbe g_bp_wave_probe;
@@ -36315,7 +36348,7 @@ private:
 //   dup_w0    -- first reached outside the wave entirely (wave 0's own ranks, or an ordinary plan).
 // The map is built only with the probe on, so this costs nothing in a shipped run.
 template <typename SeenSet, typename SlotMap>
-static bool LaWaveDup(const BpWaveWalker& walker, const GameState& gs,
+static bool LaWaveDup(const BpWaveWalker& walker, const TurnSolver::Plan& v, const GameState& gs,
                       SeenSet& seen, SlotMap& key_slot)
 {
     const TranspositionTable::Key wk = BuildDedupKey(gs);
@@ -36324,16 +36357,27 @@ static bool LaWaveDup(const BpWaveWalker& walker, const GameState& gs,
     {
         const uint64_t slot_id = (static_cast<uint64_t>(walker.LastBase()) << 8)
                                | static_cast<uint64_t>(walker.LastAt() & 0xFF);
+        const uint64_t sbfp    = BpCandFingerprint(v, /*source_blind=*/true);
         const auto it = key_slot.find(wk);
         if (!fresh)
         {
-            (it == key_slot.end()      ? g_bp_wave_probe.dup_w0
-             : it->second == slot_id   ? g_bp_wave_probe.dup_self
-                                       : g_bp_wave_probe.dup_cross).fetch_add(1);
+            if (it != key_slot.end())
+            {
+                (it->second.second == sbfp ? g_bp_wave_probe.dup_sbsame
+                                           : g_bp_wave_probe.dup_sbdiff).fetch_add(1);
+            }
+            (it == key_slot.end()           ? g_bp_wave_probe.dup_w0
+             : it->second.first == slot_id  ? g_bp_wave_probe.dup_self
+                                            : g_bp_wave_probe.dup_cross).fetch_add(1);
+            if (it != key_slot.end() && it->second.first != slot_id)
+            {
+                ((it->second.first >> 8) == (slot_id >> 8) ? g_bp_wave_probe.dupx_sameb
+                                                           : g_bp_wave_probe.dupx_diffb).fetch_add(1);
+            }
             g_bp_wave_probe.dupstate.fetch_add(1);
             g_bp_wave_probe.la_dupstate.fetch_add(1);
         }
-        else { key_slot.emplace(wk, slot_id); }
+        else { key_slot.emplace(wk, std::make_pair(slot_id, sbfp)); }
     }
     return !fresh;
 }
@@ -49135,8 +49179,11 @@ TurnSolver::Plan TurnSolver::SolveWithLookahead(const GameState& state, bool is_
                 // dup_w0 described 0.45% of the duplicates they were printed next to (13,820 of
                 // 3,069,985 on gi26), and the three want opposite fixes, so an unattributed
                 // dupstate cannot direct the work. Built ONLY with the probe on.
-                std::unordered_map<TranspositionTable::Key, uint64_t,
+                std::unordered_map<TranspositionTable::Key, std::pair<uint64_t, uint64_t>,
                                    TranspositionTable::KeyHash> la_key_slot;
+                // Probe-only: breakpoint states this node has already snapped (see prefix_snaps).
+                std::unordered_set<TranspositionTable::Key,
+                                   TranspositionTable::KeyHash> la_prefix_states;
                 while (walker.Next(candidates, v))
                 {
                     if (budget != nullptr && !budget->Unlimited() && budget->Exhausted())
@@ -49162,14 +49209,23 @@ TurnSolver::Plan TurnSolver::SolveWithLookahead(const GameState& state, bool is_
                         {
                             BpPrefixSnap snap;
                             ApplyPlanDirect(copy, v, true, nullptr, &snap, nullptr);
-                            if (snap.valid) { prefix_cache.emplace(ck, std::move(snap)); }
+                            if (snap.valid)
+                            {
+                                if (BpWaveProbeOn())
+                                {
+                                    g_bp_wave_probe.prefix_snaps.fetch_add(1);
+                                    if (!la_prefix_states.insert(BuildDedupKey(snap.state)).second)
+                                    { g_bp_wave_probe.prefix_state_dup.fetch_add(1); }
+                                }
+                                prefix_cache.emplace(ck, std::move(snap));
+                            }
                         }
                         else { ApplyPlanDirect(copy, v, true); }
                         if (walker.Report(candidates, g_bp_cands_last, g_bp_seen_last))
                         { if (BpWaveProbeOn()) { g_bp_wave_probe.retired.fetch_add(1);
                                                  g_bp_wave_probe.la_retired.fetch_add(1); }
                           continue; }
-                        if (LaWaveDup(walker, copy, bp_seen_states, la_key_slot)) { continue; }
+                        if (LaWaveDup(walker, v, copy, bp_seen_states, la_key_slot)) { continue; }
                         if (BpWaveProbeOn()) { g_bp_wave_probe.rolled.fetch_add(1);
                                                g_bp_wave_probe.la_rolled.fetch_add(1); }
                         AnimateLandsShared(copy, nullptr);
@@ -49193,7 +49249,7 @@ TurnSolver::Plan TurnSolver::SolveWithLookahead(const GameState& state, bool is_
                                                  g_bp_wave_probe.la_retired.fetch_add(1); }
                           continue; }
                         if (OpponentHasLost(copy)) { report(state.turn_number, depth - 1); return v; }
-                        if (LaWaveDup(walker, copy, bp_seen_states, la_key_slot)) { continue; }
+                        if (LaWaveDup(walker, v, copy, bp_seen_states, la_key_slot)) { continue; }
                         if (BpWaveProbeOn()) { g_bp_wave_probe.rolled.fetch_add(1);
                                                g_bp_wave_probe.la_rolled.fetch_add(1); }
                     }
