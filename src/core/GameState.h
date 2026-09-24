@@ -339,6 +339,17 @@ struct GameState
     // every deck. Defaults true for the reason above -- an unstamped state keeps the scan, and the
     // real gate is the board (no outlet on the battlefield -> no fodder) plus MTG_SAC_OUTLET_PAY.
     bool                     deck_has_sac_mana_outlet   = true;   // IsSacManaOutlet in the list
+    // Same shape again, for Brightcap Badger's "each Fungus and Saproling you control has
+    // '{T}: Add {G}'". The grant has to be resolved inside the mana-source predicate, which is the
+    // single hottest question this engine asks -- so without a per-GAME gate every deck in the
+    // suite would pay a board scan per payment for a card only one list plays. Stamped false when
+    // no card in the list carries granted_tap_mana_subtypes, which is every deck but this one, and
+    // that makes them byte-identical by construction rather than by measurement.
+    //
+    // Defaults TRUE for the reason above: an unstamped state (a unit test, a --scenario board, a
+    // partially built GameState) keeps the scan and stays correct, it just does not skip work.
+    // Erring the other way would silently drop mana the board really has.
+    bool                     deck_has_mana_grant        = true;   // granted_tap_mana_subtypes in the list
     // TWO MORE OF THE SAME, found 2026-09-19 by re-reading the cascade after the three above were
     // added. Those three closed the walks whose guard sat OUTSIDE the loop; these two are the ones
     // whose guard sits INSIDE it, which is the same defect wearing a param check:

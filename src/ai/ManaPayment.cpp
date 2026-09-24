@@ -518,6 +518,10 @@ bool TapForCostSharedOnce(GameState& state, const ManaCost& cost_in, bool for_cr
     // branch below a single null test, which is what keeps the lever's OFF arm and every deck
     // without an outlet byte-identical.
     const SacPayOutlet sac_outlet = LiveSacPayOutlet(state, active);
+    // Brightcap Badger's "each Fungus and Saproling you control has '{T}: Add {G}'". Resolved ONCE
+    // per payment, exactly like the outlet above, and free for every deck that cannot contain a
+    // grant source (GameState::deck_has_mana_grant).
+    const ManaGrant    mana_grant = LiveManaGrant(state, active);
     // Fodder is only ever considered for a permanent `usable()` REJECTS, so no permanent can be
     // offered twice in one pip selection (a Goblin mana dork taps at its own rank; it is not eaten).
     auto fodder_ok = [&](const Permanent& p, const CardDefinition& def) -> bool
@@ -658,7 +662,22 @@ bool TapForCostSharedOnce(GameState& state, const ManaCost& cost_in, bool for_cr
                 // is invalid and this is the historical short-circuit, LookupCached included.
                 if (p.tapped && !sac_outlet.valid()) { continue; }
                 const CardDefinition* def = CardDatabase::Instance().LookupCached(p.card);
-                if (!def) { continue; }
+                if (!def)
+                {
+                    // BRIGHTCAP BADGER'S GRANT. This `continue` is why a param-only grant would
+                    // have been dead: a Saproling is a TOKEN, LookupCached returns null for it, and
+                    // the loop bailed before the grant could ever be considered. Hand the shared
+                    // synthetic ManaDork face to the TAP path only.
+                    //
+                    // NOT the §2b fodder path below, deliberately. That path is ALSO blind to
+                    // tokens -- Utopia Mycon's "Sacrifice a Saproling: Add one mana of any color"
+                    // cannot see a single legal body in this deck for exactly the same reason --
+                    // but it is a separate defect with its own measurement, and folding it in here
+                    // would make a perf or quality change in either one impossible to bisect.
+                    if (p.tapped || !GrantReaches(mana_grant, p)
+                        || !GrantedBodyCanTap(mana_grant, p)) { continue; }
+                    def = &GrantedManaFace(mana_grant.color);
+                }
                 const bool tap_ok = !p.tapped && usable(p, *def);
                 const bool fodder = !tap_ok && fodder_ok(p, *def);
                 if (!tap_ok && !fodder) { continue; }
@@ -2118,11 +2137,15 @@ ManaPool AvailableManaPool(const GameState& state, const Permanent* skip)
 {
     ManaPool pool;
     int gy_fuel = -1;   // Deathrite fuel: lazily counted, decremented per credited source
+    const ManaGrant grant = LiveManaGrant(state, state.active_player_index);
     for (const Permanent& p : state.battlefield)
     {
         if (&p == skip) { continue; }   // "as if this source were tapped" (see the header note)
         if (p.controller_index != state.active_player_index || p.tapped) { continue; }
-        auto def = CardDatabase::Instance().LookupCached(p.card);
+        // Brightcap Badger's grant: a granted body has no CardDefinition, so this `continue`
+        // was blind to it. ManaDefOf hands back the shared synthetic ManaDork face; the loop body
+        // below is unchanged. Free when no grant is live.
+        const CardDefinition* def = ManaDefOf(state, p, grant);
         if (!def) { continue; }
         bool is_land = (def->tmpl == CardTemplate::BasicLand);
         bool is_dork = (def->tmpl == CardTemplate::ManaDork && CanTapNow(p, state.battlefield)) || def->params.mana_rock
@@ -2153,10 +2176,14 @@ ManaPool AvailableManaPoolNoAttackers(const GameState& state)
     ManaPool pool;
     int gy_fuel = -1;
     const int active = state.active_player_index;
+    const ManaGrant grant = LiveManaGrant(state, active);
     for (const Permanent& p : state.battlefield)
     {
         if (p.controller_index != active || p.tapped) { continue; }
-        auto def = CardDatabase::Instance().LookupCached(p.card);
+        // Brightcap Badger's grant: a granted body has no CardDefinition, so this `continue`
+        // was blind to it. ManaDefOf hands back the shared synthetic ManaDork face; the loop body
+        // below is unchanged. Free when no grant is live.
+        const CardDefinition* def = ManaDefOf(state, p, grant);
         if (!def) { continue; }
         bool is_land = (def->tmpl == CardTemplate::BasicLand);
         bool is_dork = (def->tmpl == CardTemplate::ManaDork && CanTapNow(p, state.battlefield)) || def->params.mana_rock
@@ -2293,11 +2320,15 @@ ColorFeasibility BuildColorFeasibility(const GameState& state, bool noncreature,
     // Same source filter as AvailableManaPool -- the pool this test post-filters must be built from
     // exactly the same permanents, or it would prune lines the flat check paid for off a source it
     // never saw.
+    const ManaGrant grant = LiveManaGrant(state, active);
     for (const Permanent& p : state.battlefield)
     {
         if (&p == skip) { continue; }   // "what would still be payable if this source were gone?"
         if (p.controller_index != active || p.tapped) { continue; }
-        const CardDefinition* def = CardDatabase::Instance().LookupCached(p.card);
+        // Brightcap Badger's grant: a granted body has no CardDefinition, so this `continue`
+        // was blind to it. ManaDefOf hands back the shared synthetic ManaDork face; the loop body
+        // below is unchanged. Free when no grant is live.
+        const CardDefinition* def = ManaDefOf(state, p, grant);
         if (!def) { continue; }
         // The NON-CREATURE pool drops creature-only sources entirely (Ancient Ziggurat) -- mirrors
         // BuildNonCreaturePool, whose flat pool this variant post-filters.
@@ -3405,7 +3436,10 @@ std::string HumanPreTapFaces(const GameState& state, const Permanent& p)
 {
     const int active = state.active_player_index;
     if (p.controller_index != active || p.tapped) { return std::string(); }
-    const CardDefinition* def = CardDatabase::Instance().LookupCached(p.card);
+    // Brightcap Badger's grant. This MUST match the payer, not merely approximate it: the viewer's
+    // tap legality and the engine's are the same question asked twice, and a human offered fewer
+    // faces than the search can use would be shown a board they cannot play.
+    const CardDefinition* def = ManaDefOf(state, p, LiveManaGrant(state, active));
     if (def == nullptr) { return std::string(); }
     const CardParams& q = def->params;
     // The same source test the payment's `usable()` applies -- MINUS the classes a hand-driven tap

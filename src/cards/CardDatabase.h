@@ -1598,6 +1598,14 @@ struct CardParams
     //                                 makes is itself worth 4+ life off each Bishop -- that life
     //                                 must not retroactively arm a copy whose condition failed).
     int  endstep_lifegain_threshold  = 1;
+    //   endstep_tokens_unconditional -- drop the "if you gained life this turn" intervening-if
+    //                                 entirely, turning this family from the Ocelot Pride /
+    //                                 Resplendent Angel shape into a plain "at the beginning of
+    //                                 your end step, create a token" trigger (Brightcap Badger).
+    //                                 The threshold above is clamped to a minimum of 1, so 0 does
+    //                                 NOT express this -- an explicit flag is the only way, and it
+    //                                 keeps every existing card's behaviour byte-identical.
+    bool endstep_tokens_unconditional = false;
     int  endstep_token_power         = 0;
     int  endstep_token_toughness     = 0;
     std::string              endstep_token_color;
@@ -1932,6 +1940,51 @@ struct CardParams
     // the hard cast; it stays a searched mode because it is the only way to buy the LTB with no
     // sac outlet in play. nullopt = no evoke.
     std::optional<ManaCost>  evoke_cost;
+
+    // ADVENTURE (CR 715 -- Brightcap Badger // Fungus Frolic). One physical card, two spells: the
+    // adventure half is cast from hand for its own cost and, on resolution, EXILES "on an
+    // adventure" instead of going to the graveyard; the creature half may then be cast from that
+    // exile later. Both halves are authored as separate top-level entries linked by these two
+    // names, the same "a second face is genuinely a different DB entry" trick MDFC and bestow use
+    // -- but AUTHORED rather than synthesized, because those two synthesize a face whose type is
+    // always known (a land, an Aura) and an adventure's text is arbitrary.
+    //
+    // Only the CREATURE name ever appears in a decklist; the adventure entry is never drawn.
+    // adventure_face_name on the creature names the spell half; adventure_parent_name on the spell
+    // half names the creature (used by the viewer and the audits, and to assert the link both ways
+    // at DB load). Empty on both = not an adventure card, which is every other card in the file.
+    std::string              adventure_face_name;
+    std::string              adventure_parent_name;
+
+    // "Create N tokens" as the RESOLUTION of an instant or sorcery. New with Fungus Frolic, which
+    // is the first plain token-making spell in this file -- the only prior instant/sorcery token
+    // params are bolted to a combat trick (trick_token_*) or copy a target (token_copy_of_target),
+    // and cast_token_* is a cast WATCHER (Young Pyromancer), not a payload. Tokens are created
+    // through the shared CreateToken cascade, so they are doubled by Doubling Season and seen by
+    // every ETB watcher exactly like any other token. 0 = inert.
+    int                      cast_creates_tokens        = 0;
+    int                      cast_created_token_power   = 0;
+    int                      cast_created_token_toughness = 0;
+    std::string              cast_created_token_color;
+    std::vector<std::string> cast_created_token_subtypes;
+    std::vector<std::string> cast_created_token_keywords;
+
+    // BRIGHTCAP BADGER's static grant: "Each Fungus and Saproling you control has '{T}: Add {G}'."
+    // A layer-6 ability grant (CR 611), NOT an ability of the granter -- the Badger may be tapped
+    // or summoning-sick and the grant still applies, so nothing reads the granter's own state.
+    //
+    // WHY THIS IS NOT A TEMPLATE: the engine's "is this a mana source" question is open-coded at
+    // ~20 payment sites as `tmpl == CardTemplate::ManaDork`, read off a CardDefinition -- and every
+    // Saproling in this archetype is a TOKEN, for which LookupCached returns null and each of those
+    // loops bails. A template- or param-keyed grant would therefore have been dead on the entire
+    // population it exists to affect. The grant is instead resolved by ManaDefOf(), which hands
+    // those sites a shared synthetic ManaDork definition for a granted body; the subtype test is
+    // CardHasSubtypeId against the permanent's own Card, never a definition.
+    //
+    // Empty = no grant, which is every other card. GameState::deck_has_mana_grant gates the board
+    // scan away entirely for decks that play no grant source, so this costs them one bool test.
+    std::vector<std::string> granted_tap_mana_subtypes;
+    std::string              granted_tap_mana_color;
 
     // Sacrifice-a-creature activated outlets. A permanent you control offers an activated ability
     // whose cost is {sac_creature_cost} mana + Sacrifice one creature you control whose subtype is

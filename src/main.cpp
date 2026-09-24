@@ -1658,6 +1658,14 @@ static void WriteDecisionJson(std::ostream& os, const GameState& s,
             if (ac.phyrexian_life > 0)            { os << ", \"phyrexian_life\": " << ac.phyrexian_life; }
             // Evoke variant (Reveillark): same bestow lesson -- the two casts share a name.
             if (ac.evoke)                         { os << ", \"evoke\": true"; }
+            //  * ADVENTURE (Brightcap Badger // Fungus Frolic) is the bestow lesson again, and the
+            //    sharpest instance of it: the two modes share a hand slot AND a name, but unlike
+            //    bestow they do not split by an `enchant` sub, so without this key the choose
+            //    dialog would offer "Brightcap Badger" twice with nothing to distinguish a {2}{G}
+            //    instant for two Saprolings from a {3}{G} 3/4. The verb also matters to the human
+            //    because the modes are not interchangeable: taking the adventure leaves the
+            //    creature castable later, while hard-casting it spends the adventure forever.
+            if (ac.adventure) { os << ", \"adventure\": true, \"verb\": \"adventure\""; }
             if (!ac.tutor_target.empty()) { os << ", \"tutor_target\": "; JsonStr(os, ac.tutor_target); }
             if (ac.chosen_x > 0)          { os << ", \"x\": " << ac.chosen_x; }
             if (ac.ponder_keep >= 0)      { os << ", \"ponder_keep\": " << ac.ponder_keep; }

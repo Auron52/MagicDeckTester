@@ -74,6 +74,60 @@ copies, not a measurement**, hence `est`:
 **Consequence for screen 2's B′ assignment (below): it is now suspect.** B′ as written keeps
 Shroofus 1 and Mycoloth 4, both refuted here, and drops to 4 Forest. Reconsider before launching.
 
+## SCREEN 1b RESULT — the estimates become measurements, and the winners STACK
+
+`logs/fungus2/screen1b.json`, 20,000 paired games × 10 cells, **disjoint seeds** (940000+, against
+screen 1's 910000–929999), same apparatus. Every arm has Thallid Shell-Dweller 0, so the control
+`sd0` IS the corrected deck and there is no donor left to confound anything.
+
+| arm | vs `sd0` | se | t |
+|---|---|---|---|
+| **stack3** (Crossroads 4 + Undercellar 4 + Woodlot 4) | **−0.1265** | 0.0044 | −28.92 |
+| Undercellar Myconid ×4 | −0.0481 | 0.0019 | −25.06 |
+| Concordant Crossroads ×4 | −0.0474 | 0.0038 | −12.48 |
+| Concordant Crossroads ×2 | −0.0427 | 0.0027 | −15.77 |
+| Concordant Crossroads ×1 | −0.0263 | 0.0020 | −13.43 |
+| Hickory Woodlot ×4 | −0.0254 | 0.0020 | −12.79 |
+| Sol Ring ×1 | −0.0067 | 0.0017 | −3.96 |
+| Mycoloth 2→4 | **+0.0398** | 0.0025 | +15.79 |
+| black package | **+0.0580** | 0.0031 | +18.95 |
+| base (4 Shell-Dwellers) | +0.1106 | 0.0034 | +32.39 |
+
+**1. Crossroads is CONFIRMED on held-out seeds** — −0.0474 here vs −0.0425 in screen 1. The
+selection bias of a 9-arm screen did not inflate it. That closes the `--confirm` obligation.
+
+**2. THE COUNT AXIS IS SHARPLY DIMINISHING, and screen 1 could not see it.** Marginal value per
+copy: 1st **−0.0263**, 2nd **−0.0164**, 3rd and 4th **−0.0023 each**. The first copy is worth ~11×
+the fourth, and **two copies capture 90% of what four buy**. Candidate B's 4-of is two dead slots.
+Screen 1's apparent cliff between `crossroads1` and `crossroads4` was *entirely* the donor, and is
+now replaced by the real shape, which is the opposite: strongly concave, not threshold.
+
+**3. THE THREE WINNERS STACK, essentially additively.** Sum of the parts −0.1208; `stack3` measured
+−0.1265; interaction **+0.0057** (very slightly super-additive). This is the result that matters
+for adoption, because this repo has a measured case of a lever going +0.0201 alone → −0.0616 in
+combination — so "each beats a Forest" does NOT imply "all three beat three Forests". Here it does.
+They can be taken as a set without re-measuring each other.
+
+**4. EVERY DONOR-CORRECTED ESTIMATE WAS WRONG IN THE SAME DIRECTION.** The linear
+`0.1163/4`-per-copy correction was systematically too conservative:
+
+| package | screen 1 `est` | screen 1b measured | error |
+|---|---|---|---|
+| Concordant Crossroads ×1 | −0.0174 | −0.0263 | −0.0089 |
+| Sol Ring ×1 | −0.0034 | −0.0067 | −0.0033 |
+| Mycoloth 2→4 | +0.0527 | +0.0398 | −0.0130 |
+| black package | +0.0631 | +0.0580 | −0.0052 |
+
+All four moved the same way, by up to 50% of the estimate. **The lesson is not "the correction was
+bad"** — it was directionally right every time and it correctly identified which arms were worth
+re-measuring. The lesson is that a linear correction across four copies of a card with a real
+curve cannot be reported as a measurement, which is why those rows carried `est`.
+
+**5. The black package is refuted IN THIS SHELL and that is still not a verdict on candidate B.**
+Both screens graft Slimefoot onto the shipped green shell, which holds exactly one sac outlet. The
+structural claim is that B wins by non-combat drain, which needs Deathspore and Vitaspore in
+numbers plus Mycoloth devour. Screen 2 is the only thing that tests the plan.
+
 ### Screen 2 bucket assignment (worked out, not yet written)
 
 Candidate **B′** = candidate B with the Brightcap Badger slot returned to a 3rd Tukatongue Thallid,

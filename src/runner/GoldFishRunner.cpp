@@ -994,6 +994,7 @@ void GoldFishRunner::StampDeckTraits(GameState& state, const Decklist& deck)
     {
         bool garth = false, ascend = false, devotion = false, dragon_ping = false;
         bool sac_mana_outlet = false;
+        bool mana_grant      = false;
         // The two guard-inside-the-loop scans (see the GameState block): a Giada-style "each other
         // <subtype> you control" counter rider, and an Emiel-style optional-cost counter on another
         // creature entering. Both need BOTH halves of their param pair to do anything, and the
@@ -1017,6 +1018,7 @@ void GoldFishRunner::StampDeckTraits(GameState& state, const Decklist& deck)
                 if (d->params.creature_requires_devotion > 0) { devotion = true; }
                 if (d->params.dragon_ping_on_enter)           { dragon_ping = true; }
                 if (IsSacManaOutlet(d->params))               { sac_mana_outlet = true; }
+                if (!d->params.granted_tap_mana_subtypes.empty()) { mana_grant = true; }
                 if (d->params.other_subtype_enters_counters_per_each > 0
                     && !d->params.other_subtype_enters_counters_subtype.empty())
                 { subtype_enter_counters = true; }
@@ -1034,6 +1036,7 @@ void GoldFishRunner::StampDeckTraits(GameState& state, const Decklist& deck)
         state.deck_has_devotion_creature = garth || devotion;
         state.deck_has_dragon_ping       = garth || dragon_ping;
         state.deck_has_sac_mana_outlet   = garth || sac_mana_outlet;
+        state.deck_has_mana_grant        = garth || mana_grant;
         // MTG_ETB_WATCHER_GATES (default ON): with the lever off the two new flags stay at their
         // GameState default of TRUE, i.e. both scans keep running exactly as before -- which is the
         // control arm of the cost A/B, carried per job so one pooled batch measures both.

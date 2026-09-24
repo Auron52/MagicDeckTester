@@ -129,6 +129,15 @@ void EffectHandler::MoveToGraveyard(GameState& state, const StackEntry& entry)
     // instant/sorcery line in TurnSolver's apply_one. See CardParams::exiles_self_on_resolve for
     // why this is implemented rather than bracket-noted as inert.
     const CardDefinition* d = CardDatabase::Instance().LookupCached(entry.source);
+    // ADVENTURE (CR 715): an adventure spell is exiled "on an adventure" rather than put into the
+    // graveyard, and the creature half stays castable from there. entry.source is the ADVENTURE
+    // face (the cast swapped the def in) carrying the physical card's m_number, so the parent
+    // creature is staged under that same per-copy ID -- an adventure is one card, not two. LOCKSTEP
+    // with the rollout's instant/sorcery line in TurnSolver's apply_one.
+    if (d != nullptr
+        && StageAdventureParent(state, entry.controller_index, *d, entry.source.m_number))
+    { return; }
+    // "Exile Living Wish": a self-exiling spell goes to EXILE instead.
     if (d != nullptr && d->params.exiles_self_on_resolve)
     { state.exile.push_back(entry.source); return; }
     state.players[entry.controller_index].graveyard.push_back(entry.source);
@@ -336,6 +345,9 @@ bool EffectHandler::ResolveImpl(GameState& state, const StackEntry& entry, const
             {
                 // Non-permanent custom spell: tutor / destroy-all-enchantments / cascade,
                 // then graveyard.
+                // "Create N tokens" as the spell's resolution (Fungus Frolic). Lockstep twin of
+                // the rollout's apply_one ApplyCastCreatesTokens call.
+                ApplyCastCreatesTokens(state, entry.controller_index, def);
                 if (def.params.tutor_to_hand || def.params.tutor_to_top)
                 {
                     // Fetch the searched target carried on the stack entry (empty -> the

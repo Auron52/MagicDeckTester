@@ -223,6 +223,14 @@ MANIFEST = {
     # (one bestow variant per legal host, sharing the hand index with the creature cast), exactly
     # like is_aura's enchant-target sub. Not its own decision type.
     "bestow_cost":           ("main_phase",           truthy),
+    # ---- Fungus list revision: ADVENTURE (Brightcap Badger // Fungus Frolic, CR 715) ----
+    # Exactly the bestow case above, and a REAL decision rather than a classification: casting the
+    # {2}{G} instant for two Saprolings and casting the {3}{G} 3/4 are different spells sharing one
+    # hand slot, and they are not interchangeable -- the adventure leaves the creature castable from
+    # exile later, the hard cast spends the adventure forever. Surfaced as a main_phase plan VARIANT
+    # (Action::adventure, emitted alongside the hard cast and sharing the hand index), with an
+    # "adventure" verb on the wire so the choose dialog can tell the two apart by more than name.
+    "adventure_face_name":   ("main_phase",           truthy),
     # Burning-Fist Minotaur "{1}{R}, Discard a card: +2/+0". TWO decisions, both surfaced:
     # the activation COUNT rides main_phase (Action::Kind::ActivatePump variants, one per K), and
     # WHICH CARD each activation discards reuses the existing `discard` type
@@ -490,6 +498,19 @@ INERT_PARAMS = {
     "combat_damage_watch_subtypes": "trigger gating detail (which attackers' damage is counted) -- not a choice",
     "combat_damage_token_power": "token spec constant", "combat_damage_token_toughness": "token spec constant",
     "combat_damage_token_subtypes": "token spec constant", "combat_damage_token_color": "token spec constant",
+    # ---- Brightcap Badger // Fungus Frolic (adventure, 2026-09-24) ----
+    # NOT INERT, and deliberately not listed here: adventure_face_name. Casting the {3}{G} 3/4 and
+    # casting the {2}{G} instant are two different spells sharing one card, which is exactly the
+    # "a hand card with more than ONE way to be played needs a route in the palette for each" case
+    # main.cpp states. It is wired as a cast route, not classified away.
+    "adventure_parent_name": "the BACK-link on the adventure half, naming the creature to stage on resolution. Pure plumbing: the player never chooses it, and the adventure face is never in a decklist or a hand -- it is reachable only by taking the adventure route on the parent, which IS surfaced",
+    "cast_creates_tokens": "fixed untargeted resolution payload (Fungus Frolic: 'create two 1/1 green Saproling creature tokens'). No target, no mode, no 'may', no division -- the count is printed on the card. The CHOICE that matters (adventure vs. hard cast) lives on the parent's cast route",
+    "cast_created_token_power": "token spec constant", "cast_created_token_toughness": "token spec constant",
+    "cast_created_token_subtypes": "token spec constant", "cast_created_token_color": "token spec constant",
+    "cast_created_token_keywords": "token spec constant",
+    "endstep_tokens_unconditional": "REMOVES the family's intervening-if ('if you gained life this turn') so the end-step token trigger is unconditional (Brightcap Badger). Dropping a condition cannot create a choice -- the trigger was already mandatory and untargeted when it fired at all",
+    "granted_tap_mana_subtypes": "a static layer-6 ability grant (CR 611) that makes each Fungus/Saproling you control an additional mana source. It creates NO new decision TYPE: 'which source do I tap' is already a surfaced decision, resolved for the human through HumanPreTapFaces, and the granted bodies simply become more faces in that same list. The grant itself is never activated, targeted or ordered",
+    "granted_tap_mana_color": "the colour the granted ability adds ({G}) -- a constant, not a 'mana of any color' fan",
     "dies_trigger_damage_each_opponent": "scales the death-watcher's face damage by OpponentHeads() (Slimefoot). Mandatory and untargeted -- 'each opponent' is not a choice at any head count",
     "dies_trigger_self_gain": "mandatory lifegain rider on the same death trigger, through the shared GainLife hook -- no target, no choice",
     "pay_token_count": "token count constant", "pay_token_power": "token spec constant",

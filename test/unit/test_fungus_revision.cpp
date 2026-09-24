@@ -925,3 +925,265 @@ TEST_CASE("Saproling Burst: activation has no {T}, is legal while sick, and is N
     PutFadeCounters(s, s.battlefield[i], q.fading_counters);
     CHECK(PermAbilitySourceLive(s, 0, 1, PermAbilityMode::FadeSaproling));
 }
+
+// ---------------------------------------------------------------------------------------------
+// Brightcap Badger // Fungus Frolic -- the engine's FIRST adventure card (CR 715).
+//
+// Nothing in test/unit or test/scenarios covered Player::staged_cards before this file: grep
+// m_is_staged / staged_cards across both returned zero. The staged mechanic is load-bearing for
+// Light Up the Stage, Apex of Power, Expressive Iteration and Rundvelt, so these cases are its
+// first coverage as well as the adventure's.
+// ---------------------------------------------------------------------------------------------
+
+TEST_CASE("Brightcap Badger: the card data links both faces and neither is half-authored")
+{
+    EnsureCardsLoaded();
+
+    const CardDefinition& badger = Def("Brightcap Badger");
+    const CardDefinition& frolic = Def("Fungus Frolic");
+
+    SUBCASE("the link is declared in BOTH directions")
+    {
+        CHECK(badger.params.adventure_face_name   == "Fungus Frolic");
+        CHECK(frolic.params.adventure_parent_name == "Brightcap Badger");
+    }
+
+    SUBCASE("the faces are genuinely different spells")
+    {
+        CHECK(badger.card.IsCreature());
+        CHECK_FALSE(badger.card.IsInstant());
+        CHECK(frolic.card.IsInstant());
+        CHECK_FALSE(frolic.card.IsCreature());
+        // {3}{G} vs {2}{G} -- the cheaper mode is why neither dominates the other.
+        CHECK(badger.card.m_mana_cost.ManaValue() == 4);
+        CHECK(frolic.card.m_mana_cost.ManaValue() == 3);
+        CHECK(badger.card.m_power.value_or(0)     == 3);
+        CHECK(badger.card.m_toughness.value_or(0) == 4);
+    }
+
+    SUBCASE("the adventure payload is two Saprolings, not one and not a copy effect")
+    {
+        CHECK(frolic.params.cast_creates_tokens          == 2);
+        CHECK(frolic.params.cast_created_token_power     == 1);
+        CHECK(frolic.params.cast_created_token_toughness == 1);
+        REQUIRE(frolic.params.cast_created_token_subtypes.size() == 1);
+        CHECK(frolic.params.cast_created_token_subtypes[0] == "Saproling");
+        CHECK(frolic.params.cast_created_token_color == "G");
+    }
+}
+
+TEST_CASE("Fungus Frolic: the resolution payload creates two Saprolings, and Season doubles them")
+{
+    EnsureCardsLoaded();
+    const CardDefinition& frolic = Def("Fungus Frolic");
+
+    SUBCASE("bare: exactly two 1/1 green Saproling tokens")
+    {
+        GameState s = Fresh();
+        ApplyCastCreatesTokens(s, 0, frolic);
+        CHECK(CountSaprolings(s) == 2);
+        REQUIRE(s.battlefield.size() == 2);
+        for (const Permanent& p : s.battlefield)
+        {
+            CHECK(p.is_token);
+            CHECK(p.card.m_power.value_or(0) == 1);
+            CHECK(p.card.m_toughness.value_or(0) == 1);
+            CHECK(CardHasSubtype(p.card, "Saproling"));
+            CHECK(p.controller_index == 0);
+        }
+    }
+
+    SUBCASE("Doubling Season applies -- these ride the universal CreateToken cascade")
+    {
+        GameState s = Fresh();
+        Put(s, "Doubling Season", 0, 90);
+        ApplyCastCreatesTokens(s, 0, frolic);
+        CHECK(CountSaprolings(s) == 4);
+    }
+
+    SUBCASE("two Seasons quadruple, as for every other token this deck makes")
+    {
+        GameState s = Fresh();
+        Put(s, "Doubling Season", 0, 90);
+        Put(s, "Doubling Season", 0, 91);
+        ApplyCastCreatesTokens(s, 0, frolic);
+        CHECK(CountSaprolings(s) == 8);
+    }
+
+    SUBCASE("the payload is controller-scoped")
+    {
+        GameState s = Fresh();
+        ApplyCastCreatesTokens(s, 1, frolic);
+        REQUIRE(s.battlefield.size() == 2);
+        // CountSaprolings is deliberately NOT controller-scoped (it counts the board), so scope
+        // the assertion here rather than reading a side into that helper.
+        int ours = 0, theirs = 0;
+        for (const Permanent& p : s.battlefield)
+        { (p.controller_index == 0 ? ours : theirs) += 1; }
+        CHECK(ours   == 0);
+        CHECK(theirs == 2);
+    }
+
+    SUBCASE("a card with no cast_creates_tokens makes nothing -- the param is inert by default")
+    {
+        GameState s = Fresh();
+        ApplyCastCreatesTokens(s, 0, Def("Doubling Season"));
+        CHECK(s.battlefield.empty());
+    }
+}
+
+TEST_CASE("Adventure: the resolved spell EXILES to staged_cards, not to the graveyard")
+{
+    EnsureCardsLoaded();
+    const CardDefinition& frolic = Def("Fungus Frolic");
+
+    SUBCASE("the parent creature is staged, under the SAME per-copy number")
+    {
+        GameState s = Fresh();
+        const bool staged = StageAdventureParent(s, 0, frolic, /*number=*/77);
+        CHECK(staged);
+        CHECK(s.players[0].graveyard.empty());
+        REQUIRE(s.players[0].staged_cards.size() == 1);
+        const StagedCard& sc = s.players[0].staged_cards[0];
+        // It is the CREATURE that is staged -- casting the adventure again must be impossible,
+        // and what you may cast later is the Badger.
+        CHECK(sc.card.m_name.str() == "Brightcap Badger");
+        CHECK(sc.card.IsCreature());
+        // An adventure is ONE physical card: the number travels.
+        CHECK(sc.card.m_number == 77);
+    }
+
+    SUBCASE("it NEVER expires -- unlike Light Up the Stage's window")
+    {
+        GameState s = Fresh();
+        StageAdventureParent(s, 0, frolic, 77);
+        REQUIRE(s.players[0].staged_cards.size() == 1);
+        CHECK(s.players[0].staged_cards[0].expiry_turn == std::numeric_limits<int>::max());
+        // The merge test is `expiry_turn < turn_number`; INT_MAX can never satisfy it.
+        CHECK_FALSE(s.players[0].staged_cards[0].expiry_turn < 100000);
+    }
+
+    SUBCASE("it is controller-scoped")
+    {
+        GameState s = Fresh();
+        StageAdventureParent(s, 1, frolic, 77);
+        CHECK(s.players[0].staged_cards.empty());
+        CHECK(s.players[1].staged_cards.size() == 1);
+    }
+
+    SUBCASE("a NON-adventure card declines, so its caller falls through to the graveyard")
+    {
+        GameState s = Fresh();
+        CHECK_FALSE(StageAdventureParent(s, 0, Def("Doubling Season"), 77));
+        CHECK(s.players[0].staged_cards.empty());
+    }
+}
+
+TEST_CASE("Brightcap Badger: the unconditional end-step Saproling")
+{
+    EnsureCardsLoaded();
+    const CardParams& bp = Def("Brightcap Badger").params;
+
+    SUBCASE("it is flagged unconditional -- threshold 0 could NOT express this")
+    {
+        CHECK(bp.endstep_lifegain_tokens == 1);
+        CHECK(bp.endstep_tokens_unconditional);
+        // The gate clamps the threshold to a minimum of 1, which is exactly why the flag exists:
+        // without it a Badger that gained no life this turn would never trigger.
+        CHECK(std::max(1, bp.endstep_lifegain_threshold) == 1);
+    }
+
+    SUBCASE("every pre-existing member of the family stays CONDITIONAL")
+    {
+        // The flag must be false wherever it was not authored, or Resplendent Angel and Ocelot
+        // Pride would start triggering on turns they gained nothing -- a silent behaviour change
+        // in decks this work never touched.
+        for (const std::string& n : { "Resplendent Angel", "Ocelot Pride" })
+        {
+            const CardDefinition* d = CardDatabase::Instance().Lookup(n);
+            if (d == nullptr) { continue; }          // not every deck's cards are in every build
+            CHECK_FALSE(d->params.endstep_tokens_unconditional);
+        }
+    }
+
+    SUBCASE("the token spec is a 1/1 green Saproling")
+    {
+        CHECK(bp.endstep_token_power     == 1);
+        CHECK(bp.endstep_token_toughness == 1);
+        CHECK(bp.endstep_token_color     == "G");
+        REQUIRE(bp.endstep_token_subtypes.size() == 1);
+        CHECK(bp.endstep_token_subtypes[0] == "Saproling");
+    }
+}
+
+TEST_CASE("Brightcap Badger: the mana grant's SUBTYPE reach is declared, and it is token-safe")
+{
+    EnsureCardsLoaded();
+    const CardParams& bp = Def("Brightcap Badger").params;
+
+    SUBCASE("it names both Fungus and Saproling, and produces green")
+    {
+        REQUIRE(bp.granted_tap_mana_subtypes.size() == 2);
+        CHECK(bp.granted_tap_mana_subtypes[0] == "Fungus");
+        CHECK(bp.granted_tap_mana_subtypes[1] == "Saproling");
+        CHECK(bp.granted_tap_mana_color == "G");
+    }
+
+    SUBCASE("the population it must reach is DEFINITION-LESS -- the reason for the whole design")
+    {
+        // This is the fact that kills a param-only implementation: a Saproling token has no
+        // CardDefinition at all, so any predicate that starts `if (!LookupCached(p.card)) continue;`
+        // sees none of them. The subtype must be read off the permanent's own Card.
+        GameState s = Fresh();
+        const int tok = PutSaprolingToken(s, 1);
+        CHECK(s.battlefield[tok].def_absent);
+        CHECK(CardDatabase::Instance().LookupCached(s.battlefield[tok].card) == nullptr);
+        CHECK(CardHasSubtype(s.battlefield[tok].card, "Saproling"));
+    }
+
+    SUBCASE("the Badger grants to others but is NOT itself a Fungus or Saproling")
+    {
+        // It is a Badger Druid. It taps for nothing; only what it grants to does.
+        const Card& c = Def("Brightcap Badger").card;
+        CHECK_FALSE(CardHasSubtype(c, "Fungus"));
+        CHECK_FALSE(CardHasSubtype(c, "Saproling"));
+        CHECK(CardHasSubtype(c, "Druid"));
+    }
+
+    SUBCASE("Utopia Mycon IS in reach -- it is a Fungus, so the grant is upside on it")
+    {
+        CHECK(CardHasSubtype(Def("Utopia Mycon").card, "Fungus"));
+    }
+}
+
+TEST_CASE("Brightcap Badger x Concordant Crossroads: a fresh token may tap for the grant")
+{
+    EnsureCardsLoaded();
+
+    // CR 302.6 restricts {T} abilities on a creature that has not been controlled since the
+    // controller's most recent turn began. A granted "{T}: Add {G}" is a {T} ability, so a
+    // Saproling created this turn cannot use it -- unless something grants haste. That makes
+    // Badger x Crossroads a real interaction rather than two independent cards, and it is also
+    // why screen 1's Crossroads result is the evidence that bought this build.
+    GameState s = Fresh();
+    const int tok = PutSaprolingToken(s, 1, /*sick=*/true);
+    REQUIRE(s.battlefield[tok].entered_this_turn);
+
+    SUBCASE("without a haste source the fresh token cannot tap")
+    {
+        CHECK_FALSE(CanTapNow(s.battlefield[tok], s.battlefield));
+    }
+
+    SUBCASE("with Concordant Crossroads it can -- no new code, the shared haste oracle resolves it")
+    {
+        Put(s, "Concordant Crossroads", 0, 2);
+        CHECK(CanTapNow(s.battlefield[tok], s.battlefield));
+    }
+
+    SUBCASE("a token that has been around since the turn began never needed the haste")
+    {
+        GameState t = Fresh();
+        const int old_tok = PutSaprolingToken(t, 1, /*sick=*/false);
+        CHECK(CanTapNow(t.battlefield[old_tok], t.battlefield));
+    }
+}

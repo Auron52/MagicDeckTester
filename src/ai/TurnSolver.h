@@ -431,6 +431,19 @@ struct Action
                                        // dominated by the cheaper hard cast). Recompute sites
                                        // must swap in evoke_cost (the phyrexian/convoke lockstep
                                        // list); plan_signature carries #E.
+    bool        adventure        = false;
+                                       // ADVENTURE (CR 715 -- Brightcap Badger // Fungus Frolic):
+                                       // this CastFromHand is the ADVENTURE mode -- pay the
+                                       // adventure half's cost and resolve ITS text, then the
+                                       // physical card goes to staged_cards (the castable exile)
+                                       // rather than the graveyard, so the creature half can be
+                                       // cast from there later. CollectActions emits BOTH modes as
+                                       // variants sharing hand_index (the bestow idiom below), so
+                                       // the SEARCH decides -- neither dominates: the adventure is
+                                       // cheaper and gives two bodies NOW, the hard cast gives a
+                                       // 3/4 and its static grant a turn sooner. Gated on
+                                       // !m_is_staged, which is what makes "already adventured"
+                                       // unrepeatable without any new state. false = ordinary cast.
     bool        bestow           = false;
                                        // BESTOW (Gnarled Scarhide, CR 702.103): this CastFromHand is
                                        // the AURA mode -- pay CardParams::bestow_cost instead of the

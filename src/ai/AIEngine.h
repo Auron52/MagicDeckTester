@@ -502,7 +502,7 @@ private:
                            int convoke_green = 0,       // Chord of Calling: committed convoke taps
                            int convoke_other = 0,       // (reduce the recomputed cost -- lockstep)
                            int phyrexian_life = 0,      // Phyrexian ({G/P}, Birthing Pod): life paid
-                           bool evoke = false);         // Evoke (Reveillark): alternate-cost cast;
+                           bool evoke = false,          // Evoke (Reveillark): alternate-cost cast;
                                                         // EnterBattlefield self-sacs -> LTB fires
                                                         // in place of pips -- strip the recomputed
                                                         // cost + deduct after payment (lockstep)   // Replicate: extra token copies the PLAN pinned
@@ -512,6 +512,12 @@ private:
                                                         // (GameState::free_casts_available) instead of
                                                         // paying mana; falls back to a paid attempt if
                                                         // the bank is empty (stranded marker).
+                           bool adventure = false);     // Adventure (Brightcap Badger // Fungus
+                                                        // Frolic, CR 715): cast the SPELL half --
+                                                        // swap in the adventure face's def, and on
+                                                        // resolution the card goes to staged_cards
+                                                        // (this engine's castable exile) so the
+                                                        // creature half can be cast from there later
 
     // Returns the battlefield index of the first creature the opponent controls, or -1.
     int FindOpponentCreature(const GameState& state) const;

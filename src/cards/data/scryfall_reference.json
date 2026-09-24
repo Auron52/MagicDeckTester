@@ -496,6 +496,15 @@
     "toughness": null,
     "type_line": "Land — Forest Island"
   },
+  "Brightcap Badger": {
+    "cmc": 4.0,
+    "keywords": [],
+    "mana_cost": "{3}{G} // {2}{G}",
+    "oracle_text": "Each Fungus and Saproling you control has \"{T}: Add {G}.\"\nAt the beginning of your end step, create a 1/1 green Saproling creature token.",
+    "power": "3",
+    "toughness": "4",
+    "type_line": "Creature — Badger Druid"
+  },
   "Brushland": {
     "cmc": 0.0,
     "keywords": [],
@@ -664,6 +673,15 @@
     "toughness": null,
     "type_line": "Artifact — Equipment"
   },
+  "Concordant Crossroads": {
+    "cmc": 1.0,
+    "keywords": [],
+    "mana_cost": "{G}",
+    "oracle_text": "All creatures have haste.",
+    "power": null,
+    "toughness": null,
+    "type_line": "World Enchantment"
+  },
   "Conservatory": {
     "cmc": 0.0,
     "keywords": [
@@ -796,6 +814,15 @@
     "power": "1",
     "toughness": "2",
     "type_line": "Creature — Elf Shaman"
+  },
+  "Deathspore Thallid": {
+    "cmc": 2.0,
+    "keywords": [],
+    "mana_cost": "{1}{B}",
+    "oracle_text": "At the beginning of your upkeep, put a spore counter on this creature.\nRemove three spore counters from this creature: Create a 1/1 green Saproling creature token.\nSacrifice a Saproling: Target creature gets -1/-1 until end of turn.",
+    "power": "1",
+    "toughness": "1",
+    "type_line": "Creature — Zombie Fungus"
   },
   "Defense of the Heart": {
     "cmc": 4.0,
@@ -1255,6 +1282,15 @@
     "toughness": null,
     "type_line": "Land"
   },
+  "Fungus Frolic": {
+    "cmc": 4.0,
+    "keywords": [],
+    "mana_cost": "{3}{G} // {2}{G}",
+    "oracle_text": "Create two 1/1 green Saproling creature tokens. (Then exile this card. You may cast the creature later from exile.)",
+    "power": "3",
+    "toughness": "4",
+    "type_line": "Instant — Adventure"
+  },
   "Fyndhorn Elves": {
     "cmc": 1.0,
     "keywords": [],
@@ -1586,6 +1622,15 @@
     "power": "2",
     "toughness": "2",
     "type_line": "Creature — Sliver"
+  },
+  "Hickory Woodlot": {
+    "cmc": 0.0,
+    "keywords": [],
+    "mana_cost": "",
+    "oracle_text": "This land enters tapped with two depletion counters on it.\n{T}, Remove a depletion counter from this land: Add {G}{G}. If there are no depletion counters on this land, sacrifice it.",
+    "power": null,
+    "toughness": null,
+    "type_line": "Land"
   },
   "Highland Weald": {
     "cmc": 0.0,
@@ -2965,6 +3010,17 @@
     "toughness": null,
     "type_line": "Land"
   },
+  "Saproling Burst": {
+    "cmc": 5.0,
+    "keywords": [
+      "Fading"
+    ],
+    "mana_cost": "{4}{G}",
+    "oracle_text": "Fading 7 (This enchantment enters with seven fade counters on it. At the beginning of your upkeep, remove a fade counter from it. If you can't, sacrifice it.)\nRemove a fade counter from this enchantment: Create a green Saproling creature token. It has \"This token's power and toughness are each equal to the number of fade counters on Saproling Burst.\"\nWhen this enchantment leaves the battlefield, destroy all tokens created with this enchantment. They can't be regenerated.",
+    "power": null,
+    "toughness": null,
+    "type_line": "Enchantment"
+  },
   "Scalding Tarn": {
     "cmc": 0.0,
     "keywords": [],
@@ -3161,6 +3217,17 @@
     "toughness": null,
     "type_line": "Legendary Land"
   },
+  "Shroofus Sproutsire": {
+    "cmc": 3.0,
+    "keywords": [
+      "Trample"
+    ],
+    "mana_cost": "{2}{G}",
+    "oracle_text": "Trample\nWhenever a Saproling you control deals combat damage to a player, create that many 1/1 green Saproling creature tokens.",
+    "power": "1",
+    "toughness": "1",
+    "type_line": "Legendary Creature — Saproling"
+  },
   "Siege-Gang Commander": {
     "cmc": 5.0,
     "keywords": [],
@@ -3232,6 +3299,15 @@
     "power": "2",
     "toughness": "2",
     "type_line": "Creature — Minotaur Shaman"
+  },
+  "Slimefoot, the Stowaway": {
+    "cmc": 3.0,
+    "keywords": [],
+    "mana_cost": "{1}{B}{G}",
+    "oracle_text": "Whenever a Saproling you control dies, Slimefoot deals 1 damage to each opponent and you gain 1 life.\n{4}: Create a 1/1 green Saproling creature token.",
+    "power": "2",
+    "toughness": "3",
+    "type_line": "Legendary Creature — Fungus"
   },
   "Slippery Bogle": {
     "cmc": 1.0,
@@ -3855,6 +3931,15 @@
     "power": "2",
     "toughness": "2",
     "type_line": "Creature — Goblin Shaman"
+  },
+  "Vitaspore Thallid": {
+    "cmc": 2.0,
+    "keywords": [],
+    "mana_cost": "{1}{G}",
+    "oracle_text": "At the beginning of your upkeep, put a spore counter on this creature.\nRemove three spore counters from this creature: Create a 1/1 green Saproling creature token.\nSacrifice a Saproling: Target creature gains haste until end of turn.",
+    "power": "1",
+    "toughness": "1",
+    "type_line": "Creature — Fungus"
   },
   "Vizier of Remedies": {
     "cmc": 2.0,

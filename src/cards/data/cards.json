@@ -8459,6 +8459,61 @@
    }
   },
   {
+   "name": "Brightcap Badger",
+   "mana_cost": "{3}{G}",
+   "types": [
+    "Creature"
+   ],
+   "subtypes": [
+    "Badger",
+    "Druid"
+   ],
+   "keywords": [],
+   "power": 3,
+   "toughness": 4,
+   "oracle_text": "Each Fungus and Saproling you control has \"{T}: Add {G}.\"\nAt the beginning of your end step, create a 1/1 green Saproling creature token. [THE FRONT FACE of the adventure card Brightcap Badger // Fungus Frolic; the adventure half is its own entry (see \"Fungus Frolic\"), linked by adventure_face_name, and ONLY this name ever appears in a decklist. THREE abilities, and the mana grant is the one with teeth. GRANT: granted_tap_mana_subtypes [Fungus, Saproling] + granted_tap_mana_color G is a layer-6 ability grant resolved through the shared mana oracle, NOT a per-site template test -- and it had to be, because EVERY Saproling in this deck is a TOKEN and tokens have no CardDefinition (LookupCached returns null), so any predicate keyed on a definition would have been dead on the entire population the card exists to affect. The subtype test is CardHasSubtype against the permanent's own Card, the token-safe route Slimefoot and Shroofus already use. IT IS BOARD-GATED, not database-gated: the grant costs nothing at all unless a Badger is on the battlefield, which matters because this is the heaviest deck in the regression suite and the mana paths it touches are its hottest. SUMMONING SICKNESS IS REAL HERE and is the whole reason this card wants Concordant Crossroads: a {T} ability on a Saproling created this turn is illegal under CR 302.6 unless something grants haste, so the Badger converts a board of fresh tokens into mana only alongside a haste source -- CanTapNow already resolves both, so the interaction works with no extra wiring. END STEP: endstep_lifegain_tokens 1 + endstep_tokens_unconditional, which converts that family from its Ocelot Pride \"if you gained life\" shape to a plain unconditional trigger; the token is created through the universal cascade, so it is doubled by Doubling Season like every other token this deck makes. NOTE the end-step token is summoning-sick on the turn it arrives and unblocked-attacks only from the next turn -- its real job here is fodder for devour and the sac outlets, plus one more body for the grant to turn into mana.]",
+   "template": "custom",
+   "parameters": {
+    "adventure_face_name": "Fungus Frolic",
+    "granted_tap_mana_subtypes": [
+     "Fungus",
+     "Saproling"
+    ],
+    "granted_tap_mana_color": "G",
+    "endstep_lifegain_tokens": 1,
+    "endstep_tokens_unconditional": true,
+    "endstep_token_power": 1,
+    "endstep_token_toughness": 1,
+    "endstep_token_subtypes": [
+     "Saproling"
+    ],
+    "endstep_token_color": "G"
+   }
+  },
+  {
+   "name": "Fungus Frolic",
+   "mana_cost": "{2}{G}",
+   "types": [
+    "Instant"
+   ],
+   "subtypes": [
+    "Adventure"
+   ],
+   "keywords": [],
+   "oracle_text": "Create two 1/1 green Saproling creature tokens. (Then exile this card. You may cast the creature later from exile.) [THE ADVENTURE HALF of Brightcap Badger // Fungus Frolic (CR 715). AUTHORED as its own entry rather than DB-synthesized: the MDFC and bestow faces are synthesized because their derived type is always known (a land, an Aura), but an adventure's text is arbitrary. This entry is NEVER put in a decklist and is never drawn -- it is reached only by casting the Badger in its adventure mode, which is an extra CastFromHand variant sharing hand_index (the bestow/evoke idiom), so the SEARCH decides between the {2}{G} instant now and the {3}{G} 3/4 later; neither dominates. ON RESOLUTION the card goes to Player::staged_cards rather than the graveyard, which is this engine's real castable-exile zone (plain GameState::exile is not playable from), with expiry INT_MAX so it never times out -- and because a staged card is merged into hand for enumeration, casting the creature from exile needs NO new code at all. m_is_staged doubles as the \"already adventured\" flag: the adventure variant is gated on !m_is_staged, so it cannot be taken twice, and every \"from your hand\" effect in the engine already excludes staged cards. FIRST PLAIN TOKEN-MAKING SPELL IN THIS FILE -- cast_creates_tokens is new; the only prior instant/sorcery token params are bolted to a combat trick (trick_token_*) or copy a target (token_copy_of_target). [PARTIAL: instants are castable only in the main phases (no opponent-turn priority window exists -- a disclosed engine-wide Tier-4 gap, not specific to this card). WHY near-inert here -- against a passive goldfish there is nothing to respond to, holding mana through combat buys nothing, and both tokens are summoning-sick so a post-blockers cast gains no damage. The one real loss is the pre- vs post-combat main choice, and that is a provider pin (FungusProvider::MainPhaseOverride), not an instant-speed limitation.]]",
+   "template": "custom",
+   "parameters": {
+    "adventure_parent_name": "Brightcap Badger",
+    "cast_creates_tokens": 2,
+    "cast_created_token_power": 1,
+    "cast_created_token_toughness": 1,
+    "cast_created_token_subtypes": [
+     "Saproling"
+    ],
+    "cast_created_token_color": "G"
+   }
+  },
+  {
    "name": "Doubling Season",
    "mana_cost": "{4}{G}",
    "types": [

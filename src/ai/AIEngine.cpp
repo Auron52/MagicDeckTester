@@ -3760,7 +3760,8 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
                             int convoke_green = 0,       // Chord of Calling: committed convoke taps
                             int convoke_other = 0,
                             int phyrexian_life = 0,      // Phyrexian ({G/P}): life paid for pips
-                            bool evoke = false)          // Evoke (Reveillark): alternate-cost self-sac cast
+                            bool evoke = false,          // Evoke (Reveillark): alternate-cost self-sac cast
+                            bool adventure = false)      // Adventure (Brightcap Badger): cast the SPELL half
     {
         Player& ap = state.ActivePlayer();
         // PRE-CAST hand snapshot for the breakpoint drawn-card exemption (lockstep twin of
@@ -3810,7 +3811,8 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
         const std::string cast_name = it->m_name.str();
         CastSpellFromHand(state, *it, available, 0, tutor_target, chosen_x, own_targets, ponder_keep,
                           crackle_targets, splice_count, chosen_float_color, enchant_target, free_cast,
-                          bestow, replicate_count, convoke_green, convoke_other, phyrexian_life, evoke);
+                          bestow, replicate_count, convoke_green, convoke_other, phyrexian_life, evoke,
+                          adventure);
         if (s_exec_tap_trace)
         {
             std::string line = "[exec-tap] T" + std::to_string(state.turn_number) + " " + cast_name + " tapped:";
@@ -4158,7 +4160,7 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
             else if (a.kind == Action::Kind::CastFromHand)
             { if (a.convoke_green > 0 || a.convoke_other > 0)
               { ApplyConvokeTaps(state, state.active_player_index, a.convoke_green, a.convoke_other); }
-              if (a.alt_cost) { cast_alt(a.card_name, a.alt_lifegain); } else { m_pending_devour_count = a.devour_count; cast_by_name(a.card_name, a.tutor_target, a.chosen_x, a.soulfire_own_targets, a.ponder_keep, a.crackle_targets, a.splice_count, a.chosen_float_color, a.enchant_target, a.free_cast, a.bestow, a.replicate_count, a.convoke_green, a.convoke_other, a.phyrexian_life, a.evoke); } resolve_now(); walker_cast_activation(a);
+              if (a.alt_cost) { cast_alt(a.card_name, a.alt_lifegain); } else { m_pending_devour_count = a.devour_count; cast_by_name(a.card_name, a.tutor_target, a.chosen_x, a.soulfire_own_targets, a.ponder_keep, a.crackle_targets, a.splice_count, a.chosen_float_color, a.enchant_target, a.free_cast, a.bestow, a.replicate_count, a.convoke_green, a.convoke_other, a.phyrexian_life, a.evoke, a.adventure); } resolve_now(); walker_cast_activation(a);
  }
             else if (a.kind == Action::Kind::CastFromGraveyard)
             { cast_from_graveyard(a.card_name, a.discard_lands); resolve_now(); }
@@ -4434,7 +4436,7 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
         {
             const Action& a = extra.actions[ci];
             {
-                m_pending_devour_count = a.devour_count; cast_by_name(a.card_name, a.tutor_target, a.chosen_x, a.soulfire_own_targets, a.ponder_keep, a.crackle_targets, a.splice_count, a.chosen_float_color, a.enchant_target, a.free_cast, a.bestow, a.replicate_count, a.convoke_green, a.convoke_other, a.phyrexian_life, a.evoke); resolve_now(); walker_cast_activation(a);
+                m_pending_devour_count = a.devour_count; cast_by_name(a.card_name, a.tutor_target, a.chosen_x, a.soulfire_own_targets, a.ponder_keep, a.crackle_targets, a.splice_count, a.chosen_float_color, a.enchant_target, a.free_cast, a.bestow, a.replicate_count, a.convoke_green, a.convoke_other, a.phyrexian_life, a.evoke, a.adventure); resolve_now(); walker_cast_activation(a);
                 const bool put_armed_c = put_in_hand_armed(a.card_name);
                 if (is_draw_engine(a.card_name) || put_armed_c)
                 {
@@ -4457,7 +4459,7 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
         for (const Action& a : extra.actions)
         {
             if (a.kind == Action::Kind::CastFromHand && a.sacrifice_land)
-            { m_pending_devour_count = a.devour_count; cast_by_name(a.card_name, a.tutor_target, a.chosen_x, a.soulfire_own_targets, a.ponder_keep, a.crackle_targets, a.splice_count, a.chosen_float_color, a.enchant_target, a.free_cast, a.bestow, a.replicate_count, a.convoke_green, a.convoke_other, a.phyrexian_life, a.evoke); resolve_now(); walker_cast_activation(a); }
+            { m_pending_devour_count = a.devour_count; cast_by_name(a.card_name, a.tutor_target, a.chosen_x, a.soulfire_own_targets, a.ponder_keep, a.crackle_targets, a.splice_count, a.chosen_float_color, a.enchant_target, a.free_cast, a.bestow, a.replicate_count, a.convoke_green, a.convoke_other, a.phyrexian_life, a.evoke, a.adventure); resolve_now(); walker_cast_activation(a); }
         }
         for (const Action& a : extra.actions)
         {
@@ -4668,7 +4670,7 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
         {
             if (a.kind != Action::Kind::CastFromHand || a.sacrifice_land) { continue; }
             if (a.alt_cost) { cast_alt(a.card_name, a.alt_lifegain); resolve_now(); continue; }
-            m_pending_devour_count = a.devour_count; cast_by_name(a.card_name, a.tutor_target, a.chosen_x, a.soulfire_own_targets, a.ponder_keep, a.crackle_targets, a.splice_count, a.chosen_float_color, a.enchant_target, a.free_cast, a.bestow, a.replicate_count, a.convoke_green, a.convoke_other, a.phyrexian_life, a.evoke); note_draw_engine(a.card_name); resolve_now(); walker_cast_activation(a); fire_unlock();
+            m_pending_devour_count = a.devour_count; cast_by_name(a.card_name, a.tutor_target, a.chosen_x, a.soulfire_own_targets, a.ponder_keep, a.crackle_targets, a.splice_count, a.chosen_float_color, a.enchant_target, a.free_cast, a.bestow, a.replicate_count, a.convoke_green, a.convoke_other, a.phyrexian_life, a.evoke, a.adventure); note_draw_engine(a.card_name); resolve_now(); walker_cast_activation(a); fire_unlock();
             // put_in_hand_armed() runs FIRST and unconditionally: it also arms the depth-0
             // second pass, which `s_full_depth &&` would short-circuit away.
             const bool put_armed = put_in_hand_armed(a.card_name);
@@ -4757,7 +4759,7 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
         for (int i : ena)
         {
             const Action& a = plan.actions[i];
-            m_pending_devour_count = a.devour_count; cast_by_name(a.card_name, a.tutor_target, a.chosen_x, a.soulfire_own_targets, a.ponder_keep, a.crackle_targets, a.splice_count, a.chosen_float_color, a.enchant_target, a.free_cast, a.bestow, a.replicate_count, a.convoke_green, a.convoke_other, a.phyrexian_life, a.evoke); note_draw_engine(a.card_name); resolve_now(); walker_cast_activation(a); fire_unlock();
+            m_pending_devour_count = a.devour_count; cast_by_name(a.card_name, a.tutor_target, a.chosen_x, a.soulfire_own_targets, a.ponder_keep, a.crackle_targets, a.splice_count, a.chosen_float_color, a.enchant_target, a.free_cast, a.bestow, a.replicate_count, a.convoke_green, a.convoke_other, a.phyrexian_life, a.evoke, a.adventure); note_draw_engine(a.card_name); resolve_now(); walker_cast_activation(a); fire_unlock();
         }
     }
     // Spectacle hoist (mirror of ApplyPlanDirect): a sac-land damage source (Shard Volley) would
@@ -4779,7 +4781,7 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
         const Action& a = plan.actions[ai];
         if (a.kind == Action::Kind::CastFromHand && a.sacrifice_land && a.direct_damage > 0)
         {
-            m_pending_devour_count = a.devour_count; cast_by_name(a.card_name, a.tutor_target, a.chosen_x, a.soulfire_own_targets, a.ponder_keep, a.crackle_targets, a.splice_count, a.chosen_float_color, a.enchant_target, a.free_cast, a.bestow, a.replicate_count, a.convoke_green, a.convoke_other, a.phyrexian_life, a.evoke); note_draw_engine(a.card_name); resolve_now(); walker_cast_activation(a); fire_unlock();
+            m_pending_devour_count = a.devour_count; cast_by_name(a.card_name, a.tutor_target, a.chosen_x, a.soulfire_own_targets, a.ponder_keep, a.crackle_targets, a.splice_count, a.chosen_float_color, a.enchant_target, a.free_cast, a.bestow, a.replicate_count, a.convoke_green, a.convoke_other, a.phyrexian_life, a.evoke, a.adventure); note_draw_engine(a.card_name); resolve_now(); walker_cast_activation(a); fire_unlock();
             spec_hoisted_sac.insert(ai);
         }
     }
@@ -4837,7 +4839,7 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
         else if (a.kind == Action::Kind::CastFromHand && !a.sacrifice_land
                  && !ResolveProvider(state).CastEnablerFirst(state, a.card_name))
         {
-            m_pending_devour_count = a.devour_count; cast_by_name(a.card_name, a.tutor_target, a.chosen_x, a.soulfire_own_targets, a.ponder_keep, a.crackle_targets, a.splice_count, a.chosen_float_color, a.enchant_target, a.free_cast, a.bestow, a.replicate_count, a.convoke_green, a.convoke_other, a.phyrexian_life, a.evoke); note_draw_engine(a.card_name); resolve_now(); walker_cast_activation(a); fire_unlock();
+            m_pending_devour_count = a.devour_count; cast_by_name(a.card_name, a.tutor_target, a.chosen_x, a.soulfire_own_targets, a.ponder_keep, a.crackle_targets, a.splice_count, a.chosen_float_color, a.enchant_target, a.free_cast, a.bestow, a.replicate_count, a.convoke_green, a.convoke_other, a.phyrexian_life, a.evoke, a.adventure); note_draw_engine(a.card_name); resolve_now(); walker_cast_activation(a); fire_unlock();
             // put_in_hand_armed() runs FIRST and unconditionally: it also arms the depth-0
             // second pass, which `s_full_depth &&` would short-circuit away.
             const bool put_armed = put_in_hand_armed(a.card_name);
@@ -4912,7 +4914,7 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
             continue;
         }
         if (a.alt_cost) { cast_alt(a.card_name, a.alt_lifegain); resolve_now(); continue; }
-        m_pending_devour_count = a.devour_count; cast_by_name(a.card_name, a.tutor_target, a.chosen_x, a.soulfire_own_targets, a.ponder_keep, a.crackle_targets, a.splice_count, a.chosen_float_color, a.enchant_target, a.free_cast, a.bestow, a.replicate_count, a.convoke_green, a.convoke_other, a.phyrexian_life, a.evoke); note_draw_engine(a.card_name); resolve_now(); walker_cast_activation(a); fire_unlock();
+        m_pending_devour_count = a.devour_count; cast_by_name(a.card_name, a.tutor_target, a.chosen_x, a.soulfire_own_targets, a.ponder_keep, a.crackle_targets, a.splice_count, a.chosen_float_color, a.enchant_target, a.free_cast, a.bestow, a.replicate_count, a.convoke_green, a.convoke_other, a.phyrexian_life, a.evoke, a.adventure); note_draw_engine(a.card_name); resolve_now(); walker_cast_activation(a); fire_unlock();
         // SITE 6 (MTG_EQUIP_DRAW_BP_INLINE) is the first breakpoint class that can appear in a
         // CLEAN set: the branch comment above ("No draw engine here, so no breakpoint handling is
         // needed") held only because every other class carries an OrderingOpaque param and an
@@ -4956,7 +4958,7 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
         if (spec_hoisted_sac.count(ai)) { continue; }   // already cast by the Spectacle hoist
         const Action& a = plan.actions[ai];
         if (a.kind == Action::Kind::CastFromHand && a.sacrifice_land)
-        { m_pending_devour_count = a.devour_count; cast_by_name(a.card_name, a.tutor_target, a.chosen_x, a.soulfire_own_targets, a.ponder_keep, a.crackle_targets, a.splice_count, a.chosen_float_color, a.enchant_target, a.free_cast, a.bestow, a.replicate_count, a.convoke_green, a.convoke_other, a.phyrexian_life, a.evoke); note_draw_engine(a.card_name); resolve_now(); walker_cast_activation(a); fire_unlock(); }
+        { m_pending_devour_count = a.devour_count; cast_by_name(a.card_name, a.tutor_target, a.chosen_x, a.soulfire_own_targets, a.ponder_keep, a.crackle_targets, a.splice_count, a.chosen_float_color, a.enchant_target, a.free_cast, a.bestow, a.replicate_count, a.convoke_green, a.convoke_other, a.phyrexian_life, a.evoke, a.adventure); note_draw_engine(a.card_name); resolve_now(); walker_cast_activation(a); fire_unlock(); }
     }
     for (const Action& a : plan.actions)
     {
@@ -6133,11 +6135,22 @@ void AIEngine::CastSpellFromHand(GameState& state, Card& hand_card, ManaPool& av
                                  const std::string& chosen_float_color, int enchant_target,
                                  bool free_cast, bool bestow, int replicate_count,
                                  int convoke_green, int convoke_other, int phyrexian_life,
-                                 bool evoke)
+                                 bool evoke, bool adventure)
 {
     Player& ap = state.ActivePlayer();
     auto def = CardDatabase::Instance().LookupCached(hand_card);
     if (!def) { return; }
+    // ADVENTURE (Brightcap Badger // Fungus Frolic, CR 715): swap in the adventure face's def for
+    // the whole cast -- its cost is paid and its text resolves. The hand card is still `hand_card`
+    // (removed below by number, never by def name), and entry.source keeps that number, so
+    // MoveToGraveyard can stage the PARENT creature under the same per-copy ID. Exact executor twin
+    // of the rollout's apply_one swap. Inert for every card without an adventure face.
+    if (adventure && !def->params.adventure_face_name.empty())
+    {
+        const CardDefinition* adef =
+            CardDatabase::Instance().Lookup(def->params.adventure_face_name);
+        if (adef != nullptr) { def = adef; }
+    }
     // BESTOW (Gnarled Scarhide): swap in the DB's synthesized "<name> (Bestowed)" AURA face for the
     // whole cast -- its cost is paid, its params resolve, and it is the permanent that enters. The
     // hand card itself is still `hand_card` (removed below by iterator/number, never by def name),

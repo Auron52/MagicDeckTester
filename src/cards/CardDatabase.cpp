@@ -1058,6 +1058,7 @@ CardParams CardDatabase::BuildParamsFromJson(const json& params) const
     for (const std::string& s : params.value("endstep_token_subtypes", json::array()))
         p.endstep_token_subtypes.push_back(s);
     p.endstep_lifegain_threshold          = params.value("endstep_lifegain_threshold", 1);
+    p.endstep_tokens_unconditional        = params.value("endstep_tokens_unconditional", false);
     for (const std::string& s : params.value("endstep_token_keywords", json::array()))
         p.endstep_token_keywords.push_back(s);
     p.endstep_token_ascend_copy           = params.value("endstep_token_ascend_copy", false);
@@ -1109,6 +1110,19 @@ CardParams CardDatabase::BuildParamsFromJson(const json& params) const
     p.ltb_return_max_power      = params.value("ltb_return_max_power", 0);
     if (params.contains("evoke_cost"))
         p.evoke_cost = ManaCostFromString(params["evoke_cost"].get<std::string>());
+    p.adventure_face_name       = params.value("adventure_face_name", std::string());
+    p.adventure_parent_name     = params.value("adventure_parent_name", std::string());
+    p.cast_creates_tokens       = params.value("cast_creates_tokens", 0);
+    p.cast_created_token_power  = params.value("cast_created_token_power", 0);
+    p.cast_created_token_toughness = params.value("cast_created_token_toughness", 0);
+    p.cast_created_token_color  = params.value("cast_created_token_color", std::string());
+    for (const std::string& s : params.value("cast_created_token_subtypes", json::array()))
+        p.cast_created_token_subtypes.push_back(s);
+    for (const std::string& s : params.value("cast_created_token_keywords", json::array()))
+        p.cast_created_token_keywords.push_back(s);
+    for (const std::string& s : params.value("granted_tap_mana_subtypes", json::array()))
+        p.granted_tap_mana_subtypes.push_back(s);
+    p.granted_tap_mana_color    = params.value("granted_tap_mana_color", std::string());
     p.etb_damage_each_opponent  = params.value("etb_damage_each_opponent", 0);
     p.etb_reveal_count          = params.value("etb_reveal_count", 0);
     for (const std::string& s : params.value("etb_reveal_put_subtypes", json::array()))

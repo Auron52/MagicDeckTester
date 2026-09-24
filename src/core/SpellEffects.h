@@ -1918,6 +1918,49 @@ inline void PutQuestCounters(GameState& state, Permanent& p, int n)
 // Doubling Season for the same CR 121.6 / 614.1c reason devour's counters are -- under one Season
 // the Burst enters with fourteen, which is twice the activations AND twice the size of every token
 // it makes, so routing this through the chokepoint is worth a factor of four, not two.
+// "Create N tokens" as the resolution of an instant or sorcery (Fungus Frolic, the first plain
+// token-making spell in this file). Shared by BOTH worlds -- EffectHandler::ResolveImpl and the
+// rollout's apply_one -- so the executor and the search cannot drift. Tokens go through the shared
+// CreateToken cascade, so Doubling Season doubles them and every ETB watcher sees them, exactly as
+// for a token made by a permanent. Inert (loop runs zero times) for every card without the param.
+inline void ApplyCastCreatesTokens(GameState& state, int controller, const CardDefinition& def)
+{
+    const CardParams& p = def.params;
+    for (int k = 0; k < p.cast_creates_tokens; ++k)
+    {
+        CreateToken(state, controller, p.cast_created_token_power,
+                    p.cast_created_token_toughness, p.cast_created_token_subtypes,
+                    p.cast_created_token_color, p.cast_created_token_keywords);
+    }
+}
+
+// ADVENTURE (CR 715), the resolution half. An adventure spell EXILES "on an adventure" instead of
+// going to the graveyard, and the CREATURE half becomes castable from there. This engine's real
+// castable-exile zone is Player::staged_cards (plain GameState::exile is not playable from -- see
+// DecisionProviders' note that staged_cards and suspended_cards are the only two), and a staged
+// card is merged into hand for enumeration each turn -- so casting the creature later needs no new
+// code at all, and every "from your hand" effect already excludes staged cards.
+//
+// `number` is the per-copy stable ID of the physical card that was cast; it travels onto the staged
+// creature because an adventure is ONE card, not two. Expiry is INT_MAX: Light Up the Stage's
+// window expires, an adventure never does. Returns false when the card is not an adventure, so the
+// caller falls through to its ordinary graveyard placement.
+inline bool StageAdventureParent(GameState& state, int controller,
+                                 const CardDefinition& def, int number)
+{
+    if (def.params.adventure_parent_name.empty()) { return false; }
+    const CardDefinition* pdef =
+        CardDatabase::Instance().Lookup(def.params.adventure_parent_name);
+    if (pdef == nullptr) { return false; }   // broken link: fall back to the graveyard, never drop it
+    StagedCard sc;
+    sc.card             = pdef->card;
+    sc.card.m_number    = number;
+    sc.card.RehashName();
+    sc.expiry_turn      = std::numeric_limits<int>::max();
+    state.players[controller].staged_cards.push_back(std::move(sc));
+    return true;
+}
+
 inline void PutFadeCounters(GameState& state, Permanent& p, int n)
 {
     if (n <= 0) { return; }
@@ -4584,7 +4627,11 @@ inline void PerformEndStepLifegainTokens(GameState& state)
     {
         const CardParams& pp = d->params;
         // Per-card threshold: default 1 reproduces the historical behaviour exactly.
-        if (gained_this_turn < std::max(1, pp.endstep_lifegain_threshold)) { continue; }
+        // endstep_tokens_unconditional drops the intervening-if outright (Brightcap Badger, whose
+        // trigger reads no condition at all). It cannot be expressed as threshold 0 -- the max()
+        // below clamps that to 1 -- so it is a separate flag, false for every pre-existing card.
+        if (!pp.endstep_tokens_unconditional
+            && gained_this_turn < std::max(1, pp.endstep_lifegain_threshold)) { continue; }
         for (int i = 0; i < pp.endstep_lifegain_tokens; ++i)
         {
             // Enters through the universal cascade: in a lifegain deck each Cat is a creature
@@ -17393,13 +17440,167 @@ inline bool CardHasColorlessPipActivation(const GameState& state, int controller
 // Cheap upper bound on the mana this player could still make this turn: every untapped source's
 // per-tap yield (aura bonuses included) plus what is already floating. Used only as a
 // castable-this-turn necessary condition -- never as a payability answer.
+// ================================================================================================
+// BRIGHTCAP BADGER'S MANA GRANT -- "Each Fungus and Saproling you control has '{T}: Add {G}'."
+//
+// THE PROBLEM THIS SOLVES. The engine's "is this permanent a mana source" question is open-coded
+// at ~20 payment-critical sites, and every one of them is keyed on a CardDefinition:
+//
+//     const CardDefinition* d = LookupCached(p.card);
+//     if (!d) { continue; }
+//     const bool is_src = (d->tmpl == CardTemplate::BasicLand)
+//                      || (d->tmpl == CardTemplate::ManaDork && CanTapNow(p, state.battlefield))
+//                      || d->params.mana_rock || PaySacSpendableNow(state, p, *d);
+//
+// There is no IsManaSource(perm) helper to change -- the predicate is written out each time. And
+// EVERY Saproling in this archetype is a TOKEN, for which LookupCached returns null, so each of
+// those loops bails on `!d` before it could ever consider the grant. A param- or template-keyed
+// implementation is therefore 100% dead on the entire population the card exists to affect.
+//
+// THE FIX. A granted body is handed a shared SYNTHETIC ManaDork definition, so each site's existing
+// body works unchanged and the only edit per site is the lookup line. Three properties make the
+// synthetic def the right shape rather than a hack:
+//
+//   * tmpl == ManaDork means every site's `&& CanTapNow(p, bf)` still applies -- so summoning
+//     sickness (CR 302.6) and Concordant Crossroads are handled with NO new code.
+//   * ONE pointer for every granted body is what lets the backtracker's identical-sibling
+//     dup-collapse fold them into a single class instead of a powerset over interchangeable 1/1s.
+//   * ManaCacheKey hashes the definition POINTER per source, so a stable static address is exactly
+//     the cache identity we want -- the key needs no new term, only the same predicate.
+//
+// The grant is a STATIC ability (CR 611), not an activated one: the Badger itself may be tapped or
+// summoning-sick and the grant still applies. Nothing here reads the granter's own state.
+// ================================================================================================
+
+// The shared synthetic face, one per colour so the pointers stay stable and distinct. Deliberately
+// minimal: no supertypes (SnowTag reads false), no aura, no storage counters, no restrictions --
+// every param-gated branch in TapSourceIntoFloat / AddSourceToPool / RestrictedManaUsable defaults
+// to the permissive answer on an empty CardParams, which is correct for a plain "{T}: Add {G}".
+inline const CardDefinition& GrantedManaFace(Color c)
+{
+    static const std::array<CardDefinition, 6> faces = []
+    {
+        std::array<CardDefinition, 6> f{};
+        static const char* kNames[6] = { "(granted {T}: Add {W})", "(granted {T}: Add {U})",
+                                         "(granted {T}: Add {B})", "(granted {T}: Add {R})",
+                                         "(granted {T}: Add {G})", "(granted {T}: Add {C})" };
+        for (int i = 0; i < 6; ++i)
+        {
+            f[i].tmpl = CardTemplate::ManaDork;
+            f[i].card.m_name = kNames[i];
+            f[i].card.RehashName();
+            f[i].params.produces        = { static_cast<Color>(i) };
+            f[i].params.produces_amount = 1;
+        }
+        return f;
+    }();
+    const int i = static_cast<int>(c);
+    return faces[(i >= 0 && i < 6) ? static_cast<std::size_t>(i) : 4u];   // default green
+}
+
+inline Color GrantedManaColorOf(const std::string& s)
+{
+    if (s == "W") { return Color::White; }
+    if (s == "U") { return Color::Blue;  }
+    if (s == "B") { return Color::Black; }
+    if (s == "R") { return Color::Red;   }
+    if (s == "C") { return Color::Colorless; }
+    return Color::Green;
+}
+
+// Resolved ONCE per payment / per pool build, never once per source per pip -- that is the O(n^2)
+// shape this whole strand exists to avoid on a 364-permanent board.
+struct ManaGrant
+{
+    bool     live          = false;
+    int      n_subs        = 0;
+    uint16_t subs[4]       = { 0, 0, 0, 0 };   // interned subtype ids the grant reaches
+    Color    color         = Color::Green;
+    // Resolved in the SAME board walk, and load-bearing for cost rather than correctness: a granted
+    // {T} on a summoning-sick body is illegal unless something grants haste, and asking CanTapNow
+    // per body would re-walk the whole battlefield per source (HasHasteFromLords takes no
+    // def_absent short-circuit). Under Concordant Crossroads -- the very card that makes this grant
+    // worth playing -- EVERY fresh token is sick, so that is precisely the hot case.
+    bool     blanket_haste = false;
+    bool valid() const { return live; }
+};
+
+inline ManaGrant LiveManaGrant(const GameState& state, int controller)
+{
+    ManaGrant g;
+    if (!state.deck_has_mana_grant) { return g; }
+    for (const Permanent& p : state.battlefield)
+    {
+        if (p.controller_index != controller) { continue; }
+        if (p.def_absent) { continue; }   // see Permanent::def_absent (same `continue`, no call)
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+        if (d == nullptr) { continue; }
+        // The blanket-haste half of the walk (Concordant Crossroads). Kept here rather than in
+        // CanTapNow so the whole question costs ONE battlefield pass per payment.
+        if (d->params.grants_haste && d->params.affects_all_creatures) { g.blanket_haste = true; }
+        if (d->params.granted_tap_mana_subtypes.empty()) { continue; }
+        if (g.live) { continue; }   // a second Badger grants the same ability; nothing changes
+        g.live  = true;
+        g.color = GrantedManaColorOf(d->params.granted_tap_mana_color);
+        for (const std::string& s : d->params.granted_tap_mana_subtypes)
+        {
+            if (g.n_subs >= 4) { break; }
+            g.subs[g.n_subs++] = SubtypeRegistry::Instance().Id(s);
+        }
+    }
+    return g;
+}
+
+// Does the grant reach this permanent? Subtypes are read off the permanent's OWN Card, never a
+// CardDefinition -- that is the entire point (see the header comment above).
+inline bool GrantReaches(const ManaGrant& g, const Permanent& p)
+{
+    if (!g.live || !p.card.IsCreature()) { return false; }
+    for (int i = 0; i < g.n_subs; ++i)
+    { if (g.subs[i] != 0 && CardHasSubtypeId(p.card, g.subs[i])) { return true; } }
+    return false;
+}
+
+// Can a granted body use its {T} right now? CR 302.6 -- the ability is a {T} ability, so a body
+// that entered this turn needs haste. Reads the grant's pre-resolved blanket_haste instead of
+// calling CanTapNow, which would re-walk the battlefield per source.
+inline bool GrantedBodyCanTap(const ManaGrant& g, const Permanent& p)
+{
+    if (p.tapped) { return false; }
+    if (!p.entered_this_turn) { return true; }
+    return g.blanket_haste || p.card.HasKeyword(Keyword::Haste);
+}
+
+// THE CHOKEPOINT. The definition to use for MANA questions about `p`. Call sites replace
+//     const CardDefinition* d = LookupCached(p.card); if (!d) { continue; }
+// with
+//     const CardDefinition* d = ManaDefOf(state, p, grant); if (!d) { continue; }
+// and leave their body untouched. Returns the real definition when there is one (a granted Fungus
+// is still whatever it already was -- Utopia Mycon keeps its sac outlet), the shared synthetic face
+// only for a body that would otherwise have none, and null when neither applies.
+inline const CardDefinition* ManaDefOf(const GameState& state, const Permanent& p,
+                                       const ManaGrant& g)
+{
+    const CardDefinition* d = p.def_absent ? nullptr
+                                           : CardDatabase::Instance().LookupCached(p.card);
+    if (d != nullptr) { return d; }
+    if (!GrantReaches(g, p) || !GrantedBodyCanTap(g, p)) { return nullptr; }
+    (void)state;
+    return &GrantedManaFace(g.color);
+}
+
 inline int LooseManaCeiling(const GameState& state, int controller)
 {
     int total = state.floating_mana.Total();
+    // A mana grant only ever ADDS mana, so a bound blind to it UNDER-counts -- and an under-count
+    // here is not merely a weaker prune: PaymentManaCovers turns a short ceiling into a proof that
+    // a cost is unpayable and refuses it before the greedy ever runs. Every bound in this family
+    // must therefore learn the grant, exactly like the payer.
+    const ManaGrant grant = LiveManaGrant(state, controller);
     for (const Permanent& p : state.battlefield)
     {
         if (p.controller_index != controller || p.tapped) { continue; }
-        const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+        const CardDefinition* d = ManaDefOf(state, p, grant);
         if (d == nullptr) { continue; }
         if (!p.card.IsLand() && d->tmpl != CardTemplate::ManaDork && !d->params.mana_rock)
         { continue; }
@@ -23289,6 +23490,10 @@ inline int UntappedManaUpperBound(const GameState& state, bool for_creature,
     }
     const int active = state.active_player_index;
     const int n      = static_cast<int>(state.battlefield.size());
+    // Same reason as LooseManaCeiling: this bound feeds PaymentManaCovers, which treats a short
+    // total as a PROOF of unpayability. A grant the bound cannot see makes it under-count, which
+    // would refuse exactly the payments the grant enables. Resolved once for the whole walk.
+    const ManaGrant grant = LiveManaGrant(state, active);
     int total = 0;
     for (int i = 0; i < n; ++i)
     {
@@ -23296,9 +23501,15 @@ inline int UntappedManaUpperBound(const GameState& state, bool for_creature,
         const Permanent& p = state.battlefield[i];
         if (p.controller_index != active || p.tapped) { continue; }
         if (reserved_mask & (1ull << i)) { continue; }   // reservation audit: held source unavailable
-        if (p.def_absent) { continue; }   // see Permanent::def_absent (same `continue`, no call)
-        const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
-        if (!d) { continue; }
+        // The def_absent fast-path stays, but it is now a fast-path rather than a verdict: a
+        // definition-less body may still be a mana source via the grant.
+        const CardDefinition* d = p.def_absent ? nullptr
+                                               : CardDatabase::Instance().LookupCached(p.card);
+        if (d == nullptr)
+        {
+            if (!GrantReaches(grant, p) || !GrantedBodyCanTap(grant, p)) { continue; }
+            d = &GrantedManaFace(grant.color);
+        }
         const bool is_src = (d->tmpl == CardTemplate::BasicLand)
                          || (d->tmpl == CardTemplate::ManaDork && CanTapNow(p, state.battlefield))
                          || d->params.mana_rock

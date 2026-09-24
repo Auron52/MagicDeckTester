@@ -2377,7 +2377,10 @@ static ManaPool BuildNonCreaturePool(const GameState& state)
     for (const Permanent& p : state.battlefield)
     {
         if (p.controller_index != state.active_player_index || p.tapped) { continue; }
-        auto def = CardDatabase::Instance().LookupCached(p.card);
+        // Brightcap Badger's grant: a granted body has no CardDefinition, so this `continue` was
+        // blind to it. ManaDefOf returns the shared synthetic ManaDork face; body unchanged.
+        const CardDefinition* def =
+            ManaDefOf(state, p, LiveManaGrant(state, state.active_player_index));
         if (!def || def->params.creature_mana_only) { continue; }
         bool is_land = (def->tmpl == CardTemplate::BasicLand);
         // §2a: a pay-sac Treasure is an artifact source -- it must be in the NONCREATURE pool or the
@@ -5016,7 +5019,9 @@ static void ComputeAvailableColors(const GameState& state, bool have[5])
     for (const Permanent& p : state.battlefield)
     {
         if (p.controller_index != active || p.tapped) { continue; }
-        const CardDefinition* def = CardDatabase::Instance().LookupCached(p.card);
+        // Brightcap Badger's grant: a granted body has no CardDefinition, so this `continue` was
+        // blind to it. ManaDefOf returns the shared synthetic ManaDork face; body unchanged.
+        const CardDefinition* def = ManaDefOf(state, p, LiveManaGrant(state, active));
         if (!def) { continue; }
         bool is_src = (def->tmpl == CardTemplate::BasicLand)
                    || (def->tmpl == CardTemplate::ManaDork && CanTapNow(p, state.battlefield))
@@ -8611,6 +8616,7 @@ static std::uint64_t ActionFoldSig(const Action& a)
     FoldMix(h, std::hash<std::string>{}(a.trick_hand_target));
     FoldMix(h, a.evoke  ? 1u : 0u);
     FoldMix(h, a.bestow ? 1u : 0u);
+    FoldMix(h, a.adventure ? 1u : 0u);
     FoldMix(h, static_cast<std::uint64_t>(a.ponder_keep));
     FoldMix(h, static_cast<std::uint64_t>(a.replicate_count));
     FoldMix(h, static_cast<std::uint64_t>(a.devour_count));   // Mycoloth: k is a searched axis
@@ -15763,6 +15769,33 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
         // it is cheaper and is itself a lord-buffed Minotaur that triggers Sethron; as an aura it
         // costs more but its +2/+0 lands on a creature that can attack THIS turn (no summoning
         // sickness). That is a real decision, so the SEARCH owns it -- one variant per legal host.
+        // ADVENTURE (CR 715 -- Brightcap Badger // Fungus Frolic): an EXTRA variant sharing
+        // hand_index (the bestow idiom below -- no `continue`, the hard cast still emits). Pays the
+        // adventure half's cost and resolves its text; the card then goes to staged_cards, from
+        // which the creature half is castable later with no extra machinery.
+        //
+        // !m_is_staged IS THE "ALREADY ADVENTURED" GUARD. A card sitting in staged_cards is merged
+        // into hand each turn with m_is_staged set, so without this test the search could adventure
+        // the same card every turn forever. With it, a staged Badger offers only the creature cast.
+        if (!def.params.adventure_face_name.empty() && !ap.hand[i].m_is_staged)
+        {
+            const CardDefinition* adef =
+                CardDatabase::Instance().Lookup(def.params.adventure_face_name);
+            if (adef != nullptr)
+            {
+                Action a;
+                a.kind           = Action::Kind::CastFromHand;
+                a.card_name      = ap.hand[i].m_name;
+                a.hand_index     = i;
+                a.cost           = EffectiveCost(*adef, state);
+                a.eval           = EvalCard(*adef, state);
+                a.is_noncreature = true;   // the adventure half is an instant/sorcery, not a creature
+                a.card_mv        = adef->card.m_mana_cost.ManaValue();
+                a.adventure      = true;
+                actions.push_back(std::move(a));
+            }
+        }
+
         if (def.params.bestow_cost.has_value())
         {
             const CardDefinition* bdef =
@@ -27102,13 +27135,13 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
         if (act.free_cast && state.free_casts_available > 0)
         { cascade_free = true; --state.free_casts_available; }
     };
-    std::function<void(const std::string&, bool, bool, int, bool, int, const std::string&, int, int, int, int, int, const std::string&, int, bool, int, int, int, int, bool)> apply_one;
+    std::function<void(const std::string&, bool, bool, int, bool, int, const std::string&, int, int, int, int, int, const std::string&, int, bool, int, int, int, int, bool, bool)> apply_one;
     apply_one = [&](const std::string& name, bool is_sacrifice, bool from_graveyard, int discard_lands,
                     bool alt_cost, int alt_lifegain, const std::string& tutor_target, int chosen_x,
                     int own_targets, int ponder_keep, int crackle_targets, int splice_count,
                     const std::string& chosen_float_color, int enchant_target, bool bestow,
                     int replicate_count, int convoke_green, int convoke_other, int phyrexian_life,
-                    bool evoke)
+                    bool evoke, bool adventure)
     {
         // PARTITION TRUNCATION (see bp_truncate): this plan's section ended at its first draw and
         // the continuation has already decided everything after it, so every remaining cast of this
@@ -27178,6 +27211,17 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
             const CardDefinition* bopt =
                 CardDatabase::Instance().Lookup(opt->card.m_name.str() + " (Bestowed)");
             if (bopt != nullptr) { opt = bopt; }
+        }
+        // ADVENTURE: the same one-place def swap. Everything downstream -- the cost paid, the text
+        // that resolves, the instant/sorcery graveyard branch -- reads the adventure face, and the
+        // ONLY site that needs to know an adventure happened is that graveyard branch, which sends
+        // the card to staged_cards instead (StageAdventureParent). Executor twin: AIEngine's
+        // CastSpellFromHand.
+        if (adventure && !opt->params.adventure_face_name.empty())
+        {
+            const CardDefinition* aopt =
+                CardDatabase::Instance().Lookup(opt->params.adventure_face_name);
+            if (aopt != nullptr) { opt = aopt; }
         }
         const CardDefinition& def = *opt;
 
@@ -27468,7 +27512,7 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
                           HandEntryReason::Reveal);
                 cascade_free = true;   // free cast (one-shot, consumed by the recursion)
                 apply_one(fname, false, false, 0, false, 0, std::string{}, 0, 0, -1, -1, 0,
-                          std::string{}, 0, false, -1, 0, 0, 0, false);
+                          std::string{}, 0, false, -1, 0, 0, 0, false, false);
             }
             else { state.exile.push_back(std::move(found)); }
         };
@@ -27560,7 +27604,7 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
                               HandEntryReason::Reveal);
                     cascade_free = true;   // free cast (one-shot, consumed by the recursion)
                     apply_one(hname, false, false, 0, false, 0, std::string{}, 0, 0, -1, -1, 0,
-                              std::string{}, 0, false, -1, 0, 0, 0, false);
+                              std::string{}, 0, false, -1, 0, 0, 0, false, false);
                 }
                 else { ap.library.push_back(std::move(hit)); }   // declined/forbidden: bottomed
             }
@@ -27625,7 +27669,7 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
                                   HandEntryReason::Reveal);
                         cascade_free = true;
                         apply_one(fname, false, false, 0, false, 0, std::string{}, 0, 0, -1, -1,
-                                  0, std::string{}, 0, false, -1, 0, 0, 0, false);
+                                  0, std::string{}, 0, false, -1, 0, 0, 0, false, false);
                     }
                     else { EnterHand(state, pe.controller, std::move(found),
                                      HandEntryReason::Reveal); }
@@ -29042,6 +29086,10 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
         // (On-cast triggers + Prowess already fired above, at cast time, before the
         // resolution branch -- see the note there.)
 
+        // "Create N tokens" as a spell's resolution (Fungus Frolic). Before the zone move below,
+        // which is the order the real game resolves in. Executor twin: EffectHandler::ResolveImpl.
+        ApplyCastCreatesTokens(state, state.active_player_index, def);
+
         // A resolved instant or sorcery goes to the graveyard (mirrors the real game's
         // MoveToGraveyard). This makes a retrace card recur and keeps the inline
         // graveyard faithful; nothing reads the graveyard for decks without retrace.
@@ -29052,8 +29100,13 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
             // this deck can interact with an exiled card: GraveyardSize and ExileSize are learned
             // model features and EOT dominance folds each zone when the attached model reads it,
             // so four wishes in the graveyard is a different state from four in exile.
-            if (def.params.exiles_self_on_resolve) { state.exile.push_back(def.card); }
-            else                                   { ap.graveyard.push_back(def.card); }
+            // ADVENTURE (CR 715): exiled "on an adventure" instead -- into staged_cards, this
+            // engine's castable exile, so the creature half can be cast later. Checked FIRST: an
+            // adventure card is never also a self-exiler, but the adventure destination is the
+            // more specific rule. Falls through to the graveyard if the link is broken.
+            if (StageAdventureParent(state, state.active_player_index, def, cast_number)) { }
+            else if (def.params.exiles_self_on_resolve) { state.exile.push_back(def.card); }
+            else                                       { ap.graveyard.push_back(def.card); }
         }
 
         if (is_sacrifice && !def.params.tutor_land_to_battlefield)
@@ -29166,7 +29219,7 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
                     if (inline_taps) { flush_pre_taps(pre_tap_slot++); }
                     line_order_trace("cast", a);
                     prep_free(a);
-                    cast_loyalty_ability = a.loyalty_ability; cast_devour_count = a.devour_count; apply_one(a.card_name, false, false, 0, a.alt_cost, a.alt_lifegain, a.tutor_target, a.chosen_x, a.soulfire_own_targets, a.ponder_keep, a.crackle_targets, a.splice_count, a.chosen_float_color, a.enchant_target, a.bestow, a.replicate_count, a.convoke_green, a.convoke_other, a.phyrexian_life, a.evoke);
+                    cast_loyalty_ability = a.loyalty_ability; cast_devour_count = a.devour_count; apply_one(a.card_name, false, false, 0, a.alt_cost, a.alt_lifegain, a.tutor_target, a.chosen_x, a.soulfire_own_targets, a.ponder_keep, a.crackle_targets, a.splice_count, a.chosen_float_color, a.enchant_target, a.bestow, a.replicate_count, a.convoke_green, a.convoke_other, a.phyrexian_life, a.evoke, a.adventure);
                     fire_unlock();
                 }
                 // ...and the board activation the human put HERE fires here, not in the trailing
@@ -29316,7 +29369,7 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
                                  now.Total(), now.red, now.green, now.wild);
                 }
                 for (int i : ena)
-                { const Action& a = acts[i]; const int dbg_before = dbg_count(a); prep_free(a); cast_loyalty_ability = a.loyalty_ability; cast_devour_count = a.devour_count; apply_one(a.card_name, false, false, 0, a.alt_cost, a.alt_lifegain, a.tutor_target, a.chosen_x, a.soulfire_own_targets, a.ponder_keep, a.crackle_targets, a.splice_count, a.chosen_float_color, a.enchant_target, a.bestow, a.replicate_count, a.convoke_green, a.convoke_other, a.phyrexian_life, a.evoke); fire_unlock(); dbg_cast("ena", a, dbg_before); }
+                { const Action& a = acts[i]; const int dbg_before = dbg_count(a); prep_free(a); cast_loyalty_ability = a.loyalty_ability; cast_devour_count = a.devour_count; apply_one(a.card_name, false, false, 0, a.alt_cost, a.alt_lifegain, a.tutor_target, a.chosen_x, a.soulfire_own_targets, a.ponder_keep, a.crackle_targets, a.splice_count, a.chosen_float_color, a.enchant_target, a.bestow, a.replicate_count, a.convoke_green, a.convoke_other, a.phyrexian_life, a.evoke, a.adventure); fire_unlock(); dbg_cast("ena", a, dbg_before); }
                 // Spectacle hoist: a sac-land damage source (Shard Volley) is otherwise cast in the
                 // trailing sac loop -- AFTER the non-sac Spectacle spell (Light Up), leaving
                 // Spectacle un-triggered and Light Up paying full cost. When the set holds a
@@ -29340,7 +29393,7 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
                     if (a.kind == Action::Kind::CastFromHand && a.sacrifice_land && a.direct_damage > 0)
                     {
                         prep_free(a);
-                        cast_loyalty_ability = a.loyalty_ability; cast_devour_count = a.devour_count; apply_one(a.card_name, true, false, 0, a.alt_cost, a.alt_lifegain, a.tutor_target, a.chosen_x, a.soulfire_own_targets, a.ponder_keep, a.crackle_targets, a.splice_count, a.chosen_float_color, a.enchant_target, a.bestow, a.replicate_count, a.convoke_green, a.convoke_other, a.phyrexian_life, a.evoke);
+                        cast_loyalty_ability = a.loyalty_ability; cast_devour_count = a.devour_count; apply_one(a.card_name, true, false, 0, a.alt_cost, a.alt_lifegain, a.tutor_target, a.chosen_x, a.soulfire_own_targets, a.ponder_keep, a.crackle_targets, a.splice_count, a.chosen_float_color, a.enchant_target, a.bestow, a.replicate_count, a.convoke_green, a.convoke_other, a.phyrexian_life, a.evoke, a.adventure);
                         spec_hoisted_sac.insert(ai);
                     }
                 }
@@ -29369,7 +29422,7 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
                     const Action& a = acts[i];
                     if (is_ordered_garth(a)) { apply_garth(a); continue; }
                     const int dbg_before = dbg_count(a);
-                    prep_free(a); cast_loyalty_ability = a.loyalty_ability; cast_devour_count = a.devour_count; apply_one(a.card_name, false, false, 0, a.alt_cost, a.alt_lifegain, a.tutor_target, a.chosen_x, a.soulfire_own_targets, a.ponder_keep, a.crackle_targets, a.splice_count, a.chosen_float_color, a.enchant_target, a.bestow, a.replicate_count, a.convoke_green, a.convoke_other, a.phyrexian_life, a.evoke); fire_unlock();
+                    prep_free(a); cast_loyalty_ability = a.loyalty_ability; cast_devour_count = a.devour_count; apply_one(a.card_name, false, false, 0, a.alt_cost, a.alt_lifegain, a.tutor_target, a.chosen_x, a.soulfire_own_targets, a.ponder_keep, a.crackle_targets, a.splice_count, a.chosen_float_color, a.enchant_target, a.bestow, a.replicate_count, a.convoke_green, a.convoke_other, a.phyrexian_life, a.evoke, a.adventure); fire_unlock();
                     dbg_cast("ord", a, dbg_before);
                 }
             }
@@ -29398,7 +29451,7 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
                     const Action& a = acts[i];
                     if (is_ordered_garth(a)) { apply_garth(a); continue; }
                     prep_free(a);
-                    cast_loyalty_ability = a.loyalty_ability; cast_devour_count = a.devour_count; apply_one(a.card_name, false, false, 0, a.alt_cost, a.alt_lifegain, a.tutor_target, a.chosen_x, a.soulfire_own_targets, a.ponder_keep, a.crackle_targets, a.splice_count, a.chosen_float_color, a.enchant_target, a.bestow, a.replicate_count, a.convoke_green, a.convoke_other, a.phyrexian_life, a.evoke);
+                    cast_loyalty_ability = a.loyalty_ability; cast_devour_count = a.devour_count; apply_one(a.card_name, false, false, 0, a.alt_cost, a.alt_lifegain, a.tutor_target, a.chosen_x, a.soulfire_own_targets, a.ponder_keep, a.crackle_targets, a.splice_count, a.chosen_float_color, a.enchant_target, a.bestow, a.replicate_count, a.convoke_green, a.convoke_other, a.phyrexian_life, a.evoke, a.adventure);
                     fire_unlock();
                 }
             }
@@ -29410,14 +29463,14 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
             if (a.kind == Action::Kind::CastFromHand && a.sacrifice_land)
             {
                 prep_free(a);
-                cast_loyalty_ability = a.loyalty_ability; cast_devour_count = a.devour_count; apply_one(a.card_name, true, false, 0, a.alt_cost, a.alt_lifegain, a.tutor_target, a.chosen_x, a.soulfire_own_targets, a.ponder_keep, a.crackle_targets, a.splice_count, a.chosen_float_color, a.enchant_target, a.bestow, a.replicate_count, a.convoke_green, a.convoke_other, a.phyrexian_life, a.evoke);
+                cast_loyalty_ability = a.loyalty_ability; cast_devour_count = a.devour_count; apply_one(a.card_name, true, false, 0, a.alt_cost, a.alt_lifegain, a.tutor_target, a.chosen_x, a.soulfire_own_targets, a.ponder_keep, a.crackle_targets, a.splice_count, a.chosen_float_color, a.enchant_target, a.bestow, a.replicate_count, a.convoke_green, a.convoke_other, a.phyrexian_life, a.evoke, a.adventure);
             }
         }
         for (const Action& a : acts)
         {
             if (a.kind == Action::Kind::CastFromGraveyard)
             {
-                cast_loyalty_ability = a.loyalty_ability; cast_devour_count = a.devour_count; apply_one(a.card_name, false, true, a.discard_lands, false, 0, std::string{}, a.chosen_x, a.soulfire_own_targets, a.ponder_keep, a.crackle_targets, a.splice_count, a.chosen_float_color, a.enchant_target, a.bestow, a.replicate_count, a.convoke_green, a.convoke_other, a.phyrexian_life, a.evoke);
+                cast_loyalty_ability = a.loyalty_ability; cast_devour_count = a.devour_count; apply_one(a.card_name, false, true, a.discard_lands, false, 0, std::string{}, a.chosen_x, a.soulfire_own_targets, a.ponder_keep, a.crackle_targets, a.splice_count, a.chosen_float_color, a.enchant_target, a.bestow, a.replicate_count, a.convoke_green, a.convoke_other, a.phyrexian_life, a.evoke, a.adventure);
             }
         }
 
@@ -29555,7 +29608,7 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
             if (target < 0) { break; }
             std::string nm = ap2.hand[target].m_name;
             size_t before = ap2.hand.size();
-            apply_one(nm, false, false, 0, true, amt, std::string{}, 0, 0, -1, -1, 0, std::string{}, 0, false, -1, 0, 0, 0, false);
+            apply_one(nm, false, false, 0, true, amt, std::string{}, 0, 0, -1, -1, 0, std::string{}, 0, false, -1, 0, 0, 0, false, false);
             if (state.ActivePlayer().hand.size() >= before) { break; }   // didn't consume -> stop
         }
     };
@@ -34638,6 +34691,14 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
                         + ((act.def && act.def->params.bestow_cost.has_value()
                             && !s_legacy_bestow_sig)
                            ? (act.bestow ? "#B1" : "#B0") : "")
+                        // ADVENTURE: exactly the bestow case. Casting Brightcap Badger as a {3}{G}
+                        // 3/4 and casting Fungus Frolic as a {2}{G} instant for two Saprolings are
+                        // two different spells sharing one name -- different cost, different type,
+                        // different board, and one of them leaves the card castable again later.
+                        // Without this the dedup keeps whichever sorted higher and the search sees
+                        // only one mode per subset. Gated on the param -- the #S/#V/#K/#B precedent.
+                        + ((act.def && !act.def->params.adventure_face_name.empty())
+                           ? (act.adventure ? "#A1" : "#A0") : "")
                         // Chord of Calling: X, the fetch target AND the convoke tap counts are all
                         // real decisions (core invariant; the MTG_SIG_X_AUDIT class -- without the
                         // gate the autonomous dedup collapses the X axis). Gated on the params so

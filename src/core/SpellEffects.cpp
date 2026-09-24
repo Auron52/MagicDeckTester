@@ -3173,6 +3173,9 @@ inline bool ManaCacheKey(const GameState& state, const ManaCost& cost, bool for_
     bool scaled_done = false;   // lazy, hashed once on the first scaled source (Three Tree City)
     if (out_ord) { out_ord->assign(state.battlefield.size(), -1); }
     int nsrc = 0;
+    // Resolved once for the whole walk, the same shape the payer uses (and free for every deck
+    // without a grant source -- GameState::deck_has_mana_grant).
+    const ManaGrant grant = LiveManaGrant(state, active);
     // The legacy scaling bail-out (below) SETS this instead of returning immediately, so the source
     // ordinals the caller asked for are still counted over the whole board -- the pre-pass it
     // replaces had no such early exit. Hashing is skipped from that point on (the key is discarded
@@ -3183,7 +3186,17 @@ inline bool ManaCacheKey(const GameState& state, const ManaCost& cost, bool for_
         const Permanent& p = state.battlefield[i];
         if (p.controller_index != active) { continue; }
         const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
-        if (!d) { continue; }
+        if (!d)
+        {
+            // BRIGHTCAP BADGER'S GRANT -- must move in LOCKSTEP with the payer's predicate
+            // (ManaPayment.cpp's source loop). This key hashes one entry per MANA SOURCE, so if the
+            // payer learns to tap granted Saprolings and this walk does not, two boards that pay
+            // differently collapse to the same key and the cache returns another board's answer.
+            // No new hash TERM is needed: the granted bodies simply enter the hashed sequence,
+            // carrying the synthetic face's stable pointer below.
+            if (!GrantReaches(grant, p) || !GrantedBodyCanTap(grant, p)) { continue; }
+            d = &GrantedManaFace(grant.color);
+        }
         if (!(d->tmpl == CardTemplate::BasicLand || d->tmpl == CardTemplate::ManaDork
               || d->params.mana_rock || IsPaySacSource(*d))) { continue; }   // §2a
         if (out_ord) { (*out_ord)[static_cast<std::size_t>(i)] = nsrc; }

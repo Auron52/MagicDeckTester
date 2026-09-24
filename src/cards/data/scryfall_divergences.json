@@ -29,5 +29,12 @@
  },
  "Mycoloth": {
   "keywords": "'Devour 2' is a real keyword and is FULLY MODELLED -- but via the `devour` CardParam, not via Keyword::Devour. The engine's Keyword enum deliberately carries only the keywords some code path actually READS, and the cards.json loader rejects an unknown keyword string outright, so listing \"Devour\" here would fail to load. Nothing is dropped: devour is applied as an as-enters replacement (CR 702.81) in the pre-push window at both enter sites, the sacrifice count is a searched plan variant, the +1/+1 counters go through the Doubling-Season-aware PutPlusCounters, and the victims' death triggers are deferred until after the entrant lands. This is the modelled-by-param rather than by-enum case, distinct from the Piledriver/Progenitus entries above (a real keyword left INERT); here the mechanic is implemented in full."
+ },
+ "Brightcap Badger": {
+  "mana_cost": "ADVENTURE CARD (CR 715), authored as TWO entries -- 'Brightcap Badger' (the {3}{G} 3/4 creature face) and 'Fungus Frolic' (the {2}{G} instant half). Scryfall reports the COMBINED card, so its mana_cost is the pair '{3}{G} // {2}{G}'. This entry models the creature face alone and is correct at {3}{G}. Same shape as the MDFC and bestow faces the DB synthesizes: a second face is a genuinely separate CardDefinition, which is what lets every downstream reader resolve it by name with no special-casing. Authored rather than synthesized because synthesis hardcodes the derived face's type (a land, an Aura) and an adventure's text is arbitrary."
+ },
+ "Fungus Frolic": {
+  "mana_cost": "The ADVENTURE HALF of Brightcap Badger // Fungus Frolic -- see the Brightcap Badger entry. Scryfall's combined mana_cost is '{3}{G} // {2}{G}'; the instant half is {2}{G} and this entry models that half.",
+  "P/T": "An Instant has no power or toughness. Scryfall reports 3/4 because it describes the COMBINED card, whose creature face is the 3/4 Brightcap Badger. Giving this entry a P/T would make the adventure half a creature spell, which is exactly the modelling error the two-entry split exists to avoid."
  }
 }
