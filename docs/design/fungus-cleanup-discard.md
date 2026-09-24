@@ -82,7 +82,7 @@ question for a deck whose hand is a mix of interchangeable pieces.
 
 | bucket | members | retention target |
 |---|---|---|
-| **MANA** | Forest, Simic Growth Chamber, Wild Growth | `min(3, max(0, 5 - board_mana))` lands + 1 accelerator |
+| **MANA** | Forest, Simic Growth Chamber, Wild Growth | to a total of **5 mana with the board**; <=3 lands, <=1 accelerator |
 | **ENABLERS** | Doubling Season, Beastmaster Ascension | **1 of each, at most** |
 | **THREATS** | the Fungus creatures (+ Essence Warden) | a MIX, with a protected core |
 
@@ -91,7 +91,14 @@ question for a deck whose hand is a mix of interchangeable pieces.
   maybe one accelerator. If we have any mana on board, probably keep it at 3"*, then
   *"(or whatever we need to reach 5 total mana)"*. Together that is
 
-      lands_to_keep = min(3, max(0, 5 - board_mana))      accelerators_to_keep = 1
+      need        = max(0, 5 - board_mana)          // 5 = the deck's top of curve
+      keep_lands  = min(3, lands_in_hand, need)      // hard cap 3
+      keep_accel  = min(1, accels_in_hand, need - keep_lands)
+
+  **The 5 INCLUDES the accelerator's mana** (USER: *"To be clear the max 5 includes the accelerator
+  mana"*) -- a kept Wild Growth counts as one of the five, it is not a bonus on top. So the caps
+  (3 lands, 1 accelerator) bound the bucket, and the 5-mana total is what actually stops it: at
+  `board_mana = 2` we keep three mana cards in total, not three lands PLUS an accelerator.
 
   -- a cap of 3 that TIGHTENS as the board fills, not a flat 3. **5 is the deck's top of curve**
   (Mycoloth `{3}{G}{G}`, Doubling Season `{4}{G}`), so once the board alone makes 5 the target is
