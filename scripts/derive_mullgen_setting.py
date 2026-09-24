@@ -127,17 +127,26 @@ def write_mull_gen(vpath, depth, budget):
         new = re.sub(r'("mull_gen_budget_ms"\s*:\s*)\d+', r"\g<1>%d" % budget, new)
     else:                                          # insert before the closing brace
         body = span[1:-1]
+        # An EMPTY value_play ({}) is a REAL shape, not a malformed one: it is what a deck with no
+        # play policy carries, which MulliganProfileIO.h:1207 describes as the case phase F exists
+        # for ("phase F writes a value_play holding ONLY that key when the deck ships no play
+        # policy"). It is also exactly what a metadata-only sidecar holds when a list deliberately
+        # ships no value leaf. Emitting the separating comma unconditionally produced
+        # `{, "mull_gen_depth": ...}`, so the json.loads guard below refused the write and the one
+        # case this writer most needs to serve was the only one it could not do. Separate only from
+        # an existing key.
+        sep = "," if body.strip() else ""
         if "\n" in body:
             m = re.search(r'\n([ \t]*)"', body)     # indentation of the first key
             ind = m.group(1) if m else "  "
             m2 = re.search(r"\n([ \t]*)$", body)    # indentation of the closing brace
             close_ind = m2.group(1) if m2 else ""
-            new = ("{" + body.rstrip() +
-                   ',\n%s"mull_gen_depth": %d,\n%s"mull_gen_budget_ms": %d\n%s}'
+            new = ("{" + body.rstrip() + sep +
+                   '\n%s"mull_gen_depth": %d,\n%s"mull_gen_budget_ms": %d\n%s}'
                    % (ind, depth, ind, budget, close_ind))
         else:
-            new = ("{" + body.rstrip() +
-                   ', "mull_gen_depth": %d, "mull_gen_budget_ms": %d}' % (depth, budget))
+            new = ("{" + body.rstrip() + sep +
+                   ' "mull_gen_depth": %d, "mull_gen_budget_ms": %d}' % (depth, budget))
 
     out = txt[:open_br] + new + txt[end + 1:]
     d = json.loads(out)                            # must still parse, and carry what we meant

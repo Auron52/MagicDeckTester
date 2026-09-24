@@ -53,14 +53,31 @@ STEM=$(basename "$DECKDIR")
 
 DECK=""
 for ext in cod txt; do [ -e "$DECKDIR/$STEM.$ext" ] && { DECK="$DECKDIR/$STEM.$ext"; break; }; done
-[ -n "$DECK" ] || { echo "no $STEM.cod or $STEM.txt in $DECKDIR"; exit 1; }
+# VARIANT / ARCHIVED LISTS -- decks/<Name>/<Variant>/<Name>.cod, a list kept beside the shipping one
+# with the artifacts fitted to it. Files inside a variant are named after the PARENT deck, not the
+# variant folder, and that is deliberate: the engine resolves every sidecar directory-relative off
+# the profile, and tools/play/server.js `listDecks` enumerates variants by the parent's stem inside
+# the subfolder. So `basename $DECKDIR` does NOT name the decklist there, and this driver used to
+# exit 1 on the repo's own documented layout -- i.e. no archived or candidate list could ever have a
+# mulligan profile generated for it.
+if [ -z "$DECK" ]; then
+    _parent=$(basename "$(dirname "$DECKDIR")")
+    for ext in cod txt; do
+        [ -e "$DECKDIR/$_parent.$ext" ] && { DECK="$DECKDIR/$_parent.$ext"; STEM=$_parent; break; }
+    done
+fi
+[ -n "$DECK" ] || { echo "no <stem>.cod or <stem>.txt in $DECKDIR (tried \"$STEM\" and the parent folder's name)"; exit 1; }
 
 BASE=$DECKDIR/$STEM.profile.json
 PROF=$DECKDIR/$STEM.keepmodel.exhaustive.profile.json
 RAW=$DECKDIR/$STEM.keepmodel.exhaustive.raw.json
 PREV=$DECKDIR/$STEM.keepmodel.exhaustive.profile.PREV.json
 DIS=$DECKDIR/$STEM.keepmodel.exhaustive.profile.DISABLED.json
-OUT=logs/${STEM}_mullgen; mkdir -p "$OUT"
+# Scratch/log key: derived from the deck DIRECTORY, never the stem. A variant SHARES its parent's
+# stem, so a stem-keyed scratch dir would have the candidate list's run resume from -- and overwrite
+# -- the shipping list's. `decks/Fungus` still maps to `Fungus`, so existing queues resume unchanged.
+KEY=$(printf '%s' "${DECKDIR#decks/}" | tr -c 'A-Za-z0-9._-' '_')
+OUT=logs/${KEY}_mullgen; mkdir -p "$OUT"
 REPORT=$OUT/VALIDATION.txt
 BIN=build/Release/mtg-analyze
 
@@ -151,7 +168,7 @@ status_report(){
 # pooled table and is what inline_ab shows.
 run_ab(){
   local mode="$1" tag="$2" base="$3" per="$4" atag="$5" btag="$6"; shift 6
-  local abdir=logs/keepmodel_exh_${mode}_${STEM}
+  local abdir=logs/keepmodel_exh_${mode}_${KEY}
   local dirs=() r delta se
   for (( r = 0; r < MAX_ROUNDS; r++ )); do
     local rd="${abdir}_r$((r+1))"
@@ -187,7 +204,7 @@ run_ab(){
 # do next"). A rejected profile is precisely when the detail matters most -- the mean is the gate,
 # but deciding what to DO next (raise R? fix the heuristic? one bad seed?) needs the spread.
 inline_ab(){
-  local mode="$1" title="$2" abdir=logs/keepmodel_exh_${1}_${STEM}
+  local mode="$1" title="$2" abdir=logs/keepmodel_exh_${1}_${KEY}
   log ""
   log "########## $title ##########"
   # The POOLED table covers every round that was run; each round's own REPORT.txt is kept beside it
@@ -222,7 +239,7 @@ run_regression(){
           if (a[2] == d) { print a[1]; exit } }' test/regression_cases.sh)
   log ""
   if [ -z "$key" ]; then
-    log "--- regression: $STEM is not in test/regression_cases.sh -- skipping (nothing to move) ---"
+    log "--- regression: $DECK is not in test/regression_cases.sh -- skipping (nothing to move) ---"
     return 0
   fi
   log "--- regression (deck=$key), for VISIBILITY -- cannot reject ($(stamp)) ---"
