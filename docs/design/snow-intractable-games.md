@@ -112,9 +112,24 @@ prefix-scoped prepay), one more was proposed and killed on 2026-09-23:
   tail game from a single decision. Snow is the only suite deck with no exhaustive keep table, so
   every bottoming decision falls through to a clairvoyant rollout. This retires the largest single
   cost AND closes the standing 2026-09-14 directive ("I don't want to use lookahead bottoming for
-  anything"). The complication is ordering: the table is an output of the mulligan stage, which runs
-  after the value leaf and inherits this same 32% population, so it needs the feasibility pre-check
-  in `mulligan-profile.md` before it gets the box.
+  anything").
+  **STARTED 2026-09-24 15:36 UTC** (`bash scripts/mullgen.sh run decks/Snow fast`, alone on the
+  box; log `logs/Snow_mullgen/gen.log`). Two things make this the right lever rather than filler,
+  now that the cost model above is known:
+  * `gamework::Begin(ceiling)` wraps `engine->RunGame`, and `AIEngine::RunGame` calls `BottomCards`
+    INSIDE it -- so **bottoming rollouts are charged against the same `abandon_units` ceiling**.
+    Retiring them does not merely save wall, it hands the ceiling back to the search on the ~17.6%
+    of games that mulligan, which is the abandonment rate the section above identifies as the only
+    quantity the matrix's cost is linear in.
+  * Bucket discovery merges NOTHING on this deck -- 17 distinct cards -> 17 classes, nearest
+    neighbours 0.015..0.215 against a 0.01 threshold -- so K=17, 175,972 size-7 cells (351,944
+    slots) plus 162,004 fused sub-table batches.
+  **THE COST, measured not projected: 21 rollouts/s on 32 cores**, i.e. 0.66/s/core against the
+  `mulligan-profile.md` guide's ~110/s/core. Snow is ~167x slower per rollout than the model every
+  other deck was sized with -- the same intractability this document is about, reappearing in the
+  apparatus. The floor pass alone is therefore ~10 h, and generation + sub-tables + the 12-seed x
+  500-game validation is a multi-day commitment, not an overnight one. It is journalled per cell and
+  resumes on the identical command, so stopping it costs only the live cell.
 * **Shipping `leaf: none`.** Would make the V arm's 571 core-h moot and stop phase A ever running
   again. StompySurprise and Goblins already ship this shape; note their sidecars still carry a real
   `eval_model` and a full `value_leaf_table`, so it is a `value_play` setting, not an absent file.
@@ -332,6 +347,12 @@ not vacuous here.
 | whole cell | 49 | 22,857.3 s | 23,260.1 s | 1.018x |
 
 **32 of 32 completing digests byte-identical**, and one ceiling-bound game rescued (`g26`).
+
+The 0.885x is pooled and should not be quoted alone -- it is weighted by `g12` (1,013.1 s ->
+807.5 s, 0.797x), which is 45% of the completing total. Over the 18 completing games above 1 s the
+**median is 0.961x and 14 of 18 are faster**. Both numbers are the same fact seen twice: the benefit
+RISES WITH GAME SIZE, which is what a branching cut should do -- a bigger tree carries more
+source-degeneracy for the fold to remove (3.2% on a completing game, 18.6% on a discarded one).
 
 So the lever is an 11.5% lossless speedup on every game that produces a row -- and the cell still
 gets 1.8% SLOWER, because the two populations are nothing alike:
