@@ -181,9 +181,51 @@ shallower passes were complete, and the unlimited-budget wave is what makes them
 **The direction instead: prove more variants REDUNDANT and drop them losslessly**, the way
 `w0_nobp` (12.4M skipped), `w0_unif_collapse` (10.5M) and `bp_newonly` (56.7% dropped) already do.
 `improved=2` out of 5.1M says the ranking is already putting good lines early, so the deep ranks are
-near-pure duplication rather than merely low value. First thread: the probe's
-**`stillborn=355,102 (first-empty=355,101)`** -- variants that resolve to EMPTY, i.e. work spent
-producing nothing, which ought to be declinable before the variant is built.
+near-pure duplication rather than merely low value.
+
+### Where the wave's cost actually is (corrected 2026-09-24, on the rebased engine)
+
+The first thread taken was the probe's `stillborn` / `first-empty` line -- variants resolving to
+EMPTY, which looked like work producing nothing. **Both that thread and the probe's own cost split
+were wrong, and the probe was wrong first.** `[bp-waves]` printed `retired` + `dupstate` as THE
+split of the scored-minus-rolled gap while incrementing them at only ONE of the two wave-scoring
+loops, so on gi26 they accounted for 0.5% of the gap they were printed next to (4,483 + 13,820
+against 3,438,085). The tell was an impossibility, not a hunch: `slots_stillborn` is incremented
+inside `Walker::Report` and so fires for every walker, and `stillborn=368,059` cannot be a subset of
+`retired=4,483`. Fixed in `0e2a10bd`; the gap now closes exactly, and relocates the cost:
+
+| population | gi26 | share of wave applies |
+|---|---:|---:|
+| duplicate post-apply state (`dupstate`) | 3,069,985 | **57.7%** |
+| reached a rollout (`rolled`) | 1,879,016 | 35.3% |
+| past-the-end probe (`retired`) | 368,100 | 6.9% |
+
+The **LOOKAHEAD** walker is 99.4% of every wave apply (5,286,396 of 5,317,101). `FSLineWin`'s wave
+phase -- which this document treated as the cost centre -- is 0.6%. Attributed:
+`dup_cross=1,742,926 (56.8%)`, `dup_w0=701,020 (22.8%)`, `dup_self=626,039 (20.4%)`.
+
+**Two candidate lossless declines are now REFUTED by measurement, not argument.**
+
+* *The EMPTY pre-skip.* The node host (site 3) declines its EMPTY arm whenever the continuation list
+  already holds an apply-empty entry -- exact, because reaching `k == n` means every cands index was
+  applied. That argument transfers to the walker exactly in the `n == k0` case. But the input does
+  not exist here: `g_bp_cands_has_empty` is filled only for node-hosted sites and `BpNodeSites()`
+  defaults to `1<<3`, while Snow's is site 8. `MTG_BP_EMPTY_CENSUS` (added in `0e2a10bd`) widens the
+  scan: **0 of 1,330,535 lists** hold an apply-empty entry, across all three Snow sites. So the
+  368,058 first-empties are genuinely distinct lines -- "a line no other rank produces", as
+  `BpProbe`'s own comment says -- and there is no decline to take.
+* *Pre-apply dedup on plan identity.* `MTG_ROLLOUT_STATS`' list-fingerprint census on gi26:
+  `lists=1,330,535 entries=5,941,057 distinct=5,941,057 duplicate=0 (0.0%)`. The lists are not
+  internally redundant by plan, so nothing is declinable on the safe "same plan, same state"
+  inference.
+
+Together those say the 3.07M duplicates are **different plans converging on the same state** -- the
+inference the codebase has twice refuted as unsound to assume, but which is here the measured
+majority of all wave work. That is the population any further lossless work has to address, and
+`dup_cross` (a different SLOT got there first) is 56.8% of it. Next concrete test: whether those
+colliding plans are order-permutations of one another, i.e. whether an order-free canonical plan key
+identifies them BEFORE the apply -- the same shape of argument that made the mana payment cache's
+canonical key sound, and testable the same way (byte-identical digests or it is not lossless).
 
 ## 3. London bottoming, on the 17.6% of these games that mulligan
 
