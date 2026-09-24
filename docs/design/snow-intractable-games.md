@@ -507,12 +507,34 @@ in `TapForCostBacktrackWorker` lives.
 payable; the rescue then re-derives the same "yes" by full backtracking, 300 million times, for a
 board fact that does not change within a turn.
 
-**NEXT LEVER (not built): teach the flat pool the conversion.** With N untapped Astrolabes, up to N
-units of the pool can become any colour at net zero total cost (pay {1}, get 1, and the `{T}` bounds
-it at N). Modelled exactly -- not optimistically -- `mana_ok` becomes true for most of those 299.9M
-subsets and the real payment is never called. This must be EXACT: a permissive flat pool would admit
-unpayable subsets and change play, so it is a mana-modelling change to design deliberately, not a
-skip to bolt on.
+**WHY THE 299.9M SUCCESSES FAIL THE FLAT CHECK, decomposed.** The per-clause probe records, for each
+candidate total-shortfall clause, how many calls tripped it AND were nonetheless rescued -- which
+turns those counters into an attribution of the successes:
+
+| the flat check failed because... | of the 299,864,980 successes |
+|---|---:|
+| the RAW pool lacked total mana | **0** |
+| the DEBITED `eff` pool lacked total mana (`tap_debit`) | 54,226,702 (18.1%) |
+| the NONCREATURE pool lacked total mana | 22,598,684 (7.5%) |
+| ...leaving COLOUR as the reason | ~223,000,000 (~74%) |
+
+So there are **two separate modelling gaps**, and neither is a search problem:
+
+1. **COLOUR, ~74%.** Note this is *not* "the pool cannot see Astrolabe's colours" --
+   `AddSourceToPool` books every multi-colour source as one `ManaPool::wild` and `CanPayFlat` lets a
+   wild pay ANY pip, so the pool is already permissive about colour PRESENCE. What it cannot express
+   is that Astrolabe's yield is a **swap, not an addition**: `{1}, {T}` consumes a unit to produce
+   one of a chosen colour, so its NET is zero units but +1 colour freedom. A flat additive pool has
+   no way to say that, so it must either over-credit the total or under-credit the flexibility.
+   Teaching it the conversion exactly (N untapped Astrolabes => up to N units may have their colour
+   reassigned, total unchanged) would make `mana_ok` true for most of those subsets without any real
+   payment. It must be EXACT: a permissive pool admits unpayable subsets and moves play, and this
+   area already has a design doc of its own (`colour-blind-subset-affordability.md`) -- so it is a
+   deliberate mana-modelling change, not a skip to bolt on.
+2. **`tap_debit` IS TOO PESSIMISTIC, 18.1%.** 54.2 million times, the flat pool said "no total" only
+   because `tap_debit` had reserved a source for another use -- and the real payment then paid
+   anyway. That is 54.2M expensive backtracks caused by a reservation the executor does not honour.
+   Likely the cheaper of the two to fix, and independently checkable by the same self-check shape.
 
 ### A sound shortcut that turned out not to be worth much (measured, kept default OFF)
 
