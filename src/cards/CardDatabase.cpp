@@ -296,6 +296,15 @@ void CardDatabase::RebuildInternedIndex()
         if (cp.doubles_tokens)             { m_has_token_doubler = true; }
         if (cp.doubles_counters)           { m_has_counter_doubler = true; }
     }
+
+    // PER-DEFINITION creature-enter-watcher flag. Unlike the whole-DB bools above this one is NOT a
+    // gate -- cards.json holds every deck's cards at once, so a DB-wide "does any card watch
+    // enters?" is ALWAYS TRUE and buys nothing (the trap the ETB-cascade note records). What earns
+    // its keep is the PER-CARD answer: FireCreatureEnterWatchers walks the whole battlefield on
+    // every creature that enters, and on a Saproling board that walk is ~220 permanents x 14M
+    // enters, of which at most one or two are ever watchers. See CardDefinition::enter_watcher.
+    for (auto& kv : m_cards)
+    { kv.second.enter_watcher = DefHasCreatureEnterWatcher(kv.second.params); }
 }
 
 std::vector<std::string> CardDatabase::MdfcBackFaceNames() const

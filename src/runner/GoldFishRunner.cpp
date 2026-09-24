@@ -990,6 +990,12 @@ void GoldFishRunner::StampDeckTraits(GameState& state, const Decklist& deck)
         // consumer tests both, so the stamp tests both too -- a card carrying only one half must
         // not hold the gate open.
         bool subtype_enter_counters = false, etb_counter_payer = false;
+        // The self-bounce scan (Breaching Dragonstorm clause 2). One param, no second half to
+        // pair with -- the consumer's only test is `self_bounce_on_etb_subtype.empty()`.
+        bool self_bounce_etb = false;
+        // Doubling Season's two halves, stamped per GAME because DoublerShift's existing
+        // CardDatabase::HasTokenDoubler() guard is DB-wide and therefore always true.
+        bool token_doubler = false, counter_doubler = false;
         auto scan = [&](const std::vector<Card>& zone)
         {
             for (const Card& c : zone)
@@ -1007,6 +1013,9 @@ void GoldFishRunner::StampDeckTraits(GameState& state, const Decklist& deck)
                 if (d->params.other_creature_etb_counter_cost.has_value()
                     && d->params.other_creature_etb_counters > 0)
                 { etb_counter_payer = true; }
+                if (!d->params.self_bounce_on_etb_subtype.empty()) { self_bounce_etb = true; }
+                if (d->params.doubles_tokens)   { token_doubler = true; }
+                if (d->params.doubles_counters) { counter_doubler = true; }
             }
         };
         scan(deck.mainboard);
@@ -1022,6 +1031,9 @@ void GoldFishRunner::StampDeckTraits(GameState& state, const Decklist& deck)
         {
             state.deck_has_subtype_enter_counters = garth || subtype_enter_counters;
             state.deck_has_etb_counter_payer      = garth || etb_counter_payer;
+            state.deck_has_self_bounce_etb        = garth || self_bounce_etb;
+            state.deck_has_token_doubler          = garth || token_doubler;
+            state.deck_has_counter_doubler        = garth || counter_doubler;
         }
     }
     // NOTE: opponent_library_dealt is deliberately NOT stamped here. It means "a library was

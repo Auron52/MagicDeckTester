@@ -3778,7 +3778,14 @@ inline void FireCreatureEnterWatchers(GameState& state, int entered_controller, 
         const Permanent& w = state.battlefield[i];
         if (w.def_absent) { continue; }   // known not in the DB -> the !wd continue below, no call
         const CardDefinition* wd = CardDatabase::Instance().LookupCached(w.card);
-        if (!wd) { continue; }
+        // ONE byte instead of six scattered CardParams probes. Every `if` in this loop is gated on
+        // one of the six payload params CardDefinition::enter_watcher ORs together, so a definition
+        // with the flag clear reached the bottom of the loop without doing anything -- skipping it
+        // here is byte-identical by construction, and the shared disjunction
+        // (DefHasCreatureEnterWatcher) is what keeps the two in lockstep. This is THE hot test in
+        // the cascade: Fungus walks 2.9 BILLION permanents through here in a 150-game run and all
+        // but a handful of them answer "no".
+        if (!wd || !wd->enter_watcher) { continue; }
         const CardParams& wp = wd->params;
         // "Whenever another creature enters, you gain N" (Soul Warden / Essence Warden: ANY side).
         // One GainLife call PER WATCHER, never summed: each watcher's trigger is its own life-gain
@@ -4249,13 +4256,24 @@ inline void FireCreatureDiesWatchers(GameState& state, int dead_controller)
 // Orchard's Spirit, Varchild's Survivors, the upkeep gift -- all of which pass `1 - controller`)
 // correctly UNDOUBLED with no extra code: they simply ask about a different player.
 //
-// Guarded on the CardDatabase derived constant first, so a deck whose card pool contains no doubler
-// pays ONE bool test instead of an O(battlefield) walk -- the MaxHandSizeAnthemMax idiom, which
-// exists because the equivalent unguarded scan for Neheb measured ~1.8% of a whole run.
+// Guarded so a deck that plays no doubler pays ONE bool test instead of an O(battlefield) walk --
+// which matters because this runs once per token-CREATION EVENT, and a token deck has a great many
+// of those on a board that is itself mostly tokens.
+//
+// THE GUARD USED TO BE DEAD AND ITS COMMENT USED TO BE WRONG (fixed 2026-09-24). It tested only
+// CardDatabase::HasTokenDoubler(), calling that "the MaxHandSizeAnthemMax idiom". It is not the
+// same idiom: MaxHandSizeAnthemMax compares a DB constant against a LIVE GAME VALUE (the
+// controller's hand size) and can therefore be false, whereas HasTokenDoubler is a bare predicate
+// over all 387 cards in cards.json and is unconditionally TRUE in every run -- the exact trap
+// GameState's own presence-gate block documents ("those predicates ... DO NOT WORK"). The walk
+// below has consequently run on every deck in the repo since the guard was added. The per-GAME
+// stamps are the working half; the DB predicate is kept as the cheap first test because when it IS
+// false (a card pool with no doubler at all) it is correct and even cheaper.
 inline int DoublerShift(const GameState& state, int controller, bool for_tokens)
 {
     const CardDatabase& db = CardDatabase::Instance();
     if (for_tokens ? !db.HasTokenDoubler() : !db.HasCounterDoubler()) { return 0; }
+    if (for_tokens ? !state.deck_has_token_doubler : !state.deck_has_counter_doubler) { return 0; }
     int n = 0;
     for (const Permanent& p : state.battlefield)
     {
@@ -4893,6 +4911,15 @@ inline void FireEtbWatchers(GameState& state, int controller, int entered_index)
     // indices an erase here would shift. Above the creature early-out: the oracle says "a
     // Dragon", not "a Dragon creature", so a noncreature Dragon permanent also fires it.
     // Param-gated scan -> byte-identical for every deck without the param.
+    // PRESENCE GATE (GameState::deck_has_self_bounce_etb), added 2026-09-24. This walk has NO
+    // entrant-side gate -- unlike the haste-on-flying and Puresteel scans just above it, which the
+    // 2026-09-19 audit checked and correctly left alone, there is nothing about the newcomer that
+    // can keep a vanilla token out of it. So it cost a full battlefield pass, with a LookupCached
+    // per permanent and WITHOUT the def_absent short-circuit, for every permanent entering on every
+    // deck in the repo. On a Saproling board that is ~200 lookups per token created, i.e. the same
+    // O(tokens x board) quadratic the Giada and Emiel gates were added to remove. Defaults true ->
+    // an unstamped state (scenario harness) keeps the scan.
+    if (state.deck_has_self_bounce_etb)
     {
         const Card& newcomer = state.battlefield[entered_index].card;
         const int   nctrl    = state.battlefield[entered_index].controller_index;
@@ -4901,6 +4928,7 @@ inline void FireEtbWatchers(GameState& state, int controller, int entered_index)
         {
             const Permanent& w = state.battlefield[i];
             if (i == entered_index || w.controller_index != nctrl) { continue; }
+            if (w.def_absent) { continue; }   // see Permanent::def_absent (same `continue`, no call)
             const CardDefinition* wd = CardDatabase::Instance().LookupCached(w.card);
             if (!wd || wd->params.self_bounce_on_etb_subtype.empty()) { continue; }
             if (!CardHasSubtype(newcomer, wd->params.self_bounce_on_etb_subtype)) { continue; }

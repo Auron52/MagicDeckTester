@@ -365,6 +365,35 @@ struct GameState
     // unstamped GameState (the scenario harness) keeps every trigger. Only ever err true.
     bool                     deck_has_subtype_enter_counters = true;  // Giada-style "each other X"
     bool                     deck_has_etb_counter_payer      = true;  // Emiel-style optional cost
+    // A THIRD OF THE SAME SHAPE, found 2026-09-24. The paragraph above claims the remaining three
+    // watcher scans in FireEtbWatchers are "already cheap ... each is gated on the ENTRANT first".
+    // That inventory was INCOMPLETE: it missed a FOURTH, the SELF-BOUNCE scan (Breaching
+    // Dragonstorm clause 2, param self_bounce_on_etb_subtype), which has no entrant gate at all --
+    // not "has flying", not "is an Equipment", nothing. It runs a full battlefield walk with a
+    // LookupCached per permanent for EVERY permanent that enters, on every deck, and it does not
+    // even take the Permanent::def_absent short-circuit, so a Saproling board pays ~200 lookups per
+    // token created. That is the same O(tokens x board) quadratic the two flags above were added to
+    // remove, sitting one block further down the same function.
+    //
+    // Same safety rule as the two above, for the same reason: DEFAULT TRUE == do the scan == the
+    // old behaviour, so an unstamped GameState (the scenario harness) keeps every trigger. Only
+    // ever err true. Stamped false only when no card in the decklist carries the param at all.
+    bool                     deck_has_self_bounce_etb        = true;  // Breaching Dragonstorm cl. 2
+    // AND A FOURTH, same day, same shape -- but this one is a DEAD GUARD rather than a missing one.
+    // DoublerShift (Doubling Season) already opens with
+    //     if (for_tokens ? !db.HasTokenDoubler() : !db.HasCounterDoubler()) { return 0; }
+    // and its comment calls that "the MaxHandSizeAnthemMax idiom". IT IS NOT. MaxHandSizeAnthemMax
+    // works because it compares a DB constant against a live GAME value (the controller's hand
+    // size), so it can actually be false. HasTokenDoubler is a bare DB predicate over all 387 cards
+    // in cards.json -- exactly the failure this block's own header documents -- so it is TRUE in
+    // every run of every deck and gates nothing. DoublerShift therefore walks the whole battlefield
+    // on every token-creation event on every deck in the repo.
+    //
+    // These two stamps make that guard live: per GAME, off the decklist. Fungus is unaffected (it
+    // really does play Doubling Season) -- the beneficiaries are every other token deck, which pays
+    // an O(battlefield) walk per token today to discover it owns no doubler.
+    bool                     deck_has_token_doubler          = true;  // Doubling Season, token half
+    bool                     deck_has_counter_doubler        = true;  // ... and its counter half
     // "You can cast only one more spell this turn" (Irencrag Feat, CardParams::max_casts_after) enforced
     // at EXECUTION time: -1 = no restrictor active (unlimited); otherwise the number of ADDITIONAL spells
     // still castable this turn. Installed when a max_casts_after spell is cast, decremented at every later

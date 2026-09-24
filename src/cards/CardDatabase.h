@@ -2604,8 +2604,47 @@ struct CardDefinition
     Card card;
     CardTier tier        = CardTier::Data;
     CardTemplate tmpl    = CardTemplate::None;
+    // "This definition has at least one CREATURE-ENTER watcher clause" -- i.e. at least one of the
+    // six payload params FireCreatureEnterWatchers can actually fire. A DERIVED CONSTANT of the
+    // loaded card data (RebuildInternedIndex computes it; immutable during play), exactly like
+    // MaxHandSizeAnthemMax / HasTokenDoubler below, and the disjunction is kept in lockstep with
+    // that function's five `if` blocks by DefHasCreatureEnterWatcher().
+    //
+    // WHY IT IS ITS OWN FIELD RATHER THAN A params READ: the watcher loop is O(board width) per
+    // enter and every one of its non-token iterations used to probe SIX separate CardParams fields
+    // to conclude "not a watcher". CardParams is a very large struct and those six live hundreds of
+    // bytes apart (any_creature_enters_lifegain, own_creature_enters_lifegain,
+    // own_creature_enters_lifegain_toughness, own_creature_enters_self_counters,
+    // any_creature_enters_self_counters_power, opp_creature_enters_life_loss), so the common
+    // negative answer cost ~5 cache lines. Hoisting the disjunction up here makes it ONE byte on a
+    // line the loop has already pulled in to reach `params` at all. It sits ABOVE `params` on
+    // purpose, for that adjacency.
+    //
+    // BYTE-IDENTICAL BY CONSTRUCTION, not by measurement: a definition with none of the six set
+    // took every `if` in that loop's false branch already, so skipping straight to the next
+    // permanent reproduces the old behaviour exactly. The DEFAULT IS FALSE, but unlike
+    // Permanent::def_absent that is safe here rather than merely conservative, because this field
+    // is never left at its default in a live DB -- RebuildInternedIndex runs at the end of every
+    // LoadFromJson AND every Register, so every reachable definition has been visited.
+    bool enter_watcher   = false;
     CardParams params;
 };
+
+// The lockstep disjunction for CardDefinition::enter_watcher: TRUE iff FireCreatureEnterWatchers
+// (core/SpellEffects.h) has a clause that could fire for this definition. Six terms, one per `if`
+// in that loop -- ADD A TERM HERE WHENEVER A NEW WATCHER CLAUSE IS ADDED THERE, or the new card's
+// trigger is silently skipped on every board. (The filter-only params -- creature_enters_min_power,
+// own_creature_enters_draw, enters_watch_subtypes -- are deliberately NOT terms: they narrow a
+// payload, they are never a payload, so a definition carrying only those fires nothing.)
+inline bool DefHasCreatureEnterWatcher(const CardParams& p)
+{
+    return p.any_creature_enters_lifegain > 0
+        || p.own_creature_enters_lifegain > 0
+        || p.own_creature_enters_lifegain_toughness
+        || p.own_creature_enters_self_counters > 0
+        || p.any_creature_enters_self_counters_power
+        || p.opp_creature_enters_life_loss > 0;
+}
 
 // Singleton registry of all known card definitions.
 // Populated from:
