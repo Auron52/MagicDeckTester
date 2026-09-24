@@ -795,6 +795,53 @@ struct CardParams
     std::vector<std::string> attack_per_token_keywords;       // see etb_created_token_keywords
     std::vector<std::string> attack_token_requires_subtypes;  // attacker subtypes counted (empty = any)
 
+    // Saproling Burst -- FADING (CR 702.32), the engine's first. "Fading 7: this enchantment enters
+    // with seven fade counters on it. At the beginning of your upkeep, remove a fade counter from
+    // it. If you can't, sacrifice it."
+    //
+    // THE COUNT IS DOWNWARD AND THE SACRIFICE IS ON FAILURE TO REMOVE, not on reaching zero -- so
+    // Fading 7 takes SEVEN decrements and dies on the EIGHTH upkeep, living eight of the
+    // controller's upkeeps in total. Getting that off by one shortens or lengthens the card's whole
+    // life.
+    //
+    // The counters are put on AS THE PERMANENT ENTERS, so Doubling Season DOUBLES them (CR 121.6 /
+    // 614.1c, the planeswalker double-loyalty ruling that devour already relies on): under one
+    // Season a Saproling Burst enters with FOURTEEN. Routed through PutFadeCounters beside the
+    // other three chokepoints. Counter REMOVAL is a cost and is never doubled.
+    int                      fading_counters = 0;
+    //   fade_saproling_cost      -- counters removed per activation (1). No {T}, no mana, so it is
+    //                               legal the turn the enchantment lands and repeatable within a
+    //                               turn; PermAbilityMode::FadeSaproling.
+    //   fade_creates_tokens      -- tokens per activation, through CreateToken (so the Season
+    //                               doubles this half INDEPENDENTLY: one Season is 4x throughput,
+    //                               twice the counters AND two Saprolings per activation).
+    //   fade_token_*             -- the token spec. Its printed P/T is 0/0 and its LIVE P/T is kept
+    //                               equal to the source's remaining fade counters (the card's
+    //                               characteristic-defining ability, CR 604.3) by RefreshFadeTokens,
+    //                               which runs at both sites where the count can change. Modelled
+    //                               as a refresh rather than a read-time CDA deliberately: the
+    //                               dependency changes at exactly two known sites, so recomputing
+    //                               there is equivalent and costs nothing on the hot board walks --
+    //                               and it keeps the token DEFINITION-LESS, preserving the
+    //                               def_absent short-circuit this 40-token deck depends on.
+    //   fade_ltb_destroys_created_tokens -- "when this enchantment leaves the battlefield, destroy
+    //                               all tokens created with it." THE CARD'S REAL COST, and without
+    //                               it the card is badly over-rated. In a goldfish the only way the
+    //                               Burst ever leaves is its own fading sacrifice (the passive
+    //                               opponent has no removal and nothing here sacrifices an
+    //                               enchantment), so every token it made dies on the eighth upkeep.
+    //                               Mostly redundant with the 0/0 toughness SBA -- at zero counters
+    //                               the tokens are already dead -- EXCEPT under a Sporecrown Thallid
+    //                               or a live Beastmaster Ascension, which lift them off zero and
+    //                               make this clause the thing that kills them.
+    int                      fade_saproling_cost = 0;
+    int                      fade_creates_tokens = 0;
+    int                      fade_token_power = 0;
+    int                      fade_token_toughness = 0;
+    std::vector<std::string> fade_token_subtypes;
+    std::string              fade_token_color;
+    bool                     fade_ltb_destroys_created_tokens = false;
+
     // Shroofus Sproutsire: "Whenever a Saproling you control deals COMBAT DAMAGE TO A PLAYER,
     // create THAT MANY 1/1 green Saproling creature tokens." The Utvara block above is the same
     // shape one step earlier in combat -- Utvara counts DECLARED ATTACKERS at declare-attackers,

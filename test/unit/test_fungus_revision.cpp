@@ -743,3 +743,185 @@ TEST_CASE("Deathspore Thallid: the target ranking must not eat its own engine")
         CHECK_FALSE(DeathOfWouldPay(s, 0, s.battlefield[f]));
     }
 }
+
+// ---------------------------------------------------------------------------------------------
+// Saproling Burst -- the engine's first FADING card. Three things here are easy to get silently
+// wrong and each has its own case: the off-by-one in "remove one, or sacrifice if you can't", the
+// token P/T tracking the SOURCE's live counter total, and the leaves-the-battlefield sweep that is
+// the card's real cost.
+// ---------------------------------------------------------------------------------------------
+
+namespace
+{
+int FadeOn(const GameState& s, int number)
+{
+    for (const Permanent& p : s.battlefield)
+    { if (p.card.m_number == number) { return p.fade_counters; } }
+    return -1;
+}
+bool OnBoard(const GameState& s, int number)
+{
+    for (const Permanent& p : s.battlefield) { if (p.card.m_number == number) { return true; } }
+    return false;
+}
+// Put a Burst on the battlefield the way the enter site does -- through PutFadeCounters, so the
+// doubler applies.
+int PutBurst(GameState& s, int number)
+{
+    const int i = Put(s, "Saproling Burst", 0, number);
+    PutFadeCounters(s, s.battlefield[i], Def("Saproling Burst").params.fading_counters);
+    return i;
+}
+}  // namespace
+
+TEST_CASE("Saproling Burst: Fading 7 enters with 7, and 14 under a Doubling Season")
+{
+    EnsureCardsLoaded();
+    GameState s = Fresh();
+    s.deck_has_counter_doubler = true;
+
+    SUBCASE("plain")
+    {
+        PutBurst(s, 1);
+        CHECK(FadeOn(s, 1) == 7);
+    }
+    SUBCASE("one Doubling Season -- counters a permanent ENTERS WITH are doubled (CR 121.6)")
+    {
+        Put(s, "Doubling Season", 0, 99);
+        PutBurst(s, 1);
+        CHECK(FadeOn(s, 1) == 14);
+    }
+}
+
+TEST_CASE("Saproling Burst: the sacrifice is on FAILURE TO REMOVE, not on reaching zero")
+{
+    EnsureCardsLoaded();
+    // THE OFF-BY-ONE. Fading 7 takes SEVEN decrements and is sacrificed on the EIGHTH upkeep --
+    // living eight of the controller's upkeeps. Reading it as "sacrifice when removing one reaches
+    // zero" would cut a whole turn off the card.
+    GameState s = Fresh();
+    PutBurst(s, 1);
+    for (int up = 1; up <= 7; ++up)
+    {
+        PerformUpkeepFading(s);
+        CHECK_MESSAGE(OnBoard(s, 1), "sacrificed too early, at upkeep ", up);
+        CHECK_MESSAGE(FadeOn(s, 1) == 7 - up, "wrong count at upkeep ", up);
+    }
+    CHECK(FadeOn(s, 1) == 0);
+    PerformUpkeepFading(s);            // the EIGHTH: cannot remove one
+    CHECK_FALSE(OnBoard(s, 1));
+    CHECK(s.players[0].graveyard.size() == 1);
+}
+
+TEST_CASE("Saproling Burst: the token's P/T tracks the SOURCE's live counter total (CR 604.3)")
+{
+    EnsureCardsLoaded();
+    GameState s = Fresh();
+    PutBurst(s, 1);
+    REQUIRE(FadeOn(s, 1) == 7);
+
+    // Pay first, THEN create: an activation at seven leaves six and mints a 6/6, never a 7/7.
+    ApplyPermAbility(s, 0, 1, PermAbilityMode::FadeSaproling);
+    CHECK(FadeOn(s, 1) == 6);
+    REQUIRE(CountSaprolings(s) == 1);
+    for (const Permanent& p : s.battlefield)
+    { if (p.is_token) { CHECK(p.EffectivePower() == 6); CHECK(p.EffectiveToughness() == 6); } }
+
+    // A second activation shrinks BOTH -- they all track the same live count.
+    ApplyPermAbility(s, 0, 1, PermAbilityMode::FadeSaproling);
+    CHECK(FadeOn(s, 1) == 5);
+    REQUIRE(CountSaprolings(s) == 2);
+    for (const Permanent& p : s.battlefield)
+    { if (p.is_token) { CHECK(p.EffectivePower() == 5); } }
+
+    // ...and so does the fading upkeep, which is the other site the count can change at.
+    PerformUpkeepFading(s);
+    CHECK(FadeOn(s, 1) == 4);
+    for (const Permanent& p : s.battlefield)
+    { if (p.is_token) { CHECK(p.EffectivePower() == 4); } }
+}
+
+TEST_CASE("Saproling Burst: at zero counters the tokens are 0/0 and die on the spot")
+{
+    EnsureCardsLoaded();
+    GameState s = Fresh();
+    PutBurst(s, 1);
+    // Seven activations: the last leaves zero counters, so every token it ever made is a 0/0 and
+    // the toughness SBA takes them all. "Pop everything" is a trap, which is exactly why K is a
+    // searched axis with an interior optimum rather than a greedy max.
+    for (int k = 0; k < 7; ++k) { ApplyPermAbility(s, 0, 1, PermAbilityMode::FadeSaproling); }
+    CHECK(FadeOn(s, 1) == 0);
+    CHECK(CountSaprolings(s) == 0);
+}
+
+TEST_CASE("Saproling Burst: a SPORECROWN lifts them off zero -- and then the LTB is what kills them")
+{
+    EnsureCardsLoaded();
+    // The one case where the leaves-the-battlefield clause is not redundant with the 0/0 SBA.
+    GameState s = Fresh();
+    Put(s, "Sporecrown Thallid", 0, 50);   // +1/+1 to each other Fungus or Saproling
+    PutBurst(s, 1);
+    for (int k = 0; k < 7; ++k) { ApplyPermAbility(s, 0, 1, PermAbilityMode::FadeSaproling); }
+    CHECK(FadeOn(s, 1) == 0);
+    CHECK(CountSaprolings(s) == 7);        // 0/0 base + the lord = 1/1, so they survive
+
+    PerformUpkeepFading(s);                // cannot remove one -> sacrifice -> LTB
+    CHECK_FALSE(OnBoard(s, 1));
+    CHECK(CountSaprolings(s) == 0);        // "destroy all tokens created with this enchantment"
+}
+
+TEST_CASE("Saproling Burst: the LTB sweep is per-SOURCE, not a board wipe")
+{
+    EnsureCardsLoaded();
+    GameState s = Fresh();
+    Put(s, "Sporecrown Thallid", 0, 50);
+    PutBurst(s, 1);
+    PutBurst(s, 2);
+    // Drain the FIRST Burst only.
+    for (int k = 0; k < 7; ++k) { ApplyPermAbility(s, 0, 1, PermAbilityMode::FadeSaproling); }
+    ApplyPermAbility(s, 0, 2, PermAbilityMode::FadeSaproling);   // the second makes one 6/6
+    const int before = CountSaprolings(s);
+    CHECK(before == 8);
+
+    PerformUpkeepFading(s);
+    CHECK_FALSE(OnBoard(s, 1));
+    CHECK(OnBoard(s, 2));
+    // Only the dead Burst's seven tokens went; the survivor's one is untouched (and shrank by the
+    // upkeep decrement to 5/5).
+    CHECK(CountSaprolings(s) == 1);
+    CHECK(FadeOn(s, 2) == 5);
+}
+
+TEST_CASE("Saproling Burst: every token death routes through OnCreatureDies -- Slimefoot drains")
+{
+    EnsureCardsLoaded();
+    // The Burst expiring is a burst of DAMAGE, not merely a board wipe. This is the interaction
+    // that would have been silently lost had the sweep just erased the permanents.
+    GameState s = Fresh();
+    Put(s, "Sporecrown Thallid", 0, 50);
+    Put(s, "Slimefoot, the Stowaway", 0, 51);
+    PutBurst(s, 1);
+    for (int k = 0; k < 7; ++k) { ApplyPermAbility(s, 0, 1, PermAbilityMode::FadeSaproling); }
+    REQUIRE(CountSaprolings(s) == 7);
+    const int life_before = s.players[1].life;
+    PerformUpkeepFading(s);
+    CHECK(s.players[1].life == life_before - 7);
+}
+
+TEST_CASE("Saproling Burst: activation has no {T}, is legal while sick, and is NOT spore-pooled")
+{
+    EnsureCardsLoaded();
+    const CardParams& q = Def("Saproling Burst").params;
+    CHECK(q.fading_counters == 7);
+    CHECK(q.fade_saproling_cost == 1);
+    CHECK(q.fade_ltb_destroys_created_tokens);
+    CHECK_FALSE(PermAbilityTaps(PermAbilityMode::FadeSaproling));
+    // It carries NO spore params, so FoldSporeSourceIdentity cannot fold it in with the Thallids --
+    // two Bursts on different counts mint different-sized tokens and are genuinely distinct.
+    CHECK(q.spore_saproling_cost == 0);
+
+    GameState s = Fresh();
+    const int i = Put(s, "Saproling Burst", 0, 1, /*sick=*/true);
+    PutFadeCounters(s, s.battlefield[i], q.fading_counters);
+    CHECK(PermAbilitySourceLive(s, 0, 1, PermAbilityMode::FadeSaproling));
+}

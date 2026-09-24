@@ -504,6 +504,11 @@ INERT_PARAMS = {
     "sac_outlet_grants_haste": "outlet payload (target creature gains haste UEOT); the victim rides the `sacrifice` type and the haste target is a ranked resolution pick with a human chooser over the full legal set",
     "sac_outlet_minus_power": "outlet payload constant (signed -N/-N UEOT, the Jitte convention); target as above",
     "sac_outlet_minus_tough": "outlet payload constant (signed -N/-N UEOT); target as above",
+    "fading_counters": "Fading N (CR 702.32): the enters-with count, then a MANDATORY untargeted upkeep trigger -- remove one, or sacrifice if you cannot. No choice at either step (pay-or-sac is echo's shape, not fading's: fading has no cost to decline)",
+    "fade_creates_tokens": "token count constant", "fade_token_power": "token spec constant",
+    "fade_token_toughness": "token spec constant", "fade_token_subtypes": "token spec constant",
+    "fade_token_color": "token spec constant",
+    "fade_ltb_destroys_created_tokens": "mandatory untargeted leaves-the-battlefield trigger (destroy all tokens created with this permanent) -- untargeted and exhaustive, nothing to choose",
     "combat_damage_token_keywords": "printed keywords on the combat-damage-created token, no choice",
     "etb_self_lifegain": "mandatory lifegain amount",
     "etb_damage_equals_power": "computed damage (live power substitution on etb_damage_any)",
@@ -974,6 +979,11 @@ MAINPHASE_PARAMS = {
     # variant; the human reaches K=2 by choosing it twice, exactly as for the drain/exile sinks.
     # Distinct from tap_token_cost below, whose {T} makes it once-per-untap.
     "pay_token_cost":      "mana-only, no-{T} activated token maker = a main_phase board activation (ActivatePermAbility/PayToken); K rides chosen_x",
+    # Saproling Burst. Same BOARD ACTIVATION shape as the spore outlet -- counter-costed, no {T},
+    # no mana -- so it is a main_phase plan action on the clicked permanent and K rides chosen_x.
+    # It is NOT pooled the way the spore outlets are: two Bursts on different counter totals mint
+    # different-sized tokens, so each keeps its own axis and the human sees both sources.
+    "fade_saproling_cost": "fade outlet = a main_phase board activation (ActivatePermAbility/FadeSaproling); K rides chosen_x",
     "sacrifice_draw_cost": "Fiery Islet sac-to-draw activation (main_phase play)",
     "stages_cards":        "Light Up the Stage: staged cards become castable (main_phase plays)",
     "tap_token_cost":      "Sliver Hive activated token ability (main_phase play)",

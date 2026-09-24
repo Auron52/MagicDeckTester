@@ -81,6 +81,11 @@ MODELED_ELSEWHERE_KEYWORDS = {
     # Demonstrate (Creative Technique): modeled structurally via the demonstrate param
     # (a cast-trigger stack entry), not a keyword tag -- mirrors cascade.
     "demonstrate",
+    # Fading (Saproling Burst): modeled structurally via fading_counters -> Permanent::fade_counters
+    # plus PerformUpkeepFading, not a keyword tag -- the engine's Keyword enum only carries keywords
+    # it actually reads (the same reason devour is absent). Not a combat/evasion keyword, so
+    # stripping it cannot mask a missing one.
+    "fading",
     # Ascend (Ocelot Pride): modeled structurally via the `ascend` param ->
     # Player::has_city_blessing, a per-player designation checked by RefreshCityBlessing,
     # not a keyword tag -- and not a combat/evasion keyword, so stripping it is safe.

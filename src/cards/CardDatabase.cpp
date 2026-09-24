@@ -870,6 +870,18 @@ CardParams CardDatabase::BuildParamsFromJson(const json& params) const
     for (const std::string& s : params.value("attack_token_requires_subtypes", json::array()))
         p.attack_token_requires_subtypes.push_back(s);
 
+    // Saproling Burst: fading + the counter-costed token maker + the LTB sweep.
+    p.fading_counters      = params.value("fading_counters", 0);
+    p.fade_saproling_cost  = params.value("fade_saproling_cost", 0);
+    p.fade_creates_tokens  = params.value("fade_creates_tokens", 0);
+    p.fade_token_power     = params.value("fade_token_power", 0);
+    p.fade_token_toughness = params.value("fade_token_toughness", 0);
+    p.fade_token_color     = params.value("fade_token_color", std::string{});
+    p.fade_ltb_destroys_created_tokens =
+        params.value("fade_ltb_destroys_created_tokens", false);
+    for (const std::string& s : params.value("fade_token_subtypes", json::array()))
+        p.fade_token_subtypes.push_back(s);
+
     // Shroofus Sproutsire: per-connecting-creature tokens, count = damage dealt to the player.
     p.combat_damage_tokens_per_damage = params.value("combat_damage_tokens_per_damage", 0);
     p.combat_damage_token_power       = params.value("combat_damage_token_power", 0);

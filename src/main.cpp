@@ -163,6 +163,10 @@ static void JsonBattlefield(std::ostream& os, const GameState& s, int controller
         // anthem -- which is the entire read of a Fungus board and makes the attack decision
         // unplayable by hand. Additive display fields; absent when zero.
         if (p.spore_counters)   { cs.push_back({ "spore",     "spore",     p.spore_counters }); }
+        // FADE counters (Saproling Burst). A HARD viewer requirement, not decoration: this count
+        // IS the power and toughness of every Saproling the Burst has made, so without the badge
+        // a human cannot read their own board -- and it is also the number of activations left.
+        if (p.fade_counters)    { cs.push_back({ "fade",      "fade",      p.fade_counters }); }
         if (p.quest_counters)   { cs.push_back({ "quest",     "quest",     p.quest_counters }); }
         // num = stable per-copy id; is_aura/is_equip + attached_to let the viewer draw an Aura or
         // an attached Equipment overlapping the creature (m_number) it enchants/equips
@@ -6009,6 +6013,10 @@ static int RunScenario(const std::filesystem::path& scenario_path)
             // valid but started from the wrong board -- so a new counter kind gets staged here at
             // the same time it is added to Permanent, not when someone first needs a fixture.
             p.spore_counters    = e.value("spore_counters", 0);
+            // The --scenario loader has silently dropped a new Permanent field three times;
+            // see the partial-GameState note. Added with the field, not after.
+            p.fade_counters     = e.value("fade_counters", 0);
+            p.created_by_number = e.value("created_by_number", 0);
             p.quest_counters    = e.value("quest_counters", 0);
             // "As this enters, choose a color" (Coldsteel Heart). A permanent STAGED directly onto
             // the battlefield never ran the as-enters replacement (FireOwnEtbTriggers fires only on

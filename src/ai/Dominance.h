@@ -98,7 +98,20 @@
 // DomAxis::SporeCounters / DomAxis::QuestCounters with MoreDominates. Unlike ChargeCounters they
 // have no aim-for-a-value shape (no cap, no upkeep cost, and the quest anthem is a >= test), so
 // more is never worse.
-static_assert(sizeof(Permanent) == 288,
+// 288 -> 296 (2026-09-24): Permanent gained `fade_counters` and `created_by_number` (Saproling
+// Burst -- the engine's first fading card). Two DIFFERENT classifications, and the split is the
+// point:
+//   * fade_counters is a DIRECTIONAL AXIS -- folded below as DomAxis::FadeCounters with
+//     MoreDominates. More is never worse: more activations left, BIGGER tokens (their P/T tracks
+//     this count, CR 604.3) and a later sacrifice. Unlike ChargeCounters it has no aim-for-a-value
+//     shape, and unlike age_counters it carries no upkeep cost.
+//   * created_by_number is token PROVENANCE, i.e. IDENTITY, not a resource. It is deliberately NOT
+//     an axis: a board is not "better" for its tokens having come from a particular Burst. It is
+//     already covered for comparison purposes because the SOURCE's fade_counters is an axis and
+//     the tokens' live P/T is written onto the Card (so EffectivePower sees it) -- two boards that
+//     differ only in provenance have identical counters and identical P/T, and folding it as an
+//     axis would refuse comparisons that are genuinely equal.
+static_assert(sizeof(Permanent) == 296,
               "Permanent changed size -- fold any new field into dominance::Build() (see the "
               "MAINTENANCE HAZARD note at the top of Dominance.h) before updating this number.");
 // 160 -> 184 (2026-09-02): Player gained `sideboard`, the OUTSIDE-THE-GAME zone a wish searches
@@ -796,6 +809,7 @@ inline DomSnap Build(const GameState& s, const DecisionProvider& prov,
         raw[static_cast<std::size_t>(DomAxis::LoreCounters)]    = p.lore_counters;   // Sagas (0 elsewhere)
         raw[static_cast<std::size_t>(DomAxis::AgeCounters)]     = p.age_counters;
         raw[static_cast<std::size_t>(DomAxis::SporeCounters)]   = p.spore_counters;
+        raw[static_cast<std::size_t>(DomAxis::FadeCounters)]    = p.fade_counters;
         raw[static_cast<std::size_t>(DomAxis::QuestCounters)]   = p.quest_counters;
         raw[static_cast<std::size_t>(DomAxis::Loyalty)]         = p.loyalty;
         for (const Counter& c : p.counters)

@@ -58,6 +58,12 @@ void EffectHandler::EnterBattlefield(GameState& state, const StackEntry& entry,
         perm.loyalty = edef->params.loyalty_start;
         perm.counters.push_back(Counter{Counter::Type::Loyalty, edef->params.loyalty_start});
     }
+    // FADING (CR 702.32, Saproling Burst): an ENTERS-WITH replacement, so it sits in this pre-push
+    // window beside loyalty_start, and it goes through PutFadeCounters so Doubling Season doubles
+    // it -- the same CR 121.6 / 614.1c rule devour relies on two clauses below. Lockstep with
+    // TurnSolver's rollout enter branch.
+    if (edef->params.fading_counters > 0)
+    { PutFadeCounters(state, perm, edef->params.fading_counters); }
     // DEVOUR (CR 702.81, Mycoloth): an AS-ENTERS replacement, so it belongs in this pre-push window
     // beside loyalty_start and NOT in FireOwnEtbTriggers below -- the fodder must be gone and the
     // counters must be on before the watchers see the body. The victims' death triggers are held

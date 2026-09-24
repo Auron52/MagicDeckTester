@@ -1914,6 +1914,16 @@ inline void PutQuestCounters(GameState& state, Permanent& p, int n)
 // guarantee rather than an observation. It goes live for the Fungus list revision, which pairs
 // 4 Doubling Season with 4 Peat Bog + 4 Hickory Woodlot -- and the direction matters: left
 // unfixed, the bug UNDER-rated exactly the arm under test.
+// FADE counters on a permanent entering the battlefield (Saproling Burst, "Fading 7"). Doubled by
+// Doubling Season for the same CR 121.6 / 614.1c reason devour's counters are -- under one Season
+// the Burst enters with fourteen, which is twice the activations AND twice the size of every token
+// it makes, so routing this through the chokepoint is worth a factor of four, not two.
+inline void PutFadeCounters(GameState& state, Permanent& p, int n)
+{
+    if (n <= 0) { return; }
+    p.fade_counters += n << DoublerShift(state, p.controller_index, /*for_tokens=*/false);
+}
+
 inline void PutDepletionCounters(GameState& state, Permanent& p, int n)
 {
     if (n <= 0) { return; }
@@ -8675,6 +8685,77 @@ inline int ChooseSacOutletVictimIndex(GameState& state, int controller, int sour
     (void)source_id;
 }
 
+// ---- Saproling Burst: the token P/T tie, the LTB sweep, and the fading upkeep ------------------
+//
+// "It has 'This token's power and toughness are each equal to the number of fade counters on
+// Saproling Burst.'" -- a characteristic-defining ability (CR 604.3) pointing at ANOTHER permanent's
+// counter total. Modelled as a REFRESH at the two sites where that total can change (the activation
+// and the fading upkeep) rather than as a read-time computation, which is equivalent because those
+// are the only two mutations, and is far cheaper: EffectivePower is the hottest function in the
+// engine and this is the deck with 40-token boards, so threading a battlefield lookup into it to
+// serve one card would be paid by every permanent of every deck on every walk.
+//
+// The token is created with a PRINTED 0/0 so CreateTokenOnce names it "0/0 Saproling Token" once
+// and the name never goes stale as the counters fall (the name feeds m_name_hash and the TT key).
+// Its live P/T is written straight onto the Card. It stays DEFINITION-LESS, so def_absent remains
+// true and every board-walk short-circuit this deck depends on keeps working.
+inline void RefreshFadeTokens(GameState& state, int source_number, int counters)
+{
+    for (Permanent& q : state.battlefield)
+    {
+        if (q.created_by_number != source_number) { continue; }
+        q.card.m_power     = counters;
+        q.card.m_toughness = counters;
+    }
+}
+
+// The toughness SBA over this source's tokens, run after a refresh. At zero fade counters every
+// token it made is a 0/0 and dies on the spot -- UNLESS a Sporecrown Thallid or a live Beastmaster
+// Ascension lifts it, which is rules-correct (CR 704.5f applies after layer 7) and is exactly why
+// the check reads the full lord/aura/equipment sum rather than the bare toughness.
+inline void SweepDeadFadeTokens(GameState& state, int source_number)
+{
+    for (std::size_t i = state.battlefield.size(); i-- > 0; )
+    {
+        Permanent& q = state.battlefield[i];
+        if (q.created_by_number != source_number) { continue; }
+        const int tough = q.EffectiveToughness()
+                        + ComputeLordBonus(q.card, state, q.controller_index, q.is_animated, &q).second
+                        + AuraBonusFor(q, state).second + EquipBonusFor(q, state).second;
+        if (tough > 0) { continue; }
+        const Card dead   = q.card;
+        const int  ctrl   = q.controller_index;
+        const bool tok    = q.is_token;
+        const int  minus  = MinusCountersOn(q);
+        if (!tok) { state.players[q.owner_index].graveyard.push_back(dead); }
+        state.battlefield.erase(state.battlefield.begin() + static_cast<std::ptrdiff_t>(i));
+        OnCreatureDies(state, ctrl, dead, tok, minus);
+    }
+}
+
+// "When this enchantment leaves the battlefield, destroy all tokens created with this enchantment."
+// THE CARD'S REAL COST. In a goldfish the only leave route is the fading sacrifice itself, so every
+// Saproling the Burst ever made dies with it -- which is what makes converting doomed bodies into
+// permanent resources (Utopia Mycon mana, a Psychotrope card, Mycoloth devour fodder) a real and
+// deep line, and what stops the card being read as eight free Saprolings.
+//
+// The deaths route through OnCreatureDies, so a Slimefoot on the battlefield drains for each one:
+// the Burst expiring is a burst of damage, not merely a board wipe. "They can't be regenerated" is
+// unmodelled and provably inert -- the engine has no regeneration mechanic at all.
+inline void DestroyTokensCreatedBy(GameState& state, int source_number)
+{
+    for (std::size_t i = state.battlefield.size(); i-- > 0; )
+    {
+        Permanent& q = state.battlefield[i];
+        if (q.created_by_number != source_number || !q.is_token) { continue; }
+        const Card dead  = q.card;
+        const int  ctrl  = q.controller_index;
+        const int  minus = MinusCountersOn(q);
+        state.battlefield.erase(state.battlefield.begin() + static_cast<std::ptrdiff_t>(i));
+        OnCreatureDies(state, ctrl, dead, /*dead_was_token=*/true, minus);
+    }
+}
+
 // Would killing `victim` actually PAY its controller? True when some permanent they control
 // watches for that death with a payload worth having (Slimefoot's drain, Pashalik's ping, a
 // death-token maker), or when the victim refunds itself on death (Tukatongue Thallid).
@@ -11060,6 +11141,68 @@ inline void PerformUpkeepSporeCounters(GameState& state)
         // the board state.
         if (sweepers > 0 && CardHasSubtype(p.card, "Fungus"))
         { for (int s = 0; s < sweepers; ++s) { PutSporeCounters(state, p, 1); } }
+    }
+}
+
+// FADING at upkeep (CR 702.32): "At the beginning of your upkeep, remove a fade counter from it.
+// If you can't, sacrifice it."
+//
+// THE ORDER OF THE TWO CLAUSES IS THE WHOLE RULE AND IT IS EASY TO GET BACKWARDS. The sacrifice
+// fires when the counter CANNOT BE REMOVED -- i.e. on the upkeep where the count is already zero --
+// not when removing one reaches zero. So Fading 7 takes seven decrements and is sacrificed on the
+// EIGHTH upkeep, and the seventh activation is legal and leaves the permanent on zero.
+//
+// Lockstep twin: called from GameEngine::UpkeepTail (executor) and
+// TurnSolver::SimulateEndAndStartNextTurn (rollout), beside PerformUpkeepSporeCounters.
+// Param-gated, so every other deck is byte-identical.
+inline void PerformUpkeepFading(GameState& state)
+{
+    const int active = state.active_player_index;
+    // Snapshot the sources first: the sacrifice below erases from the battlefield and the LTB sweep
+    // erases more, so indices taken during a live walk do not survive.
+    std::vector<int> sources;
+    for (const Permanent& p : state.battlefield)
+    {
+        if (p.controller_index != active) { continue; }
+        if (p.def_absent) { continue; }
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+        if (!d || d->params.fading_counters <= 0) { continue; }
+        sources.push_back(p.card.m_number);
+    }
+    if (sources.empty()) { return; }
+
+    for (int num : sources)
+    {
+        int idx = -1;
+        for (int i = 0; i < static_cast<int>(state.battlefield.size()); ++i)
+        {
+            const Permanent& q = state.battlefield[i];
+            if (q.controller_index == active && q.card.m_number == num) { idx = i; break; }
+        }
+        if (idx < 0) { continue; }   // already gone this upkeep
+
+        if (state.battlefield[static_cast<std::size_t>(idx)].fade_counters > 0)
+        {
+            const int left = --state.battlefield[static_cast<std::size_t>(idx)].fade_counters;
+            // The tokens shrink with it, and any that hit 0/0 die now.
+            RefreshFadeTokens(state, num, left);
+            SweepDeadFadeTokens(state, num);
+            continue;
+        }
+
+        // Cannot remove one -> sacrifice, then the LTB destroys every token it made.
+        const Card dead = state.battlefield[static_cast<std::size_t>(idx)].card;
+        const CardDefinition* dd = CardDatabase::Instance().LookupCached(dead);
+        state.battlefield.erase(state.battlefield.begin() + idx);
+        if (g_play_event_sink)
+        {
+            EmitPlayEvent(state.turn_number, "sacrifice",
+                          "\xE2\x8C\x9B " + dead.m_name.str()
+                          + ": no fade counter left -- sacrificed");
+        }
+        state.players[active].graveyard.push_back(dead);
+        if (dd && dd->params.fade_ltb_destroys_created_tokens)
+        { DestroyTokensCreatedBy(state, num); }
     }
 }
 
@@ -14902,6 +15045,7 @@ inline const char* PermAbilityLabel(PermAbilityMode mode)
         case PermAbilityMode::GrantLifelink:  return "another target creature gains lifelink until end of turn";
         case PermAbilityMode::SporeSaproling: return "remove three spore counters: create a Saproling";
         case PermAbilityMode::PayToken:       return "create a creature token";
+        case PermAbilityMode::FadeSaproling:  return "remove a fade counter: create a Saproling";
         default:                              return "activate";
     }
 }
@@ -15261,6 +15405,54 @@ inline void ApplyPermAbility(GameState& state, int controller, int source_id, Pe
             }
             break;
         }
+        case PermAbilityMode::FadeSaproling:
+        {
+            // Saproling Burst: "Remove a fade counter from this enchantment: Create a green
+            // Saproling creature token. It has 'This token's power and toughness are each equal to
+            // the number of fade counters on Saproling Burst.'"
+            //
+            // The counter is the COST (CR 601.2h / 602.2b), so it comes off here and is NOT doubled
+            // -- Doubling Season doubles only counters being PUT ON. The token IS doubled, because
+            // CreateToken is where that half hooks.
+            //
+            // ORDER MATTERS AND IS THE RULES ORDER: pay first, then create. So an activation at
+            // seven counters leaves six and mints a 6/6, not a 7/7.
+            Permanent& self = state.battlefield[idx];
+            const int cost_ctrs = d->params.fade_saproling_cost;
+            if (cost_ctrs <= 0 || self.fade_counters < cost_ctrs) { break; }
+            self.fade_counters -= cost_ctrs;
+            const int left    = self.fade_counters;
+            const int src_num = self.card.m_number;
+            const int ntok    = d->params.fade_creates_tokens > 0 ? d->params.fade_creates_tokens : 1;
+
+            // Create at a PRINTED 0/0 so CreateTokenOnce names every one of them "0/0 Saproling
+            // Token" and that name never goes stale as the counters fall (it feeds m_name_hash and
+            // the TT key). The live P/T is written on below. Note the battlefield size before, so
+            // the fix-up finds exactly the replicas this call made -- CreateToken emits 2^N of them
+            // under N Doubling Seasons and they are all appended.
+            const std::size_t before = state.battlefield.size();
+            for (int t = 0; t < ntok; ++t)
+            {
+                CreateToken(state, controller, d->params.fade_token_power,
+                            d->params.fade_token_toughness, d->params.fade_token_subtypes,
+                            d->params.fade_token_color);
+            }
+            for (std::size_t i2 = before; i2 < state.battlefield.size(); ++i2)
+            { state.battlefield[i2].created_by_number = src_num; }
+
+            // Every token of this source now tracks the new count -- the ones just made AND the
+            // ones made on earlier activations, which is the CDA: they all shrink together.
+            RefreshFadeTokens(state, src_num, left);
+            SweepDeadFadeTokens(state, src_num);
+            if (g_play_event_sink)
+            {
+                EmitPlayEvent(state.turn_number, "token",
+                              "\xF0\x9F\x8D\x84 " + src_name + ": removes a fade counter ("
+                              + std::to_string(left) + " left) -> Saproling "
+                              + std::to_string(left) + "/" + std::to_string(left));
+            }
+            break;
+        }
         case PermAbilityMode::PayToken:
         {
             // Slimefoot, the Stowaway: "{4}: Create a 1/1 green Saproling creature token."
@@ -15339,6 +15531,34 @@ inline int NextCanonicalSporeSource(const GameState& state, int controller, cons
         return p.card.m_number;
     }
     return 0;
+}
+
+// The counter-bounded repeat twin for FadeSaproling, the SpendSporeActivations sibling. It exists
+// for the same reason: the cost is COUNTERS, so SpendRepeatActivations -- which prices in mana and
+// bails at `per <= 0` to stop a free repeatable sink from non-terminating -- would fire ZERO extras
+// with no error. Unlike the spore version there is no pooling: two Saproling Bursts at different
+// counter totals mint DIFFERENT-SIZED tokens, so they are not interchangeable and must not be
+// folded the way FoldSporeSourceIdentity folds the five spore outlets.
+inline int SpendFadeActivations(GameState& state, int controller, int source_id,
+                                const CardDefinition& def, int want)
+{
+    if (want <= 0 || def.params.fade_saproling_cost <= 0) { return 0; }
+    int fired = 0;
+    for (int i = 0; i < want; ++i)
+    {
+        // Re-locate every iteration: each activation calls CreateToken, which can reallocate the
+        // battlefield, so a pointer taken before the loop dangles.
+        bool live = false;
+        for (const Permanent& p : state.battlefield)
+        {
+            if (p.card.m_number == source_id && p.controller_index == controller)
+            { live = (p.fade_counters >= def.params.fade_saproling_cost); break; }
+        }
+        if (!live) { break; }
+        ApplyPermAbility(state, controller, source_id, PermAbilityMode::FadeSaproling);
+        ++fired;
+    }
+    return fired;
 }
 
 inline int SpendSporeActivations(GameState& state, int controller, int source_id,

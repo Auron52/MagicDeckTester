@@ -396,6 +396,9 @@ void GameEngine::UpkeepTail(GameState& state)
     // Spore counters (the Thallid family), before the other upkeep triggers. Mirrors
     // TurnSolver::SimulateEndAndStartNextTurn (lockstep). Param-gated -> byte-identical elsewhere.
     PerformUpkeepSporeCounters(state);
+    // Fading (Saproling Burst): remove a fade counter, or sacrifice if you cannot -- and the LTB
+    // then destroys every token it made. Lockstep twin in TurnSolver::SimulateEndAndStartNextTurn.
+    PerformUpkeepFading(state);
 
     // Creature Giving upkeep triggers, in controller-optimal order: Varchild's War-Riders
     // cumulative-upkeep gifts FIRST (the fresh Survivors count toward DotH's >= 3), then the

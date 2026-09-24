@@ -5408,6 +5408,9 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
                             (a.ability_mode == Action::AbilityMode::SporeSaproling)
                             ? SpendSporeActivations(state, state.active_player_index,
                                                     a.sac_source_id, *a.def, a.chosen_x - 1)
+                            : (a.ability_mode == Action::AbilityMode::FadeSaproling)
+                            ? SpendFadeActivations(state, state.active_player_index,
+                                                   a.sac_source_id, *a.def, a.chosen_x - 1)
                             : SpendRepeatActivations(state, state.active_player_index,
                                                    a.sac_source_id, a.ability_mode, *a.def,
                                                    a.chosen_x - 1);

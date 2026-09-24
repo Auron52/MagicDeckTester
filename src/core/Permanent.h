@@ -62,6 +62,16 @@ enum class PermAbilityMode
     // so it routes through SpendRepeatActivations safely (that helper bails at a zero mana value
     // precisely to stop a free repeatable sink from non-terminating; {4} has mana value 4).
     PayToken,
+    // Remove a fade counter from this enchantment: create a Saproling whose P/T equal the number
+    // of fade counters left on it  (Saproling Burst; CardParams::fade_saproling_cost). The
+    // SporeSaproling shape -- the cost is COUNTERS, not mana, so it must NOT route through
+    // SpendRepeatActivations (that helper bails at a zero mana value to stop a free repeatable
+    // sink from non-terminating); it takes the counter-bounded twin SpendFadeActivations instead.
+    //
+    // K IS A GENUINE OPTIMUM HERE, not a "take the maximum" axis. K activations leave C-K counters,
+    // so the turn yields K bodies of (C-K)/(C-K) -- total power K*(C-K), maximised near C/2 --
+    // and popping everything mints a pile of 0/0s that die to the toughness SBA on the spot.
+    FadeSaproling,
 };
 
 // Does this mode's cost include {T}? THE single source of truth, because three separate sites used
@@ -77,7 +87,8 @@ inline bool PermAbilityTaps(PermAbilityMode m)
         && m != PermAbilityMode::IceCounter
         && m != PermAbilityMode::GrantLifelink
         && m != PermAbilityMode::SporeSaproling
-        && m != PermAbilityMode::PayToken;
+        && m != PermAbilityMode::PayToken
+        && m != PermAbilityMode::FadeSaproling;
 }
 
 struct Permanent
@@ -222,6 +233,27 @@ struct Permanent
                                            // Saprolings a later turn yields), so it MUST be folded into
                                            // BuildSimKey and BoardSignature under a nonzero gate -- see
                                            // the storage-counter key-hole note in TurnSolver.cpp.
+    int       fade_counters        = 0;    // Fade counters (Saproling Burst; CardParams::
+                                           // fading_counters puts them on AS THE PERMANENT ENTERS,
+                                           // one comes off at each of the controller's upkeeps, and
+                                           // fade_saproling_cost removes one to make a token).
+                                           // FADING COUNTS DOWN AND THE SACRIFICE IS ON FAILURE TO
+                                           // REMOVE (CR 702.32), so Fading 7 takes SEVEN decrements
+                                           // and is sacrificed on the EIGHTH upkeep. Same dedicated-
+                                           // int rationale as spore_counters above (kept out of the
+                                           // counters vector, which EffectivePower iterates), and
+                                           // the same sim-key obligation -- it is FUTURE-DETERMINING
+                                           // twice over: it decides how many activations remain AND
+                                           // it IS the power and toughness of every token the
+                                           // permanent has already made.
+    int       created_by_number    = 0;    // Token PROVENANCE: the m_number of the permanent whose
+                                           // ability created this token, or 0 for every token that
+                                           // predates this field. Only Saproling Burst sets it, and
+                                           // it is read at exactly two places -- the P/T refresh
+                                           // when its source's fade counters change, and the
+                                           // leaves-the-battlefield sweep that destroys "all tokens
+                                           // created with this enchantment". Inert (never inspected)
+                                           // for every other deck -> byte-identical.
     int       quest_counters       = 0;    // Quest counters (Beastmaster Ascension; CardParams::
                                            // quest_counter_per_attacker adds one per DECLARED attacker,
                                            // quest_anthem_threshold switches on the team pump at 7+).

@@ -496,6 +496,10 @@ inline uint64_t FungibilityKey(const Permanent& p)
     Mix(h, static_cast<uint64_t>(p.charge_counters) << 32 | static_cast<uint64_t>(p.verse_counters));
     Mix(h, static_cast<uint64_t>(p.storage_counters) << 32 | static_cast<uint64_t>(p.ice_counters));
     Mix(h, static_cast<uint64_t>(p.age_counters) << 32 | static_cast<uint64_t>(p.spore_counters));
+    // FUTURE-DETERMINING twice over: the remaining activations AND the live P/T of every token
+    // this permanent has already made. A key that cannot see it would collide two boards that
+    // play out completely differently.
+    Mix(h, static_cast<uint64_t>(p.fade_counters) << 48);
     Mix(h, static_cast<uint64_t>(p.quest_counters) << 32 | static_cast<uint64_t>(p.loyalty));
     Mix(h, static_cast<uint64_t>(p.garth_chosen_mask) << 32 | static_cast<uint64_t>(p.chosen_subtype_id));
     Mix(h, static_cast<uint64_t>(p.chosen_color + 1));
@@ -2317,6 +2321,7 @@ static std::string BoardSignature(const GameState& s)
         // later turn yields; quest counters decide when the anthem switches on), so they must be
         // distinguished. Nonzero-gated, so every other deck keeps the EXACT prior signature.
         if (p.spore_counters > 0) { e += "/sp" + std::to_string(p.spore_counters); }
+        if (p.fade_counters > 0)  { e += "/fd" + std::to_string(p.fade_counters); }
         if (p.quest_counters > 0) { e += "/qu" + std::to_string(p.quest_counters); }
         e += "/p" + std::to_string(p.temp_power_bonus) + "," + std::to_string(p.temp_tough_bonus);
         if (p.temp_haste)   { e += "/h"; }    // Expedite until-EOT haste
@@ -8293,7 +8298,8 @@ static bool PermIsPlainForFoldImpl(const GameState& state, const Permanent& p, i
     // can pop, the other cannot), and folding them would pick a winner among real alternatives.
     // Under MTG_FOLD_COUNTER_SOURCES that distinction moves into the TAG instead of gating
     // membership, so UNEQUAL counts still never share a class -- see the note above this function.
-    if (!FoldCounterSourcesOn() && (p.spore_counters != 0 || p.quest_counters != 0))
+    if (!FoldCounterSourcesOn() && (p.spore_counters != 0 || p.quest_counters != 0
+                                    || p.fade_counters != 0))
     { return false; }
     why = foldcensus::kTempHasteEtc;
     if (p.temp_haste || p.temp_lifelink || p.exile_at_end) { return false; }
@@ -8844,6 +8850,7 @@ static int ActivationEquivTag(const GameState& state, const Permanent& src, cons
     if (FoldCounterSourcesOn())
     {
         mix(static_cast<std::uint64_t>(src.spore_counters));
+        mix(static_cast<std::uint64_t>(src.fade_counters));
         mix(static_cast<std::uint64_t>(src.quest_counters));
     }
     const int t = static_cast<int>(h & 0x7fffffff);
@@ -10474,7 +10481,8 @@ static int BuildFungibleEquipClasses(const GameState& state,
             // Unreachable today (the is_equipment gate below excludes every Fungus card), but this
             // list is "every field that can differentiate two copies" and an incomplete one is the
             // documented failure mode -- keep it exhaustive rather than argue reachability.
-            || src->spore_counters != 0 || src->quest_counters != 0)
+            || src->spore_counters != 0 || src->quest_counters != 0
+            || src->fade_counters != 0)
         { continue; }
         const CardDefinition* d = a0.def ? a0.def : CardDatabase::Instance().LookupCached(src->card);
         if (!d || !d->params.is_equipment || d->params.equip_sacrifices_prior_host) { continue; }
@@ -18863,6 +18871,64 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
                     // Each Saproling is a 1/1 body; the repo's convention scores a created token at
                     // its body value. No direct_damage -- a token is board, not face damage.
                     a.eval           = k * std::max(1, sd->params.spore_creates_tokens);
+                    a.direct_damage  = 0;
+                    a.is_noncreature = true;
+                    actions.push_back(std::move(a));
+                }
+            }
+
+            // ---- Fade outlet: "Remove a fade counter: create a Saproling that is X/X" ------------
+            // The spore outlet's sibling and, like it, deliberately NOT in the ModeSpec table: the
+            // cost is COUNTERS, so none of that table's mana affordability machinery applies. No
+            // {T} and no sacrifice either, so the enchantment may activate the turn it lands and
+            // repeatedly within a turn.
+            //
+            // K IS A GENUINE INTERIOR OPTIMUM HERE, which is what makes it worth enumerating rather
+            // than maxing. Each activation spends a counter, and the counter total IS the size of
+            // every token this source has already made -- so K activations off C counters leave
+            // K bodies of (C-K)/(C-K), total power K*(C-K), maximised near K = C/2. Popping
+            // everything mints a pile of 0/0s that die to the toughness SBA on the spot, and
+            // popping nothing banks a bigger body for later at the cost of tempo. The search owns
+            // that trade.
+            //
+            // NOT POOLED, unlike the spore outlets. FoldSporeSourceIdentity is licensed by the five
+            // spore bodies carrying a byte-identical payload; two Saproling Bursts on different
+            // counter totals mint DIFFERENT-SIZED tokens, so they are genuinely distinct sources and
+            // each keeps its own axis.
+            //
+            // Folded to {1} under human play / unpruned for the same reason the spore k-fan is: the
+            // viewer's main phase re-prompts after every activation.
+            if (sd->params.fade_saproling_cost > 0
+                && src.fade_counters >= sd->params.fade_saproling_cost)
+            {
+                const int fade_max_k = src.fade_counters / sd->params.fade_saproling_cost;
+                std::vector<int> counts{ 1 };
+                if (fade_max_k > 1 && !HumanPlayActive()
+                    && !DecisionUnpruned(UnprunedGate::BlinkTarget))
+                {
+                    counts.clear();
+                    for (int k = 1; k <= fade_max_k; ++k) { counts.push_back(k); }
+                }
+                for (int k : counts)
+                {
+                    Action a;
+                    a.kind           = Action::Kind::ActivatePermAbility;
+                    a.card_name      = src.card.m_name;
+                    a.def            = sd;
+                    a.hand_index     = -1;
+                    a.sac_source_id  = src.card.m_number;
+                    a.ability_mode   = Action::AbilityMode::FadeSaproling;
+                    a.chosen_x       = k;
+                    a.equiv_tag      = ActivationEquivTag(
+                        state, src, static_cast<const std::string&>(src.card.m_name),
+                        static_cast<int>(Action::AbilityMode::FadeSaproling), ManaCost{}, k);
+                    a.cost           = ManaCost{};   // the cost is counters, not mana
+                    // The bodies are (C-k)/(C-k) each, so the turn's power is k*(C-k) -- score it
+                    // as such rather than as k tokens, or the search reads "pop everything" as the
+                    // best activation when it is the one that mints a pile of 0/0s.
+                    const int left   = src.fade_counters - k * sd->params.fade_saproling_cost;
+                    a.eval           = k * std::max(0, left)
+                                     * std::max(1, sd->params.fade_creates_tokens);
                     a.direct_damage  = 0;
                     a.is_noncreature = true;
                     actions.push_back(std::move(a));
@@ -28799,6 +28865,14 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
                 perm.loyalty = def.params.loyalty_start;
                 perm.counters.push_back(Counter{Counter::Type::Loyalty, def.params.loyalty_start});
             }
+            // FADING (CR 702.32, Saproling Burst): "this enchantment enters with seven fade
+            // counters on it." An ENTERS-WITH replacement, so it belongs in this pre-push window
+            // beside loyalty_start -- and routed through PutFadeCounters so Doubling Season doubles
+            // it (CR 121.6 / 614.1c, the same rule devour's counters already ride). Under one
+            // Season the Burst enters with fourteen, which is twice the activations AND twice the
+            // size of every token it will make.
+            if (def.params.fading_counters > 0)
+            { PutFadeCounters(state, perm, def.params.fading_counters); }
             state.battlefield.push_back(perm);
             // Aura (Bogles): attach to the searched creature (enchant_target), then fire Light-Paws.
             // Set aura_attached_to BEFORE PerformLightPawsAttach push_backs the fetched aura. Lockstep
@@ -29800,6 +29874,11 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
                         {
                             SpendSporeActivations(state, state.active_player_index, a.sac_source_id,
                                                   *a.def, a.chosen_x - 1);
+                        }
+                        else if (a.ability_mode == Action::AbilityMode::FadeSaproling)
+                        {
+                            SpendFadeActivations(state, state.active_player_index, a.sac_source_id,
+                                                 *a.def, a.chosen_x - 1);
                         }
                         else
                         {
@@ -31163,6 +31242,9 @@ static bool SimulateEndAndStartNextTurn(GameState& state)
     // Spore counters (the Thallid family), before the other upkeep triggers. Mirrors
     // GameEngine::UpkeepStep (lockstep). Param-gated -> byte-identical elsewhere.
     PerformUpkeepSporeCounters(state);
+    // Fading (Saproling Burst): remove one, or sacrifice if you cannot -- and the LTB then
+    // destroys every token it made. Lockstep twin in GameEngine::UpkeepTail.
+    PerformUpkeepFading(state);
 
     // Creature Giving upkeep triggers, in controller-optimal order: Varchild's War-Riders
     // cumulative-upkeep gifts FIRST (the fresh Survivors count toward DotH's >= 3), then the

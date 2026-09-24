@@ -112,6 +112,9 @@ enum class DomAxis : std::uint8_t
     // mid-list would renumber every existing one. Zero on every permanent that is not a Saga, so
     // adding it changes nothing for any other deck.
     LoreCounters,        // Permanent::lore_counters     -- Sagas (CR 714)
+    // Appended after LoreCounters for the same reason it was appended: the raw array is indexed
+    // by this enum. Zero on every permanent that is not a fading one, so no other deck moves.
+    FadeCounters,        // Permanent::fade_counters     -- Saproling Burst (CR 702.32)
     _Count
 };
 
@@ -1279,6 +1282,9 @@ public:
             // simply buy the next Saproling sooner. Quest counters are the same: no cap, no cost,
             // and the anthem is a >= threshold test, so more can only bring it on earlier.
             case DomAxis::SporeCounters:    return DomDir::MoreDominates;
+            // MORE fade counters is never worse: more activations left, BIGGER tokens (their P/T
+            // tracks the count), and a later sacrifice taking them all with it.
+            case DomAxis::FadeCounters:     return DomDir::MoreDominates;
             case DomAxis::QuestCounters:    return DomDir::MoreDominates;
             // Strictly better with FEWER.
             case DomAxis::MinusOneMinusOne: return DomDir::FewerDominates; // smaller creature
