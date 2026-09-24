@@ -82,17 +82,23 @@ question for a deck whose hand is a mix of interchangeable pieces.
 
 | bucket | members | retention target |
 |---|---|---|
-| **MANA** | Forest, Simic Growth Chamber, Wild Growth | **3 lands max + 1 accelerator max** |
+| **MANA** | Forest, Simic Growth Chamber, Wild Growth | `min(3, max(0, 5 - board_mana))` lands + 1 accelerator |
 | **ENABLERS** | Doubling Season, Beastmaster Ascension | **1 of each, at most** |
 | **THREATS** | the Fungus creatures (+ Essence Warden) | a MIX, with a protected core |
 
-* **MANA, refined by the USER the same day:** *"I guess mana should be only 3 lands at most and
-  maybe one accelerator. If we have any mana on board, probably keep it at 3."* So it is a FLAT CAP,
-  not a function of board mana -- **3 lands, plus at most 1 Wild Growth** -- because by the time a
-  cleanup discard happens there is always some mana on board. (The earlier "lesser of 3-4 spots and
-  5 total mana counting the board" was the first statement of it; 5 is the deck's top of curve,
-  Mycoloth `{3}{G}{G}` and Doubling Season `{4}{G}`, and the flat 3 supersedes it for
-  implementation.) The 3 counts Forest and Simic Growth Chamber together.
+* **MANA**, stated by the USER over three messages and reconciled here:
+  *"the lesser of 3-4 spots and 5 total mana (counting the board)"*, then *"only 3 lands at most and
+  maybe one accelerator. If we have any mana on board, probably keep it at 3"*, then
+  *"(or whatever we need to reach 5 total mana)"*. Together that is
+
+      lands_to_keep = min(3, max(0, 5 - board_mana))      accelerators_to_keep = 1
+
+  -- a cap of 3 that TIGHTENS as the board fills, not a flat 3. **5 is the deck's top of curve**
+  (Mycoloth `{3}{G}{G}`, Doubling Season `{4}{G}`), so once the board alone makes 5 the target is
+  ZERO and every land in hand is surplus. Board at 1-2 mana is the common case at a cleanup
+  discard, which is why "probably keep it at 3" is the usual answer. The 3 counts Forest and Simic
+  Growth Chamber together; `board_mana` is mana the board makes in a turn, so a Chamber counts 2
+  and each Wild Growth adds 1 (the engine already has `OptimisticTurnMana` for exactly this).
 * **THREATS protected core:** one Sporecrown Thallid, one Mycoloth, one Sporesower Thallid, and one
   one-drop -- **preferably Utopia Mycon** (it is the free sac outlet: "Sacrifice a Saproling: add
   one mana of any color", which is the deck's real mana engine once a swarm exists).
