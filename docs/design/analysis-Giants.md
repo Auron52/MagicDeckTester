@@ -1159,13 +1159,14 @@ user still had the viewer open:
     Both GT tiers re-accepted with `slower=0` in each. See *Value-leaf COMPLETED and ADOPTED*.
     The phase-E restart cost **36 min**, not the 1–1.5 h estimated — the estimate's three
     extrapolated arms all carry the sidecar and run far cheaper than `live`.
-13. **NEXT: the mulligan profile**, for which Finding 3 is the concrete argument. Phase F wrote its
-    contract (**`mull_gen_depth: 1`, `mull_gen_budget_ms: 3`, `expected_buckets: 13`**; K=13 is
-    binding). **The `recommend` probe is DONE and the verdict is FEASIBLE: `complete` projects
-    ~6.9 h against the ~8 h overnight window, with no degenerate cell** (slowest rollout 11.0 s vs
-    a 30 s threshold nothing tripped). See the probe section. **HANDED OFF to the secondary
-    machine** at the user's direction (2026-09-23) — see the HANDOFF section for the freeze commit
-    `aaad47b3`, the driver command, and what comes back. Not run on this box.
+13. **The mulligan profile: RUNNING** (launched 2026-09-23 05:55 UTC), for which Finding 3 is the
+    concrete argument. Phase F wrote its contract (**`mull_gen_depth: 1`, `mull_gen_budget_ms: 3`,
+    `expected_buckets: 13`**; K=13 is binding). The `recommend` probe verdicted `complete`
+    FEASIBLE at ~6.9 h — **and that projection is running ~4x over; see *Mulligan generation
+    LAUNCHED* for the measured diagnosis.** The run is on the **secondary machine** (this box,
+    which the user moved it to precisely because it has nothing else to do), frozen at
+    **`57d57cfb`** — *not* the `aaad47b3` named in the older HANDOFF section, and the two are
+    provably equivalent for this deck because the gen play digest is byte-identical across them.
 14. **Open, not started: the lossless keep-axis name-dedup.** 24 Mountains ⇒ Tectonic's two exiled
     cards are frequently the SAME CARD, and two keep variants over identical cards are the
     identical plan (the Finding-2 equip-host precedent). It would claw back part of the keep axis's
@@ -1753,3 +1754,177 @@ Recorded rather than drive-by fixed.
   mana_cost, cmc, power/toughness, keywords and type_line all match byte-for-byte.
 * `scripts/audit_card_fields.py` (offline) — exit 0; all HARD fields pass.
 * `scripts/provider_audit.py --check` — exit 0; Giants owns `GiantsProvider`.
+
+## Mulligan generation LAUNCHED (2026-09-23) — and the probe's projection is running ~4x over
+
+`bash scripts/mullgen.sh run decks/Giants complete`, started 05:55:40 UTC on the secondary box
+(12 cores / 10 GB). The driver, not the bare binary — generation and validation are one operation.
+
+### Freeze commit: `57d57cfb`, not the HANDOFF section's `aaad47b3`
+
+The pull before launch brought five commits past `aaad47b3`, two of them genuine play-logic fixes
+(`43bbed27` Coldsteel Heart's locked colour + the per-colour tap-DFS gate; `d3f415a0` sac-fodder
+reservation). Generating on the older commit would have fitted the table to play we no longer ship,
+so the freeze moved to the tip. **The choice turned out to be free, and that was measured rather
+than argued:** the gen's own startup battery printed
+
+```
+rollout-config play digest (d1/b3, 64-game battery): e3e609b4c53d22ec
+```
+
+— byte-identical to the digest the `recommend` probe printed at `aaad47b3`. Those five commits do
+not move this deck's play at generation settings. This is the Rule 0 "probe the digest, don't argue
+about the commit log" check, answered for free by the run itself.
+
+Preconditions verified before committing the hours, none assumed:
+
+| check | result |
+|---|---|
+| value leaf adopted, `value_play` present | d1 / b3, `expected_buckets: 13` |
+| `check_gt_logs.py` | 506 consistent, 0 STALE, 0 missing |
+| Giants smoke at the freeze commit | **3/3 byte-identical digests** |
+| `K check OK` | `K=13 matches value_play.expected_buckets` |
+| hand counts | `size7=36113 ... total 58421` — identical to the probe |
+
+> **A trap worth recording: the per-game audit is NOT deck-scoped.** `regression.sh --smoke
+> --deck=giants` passed 3/3 with matching digests, yet its audit printed `slower=194
+> play-changed=412`. Those counts come from **stale leftover logs of other decks** sitting in
+> `test/logs/smoke/` from earlier runs on this box — `audit_changed_games.py` diffs committed GT
+> against every config it finds there, not just the one you filtered to. Grepping the audit section
+> for `giants` returns **zero** hits. A deck-scoped tier on a box with old logs will always look
+> like this; read the audit's deck attribution before reconciling anything.
+
+### The projection miss, and exactly where it came from
+
+At 6.4 h elapsed the run was 51.6% through the sub-table half with size-7 refine not yet started.
+The arithmetic identifies the projection's method precisely:
+
+```
+probe projection : 116842 cell-sides x R40 / 188 rollouts/s = 6.91 h   <- reproduces "~6.9 h" exactly
+actual sustained : 1,065,132 rollouts / 23,108 s = 46.1 rollouts/s     <- 4.1x below
+```
+
+So `recommend` extrapolated its **619-second** floor pass — one rollout per cell-side — straight out
+to the full R=40 job. Sustained throughput does not hold at that rate. The corroborating signal is
+the tail: the probe's slowest rollout was **11.0 s**, the run's is **22.2 s**. The probe times the
+first rollout of each cell and systematically samples the cheap end of the distribution.
+
+**This is a general defect in the scout, not a Giants quirk.** `recommend`'s projection should be
+read as a lower bound, and a deck whose feasibility verdict sits near the overnight window (as this
+one's did, at 6.9 h against ~8 h) has not actually been shown to fit. Worth fixing in the projection
+itself; recorded here because the next deck's verdict will be read the same way otherwise.
+
+### Not a stall — the zero-signal monitor line is documented behaviour
+
+The monitor reads `roll7=... (0/s)` and `frozen=0/72226 (0.0%)` for the whole sub-table phase, which
+looks dead and is not. `ExhaustiveKeep.cpp:1830-1835` says so in terms: while the sub-tables run the
+size-7 counters are flat because "the producer is QCAP-throttled, not idle", and that signature is
+what "made a healthy Mirrorwing run look dead for 4.5 h". The live signal is `sub=N/44616`, climbing
+at a steady ~1.15 batches/s across nine monitor windows with no degradation.
+
+Health at 6.4 h: **1183% CPU ≈ 11.8 of 12 cores**, journal advancing (95,135 records, last write 0 s
+ago), RSS 1.47 GB of 10 GB, 905 G disk free, slowest rollout 22.2 s against a 30 s threshold nothing
+tripped. **No degenerate cell** — the third time this deck's tail has come back healthy.
+
+### Decision: let it run (user, 2026-09-23)
+
+The user kept it running — *"This box has nothing else to do anyway. That's why I moved where it was
+being run."* Expect on the order of a day rather than an overnight. The alternative considered and
+rejected was switching to `fast`: cap R is part of the journal's resume gate, so 40 -> 30 is
+**refused**, and the banked hours would restart (the journal would remain poolable as a merge input,
+but only at whatever per-cell R it holds).
+
+Pooling with a second box is **not** planned (user: "Not pooling is fine"). Worth knowing why it
+would not have worked by default: the recipe path pins `seed=1000000`, so two recipe runs on two
+machines produce overlapping seed bases and the merge rejects them. Cross-machine pooling needs the
+manual path with a distinct `--seed`.
+
+When the gen lands, `mullgen.sh` runs the first-version gates automatically — exhaustive-keep-vs-
+static, and the confounded bottoming A/B at `MTG_CONFOUND_BOTTOM=3` (mode 3, not mode 1) — and
+quarantines to `.profile.DISABLED.json` if either is worse by any amount.
+
+## Mulligan profile COMPLETE and VALIDATED (2026-09-24) — both gates passed
+
+`mullgen.sh run decks/Giants complete` finished and the profile is **LIVE**
+(`decks/Giants/Giants.keepmodel.exhaustive.profile.json`, 36113 entries).
+
+```
+generation : 14.28 h  (2026-09-23 05:55:40Z -> 20:12:30Z)
+validation :  4.85 h  (20:12:30Z -> 2026-09-24 01:03:23Z)
+total      : 19.13 h
+```
+
+Against the probe's ~6.9 h that is **2.1x**, not the 4x the halfway mark suggested. The mid-run
+estimate published here (15.5–17 h for generation) was itself ~1.3 h conservative: the refine tail
+did not decelerate as far as the freeze-rate curve implied, because the R=40 cap truncates it.
+
+**Why the overrun was confined to one half.** Adaptive keep froze **80.3% of size-7 cell-sides
+(57,987 of 72,226) the instant refine opened** — they had settled at the floor R=2 and never cost a
+refine rollout. Only 14,239 cells were ever refined, at ~32 rollouts each. The sub-table half has no
+such trimming under `complete` (full bottoming), so it ran all 44,616 batches x R40 = **1,784,640
+rollouts**, exactly as projected, and that is where the whole 2.1x sits. A deck whose `recommend`
+verdict sits near the window should therefore be read as *sub-table-bound*: `fast` (adaptive
+bottoming) targets precisely the half that overruns.
+
+### Artifact check — the Dragons/Mirrorwing defect is absent
+
+```
+artifact check OK: K=13 entries=36113 bottoming_enabled=True
+                   sub_cells=44616 min_rollouts=40 sub_target=40
+```
+
+`min_rollouts=40` is the line that matters. Dragons and Mirrorwing v3 shipped tables whose sub-cells
+each held a **single** probe-carried rollout, so `DecideBottom`'s argmin selected on noise — the
+defect their confounded-bottoming A/Bs caught only after 40+ minutes of games. Every sub-cell here
+carries the full 40.
+
+### The two gates
+
+| check | delta | seeds | mean/se |
+|---|---|---|---|
+| keep, exhaustive vs static | **−0.3971 t** | **16/16** | −49.10 |
+| bottoming, blind vs lookahead, **CONFOUNDED (mode 3)** | **−0.1029 t** | **16/16** | −31.69 |
+
+Both clear the "at all worse on average" bar by an enormous margin, and neither needed an escalation
+round. The bottoming result is worth dwelling on: this gate **fails decisively on Dragons (+0.0641 t,
+0/16) and Mirrorwing v3 (+0.1006 t, 0/16)**, whose mechanism is still unexplained. Giants passes it
+16/16 at mean/se −31.69, so whatever drives those failures, this deck does not have it.
+
+Finding 3 is now closed. The static profile's `curve_check: two_drop` was mulliganing winning hands;
+the exhaustive table is worth **0.397 turns** over it, which is far and away the largest single
+improvement measured on this deck.
+
+### The driver's regression narrative is WRONG for Giants — same non-deck-scoped audit trap
+
+`run_regression` reported *"Direction: net slower (faster=385 slower=1258)"* and printed the
+bottoming-dominates explanation. **That reading is an artifact, not a result.** `audit_changed_games.py:77`
+globs `test/gt_logs/*_<MODE>_*.wins` — **every key of the mode**, not the deck that ran — so with only
+5 Giants cells executed it diffed 85 changed configs across ~15 decks' stale leftover logs (critter
+1023 entries, stompy 994, th 377, mirrorwing 304 …). Giants contributed **57 of the 1258**.
+
+This is the same defect recorded for the smoke tier in *Mulligan generation LAUNCHED*, but it is
+worse here, because the driver does not merely print the number — it **branches on it**, choosing
+between its "net FASTER" and "net slower" narratives. It took the wrong branch and attached a
+plausible-sounding causal story ("the standard metric still rewards lookahead's peek") to a deck
+that is in fact the opposite, StompySurprise-style case: keep dominates and swamps bottoming.
+
+Recomputed from the win logs, Giants alone (`-1` is the unwon sentinel; unwon scores as 9, which
+reproduces the harness's own `exp`/`got` to four decimals on all five cells — the check that
+validates the method):
+
+| cell | old | new | delta | slower | faster | wins lost | wins gained |
+|---|---|---|---|---|---|---|---|
+| `d0_s2002` | 6.5380 | 6.0550 | **−0.4830** | 125 | 342 | 30 | 89 |
+| `d3_s2002` | 5.7733 | 5.6067 | **−0.1667** | 24 | 33 | 4 | 5 |
+| `d3_s3003` | 5.9400 | 5.6267 | **−0.3133** | 18 | 40 | 1 | 3 |
+| `d5_s2002` | 5.8400 | 5.5467 | **−0.2933** | 12 | 22 | 1 | 4 |
+| `d5_s3003` | 6.0000 | 5.7467 | **−0.2533** | 9 | 17 | 0 | 1 |
+| **total** | | | | **188** | **454** | **36** | **102** |
+
+**Every cell got faster, at every depth, and the deck wins 66 more games than it did.** At searched
+depths alone it is 6 wins lost against 13 gained. There is no slowdown to excuse and no
+`--accept-with-regressions` ack needed: this is a plain improvement on the unconfounded metric too.
+
+> **Fix worth making:** `run_regression` should filter the audit to the deck it ran, or refuse to
+> state a direction when `--deck=` was used. Printing another deck's stale numbers is a reporting
+> nit; *branching* on them to pick a causal narrative is how a wrong story gets into a ledger.
