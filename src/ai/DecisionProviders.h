@@ -1530,6 +1530,41 @@ public:
     // (11 / 9), 0.45x / 0.90x / 0.93x units at d2 / d3 / d5 (docs/design/bp-new-only-continuations.md).
     // The rule is GLOBAL and default ON since 2026-09-22 (TurnSolver's BpNewOnlyEnabled; per-job via
     // the BP_NEW_ONLY heurarm slot), so this provider no longer carries a switch for it.
+
+    // Cleanup discard: USER-AUTHORED bucket policy (2026-09-23, verbatim) -- "bucket land,
+    // acceleration, draw and threats. Generally you would want to keep multiple threats if you can.
+    // You always would want to keep some land, since the deck loves playing more permanents every
+    // turn. So maybe 2 land (and 3 if we have none on board) 1-2 accelerants 2 threats and draw
+    // filling in whatever remains if any."
+    //
+    // Refined by the user the same day, and the two clarifications pull in opposite directions, so
+    // both are recorded: "Draw is just the last bucket to fill... and we might not fill it if we
+    // don't have the space in hand" (FILL order -- draw takes the slack, or nothing when the three
+    // hard buckets already reach seven), against "Once you have filled a bucket you move on, so if
+    // the bucket is full of lands those would be behind draw... The additional ones" (SHED order --
+    // a bucket protects nothing past its quota, so the EXTRA lands rank below a kept draw spell).
+    // Filling first does not mean surviving longest; see the implementation's own header.
+    //
+    // WHY THIS DECK NEEDS ONE, and why `real == 0` is not a reason to skip it. Snow overrode no
+    // discard hook, so it fell through to the shared base ranking, whose only live tier here is
+    // tier B -- DESCENDING MANA VALUE. With no land outlet (DiscardLandsFirst is false) and no
+    // required_pieces in the profile, tiers A and C never fire, so the rule was exactly "shed the
+    // biggest spell": Rimefeather Owl, Rimescale Dragon, Marit Lage's Slumber and Abominable
+    // Treefolk go before any land, accelerant or cantrip. That is the deck's whole payoff suite,
+    // and it is the precise inverse of the policy above.
+    //
+    // MEASURED REACH (MTG_SHED_STATS, 2026-09-23): real=1 shed per 50 games, but rollout=157,392 --
+    // and index 0 of this ranking decides every one of those with no search above it, because the
+    // searched alternatives are both inert on this deck (the out-of-band trial pass is retired by
+    // MTG_DISCARD_NODE, and the in-search axis needs CleanupDiscardSearchWidth() > 1, which is the
+    // default 1 here). So the ranking is not a tie-break under a search -- on Snow it IS the
+    // decision, ~157k times per 50 games, and it shapes which lines the search believes are good.
+    //
+    // NOT A PERFORMANCE CHANGE, and it must not be sold as one: the shed path was priced at
+    // 0.011%-0.11% of CPU across budgeted play and two unbudgeted tail games (0.160s of 145.05s;
+    // 0.179s of 473.85s; 0.017s of 148.85s). This is a play-quality hook.
+    std::vector<int> CleanupDiscardCandidates(
+        const GameState& s, const std::vector<std::string>* required_pieces) const override;
 };
 
 // Fungus (Thallid / Saproling spore-token swarm). EXISTS FOR ONE HOOK: the winless certificate.

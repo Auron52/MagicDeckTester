@@ -12987,6 +12987,181 @@ std::vector<int> DragonsProvider::CleanupDiscardCandidates(
     return CleanupDiscardRankingWithOrder(s, required_pieces, shed);
 }
 
+// ---- SnowProvider::CleanupDiscardCandidates ---------------------------------
+// The USER's bucket policy, verbatim in the header. Land 2 (3 with an empty board), accelerants
+// 1-2, threats 2, draw fills whatever is left.
+//
+// PARAM-DRIVEN, never keyed on a card name, so a deckbuilding swap re-buckets automatically:
+//   * accelerant = a NON-land that either declares `mana_rock` (Coldsteel Heart, Arcum's Astrolabe)
+//     or simply produces mana (Boreal Druid, which is neither a rock nor a land).
+//   * draw       = `tap_draw_cost` (Frost Augur) or `etb_self_draw` (Astrolabe, Ice-Fang Coatl).
+//     A card that accelerates AND draws is an ACCELERANT: the mana is the reason it is cast on
+//     curve, and classifying Astrolabe as draw would leave the accelerant quota unfilled while a
+//     cantrip sat in it.
+//   * threat     = anything left that actually threatens the opponent -- a creature, or a permanent
+//     whose param makes one (`upkeep_sac_creates_token` catches Marit Lage's Slumber, which is an
+//     ENCHANTMENT and would otherwise fall to `rest` despite being the deck's best win condition).
+//     `gy_play_cost` (Kaldring) counts: recurring the payoffs is the same role.
+//   * land       = CleanupDiscardIsLand, with the tap-draw lands (Scrying Sheets) kept FIRST and
+//     shed LAST among lands. A Sheets is a land that is also the engine; spending the land quota on
+//     a basic while pitching a Sheets would be strictly worse.
+//
+// FILL ORDER vs SHED ORDER -- the two things "last" could mean, settled by the user 2026-09-23.
+//
+//   * "in my rule last meant after lands acceleration and threats" -- that is the FILL order. The
+//     quotas are satisfied land -> acceleration -> threats, and only then does draw take whatever
+//     slots are still open. Draw is the last bucket FILLED.
+//   * "Once you have filled a bucket you move on, so if the bucket is full of lands those would be
+//     behind draw" / "The additional ones" -- that is the SHED order, and it is the opposite
+//     reading. A bucket stops protecting anything the moment its quota is met, so the ADDITIONAL
+//     lands rank BELOW a kept draw spell and shed before it. Filling first does not mean surviving
+//     longest.
+//
+// So the surplus is not "the keep order reversed": every card past its quota falls into one pool
+// that sits under all four buckets, and a fourth land is in it exactly as much as a second Frost
+// Augur. Within that pool the order below is the agent's, not the user's -- lands first because
+// this list floods on them (8 Sheets plus basics), then unclassified, then draw, then acceleration,
+// with surplus threats last per "keep multiple threats if you can".
+std::vector<int> SnowProvider::CleanupDiscardCandidates(
+    const GameState& s, const std::vector<std::string>* required_pieces) const
+{
+    // ADOPTED 2026-09-24 on the USER's instruction ("Let's enable the discard profile"), with the
+    // ground truth re-accepted in the same change. Measured against the shipped fallback:
+    //     d0 6.7090 -> 6.7060    d3 6.1400 -> 6.1200    d5 6.2600 -> 6.2200
+    // and on the searched tiers 0 slower / 4 faster, including two loss->win conversions (d3 gi69,
+    // d5 gi18). One d0 regression, gi234 8->loss. Nothing outside Snow moves.
+    //
+    // It was briefly defaulted OFF earlier the same day, deliberately: it changes Snow's play, so
+    // leaving it armed while the mana-cache-canon flip was being measured would have folded two
+    // independent changes into one GT diff. That is the general rule this comment is really for --
+    // a play-changing hatch defaults to the SHIPPED behaviour until it is promoted WITH its accept,
+    // so an unrelated suite run can never silently carry it.
+    static const bool s_bucket = EnvOn("MTG_SNOW_BUCKET_DISCARD", true);
+    if (!s_bucket) { return GenericProvider::CleanupDiscardCandidates(s, required_pieces); }
+
+    const Player& ap = s.players[s.active_player_index];
+    const int n = static_cast<int>(ap.hand.size());
+    if (n <= 0) { return GenericProvider::CleanupDiscardCandidates(s, required_pieces); }
+
+    auto def_of  = [](const Card& c) { return CardDatabase::Instance().LookupCached(c); };
+    auto mv_of   = [&](int i) { return CleanupDiscardManaValue(ap.hand[i]); };
+    auto is_land = [&](int i) { return CleanupDiscardIsLand(ap.hand[i]); };
+    auto taps_draw = [&](int i)
+    { const CardDefinition* d = def_of(ap.hand[i]); return d && d->params.tap_draw_cost.has_value(); };
+    auto is_accel = [&](int i)
+    {
+        if (is_land(i)) { return false; }
+        const CardDefinition* d = def_of(ap.hand[i]);
+        return d && (d->params.mana_rock || !d->params.produces.empty());
+    };
+    auto is_draw = [&](int i)
+    {
+        if (is_land(i) || is_accel(i)) { return false; }
+        const CardDefinition* d = def_of(ap.hand[i]);
+        return d && (d->params.tap_draw_cost.has_value() || d->params.etb_self_draw > 0);
+    };
+    auto is_threat = [&](int i)
+    {
+        if (is_land(i) || is_accel(i) || is_draw(i)) { return false; }
+        const CardDefinition* d = def_of(ap.hand[i]);
+        if (!d) { return false; }
+        return d->card.IsCreature() || d->params.upkeep_sac_creates_token
+               || d->params.gy_play_cost.has_value();
+    };
+
+    // ---- board state -----------------------------------------------------------------------
+    int board_lands = 0, board_accel = 0;
+    for (const Permanent& p : s.battlefield)
+    {
+        if (p.controller_index != s.active_player_index) { continue; }
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+        if (p.card.IsLand())                                     { ++board_lands; }
+        else if (d && (d->params.mana_rock || !d->params.produces.empty())) { ++board_accel; }
+    }
+
+    // ---- partition -------------------------------------------------------------------------
+    std::vector<int> lands, accel, threats, draw, rest;
+    for (int i = 0; i < n; ++i)
+    {
+        if (ap.hand[i].m_is_staged) { continue; }
+        if (is_land(i))        { lands.push_back(i); }
+        else if (is_accel(i))  { accel.push_back(i); }
+        else if (is_draw(i))   { draw.push_back(i); }
+        else if (is_threat(i)) { threats.push_back(i); }
+        else                   { rest.push_back(i); }
+    }
+
+    // A tap-draw land is the engine, so it fills the land quota first and survives longest.
+    std::stable_sort(lands.begin(), lands.end(), [&](int a, int b)
+    { return static_cast<int>(taps_draw(a)) > static_cast<int>(taps_draw(b)); });
+    // Accelerants and threats: cheapest kept first. Distance-to-castable is what decides which of
+    // them is real on a deck whose whole plan is deploying a permanent every turn.
+    std::stable_sort(accel.begin(),   accel.end(),   [&](int a, int b) { return mv_of(a) < mv_of(b); });
+    std::stable_sort(threats.begin(), threats.end(), [&](int a, int b) { return mv_of(a) < mv_of(b); });
+    std::stable_sort(draw.begin(),    draw.end(),    [&](int a, int b) { return mv_of(a) < mv_of(b); });
+
+    // ---- quotas ----------------------------------------------------------------------------
+    // CR 514.1's limit -- what the caller actually sheds down to (TurnSolver's `hand_count() > 7`).
+    // Nothing in this list carries no_max_hand_size, so 7 is exact here rather than a default.
+    const int kKeepLimit = 7;
+    int land_need   = (board_lands == 0) ? 3 : 2;   // "2 land (and 3 if we have none on board)"
+    int accel_need  = (board_accel == 0) ? 2 : 1;   // "1-2 accelerants"
+    int threat_need = 2;                            // "2 threats"
+
+    std::vector<char> keep(static_cast<std::size_t>(n), 0);
+    std::vector<int>  taken_order;                  // acquisition order; reversed, it is the keep tail
+    auto take = [&](int i)
+    {
+        if (static_cast<int>(taken_order.size()) >= kKeepLimit) { return false; }
+        keep[static_cast<std::size_t>(i)] = 1;
+        taken_order.push_back(i);
+        return true;
+    };
+
+    for (int i : lands)   { if (land_need   <= 0 || !take(i)) { break; } --land_need; }
+    for (int i : accel)   { if (accel_need  <= 0 || !take(i)) { break; } --accel_need; }
+    for (int i : threats) { if (threat_need <= 0 || !take(i)) { break; } --threat_need; }
+    // "draw filling in whatever remains if any" (user), and "we might not fill it if we don't have
+    // the space in hand". So draw has NO quota of its own -- it takes EVERY slot the three hard
+    // buckets left, and none at all when they filled the limit between them, which on an empty board
+    // is exact: 3 land + 2 accelerants + 2 threats = 7.
+    if (land_need <= 0 && accel_need <= 0 && threat_need <= 0)
+    {
+        for (int i : draw) { if (!take(i)) { break; } }
+    }
+
+    // ---- shed order: everything unkept, deadest first ---------------------------------------
+    std::vector<int> shed;
+    std::vector<char> listed(static_cast<std::size_t>(n), 0);
+    auto put = [&](int i)
+    {
+        if (i < 0 || i >= n || listed[static_cast<std::size_t>(i)]) { return; }
+        if (ap.hand[i].m_is_staged) { return; }
+        listed[static_cast<std::size_t>(i)] = 1; shed.push_back(i);
+    };
+    auto put_unkept = [&](int i) { if (!keep[static_cast<std::size_t>(i)]) { put(i); } };
+
+    // S1 -- surplus lands, plainest first (the tap-draw lands sorted to the front, so walk back).
+    for (auto it = lands.rbegin(); it != lands.rend(); ++it) { put_unkept(*it); }
+    // S2 -- unclassified (Skred and anything a future list adds that fills no role).
+    for (int i : rest) { put_unkept(i); }
+    // S3 -- draw that did not fit. Unlike the three above, this bucket has no quota to exceed, so a
+    // card reaches here only when the hard buckets consumed the limit before draw was reached.
+    for (auto it = draw.rbegin(); it != draw.rend(); ++it) { put_unkept(*it); }
+    // S4 -- surplus accelerants, most expensive first (a third rock with the mana already online).
+    for (auto it = accel.rbegin(); it != accel.rend(); ++it) { put_unkept(*it); }
+    // S5 -- surplus threats LAST, most expensive first. "Keep multiple threats if you can" (user);
+    // this is the tier the shared descending-MV fallback put FIRST.
+    for (auto it = threats.rbegin(); it != threats.rend(); ++it) { put_unkept(*it); }
+    // The KEEP TAIL, quota order reversed, so the returned list covers the WHOLE hand. Without it
+    // the quota-protected cards fall through to the shared tier B -- descending mana value -- which
+    // is the exact ranking this provider exists to overturn, and on a hand where every card is
+    // quota-covered that fallback would decide everything.
+    for (auto it = taken_order.rbegin(); it != taken_order.rend(); ++it) { put(*it); }
+
+    return CleanupDiscardRankingWithOrder(s, required_pieces, shed);
+}
+
 // ---- StompyProvider::CleanupDiscardCandidates -------------------------------
 //
 // Cleanup discard: the USER-AUTHORED role-bucket policy (2026-08-21, worst-case allocation

@@ -22,6 +22,7 @@
 #include <climits>   // INT_MIN -- the refloat need model's argmax seed (demand can go negative)
 #include <array>
 #include <atomic>
+#include <chrono>    // ShedStats::CostScope -- pricing the shed path, not just counting it
 #include <cstdio>
 #include <cstdlib>
 #include <limits>
@@ -215,6 +216,36 @@ namespace ShedStats
     inline std::atomic<std::uint64_t> g_cleanups{0};
     inline void CountCleanup()
     { if (Enabled()) { g_cleanups.fetch_add(1, std::memory_order_relaxed); } }
+
+    // COST + HAND SIZE of the shed path (2026-09-23). Added because a REAL-PLAY census answered the
+    // wrong question twice over: the game log records only the line the engine PLAYED, so a hand-size
+    // histogram read off it says nothing about the ~6k branches per game that decline the land drop
+    // and shed -- which is where `g_rollout` above already showed the sheds are. Counting calls does
+    // not price them either; that needs a clock on the call. Both are gated on MTG_SHED_STATS, so
+    // this is zero cost on every shipped path.
+    inline std::atomic<std::uint64_t> g_shed_ns{0};
+    inline std::atomic<std::uint64_t> g_shed_calls{0};
+    inline std::atomic<std::uint64_t> g_hand_hist[24]{};   // hand size AT ENTRY, clamped to 23
+    inline void CountHand(std::size_t n)
+    { if (Enabled()) { g_hand_hist[n < 24 ? n : 23].fetch_add(1, std::memory_order_relaxed); } }
+
+    // RAII so the early `count <= 0` return cannot escape the clock.
+    struct CostScope
+    {
+        std::chrono::steady_clock::time_point t0;
+        bool                                  on;
+        CostScope() : on(Enabled())
+        { if (on) { t0 = std::chrono::steady_clock::now(); } }
+        ~CostScope()
+        {
+            if (!on) { return; }
+            g_shed_ns.fetch_add(static_cast<std::uint64_t>(
+                std::chrono::duration_cast<std::chrono::nanoseconds>(
+                    std::chrono::steady_clock::now() - t0).count()),
+                std::memory_order_relaxed);
+            g_shed_calls.fetch_add(1, std::memory_order_relaxed);
+        }
+    };
     inline void Count(const GameState& state, bool is_rollout)
     {
         if (!Enabled()) { return; }
@@ -239,6 +270,18 @@ namespace ShedStats
                          (unsigned long long)g_rollout_lowland.load(),
                          (unsigned long long)g_cleanups.load(),
                          g_cleanups.load() ? (double)g_rollout.load() / (double)g_cleanups.load() : 0.0);
+            const double ns = (double)g_shed_ns.load();
+            const unsigned long long calls = g_shed_calls.load();
+            std::fprintf(stderr,
+                         "=== SHED COST: calls=%llu  cpu=%.3fs  (%.3f us/call, summed over threads) ===\n",
+                         calls, ns / 1e9, calls ? ns / 1e3 / (double)calls : 0.0);
+            std::fprintf(stderr, "=== SHED HAND SIZE AT ENTRY:");
+            for (int i = 0; i < 24; ++i)
+            {
+                const unsigned long long v = g_hand_hist[i].load();
+                if (v) { std::fprintf(stderr, " %d:%llu", i, v); }
+            }
+            std::fprintf(stderr, " ===\n");
         }
     };
     inline Dumper g_dumper;
@@ -563,9 +606,11 @@ inline int CleanupDiscardShed(GameState& state, const std::vector<std::string>* 
                               int count, int pinned_first, bool invert, bool staged_exempt,
                               bool* consulted)
 {
+    ShedStats::CostScope _scs;          // MTG_SHED_STATS cost attribution; see ShedStats::CostScope
     if (consulted != nullptr) { *consulted = false; }
     if (count <= 0) { return 0; }
     Player& ap = state.players[state.active_player_index];
+    ShedStats::CountHand(ap.hand.size());
     const DecisionProvider& prov = ResolveProvider(state);
 
     static const bool s_verify = EnvOn("MTG_DISCARD_SHED_VERIFY");
