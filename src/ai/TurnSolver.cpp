@@ -19193,11 +19193,27 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
             // shared expendability heuristic (tokens/Mogg first, lords/scaling deferred, source last --
             // see CanonicalSacVictim). This emits ONE action per outlet -- linear, not exponential, and
             // keeps the single-sac pick in lockstep with the Skirk multi-sac burst's apply-time picks.
-            const int victim_id = CanonicalSacVictim(state, state.active_player_index,
-                                                     src.card.m_number, need_sub,
-                                                     sd->params.sac_outlet_allows_enchantment,
-                                                     sd->params.sac_outlet_excludes_self);
-            if (victim_id < 0) { continue; }   // no legal victim to sacrifice
+            int victim_id = CanonicalSacVictim(state, state.active_player_index,
+                                               src.card.m_number, need_sub,
+                                               sd->params.sac_outlet_allows_enchantment,
+                                               sd->params.sac_outlet_excludes_self);
+            // SAME-LINE FODDER (MTG_SAC_FODDER_SAME_LINE, default OFF -> byte-identical). The board
+            // has no victim, but this deck can MAKE one for free right now -- three idle spore
+            // counters become a Saproling and that Saproling becomes a mana. Bailing here is what
+            // made the line unreachable: with no action emitted, no subset could contain it.
+            //
+            // Restricted to MANA outlets. A VALUE outlet (Psychotrope's draw, Siege-Gang's damage)
+            // spending a body it had to manufacture is a real judgement call and a much wider
+            // enumeration; the reports are all about mana, so this stays where the evidence is.
+            bool same_line_fodder = false;
+            if (victim_id < 0)
+            {
+                if (!is_mana_outlet || !SacFodderSameLineEnabled()
+                    || SameLineSacFodderSource(state, state.active_player_index, need_sub) < 0)
+                { continue; }   // no legal victim to sacrifice, and none makeable
+                victim_id        = kSameLineSacVictim;   // resolved (and created) at apply time
+                same_line_fodder = true;
+            }
             // "Sacrifice THIS creature" outlet with no payload (Ranger-Captain of Eos): its whole
             // effect is the death event, so while no controller-side death payoff is live
             // (Daxos) it removes our own 3/3 and changes nothing else -- a strictly dominated
@@ -19211,7 +19227,13 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
             // non-canonical member and the family once for the canonical (oldest) one, so every
             // variant shares one sac_source_id and lands in ONE ActivationFamilyKey group --
             // |counts|+1 positions where the per-source form costs 2^(2N). See SacOutletPoolEnabled.
-            if (is_mana_outlet && SacOutletPoolEnabled())
+            // NOT POOLED WHEN THE FODDER IS SAME-LINE, and this is a correctness gate rather than a
+            // simplification. The pool's whole licence is that every member resolves the SAME
+            // canonical victim -- which it proves by calling CanonicalSacVictim per member. With no
+            // victim on the board every member answers -1, so the proof is vacuous and the count
+            // axis would promise N mana off fodder that has to be manufactured N times. One
+            // activation per source, with the apply making exactly the one body it eats.
+            if (is_mana_outlet && SacOutletPoolEnabled() && !same_line_fodder)
             {
                 // THE COLOUR FAN MUST BE A SINGLETON. With several candidate colours the outcome
                 // depends on the colour MULTISET and not on the count alone, so a count axis would
@@ -27108,6 +27130,20 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
     // in lockstep. Empty for every plan without a SacForMana/Suspend action.
     auto apply_continuation_precasts = [&](const TurnSolver::Plan& sp)
     {
+        // ORDERING NOTE (MTG_SAC_FODDER_SAME_LINE). A same-line sacrifice manufactures its own
+        // fodder inside ApplySacForMana, and this pre-pass runs BEFORE the trailing activation pass
+        // -- so when a plan carries BOTH a same-line sac and its own spore/fade pop, the sac pops
+        // first and the plan's pop then fires as a second one. On a source holding exactly the
+        // activation cost (the common case, and what the GAP fixture declares) the second pop finds
+        // no counters and no-ops, so the line is exactly as declared. With counters to SPARE it
+        // really does pop twice: a legal play, correctly evaluated (the search grades the state the
+        // apply produces), but not the line a human typed.
+        //
+        // Hoisting the plan's own activation to here is NOT the fix -- the trailing pass would then
+        // apply it a second time, and `sp` is a continuation plan whose actions that pass does not
+        // own. The fix is to teach the trailing pass which activations were already spent, which is
+        // its own change; it is deliberately not bundled into a lever that is still default-OFF and
+        // unmeasured. Recorded in docs/design/sac-fodder-created-in-the-same-line.md.
         for (const Action& a : sp.actions)
         {
             if (a.kind == Action::Kind::SacForMana)

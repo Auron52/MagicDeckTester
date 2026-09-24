@@ -1,6 +1,28 @@
 # Sac-for-mana fodder created in the SAME line
 
-**Status: diagnosed, NOT fixed. Deferred 2026-09-18 ahead of the Fungus value-leaf generation.**
+**Status: ADOPTED 2026-09-24, `MTG_SAC_FODDER_SAME_LINE` DEFAULT ON.** The diagnosis below is
+unchanged and still accurate; the fix, the measurement and the adoption are described at the end.
+
+**USER 2026-09-24, on scope:** *"We should probably not restrict it at all."* then *"But, you can
+finish adopting as-is and then widen it."* — so the adopted cut keeps the two restrictions below
+(mana outlets only; counter-costed fodder makers only) and **widening them is the next step, taken
+as its own measured change.** See "Widening" at the end.
+
+**Third report is what moved it.** The user hit the same shape again on 2026-09-24, on the candidate-B
+Fungus list (`logs/play/rejections/Fungus_cod_candidate-b-2026-09_s1_gi0_t4.json`), turn 4:
+
+> `land=Peat Bog;cast=Doubling Season;cast=Utopia Mycon;cast=Sporecrown Thallid`
+> — *"can't pay {1}{G} for 'Sporecrown Thallid' with the mana available this phase"*
+
+The board makes **6** and the line needs **7**. The engine's own plan 17 (`Peat Bog; Doubling Season,
+Tukatongue Thallid`) proves it counts 6, and the missing one is exactly this: Utopia Mycon's spore
+ability makes a Saproling for three idle counters, and Mycon's own sac outlet eats it for a mana.
+Neither ability taps, so Mycon still taps for `{G}` afterwards under the Brightcap Badger grant, and
+the token being summoning-sick is irrelevant — sacrificing needs no untapped, unsick body.
+
+**The 2026-09-18 deferral reason has expired.** It was *"landing it unvalidated immediately before an
+overnight value-leaf generation would fit the learned evaluator to a barely-tested engine"*. That
+generation finished long ago and the Fungus mulligan was adopted 2026-09-24.
 
 ## The report
 
@@ -138,3 +160,117 @@ freshly-cast rock.
 
 This is the "fuse create+spend, payability-gated" shortcut doctrine
 (`docs/design/`, the Clue-fusion strand) applied to a sac outlet.
+
+## What was actually built (2026-09-24)
+
+**FUSION, not reordering — and that is the whole design choice.** The shape above proposes four
+edits: emit the candidate, resolve the victim at apply time, *hoist token-creating activations ahead
+of `SacForMana` in the pre-pass*, and teach CheckLine's walk. The hoist is the expensive one: the
+sacrifice is applied at **six** sites (the rollout's `apply_continuation_precasts` plus five in
+`AIEngine.cpp`), and any one of them drifting desynchronises executor from rollout silently.
+
+Fusing the create INTO the spend, inside `ApplySacForMana`, makes lockstep **structural** — every one
+of those six sites already calls it — and removes the ordering problem instead of solving it.
+CheckLine needs no change either, because it accepts by **matching an enumerated plan**; once the
+emitter produces the plan, the affordability walk is never reached.
+
+Three pieces, all in the default-OFF arm:
+
+| where | what |
+|---|---|
+| `core/SpellEffects.h` | `kSameLineSacVictim` (INT_MAX) + `SameLineSacFodderSource` / `MakeSameLineSacFodder` |
+| `core/SpellEffects.h` | `ApplySacForMana` resolves the sentinel: re-check board, make fodder, re-check, else no-op |
+| `ai/TurnSolver.cpp` | the emitter bakes the sentinel instead of bailing on `victim_id < 0` |
+
+**Why INT_MAX and not 0.** Token ids count up from 1000, so no permanent can carry it, and the
+existing stale-victim walks already treat `id >= 1000` as a fungible token victim and re-pick — so a
+path that somehow bypassed the fusion degrades to today's re-pick rather than to a wrong sacrifice.
+`0` would have been wrong twice over: it is the legacy no-victim value **and** it routes around the
+`s_no_phantom_float` guard, floating mana for a sacrifice that never happened.
+
+**Two deliberate restrictions.** Only **mana** outlets (a value outlet manufacturing a body to eat is
+a real judgement call and a much wider enumeration; every report is about mana), and **never pooled**
+— `MTG_SAC_OUTLET_POOL` proves its members interchangeable by checking they resolve the same canonical
+victim, and with no victim on the board every member answers -1, so that proof is vacuous and a count
+axis would promise N mana off fodder that must be manufactured N times.
+
+### Verified
+
+| check | result |
+|---|---|
+| `fungus_sac_fodder_same_line_GAP`, lever ON | **accept** — `cast: Sporesower Thallid, Thallid Shell-Dweller: remove three spore counters: create a Saproling, Utopia Mycon: sac 1 creature` |
+| `fungus_sac_fodder_same_line_GAP`, lever OFF | illegal (unchanged) |
+| `fungus_sac_fodder_on_board`, both arms | accept (unchanged) |
+| candidate B, the user's board, lever ON | the enumerator now produces `land=Peat Bog; cast: Doubling Season, Sporecrown Thallid, Utopia Mycon: sacrifice for {G}x1` |
+| lever OFF | 161/161 unit, 103/103 scenarios, smoke 93 passed, `play-changed=0` both tiers |
+
+**The user's line still needs the sacrifice NAMED.** `land=Peat Bog;cast=Doubling Season;cast=Sporecrown
+Thallid;sacout=Utopia Mycon` → **accept**. The originally-typed form, which named the spore pop but not
+the sacrifice, stays `illegal` — correctly, because as typed it contains no mana-producing action.
+
+### Known limitation of this cut — the DOUBLE POP
+
+`apply_continuation_precasts` runs before the trailing activation pass, so a plan carrying **both** a
+same-line sac and its own spore/fade pop pops twice: the sac fuses one, then the plan's own fires.
+
+* On a source holding **exactly** the activation cost — the common case, and what the GAP fixture
+  declares — the second pop finds no counters and no-ops, so the line is exactly as declared.
+* With counters to **spare** it really does pop twice. That is a legal play and it is correctly
+  *evaluated* (the search grades the state the apply produces, so nothing is mis-scored), but it is
+  not the line a human typed — a reference-fidelity gap, not a soundness one.
+
+Hoisting the plan's activation into the pre-pass is **not** the fix: the trailing pass would apply it
+a second time, and `sp` is a continuation plan whose actions that pass does not own. The fix is to
+teach the trailing pass which activations were already spent. Deliberately kept out of the adoption.
+
+## Adoption (2026-09-24) — default ON, ground truth rebaselined
+
+**Every config that moved, moved the right way, and only Fungus moved at all.**
+
+| tier / config | before | after | delta |
+|---|---|---|---|
+| `fungus_regression_d3_s2002` | 5.4300 | 5.4050 | **−0.0250** |
+| `fungus_regression_d3_s3003` | 5.4850 | 5.4550 | **−0.0300** |
+| `fungus_regression_d5_s2002` | 5.4900 | 5.4600 | **−0.0300** |
+| `fungus_regression_d5_s3003` | 5.4700 | 5.4500 | **−0.0200** |
+| `fungus_regression_d0_s2002` | 5.7670 | 5.7620 | −0.0050 |
+| `fungus_smoke_d3_s1001` | 5.4133 | 5.3800 | **−0.0333** |
+| `fungus_smoke_d5_s1001` | 5.4267 | 5.3867 | **−0.0400** |
+| `fungus_smoke_d0_s1001` | 5.6820 | 5.6820 | 0 (same score, different line) |
+
+129 regression configs: **5 changed, 124 unchanged**. Per-game audit `[searched] slower=1 faster=17`.
+Consistent across two seeds and all three depths, which is what distinguishes this from churn.
+
+**References still replay, and that was the gate that mattered** — adoption widens the enumeration, and
+a reference must stay matchable by the search. Full corpus, 335 refs: **0 play-drift, 0 ENUM-GAP,
+0 CONTRACT-FAIL** (the three `--strict` gating classes). The 1 `board-diverged` is NOT in Fungus:
+re-running the Fungus refs alone gives 0 board-diverged with the lever **both on and off**, and no
+non-Fungus fingerprint moved, so it predates this change. The Fungus corpus goes 6 ok / 1 repaired →
+4 ok / 3 repaired, which is the expected re-anchoring when more plans are offered, not a failure.
+
+Accepted into `regression_gt.txt` for **both** tiers via `regression.sh [--smoke] --accept`
+(`gt_logs consistent: 129` then `93`, STALE 0 in both). Post-accept smoke: 93 passed,
+`play-changed=0`.
+
+**⚠ THE OVERNIGHT TIER IS NOW STALE.** It was not re-run, so its Fungus fingerprints still describe
+the pre-adoption engine and its next run will report those configs as changed. That is expected, not a
+regression — accept it after inspecting, exactly as here.
+
+## Widening — the next step, NOT yet done
+
+USER 2026-09-24: *"We should probably not restrict it at all."* The adopted cut keeps two
+restrictions, and each needs its own measured change:
+
+1. **Mana outlets only.** Extending to VALUE outlets (Psychotrope Thallid's `{1}`, sac a Saproling:
+   draw; Deathspore/Vitaspore's sac payloads; Siege-Gang's damage) needs the same fusion in the
+   *creature-sac-outlet* apply path, which is a different function from `ApplySacForMana`.
+2. **Counter-costed fodder makers only** (spore/fade). Widening to other FREE makers brings in
+   `{T}`-costed ones — Krenko, Mob Boss (`tap_creates_tokens_per_controlled_subtype`), which is
+   exactly the Skirk Prospector line the original write-up expected to be affected. **This one really
+   will move Goblins**, so it needs its own rebaseline.
+
+**A MANA-COSTED maker (Slimefoot's `{4}`: create a Saproling) is a different problem and must not be
+swept in with the rest.** The fusion runs inside the apply, after the enumerator has already credited
+the sacrifice's mana — so paying `{4}` there would debit mana the subset's accounting never charged.
+That is the phantom-mana shape `MTG_SAC_NO_PHANTOM_FLOAT` was just fixed to remove. Widening to
+mana-costed makers requires the COST to be visible to the enumerator, not just to the apply.

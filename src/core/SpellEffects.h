@@ -7825,6 +7825,97 @@ inline int CanonicalSacVictim(const GameState& state, int controller, int source
     return victim_id;
 }
 
+// ---- SAME-LINE SAC FODDER (MTG_SAC_FODDER_SAME_LINE) ------------------------------------------
+// USER, three times (2026-09-17, 2026-09-18, and again 2026-09-24 on candidate B):
+// *"Should be able to activate and sac in same line ideally, to avoid extra breakpoints."*
+// See docs/design/sac-fodder-created-in-the-same-line.md for the full diagnosis.
+//
+// THE SHAPE. Utopia Mycon carries BOTH halves of a mana source that needs no mana and no {T}:
+//   "Remove three spore counters: Create a 1/1 green Saproling"  -- makes the fodder
+//   "Sacrifice a Saproling: Add one mana of any color"           -- eats it for mana
+// so three idle spore counters convert to one mana of any colour. Both abilities are free and
+// neither taps, so the body is still available to tap for mana afterwards (a Brightcap Badger
+// grant), and the token being summoning-sick is irrelevant -- sacrificing needs no untapped,
+// unsick body (CR 302.6 restricts only {T} abilities).
+//
+// WHY IT WAS UNREACHABLE. The sac-outlet candidate emitter resolves its victim against the board
+// AS IT STANDS (CanonicalSacVictim), so with no Saproling out it returns -1 and the SacForMana
+// action is never emitted AT ALL -- no subset can contain it, and nothing downstream gets the
+// chance to notice that a co-selected spore pop would have supplied one.
+//
+// THE FIX IS FUSION, NOT REORDERING, and that choice is the whole design. The obvious route --
+// emit the sacrifice, then hoist token-creating activations ahead of it in the apply -- has to be
+// repeated at SIX apply sites (the rollout pre-pass plus five in AIEngine), and any one of them
+// drifting silently desynchronises executor from rollout. Fusing the create INTO the spend keeps
+// the pair atomic inside ApplySacForMana, which every one of those sites already calls, so
+// lockstep is structural rather than maintained. This is the "fuse create+spend, payability-gated"
+// shortcut doctrine (the Clue-fusion strand) applied to a sac outlet.
+//
+// Returns the card number of a permanent we control that can, RIGHT NOW and for free, create a
+// creature token matching `need_sub` -- or -1. Deliberately covers only the two counter-costed
+// token makers this shape needs (spore and fade), because both are free, neither taps, and both
+// re-check their own counter supply at apply time. A token maker that costs MANA is excluded on
+// purpose: its cost would have to be paid out of the very payment this fodder is meant to fund.
+// Declared here rather than used from its definition far below: this block sits beside
+// CanonicalSacVictim (its only consumer's neighbour), which is well above the activation appliers.
+inline void ApplyPermAbility(GameState& state, int controller, int source_id, PermAbilityMode mode);
+
+// The Action::sac_victim_id an emitter bakes when the victim does not exist yet. Chosen INT_MAX for
+// two reasons that both matter: no permanent can ever carry it (token ids count up from 1000), and
+// the existing stale-victim walks treat "id >= 1000" as a fungible TOKEN victim and re-pick, so a
+// path that somehow misses the fusion below degrades to today's re-pick rather than to a wrong
+// sacrifice. It is deliberately NOT 0 -- 0 is the legacy no-victim value and would route around the
+// no-phantom-float guard, floating mana for a sacrifice that never happened.
+inline constexpr int kSameLineSacVictim = std::numeric_limits<int>::max();
+
+inline int SameLineSacFodderSource(const GameState& state, int controller,
+                                   const std::string& need_sub)
+{
+    auto yields = [&](const std::vector<std::string>& subs)
+    {
+        if (need_sub.empty()) { return !subs.empty(); }
+        for (const std::string& s : subs) { if (s == need_sub) { return true; } }
+        return false;
+    };
+    for (const Permanent& p : state.battlefield)
+    {
+        if (p.controller_index != controller) { continue; }
+        if (p.def_absent) { continue; }
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+        if (d == nullptr) { continue; }
+        if (d->params.spore_saproling_cost > 0
+            && p.spore_counters >= d->params.spore_saproling_cost
+            && yields(d->params.spore_token_subtypes))
+        { return p.card.m_number; }
+        if (d->params.fade_saproling_cost > 0
+            && p.fade_counters >= d->params.fade_saproling_cost
+            && yields(d->params.fade_token_subtypes))
+        { return p.card.m_number; }
+    }
+    return -1;
+}
+
+// Fire that maker once. Returns true if a matching victim EXISTS afterwards -- which is the only
+// question the caller has, and is re-asked against the board rather than trusting the activation
+// (a Doubling Season makes two, a 0/0 fade token can die to the toughness SBA on arrival).
+inline bool MakeSameLineSacFodder(GameState& state, int controller, const std::string& need_sub,
+                                  int outlet_id)
+{
+    const int maker = SameLineSacFodderSource(state, controller, need_sub);
+    if (maker < 0) { return false; }
+    const CardDefinition* md = nullptr;
+    for (const Permanent& p : state.battlefield)
+    {
+        if (p.controller_index == controller && p.card.m_number == maker)
+        { md = CardDatabase::Instance().LookupCached(p.card); break; }
+    }
+    if (md == nullptr) { return false; }
+    ApplyPermAbility(state, controller, maker,
+                     md->params.spore_saproling_cost > 0 ? PermAbilityMode::SporeSaproling
+                                                         : PermAbilityMode::FadeSaproling);
+    return CanonicalSacVictim(state, controller, outlet_id, need_sub) >= 0;
+}
+
 // Sacrifice the permanent at battlefield index `idx`: to the graveyard, off the battlefield, then
 // its death-watchers (Pashalik ping / Rundvelt impulse / Mogg death token). Factored out because
 // the sac-outlet paths below each open-coded it, and the human-victim override needs to sacrifice
@@ -10842,6 +10933,31 @@ inline void ApplySacForMana(GameState& state, int controller, int sac_source_id,
         // Captured BEFORE any sacrifice below: erasing from the battlefield invalidates `p`.
         const std::string src_name = p.card.m_name.str();
         const std::string need_sub = d->params.sac_creature_requires_subtype;
+        // ---- SAME-LINE FODDER (kSameLineSacVictim) ---------------------------------------------
+        // The emitter promised this activation a victim THIS LINE WOULD MAKE, so make it now --
+        // before anything is floated and before the burst path below counts victims. See
+        // SameLineSacFodderSource for why the create is fused into the spend rather than ordered
+        // ahead of it at six separate apply sites.
+        //
+        // RE-CHECKED, NOT TRUSTED: the board here is the one the plan actually produced, not the
+        // one the emitter predicted, so the fodder may already exist (an earlier action in this
+        // same plan popped it) or have become unmakeable (the counters were spent elsewhere).
+        // Only make one when the board really has no victim, and fall through to the ordinary
+        // no-victim handling when it cannot be made -- which floats nothing, because the outlet's
+        // cost could not be paid and the ability was therefore never activated (CR 601.2h).
+        if (victim_id == kSameLineSacVictim)
+        {
+            victim_id = CanonicalSacVictim(state, controller, sac_source_id, need_sub);
+            if (victim_id < 0)
+            {
+                MakeSameLineSacFodder(state, controller, need_sub, sac_source_id);
+                victim_id = CanonicalSacVictim(state, controller, sac_source_id, need_sub);
+            }
+            if (victim_id < 0) { return; }   // premise failed -> no activation, no float
+            // `p` may dangle: making a token push_backs onto the battlefield. Nothing below reads
+            // it (src_name / need_sub were copied above, `d` points into the card DB), but the
+            // burst path re-finds by id and the single-sac path works from victim_id.
+        }
         if (skirk)
         {
             const int per = std::max(1, d->params.sac_outlet_add_mana_amount);

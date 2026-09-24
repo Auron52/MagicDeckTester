@@ -165,6 +165,41 @@ inline bool EnterWatcherGateEnabled()
     return heurarm::Flag(heurarm::ENTER_WATCHER_GATE, env_on);
 }
 
+// MTG_SAC_FODDER_SAME_LINE -- ADOPTED 2026-09-24, DEFAULT ON (=0 restores the old enumeration, which
+// is the only way to reproduce a pre-adoption ground truth). Let a sac outlet be paid with fodder
+// THIS SAME LINE creates. See SameLineSacFodderSource (core/SpellEffects.h) for the mechanism and
+// docs/design/sac-fodder-created-in-the-same-line.md for the three user reports behind it.
+//
+// THIS IS A MISSING LINE, NOT A HEURISTIC, and that changes what the measurement had to show. The
+// off arm is not a defensible alternative policy -- it is simply unable to express a rules-legal
+// play (three idle spore counters become a Saproling, that Saproling becomes a mana). So the bar was
+// not "is it better", it was "does restoring the line cost anything". It does not:
+//
+//   Goblins        3.8033 -> 3.8033   IDENTICAL DIGEST (unaffected by construction, see below)
+//   Fungus         5.4683 -> 5.4583   train, 600 games
+//   Fungus         5.4170 -> 5.3998   HELD OUT, 4000 games, disjoint seeds -- the sign confirms
+//   candidate B    5.5033 -> 5.4950   train, 600 games
+//
+// (lower avg win turn is better; every arm paired on the same seeds.)
+//
+// WHY GOBLINS IS UNTOUCHED, and it is by construction rather than by luck: the fodder maker must be
+// a COUNTER-costed token ability (spore/fade). Skirk Prospector's feeder is Krenko, whose token
+// ability costs {T} -- outside that set -- so no Goblins action changes. The September write-up
+// expected this fix to move Goblins and asked for its own regression cycle on that basis; scoping
+// the maker set is what removed the need.
+//
+// IT COSTS WALL, and that is the honest trade: 4000 held-out Fungus games ran +12.3% (821,746 ->
+// 922,784 ms). More legal actions means a wider enumeration. Paid for by a real line the search
+// could not previously reach.
+//
+// Read at EMISSION time only, so there is no executor/rollout lockstep concern: with the lever off
+// no action carrying kSameLineSacVictim is ever created, and the apply-side fusion is unreachable.
+inline bool SacFodderSameLineEnabled()
+{
+    static const bool env_on = EnvOn("MTG_SAC_FODDER_SAME_LINE", true);
+    return heurarm::Flag(heurarm::SAC_FODDER_SAME_LINE, env_on);
+}
+
 // MTG_M2_FIXPOINT (DEFAULT OFF -> byte-identical; heurarm slot for per-job pooling): restore the
 // FREE INTER-MAIN RE-SOLVE the second main never had -- after an m2 plan whose apply/execution
 // FIRED a breakpoint (cards may have entered hand mid-plan), solve m2 AGAIN on the post-draw
