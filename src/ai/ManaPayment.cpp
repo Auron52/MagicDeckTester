@@ -661,25 +661,29 @@ bool TapForCostSharedOnce(GameState& state, const ManaCost& cost_in, bool for_cr
                 // this deck is built on. With the lever off (or no outlet on the board) sac_outlet
                 // is invalid and this is the historical short-circuit, LookupCached included.
                 if (p.tapped && !sac_outlet.valid()) { continue; }
-                const CardDefinition* def = CardDatabase::Instance().LookupCached(p.card);
-                if (!def)
+                // TWO pointers, deliberately. `real_def` is what this permanent actually is;
+                // `def` is what it is FOR MANA, which under Brightcap Badger's grant may be the
+                // shared synthetic tap-for-{G} face (a Saproling token has no definition at all,
+                // and a Thallid has one with no mana ability).
+                //
+                // The §2b sacrifice-fodder branch below MUST read `real_def`: the synthetic face is
+                // not a creature and carries none of the card's params, so feeding it there would
+                // silently stop a tapped Fungus being legal fodder for Utopia Mycon. Keeping the
+                // two apart is also what keeps §2b's own token blindness a SEPARATE defect with its
+                // own measurement, rather than something this change quietly half-fixes.
+                const CardDefinition* real_def = p.def_absent
+                                               ? nullptr
+                                               : CardDatabase::Instance().LookupCached(p.card);
+                const CardDefinition* def = real_def;
+                if (def == nullptr || !IsBaselineManaSource(*def))
                 {
-                    // BRIGHTCAP BADGER'S GRANT. This `continue` is why a param-only grant would
-                    // have been dead: a Saproling is a TOKEN, LookupCached returns null for it, and
-                    // the loop bailed before the grant could ever be considered. Hand the shared
-                    // synthetic ManaDork face to the TAP path only.
-                    //
-                    // NOT the §2b fodder path below, deliberately. That path is ALSO blind to
-                    // tokens -- Utopia Mycon's "Sacrifice a Saproling: Add one mana of any color"
-                    // cannot see a single legal body in this deck for exactly the same reason --
-                    // but it is a separate defect with its own measurement, and folding it in here
-                    // would make a perf or quality change in either one impossible to bisect.
-                    if (p.tapped || !GrantReaches(mana_grant, p)
-                        || !GrantedBodyCanTap(mana_grant, p)) { continue; }
-                    def = &GrantedManaFace(mana_grant.color);
+                    if (!p.tapped && GrantReaches(mana_grant, p)
+                        && GrantedBodyCanTap(mana_grant, p))
+                    { def = &GrantedManaFace(mana_grant.color); }
                 }
+                if (def == nullptr) { continue; }
                 const bool tap_ok = !p.tapped && usable(p, *def);
-                const bool fodder = !tap_ok && fodder_ok(p, *def);
+                const bool fodder = !tap_ok && real_def != nullptr && fodder_ok(p, *real_def);
                 if (!tap_ok && !fodder) { continue; }
                 int kind = 0;
                 if (fodder)
@@ -887,7 +891,11 @@ bool TapForCostSharedOnce(GameState& state, const ManaCost& cost_in, bool for_cr
                 }
             }
             Permanent& bp = state.battlefield[best_i];
-            const CardDefinition* bdef = CardDatabase::Instance().LookupCached(bp.card);
+            // MUST use the same resolver the SELECTION loop above used. This site re-derives the
+            // definition for the chosen source, and a raw LookupCached returns null for a granted
+            // Saproling token -- which the selection loop can now legitimately pick, so the bare
+            // `*bdef` below would dereference null. One rule, two readers: they have to agree.
+            const CardDefinition* bdef = ManaDefOf(state, bp, mana_grant);
             if (best_kind == 5)
             {
                 // §2b: EAT one body through the outlet. Marked, not erased -- erasing mid-payment

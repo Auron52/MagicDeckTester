@@ -1780,12 +1780,44 @@ static bool TapForCostBacktrackWorker(GameState& state, const ManaCost& cost,
     if (top_level)
     {
         s_src_cands_buf.clear();
+        const ManaGrant grant = LiveManaGrant(state, active);
+        // BRIGHTCAP BADGER'S GRANT, with a CAP -- and the cap is the load-bearing half.
+        //
+        // The failure memo below switches off above 64 sources, and it is the guard against the
+        // documented TapForCostBacktrackWorker blow-up (docs/design/tap-backtrack-blowup.md, a
+        // 14-hour game). This deck already runs 22 lands + 27 Fungi and reaches 364 permanents in
+        // rollouts, so admitting every granted Saproling would push essentially every mid-game
+        // payment past 64 and turn the memo off exactly where it is most needed.
+        //
+        // The cap is LOSSLESS, for two reasons that must both hold:
+        //   * a payment taps at most cost.ManaValue() sources, so admitting more granted tokens
+        //     than that cannot change which costs are payable; and
+        //   * granted SAPROLINGS are interchangeable -- identical 1/1 vanilla token bodies, no
+        //     counters, all sharing one synthetic definition pointer, and the sick ones are already
+        //     filtered by GrantedBodyCanTap. Any k of them pay the same costs as any other k.
+        // Granted FUNGI are NOT capped: they are real cards with their own definitions and their
+        // own other abilities, so tapping Utopia Mycon is not interchangeable with tapping a
+        // Thallid. Admission is by ascending battlefield index so the DFS's prefix rule still holds.
+        //
+        // This is the payment-layer analogue of the adopted sac-outlet count pool: one axis over
+        // identical outlets instead of a powerset over them.
+        const int granted_cap = std::max(1, cost.ManaValue());
+        int granted_taken = 0;
         for (int i = 0; i < n; ++i)
         {
             const Permanent& p = state.battlefield[i];
             if (p.controller_index != active) { continue; }
-            const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
-            if (!d) { continue; }
+            const CardDefinition* d = p.def_absent
+                                    ? nullptr
+                                    : CardDatabase::Instance().LookupCached(p.card);
+            if (!d)
+            {
+                if (!GrantReaches(grant, p) || !GrantedBodyCanTap(grant, p)) { continue; }
+                if (granted_taken >= granted_cap) { continue; }
+                ++granted_taken;
+                s_src_cands_buf.push_back({ i, &GrantedManaFace(grant.color) });
+                continue;
+            }
             if (d->tmpl == CardTemplate::BasicLand || d->tmpl == CardTemplate::ManaDork
                 || d->params.mana_rock || IsPaySacSource(*d))   // §2a
             { s_src_cands_buf.push_back({ i, d }); }

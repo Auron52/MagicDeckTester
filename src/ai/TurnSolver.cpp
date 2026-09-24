@@ -54094,10 +54094,14 @@ TurnSolver::LineCheck TurnSolver::CheckLine(const GameState& state_in, bool is_p
             // source whose own condition this spell satisfies.
             ManaPool usable;
             int gy_fuel = -1;
+            const ManaGrant grant = LiveManaGrant(s, s.active_player_index);
             for (const Permanent& p : s.battlefield)
             {
                 if (p.controller_index != s.active_player_index || p.tapped) { continue; }
-                const CardDefinition* pd = CardDatabase::Instance().LookupCached(p.card);
+                // Brightcap Badger's grant. CheckLine is what tells a human at the viewer WHY a
+                // line was rejected, so a grant it cannot see would report "unpayable" for a cost
+                // the engine would happily pay -- the verdict and the payer must agree.
+                const CardDefinition* pd = ManaDefOf(s, p, grant);
                 if (!pd) { continue; }
                 const bool is_land = (pd->tmpl == CardTemplate::BasicLand);
                 const bool is_dork = (pd->tmpl == CardTemplate::ManaDork && CanTapNow(p, s.battlefield))

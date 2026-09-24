@@ -17571,22 +17571,46 @@ inline bool GrantedBodyCanTap(const ManaGrant& g, const Permanent& p)
     return g.blanket_haste || p.card.HasKeyword(Keyword::Haste);
 }
 
+// Does this definition ALREADY answer "yes" to the tap-for-mana question on its own? Used only to
+// decide whether the grant has anything to add -- deliberately NOT the payer's full `usable()`,
+// which also applies per-permanent liveness (storage counters, graveyard fuel) that is irrelevant
+// to "does this card have a printed mana ability at all".
+inline bool IsBaselineManaSource(const CardDefinition& d)
+{
+    return d.tmpl == CardTemplate::BasicLand
+        || d.tmpl == CardTemplate::ManaDork
+        || d.params.mana_rock;
+}
+
 // THE CHOKEPOINT. The definition to use for MANA questions about `p`. Call sites replace
 //     const CardDefinition* d = LookupCached(p.card); if (!d) { continue; }
 // with
 //     const CardDefinition* d = ManaDefOf(state, p, grant); if (!d) { continue; }
-// and leave their body untouched. Returns the real definition when there is one (a granted Fungus
-// is still whatever it already was -- Utopia Mycon keeps its sac outlet), the shared synthetic face
-// only for a body that would otherwise have none, and null when neither applies.
+// and leave their body untouched.
+//
+// THE GRANT REACHES TWO POPULATIONS, AND MISSING EITHER ONE HALVES THE CARD:
+//   * Saproling TOKENS, which have no CardDefinition at all. This is the case the whole design
+//     exists for and the one every naive implementation misses.
+//   * FUNGI THAT ALREADY HAVE A DEFINITION BUT NO MANA ABILITY -- Thallid, Sporecrown Thallid,
+//     Mycoloth, Sporesower Thallid, and Utopia Mycon, whose only mana ability costs a SACRIFICE
+//     rather than {T} and so does not conflict with the granted tap at all. Returning the real
+//     definition unconditionally would silently skip all of them.
+// A body whose printed ability ALREADY taps for mana keeps its own definition: it can only tap
+// once either way, so the grant adds nothing but a colour choice, and preserving the real def keeps
+// every other property that def carries (Undercellar Myconid's any-colour tap stays any-colour).
+//
+// CALLERS THAT ALSO ASK NON-MANA QUESTIONS OF THE RESULT MUST KEEP THE REAL DEFINITION SEPARATELY
+// (the payer does, for its §2b sacrifice-fodder branch) -- the synthetic face is not a creature and
+// carries none of the card's other params.
 inline const CardDefinition* ManaDefOf(const GameState& state, const Permanent& p,
                                        const ManaGrant& g)
 {
+    (void)state;
     const CardDefinition* d = p.def_absent ? nullptr
                                            : CardDatabase::Instance().LookupCached(p.card);
-    if (d != nullptr) { return d; }
-    if (!GrantReaches(g, p) || !GrantedBodyCanTap(g, p)) { return nullptr; }
-    (void)state;
-    return &GrantedManaFace(g.color);
+    if (d != nullptr && IsBaselineManaSource(*d)) { return d; }
+    if (GrantReaches(g, p) && GrantedBodyCanTap(g, p)) { return &GrantedManaFace(g.color); }
+    return d;
 }
 
 inline int LooseManaCeiling(const GameState& state, int controller)
@@ -20863,10 +20887,13 @@ inline int SpareUntappedMana(const GameState& state, int controller)
 {
     ManaPool pool;
     int gy_fuel = -1;   // Deathrite fuel: lazily counted, decremented per credited source
+    const ManaGrant grant = LiveManaGrant(state, controller);
     for (const Permanent& p : state.battlefield)
     {
         if (p.controller_index != controller || p.tapped) { continue; }
-        const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+        // Brightcap Badger's grant (see ManaDefOf). This is the human-play floor -- "how much mana
+        // would still be spare", which the viewer shows -- so it must agree with the payer.
+        const CardDefinition* d = ManaDefOf(state, p, grant);
         if (!d) { continue; }
         const bool is_land = (d->tmpl == CardTemplate::BasicLand);
         const bool is_dork = (d->tmpl == CardTemplate::ManaDork && CanTapNow(p, state.battlefield)) || d->params.mana_rock

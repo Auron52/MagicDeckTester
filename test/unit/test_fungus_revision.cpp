@@ -40,6 +40,7 @@
 #include "core/SpellEffects.h"
 #include "core/HeuristicDefaults.h"
 #include "ai/Combat.h"
+#include "ai/ManaPayment.h"
 
 #include <string>
 #include <vector>
@@ -1185,5 +1186,175 @@ TEST_CASE("Brightcap Badger x Concordant Crossroads: a fresh token may tap for t
         GameState t = Fresh();
         const int old_tok = PutSaprolingToken(t, 1, /*sick=*/false);
         CHECK(CanTapNow(t.battlefield[old_tok], t.battlefield));
+    }
+}
+
+// ---------------------------------------------------------------------------------------------
+// Brightcap Badger's MANA GRANT, end to end through the real payment API.
+//
+// These are the cases that decide whether the grant works at all. A param-only implementation
+// would pass every data test above and fail every one of these, because the population it must
+// reach -- Saproling TOKENS -- has no CardDefinition, and the ~20 open-coded mana-source
+// predicates all bail on that.
+// ---------------------------------------------------------------------------------------------
+
+TEST_CASE("Brightcap Badger: granted Saprolings are REAL mana, through the payer")
+{
+    EnsureCardsLoaded();
+
+    auto board_with = [](bool badger, int saprolings, bool sick, bool crossroads)
+    {
+        GameState s = Fresh();
+        if (badger)    { Put(s, "Brightcap Badger", 0, 50); }
+        if (crossroads){ Put(s, "Concordant Crossroads", 0, 51); }
+        for (int i = 0; i < saprolings; ++i) { PutSaprolingToken(s, 100 + i, sick); }
+        return s;
+    };
+
+    SUBCASE("WITHOUT a Badger three Saprolings make nothing -- the control")
+    {
+        GameState s = board_with(false, 3, false, false);
+        CHECK(AvailableManaPool(s).Total() == 0);
+        CHECK(UntappedManaUpperBound(s, false, 0) == 0);
+    }
+
+    SUBCASE("WITH a Badger the same three tokens are three green mana")
+    {
+        GameState s = board_with(true, 3, false, false);
+        CHECK(AvailableManaPool(s).green == 3);
+        CHECK(UntappedManaUpperBound(s, false, 0) == 3);
+    }
+
+    SUBCASE("the Badger itself is NOT a source -- it is a Badger Druid, not a Fungus")
+    {
+        GameState s = board_with(true, 0, false, false);
+        CHECK(AvailableManaPool(s).Total() == 0);
+    }
+
+    SUBCASE("and the payer actually SPENDS them")
+    {
+        GameState s = board_with(true, 3, false, false);
+        ManaCost cost;               // {2}{G} -- Fungus Frolic's own cost, off zero lands
+        cost.generic = 2;
+        cost.green   = 1;
+        CHECK(TapForCostShared(s, cost, /*for_creature=*/false, nullptr, false));
+        int tapped = 0;
+        for (const Permanent& p : s.battlefield) { if (p.tapped) { ++tapped; } }
+        CHECK(tapped == 3);
+    }
+
+    SUBCASE("a cost one larger than the board is correctly REFUSED")
+    {
+        GameState s = board_with(true, 3, false, false);
+        ManaCost cost;
+        cost.generic = 3;
+        cost.green   = 1;            // {3}{G} = 4 > 3 available
+        CHECK_FALSE(TapForCostShared(s, cost, /*for_creature=*/false, nullptr, false));
+    }
+
+    SUBCASE("SUMMONING SICKNESS holds -- CR 302.6 applies to a granted {T} ability")
+    {
+        GameState s = board_with(true, 3, /*sick=*/true, false);
+        CHECK(AvailableManaPool(s).Total() == 0);
+        CHECK(UntappedManaUpperBound(s, false, 0) == 0);
+    }
+
+    SUBCASE("Concordant Crossroads lifts it -- THE interaction the screen bought this build for")
+    {
+        GameState s = board_with(true, 3, /*sick=*/true, /*crossroads=*/true);
+        CHECK(AvailableManaPool(s).green == 3);
+        CHECK(UntappedManaUpperBound(s, false, 0) == 3);
+    }
+
+    SUBCASE("a TAPPED granted body makes nothing")
+    {
+        GameState s = board_with(true, 3, false, false);
+        for (Permanent& p : s.battlefield) { if (p.is_token) { p.tapped = true; } }
+        CHECK(AvailableManaPool(s).Total() == 0);
+    }
+
+    SUBCASE("the grant is CONTROLLER-scoped -- an opponent's Badger grants us nothing")
+    {
+        GameState s = Fresh();
+        Put(s, "Brightcap Badger", 1, 50);          // THEIR Badger
+        for (int i = 0; i < 3; ++i) { PutSaprolingToken(s, 100 + i); }   // OUR tokens
+        CHECK(AvailableManaPool(s).Total() == 0);
+    }
+
+    SUBCASE("THE SECOND POPULATION: Fungi that HAVE a definition but no mana ability")
+    {
+        // Missing this halves the card. Thallid, Sporecrown Thallid, Mycoloth, Sporesower Thallid
+        // and Utopia Mycon are all Fungi with real CardDefinitions and NO {T}: add mana -- so a
+        // resolver that only rescued definition-less tokens would grant them nothing. Utopia
+        // Mycon's own mana ability costs a SACRIFICE, not {T}, so the granted tap does not even
+        // conflict with it.
+        GameState s = Fresh();
+        Put(s, "Utopia Mycon",      0, 60);
+        Put(s, "Thallid",           0, 61);
+        Put(s, "Sporecrown Thallid",0, 62);
+        CHECK(AvailableManaPool(s).Total() == 0);   // no Badger: three Fungi make nothing
+
+        Put(s, "Brightcap Badger", 0, 50);
+        CHECK(AvailableManaPool(s).green == 3);     // with it: three green
+    }
+
+    SUBCASE("a body that ALREADY taps for mana keeps its own, better ability")
+    {
+        // Undercellar Myconid is a Fungus AND a mana dork that taps for any colour. The grant must
+        // not downgrade it to {G}: it can only tap once either way, so replacing a real definition
+        // that is already a mana source could only ever lose colour flexibility.
+        GameState s = Fresh();
+        Put(s, "Brightcap Badger",   0, 50);
+        Put(s, "Undercellar Myconid",0, 61);
+        const ManaPool pool = AvailableManaPool(s);
+        CHECK(pool.Total() == 1);
+        CHECK(pool.green == 0);                     // banked as `wild`, not pinned to green
+        CHECK(pool.wild  == 1);
+    }
+
+    SUBCASE("THE CONTAINMENT PROPERTY: deck_has_mana_grant=false costs one bool and skips it all")
+    {
+        // This is what makes every other deck in the suite byte-identical by construction rather
+        // than by measurement. The smoke's play-changed=0 is the empirical half of the same claim.
+        GameState s = board_with(true, 3, false, false);
+        s.deck_has_mana_grant = false;
+        CHECK(AvailableManaPool(s).Total() == 0);
+        CHECK(UntappedManaUpperBound(s, false, 0) == 0);
+    }
+}
+
+TEST_CASE("Brightcap Badger: the granted-source CAP is lossless, and keeps the memo alive")
+{
+    EnsureCardsLoaded();
+
+    // The backtracker's failure memo switches off above 64 sources, and it is the guard against a
+    // documented 14-hour blow-up. A wide Saproling board would blow past that, so the candidate
+    // build admits at most cost.ManaValue() granted tokens. That is lossless because a payment taps
+    // at most that many sources and the tokens are interchangeable -- these cases pin both halves.
+    GameState s = Fresh();
+    Put(s, "Brightcap Badger", 0, 50);
+    for (int i = 0; i < 80; ++i) { PutSaprolingToken(s, 100 + i); }
+
+    SUBCASE("a wide board still pays a small cost")
+    {
+        ManaCost cost;
+        cost.generic = 1;
+        cost.green   = 1;
+        CHECK(TapForCostShared(s, cost, false, nullptr, false));
+    }
+
+    SUBCASE("the bound still sees the whole board -- the cap is on the BACKTRACKER, not the bound")
+    {
+        // UntappedManaUpperBound must NOT be capped: it feeds PaymentManaCovers, which turns a
+        // short bound into a proof of unpayability. Capping it would refuse payable costs.
+        CHECK(UntappedManaUpperBound(s, false, 0) == 80);
+    }
+
+    SUBCASE("a LARGE cost is still payable off the wide board")
+    {
+        ManaCost cost;
+        cost.generic = 19;
+        cost.green   = 1;            // 20 mana off 80 interchangeable bodies
+        CHECK(TapForCostShared(s, cost, false, nullptr, false));
     }
 }
