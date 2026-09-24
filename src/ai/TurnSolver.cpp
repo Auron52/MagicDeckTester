@@ -6562,10 +6562,13 @@ static int PendingAttackDamage(const GameState& state)
     int dmg = 0;
     int active = state.active_player_index;
     std::vector<const Permanent*> attackers;
+    // Haste prefilter, gathered once (SpellEffects.h) -- this loop tests every creature and the
+    // solver re-runs it per scored subset, so the unfiltered scans are quadratic in board size.
+    const HasteSources hs = GatherHasteSources(state.battlefield, active);
     for (const Permanent& p : state.battlefield)
     {
         if (p.controller_index != active) { continue; }
-        if (!CanAttackFull(p, state.battlefield, active)) { continue; }
+        if (!CanAttackFull(p, state.battlefield, active, &hs)) { continue; }
         if (!ResolveProvider(state).AttackWith(state, p)) { continue; }
         bool animated = p.is_animated;
         auto [lord_pb, lord_tb] = ComputeLordBonus(

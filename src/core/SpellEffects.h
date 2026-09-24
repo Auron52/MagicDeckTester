@@ -2365,8 +2365,50 @@ inline int CountExalted(const std::vector<Permanent>& battlefield, int controlle
     return n;
 }
 
+// ---- Board-level HASTE SOURCES, gathered once -------------------------------------------------
+//
+// The haste scans in CanAttackFull / CanTapNow are asked PER CREATURE and each re-walks the whole
+// battlefield, so a caller that loops every creature (DeclareAttackerIndices, FindBestOwnAttacker)
+// is O(N^2) in board size. On a token board that is the dominant cost: Fungus candidate B reaches
+// dozens of Saprolings in a single turn -- Mycoloth's devour under Doubling Season -- and every one
+// of them ENTERED THIS TURN, so each falls past the cheap `!entered_this_turn` exit into the full
+// scans, and the whole thing re-runs for every subset the solver scores.
+//
+// This is the same prefilter ResolveCombatDamage already applies to its lord scans (Combat.cpp
+// ~124, "usually none ... Byte-identical: same permanents, same per-creature logic"), extended to
+// the haste pair. Identical by CONSTRUCTION rather than by argument: each list holds exactly the
+// permanents whose loop body could ever reach a `return true`, so an EMPTY list is a proof that the
+// scan would have returned false. That is the overwhelmingly common case -- Fungus's only haste
+// source is a single Concordant Crossroads and the deck runs no equipment at all.
+//
+// Defined HERE, above FindBestOwnAttacker, because that caller needs the complete type.
+struct HasteSources
+{
+    std::vector<int> lords;    // controller's permanents with grants_haste
+    std::vector<int> equips;   // controller's ATTACHED equipment with equip_grants_haste
+};
+
+inline HasteSources GatherHasteSources(const std::vector<Permanent>& battlefield,
+                                       int                          controller_index)
+{
+    HasteSources hs;
+    for (int i = 0; i < static_cast<int>(battlefield.size()); ++i)
+    {
+        const Permanent& q = battlefield[i];
+        if (q.controller_index != controller_index) { continue; }
+        if (q.def_absent) { continue; }   // token: no definition, so neither a lord nor equipment
+        const CardDefinition* qd = CardDatabase::Instance().LookupCached(q.card);
+        if (!qd) { continue; }
+        if (qd->params.grants_haste) { hs.lords.push_back(i); }
+        if (q.equipped_to != 0 && qd->params.is_equipment && qd->params.equip_grants_haste)
+        { hs.equips.push_back(i); }
+    }
+    return hs;
+}
+
 // Forward declaration: CanAttackFull is defined later in this header.
 inline bool CanAttackFull(const Permanent&, const std::vector<Permanent>&, int);
+inline bool CanAttackFull(const Permanent&, const std::vector<Permanent>&, int, const HasteSources*);
 
 // Battlefield index of the controller's best attacker (highest effective power among creatures
 // that can attack this turn), or -1. Used to target an own-creature pump (Invigorate) at the
@@ -2376,11 +2418,14 @@ inline int FindBestOwnAttacker(const GameState& state, int controller_index)
     // WHICH of your creatures a self-targeting pump picks is provider-owned
     // (OwnPumpTargetCandidates); the base rule is the historical highest-power pick.
     std::vector<int> mine;
+    // Same once-per-board haste prefilter as DeclareAttackerIndices (Combat.cpp): without it this
+    // loop re-derives the board's haste sources for every creature it tests.
+    const HasteSources hs = GatherHasteSources(state.battlefield, controller_index);
     for (int i = 0; i < static_cast<int>(state.battlefield.size()); ++i)
     {
         const Permanent& p = state.battlefield[i];
         if (p.controller_index != controller_index) { continue; }
-        if (!CanAttackFull(p, state.battlefield, controller_index)) { continue; }
+        if (!CanAttackFull(p, state.battlefield, controller_index, &hs)) { continue; }
         mine.push_back(i);
     }
     if (mine.empty()) { return -1; }
@@ -3527,8 +3572,30 @@ inline bool HasHasteFromLords(
     const Card&                    creature,
     const std::vector<Permanent>&  battlefield,
     int                            controller_index,
-    bool                           all_creature_types = false)
+    bool                           all_creature_types = false,
+    const std::vector<int>*        prefiltered = nullptr)
 {
+    // Prefiltered: walk only the grants_haste permanents (usually zero). The unfiltered path below
+    // is unchanged, so a caller that passes nothing behaves exactly as before.
+    if (prefiltered != nullptr)
+    {
+        for (int li : *prefiltered)
+        {
+            const Permanent&      lord = battlefield[li];
+            const CardDefinition* ldef = CardDatabase::Instance().LookupCached(lord.card);
+            if (!ldef) { continue; }
+            if (ldef->params.affects_all_creatures) { return true; }
+            if (all_creature_types && !ldef->params.subtypes_affected.empty()) { return true; }
+            for (const std::string& sub : ldef->params.subtypes_affected)
+            {
+                for (const std::string& cs : creature.m_subtypes)
+                {
+                    if (cs == sub) { return true; }
+                }
+            }
+        }
+        return false;
+    }
     for (const Permanent& lord : battlefield)
     {
         if (lord.controller_index != controller_index) { continue; }
@@ -3561,8 +3628,19 @@ inline bool HasHasteFromLords(
 // the tap-ability limitation (disclosed).
 inline bool HasHasteFromEquip(const Permanent& creature,
                               const std::vector<Permanent>& battlefield,
-                              int controller_index)
+                              int controller_index,
+                              const std::vector<int>* prefiltered = nullptr)
 {
+    // See GatherHasteSources: the list holds the controller's ATTACHED equip_grants_haste
+    // equipment, so only the attachment identity still has to be checked per creature.
+    if (prefiltered != nullptr)
+    {
+        for (int ei : *prefiltered)
+        {
+            if (battlefield[ei].equipped_to == creature.card.m_number) { return true; }
+        }
+        return false;
+    }
     for (const Permanent& e : battlefield)
     {
         if (e.controller_index != controller_index) { continue; }
@@ -3616,13 +3694,17 @@ namespace HasteTapStats
     inline Dumper g_dumper;
 }
 
-inline bool CanTapNow(const Permanent& p, const std::vector<Permanent>& battlefield)
+// `hs`, when given, must have been gathered for p.controller_index (see GatherHasteSources). It
+// only short-circuits the two scans below, so passing nothing is the identical, slower path.
+inline bool CanTapNow(const Permanent& p, const std::vector<Permanent>& battlefield,
+                      const HasteSources* hs = nullptr)
 {
     if (p.CanTap()) { return true; }
     // "Gains haste until end of turn" (Expedite): haste lifts the summoning-sick {T} restriction
     // too (CR 302.6), so a hasted fresh mana dork may tap for mana the turn it arrives.
     if (p.temp_haste) { return true; }
-    if (HasHasteFromLords(p.card, battlefield, p.controller_index, p.is_animated))
+    if (HasHasteFromLords(p.card, battlefield, p.controller_index, p.is_animated,
+                          hs ? &hs->lords : nullptr))
     {
         // MTG_HASTE_TAP_STATS: how often a summoning-sick permanent is rescued by each haste
         // source. Distinguishes "this pairing does not exist in any deck" from "it exists and is
@@ -3630,12 +3712,33 @@ inline bool CanTapNow(const Permanent& p, const std::vector<Permanent>& battlefi
         if (HasteTapStats::Enabled()) { HasteTapStats::g_lords.fetch_add(1, std::memory_order_relaxed); }
         return true;
     }
-    if (HasHasteFromEquip(p, battlefield, p.controller_index))
+    if (HasHasteFromEquip(p, battlefield, p.controller_index, hs ? &hs->equips : nullptr))
     {
         if (HasteTapStats::Enabled()) { HasteTapStats::g_equip.fetch_add(1, std::memory_order_relaxed); }
         return true;
     }
     return false;
+}
+
+// Overload taking a GatherHasteSources() prefilter, for callers that test EVERY creature on the
+// battlefield and would otherwise re-derive the same board-level answer once per creature. The
+// three-argument form below delegates here with no prefilter and is byte-identical to before, so
+// the ~54 existing call sites are untouched.
+inline bool CanAttackFull(
+    const Permanent&               p,
+    const std::vector<Permanent>&  battlefield,
+    int                            controller_index,
+    const HasteSources*            hs)
+{
+    if (!p.card.IsCreature() && !p.is_animated) { return false; }
+    if (p.tapped)                               { return false; }
+    if (p.card.HasKeyword(Keyword::Defender))   { return false; }
+    if (!p.entered_this_turn && !p.gained_control_this_turn) { return true; }
+    if (p.card.HasKeyword(Keyword::Haste))      { return true; }
+    if (p.temp_haste)                           { return true; }
+    if (HasHasteFromLords(p.card, battlefield, controller_index, p.is_animated,
+                          hs ? &hs->lords : nullptr)) { return true; }
+    return HasHasteFromEquip(p, battlefield, controller_index, hs ? &hs->equips : nullptr);
 }
 
 inline bool CanAttackFull(

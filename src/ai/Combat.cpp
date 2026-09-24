@@ -86,11 +86,19 @@ std::vector<int> DeclareAttackerIndices(const GameState& state)
             return atk_idx;
         }
     }
+    // Gather the board's haste sources ONCE (usually none) instead of letting each creature's
+    // CanAttackFull re-walk the whole battlefield for them. Same prefilter ResolveCombatDamage
+    // applies to its lord scans below; byte-identical, and it takes this loop from O(N^2) to O(N)
+    // in board size. That matters because the creatures which reach the haste scans at all are
+    // exactly the ones that ENTERED THIS TURN, and a token deck enters them in bulk -- a Mycoloth
+    // devour under Doubling Season can add dozens at once, and this function is re-run for every
+    // subset the solver scores.
+    const HasteSources hs = GatherHasteSources(state.battlefield, active);
     for (int i = 0; i < static_cast<int>(state.battlefield.size()); ++i)
     {
         const Permanent& p = state.battlefield[i];
         if (p.controller_index != active) { continue; }
-        if (!CanAttackFull(p, state.battlefield, active)) { continue; }
+        if (!CanAttackFull(p, state.battlefield, active, &hs)) { continue; }
         if (!provider.AttackWith(state, p)) { continue; }
         atk_idx.push_back(i);
     }

@@ -1480,10 +1480,13 @@ static bool HoldManaSourceForCollapsedMain(const GameState& s, const Permanent& 
     if (exalted >= 1)
     {
         bool other_attacker = false;
+        // Haste prefilter, gathered once (SpellEffects.h): this loop is reached from the per-creature
+        // attack heuristic, so an unfiltered CanAttackFull makes the pair cubic in board size.
+        const HasteSources hs = GatherHasteSources(s.battlefield, active);
         for (const Permanent& q : s.battlefield)
         {
             if (&q == &p || q.controller_index != active)                 { continue; }
-            if (!CanAttackFull(q, s.battlefield, active))                 { continue; }
+            if (!CanAttackFull(q, s.battlefield, active, &hs))            { continue; }
             if (AttackPowerOf(s, q) > 0 || AttackHasNonPowerValue(s, q))  { other_attacker = true; break; }
         }
         if (!other_attacker)
@@ -3485,12 +3488,13 @@ static bool ExaltedAwareShouldAttack(const GameState& s, const Permanent& p)
     const int active = s.active_player_index;
     const int n      = static_cast<int>(s.battlefield.size());
     int lone_idx = -1, p_idx = -1;
+    const HasteSources hs = GatherHasteSources(s.battlefield, active);   // once, not per q
     for (int i = 0; i < n; ++i)
     {
         const Permanent& q = s.battlefield[i];
         if (q.controller_index != active) { continue; }
         if (&q == &p) { p_idx = i; }
-        if (!CanAttackFull(q, s.battlefield, active)) { continue; }
+        if (!CanAttackFull(q, s.battlefield, active, &hs)) { continue; }
         if (AttackPowerOf(s, q) > 0 || AttackHasNonPowerValue(s, q)) { return false; }  // real attacker exists -> hold p
         if (lone_idx < 0) { lone_idx = i; }
     }
@@ -6846,10 +6850,11 @@ bool GoblinsProvider::PayEchoToKeep(const GameState& s, const Permanent& p) cons
     // resolves the upkeep AFTER it entered). AttackPowerOf mirrors the combat sites (conservative: it omits
     // double-strike/exalted, absent from this deck), so atk <= true lethal -> we only keep on a real kill.
     int atk = 0;
+    const HasteSources hs = GatherHasteSources(s.battlefield, active);   // once, not per q
     for (const Permanent& q : s.battlefield)
     {
         if (q.controller_index != active)                  { continue; }
-        if (!CanAttackFull(q, s.battlefield, active))      { continue; }
+        if (!CanAttackFull(q, s.battlefield, active, &hs)) { continue; }
         if (!AttackWith(s, q))                             { continue; }
         atk += AttackPowerOf(s, q);
     }
@@ -8644,10 +8649,11 @@ bool FiveColourProvider::ShouldAttackWith(const GameState& s, const Permanent& p
     const int active   = s.active_player_index;
     const int opp_life = s.players[1 - active].life;
     int total = 0;
+    const HasteSources hs = GatherHasteSources(s.battlefield, active);   // once, not per q
     for (const Permanent& q : s.battlefield)
     {
         if (q.controller_index != active) { continue; }
-        if (!CanAttackFull(q, s.battlefield, active)) { continue; }
+        if (!CanAttackFull(q, s.battlefield, active, &hs)) { continue; }
         total += AttackPowerOf(s, q);
     }
     if (total >= opp_life) { return true; }
@@ -20449,6 +20455,10 @@ std::vector<int> FungusProvider::DevourCountCandidates(const GameState& s, const
     std::vector<Body> bodies;
     bodies.reserve(ladder.size());
     int lords = 0, att_avail = 0;
+    // Haste prefilter, once for the whole ladder (SpellEffects.h). The ladder is every candidate
+    // body on the board, so without it the CanAttackFull below re-scans the battlefield per body --
+    // and this runs inside CollectActions, one of the millions-of-calls hot paths.
+    const HasteSources hs = GatherHasteSources(s.battlefield, me);
     for (int idx : ladder)
     {
         const Permanent& p = s.battlefield[static_cast<std::size_t>(idx)];
@@ -20489,7 +20499,7 @@ std::vector<int> FungusProvider::DevourCountCandidates(const GameState& s, const
         // Can it swing THIS combat? Only a declared attacker puts a quest counter on the Ascension,
         // so a summoning-sick Saproling is free to eat on that axis and an attacking one is not.
         // (Power is irrelevant here -- the 0/5 Shell-Dweller banks a counter exactly like a 1/1.)
-        const bool atk = CanAttackFull(p, s.battlefield, me);
+        const bool atk = CanAttackFull(p, s.battlefield, me, &hs);
         if (atk) { ++att_avail; }
         bodies.push_back(Body{ d, key, !key && (lord || p.EffectivePower() >= 2), atk });
     }
