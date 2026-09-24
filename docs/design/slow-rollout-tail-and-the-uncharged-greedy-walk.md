@@ -233,3 +233,30 @@ on 2026-09-22 (*"I don't want to do this change in this session. Nor am I sure w
 all."*). What (b) still needs before adoption: a chosen N, and confirmation of how far K moves on a
 deck that trips it (candidate B is the natural subject, and its gencache now makes the comparison
 cheap to re-run).
+
+### USER RULING 2026-09-24 — fix the BUDGET, not discovery
+
+The recommendation above (prefer (b), the discovery-scoped wall cap) is **superseded**. The user's
+call, and the reasoning is better than the argument it replaces:
+
+> *"It is a good point that on heavy decks that operation can be an issue. This might point more
+> toward the need for properly bounding things by budget, though, rather than a need for a change
+> to discovery."*
+
+So discovery is the **symptom that made the defect visible**, not the thing to fix. A wall cap
+scoped to discovery is a local patch: it would stop this one barrier from stranding the box while
+leaving the currency broken everywhere else — the same 20-virtual-ms-buys-17.7-minutes failure would
+still be live in play, in generation, and in every future phase that trusts a budget to mean
+something. Bounding the budget properly repairs all of them at once, and it is the fix this document
+was opened for.
+
+That also re-weights the open questions above. Question 2 ("is 1:1 the right rate?") and question 3
+("is a flat charge even the right shape?") become the load-bearing ones, because the target is no
+longer "make discovery stop early" but "make a unit cost what it claims to cost". Question 4
+(generation vs play must agree) stops being an obstacle and becomes an argument FOR this direction:
+a budget that bounds on both sides is exactly what keeps the artifact's play fingerprint honest.
+
+Discovery keeps ONE property worth remembering when the fix is measured: it is the only phase that
+is a **barrier**, so it is the most sensitive test of whether a candidate bound actually works.
+A fix that leaves one 17.7-minute rollout in 8,800 has not fixed it — 1 of 24 cores for the last
+12 minutes of a 45-minute phase is what that residue looks like.
