@@ -230,32 +230,51 @@ is that one breakpoint state yields one cands list. Measured: `prefix-snaps=323,
 state-dup=43,242` -- only **13.4%** of prefixes repeat a state. The converging plans diverge at the
 breakpoint and only meet at end of turn, so a state-keyed prefix cache does not reach them.
 
-### What the duplicates ARE: an unfolded physical-source axis
+### RETRACTED: the "unfolded physical-source axis" (2026-09-24)
 
-`BpCandFingerprint`'s `source_blind` mode zeroes exactly the physical-identity fields
-(`sac_source_id`, `hand_index`) covered by the USER's 2026-09-09 ruling -- *"It doesn't matter
-whether you tap Scrying Sheets 1, 2, 3 or 4 first. They are interchangeable. Same with the Frost
-Augurs"* -- the premise `MTG_FOLD_ACT_SOURCES` (default ON since 2026-09-09) ships on. Comparing
-each duplicate against the plan that first reached its state:
+An earlier revision of this section reported that 41.3% of the wave's duplicates
+(`dup src-blind same=975,749`) were physical-source variants -- distinct plans differing only in
+which interchangeable permanent they touch -- and named extending `MTG_FOLD_ACT_SOURCES` as the
+next work. **That finding is void and the work it proposed does not exist.**
 
-    dup src-blind same=975,749   diff=1,385,061
+`BpCandFingerprint` folds neither `bp_choice` nor `bp_at`. Every wave variant is
+`plans[sl.base]` with only those two overwritten, so each variant carries its BASE PLAN's
+fingerprint and "source-blind equal" degenerates to "same base plan" -- a near-tautology for a
+duplicate, and nothing to do with physical source identity. The counter was exactly the base split
+it was supposed to be independent of: on Snow H5 s8008, `src-blind diff=4427` against
+`dup_cross diffb=4427`, to the unit.
 
-**41.3% of attributed duplicates differ from an already-scored plan ONLY in physical source
-identity.** Since the list census puts within-list fingerprint duplication at 0.0%, these are not
-the same plan enumerated twice -- they are distinct plans separated by precisely the axis the user
-ruled irrelevant. Roughly a million of them per game, on one game.
+The question is settled properly by censusing the BASE PLANS, where source-blinding is meaningful.
+On H5 s8008, over the base plans that actually open wave slots:
 
-This also joins mechanism 1 to mechanism 2 rather than leaving them as two coincidences: the
-13-source board that makes each payment question cost 251.5 backtracker nodes is the same board that
-makes plan space degenerate by physical source. One property of this deck, priced twice.
+    node plans total=202,359  distinct=202,359  src-blind-distinct=202,359
 
-**What this does NOT license.** `source_blind` is a CLASSIFIER, and the comment above it says so
-explicitly: *"Never use this for a SKIP -- two sacrifices of different creatures are genuinely
-different plans and this cannot tell them apart."* So the next step is not to skip on this
-fingerprint. It is to find which axis `MTG_FOLD_ACT_SOURCES` leaves unfolded -- the fold covers
-ACTIVATION sources, and these variants survive it -- and extend the fold there, under the same
-provably-plain predicate (`PermIsPlainForFold`) that makes the existing one sound, with
-byte-identical digests as the gate.
+**Zero degeneracy, by either key.** Source-blinding removes nothing, so there is no unfolded
+physical-source axis and `MTG_FOLD_ACT_SOURCES` is already covering what the user's 2026-09-09
+ruling describes. The duplicates are genuinely different plans reaching the same state.
+
+### Where H5's units actually are (measured 2026-09-24, current engine)
+
+`MTG_ROLLOUT_STATS` over the whole H5 s8008 cell, 576,150,077 units:
+
+| site | units | share |
+|---|---:|---:|
+| `la_bp_wave` | 161,513,558 | 28.0% |
+| `rollout_step` | 136,811,391 | 23.7% |
+| `greedy_fallback` | 134,942,321 | 23.4% |
+| `la_cand` | 116,964,332 | 20.3% |
+| `fs_pre` + `fs_bp_wave` | 25,918,475 | 4.5% |
+
+No single class dominates, which is the main planning fact: the deferred wave is 28%, so even
+eliminating it entirely is 1.4x. `greedy_fallback` and `la_cand` together are 43.7% and have never
+been examined.
+
+Wave shape on the same cell: 13,693 nodes of which **11,024 (80.5%) open no slots at all**; over
+the rest, 75.8 base plans and 36.3 slots per node, 225,471 wave applies, 67,696 rollouts,
+`improved=26`. Duplicates are 92,226 (40.9% of applies), split `w0=49,266 (53.4%)` /
+`cross=27,006` / `self=15,954` -- so on H5 the majority of the wave's duplicates repeat a state
+WAVE 0 or an ordinary plan already reached, which is the opposite of gi26's cross-dominated split
+at d3.
 
 ## 3. London bottoming, on the 17.6% of these games that mulligan
 

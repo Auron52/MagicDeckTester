@@ -35630,15 +35630,27 @@ namespace
         // These two count whether the population exists: snaps taken, and how many of them repeat a
         // breakpoint state the same node already snapped.
         std::atomic<uint64_t> prefix_snaps{0}, prefix_state_dup{0};
-        // Are the CONVERGING PLANS physical-source variants of one another? BpCandFingerprint's
-        // `source_blind` mode zeroes exactly the physical identity fields (sac_source_id,
-        // hand_index) that the USER's 2026-09-09 ruling calls interchangeable -- "it doesn't matter
-        // whether you tap Scrying Sheets 1, 2, 3 or 4 first". MTG_FOLD_ACT_SOURCES already folds
-        // that axis for ACTIVATIONS, so if the duplicates still fingerprint source-blind-EQUAL
-        // there is an unfolded physical-source axis left and it is fixable in the enumerator; if
-        // they fingerprint source-blind-DIFFERENT, the plans genuinely differ and the convergence
-        // happens deeper than any plan-level key can see.
-        std::atomic<uint64_t> dup_sbsame{0}, dup_sbdiff{0};
+        // REMOVED 2026-09-24: a source-blind comparison of the DUPLICATES measured nothing.
+        // It was added to ask whether converging plans are physical-source variants of one another
+        // -- the axis the USER's 2026-09-09 ruling calls interchangeable. It cannot answer that,
+        // because BpCandFingerprint folds neither bp_choice nor bp_at, so every wave variant of one
+        // base plan carries its base plan's fingerprint and "source-blind equal" degenerates to
+        // "same base plan". Measured on Snow H5 s8008 the counter was EXACTLY the base split it was
+        // supposed to be independent of: src-blind diff=4427 vs dup_cross diffb=4427, to the unit.
+        // The question it was built for is settled by plans_sbdistinct below, which asks it of the
+        // BASE PLANS where it is meaningful -- and the answer is that there is no unfolded axis:
+        // total == distinct == src-blind-distinct == 202,359.
+        // BRANCHING AT ITS SOURCE. Every saving downstream is multiplied by the size of the node's
+        // BASE PLAN list: each base plan opens slots (x bp_at), each slot walks ranks, and each rank
+        // is an ApplyPlanDirect. So a duplicate base plan is not one wasted apply, it is a wasted
+        // SUBTREE. These count the list three ways per node:
+        //   plans_total       -- what the enumerator emitted
+        //   plans_distinct    -- distinct under the full content fingerprint
+        //   plans_sbdistinct  -- distinct once PHYSICAL SOURCE identity is zeroed (sac_source_id,
+        //                        hand_index), i.e. the equivalence the USER's 2026-09-09 ruling
+        //                        states and MTG_FOLD_ACT_SOURCES already applies to activations.
+        // plans_sbdistinct << plans_total is the branching factor that a fold could remove.
+        std::atomic<uint64_t> plans_total{0}, plans_distinct{0}, plans_sbdistinct{0};
         // ...and WHOSE state the duplicate repeats, which decides where a fix belongs:
         //   dup_self  = an earlier RANK OF THE SAME SLOT (same base plan, same bp_at). The
         //               continuation LIST is internally redundant -> fix in the continuation
@@ -35709,7 +35721,7 @@ namespace
                          " | pre-plans dup=%llu/%llu"
                          " | lookahead-share scored=%llu rolled=%llu retired=%llu dupstate=%llu"
                          " | dup_cross sameb=%llu diffb=%llu prefix-snaps=%llu state-dup=%llu"
-                         " | dup src-blind same=%llu diff=%llu\n",
+                         " | node plans total=%llu distinct=%llu src-blind-distinct=%llu\n",
                          static_cast<unsigned long long>(nodes.load()),
                          static_cast<unsigned long long>(no_slots.load()),
                          static_cast<unsigned long long>(slots.load()),
@@ -35748,8 +35760,9 @@ namespace
                          static_cast<unsigned long long>(dupx_diffb.load()),
                          static_cast<unsigned long long>(prefix_snaps.load()),
                          static_cast<unsigned long long>(prefix_state_dup.load()),
-                         static_cast<unsigned long long>(dup_sbsame.load()),
-                         static_cast<unsigned long long>(dup_sbdiff.load()));
+                         static_cast<unsigned long long>(plans_total.load()),
+                         static_cast<unsigned long long>(plans_distinct.load()),
+                         static_cast<unsigned long long>(plans_sbdistinct.load()));
         }
     };
     BpWaveProbe g_bp_wave_probe;
@@ -36142,6 +36155,22 @@ public:
             m_bases.push_back(i);
             AddSlots(plans, m_bases.size() - 1, BpSearchDepth());
         }
+        // BRANCHING CENSUS over the BASE PLANS that actually opened slots (see plans_total). Counted
+        // here rather than over the raw plan list because these are the plans that cost a subtree
+        // each -- every one multiplies by its bp_at slots and their ranks. Probe-only.
+        if (BpWaveProbeOn() && !m_bases.empty())
+        {
+            std::unordered_set<uint64_t> full, sb;
+            full.reserve(m_bases.size()); sb.reserve(m_bases.size());
+            for (std::size_t bi : m_bases)
+            {
+                full.insert(BpCandFingerprint(plans[bi]));
+                sb.insert(BpCandFingerprint(plans[bi], /*source_blind=*/true));
+            }
+            g_bp_wave_probe.plans_total.fetch_add(m_bases.size(), std::memory_order_relaxed);
+            g_bp_wave_probe.plans_distinct.fetch_add(full.size(), std::memory_order_relaxed);
+            g_bp_wave_probe.plans_sbdistinct.fetch_add(sb.size(), std::memory_order_relaxed);
+        }
     }
 
     bool Empty() const { return m_slots.empty(); }
@@ -36357,15 +36386,9 @@ static bool LaWaveDup(const BpWaveWalker& walker, const TurnSolver::Plan& v, con
     {
         const uint64_t slot_id = (static_cast<uint64_t>(walker.LastBase()) << 8)
                                | static_cast<uint64_t>(walker.LastAt() & 0xFF);
-        const uint64_t sbfp    = BpCandFingerprint(v, /*source_blind=*/true);
         const auto it = key_slot.find(wk);
         if (!fresh)
         {
-            if (it != key_slot.end())
-            {
-                (it->second.second == sbfp ? g_bp_wave_probe.dup_sbsame
-                                           : g_bp_wave_probe.dup_sbdiff).fetch_add(1);
-            }
             (it == key_slot.end()           ? g_bp_wave_probe.dup_w0
              : it->second.first == slot_id  ? g_bp_wave_probe.dup_self
                                             : g_bp_wave_probe.dup_cross).fetch_add(1);
@@ -36377,7 +36400,7 @@ static bool LaWaveDup(const BpWaveWalker& walker, const TurnSolver::Plan& v, con
             g_bp_wave_probe.dupstate.fetch_add(1);
             g_bp_wave_probe.la_dupstate.fetch_add(1);
         }
-        else { key_slot.emplace(wk, std::make_pair(slot_id, sbfp)); }
+        else { key_slot.emplace(wk, std::make_pair(slot_id, uint64_t(0))); }
     }
     return !fresh;
 }
