@@ -345,6 +345,20 @@ struct CardParams
     std::vector<std::string> tap_token_subtypes;
     std::vector<std::string> tap_token_requires_subtypes;
 
+    // Slimefoot, the Stowaway: "{4}: Create a 1/1 green Saproling creature token." A mana-only
+    // activated token maker with NO {T} and NO sacrifice -- deliberately NOT tap_token_cost above,
+    // whose {T} would wrongly make it once-per-untap and illegal on the turn the body lands.
+    // Emitted as PermAbilityMode::PayToken, which is repeatable within a turn and bounded only by
+    // mana, so the activation count K is a real searched axis: each Saproling is simultaneously a
+    // future Slimefoot drain, Utopia Mycon mana, a Psychotrope Thallid card, Mycoloth devour fodder
+    // and a Beastmaster Ascension quest counter, and those sinks CONTEST the same bodies.
+    std::optional<ManaCost>  pay_token_cost;
+    int                      pay_token_count     = 1;
+    int                      pay_token_power     = 0;
+    int                      pay_token_toughness = 0;
+    std::vector<std::string> pay_token_subtypes;
+    std::string              pay_token_color;
+
     // Enters tapped (e.g. Saprazzan Skerry, Lonely Sandbar, Temple of Epiphany).
     // If true, the permanent is placed on the battlefield tapped and cannot
     // produce mana until the next turn's untap step.
@@ -1776,6 +1790,17 @@ struct CardParams
     std::string              dies_watch_subtype;
     bool                     dies_watch_includes_self = false;
     int                      dies_trigger_damage = 0;
+    // Slimefoot, the Stowaway: "...deals 1 damage to EACH OPPONENT and you gain 1 life."
+    //   dies_trigger_damage_each_opponent -- multiply the face damage by OpponentHeads(). NOT an
+    //     inert collapse: OpponentHeads() is 1 or 2 (MTG_OPPONENT_HEADS / a two-headed setup), so
+    //     folding "each opponent" into "the opponent" would silently halve the clock at 2 heads.
+    //     Deliberately NOT modelled by reusing etb_damage_each_opponent, which ALSO pings every
+    //     opponent creature (the Torbran/Chainwhirler clause) -- Slimefoot does not.
+    //   dies_trigger_self_gain -- life gained per TRIGGER, through the shared GainLife hook so it
+    //     is a real life-gain EVENT (CR 119.10) for any watcher. NOT head-multiplied: "you gain 1
+    //     life" happens once however many opponents there are.
+    bool                     dies_trigger_damage_each_opponent = false;
+    int                      dies_trigger_self_gain = 0;
     int                      dies_trigger_creates_tokens = 0;
     int                      dies_token_power = 0;
     int                      dies_token_toughness = 0;

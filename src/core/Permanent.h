@@ -50,6 +50,18 @@ enum class PermAbilityMode
     // SpendRepeatActivations -- that helper bails on a zero mana-value cost precisely to stop a
     // free repeatable sink from non-terminating.
     SporeSaproling,
+    // {cost}: Create N tokens  (Slimefoot, the Stowaway, "{4}: Create a 1/1 green Saproling
+    // creature token"; CardParams::pay_token_cost). NO {T} and NO sacrifice, so it is the
+    // Drain/ExileTop/GrantLifelink shape: REPEATABLE within a turn, legal on a summoning-sick body
+    // (CR 302.6 restricts only {T} abilities), and the activation count K is bounded solely by
+    // available mana -- a pure mana sink.
+    //
+    // STRUCTURALLY UNLIKE CardParams::tap_token_cost (Sliver Hive), and the difference is the whole
+    // reason this is a separate mode: that one has {T} in its cost, which would wrongly make this
+    // once-per-untap AND illegal the turn Slimefoot lands. Unlike SporeSaproling the cost IS mana,
+    // so it routes through SpendRepeatActivations safely (that helper bails at a zero mana value
+    // precisely to stop a free repeatable sink from non-terminating; {4} has mana value 4).
+    PayToken,
 };
 
 // Does this mode's cost include {T}? THE single source of truth, because three separate sites used
@@ -64,7 +76,8 @@ inline bool PermAbilityTaps(PermAbilityMode m)
         && m != PermAbilityMode::ExileTop
         && m != PermAbilityMode::IceCounter
         && m != PermAbilityMode::GrantLifelink
-        && m != PermAbilityMode::SporeSaproling;
+        && m != PermAbilityMode::SporeSaproling
+        && m != PermAbilityMode::PayToken;
 }
 
 struct Permanent

@@ -3889,6 +3889,7 @@ static std::uint32_t BpAvailablePermAbilityModes(const GameState& state, const P
         { PermAbilityMode::ExileTop,       &sd.params.exile_opponent_top_cost },
         { PermAbilityMode::IceCounter,     &sd.params.ice_counter_cost        },
         { PermAbilityMode::GrantLifelink,  &sd.params.lifelink_grant_cost     },
+        { PermAbilityMode::PayToken,       &sd.params.pay_token_cost          },
     };
     const int ctrl = state.active_player_index;
     for (const ModeSpec& m : modes)
@@ -12266,6 +12267,7 @@ void CollectActivationKeys(const GameState& state, int ctrl, const Permanent& p,
         { PermAbilityMode::ExileTop,       &pp.exile_opponent_top_cost },
         { PermAbilityMode::IceCounter,     &pp.ice_counter_cost        },
         { PermAbilityMode::GrantLifelink,  &pp.lifelink_grant_cost     },
+        { PermAbilityMode::PayToken,       &pp.pay_token_cost          },
     };
     for (std::size_t i = 0; i < sizeof modes / sizeof modes[0]; ++i)
     {
@@ -18567,6 +18569,7 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
                     { Action::AbilityMode::ExileTop,       &sd->params.exile_opponent_top_cost },
                     { Action::AbilityMode::IceCounter,     &sd->params.ice_counter_cost     },
                     { Action::AbilityMode::GrantLifelink,  &sd->params.lifelink_grant_cost  },
+                    { Action::AbilityMode::PayToken,       &sd->params.pay_token_cost       },
                 };
                 for (const ModeSpec& m : modes)
                 {

@@ -384,3 +384,185 @@ TEST_CASE("Shroofus turns the second main on by itself, not parasitically off My
     // gated on MTG_FUNGUS_M2_DEVOUR and a list revision could cut Mycoloth.
     CHECK(Def("Shroofus Sproutsire").params.combat_damage_tokens_per_damage > 0);
 }
+
+// ---------------------------------------------------------------------------------------------
+// Slimefoot, the Stowaway. The archetype's first NON-COMBAT damage source, and the card whose
+// highest-risk failure mode was silent: the death-watcher had to fire for definition-less TOKENS,
+// which is ~95% of the Saprolings that ever die here. A CardDefinition-keyed subtype test would
+// have compiled, passed every other check, and simply never triggered.
+// ---------------------------------------------------------------------------------------------
+
+TEST_CASE("Slimefoot: the drain fires for a definition-less Saproling TOKEN")
+{
+    EnsureCardsLoaded();
+    GameState s = Fresh();
+    Put(s, "Slimefoot, the Stowaway", 0, 1);
+
+    // Exactly what CreateTokenOnce produces: no CardDefinition, subtype on the Card itself.
+    Card dead;
+    dead.m_name = "1/1 Saproling Token";
+    dead.RehashName();
+    dead.AddType(CardType::Creature);
+    dead.m_subtypes = { "Saproling" };
+    REQUIRE(CardDatabase::Instance().LookupCached(dead) == nullptr);   // the trap, made explicit
+
+    OnCreatureDies(s, 0, dead, /*dead_was_token=*/true, /*dead_minus_counters=*/0);
+    CHECK(s.players[1].life == 19);
+    CHECK(s.players[0].life == 21);
+    CHECK(s.opponent_lost_life_this_turn);
+}
+
+TEST_CASE("Slimefoot: every Saproling death is a separate trigger -- the board IS the clock")
+{
+    EnsureCardsLoaded();
+    GameState s = Fresh();
+    Put(s, "Slimefoot, the Stowaway", 0, 1);
+
+    Card dead;
+    dead.m_name = "1/1 Saproling Token";
+    dead.RehashName();
+    dead.AddType(CardType::Creature);
+    dead.m_subtypes = { "Saproling" };
+
+    for (int i = 0; i < 8; ++i) { OnCreatureDies(s, 0, dead, true, 0); }
+    CHECK(s.players[1].life == 12);   // eight Saprolings sacrificed = eight damage, no attack step
+    CHECK(s.players[0].life == 28);
+}
+
+TEST_CASE("Slimefoot: TWO copies are two independent watchers (per-copy, not max)")
+{
+    EnsureCardsLoaded();
+    GameState s = Fresh();
+    Put(s, "Slimefoot, the Stowaway", 0, 1);
+    Put(s, "Slimefoot, the Stowaway", 0, 2);   // legend rule is a separate SBA; the watchers stack
+
+    Card dead;
+    dead.m_name = "1/1 Saproling Token";
+    dead.RehashName();
+    dead.AddType(CardType::Creature);
+    dead.m_subtypes = { "Saproling" };
+
+    OnCreatureDies(s, 0, dead, true, 0);
+    CHECK(s.players[1].life == 18);
+}
+
+TEST_CASE("Slimefoot: the watch is SUBTYPE- and CONTROLLER-scoped, and excludes itself")
+{
+    EnsureCardsLoaded();
+
+    SUBCASE("a dying FUNGUS is not a dying Saproling")
+    {
+        GameState s = Fresh();
+        Put(s, "Slimefoot, the Stowaway", 0, 1);
+        OnCreatureDies(s, 0, Def("Thallid").card, false, 0);   // Thallid is a Fungus
+        CHECK(s.players[1].life == 20);
+    }
+
+    SUBCASE("Slimefoot's OWN death does not trigger it -- it is a Fungus, not a Saproling")
+    {
+        GameState s = Fresh();
+        Put(s, "Slimefoot, the Stowaway", 0, 1);
+        OnCreatureDies(s, 0, Def("Slimefoot, the Stowaway").card, false, 0);
+        CHECK(s.players[1].life == 20);
+    }
+
+    SUBCASE("the OPPONENT's Saproling dying does not trigger our Slimefoot")
+    {
+        GameState s = Fresh();
+        Put(s, "Slimefoot, the Stowaway", 0, 1);
+        Card dead;
+        dead.m_name = "1/1 Saproling Token";
+        dead.RehashName();
+        dead.AddType(CardType::Creature);
+        dead.m_subtypes = { "Saproling" };
+        OnCreatureDies(s, 1, dead, true, 0);   // died under the OPPONENT's control
+        CHECK(s.players[1].life == 20);
+    }
+
+    SUBCASE("Shroofus Sproutsire IS a Saproling, so its death drains too")
+    {
+        GameState s = Fresh();
+        Put(s, "Slimefoot, the Stowaway", 0, 1);
+        OnCreatureDies(s, 0, Def("Shroofus Sproutsire").card, false, 0);
+        CHECK(s.players[1].life == 19);
+    }
+}
+
+TEST_CASE("Slimefoot: the {4} token maker has NO {T} -- repeatable, and legal while summoning-sick")
+{
+    EnsureCardsLoaded();
+    const CardParams& q = Def("Slimefoot, the Stowaway").params;
+    REQUIRE(q.pay_token_cost.has_value());
+    CHECK(q.pay_token_cost->ManaValue() == 4);
+
+    // The distinction against Sliver Hive's tap_token_cost, asserted rather than trusted: a {T} in
+    // the cost would make this once-per-untap AND illegal the turn Slimefoot lands.
+    CHECK_FALSE(PermAbilityTaps(PermAbilityMode::PayToken));
+
+    GameState s = Fresh();
+    Put(s, "Slimefoot, the Stowaway", 0, 1, /*sick=*/true);
+    CHECK(PermAbilitySourceLive(s, 0, 1, PermAbilityMode::PayToken));
+    s.battlefield[0].tapped = true;                                  // even tapped
+    CHECK(PermAbilitySourceLive(s, 0, 1, PermAbilityMode::PayToken));
+}
+
+TEST_CASE("Slimefoot: {4} makes a Saproling, and Doubling Season makes it two")
+{
+    EnsureCardsLoaded();
+
+    SUBCASE("one activation, one Saproling")
+    {
+        GameState s = Fresh();
+        Put(s, "Slimefoot, the Stowaway", 0, 1);
+        ApplyPermAbility(s, 0, 1, PermAbilityMode::PayToken);
+        CHECK(CountSaprolings(s) == 1);
+    }
+
+    SUBCASE("through the CreateToken chokepoint, so a Season doubles it")
+    {
+        GameState s = Fresh();
+        s.deck_has_token_doubler = true;
+        Put(s, "Slimefoot, the Stowaway", 0, 1);
+        Put(s, "Doubling Season", 0, 2);
+        ApplyPermAbility(s, 0, 1, PermAbilityMode::PayToken);
+        CHECK(CountSaprolings(s) == 2);
+    }
+
+    SUBCASE("...and each of those tokens is itself future Slimefoot damage")
+    {
+        GameState s = Fresh();
+        Put(s, "Slimefoot, the Stowaway", 0, 1);
+        ApplyPermAbility(s, 0, 1, PermAbilityMode::PayToken);
+        REQUIRE(CountSaprolings(s) == 1);
+        // Find the token we just made and kill it.
+        Card tok;
+        for (const Permanent& p : s.battlefield)
+        { if (p.is_token) { tok = p.card; } }
+        OnCreatureDies(s, 0, tok, true, 0);
+        CHECK(s.players[1].life == 19);
+    }
+}
+
+TEST_CASE("DEATHSPORE + SLIMEFOOT: the '-1/-1' clause is a FREE two-for-one sac outlet")
+{
+    EnsureCardsLoaded();
+    // This is the interaction that makes the candidate list a different deck rather than a faster
+    // one, and it is why Deathspore Thallid's -1/-1 must NOT be written off as goldfish-inert:
+    // sacrifice one Saproling to the outlet (death #1) and shrink a SECOND 1/1 Saproling to 0/0,
+    // which dies to the toughness SBA (death #2). Two deaths, no mana, no combat, no summoning
+    // sickness -- so with Slimefoot out the whole token board converts to damage at 1 per body.
+    //
+    // Deathspore itself is not implemented yet; this asserts the half that already exists -- that
+    // two Saproling deaths in one activation window are two drains -- so the arithmetic is pinned
+    // before the outlet lands.
+    GameState s = Fresh();
+    Put(s, "Slimefoot, the Stowaway", 0, 1);
+    Card tok;
+    tok.m_name = "1/1 Saproling Token";
+    tok.RehashName();
+    tok.AddType(CardType::Creature);
+    tok.m_subtypes = { "Saproling" };
+    OnCreatureDies(s, 0, tok, true, 0);   // the sacrificed fodder
+    OnCreatureDies(s, 0, tok, true, 0);   // the one shrunk to 0/0
+    CHECK(s.players[1].life == 18);
+}

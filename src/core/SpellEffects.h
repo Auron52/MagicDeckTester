@@ -6418,8 +6418,35 @@ inline void OnCreatureDies(GameState& state, int dead_controller, const Card& de
     {
         if (wp.dies_trigger_damage > 0)
         {
-            state.players[opp].life -= wp.dies_trigger_damage;   // "1 damage to any target" -> face
+            // "each opponent" (Slimefoot) scales by head count; the plain "any target" forms
+            // (Pashalik Mons) do not. OpponentHeads() is 1 or 2, so this is not an inert collapse.
+            const int heads = wp.dies_trigger_damage_each_opponent ? gamesetup::OpponentHeads() : 1;
+            const int dmg   = wp.dies_trigger_damage * heads;
+            const int before = state.players[opp].life;
+            state.players[opp].life -= dmg;                      // "1 damage to any target" -> face
             state.opponent_lost_life_this_turn = true;
+            // The history panel had NO entry for this damage. Near-invisible while the only card
+            // here was Pashalik Mons (it fires rarely); with Slimefoot it fires on EVERY Saproling
+            // sacrifice, so a human would watch the opponent's life fall all game with nothing
+            // explaining it. Exactly the Fanatic of Mogis bug (user report 2026-08-29, Minotaur
+            // reference seed 1) -- same fix, same shape. Nulled by RevealLogPause during
+            // search/rollout, so autonomous play stays byte-identical.
+            if (g_play_event_sink)
+            {
+                EmitPlayEvent(state.turn_number, "damage",
+                              "\xF0\x9F\x94\xA5 a " + wp.dies_watch_subtype
+                              + " died: " + std::to_string(dmg) + " to opponent ("
+                              + std::to_string(before) + "\xE2\x86\x92"
+                              + std::to_string(state.players[opp].life) + ")");
+            }
+        }
+        if (wp.dies_trigger_self_gain > 0)
+        {
+            // Through the SHARED hook, never a bare `life +=`: GainLife accumulates
+            // life_gained_this_turn and fires the lifegain watchers, so this reads as its own
+            // life-gain EVENT (CR 119.10) rather than a silent total bump. Once per trigger --
+            // NOT multiplied by head count, unlike the damage above.
+            GainLife(state, dead_controller, wp.dies_trigger_self_gain);
         }
         for (int k = 0; k < wp.dies_trigger_creates_tokens; ++k)
         {
@@ -14667,6 +14694,7 @@ inline const char* PermAbilityLabel(PermAbilityMode mode)
         case PermAbilityMode::IceCounter:     return "put an ice counter on target permanent";
         case PermAbilityMode::GrantLifelink:  return "another target creature gains lifelink until end of turn";
         case PermAbilityMode::SporeSaproling: return "remove three spore counters: create a Saproling";
+        case PermAbilityMode::PayToken:       return "create a creature token";
         default:                              return "activate";
     }
 }
@@ -15026,6 +15054,33 @@ inline void ApplyPermAbility(GameState& state, int controller, int source_id, Pe
             }
             break;
         }
+        case PermAbilityMode::PayToken:
+        {
+            // Slimefoot, the Stowaway: "{4}: Create a 1/1 green Saproling creature token."
+            //
+            // The mana cost is already paid by the caller; this is the effect half only. No {T},
+            // no sacrifice, no target and no choice at resolution -- the only decision the card
+            // creates is HOW MANY TIMES to activate, which is the K axis the caller enumerates.
+            // The token goes through CreateToken, so Doubling Season applies at the single
+            // chokepoint and one Season makes this {4} produce two Saprolings.
+            const int ntok  = d->params.pay_token_count > 0 ? d->params.pay_token_count : 1;
+            for (int t = 0; t < ntok; ++t)
+            {
+                CreateToken(state, controller, d->params.pay_token_power,
+                            d->params.pay_token_toughness, d->params.pay_token_subtypes,
+                            d->params.pay_token_color);
+            }
+            if (g_play_event_sink)
+            {
+                EmitPlayEvent(state.turn_number, "token",
+                              "\xF0\x9F\x8D\x84 " + src_name + ": creates "
+                              + std::to_string(ntok) + " "
+                              + (d->params.pay_token_subtypes.empty()
+                                   ? std::string("token")
+                                   : d->params.pay_token_subtypes[0]));
+            }
+            break;
+        }
         default: break;
     }
 }
@@ -15141,6 +15196,13 @@ inline int SpendRepeatActivations(GameState& state, int controller, int source_i
                                       ? &def.params.ice_counter_cost
                                       : (mode == PermAbilityMode::GrantLifelink)
                                       ? &def.params.lifelink_grant_cost
+                                      // Slimefoot's "{4}: Create a Saproling". The chain ENDS in
+                                      // exile_opponent_top_cost, so a mode missing from it does not
+                                      // fail loudly -- it reads a cost the card does not have,
+                                      // finds no value, and fires ZERO times. Silent, and exactly
+                                      // the class of bug the per-mode tables keep producing.
+                                      : (mode == PermAbilityMode::PayToken)
+                                      ? &def.params.pay_token_cost
                                       : &def.params.exile_opponent_top_cost;
     if (!rc->has_value()) { return 0; }
 

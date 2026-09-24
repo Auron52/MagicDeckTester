@@ -752,6 +752,16 @@ CardParams CardDatabase::BuildParamsFromJson(const json& params) const
     for (const std::string& s : params.value("tap_token_requires_subtypes", json::array()))
         p.tap_token_requires_subtypes.push_back(s);
 
+    // Slimefoot: mana-only, no-{T}, repeatable token maker (PermAbilityMode::PayToken).
+    if (params.contains("pay_token_cost"))
+        p.pay_token_cost = ManaCostFromString(params["pay_token_cost"].get<std::string>());
+    p.pay_token_count     = params.value("pay_token_count", 1);
+    p.pay_token_power     = params.value("pay_token_power", 0);
+    p.pay_token_toughness = params.value("pay_token_toughness", 0);
+    p.pay_token_color     = params.value("pay_token_color", std::string{});
+    for (const std::string& s : params.value("pay_token_subtypes", json::array()))
+        p.pay_token_subtypes.push_back(s);
+
     p.enters_tapped       = params.value("enters_tapped",       false);
     p.fastland_max_other_lands = params.value("fastland_max_other_lands", -1);
     p.no_max_hand_size    = params.value("no_max_hand_size",    false);
@@ -1103,6 +1113,8 @@ CardParams CardDatabase::BuildParamsFromJson(const json& params) const
     p.dies_watch_subtype        = params.value("dies_watch_subtype", std::string());
     p.dies_watch_includes_self  = params.value("dies_watch_includes_self", false);
     p.dies_trigger_damage       = params.value("dies_trigger_damage", 0);
+    p.dies_trigger_damage_each_opponent = params.value("dies_trigger_damage_each_opponent", false);
+    p.dies_trigger_self_gain    = params.value("dies_trigger_self_gain", 0);
     p.dies_trigger_creates_tokens = params.value("dies_trigger_creates_tokens", 0);
     p.dies_token_power          = params.value("dies_token_power", 0);
     p.dies_token_toughness      = params.value("dies_token_toughness", 0);

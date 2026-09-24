@@ -490,6 +490,11 @@ INERT_PARAMS = {
     "combat_damage_watch_subtypes": "trigger gating detail (which attackers' damage is counted) -- not a choice",
     "combat_damage_token_power": "token spec constant", "combat_damage_token_toughness": "token spec constant",
     "combat_damage_token_subtypes": "token spec constant", "combat_damage_token_color": "token spec constant",
+    "dies_trigger_damage_each_opponent": "scales the death-watcher's face damage by OpponentHeads() (Slimefoot). Mandatory and untargeted -- 'each opponent' is not a choice at any head count",
+    "dies_trigger_self_gain": "mandatory lifegain rider on the same death trigger, through the shared GainLife hook -- no target, no choice",
+    "pay_token_count": "token count constant", "pay_token_power": "token spec constant",
+    "pay_token_toughness": "token spec constant", "pay_token_subtypes": "token spec constant",
+    "pay_token_color": "token spec constant",
     "combat_damage_token_keywords": "printed keywords on the combat-damage-created token, no choice",
     "etb_self_lifegain": "mandatory lifegain amount",
     "etb_damage_equals_power": "computed damage (live power substitution on etb_damage_any)",
@@ -953,6 +958,13 @@ MAINPHASE_PARAMS = {
     # activation count K rides chosen_x as a searched plan variant -- the human reaches K=2 by
     # choosing it twice, exactly as for the drain/exile sinks.
     "spore_saproling_cost": "spore outlet = a main_phase board activation (ActivatePermAbility/SporeSaproling); K rides chosen_x",
+    # Slimefoot, the Stowaway: "{4}: Create a 1/1 green Saproling creature token." The same
+    # BOARD ACTIVATION shape one step over -- an Action::Kind::ActivatePermAbility with
+    # PermAbilityMode::PayToken -- but its cost is MANA rather than counters. No {T} and no
+    # sacrifice, so it is repeatable within a turn and K rides chosen_x as a searched plan
+    # variant; the human reaches K=2 by choosing it twice, exactly as for the drain/exile sinks.
+    # Distinct from tap_token_cost below, whose {T} makes it once-per-untap.
+    "pay_token_cost":      "mana-only, no-{T} activated token maker = a main_phase board activation (ActivatePermAbility/PayToken); K rides chosen_x",
     "sacrifice_draw_cost": "Fiery Islet sac-to-draw activation (main_phase play)",
     "stages_cards":        "Light Up the Stage: staged cards become castable (main_phase plays)",
     "tap_token_cost":      "Sliver Hive activated token ability (main_phase play)",

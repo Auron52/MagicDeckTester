@@ -8226,6 +8226,39 @@
    }
   },
   {
+   "name": "Slimefoot, the Stowaway",
+   "mana_cost": "{1}{B}{G}",
+   "types": [
+    "Creature"
+   ],
+   "supertypes": [
+    "Legendary"
+   ],
+   "subtypes": [
+    "Fungus"
+   ],
+   "keywords": [],
+   "power": 2,
+   "toughness": 3,
+   "oracle_text": "Whenever a Saproling you control dies, Slimefoot deals 1 damage to each opponent and you gain 1 life.\n{4}: Create a 1/1 green Saproling creature token. [THE ARCHETYPE'S FIRST NON-COMBAT DAMAGE SOURCE. Every prior win in this pool crosses the red zone; this one converts the sacrifice engine itself into a clock, and it does so ignoring summoning sickness and ignoring combat entirely -- which is why it RETIRES premise 1 of FungusProvider::ProvenWinlessThisTurn (see the CERTIFICATE note at the end). DEATH HALF: dies_watch_subtype \"Saproling\" + dies_trigger_damage 1, fired from OnCreatureDies -- the single funnel every death site routes through (the toughness SBA, the sac outlets, devour's deferred victims, the legend rule). dies_watch_includes_self is FALSE and that is faithful rather than a shortcut: Slimefoot is a FUNGUS, not a Saproling, so its own death is not a Saproling death, and the watcher scan is controller-scoped so an opponent's Saproling would not trigger it either. IT FIRES FOR TOKENS, WHICH IS THE ENTIRE CARD HERE: CreateTokenOnce writes m_subtypes onto the token's own Card and the watcher filter is CardHasSubtype(dead_card, ...), a plain string scan with NO CardDefinition lookup anywhere on the dead creature's path -- so a definition-less 1/1 Saproling Token matches exactly as a printed card would. A def-keyed test would have silently missed ~95% of this card's triggers. \"EACH OPPONENT\" IS NOT COLLAPSED to \"the opponent\": OpponentHeads() is 1 or 2 (MTG_OPPONENT_HEADS / a two-headed setup), so dies_trigger_damage_each_opponent multiplies the face damage by the head count, the same arithmetic etb_damage_each_opponent uses. Deliberately NOT modelled by reusing that param, because it ALSO pings every opponent CREATURE (the Torbran/Chainwhirler clause) and Slimefoot does not. THE LIFEGAIN IS REAL and routes through the shared GainLife hook rather than a bare life += , so it accumulates life_gained_this_turn and fires the lifegain watchers -- each trigger is its own life-gain EVENT (CR 119.10). It is NOT head-multiplied: \"you gain 1 life\" happens once per trigger however many opponents there are. [PARTIAL: the life itself is currently outcome-INERT in this archetype; WHY -- nothing in the pool reads life or life-gain (Essence Warden only PRODUCES it, Beastmaster Ascension reads quest counters), and the candidate mana base carries no pain, shock or fetch cost to pay. Implemented faithfully anyway because it is free and because a black source added for this card's own cost may well be a painland.] ACTIVATED HALF: \"{4}: Create a 1/1 green Saproling\" is pay_token_cost {4} via PermAbilityMode::PayToken. STRUCTURALLY UNLIKE Sliver Hive's tap_token_cost, and the difference is the point: there is NO {T} and no sacrifice, so it is not once-per-untap, it is legal on the turn Slimefoot lands (CR 302.6 restricts only {T} abilities), and it is REPEATABLE within a turn -- the Essence Depleter / Dimensional Infiltrator shape, a pure mana sink whose activation COUNT K is bounded only by available mana. K IS A REAL SEARCHED AXIS, and doubly so here: each token is simultaneously a future Slimefoot drain, a Utopia Mycon mana, a Psychotrope Thallid card, a Mycoloth devour counter and a Beastmaster Ascension quest counter, and those five sinks CONTEST the same bodies. Under one Doubling Season the {4} makes two. THE FUNGUS IS A FUNGUS, three consequences: Sporecrown Thallid's Fungus-or-Saproling lord pumps it to 3/4; Sporesower Thallid spores it every upkeep with counters it can never spend (the same dead-counter case Mycoloth and Sporecrown already carry -- faithful and free, and filtering it would be a lie in the board state); and it is NOT legal fodder for Utopia Mycon's or Psychotrope Thallid's sac_creature_requires_subtype \"Saproling\", so it can never eat itself. It CAN be devoured by Mycoloth -- usually terrible once it is the clock, but left to the search rather than hardcoded. Legendary is engine-enforced by EnforceLegendRule; inert at one copy (the Pashalik Mons precedent). Both triggers are MANDATORY and UNTARGETED -- \"each opponent\" is not a choice at any head count -- so nothing here needs surfacing to a human; the only interactive decision the card creates is whether and how many times to activate {4}, which the main-phase plan variants already carry. [PARTIAL: with TWO OR MORE Doubling Seasons plus a free sac-for-mana outlet (Utopia Mycon) on the battlefield, {4} -> 4+ Saprolings -> 4+ mana back is a net-nonnegative loop, i.e. arbitrarily large damage and life; the engine bounds K by the mana actually enumerated at emission time and therefore UNDER-models it, in the PESSIMISTIC direction. Disclosed rather than special-cased, the same posture GameState::inf_life_turn takes toward the persist loop.] [CERTIFICATE NOTE, load-bearing: FungusProvider::ProvenWinlessThisTurn bounds COMBAT damage only, so a non-combat route makes that bound UNSOUND. FungusCertKnownDef is a NAME whitelist and this name is deliberately NOT on it, so the certificate DECLINES at every node where a copy sits in hand, on the battlefield or in the graveyard -- the safe direction. Do NOT add the name without first adding a drain term bounded by the Saprolings that can die this turn (fodder + free spore activations + mana/3 for this card's own {4} + death-replacement tokens, times OpponentHeads()), AND a hard guard returning false at 2+ Doubling Seasons with a free sac-for-mana outlet, where that term has no finite bound at all.]]",
+   "template": "custom",
+   "parameters": {
+    "dies_watch_subtype": "Saproling",
+    "dies_watch_includes_self": false,
+    "dies_trigger_damage": 1,
+    "dies_trigger_damage_each_opponent": true,
+    "dies_trigger_self_gain": 1,
+    "pay_token_cost": "{4}",
+    "pay_token_count": 1,
+    "pay_token_power": 1,
+    "pay_token_toughness": 1,
+    "pay_token_subtypes": [
+     "Saproling"
+    ],
+    "pay_token_color": "G"
+   }
+  },
+  {
    "name": "Sporecrown Thallid",
    "mana_cost": "{1}{G}",
    "types": [
