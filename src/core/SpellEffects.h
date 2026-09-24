@@ -8675,6 +8675,99 @@ inline int ChooseSacOutletVictimIndex(GameState& state, int controller, int sour
     (void)source_id;
 }
 
+// Would killing `victim` actually PAY its controller? True when some permanent they control
+// watches for that death with a payload worth having (Slimefoot's drain, Pashalik's ping, a
+// death-token maker), or when the victim refunds itself on death (Tukatongue Thallid).
+//
+// This is what separates "a free two-for-one" from "throwing away a creature". Deathspore
+// Thallid's -1/-1 aimed at our own Saproling is the former ONLY while such a watcher is out; with
+// no watcher it is a pure loss, and the ranking has to be able to tell the difference rather than
+// assuming the combo is always live.
+inline bool DeathOfWouldPay(const GameState& state, int controller, const Permanent& victim)
+{
+    const CardDatabase& db = CardDatabase::Instance();
+    for (const Permanent& w : state.battlefield)
+    {
+        if (w.controller_index != controller) { continue; }
+        if (w.def_absent) { continue; }
+        const CardDefinition* wd = db.LookupCached(w.card);
+        if (wd == nullptr) { continue; }
+        const CardParams& wp = wd->params;
+        const bool pays = wp.dies_trigger_damage > 0 || wp.dies_trigger_creates_tokens > 0
+                       || wp.dies_trigger_self_gain > 0 || wp.dies_trigger_impulse_exile;
+        if (!pays) { continue; }
+        const bool self_only = wp.dies_watch_subtype.empty();
+        if (self_only)
+        {
+            // A self-death watcher pays only for its OWN death (Tukatongue / Mogg War Marshal).
+            if (wp.dies_watch_includes_self && w.card.m_number == victim.card.m_number)
+            { return true; }
+            continue;
+        }
+        if (CardHasSubtype(victim.card, wp.dies_watch_subtype))
+        {
+            // "another <subtype> you control dies" -- the watcher does not pay for itself unless
+            // it opts in.
+            if (w.card.m_number != victim.card.m_number || wp.dies_watch_includes_self)
+            { return true; }
+        }
+    }
+    return false;
+}
+
+// Apply a signed until-end-of-turn P/T change to one creature and run the toughness SBA inline,
+// routing any resulting death through OnCreatureDies so every death watcher fires.
+//
+// THE DIFFERENCE FROM ApplyJitteMode's inline check IS THE WHOLE POINT, and it is why this is a
+// separate helper rather than a call into that one. Jitte's -1/-1 removes the body from the
+// battlefield and clears its attachments but never calls OnCreatureDies, so nothing watching for a
+// death ever learns about it. That is inert where Jitte lives (its realistic target is an opponent
+// spawn, and KittyEquipment runs no death watcher), which is why it has never been wrong -- but it
+// would be catastrophically wrong here: Deathspore Thallid shrinking our own Saproling to 0/0 IS
+// the second half of the Slimefoot drain, and a death that fires no watcher would silently delete
+// the combo the card is in the list for. Migrating the Jitte site onto this helper is the obvious
+// follow-up and is deliberately NOT done here: it could move KittyEquipment's ground truth, so it
+// wants its own measured change rather than a ride-along.
+//
+// The rollout runs no SBA loop between main-phase actions, so the check must be inline; the
+// toughness read sums the same four terms ApplyJitteMode does (base + lords + auras + equipment),
+// because a Saproling under a Sporecrown Thallid is a 2/2 and does NOT die to a single -1/-1.
+inline void ShrinkCreatureUntilEot(GameState& state, int target_id, int dp, int dt)
+{
+    if (dp == 0 && dt == 0) { return; }
+    int ti = -1;
+    for (int i = 0; i < static_cast<int>(state.battlefield.size()); ++i)
+    {
+        const Permanent& t = state.battlefield[i];
+        if (t.card.m_number == target_id && (t.card.IsCreature() || t.is_animated)) { ti = i; break; }
+    }
+    if (ti < 0) { return; }   // target left -> fizzle
+    Permanent& t = state.battlefield[static_cast<std::size_t>(ti)];
+    t.temp_power_bonus += dp;
+    t.temp_tough_bonus += dt;
+
+    const int tough = t.EffectiveToughness()
+                    + ComputeLordBonus(t.card, state, t.controller_index, t.is_animated, &t).second
+                    + AuraBonusFor(t, state).second
+                    + EquipBonusFor(t, state).second;
+    if (tough > 0) { return; }
+
+    const Card dead_card   = t.card;               // copied BEFORE the erase invalidates `t`
+    const int  dead_num    = t.card.m_number;
+    const int  dead_owner  = t.owner_index;
+    const int  dead_ctrl   = t.controller_index;
+    const bool dead_token  = t.is_token;
+    const int  dead_minus  = MinusCountersOn(t);
+    if (!dead_token) { state.players[dead_owner].graveyard.push_back(dead_card); }
+    state.battlefield.erase(state.battlefield.begin() + ti);
+    for (Permanent& e : state.battlefield)
+    {
+        if (e.equipped_to      == dead_num) { e.equipped_to = 0; }
+        if (e.aura_attached_to == dead_num) { e.aura_attached_to = 0; }
+    }
+    OnCreatureDies(state, dead_ctrl, dead_card, dead_token, dead_minus);
+}
+
 inline void ApplySacCreatureOutlet(GameState& state, int controller, int source_id, int victim_id)
 {
     const CardParams* op = nullptr;
@@ -8797,6 +8890,120 @@ inline void ApplySacCreatureOutlet(GameState& state, int controller, int source_
             break;
         }
     }
+    // TARGETED payloads (Vitaspore Thallid's haste grant, Deathspore Thallid's -1/-1). Resolved
+    // HERE, at apply time, with a ranked candidate list and a human override -- deliberately NOT as
+    // one plan variant per legal target.
+    //
+    // WHY NOT A PER-TARGET FAN. Umezawa's Jitte's -1/-1 mode enumerates a variant per target, and
+    // that is the obvious precedent to copy, but Jitte lives in KittyEquipment where the board is a
+    // handful of creatures. This archetype routinely holds THIRTY-PLUS Saprolings, and they are
+    // INTERCHANGEABLE: hasting one of N identical summoning-sick Saprolings is ONE outcome, not N.
+    // A per-target fan would be a ~30-way branch per activation on the deck whose documented cost
+    // centre is exactly that shape (the sac-outlet count pool, adopted 2026-09-23, was worth 2.29x
+    // on the heaviest cell by collapsing a powerset over identical outlets). So this follows
+    // PermAbilityMode::GrantLifelink instead -- the same "K is the searched dimension, the target
+    // is ranked" split -- and the ranking below is a genuine narrowing, disclosed as such.
+    //
+    // HUMAN PLAY NARROWS NOTHING: the chooser is offered the full rules-legal set with the
+    // heuristic pick preselected, per the core invariant.
+    if (op->sac_outlet_grants_haste || op->sac_outlet_minus_power != 0 || op->sac_outlet_minus_tough != 0)
+    {
+        std::vector<int> cands;   // battlefield indices, heuristic-preferred first
+        std::vector<std::pair<long long,int>> ranked;
+        for (int i = 0; i < static_cast<int>(state.battlefield.size()); ++i)
+        {
+            const Permanent& q = state.battlefield[i];
+            if (!q.card.IsCreature() && !q.is_animated) { continue; }
+            long long score;
+            if (op->sac_outlet_grants_haste)
+            {
+                // Haste is worth exactly nothing on a body that could already attack, and nothing
+                // at all on the opponent's side (their creatures never attack). Prefer OUR biggest
+                // creature that cannot attack right now; rank everything else behind it so the set
+                // stays complete for a human.
+                const bool ours = (q.controller_index == controller);
+                const bool useful = ours && !CanAttackFull(q, state.battlefield, controller);
+                score = (useful ? 0LL : 1000000LL) - q.EffectivePower() * 1000LL;
+            }
+            else
+            {
+                // -1/-1 wants to KILL something, but WHOSE death is worth having is the whole
+                // question, and the naive "anything that dies, cheapest first" ranking is actively
+                // wrong: the outlet is itself a 1/1 here, so it ties with its own fodder and
+                // cheerfully eats itself.
+                //
+                // Tiering, worst score first:
+                //   0  our own body whose death PAYS -- a death watcher on our side profits from
+                //      it (Slimefoot turning each Saproling into a point of damage) or the body
+                //      refunds itself (Tukatongue). This is the line the card is in the list for.
+                //   1  an OPPONENT creature that dies. Neutral-to-good and costs us nothing.
+                //   2  our own body whose death pays nothing -- a real loss, taken only if it is
+                //      all that is legal.
+                //   3  anything the shrink does not kill: legal, pointless.
+                // The SOURCE is pushed behind its own tier: killing the outlet ends the engine.
+                const int tough = q.EffectiveToughness()
+                                + ComputeLordBonus(q.card, state, q.controller_index,
+                                                   q.is_animated, &q).second
+                                + AuraBonusFor(q, state).second + EquipBonusFor(q, state).second;
+                const bool kills = (tough + op->sac_outlet_minus_tough) <= 0;
+                const bool ours  = (q.controller_index == controller);
+                long long tier;
+                if      (!kills) { tier = 3; }
+                else if (!ours)  { tier = 1; }
+                else             { tier = DeathOfWouldPay(state, controller, q) ? 0 : 2; }
+                const long long is_src = (q.card.m_number == source_id) ? 1 : 0;
+                // Within a tier prefer the cheapest body, and a TOKEN over a card (a token costs
+                // no card; erasing it is strictly less loss).
+                score = tier * 100LL + is_src * 10LL + (q.is_token ? 0LL : 1LL)
+                      + q.EffectivePower();
+            }
+            ranked.emplace_back(score * 1000LL + q.card.m_number, i);   // stable tie-break
+        }
+        std::sort(ranked.begin(), ranked.end());
+        for (const auto& r : ranked) { cands.push_back(r.second); }
+
+        int pick = cands.empty() ? -1 : cands[0];
+        if (!cands.empty() && g_play_dig_chooser)   // nulled by RevealLogPause -> real play only
+        {
+            std::vector<Card> examined;
+            std::vector<int>  legal;
+            for (int ci = 0; ci < static_cast<int>(cands.size()); ++ci)
+            { examined.push_back(state.battlefield[cands[ci]].card); legal.push_back(ci); }
+            const int c = (*g_play_dig_chooser)(state, controller, src_name, examined, legal, 0);
+            if (c >= 0 && c < static_cast<int>(cands.size())) { pick = cands[c]; }
+        }
+        if (pick >= 0)
+        {
+            const int target_num = state.battlefield[static_cast<std::size_t>(pick)].card.m_number;
+            if (op->sac_outlet_grants_haste)
+            {
+                state.battlefield[static_cast<std::size_t>(pick)].temp_haste = true;
+                if (g_play_event_sink)
+                {
+                    EmitPlayEvent(state.turn_number, "pump",
+                                  "\xE2\x9A\xA1 " + src_name + ": "
+                                  + state.battlefield[static_cast<std::size_t>(pick)].card.m_name.str()
+                                  + " gains haste");
+                }
+            }
+            else
+            {
+                if (g_play_event_sink)
+                {
+                    EmitPlayEvent(state.turn_number, "pump",
+                                  "\xF0\x9F\x92\x80 " + src_name + ": "
+                                  + state.battlefield[static_cast<std::size_t>(pick)].card.m_name.str()
+                                  + " gets " + std::to_string(op->sac_outlet_minus_power) + "/"
+                                  + std::to_string(op->sac_outlet_minus_tough));
+                }
+                // Routed through the shared helper so a resulting death fires OnCreatureDies --
+                // which is the second Saproling death that makes the Slimefoot pairing work.
+                ShrinkCreatureUntilEot(state, target_num,
+                                       op->sac_outlet_minus_power, op->sac_outlet_minus_tough);
+            }
+        }
+    }
+
     const bool outlet_free = !op->sac_creature_cost.has_value()
                           || op->sac_creature_cost->ManaValue() == 0;
     FireSacrificeWatchers(state, controller);   // Slaughter-Priest ("whenever YOU sacrifice ...")

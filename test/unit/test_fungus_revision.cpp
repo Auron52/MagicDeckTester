@@ -131,6 +131,14 @@ int PutSaprolingToken(GameState& s, int number, bool sick = false)
     return static_cast<int>(s.battlefield.size()) - 1;
 }
 
+const Permanent& ByNumber(const GameState& s, int number)
+{
+    for (const Permanent& p : s.battlefield) { if (p.card.m_number == number) { return p; } }
+    static Permanent none;
+    REQUIRE_MESSAGE(false, "permanent not found: ", number);
+    return none;
+}
+
 int CountSaprolings(const GameState& s)
 {
     int n = 0;
@@ -565,4 +573,173 @@ TEST_CASE("DEATHSPORE + SLIMEFOOT: the '-1/-1' clause is a FREE two-for-one sac 
     OnCreatureDies(s, 0, tok, true, 0);   // the sacrificed fodder
     OnCreatureDies(s, 0, tok, true, 0);   // the one shrunk to 0/0
     CHECK(s.players[1].life == 18);
+}
+
+// ---------------------------------------------------------------------------------------------
+// Vitaspore Thallid / Deathspore Thallid -- the two TARGETED sac-outlet payloads.
+// ---------------------------------------------------------------------------------------------
+
+TEST_CASE("Vitaspore Thallid: sac a Saproling, haste a creature that could not attack")
+{
+    EnsureCardsLoaded();
+    GameState s = Fresh();
+    Put(s, "Vitaspore Thallid", 0, 1);
+    const int sick = Put(s, "Mycoloth", 0, 2, /*sick=*/true);   // a fresh 4/4, cannot attack
+    PutSaprolingToken(s, 10);                                   // the fodder
+    REQUIRE_FALSE(CanAttackFull(s.battlefield[sick], s.battlefield, 0));
+
+    ApplySacCreatureOutlet(s, 0, /*source_id=*/1, /*victim_id=*/10);
+
+    // The fodder is gone and the summoning-sick body can now attack -- the ranking prefers OUR
+    // biggest creature that could not already attack.
+    CHECK(CountSaprolings(s) == 0);
+    const Permanent& myc = ByNumber(s, 2);
+    CHECK(myc.temp_haste);
+    CHECK(CanAttackFull(myc, s.battlefield, 0));
+}
+
+TEST_CASE("Vitaspore Thallid: the outlet is FREE and repeatable (no mana, no {T})")
+{
+    EnsureCardsLoaded();
+    const CardParams& q = Def("Vitaspore Thallid").params;
+    CHECK_FALSE(q.sac_creature_cost.has_value());       // the Utopia Mycon shape
+    CHECK(q.sac_creature_requires_subtype == "Saproling");
+    CHECK(q.sac_outlet_grants_haste);
+    // A FUNGUS, so the subtype filter alone forbids it eating itself.
+    CHECK_FALSE(CardHasSubtype(Def("Vitaspore Thallid").card, "Saproling"));
+}
+
+TEST_CASE("Deathspore Thallid: the '-1/-1' is a FREE TWO-FOR-ONE, not an inert clause")
+{
+    EnsureCardsLoaded();
+
+    SUBCASE("alone it is two dead Saprolings and nothing else")
+    {
+        GameState s = Fresh();
+        Put(s, "Deathspore Thallid", 0, 1);
+        PutSaprolingToken(s, 10);   // sacrificed as the cost
+        PutSaprolingToken(s, 11);   // shrunk to 0/0 and killed by the SBA
+        ApplySacCreatureOutlet(s, 0, 1, 10);
+        CHECK(CountSaprolings(s) == 0);
+    }
+
+    SUBCASE("WITH SLIMEFOOT it is TWO DAMAGE per activation, no mana and no combat")
+    {
+        // This is the interaction that makes the candidate list a different deck rather than a
+        // faster one. One activation = the sacrificed fodder (death 1) + the shrunk body (death 2).
+        GameState s = Fresh();
+        Put(s, "Deathspore Thallid", 0, 1);
+        Put(s, "Slimefoot, the Stowaway", 0, 2);
+        PutSaprolingToken(s, 10);
+        PutSaprolingToken(s, 11);
+        ApplySacCreatureOutlet(s, 0, 1, 10);
+        CHECK(s.players[1].life == 18);
+        CHECK(s.players[0].life == 22);
+        CHECK(CountSaprolings(s) == 0);
+    }
+
+    SUBCASE("a Saproling under a SPORECROWN is a 2/2 and correctly SURVIVES -1/-1")
+    {
+        // The SBA must read the full toughness -- base + lords + auras + equipment -- not the
+        // printed 1. Getting this wrong would invent a free kill on every token.
+        GameState s = Fresh();
+        Put(s, "Deathspore Thallid", 0, 1);
+        Put(s, "Slimefoot, the Stowaway", 0, 2);
+        Put(s, "Sporecrown Thallid", 0, 3);   // +1/+1 to each other Fungus or Saproling
+        PutSaprolingToken(s, 10);
+        PutSaprolingToken(s, 11);
+        ApplySacCreatureOutlet(s, 0, 1, 10);
+        CHECK(CountSaprolings(s) == 1);   // the second token is a 2/2 -> survives as a 1/1
+        CHECK(s.players[1].life == 19);   // only the sacrificed fodder drained
+    }
+
+    SUBCASE("the outlet is free, and Deathspore is a Zombie Fungus that Sporecrown still pumps")
+    {
+        const CardParams& q = Def("Deathspore Thallid").params;
+        CHECK_FALSE(q.sac_creature_cost.has_value());
+        CHECK(q.sac_outlet_minus_power == -1);
+        CHECK(q.sac_outlet_minus_tough == -1);
+        const Card& c = Def("Deathspore Thallid").card;
+        CHECK(CardHasSubtype(c, "Zombie"));
+        CHECK(CardHasSubtype(c, "Fungus"));
+        CHECK_FALSE(CardHasSubtype(c, "Saproling"));   // so it cannot eat itself
+    }
+}
+
+TEST_CASE("Both new spore bodies join the EXISTING spore pool byte-identically")
+{
+    EnsureCardsLoaded();
+    // FoldSporeSourceIdentity waives "which body pays" only because every outlet's payload is
+    // identical. Adding two more must not break that -- if it did, the pool would silently start
+    // conflating outlets that are not interchangeable.
+    const CardParams& ref = Def("Thallid").params;
+    for (const char* n : { "Vitaspore Thallid", "Deathspore Thallid" })
+    {
+        const CardParams& q = Def(n).params;
+        CHECK_MESSAGE(q.spore_saproling_cost  == ref.spore_saproling_cost,  n);
+        CHECK_MESSAGE(q.spore_creates_tokens  == ref.spore_creates_tokens,  n);
+        CHECK_MESSAGE(q.spore_token_power     == ref.spore_token_power,     n);
+        CHECK_MESSAGE(q.spore_token_toughness == ref.spore_token_toughness, n);
+        CHECK_MESSAGE(q.spore_token_color     == ref.spore_token_color,     n);
+        CHECK_MESSAGE(q.spore_token_subtypes  == ref.spore_token_subtypes,  n);
+        CHECK_MESSAGE(q.spore_upkeep_self     == ref.spore_upkeep_self,     n);
+    }
+}
+
+TEST_CASE("Deathspore Thallid: the target ranking must not eat its own engine")
+{
+    EnsureCardsLoaded();
+    // REGRESSION GUARD. The first ranking was "anything the shrink kills, cheapest first", which
+    // is wrong in a way that only shows up on this card: Deathspore is ITSELF a 1/1, so it tied
+    // with its own fodder and -- losing the tie-break on m_number -- killed itself on the first
+    // activation. Whose death is worth having is the question, not merely whose death is possible.
+
+    SUBCASE("with a watcher out it kills the Saproling, never itself")
+    {
+        GameState s = Fresh();
+        Put(s, "Deathspore Thallid", 0, 1);
+        Put(s, "Slimefoot, the Stowaway", 0, 2);
+        PutSaprolingToken(s, 10);
+        PutSaprolingToken(s, 11);
+        ApplySacCreatureOutlet(s, 0, 1, 10);
+        bool outlet_alive = false;
+        for (const Permanent& p : s.battlefield)
+        { if (p.card.m_number == 1) { outlet_alive = true; } }
+        CHECK(outlet_alive);
+    }
+
+    SUBCASE("with NO death watcher, killing our own body pays nothing -- prefer the opponent's")
+    {
+        // Tier 1 (an opponent creature that dies) beats tier 2 (our own body whose death pays
+        // nothing), so the free kill goes across the table rather than into our own board.
+        GameState s = Fresh();
+        Put(s, "Deathspore Thallid", 0, 1);
+        PutSaprolingToken(s, 11);
+        const int opp = PutSaprolingToken(s, 20);
+        s.battlefield[opp].controller_index = 1;
+        s.battlefield[opp].owner_index      = 1;
+        PutSaprolingToken(s, 10);   // the fodder
+        ApplySacCreatureOutlet(s, 0, 1, 10);
+        bool ours_alive = false, theirs_alive = false;
+        for (const Permanent& p : s.battlefield)
+        {
+            if (p.card.m_number == 11) { ours_alive = true; }
+            if (p.card.m_number == 20) { theirs_alive = true; }
+        }
+        CHECK(ours_alive);
+        CHECK_FALSE(theirs_alive);
+    }
+
+    SUBCASE("DeathOfWouldPay is what draws the line, and it reads the BOARD not the card pool")
+    {
+        GameState s = Fresh();
+        Put(s, "Deathspore Thallid", 0, 1);
+        const int t = PutSaprolingToken(s, 11);
+        CHECK_FALSE(DeathOfWouldPay(s, 0, s.battlefield[t]));   // no watcher yet
+        Put(s, "Slimefoot, the Stowaway", 0, 2);
+        CHECK(DeathOfWouldPay(s, 0, s.battlefield[t]));         // now it pays
+        // ...and it is subtype-scoped: Slimefoot does not pay for a Fungus dying.
+        const int f = Put(s, "Thallid", 0, 3);
+        CHECK_FALSE(DeathOfWouldPay(s, 0, s.battlefield[f]));
+    }
 }

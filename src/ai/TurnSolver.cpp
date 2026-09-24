@@ -19273,9 +19273,16 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
                 // A DRAW payload must contribute, or the search reads the activation as pure loss
                 // (it gives up a body for nothing) and never takes it. 1 card = 1 DMG is the repo's
                 // draw convention, matching the cast-draw valuation sites.
+                // The haste grant and the -1/-1 must contribute for the same reason the DRAW
+                // payload does: without a term the search scores the activation as pure loss (a
+                // body given up for nothing) and never takes it. Haste ~ one attacker's worth;
+                // the shrink is priced at the magnitude it removes.
                 a.eval           = (sd->params.sac_outlet_damage
                                     + sd->params.sac_outlet_creates_tokens
-                                    + sd->params.sac_outlet_draw) * DMG;
+                                    + sd->params.sac_outlet_draw
+                                    + (sd->params.sac_outlet_grants_haste ? 1 : 0)
+                                    + (-sd->params.sac_outlet_minus_power)
+                                    + (-sd->params.sac_outlet_minus_tough)) * DMG;
                 // Provider gate on the GENERIC fodder sac only (FodderSacUseful -- the Melira
                 // rule: no fodder to a self-payload outlet until the combo is active or the
                 // payload reaches lethal). The persist variants and bursts below are NOT gated,

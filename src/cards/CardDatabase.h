@@ -1931,6 +1931,34 @@ struct CardParams
     //                                 scores ZERO and the search reads the activation as pure loss
     //                                 (it gives up a body for nothing) and never takes it.
     int                      sac_outlet_draw = 0;
+    //   sac_outlet_grants_haste    -- TARGET CREATURE GAINS HASTE until end of turn (Vitaspore
+    //                                 Thallid, "Sacrifice a Saproling: Target creature gains haste
+    //                                 until end of turn"). Sets Permanent::temp_haste, read by
+    //                                 CanAttackFull and CanTapNow and cleared each cleanup -- the
+    //                                 Expedite machinery, reached from an outlet rather than a
+    //                                 spell. Body-neutral on its face (one Saproling for one
+    //                                 attacker) and therefore a real trade the search prices: it
+    //                                 WINS when the hasted body outclasses the Saproling as an
+    //                                 attacker (a fresh Mycoloth) or when the sacrificed Saproling
+    //                                 was itself summoning-sick and could not have attacked, and it
+    //                                 additionally buys a Beastmaster Ascension quest counter,
+    //                                 which come from DECLARED attackers in the same combat.
+    bool                     sac_outlet_grants_haste = false;
+    //   sac_outlet_minus_power/_tough -- TARGET CREATURE gets -N/-N until end of turn (Deathspore
+    //                                 Thallid, "Sacrifice a Saproling: Target creature gets -1/-1").
+    //                                 SIGNED, so the values are negative (the Umezawa's Jitte
+    //                                 charge_minus_power convention). Against a passive goldfish
+    //                                 opponent whose spawns never block or attack this looks inert,
+    //                                 AND IT IS NOT: pointed at one of OUR OWN 1/1 Saprolings it is
+    //                                 a second free death, so with a "whenever a Saproling you
+    //                                 control dies" watcher out (Slimefoot, the Stowaway) one
+    //                                 activation is TWO deaths -- the sacrificed fodder plus the
+    //                                 shrunk body -- for no mana and no combat. The death routes
+    //                                 through OnCreatureDies so those watchers actually fire; see
+    //                                 ShrinkCreatureUntilEot, and note the Jitte site does NOT
+    //                                 (a latent gap, inert there, recorded rather than changed).
+    int                      sac_outlet_minus_power = 0;
+    int                      sac_outlet_minus_tough = 0;
     //   sac_outlet_add_mana_any_color -- MANA ability that adds one mana of ANY colour (Utopia Mycon
     //                                 "Sacrifice a Saproling: Add one mana of any color"). Distinct
     //                                 from sac_outlet_add_mana_color, which pins a letter: this card

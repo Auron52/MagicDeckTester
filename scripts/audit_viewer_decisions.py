@@ -495,6 +495,15 @@ INERT_PARAMS = {
     "pay_token_count": "token count constant", "pay_token_power": "token spec constant",
     "pay_token_toughness": "token spec constant", "pay_token_subtypes": "token spec constant",
     "pay_token_color": "token spec constant",
+    # Vitaspore / Deathspore Thallid -- TARGETED sac-outlet payloads. WHICH Saproling is
+    # sacrificed already rides the existing `sacrifice` decision. The EFFECT target is resolved at
+    # apply time from a ranked candidate list with the human chooser offered the full rules-legal
+    # set (the PermAbilityMode::GrantLifelink shape), deliberately NOT one plan variant per target:
+    # this archetype holds thirty-plus interchangeable Saprolings, so a per-target fan would be a
+    # ~30-way branch per activation on the deck whose cost centre is exactly that powerset.
+    "sac_outlet_grants_haste": "outlet payload (target creature gains haste UEOT); the victim rides the `sacrifice` type and the haste target is a ranked resolution pick with a human chooser over the full legal set",
+    "sac_outlet_minus_power": "outlet payload constant (signed -N/-N UEOT, the Jitte convention); target as above",
+    "sac_outlet_minus_tough": "outlet payload constant (signed -N/-N UEOT); target as above",
     "combat_damage_token_keywords": "printed keywords on the combat-damage-created token, no choice",
     "etb_self_lifegain": "mandatory lifegain amount",
     "etb_damage_equals_power": "computed damage (live power substitution on etb_damage_any)",

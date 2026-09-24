@@ -8259,6 +8259,66 @@
    }
   },
   {
+   "name": "Vitaspore Thallid",
+   "mana_cost": "{1}{G}",
+   "types": [
+    "Creature"
+   ],
+   "subtypes": [
+    "Fungus"
+   ],
+   "keywords": [],
+   "power": 1,
+   "toughness": 1,
+   "oracle_text": "At the beginning of your upkeep, put a spore counter on this creature.\nRemove three spore counters from this creature: Create a 1/1 green Saproling creature token.\nSacrifice a Saproling: Target creature gains haste until end of turn. [Spore family (shared with Thallid / Thallid Shell-Dweller / Sporesower Thallid / Psychotrope Thallid / Utopia Mycon): spore_upkeep_self puts one spore counter on this creature at each of the controller's upkeeps, into the dedicated Permanent::spore_counters int (param-gated, so inert for every other deck). spore_saproling_cost 3 gates a free repeatable activation via PermAbilityMode::SporeSaproling -- NO mana and NO {T}, so it is legal on a summoning-sick or already-tapped body (CR 302.6 restricts only {T} abilities) and its activation count K is bounded by counters/3 rather than by mana. The payload is BYTE-IDENTICAL to the other five outlets, so SporePayloadsMatch folds this body into the existing spore pool automatically (FoldSporeSourceIdentity) and no new enumeration axis appears. The counters are a COST (CR 601.2h/602.2b), so they are NOT doubled by Doubling Season -- which doubles only counters being PUT ON -- while the upkeep tick and the created Saproling both are, making this card 4x under one Season rather than 2x. THE HASTE OUTLET is a new payload on the existing sac_creature_outlet template (sac_outlet_grants_haste), with NO mana in the cost -- sac_creature_cost is omitted entirely, the Utopia Mycon shape -- so it is free and repeatable, bounded only by Saprolings. It sets Permanent::temp_haste, the Expedite machinery already read by CanAttackFull AND CanTapNow and cleared each cleanup; deliberately NOT a reuse of the spell-scoped grants_temp_haste param, which HasteAccessThisTurn scans HAND cards for -- an uncharged Vitaspore in hand would have injected a false 'a route to haste exists this turn'. sac_creature_requires_subtype Saproling makes self-sacrifice illegal by the filter alone (this card is a FUNGUS, not a Saproling). VALUE, stated plainly because it is easy to mis-read as free: it is BODY-NEUTRAL on its face (one Saproling spent, one attacker gained) and therefore a real trade the search prices per turn. It WINS when the hasted creature outclasses the Saproling as an attacker (a freshly-devoured Mycoloth, a doubled token) or when the sacrificed Saproling was ITSELF summoning-sick and could not have attacked -- then it is strictly positive. It also buys a Beastmaster Ascension quest counter, which come from DECLARED attackers (CR 508.2) and apply to the SAME combat, so an extra attacker can flip a non-lethal swing into a lethal one. THE TARGET IS RANKED AT RESOLUTION, NOT FANNED INTO PLAN VARIANTS, and that is a deliberate departure from Umezawa's Jitte's -1/-1 mode (the obvious precedent). Jitte enumerates one variant per legal target, which is fine on KittyEquipment's handful of creatures; this archetype routinely holds THIRTY-PLUS Saprolings and they are interchangeable, so a per-target fan would be a ~30-way branch per activation on the deck whose documented cost centre is exactly a powerset over identical bodies (the sac-outlet count pool, adopted 2026-09-23, was worth 2.29x on the heaviest cell). It therefore follows PermAbilityMode::GrantLifelink instead: K is the searched dimension, the target is a ranked heuristic pick, and HUMAN PLAY NARROWS NOTHING -- the chooser receives the full rules-legal set with the heuristic pick preselected, per the core invariant. The ranking is disclosed as a narrowing in the deck's Stage 6a list. [PARTIAL: the activations are instant-speed on the real card but the engine enumerates activations only in the main phases; WHY inert -- the passive goldfish opponent offers nothing to respond to, and haste must be granted before attackers are declared anyway.]]",
+   "template": "custom",
+   "parameters": {
+    "spore_upkeep_self": 1,
+    "spore_saproling_cost": 3,
+    "spore_creates_tokens": 1,
+    "spore_token_power": 1,
+    "spore_token_toughness": 1,
+    "spore_token_subtypes": [
+     "Saproling"
+    ],
+    "spore_token_color": "G",
+    "sac_creature_outlet": true,
+    "sac_creature_requires_subtype": "Saproling",
+    "sac_outlet_grants_haste": true
+   }
+  },
+  {
+   "name": "Deathspore Thallid",
+   "mana_cost": "{1}{B}",
+   "types": [
+    "Creature"
+   ],
+   "subtypes": [
+    "Zombie",
+    "Fungus"
+   ],
+   "keywords": [],
+   "power": 1,
+   "toughness": 1,
+   "oracle_text": "At the beginning of your upkeep, put a spore counter on this creature.\nRemove three spore counters from this creature: Create a 1/1 green Saproling creature token.\nSacrifice a Saproling: Target creature gets -1/-1 until end of turn. [Spore family (shared with Thallid / Thallid Shell-Dweller / Sporesower Thallid / Psychotrope Thallid / Utopia Mycon): spore_upkeep_self puts one spore counter on this creature at each of the controller's upkeeps, into the dedicated Permanent::spore_counters int (param-gated, so inert for every other deck). spore_saproling_cost 3 gates a free repeatable activation via PermAbilityMode::SporeSaproling -- NO mana and NO {T}, so it is legal on a summoning-sick or already-tapped body (CR 302.6 restricts only {T} abilities) and its activation count K is bounded by counters/3 rather than by mana. The payload is BYTE-IDENTICAL to the other five outlets, so SporePayloadsMatch folds this body into the existing spore pool automatically (FoldSporeSourceIdentity) and no new enumeration axis appears. The counters are a COST (CR 601.2h/602.2b), so they are NOT doubled by Doubling Season -- which doubles only counters being PUT ON -- while the upkeep tick and the created Saproling both are, making this card 4x under one Season rather than 2x. TWO SUBTYPES (Zombie Fungus): CardHasSubtype and ComputeLordBonus both match ANY-OF, so Sporecrown Thallid's [Fungus, Saproling] lord reads the \"Fungus\" entry and the extra \"Zombie\" tag changes nothing. THE DECK'S FIRST BLACK PIP: {1}{B} forces a real mana base change in an otherwise mono-green list -- a deckbuilding cost this card must be screened WITH, never against a free splash. THE -1/-1 OUTLET IS NOT INERT, AND READING IT AS INERT IS THE TRAP. Against a passive goldfish opponent whose spawns never block or attack, killing one of their 1/1s accomplishes nothing -- so the clause looks like a disclosed no-op. It is not: pointed at ONE OF OUR OWN 1/1 SAPROLINGS it shrinks it to 0/0 and the toughness SBA kills it, which is a SECOND free death on the same activation (the first being the sacrificed fodder). With a \"whenever a Saproling you control dies\" watcher on the battlefield -- Slimefoot, the Stowaway -- one activation is therefore TWO damage, for no mana, no combat and no summoning sickness, and the whole token board converts to damage at one per body. That is why the death routes through the shared ShrinkCreatureUntilEot helper and thence OnCreatureDies, rather than through ApplyJitteMode's inline check, which removes the body WITHOUT firing any death watcher (inert where Jitte lives, catastrophic here). sac_outlet_minus_power/-tough are SIGNED (the Jitte charge_minus_power convention) and the SBA reads the full toughness -- base plus lords plus auras plus equipment -- so a Saproling under a Sporecrown Thallid is a 2/2 and correctly SURVIVES a single -1/-1. THE TARGET IS RANKED AT RESOLUTION, NOT FANNED INTO PLAN VARIANTS, and that is a deliberate departure from Umezawa's Jitte's -1/-1 mode (the obvious precedent). Jitte enumerates one variant per legal target, which is fine on KittyEquipment's handful of creatures; this archetype routinely holds THIRTY-PLUS Saprolings and they are interchangeable, so a per-target fan would be a ~30-way branch per activation on the deck whose documented cost centre is exactly a powerset over identical bodies (the sac-outlet count pool, adopted 2026-09-23, was worth 2.29x on the heaviest cell). It therefore follows PermAbilityMode::GrantLifelink instead: K is the searched dimension, the target is a ranked heuristic pick, and HUMAN PLAY NARROWS NOTHING -- the chooser receives the full rules-legal set with the heuristic pick preselected, per the core invariant. The ranking is disclosed as a narrowing in the deck's Stage 6a list. [PARTIAL: the activations are instant-speed on the real card but the engine enumerates activations only in the main phases; WHY inert -- the passive goldfish opponent offers nothing to respond to.]]",
+   "template": "custom",
+   "parameters": {
+    "spore_upkeep_self": 1,
+    "spore_saproling_cost": 3,
+    "spore_creates_tokens": 1,
+    "spore_token_power": 1,
+    "spore_token_toughness": 1,
+    "spore_token_subtypes": [
+     "Saproling"
+    ],
+    "spore_token_color": "G",
+    "sac_creature_outlet": true,
+    "sac_creature_requires_subtype": "Saproling",
+    "sac_outlet_minus_power": -1,
+    "sac_outlet_minus_tough": -1
+   }
+  },
+  {
    "name": "Sporecrown Thallid",
    "mana_cost": "{1}{G}",
    "types": [

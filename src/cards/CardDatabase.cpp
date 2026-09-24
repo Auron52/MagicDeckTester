@@ -1134,6 +1134,9 @@ CardParams CardDatabase::BuildParamsFromJson(const json& params) const
     p.sac_outlet_add_mana_any_color = params.value("sac_outlet_add_mana_any_color", false);
     p.sac_outlet_add_mana_amount = params.value("sac_outlet_add_mana_amount", 0);
     p.sac_outlet_draw           = params.value("sac_outlet_draw", 0);
+    p.sac_outlet_grants_haste   = params.value("sac_outlet_grants_haste", false);
+    p.sac_outlet_minus_power    = params.value("sac_outlet_minus_power", 0);
+    p.sac_outlet_minus_tough    = params.value("sac_outlet_minus_tough", 0);
     p.sac_outlet_damage         = params.value("sac_outlet_damage", 0);
     p.sac_outlet_creates_tokens = params.value("sac_outlet_creates_tokens", 0);
     p.sac_outlet_token_power    = params.value("sac_outlet_token_power", 0);
