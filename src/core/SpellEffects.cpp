@@ -3049,10 +3049,35 @@ inline bool McLeftoverShape() { static const bool v = EnvOn("MTG_MANA_CACHE_LEFT
 // is found, so it is a play change needing a full A/B and a GT rebaseline -- not a byte-identical perf
 // edit. Recorded in docs/design/fivecolour-mulligan-and-slow-atom.md section 5c.
 //
-// MTG_MANA_CACHE_CANON=1 enables the sound sequence version.
+// DEFAULT FLIPPED TO ON, 2026-09-24. The verdict above is correct for the tree it was taken in and
+// STALE for this one: its whole cost side was "hashing a descriptor per source on every call", and
+// on 2026-09-08 the caller's separate O(battlefield) source-ordinal pre-pass was folded INTO
+// ManaCacheKey's own scan (see `out_ord` above), removing one of the two full battlefield walks from
+// every cache HIT. The rejection was never retaken after that. Re-measured, single-threaded, total
+// USER cpu, at each deck's own shipped regime -- the two decks the verdict rested on have gone from
+// negative to free:
+//     FiveColour  best-of-3  35.98s -> 35.62s  (-1.0%; was +0.8% d3 / +2.3% d5)
+//     Dragonstorm             4.08s ->  4.06s  (-0.5%; was +1.7% d3 / +2.3% d5)
+//     breaching / goblins / angels / antilife / slivers: within +-2%, i.e. run-to-run noise
+//     whole smoke matrix, best-of-3 total cpu: 47.55s -> 47.13s
+// So there is no longer a deck paying for it, and one deck gains a lot: SNOW, whose intractable
+// games are ~50% mana payment because its board carries 13 mana sources of which most are
+// interchangeable (4 Arcum's Astrolabe, 4 Coldsteel Heart, 4 Boreal Druid, many identical snow
+// basics). Indexed keying gives every permutation of those its own entry, so the same question is
+// re-asked under a different labelling. On the ledger's 2nd-worst game (s11011 gi26, d3 unbudgeted):
+//     backtracker nodes 347,351,346 -> 141,305,618 (-59%), cache hit 80.5% -> 90.3%, 86.2s -> 69.3s
+// -59% here rather than the -22% measured elsewhere, for the same reason: redundancy is a property
+// of the BOARD, and Snow's is the most redundant in the suite.
+//
+// SAFE BY CONSTRUCTION, and verified rather than assumed: the key is sound (same descriptor sequence
+// => isomorphic search => same first solution), so this is a pure perf change that cannot move play.
+// Checked as digests, not aggregates -- 60/60 suite jobs across 11 decks byte-identical, plus 9/9
+// FiveColour repeats. No GT rebaseline is implied; a GT diff from this flag would be a BUG.
+//
+// MTG_MANA_CACHE_CANON=0 restores indexed keying (the A/B arm that measured all of the above).
 inline bool McCanonKey()
 {
-    static const bool v = EnvOn("MTG_MANA_CACHE_CANON");
+    static const bool v = EnvOn("MTG_MANA_CACHE_CANON", true);
     return v;
 }
 inline bool McSimpleTap(const CardDefinition* d)
