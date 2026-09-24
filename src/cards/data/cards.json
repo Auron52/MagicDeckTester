@@ -6422,6 +6422,25 @@
    }
   },
   {
+   "name": "Hickory Woodlot",
+   "mana_cost": "",
+   "types": [
+    "Land"
+   ],
+   "subtypes": [],
+   "keywords": [],
+   "oracle_text": "This land enters tapped with two depletion counters on it.\n{T}, Remove a depletion counter from this land: Add {G}{G}. If there are no depletion counters on this land, sacrifice it. [The GREEN Peat Bog / Sandstone Needle -- byte-identical parameters to the committed Peat Bog entry with the colour letter changed, so every clause rides machinery this repo already ships: enters_tapped + enters_tapped_with_depletion 2 are applied at the land drop (LandPlay.cpp, which stamps a Counter::Type::Depletion of that size), the tap adds TWO mana of one colour via produces_amount 2, DecrementDepletionOnTap (ManaPayment.cpp) removes one counter per tap, and the self-sacrifice at zero is the same path Peat Bog takes. DomAxis::DepletionCounter already prices the remaining counters (MoreDominates), so two Woodlots at different counts are distinguished rather than folded. FULLY MODELLED -- no deferral. In a Fungus list this is a two-mana land that enters tapped and dies after two taps: it accelerates a {4}{G} Saproling Burst or a {3}{G}{G} Mycoloth by a turn at the cost of a permanent land drop, which is exactly the trade the screen is being run to price.]",
+   "template": "basic_land",
+   "parameters": {
+    "produces": [
+     "G"
+    ],
+    "enters_tapped": true,
+    "enters_tapped_with_depletion": 2,
+    "produces_amount": 2
+   }
+  },
+  {
    "name": "Remote Farm",
    "mana_cost": "",
    "types": [
@@ -8271,6 +8290,24 @@
     "sac_creature_cost": "{1}",
     "sac_creature_requires_subtype": "Saproling",
     "sac_outlet_draw": 1
+   }
+  },
+  {
+   "name": "Concordant Crossroads",
+   "mana_cost": "{G}",
+   "types": [
+    "Enchantment"
+   ],
+   "supertypes": [
+    "World"
+   ],
+   "subtypes": [],
+   "keywords": [],
+   "oracle_text": "All creatures have haste. [An UNCONDITIONAL, SELF-INCLUSIVE all-creatures haste grant -- grants_haste + affects_all_creatures, the Maelstrom Wanderer precedent (NOT the mono-tribal subtypes_affected collapse: this grant is typeless). Resolved inside HasHasteFromLords, the single shared haste oracle, which is consulted by BOTH CanAttackFull (attack eligibility) and CanTapNow ({T}-ability eligibility) -- CR 302.6 is ONE restriction and haste from any source lifts both halves. THE GRANTER NEED NOT BE A CREATURE: that scan reads grants_haste off any battlefield permanent its controller owns and applies no IsCreature() test, and IsLordPermanent stays correctly FALSE here (no P/T bonus, not a creature), so this is a keyword lord and never a stat lord -- ComputeLordBonus skips it. Every other reader of affects_all_creatures is gated on a second param (grants_lifelink / IsLordPermanent / hand_size_anthem_max / life_above_start_anthem_life), so this pair touches exactly one behavioural site and every other deck stays byte-identical. WHAT IT DOES IN A SAPROLING DECK: every body this archetype makes arrives summoning-sick and could not attack the turn it was created -- spore pops (PermAbilityMode::SporeSaproling), Tukatongue's death trigger, Mycoloth's upkeep Saprolings, all doubled again by Doubling Season. With this out they attack immediately, which COMPOUNDS with Beastmaster Ascension rather than merely adding to it: quest counters land one per DECLARED attacker (ApplyAttackQuestCounters, at declare-attackers) and the anthem applies to the SAME combat that crossed the threshold, so a wider immediate attack raises both the body count and the per-body bonus. [PARTIAL: the printed grant is \"ALL creatures\", both sides; HasHasteFromLords is controller-scoped, so only OUR creatures are hasted. WHY inert -- the goldfish opponent's board is the fixed OpponentSpawn pattern cycle (GoldFishRunner::PopulateOpponentSpawns): vanilla P/T bodies with no CardDefinition and therefore no abilities, which that function's own comment records as never attacking or blocking. There is nothing haste could unlock for them.] [PARTIAL: the WORLD supertype's world rule (CR 704.5m -- all but the most recently played World permanent are put into their owners' graveyards) is NOT modelled. Supertype::World parses and is queryable via CardHasSupertypeNamed, but the only supertype SBA the engine runs is the legend rule (EnforceLegendRule), and this is the first World card in the file. WHY inert -- at exactly ONE copy, with an opponent that plays no World permanents, two World permanents can never coexist. THE INVARIANT GOES LIVE AT TWO OR MORE COPIES, where a second would kill the first in paper and the engine would keep both.] [CERTIFICATE NOTE, load-bearing: this card RETIRES premise 2 of FungusProvider::ProvenWinlessThisTurn (\"nothing grants haste, so this turn's attackers are exactly the creatures CanAttackFull reports now\"). FungusCertKnownDef is a NAME whitelist and this name is deliberately NOT on it, so the certificate DECLINES at every node where a copy sits in hand, on the battlefield or in the graveyard -- the safe direction, and precisely the property the whitelist exists to buy. Do NOT add the name without first re-deriving the damage bound to credit every creature CREATABLE this turn as an attacker; the joint-budget shortcut breaks too, since it spends summoning-sick bodies FIRST on the grounds that they cost no attack. Fungus becomes the third deck in the AngelsProvider / BreachingDragonstormProvider haste-grant class.]]",
+   "template": "custom",
+   "parameters": {
+    "grants_haste": true,
+    "affects_all_creatures": true
    }
   },
   {

@@ -1897,6 +1897,32 @@ inline void PutQuestCounters(GameState& state, Permanent& p, int n)
     p.quest_counters += n << DoublerShift(state, p.controller_index, /*for_tokens=*/false);
 }
 
+// DEPLETION counters on a land entering the battlefield (Peat Bog / Hickory Woodlot / Sandstone
+// Needle / Saprazzan Skerry / Remote Farm: "enters tapped with two depletion counters on it").
+//
+// Why this exists: the land drop used to stamp `Counter{Depletion, N}` DIRECTLY into perm.counters
+// (LandPlay.cpp), bypassing every doubling chokepoint -- so Doubling Season did not double them.
+// It should: "enters with N counters" is a replacement effect (CR 614.1c) and CR 121.6 is the same
+// rule that doubles a planeswalker's starting loyalty, which the block above already relies on for
+// devour. Under one Doubling Season a Peat Bog enters with FOUR depletion counters, i.e. twice the
+// mana over its life.
+//
+// BYTE-IDENTICAL FOR EVERY COMMITTED DECK at the time this landed: the depletion lands live in
+// Angels / BreachingDragonstorm / CritterLifegain / Dragonstorm / Mirrorwing Dragon / treasure_hunt,
+// the only counter-doubler in cards.json is Doubling Season, and the only deck playing it (Fungus)
+// ran no depletion land. DoublerShift's own per-game `deck_has_counter_doubler` stamp makes that a
+// guarantee rather than an observation. It goes live for the Fungus list revision, which pairs
+// 4 Doubling Season with 4 Peat Bog + 4 Hickory Woodlot -- and the direction matters: left
+// unfixed, the bug UNDER-rated exactly the arm under test.
+inline void PutDepletionCounters(GameState& state, Permanent& p, int n)
+{
+    if (n <= 0) { return; }
+    Counter dep;
+    dep.type  = Counter::Type::Depletion;
+    dep.count = n << DoublerShift(state, p.controller_index, /*for_tokens=*/false);
+    p.counters.push_back(dep);
+}
+
 // True while candidates are being enumerated FOR THE SEARCH (variant fan); false on the greedy
 // paths (d0 decision + rollout leaves), which bind the provider's first pick with no branch.
 // Set/reset by TurnSolver around enumeration (was file-local there; shared 2026-08-26 so a

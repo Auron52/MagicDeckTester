@@ -100,13 +100,10 @@ bool PlayLandFromHand(GameState& state, std::size_t hand_index, const CardDefini
     perm.owner_index       = state.active_player_index;
     perm.entered_this_turn = true;
     perm.tapped            = tapped;
-    if (fdef.params.enters_tapped_with_depletion > 0)
-    {
-        Counter dep;
-        dep.type  = Counter::Type::Depletion;
-        dep.count = fdef.params.enters_tapped_with_depletion;
-        perm.counters.push_back(dep);
-    }
+    // Routed through the shared chokepoint so Doubling Season applies (CR 121.6 / 614.1c -- the
+    // same rule that doubles devour's enters-with counters). Stamping the Counter here directly is
+    // what made depletion the one counter kind a doubler could not see; see PutDepletionCounters.
+    PutDepletionCounters(state, perm, fdef.params.enters_tapped_with_depletion);
     state.battlefield.push_back(perm);
     // ASCEND (Ocelot Pride): a land drop raises the permanent count, and land drops deliberately do
     // NOT route through FireEtbWatchers (see the snow-watcher note below), so the city's-blessing

@@ -292,6 +292,7 @@ add_executable(mtg-test
     test/unit/test_breaching_clauses.cpp
     test/unit/test_edf_blink_target.cpp
     test/unit/test_critter_lifegain.cpp
+    test/unit/test_fungus_revision.cpp
     test/unit/test_keep_table.cpp
     test/unit/test_angels_tribal.cpp
     test/unit/test_game_work_meter.cpp
