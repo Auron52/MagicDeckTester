@@ -230,6 +230,120 @@ is that one breakpoint state yields one cands list. Measured: `prefix-snaps=323,
 state-dup=43,242` -- only **13.4%** of prefixes repeat a state. The converging plans diverge at the
 breakpoint and only meet at end of turn, so a state-keyed prefix cache does not reach them.
 
+### The activation-source fold is never applied where Snow's width is (2026-09-24)
+
+This supersedes the "zero degeneracy" reading in the retraction below. That census was run over a
+cell whose population is dominated by games that finish cheaply; **on a game the work ceiling
+discards the answer is completely different**, and those games are 55.3% of the cell's units.
+
+Measured on H5 seed 8008, at the wave node, base plans only:
+
+| game | plans | distinct | src-blind-distinct | degenerate |
+|---|---:|---:|---:|---:|
+| g33 (completes, 130 s) | 462,216 | 462,216 | 447,204 | **3.2%** |
+| g26 (abandoned, 782 s) | 2,712,039 | 2,712,039 | 2,207,842 | **18.6%** |
+| chunk off25, all 12 pooled | 19,441,343 | 19,441,343 | 18,135,223 | 6.7% |
+
+So ~504,000 base plans per degenerate game differ from another base plan **only in which physical
+permanent they touch**, and each one costs a whole subtree (its `bp_at` slots x their ranks x the
+nested wave). Four measurements then narrow that to a single line of code:
+
+1. **WHICH FIELD.** `BpCandFingerprint` takes a blind mask (`kBlindSac` / `kBlindHand`), so the two
+   physical-identity axes can be counted separately instead of as one "source-blind" aggregate:
+
+       node plans total=2712039 distinct=2712039 src-blind-distinct=2207842
+                                                 sac-blind=2207842 hand-blind=2712039
+
+   `hand-blind == total` and `sac-blind == src-blind`: **100% of it is `sac_source_id`, 0% is
+   `hand_index`.** The hand-cast half of the fold (`MTG_FOLD_HAND_CASTS`) leaves nothing on the
+   table; the activation half leaks all of it.
+
+2. **NOT THE PREDICATE.** `MTG_FOLD_REFUSE_CENSUS` attributes every `PermIsPlainForFold` outcome to
+   its clause. Over the whole chunk: **99,555,664 calls, 100.0% PLAIN, zero refusals.** So the
+   "relax a clause and move the distinction into the tag" idea -- the shape that worked for spore
+   counters -- has nothing to relax here. Coldsteel Heart's locked colour and Rimefeather Owl's ice
+   counters were both plausible and are both innocent: those permanents are not the ones being
+   enumerated.
+
+3. **NOT CLASS VALIDATION.** `MTG_BF_CENSUS`: of 395,485,050 tagged actions, `drop_sig=0` (no class
+   ever failed the field-identity condition) and `drop_src=1,157,008` (0.29%). The classes form and
+   they are valid. 69.5% are singletons, which is not a leak.
+
+4. **THE GUARD IS NOT CONSULTED.** The canonical-prefix rule is fenced behind `foldsel::Take()` --
+   "this selection came off an odometer" -- because a hand-CONSTRUCTED line has no twin and
+   rejecting it deletes it outright (knights gi497 lost a turn-4 kill exactly that way). The census
+   splits the fence by call site:
+
+       bf_foldsite greedy  calls=2,606,886,966  from_odometer=2,606,886,966 (100%)  rejected=909,313,023
+       bf_foldsite search  calls=  330,079,681  from_odometer=   67,134,233 (20.3%) rejected= 14,462,840
+
+   **79.7% of the search's selections never reach the fold**, because the search grew its own
+   private copy of the subset walk and that copy never set the flag. And the search is exactly where
+   Snow's width is: `bf_src` reports `Scrying Sheets activations=38,988,401 distinct_physical_sources=4`
+   and `Frost Augur activations=37,586,408 distinct_physical_sources=3` -- the top two action kinds
+   by more than 2x over anything else.
+
+`MTG_FOLD_SEARCH_ODO` is the one-line lever for precisely that gap and is **already in the tree at
+default OFF**, with a set-site comment that states the consequence outright: *"turning
+MTG_FOLD_ACT_SOURCES off leaves the search's candidate widths BYTE-IDENTICAL (62.2844 either way)
+... the deduplication everyone assumes is deduplicating Snow's four Scrying Sheets has never once
+been applied where those widths are counted."* Its own stated adoption bar is `MTG_FOLD_VERIFY`,
+which builds each rejected selection's canonical twin and counts `UNRECOVERABLE` -- a runtime check,
+not an argument.
+
+#### What arming it does (paired A/B, chunk off25, both arms in one pooled batch)
+
+| | control | armed |
+|---|---|---|
+| completing games, digest | -- | **5 of 5 byte-identical** |
+| `g26` (the 782 s game above) | `played=0` (discarded) | **`played=1 avg=7.0000`** |
+| chunk wall | 5,177 s | 5,182 s (**1.001x**) |
+
+**The wall is flat and that is the expected result, not a disappointment.** An abandoned game burns
+its whole 40M-unit ceiling either way, so the ceiling -- not the search's efficiency -- sets its
+wall. What the fold buys is COVERAGE PER UNIT: the same 40M units now reach the end of g26's tree,
+so the game completes instead of being discarded. The benefit is therefore denominated in
+ABANDONMENTS, not in seconds, and it lands on the 55.3% of the cell that currently banks nothing.
+
+Byte-identical digests on every game that completes is the losslessness evidence: the rule is
+removing arrangements whose twin was enumerated beside them, exactly as claimed, and the play it
+produces is unchanged.
+
+#### The soundness gate, run (MTG_FOLD_VERIFY, same chunk)
+
+    bf_fold ... recoverable=1,053,475,731  UNRECOVERABLE=0  guard_reject=1,053,475,731
+                                                            (greedy=976,672,216 search=76,803,515)
+    bf_foldsite search calls=502,269,230 from_odometer=348,662,200 (69.4%) rejected=76,803,515
+
+`VerifyFoldRecoverable` builds the canonical twin of **every** rejected selection and checks it is
+itself enumerable. Over 1.05 billion rejections: **zero unrecoverable.** That is the precondition
+the set site names, discharged on the population where the rule fires hardest -- search-site
+rejections rise 14,462,840 -> 76,803,515 (5.3x) when the flag is armed, so the check is emphatically
+not vacuous here.
+
+#### What is still NOT settled: default-ON
+
+Losslessness is not play-neutrality **under a budget**. Units are the budget's currency, so a node
+that consumes fewer of them buys the rest of the search more search -- the same trap `LazyLeafOn`
+documents and refuses to fire under a limited budget for. The matrix runs `budget_ms: 0`, where the
+coupling does not exist; the regression suite does not. So:
+
+* **For the matrix** (unbounded) the lever is sound, lossless, and strictly reduces censoring. It
+  can be set per-job from the driver without touching any other deck.
+* **For shipped budgeted play** it is a reserved decision: it would move ground truth on every deck
+  whose search reaches the odometer, and that needs the full A/B plus a rebaseline, not this chunk.
+
+**One consequence to put in front of the user rather than decide.** A rescued game ENTERS THE
+SAMPLE, and the games the ceiling discards are the hard ones, which win late (`g26` at turn 7
+against a chunk whose completing games are 5, 5, 5, 5, 6). So arming this does not merely make the
+cell cheaper -- it makes the cell's mean win turn less censored, and therefore different. Every
+already-banked row was measured under the old censoring. Per the standing rule, an optimisation that
+collects the SAME data more cheaply is adoptable on evidence, but one that changes WHICH data is
+collected is the user's call. This is the second kind. It is also, on the merits, a bias being
+removed rather than introduced: today H5 silently drops its 12 hardest games while a shallower arm
+drops fewer, so the depth comparison the matrix exists to make is already being taken across
+different populations.
+
 ### RETRACTED: the "unfolded physical-source axis" (2026-09-24)
 
 An earlier revision of this section reported that 41.3% of the wave's duplicates
@@ -249,9 +363,12 @@ On H5 s8008, over the base plans that actually open wave slots:
 
     node plans total=202,359  distinct=202,359  src-blind-distinct=202,359
 
-**Zero degeneracy, by either key.** Source-blinding removes nothing, so there is no unfolded
-physical-source axis and `MTG_FOLD_ACT_SOURCES` is already covering what the user's 2026-09-09
-ruling describes. The duplicates are genuinely different plans reaching the same state.
+**Zero degeneracy, by either key** *on that population*. The retraction of the duplicate-level
+counter stands: it measured base-plan identity and nothing else. But the conclusion drawn from this
+follow-up census -- "there is no unfolded physical-source axis" -- was **wrong, and wrong for a
+reason worth naming: it was measured on games that finish.** Re-run on a game the ceiling discards
+it reads 18.6%, and those games carry 55.3% of the cell. See the section above. Neither number is
+noise; they are different populations, and only one of them is where the runtime is.
 
 ### Where H5's units actually are (measured 2026-09-24, current engine)
 

@@ -7956,8 +7956,77 @@ inline bool FoldCounterSourcesOn()
     static const bool env_on = EnvOn("MTG_FOLD_COUNTER_SOURCES");
     return heurarm::Flag(heurarm::FOLD_COUNTER_SOURCES, env_on);
 }
+
+
+// --- WHICH CLAUSE REFUSES (MTG_FOLD_REFUSE_CENSUS, probe-only, default off) --------------------
+// PermIsPlainForFold is a long conjunction of "provably plain" tests, every one of which returns the
+// same `false`. When a deck shows residual activation-source branching WITH the fold on -- Snow's
+// base plans are 18.6% source-degenerate (2,712,039 -> 2,207,842 src-blind), and the axis probe
+// pinned 100% of that on sac_source_id, i.e. on ACTIVATIONS -- the aggregate cannot say which clause
+// is doing the refusing, and therefore cannot say whether the refusal is load-bearing or just a
+// distinction that belongs IN THE TAG (which is exactly what MTG_FOLD_COUNTER_SOURCES did for spore
+// and quest counters). This attributes each refusal to its clause and remembers one offending card
+// name per clause, which on a 17-card deck is enough to name the culprit outright.
+namespace foldcensus
+{
+enum : int {
+    kDamage = 0, kAttached, kMarked, kTempPT, kChargeVerseStorage, kStorageHold, kGarth, kLoyalty,
+    kCastLifegain, kChosenColor, kIceAge, kSporeQuest, kTempHasteEtc, kChosenSubtype, kAnimatedToken,
+    kCopyName, kAttachedScan, kPlain, kReasonCount
+};
+static const char* kReasonNames[kReasonCount] = {
+    "damage/death-trigger/counters", "aura-or-equip-on-self", "marked_for_destruction",
+    "temp_power/toughness", "charge/verse/storage counters", "storage_hold_this_turn",
+    "garth_chosen_mask", "loyalty", "colored_cast_lifegain_used", "chosen_color (locked mana rock)",
+    "ice/age counters", "spore/quest counters", "temp_haste/lifelink/exile_at_end",
+    "chosen_subtype_id", "is_animated/is_token/echo_resolved", "copy_printed_name",
+    "something ATTACHED to it", "PLAIN (folded)"
+};
+static std::atomic<long long> g_n[kReasonCount];
+static std::atomic<const std::string*> g_name[kReasonCount];
+inline bool On()
+{
+    static const bool on = EnvOn("MTG_FOLD_REFUSE_CENSUS");
+    return on;
+}
+struct Dumper
+{
+    ~Dumper()
+    {
+        long long tot = 0;
+        for (int i = 0; i < kReasonCount; ++i) { tot += g_n[i].load(); }
+        if (tot == 0) { return; }
+        std::fprintf(stderr, "[fold-refuse] PermIsPlainForFold outcomes (total=%lld)\n", tot);
+        for (int i = 0; i < kReasonCount; ++i)
+        {
+            const long long n = g_n[i].load();
+            if (n == 0) { continue; }
+            const std::string* nm = g_name[i].load();
+            std::fprintf(stderr, "[fold-refuse] %-34s %12lld (%5.1f%%)  e.g. %s\n",
+                         kReasonNames[i], n, 100.0 * static_cast<double>(n) / static_cast<double>(tot),
+                         nm ? nm->c_str() : "?");
+        }
+    }
+};
+static Dumper g_dumper;
+}   // namespace foldcensus
+
+static bool PermIsPlainForFoldImpl(const GameState& state, const Permanent& p, int& why);
+
 static bool PermIsPlainForFold(const GameState& state, const Permanent& p)
 {
+    if (!foldcensus::On()) { int why; return PermIsPlainForFoldImpl(state, p, why); }
+    int why = foldcensus::kPlain;
+    const bool ok = PermIsPlainForFoldImpl(state, p, why);
+    foldcensus::g_n[why].fetch_add(1, std::memory_order_relaxed);
+    if (foldcensus::g_name[why].load(std::memory_order_relaxed) == nullptr)
+    { foldcensus::g_name[why].store(&p.card.m_name.str(), std::memory_order_relaxed); }
+    return ok;
+}
+
+static bool PermIsPlainForFoldImpl(const GameState& state, const Permanent& p, int& why)
+{
+    why = foldcensus::kDamage;
     if (p.damage != 0 || p.pending_death_trigger != 0 || !p.counters.empty()) { return false; }
     // SUMMONING SICKNESS IS AN ORDERING CONCERN, NOT A MEMBERSHIP ONE -- and this replaces an
     // earlier, stricter form that refused to fold anything which entered this turn.
@@ -7995,16 +8064,27 @@ static bool PermIsPlainForFold(const GameState& state, const Permanent& p)
     //     what the rest of this function enforces: every other differentiating field at its default
     //     and nothing attached. (An ALREADY-animated permanent is refused outright by is_animated
     //     below, so it never reaches this argument.)
+    why = foldcensus::kAttached;
     if (p.aura_attached_to != 0 || p.equipped_to != 0) { return false; }
+    why = foldcensus::kMarked;
     if (p.marked_for_destruction) { return false; }
+    why = foldcensus::kTempPT;
     if (p.temp_power_bonus != 0 || p.temp_tough_bonus != 0) { return false; }
+    why = foldcensus::kChargeVerseStorage;
     if (p.charge_counters != 0 || p.verse_counters != 0 || p.storage_counters != 0) { return false; }
+    why = foldcensus::kStorageHold;
     if (p.storage_hold_this_turn) { return false; }
+    why = foldcensus::kGarth;
     if (p.garth_chosen_mask != 0) { return false; }
+    why = foldcensus::kLoyalty;
     if (p.loyalty != 0 || p.loyalty_activated_this_turn) { return false; }
+    why = foldcensus::kCastLifegain;
     if (p.colored_cast_lifegain_used_this_turn) { return false; }
+    why = foldcensus::kChosenColor;
     if (p.chosen_color != -1) { return false; }
+    why = foldcensus::kIceAge;
     if (p.ice_counters != 0 || p.age_counters != 0) { return false; }
+    why = foldcensus::kSporeQuest;
     // Spore / quest counters differentiate two otherwise identical copies, and LOAD-BEARINGLY so:
     // a Thallid holding 2 spores and one holding 5 are not interchangeable activation sources (one
     // can pop, the other cannot), and folding them would pick a winner among real alternatives.
@@ -8012,18 +8092,24 @@ static bool PermIsPlainForFold(const GameState& state, const Permanent& p)
     // membership, so UNEQUAL counts still never share a class -- see the note above this function.
     if (!FoldCounterSourcesOn() && (p.spore_counters != 0 || p.quest_counters != 0))
     { return false; }
+    why = foldcensus::kTempHasteEtc;
     if (p.temp_haste || p.temp_lifelink || p.exile_at_end) { return false; }
+    why = foldcensus::kChosenSubtype;
     if (p.chosen_subtype_id != 0) { return false; }
+    why = foldcensus::kAnimatedToken;
     if (p.is_animated || p.is_token || p.echo_resolved) { return false; }
     // A copy effect can make two same-named permanents differ, and a token is never plain above.
+    why = foldcensus::kCopyName;
     if (!static_cast<const std::string&>(p.copy_printed_name).empty()) { return false; }
     // ...and nothing ATTACHED TO it. This is the "land auras" case: the attachment lives on the
     // OTHER permanent, so it cannot be seen from p's own fields.
+    why = foldcensus::kAttachedScan;
     for (const Permanent& q : state.battlefield)
     {
         if (q.aura_attached_to == p.card.m_number) { return false; }
         if (q.equipped_to      == p.card.m_number) { return false; }
     }
+    why = foldcensus::kPlain;
     return true;
 }
 
@@ -8587,10 +8673,14 @@ inline bool Take() { const bool b = g_from_odometer; g_from_odometer = false; re
 // MTG_FOLD_SEARCH_ODO -- DEFAULT OFF; =1 enables. Arms the flag above on the SEARCH's own
 // subset walk, which is a second, private copy of the odometer that was never wired to it. See
 // the set site in EnumeratePlansWithLandUncached for the measurement that found the gap.
+//
+// Per-JOB (heurarm) so the control and the armed arm pool into ONE batch instead of one invocation
+// each: this lever's A/B population is Snow's slowest games, where a per-arm split would idle the
+// box against a 13-minute tail twice over.
 static bool FoldSearchOdometerOn()
 {
-    static const bool on = EnvOn("MTG_FOLD_SEARCH_ODO");
-    return on;
+    static const bool env_on = EnvOn("MTG_FOLD_SEARCH_ODO");
+    return heurarm::Flag(heurarm::FOLD_SEARCH_ODO, env_on);
 }
 
 static bool FoldVerifyOn()
@@ -11414,7 +11504,11 @@ int TurnSolver::BpChainCandIndex(const GameState& state,
 // interchangeable"*), which is the premise MTG_FOLD_ACT_SOURCES ships on. Never use this for a
 // SKIP -- two sacrifices of different creatures are genuinely different plans and this cannot tell
 // them apart. It is a CLASSIFIER for the verifier's residue, nothing more.
-static uint64_t BpCandFingerprint(const TurnSolver::Plan& p, bool source_blind = false)
+// Which PHYSICAL-IDENTITY fields to zero. Split from the old bool because the two axes turn out to
+// behave completely differently on Snow, and an aggregate "source-blind" number cannot say which one
+// a fold would have to cover: see the census at plans_sbdistinct.
+enum : int { kBlindNone = 0, kBlindSac = 1, kBlindHand = 2, kBlindBoth = 3 };
+static uint64_t BpCandFingerprint(const TurnSolver::Plan& p, int blind = kBlindNone)
 {
     uint64_t h = 1469598103934665603ull;
     auto fold = [&h](uint64_t v) { h ^= v; h *= 1099511628211ull; };
@@ -11422,10 +11516,14 @@ static uint64_t BpCandFingerprint(const TurnSolver::Plan& p, bool source_blind =
     fold(static_cast<uint64_t>(p.actions.size()));
     for (const Action& a0 : p.actions)
     {
-        Action blind;
-        if (source_blind)
-        { blind = a0; blind.sac_source_id = 0; blind.hand_index = -1; }
-        const Action& a = source_blind ? blind : a0;
+        Action blind_a;
+        if (blind != kBlindNone)
+        {
+            blind_a = a0;
+            if (blind & kBlindSac)  { blind_a.sac_source_id = 0; }
+            if (blind & kBlindHand) { blind_a.hand_index    = -1; }
+        }
+        const Action& a = (blind != kBlindNone) ? blind_a : a0;
         fold(static_cast<uint64_t>(a.kind));
         folds(a.card_name.str());
         folds(a.chosen_float_color.str());
@@ -35651,6 +35749,10 @@ namespace
         //                        states and MTG_FOLD_ACT_SOURCES already applies to activations.
         // plans_sbdistinct << plans_total is the branching factor that a fold could remove.
         std::atomic<uint64_t> plans_total{0}, plans_distinct{0}, plans_sbdistinct{0};
+        // ...and the two physical-identity axes SEPARATELY, because the aggregate cannot say which
+        // one a fold would have to cover. sac = which permanent was tapped/sacrificed;
+        // hand = which copy in hand was cast.
+        std::atomic<uint64_t> plans_sacdistinct{0}, plans_handdistinct{0};
         // ...and WHOSE state the duplicate repeats, which decides where a fix belongs:
         //   dup_self  = an earlier RANK OF THE SAME SLOT (same base plan, same bp_at). The
         //               continuation LIST is internally redundant -> fix in the continuation
@@ -35721,7 +35823,8 @@ namespace
                          " | pre-plans dup=%llu/%llu"
                          " | lookahead-share scored=%llu rolled=%llu retired=%llu dupstate=%llu"
                          " | dup_cross sameb=%llu diffb=%llu prefix-snaps=%llu state-dup=%llu"
-                         " | node plans total=%llu distinct=%llu src-blind-distinct=%llu\n",
+                         " | node plans total=%llu distinct=%llu src-blind-distinct=%llu"
+                         " sac-blind=%llu hand-blind=%llu\n",
                          static_cast<unsigned long long>(nodes.load()),
                          static_cast<unsigned long long>(no_slots.load()),
                          static_cast<unsigned long long>(slots.load()),
@@ -35762,7 +35865,9 @@ namespace
                          static_cast<unsigned long long>(prefix_state_dup.load()),
                          static_cast<unsigned long long>(plans_total.load()),
                          static_cast<unsigned long long>(plans_distinct.load()),
-                         static_cast<unsigned long long>(plans_sbdistinct.load()));
+                         static_cast<unsigned long long>(plans_sbdistinct.load()),
+                         static_cast<unsigned long long>(plans_sacdistinct.load()),
+                         static_cast<unsigned long long>(plans_handdistinct.load()));
         }
     };
     BpWaveProbe g_bp_wave_probe;
@@ -36160,16 +36265,21 @@ public:
         // each -- every one multiplies by its bp_at slots and their ranks. Probe-only.
         if (BpWaveProbeOn() && !m_bases.empty())
         {
-            std::unordered_set<uint64_t> full, sb;
+            std::unordered_set<uint64_t> full, sb, sac, hnd;
             full.reserve(m_bases.size()); sb.reserve(m_bases.size());
+            sac.reserve(m_bases.size());  hnd.reserve(m_bases.size());
             for (std::size_t bi : m_bases)
             {
                 full.insert(BpCandFingerprint(plans[bi]));
-                sb.insert(BpCandFingerprint(plans[bi], /*source_blind=*/true));
+                sb.insert (BpCandFingerprint(plans[bi], kBlindBoth));
+                sac.insert(BpCandFingerprint(plans[bi], kBlindSac));
+                hnd.insert(BpCandFingerprint(plans[bi], kBlindHand));
             }
             g_bp_wave_probe.plans_total.fetch_add(m_bases.size(), std::memory_order_relaxed);
             g_bp_wave_probe.plans_distinct.fetch_add(full.size(), std::memory_order_relaxed);
             g_bp_wave_probe.plans_sbdistinct.fetch_add(sb.size(), std::memory_order_relaxed);
+            g_bp_wave_probe.plans_sacdistinct.fetch_add(sac.size(), std::memory_order_relaxed);
+            g_bp_wave_probe.plans_handdistinct.fetch_add(hnd.size(), std::memory_order_relaxed);
         }
     }
 
@@ -51491,9 +51601,9 @@ static BpEnumEntry* BpEnumEntryFor(const GameState& state, bool is_pre_combat,
                     std::vector<std::uint64_t> fb, sb;
                     fb.reserve(fresh.size()); sb.reserve(served.size());
                     for (const TurnSolver::Plan& p : fresh)
-                    { fb.push_back(BpCandFingerprint(p, /*source_blind=*/true)); }
+                    { fb.push_back(BpCandFingerprint(p, kBlindBoth)); }
                     for (const TurnSolver::Plan& p : served)
-                    { sb.push_back(BpCandFingerprint(p, /*source_blind=*/true)); }
+                    { sb.push_back(BpCandFingerprint(p, kBlindBoth)); }
                     std::sort(fb.begin(), fb.end());
                     std::sort(sb.begin(), sb.end());
                     if (fb == sb)
