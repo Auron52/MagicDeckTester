@@ -9222,6 +9222,75 @@ inline void FireUtvaraAttackTokens(GameState& state, int controller,
     }
 }
 
+// Shroofus Sproutsire: "Whenever a Saproling you control deals combat damage to a player, create
+// that many 1/1 green Saproling creature tokens." The combat-damage-step sibling of
+// FireUtvaraAttackTokens above, and deliberately a separate helper: Utvara counts DECLARED
+// ATTACKERS at declare-attackers, this counts DAMAGE DEALT one step later.
+//
+// `damaging` is the (battlefield index, damage dealt) list the damage loop already builds -- the
+// SAME `power` it subtracted from the opponent's life, i.e. after lords, the Beastmaster anthem and
+// any Jitte spend. That is the card: a 1/1 Saproling under a Sporecrown connects for 2 and makes
+// two; with the Ascension online it connects for 7 and makes seven.
+//
+// ONE SEPARATE TRIGGER PER CONNECTING CREATURE (CR 603.2), and the source watches every matching
+// creature its controller controls -- including ITSELF, since Shroofus is a Saproling. Tokens enter
+// untapped and summoning-sick via CreateToken (so each fires FireEtbWatchers) and do NOT join the
+// combat that made them.
+//
+// Two structural requirements, both inherited from the Utvara helper and both load-bearing:
+//   (a) gather every source's spec BEFORE any CreateToken -- CreateToken push_backs onto
+//       state.battlefield and invalidates references held across it;
+//   (b) call CreateToken, never CreateTokenOnce, or Doubling Season silently stops applying.
+// And one that is specific to this card: match on the ATTACKER's `card.m_subtypes` via
+// CardHasSubtype, never on a CardDefinition. Every Saproling is a token with no definition, so a
+// def-keyed test would see none of the population this ability exists to watch.
+inline void FireCombatDamageTokens(GameState& state, int controller,
+                                   const std::vector<int>& damaging_idx,
+                                   const std::vector<int>& damaging_pw)
+{
+    if (damaging_idx.empty()) { return; }
+    struct Spec { int n, p, t; std::vector<std::string> subs, kws; std::string color; };
+    std::vector<Spec> specs;
+    const int bf_size = static_cast<int>(state.battlefield.size());
+    for (int i = 0; i < bf_size; ++i)
+    {
+        const Permanent& src = state.battlefield[i];
+        if (src.controller_index != controller) { continue; }
+        if (src.def_absent) { continue; }   // see Permanent::def_absent (same `continue`, no call)
+        const CardDefinition* sdef = CardDatabase::Instance().LookupCached(src.card);
+        if (!sdef || sdef->params.combat_damage_tokens_per_damage <= 0) { continue; }
+
+        long long dealt = 0;
+        const std::size_t n = std::min(damaging_idx.size(), damaging_pw.size());
+        for (std::size_t k = 0; k < n; ++k)
+        {
+            const int idx = damaging_idx[k];
+            if (idx < 0 || idx >= bf_size) { continue; }
+            const Permanent& atk = state.battlefield[static_cast<std::size_t>(idx)];
+            bool m = sdef->params.combat_damage_watch_subtypes.empty()
+                  || atk.is_animated;   // animated land = every creature type
+            for (const std::string& req : sdef->params.combat_damage_watch_subtypes)
+            {
+                if (m) { break; }
+                if (CardHasSubtype(atk.card, req)) { m = true; }
+            }
+            if (m) { dealt += std::max(0, damaging_pw[k]); }
+        }
+        if (dealt <= 0) { continue; }
+        specs.push_back({ static_cast<int>(dealt * sdef->params.combat_damage_tokens_per_damage),
+                          sdef->params.combat_damage_token_power,
+                          sdef->params.combat_damage_token_toughness,
+                          sdef->params.combat_damage_token_subtypes,
+                          sdef->params.combat_damage_token_keywords,
+                          sdef->params.combat_damage_token_color });
+    }
+    for (const Spec& s : specs)
+    {
+        for (int k = 0; k < s.n; ++k)
+        { CreateToken(state, controller, s.p, s.t, s.subs, s.color, s.kws); }
+    }
+}
+
 // ---- Goblins combat attack-trigger self-pumps (Piledriver / Muxus) -------------------------------
 // "Whenever this attacks, it gets +X/+Y until end of turn for each other <...>." Applied at
 // declare-attackers in BOTH worlds (executor CombatPhase + rollout SimulateCombat), writing

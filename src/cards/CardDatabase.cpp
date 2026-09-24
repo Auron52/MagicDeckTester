@@ -859,6 +859,19 @@ CardParams CardDatabase::BuildParamsFromJson(const json& params) const
         p.attack_per_token_keywords.push_back(s);
     for (const std::string& s : params.value("attack_token_requires_subtypes", json::array()))
         p.attack_token_requires_subtypes.push_back(s);
+
+    // Shroofus Sproutsire: per-connecting-creature tokens, count = damage dealt to the player.
+    p.combat_damage_tokens_per_damage = params.value("combat_damage_tokens_per_damage", 0);
+    p.combat_damage_token_power       = params.value("combat_damage_token_power", 0);
+    p.combat_damage_token_toughness   = params.value("combat_damage_token_toughness", 0);
+    p.combat_damage_token_color       = params.value("combat_damage_token_color", std::string{});
+    for (const std::string& s : params.value("combat_damage_watch_subtypes", json::array()))
+        p.combat_damage_watch_subtypes.push_back(s);
+    for (const std::string& s : params.value("combat_damage_token_subtypes", json::array()))
+        p.combat_damage_token_subtypes.push_back(s);
+    for (const std::string& s : params.value("combat_damage_token_keywords", json::array()))
+        p.combat_damage_token_keywords.push_back(s);
+
     if (params.contains("firebreathing_cost"))
         p.firebreathing_cost = ManaCostFromString(params["firebreathing_cost"].get<std::string>());
     p.firebreathing_power = params.value("firebreathing_power", 0);

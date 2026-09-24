@@ -485,6 +485,12 @@ INERT_PARAMS = {
     "upkeep_tokens_per_plus_one_counter": "mandatory untargeted upkeep trigger (a Saproling per +1/+1 counter) -- count is read from board state, nothing to choose",
     "upkeep_token_color": "token spec constant",
     "sac_outlet_add_mana_any_color": "mana-outlet payload; WHICH Saproling is sacrificed rides the existing `sacrifice` decision and the COLOUR is resolved by the shared ChosenFloatColorCandidates fan as a main_phase plan variant (singleton {G} in this mono-green deck)",
+    # ---- Fungus list revision (2026-09-24) ----
+    "combat_damage_tokens_per_damage": "automatic combat-damage trigger (Shroofus Sproutsire), mandatory and untargeted -- no target, no mode, no 'may', no division. The COUNT is read from board state (the damage the creature actually dealt), the same shape as upkeep_tokens_per_plus_one_counter above. Trigger ORDER among the several simultaneous copies is a CR 603.3b choice but provably inert: each only ADDS tokens and none reads a count, so every ordering gives an identical board",
+    "combat_damage_watch_subtypes": "trigger gating detail (which attackers' damage is counted) -- not a choice",
+    "combat_damage_token_power": "token spec constant", "combat_damage_token_toughness": "token spec constant",
+    "combat_damage_token_subtypes": "token spec constant", "combat_damage_token_color": "token spec constant",
+    "combat_damage_token_keywords": "printed keywords on the combat-damage-created token, no choice",
     "etb_self_lifegain": "mandatory lifegain amount",
     "etb_damage_equals_power": "computed damage (live power substitution on etb_damage_any)",
     "sac_outlet_add_counter_to_self": "outlet payload constant (Carrion Feeder +1/+1) -- the victim choice rides the sacrifice type",
@@ -837,6 +843,7 @@ INERT_PARAMS = {
     "etb_created_token_keywords": "printed keywords on the ETB-created token, no choice",
     "attack_per_token_keywords": "printed keywords on the attack-created token, no choice",
     "colored_creature_only": "Cavern of Souls mana restriction (spend only on creature spells), no choice",
+    "colored_creature_ability_ok": "widens the colored_creature_only restriction above to also permit an ACTIVATED ABILITY whose source is a creature (Secluded Courtyard's 'or activate an ability of a creature source of the chosen type'). A payment-LEGALITY predicate read by the mana solver, not a player decision -- the human never picks whether it applies",
     # --- FiveColour: automatic triggers / mana production / detail params (NO player choice) ---
     # (Choice-bearing FiveColour params are in MAINPHASE_PARAMS below; the underlying resolution
     # decisions -- Archangel banking, Unite mode collapse, Deathrite fungible-fuel picks, the

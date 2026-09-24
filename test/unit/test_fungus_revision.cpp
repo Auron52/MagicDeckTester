@@ -39,8 +39,10 @@
 #include "core/GameState.h"
 #include "core/SpellEffects.h"
 #include "core/HeuristicDefaults.h"
+#include "ai/Combat.h"
 
 #include <string>
+#include <vector>
 
 namespace
 {
@@ -94,6 +96,59 @@ int DepletionOn(const Permanent& p)
     for (const Counter& c : p.counters)
     { if (c.type == Counter::Type::Depletion) { return c.count; } }
     return 0;
+}
+
+GameState Fresh()
+{
+    GameState s;
+    s.active_player_index = 0;
+    s.turn_number         = 4;
+    s.players[0].life     = 20;
+    s.players[1].life     = 20;
+    return s;
+}
+
+// A 1/1 green Saproling TOKEN -- no CardDefinition, def_absent set, subtype written onto the Card
+// exactly as CreateTokenOnce does. This is the population Shroofus actually watches, and the whole
+// reason the trigger matches on Card::m_subtypes rather than on a definition.
+int PutSaprolingToken(GameState& s, int number, bool sick = false)
+{
+    Permanent p;
+    p.card.m_name       = "1/1 Saproling Token";
+    p.card.RehashName();
+    p.card.AddColor(Color::Green);
+    p.card.AddType(CardType::Creature);
+    p.card.m_subtypes   = { "Saproling" };
+    p.card.m_power      = 1;
+    p.card.m_toughness  = 1;
+    p.card.m_number     = number;
+    p.is_token          = true;
+    p.def_absent        = true;
+    p.controller_index  = 0;
+    p.owner_index       = 0;
+    p.entered_this_turn = sick;
+    s.battlefield.push_back(p);
+    return static_cast<int>(s.battlefield.size()) - 1;
+}
+
+int CountSaprolings(const GameState& s)
+{
+    int n = 0;
+    for (const Permanent& p : s.battlefield)
+    { if (CardHasSubtype(p.card, "Saproling")) { ++n; } }
+    return n;
+}
+
+// Attack with every creature currently on our side.
+std::vector<int> AllOurCreatures(const GameState& s)
+{
+    std::vector<int> v;
+    for (int i = 0; i < static_cast<int>(s.battlefield.size()); ++i)
+    {
+        const Permanent& p = s.battlefield[i];
+        if (p.controller_index == 0 && p.card.IsCreature()) { v.push_back(i); }
+    }
+    return v;
 }
 
 }  // namespace
@@ -228,4 +283,104 @@ TEST_CASE("Concordant Crossroads: a NON-CREATURE granter hastes the whole team")
         Put(s, "Concordant Crossroads", 1, 2);   // the OPPONENT's copy
         CHECK_FALSE(CanAttackFull(s.battlefield[sap], s.battlefield, 0));
     }
+}
+
+TEST_CASE("Shroofus Sproutsire: 'that many' is the DAMAGE DEALT, not the printed power")
+{
+    EnsureCardsLoaded();
+
+    SUBCASE("a lone Shroofus connects for 1 and makes exactly one Saproling")
+    {
+        GameState s = Fresh();
+        Put(s, "Shroofus Sproutsire", 0, 1);
+        const auto atk = AllOurCreatures(s);
+        const CombatDamageResult r = ResolveCombatDamage(s, atk, 0, false);
+        CHECK(r.total_damage == 1);
+        // Shroofus is ITSELF a Saproling, so it watches its own combat damage (the Utvara shape).
+        CHECK(CountSaprolings(s) == 2);   // Shroofus + the one token it made
+    }
+
+    SUBCASE("IT FIRES FOR TOKENS -- the population the card exists to watch")
+    {
+        // Three definition-less 1/1 Saproling tokens attacking alongside Shroofus: 3 tokens x 1
+        // damage + Shroofus x 1 = 4 damage, hence 4 new Saprolings. A CardDefinition-keyed watch
+        // would have seen NONE of the three tokens.
+        GameState s = Fresh();
+        Put(s, "Shroofus Sproutsire", 0, 1);
+        for (int i = 0; i < 3; ++i) { PutSaprolingToken(s, 10 + i); }
+        const auto atk = AllOurCreatures(s);
+        const CombatDamageResult r = ResolveCombatDamage(s, atk, 0, false);
+        CHECK(r.total_damage == 4);
+        CHECK(CountSaprolings(s) == 4 + 4);
+    }
+
+    SUBCASE("the count is POST-LORD: a Sporecrown makes each 1/1 Saproling connect for 2")
+    {
+        // Sporecrown Thallid: "Each OTHER creature you control that's a Fungus or Saproling gets
+        // +1/+1." So the three tokens and Shroofus are all 2/2; Sporecrown itself is a 2/2 Fungus
+        // that also attacks but is NOT a Saproling, so its 2 damage creates nothing.
+        GameState s = Fresh();
+        Put(s, "Shroofus Sproutsire", 0, 1);
+        Put(s, "Sporecrown Thallid", 0, 2);
+        for (int i = 0; i < 3; ++i) { PutSaprolingToken(s, 10 + i); }
+        const auto atk = AllOurCreatures(s);
+        const CombatDamageResult r = ResolveCombatDamage(s, atk, 0, false);
+        CHECK(r.total_damage == 2 + 2 + 2 + 2 + 2);          // 4 pumped Saprolings + Sporecrown
+        // Only the SAPROLINGS' damage counts: 4 bodies x 2 = 8, never the Fungus lord's 2.
+        CHECK(CountSaprolings(s) == 4 + 8);
+    }
+
+    SUBCASE("a NON-Saproling attacker's damage is not counted")
+    {
+        GameState s = Fresh();
+        Put(s, "Shroofus Sproutsire", 0, 1);
+        Put(s, "Mycoloth", 0, 2);            // 4/4 Fungus, not a Saproling
+        const auto atk = AllOurCreatures(s);
+        const CombatDamageResult r = ResolveCombatDamage(s, atk, 0, false);
+        CHECK(r.total_damage == 1 + 4);
+        CHECK(CountSaprolings(s) == 1 + 1);  // only Shroofus's own 1 damage made a token
+    }
+
+    SUBCASE("Doubling Season compounds automatically through the CreateToken chokepoint")
+    {
+        GameState s = Fresh();
+        Put(s, "Shroofus Sproutsire", 0, 1);
+        Put(s, "Doubling Season", 0, 2);
+        for (int i = 0; i < 3; ++i) { PutSaprolingToken(s, 10 + i); }
+        const auto atk = AllOurCreatures(s);
+        ResolveCombatDamage(s, atk, 0, false);
+        CHECK(CountSaprolings(s) == 4 + 8);   // 4 damage x 2^1
+    }
+
+    SUBCASE("the tokens are summoning-sick -- they do NOT join the combat that made them")
+    {
+        GameState s = Fresh();
+        Put(s, "Shroofus Sproutsire", 0, 1);
+        const auto atk = AllOurCreatures(s);
+        const CombatDamageResult r = ResolveCombatDamage(s, atk, 0, false);
+        CHECK(r.total_damage == 1);           // the new token dealt nothing this combat
+        for (const Permanent& p : s.battlefield)
+        { if (p.is_token) { CHECK(p.entered_this_turn); } }
+    }
+
+    SUBCASE("it watches only OUR Saprolings -- an opponent's body is not our trigger")
+    {
+        GameState s = Fresh();
+        Put(s, "Shroofus Sproutsire", 0, 1);
+        PutSaprolingToken(s, 10);
+        s.battlefield.back().controller_index = 1;   // theirs
+        s.battlefield.back().owner_index      = 1;
+        const auto atk = AllOurCreatures(s);         // only ours attack
+        ResolveCombatDamage(s, atk, 0, false);
+        CHECK(CountSaprolings(s) == 3);              // Shroofus + their token + our one new token
+    }
+}
+
+TEST_CASE("Shroofus turns the second main on by itself, not parasitically off Mycoloth")
+{
+    EnsureCardsLoaded();
+    // 2c-bis: combat creates Saprolings, which Utopia Mycon / Psychotrope Thallid / Mycoloth all
+    // consume post-combat. Fungus already flips DeckUsesSecondMain via devour, but that clause is
+    // gated on MTG_FUNGUS_M2_DEVOUR and a list revision could cut Mycoloth.
+    CHECK(Def("Shroofus Sproutsire").params.combat_damage_tokens_per_damage > 0);
 }

@@ -107,6 +107,11 @@ CombatDamageResult ResolveCombatDamage(GameState& state, const std::vector<int>&
     std::vector<const Permanent*> attackers;
     attackers.reserve(atk_idx.size());
     std::vector<int> damaging_idx;   // attackers that dealt >0 damage (Goblin Lackey cheat)
+    // ...and HOW MUCH each of them dealt, aligned index-for-index with damaging_idx. Shroofus
+    // Sproutsire's trigger creates "that many" tokens, so the amount is the payload, not just the
+    // fact of connecting -- and it must be the post-lord / post-anthem / post-Jitte `power` below,
+    // which is what actually left the opponent's life total.
+    std::vector<int> damaging_pw;
     // Lifelink gains, ONE ENTRY PER LIFELINKING ATTACKER, applied AFTER the damage loop. Combat
     // damage is simultaneous (CR 510.2) and lifelink's gain is part of that damage event
     // (CR 702.15b), so nothing it causes -- Serra Ascendant's 30-life +5/+5 switching on, an
@@ -183,6 +188,7 @@ CombatDamageResult ResolveCombatDamage(GameState& state, const std::vector<int>&
         {
             state.opponent_lost_life_this_turn = true;
             damaging_idx.push_back(idx);   // Goblin Lackey: dealt combat damage to a player
+            damaging_pw.push_back(power);  // Shroofus Sproutsire: "create THAT MANY" tokens
             // Maelstrom Archangel: connecting banks one free cast for the post-combat main
             // (user-approved banking model; see GameState::free_casts_available). Shared combat
             // core -> executor and rollout bank identically.
@@ -223,6 +229,13 @@ CombatDamageResult ResolveCombatDamage(GameState& state, const std::vector<int>&
     // permanent from hand onto the battlefield (shared enter cascade). Fired AFTER Utvara so the
     // pre-token attacker pointers above are already consumed.
     FireCombatDamageCheatIntoPlay(state, active, damaging_idx);
+
+    // Shroofus Sproutsire: per connecting Saproling, create that many 1/1 green Saprolings. Fired
+    // after Utvara and Lackey for the same reason they are ordered as they are -- the pre-token
+    // attacker pointers above are already consumed, and this helper re-reads the battlefield by
+    // INDEX (bounds-checked) rather than holding references across CreateToken. Every preceding
+    // hook only appends, so damaging_idx stays valid.
+    FireCombatDamageTokens(state, active, damaging_idx, damaging_pw);
 
     // Neheb, the Worthy: "Whenever Neheb deals combat damage to a player, each player discards a
     // card." Fired here, after damage, off the same damaging_idx list Goblin Lackey uses -- so it

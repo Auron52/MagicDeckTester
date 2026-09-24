@@ -151,6 +151,16 @@ bool GoldFishRunner::DeckUsesSecondMain(const Decklist& deck)
         //     second main the resource silently evaporates each turn.
         if (def->params.combat_damage_free_cast) { return true; }
 
+        //   * SHROOFUS SPROUTSIRE (combat-damage tokens): connecting Saprolings create MORE
+        //     Saprolings in the combat-damage step, and in this archetype a Saproling is a
+        //     spendable resource three ways over -- Utopia Mycon turns each into mana, Psychotrope
+        //     Thallid into a card, Mycoloth devours them. Those bodies provably did not exist in
+        //     the pre-combat main, which is exactly 2c-bis's "resources generated during combat".
+        //     Fungus already returns true here via `devour` below, but that clause is gated on
+        //     MTG_FUNGUS_M2_DEVOUR and a list revision could cut Mycoloth -- detection must not be
+        //     parasitic on another card.
+        if (def->params.combat_damage_tokens_per_damage > 0) { return true; }
+
         //   * ARMORED SKYHUNTER + PURESTEEL PALADIN (attack-dig put + equipment-ETB draw): the
         //     attack trigger puts an Equipment onto the battlefield DURING combat; with a
         //     Puresteel-style watcher in the deck that put draws a card mid-combat -- a resource

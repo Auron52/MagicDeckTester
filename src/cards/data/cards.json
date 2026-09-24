@@ -8194,6 +8194,38 @@
    }
   },
   {
+   "name": "Shroofus Sproutsire",
+   "mana_cost": "{2}{G}",
+   "types": [
+    "Creature"
+   ],
+   "supertypes": [
+    "Legendary"
+   ],
+   "subtypes": [
+    "Saproling"
+   ],
+   "keywords": [
+    "Trample"
+   ],
+   "power": 1,
+   "toughness": 1,
+   "oracle_text": "Trample\nWhenever a Saproling you control deals combat damage to a player, create that many 1/1 green Saproling creature tokens. [THE EXPONENTIAL ENGINE, and the first COMBAT-DAMAGE token trigger in this file. combat_damage_tokens_per_damage 1 + combat_damage_watch_subtypes [Saproling], fired from FireCombatDamageTokens inside ResolveCombatDamage -- the ONE shared combat core that GameEngine::CombatPhase and TurnSolver::SimulateCombat both call, so executor/rollout lockstep is by construction rather than by discipline. ONE SEPARATE TRIGGER PER CONNECTING CREATURE (CR 603.2). THE COUNT IS THE DAMAGE, NOT THE PRINTED POWER, and that distinction IS the card: the amount is read from the same post-lord, post-anthem, post-Jitte `power` the damage loop subtracted from the opponent's life, so a 1/1 Saproling token under one Sporecrown Thallid connects for 2 and makes two, and with Beastmaster Ascension at seven quest counters it connects for 7 and makes SEVEN. Reading EffectivePower() instead would silently under-produce by 5-6x on exactly the turns this card decides. The watch matches the ATTACKER's card.m_subtypes via CardHasSubtype and never a CardDefinition -- every Saproling is a TOKEN with def_absent set, so a definition-keyed test would see ZERO of the entire watched population. SHROOFUS IS ITSELF A SAPROLING, so it watches its own combat damage; no self-exclusion, the Utvara Hellkite shape (itself a Dragon). Being a Saproling has three further consequences, all faithful and all left to the search: Sporecrown Thallid's Fungus-or-Saproling lord DOES pump it, Sporesower Thallid's each-Fungus spore sweep does NOT reach it, and it is LEGAL FODDER for Utopia Mycon's and Psychotrope Thallid's \"Sacrifice a Saproling\" outlets and for Mycoloth's devour -- the search may eat its own engine, which is a real trade-off rather than a modelling shortcut. TIMING IS THE WHOLE VALUE: the tokens are created in the COMBAT-DAMAGE step, so (i) they enter summoning-sick and cannot join the combat that made them -- and a haste grant does NOT change that, because there is no second combat step and a body made this turn could attack next turn regardless; (ii) they arrive strictly AFTER Beastmaster Ascension's quest counters, which come from DECLARED attackers at declare-attackers (CR 508.2/508.4, see ApplyAttackQuestCounters), so they bank zero counters toward their own combat; (iii) they ARE on the battlefield for the post-combat main, which is why combat_damage_tokens_per_damage is on DeckUsesSecondMain's whitelist -- in this archetype a Saproling is a spendable resource three ways over (Utopia Mycon mana, Psychotrope card, Mycoloth devour fodder) and those bodies provably did not exist in the pre-combat main. DOUBLING SEASON COMPOUNDS AUTOMATICALLY: the tokens are made through CreateToken, the single chokepoint where the token half of Doubling Season hooks, so N Seasons give damage x 2^N tokens per connecting Saproling. Each replica enters INDIVIDUALLY, so every lord and every enter-watcher sees each one. The trigger is MANDATORY and UNTARGETED -- no target, no mode, no \"may\", no division -- so there is nothing to surface to a human; ordering among the several simultaneous copies is a CR 603.3b choice but provably inert (each only ADDS tokens and none reads a count, so every ordering yields an identical board). Legendary is engine-enforced by EnforceLegendRule; inert at one copy. [PARTIAL: TRAMPLE is parsed into the keywords array (Keyword::Trample) but is structurally INERT -- every reference to Keyword::Trample in the engine is a WRITE, and src/ai/Combat.cpp has no blocker path at all, so 100% of every attacker's power already reaches the player. WHY inert: structural, the Sunrise Sovereign / Borderland Behemoth / Craterhoof Behemoth disclosure class. THE SAME PROOF covers this trigger's \"to a PLAYER\" qualifier -- with no blockers, \"dealt combat damage to a player\" collapses exactly onto the `power > 0` guard the damage loop already applies, so no damage can be mis-credited to a blocker and no trample-overflow arithmetic is reachable.]]",
+   "template": "vanilla_creature",
+   "parameters": {
+    "combat_damage_tokens_per_damage": 1,
+    "combat_damage_watch_subtypes": [
+     "Saproling"
+    ],
+    "combat_damage_token_power": 1,
+    "combat_damage_token_toughness": 1,
+    "combat_damage_token_subtypes": [
+     "Saproling"
+    ],
+    "combat_damage_token_color": "G"
+   }
+  },
+  {
    "name": "Sporecrown Thallid",
    "mana_cost": "{1}{G}",
    "types": [

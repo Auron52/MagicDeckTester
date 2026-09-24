@@ -781,6 +781,37 @@ struct CardParams
     std::vector<std::string> attack_per_token_keywords;       // see etb_created_token_keywords
     std::vector<std::string> attack_token_requires_subtypes;  // attacker subtypes counted (empty = any)
 
+    // Shroofus Sproutsire: "Whenever a Saproling you control deals COMBAT DAMAGE TO A PLAYER,
+    // create THAT MANY 1/1 green Saproling creature tokens." The Utvara block above is the same
+    // shape one step earlier in combat -- Utvara counts DECLARED ATTACKERS at declare-attackers,
+    // this counts DAMAGE DEALT in the combat-damage step -- so the two are deliberately separate
+    // params rather than one overloaded family.
+    //
+    // THE COUNT IS THE DAMAGE, NOT THE PRINTED POWER, and that distinction IS the card: the amount
+    // is read from the same post-lord / post-anthem / post-Jitte `power` the damage loop subtracted
+    // from the opponent's life (Combat.cpp), so a 1/1 Saproling under a Sporecrown Thallid connects
+    // for 2 and makes two, and with Beastmaster Ascension at seven quest counters it connects for 7
+    // and makes SEVEN. Reading EffectivePower() instead would silently under-produce by 5-6x on
+    // exactly the turns the card decides.
+    //
+    // Fired from FireCombatDamageTokens inside ResolveCombatDamage -- the ONE shared combat core
+    // that GameEngine::CombatPhase and TurnSolver::SimulateCombat both call, so executor/rollout
+    // lockstep is by construction rather than by discipline. One separate trigger per connecting
+    // creature (CR 603.2). Tokens enter untapped and summoning-sick and do NOT join the combat that
+    // made them; they also arrive strictly AFTER Beastmaster Ascension's quest counters, which come
+    // from DECLARED attackers (CR 508.2/508.4), so they bank none for their own combat.
+    //
+    // The watch is on the ATTACKER's card subtypes (CardHasSubtype over Card::m_subtypes), never a
+    // CardDefinition -- every Saproling is a TOKEN with def_absent set and no definition, so a
+    // def-keyed test would see ZERO of the entire watched population.
+    int                      combat_damage_tokens_per_damage = 0;
+    std::vector<std::string> combat_damage_watch_subtypes;   // attacker subtypes watched (empty = any)
+    int                      combat_damage_token_power     = 0;
+    int                      combat_damage_token_toughness = 0;
+    std::vector<std::string> combat_damage_token_subtypes;
+    std::vector<std::string> combat_damage_token_keywords;   // see etb_created_token_keywords
+    std::string              combat_damage_token_color;
+
     // Firebreathing (activated pump; converts LEFTOVER combat mana -> attacker power = face
     // damage). Applied in the combat step of BOTH worlds (ApplyFirebreathing, SpellEffects.h) so
     // the win projection sees the extra damage and the search pumps for lethal. Self: Scourge
