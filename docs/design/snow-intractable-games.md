@@ -321,6 +321,46 @@ the set site names, discharged on the population where the rule fires hardest --
 rejections rise 14,462,840 -> 76,803,515 (5.3x) when the flag is armed, so the check is emphatically
 not vacuous here.
 
+#### Widened to the whole cell -- and the result reframes the matrix's cost model
+
+49 games (H5 s8008 gi 0..48), both arms in one pooled batch, 98 jobs on 32 cores, 41 min:
+
+| population | games | control | armed | ratio |
+|---|---:|---:|---:|---:|
+| games that COMPLETE (bank a row) | 32 | 2,240.3 s | 1,982.7 s | **0.885x** |
+| games that hit the unit CEILING | 17 | 20,617.0 s | 21,277.4 s | 1.032x |
+| whole cell | 49 | 22,857.3 s | 23,260.1 s | 1.018x |
+
+**32 of 32 completing digests byte-identical**, and one ceiling-bound game rescued (`g26`).
+
+So the lever is an 11.5% lossless speedup on every game that produces a row -- and the cell still
+gets 1.8% SLOWER, because the two populations are nothing alike:
+
+* **34.7% of games are ceiling-bound, and they are 90.2% of the cell's wall** (mean 1,212.8 s
+  against 70.0 s for a completing game).
+* A ceiling-bound game spends exactly `abandon_units` whatever the search does. Making the search
+  more efficient therefore cannot make it finish sooner -- it makes it cover MORE TREE in the same
+  40M units. The 3.2% is the guard's own per-selection cost, paid against a fixed unit budget.
+
+**THE COST MODEL THIS IMPLIES, which is the important part.** A cell needs `target` COMPLETED games
+and `target() = args.target + len(skiplist)`, so at a 34.7% abandonment rate a 400-game cell runs
+~612 games: ~212 ceiling burns at ~1,213 s against 400 completions at ~70 s. **~90% of the matrix's
+cost is games that bank nothing**, and that share is set by the ABANDONMENT RATE, not by the speed
+of the search.
+
+Three consequences, and they should be read before any further optimisation work on this deck:
+
+1. **Wall-clock A/Bs on this cell are actively misleading.** They are dominated by a fixed unit
+   budget that is spent in full either way. A change can be a large, provable, lossless win on every
+   game that matters and still read as a 1.8% regression. This one did.
+2. **The metric to optimise is the ABANDONMENT RATE.** That is the quantity the user's instruction
+   ("cut branching or whatever is making this degenerate") actually names, and it is the only one
+   the cell's cost is linear in. `MTG_FOLD_SEARCH_ODO` moves it 17/49 -> 16/49, i.e. 5.9% relative:
+   real, measured, and an order of magnitude short of what a 12-hour matrix needs.
+3. **No search optimisation can save more than ~10% of this cell's wall** while the ceiling stands,
+   because that is all the non-ceiling-bound work there is. Halving the cell means halving the
+   abandonment rate -- 17 of 49 games have to start finishing.
+
 #### What is still NOT settled: default-ON
 
 Losslessness is not play-neutrality **under a budget**. Units are the budget's currency, so a node
