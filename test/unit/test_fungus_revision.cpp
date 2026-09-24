@@ -1358,3 +1358,85 @@ TEST_CASE("Brightcap Badger: the granted-source CAP is lossless, and keeps the m
         CHECK(TapForCostShared(s, cost, false, nullptr, false));
     }
 }
+
+TEST_CASE("The creature-enter watcher cascade is gated per DECK, and the gate is a no-op proof")
+{
+    EnsureCardsLoaded();
+
+    // GameState::deck_has_creature_enter_watcher gates FireCreatureEnterWatchers' own top-level
+    // loop. Unlike an ordinary optimisation this one claims to be byte-identical BY CONSTRUCTION,
+    // because the stamp's predicate (DefHasCreatureEnterWatcher) is the SAME function the loop's
+    // per-permanent `enter_watcher` byte is computed from. These cases pin that equivalence from
+    // both ends: the gate must suppress nothing when a watcher is present, and the stamp must never
+    // be able to close while a card that would fire is in the list.
+
+    SUBCASE("a fresh GameState defaults to TRUE -- an unstamped state keeps every trigger")
+    {
+        // The scenario harness builds a PARTIAL GameState and never stamps. Erring true costs time;
+        // erring false silently drops a trigger, which is why every flag in this family defaults on.
+        GameState fresh;
+        CHECK(fresh.deck_has_creature_enter_watcher);
+    }
+
+    SUBCASE("with the gate OPEN a Soul Warden gains life, which is what the gate must never break")
+    {
+        GameState s = Fresh();
+        Put(s, "Soul Warden", 0, 10);
+        const int entered = Put(s, "Tukatongue Thallid", 0, 11, /*sick=*/true);
+        s.deck_has_creature_enter_watcher = true;
+        const int before = s.players[0].life;
+        FireCreatureEnterWatchers(s, 0, entered);
+        CHECK(s.players[0].life == before + 1);
+    }
+
+    SUBCASE("the gate really is the thing doing the gating")
+    {
+        // Same board, flag down: proves the flag controls this loop rather than some other
+        // predicate happening to agree. This configuration is UNREACHABLE in a real game -- a deck
+        // holding a Soul Warden always stamps true -- so it asserts the mechanism, not a behaviour
+        // we ship.
+        GameState s = Fresh();
+        Put(s, "Soul Warden", 0, 10);
+        const int entered = Put(s, "Tukatongue Thallid", 0, 11, /*sick=*/true);
+        s.deck_has_creature_enter_watcher = false;
+        const int before = s.players[0].life;
+        FireCreatureEnterWatchers(s, 0, entered);
+        CHECK(s.players[0].life == before);
+    }
+
+    SUBCASE("the stamp predicate agrees with the per-definition byte for EVERY card in the DB")
+    {
+        // THE LOCKSTEP THAT MAKES THE SKIP SOUND. If a new watcher clause is ever added to
+        // FireCreatureEnterWatchers with a term added to DefHasCreatureEnterWatcher but the
+        // definition byte left stale (or vice versa), the gate would close on a deck that really
+        // does have a watcher and silently drop it. Nothing else in the build checks this.
+        int checked = 0;
+        for (const std::string& name : CardDatabase::Instance().AllNames())
+        {
+            const CardDefinition* d = CardDatabase::Instance().Lookup(name);
+            REQUIRE(d != nullptr);
+            CHECK(d->enter_watcher == DefHasCreatureEnterWatcher(d->params));
+            ++checked;
+        }
+        CHECK(checked > 300);
+    }
+
+    SUBCASE("the six terms are each sufficient on their own")
+    {
+        // One card per lane, so a term deleted from the disjunction fails here rather than in a
+        // deck's win rate. Names are cards the repo really ships; a rename fails loudly at Def().
+        CHECK(Def("Soul Warden").enter_watcher);              // any_creature_enters_lifegain
+        CHECK(Def("Essence Warden").enter_watcher);           // ... the Fungus deck's copy
+        CHECK(Def("Suture Priest").enter_watcher);            // own_* + opp_creature_enters_life_loss
+        CHECK(Def("Righteous Valkyrie").enter_watcher);       // own_creature_enters_lifegain_toughness
+        CHECK(Def("Youthful Valkyrie").enter_watcher);        // own_creature_enters_self_counters
+        CHECK(Def("Hamletback Goliath").enter_watcher);       // any_creature_enters_self_counters_power
+        // ...and the cards candidate B actually plays must NOT be watchers, which is the whole
+        // reason the gate closes on that list.
+        CHECK_FALSE(Def("Saproling Burst").enter_watcher);
+        CHECK_FALSE(Def("Sporecrown Thallid").enter_watcher);
+        CHECK_FALSE(Def("Mycoloth").enter_watcher);
+        CHECK_FALSE(Def("Slimefoot, the Stowaway").enter_watcher);   // a DIES watcher, not an enter one
+        CHECK_FALSE(Def("Brightcap Badger").enter_watcher);
+    }
+}

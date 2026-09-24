@@ -136,6 +136,35 @@ inline bool EtbWatcherGatesEnabled()
     return heurarm::Flag(heurarm::ETB_WATCHER_GATES, env_on);
 }
 
+// MTG_ENTER_WATCHER_GATE (DEFAULT ON) -- the same family as the lever above, given its OWN slot so
+// it can be A/B'd alone. It stamps GameState::deck_has_creature_enter_watcher, which gates
+// FireCreatureEnterWatchers' own top-level cascade loop.
+//
+// SEPARATE FROM MTG_ETB_WATCHER_GATES ON PURPOSE. That lever covers five gates at once, so using it
+// as this one's control arm would have measured six changes and attributed them to one. The repo's
+// A/B rule wants the arms INTERLEAVED in a single pooled batch, which needs a per-job heurarm slot
+// rather than a process-wide static -- hence the slot.
+//
+// IT NARROWS NOTHING, and the argument is stronger than the sibling gates': those reason "no card
+// carries the param, so the scan finds nothing". This one is stamped from DefHasCreatureEnterWatcher
+// -- the SAME disjunction CardDefinition::enter_watcher is computed from, which is the exact
+// predicate the loop tests per permanent. So the flag being false and every iteration answering "no"
+// are not two facts that happen to agree; they are one fact. Byte-identical by construction.
+//
+// WHY IT EXISTS AT ALL, given the loop was already tight: def_absent + the folded `enter_watcher`
+// byte had driven the per-permanent cost down to about as low as it goes, and the site STILL profiled
+// at 12.20% self on candidate-B Fungus -- because the residue is the TRIP COUNT, not the body.
+// CreateToken routes through the cascade, so a token deck pays O(tokens x board) to ask a question
+// whose answer was fixed when the decklist was read.
+//
+// Read at STAMP time only (GoldFishRunner::StampDeckTraits), exactly like the lever above: the stamp
+// is a per-GAME constant, so executor and rollout read one GameState field and cannot drift.
+inline bool EnterWatcherGateEnabled()
+{
+    static const bool env_on = EnvOn("MTG_ENTER_WATCHER_GATE", true);
+    return heurarm::Flag(heurarm::ENTER_WATCHER_GATE, env_on);
+}
+
 // MTG_M2_FIXPOINT (DEFAULT OFF -> byte-identical; heurarm slot for per-job pooling): restore the
 // FREE INTER-MAIN RE-SOLVE the second main never had -- after an m2 plan whose apply/execution
 // FIRED a breakpoint (cards may have entered hand mid-plan), solve m2 AGAIN on the post-draw

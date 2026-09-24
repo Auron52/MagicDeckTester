@@ -405,6 +405,41 @@ struct GameState
     // an O(battlefield) walk per token today to discover it owns no doubler.
     bool                     deck_has_token_doubler          = true;  // Doubling Season, token half
     bool                     deck_has_counter_doubler        = true;  // ... and its counter half
+    // AND A FIFTH, 2026-09-24 -- the BIGGEST of the family, and the one every previous pass walked
+    // straight past because it does not look like the others. This is not a guard buried inside a
+    // walk: it is FireCreatureEnterWatchers' OWN top-level loop, the "whenever another creature
+    // enters" cascade (Soul Warden / Suture Priest / Youthful Valkyrie / Hamletback Goliath).
+    //
+    // It was already tightened as far as a PER-PERMANENT test can go -- Permanent::def_absent skips
+    // tokens without a lookup, and CardDefinition::enter_watcher folds six CardParams probes into
+    // one byte -- and its own comment records the result: *"Fungus walks 2.9 BILLION permanents
+    // through here in a 150-game run and all but a handful of them answer no."* That is the tell.
+    // When a loop is already this tight and still tops the profile, the remaining cost is the
+    // ITERATION COUNT, and no per-permanent predicate can remove it. Only a per-GAME answer can.
+    //
+    // MEASURED (perf, Profile build, candidate-B Fungus gi=242, the worst game in a 300-game arm):
+    // FireCreatureEnterWatchers is 12.20% SELF, the single hottest symbol in the profile -- ahead of
+    // ComputeLordBonus (5.70% + 4.50% in its lambda) and CreateToken (4.60%). Same O(enters x board)
+    // quadratic as the rest of this family, reached because CreateToken routes through the cascade.
+    //
+    // WHY THE STAMP IS BYTE-IDENTICAL BY CONSTRUCTION, not by measurement: the flag is stamped from
+    // DefHasCreatureEnterWatcher -- the SAME six-term disjunction that computes the per-definition
+    // `enter_watcher` byte the loop tests. So "no card in the decklist satisfies it" and "every
+    // permanent in the loop answers no" are the same statement, and skipping the loop cannot change
+    // a trigger. Keep the two in lockstep: a new watcher clause needs a term in that one function
+    // and nothing here.
+    //
+    // 19 of the 25 committed decklists carry NO creature-enter watcher at all. Fungus's SHIPPED list
+    // is not among them (4 Essence Warden), which is exactly why this never surfaced on the deck it
+    // costs the most -- candidate B, which cut them, pays a full board walk per token for nothing.
+    //
+    // Gates ONLY that first loop. The Emiel optional-cost scan below it has its own flag
+    // (deck_has_etb_counter_payer) and its param is NOT one of the six terms, so an early return
+    // from the whole function would have silently dropped it; the self-inclusive tail reads only the
+    // ENTRANT's own definition and is O(1). Same safety rule as the four above: DEFAULT TRUE == do
+    // the walk == the old behaviour, so an unstamped GameState (the scenario harness) keeps every
+    // trigger. Only ever err true.
+    bool                     deck_has_creature_enter_watcher = true;  // Soul Warden-style cascade
     // "You can cast only one more spell this turn" (Irencrag Feat, CardParams::max_casts_after) enforced
     // at EXECUTION time: -1 = no restrictor active (unlimited); otherwise the number of ADDITIONAL spells
     // still castable this turn. Installed when a max_casts_after spell is cast, decremented at every later

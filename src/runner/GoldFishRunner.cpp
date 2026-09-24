@@ -1007,6 +1007,10 @@ void GoldFishRunner::StampDeckTraits(GameState& state, const Decklist& deck)
         // Doubling Season's two halves, stamped per GAME because DoublerShift's existing
         // CardDatabase::HasTokenDoubler() guard is DB-wide and therefore always true.
         bool token_doubler = false, counter_doubler = false;
+        // FireCreatureEnterWatchers' own top-level cascade loop. Stamped from the SAME disjunction
+        // the loop's per-permanent `enter_watcher` byte is computed from, which is what makes the
+        // skip byte-identical by construction rather than by measurement.
+        bool creature_enter_watcher = false;
         auto scan = [&](const std::vector<Card>& zone)
         {
             for (const Card& c : zone)
@@ -1028,6 +1032,7 @@ void GoldFishRunner::StampDeckTraits(GameState& state, const Decklist& deck)
                 if (!d->params.self_bounce_on_etb_subtype.empty()) { self_bounce_etb = true; }
                 if (d->params.doubles_tokens)   { token_doubler = true; }
                 if (d->params.doubles_counters) { counter_doubler = true; }
+                if (DefHasCreatureEnterWatcher(d->params)) { creature_enter_watcher = true; }
             }
         };
         scan(deck.mainboard);
@@ -1047,6 +1052,13 @@ void GoldFishRunner::StampDeckTraits(GameState& state, const Decklist& deck)
             state.deck_has_self_bounce_etb        = garth || self_bounce_etb;
             state.deck_has_token_doubler          = garth || token_doubler;
             state.deck_has_counter_doubler        = garth || counter_doubler;
+        }
+        // Its own lever (MTG_ENTER_WATCHER_GATE), not MTG_ETB_WATCHER_GATES: this one is worth a
+        // slot of its own because it is the largest of the family and must be measurable alone --
+        // sharing the lever above would have made its control arm turn off six gates at once.
+        if (EnterWatcherGateEnabled())
+        {
+            state.deck_has_creature_enter_watcher = garth || creature_enter_watcher;
         }
     }
     // NOTE: opponent_library_dealt is deliberately NOT stamped here. It means "a library was

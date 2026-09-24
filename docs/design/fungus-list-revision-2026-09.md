@@ -42,31 +42,84 @@ invisible to every deck that does not play a Brightcap Badger — which is all 2
 containment that made the grant safe for everyone else is exactly what hid its cost. A perf test on
 an UNCOMMITTED list is the only thing that could have caught it.
 
-**2. Candidate B is 6.5x the shipped list, and Saproling Burst is the largest single cause.**
-200 games, 8 threads, shared profile/seeds, `--max-turns 14`:
+**2. RE-MEASURED AFTER THE HOIST — and the Saproling Burst pooling plan is REFUTED.**
+
+⚠ **The "6.5x / Burst is 42%" table below this paragraph was measured on the O(n^2) binary and is
+RETRACTED as an engine fact.** It is kept only so the retraction is legible. On the buggy binary every
+extra token on the board was quadratically expensive, so the card that makes the most tokens looked
+like the cost centre — the bug was masquerading as a card.
+
+*(retracted — buggy binary)*
 
 | deck | wall | note |
 |---|---|---|
-| shipped Fungus | **2.8 s** | baseline |
-| candidate B (full) | **18.1 s** | **6.5x** |
-| B − Saproling Burst | 10.5 s | **Burst is ~42% of B's cost** |
-| B − Vitaspore | 12.3 s | |
-| B − Brightcap Badger | 23.6 s | **SLOWER without it** — the grant pays for itself |
+| shipped Fungus | 2.8 s | baseline |
+| candidate B (full) | 18.1 s | 6.5x |
+| B − Saproling Burst | 10.5 s | "Burst is ~42% of B's cost" |
+| B − Brightcap Badger | 23.6 s | SLOWER without it |
 
-(Each variant swaps the cut card for Forests, so land count is a mild confound; the 6.5x headline
-is not.)
+**THE REPLACEMENT MEASUREMENT.** `logs/fungus2/perf2/manifest.json` — ONE pooled batch, 6 arms x 300
+games, 24/24 threads, shared seed 980000, candidate B's profile on every B arm, `MTG_SLOW_GAME_MS=1`
+so every game reports its own ms. The Saproling Burst **count** axis is the discriminator: a
+4-dimensional product would cost ~8x per added copy, a flat cost would not.
 
-**THE CAUSE IS A DESIGN DECISION I MADE, and it is written down in the card's own oracle note:**
-Saproling Burst's K axis is deliberately NOT pooled — *"two Saproling Bursts on different counter
-totals mint DIFFERENT-SIZED tokens, so each keeps its own axis."* True, but with **4 copies that is a
-4-dimensional axis**, and the engine has fought this exact shape before (the adopted sac-outlet count
-pool, 2.29x on the heaviest Fungus cell; see [[greedy-walk-powerset-over-identical-outlets]]).
+| arm | total CPU | vs shipped | vs burst0 | mean/game | p99 | avg turn |
+|---|---|---|---|---|---|---|
+| shipped Fungus | 57.2 s | 1.0x | — | 191 ms | 1.6 s | 5.3700 |
+| **B, ZERO Bursts** | **1088.7 s** | **19.0x** | 1.00x | 3.63 s | 37.2 s | 5.4200 |
+| B, 1 Burst | 1482.3 s | 25.9x | 1.36x | 4.94 s | 86.5 s | 5.4233 |
+| B, 2 Bursts | 1702.5 s | 29.8x | 1.56x | 5.68 s | 86.3 s | 5.4400 |
+| B, 3 Bursts | 1765.6 s | 30.9x | 1.62x | 5.89 s | 72.7 s | 5.4467 |
+| **B, 4 Bursts (full)** | **2084.8 s** | **36.4x** | **1.91x** | 6.95 s | 74.0 s | 5.4633 |
 
-**THE FIX TO BUILD NEXT — pool Bursts that share a counter total.** Two Bursts on the SAME count
-genuinely are identical (same fade total, same token size, byte-identical payload), so folding them is
-LOSSLESS — and it covers the common case, because all four enter at 7 (or 14 under a Doubling Season)
-and only diverge once activated unevenly. This is `FoldSporeSourceIdentity` with the counter total
-added to the identity key. Do NOT pool across different totals; that would be the unsound version.
+**Three findings, and two of them overturn the plan that was written here.**
+
+* **The count axis is SUB-LINEAR, not exponential.** Copies 1-4 cost +36%, +15%, +4%, +18%. The
+  4-dimensional-product hypothesis predicts ~8x per copy. It is refuted.
+* **Candidate B with NOT ONE Saproling Burst is already 19x the shipped list.** That is the dominant
+  fact about this deck's cost and no Burst work touches it.
+* **All four Bursts together are worth 1.91x** — so *deleting the card entirely* is the hard ceiling
+  on any Burst optimisation, and a pool that only removes enumeration must land well under it.
+
+**AND THE ODOMETER CONFIRMS THE DIAGNOSIS RATHER THAN THE FIX.** Same game (gi=242, the worst in both
+arms: 149 s with 4 Bursts, 93 s with none), `MTG_ENUM_STATS=1`:
+
+| | 4 Bursts | 0 Bursts | ratio |
+|---|---|---|---|
+| enumeration calls | 95,921 | 97,137 | 1.0x |
+| **odometer positions** | **43,794,997** | **6,316,159** | **6.9x** |
+| payoff-side lines | 1,901,741 | 275,716 | 6.9x |
+| mana-side combos | 2,408,447 | 2,182,290 | 1.1x |
+
+So **the 4-dimensional product is REAL — 6.9x on the payoff axis — and it is NOT WHAT COSTS THE
+WALL** (1.6x on the same game). Those two numbers together are the whole result: the enumeration a
+pool would delete is cheap, and the token-board work it would leave behind is what is expensive.
+An odometer bound is not a cost measurement, and here it overstates by 4x.
+
+**THEREFORE: DO NOT BUILD THE SAPROLING BURST COUNTER-TOTAL POOL.** The plan that stood here is
+withdrawn. Recorded in full because the reasoning was sound and only the premise was wrong, so a
+future reader must not re-derive it:
+
+> ~~Pool Bursts that share a counter total. Two Bursts on the SAME count are identical (same fade
+> total, same token size, byte-identical payload), so folding them is LOSSLESS, and all four enter at
+> 7 (or 14 under a Doubling Season). This is `FoldSporeSourceIdentity` with the counter total added to
+> the identity key.~~
+
+Two independent reasons it is withdrawn, either sufficient:
+
+1. **It would not pay.** Its ceiling is the 1.91x that deleting the card outright buys, and it only
+   removes the enumeration half of that — which the gi=242 pair shows is the cheap half.
+2. **Its stated licence does not hold in play, which the design note never checked.** Equal counter
+   totals are NOT the common case. Fading ticks every Burst down one per upkeep in lockstep, so two
+   Bursts cast on different turns stay permanently offset by the gap between those turns, and at
+   {2}{G}{G} casting two in one turn needs 8 mana. Totals like 7/5/3 are the norm — three classes of
+   one, i.e. **no pooling at all**. The equal-total pool would have been correct, cheap, and almost
+   never triggered.
+
+The general lever for this shape already exists and is already known not to pay: `MTG_FOLD_COUNTER_SOURCES`
+(`TurnSolver.cpp:7952`) moves the count into `ActivationEquivTag` so equal counts share a class. It is
+**default OFF because it moved `units_total` by ZERO** — `FinalizeFoldTags` CONDITION 2 drops any class
+whose source emitted more than one action, and a Burst on 7 counters emits k=1..7.
 
 **3. A lord-scan guard that did NOT pay — kept, but claim nothing for it.** `ComputeLordBonus` (17%)
 and `HasHasteFromLords` (5.8%) dominated a profile of the stuck game, and neither took the
@@ -77,16 +130,100 @@ must not be reported as one. `LookupCached` was already memoised to a sentinel c
 
 ### NEXT STEPS, in order
 
-1. **Build the Saproling Burst counter-total pool.** Biggest single win available (~42% of B's cost).
-2. **Re-run `scripts/analyze_deck.py decks/Fungus/candidate-b-2026-09/Fungus.cod --no-rebuild`.**
-   The previous attempt STALLED — 20+ min on ONE game at 1 core of 24, in the card-scores phase, on a
-   pre-guard binary. That stall is the Burst explosion, not a hang (perf showed ordinary gameplay
-   code). Kill any survivor before restarting.
+1. ~~Build the Saproling Burst counter-total pool.~~ **WITHDRAWN — refuted by measurement, see above.**
+   Do not re-derive it.
+2. **Run `scripts/analyze_deck.py decks/Fungus/candidate-b-2026-09/Fungus.cod --no-rebuild`.**
+   This is now the FIRST step, not the second, and running it IS the perf test. The previous attempt
+   stalled 20+ min on ONE game at 1 core of 24 on the pre-hoist binary; that stall was the O(n^2), and
+   the same game class now finishes in seconds. B's mean game is 6.95 s and 300 games cost ~87 s wall
+   on 24 cores. Kill any survivor `mtg`/`mtg-analyze` before restarting.
 3. **Then Stage 5:** `python3 scripts/verify_deck.py <deck>` — the one-command gate (coverage,
    Scryfall cost audit, viewer decision auditor, viewer_wiring, nonconv/fd-diverge), then the 5d
    claude-play sweep (~15-20 games, fan-out expected, Opus for judgement).
 4. Only after the engine is fast and validated: the user kicks off mulligan generation. Stage 4 does
    NOT do mulligan work.
+
+### THE FIX THAT WAS ACTUALLY BUILT — `MTG_ENTER_WATCHER_GATE` (default ON)
+
+Profiling the worst game (perf, Profile build, gi=242, 4 Bursts) put the answer at the top of the
+list, and it was not Saproling Burst:
+
+| symbol | self |
+|---|---|
+| **`FireCreatureEnterWatchers`** | **12.20%** |
+| `ComputeLordBonus` (+ its lambda) | 5.70% + 4.50% |
+| `CreateToken` (+ `CreateTokenOnce`) | 4.60% + 1.56% |
+| `vector<Permanent>::push_back` | 3.89% |
+| `SweepDeadFadeTokens` | 3.34% |
+| `BuildSimKey` | 2.72% |
+
+**Why this site had already resisted two rounds of tuning.** Its loop was tight — `Permanent::def_absent`
+skips tokens without a lookup, and `CardDefinition::enter_watcher` folds six `CardParams` probes into
+one byte — and its own comment records the outcome: *"Fungus walks 2.9 BILLION permanents through here
+in a 150-game run and all but a handful of them answer no."* That is the tell, and it is the general
+lesson: **when a loop is already minimal per iteration and still tops the profile, the residue is the
+TRIP COUNT, and no per-permanent predicate can remove it.** Only a per-game answer can.
+
+**19 of the 25 committed decklists carry no creature-enter watcher at all.** The shipped Fungus list is
+NOT one of them — it plays 4 Essence Warden — which is precisely why this never surfaced on the deck it
+costs the most. Candidate B cut them, so it was paying a full board walk per token to find nothing.
+
+Built as `GameState::deck_has_creature_enter_watcher`, stamped in `StampDeckTraits` from
+**`DefHasCreatureEnterWatcher`** — the *same* disjunction `enter_watcher` itself is computed from. That
+is what makes it **byte-identical by construction rather than by measurement**: "no card in the
+decklist satisfies it" and "every permanent in the loop answers no" are one statement, not two that
+happen to agree. Gates ONLY that first loop — a bare `return` would have dropped the Emiel
+optional-cost scan below it, whose param is not one of the six terms.
+
+**Verified byte-identical on 1,800 games** (6 arms x 300, gate vs no gate): **all six digests
+unchanged**, every `avg` unchanged.
+
+**THE WALL EFFECT IS SMALL — AND GETTING THAT RIGHT TOOK THREE APPARATUSES.** This is the most
+useful part of the entry, because two of the three gave numbers that were wrong by 3-4x and the
+NO-OP CONTROL is the only thing that revealed it.
+
+The control is `shipped Fungus` with the lever flipped. Shipped plays 4 Essence Warden, so the flag
+stamps TRUE on both arms and the change is a **literal no-op** — same digest, same avg, same play.
+Whatever it reads is pure apparatus error, and it must be subtracted from everything else.
+
+| apparatus | NO-OP control reads | candidate B, 0 Bursts | verdict |
+|---|---|---|---|
+| two separate pooled batches, before/after | **+4.4%** | −15.5% | unusable |
+| ONE pooled batch, arms interleaved by per-job lever | **−5.7%** | −10.7% | still unusable |
+| **6 processes, single-threaded, uncontended, paired by game index** | **−0.5%** | **−3.6%** | usable |
+
+**A ~6% noise floor on pooled-batch `ms` is enough to invent a result out of nothing**, and the
+interleaved-in-one-batch protocol — normally the right answer, and what [[box-is-shared-interleave-ab-arms]]
+asks for — did NOT fix it, because per-game `ms` in a pooled batch is WALL on a contended box, not CPU.
+What fixed it was giving each arm its own core on an idle box so per-game `ms` *is* CPU, then pairing
+game-by-game on the game index.
+
+**Final, honest numbers** (120 games/arm, paired, uncontended; `better` = share of paired games the
+gate improved, which is the statistic least sensitive to the tail):
+
+| arm | median ratio | sum ratio | better |
+|---|---|---|---|
+| shipped Fungus — **NO-OP control** | 0.9895 | 0.9955 | 40/77 (**52%** — a coin flip, as it must be) |
+| candidate B, 0 Bursts | 0.9864 | **0.9641** | 91/120 (**76%**) |
+| candidate B, 4 Bursts | 0.9887 | 0.9887 | 76/109 (**70%**) |
+
+**So the gate is worth roughly 1-4%, not the 12.2% the profile showed.** Both numbers are true and
+the gap between them is the lesson: **a perf profile of ONE outlier game over-attributes every
+board-width-quadratic site.** gi=242 is a 149-second game on a ~364-permanent board, which is where
+an O(tokens x board) walk looks enormous; across a 120-game population most boards are far smaller and
+the same site is a few percent. Profile the outlier to FIND the site, measure the population to SIZE it.
+
+**It ships anyway, and the case does not rest on the wall number**: it is byte-identical by
+construction, costs one branch, needs no maintenance, and helps 19 of 25 committed decks. But it is
+NOT the answer to candidate B's cost, and must not be written up as one.
+
+**IF MORE PERF IS NEEDED, THE TARGET IS THE 19x, NOT THE 1.9x.** Candidate B with zero Bursts is 19x
+the shipped list, and its tail is the problem, not its median: p50 is 1.2 s but p99 is 37 s and the
+worst game is 93 s. The cost is **board width** — this list is built to make more tokens than the
+shipped one — so the lever is per-permanent walk cost, not enumeration width. That is the same place
+`ComputeLordBonus` (17%) and `HasHasteFromLords` (5.8%) showed up in the stalled-analyzer profile.
+Note what this implies and do not lose it: **a token-making deck's cost is mostly its tokens, which is
+the card doing its job, not a search defect.** Some of the 19x is simply what candidate B is.
 
 ### WHAT THE HUMAN SHOULD WATCH FOR IN THE VIEWER (already told to the user)
 

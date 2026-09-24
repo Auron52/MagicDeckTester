@@ -3905,7 +3905,24 @@ inline void FireCreatureEnterWatchers(GameState& state, int entered_controller, 
         }
     };
 
-    const int n = static_cast<int>(state.battlefield.size());
+    // PRESENCE GATE (GameState::deck_has_creature_enter_watcher) -- the per-GAME answer to the
+    // question every iteration below asks per permanent. The loop is already as tight as a
+    // per-permanent test can be (def_absent skips tokens with no lookup; `enter_watcher` folds six
+    // param probes into one byte) and it STILL tops the profile at 12.20% self on candidate-B
+    // Fungus, because what is left is the ITERATION COUNT: CreateToken routes through this cascade,
+    // so a token deck pays O(tokens x board).
+    //
+    // The stamp is computed from DefHasCreatureEnterWatcher -- the same disjunction `enter_watcher`
+    // itself is computed from -- so "no card in the decklist has a watcher" and "every permanent
+    // here answers no" are the same statement: this skip is byte-identical BY CONSTRUCTION. Defaults
+    // true, so an unstamped state (the scenario harness) keeps the walk.
+    //
+    // Deliberately a zero TRIP COUNT rather than an early `return`: the Emiel optional-cost scan and
+    // the self-inclusive tail below are NOT covered by the six terms, and returning here would drop
+    // them. (The Emiel scan carries its own flag; the tail is O(1).)
+    const int n = state.deck_has_creature_enter_watcher
+                ? static_cast<int>(state.battlefield.size())
+                : 0;
     for (int i = 0; i < n; ++i)
     {
         if (i == entered_index) { continue; }   // "another creature"
