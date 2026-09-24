@@ -7868,8 +7868,23 @@ inline void ApplyPermAbility(GameState& state, int controller, int source_id, Pe
 // no-phantom-float guard, floating mana for a sacrifice that never happened.
 inline constexpr int kSameLineSacVictim = std::numeric_limits<int>::max();
 
+// Which KIND of free token maker a permanent offers. The search order below is deliberate: the
+// counter-costed makers come first, because their cost is a resource with no other use this turn,
+// while TAPPING a body forfeits whatever else that body could have done with its {T}.
+enum class SameLineFodderKind { None, Spore, Fade, TapForTokens };
+
+// Returns the card number of a permanent we control that can, RIGHT NOW and for free, create a
+// creature token matching `need_sub` -- or -1. `out_kind` receives how.
+//
+// FREE IS THE WHOLE CRITERION, and a MANA-COSTED maker is excluded for a structural reason rather
+// than a conservative one. Slimefoot's "{4}: Create a Saproling" would have its {4} paid inside the
+// apply -- i.e. AFTER the enumerator has already credited this sacrifice's mana to the subset -- so
+// it would debit mana the subset's accounting never charged. That is exactly the phantom-mana shape
+// MTG_SAC_NO_PHANTOM_FLOAT was added to remove, pointing the other way. Widening to mana-costed
+// makers needs the cost visible to the ENUMERATOR, not just to the apply: a separate change.
 inline int SameLineSacFodderSource(const GameState& state, int controller,
-                                   const std::string& need_sub)
+                                   const std::string& need_sub,
+                                   SameLineFodderKind* out_kind = nullptr)
 {
     auto yields = [&](const std::vector<std::string>& subs)
     {
@@ -7877,6 +7892,9 @@ inline int SameLineSacFodderSource(const GameState& state, int controller,
         for (const std::string& s : subs) { if (s == need_sub) { return true; } }
         return false;
     };
+    auto give = [&](int num, SameLineFodderKind k)
+    { if (out_kind) { *out_kind = k; } return num; };
+    if (out_kind) { *out_kind = SameLineFodderKind::None; }
     for (const Permanent& p : state.battlefield)
     {
         if (p.controller_index != controller) { continue; }
@@ -7886,33 +7904,49 @@ inline int SameLineSacFodderSource(const GameState& state, int controller,
         if (d->params.spore_saproling_cost > 0
             && p.spore_counters >= d->params.spore_saproling_cost
             && yields(d->params.spore_token_subtypes))
-        { return p.card.m_number; }
+        { return give(p.card.m_number, SameLineFodderKind::Spore); }
         if (d->params.fade_saproling_cost > 0
             && p.fade_counters >= d->params.fade_saproling_cost
             && yields(d->params.fade_token_subtypes))
-        { return p.card.m_number; }
+        { return give(p.card.m_number, SameLineFodderKind::Fade); }
+        // Krenko, Mob Boss: "{T}: Create X 1/1 Goblins, X = Goblins you control." Free of MANA, but
+        // it pays {T} -- which is why it is searched last and why both tap gates are tested here: an
+        // already-tapped or summoning-sick body cannot pay that cost (CR 302.6).
+        //
+        // X IS COUNTED AT RESOLUTION and can be zero, which would make a fodder promise the apply
+        // cannot keep -- so require it positive NOW. (Krenko is himself a Goblin, so on any board
+        // where he can tap it is at least 1; the test is for the general param, not for him.)
+        if (SacFodderTapMakerEnabled()
+            && !d->params.tap_creates_tokens_per_controlled_subtype.empty()
+            && !p.tapped && CanTapNow(p, state.battlefield)
+            && yields(d->params.tap_created_token_subtypes)
+            && CountControlledSubtype(state, controller,
+                                      d->params.tap_creates_tokens_per_controlled_subtype) > 0)
+        { return give(p.card.m_number, SameLineFodderKind::TapForTokens); }
     }
     return -1;
 }
 
-// Fire that maker once. Returns true if a matching victim EXISTS afterwards -- which is the only
-// question the caller has, and is re-asked against the board rather than trusting the activation
-// (a Doubling Season makes two, a 0/0 fade token can die to the toughness SBA on arrival).
+// Fire that maker once. Returns true if a matching victim EXISTS afterwards -- the only question the
+// caller has, and re-asked against the board rather than trusting the activation (a Doubling Season
+// makes two, a 0/0 fade token can die to the toughness SBA on arrival, Krenko's X is recounted at
+// resolution).
 inline bool MakeSameLineSacFodder(GameState& state, int controller, const std::string& need_sub,
                                   int outlet_id)
 {
-    const int maker = SameLineSacFodderSource(state, controller, need_sub);
+    SameLineFodderKind kind = SameLineFodderKind::None;
+    const int maker = SameLineSacFodderSource(state, controller, need_sub, &kind);
     if (maker < 0) { return false; }
-    const CardDefinition* md = nullptr;
-    for (const Permanent& p : state.battlefield)
+    switch (kind)
     {
-        if (p.controller_index == controller && p.card.m_number == maker)
-        { md = CardDatabase::Instance().LookupCached(p.card); break; }
+        case SameLineFodderKind::Spore:
+            ApplyPermAbility(state, controller, maker, PermAbilityMode::SporeSaproling); break;
+        case SameLineFodderKind::Fade:
+            ApplyPermAbility(state, controller, maker, PermAbilityMode::FadeSaproling);  break;
+        case SameLineFodderKind::TapForTokens:
+            ApplyTapForTokens(state, controller, maker);                                 break;
+        default: return false;
     }
-    if (md == nullptr) { return false; }
-    ApplyPermAbility(state, controller, maker,
-                     md->params.spore_saproling_cost > 0 ? PermAbilityMode::SporeSaproling
-                                                         : PermAbilityMode::FadeSaproling);
     return CanonicalSacVictim(state, controller, outlet_id, need_sub) >= 0;
 }
 
@@ -9027,6 +9061,30 @@ inline void ApplySacCreatureOutlet(GameState& state, int controller, int source_
         }
     }
     if (!op) { return; }
+    // ---- SAME-LINE FODDER, value-outlet twin (MTG_SAC_FODDER_VALUE_OUTLET) -----------------------
+    // The mana twin lives in ApplySacForMana; this is the same fusion for an outlet whose payload is
+    // a draw or damage rather than mana (Psychotrope Thallid, Deathspore, Vitaspore). It MUST sit
+    // above the ChooseSacOutletVictimIndex call below -- that chooser is handed `victim_id`, so
+    // resolving the sentinel afterwards would prompt a human with INT_MAX as the preselected victim.
+    //
+    // Re-checked rather than trusted, exactly as the mana twin is: the board here is the one the plan
+    // actually produced, so the fodder may already exist or have become unmakeable. `op` points into
+    // the card DB and stays valid across the token creation; nothing else is held across it.
+    if (victim_id == kSameLineSacVictim)
+    {
+        const std::string want = op->sac_creature_requires_subtype;
+        victim_id = CanonicalSacVictim(state, controller, source_id, want,
+                                       op->sac_outlet_allows_enchantment,
+                                       op->sac_outlet_excludes_self);
+        if (victim_id < 0)
+        {
+            MakeSameLineSacFodder(state, controller, want, source_id);
+            victim_id = CanonicalSacVictim(state, controller, source_id, want,
+                                           op->sac_outlet_allows_enchantment,
+                                           op->sac_outlet_excludes_self);
+        }
+        if (victim_id < 0) { return; }   // premise failed -> the ability was never activated
+    }
     // Human play re-asks WHICH creature dies against the real resolution board (viewer issue #4);
     // with no chooser this is -1 and the card-number search below runs byte-identically.
     std::string src_name;

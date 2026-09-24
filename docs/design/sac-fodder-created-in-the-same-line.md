@@ -256,7 +256,70 @@ Accepted into `regression_gt.txt` for **both** tiers via `regression.sh [--smoke
 the pre-adoption engine and its next run will report those configs as changed. That is expected, not a
 regression — accept it after inspecting, exactly as here.
 
-## Widening — the next step, NOT yet done
+## ⚠ CORRECTION to the adoption note above — WHY Goblins is unaffected
+
+The adoption commit (`9d4ed032`) says Goblins is untouched "BY CONSTRUCTION: the fodder maker must
+be a COUNTER-costed token ability, and Skirk Prospector's feeder is Krenko, whose ability costs
+{T}". **The conclusion is right and the stated reason is wrong.** Widening to {T}-costed makers
+(`MTG_SAC_FODDER_TAP_MAKER`, below) left Goblins **byte-identical over 2000 games anyway**, which
+falsifies that explanation directly.
+
+**The real reason is the VICTIM SET, not the maker set.** The same-line branch is only reached when
+`CanonicalSacVictim` returns -1 — i.e. the outlet is on the battlefield and there is *nothing it can
+legally eat*. Auditing every sac outlet in `cards.json` for whether its own body satisfies its own
+filter:
+
+| outlet | needs | own subtypes | can eat ITSELF |
+|---|---|---|---|
+| Skirk Prospector | Goblin | Goblin | **yes** |
+| Siege-Gang Commander | Goblin | Goblin | **yes** |
+| Pashalik Mons | Goblin | Goblin, Warrior | **yes** |
+| Carrion Feeder / Bloodthrone Vampire / Ranger-Captain | any creature | — | **yes** |
+| **Utopia Mycon** | Saproling | Fungus | **no** |
+| **Psychotrope Thallid** | Saproling | Fungus | **no** |
+| **Deathspore Thallid** | Saproling | Zombie Fungus | **no** |
+| **Vitaspore Thallid** | Saproling | Fungus | **no** |
+
+A self-eating outlet **can never have an empty victim set while it is on the battlefield**, so it
+never reaches the same-line branch no matter what makers exist. Every Goblin outlet is a Goblin.
+
+**So this whole feature is structurally Fungus-shaped**, and the shape is precise: it needs an outlet
+carrying a subtype filter *its own body does not satisfy*. The four Fungus outlets are the only cards
+in the database that do. (Slaughter-Priest of Mogis is the one other candidate — "any creature" plus
+`sac_outlet_excludes_self` — but no deck pairs it with a free token maker.) The September write-up's
+concern that this fix would move Goblins was therefore never going to materialise, for a reason
+nobody had identified at the time.
+
+## Widening — BUILT and MEASURED 2026-09-24, both levers DEFAULT OFF
+
+USER: *"We should probably not restrict it at all."* Both restrictions are now removable, each behind
+its own lever so they can be adopted independently.
+
+| lever | what it adds | Fungus (2000 games) | Goblins (2000) |
+|---|---|---|---|
+| `MTG_SAC_FODDER_VALUE_OUTLET` | Psychotrope / Deathspore / Vitaspore payloads | 5.3920 → 5.3935 | IDENTICAL digest |
+| `MTG_SAC_FODDER_TAP_MAKER` | Krenko-style `{T}` makers | **IDENTICAL digest** | **IDENTICAL digest** |
+| both together | — | 5.3935 (= value alone) | IDENTICAL digest |
+
+**`MTG_SAC_FODDER_TAP_MAKER` IS STRUCTURALLY INERT** — identical digest on both decks — for the
+victim-set reason above. It is worth keeping as a generalisation (it removes a restriction that was
+never doing any work) but it must not be described as buying anything.
+
+**`MTG_SAC_FODDER_VALUE_OUTLET` IS PLAY-NEUTRAL.** Held out on 6000 games at disjoint seeds:
+**5.3643 → 5.3643, identical average, different digest** — it takes different lines and reaches the
+same outcome. The train-seed +0.0015 was noise, which is exactly what a held-out run is for. It costs
+**+7.8% wall** (1,272,611 → 1,371,836 ms over 6000 games).
+
+**Adoption is therefore an EXPRESSIVENESS call, not a win-rate one**, and should be argued as such:
+it lets the viewer express "pop a spore counter, sac the Saproling to Psychotrope, draw" as one line
+instead of two commits, which is the user's original complaint. It buys no measurable win-rate and
+costs ~8% wall. Adopting needs a Fungus GT rebaseline (digests move).
+
+**NOT adopted in this commit** — deliberately, to avoid leaving a half-finished ground-truth
+rebaseline across a session boundary. Both levers are default OFF and the tree is byte-identical
+(161/161 unit, 103/103 scenarios, smoke 93 passed `play-changed=0`).
+
+## Still not done
 
 USER 2026-09-24: *"We should probably not restrict it at all."* The adopted cut keeps two
 restrictions, and each needs its own measured change:

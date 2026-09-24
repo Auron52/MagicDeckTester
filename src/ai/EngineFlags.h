@@ -200,6 +200,38 @@ inline bool SacFodderSameLineEnabled()
     return heurarm::Flag(heurarm::SAC_FODDER_SAME_LINE, env_on);
 }
 
+// ---- THE TWO WIDENINGS (USER 2026-09-24: "We should probably not restrict it at all") ----------
+// The adopted cut above restricts same-line fodder twice. Each widening gets its OWN lever because
+// they have different blast radii and must be adoptable independently -- one lever covering both
+// would force an all-or-nothing call on two changes whose evidence is separate.
+
+// MTG_SAC_FODDER_VALUE_OUTLET (DEFAULT OFF -> byte-identical) -- same-line fodder for a VALUE outlet,
+// not just a mana one: Psychotrope Thallid's "{1}, Sacrifice a Saproling: Draw a card", and the
+// Deathspore / Vitaspore sac payloads. Needs the fusion in ApplySacCreatureOutlet as well, which is
+// a different function from ApplySacForMana -- so this is a second apply site, not just a widened
+// predicate. Expected to be Fungus-local: no other suite deck owns a free token maker AND a
+// subtype-filtered value outlet.
+inline bool SacFodderValueOutletEnabled()
+{
+    static const bool env_on = EnvOn("MTG_SAC_FODDER_VALUE_OUTLET");
+    return heurarm::Flag(heurarm::SAC_FODDER_VALUE_OUTLET, env_on);
+}
+
+// MTG_SAC_FODDER_TAP_MAKER (DEFAULT OFF -> byte-identical) -- let a {T}-costed token maker supply the
+// fodder, which is Krenko, Mob Boss feeding Skirk Prospector. THIS ONE MOVES GOBLINS, and that is
+// the whole reason it is separate: the adopted cut leaves Goblins byte-identical because Krenko was
+// out of scope, and the original design doc expected this fix to need its own Goblins rebaseline.
+// It does -- just here rather than there.
+//
+// The cost is REAL in a way the counter-costed makers' is not: spore/fade counters have no other use
+// this turn, but tapping Krenko forfeits whatever else that {T} could have bought, and the
+// enumerator may have planned to spend it. Hence searched LAST in SameLineSacFodderSource.
+inline bool SacFodderTapMakerEnabled()
+{
+    static const bool env_on = EnvOn("MTG_SAC_FODDER_TAP_MAKER");
+    return heurarm::Flag(heurarm::SAC_FODDER_TAP_MAKER, env_on);
+}
+
 // MTG_M2_FIXPOINT (DEFAULT OFF -> byte-identical; heurarm slot for per-job pooling): restore the
 // FREE INTER-MAIN RE-SOLVE the second main never had -- after an m2 plan whose apply/execution
 // FIRED a breakpoint (cards may have entered hand mid-plan), solve m2 AGAIN on the post-draw

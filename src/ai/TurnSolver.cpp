@@ -19202,13 +19202,15 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
             // counters become a Saproling and that Saproling becomes a mana. Bailing here is what
             // made the line unreachable: with no action emitted, no subset could contain it.
             //
-            // Restricted to MANA outlets. A VALUE outlet (Psychotrope's draw, Siege-Gang's damage)
-            // spending a body it had to manufacture is a real judgement call and a much wider
-            // enumeration; the reports are all about mana, so this stays where the evidence is.
+            // VALUE outlets (Psychotrope's draw, Deathspore/Vitaspore's payloads) join under their
+            // own lever -- USER 2026-09-24: "We should probably not restrict it at all." They need
+            // the fusion in ApplySacCreatureOutlet as well, which is a different apply function, so
+            // the widening is a second site rather than a looser predicate here.
             bool same_line_fodder = false;
             if (victim_id < 0)
             {
-                if (!is_mana_outlet || !SacFodderSameLineEnabled()
+                const bool outlet_ok = is_mana_outlet || SacFodderValueOutletEnabled();
+                if (!outlet_ok || !SacFodderSameLineEnabled()
                     || SameLineSacFodderSource(state, state.active_player_index, need_sub) < 0)
                 { continue; }   // no legal victim to sacrifice, and none makeable
                 victim_id        = kSameLineSacVictim;   // resolved (and created) at apply time

@@ -246,6 +246,8 @@ enum Slot : int
     ACT_TAP_RESERVE,          // MTG_ACT_TAP_RESERVE      a planned `{cost},{T}` activation's SOURCE is held back from mana payment for the whole plan, so an earlier cost cannot strand it (default OFF)
     RESCUE_TAP_SOURCE,        // MTG_RESCUE_TAP_SOURCE    the filter real-payment rescue applies each selected activation's own {T} before paying, so no source funds its own activation (default OFF)
     SAC_FODDER_SAME_LINE,     // MTG_SAC_FODDER_SAME_LINE  a sac-for-mana outlet may be paid with fodder THIS LINE creates (default OFF; adds actions, so it moves GT)
+    SAC_FODDER_VALUE_OUTLET,  // MTG_SAC_FODDER_VALUE_OUTLET  ...and for a VALUE outlet (draw/damage), not just a mana one (default OFF)
+    SAC_FODDER_TAP_MAKER,     // MTG_SAC_FODDER_TAP_MAKER  ...and the maker may pay {T} (Krenko feeding Skirk) -- MOVES GOBLINS (default OFF)
     ENTER_WATCHER_GATE,       // MTG_ENTER_WATCHER_GATE   FireCreatureEnterWatchers' own cascade loop is skipped when the DECKLIST holds no creature-enter watcher (default ON; =0 walks the board as before, which must be byte-identical)
     COUNT
 };
@@ -459,6 +461,8 @@ inline const char* Name(int slot)
         "MTG_ACT_TAP_RESERVE",
         "MTG_RESCUE_TAP_SOURCE",
         "MTG_SAC_FODDER_SAME_LINE",
+        "MTG_SAC_FODDER_VALUE_OUTLET",
+        "MTG_SAC_FODDER_TAP_MAKER",
         "MTG_ENTER_WATCHER_GATE",
     };
     // The enum and this table are ONE mapping split across two lists: a slot added to one and not
