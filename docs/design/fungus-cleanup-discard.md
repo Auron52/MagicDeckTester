@@ -56,20 +56,49 @@ Two distinct effects must not be conflated:
 * Psychotrope showing up in the slowest hands is a **cost** observation, and the likelier mechanism
   there is that each draw is a BREAKPOINT opening search nodes, not the discard rule.
 
-## 4. The shape a fix would take
+## 4. FREQUENCY, MEASURED
 
-A `FungusProvider::CleanupDiscardCandidates` override. The deck's own logic is not subtle -- the
-USER has already stated the board-side version of it for devour targets (quoted in
-`fungus-token-search-cost.md` Round 9), and the hand-side analogue is:
+`MTG_TRACE=discard` (real resolutions only -- every rollout scope clears `g_real_resolution`, so
+this counts the discards the GAME made, not the millions the search imagined), 400 games at d1/b3
+with the adopted mulligan profile live:
 
-1. excess LANDS first once the land count on board is sufficient (22 lands, nothing uses them as
-   ammunition, so `DiscardLandsFirst` is the wrong lever -- this wants a "surplus land" test, not an
-   unconditional land-first);
-2. then redundant vanilla bodies (a 4th Thallid / Tukatongue) -- the same interchangeability the
-   spore pool and devour narrowing already exploit;
-3. NEVER Mycoloth, and never the first Doubling Season. A SECOND Doubling Season is close to dead
-   (it doubles what the first already doubles, at 5 mana), so copy-aware ranking matters here --
-   the redundancy idea `DiscardProtectScope` already encodes.
+**ONE cleanup discard in 400 games**, and it shed **Doubling Season** -- the predicted failure,
+observed. So the rule is wrong but almost never consulted: this is a correctness wart with a very
+small expected value, and any fix must be judged on that basis rather than on how bad the ordering
+looks. Fungus empties its hand; it does not flood past seven.
+
+## 5. THE USER'S BUCKETING (ruling, 2026-09-24)
+
+> *"Rather than just an order, the best way to deal with it is to start with buckets. One for mana,
+> one for threats and perhaps one for enablers. (doubling season + beastmaster) Though you only
+> really want 1 Doubling Season and 1 Beastmaster at the most. Mana we should aim to have the lesser
+> of 3-4 spots and 5 total mana (counting the board) We should keep a mix of Fungus, but especially
+> one Sporecrown, one Mycoloth, one Sporesower and a 1-drop, preferably Utopia Mycon."*
+
+**A RETENTION TARGET PER BUCKET, not a shed ranking.** The shed list is then derived: whatever
+exceeds its bucket's target is surplus, and surplus is what gets discarded. That inverts the base
+rule's question from "which card is worst" to "which bucket is over quota", which is the right
+question for a deck whose hand is a mix of interchangeable pieces.
+
+| bucket | members | retention target |
+|---|---|---|
+| **MANA** | Forest, Simic Growth Chamber, Wild Growth | **3 lands max + 1 accelerator max** |
+| **ENABLERS** | Doubling Season, Beastmaster Ascension | **1 of each, at most** |
+| **THREATS** | the Fungus creatures (+ Essence Warden) | a MIX, with a protected core |
+
+* **MANA, refined by the USER the same day:** *"I guess mana should be only 3 lands at most and
+  maybe one accelerator. If we have any mana on board, probably keep it at 3."* So it is a FLAT CAP,
+  not a function of board mana -- **3 lands, plus at most 1 Wild Growth** -- because by the time a
+  cleanup discard happens there is always some mana on board. (The earlier "lesser of 3-4 spots and
+  5 total mana counting the board" was the first statement of it; 5 is the deck's top of curve,
+  Mycoloth `{3}{G}{G}` and Doubling Season `{4}{G}`, and the flat 3 supersedes it for
+  implementation.) The 3 counts Forest and Simic Growth Chamber together.
+* **THREATS protected core:** one Sporecrown Thallid, one Mycoloth, one Sporesower Thallid, and one
+  one-drop -- **preferably Utopia Mycon** (it is the free sac outlet: "Sacrifice a Saproling: add
+  one mana of any color", which is the deck's real mana engine once a swarm exists).
+
+Cross-bucket shed order follows from the targets: surplus MANA, then surplus ENABLERS (the 2nd+
+Doubling Season / Beastmaster), then surplus THREATS beyond the core.
 
 Adopt via the heuristic-optimization route (train seeds, then held-out), behind a `heurarm` slot,
-like every other Fungus lever.
+like every other Fungus lever -- though see the frequency in section 4 before spending a sweep on it.
