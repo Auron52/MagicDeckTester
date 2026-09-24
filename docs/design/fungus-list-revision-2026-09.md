@@ -126,9 +126,16 @@ walk via `blanket_haste`.
    the permanent *is*, and what it is *for mana*. The synthetic face is not a creature, so feeding
    it there would have silently stopped a tapped Fungus being legal fodder for Utopia Mycon.
 
-### An unrelated live bug this turned up — NOT fixed, deliberately
+### An unrelated bug this turned up — NOT fixed, and LOWER priority than first stated
 
-`MTG_SAC_OUTLET_PAY` (§2b) is **already dead on Fungus**, for exactly the reason the grant would
+**Correction to this ledger's first draft, and to what was reported to the user:** I called this
+a *live* bug. It is not. `SacOutletPayEnabled()` reads `EnvOn("MTG_SAC_OUTLET_PAY")` with no
+default argument (`EnvFlags.h:24` -> `dflt = false`), so **§2b is default OFF and nothing shipping
+runs it.** The defect is real but its blast radius is "a default-off lever would do nothing if
+anyone enabled it for this deck", which is consistent with the existing record that this lever is
+INCOMPLETE and not a ship path. It does not compete for attention with the screens.
+
+`MTG_SAC_OUTLET_PAY` (§2b) is **dead on Fungus when enabled**, for exactly the reason the grant would
 have been. Utopia Mycon's *"Sacrifice a Saproling: Add one mana of any color"* cannot see a single
 legal body, because three separate sites bail on `def_absent` / `!def` before the fodder test runs
 (`LiveSacPayOutlet` `SpellEffects.h:18996`, `SacPayFodderCount` `:19090`, the payer's own branch
