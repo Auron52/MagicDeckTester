@@ -24376,6 +24376,57 @@ namespace
         }
     }
 
+    // MTG_BP_EMPTY_CENSUS=1 (default off -> not even computed): does the continuation list ALREADY
+    // hold an apply-empty entry, per site?
+    //
+    // WHY THIS NUMBER. The node host (site 3) has an EMPTY pre-skip whose argument is exact: if the
+    // k loop reached k == n then every cands index was applied, so an apply-empty entry in the list
+    // has its post-apply state in the dedup set already, and the explicit EMPTY arm is a guaranteed
+    // dupe that can be declined BEFORE paying its resume apply. The wave walker has no such skip,
+    // and Snow's site 8 is not node-hosted (BpNodeSites() defaults to 1<<3), so the channel that
+    // would answer this is never even filled there.
+    //
+    // It is the walker's residual stillborn population that makes this worth pricing. NSKIP already
+    // removes the slots wave 0 itself overran (`max_k >= n`); on gi26 that leaves stillborn=355,102
+    // of which 355,101 are `n == k0` -- the slot's FIRST and only EMPTY, which by the BpProbe
+    // comment is "a line no other rank produces" and so is NOT redundant on the rank argument. The
+    // pre-skip argument is a DIFFERENT one: not "some rank already produced this" but "some entry
+    // IN THE LIST applies to the same state". If site 8's lists carry an apply-empty entry often,
+    // that whole residual is declinable losslessly; if they rarely do, this thread is dead and the
+    // 355k first-empties are real work. This counter is here to tell those two apart before any
+    // play-affecting code is written.
+    inline std::atomic<uint64_t> g_bpempty_lists[kBpSites]{}, g_bpempty_with[kBpSites]{};
+    struct BpEmptyCensusDumper
+    {
+        ~BpEmptyCensusDumper()
+        {
+            uint64_t tl = 0, tw = 0;
+            for (int i = 0; i < kBpSites; ++i)
+            { tl += g_bpempty_lists[i].load(); tw += g_bpempty_with[i].load(); }
+            if (tl == 0) { return; }
+            std::fprintf(stderr, "[bp-empty] APPLY-EMPTY ENTRY IN THE CONTINUATION LIST\n");
+            for (int i = 0; i < kBpSites; ++i)
+            {
+                const uint64_t l = g_bpempty_lists[i].load(), w = g_bpempty_with[i].load();
+                if (l == 0) { continue; }
+                std::fprintf(stderr, "[bp-empty] %-58s lists=%-12llu with-empty=%-12llu (%.1f%%)\n",
+                             kBpSiteName[i], static_cast<unsigned long long>(l),
+                             static_cast<unsigned long long>(w),
+                             100.0 * static_cast<double>(w) / static_cast<double>(l));
+            }
+            std::fprintf(stderr, "[bp-empty] %-58s lists=%-12llu with-empty=%-12llu (%.1f%%)\n",
+                         "TOTAL", static_cast<unsigned long long>(tl),
+                         static_cast<unsigned long long>(tw),
+                         100.0 * static_cast<double>(tw) / static_cast<double>(tl));
+        }
+    };
+    inline BpEmptyCensusDumper g_bpempty_dumper;
+    inline bool BpEmptyCensusOn()
+    {
+        static const bool on = EnvOn("MTG_BP_EMPTY_CENSUS");
+        return on;
+    }
+
     // MTG_BP_CANDS_PROBE=1: the continuation-count distribution at every SEARCHED breakpoint (see
     // g_bp_cands_last). This is the measurement that sizes the deferred-wave loop: `unreachable` is
     // the number of continuations that bp_choice can never index at the current width W, i.e. the
@@ -26308,11 +26359,26 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
             // EMPTY pre-skip channel (PLAY logic under the node, unlike the stats block above):
             // report whether the list holds an apply-empty entry, so the host can skip its
             // explicit EMPTY arm as a guaranteed post-apply dupe. Node-hosted sites, k=0 only.
-            if (BpNodeEnabled() && ((BpNodeSites() >> site) & 1) != 0 && plan.bp_choice == 0)
+            // MTG_BP_EMPTY_CENSUS widens the SCAN to every site (see g_bpempty_lists) but must not
+            // widen the CHANNEL: g_bp_cands_has_empty is a thread_local the node's k loop reads, so
+            // letting a non-hosted site write it would hand site 3's pre-skip site 8's answer --
+            // play-changing, and silently. The census therefore keeps its own local and the
+            // assignment below stays under exactly the condition, and with exactly the value, it
+            // had before.
+            const bool node_hosted = plan.bp_choice == 0
+                                  && BpNodeEnabled() && ((BpNodeSites() >> site) & 1) != 0;
+            if (node_hosted || (plan.bp_choice == 0 && BpEmptyCensusOn()))
             {
-                g_bp_cands_has_empty = false;
+                bool has_empty = false;
                 for (const TurnSolver::Plan& cp : cands)
-                { if (IsApplyEmptyPlan(cp)) { g_bp_cands_has_empty = true; break; } }
+                { if (IsApplyEmptyPlan(cp)) { has_empty = true; break; } }
+                if (node_hosted) { g_bp_cands_has_empty = has_empty; }
+                if (BpEmptyCensusOn() && site >= 0 && site < kBpSites)
+                {
+                    g_bpempty_lists[site].fetch_add(1, std::memory_order_relaxed);
+                    if (has_empty)
+                    { g_bpempty_with[site].fetch_add(1, std::memory_order_relaxed); }
+                }
             }
             // Sample once per distinct breakpoint, not once per variant: the W variants of one base
             // plan all re-reach the SAME breakpoint state (that is the enum memo's premise), and
@@ -35533,8 +35599,21 @@ namespace
         //             a list's length without applying into it.
         //   dupstate = the apply landed on a post-apply state a sibling already reached
         //             (bp_seen_states). Pure recomputation; the prize, if it can be seen earlier.
+        //
+        // THE SPLIT DID NOT ADD UP, AND THE REASON WAS THE COUNTERS, NOT THE MECHANISM (2026-09-24).
+        // `scored` and `rolled` are incremented at BOTH wave-scoring loops -- FSLineWin's and the
+        // LOOKAHEAD one -- but `retired`/`dupstate` were incremented at FSLineWin's only, where the
+        // lookahead loop's two `continue`s simply fell through uncounted. On Snow gi26 that made the
+        // published split describe 0.5% of its own gap: scored=5,317,101 rolled=1,879,016 (a gap of
+        // 3,438,085) against retired=4,483 dupstate=13,820. It also sat wrong against a counter that
+        // was always global: `slots_stillborn` is incremented inside Walker::Report, so it fires for
+        // every walker, and stillborn=368,059 cannot be a SUBSET of retired=4,483. That impossibility
+        // is what exposed it. Both loops now count, and `la_*` carries the lookahead's own share so
+        // the two call sites can still be told apart -- which matters, because the gap turns out not
+        // to live where the wave phase was assumed to.
         std::atomic<uint64_t> retired{0};
         std::atomic<uint64_t> dupstate{0};
+        std::atomic<uint64_t> la_scored{0}, la_rolled{0}, la_retired{0}, la_dupstate{0};
         // ...and WHOSE state the duplicate repeats, which decides where a fix belongs:
         //   dup_self  = an earlier RANK OF THE SAME SLOT (same base plan, same bp_at). The
         //               continuation LIST is internally redundant -> fix in the continuation
@@ -35602,7 +35681,8 @@ namespace
                          " | slots barren=%llu/%llu applies barren=%llu fertile=%llu"
                          " stillborn=%llu(dup=%llu first-empty=%llu)"
                          " nskip=%llu(nomemo=%llu miss=%llu live=%llu) nobp=%llu"
-                         " | pre-plans dup=%llu/%llu\n",
+                         " | pre-plans dup=%llu/%llu"
+                         " | lookahead-share scored=%llu rolled=%llu retired=%llu dupstate=%llu\n",
                          static_cast<unsigned long long>(nodes.load()),
                          static_cast<unsigned long long>(no_slots.load()),
                          static_cast<unsigned long long>(slots.load()),
@@ -35632,7 +35712,11 @@ namespace
                          static_cast<unsigned long long>(nskip_live.load()),
                          static_cast<unsigned long long>(nobp_slots.load()),
                          static_cast<unsigned long long>(pre_dup.load()),
-                         static_cast<unsigned long long>(pre_seen.load()));
+                         static_cast<unsigned long long>(pre_seen.load()),
+                         static_cast<unsigned long long>(la_scored.load()),
+                         static_cast<unsigned long long>(la_rolled.load()),
+                         static_cast<unsigned long long>(la_retired.load()),
+                         static_cast<unsigned long long>(la_dupstate.load()));
         }
     };
     BpWaveProbe g_bp_wave_probe;
@@ -36218,6 +36302,41 @@ private:
     std::size_t              m_last   = 0;
     int                      m_last_k = 0;
 };
+
+// Post-apply dedup for the LOOKAHEAD wave loop, with the probe attribution the FSLineWin loop has
+// always had and this one never did. Returns true when the variant repeats a state and the caller
+// should `continue` -- the dedup itself is unchanged play, only the counting is new.
+//
+// WHOSE state it repeats is the whole point, because the three answers want different fixes:
+//   dup_self  -- an earlier rank of the SAME slot, i.e. the continuation LIST is internally
+//                redundant. Fixable in the enumerator, without applying anything.
+//   dup_cross -- a DIFFERENT slot got there first. Needs a node-level mechanism; cannot be seen
+//                before the apply.
+//   dup_w0    -- first reached outside the wave entirely (wave 0's own ranks, or an ordinary plan).
+// The map is built only with the probe on, so this costs nothing in a shipped run.
+template <typename SeenSet, typename SlotMap>
+static bool LaWaveDup(const BpWaveWalker& walker, const GameState& gs,
+                      SeenSet& seen, SlotMap& key_slot)
+{
+    const TranspositionTable::Key wk = BuildDedupKey(gs);
+    const bool fresh = seen.insert(wk).second;
+    if (BpWaveProbeOn())
+    {
+        const uint64_t slot_id = (static_cast<uint64_t>(walker.LastBase()) << 8)
+                               | static_cast<uint64_t>(walker.LastAt() & 0xFF);
+        const auto it = key_slot.find(wk);
+        if (!fresh)
+        {
+            (it == key_slot.end()      ? g_bp_wave_probe.dup_w0
+             : it->second == slot_id   ? g_bp_wave_probe.dup_self
+                                       : g_bp_wave_probe.dup_cross).fetch_add(1);
+            g_bp_wave_probe.dupstate.fetch_add(1);
+            g_bp_wave_probe.la_dupstate.fetch_add(1);
+        }
+        else { key_slot.emplace(wk, slot_id); }
+    }
+    return !fresh;
+}
 
 // MTG_LAND_SIG_COMPLETE -- ADOPTED DEFAULT ON 2026-09-03 (`=0` restores the legacy signature).
 // The 2026-07-29 decline ("widening buys little") was superseded by the recoverability audit's
@@ -49011,13 +49130,21 @@ TurnSolver::Plan TurnSolver::SolveWithLookahead(const GameState& state, bool is_
                 // Prefix-resume cache -- same shape as the FSLine wave loop (see BpPrefixSnap).
                 static const bool s_prefix_cache = !EnvOn("MTG_NO_BP_PREFIX_CACHE");
                 std::unordered_map<uint64_t, BpPrefixSnap> prefix_cache;
+                // Probe-only slot attribution for this loop's duplicates -- the same map the
+                // FSLineWin wave keeps, which this loop never had. Without it dup_self/dup_cross/
+                // dup_w0 described 0.45% of the duplicates they were printed next to (13,820 of
+                // 3,069,985 on gi26), and the three want opposite fixes, so an unattributed
+                // dupstate cannot direct the work. Built ONLY with the probe on.
+                std::unordered_map<TranspositionTable::Key, uint64_t,
+                                   TranspositionTable::KeyHash> la_key_slot;
                 while (walker.Next(candidates, v))
                 {
                     if (budget != nullptr && !budget->Unlimited() && budget->Exhausted())
                     { ++g_fs_trunc_events;
                       if (BpWaveProbeOn()) { g_bp_wave_probe.stopped.fetch_add(1); } break; }
                     if (BpWaveProbeOn())
-                    { g_bp_wave_probe.scored.fetch_add(1); BpWaveRank(walker.LastRank()); }
+                    { g_bp_wave_probe.scored.fetch_add(1); g_bp_wave_probe.la_scored.fetch_add(1);
+                      BpWaveRank(walker.LastRank()); }
 
                     ConsumeAt(budget, unitsite::kLookaheadBpWave);
                     PROF_INC(gamestate_copies);
@@ -49038,9 +49165,13 @@ TurnSolver::Plan TurnSolver::SolveWithLookahead(const GameState& state, bool is_
                             if (snap.valid) { prefix_cache.emplace(ck, std::move(snap)); }
                         }
                         else { ApplyPlanDirect(copy, v, true); }
-                        if (walker.Report(candidates, g_bp_cands_last, g_bp_seen_last)) { continue; }
-                        if (!bp_seen_states.insert(BuildDedupKey(copy)).second) { continue; }
-                        if (BpWaveProbeOn()) { g_bp_wave_probe.rolled.fetch_add(1); }
+                        if (walker.Report(candidates, g_bp_cands_last, g_bp_seen_last))
+                        { if (BpWaveProbeOn()) { g_bp_wave_probe.retired.fetch_add(1);
+                                                 g_bp_wave_probe.la_retired.fetch_add(1); }
+                          continue; }
+                        if (LaWaveDup(walker, copy, bp_seen_states, la_key_slot)) { continue; }
+                        if (BpWaveProbeOn()) { g_bp_wave_probe.rolled.fetch_add(1);
+                                               g_bp_wave_probe.la_rolled.fetch_add(1); }
                         AnimateLandsShared(copy, nullptr);
                         ActivateTapTokensShared(copy, nullptr);
                         SimulateCombat(copy);
@@ -49057,10 +49188,14 @@ TurnSolver::Plan TurnSolver::SolveWithLookahead(const GameState& state, bool is_
                     else
                     {
                         ApplyPlanDirect(copy, v, false);
-                        if (walker.Report(candidates, g_bp_cands_last, g_bp_seen_last)) { continue; }
+                        if (walker.Report(candidates, g_bp_cands_last, g_bp_seen_last))
+                        { if (BpWaveProbeOn()) { g_bp_wave_probe.retired.fetch_add(1);
+                                                 g_bp_wave_probe.la_retired.fetch_add(1); }
+                          continue; }
                         if (OpponentHasLost(copy)) { report(state.turn_number, depth - 1); return v; }
-                        if (!bp_seen_states.insert(BuildDedupKey(copy)).second) { continue; }
-                        if (BpWaveProbeOn()) { g_bp_wave_probe.rolled.fetch_add(1); }
+                        if (LaWaveDup(walker, copy, bp_seen_states, la_key_slot)) { continue; }
+                        if (BpWaveProbeOn()) { g_bp_wave_probe.rolled.fetch_add(1);
+                                               g_bp_wave_probe.la_rolled.fetch_add(1); }
                     }
                     if (!SimulateEndAndStartNextTurn(copy)) { continue; }
                     const int win_turn = SimulateToEnd(std::move(copy), sub_depth, max_turns, budget,
