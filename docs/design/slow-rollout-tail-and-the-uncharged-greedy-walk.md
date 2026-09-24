@@ -157,3 +157,79 @@ the right instrument for any candidate fix: a fix that does not move it has not 
   about the size of the Saproling set being subset-enumerated. Do not expect more from it.
 * **A Fungus overnight regression tier** — Fungus is the heaviest deck in the suite and currently has
   no overnight coverage.
+
+---
+
+## DISCOVERY IS THE PHASE THAT BLOCKS — and it is the one with no backstop (2026-09-24)
+
+New, and it changes where a fix should be aimed. Everything above measures the tail inside
+*generation*, which is pooled, journalled and resumable — a long cell there costs throughput, not
+progress. **Equivalence discovery is different: it is a barrier.** Nothing downstream starts until
+the last probe lands, so its tail is wall-clock the operator sits through. USER, 2026-09-24:
+
+> *"Discovery is the one phase that we actually wait for. It typically isn't too crazily long, so
+> this has rarely bitten."*
+
+And the reason it has rarely bitten is **not** that discovery is cheap — it is that discovery is
+**cached** (`<stem>.keepmodel.gencache.json`, fingerprint-gated: `ExhaustiveKeep.cpp` ~744, "a hit
+skips discovery"). A deck pays it once. A NEW list pays it in full, and there is nothing to stop it.
+
+### Measured on Fungus candidate B (decks/Fungus/candidate-b-2026-09), `fast` recipe
+
+400 probes x 22 candidates = 8,800 rollouts at play settings (d5/b20, from `BuiltinDefaultPlay` —
+this list deliberately ships no value leaf):
+
+| | |
+|---|---|
+| discovery wall | **31+ min** (still on its last 2 rollouts) |
+| rollouts over 30 s | **73 of 8,800** |
+| worst single rollout | **1,061.8 s — 17.7 minutes** (Doubling Season, probe 112) |
+| next worst | 692.9 s / 687.7 s / 645.0 s (Utopia Mycon, Saproling Burst) |
+| utilisation | **23.9/24 at 6% done -> 2.0/24 for the last two rollouts** |
+
+The hands are the ones this document already fingered: `Doubling Season` and `Utopia Mycon` are the
+exact pair in the "worst single seed observed" line above. Same structure, different phase.
+
+### THE USER NAMED THE PRECISE GAP, and it is the one this document exists for
+
+> *"We have a budget on discovery, though, since it is done at play settings. That said, in some of
+> these cases the budget is not bounding things as well as it perhaps should."*
+
+That is exactly right and it is this bug. Discovery **does** carry a budget — 20 virtual-ms — and it
+does not bound: 20 virtual-ms produced a 17.7-minute rollout. The signature matches the 3 ms ->
+25.2 min case recorded above, because the currency is the same: a unit is one simulated turn-step,
+and the greedy subset walk inside a step bills nothing.
+
+**There is additionally NO wall-clock backstop on this path.** `MTG_MAX_GAME_PREDICT_SEC` /
+`MTG_MAX_GAME_WALL_SEC` (the value-leaf tail guard) live in `src/runner/BatchRunner.cpp` ONLY —
+`mtg-analyze`'s keepgen route never sees them. So a discovery rollout today is bounded by a
+currency that undercounts it and by nothing else. `MTG_SOLVE_CHARGE` remains wired into six
+`GreedyChargeGuard` hosts and set by nothing in `scripts/`, `test/` or any manifest.
+
+### Two candidate fixes, and they are NOT equally safe
+
+**(a) Charge the greedy walk during discovery.** Fixes the cause. But it runs into open question 4
+above ("generation vs play must agree"), and it changes scores, so it can MERGE candidates that are
+not actually equivalent — a coarser partition, which is the dangerous direction: a hand then gets
+labelled by a bucket it does not belong to.
+
+**(b) A discovery-scoped WALL CAP with a conservative fallback.** If a discovery rollout exceeds N
+seconds, abandon it and place the candidates in **separate** buckets. This is strictly safer than
+(a), and the asymmetry is the whole argument:
+
+* It can only ever produce a **FINER** partition. It never merges two candidates on the strength of
+  a truncated comparison — it declines to merge. A finer partition costs downstream cells (more
+  work in the phase that is pooled and resumable, i.e. the cheap place to spend) and cannot cause a
+  hand to be scored by a bucket it does not match.
+* Open question 4 bites (a) harder than (b). Point 4 is about the table's VALUES being fitted under
+  an unshipped engine. Discovery does not produce values — the labels come from the generation
+  rollouts at the `mull_gen_*` contract (d1/b3 here). Discovery produces the PARTITION. A
+  conservative partition is not a claim about the shipped engine's scores, it is a refusal to make
+  one.
+* It is provably play-neutral by construction, because it would exist only on the discovery path.
+
+**Neither is adopted, and (a) must not be flipped on by default** — the user reverted exactly that
+on 2026-09-22 (*"I don't want to do this change in this session. Nor am I sure we want it as-is at
+all."*). What (b) still needs before adoption: a chosen N, and confirmation of how far K moves on a
+deck that trips it (candidate B is the natural subject, and its gencache now makes the comparison
+cheap to re-run).
