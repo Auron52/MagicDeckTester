@@ -1,0 +1,91 @@
+{
+  "card_scores": {
+    "Beastmaster Ascension": [
+      0.2128365585186618
+    ],
+    "Blooming Marsh": [
+      0.044804095255805976,
+      -0.009468488735183911
+    ],
+    "Brightcap Badger": [
+      -0.168715772676169
+    ],
+    "Concordant Crossroads": [
+      0.41121774524814203
+    ],
+    "Deathspore Thallid": [
+      -0.21897636171474222
+    ],
+    "Doubling Season": [
+      -0.22831765935214232,
+      -0.20979020979020913
+    ],
+    "Forest": [
+      0.043874643874644015,
+      -0.1450320512820511
+    ],
+    "Hickory Woodlot": [
+      0.2115394282841665,
+      -0.0057203487567463185
+    ],
+    "Mycoloth": [
+      -0.013691330190613193
+    ],
+    "Peat Bog": [
+      0.04382876382876422,
+      -0.3990476190476189
+    ],
+    "Psychotrope Thallid": [
+      -0.21751093148839473
+    ],
+    "Saproling Burst": [
+      -0.05252822778595956
+    ],
+    "Secluded Courtyard": [
+      0.06351317936798395,
+      -0.19532841587636174
+    ],
+    "Shroofus Sproutsire": [
+      0.21358695652173942
+    ],
+    "Slimefoot, the Stowaway": [
+      -0.10666666666666647
+    ],
+    "Sol Ring": [
+      0.20674157303370766
+    ],
+    "Sporecrown Thallid": [
+      0.34801617873651836,
+      0.3904220779220777
+    ],
+    "Tukatongue Thallid": [
+      0.14842876421823803
+    ],
+    "Undercellar Myconid": [
+      0.07824395665462625,
+      -0.5276171485543371
+    ],
+    "Utopia Mycon": [
+      -0.12416997377068384,
+      -0.057175251052801634
+    ],
+    "Vitaspore Thallid": [
+      -0.10807581376184583
+    ],
+    "Wild Growth": [
+      -0.04178571428571409
+    ]
+  },
+  "hand_score_threshold": -1e+18,
+  "mulligan": {
+    "bottom_order": "count_first",
+    "curve_check": "two_drop",
+    "max_lands": 5,
+    "min_color_sources": {},
+    "min_lands": 1,
+    "min_playable": 0,
+    "required_pieces": [],
+    "stop_at": 4
+  },
+  "version": 1
+}

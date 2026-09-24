@@ -3274,6 +3274,14 @@ inline std::pair<int,int> ComputeLordBonus(
     auto process_lord = [&](const Permanent& lord)
     {
         if (lord.controller_index != controller_index) { return; }
+        // A token can never be a lord: it has no CardDefinition, so it has no params to carry
+        // subtypes_affected / grants_haste / power_bonus. `def_absent` is precomputed exactly
+        // for this (see Permanent::def_absent) and turns a futile out-of-line hash lookup into
+        // a byte test. BYTE-IDENTICAL: def_absent is set only where the lookup was done and
+        // came back null, so this is the same `continue` the !ldef test below already takes.
+        // Measured hot on candidate-B Fungus boards: ComputeLordBonus 17% + HasHasteFromLords
+        // 5.8% of a stuck single-game profile, both dominated by this walk over ~200 tokens.
+        if (lord.def_absent) { return; }
         const CardDefinition* ldef = CardDatabase::Instance().LookupCached(lord.card);
         if (!ldef || !IsLordPermanent(*ldef)) { return; }
 
@@ -3487,6 +3495,7 @@ inline bool HasDoubleStrikeFromLords(
     auto grants = [&](const Permanent& lord) -> bool
     {
         if (lord.controller_index != controller_index) { return false; }
+        if (lord.def_absent) { return false; }   // token: no definition, so never a lord (see above)
         const CardDefinition* ldef = CardDatabase::Instance().LookupCached(lord.card);
         if (!ldef || !ldef->params.grants_double_strike) { return false; }
         if (all_creature_types && !ldef->params.subtypes_affected.empty()) { return true; }
@@ -3523,6 +3532,7 @@ inline bool HasHasteFromLords(
     for (const Permanent& lord : battlefield)
     {
         if (lord.controller_index != controller_index) { continue; }
+        if (lord.def_absent) { continue; }   // token: no definition, so never a haste lord
         const CardDefinition* ldef = CardDatabase::Instance().LookupCached(lord.card);
         if (!ldef || !ldef->params.grants_haste) { continue; }
         // Maelstrom Wanderer: "Creatures you control have haste" -- an ALL-creatures grant
@@ -17538,7 +17548,12 @@ inline ManaGrant LiveManaGrant(const GameState& state, int controller)
         // The blanket-haste half of the walk (Concordant Crossroads). Kept here rather than in
         // CanTapNow so the whole question costs ONE battlefield pass per payment.
         if (d->params.grants_haste && d->params.affects_all_creatures) { g.blanket_haste = true; }
-        if (d->params.granted_tap_mana_subtypes.empty()) { continue; }
+        if (d->params.granted_tap_mana_subtypes.empty())
+        {
+            // Both halves found -- nothing later in the walk can change either answer.
+            if (g.live && g.blanket_haste) { break; }
+            continue;
+        }
         if (g.live) { continue; }   // a second Badger grants the same ability; nothing changes
         g.live  = true;
         g.color = GrantedManaColorOf(d->params.granted_tap_mana_color);
@@ -17547,6 +17562,7 @@ inline ManaGrant LiveManaGrant(const GameState& state, int controller)
             if (g.n_subs >= 4) { break; }
             g.subs[g.n_subs++] = SubtypeRegistry::Instance().Id(s);
         }
+        if (g.blanket_haste) { break; }
     }
     return g;
 }

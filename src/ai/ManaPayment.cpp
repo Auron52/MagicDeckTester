@@ -3447,6 +3447,11 @@ std::string HumanPreTapFaces(const GameState& state, const Permanent& p)
     // Brightcap Badger's grant. This MUST match the payer, not merely approximate it: the viewer's
     // tap legality and the engine's are the same question asked twice, and a human offered fewer
     // faces than the search can use would be shown a board they cannot play.
+    // NOT hoisted, unlike the two rollout pools: this function is asked about ONE permanent at a
+    // time and its callers are viewer-only (HumanPlayActive), so the per-call battlefield walk is
+    // paid a handful of times per human decision rather than millions of times per rollout. If a
+    // non-viewer caller is ever added, hoist the grant into it -- see the note in
+    // BuildNonCreaturePool for what the per-permanent form costs on a 364-permanent board.
     const CardDefinition* def = ManaDefOf(state, p, LiveManaGrant(state, active));
     if (def == nullptr) { return std::string(); }
     const CardParams& q = def->params;

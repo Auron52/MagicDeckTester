@@ -1,34 +1,102 @@
 # Fungus list revision — candidate B vs the shipped list (opened 2026-09-24)
 
-## ⇥ RESUME HERE (state as of 2026-09-24, post-screen-1)
+## ⇥ RESUME HERE (state as of 2026-09-24, post-compaction #2)
 
-**SCREEN 1 IS DONE AND REPORTED** — see "SCREEN 1 RESULT" below. Saproling Burst is committed
-(`72f72d30`): Release 152/152 doctest, 103/103 scenarios, smoke ALL PASS with `play-changed=0`
-on both searched and d0.
+**THE DIRECTION CHANGED (USER, 2026-09-24).** *"We may need to focus more on just getting the new
+list working well before we spend too much time trying to screen for cards."* Then: *"Please also
+get the newer list in the play viewer so I can create some references… That way we can be more
+confident that it is working as intended."* Then: *"We need to properly analyze it (since I don't
+want to find a bunch of issues that the analysis process should be catching)."*
 
-**THE NEXT STEPS, in order:**
-1. **Brightcap Badger — USER SAID BUILD IT (2026-09-24).** Screen 1 independently agrees: the
-   Crossroads axis is the one clean winner, which is the evidence the sequencing call below said
-   to wait for. **The user also reframed the card:** *"The adventure is a useful part of the badger
-   when you don't have a 3-drop so it has upside… In fact, without that I wouldn't have even
-   considered it."* So **Fungus Frolic is load-bearing, not a rider** — the sequencing call below
-   costed this card as "the mana grant, 2-3 days" and barely weighed the adventure. Re-cost it.
-2. **Screen 2** (design below): base + candidate **B′** + per-card marginals off B′, read with
-   `screen_marginals.py --ref final`. Second direction of the user's question. **Revise the B′
-   bucket assignment** — screen 1 says B′ should probably not be measured as written (below).
-3. `--confirm crossroads4` on disjoint seeds. It is the selection-biased winner of a 9-arm screen.
+So the job is no longer screening. It is: **make candidate B fast enough and correct enough to
+analyse, get it viewer-ready, run the real analyze-deck pipeline.**
 
-**Already committed:** `476df8c3` (Hickory Woodlot, Concordant Crossroads, the Doubling Season ×
-depletion fix), `c7c75010` (Shroofus Sproutsire), `1ff33a02` (Slimefoot), `9fdbced1` (Vitaspore +
-Deathspore), `72f72d30` (Saproling Burst).
+### WHERE THINGS STAND
 
-**USER SIGN-OFF RECEIVED (2026-09-24) on the provisional deferrals** — Shroofus's inert Trample
-and "to a player"; Saproling Burst's "can't be regenerated" and instant-speed activation;
-Concordant Crossroads' opponent-half and the unmodelled World rule; Slimefoot's inert lifegain
-and the 2-copies + Doubling Season loop. **Conditional on one thing, which holds:** *"as long as
-Crossroads still provides haste for the current player."* It does — both halves of CR 302.6,
-attacking and `{T}`, tested at `test/unit/test_fungus_revision.cpp:267-278`. The deferred half is
-only the opponent's side, inert against a goldfish opponent that never attacks or blocks.
+* **SCREEN 2 WAS KILLED at ~70 min, WITH USER APPROVAL** (asked explicitly; the destructive carve-out).
+  It was measuring an O(n^2) bug, not candidate B — see below. Do not resume it; its arms are stale.
+* **Candidate B is now a VARIANT, not a separate deck**: `decks/Fungus/candidate-b-2026-09/Fungus.cod`
+  (USER: *"it could be included as a variant under Fungus instead of its own item"*). The viewer lists
+  it as **Fungus — candidate-b-2026-09**. Files inside a variant are named after the PARENT stem, which
+  is why it is `Fungus.cod` and its profile must be `Fungus.profile.json`. References for it belong
+  under `references/Fungus/candidate-b-2026-09/`.
+* `logs/fungus2/FungusB.txt` is the user's list VERBATIM — never edit it. `FungusB_myc2.txt` was the
+  screen-2 base (Mycoloth 2, forced by keep-table coverage).
+
+### THE PERF STORY — the reason everything else stalled
+
+**1. I introduced an O(board^2) and it was catastrophic.** `LiveManaGrant` walks the whole
+battlefield; I called it from INSIDE the per-permanent loop in `BuildNonCreaturePool` and
+`ComputeAvailableColors`. On 364-permanent boards that is ~132,000 lookups per call. **Fixed
+(hoisted).** Same game, same seed, same profile, d5/20ms, only the binary differs:
+
+| game | with the bug | after the hoist |
+|---|---|---|
+| gi=7069 | 93,922 ms | **0.12 s** |
+| gi=6882 | 96,709 ms | **0.26 s** |
+| gi=8061 | 87,898 ms | **0.29 s** |
+| gi=663 | ~360,000 ms | **3.5 s** |
+
+**WHY NOTHING CAUGHT IT:** `deck_has_mana_grant` is stamped from the decklist, so the bug was
+invisible to every deck that does not play a Brightcap Badger — which is all 22 committed decks. The
+containment that made the grant safe for everyone else is exactly what hid its cost. A perf test on
+an UNCOMMITTED list is the only thing that could have caught it.
+
+**2. Candidate B is 6.5x the shipped list, and Saproling Burst is the largest single cause.**
+200 games, 8 threads, shared profile/seeds, `--max-turns 14`:
+
+| deck | wall | note |
+|---|---|---|
+| shipped Fungus | **2.8 s** | baseline |
+| candidate B (full) | **18.1 s** | **6.5x** |
+| B − Saproling Burst | 10.5 s | **Burst is ~42% of B's cost** |
+| B − Vitaspore | 12.3 s | |
+| B − Brightcap Badger | 23.6 s | **SLOWER without it** — the grant pays for itself |
+
+(Each variant swaps the cut card for Forests, so land count is a mild confound; the 6.5x headline
+is not.)
+
+**THE CAUSE IS A DESIGN DECISION I MADE, and it is written down in the card's own oracle note:**
+Saproling Burst's K axis is deliberately NOT pooled — *"two Saproling Bursts on different counter
+totals mint DIFFERENT-SIZED tokens, so each keeps its own axis."* True, but with **4 copies that is a
+4-dimensional axis**, and the engine has fought this exact shape before (the adopted sac-outlet count
+pool, 2.29x on the heaviest Fungus cell; see [[greedy-walk-powerset-over-identical-outlets]]).
+
+**THE FIX TO BUILD NEXT — pool Bursts that share a counter total.** Two Bursts on the SAME count
+genuinely are identical (same fade total, same token size, byte-identical payload), so folding them is
+LOSSLESS — and it covers the common case, because all four enter at 7 (or 14 under a Doubling Season)
+and only diverge once activated unevenly. This is `FoldSporeSourceIdentity` with the counter total
+added to the identity key. Do NOT pool across different totals; that would be the unsound version.
+
+**3. A lord-scan guard that did NOT pay — kept, but claim nothing for it.** `ComputeLordBonus` (17%)
+and `HasHasteFromLords` (5.8%) dominated a profile of the stuck game, and neither took the
+`def_absent` short-circuit, so each walked ~200 tokens doing futile hash lookups. Added the guard to
+all three lord scans. **Measured: no improvement** (gi=663 3.51 s → 3.56 s; short games unchanged).
+It is byte-identical and is exactly what `def_absent` is for, so it stays — but it is NOT a fix and
+must not be reported as one. `LookupCached` was already memoised to a sentinel compare.
+
+### NEXT STEPS, in order
+
+1. **Build the Saproling Burst counter-total pool.** Biggest single win available (~42% of B's cost).
+2. **Re-run `scripts/analyze_deck.py decks/Fungus/candidate-b-2026-09/Fungus.cod --no-rebuild`.**
+   The previous attempt STALLED — 20+ min on ONE game at 1 core of 24, in the card-scores phase, on a
+   pre-guard binary. That stall is the Burst explosion, not a hang (perf showed ordinary gameplay
+   code). Kill any survivor before restarting.
+3. **Then Stage 5:** `python3 scripts/verify_deck.py <deck>` — the one-command gate (coverage,
+   Scryfall cost audit, viewer decision auditor, viewer_wiring, nonconv/fd-diverge), then the 5d
+   claude-play sweep (~15-20 games, fan-out expected, Opus for judgement).
+4. Only after the engine is fast and validated: the user kicks off mulligan generation. Stage 4 does
+   NOT do mulligan work.
+
+### WHAT THE HUMAN SHOULD WATCH FOR IN THE VIEWER (already told to the user)
+
+* **The Badger's TWO cast modes** share one hand card — `{3}{G}` creature and `{2}{G}` Fungus Frolic,
+  the adventure tagged `adventure`. After adventuring, the Badger must be castable again from exile.
+  First adventure card the engine has ever had.
+* **Tapping Saprolings for mana** under a Badger — including tokens AND definition-bearing Fungi
+  (Thallid, Sporecrown, Utopia Mycon). A token made THIS turn must refuse unless Crossroads is out.
+* **Saproling Burst token sizes** shrink as it is activated, and all its tokens die when it is
+  sacrificed on the eighth upkeep.
 
 ## SCREEN 1 RESULT — the control arm reversed the reading
 

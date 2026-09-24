@@ -2374,13 +2374,16 @@ static ManaPool BuildNonCreaturePool(const GameState& state)
 {
     ManaPool pool;
     int gy_fuel = -1;   // Deathrite fuel: lazily counted, decremented per credited source
+    // HOISTED, and it must stay hoisted: LiveManaGrant walks the whole battlefield, so calling
+    // it per permanent makes this loop O(board^2) -- ~132,000 lookups per call on this deck's
+    // 364-permanent rollout boards. One resolve per call, the shape LiveSacPayOutlet uses.
+    const ManaGrant grant = LiveManaGrant(state, state.active_player_index);
     for (const Permanent& p : state.battlefield)
     {
         if (p.controller_index != state.active_player_index || p.tapped) { continue; }
         // Brightcap Badger's grant: a granted body has no CardDefinition, so this `continue` was
         // blind to it. ManaDefOf returns the shared synthetic ManaDork face; body unchanged.
-        const CardDefinition* def =
-            ManaDefOf(state, p, LiveManaGrant(state, state.active_player_index));
+        const CardDefinition* def = ManaDefOf(state, p, grant);
         if (!def || def->params.creature_mana_only) { continue; }
         bool is_land = (def->tmpl == CardTemplate::BasicLand);
         // §2a: a pay-sac Treasure is an artifact source -- it must be in the NONCREATURE pool or the
@@ -5016,12 +5019,16 @@ static void ComputeAvailableColors(const GameState& state, bool have[5])
     have[0] = have[1] = have[2] = have[3] = have[4] = false;
     int active = state.active_player_index;
     bool scaling_source = false;         // controls a live "colors among permanents" mana source
+    // HOISTED, and it must stay hoisted: LiveManaGrant walks the whole battlefield, so calling
+    // it per permanent makes this loop O(board^2) -- ~132,000 lookups per call on this deck's
+    // 364-permanent rollout boards. One resolve per call, the shape LiveSacPayOutlet uses.
+    const ManaGrant grant = LiveManaGrant(state, active);
     for (const Permanent& p : state.battlefield)
     {
         if (p.controller_index != active || p.tapped) { continue; }
         // Brightcap Badger's grant: a granted body has no CardDefinition, so this `continue` was
         // blind to it. ManaDefOf returns the shared synthetic ManaDork face; body unchanged.
-        const CardDefinition* def = ManaDefOf(state, p, LiveManaGrant(state, active));
+        const CardDefinition* def = ManaDefOf(state, p, grant);
         if (!def) { continue; }
         bool is_src = (def->tmpl == CardTemplate::BasicLand)
                    || (def->tmpl == CardTemplate::ManaDork && CanTapNow(p, state.battlefield))
