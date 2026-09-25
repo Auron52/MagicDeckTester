@@ -152,6 +152,98 @@ running hotter than section 2's Melira calibration: at ~16 rollouts per task, wa
 therefore rests on the size-7 refine estimate (2.89M rollouts, ~10 h at the observed rate) plus a sub
 tail that is now the wider of the two error bars.
 
+## 4c. CANCELLED at 19:38 UTC by the user, and where the cost actually is
+
+> *"I think I would like to cancel and look at optimizing. This is clearly still too slow."*
+
+Cancelled at 6.47 h. **The watcher was stopped FIRST** -- it would otherwise have seen the gen die
+with the journal present and faithfully relaunched it 30 s later. Then the gen by captured PID.
+
+**Nothing was lost.** The journal grew 14.6 MB -> **30 MB** and is preserved
+(`decks/Snow/Snow.keepmodel.exhaustive.raw.json.journal`), ending on well-formed records. Banked:
+the size-7 floor, the whole sub-table floor, and roughly half of sub-refine wave 1. The journal's
+`"n":18` records also settle the wave arithmetic -- the adaptive sub-refine steps a sub cell-side
+from the floor of 2 straight to **18** rollouts, which is the ~16-per-task figure section 4b
+inferred. Re-running `mullgen.sh run decks/Snow fast` resumes it, subject to the play digest.
+
+### The tail is NOT the cost on this deck -- the median rollout is
+
+This matters because it points the optimization somewhere different from the matrix work, where
+34.7% of games ceiling-bound were 90.2% of cell wall.
+
+| | |
+|---|---|
+| rollouts over the 30 s slow threshold | 689 |
+| their total cost | 32,979 core-s = **9.16 core-h** |
+| the run's total | ~192 core-h (6.0 h x 32) |
+| **tail share of the work** | **4.8%**, from **0.044% of rollouts** |
+
+So a tail cap -- the instinctive fix, and the one `slow-rollout-tail-and-the-uncharged-greedy-walk.md`
+was opened for on Fungus -- buys about 5% here. **The cost is the ordinary rollout**, at 0.45 core-s
+and 18,584 units apiece (~40 units/ms, ~25 us per work unit).
+
+### Which is the defect the user already ruled on, now measured on Snow
+
+The ordinary rollout is expensive for the reason that doc names: `SearchBudget` counts one unit per
+simulated turn-step, and the greedy subset walk inside a step bills nothing. Measured at Snow's
+shipped labeller settings (d2/b1) with `MTG_BF_CENSUS=1 MTG_ROLLOUT_STATS=1`:
+
+```
+[score] depth=2 budget_ms=1 rollouts=16 work_units=434182 units_per_rollout=27136
+[rollout-stats]   bf_scored greedy_subsets=2793865 search_subsets=170425
+```
+
+**6.43 uncharged greedy subset visits per charged unit** (6.83 counting search subsets). At the
+doc's own calibrated 1:1 exchange rate that means **the budget undercounts a Snow labeller rollout's
+true work by ~7x**. For scale, Fungus's *degenerate* cell measured 27.4 per unit -- Snow's figure is
+a quarter of that, but it is the **typical** rollout rather than a pathological one. A uniform 7x
+undercount, not a tail.
+
+That is exactly the defect behind the USER RULING of 2026-09-24 (*"this might point more toward the
+need for properly bounding things by budget"*), which is still **unlanded** -- `MTG_SOLVE_CHARGE` is
+set by nothing in `scripts/`, `test/` or any manifest.
+
+### What charging would buy the LABELLER, and what it would cost
+
+Melira rejected `MTG_SOLVE_CHARGE` on **play** quality (613->370 s but avg 4.96->5.24, -0.28 t). A
+labeller is not judged on play quality -- it is judged on whether it RANKS hands like the shipped
+policy, which is the only reason d2/b1 was adoptable at all. **That test had never been run for this
+flag.** Run now, 200 paired openers from the real opening distribution, R=30, seed 9201 (held out),
+both arms carrying the census so the ratio is a ratio:
+
+| | base d2/b1 | + `MTG_SOLVE_CHARGE` |
+|---|---|---|
+| wall | 257.3 s | **169.8 s = 0.660x (1.52x faster)** |
+| units/rollout | 18,584 | 25,970 (a different currency -- it now includes the walk) |
+| rho vs base | -- | 0.9968 |
+| mean shift | -- | +0.0180 t |
+| dispersion sd | -- | 0.0288 |
+| pairwise order agreement | -- | **10,685/10,685 = 100.0%** |
+
+Against the bar the d2/b1 adoption cleared (rho >= 0.9984, dispersion <= 0.030, agreement 100.0%):
+**agreement ties it, dispersion passes at 0.0288, and rho MISSES at 0.9968.** Reported as it fell --
+two of three, not a pass. The honest reading is that charging the walk costs this labeller very
+little ranking fidelity for 1.52x, but it is not the clean sweep d2/b1 was.
+
+**This is evidence for the budget repair, not authority to flip the flag.** Enabling it for
+generation alone runs straight into the doc's open question 4 -- a table fitted under an engine we do
+not ship -- and the 2026-09-24 ruling deliberately chose the global repair over per-phase patches.
+
+### The strategic answer: no single lever makes this an overnight job
+
+1.52x takes ~20-24 h to ~13-16 h. Still not 8 h. Stacking what is measured and available:
+
+| lever | factor | state |
+|---|---|---|
+| budget-currency repair (the walk billed) | **1.52x** | measured here; unlanded, user-ruled direction |
+| `MTG_FOLD_SEARCH_ODO` | 1.13x | built, verified lossless, RESERVED |
+| K 17->16 (`-1 Rimescale Dragon +1 Rimefeather Owl`) | ~1.30x (cells 0.769x) | a DECKLIST change, user's call |
+
+Together ~2.2x -> **~9-11 h**, which finally approaches the window. Any one of them alone does not.
+That is the answer to *"this is clearly still too slow"*: it is too slow by roughly 3x, the largest
+single piece of it is a defect you have already ruled on, and closing the gap needs the stack rather
+than a lever.
+
 ## 5. A live collision risk on this box, for whoever reads this first
 
 Another session pushed `9d8e1718` at 13:18 UTC about **relaunching candidate B's (Fungus) mulligan

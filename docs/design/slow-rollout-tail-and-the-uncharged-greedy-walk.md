@@ -260,3 +260,65 @@ Discovery keeps ONE property worth remembering when the fix is measured: it is t
 is a **barrier**, so it is the most sensitive test of whether a candidate bound actually works.
 A fix that leaves one 17.7-minute rollout in 8,800 has not fixed it — 1 of 24 cores for the last
 12 minutes of a 45-minute phase is what that residue looks like.
+
+---
+
+## SNOW, 2026-09-25: the undercount measured on a NON-degenerate deck, and the labeller's own verdict
+
+Two gaps in the record above, both filled by a cancelled Snow mulligan generation.
+
+### 1. The undercount is not a Fungus pathology -- it is the ordinary rollout
+
+Everything above measures a *degenerate* cell (12,578,432 subsets against 458,797 units = 27.4 per
+unit, a token doubler feeding a sacrifice outlet). That framing invites the reading that the defect
+only bites explosive board structures. It does not. At Snow's shipped labeller settings, d2/b1, with
+`MTG_BF_CENSUS=1 MTG_ROLLOUT_STATS=1` on 16 ordinary rollouts:
+
+```
+[score] depth=2 budget_ms=1 rollouts=16 work_units=434182 units_per_rollout=27136
+[rollout-stats]   bf_scored greedy_subsets=2793865 search_subsets=170425
+```
+
+**6.43 greedy subset visits per charged unit** (6.83 with search subsets). No doubler, no sacrifice
+outlet, no degenerate cell -- just Snow. At the 1:1 rate this document already calibrates, the budget
+undercounts a typical Snow labeller rollout by **~7x**.
+
+And on Snow the tail is NOT where the money is, which is worth recording next to the Fungus story:
+689 rollouts over the 30 s threshold cost 9.16 core-h of a ~192 core-h run -- **4.8% of the work from
+0.044% of the rollouts**. A tail cap buys ~5% here. The median rollout is the cost.
+
+**Instrument gap, for the next reader:** `MTG_BF_CENSUS` alone prints nothing. It increments the
+counters; the printer is `RolloutStatsReporter`'s destructor gated on `MTG_ROLLOUT_STATS`
+(`TurnSolver.cpp:1367`). With the census alone the subset lines silently read **0**, which is
+indistinguishable from "this deck has no greedy walk" -- it cost a wrong reading before it was caught.
+
+### 2. Open question 1, answered for the LABELLER -- and it is not the Melira answer
+
+Question 1 asks "what does it cost?" and the only datum was Melira's, on **play**: 613->370 s but avg
+4.96->5.24, **-0.28 t**, rejected. A labeller is not judged on play quality. It is judged on whether
+it RANKS hands like the shipped policy -- the criterion that made d2/b1 adoptable while shifting the
+mean +0.056. That test had never been run for this flag.
+
+200 paired openers from the real opening distribution, forced kept (the gen shape), R=30, held-out
+seed 9201, Snow d2/b1, census on both arms (`logs/snowopt/label_charge_ab.py`):
+
+| | base | + `MTG_SOLVE_CHARGE` | bar d2/b1 cleared |
+|---|---|---|---|
+| wall | 257.3 s | **169.8 s = 0.660x** | -- |
+| rho | -- | 0.9968 | >= 0.9984 **MISS** |
+| mean shift | -- | +0.0180 t | -- |
+| dispersion sd | -- | 0.0288 | <= 0.030 pass |
+| pairwise order agreement | -- | **10,685/10,685 = 100.0%** | 100.0% tie |
+
+**1.52x faster for two of three fidelity criteria.** Not the clean sweep d2/b1 was, but nothing like
+Melira's -0.28 t either -- because truncating the walk moves scores in a way that shifts hands
+together rather than reordering them. Every one of 10,685 reference-separated pairs kept its order.
+
+This does **not** license enabling it for generation: open question 4 stands (a table fitted under an
+engine we do not ship), and the 2026-09-24 ruling deliberately chose the global budget repair over a
+per-phase patch. What it does is price that repair. Snow's mulligan gen projects ~20-24 h; 1.52x takes
+it to ~13-16 h, still over the ~8 h window, so the repair is necessary and not sufficient -- it needs
+`MTG_FOLD_SEARCH_ODO` (1.13x) and a K reduction (~1.30x) stacked with it to approach a night.
+
+Full context, including the cancelled run's state and the resumable 30 MB journal:
+`docs/design/snow-generation-cost-2026-09-25.md` section 4c.
