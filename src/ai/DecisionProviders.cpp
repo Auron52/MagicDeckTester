@@ -20420,10 +20420,27 @@ bool FungusProvider::DeferSacOutletPreCombat(const GameState& s, const Permanent
 {
     // ITS OWN ARM, not the payer gate's. Folding the two together is exactly the mistake the
     // FUNGUS_M2_GATE comment warns about, and it cost a measurement: a combined A/B on 2026-09-25
-    // came back >=2.9x SLOWER and could not say which half did it. Deferring is the expensive
-    // suspect -- it makes the second main NECESSARY on turns that previously skipped it, and every
-    // such turn then solves twice.
-    static const bool env_on = EnvOn("MTG_FUNGUS_SHRINK_SAC_M2");
+    // came back >=2.9x SLOWER and could not say which half did it.
+    //
+    // ADOPTED 2026-09-25, DEFAULT ON (=0 restores the pre-combat outlet). The suspicion recorded
+    // above -- "deferring is the expensive suspect" -- was measured and is BACKWARDS once the two
+    // arms are separated, which is exactly the attribution the fused A/B could not give:
+    //   * cost, serial and alone on the box: candidate B's tail block (24 games, seed 90000)
+    //     22.60/21.97 s -> 7.51/7.46 s = 2.95x; its worst game 22,518 ms -> 7,117 ms with work
+    //     units 1,339,602 -> 543,628. A MEDIAN game is ~1.0x, so an average-based A/B cannot see
+    //     this and that is how it came to be filed as slower.
+    //   * play, 1,392 HELD-OUT games over five fresh seeds at BOTH depths, one pooled batch:
+    //     d1/b3 t = -2.68 (n=600, -0.0183 turns), d5/b20 t = -1.42 (n=96, -0.0208), all held-out
+    //     t = -3.00. 15 games better, 2 worse; 5 of 5 held-out seeds favour it (6 of 6 with the
+    //     train seed). The two depths give the SAME effect size, so it is not a shallow-search
+    //     artefact the real play depth routes around.
+    //   * the SHIPPED Fungus list is byte-identical (no Deathspore-class shrink outlet), so this
+    //     adoption cannot move the regression suite.
+    // USER 2026-09-25: *"If it is a general win, then let's adopt."* It is a general win at both
+    // depths, which is why this is an engine default rather than a generation-only wiring like
+    // MTG_DECISION_WORK_X. Writeup + the held-out table:
+    // docs/design/slow-rollout-tail-and-the-uncharged-greedy-walk.md.
+    static const bool env_on = EnvOn("MTG_FUNGUS_SHRINK_SAC_M2", true);
     if (!heurarm::Flag(heurarm::FUNGUS_SHRINK_SAC_M2, env_on)) { return false; }
     if (is_mana_outlet)      { return false; }   // Mycon: pre-combat float funds a cast
     if (!s.uses_second_main) { return false; }   // nowhere to defer TO -> would delete, not move
