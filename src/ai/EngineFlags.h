@@ -730,6 +730,35 @@ inline bool UpkeepFloatClearEnabled()
     return v;
 }
 
+// MTG_ACT_TAP_RESERVE=1 -- measurement lever (DEFAULT OFF; it changes which source pays, so it moves
+// ground truth): a planned `{cost}, {T}` activation's SOURCE is held back from mana payment for the
+// whole plan, so no earlier cost in the same plan can spend it and strand the activation.
+//
+// THE DEFECT, from a replay (snow_smoke_d0_s1001 gi413, turn 4). The plan is "activate Scrying Sheets
+// #39, activate Scrying Sheets #38": each look costs {1}{S} and taps its own Sheets, and the board has
+// Boreal Druid + Rimewood Falls + Coldsteel Heart + Snow-Covered Island untapped -- exactly the 4 mana
+// the two looks need. The trailing pass taps #39 for its {T}, then pays {1}{S} with the FIRST sources
+// the greedy finds, which include Sheets #38 (it taps for {C}). #38 is now tapped, so the second
+// activation is stranded and the turn gets ONE look instead of two. Nothing was unaffordable; the
+// payment simply spent the source the plan's own later action had to tap.
+//
+// It rides the SAME reserve-then-fallback retry as every other entry in g_plan_reserved_sources (try
+// holding them; if the cost cannot be met, pay normally), so it can only ever change WHICH sources
+// pay, never whether a cost is payable -- and therefore can never drop an action.
+//
+// WHY IT IS THE OTHER HALF OF MTG_RESCUE_TAP_SOURCE. That flag stops the ENUMERATOR from offering
+// self-funded plans (a source paying for its own activation). Both must move together: with the gate
+// alone, the enumerator correctly refuses the illegal 3-activation plan whose PARTIAL execution used
+// to deliver a good 2-activation line by accident, and the legal plan that replaces it is then
+// stranded by this defect -- which is exactly how a correctness fix measured as three d0 regressions.
+// Read by BOTH apply paths through TurnSolver::ActivationTapReserve -> PlanReserveSources (the cast
+// section) and the trailing dispatchers' own scope, per the lockstep rule.
+inline bool ActTapReserveEnabled()
+{
+    static const bool env_on = EnvOn("MTG_ACT_TAP_RESERVE");
+    return heurarm::Flag(heurarm::ACT_TAP_RESERVE, env_on);
+}
+
 // MTG_BP_TRACE (diagnosis only): print the breakpoint sequences on both sides -- the EXECUTOR's
 // ([bp-exec], AIEngine) and the apply side's ([bp-apply], TurnSolver::ApplyPlanDirect) -- so they
 // can be diffed. A searched continuation landing at a different index on the two sides is the

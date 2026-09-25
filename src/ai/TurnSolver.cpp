@@ -5653,12 +5653,19 @@ static const bool* WidenHaveWithSubsetRocks(const bool have[5], bool scratch[5],
 // silent perf tweak.
 static bool RescueTapSourceOn()
 {
-    static const bool on = EnvOn("MTG_RESCUE_TAP_SOURCE");
-    return on;
+    // Per-job override (see HeuristicArm.h) so ONE pooled batch carries every arm of the A/B -- which
+    // this change needs more than most, because it must be measured JOINTLY with MTG_ACT_TAP_RESERVE
+    // (the two are halves of one fix) and a four-arm cross on separate runs is four load-imbalance
+    // tails instead of one.
+    static const bool env_on = EnvOn("MTG_RESCUE_TAP_SOURCE");
+    return heurarm::Flag(heurarm::RESCUE_TAP_SOURCE, env_on);
 }
 
-static bool SubsetPayableWithFilters(const GameState& state, const std::vector<Action>& cands,
-                                     const std::vector<int>& sel)
+// `tap_sources` is RescueTapSourceOn() at every production call site; the parameter exists so
+// MTG_RESCUE_TAP_TRACE can run the SAME code both ways on a rejection and print the flips. See the
+// wrapper below.
+static bool SubsetPayableWithFiltersImpl(const GameState& state, const std::vector<Action>& cands,
+                                         const std::vector<int>& sel, bool tap_sources)
 {
     // PROFILED HOTSPOT (2026-09-07), now on a REUSED board (2026-09-08). This copy is the single
     // largest GameState-copy cost in the engine on this deck: a task-clock profile (EDF s3001 gi0,
@@ -5706,7 +5713,7 @@ static bool SubsetPayableWithFilters(const GameState& state, const std::vector<A
     //
     // Tapping happens BEFORE any payment because a source reserved by one activation must be
     // unavailable to every cost in the subset, not just the ones sequenced after it.
-    if (RescueTapSourceOn())
+    if (tap_sources)
     {
         for (int j : sel)
         {
@@ -5804,6 +5811,63 @@ static bool SubsetPayableWithFilters(const GameState& state, const std::vector<A
         }
     }
     return true;
+}
+
+// MTG_RESCUE_TAP_TRACE -- WHICH subsets does MTG_RESCUE_TAP_SOURCE delete? The aggregate counter says
+// 299,864,980 rescues collapse to 13,208, and the smoke run says three d0 Snow games get WORSE, but a
+// count cannot say whether a deleted subset was an illegal self-funded plan (the fix working) or a
+// legal line the gate misjudges (a bug). This prints the first N flips -- selections that are payable
+// WITHOUT the activation taps and unpayable WITH them -- with the board's untapped sources, which is
+// exactly the evidence needed to adjudicate one by hand.
+//
+// Diagnostic only: it re-runs the whole payment walk on every rejection, so it roughly doubles the
+// rescue's cost and must never be on in a measured run. N defaults to 20 because the first divergent
+// turn is what matters; everything after it is downstream of a plan that already changed.
+static int RescueTapTraceLimit()
+{
+    static const int v = EnvOn("MTG_RESCUE_TAP_TRACE") ? EnvInt("MTG_RESCUE_TAP_TRACE", 20) : 0;
+    return v;
+}
+
+static bool SubsetPayableWithFilters(const GameState& state, const std::vector<Action>& cands,
+                                     const std::vector<int>& sel)
+{
+    const bool tap = RescueTapSourceOn();
+    const bool ok  = SubsetPayableWithFiltersImpl(state, cands, sel, tap);
+    const int  lim = RescueTapTraceLimit();
+    if (lim > 0 && tap && !ok)
+    {
+        static std::atomic<int> shown{0};
+        if (SubsetPayableWithFiltersImpl(state, cands, sel, /*tap_sources=*/false)
+            && shown.fetch_add(1, std::memory_order_relaxed) < lim)
+        {
+            std::string acts;
+            for (int j : sel)
+            {
+                const Action& a = cands[j];
+                if (!acts.empty()) { acts += " + "; }
+                acts += a.card_name.str();
+                if (a.kind == Action::Kind::ActivatePermAbility)
+                {
+                    acts += "[ACT src=" + std::to_string(a.sac_source_id)
+                          + (PermAbilityTaps(a.ability_mode) ? ",T" : ",noT") + "]";
+                }
+                acts += " cost=" + a.cost.ToString();
+            }
+            std::string srcs;
+            for (const Permanent& sp : state.battlefield)
+            {
+                if (sp.controller_index != state.active_player_index || sp.tapped) { continue; }
+                const CardDefinition* sd = CardDatabase::Instance().LookupCached(sp.card);
+                if (!sd) { continue; }
+                if (sd->params.produces.empty() && !sd->params.mana_rock) { continue; }
+                srcs += sp.card.m_name.str() + "#" + std::to_string(sp.card.m_number) + ",";
+            }
+            std::fprintf(stderr, "[rescue-tap] FLIP turn=%d: %s   UNTAPPED{%s}\n",
+                         state.turn_number, acts.c_str(), srcs.c_str());
+        }
+    }
+    return ok;
 }
 
 // MTG_COLOR_EXACT_PROBE -- the soundness instrument for the colour-exact gate. The gate may only
@@ -7854,7 +7918,54 @@ std::vector<int> TurnSolver::PlanReserveSources(const GameState& state,
     std::vector<int> out = ManaUnlockColorReserve(state, acts);
     for (int n : ColorCriticalReserve(state, acts))
     { if (std::find(out.begin(), out.end(), n) == out.end()) { out.push_back(n); } }
+    for (int n : ActivationTapReserve(state, acts))
+    { if (std::find(out.begin(), out.end(), n) == out.end()) { out.push_back(n); } }
     return out;
+}
+
+// See the header, and MTG_ACT_TAP_RESERVE's note in EngineFlags.h for the replayed case this fixes.
+// Deliberately NOT restricted to sources the payment could plausibly want: a reserved source is a
+// first ATTEMPT that falls back to the ordinary payment, so over-reserving costs at most one extra
+// payment attempt and can never drop a cost. It IS restricted to permanents that are (a) the active
+// player's, (b) currently untapped -- an already-tapped source is not supply, and naming it would make
+// the reserve list differ between two boards that pay identically -- and (c) a mana source at all,
+// since holding back a non-source changes nothing and only lengthens the list the payment walk reads.
+std::vector<int> TurnSolver::ActivationTapReserve(const GameState& state,
+                                                  const std::vector<Action>& acts)
+{
+    std::vector<int> out;
+    if (!ActTapReserveEnabled()) { return out; }
+    const int active = state.active_player_index;
+    for (const Action& a : acts)
+    {
+        if (a.kind != Action::Kind::ActivatePermAbility || a.sac_source_id <= 0) { continue; }
+        if (!PermAbilityTaps(a.ability_mode)) { continue; }
+        for (const Permanent& p : state.battlefield)
+        {
+            if (p.controller_index != active || p.tapped) { continue; }
+            if (p.card.m_number != a.sac_source_id) { continue; }
+            const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+            if (d == nullptr) { break; }
+            if (d->params.produces.empty() && !d->params.mana_rock) { break; }   // not a mana source
+            if (std::find(out.begin(), out.end(), a.sac_source_id) == out.end())
+            { out.push_back(a.sac_source_id); }
+            break;
+        }
+    }
+    return out;
+}
+
+// See the header. EMPTY means "nothing to add" -- the callers then install no scope at all, which is
+// what keeps the lever byte-identical when off (an empty PlanSourceReserveScope is NOT a no-op: it
+// would clear an outer reservation for the duration of an inline activation).
+std::vector<int> TurnSolver::ActivationTapReserveUnion(const GameState& state,
+                                                      const std::vector<Action>& acts)
+{
+    std::vector<int> add = ActivationTapReserve(state, acts);
+    if (add.empty()) { return add; }
+    for (int n : g_plan_reserved_sources)
+    { if (std::find(add.begin(), add.end(), n) == add.end()) { add.push_back(n); } }
+    return add;
 }
 
 
@@ -29497,6 +29608,21 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
         }
     }
     const std::vector<Action>& trailing_acts = *_acts;
+    // ACTIVATION TAP reserve for the trailing pass (MTG_ACT_TAP_RESERVE, default off -> empty vector ->
+    // byte-identical). The cast section's reserve (apply_plan_actions' PlanSourceReserveScope) has
+    // already gone out of scope by here, and the case that motivated the lever is activation-vs-
+    // ACTIVATION: two Scrying Sheets, where paying the FIRST look taps the second Sheets for {C} and
+    // strands the second look. Each source is still tapped for its own {T} by the branches below --
+    // this only stops the mana payment from spending one of them. Nested (a continuation re-enters
+    // this lambda) restores the outer list, per PlanSourceReserveScope's contract. Installed ONLY when
+    // the union is non-empty: an empty scope would CLEAR the cast section's reserve for an activation
+    // dispatched inline from inside it (the human-order interleave), which is a behaviour change with
+    // the lever off.
+    std::optional<PlanSourceReserveScope> _act_reserve;
+    {
+        std::vector<int> _act_hold = TurnSolver::ActivationTapReserveUnion(state, trailing_acts);
+        if (!_act_hold.empty()) { _act_reserve.emplace(std::move(_act_hold)); }
+    }
     for (const Action& a : trailing_acts)
     {
         if (a.kind == Action::Kind::SacCreatureOutlet)

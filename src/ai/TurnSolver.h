@@ -1529,8 +1529,28 @@ public:
     static std::vector<int> ColorCriticalReserve(const GameState& state,
                                                  const std::vector<Action>& acts);
 
-    // The union both apply paths install (unlock pieces + colour-critical). One function so the
-    // executor and the rollout cannot drift on which sources are held.
+    // ACTIVATION TAP reserve (MTG_ACT_TAP_RESERVE, default off). The card numbers of every permanent
+    // this plan intends to TAP as part of a `{cost}, {T}` activation cost. Such a source is not supply
+    // for the plan at all -- it is a resource the plan has already committed -- so letting an earlier
+    // cost tap it for mana strands the activation. See the flag's note in EngineFlags.h for the
+    // replayed case (two Scrying Sheets, 4 mana available for 4 mana of looks, one look delivered).
+    //
+    // Empty when the lever is off or the plan taps nothing. Like every reserve it rides the payment
+    // path's reserve-then-fallback, so it can only change WHICH source pays.
+    static std::vector<int> ActivationTapReserve(const GameState& state,
+                                                 const std::vector<Action>& acts);
+
+    // ...UNIONED with whatever reservation is already in scope, which is what the trailing passes
+    // install. It must be a union and not a replacement: the trailing dispatcher is also re-entered
+    // from INSIDE the cast section (the human-order interleave applies a single activation inline),
+    // and there the cast section's own reserve is live -- a plain scope would drop it. Returns empty
+    // when this lever adds nothing, and both call sites skip installing a scope at all in that case,
+    // so with the lever off `g_plan_reserved_sources` is never even written.
+    static std::vector<int> ActivationTapReserveUnion(const GameState& state,
+                                                      const std::vector<Action>& acts);
+
+    // The union both apply paths install (unlock pieces + colour-critical + activation taps). One
+    // function so the executor and the rollout cannot drift on which sources are held.
     static std::vector<int> PlanReserveSources(const GameState& state,
                                                const std::vector<Action>& acts);
 

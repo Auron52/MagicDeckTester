@@ -579,14 +579,15 @@ score gets committed, the executor then cannot pay it, and the cast is silently 
 line actually played is worse than the line chosen. Removing them makes the search commit to plans it
 can perform.
 
-**AND WHY d0 CAN STILL LOSE.** At d0 the greedy IS the decision, with no search above it to pick a
-different plan. The likely mechanism for the three regressions is PARTIAL EXECUTION: a subset
-`{activate Sheets, cast X}` whose activation is unaffordable is still executed as "cast X", which is
-a real line. Tightening the gate deletes the whole subset rather than degrading it, so unless the
-enumerator separately offers `{cast X}` alone, that line is lost. If so the better fix is at
-emission -- offer the subset without the unaffordable activation -- rather than at the payability
-gate. **Not yet verified**: it needs `snow_smoke_d0_s1001 gi413` replayed, which is the concrete
-repro to start from.
+**AND WHY d0 COULD STILL LOSE -- REPLAYED AND ROOT-CAUSED (2026-09-25).** The mechanism is PARTIAL
+EXECUTION, and it is only half the story; the other half is a separate defect in the executor. See
+[§2c](#2c-a-plan-must-not-spend-the-source-it-has-to-tap-mtg_act_tap_reserve) -- with both halves in
+place this game wins on turn 8 again and the whole d0 tier ends up **better** than the shipped
+baseline. The hypothesis recorded here before the replay -- that the fix therefore belonged at
+EMISSION (offer the subset without the unaffordable activation) -- was **wrong**, and wrong in an
+instructive way: emission was not the problem, so a fix there would have added a second enumeration
+axis to a deck whose whole problem is enumeration width, and it would not have touched the actual
+cause.
 
 **COST IS NOT THE REASON TO DO IT.** Skipping ~300M expensive real payments is worth almost nothing
 (0.995x), because the freed breadth is immediately spent elsewhere -- `entered` rises 5.9%. The case
@@ -621,6 +622,152 @@ deck, where the raising cases are real; it is not a Snow answer.
 an A/B -- a 0.25% wall change is indistinguishable from noise, and an unsound gate that deletes 4% of
 payable subsets could easily have read as a win. Pairing every candidate clause with a
 "rejected-but-actually-rescued" counter settled soundness and size in ONE run, before any play moved.
+
+## 2c. A plan must not spend the source it has to tap (MTG_ACT_TAP_RESERVE)
+
+Replaying `snow_smoke_d0_s1001 gi413` -- the one game the gate above turned from a turn-8 win into a
+loss -- found a SECOND, independent defect, on the execution side. The two are halves of one fix, and
+shipping either alone is a trade.
+
+### The replay
+
+`MTG_RESCUE_TAP_TRACE` prints every selection the gate deletes that would have been rescued without
+the activation taps -- payable-without / unpayable-with, i.e. exactly the plans the fix removes. The
+whole game produces **six**, and the decisive one is at turn 4:
+
+    [rescue-tap] FLIP turn=4:
+      Scrying Sheets[ACT src=39,T] cost={2} + Scrying Sheets[ACT src=38,T] cost={2}
+      + Frost Augur[ACT src=20,T] cost={1}
+      UNTAPPED{Sheets#39, Astrolabe#8, Sheets#38, Astrolabe#7, Boreal Druid#10,
+               Rimewood Falls#34, Coldsteel Heart#15, Snow-Covered Island#56}
+
+Adjudicated by hand: **5 mana of activation cost.** Both Sheets and the Augur tap for their own `{T}`,
+so what is left to pay with is Druid + Rimewood + Coldsteel + Island = **4 mana** (the two Astrolabes
+are `{1}, {T}` re-colourers -- net zero, and `ConversionTotalPreserving` is why the earlier total-gate
+work could rely on that). **The plan is illegal and the gate is right to delete it.**
+
+What the shipped engine did with it is the interesting part. The executor committed the 3-activation
+plan, executed two of the activations, and could not pay the third -- and the accidental 2-activation
+residue (`Sheets`, then `Augur`) is a perfectly good line that wins on turn 8. **PARTIAL EXECUTION was
+laundering an illegal plan into a legal one.** That is the hypothesis this doc recorded, confirmed.
+
+### But the legal replacement plan was then STRANDED
+
+With the gate on, the greedy falls to the best legal plan: `{activate Sheets #39, activate Sheets #38}`
+-- 4 mana of looks against exactly the 4 mana available. The turn should still get two looks. It got
+one:
+
+| arm | turn 4 actions | result |
+|---|---|---|
+| base (shipped) | land; **ABILITY Sheets; ABILITY Augur** | win T8 (from an ILLEGAL plan) |
+| `MTG_RESCUE_TAP_SOURCE` | land; ABILITY Sheets | **loss** |
+| `MTG_ACT_TAP_RESERVE` | land; **ABILITY Sheets; ABILITY Sheets** | win T8 |
+| both | land; **ABILITY Sheets; ABILITY Sheets** | win T8 |
+
+The trailing-activation pass taps Sheets #39 for its `{T}`, then pays `{1}{S}` with the first sources
+the payment walk reaches -- which include **Sheets #38**, because a Scrying Sheets also taps for `{C}`.
+#38 is now tapped, so the second activation is stranded and silently dropped. Nothing was unaffordable;
+the payment spent the source the plan's own later action had to tap. The board after the turn says it
+plainly: the `resv` arm leaves Rimewood Falls untapped and both Sheets spent on looks, the `gate` arm
+leaves Rimewood **and** Druid **and** Coldsteel up while dropping a look it could afford.
+
+### The fix, and why it is free of risk by construction
+
+`MTG_ACT_TAP_RESERVE` adds every planned `{cost}, {T}` activation's source to
+`g_plan_reserved_sources`, the plan-scoped reservation that already exists for the mana-unlock equip
+and the colour-critical hold. That list rides **reserve-then-fallback**: the held attempt runs first
+and a payment that genuinely needs a reserved source still gets it on the unrestricted retry. So it
+can only ever change WHICH source pays -- never whether a cost is payable, and therefore it can never
+drop an action.
+
+Two insertion points, one shared producer (`TurnSolver::ActivationTapReserve`), because the executor
+and the rollout must not drift:
+* `PlanReserveSources` -- the CAST section, both apply paths, already wired;
+* the two trailing dispatchers' own `PlanSourceReserveScope` -- `ApplyPlanDirect`'s and `AIEngine`'s
+  twin. Needed separately because the cast-section scope has already exited by then and the defect
+  here is activation-vs-**activation**.
+
+### Measured (smoke, 93 configs, vs committed ground truth)
+
+| arm | d0 (1000 games) | d3 (100) | d5 (50) | configs changed |
+|---|---|---|---|---|
+| ground truth | 6.7060 | 6.1200 | 6.2200 | -- |
+| `gate` alone | 6.7040 | 6.1200 | 6.2200 | 3 |
+| `resv` alone | 6.7000 | 6.1300 | 6.2400 | 3 |
+| **both** | **6.6950** | 6.1300 | 6.2400 | 3 |
+
+`both` per-game audit: d0 `slower=15 faster=24`, searched `slower=2 faster=0`. **The d0 regression the
+gate was reserved for is gone** -- that tier is now better than the shipped baseline, and `gi413`
+specifically is back to a turn-8 win. Still Snow-only: **90 of 93 configs byte-identical**, because
+neither flag can fire without a plan that taps a mana source for an activation cost.
+
+The two searched "slower" entries are **one physical game scored at two depths** (`gi2` at d3 and d5,
+seed 1003, both 6->7), and the harness's own explain output classifies it: *"DRAWS DIVERGE from T3 (old
+drew 'Ice-Fang Coatl' vs new 'Snow-Covered Island') -> a fetch/shuffle resolved differently; physically
+different from there on."* Its turn 2 is strictly more productive under the fix (`land; Astrolabe;
+Boreal Druid; ATTACK` against `land` alone), which is what re-ordered the draws. A 1-game move on 100
+is not evidence either way -- so it was re-measured on held-out seeds, and that is where the story
+changes.
+
+### HELD OUT, AND THE RESERVE IS REFUTED
+
+Four arms of the 2x2 in ONE pooled batch (per-job `flags`, so all 7,200 games share one work queue and
+one tail), Snow at d3/b10 x 300 games and d5/b20 x 150 games, seeds **9001-9004** -- touched by no tier
+(smoke 1001, regression 2002/3003, overnight 4004-7007). 1,800 searched games per arm:
+
+| arm | mean turn | vs base | cells worse |
+|---|---:|---:|---|
+| base | 5.9839 | -- | -- |
+| `gate` (RESCUE_TAP_SOURCE) | 5.9828 | **-0.0011** | 0 of 8 (6 of 8 score-identical) |
+| `resv` (ACT_TAP_RESERVE) | 5.9972 | **+0.0133** | **8 of 8** |
+| `both` | 5.9872 | **+0.0033** | 4 of 8 (4 equal) |
+
+...and the same four arms at **d0**, same four seeds, 1,000 games each (16,000 games in 0.4 s wall --
+d0 costs nothing on this deck because the expense IS the search):
+
+| arm | mean turn | vs base | cells worse |
+|---|---:|---:|---|
+| base | 6.6913 | -- | -- |
+| `gate` | 6.6935 | **+0.0023** | 4 of 4 |
+| `resv` | 6.6958 | **+0.0045** | 4 of 4 |
+| `both` | **6.6898** | **-0.0015** | 0 of 4 (3 better, 1 equal) |
+
+**The two axes disagree about which arm wins, and every effect except one is inside the noise.** The
+exception is `resv` on searched play: **8 of 8 cells worse** is p ~ 0.004 on a sign test, and it is worse
+at d0 as well (4 of 4). Everything else -- gate -0.0011 searched / +0.0023 d0, both +0.0033 searched /
+-0.0015 d0 -- is a few thousandths of a turn with the sign flipping between depths, which is exactly the
+regime where the smoke tier's single seed told two different stories on two runs.
+
+**`MTG_ACT_TAP_RESERVE` is worse, and the 8-of-8 sign pattern is not noise.** It is REJECTED as a play
+change; the flag stays default OFF as the record of the measurement. The smoke d0 improvement it
+produced (6.7000, the best d0 of any arm) did not survive contact with searched play.
+
+**Why holding the source back loses, which is worth understanding before anyone re-proposes it.** It is
+NOT an executor/rollout divergence -- `ApplyPlanDirect` reserves too, so the search scores the reserved
+line and there is nothing out of lockstep. It is that the trade is genuinely bad on average for this
+deck: reserving Scrying Sheets #38 forces the first look's `{1}{S}` onto Rimewood Falls and Snow-Covered
+Island, and **those** are then unavailable to whatever else the turn wanted. A second Scrying Sheets
+look is worth less than the mana flexibility it costs. The stranding is therefore not a bug at all --
+the plan is partially realised *identically in both worlds* -- it is a tap-order HEURISTIC, and the
+heuristic-optimization rule applies: it was measured, and it lost.
+
+**What this does for the gate.** It does not make it a clean win -- held-out d0 is +0.0023 on 4 of 4
+seeds -- but it removes the *unexplained* part. The gi413 loss is now fully accounted for (an illegal
+plan laundered by partial execution), and the one fix for it measures worse than the loss it repairs, so
+it is a known and priced single-game cost rather than an open question. What the gate is actually worth
+stands on its other three legs: **299,864,980 unexecutable rescues removed**, the **H5 d5 cell -0.0312
+turns** (30/32 digests identical, both movers better), and held-out searched play **-0.0011 with no cell
+worse**. It stays a user decision, now made against a complete picture.
+
+**VERIFICATION OF THE DEFAULTS.** Smoke with both levers off: **93 passed, 0 failed, 0 configs changed**.
+That is load-bearing rather than ceremonial, because `PlanSourceReserveScope` is NOT a no-op when handed
+an empty list -- it saves and REPLACES `g_plan_reserved_sources`, and the trailing dispatcher is
+re-entered from inside the cast section (the human-order interleave applies one activation inline) where
+that outer reserve is live. The first version installed the scope unconditionally and would have cleared
+it with the lever off. Guard: install only when the union is non-empty
+(`ActivationTapReserveUnion` returns empty to mean "add nothing"). The four-arm table above was measured
+on the pre-guard binary and re-verified on the guarded one -- `resv`/`both` d3 s9001 digests
+`fefb8935b2136bb5` / `f71c4ce2fa801419` both sides, so the guard is inert here and the numbers stand.
 
 ## 3. London bottoming, on the 17.6% of these games that mulligan
 

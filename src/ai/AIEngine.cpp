@@ -29,6 +29,7 @@
 #include <map>
 #include <stdexcept>
 #include <chrono>   // MTG_DECISION_PROGRESS wall timing (diagnostic only)
+#include <optional>
 
 // ---- LIVE PER-DECISION PROGRESS (MTG_DECISION_PROGRESS; DIAGNOSTIC, DEFAULT OFF) -------------
 //
@@ -5072,6 +5073,17 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
         }
     }
     const std::vector<Action>& trailing_acts = *_acts;
+    // EXECUTOR TWIN of the rollout's activation-tap reserve (MTG_ACT_TAP_RESERVE, default off -> empty
+    // vector -> byte-identical). Installed here and not only in the cast section because the defect is
+    // activation-vs-ACTIVATION -- see the flag's note in EngineFlags.h. Reserving in one world and not
+    // the other would make the played turn differ from the scored one, which is the whole reason this
+    // reserve has a single shared producer. Installed only when non-empty -- see the rollout twin for
+    // why an empty scope is not a no-op.
+    std::optional<PlanSourceReserveScope> _act_reserve;
+    {
+        std::vector<int> _act_hold = TurnSolver::ActivationTapReserveUnion(state, trailing_acts);
+        if (!_act_hold.empty()) { _act_reserve.emplace(std::move(_act_hold)); }
+    }
     for (const Action& a : trailing_acts)
     {
         if (a.kind == Action::Kind::SacCreatureOutlet)

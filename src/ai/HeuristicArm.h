@@ -243,6 +243,8 @@ enum Slot : int
     RESCUE_TOTAL_GATE,        // MTG_RESCUE_TOTAL_GATE   skip the filter real-payment rescue when the flat failure is a TOTAL shortfall and every conversion source is total-preserving (default OFF)
     M2_EMPTY_FAST,            // MTG_M2_EMPTY_FAST        a PROVEN-EMPTY second main costs the recursion and nothing else: no state copy, no apply, no dedup key (ADOPTED default ON; =0 runs the do-nothing plan through the loop, which must be byte-identical)
     FOLD_SEARCH_ODO,          // MTG_FOLD_SEARCH_ODO      the SEARCH's private subset walk declares itself an odometer, so the canonical-prefix fold applies there too (default OFF)
+    ACT_TAP_RESERVE,          // MTG_ACT_TAP_RESERVE      a planned `{cost},{T}` activation's SOURCE is held back from mana payment for the whole plan, so an earlier cost cannot strand it (default OFF)
+    RESCUE_TAP_SOURCE,        // MTG_RESCUE_TAP_SOURCE    the filter real-payment rescue applies each selected activation's own {T} before paying, so no source funds its own activation (default OFF)
     COUNT
 };
 
@@ -452,6 +454,8 @@ inline const char* Name(int slot)
         "MTG_RESCUE_TOTAL_GATE",
         "MTG_M2_EMPTY_FAST",
         "MTG_FOLD_SEARCH_ODO",
+        "MTG_ACT_TAP_RESERVE",
+        "MTG_RESCUE_TAP_SOURCE",
     };
     // The enum and this table are ONE mapping split across two lists: a slot added to one and not
     // the other silently shifts every lever after it (a manifest asking for lever X would set Y).
