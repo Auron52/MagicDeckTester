@@ -326,6 +326,48 @@ extern thread_local BounceChooser* g_play_bounce_chooser;
 // graveyard and the viewer says "sacrifice" not "return". Nulled by RevealLogPause for search.
 extern thread_local BounceChooser* g_play_sacrifice_chooser;
 
+// ---- MULTI-VICTIM DISCLOSURE for a sac-outlet BURST -----------------------------------------
+// How many bodies THIS activation eats in total, and which of them this prompt is for. Published
+// on the `sacrifice` decision JSON (pick_index / pick_total) so the viewer can show the whole cost
+// in ONE dialog -- "pick 2" -- instead of a sequence of prompts that never states the total.
+//
+// USER-REPORTED (candidate-B Fungus seed 11 gi 10 T4, 2026-09-25). A 2-sac Utopia Mycon burst had
+// exactly two legal Saprolings: a token and Shroofus Sproutsire, which is itself a Saproling. The
+// burst asks once per body, so sac 1 of 2 prompted (two candidates) and the human picked the token
+// -- then sac 2 of 2 had one candidate left, hit ChooseSacOutletVictimIndex's "forced, do not
+// prompt for a non-choice" short-circuit, and Shroofus died in silence. "I chose the saproling, but
+// the Shroofus was also drawn in." Every prompt was honest and the forced pick was genuinely
+// forced; the defect is that a one-at-a-time shape CANNOT disclose the total cost before the first
+// irrevocable answer. USER: "The right way to handle it is a multi-choice. (i.e. pick 2)"
+//
+// WHY A CONTEXT AND NOT A SIGNATURE CHANGE. The answer must stay ONE int per frame: --choices is a
+// flat positional stream and every saved reference records `chosen` as a single integer per
+// decision, so a chooser returning N picks would change the reference format and a frame COUNT
+// change would misalign every stream recorded before it. So the frames are unchanged and only the
+// DISCLOSURE is added -- the viewer reads pick_total, renders one multi-select over the candidates,
+// answers this frame with the first pick and holds the rest for the frames that follow. The forced
+// last victim still never gets a frame, but it is now VISIBLE in the dialog before the human
+// commits, which is the whole of the bug.
+//
+// Default {0,1} means "an ordinary single sacrifice" and publishes nothing new.
+struct SacBurstDisclosure
+{
+    int index = 0;   // 0-based: which victim of this activation this prompt decides
+    int total = 1;   // how many bodies the activation eats in all
+};
+extern thread_local SacBurstDisclosure g_sac_burst_disclosure;
+
+// RAII: set the disclosure for one burst iteration and restore it after, so a nested sacrifice
+// (a death trigger that sacrifices something else mid-burst) cannot inherit the outer burst's
+// numbers and mislabel its own prompt.
+struct SacBurstScope
+{
+    SacBurstDisclosure saved;
+    SacBurstScope(int index, int total) : saved(g_sac_burst_disclosure)
+    { g_sac_burst_disclosure.index = index; g_sac_burst_disclosure.total = total; }
+    ~SacBurstScope() { g_sac_burst_disclosure = saved; }
+};
+
 // ---- Human-play FLING chooser (Surtland Flinger's attack-trigger sacrifice) -----------------
 // Same BounceChooser shape as the sacrifice chooser above, but a SEPARATE pointer because this
 // one is OPTIONAL: "you MAY sacrifice another creature" (CR 603.2c). Its main.cpp lambda clamps

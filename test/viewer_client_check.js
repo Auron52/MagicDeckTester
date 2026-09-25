@@ -136,6 +136,13 @@ function buildDom() {
     + 'window.__subdecisions = SUBDECISIONS;'
     + 'window.__panel = function(d, dec){ return renderDecisionPanel(d, dec); };'
     + 'window.__actpick = activationPickerHtml;'
+    // Multi-victim sacrifice ("pick 2"). No deck in SCENARIOS plays a sac outlet twice in one line,
+    // so the burst path is unreachable by walking a game -- it is driven directly, like firebreathe.
+    // NB `promptPanelHtml`, not renderDecisionPanel: the latter WRITES panel.innerHTML and returns
+    // nothing, so asserting on its return value silently tests the string "undefined".
+    + 'window.__sacb = { panel: promptPanelHtml, init: initBoardSel, commit: commitBoardSel,'
+    + '                  auto: sacBurstAuto, need: sacBurstNeed, forced: sacBurstForced,'
+    + '                  wire: wireDecisionBoard, rollback: rollbackStep };'
     + 'window.__blink = { arm: toggleActivate, at: blinkAtTarget };';
   // NB renderBoard/renderHand are function declarations, so they already are window properties --
   // the MDFC test below drives them directly against a synthetic decision.
@@ -167,6 +174,130 @@ function testFirebreatheBookkeeping(win) {
   S.busy = false;
   fb.rollback();
   chk(!(5 in S.firebreathe), 'undo drops the side-channel entry');
+  return fails;
+}
+
+// MULTI-VICTIM SACRIFICE ("pick 2") — isolated, because no deck in SCENARIOS activates a sac outlet
+// twice in one line, so no game walk reaches the burst frames at all.
+//
+// The bug this guards (USER, 2026-09-25, candidate-B Fungus seed 11 gi 10 T4): Utopia Mycon eating
+// two bodies asked about ONE of them and silently took the other — "I chose the saproling, but the
+// Shroofus was also drawn in". The engine's ChooseSacOutletVictimIndex skips the prompt once a single
+// candidate remains, so a 2-of-2 burst emits exactly ONE frame for two deaths. The three properties
+// that make the dialog honest, and each of which is silently losable:
+//   1. `need` is read off pick_total/pick_index, not assumed to be 1.
+//   2. When need === the candidate count, the panel is READ-ONLY and says so — an "every one of
+//      these dies" cost must never be drawn as a picker.
+//   3. The 2nd..Nth pick replays onto the follow-up frames by NAME against a predicted option list,
+//      and a board that does not match DROPS the queue rather than answering the wrong frame.
+// (3) is the one worth a test: the fallback is invisible when it works and answers the wrong
+// permanent when it silently doesn't.
+function testSacBurstMultiSelect(win) {
+  const S = win.__getS(), sb = win.__sacb, fails = [];
+  const chk = (c, m) => { if (!c) fails.push(m); };
+  const opt = (i, pi, name) => ({ index: i, perm_index: pi, tapped: false, name, label: name });
+  // The panel's NOUN is derived from the real board by perm_index (a creature list must not say
+  // "land"), so a frame with no `me.battlefield` renders "permanent" and every wording assertion
+  // below would be testing the fallback instead of what the player sees.
+  const bf = (idxs, isLand) => ({ battlefield: idxs.map(i => ({ idx: i, is_land: isLand })) });
+  const reset = () => {
+    S.choices = []; S.steps = []; S.checkpoints = [{ histLen: 0 }]; S.history = [];
+    S.sacBurst = null; S.busy = false; S.boardSel = null; S._selFor = null;
+  };
+
+  // --- 2 of 3: a genuine multi-select, and the frame that follows is auto-answered --------------
+  const d1 = { type: 'sacrifice', source: 'Utopia Mycon', turn: 4, decision_index: 11,
+               heuristic_default: 0, pick_index: 0, pick_total: 2, me: bf([5, 6, 7], false),
+               options: [opt(0, 5, 'Shroofus Sproutsire'), opt(1, 6, '1/1 Saproling Token'),
+                         opt(2, 7, 'Tukatongue Thallid')] };
+  chk(sb.need(d1) === 2, '2-of-3: need is read from pick_total - pick_index');
+  chk(sb.forced(d1) === false, '2-of-3: not forced (more candidates than victims)');
+  reset(); sb.init(d1);
+  chk(S.boardSel && S.boardSel.size === 2, '2-of-3: the seed preselects the WHOLE cost, not one body');
+  const h1 = sb.panel(d1, 'sacrifice');
+  chk(/Sacrifice 2 creatures/.test(h1), '2-of-3: the heading states the full cost');
+  chk(/activated <b>2<\/b> times/.test(h1), '2-of-3: the panel says how many activations are being paid for');
+  chk(/2 \/ 2/.test(h1), '2-of-3: the counter shows picks against the requirement');
+  // Pick the Saproling + the Thallid (i.e. deliberately spare Shroofus) and commit.
+  S.boardSel = new Set(['m:6', 'm:7']); S.decision = d1;
+  sb.commit(d1, 'sacrifice');
+  chk(S.choices.length === 1 && S.choices[0] === 1,
+      '2-of-3: THIS frame is answered with the first pick only (one int per frame)');
+  chk(S.sacBurst && S.sacBurst.want.length === 1 && S.sacBurst.want[0] === 'Tukatongue Thallid',
+      '2-of-3: the remaining pick is queued for the next frame');
+  chk(S.sacBurst && S.sacBurst.expect.join('|') === 'Shroofus Sproutsire|Tukatongue Thallid',
+      '2-of-3: the queue predicts the next option list (previous list minus the victim taken)');
+  // The follow-up frame arrives exactly as predicted -> auto-answered, no user rest.
+  const d2 = { type: 'sacrifice', source: 'Utopia Mycon', turn: 4, decision_index: 12,
+               heuristic_default: 0, pick_index: 1, pick_total: 2, me: bf([5, 6], false),
+               options: [opt(0, 5, 'Shroofus Sproutsire'), opt(1, 6, 'Tukatongue Thallid')] };
+  const took = sb.auto(d2);
+  chk(took === true, '2-of-3: the predicted follow-up frame is auto-answered');
+  chk(S.choices.length === 2 && S.choices[1] === 1,
+      '2-of-3: the follow-up answers the QUEUED name at ITS re-enumerated index (1, not 2)');
+  chk(d2._autoStep === true, '2-of-3: the auto answer is an auto step (undo pops it with the click above)');
+  chk(S.sacBurst === null, '2-of-3: the queue is emptied once every pick is spent');
+
+  // --- the board moved: DROP the queue and surface the frame rather than answer the wrong one ---
+  reset();
+  S.boardSel = new Set(['m:6', 'm:7']); S.decision = d1;
+  sb.commit(d1, 'sacrifice');
+  const dMoved = { type: 'sacrifice', source: 'Utopia Mycon', turn: 4, decision_index: 12,
+                   heuristic_default: 0, pick_index: 1, pick_total: 2, me: bf([5, 7, 9], false),
+                   // a death trigger made a token: NOT "the previous list minus the victim"
+                   options: [opt(0, 5, 'Shroofus Sproutsire'), opt(1, 7, 'Tukatongue Thallid'),
+                             opt(2, 9, '1/1 Saproling Token')] };
+  const before = S.choices.length;
+  chk(sb.auto(dMoved) === false, 'board moved: the queue does NOT answer an unpredicted frame');
+  chk(S.choices.length === before, 'board moved: nothing is appended — the frame surfaces to the human');
+  chk(S.sacBurst === null, 'board moved: the stale queue is dropped');
+
+  // --- a non-sacrifice frame clears a queue the engine never came back for ----------------------
+  // The 2-of-2 case below never gets a second frame at all (the engine forces the last victim
+  // silently), so the queue MUST be cleared by whatever frame arrives next or it would fire into an
+  // unrelated later sacrifice.
+  reset();
+  S.boardSel = new Set(['m:6', 'm:7']); S.decision = d1;
+  sb.commit(d1, 'sacrifice');
+  chk(S.sacBurst !== null, 'stale queue: it is set before the next frame arrives');
+  chk(sb.auto({ type: 'main_phase', turn: 4 }) === false, 'stale queue: a main_phase frame is not answered');
+  chk(S.sacBurst === null, 'stale queue: a main_phase frame clears it');
+
+  // --- 2 of 2: every candidate dies. READ-ONLY -- this is the exact reported frame --------------
+  const dF = { type: 'sacrifice', source: 'Utopia Mycon', turn: 4, decision_index: 11,
+               heuristic_default: 0, pick_index: 0, pick_total: 2, me: bf([5, 6], false),
+               options: [opt(0, 5, 'Shroofus Sproutsire'), opt(1, 6, '1/1 Saproling Token')] };
+  chk(sb.forced(dF) === true, '2-of-2: forced — need equals the candidate count');
+  reset(); sb.init(dF);
+  chk(S.boardSel && S.boardSel.size === 2, '2-of-2: both victims are preselected');
+  const hF = sb.panel(dF, 'sacrifice');
+  chk(/all of them are sacrificed/.test(hF), '2-of-2: the panel says every candidate dies');
+  chk(/nothing to choose/.test(hF), '2-of-2: the panel says it is not a choice');
+  chk(!/disabled/.test(hF.slice(hF.indexOf('decconfirm'))), '2-of-2: Confirm is enabled (the seed IS the answer)');
+  S.decision = dF;
+  sb.commit(dF, 'sacrifice');
+  chk(S.choices.length === 1, '2-of-2: still exactly one int for this frame');
+  chk(/forced/.test((S.history[S.history.length - 1] || {}).label || ''),
+      '2-of-2: the history line records that it was forced, not chosen');
+
+  // --- undo drops a queued burst -----------------------------------------------------------------
+  reset();
+  S.boardSel = new Set(['m:6', 'm:7']); S.decision = d1;
+  sb.commit(d1, 'sacrifice');
+  chk(S.sacBurst !== null, 'undo: a queue exists to drop');
+  S.busy = false; sb.rollback();
+  chk(S.sacBurst === null, 'undo: rolling the step back drops the queued picks');
+
+  // --- an ORDINARY single sacrifice is untouched (no pick_total) ---------------------------------
+  const dS = { type: 'sacrifice', source: 'Shard Volley', turn: 3, decision_index: 4,
+               heuristic_default: 0, me: bf([2, 3], true),
+               options: [opt(0, 2, 'Mountain'), opt(1, 3, 'Mountain')] };
+  chk(sb.need(dS) === 1, 'single: a frame with no pick_total needs exactly one victim');
+  chk(sb.forced(dS) === false, 'single: never treated as forced');
+  reset(); sb.init(dS);
+  chk(S.boardSel.size === 1, 'single: the seed is one victim, as before');
+  chk(/Sacrifice a land/.test(sb.panel(dS, 'sacrifice')), 'single: the original panel is unchanged');
+  reset();
   return fails;
 }
 
@@ -1444,6 +1575,10 @@ async function testColorlessFirstTapOrder() {
     const shFails = testStorageHoldBookkeeping(win);
     if (shFails.length) { anyFail = true; console.log(`✗ storage_hold bookkeeping: ${shFails.length} fail`); shFails.forEach(m => console.log('  - ' + m)); }
     else { console.log('✓ storage_hold GUI bookkeeping (side-channel + zero-int step + undo)'); }
+    // Multi-victim sacrifice "pick 2" (fast, DOM-only — no deck here plays a sac outlet twice).
+    const sbFails = testSacBurstMultiSelect(win);
+    if (sbFails.length) { anyFail = true; console.log(`✗ multi-victim sacrifice: ${sbFails.length} fail`); sbFails.forEach(m => console.log('  - ' + m)); }
+    else { console.log('✓ multi-victim sacrifice ("pick 2": whole cost stated, forced case read-only, rest replayed or dropped)'); }
     // #10 cast-order GUI bookkeeping (fast, DOM-only).
     const coFails = testCastOrderBookkeeping(win);
     if (coFails.length) { anyFail = true; console.log(`✗ cast_order bookkeeping: ${coFails.length} fail`); coFails.forEach(m => console.log('  - ' + m)); }

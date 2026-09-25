@@ -161,6 +161,44 @@ switching to a `ChooseSacOutletVictims(..., k)` that asks once for k rather than
 `g_play_*_chooser == nullptr` keeps the heuristic path byte-identical, exactly as today, so
 autonomous play, the search and every rollout are untouched.
 
+#### BUILT INSTEAD (2026-09-25): disclosure on the frame, assembly in the viewer
+
+**The "ONE frame that consumes N entries" route above was NOT taken, and should not be.** It looks
+free because the *number* of ints consumed is unchanged — N victims cost N ints either way — but the
+*meaning* of every int after the first changes. Today victim 2 is answered by an index into the
+RE-ENUMERATED candidate list (the board minus victim 1); under a single N-int frame it would be an
+index into the original list. So every saved reference holding a burst sacrifice would silently
+replay a different permanent, and nothing in the protocol check could tell the difference — the
+cursor stays aligned, the ints stay valid, the game just plays out differently. That is strictly
+worse than the bug being fixed.
+
+What shipped:
+
+* **Engine — disclosure only.** `SacBurstDisclosure` + `SacBurstScope` (`core/GameLogger.h`), scoped
+  around BOTH burst loops in `core/SpellEffects.h` (the `SacForMana` burst and
+  `ApplySacCreatureOutletBurst`). `WriteBounceDecisionJson` emits `pick_index` / `pick_total` **only
+  when `pick_total > 1`**, so every ordinary single sacrifice serialises byte-identically. The frame
+  count, the int-per-frame contract and the meaning of each int are all untouched.
+* **Viewer — the dialog is assembled client-side.** `sacBurstNeed` / `sacBurstForced` /
+  `sacBurstAuto` in `tools/play/index.html`: one multi-select over the candidates stating the whole
+  cost, answered with the first pick, with picks 2..N queued and replayed onto the follow-up frames
+  as they arrive. The queue matches by NAME against a PREDICTED option list ("the previous list minus
+  the victim just taken"); any other board drops the queue and surfaces the frame normally, which is
+  today's behaviour — so the fallback can never be worse than not having tried. Names rather than ids
+  because tokens all carry `m_number` 0 (`ChooseSacOutletVictimIndex`), which is also why two
+  identical tokens are fungible here: the engine cannot tell them apart either.
+* **The forced case is the reported one.** At candidate-B Fungus seed 11 gi 10 T4 the burst is 2 of 2
+  candidates, so the engine emits exactly ONE frame and takes the second victim silently — verified
+  by probe. The panel now opens READ-ONLY naming both and says there is nothing to choose, which is
+  precisely the disclosure whose absence ate Shroofus Sproutsire.
+
+Gates: regression `129 passed / 0 failed`, `play-changed=0` both tiers, viewer protocol
+`23 ok / 301 repaired / 0 play-drift / 0 enum-gap / 0 contract-fail (335 refs)` — **identical to the
+pre-change baseline**, confirming no reference moved. Scenarios 103/103. The burst path is unreachable
+by walking any deck in the client check's `SCENARIOS`, so it is driven directly by
+`testSacBurstMultiSelect` in `test/viewer_client_check.js` (the forced read-only case, the 2-of-3
+replay, the board-moved drop, the stale-queue clear, undo, and an ordinary single sacrifice unchanged).
+
 ### What must NOT change
 
 * **Defaults reproduce the autonomous line.** The heuristic's k picks are the preselected default, so

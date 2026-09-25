@@ -2431,6 +2431,17 @@ static void WriteBounceDecisionJson(std::ostream& os, const GameState& s, const 
     // Decline button on this field, so the mandatory consumers -- Shard Volley's land-sac
     // additional cost, Natural Order, Mycoloth devour -- keep showing no decline, as they must.
     d.Bool("allow_decline", allow_decline);
+    // MULTI-VICTIM DISCLOSURE. When this sacrifice is one body of a BURST, say so: `pick_total` is
+    // how many the activation eats in all and `pick_index` is which one this prompt decides. The
+    // viewer uses them to open ONE multi-select ("pick 2") over the candidates instead of a run of
+    // prompts that never states the total -- the shape that let Shroofus Sproutsire die unasked
+    // (see SacBurstDisclosure in GameLogger.h for the report). Emitted only for a real burst, so
+    // every ordinary single sacrifice serialises byte-identically and no saved reference moves.
+    if (sacrifice && g_sac_burst_disclosure.total > 1)
+    {
+        d.Int("pick_index", g_sac_burst_disclosure.index)
+         .Int("pick_total", g_sac_burst_disclosure.total);
+    }
     d.Array("options", legal.size(), [&](std::size_t i)
     {
         const Permanent& p = s.battlefield[legal[i]];

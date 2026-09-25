@@ -9889,6 +9889,9 @@ inline void ApplySacCreatureOutletBurst(GameState& state, int controller, int so
         int victim_id = CanonicalSacVictim(state, controller, source_id, need_sub,
                                            allow_ench, excl_self);
         if (victim_id < 0) { break; }   // ran out of victims
+        // Same disclosure as the SacForMana burst: this is victim n+1 of `count`, and the viewer
+        // needs the total to ask for them in one dialog. See SacBurstDisclosure.
+        const SacBurstScope burst_scope(n, count);
         ApplySacCreatureOutlet(state, controller, source_id, victim_id);
     }
 }
@@ -11552,6 +11555,9 @@ inline void ApplySacForMana(GameState& state, int controller, int sac_source_id,
                     if (vid < 0) { break; }   // ran out of Goblins to sacrifice
                     // Human play picks each victim in turn (one prompt per sac in the burst); with no
                     // chooser this is -1 and the card-number path below runs byte-identically.
+                    // The scope publishes "victim n+1 of count" on the decision JSON so the viewer
+                    // can state the WHOLE cost up front -- see SacBurstDisclosure for the report.
+                    const SacBurstScope burst_scope(n, count);
                     const int bidx = ChooseSacOutletVictimIndex(state, controller, sac_source_id,
                                                                 need_sub, vid, src_name);
                     AddChosenColorFloat(state, color, per);

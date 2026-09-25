@@ -3196,6 +3196,61 @@ function faceTarget(d, who){
   return (d.legal_targets||[]).find(t=>t.kind==='player' && re.test(t.label)) || null;
 }
 function isSelT(t){ return !!(S.boardSel && t && S.boardSel.has(tgtKey(t))); }
+
+// ---- MULTI-VICTIM SACRIFICE ("pick 2") -------------------------------------------------------
+// A sac outlet activated N times in one line eats N bodies, but the engine asks about ONE victim
+// per body -- and ChooseSacOutletVictimIndex skips the prompt altogether once a single candidate
+// is left ("forced -- do not prompt for a non-choice"). So a Utopia Mycon taking 2 of the 2
+// creatures on the board asked about the Saproling and then silently ate Shroofus Sproutsire.
+// USER, 2026-09-25: "I chose the saproling, but the Shroofus was also drawn in ... I don't
+// actually want it to fire twice. The right way to handle it is a multi-choice. (i.e. pick 2)".
+//
+// The engine now discloses `pick_index`/`pick_total` on every burst victim frame (SacBurstScope in
+// core/GameLogger.h). It deliberately did NOT collapse the run into one N-int frame: `--choices` is
+// a flat positional stream and every saved reference records ONE int per decision, so changing the
+// frame count would misalign every recorded game. The dialog is therefore assembled here -- one
+// multi-select over the candidates, answered by this frame's int, with the remaining picks replayed
+// onto the frames that follow.
+function sacBurstNeed(d){
+  if (!d || d.type!=='sacrifice') return 1;
+  const tot=+d.pick_total||1, idx=+d.pick_index||0;
+  return tot>1 ? Math.max(1, Math.min(tot-idx, (d.options||[]).length)) : 1;
+}
+// Every remaining candidate dies: `need` victims and exactly `need` bodies to take them from.
+// Nothing is left to choose, and a picker that implies otherwise is precisely what hid Shroofus --
+// so the panel opens READ-ONLY and names all of them.
+function sacBurstForced(d){ const n=sacBurstNeed(d); return n>1 && n===(d.options||[]).length; }
+function sameNameMultiset(a,b){
+  if (a.length!==b.length) return false;
+  const s=a.slice().sort(), t=b.slice().sort();
+  return s.every((x,i)=>x===t[i]);
+}
+// Replay the 2nd..Nth pick of a multi-victim sacrifice onto the frames that follow. Each frame
+// RE-ENUMERATES the battlefield, so the option index the human clicked on the first frame is not
+// the same number here -- and tokens all carry m_number 0 (see ChooseSacOutletVictimIndex), so
+// there is no stable per-permanent id to match on either. The buffer therefore carries NAMES plus
+// the exact option list it expects to be shown; if the board is anything other than "the previous
+// list minus the victim just taken", the buffer is dropped and the frame is surfaced normally.
+// Falling back to a prompt IS today's behaviour, so the degradation can never be worse than not
+// having tried. (Two identically-named tokens are matched by name alone -- they are fungible to
+// the engine for the same reason: it cannot tell them apart either.)
+function sacBurstAuto(d){
+  const q=S.sacBurst;
+  if (!q) return false;
+  if (!d || d.type!=='sacrifice' || !(+d.pick_total>1) || d.source!==q.source || d.turn!==q.turn
+      || !q.want.length) { S.sacBurst=null; return false; }
+  const got=(d.options||[]).map(o=>o.name);
+  if (!sameNameMultiset(got, q.expect)) { S.sacBurst=null; return false; }   // board moved -- ask
+  const want=q.want[0];
+  const oi=got.indexOf(want);
+  if (oi<0) { S.sacBurst=null; return false; }
+  q.want.shift(); q.expect=got.slice(); q.expect.splice(oi,1);
+  if (!q.want.length) S.sacBurst=null;
+  d._autoStep = true;   // no user rest -> undo pops it with the click that opened the multi-select
+  pushChoice(d, ((d.options||[])[oi]||{}).index,
+             `${d.source||'Sacrifice'}: sacrifice ${want} (${(+d.pick_index||0)+1} of ${+d.pick_total})`);
+  return true;
+}
 // Seed the board selection from the AI's heuristic-default option (so targeting/bounce start on
 // the smart pick, which the player can then retarget by clicking the board).
 function initBoardSel(d){
@@ -3206,6 +3261,11 @@ function initBoardSel(d){
   } else if (d.type==='bounce' || d.type==='sacrifice' || d.type==='attach_host' || d.type==='flicker'){
     const def=(d.options||[]).find(o=>o.index===d.heuristic_default)||(d.options||[])[0];
     if (def) S.boardSel.add('m:'+def.perm_index);
+    // Multi-victim burst: seed the WHOLE cost, not one body of it -- the heuristic pick first, then
+    // board order. When every candidate dies (sacBurstForced) that seed already IS the answer.
+    const need=sacBurstNeed(d);
+    for (let k=0; k<(d.options||[]).length && S.boardSel.size<need; ++k)
+    { S.boardSel.add('m:'+d.options[k].perm_index); }
   }
   S._selFor = d.decision_index;
 }
@@ -3244,10 +3304,18 @@ function wireDecisionBoard(d, dec){
   }
   if (dec==='target' || dec==='bounce' || dec==='sacrifice' || dec==='soulfire_targets' || dec==='attach_host' || dec==='flicker'){
     const legal=legalTargetKeys(d);
-    const max = (dec==='bounce'||dec==='sacrifice'||dec==='attach_host'||dec==='flicker')?1:(dec==='soulfire_targets'?(d.count||1):(d.max_targets||1));
+    // A multi-victim sacrifice takes `need` bodies, not one -- and when need === the candidate count
+    // every one of them dies, so the board is highlighted (they ARE the victims) but NOT clickable:
+    // there is no choice to make and letting a click deselect one would only be able to produce an
+    // un-confirmable state.
+    const ro = dec==='sacrifice' && sacBurstForced(d);
+    const max = (dec==='bounce'||dec==='attach_host'||dec==='flicker')?1
+              : dec==='sacrifice' ? sacBurstNeed(d)
+              : (dec==='soulfire_targets'?(d.count||1):(d.max_targets||1));
     board.querySelectorAll('.thumb[data-idx]').forEach(t=>{
       const key='m:'+t.dataset.idx; if (!legal.has(key)) return;
       t.classList.add('selectable'); if (S.boardSel && S.boardSel.has(key)) t.classList.add('selected');
+      if (ro) return;
       t.onclick=e=>{ e.stopPropagation(); toggleSel(d, key, max); };
     });
     board.querySelectorAll('.life b[data-tk]').forEach(b=>{ b.onclick=()=>toggleSel(d, b.dataset.tk, max); });
@@ -3933,6 +4001,27 @@ function promptPanelHtml(d, dec){
     // could decline -- a search/human capability asymmetry, and the second time this exact pair
     // has been wrong for this card.
     const mayDecline = !!d.allow_decline;
+    // MULTI-VICTIM ("pick 2"): the outlet was activated pick_total times, so it eats pick_total
+    // bodies. State the whole cost in ONE dialog rather than a run of single prompts that never
+    // says how many are coming -- see sacBurstNeed for the report that forced this.
+    const need = sacBurstNeed(d);
+    if (need>1){
+      const picked=(d.options||[]).filter(o=>S.boardSel&&S.boardSel.has('m:'+o.perm_index));
+      const forced=sacBurstForced(d);
+      const list=picked.map(o=>esc(o.name)).join(' + ')||`(pick ${need})`;
+      return `<h3>Sacrifice ${need} ${noun}s — ${esc(d.source||'')}</h3>`+
+        `<div class="sub">${esc(d.source||'This ability')} was activated <b>${+d.pick_total}</b> times, so it eats `+
+        `<b>${+d.pick_total}</b> ${noun}s in all`+
+        ((+d.pick_index||0)>0?` (${+d.pick_index} already taken)`:'')+`. `+
+        (forced
+          ? `You have exactly ${need} left — <b>all of them are sacrificed</b>, there is nothing to choose. `+
+            `Undo if that is not the line you wanted.`
+          : `Click <b>${need}</b> ${noun}s on your board; ✓ marks each pick.`)+
+        `</div>`+
+        `<div class="pbtns"><span class="pcount">Sacrificing: <b>${list}</b> · ${picked.length} / ${need}</span>`+
+        `<span class="spacer"></span>`+
+        `<button id="decconfirm" class="primary" ${picked.length===need?'':'disabled'}>Sacrifice ${need}</button></div>`;
+    }
     return `<h3>Sacrifice a ${noun} — ${esc(d.source||'')}</h3>`+
       `<div class="sub">Click a ${noun} on your board to sacrifice (${esc(d.source||'this spell')}'s cost). Eligible ${noun}s are highlighted; ✓ marks your pick.`+
       (mayDecline?` This one is <b>optional</b> — you may decline and keep the ${noun}.`:'')+`</div>`+
@@ -4499,6 +4588,21 @@ function commitBoardSel(d, dec){
     const opt=(d.options||[]).find(o=>'m:'+o.perm_index===sel[0]);
     oi=opt?opt.index:d.heuristic_default; lab=`${d.source}: return ${opt?opt.name:'land'}`;
   } else if (dec==='sacrifice'){
+    const need=sacBurstNeed(d);
+    if (need>1){
+      // Answer THIS frame with the first pick and queue the rest for the frames that follow
+      // (sacBurstAuto). Order is board order, which is the order the engine re-enumerates in, so
+      // the queue's predicted option list stays comparable frame to frame.
+      const picked=(d.options||[]).filter(o=>S.boardSel&&S.boardSel.has('m:'+o.perm_index));
+      if (picked.length!==need){ flashHint(`Pick ${need} to sacrifice (you have ${picked.length}).`); return; }
+      const expect=(d.options||[]).map(o=>o.name);
+      expect.splice(expect.indexOf(picked[0].name), 1);
+      const rest=picked.slice(1).map(o=>o.name);
+      S.sacBurst = rest.length ? { source:d.source, turn:d.turn, want:rest, expect } : null;
+      return pushChoice(d, picked[0].index,
+        `${d.source}: sacrifice ${picked.map(o=>o.name).join(' + ')}`
+        + (sacBurstForced(d)?' (forced — every creature)':''));
+    }
     const opt=(d.options||[]).find(o=>'m:'+o.perm_index===sel[0]);
     oi=opt?opt.index:d.heuristic_default; lab=`${d.source}: sacrifice ${opt?opt.name:'(default)'}`;
   } else if (dec==='attach_host'){
@@ -4759,6 +4863,10 @@ function advanceTo(dec) { (dec&&dec.mdfc_backs||[]).forEach(n=>MDFC_BACKS.add(n)
     }
     renderHistory();
   }
+  // A multi-victim sacrifice the human already answered in full ("pick 2"): replay the queued picks
+  // onto the follow-up frames. Called unconditionally so ANY other frame clears a stale queue.
+  if (!undoing && sacBurstAuto(dec)) return;
+  if (undoing) S.sacBurst=null;
   // Options-menu "let AI decide": auto-reply the heuristic default without surfacing the modal
   // (default for the repetitive shock/reveal land-entry choice). Short-circuits before rendering.
   if (autoResolveDecision(dec)) return;
@@ -4881,6 +4989,7 @@ async function nextGame() {
 // there was nothing to pop. Callers then step() to replay + re-log the returned decision exactly.
 function rollbackStep() {
   if (!(S.steps&&S.steps.length)) return false;
+  S.sacBurst=null;   // a queued multi-victim sacrifice belongs to the click being rolled back
   // Pop the last USER action AND any auto-advanced steps that trailed it. A single user click ("Commit
   // turn", or a lethal line that leaves the dead opponent still being prompted, or an auto-resolved
   // land-entry) can commit SEVERAL engine decisions with no user rest between them; popping only the
