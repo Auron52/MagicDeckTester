@@ -115,3 +115,12 @@ node_modules/
 
 # Agent worktrees (transient isolated checkouts; never committed)
 .claude/worktrees/
+
+# Rebase/merge conflict leftovers (git writes these beside the file; never tracked --
+# one 3.5 MB src/ai/TurnSolver.cpp.orig reached a pushed commit on 2026-09-25)
+*.orig
+*.rej
+*.BACKUP.*
+*.BASE.*
+*.LOCAL.*
+*.REMOTE.*
