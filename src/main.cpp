@@ -1244,7 +1244,6 @@ static void WriteDecisionJson(std::ostream& os, const GameState& s,
     emit_order.reserve(n_emit);
     if (plans.size() > kMaxEmittedPlans)
     {
-        std::unordered_set<std::string> seen_sets;
         std::vector<char> taken(plans.size(), 0);
         // THE VERIFIED COMBO OFF PLAN IS NEVER CAPPED OUT. The gate APPENDS it (so every other plan
         // keeps the index it would have had), which puts it at plans.size()-1 -- the worst possible
@@ -1318,6 +1317,33 @@ static void WriteDecisionJson(std::ostream& os, const GameState& s,
                 emit_order.push_back(i); taken[i] = 1;
             }
         }
+        // ONE SLOT PER (land, face, cast-name multiset) -- and the ordering that gets it is the
+        // CANONICAL one.
+        //
+        // Under human play the unpruned gate opens the cast-ORDERING search, so a cast set arrives
+        // here as k! sibling plans that differ only in the order they execute. They share this key,
+        // so exactly one is emitted, and "first by index" hands the slot to whichever permutation
+        // `next_permutation` produced first -- a LEXICOGRAPHIC accident with no bearing on play.
+        //
+        // USER-REPORTED (candidate-B Fungus seed 8 gi0 T3): the two orderings of
+        // {Sol Ring, Shroofus Sproutsire} are plans 444 and 445 of 571. 444 casts the creature
+        // first, pays its {2}{G} off Forest plus Peat Bog's last depletion counter and SACRIFICES
+        // the land; 445 casts Sol Ring first and pays the {2} off its own {C}{C}, keeping Peat Bog.
+        // "Shroofus" sorts before "Sol" by name, so 444 took the slot, 445 fell past the 200-plan
+        // cap, and the menu offered only the line that throws a land away.
+        //
+        // The canonical order is the engine's own judgement about cast sequencing (CastOrderRank --
+        // a mana rock before the spells it funds, exactly this case), and it is what AUTONOMOUS play
+        // uses, since the ordering search is off there. So it is the honest representative. The
+        // alternates stay ENUMERATED and stay reachable: the viewer pins the human's queued order
+        // through --cast-order for any multi-cast line (see applyAccepted), so nothing a person can
+        // ask for is narrowed -- only which sibling is shown by default changes.
+        //
+        // Implemented as replace-in-place rather than a second pass so the walk stays single and the
+        // canonicality test (std::is_sorted under CastOrderLess -- no allocation) runs only for a
+        // key's first plan and for keys whose representative is not canonical yet.
+        // See docs/design/searched-cast-order-not-reported.md.
+        std::unordered_map<std::string, std::pair<size_t, char>> reps;   // key -> (slot, canonical?)
         for (size_t i = 0; i < plans.size() && emit_order.size() < n_emit; ++i)
         {
             if (hide_bundle[i] || taken[i]) { continue; }
@@ -1327,7 +1353,20 @@ static void WriteDecisionJson(std::ostream& os, const GameState& s,
             for (const Action& a : plans[i].actions) { nm.push_back(a.card_name); }
             std::sort(nm.begin(), nm.end());
             for (const std::string& n : nm) { key += n; key += ';'; }
-            if (seen_sets.insert(key).second) { emit_order.push_back(i); taken[i] = 1; }
+            auto it = reps.find(key);
+            if (it == reps.end())
+            {
+                const bool canon = TurnSolver::CastOrderIsCanonical(s, plans[i]);
+                reps.emplace(std::move(key),
+                             std::make_pair(emit_order.size(), static_cast<char>(canon ? 1 : 0)));
+                emit_order.push_back(i); taken[i] = 1;
+            }
+            else if (it->second.second == 0 && TurnSolver::CastOrderIsCanonical(s, plans[i]))
+            {
+                taken[emit_order[it->second.first]] = 0;   // the accidental winner goes back in the pool
+                emit_order[it->second.first] = i; taken[i] = 1;
+                it->second.second = 1;
+            }
         }
         for (size_t i = 0; i < plans.size() && emit_order.size() < n_emit; ++i)
         { if (!taken[i] && !hide_bundle[i]) { emit_order.push_back(i); } }
@@ -1450,11 +1489,19 @@ static void WriteDecisionJson(std::ostream& os, const GameState& s,
             }
             if (any) { os << "]"; }
         }
-        // #10 cast-order: the CANONICAL execution order of this plan's non-sac hand casts, so the viewer
-        // can tell whether the human's queued order is a REORDER (=> emit --cast-order) or already
-        // canonical (=> omit, keeping references byte-identical). Emitted only when >=2 non-sac casts.
+        // #10 cast-order: the execution order of this plan's non-sac hand casts, so the viewer can
+        // tell whether the human's queued order is a REORDER (=> emit --cast-order) or already what
+        // the engine would do (=> omit, keeping references byte-identical). Emitted only when >=2
+        // non-sac casts.
+        //
+        // THE REALISED ORDER, not the canonical sort (2026-09-25). The wire key keeps its name for
+        // compatibility -- 265 saved references carry it and the viewer reads it by that name -- but
+        // its VALUE is now what apply_plan_actions will really do, which for an ordering-searched
+        // plan is the vector order. See TurnSolver::RealisedNonSacCastOrder for the seed-8 Peat Bog
+        // report this fixes: two orderings of {Sol Ring, Shroofus Sproutsire} that differ by a
+        // sacrificed land serialised with the SAME `cast_order_canonical`.
         {
-            std::vector<std::string> canon = TurnSolver::CanonicalNonSacCastOrder(s, p);
+            std::vector<std::string> canon = TurnSolver::RealisedNonSacCastOrder(s, p);
             if (canon.size() >= 2)
             {
                 os << ", \"cast_order_canonical\": [";
@@ -3774,7 +3821,7 @@ void ClaudePlayHarness::WriteValidation(std::ostream& os, const std::string& lin
             os << "]";
             // Same >=2 gate as the `plans` entry above, so the two views of one plan agree field
             // for field: below that the client's cast-only fallback pin does not apply anyway.
-            std::vector<std::string> canon = TurnSolver::CanonicalNonSacCastOrder(s, mp);
+            std::vector<std::string> canon = TurnSolver::RealisedNonSacCastOrder(s, mp);
             if (canon.size() >= 2)
             {
                 os << ", \"cast_order_canonical\": [";

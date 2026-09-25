@@ -1401,6 +1401,15 @@ public:
     // #10 cast-order: canonical (executor clean-set) order of a plan's non-sac hand casts, for the
     // viewer to diff the human's queued order against (equal => don't emit --cast-order).
     static std::vector<std::string> CanonicalNonSacCastOrder(const GameState& state, const Plan& plan);
+    // ...and the order this plan will ACTUALLY be cast in: the vector order for a searched_order
+    // plan, the canonical sort otherwise. Same rule apply_plan_actions applies (and BpPrepayPrefix
+    // already mirrors) -- see the note on the definition for why reporting the canonical sort for
+    // an ordering-searched plan is a lie the viewer cannot see through.
+    static std::vector<std::string> RealisedNonSacCastOrder(const GameState& state, const Plan& plan);
+    // Cheap "is the realised order already the canonical one?" test -- std::is_sorted under the
+    // shared comparator, so no allocation and at most k-1 comparisons. Used by the viewer's
+    // display cap to pick which ordering of a cast set represents it in the menu.
+    static bool CastOrderIsCanonical(const GameState& state, const Plan& plan);
 
     // --- Whole-turn (batch) mana pre-payment ------------------------------------
     // Pays the COMBINED mana cost of this turn's main hand casts in a SINGLE complete-solver call,

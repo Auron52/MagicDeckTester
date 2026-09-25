@@ -160,7 +160,185 @@ std::vector<int> AllOurCreatures(const GameState& s)
     return v;
 }
 
+// ---- OFFER / EXECUTOR PARITY for the viewer's manual tap ------------------------------------
+//
+// The viewer publishes `taps` per permanent from HumanPreTapFaces (the OFFER) and then executes a
+// human's click through ApplyHumanPreTap (the EXECUTOR). They are two functions asking one
+// question, so the ONLY safe relation between them is a biconditional: every face the offer
+// publishes must be accepted, and every face it withholds must be refused.
+//
+// This helper checks that relation over a WHOLE board rather than a named source, because the
+// defect it exists to catch is not "this card is wrong" but "these two halves disagree" -- which
+// is invisible to any test that drives one half alone. Each tap gets a fresh copy of the state:
+// a tap mutates (it taps the permanent and adds to the float), so reusing one board would make
+// every source after the first fail for the wrong reason.
+//
+// The token is built and PARSED rather than hand-filling a PreTap, so the assertion runs the exact
+// route a human's `tap=` click takes -- parser included.
+std::vector<std::string> PreTapOfferMismatches(const GameState& s)
+{
+    std::vector<std::string> bad;
+    for (const Permanent& p : s.battlefield)
+    {
+        if (p.controller_index != s.active_player_index || p.tapped) { continue; }
+        const std::string where = p.card.m_name.str() + "#" + std::to_string(p.card.m_number);
+        const std::string faces = HumanPreTapFaces(s, p);
+        for (char f : std::string("WUBRGC"))
+        {
+            const bool offered = faces.find(f) != std::string::npos;
+            TurnSolver::PreTap t;
+            if (!ParseHumanPreTapToken("tap=" + where + ":" + std::string(1, f), t))
+            { bad.push_back(where + ":" + f + " -- the token did not parse"); continue; }
+            GameState scratch = s;                    // a tap mutates; never reuse a board
+            const std::string why = ApplyHumanPreTap(scratch, t);
+            if (offered && !why.empty())
+            { bad.push_back(where + ":" + f + " -- OFFERED but refused: " + why); }
+            else if (!offered && why.empty())
+            { bad.push_back(where + ":" + f + " -- NOT offered but accepted"); }
+            else if (offered && scratch.floating_mana.Total() == 0)
+            { bad.push_back(where + ":" + f + " -- accepted but added no mana"); }
+        }
+    }
+    return bad;
+}
+
+std::string Joined(const std::vector<std::string>& v)
+{
+    std::string out;
+    for (const std::string& s : v) { out += "\n    "; out += s; }
+    return out.empty() ? std::string("(none)") : out;
+}
+
 }  // namespace
+
+// ---------------------------------------------------------------------------------------------
+// THE HALF THAT HAD NO TEST.
+//
+// USER-REPORTED twice (2026-09-25): "Brightcap Badger turning critters into mana producers is not
+// working", and then -- after the grant had been verified end to end through the payer -- "Tapping
+// with Badger out is still not working?" The second report was right and the first verdict was
+// wrong, and the reason the verdict was wrong is structural, not a missed case:
+//
+// The 22 assertions in "granted Saprolings are REAL mana, through the payer" above drive
+// AvailableManaPool, UntappedManaUpperBound, TapForCostShared and HumanPreTapFaces. Every one of
+// them passed, and every one of them still passes -- the payer and the OFFER were always correct.
+// ApplyHumanPreTap, the half a human's click actually runs, had NO test at all: it re-asked
+// CardDatabase for the definition, and every Saproling is a TOKEN, so it refused "has no card
+// definition" on exactly the population the card exists to create. Two independently-green halves,
+// one broken feature.
+//
+// So this case asserts the RELATION, not a card. It sweeps the board and requires the offer and
+// the executor to agree face by face in BOTH directions, which is the only shape that could have
+// failed while both halves' own tests were green. The manual tap is human-play-only -- no digest,
+// no GT cell, no protocol replay reaches it -- so a unit test is the only thing that can.
+// ---------------------------------------------------------------------------------------------
+TEST_CASE("Manual tap: the offer and the executor are the same question (Badger, tokens, lands)")
+{
+    EnsureCardsLoaded();
+
+    SUBCASE("THE REPORT: with a Badger out, a Saproling TOKEN is offered {G} and the tap takes")
+    {
+        GameState s = Fresh();
+        Put(s, "Brightcap Badger", 0, 50);
+        PutSaprolingToken(s, 1000);
+
+        const Permanent& tok = ByNumber(s, 1000);
+        CHECK(HumanPreTapFaces(s, tok) == "G");        // the offer -- this was always right
+
+        TurnSolver::PreTap t;
+        REQUIRE(ParseHumanPreTapToken("tap=1/1 Saproling Token#1000:G", t));
+        CHECK(ApplyHumanPreTap(s, t) == "");           // the executor -- this is what was broken
+        CHECK(s.floating_mana.green == 1);
+        CHECK(ByNumber(s, 1000).tapped);
+    }
+
+    SUBCASE("...and WITHOUT the Badger the same click is refused -- the grant is what opens it")
+    {
+        GameState s = Fresh();
+        PutSaprolingToken(s, 1000);
+        CHECK(HumanPreTapFaces(s, ByNumber(s, 1000)) == "");
+
+        TurnSolver::PreTap t;
+        REQUIRE(ParseHumanPreTapToken("tap=1/1 Saproling Token#1000:G", t));
+        CHECK(ApplyHumanPreTap(s, t) != "");           // refused by BOTH halves, which is parity too
+        CHECK(s.floating_mana.Total() == 0);
+    }
+
+    SUBCASE("PARITY over a mixed board: tokens, granted Fungi, a real dork and real lands")
+    {
+        // Every population the grant touches, plus the ones it must not, on one battlefield:
+        //   * Saproling tokens          -- no CardDefinition at all (the reported failure)
+        //   * Thallid / Sporecrown      -- a real definition, but no mana ability of their own
+        //   * Undercellar Myconid       -- already a mana dork; the grant must not downgrade it
+        //   * Brightcap Badger itself   -- a Badger Druid, NOT a Fungus: never a source
+        //   * Forest / Hickory Woodlot  -- ordinary lands, which must be unaffected by any of it
+        GameState s = Fresh();
+        Put(s, "Brightcap Badger",    0, 50);
+        Put(s, "Utopia Mycon",        0, 60);
+        Put(s, "Thallid",             0, 61);
+        Put(s, "Sporecrown Thallid",  0, 62);
+        Put(s, "Undercellar Myconid", 0, 63);
+        Put(s, "Forest",              0, 70);
+        Put(s, "Hickory Woodlot",     0, 71);
+        for (int i = 0; i < 3; ++i) { PutSaprolingToken(s, 100 + i); }
+
+        const std::vector<std::string> bad = PreTapOfferMismatches(s);
+        CHECK_MESSAGE(bad.empty(), "offer/executor disagreed on:", Joined(bad));
+    }
+
+    SUBCASE("PARITY holds on the boards where the offer must say NO")
+    {
+        // Summoning sickness (CR 302.6), a tapped body, an opponent's Badger, and the deck stamp
+        // shut. Each closes the offer, so each must close the executor -- the direction that would
+        // let a human mint mana the search cannot see.
+        GameState sick = Fresh();
+        Put(sick, "Brightcap Badger", 0, 50);
+        for (int i = 0; i < 3; ++i) { PutSaprolingToken(sick, 100 + i, /*sick=*/true); }
+        CHECK_MESSAGE(PreTapOfferMismatches(sick).empty(),
+                      "summoning-sick:", Joined(PreTapOfferMismatches(sick)));
+
+        GameState theirs = Fresh();
+        Put(theirs, "Brightcap Badger", 1, 50);                       // THEIR Badger
+        for (int i = 0; i < 3; ++i) { PutSaprolingToken(theirs, 100 + i); }
+        CHECK_MESSAGE(PreTapOfferMismatches(theirs).empty(),
+                      "opponent's Badger:", Joined(PreTapOfferMismatches(theirs)));
+
+        GameState stamped = Fresh();
+        Put(stamped, "Brightcap Badger", 0, 50);
+        for (int i = 0; i < 3; ++i) { PutSaprolingToken(stamped, 100 + i); }
+        stamped.deck_has_mana_grant = false;
+        CHECK_MESSAGE(PreTapOfferMismatches(stamped).empty(),
+                      "grant stamp shut:", Joined(PreTapOfferMismatches(stamped)));
+    }
+
+    SUBCASE("Concordant Crossroads lifts sickness for the manual tap too, not just the payer")
+    {
+        // The payer's version of this is asserted above via AvailableManaPool. The human's click
+        // runs a different function, so it gets its own assertion rather than an inference.
+        GameState s = Fresh();
+        Put(s, "Brightcap Badger",      0, 50);
+        Put(s, "Concordant Crossroads", 0, 51);
+        PutSaprolingToken(s, 1000, /*sick=*/true);
+
+        CHECK(HumanPreTapFaces(s, ByNumber(s, 1000)) == "G");
+        TurnSolver::PreTap t;
+        REQUIRE(ParseHumanPreTapToken("tap=1/1 Saproling Token#1000:G", t));
+        CHECK(ApplyHumanPreTap(s, t) == "");
+        CHECK(s.floating_mana.green == 1);
+    }
+
+    SUBCASE("a wide granted board stays in parity -- the payer's 64-source cap is not the offer's")
+    {
+        // The backtracker caps how many granted tokens one PAYMENT may consider. The manual tap is
+        // one permanent at a time and must not inherit that cap: token #79 is as tappable by hand
+        // as token #0, or a human on a wide board would find clicks silently dead.
+        GameState s = Fresh();
+        Put(s, "Brightcap Badger", 0, 50);
+        for (int i = 0; i < 80; ++i) { PutSaprolingToken(s, 100 + i); }
+        const std::vector<std::string> bad = PreTapOfferMismatches(s);
+        CHECK_MESSAGE(bad.empty(), "wide board:", Joined(bad));
+    }
+}
 
 TEST_CASE("Depletion counters are doubled by Doubling Season (CR 121.6 / 614.1c)")
 {

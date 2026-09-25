@@ -53670,6 +53670,33 @@ TurnSolver::LineCheck TurnSolver::CheckLine(const GameState& state_in, bool is_p
                            a.card_name + " replicate", "+" + std::to_string(a.replicate_count),
                            a.card_name, "replicate");
                 }
+                // DEVOUR COUNT (CR 702.81, Mycoloth "Devour 2"): how many creatures the cast eats on
+                // the way in. Same shape and same failure as splice/replicate above -- every k
+                // enumerates as a CastFromHand of the same card name, so with no sub they shared a
+                // signature, the dedup below kept the first enumerated and the human's count was
+                // decided for them.
+                //
+                // USER-REPORTED (candidate-B Fungus, seed 9, 2026-09-25): "I still do not get to
+                // pick what is sacrificed to Mycoloth", and then, unambiguously: "For seed 9 I was
+                // given no choice of what to sacrifice PERIOD." Both halves of that are this sub.
+                // `--validate-line "cast=Mycoloth"` returned ONE variant with `"subs": []`, so the
+                // viewer auto-accepted it -- the count was committed silently, and because the
+                // resolution-time victim prompt only opens where the count leaves a genuine choice,
+                // devouring the whole board asked nothing either. The COUNT is the decision the card
+                // is about (this turn's attackers and Utopia Mycon fodder against a permanent
+                // +1/+1-counter engine), which is why EnumeratePlans fans it in autonomous play too
+                // and refuses to cap it -- and why collapsing it in the viewer was the one place the
+                // human lost it.
+                //
+                // Emitted for every k >= 0 (k = 0 is a real and frequently-correct line: the bodies
+                // are usually worth more attacking); -1 is the "not a devour cast" sentinel every
+                // other card carries and emits nothing, so no other deck's signature moves.
+                if (a.devour_count >= 0)
+                {
+                    addSub(a.card_name + " devour " + std::to_string(a.devour_count),
+                           a.card_name + " devours", std::to_string(a.devour_count),
+                           a.card_name, "devour");
+                }
                 // Maelstrom Archangel FREE CAST: with a banked charge, "pay for this spell" and
                 // "spend the bank on it" are two genuinely different lines (the freed mana funds
                 // other casts), and WHICH card eats the charge is the player's call. Without a sub
@@ -54979,4 +55006,52 @@ std::vector<std::string> TurnSolver::CanonicalNonSacCastOrder(const GameState& s
     names.reserve(order.size());
     for (int i : order) { names.push_back(plan.actions[i].card_name); }
     return names;
+}
+
+// THE ORDER THE PLAN WILL ACTUALLY BE CAST IN -- which for an ordering-searched plan is NOT the
+// canonical sort above.
+//
+// apply_plan_actions has two routes: `searched_order` casts in VECTOR order, everything else sorts
+// by CastOrderLess. BpPrepayPrefix already mirrors that split ("the vector order for a
+// searched_order plan, otherwise the canonical CastOrderLess sort"), and its comment says why
+// re-deriving it with separate logic is a lockstep hazard. The viewer's `cast_order_canonical` was
+// the one consumer that never got the split, so it reported the SORT for plans the engine executes
+// in vector order.
+//
+// USER-REPORTED (candidate-B Fungus, seed 8 game-index 0 turn 3, 2026-09-25): "The mana usage is
+// just bad in this line. It fails to keep the Peat Bog despite the fact that it isn't difficult to
+// do so." The committed plan cast Shroofus Sproutsire before Sol Ring, so the {2}{G} was paid off
+// Forest + Peat Bog's LAST depletion counter and the land was sacrificed -- while the Sol Ring the
+// same line cast sat untapped. Cast Sol Ring first and its own {C}{C} pays the {2}: Peat Bog lives.
+// Both orderings were enumerated (indices 444 and 445) and BOTH advertised
+// `cast_order_canonical: [Sol Ring, Shroofus Sproutsire]`, so nothing on the wire distinguished the
+// line that wastes a land from the line that does not. See
+// docs/design/searched-cast-order-not-reported.md.
+std::vector<std::string> TurnSolver::RealisedNonSacCastOrder(const GameState& state, const Plan& plan)
+{
+    if (!plan.searched_order) { return CanonicalNonSacCastOrder(state, plan); }
+    std::vector<std::string> names;
+    for (const Action& a : plan.actions)
+    {
+        if (a.kind == Action::Kind::CastFromHand && !a.sacrifice_land)
+        { names.push_back(a.card_name); }
+    }
+    return names;
+}
+
+bool TurnSolver::CastOrderIsCanonical(const GameState& state, const Plan& plan)
+{
+    // A plan that takes the canonical route IS canonical by construction.
+    if (!plan.searched_order) { return true; }
+    // Otherwise: would the stable_sort above be a no-op? `is_sorted` under the same comparator
+    // answers that exactly, in at most k-1 comparisons and with no allocation -- which matters
+    // because the display cap runs this over every plan of a go-off fan.
+    const Action* prev = nullptr;
+    for (const Action& a : plan.actions)
+    {
+        if (a.kind != Action::Kind::CastFromHand || a.sacrifice_land) { continue; }
+        if (prev != nullptr && CastOrderLess(state, a, *prev)) { return false; }
+        prev = &a;
+    }
+    return true;
 }

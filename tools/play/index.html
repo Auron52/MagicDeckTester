@@ -1114,9 +1114,12 @@ function activatableSources(){
   S._actOpts = {}; Object.keys(opts).forEach(n=>{ S._actOpts[n] = Object.keys(opts[n]).map(k=>opts[n][k]); });
   return max;
 }
-// Is this battlefield permanent a SAC OUTLET (its activation eats a creature) rather than a plain
-// activated ability? Decides the line verb (sacout= vs cast=) and the hint wording.
-function isSacOutletSource(name){ activatableSources(); return !!(S._sacOutSrc||{})[name]; }
+// DELIBERATELY REMOVED: isSacOutletSource(name), "is this PERMANENT a sac outlet". It was the verb
+// decision in queueActivation, and it is the wrong question -- a permanent with two activated
+// abilities (Utopia Mycon: the spore Saproling and the sac-for-mana) has one of each, so a
+// source-keyed answer mis-encoded the spore activation as `sacout=`. See queueActivation for the
+// report. `S._sacOutSrc` is still assembled above but is now read by NOTHING, and must stay that
+// way: the option carries its own `sacout`, and that is the only honest answer to the question.
 // The distinct activations this source offers, as {verb, mode, name} (name = what the line verb
 // names, which for Stoneforge's put is the Equipment, not the source).
 function activationOptions(name){ activatableSources(); return (S._actOpts||{})[name] || []; }
@@ -1255,7 +1258,23 @@ function blinkAtTarget(num){
 // Commit one chosen activation into the plan. `src` is the permanent clicked; `opt` says which verb
 // the line writes and what it names. Kept apart from toggleActivate so the picker can call it.
 function queueActivation(src, opt){
-  const sac = isSacOutletSource(src);
+  // PER-OPTION, NOT PER-SOURCE. This used to read isSacOutletSource(src) -- "does this PERMANENT
+  // have a sac outlet at all" -- which was fine while a permanent had at most one activated
+  // ability. Utopia Mycon has two ("remove three spore counters: create a Saproling" and
+  // "sacrifice a Saproling: add one mana of any colour"), so the source flag was true for BOTH and
+  // the spore activation encoded as `sacout=Utopia Mycon` -- a verb CheckLine only ever matches
+  // against SacForMana / SacCreatureOutlet actions. USER-REPORTED 2026-09-25 (candidate-B Fungus,
+  // seed 11 gi 10 T4, logs/play/rejections/..._s11_gi10_t4.json): "For some reason I can't just
+  // activate to create a saproling. I also cannot activate to create a saproling and then drop
+  // doubling season." Both lines were rules-legal -- `cast=Utopia Mycon` accepts at that very frame
+  // -- and both came back legal_not_enumerated because the viewer wrote the wrong verb.
+  //
+  // This is the SAME defect as the act_label fix one layer down, in the layer below it: that fix
+  // stopped the two abilities DEDUPING to one picker entry; this one stops the two picker entries
+  // ENCODING to one verb. Both were "keyed on the source when the choice is per-ability", so the
+  // rule now is: the option knows what it is (`sacout:!!a.sacout`, set when the option is built
+  // from the action), and nothing downstream may re-derive it from the permanent.
+  const sac = !!opt.sacout;
   const cap = activatableSources()[src]||0, have = activateCount(src);
   S.actPick = null;
   // FUSED "Investigate & crack": two ordinary entries, the second DEFERRED so it validates against
@@ -2805,7 +2824,7 @@ function renderChooseDialog(v, line){
     // dimension reports '—').
     const sameCard = choices.every(c => (c.card||'') === (choices[0].card||''));
     const listShape = sameCard || choices.some(c => !c.card)
-                   || ['modal','x','splice','replicate','free','loyalty'].indexOf(dim.kind) >= 0;
+                   || ['modal','x','splice','replicate','devour','free','loyalty'].indexOf(dim.kind) >= 0;
     let h=`<div class="dimhead">${srcName?cardMini(srcName,'dimsrc'):''}`+
           `<div class="dimtext"><h3>${esc(dim.key)}?</h3>`+
           `<div class="sub">${total>1?`Decision ${step} of ${total} for this line — `:''}`+

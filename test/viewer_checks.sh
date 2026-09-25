@@ -57,6 +57,11 @@
 #     colour. Both halves are human-play-only, so nothing else in the suite can witness them, and no
 #     SAVED reference plays this line. Pins both `=0` hatches -- either defect alone reproduces the
 #     bug. Needs python3 + the binary; ~3 s. SKIPS itself when the board is not reachable.
+#   * cast-order truth (engine) -- cast_order_truth_check.py asserts a plan's advertised cast order
+#     IS the order it applies, and that the display cap keeps the canonical ordering as a cast set's
+#     representative. Human-play-only on both counts (the ordering search is unpruned-gated; the
+#     protocol sweep runs uncapped), so no other layer can witness either. Needs python3 + the
+#     binary; ~5 s. SKIPS itself when the frame is not reachable.
 #   * protocol (engine<->GUI) -- viewer_protocol_check.py replays each reference's chosen plan
 #     indices through the binary and asserts the decision-JSON contract holds (well-formed,
 #     valid index, clean terminal). Needs python3 + the binary. FULL sweep ~35 min; --sample
@@ -291,6 +296,30 @@ if [ "$MODE" != line ]; then
       echo "--- pay line colour (a line's later cast keeps the colour it still owes) ---"
       if MTG_BIN="$BIN" python3 "$HERE/pay_line_color_check.py"; then :; else
         echo "FAIL: a committed line's generic pips again spent the mana a later cast in that same line needed."
+        rc=1
+      fi
+    fi
+  fi
+fi
+
+#   * cast-order truth (engine) -- cast_order_truth_check.py drives the user's seed-8 turn-3 frame,
+#     where two enumerated orderings of {Sol Ring, Shroofus Sproutsire} differ by a SACRIFICED Peat
+#     Bog, and asserts (a) they advertise different cast_order_canonical values, (b) each label
+#     predicts the board its apply produces, and (c) the ordering the capped menu shows is the
+#     canonical one. Nothing else can see either half: the cast-ORDERING search that creates the
+#     siblings is gated on DecisionUnpruned(SearchOrder), i.e. human play only, and
+#     viewer_protocol_check.py runs UNCAPPED so the display cap is invisible to it by construction.
+#     Needs python3 + the binary; ~5 s. SKIPS itself when the frame is not reachable.
+#     See docs/design/searched-cast-order-not-reported.md.
+if [ "$MODE" != line ]; then
+  if command -v python3 >/dev/null 2>&1 && [ -f "$HERE/cast_order_truth_check.py" ]; then
+    if [ ! -f "$BIN" ]; then
+      echo "FAIL: cast-order truth check needs the binary but '$BIN' is missing."
+      rc=1
+    else
+      echo "--- cast-order truth (the advertised order is the one that executes) ---"
+      if MTG_BIN="$BIN" python3 "$HERE/cast_order_truth_check.py"; then :; else
+        echo "FAIL: a plan's advertised cast order again disagrees with the order it applies, or the menu hides the canonical ordering."
         rc=1
       fi
     fi

@@ -520,9 +520,13 @@
   // the `enchant` key, so the dialog asked "Oko, Thief of Crowns ->? / leave it unattached /
   // Faeburrow Elder / Deathrite Shaman": an attach question standing in for the ability choice
   // (2026-09-02 item 2). The engine no longer emits that sub, and the ability is asked first.
+  // `devour` (how many creatures a Mycoloth-class cast eats as it enters) sits with the other
+  // per-spell counts, just ahead of `replicate`: it consumes BODIES rather than mana, so unlike
+  // replicate it does not want to be read against what the rest of the line left spare -- and it
+  // decides how many victims the resolution-time board click will then ask for.
   const SUBKIND_PRI = { face: -1, fetch: 0, free: 0.5, sacrifice: 0.75, tutor: 1, loyalty: 1.3,
                         bestow: 1.4, enchant: 1.5, equip: 1.5, jitte: 1.6, x: 2, activations: 2,
-                        modal: 2.5, soulfire: 3, crackle: 4, splice: 5, replicate: 6 };
+                        modal: 2.5, soulfire: 3, crackle: 4, splice: 5, devour: 5.5, replicate: 6 };
   function subKindPri(k) { return SUBKIND_PRI[k] === undefined ? 9 : SUBKIND_PRI[k]; }
   function subOf(v, key) { return (v.subs || []).filter(s => s.key === key)[0]; }
   function choiceOf(v, key) { const s = subOf(v, key); return s ? s.choice : '—'; }

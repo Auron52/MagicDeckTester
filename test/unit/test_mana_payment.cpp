@@ -12,6 +12,7 @@
 #include <doctest/doctest.h>
 
 #include "ai/AIEngine.h"
+#include "ai/DecisionProviders.h"  // ResolveProvider -- ManaSourceRank, the scarcity-first tap order
 #include "ai/HeuristicArm.h"  // heurarm::t_arm -- per-test lever control (env reads are static)
 #include "ai/ManaPayment.h"   // AvailableManaPool: the unified accounting pool (C1 unit 4)
 #include "ai/TurnSolver.h"
@@ -801,4 +802,81 @@ TEST_CASE("a {C}-pip cost pays its generic from a COLOUR, sparing colourless for
     CHECK(plain.generic == 0);
     CHECK(ppool.colorless == 0);
     CHECK(ppool.green == 2);
+}
+
+// ---------------------------------------------------------------------------------------------
+// A COLOURLESS-ONLY SOURCE TAPS BEFORE A MONO-COLOURED ONE (eaccc120).
+//
+// THIS RULE HAD NO LIST-INDEPENDENT TEST, AND ITS ONLY GUARD WENT SILENTLY RED. `eaccc120`
+// ("fix(mana): a COLOURLESS-only source must tap before a mono-coloured one") shipped with exactly
+// one check: `testColorlessFirstTapOrder` in test/viewer_client_check.js, which walks a REAL game of
+// StompySurprise seed 9 and hard-codes `queueCard('Wirewood Lodge', 'land')`. StompySurprise was
+// later revised and its predecessor archived to decks/StompySurprise/v1-arborelf-worldspine4/ --
+// **Wirewood Lodge is in the archived list and absent from the shipped one**. So the card can never
+// be in hand, the line cannot be built, the commit does nothing, and the check has been failing ever
+// since on two assertions that read like an engine regression ("Sol Ring resolved", "Natural Order
+// actually left hand") while the engine was fine.
+//
+// Two lessons, both worth more than the rule itself:
+//   * A viewer check that names CARDS is coupled to a DECKLIST, and the deck-revision convention
+//     (CLAUDE.md: archive the predecessor as v<N>-<slug>/) has no step that sweeps the checks. A
+//     rule whose only guard is such a check is one list revision away from unguarded.
+//   * The property is a pure function of two CardDefinitions. It never needed a game walk.
+//
+// So it is pinned here instead: no deck, no seed, no shuffle, nothing a list revision can reach.
+// The ordering is the whole claim -- LOWER rank taps EARLIER -- and it is asserted as an inequality
+// rather than against the literal rungs (5 and 10), because the rungs around it have been renumbered
+// repeatedly by later measured tiers and the INVARIANT is what eaccc120 bought.
+TEST_CASE("scarcity-first: a {C}-only land outranks a mono-coloured one (eaccc120)")
+{
+    EnsureCards();
+
+    // No {C} SINK on the board and no untap-burst target, so both of the tiers that deliberately
+    // INVERT this rule are dormant: an Eldrazi-style {C} pip sink sends the colourless land to 59
+    // ("last of the lands"), and a live Wirewood Lodge burst sends it to 63. Those are separate,
+    // measured reserves with their own reasons; this case pins the plain ladder underneath them.
+    const GameState s = MakeBoard({"Forest"});
+    const DecisionProvider& prov = ResolveProvider(s);
+
+    // Reliquary Tower is the clean {C}-only land in cards.json: its only parameter is
+    // `no_max_hand_size`, so it trips none of the reserve tiers (no animate, no storage, no scaled
+    // yield, no untap burst) and lands on the plain ladder this rung governs.
+    const CardDefinition* tower  = CardDatabase::Instance().Lookup("Reliquary Tower");
+    const CardDefinition* forest = CardDatabase::Instance().Lookup("Forest");
+    REQUIRE(tower  != nullptr);
+    REQUIRE(forest != nullptr);
+
+    const int c_only = prov.ManaSourceRank(s, *tower);
+    const int mono   = prov.ManaSourceRank(s, *forest);
+
+    // THE CLAIM: spend the least flexible first. A {C}-only source pays generic pips only; a
+    // Forest's {G} pays generic AND green, so the Forest must be kept back. Before eaccc120 both
+    // read as "mono" (ncol == 1) and tied, which let a GENERIC pip eat the coloured source and
+    // strand a later cast's coloured pips in the same turn.
+    CHECK(c_only < mono);
+
+    // ...and it must not have overshot into the RESERVE band. Everything at 60 and above is
+    // deliberately held back (animated manland 60, scaled dork/land 61, storage 62, untap burst 63,
+    // creatures 64+); a plain {C} land belongs in front of the plain lands, not behind the reserves.
+    CHECK(c_only < 60);
+
+    // THE CARD FROM THE ORIGINAL REPORT, with no decklist in sight. Wirewood Lodge is a {C}-only
+    // land whose untap-burst reserve (63) is gated on a LIVE burst -- a 2+ scaled Elf on our board.
+    // This board is one Forest, so the burst is dead and the Lodge must fall through to exactly the
+    // rung above. That is the precise configuration of the 2026-08-24 report
+    // (`land=Wirewood Lodge; cast Sol Ring, Natural Order`), reduced to the two definitions that
+    // actually decide it.
+    if (const CardDefinition* lodge = CardDatabase::Instance().Lookup("Wirewood Lodge"))
+    {
+        CHECK(prov.ManaSourceRank(s, *lodge) == c_only);
+    }
+
+    // The reserve the rung must NOT have swallowed: an animated manland is held back ON PURPOSE
+    // (its {C} is marginal but its body attacks), so it ranks BEHIND the plain mono-coloured land
+    // even though it is also {C}-only. Asserting both directions is what makes the case a pin on
+    // the ORDER rather than on "colourless is early".
+    if (const CardDefinition* muta = CardDatabase::Instance().Lookup("Mutavault"))
+    {
+        CHECK(prov.ManaSourceRank(s, *muta) > mono);
+    }
 }

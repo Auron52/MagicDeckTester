@@ -3558,7 +3558,29 @@ std::string ApplyHumanPreTap(GameState& state, const TurnSolver::PreTap& t)
         return reject(std::string("'") + t.name + "' cannot produce {" + letter + "} (it makes {"
                       + faces + "})");
     }
-    const CardDefinition* def = CardDatabase::Instance().LookupCached(found->card);
+    // THE SAME CHOKEPOINT HumanPreTapFaces JUST USED, not a second raw lookup.
+    //
+    // USER-REPORTED, twice (candidate-B Fungus, 2026-09-25): "Brightcap Badger turning critters into
+    // mana producers is not working", then -- after the grant itself had been verified end to end
+    // through the payer -- "Tapping with Badger out is still not working?" Both were this line.
+    //
+    // The faces check above resolves the Badger's grant through ManaDefOf, so a granted Saproling
+    // correctly reports "G" and the viewer draws it as a tappable {G} source. This line then threw
+    // it away and asked CardDatabase directly -- and EVERY Saproling is a TOKEN, so LookupCached
+    // returns null and the hand-forced tap died with "has no card definition" on exactly the
+    // population the card exists to create. Offered by one half of the question and refused by the
+    // other: `tap=1/1 Saproling Token#1000:G` verdict ILLEGAL on a board whose own chip said {G}.
+    //
+    // Nothing else could see it. The 22 assertions that closed the first report drove
+    // AvailableManaPool / UntappedManaUpperBound / TapForCostShared / HumanPreTapFaces -- the payer
+    // and the OFFER -- and every one of them was and is correct; the executor half had no test at
+    // all, and the manual tap is human-play-only so no digest, GT cell or protocol replay reaches it.
+    //
+    // `def` is used for exactly one thing below -- TapSourceIntoFloat -- which asks only mana
+    // questions of it (produces, energy, depletion, pay-sac), so the synthetic granted face is the
+    // right answer here. See the ManaDefOf header for the caution that applies to callers which ask
+    // NON-mana questions of the result; this is not one of them.
+    const CardDefinition* def = ManaDefOf(state, *found, LiveManaGrant(state, active));
     if (def == nullptr) { return reject("'" + t.name + "' has no card definition"); }
     // ---- the land Aura's colour, when the human stated one ------------------------------------
     // "Whenever enchanted land is tapped for mana, its controller adds an additional one mana of
