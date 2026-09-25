@@ -75,7 +75,16 @@ fast`, PID **3827293**, log `logs/Snow_mullgen/gen.log` (the stopped run's log i
   journal resume" defect (`sub=0/142464`, shipped on Dragons and Mirrorwing) was fixed 2026-09-01 --
   `ExhaustiveKeep.cpp:3900`, "RESUME FIX ... must be drained in the REFINE phase" -- and
   `mullgen.sh`'s artifact check hard-fails an under-sampled sub-table regardless, before any games
-  are played.
+  are played. **CONFIRMED IN FLIGHT at 13:41 UTC:** the 1800 s monitor reads
+  `rollsub=15298 (50/s) sub=7361/162004 (4.5%, 24.5/s)` -- the fused batches are draining on a
+  resumed journal, so the Dragons/Mirrorwing failure mode is not in play here.
+* **The size-7 floor closed exactly where the arithmetic said it would.** 703,888 floor rollouts
+  minus the 579,316 banked leaves 124,572, and the 1800 s monitor reads `roll7=124572` with the phase
+  moved on to the sub-table. That is a clean check on the projection's denominator. The sub floor
+  (162,004 cell-sides at 24.5/s) lands ~1.8 h in, i.e. ~15:30 UTC, and refine holds the rest.
+* **Rate is running ABOVE the figure section 2 projects from:** 75-84/s against the 03:37 run's
+  53.7/s, which pushes the estimate toward the low end of the 20-40 h range. Do not bank that -- the
+  refine tail is where the rate decays, and the floor pass is the cheap part by construction.
 * **It will not finish in one night.** Expect the floor complete, the sub-table floor down and
   refine well under way by morning. `bash scripts/mullgen.sh status decks/Snow` reports progress;
   re-running `run` resumes. `mullgen.sh run` validates and gates automatically when gen completes,
