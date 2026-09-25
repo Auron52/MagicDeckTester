@@ -2631,8 +2631,9 @@ inline void DestroyAllEnchantments(GameState& state)
 
 // ==================== Auras (attach-to-creature enchantments) =========================
 // A single, battlefield-aware home for the Bogles/hexproof-auras mechanic. Auras attach to a
-// creature by STABLE m_number (Permanent::aura_attached_to) -- copy/realloc-safe unlike the dead
-// `attached_to` pointer. Every function here is a plain scan over state.battlefield, so it composes
+// creature by STABLE m_number (Permanent::aura_attached_to) -- copy/realloc-safe, unlike the
+// `Permanent* attached_to` back-pointer this deliberately replaced (a dead stub for a long while;
+// removed 2026-09-25). Every function here is a plain scan over state.battlefield, so it composes
 // cleanly with the deep-copied search state. Inert for decks with no is_aura cards (the scans find
 // nothing) -> byte-identical for every other deck.
 

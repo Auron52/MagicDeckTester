@@ -966,8 +966,8 @@ inline void LoadPlanState(GameState& dst, const GameState& src, bool reuse)
 // Byte-identical by construction, exactly as for LoadPlanState: assignment overwrites every field
 // with the values the copy constructor would have produced and only the storage is reused. The
 // one thing that differs is a vector's CAPACITY, which can suppress a reallocation the fresh copy
-// would have done -- and no GameState field is a pointer into its own storage (Permanent::
-// attached_to is a dead stub; every attachment rides a stable card m_number), nor does any key /
+// would have done -- and no GameState field is a pointer into its own storage (every attachment
+// rides a stable card m_number, never a Permanent*), nor does any key /
 // digest / log fold a heap address. Verified: smoke 73/73 byte-identical, scenarios 72/72, and
 // the six EDF reference games' play digests unchanged.
 //

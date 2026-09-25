@@ -306,6 +306,17 @@ struct Card
     // a heap alloc/free for its (always non-empty) type set on each GameState copy.
     // Subtypes stay a vector<string>: they are string-matched (lord subtype checks)
     // and would need an intern table to pack, which the lord paths don't justify.
+    //
+    // MEMBER ORDER IS A CACHE-LAYOUT CONTRACT, not alphabetical or historical (2026-09-25).
+    // Everything a BOARD WALK reads -- m_name / m_name_hash / m_def (LookupCached), m_number,
+    // the four masks (Is*/Has*), and P/T -- is packed into the FIRST 64 BYTES, i.e. one cache
+    // line; the members only a CAST or a DISPLAY path reads (m_mana_cost at 48 bytes, m_subtypes,
+    // the staged-card fields) follow it. Before this, m_mana_cost sat at offset 32 and shoved
+    // m_def out to 128, so the single statement `LookupCached(p.card)` inside a scan touched
+    // line 0 (m_name) AND line 2 (m_def) for every permanent. Reordering also dropped
+    // sizeof(Card) 136 -> 128, which matters twice over because Card is Permanent's first member
+    // and is deep-copied per search node. Adding a member: put it after m_toughness only if a
+    // per-permanent scan reads it, otherwise at the END, and keep the hot block <= 64 bytes.
     InternedName m_name;   // interned: an 8-byte pointer into a process-wide name registry (see
                            // NameRegistry.h). Reads convert implicitly to const std::string&; this
                            // keeps Card trivially copyable so vector<Card> copy/erase are memcpy/
@@ -316,25 +327,8 @@ struct Card
     // few sites that assign m_name -- a stale value would change the TT key (a bug, caught by
     // the byte-identical smoke/regression gate). Copied with the card (stays consistent).
     uint64_t    m_name_hash = 0;
-    int         m_number    = 0;    // per-copy stable ID (1–60); assigned at deck setup
-    bool        m_is_staged = false; // true while the card is a staged (exiled) card in hand
-    int         m_staged_expiry = 0; // last turn this staged card may be played (CR 406); valid when m_is_staged
-    // Apex of Power impulse-exile marker: this staged card was exiled by Apex ("you may cast SPELLS
-    // from among them"), so if it is a LAND it may NOT be PLAYED (a land is played, not cast; CR 601.2).
-    // Set ONLY in Apex's exile loop (DrawTopAsImpulseStaged) -- never on Light Up / Expressive Iteration
-    // / Soulfire staged cards, whose lands MUST stay playable. The land-play sites skip a staged card
-    // with this bit; every other card leaves it false -> byte-identical. Travels with the card (copied).
-    bool        m_impulse_no_land = false;
-    ManaCost m_mana_cost;
-    SubtypeSet  m_subtypes;              // creature/land subtypes (e.g. "Sliver", "Goblin", "Mountain"):
-                                         // interned-id storage, iterates as std::string (see SubtypeSet)
-    uint32_t    m_type_mask      = 0;    // set of CardType  (see Bit())
-    uint32_t    m_supertype_mask = 0;    // set of Supertype
-    uint32_t    m_color_mask     = 0;    // set of Color
-    uint32_t    m_keyword_mask   = 0;    // set of Keyword
-    std::optional<int>     m_power;      // null for non-creatures
-    std::optional<int>     m_toughness;
 
+    // ---- HOT BLOCK (bytes 0-63): everything a per-permanent board scan touches. ----------------
     // Memoized pointer to this card's CardDatabase entry, resolved lazily by
     // CardDatabase::LookupCached(const Card&). The DB is a lifetime singleton whose
     // entries are never erased/relocated, so the pointer stays valid; it is copied
@@ -360,6 +354,29 @@ struct Card
     // the pointee is immutable, published before any thread starts, and there is nothing to
     // order against. On x86-64 a relaxed atomic load/store is a plain mov, so this is free.
     mutable const CardDefinition* m_def = nullptr;
+
+    int         m_number    = 0;    // per-copy stable ID (1–60); assigned at deck setup
+    uint32_t    m_type_mask      = 0;    // set of CardType  (see Bit())
+    uint32_t    m_supertype_mask = 0;    // set of Supertype
+    uint32_t    m_color_mask     = 0;    // set of Color
+    uint32_t    m_keyword_mask   = 0;    // set of Keyword
+    std::optional<int>     m_power;      // null for non-creatures
+    std::optional<int>     m_toughness;
+    // ---- end of the hot block (exactly 64 bytes) ------------------------------------------------
+
+    // Read only when a card is CAST, enumerated or rendered -- never by a board scan, so it is
+    // deliberately kept out of the cache line above even though it is 48 bytes of the object.
+    ManaCost m_mana_cost;
+    SubtypeSet  m_subtypes;              // creature/land subtypes (e.g. "Sliver", "Goblin", "Mountain"):
+                                         // interned-id storage, iterates as std::string (see SubtypeSet)
+    int         m_staged_expiry = 0; // last turn this staged card may be played (CR 406); valid when m_is_staged
+    bool        m_is_staged = false; // true while the card is a staged (exiled) card in hand
+    // Apex of Power impulse-exile marker: this staged card was exiled by Apex ("you may cast SPELLS
+    // from among them"), so if it is a LAND it may NOT be PLAYED (a land is played, not cast; CR 601.2).
+    // Set ONLY in Apex's exile loop (DrawTopAsImpulseStaged) -- never on Light Up / Expressive Iteration
+    // / Soulfire staged cards, whose lands MUST stay playable. The land-play sites skip a staged card
+    // with this bit; every other card leaves it false -> byte-identical. Travels with the card (copied).
+    bool        m_impulse_no_land = false;
 
     // The enum value's ordinal is its bit index; every enum above has < 32 values.
     static constexpr uint32_t Bit(CardType t)  { return 1u << static_cast<int>(t); }

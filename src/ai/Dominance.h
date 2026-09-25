@@ -120,7 +120,18 @@
 // NOT apply to -- there is no new state to classify, only a different container holding the old
 // state -- which is why the sequence semantics were preserved exactly rather than collapsing to a
 // per-Type slot array (that WOULD have changed .size() and moved this axis).
-static_assert(sizeof(Permanent) == 320,
+// 320 -> 288 (2026-09-25): NO FIELD ADDED OR REMOVED FROM THE GAME STATE -- a pure CACHE-LAYOUT
+// pass, so Build() is untouched and every key is bit-for-bit what it was. Two changes: the dead
+// `Permanent* attached_to` stub (never read by anything; every attachment already rode a stable
+// card m_number) was deleted, and the members were REORDERED so the fields a whole-board scan
+// reads sit in one cache line. Measured cause: `GatherBoardSources` spent 29.9% of its self time
+// on the single byte load `cmpb $0x0,0x101(%rbx)` -- `def_absent` at offset 257 -- reached with a
+// 320-byte stride, while `controller_index` (136) and `card.m_def` (128) sat on two OTHER lines,
+// so one iteration missed three times. They are now all within bytes 0-191. sizeof(Card) went
+// 136 -> 128 in the same pass (see the member-order contract at the top of Card.h).
+// THE ONE THING TO CHECK when this number next moves: whether it moved because a FIELD changed
+// (classify it below) or only because the layout did (nothing to do here but the number).
+static_assert(sizeof(Permanent) == 288,
               "Permanent changed size -- fold any new field into dominance::Build() (see the "
               "MAINTENANCE HAZARD note at the top of Dominance.h) before updating this number.");
 // The point of CounterList: this is what makes the erase path a memmove. If a future field breaks
