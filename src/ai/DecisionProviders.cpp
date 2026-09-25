@@ -20292,9 +20292,81 @@ namespace { struct FungusWhyDumper { ~FungusWhyDumper() { FungusCertReasonReport
 //
 // NOT a dominance argument, and it must not be sold as one: the sacrificed body would have attacked
 // NEXT turn, and the objective is avg win turn, so this is a tempo trade. Hence the arm, default OFF.
+// THE SHRINK-ONLY OUTLET (Deathspore Thallid: "Sacrifice a Saproling: Target creature gets -1/-1").
+// USER 2026-09-25: *"No need to pay for something that doesn't help in goldfishing. It is a good
+// ability in real games, but not here."* -- then, on being shown Slimefoot: *"If slimefoot is out is
+// the only case, though. So Slimefoot must be on the board or in the plan."* This encodes exactly
+// that refinement, and the refinement is what makes it correct: the first reading (the shrink is
+// inert here) is WRONG for this list.
+//
+// WHY THE CLAUSE IS NEARLY WORTHLESS HERE, AND WHY "NEARLY" IS THE WHOLE POINT.
+//   * Aimed at the OPPONENT it is provably inert. Their board is GoldFishRunner's scheduled
+//     OpponentSpawn pattern -- vanilla bodies with no CardDefinition that never block and never
+//     attack -- so removing one cannot change any outcome. Structural, not a simplification.
+//   * Aimed at OUR OWN Saproling it is real: 0/0 dies to the toughness SBA, and that death is a
+//     SECOND death on one activation (the sacrificed fodder being the first). With a death watcher
+//     out -- this list runs Slimefoot, the Stowaway -- each death is a point of damage.
+//   * With NO death watcher, both halves are pure loss: we spend a body (the sac cost) and
+//     optionally a second (the shrink) to accomplish nothing at all.
+// So the discriminator is not the card, it is whether a DEATH PAYS. Hence the predicate.
+//
+// BOARD *OR* HAND, because the plan may CAST the payer first. Enumeration runs against a frozen
+// pre-plan board, so a Slimefoot cast earlier in the same plan is not on `s.battlefield` yet;
+// gating on the board alone would delete the cast-then-drain line the user explicitly called out.
+// Hand is the sound over-approximation: it can only ever leave the option available, never remove
+// one, which is the safe direction for a judgment prune.
+//
+// NOT A DOMINANCE CLAIM, for the same reason the draw rule above is not: with a payer absent this
+// turn but drawn later, the body we declined to eat is still there to eat then -- so this is a
+// tempo judgment, not a proof. Hence an arm, default OFF, adopted on measurement.
+//
+// Reaches exactly two cards in the repo (Deathspore Thallid, and Vitaspore Thallid's haste grant),
+// both only in the candidate-B Fungus list -- so every deck in the regression suite is untouched.
+// Vitaspore is deliberately NOT caught: a haste grant is worth real damage in a deck whose bodies
+// all arrive summoning-sick, which is why the list also runs Concordant Crossroads.
+static bool AnyDeathPayerAvailable(const GameState& s, int me)
+{
+    const CardDatabase& db = CardDatabase::Instance();
+    auto pays = [](const CardParams& p)
+    {
+        return p.dies_trigger_damage > 0 || p.dies_trigger_creates_tokens > 0
+            || p.dies_trigger_self_gain > 0 || p.dies_trigger_impulse_exile;
+    };
+    for (const Permanent& p : s.battlefield)
+    {
+        if (p.controller_index != me) { continue; }
+        if (p.def_absent) { continue; }          // token: no definition, so no dies_trigger_*
+        const CardDefinition* d = db.LookupCached(p.card);
+        if (d != nullptr && pays(d->params)) { return true; }
+    }
+    for (const Card& c : s.players[me].hand)     // "...or in the plan": castable this turn
+    {
+        const CardDefinition* d = db.LookupCached(c);
+        if (d != nullptr && pays(d->params)) { return true; }
+    }
+    return false;
+}
+
 bool FungusProvider::FodderSacUseful(const GameState& s, const Permanent& src,
                                      const CardDefinition& def) const
 {
+    // The shrink rule is its own arm: it must be measurable alone, and it gates a different outlet
+    // than the draw rule below (they can never both fire for one card).
+    {
+        const CardParams& p = def.params;
+        const bool shrink = (p.sac_outlet_minus_power != 0 || p.sac_outlet_minus_tough != 0);
+        const bool other_payload = p.sac_outlet_damage > 0 || p.sac_outlet_draw > 0
+                                || p.sac_outlet_creates_tokens > 0 || p.sac_outlet_grants_haste
+                                || p.sac_outlet_add_mana_amount > 0
+                                || p.sac_outlet_add_counter_to_self > 0
+                                || p.sac_outlet_self_pump_power != 0
+                                || p.sac_outlet_self_pump_toughness != 0;
+        static const bool shrink_env = EnvOn("MTG_FUNGUS_SHRINK_SAC_PAYER");
+        if (shrink && !other_payload
+            && heurarm::Flag(heurarm::FUNGUS_SHRINK_SAC_PAYER, shrink_env)
+            && !AnyDeathPayerAvailable(s, src.controller_index))
+        { return false; }
+    }
     static const bool env_on = EnvOn("MTG_FUNGUS_SAC_DRAW_CLOCK");
     if (!heurarm::Flag(heurarm::FUNGUS_SAC_DRAW_CLOCK, env_on))
     { return GenericProvider::FodderSacUseful(s, src, def); }
@@ -20319,6 +20391,46 @@ bool FungusProvider::FodderSacUseful(const GameState& s, const Permanent& src,
         return !CanAttackFull(p, s.battlefield, me);
     }
     return GenericProvider::FodderSacUseful(s, src, def);   // victim not on the battlefield: unchanged
+}
+
+// USER 2026-09-25: *"we should move this into the second main along with Mycoloth"*, and
+// *"It should be after Mycoloth, since the latter is a better outlet."* Both halves are the same
+// argument the user already made for devour on 2026-09-23 -- a body spent BEFORE combat forfeits
+// its attack AND its Beastmaster Ascension quest counter -- and the second ranks the two consumers
+// of that body: Mycoloth turns a Saproling into a permanent +1/+1 counter (doubled again by
+// Doubling Season), the shrink outlet turns it into at most one point of Slimefoot damage. So the
+// shrink must never win a body Mycoloth would have eaten.
+//
+// Deferring is what produces that ordering, and it produces it structurally rather than by a
+// tie-break: devour is an ADDITIONAL COST paid as Mycoloth enters, so a Mycoloth cast in the second
+// main consumes its fodder at cast time, while the outlet is an activation the search weighs
+// afterwards against whatever bodies remain.
+//
+// THE GUARD IS THE POINT. Without a post-combat main this hook does not move the outlet, it
+// DELETES it -- the precise harm documented on the Fungus routing check, where GoblinsProvider's
+// default-on version of this hook would have silently removed Utopia Mycon's and Psychotrope
+// Thallid's outlets from a deck that then merely "measured weak". Fungus has a second main ONLY
+// via the devour whitelist entry, so `s.uses_second_main` is the honest precondition: a
+// Fungus-shaped list without a devour card keeps the outlet pre-combat.
+//
+// Mana outlets are never deferred (Utopia Mycon): pre-combat float funds a cast, and the second
+// main cannot recover that tempo. Same carve-out the base hook documents for Skirk Prospector.
+bool FungusProvider::DeferSacOutletPreCombat(const GameState& s, const Permanent& src,
+                                             bool is_mana_outlet) const
+{
+    static const bool env_on = EnvOn("MTG_FUNGUS_SHRINK_SAC_PAYER");
+    if (!heurarm::Flag(heurarm::FUNGUS_SHRINK_SAC_PAYER, env_on)) { return false; }
+    if (is_mana_outlet)      { return false; }   // Mycon: pre-combat float funds a cast
+    if (!s.uses_second_main) { return false; }   // nowhere to defer TO -> would delete, not move
+    const CardDefinition* d = CardDatabase::Instance().LookupCached(src.card);
+    if (d == nullptr) { return false; }
+    const CardParams& p = d->params;
+    const bool shrink = (p.sac_outlet_minus_power != 0 || p.sac_outlet_minus_tough != 0);
+    const bool other  = p.sac_outlet_damage > 0 || p.sac_outlet_draw > 0
+                     || p.sac_outlet_creates_tokens > 0 || p.sac_outlet_grants_haste
+                     || p.sac_outlet_add_mana_amount > 0 || p.sac_outlet_add_counter_to_self > 0
+                     || p.sac_outlet_self_pump_power != 0 || p.sac_outlet_self_pump_toughness != 0;
+    return shrink && !other;                     // Deathspore only; Vitaspore's haste stays pre-combat
 }
 
 // See the ruling and the dominance argument quoted on the declaration (DecisionProviders.h), and

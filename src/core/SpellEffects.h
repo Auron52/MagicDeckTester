@@ -3659,6 +3659,32 @@ struct BoardSources
     std::vector<int> lifelink;   // any of the three lifelink GRANTS        -> CreatureHasLifelink
     std::vector<int> attached;   // an ATTACHED Aura / Equipment    -> Aura/EquipBonusFor, the Jitte
     std::vector<int> deaths;     // a death watcher that PAYS                  -> DeathOfWouldPay
+
+    // MAINTAIN THE LISTS ACROSS AN ERASE. Every list holds battlefield INDICES, so a caller that
+    // removes a permanent mid-loop (SweepDeadFadeTokens) invalidates them: the erased index is gone
+    // and every later index shifts down by one. This applies that fixup exactly, which is what lets
+    // such a loop keep the prefilter instead of re-walking the board per death. The lists are tiny
+    // (usually empty -- the whole point), so this is far cheaper than a re-gather.
+    //
+    // It handles ERASE ONLY. Any other membership change -- a death watcher that ADDS a permanent,
+    // e.g. Tukatongue Thallid's replacement Saproling -- must fall back to a full re-gather, because
+    // the new permanent could itself be a lord/anthem/attachment. Callers detect that by checking
+    // the battlefield size against what an erase alone would predict.
+    void OnErase(int erased)
+    {
+        auto fix = [erased](std::vector<int>& v)
+        {
+            std::size_t w = 0;
+            for (std::size_t r = 0; r < v.size(); ++r)
+            {
+                if (v[r] == erased) { continue; }              // the permanent itself is gone
+                v[w++] = (v[r] > erased) ? v[r] - 1 : v[r];    // later indices shift down by one
+            }
+            v.resize(w);
+        };
+        fix(haste.lords); fix(haste.equips);
+        fix(lords); fix(anthems); fix(ds); fix(lifelink); fix(attached); fix(deaths);
+    }
 };
 
 inline BoardSources GatherBoardSources(const std::vector<Permanent>& battlefield,
@@ -4682,17 +4708,32 @@ inline int DoublerShift(const GameState& state, int controller, bool for_tokens)
 
 // Creates ONE creature token. Callers go through CreateToken below, which applies Doubling Season;
 // this is split out only so that doubling lives at exactly one place rather than at ~20 call sites.
-inline void CreateTokenOnce(
-    GameState&                       state,
-    int                              controller_index,
-    int                              power,
-    int                              toughness,
-    const std::vector<std::string>&  subtypes,
-    const std::string&               color,    // default given at the forward declaration above
-    const std::vector<std::string>&  keywords) // ditto
+// THE TOKEN CARD IS THE SAME OBJECT FOR EVERY BODY AN EVENT MAKES. A doubled event makes 2^N
+// identical replicas and a bulk creation makes n of them, all with the same P/T, subtypes, colour
+// and keywords -- and therefore the same NAME. Building the card per body re-ran a two-`to_string`
+// name concatenation, an INTERN of that name, a rehash and the keyword parse every single time.
+// MEASURED across the ten worst candidate-B keep cells (357k samples): InternedName::Intern is
+// 18.4% INCLUSIVE, on a board where one Mycoloth upkeep makes 16 identical Saprolings at a time.
+//
+// So the card is built ONCE into a prototype and copied per body. Byte-identical by construction:
+// every field set here is exactly the field CreateTokenOnce set, in the same order, and the only
+// per-BODY state -- the token number and the controller/owner/entered/is_token flags -- stays in
+// CreateTokenFromProto below, so numbering still advances one per body in the same sequence.
+// `def_absent` is likewise a property of the NAME, so it is resolved once with it.
+struct TokenProto
 {
-    if (tokenstats::On()) { tokenstats::g_tokens.fetch_add(1, std::memory_order_relaxed); }
-    Permanent token;
+    Card card;
+    bool def_absent = false;
+};
+
+inline TokenProto BuildTokenProto(int                              power,
+                                  int                              toughness,
+                                  const std::vector<std::string>&  subtypes,
+                                  const std::string&               color,
+                                  const std::vector<std::string>&  keywords)
+{
+    TokenProto proto;
+    TokenProto& token = proto;   // the body below is the original, verbatim, on the prototype
     // Token colour (StompySurprise: green Insect/Wurm/Elephant tokens are legal "sacrifice a
     // green creature" fodder for Natural Order). Empty = the historical colourless token --
     // byte-identical for every existing call site (nothing else reads token colour).
@@ -4734,15 +4775,29 @@ inline void CreateTokenOnce(
     }
     token.card.m_power     = power;
     token.card.m_toughness = toughness;
-    token.card.m_number    = state.next_token_number++;   // unique per-copy id (GameState.h note)
-    token.controller_index = controller_index;
-    token.owner_index      = controller_index;
-    token.entered_this_turn = true;
-    token.is_token          = true;   // Lathliss "nontoken Dragon" gate reads this (loop-safe)
     // Short-circuit flag for the board walks (see Permanent::def_absent). A token's name is
     // normally absent from the DB, and this is the one place we already know it: do the lookup
     // ONCE here, at creation, instead of once per permanent per enter for the rest of the game.
+    // It is a property of the NAME, so it belongs to the prototype and is resolved once per event
+    // rather than once per body. (m_number is deliberately NOT set here: LookupCached keys on the
+    // name, so the answer is the same, and the number is per-body state.)
     token.def_absent = (CardDatabase::Instance().LookupCached(token.card) == nullptr);
+    return proto;
+}
+
+// One BODY from a prototype. Everything here is per-token state; everything shared was resolved in
+// BuildTokenProto above. The token number still advances exactly one per body, in the same order.
+inline void CreateTokenFromProto(GameState& state, int controller_index, const TokenProto& proto)
+{
+    if (tokenstats::On()) { tokenstats::g_tokens.fetch_add(1, std::memory_order_relaxed); }
+    Permanent token;
+    token.card              = proto.card;                  // interned name -> a handle copy
+    token.card.m_number     = state.next_token_number++;   // unique per-copy id (GameState.h note)
+    token.controller_index  = controller_index;
+    token.owner_index       = controller_index;
+    token.entered_this_turn = true;
+    token.is_token          = true;   // Lathliss "nontoken Dragon" gate reads this (loop-safe)
+    token.def_absent        = proto.def_absent;
     if (tokenstats::On() && token.def_absent)
     { tokenstats::g_tok_absent.fetch_add(1, std::memory_order_relaxed); }
     // MOVE, not copy: `token` is a local that nothing reads after this line (the cascade below
@@ -4755,6 +4810,21 @@ inline void CreateTokenOnce(
     // Lathliss (nontoken gate). No-op for every non-Dragon token (early subtype return) -> all
     // existing token-making decks (Adeline, Forbidden Orchard, Sliver Hive) are byte-identical.
     FireEtbWatchers(state, controller_index, static_cast<int>(state.battlefield.size()) - 1);
+}
+
+// The original one-shot entry point, kept for the ~20 call sites that make a single token: build a
+// prototype and spend it immediately. Identical to the pre-split function.
+inline void CreateTokenOnce(
+    GameState&                       state,
+    int                              controller_index,
+    int                              power,
+    int                              toughness,
+    const std::vector<std::string>&  subtypes,
+    const std::string&               color,
+    const std::vector<std::string>&  keywords)
+{
+    CreateTokenFromProto(state, controller_index,
+                         BuildTokenProto(power, toughness, subtypes, color, keywords));
 }
 
 // Creates a creature token with the given stats and adds it to the active battlefield.
@@ -4780,8 +4850,9 @@ inline void CreateToken(
     const std::vector<std::string>&  keywords)
 {
     const int reps = 1 << DoublerShift(state, controller_index, /*for_tokens=*/true);
-    for (int i = 0; i < reps; ++i)
-    { CreateTokenOnce(state, controller_index, power, toughness, subtypes, color, keywords); }
+    // The card is identical for all 2^N replicas -- build it once (see TokenProto).
+    const TokenProto proto = BuildTokenProto(power, toughness, subtypes, color, keywords);
+    for (int i = 0; i < reps; ++i) { CreateTokenFromProto(state, controller_index, proto); }
 }
 
 // N identical tokens as ONE event -- the bulk form of CreateToken, for the sites that were written
@@ -4818,13 +4889,14 @@ inline void CreateTokens(
 {
     if (n <= 0) { return; }
     int shift = DoublerShift(state, controller_index, /*for_tokens=*/true);
+    // One prototype for the whole event: every one of the n x 2^N bodies carries the same card.
+    const TokenProto proto = BuildTokenProto(power, toughness, subtypes, color, keywords);
     for (int k = 0; k < n; ++k)
     {
         const std::size_t bf_before  = state.battlefield.size();
         const int         tok_before = state.next_token_number;
         const int         reps       = 1 << shift;
-        for (int i = 0; i < reps; ++i)
-        { CreateTokenOnce(state, controller_index, power, toughness, subtypes, color, keywords); }
+        for (int i = 0; i < reps; ++i) { CreateTokenFromProto(state, controller_index, proto); }
         if (k + 1 < n
             && (state.battlefield.size() != bf_before + static_cast<std::size_t>(reps)
                 || state.next_token_number != tok_before + reps))
@@ -9205,15 +9277,35 @@ inline void RefreshFadeTokens(GameState& state, int source_number, int counters)
 // token it made is a 0/0 and dies on the spot -- UNLESS a Sporecrown Thallid or a live Beastmaster
 // Ascension lifts it, which is rules-correct (CR 704.5f applies after layer 7) and is exactly why
 // the check reads the full lord/aura/equipment sum rather than the bare toughness.
+// PREFILTERED (see BoardSources). This asks three BOARD-level questions -- lord bonus, aura bonus,
+// equipment bonus -- once per token the source created, and each used to answer by walking the whole
+// battlefield. On a Saproling Burst board that is dozens of tokens against a board of hundreds, and
+// the fade sweep runs whenever one of them shrinks. MEASURED across the ten worst candidate-B keep
+// cells (357k samples): this function is 65.8% INCLUSIVE, the largest single driver in the slow
+// tail, with ComputeLordBonus 28.5% self behind it.
+//
+// This is the one member of the family deliberately left unprefiltered before, because it ERASES
+// inside its own loop and the lists hold indices. BoardSources::OnErase maintains them exactly
+// across a removal; anything that also ADDS a permanent (a death watcher's replacement token)
+// changes the size by more than the erase predicts and falls back to a full re-gather. Byte-
+// identical by construction either way -- the lists never decide anything, they only shorten a walk.
 inline void SweepDeadFadeTokens(GameState& state, int source_number)
 {
+    BoardSources bsrc[2] = { GatherBoardSources(state.battlefield, 0),
+                             GatherBoardSources(state.battlefield, 1) };
+    auto srcs = [&](int ci) -> const BoardSources*
+    { return (ci == 0 || ci == 1) ? &bsrc[ci] : nullptr; };
     for (std::size_t i = state.battlefield.size(); i-- > 0; )
     {
         Permanent& q = state.battlefield[i];
         if (q.created_by_number != source_number) { continue; }
+        const BoardSources* qs = srcs(q.controller_index);
         const int tough = q.EffectiveToughness()
-                        + ComputeLordBonus(q.card, state, q.controller_index, q.is_animated, &q).second
-                        + AuraBonusFor(q, state).second + EquipBonusFor(q, state).second;
+                        + ComputeLordBonus(q.card, state, q.controller_index, q.is_animated, &q,
+                                           qs ? &qs->lords   : nullptr,
+                                           qs ? &qs->anthems : nullptr).second
+                        + AuraBonusFor(q, state,  qs ? &qs->attached : nullptr).second
+                        + EquipBonusFor(q, state, qs ? &qs->attached : nullptr).second;
         if (tough > 0) { continue; }
         const Card dead   = q.card;
         const int  ctrl   = q.controller_index;
@@ -9221,7 +9313,19 @@ inline void SweepDeadFadeTokens(GameState& state, int source_number)
         const int  minus  = MinusCountersOn(q);
         if (!tok) { state.players[q.owner_index].graveyard.push_back(dead); }
         state.battlefield.erase(state.battlefield.begin() + static_cast<std::ptrdiff_t>(i));
+        // Maintain the prefilters across the removal, then across whatever OnCreatureDies did.
+        // The erase alone predicts exactly one fewer permanent; ANY other delta means a death
+        // watcher added or removed one (Tukatongue's replacement Saproling, a Slimefoot drain that
+        // kills something) and the index lists can no longer be patched -- re-gather instead.
+        bsrc[0].OnErase(static_cast<int>(i));
+        bsrc[1].OnErase(static_cast<int>(i));
+        const std::size_t expect = state.battlefield.size();
         OnCreatureDies(state, ctrl, dead, tok, minus);
+        if (state.battlefield.size() != expect)
+        {
+            bsrc[0] = GatherBoardSources(state.battlefield, 0);
+            bsrc[1] = GatherBoardSources(state.battlefield, 1);
+        }
     }
 }
 

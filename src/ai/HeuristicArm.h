@@ -249,6 +249,7 @@ enum Slot : int
     SAC_FODDER_VALUE_OUTLET,  // MTG_SAC_FODDER_VALUE_OUTLET  ...and for a VALUE outlet (draw/damage), not just a mana one (default OFF)
     SAC_FODDER_TAP_MAKER,     // MTG_SAC_FODDER_TAP_MAKER  ...and the maker may pay {T} (Krenko feeding Skirk) -- MOVES GOBLINS (default OFF)
     ENTER_WATCHER_GATE,       // MTG_ENTER_WATCHER_GATE   FireCreatureEnterWatchers' own cascade loop is skipped when the DECKLIST holds no creature-enter watcher (default ON; =0 walks the board as before, which must be byte-identical)
+    FUNGUS_SHRINK_SAC_PAYER,  // MTG_FUNGUS_SHRINK_SAC_PAYER  a SHRINK-ONLY sac outlet (Deathspore Thallid) is offered only when a death-payer is on the board or in hand (default OFF)
     COUNT
 };
 
@@ -464,6 +465,7 @@ inline const char* Name(int slot)
         "MTG_SAC_FODDER_VALUE_OUTLET",
         "MTG_SAC_FODDER_TAP_MAKER",
         "MTG_ENTER_WATCHER_GATE",
+        "MTG_FUNGUS_SHRINK_SAC_PAYER",
     };
     // The enum and this table are ONE mapping split across two lists: a slot added to one and not
     // the other silently shifts every lever after it (a manifest asking for lever X would set Y).

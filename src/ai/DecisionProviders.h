@@ -1612,8 +1612,26 @@ public:
     // decision is STRUCTURALLY CLAIRVOYANT and no existing flag decouples it
     // (MTG_SHUFFLE_SALT_SEARCH salts mid-game RESHUFFLES, of which this deck has none).
     // Behind heurarm FUNGUS_SAC_DRAW_CLOCK, default OFF -> byte-identical.
+    // ALSO carries the SHRINK-ONLY rule (Deathspore Thallid) behind FUNGUS_SHRINK_SAC_PAYER --
+    // see the definition; the two can never both fire for one card.
     bool FodderSacUseful(const GameState& s, const Permanent& src,
                          const CardDefinition& def) const override;
+
+    // USER 2026-09-25: *"we should move this into the second main along with Mycoloth"* -- the
+    // shrink-only sac outlet spends a body, and a body spent BEFORE combat forfeits both its attack
+    // and its Beastmaster Ascension quest counter. That is the identical argument the user already
+    // made for Mycoloth's devour (*"you want to attack with existing creatures and then sacrifice
+    // them"*, 2026-09-23), which is why this deck has a second main at all.
+    //
+    // GUARDED ON s.uses_second_main, and that guard is load-bearing rather than defensive: without
+    // a post-combat main the base hook does not MOVE an outlet, it DELETES it -- the exact failure
+    // that made GoblinsProvider's default-on version of this hook so harmful when Fungus misrouted
+    // to it (see the routing comment in DecisionProviders.cpp). Fungus's second main exists only
+    // because of the devour whitelist entry, so a Fungus-shaped list with no devour card would have
+    // no second main and must keep the outlet pre-combat.
+    // Behind heurarm FUNGUS_SHRINK_SAC_PAYER, default OFF -> byte-identical.
+    bool DeferSacOutletPreCombat(const GameState& s, const Permanent& src,
+                                 bool is_mana_outlet) const override;
 
     // USER 2026-09-18: *"Heuristically, we know that the source of the saproling does not matter in
     // this deck, so we can safely choose any of them that has enough counters to be the first
