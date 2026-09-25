@@ -61,6 +61,7 @@
 // Directions come from the deck's DecisionProvider (generic monotone table in the base class,
 // per-deck overrides in the archetype) -- see DecisionProvider.h's DomAxis / DomDir.
 
+#include <type_traits>
 #include "../core/GameState.h"
 #include "DecisionProvider.h"
 
@@ -111,9 +112,22 @@
 //     the tokens' live P/T is written onto the Card (so EffectivePower sees it) -- two boards that
 //     differ only in provenance have identical counters and identical P/T, and folding it as an
 //     axis would refuse comparisons that are genuinely equal.
-static_assert(sizeof(Permanent) == 296,
+// 296 -> 320 (2026-09-25): NO NEW FIELD. `counters` changed STORAGE only, from std::vector<Counter>
+// to the fixed-capacity inline CounterList (see the rationale block in Permanent.h) so that
+// Permanent becomes trivially copyable and vector<Permanent> erase/realloc lower to memmove/memcpy.
+// Nothing is added to Build(): the same `counters` sequence, in the same order, with the same
+// .size(), is already folded as DomAxis::Counters. This bump is the one case the note below does
+// NOT apply to -- there is no new state to classify, only a different container holding the old
+// state -- which is why the sequence semantics were preserved exactly rather than collapsing to a
+// per-Type slot array (that WOULD have changed .size() and moved this axis).
+static_assert(sizeof(Permanent) == 320,
               "Permanent changed size -- fold any new field into dominance::Build() (see the "
               "MAINTENANCE HAZARD note at the top of Dominance.h) before updating this number.");
+// The point of CounterList: this is what makes the erase path a memmove. If a future field breaks
+// it, vector<Permanent>::_M_erase silently reverts to a member-wise move loop over 320 bytes and
+// a quarter of the engine's runtime comes back -- so assert it rather than hope.
+static_assert(std::is_trivially_copyable_v<Permanent>,
+              "Permanent must stay trivially copyable -- see CounterList in Permanent.h.");
 // 160 -> 184 (2026-09-02): Player gained `sideboard`, the OUTSIDE-THE-GAME zone a wish searches
 // (Living Wish). Classification: an EXACT-MATCH zone, folded below beside staged_cards /
 // suspended_cards. It is future-determining and NOT monotone -- which singletons remain decides

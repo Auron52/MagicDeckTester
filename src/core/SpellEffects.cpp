@@ -2061,7 +2061,7 @@ static bool TapForCostBacktrackWorker(GameState& state, const ManaCost& cost,
         s_dup_of_buf.assign(nc, -1);
         if (!s_no_dup_collapse)
         {
-            auto counters_equal = [](const std::vector<Counter>& a, const std::vector<Counter>& b)
+            auto counters_equal = [](const CounterList& a, const CounterList& b)
             {
                 if (a.size() != b.size()) { return false; }
                 for (std::size_t k = 0; k < a.size(); ++k)
@@ -2417,7 +2417,7 @@ static bool TapForCostBacktrackWorker(GameState& state, const ManaCost& cost,
         // in a ritual-combo deck like Hinata -- restores with a plain bool assignment. Byte-identical.
         const bool tapped_snap = state.battlefield[i].tapped;
         const bool has_counters = !state.battlefield[i].counters.empty();
-        std::vector<Counter> counters_snap;
+        CounterList counters_snap;
         if (has_counters) { counters_snap = state.battlefield[i].counters; }
         const int storage_snap = state.battlefield[i].storage_counters;   // burst zeroes it (undo below)
         const int src_max_net  = source_max_net(state.battlefield[i], *def); // captured pre-tap (storage_snap-aware)

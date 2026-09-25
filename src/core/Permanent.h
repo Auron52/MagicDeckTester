@@ -1,5 +1,9 @@
 #pragma once
 #include "Card.h"
+#include <atomic>
+#include <cstddef>
+#include <cstdint>
+#include <cstdio>
 #include <vector>
 
 struct Counter
@@ -8,6 +12,104 @@ struct Counter
     Type type;
     int count = 1;
 };
+
+// ---------------------------------------------------------------------------------------------
+// CounterList -- a fixed-capacity INLINE replacement for the std::vector<Counter> that used to be
+// Permanent::counters.
+//
+// WHY IT EXISTS. That vector was the ONE non-trivially-copyable member of Permanent, and that
+// single fact set the cost of the whole engine's hot path. `std::vector<Permanent>` cannot memmove
+// a non-trivially-copyable element type, so every erase became a member-wise move-assignment loop
+// over 296-byte objects and every reallocation became an element-by-element relocate. Measured on
+// the ten worst candidate-B keep cells (perf, 321,972 samples, 2026-09-25):
+//
+//     25.94% self   std::vector<Permanent>::_M_erase
+//     17.61% incl   std::__copy_move_a2<true, Permanent*, Permanent*>   (the erase shift)
+//      5.89% incl   Permanent::operator=(Permanent&&)
+//      4.61% incl   std::__relocate_a<Permanent*>                       (the realloc path)
+//
+// Card was already made trivially copyable for exactly this reason (see the InternedName note in
+// Card.h: "vector<Card> copy/erase are memcpy/memmove"); Permanent never got the same treatment.
+//
+// SEQUENCE SEMANTICS ARE PRESERVED EXACTLY -- insertion order is kept and duplicate entries of the
+// same Type are NOT merged. That matters: AddPlusCounters merges deliberately, but seven other
+// sites push a raw second PlusOnePlusOne entry, and .size() is read by BuildSimKey, the dominance
+// signature and several dedup keys. A per-Type slot array would have silently merged those and
+// moved every one of those keys. This is a storage change, not a behaviour change.
+//
+// THE CAPACITY IS THE ONE RISK, so it is instrumented rather than assumed: an overflowing push_back
+// folds the new counters into the first entry of the same Type (which preserves the TOTAL, the only
+// thing EffectivePower/EffectiveToughness read) and bumps g_counter_overflows. That counter is
+// asserted zero by the test gate, so a cap that is ever too small shows up as a test failure rather
+// than as a wrong board.
+inline std::atomic<std::uint64_t> g_counter_overflows{0};
+
+struct CounterList
+{
+    // Counter::Type has five values. Six slots leaves room for the duplicate-PlusOnePlusOne entries
+    // the raw push sites create without paying for a seventh; see g_counter_overflows above.
+    static constexpr int kCap = 6;
+
+    using value_type     = Counter;
+    using iterator       = Counter*;
+    using const_iterator = const Counter*;
+
+    Counter      m_e[kCap] = {};
+    std::int32_t m_n       = 0;
+
+    iterator       begin()        { return m_e; }
+    iterator       end()          { return m_e + m_n; }
+    const_iterator begin()  const { return m_e; }
+    const_iterator end()    const { return m_e + m_n; }
+    std::size_t    size()   const { return static_cast<std::size_t>(m_n); }
+    bool           empty()  const { return m_n == 0; }
+    void           clear()        { m_n = 0; }
+
+    Counter&       operator[](std::size_t i)       { return m_e[i]; }
+    const Counter& operator[](std::size_t i) const { return m_e[i]; }
+
+    void push_back(const Counter& c)
+    {
+        if (m_n < kCap) { m_e[m_n++] = c; return; }
+        g_counter_overflows.fetch_add(1, std::memory_order_relaxed);
+        for (std::int32_t i = 0; i < m_n; ++i)
+        { if (m_e[i].type == c.type) { m_e[i].count += c.count; return; } }
+        m_e[kCap - 1].count += c.count;   // last resort: never drop a counter on the floor
+    }
+
+    // The remove_if/erase idiom at the decrement site passes a suffix [first, end()).
+    iterator erase(iterator first, iterator last)
+    {
+        const std::ptrdiff_t gap = last - first;
+        for (iterator s = last, d = first; s != end(); ++s, ++d) { *d = *s; }
+        m_n -= static_cast<std::int32_t>(gap);
+        return first;
+    }
+    iterator erase(iterator pos) { return erase(pos, pos + 1); }
+};
+
+// A too-small kCap must never pass QUIETLY. The merge above keeps the board legal, but it collapses
+// two entries into one and so moves .size() -- which BuildSimKey, the dominance signature and four
+// dedup keys read. One inline variable (C++17: exactly one instance program-wide), so every binary
+// that links core -- mtg, mtg-test, mtg-analyze -- shouts on the way out if it ever happened.
+namespace counterlist
+{
+    struct OverflowReporter
+    {
+        ~OverflowReporter()
+        {
+            const std::uint64_t n = g_counter_overflows.load(std::memory_order_relaxed);
+            if (n != 0)
+            {
+                std::fprintf(stderr,
+                             "[counterlist] OVERFLOW x%llu -- CounterList::kCap (%d) is too small; "
+                             "entries were merged, so .size() moved. RAISE kCap in Permanent.h.\n",
+                             static_cast<unsigned long long>(n), CounterList::kCap);
+            }
+        }
+    };
+    inline OverflowReporter g_overflow_reporter;
+}
 
 // The sub-mode of an ActivatePermAbility action. Lives in the CORE layer (not beside Action in the
 // ai layer) because the shared resolver below is what both worlds call, and core must not depend
@@ -102,7 +204,7 @@ struct Permanent
     // triggers (Searing Blood: 3 per copy). Two Searing Bloods on one creature leave 6 pending; it
     // all fires when the creature dies (CR 603.7). Reset each cleanup with damage.
     int       pending_death_trigger = 0;
-    std::vector<Counter> counters;
+    CounterList counters;   // was std::vector<Counter>; see CounterList above for why
     bool      entered_this_turn    = false;  // summoning sickness tracker
     // Summoning sickness tracks how long you have CONTROLLED a permanent, not how long it has been
     // on the battlefield (CR 302.6), so gaining control resets it independently of entered_this_turn.
