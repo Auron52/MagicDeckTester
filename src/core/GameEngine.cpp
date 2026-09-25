@@ -387,10 +387,8 @@ void GameEngine::UpkeepTail(GameState& state)
         const int tok_t = def->params.upkeep_token_toughness;
         const std::vector<std::string> tok_subs = def->params.upkeep_token_subtypes;
         const std::string tok_col = def->params.upkeep_token_color;
-        for (int t = 0; t < count; ++t)
-        {
-            CreateToken(state, state.active_player_index, tok_p, tok_t, tok_subs, tok_col);
-        }
+        // Bulk (lockstep twin of TurnSolver's SimulateEndAndStartNextTurn upkeep block).
+        CreateTokens(state, state.active_player_index, count, tok_p, tok_t, tok_subs, tok_col);
     }
 
     // Spore counters (the Thallid family), before the other upkeep triggers. Mirrors

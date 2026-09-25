@@ -818,6 +818,11 @@ inline std::vector<std::string> HasteKeywords(bool haste)
 inline void CreateToken(GameState&, int, int, int, const std::vector<std::string>&,
                         const std::string& = std::string(),
                         const std::vector<std::string>& = std::vector<std::string>());
+// ... and its BULK form, for the sites that make N identical tokens as one event. Same reason for
+// the forward declaration (callers resolve above the definition). See CreateTokens below.
+inline void CreateTokens(GameState&, int, int, int, int, const std::vector<std::string>&,
+                         const std::string& = std::string(),
+                         const std::vector<std::string>& = std::vector<std::string>());
 // THE TWO ENTER CASCADES. Every site that puts a permanent onto the battlefield calls both, in
 // this order, and they split by WHOSE ability fires:
 //
@@ -3183,10 +3188,7 @@ inline void FireOnCastTriggers(GameState& state, const CardDefinition& cast_def)
     }
 
     for (const TokenSpec& s : to_create)
-    {
-        for (int k = 0; k < s.n; ++k)
-        { CreateToken(state, active, s.p, s.t, s.subs, s.color, s.kws); }
-    }
+    { CreateTokens(state, active, s.n, s.p, s.t, s.subs, s.color, s.kws); }   // bulk
 }
 
 // Returns the total {power_bonus, toughness_bonus} granted to `creature` by all
@@ -4640,6 +4642,54 @@ inline void CreateToken(
     const int reps = 1 << DoublerShift(state, controller_index, /*for_tokens=*/true);
     for (int i = 0; i < reps; ++i)
     { CreateTokenOnce(state, controller_index, power, toughness, subtypes, color, keywords); }
+}
+
+// N identical tokens as ONE event -- the bulk form of CreateToken, for the sites that were written
+// `for (k < n) CreateToken(...)`.
+//
+// WHY IT EXISTS. DoublerShift is a BOARD-LEVEL count and CreateToken recomputes it by walking the
+// whole battlefield, so those loops are O(n x battlefield) -- and on a token deck BOTH factors blow
+// up together. Mycoloth's upkeep makes one Saproling per +1/+1 counter, and Doubling Season already
+// multiplied the devour counters: under four of them a 3-creature devour leaves 48 counters, so the
+// loop runs 48 times AND each pass adds 16 Saprolings for the next pass to re-walk. Measured on the
+// worst candidate-B keep cell (`Sol Ring x1; Mycoloth x2; Doubling Season x4`, 211 s single-
+// threaded), that one loop in SimulateEndAndStartNextTurn was **79% of total runtime** -- 97% of its
+// samples on the two instructions that load `controller_index` and `def_absent` out of a 296-byte
+// Permanent, i.e. pure cache-miss traffic over thousands of tokens.
+//
+// WHY IT IS IDENTICAL, and how far that claim reaches. DoublerShift reads exactly two things:
+// battlefield MEMBERSHIP and each member's controller_index. Our own replicas are vanilla tokens
+// (def_absent -> DoublerShift skips them without a lookup), so they cannot change the answer; the
+// guard below recomputes the moment anything ELSE moved, detected as "the battlefield did not grow
+// by exactly the replicas we just pushed, each of which took exactly one token number". That covers
+// every enter and every leave, including a watcher cascade that both adds and removes. What it does
+// NOT cover is a mid-cascade CONTROL CHANGE of an existing doubler with no membership change --
+// and note CreateToken itself already assumes that much across its own 2^N replica loop, so this
+// widens an existing assumption from one event to one loop rather than introducing a new one.
+inline void CreateTokens(
+    GameState&                       state,
+    int                              controller_index,
+    int                              n,        // tokens to make BEFORE doubling
+    int                              power,
+    int                              toughness,
+    const std::vector<std::string>&  subtypes,
+    const std::string&               color,    // defaults at the forward declaration above
+    const std::vector<std::string>&  keywords)
+{
+    if (n <= 0) { return; }
+    int shift = DoublerShift(state, controller_index, /*for_tokens=*/true);
+    for (int k = 0; k < n; ++k)
+    {
+        const std::size_t bf_before  = state.battlefield.size();
+        const int         tok_before = state.next_token_number;
+        const int         reps       = 1 << shift;
+        for (int i = 0; i < reps; ++i)
+        { CreateTokenOnce(state, controller_index, power, toughness, subtypes, color, keywords); }
+        if (k + 1 < n
+            && (state.battlefield.size() != bf_before + static_cast<std::size_t>(reps)
+                || state.next_token_number != tok_before + reps))
+        { shift = DoublerShift(state, controller_index, /*for_tokens=*/true); }
+    }
 }
 
 // Token that is a COPY of a real card (Vaultborn Tyrant's "create a token that's a copy of it").
@@ -9279,7 +9329,7 @@ inline void ApplySacCreatureOutlet(GameState& state, int controller, int source_
     }
     if (!mana_color.empty()) { AddChosenColorFloat(state, mana_color, mana_amt); }
     if (dmg > 0) { state.players[1 - controller].life -= dmg; state.opponent_lost_life_this_turn = true; }
-    for (int k = 0; k < ntok; ++k) { CreateToken(state, controller, tp, tt, tsub); }
+    CreateTokens(state, controller, ntok, tp, tt, tsub);   // bulk: one DoublerShift, not ntok
     // DRAW payload (Psychotrope Thallid "{1}, Sacrifice a Saproling: Draw a card") -- the same
     // TrickDraw primitive PermAbilityMode::SacDraw uses, so the two draw outlets behave identically.
     if (ndraw > 0) { TrickDraw(state, controller, ndraw); }
@@ -9926,10 +9976,7 @@ inline void FireCombatDamageTokens(GameState& state, int controller,
                           sdef->params.combat_damage_token_color });
     }
     for (const Spec& s : specs)
-    {
-        for (int k = 0; k < s.n; ++k)
-        { CreateToken(state, controller, s.p, s.t, s.subs, s.color, s.kws); }
-    }
+    { CreateTokens(state, controller, s.n, s.p, s.t, s.subs, s.color, s.kws); }   // bulk
 }
 
 // ---- Goblins combat attack-trigger self-pumps (Piledriver / Muxus) -------------------------------
@@ -11916,6 +11963,9 @@ inline int FireAttackCreateTokens(GameState& state, int controller_index)
     }
     for (const TokenSpec& s : to_create)
     {
+        // NOT converted to CreateTokens: the body reads battlefield.back() between tokens, so the
+        // bulk form would not be equivalent (it taps only the last replica of each group, which is
+        // this site's existing -- and separately questionable -- behaviour under doubling).
         for (int k = 0; k < s.n; ++k)
         {
             CreateToken(state, controller_index, s.p, s.t, s.subs);
@@ -15746,8 +15796,9 @@ inline void ApplyPermAbility(GameState& state, int controller, int source_id, Pe
             const int tok_t  = d->params.spore_token_toughness;
             const std::vector<std::string> tok_subs = d->params.spore_token_subtypes;
             const std::string tok_col = d->params.spore_token_color;
-            for (int t = 0; t < ntok; ++t)
-            { CreateToken(state, controller, tok_p, tok_t, tok_subs, tok_col); }
+            // Bulk: the Thallid family pops every upkeep onto a board it has been growing all
+            // game, so this is the same quadratic as the Mycoloth loop (CreateTokens, above).
+            CreateTokens(state, controller, ntok, tok_p, tok_t, tok_subs, tok_col);
             if (g_play_event_sink)
             {
                 EmitPlayEvent(state.turn_number, "token",
