@@ -99,13 +99,27 @@ and the smoke suite's batch makespan halved (185 s -> 88 s). Byte-identical (smo
 **It does not rescue this generation.** Resuming the gen on the new binary (discovery a CACHE HIT,
 journal resumed at 81,298 cell-sides -- the `play_digest` is unchanged, so prior work survives):
 
-| | first run (old binary) | resumed probe (new binary) |
+| | first run (old binary, 36,304 s) | resumed probe (new binary, 900 s) |
 |---|---|---|
-| rate | 9.8 roll7/s | **0.63 roll7/s** |
-| slow (>30 s) cells | 620 in ~9 h | **640 in 15 min** |
+| keep-rollouts (`roll7`) | 162,836 | 621 |
+| rate | **4.48 roll7/s** | **0.69 roll7/s** |
+| slow (>30 s) keep-rollouts | 628 (0.39%) | **12 (1.9%)** |
 | worst cell | 25,713 s | 873 s |
 
+> **Correction (2026-09-25).** An earlier version of this table read *"slow cells: 620 in ~9 h vs
+> **640 in 15 min**"* and gave the first run's rate as 9.8 roll7/s. Both were wrong. **640 was the
+> probe's `roll7` COUNT**, read off the monitor line and mislabelled as a slow-cell count — the
+> probe's actual slow-rollout count was **12**. And 9.8 roll7/s was the *instantaneous* early rate
+> (the 3600–4500 s window), not the run's average, which was 4.48. The corrected figures do not
+> change the conclusion — the slow FRACTION really is ~5x higher in the probe's region, and the
+> overall rate really did fall 6.5x — but they shrink the headline gap from ~50x to ~5x. The trap
+> was reading a monitor line for a number it does not report; the slow count comes from
+> `grep -c SLOW-ROLLOUT.*keep-rollout` on the `.slow.log`, and nowhere else.
+
 The rate fell *despite* the speedup because the odometer left the cheap corner of the hand space.
+Note what the two rows say together: slow rollouts arrive at about the same rate **per second** in
+both runs (0.017/s vs 0.013/s) but the probe completes 6.5x fewer rollouts while they do, which is
+what "the same tail against a much smaller denominator" looks like.
 The first run only ever covered **5.3%** of cells, all of them free of buckets 0-6; the probe has
 moved into the **Doubling Season x3/x4** cells (540 of its 640 slow cells hold Doubling Season, 247
 hold Mycoloth). Four Doubling Seasons is a **16x** token multiplier and Sol Ring deploys it early,
@@ -116,6 +130,35 @@ worse -- i.e. 10+ hours EACH.
 is wildly heterogeneous and the odometer walks it in bucket-index order, so the early rate is
 sampled from the cheapest corner. The 86 h floor-pass estimate above was optimistic for that reason,
 not pessimistic.
+
+## UPDATE 2026-09-25b — a second 8.7x, and the answer to "is it fast enough now?" is NO
+
+`dc6001f6` removed the other half of the per-rollout cost: `CreateToken` recomputed Doubling
+Season's multiplier by walking the whole battlefield, so `for (k < n) CreateToken(...)` was
+O(n x board) — and under four Doubling Seasons Mycoloth's `n` is itself 16x inflated. It was **79%
+of total runtime** on the worst cell. Bulk creation (`CreateTokens`) took the worst cell
+**211.3 s -> 24.3 s single-threaded (8.7x)**, and the profile afterwards is FLAT (top symbol 9.4%).
+
+**Like-for-like resume, same odometer region, 900 s, 24/24 cores busy both times:**
+
+| | haste fix only | + bulk tokens | ratio |
+|---|---|---|---|
+| `roll7` | 621 | **1403** | 2.26x |
+| journal cell-sides | 191 | **582** | **3.05x** |
+| slow (>30 s) rollouts | 12 | 18 | — |
+
+So the engine work was real and it compounds. It still does not make candidate B tractable:
+
+* remaining floor-pass cell-sides: 1,522,096 − 81,508 = **1,440,588**
+* at the measured 0.647 cell-sides/s (this expensive region): **25.8 days**
+* at run 1's 2.48 cell-sides/s (the cheapest corner): **7.4 days**
+
+Either way the **floor pass alone is weeks**, before adaptive refine toward cap R=30 and before the
+560,212 sub-table batches. Two rounds of optimisation totalling ~570x on the worst cell moved this
+from "impossible" to "still impossible", which is the point: **the cost is K=22, and K is a
+property of the decklist, not of the engine.** The honest projection is not a single number — the
+cell space is heterogeneous enough that any single rate is a statement about *where the odometer
+currently is*, which is exactly the trap the correction above documents.
 
 ## Related
 
