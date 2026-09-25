@@ -661,6 +661,28 @@ half.**
 
 Game 11 itself: 22,518 ms -> 7,117 ms, units 1,339,602 -> 543,628.
 
+**HELD-OUT PLAY VALIDATION (1,392 games, five fresh seeds, one pooled batch, both depths).** The
+table above is the train block; this is the confirmation, and it is the part that changes the
+verdict from "cost lever, play-neutral" to "cost lever that is also a small play WIN". Losses are
+scored `max_turns+1 = 9`, the convention the batch's own `avg` uses (recovered exactly from six
+independent jobs -- the raw `.wins` column is -1 for a loss and a naive mean of it is wrong by 0.1
+here).
+
+| regime | seed | n | base | m2 | diff | changed | better | worse |
+|---|---|---|---|---|---|---|---|---|
+| gen d1/b3 | 71000 | 200 | 5.5450 | 5.5200 | **-0.0250** | 5 | 5 | 0 |
+| gen d1/b3 | 72000 | 200 | 5.4900 | 5.4700 | **-0.0200** | 10 | 7 | 3 |
+| gen d1/b3 | 73000 | 200 | 5.5250 | 5.5150 | **-0.0100** | 2 | 2 | 0 |
+| play d5/b20 | 74000 | 48 | 5.5625 | 5.5417 | **-0.0208** | 1 | 1 | 0 |
+| play d5/b20 | 75000 | 48 | 5.3333 | 5.3125 | **-0.0208** | 1 | 1 | 0 |
+
+Pooled generation regime: **t = -2.68** (n=600, mean -0.0183). Play regime: t = -1.42 (n=96, same
+magnitude, smaller n). All held-out: **t = -3.00** (n=696). **Five of five held-out seeds favour the
+lever, 15 games better against 2 worse**, and the train seed 70000 agrees, so 6 of 6 overall. Note
+the two depths give the SAME effect size (-0.018 / -0.021) -- this is not a shallow-search artefact
+that the real play depth would route around, which is the failure mode
+`bound-the-axis-before-building-the-search` warns about.
+
 **The shape is the point, and it is the right shape for generation.** The lever is ~1.0x on a median
 game and ~3x on the tail — and the tail is where generation cost lives (576 rollouts >= 30 s were
 32.6% of the whole candidate-B run). An average-based A/B will therefore always under-read it, which
