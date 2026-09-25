@@ -6562,21 +6562,25 @@ static int PendingAttackDamage(const GameState& state)
     int dmg = 0;
     int active = state.active_player_index;
     std::vector<const Permanent*> attackers;
-    // Haste prefilter, gathered once (SpellEffects.h) -- this loop tests every creature and the
-    // solver re-runs it per scored subset, so the unfiltered scans are quadratic in board size.
-    const HasteSources hs = GatherHasteSources(state.battlefield, active);
+    // Board-source prefilter, gathered once (SpellEffects.h) -- this loop tests every creature and
+    // the solver re-runs it per scored subset, so the unfiltered scans are quadratic in board size.
+    // It used to gather the HASTE pair only; the lord / anthem / double-strike / attachment scans
+    // below ask the same board-level question once per creature and were the larger cost on a wide
+    // token board. This is the lockstep twin of ResolveCombatDamage's prefilter (Combat.cpp), which
+    // had the lord and ds halves already -- this projection had neither.
+    const BoardSources bs = GatherBoardSources(state.battlefield, active);
     for (const Permanent& p : state.battlefield)
     {
         if (p.controller_index != active) { continue; }
-        if (!CanAttackFull(p, state.battlefield, active, &hs)) { continue; }
+        if (!CanAttackFull(p, state.battlefield, active, &bs.haste)) { continue; }
         if (!ResolveProvider(state).AttackWith(state, p)) { continue; }
         bool animated = p.is_animated;
         auto [lord_pb, lord_tb] = ComputeLordBonus(
-            p.card, state, active, animated, &p);
+            p.card, state, active, animated, &p, &bs.lords, &bs.anthems);
         bool ds = (animated
-            ? HasDoubleStrikeFromLords(p.card, state.battlefield, active, true)
+            ? HasDoubleStrikeFromLords(p.card, state.battlefield, active, true, &bs.ds)
             : (p.card.HasKeyword(Keyword::DoubleStrike)
-               || HasDoubleStrikeFromLords(p.card, state.battlefield, active)))
+               || HasDoubleStrikeFromLords(p.card, state.battlefield, active, false, &bs.ds)))
             || HasDoubleStrikeFromEquipment(p, state);           // Kor Duelist / Balan
         int base_pw = p.EffectivePower() + lord_pb;
         const CardDefinition* adef = CardDatabase::Instance().LookupCached(p.card);
@@ -6585,10 +6589,10 @@ static int PendingAttackDamage(const GameState& state)
             if (animated) { base_pw += adef->params.animate_power; }
             base_pw += DynamicBasePower(*adef, state, active);   // Adeline: power = creature count
         }
-        base_pw += AuraBonusFor(p, state).first;                 // Bogles: attached auras + Kor self-buff
-        base_pw += EquipBonusFor(p, state).first;                // attached equipment
+        base_pw += AuraBonusFor(p, state, &bs.attached).first;   // Bogles: attached auras + Kor self-buff
+        base_pw += EquipBonusFor(p, state, &bs.attached).first;  // attached equipment
         {   // Umezawa's Jitte projection -- same shared closed form as the combat core
-            const int jbf = FindAttachedChargeEquip(state, p);
+            const int jbf = FindAttachedChargeEquip(state, p, &bs.attached);
             if (jbf >= 0)
             {
                 const Permanent& je = state.battlefield[jbf];
@@ -6629,7 +6633,8 @@ static int PendingAttackDamage(const GameState& state)
             tok.AddType(CardType::Creature);
             tok.m_subtypes = d->params.attack_token_subtypes;
             tok.m_power    = d->params.attack_token_power;
-            auto [tpb, ttb] = ComputeLordBonus(tok, state, active, false, nullptr);
+            auto [tpb, ttb] = ComputeLordBonus(tok, state, active, false, nullptr,
+                                               &bs.lords, &bs.anthems);
             dmg += d->params.attack_creates_tokens * gamesetup::OpponentHeads()   // one per head (2HG)
                  * (d->params.attack_token_power + tpb);
         }

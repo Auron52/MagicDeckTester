@@ -129,25 +129,23 @@ CombatDamageResult ResolveCombatDamage(GameState& state, const std::vector<int>&
     // own life-gain EVENT (CR 119.10: two lifelink attackers = two Pridemate triggers).
     std::vector<int> pending_lifelink;
 
-    // Pre-filter the active player's lord permanents ONCE (usually none), so the per-attacker
-    // ComputeLordBonus / HasDoubleStrikeFromLords below iterate that tiny list instead of each
-    // re-scanning the whole battlefield. Byte-identical: same permanents, same per-creature logic.
-    std::vector<int> lord_idx, ds_idx;
-    for (int i = 0; i < static_cast<int>(state.battlefield.size()); ++i)
-    {
-        const Permanent& q = state.battlefield[i];
-        if (q.controller_index != active) { continue; }
-        const CardDefinition* qd = CardDatabase::Instance().LookupCached(q.card);
-        if (!qd) { continue; }
-        if (IsLordPermanent(*qd)) { lord_idx.push_back(i); }   // template lords + dual-role (Archdruid)
-        if (qd->params.grants_double_strike)      { ds_idx.push_back(i); }
-    }
+    // Pre-filter the active player's board-level sources ONCE (usually none of each), so the
+    // per-attacker ComputeLordBonus / HasDoubleStrikeFromLords / AuraBonusFor / EquipBonusFor /
+    // FindAttachedChargeEquip / CreatureHasLifelink below iterate those tiny lists instead of each
+    // re-scanning the whole battlefield. Byte-identical: same permanents, same per-creature logic
+    // (see BoardSources in SpellEffects.h). This block used to gather the lord and double-strike
+    // halves only; the other four asked the same board-level question once per attacker and were
+    // the larger cost on a wide token board.
+    const BoardSources      bs       = GatherBoardSources(state.battlefield, active);
+    const std::vector<int>& lord_idx = bs.lords;
+    const std::vector<int>& ds_idx   = bs.ds;
 
     for (int idx : atk_idx)
     {
         Permanent& p = state.battlefield[idx];
         const bool animated = p.is_animated;
-        auto [lord_pb, lord_tb] = ComputeLordBonus(p.card, state, active, animated, &p, &lord_idx);
+        auto [lord_pb, lord_tb] = ComputeLordBonus(p.card, state, active, animated, &p, &lord_idx,
+                                                   &bs.anthems);
         (void)lord_tb;
         const bool ds = (animated
             ? HasDoubleStrikeFromLords(p.card, state.battlefield, active, true, &ds_idx)
@@ -161,13 +159,13 @@ CombatDamageResult ResolveCombatDamage(GameState& state, const std::vector<int>&
             if (animated) { base_pw += adef->params.animate_power; }
             base_pw += DynamicBasePower(*adef, state, active);   // Adeline: power = creature count
         }
-        base_pw += AuraBonusFor(p, state).first;                 // Bogles: attached auras + Kor self-buff
-        base_pw += EquipBonusFor(p, state).first;                // KittyEquipment: attached equipment
+        base_pw += AuraBonusFor(p, state, &bs.attached).first;   // Bogles: attached auras + Kor self-buff
+        base_pw += EquipBonusFor(p, state, &bs.attached).first;  // KittyEquipment: attached equipment
         // Umezawa's Jitte: spend charge counters on +2/+2 (greedy default / provider / human
         // side-channel), earn 2 per damage event -- the shared closed form (JitteDamageMath) the
         // two TurnSolver projections also use, so search and execution stay lockstep.
         int power = base_pw * (ds ? 2 : 1);
-        const int jitte_bf = FindAttachedChargeEquip(state, p);
+        const int jitte_bf = FindAttachedChargeEquip(state, p, &bs.attached);
         if (jitte_bf >= 0)
         {
             Permanent& je = state.battlefield[jitte_bf];
@@ -203,7 +201,7 @@ CombatDamageResult ResolveCombatDamage(GameState& state, const std::vector<int>&
             if (adef && adef->params.combat_damage_free_cast) { ++state.free_casts_available; }
             // Lifelink (modeled): combat damage also gains the controller that much life. Inert vs
             // the passive opponent's clock, tracked for life-total decks.
-            if (CreatureHasLifelink(p, state)) { pending_lifelink.push_back(power); }
+            if (CreatureHasLifelink(p, state, &bs.lifelink)) { pending_lifelink.push_back(power); }
         }
         if (collect_descs && power > 0)
         { out.attacker_descs.push_back(p.card.m_name.str() + " (" + std::to_string(power) + ")"); }

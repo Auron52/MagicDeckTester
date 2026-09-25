@@ -2712,17 +2712,25 @@ inline int CountAuraScaleUnits(const std::string& kind, const Permanent& aura,
 // (flat + dynamic scaling) PLUS its own per-aura self-buff (Kor Spiritdancer +2/+2 per Aura on it).
 // Added on top of EffectivePower()/lords/dynamic at every combat site. Toughness is currently inert
 // vs the passive opponent but is summed for future life-total fidelity.
-inline std::pair<int,int> AuraBonusFor(const Permanent& creature, const GameState& state)
+// attached_idx (optional): pre-filtered battlefield indices of the controller's ATTACHED Auras and
+// Equipment (see BoardSources / GatherBoardSources further down). A caller that scores many
+// creatures against one unchanging battlefield collects it ONCE instead of having every creature
+// re-walk the whole battlefield to discover there are no attachments on it at all. Byte-identical:
+// the list is a superset of what this loop's own filter keeps and the per-permanent body below is
+// applied unchanged. nullptr => walk the whole battlefield (original behaviour).
+inline std::pair<int,int> AuraBonusFor(const Permanent& creature, const GameState& state,
+                                       const std::vector<int>* attached_idx = nullptr)
 {
     if (!creature.card.IsCreature() && !creature.is_animated) { return {0, 0}; }
     const int num  = creature.card.m_number;
     const int ctrl = creature.controller_index;
     int pw = 0, tb = 0, aura_count = 0;
-    for (const Permanent& a : state.battlefield)
+    auto consider = [&](const Permanent& a)
     {
-        if (a.aura_attached_to != num || a.controller_index != ctrl) { continue; }
+        if (a.aura_attached_to != num || a.controller_index != ctrl) { return; }
+        if (a.def_absent) { return; }   // token: no definition -> the !d return below, without the call
         const CardDefinition* d = CardDatabase::Instance().LookupCached(a.card);
-        if (!d || !d->params.is_aura) { continue; }
+        if (!d || !d->params.is_aura) { return; }
         ++aura_count;
         pw += d->params.aura_power_bonus;
         tb += d->params.aura_tough_bonus;
@@ -2732,7 +2740,9 @@ inline std::pair<int,int> AuraBonusFor(const Permanent& creature, const GameStat
             pw += d->params.aura_scale_power * units;
             tb += d->params.aura_scale_tough * units;
         }
-    }
+    };
+    if (attached_idx) { for (int i : *attached_idx) { consider(state.battlefield[i]); } }
+    else              { for (const Permanent& a : state.battlefield) { consider(a); } }
     const CardDefinition* cd = CardDatabase::Instance().LookupCached(creature.card);
     if (cd && aura_count > 0)
     {
@@ -2747,20 +2757,25 @@ inline std::pair<int,int> AuraBonusFor(const Permanent& creature, const GameStat
 // lockstep with AuraBonusFor's call sites -- Combat.cpp's real damage, TurnSolver's two attack
 // projections, and the SBA toughness re-check. Equipment stacks (Bonesplitter + Hammer on one
 // host both count), matching CR 613: each grants independently.
-inline std::pair<int,int> EquipBonusFor(const Permanent& creature, const GameState& state)
+// attached_idx: same optional prefilter as AuraBonusFor above, same byte-identity argument.
+inline std::pair<int,int> EquipBonusFor(const Permanent& creature, const GameState& state,
+                                        const std::vector<int>* attached_idx = nullptr)
 {
     if (!creature.card.IsCreature() && !creature.is_animated) { return {0, 0}; }
     const int num  = creature.card.m_number;
     const int ctrl = creature.controller_index;
     int pw = 0, tb = 0;
-    for (const Permanent& e : state.battlefield)
+    auto consider = [&](const Permanent& e)
     {
-        if (e.equipped_to != num || e.controller_index != ctrl) { continue; }
+        if (e.equipped_to != num || e.controller_index != ctrl) { return; }
+        if (e.def_absent) { return; }   // token: no definition -> the !d return below, without the call
         const CardDefinition* d = CardDatabase::Instance().LookupCached(e.card);
-        if (!d || !d->params.is_equipment) { continue; }
+        if (!d || !d->params.is_equipment) { return; }
         pw += d->params.equip_power_bonus;
         tb += d->params.equip_tough_bonus;
-    }
+    };
+    if (attached_idx) { for (int i : *attached_idx) { consider(state.battlefield[i]); } }
+    else              { for (const Permanent& e : state.battlefield) { consider(e); } }
     return {pw, tb};
 }
 
@@ -2798,16 +2813,28 @@ inline bool HasDoubleStrikeFromEquipment(const Permanent& creature, const GameSt
 
 // The battlefield index of a charge-trigger Equipment (Umezawa's Jitte) attached to `attacker`,
 // or -1. Legend rule caps the board at one Jitte, so first match suffices.
-inline int FindAttachedChargeEquip(const GameState& state, const Permanent& attacker)
+// attached_idx: same optional prefilter as AuraBonusFor above. The list is in ascending battlefield
+// order, so "first match" is the same permanent either way (and the legend rule caps the board at
+// one Jitte regardless).
+inline int FindAttachedChargeEquip(const GameState& state, const Permanent& attacker,
+                                   const std::vector<int>* attached_idx = nullptr)
 {
-    for (int i = 0; i < static_cast<int>(state.battlefield.size()); ++i)
+    auto hit = [&](int i)
     {
         const Permanent& e = state.battlefield[i];
         if (e.equipped_to != attacker.card.m_number
-            || e.controller_index != attacker.controller_index) { continue; }
+            || e.controller_index != attacker.controller_index) { return false; }
+        if (e.def_absent) { return false; }   // token: no definition -> the !d skip, without the call
         const CardDefinition* d = CardDatabase::Instance().LookupCached(e.card);
-        if (d && d->params.is_equipment && d->params.equip_combat_damage_charges > 0) { return i; }
+        return d && d->params.is_equipment && d->params.equip_combat_damage_charges > 0;
+    };
+    if (attached_idx)
+    {
+        for (int i : *attached_idx) { if (hit(i)) { return i; } }
+        return -1;
     }
+    for (int i = 0; i < static_cast<int>(state.battlefield.size()); ++i)
+    { if (hit(i)) { return i; } }
     return -1;
 }
 
@@ -2874,23 +2901,30 @@ inline bool CreatureHasShroud(const Permanent& creature, const GameState& state,
 // True if `creature` deals combat damage with lifelink -- its own keyword, any attached
 // aura_grants_lifelink Aura, or any attached equip_grants_lifelink Equipment (Loxodon
 // Warhammer / Shadowspear). Combat sites gain the controller that much life.
-inline bool CreatureHasLifelink(const Permanent& creature, const GameState& state)
+// granter_idx (optional): pre-filtered battlefield indices of the controller's permanents that can
+// grant lifelink at all (see BoardSources / GatherBoardSources). Combat calls this once per
+// CONNECTING attacker and the walk below is board-level, so on a wide token board it is
+// O(attackers x board) for an answer almost every deck gives as "no". Byte-identical: the list is
+// a superset of the permanents whose body below can reach `return true`, so an EMPTY list is a
+// PROOF this scan would find nothing. nullptr => walk the whole battlefield (original behaviour).
+inline bool CreatureHasLifelink(const Permanent& creature, const GameState& state,
+                                const std::vector<int>* granter_idx = nullptr)
 {
     if (creature.card.HasKeyword(Keyword::Lifelink)) { return true; }
     if (creature.temp_lifelink) { return true; }   // Heliod's "{1}{W}: gains lifelink until end of turn"
-    for (const Permanent& a : state.battlefield)
+    // One lookup per permanent for all three grant shapes below (it used to be up to three of the
+    // same call), skipped outright for a token -- def_absent is precomputed exactly for this and is
+    // the same `d == nullptr` every block already tests. See Permanent::def_absent.
+    auto grants = [&](const Permanent& a)
     {
-        if (a.controller_index != creature.controller_index) { continue; }
-        if (a.aura_attached_to == creature.card.m_number)
-        {
-            const CardDefinition* d = CardDatabase::Instance().LookupCached(a.card);
-            if (d && d->params.is_aura && d->params.aura_grants_lifelink) { return true; }
-        }
-        if (a.equipped_to == creature.card.m_number)
-        {
-            const CardDefinition* d = CardDatabase::Instance().LookupCached(a.card);
-            if (d && d->params.is_equipment && d->params.equip_grants_lifelink) { return true; }
-        }
+        if (a.controller_index != creature.controller_index) { return false; }
+        if (a.def_absent) { return false; }
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(a.card);
+        if (!d) { return false; }
+        if (a.aura_attached_to == creature.card.m_number
+            && d->params.is_aura && d->params.aura_grants_lifelink) { return true; }
+        if (a.equipped_to == creature.card.m_number
+            && d->params.is_equipment && d->params.equip_grants_lifelink) { return true; }
         // Static subtype lifelink LORD (Lyra Dawnbringer: "Other Angels you control have
         // lifelink"). Folded into this existing same-controller pass rather than given its own
         // battlefield scan -- this is the hot combat path and the header records a ~3% rollout
@@ -2899,23 +2933,27 @@ inline bool CreatureHasLifelink(const Permanent& creature, const GameState& stat
         // Self-exclusion is by per-instance m_number, the same key aura_attached_to/equipped_to
         // use above -- not by name, which would be wrong with 3 copies of Lyra on the stack of
         // legend-rule replacements, and not by address, which is not available here.
+        if (d->params.grants_lifelink
+            && !(d->params.lord_excludes_self && a.card.m_number == creature.card.m_number))
         {
-            const CardDefinition* d = CardDatabase::Instance().LookupCached(a.card);
-            if (d && d->params.grants_lifelink
-                && !(d->params.lord_excludes_self && a.card.m_number == creature.card.m_number))
+            if (d->params.affects_all_creatures) { return true; }
+            // An animated land has every creature type (Mutavault), so any subtype lord
+            // reaches it -- the same rule the P/T lord scans and HasHasteFromLords apply.
+            if (creature.is_animated && !d->params.subtypes_affected.empty()) { return true; }
+            for (const std::string& sub : d->params.subtypes_affected)
             {
-                if (d->params.affects_all_creatures) { return true; }
-                // An animated land has every creature type (Mutavault), so any subtype lord
-                // reaches it -- the same rule the P/T lord scans and HasHasteFromLords apply.
-                if (creature.is_animated && !d->params.subtypes_affected.empty()) { return true; }
-                for (const std::string& sub : d->params.subtypes_affected)
-                {
-                    for (const std::string& cs : creature.card.m_subtypes)
-                    { if (cs == sub) { return true; } }
-                }
+                for (const std::string& cs : creature.card.m_subtypes)
+                { if (cs == sub) { return true; } }
             }
         }
+        return false;
+    };
+    if (granter_idx)
+    {
+        for (int i : *granter_idx) { if (grants(state.battlefield[i])) { return true; } }
+        return false;
     }
+    for (const Permanent& a : state.battlefield) { if (grants(a)) { return true; } }
     return false;
 }
 
@@ -3210,6 +3248,18 @@ inline void FireOnCastTriggers(GameState& state, const CardDefinition& cast_def)
 // (controller + LordEffect), and the per-creature logic below (self-exclusion by address, subtype
 // matching, scales_per_matching count) is applied unchanged, so no lord is double-counted and an
 // "other"-lord still skips itself. nullptr => scan the whole battlefield (original behaviour).
+// controlled_anthem_idx (optional): the SAME device for the three CONDITIONAL-anthem passes at the
+// bottom of this function (hand size / life above start / quest counters). Those needed it more
+// than the lord pass did. Each is guarded, but the guards are weak in exactly the wrong place:
+// HasQuestAnthem() is a DB-WIDE predicate over all of cards.json (the failure mode
+// GameState::deck_has_token_doubler's block documents), so the quest walk runs on EVERY deck; and
+// MaxHandSizeAnthemMax() compares against the live HAND SIZE, which an emptied late-game hand slips
+// under. MEASURED on the worst candidate-B keep cell: those two walks are 59.1% and 25.6% of
+// ComputeLordBonus's self time -- 95% of the symbol -- essentially all of it a LookupCached per
+// Saproling that returns null. The list holds every controller-owned permanent carrying ANY of the
+// three params, so it is a superset of what each pass's own filter keeps and each pass applies its
+// tests unchanged. nullptr => walk the whole battlefield, now with the same def_absent
+// short-circuit process_lord already uses.
 // Is this definition a battlefield LORD (grants a continuous P/T bonus to matching creatures)?
 // The LordEffect template, plus the dual-role case: a CREATURE of another template carrying lord
 // params (Elvish Archdruid = mana_dork + "Other Elf creatures you control get +1/+1"). Gated on a
@@ -3241,7 +3291,8 @@ inline std::pair<int,int> ComputeLordBonus(
     int                            controller_index,
     bool                           all_creature_types = false,
     const Permanent*               self               = nullptr,
-    const std::vector<int>*        controlled_lord_idx = nullptr)
+    const std::vector<int>*        controlled_lord_idx = nullptr,
+    const std::vector<int>*        controlled_anthem_idx = nullptr)
 {
     const std::vector<Permanent>& battlefield = state.battlefield;
     int pb = 0, tb = 0;
@@ -3427,12 +3478,13 @@ inline std::pair<int,int> ComputeLordBonus(
         <= CardDatabase::Instance().MaxHandSizeAnthemMax())
     {
         const std::size_t hand_size = state.players[controller_index].hand.size();
-        for (const Permanent& src : battlefield)
+        auto process_hand_anthem = [&](const Permanent& src)
         {
-            if (src.controller_index != controller_index) { continue; }
+            if (src.controller_index != controller_index) { return; }
+            if (src.def_absent) { return; }   // token: the !sd return below, without the call
             const CardDefinition* sd = CardDatabase::Instance().LookupCached(src.card);
-            if (!sd || sd->params.hand_size_anthem_max < 0)                        { continue; }
-            if (static_cast<int>(hand_size) > sd->params.hand_size_anthem_max)     { continue; }
+            if (!sd || sd->params.hand_size_anthem_max < 0)                        { return; }
+            if (static_cast<int>(hand_size) > sd->params.hand_size_anthem_max)     { return; }
             bool matches = sd->params.affects_all_creatures;
             if (!matches && all_creature_types && !sd->params.subtypes_affected.empty())
             { matches = true; }
@@ -3448,10 +3500,14 @@ inline std::pair<int,int> ComputeLordBonus(
                     { if (cs == sub) { matches = true; break; } }
                 }
             }
-            if (!matches) { continue; }
+            if (!matches) { return; }
             pb += sd->params.hand_size_anthem_power;
             tb += sd->params.hand_size_anthem_tough;
-        }
+        };
+        if (controlled_anthem_idx)
+        { for (int ai : *controlled_anthem_idx) { process_hand_anthem(battlefield[ai]); } }
+        else
+        { for (const Permanent& src : battlefield) { process_hand_anthem(src); } }
     }
 
     // Conditional LIFE-keyed team anthem (Righteous Valkyrie: "As long as you have at least 7
@@ -3470,13 +3526,14 @@ inline std::pair<int,int> ComputeLordBonus(
         && state.players[controller_index].life >= gamesetup::StartingLife() + min_life_anthem)
     {
         const int life = state.players[controller_index].life;
-        for (const Permanent& src : battlefield)
+        auto process_life_anthem = [&](const Permanent& src)
         {
-            if (src.controller_index != controller_index) { continue; }
+            if (src.controller_index != controller_index) { return; }
+            if (src.def_absent) { return; }   // token: the !sd return below, without the call
             const CardDefinition* sd = CardDatabase::Instance().LookupCached(src.card);
-            if (!sd || sd->params.life_above_start_anthem_life <= 0) { continue; }
+            if (!sd || sd->params.life_above_start_anthem_life <= 0) { return; }
             if (life < gamesetup::StartingLife() + sd->params.life_above_start_anthem_life)
-            { continue; }
+            { return; }
             // Match scope reuses the lord vocabulary. SELF-INCLUSIVE: the oracle says "creatures
             // you control", not "other", so there is deliberately no lord_excludes_self check.
             bool matches = sd->params.affects_all_creatures;
@@ -3493,10 +3550,14 @@ inline std::pair<int,int> ComputeLordBonus(
                     { if (cs == sub) { matches = true; break; } }
                 }
             }
-            if (!matches) { continue; }
+            if (!matches) { return; }
             pb += sd->params.life_above_start_anthem_power;
             tb += sd->params.life_above_start_anthem_tough;
-        }
+        };
+        if (controlled_anthem_idx)
+        { for (int ai : *controlled_anthem_idx) { process_life_anthem(battlefield[ai]); } }
+        else
+        { for (const Permanent& src : battlefield) { process_life_anthem(src); } }
     }
 
     // QUEST-COUNTER ANTHEM (Beastmaster Ascension: "As long as this enchantment has seven or more
@@ -3514,17 +3575,22 @@ inline std::pair<int,int> ComputeLordBonus(
     // reason: without it this walks the battlefield on every call for a clause one card carries.
     if (CardDatabase::Instance().HasQuestAnthem())
     {
-        for (const Permanent& src : battlefield)
+        auto process_quest_anthem = [&](const Permanent& src)
         {
-            if (src.controller_index != controller_index) { continue; }
+            if (src.controller_index != controller_index) { return; }
+            if (src.def_absent) { return; }   // token: the !sd return below, without the call
             const CardDefinition* sd = CardDatabase::Instance().LookupCached(src.card);
-            if (!sd || sd->params.quest_anthem_threshold <= 0)                      { continue; }
-            if (src.quest_counters < sd->params.quest_anthem_threshold)             { continue; }
+            if (!sd || sd->params.quest_anthem_threshold <= 0)                      { return; }
+            if (src.quest_counters < sd->params.quest_anthem_threshold)             { return; }
             // "creatures you control" -- no subtype gate, and the source is a noncreature so there
             // is no self-exclusion question. Multiple live Ascensions accumulate (+10/+10 for two).
             pb += sd->params.quest_anthem_power;
             tb += sd->params.quest_anthem_tough;
-        }
+        };
+        if (controlled_anthem_idx)
+        { for (int ai : *controlled_anthem_idx) { process_quest_anthem(battlefield[ai]); } }
+        else
+        { for (const Permanent& src : battlefield) { process_quest_anthem(src); } }
     }
     return {pb, tb};
 }
@@ -3564,6 +3630,76 @@ inline bool HasDoubleStrikeFromLords(
         for (const Permanent& lord : battlefield) { if (grants(lord)) { return true; } }
     }
     return false;
+}
+
+// ---------------------------------------------------------------------------------------------
+// BoardSources -- every board-level source list a per-creature combat loop needs, gathered in ONE
+// walk. The generalisation of HasteSources (above) and of ResolveCombatDamage's hand-rolled
+// lord/ds prefilter, and it exists for the same measured reason: the helpers below all answer a
+// BOARD-level question, and combat asks each of them once per creature, so a loop over C creatures
+// on a board of N permanents does ~5 x C x N work to discover, almost always, that the board holds
+// none of these cards at all. On a Doubling Season / Mycoloth board both C and N are in the
+// hundreds. Measured on the worst candidate-B keep cell: ComputeLordBonus 9.7%, ResolveCombatDamage
+// 9.4% (its inlined AuraBonusFor / EquipBonusFor / CreatureHasLifelink), PendingAttackDamage 5.7%.
+//
+// BYTE-IDENTICAL BY CONSTRUCTION, not by measurement -- the same property the haste prefilter has.
+// Every list is built from exactly the predicate its consumer's loop body tests, so the list is a
+// superset of the permanents that could change that consumer's answer and an EMPTY list is a PROOF
+// the walk would find nothing. Each consumer still applies its own per-permanent tests unchanged.
+//
+// CONTRACT: gathered for ONE controller. Pass the lists only where the creature being scored is
+// controlled by that same player (combat and the attack projections score only the active player's
+// creatures). This is the contract controlled_lord_idx already carries.
+struct BoardSources
+{
+    HasteSources     haste;      // grants_haste / attached equip_grants_haste  -> Can{Attack,TapNow}
+    std::vector<int> lords;      // IsLordPermanent                             -> ComputeLordBonus
+    std::vector<int> anthems;    // any of the three CONDITIONAL anthem params  -> ComputeLordBonus
+    std::vector<int> ds;         // grants_double_strike               -> HasDoubleStrikeFromLords
+    std::vector<int> lifelink;   // any of the three lifelink GRANTS        -> CreatureHasLifelink
+    std::vector<int> attached;   // an ATTACHED Aura / Equipment    -> Aura/EquipBonusFor, the Jitte
+    std::vector<int> deaths;     // a death watcher that PAYS                  -> DeathOfWouldPay
+};
+
+inline BoardSources GatherBoardSources(const std::vector<Permanent>& battlefield,
+                                       int                          controller_index)
+{
+    BoardSources bs;
+    for (int i = 0; i < static_cast<int>(battlefield.size()); ++i)
+    {
+        const Permanent& q = battlefield[i];
+        if (q.controller_index != controller_index) { continue; }
+        if (q.def_absent) { continue; }   // token: no definition, so none of these predicates hold
+        const CardDefinition* qd = CardDatabase::Instance().LookupCached(q.card);
+        if (!qd) { continue; }
+        const CardParams& pp = qd->params;
+        if (pp.grants_haste) { bs.haste.lords.push_back(i); }
+        if (q.equipped_to != 0 && pp.is_equipment && pp.equip_grants_haste)
+        { bs.haste.equips.push_back(i); }
+        if (IsLordPermanent(*qd))     { bs.lords.push_back(i); }
+        if (pp.grants_double_strike)  { bs.ds.push_back(i); }
+        if (pp.hand_size_anthem_max >= 0 || pp.life_above_start_anthem_life > 0
+            || pp.quest_anthem_threshold > 0)
+        { bs.anthems.push_back(i); }
+        if ((pp.is_aura && pp.aura_grants_lifelink)
+            || (pp.is_equipment && pp.equip_grants_lifelink)
+            || pp.grants_lifelink)
+        { bs.lifelink.push_back(i); }
+        // Any Aura or Equipment, attached or not. Deliberately NOT narrowed to the attached ones:
+        // the three consumers each test `aura_attached_to`/`equipped_to` against a specific host's
+        // m_number, and narrowing here would additionally assume no host can ever have m_number 0
+        // (the unattached sentinel). Keeping the list a plain superset of "could be an attachment"
+        // leaves every consumer's own filter as the sole decider, which is what makes this
+        // byte-identical without reasoning about card numbering. The list is tiny either way.
+        if (pp.is_aura || pp.is_equipment) { bs.attached.push_back(i); }
+        // DeathOfWouldPay's `pays` disjunction, which is VICTIM-INDEPENDENT -- it is a property of
+        // the watcher alone, so it is exactly the right thing to hoist. The victim-dependent half
+        // (subtype match, self-inclusion) stays in that function and runs unchanged.
+        if (pp.dies_trigger_damage > 0 || pp.dies_trigger_creates_tokens > 0
+            || pp.dies_trigger_self_gain > 0 || pp.dies_trigger_impulse_exile)
+        { bs.deaths.push_back(i); }
+    }
+    return bs;
 }
 
 // Returns true if any lord on the battlefield grants haste to creature's subtype.
@@ -4609,7 +4745,11 @@ inline void CreateTokenOnce(
     token.def_absent = (CardDatabase::Instance().LookupCached(token.card) == nullptr);
     if (tokenstats::On() && token.def_absent)
     { tokenstats::g_tok_absent.fetch_add(1, std::memory_order_relaxed); }
-    state.battlefield.push_back(token);
+    // MOVE, not copy: `token` is a local that nothing reads after this line (the cascade below
+    // reaches the new permanent by index), and a Permanent is 296 bytes carrying heap members --
+    // the subtype vector of strings above chief among them -- so the copy deep-copied all of it
+    // per token. std::vector<Permanent>::push_back was 7.8% of the worst candidate-B keep cell.
+    state.battlefield.push_back(std::move(token));
     // A token Dragon (Lathliss 5/5, Utvara 6/6) entering also fires the Dragonstorm cascade: it
     // re-pings every Scourge (via FireEtbWatchers step 2) but, being a token, never re-triggers
     // Lathliss (nontoken gate). No-op for every non-Dragon token (early subtype return) -> all
@@ -9116,35 +9256,46 @@ inline void DestroyTokensCreatedBy(GameState& state, int source_number)
 // Thallid's -1/-1 aimed at our own Saproling is the former ONLY while such a watcher is out; with
 // no watcher it is a pure loss, and the ranking has to be able to tell the difference rather than
 // assuming the combo is always live.
-inline bool DeathOfWouldPay(const GameState& state, int controller, const Permanent& victim)
+// watcher_idx (optional): pre-filtered battlefield indices of the controller's PAYING death
+// watchers (BoardSources::deaths). The caller that matters asks this question once per creature on
+// the board, so the walk below is O(creatures x board); the `pays` disjunction it is looking for is
+// victim-independent, which is what makes hoisting it byte-identical -- the list is exactly the
+// permanents that can reach a `return true` here, and the victim-dependent tests below run
+// unchanged. nullptr => walk the whole battlefield (original behaviour).
+inline bool DeathOfWouldPay(const GameState& state, int controller, const Permanent& victim,
+                            const std::vector<int>* watcher_idx = nullptr)
 {
     const CardDatabase& db = CardDatabase::Instance();
-    for (const Permanent& w : state.battlefield)
+    auto pays_for = [&](const Permanent& w) -> bool
     {
-        if (w.controller_index != controller) { continue; }
-        if (w.def_absent) { continue; }
+        if (w.controller_index != controller) { return false; }
+        if (w.def_absent) { return false; }
         const CardDefinition* wd = db.LookupCached(w.card);
-        if (wd == nullptr) { continue; }
+        if (wd == nullptr) { return false; }
         const CardParams& wp = wd->params;
         const bool pays = wp.dies_trigger_damage > 0 || wp.dies_trigger_creates_tokens > 0
                        || wp.dies_trigger_self_gain > 0 || wp.dies_trigger_impulse_exile;
-        if (!pays) { continue; }
+        if (!pays) { return false; }
         const bool self_only = wp.dies_watch_subtype.empty();
         if (self_only)
         {
             // A self-death watcher pays only for its OWN death (Tukatongue / Mogg War Marshal).
-            if (wp.dies_watch_includes_self && w.card.m_number == victim.card.m_number)
-            { return true; }
-            continue;
+            return wp.dies_watch_includes_self && w.card.m_number == victim.card.m_number;
         }
         if (CardHasSubtype(victim.card, wp.dies_watch_subtype))
         {
             // "another <subtype> you control dies" -- the watcher does not pay for itself unless
             // it opts in.
-            if (w.card.m_number != victim.card.m_number || wp.dies_watch_includes_self)
-            { return true; }
+            return w.card.m_number != victim.card.m_number || wp.dies_watch_includes_self;
         }
+        return false;
+    };
+    if (watcher_idx)
+    {
+        for (int i : *watcher_idx) { if (pays_for(state.battlefield[i])) { return true; } }
+        return false;
     }
+    for (const Permanent& w : state.battlefield) { if (pays_for(w)) { return true; } }
     return false;
 }
 
@@ -9367,10 +9518,29 @@ inline void ApplySacCreatureOutlet(GameState& state, int controller, int source_
     {
         std::vector<int> cands;   // battlefield indices, heuristic-preferred first
         std::vector<std::pair<long long,int>> ranked;
+        // Board-source prefilters, gathered ONCE per side (see BoardSources earlier in this header).
+        // The ranking loop below asks four BOARD-level questions about EVERY creature on the
+        // battlefield -- lord bonus, aura bonus, equipment bonus, and "would this death pay?" --
+        // and each of those used to answer by walking the battlefield again. That is
+        // O(creatures x board) per activation, and ApplySacCreatureOutletBurst runs this once per
+        // body sacrificed, so on a Saproling board the whole thing is cubic in board width.
+        // MEASURED (perf, Profile build, the worst candidate-B keep cell, 29.8k samples): this
+        // function is 55.8% of the cell, 37.8% of it inside ComputeLordBonus and a further 8.5% in
+        // AuraBonusFor/EquipBonusFor. Byte-identical: each consumer applies its own per-permanent
+        // tests unchanged against a list that is a superset of what those tests can keep.
+        //
+        // TWO lists, indexed by controller, because this loop ranks BOTH sides' creatures and the
+        // prefilter contract is per-controller. An index outside {0,1} falls back to nullptr, i.e.
+        // the original full walk -- the safe direction.
+        const BoardSources bsrc[2] = { GatherBoardSources(state.battlefield, 0),
+                                       GatherBoardSources(state.battlefield, 1) };
+        auto srcs = [&](int ci) -> const BoardSources*
+        { return (ci == 0 || ci == 1) ? &bsrc[ci] : nullptr; };
         for (int i = 0; i < static_cast<int>(state.battlefield.size()); ++i)
         {
             const Permanent& q = state.battlefield[i];
             if (!q.card.IsCreature() && !q.is_animated) { continue; }
+            const BoardSources* qs = srcs(q.controller_index);
             long long score;
             if (op->sac_outlet_grants_haste)
             {
@@ -9379,7 +9549,8 @@ inline void ApplySacCreatureOutlet(GameState& state, int controller, int source_
                 // creature that cannot attack right now; rank everything else behind it so the set
                 // stays complete for a human.
                 const bool ours = (q.controller_index == controller);
-                const bool useful = ours && !CanAttackFull(q, state.battlefield, controller);
+                const HasteSources* chs = srcs(controller) ? &srcs(controller)->haste : nullptr;
+                const bool useful = ours && !CanAttackFull(q, state.battlefield, controller, chs);
                 score = (useful ? 0LL : 1000000LL) - q.EffectivePower() * 1000LL;
             }
             else
@@ -9400,14 +9571,19 @@ inline void ApplySacCreatureOutlet(GameState& state, int controller, int source_
                 // The SOURCE is pushed behind its own tier: killing the outlet ends the engine.
                 const int tough = q.EffectiveToughness()
                                 + ComputeLordBonus(q.card, state, q.controller_index,
-                                                   q.is_animated, &q).second
-                                + AuraBonusFor(q, state).second + EquipBonusFor(q, state).second;
+                                                   q.is_animated, &q,
+                                                   qs ? &qs->lords    : nullptr,
+                                                   qs ? &qs->anthems  : nullptr).second
+                                + AuraBonusFor(q, state,  qs ? &qs->attached : nullptr).second
+                                + EquipBonusFor(q, state, qs ? &qs->attached : nullptr).second;
                 const bool kills = (tough + op->sac_outlet_minus_tough) <= 0;
                 const bool ours  = (q.controller_index == controller);
                 long long tier;
                 if      (!kills) { tier = 3; }
                 else if (!ours)  { tier = 1; }
-                else             { tier = DeathOfWouldPay(state, controller, q) ? 0 : 2; }
+                else             { tier = DeathOfWouldPay(state, controller, q,
+                                              srcs(controller) ? &srcs(controller)->deaths
+                                                               : nullptr) ? 0 : 2; }
                 const long long is_src = (q.card.m_number == source_id) ? 1 : 0;
                 // Within a tier prefer the cheapest body, and a TOKEN over a card (a token costs
                 // no card; erasing it is strictly less loss).

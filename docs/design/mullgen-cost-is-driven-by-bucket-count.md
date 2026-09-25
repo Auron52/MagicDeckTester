@@ -160,6 +160,76 @@ property of the decklist, not of the engine.** The honest projection is not a si
 cell space is heterogeneous enough that any single rate is a statement about *where the odometer
 currently is*, which is exactly the trap the correction above documents.
 
+## UPDATE 2026-09-25c — a THIRD instance of the same family, and a profiling error worth recording
+
+### The error first, because it is the transferable part
+
+The obvious next move after `dc6001f6` was "read the profile, fix the top symbol". I did exactly
+that, shipped five careful prefilters, and bought **1.06x** (302.8 s → 285.6 s on the worst cell).
+
+The profile I read was real, correct, and **about a different workload**: `/tmp/candb_cell2.perf`,
+3,417 samples captured in the previous session from a **17-second** cell. The worst cell in the new
+slow log takes **302 seconds**. Those two cells do not share a cost centre:
+
+| symbol | stale 17 s cell | the ACTUAL worst cell |
+|---|---|---|
+| `ApplySacCreatureOutlet` (inclusive) | not in the top 20 | **55.8%** |
+| `ComputeLordBonus` (self + its two lambdas) | 9.7% | **56.7%** |
+| `ResolveCombatDamage` | 9.4% | < 1% |
+| `vector<Permanent>::push_back` | 7.8% | 2.5% |
+| `PendingAttackDamage` | 5.7% | < 1% |
+
+**The rule this yields: re-profile the cell you are actually trying to speed up, every time.** The
+candidate-B cell space is heterogeneous enough that a profile is scoped to ONE hand, not to the deck
+— the same heterogeneity that makes a single rollout rate a statement about where the odometer is
+(see the correction in UPDATE 2026-09-25 above). A 3.4k-sample profile of the wrong cell is worse
+than no profile, because it is confidently wrong. The re-capture used 29,818 samples, taken by
+attaching `perf record -p` *after* the `[replay] ... -> running` line so the multi-threaded
+play-digest battery is excluded.
+
+### The defect
+
+Deathspore Thallid's outlet ("Sacrifice a Saproling: target creature gets -1/-1") ranks its target
+at resolution — deliberately, because fanning ~30 interchangeable Saprolings into plan variants is
+the documented cost centre this archetype already fought. But the ranking loop asks **four
+board-level questions about every creature on the battlefield** — lord bonus, aura bonus, equipment
+bonus, and "would this death pay?" — and each of those answered by walking the battlefield again.
+That is O(creatures × board) per activation, and `ApplySacCreatureOutletBurst` runs it once per body
+sacrificed, so on a Saproling board the whole thing is **cubic in board width**.
+
+Same family as the haste scans (`b4c7f657` / `19d3e3a8`) and `DoublerShift` (`dc6001f6`): a
+board-level answer recomputed per element of a loop over the board.
+
+### The fix
+
+`BoardSources` + `GatherBoardSources` in `SpellEffects.h` — the generalisation of the existing
+`HasteSources` and of `ResolveCombatDamage`'s hand-rolled lord/double-strike prefilter. One walk
+yields six lists (haste, lords, conditional anthems, double-strike granters, lifelink granters,
+attachments, paying death watchers); every consumer keeps its own per-permanent tests and iterates
+a usually-empty list. Byte-identical by construction: each list is built from exactly the predicate
+its consumer's loop body tests, so an empty list is a *proof* the walk would find nothing.
+
+Wired into `ApplySacCreatureOutlet`'s ranking loop (two lists, one per controller, since it ranks
+both sides), `ResolveCombatDamage`, and `PendingAttackDamage` — which turned out to be
+`ResolveCombatDamage`'s un-prefiltered twin, carrying neither of the two lists that function had had
+since the lord prefilter was added. Plus two purely local ones: `CreatureHasLifelink` did up to
+**three** `LookupCached` calls per permanent with no `def_absent` short-circuit, and
+`CreateTokenOnce` copied its 296-byte `Permanent` into the battlefield instead of moving it.
+
+### Result
+
+| | |
+|---|---|
+| worst cell, single-threaded, Profile build | **302,754 ms → 197,755 ms = 1.53x**, `win_turn=6` both |
+| ... of which the first (mis-targeted) round | 302,754 → 285,630 ms = 1.06x |
+| smoke batch makespan | 82 s → **75 s** |
+
+Gates: play digest `f1f8288da6dff73e` unchanged, scenarios 103/103, unit SUCCESS (2,635,895
+assertions), smoke 93 passed with `configs changed: 0` and `play-changed=0` on both arms.
+
+**1.53x does not change the verdict in UPDATE 2026-09-25b.** The floor pass was 7–26 days; it is now
+5–17 days. Still weeks, still because K=22.
+
 ## Related
 
 * `docs/design/slow-rollout-tail-and-the-uncharged-greedy-walk.md` -- the *other*, independent cost
