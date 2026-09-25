@@ -14406,6 +14406,19 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
     // Hoisted: one battlefield scan per CollectActions call, not one per candidate card, and only
     // when the prune is on (this is a millions-of-calls hot path). See the exemption below.
     const bool free_charge_live = g_emit_prune && FreeCastChargeLive(state);
+    // Haste prefilter for the CanTapNow loops further down (SpellEffects.h). LAZY on purpose: this
+    // function is itself a millions-of-calls hot path and most calls never reach an emission block
+    // that needs it, so an unconditional gather would cost more than the scans it removes. Every
+    // consumer below is guarded on `controller_index == active_player_index`, which is what makes
+    // one active-player gather valid for all of them.
+    bool         haste_ready = false;
+    HasteSources haste_src;
+    auto haste = [&]() -> const HasteSources* {
+        if (!haste_ready)
+        { haste_src = GatherHasteSources(state.battlefield, state.active_player_index);
+          haste_ready = true; }
+        return &haste_src;
+    };
 
     if (poolaudit::Enabled()) { poolaudit::Probe(state, is_pre_combat ? "collect-m1" : "collect-m2"); }
 
@@ -16980,7 +16993,7 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
             if (p.controller_index != state.active_player_index || p.tapped) { continue; }
             const CardDefinition* pd = CardDatabase::Instance().LookupCached(p.card);
             if (!pd || pd->params.tap_creates_tokens_per_controlled_subtype.empty()) { continue; }
-            if (!CanTapNow(p, state.battlefield)) { continue; }
+            if (!CanTapNow(p, state.battlefield, haste())) { continue; }
             const int x = CountControlledSubtype(state, state.active_player_index,
                               pd->params.tap_creates_tokens_per_controlled_subtype);
             if (x <= 0) { continue; }
@@ -17305,7 +17318,7 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
                     if (p.controller_index != state.active_player_index || p.tapped) { continue; }
                     const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
                     if (!d || !d->params.tap_put_from_hand_cost.has_value()) { continue; }
-                    if (CanTapNow(p, state.battlefield)) { continue; }   // already live: no enable needed
+                    if (CanTapNow(p, state.battlefield, haste())) { continue; }   // already live: no enable needed
                     for (const Card& c : ap.hand)
                     {
                         const CardDefinition* hd = CardDatabase::Instance().LookupCached(c);
@@ -17560,7 +17573,7 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
             // possible to activate ... if we equip lightning greaves on him, he can do the
             // plans", "even [the Lotus] can be activated on the first turn if he gains haste").
             // Was p.CanTap(), which is sickness-only and silently denied the equipped tap.
-            if (!CanTapNow(p, state.battlefield)) { continue; }
+            if (!CanTapNow(p, state.battlefield, haste())) { continue; }
             const CardDefinition* pd = CardDatabase::Instance().LookupCached(p.card);
             if (!pd || !pd->params.garth_copy_ability) { continue; }
             const ManaPool garth_pool = BuildNonCreaturePool(state);
@@ -17975,7 +17988,7 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
             // ever emits for the two graveyard-exile modes.
             if (pd->params.gy_exile_instant_sorcery_drain <= 0
                 && pd->params.gy_exile_creature_lifegain <= 0) { continue; }
-            if (!CanTapNow(p, state.battlefield)) { continue; }
+            if (!CanTapNow(p, state.battlefield, haste())) { continue; }
             const std::vector<Card>& gy = state.players[state.active_player_index].graveyard;
             if (pd->params.gy_exile_instant_sorcery_drain > 0)
             {
@@ -18055,7 +18068,7 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
             if (p.controller_index != state.active_player_index || p.tapped) { continue; }
             const CardDefinition* pd = CardDatabase::Instance().LookupCached(p.card);
             if (!pd || !pd->params.gy_return_cost.has_value()) { continue; }
-            if (!CanTapNow(p, state.battlefield)) { continue; }
+            if (!CanTapNow(p, state.battlefield, haste())) { continue; }
             const std::vector<Card>& gy = state.players[state.active_player_index].graveyard;
             std::vector<std::string> seen;
             for (const Card& gc : gy)
@@ -18094,7 +18107,7 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
             if (p.controller_index != state.active_player_index || p.tapped) { continue; }
             const CardDefinition* pd = CardDatabase::Instance().LookupCached(p.card);
             if (!pd || !pd->params.gy_play_cost.has_value()) { continue; }
-            if (!CanTapNow(p, state.battlefield)) { continue; }
+            if (!CanTapNow(p, state.battlefield, haste())) { continue; }
             const Player& gap = state.players[state.active_player_index];
             const bool drop_open =
                 gap.lands_played_this_turn < 1 + gap.bonus_land_drops_this_turn;
@@ -18170,7 +18183,7 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
             if (p.controller_index != state.active_player_index || p.tapped) { continue; }
             const CardDefinition* pd = CardDatabase::Instance().LookupCached(p.card);
             if (!pd || !pd->params.tap_put_from_hand_cost.has_value()) { continue; }
-            if (!CanTapNow(p, state.battlefield)) { continue; }
+            if (!CanTapNow(p, state.battlefield, haste())) { continue; }
             std::unordered_set<std::string> seen_put;
             for (const Card& c : ap.hand)
             {
