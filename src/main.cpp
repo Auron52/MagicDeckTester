@@ -1291,13 +1291,41 @@ static void WriteDecisionJson(std::ostream& os, const GameState& s,
                 if (cd && (cd->params.tutor_mv_max_is_x || HumanPlayDefersTutorTarget(*cd)))
                 { tgt.clear(); }
             }
+            // THE COUNT AXES BELONG IN THE IDENTITY. `sac_count` (how many bodies one activation
+            // eats) and `devour_count` (how many a Mycoloth-class cast eats entering) are genuinely
+            // different plays -- "sac 1 Saproling" and "sac 2 Saprolings" cost different boards --
+            // and both were absent here, so the coverage pass treated them as the same payload and
+            // guaranteed only ONE of them a slot. That was harmless while the fill pass swept up
+            // every leftover in index order; it stops being harmless the moment the fill pass
+            // filters (see the colour fold below), because this key is then the ONLY thing standing
+            // between a distinct count and falling out of the menu.
+            //
+            // DELIBERATELY ABSENT: `chosen_float_color`. Which colour a sac-for-mana outlet floats
+            // is not an identity -- it is a MEANS, determined by what the rest of the line consumes,
+            // and since 2026-09-25 it is expressible as a `color` sub-choice dimension instead
+            // (TurnSolver::CheckLine). Its absence here is what lets both passes below fold the
+            // colour fan. Anything ADDED to this key is automatically respected by both passes,
+            // which is the whole reason they share one function rather than each building a key.
             return std::to_string(static_cast<int>(a.kind)) + "|" + a.card_name.str()
                  + "|" + std::to_string(a.sac_source_id)
                  + "|" + std::to_string(a.sac_victim_id)
+                 + "|" + std::to_string(a.sac_count)
+                 + "|" + std::to_string(a.devour_count)
                  + "|" + std::to_string(a.chosen_x)
                  + "|" + std::to_string(static_cast<int>(a.ability_mode))
                  + "|" + std::to_string(a.enchant_target)
                  + "|" + tgt;
+        };
+        // The PLAN-level identity: its land, its face, and its actions' payload keys IN VECTOR
+        // ORDER. Everything payload_key distinguishes is distinguished here too, and the one thing
+        // it omits -- the float colour -- is therefore folded, which is exactly the axis being
+        // collapsed. Vector order rather than sorted, so cast-ORDER siblings stay DISTINCT and the
+        // seed-8 representative logic below keeps its job.
+        auto plan_identity = [&](const TurnSolver::Plan& p) -> std::string
+        {
+            std::string k = p.land_to_play + "|" + p.land_face + "#";
+            for (const Action& a : p.actions) { k += payload_key(a); k += ';'; }
+            return k;
         };
         // MTG_PLAY_CAP_PAYLOAD_COVER=0 disables this pass (the A/B control that shows the class is
         // real: with it off, a deep EDF go-off frame drops distinct blink (outlet, target) pairs
@@ -1368,8 +1396,45 @@ static void WriteDecisionJson(std::ostream& os, const GameState& s,
                 it->second.second = 1;
             }
         }
+        // FILL THE REST -- but not with the SAME PLAY in different mana.
+        //
+        // The two passes above are both colour-blind (payload_key omits the float colour; the
+        // name-multiset key cannot see it either), so each takes exactly one representative per
+        // distinct play. This pass then used to sweep up EVERY remaining plan in index order, and on
+        // a board with two any-colour sac outlets that is almost entirely colour permutation.
+        //
+        // MEASURED (candidate-B Fungus seed 12 gi 0 T4, two Utopia Mycons, cap 200): 200 plans
+        // emitted, 49 distinct plays once float colour is ignored, and 151 slots -- 76% of the
+        // human's menu -- holding the same plays in different mana, ONE of them appearing eighteen
+        // times. Because the cap is the menu, those 151 slots are 151 real, distinct plays the human
+        // never sees. Same defect as the seed-8 cast-order cap starvation, on a wider axis.
+        // USER 2026-09-25: "the chooser is pretty poor. We should have a cleaner way to choose the
+        // mode that is not multiplicative", and "I don't actually need the sacrifice option very
+        // often" -- the sacrifice they rarely want was crowding out the plays they do.
+        //
+        // NOTHING BECOMES UNREACHABLE. The colour is now a sub-choice dimension
+        // (TurnSolver::CheckLine, kind "color"), so the human commits the line and the existing
+        // dimension walk asks which colour -- one compact question instead of eighteen menu rows.
+        // That dimension is what makes this fold a display collapse rather than a narrowing, and it
+        // is why the two changes have to land together.
+        //
+        // MTG_PLAY_CAP_COLOR_FOLD=0 restores the old unfiltered fill (the A/B control, and the only
+        // way to reproduce a menu recorded before this). Capped mode only, so the uncapped protocol
+        // checker is byte-identical either way.
+        static const bool s_cap_color_fold = EnvOn("MTG_PLAY_CAP_COLOR_FOLD", true);
+        std::unordered_set<std::string> filled;
+        if (s_cap_color_fold)
+        {
+            // Seed with what the passes above already emitted, or their representatives' own
+            // identities would read as novel and the first sibling of each would still get in.
+            for (size_t e : emit_order) { filled.insert(plan_identity(plans[e])); }
+        }
         for (size_t i = 0; i < plans.size() && emit_order.size() < n_emit; ++i)
-        { if (!taken[i] && !hide_bundle[i]) { emit_order.push_back(i); } }
+        {
+            if (taken[i] || hide_bundle[i]) { continue; }
+            if (s_cap_color_fold && !filled.insert(plan_identity(plans[i])).second) { continue; }
+            emit_order.push_back(i);
+        }
         std::sort(emit_order.begin(), emit_order.end());
     }
     else

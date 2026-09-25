@@ -53697,6 +53697,60 @@ TurnSolver::LineCheck TurnSolver::CheckLine(const GameState& state_in, bool is_p
                            a.card_name + " devours", std::to_string(a.devour_count),
                            a.card_name, "devour");
                 }
+                // FLOAT COLOUR of a sac-for-mana activation (Utopia Mycon's "add one mana of any
+                // color"). Same shape and same failure as devour above, and by far the widest:
+                // WHICH colour the sacrifice floats had no sub, so the only way a human could say
+                // "{B}, not {G}" was to pick a DIFFERENT PLAN -- which is precisely why the
+                // enumeration has to fan a plan per colour per outlet, and why the menu drowns.
+                //
+                // MEASURED (candidate-B Fungus seed 12 gi 0 T4, two Utopia Mycons out, cap at its
+                // default 200): 200 plans emitted, 49 distinct plays once float colour is ignored,
+                // 151 slots -- 76% of the human's entire menu -- spent on pure colour permutations,
+                // with ONE play appearing eighteen times. Mycon adds any colour, so the ceiling is
+                // 5^n, not 2^n; that frame shows only {G}/{B} because those are the colours some
+                // cast could consume.
+                //
+                // This is not merely an ugly menu. It is the seed-8 display-cap defect on a much
+                // bigger axis (docs/design/searched-cast-order-not-reported.md): the cap keeps 200
+                // plans, so 151 slots holding the same play in different mana are 151 real, distinct
+                // plays pushed out of the menu entirely. USER 2026-09-25: "the chooser is pretty
+                // poor. We should have a cleaner way to choose the mode that is not multiplicative",
+                // and "I don't actually need the sacrifice option very often."
+                //
+                // With the colour expressible as a DIMENSION, variants differing only by it share a
+                // signature, collapse to one representative, and the viewer's existing dimension
+                // walk asks for it -- rendered as a compact list rather than N identical card
+                // thumbnails, because every choice here shares the source's art (the `sameCard`
+                // rule in renderDimPick). CheckLine is viewer-only (sole caller --validate-line),
+                // so this is GT-neutral; NARROWING the enumeration's colour fan would be a real play
+                // change and is deliberately NOT done here.
+                //
+                // ONLY WHEN THE HUMAN DECLARED THE SACRIFICE. An UNdeclared SacForMana is not a play
+                // the human chose -- the matcher treats it as an implicit one-shot mana source, "tap
+                // and sacrifice for a float, exactly like auto-tapping a land" (see the planSacs note
+                // above), and the pool sort already prefers the plan that does NOT spend it. We do
+                // not ask which land's face the engine tapped, so we must not ask which colour it
+                // floated either: doing so splits a pair the dedup was right to collapse and turns a
+                // correct auto-`accept` into a question about a sacrifice the human never asked for.
+                //
+                // Caught by test/scenarios/fungus_spore_activation_with_cast.json, which committed
+                // `cast=Thallid Shell-Dweller;cast=Sporesower Thallid` -- no sacrifice declared --
+                // and began returning `choose` between that line and the same line PLUS a Utopia
+                // Mycon sac. The scenario was right and the ungated sub was wrong.
+                //
+                // Declared (`sacout=Utopia Mycon; cast=...`), the colour IS the human's -- they
+                // committed the sacrifice, so which mana it makes is theirs to pick, and that is the
+                // case the dimension exists for.
+                //
+                // Also gated on a non-empty chosen_float_color, which only a SacForMana-class
+                // activation carries, so no other deck's signature moves.
+                if (sacout_declared && !a.chosen_float_color.str().empty())
+                {
+                    const std::string col = a.chosen_float_color.str();
+                    addSub(a.card_name + " float {" + col + "}",
+                           a.card_name + " floats", "{" + col + "}",
+                           a.card_name, "color");
+                }
                 // Maelstrom Archangel FREE CAST: with a banked charge, "pay for this spell" and
                 // "spend the bank on it" are two genuinely different lines (the freed mana funds
                 // other casts), and WHICH card eats the charge is the player's call. Without a sub

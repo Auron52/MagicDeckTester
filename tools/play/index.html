@@ -1070,7 +1070,17 @@ function activatableSources(){
       // entry and the picker never opened. USER 2026-09-25: "The choice is not given when both are
       // available." `act_label` is the engine's own wording for the ability (PermAbilityLabel) and
       // `sacout` separates the sac half, which carries no label of its own.
-      const actKey = (a.act_label || '') + (a.sacout ? '|sac'+(a.sac_count||1)+'|'+(a.float_color||'') : '');
+      // ...but NOT the float COLOUR. Which colour a sac-for-mana outlet floats used to be part of
+      // this key, so one Utopia Mycon offered a row per (count x colour) -- five rows for two
+      // abilities, and five COLOURS is the real ceiling since it adds "one mana of any color".
+      // USER 2026-09-25: "the chooser is pretty poor. We should have a cleaner way to choose the mode
+      // that is not multiplicative", and "I don't actually need the sacrifice option very often."
+      // The colour is a MEANS, not a mode: it is determined by what the rest of the line consumes,
+      // and it is now a `color` sub-choice dimension asked AFTER the line is committed (and usually
+      // already collapsed to one value by then, so it never surfaces). Dropping it here is the
+      // picker-level half of the same fold the emitted-plan cap does -- see
+      // docs/design/activation-picker-not-multiplicative.md.
+      const actKey = (a.act_label || '') + (a.sacout ? '|sac'+(a.sac_count||1) : '');
       const key = (a.verb||'cast')+'|'+(a.mode!=null?a.mode:'')+'|'+payload+'|'+actKey
                 + (a.verb==='blink' ? '|'+a.blink_target+'|'+(a.blink_count||1) : '');
       (opts[src]=opts[src]||{})[key] = { verb:a.verb||'cast', mode:(a.mode!=null?a.mode:null), name:payload,
@@ -1078,10 +1088,12 @@ function activatableSources(){
                                          // What the picker SHOWS for this ability. Without it two
                                          // abilities of one permanent render as the same bare card
                                          // name even once they stop deduping.
+                                         // No colour in the label either, for the same reason it is
+                                         // out of the key: the row would claim a colour the human
+                                         // has not chosen yet (it is asked after the commit).
                                          actLabel:(a.act_label
                                                    || (a.sacout ? ('sacrifice ' + (a.sac_count||1)
-                                                        + (a.float_color ? ' for {'+a.float_color+'}' : ''))
-                                                      : null)),
+                                                        + ' for mana') : null)),
                                          sacout:!!a.sacout,
                                          makesClue:!!a.makes_clue,
                                          blinkTarget:(a.verb==='blink' ? a.blink_target : undefined),
@@ -2794,7 +2806,7 @@ function renderChooseDialog(v, line){
     // Every relation word a dimension key can end with must be listed, or the leftover text is asked
     // of Scryfall as a card name and the header art comes back broken ("Natural Order sacrifices" is
     // not a card). Keep this in sync with the addSub() keys in TurnSolver::CheckLine.
-    const srcName = dim.key.replace(/\s*(\u2192|fetches|X|own targets|extra targets|splice|replicate|face|sacrifices|activations|equips to|counter|ability|modes|mode|strive|cost)\s*$/,'').trim();
+    const srcName = dim.key.replace(/\s*(\u2192|fetches|X|own targets|extra targets|splice|replicate|devours|floats|face|sacrifices|activations|equips to|counter|ability|modes|mode|strive|cost)\s*$/,'').trim();
     const crumbs = picks.length
       ? `<div class="chosen">${picks.map(p=>`<span class="crumb">${esc(p.key)} <b>${esc(p.label||p.choice)}</b></span>`).join('')}</div>`
       : '';
@@ -2824,7 +2836,7 @@ function renderChooseDialog(v, line){
     // dimension reports '—').
     const sameCard = choices.every(c => (c.card||'') === (choices[0].card||''));
     const listShape = sameCard || choices.some(c => !c.card)
-                   || ['modal','x','splice','replicate','devour','free','loyalty'].indexOf(dim.kind) >= 0;
+                   || ['modal','x','splice','replicate','devour','color','free','loyalty'].indexOf(dim.kind) >= 0;
     let h=`<div class="dimhead">${srcName?cardMini(srcName,'dimsrc'):''}`+
           `<div class="dimtext"><h3>${esc(dim.key)}?</h3>`+
           `<div class="sub">${total>1?`Decision ${step} of ${total} for this line — `:''}`+
