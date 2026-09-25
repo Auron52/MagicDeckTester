@@ -1033,3 +1033,106 @@ d2 `849fe310eb25c531`, d3 `8cb3f2dae18654c4`), smoke 93 passed / 0 failed / 0 co
 The firing counter (`[rollout-stats] dig_mana_last drops=`) exists because this family's standing trap
 is a narrowing whose digests match because it emitted nothing ([[digest-equality-can-mean-broken]]);
 a zero count prints `NO POWER` rather than letting silence read as neutrality.
+
+## 6. Three dead ends on the frontier, and one census bug worth more than the results (2026-09-25)
+
+USER, after §5 came back narrow: *"If it isn't paying off then let's try a different option."* Three
+options were priced. All three are dead, and the cheapest lesson is in how the first one nearly
+wasn't.
+
+### 6a. Rule 2 -- "skip candidates that play strictly less than an alternative"
+
+USER: *"We could also potentially skip candidates that play strictly less than an alternative."* /
+*"Since more is always better in this deck."*
+
+Censused before building (`MTG_PLANDOM_CENSUS`, default OFF) at the end of
+`EnumeratePlansWithLandUncached` -- the list whose SIZE IS the branching factor, so a plan dropped
+there removes a whole subtree. Three nested tiers, because "more is better" must be measured and not
+assumed: extras all land/permanent (the user's rule), extras also activations and non-permanent draws,
+extras unrestricted (an upper bound only -- that tier would prune a plan because a rival casts Skred).
+
+**THE FIRST NUMBERS WERE WRONG, AND THE BUG IS THE REUSABLE PART.** The axes key folded **4 of the 21**
+plan-level sub-decision fields. An omitted field in an EXACT-MATCH key is fail-**OPEN**: two genuinely
+different plans compare EQUAL, so every column inflates. The code carried a comment asserting the
+opposite ("an axis omitted here costs the census REACH, never correctness"), which is exactly backwards
+and is the same hazard `Dominance.h` documents for `GameState`/`Permanent`/`Player`. Snow makes it
+concrete: eight repeatable card-to-hand permanents mean `bp_all` / `bp_wave0` / `bp_sched` / `bp_base`
+/ `bp_self` are live on most frontiers, and all five were invisible.
+
+| on the same 17 ceiling-bound games | 4 of 21 axes | **all 21 axes** |
+|---|---:|---:|
+| exact duplicates | 9.97% | **0%** |
+| perm-only extras (the user's rule) | 61.8% | **32.0%** |
+| mean frontier width | 23.1 -> 8.8 | **29.3 -> 19.9** |
+| branching reduction | 2.62x | **1.47x** |
+
+So half the mass was an artifact, and the *free* half -- exact duplicates, which was to be built first
+because losslessness would have been provable rather than gated -- **does not exist at all**. Every
+apparent duplicate was two plans differing in an axis the key could not see.
+`static_assert(sizeof(TurnSolver::Plan) == 376)` now makes a new Plan field a BUILD FAILURE that lands
+the author at the key. That assert is the only reason the corrected numbers are trustworthy, which is
+the argument for keeping it despite the tripwire it puts on Plan.
+
+**Verdict: not built.** 1.47x of branching behind a full judgment gate (must-find, suite audit,
+held-out) is thin, and §6b is why the gate is the expensive part.
+
+### 6b. EOT state dominance on Snow -- the shelving condition opened, and the deck still says no
+
+`docs/design/eot-dominance-pruning.md` shelved `MTG_DOM_PRUNE` with an explicit re-open condition:
+*"don't re-measure unless production starts using unbounded budgets."* The value-leaf depth matrix runs
+`budget_ms: 0`, so the condition is MET, and `MTG_DOM_CENSUS` was armed alongside the census above at
+no extra cost.
+
+**Snow: 3,898,122 dominated of 133,833,782 EOT states = 2.91%.** That is mirrowing's shape (2.2%, which
+converted to 0.15% of the tree and a NET COST), not fivecolour's (18.1% -> 1.59x). The door opened and
+the evidence closed it again. Do not re-open it for this deck.
+
+### 6c. Letting ORDINARY plans skip a repeated post-apply state (MTG_FS_PRE_STATE_SKIP)
+
+`FSLineWin`'s frontier loop already computes every plan's post-apply state key, inserts it into
+`bp_seen_states`, and learns whether an earlier sibling reached it -- then discards the answer unless
+the plan carries a `bp_choice` ("Ordinary plans only RECORD"). The lever is that one condition. It is
+an IDENTITY relation, so unlike dominance the evaluator is irrelevant and the only failure mode is a
+key hole; it is a `continue` rather than an erase, so the positional `bp_base`/`bp_self` indices need
+no remap. `MTG_BP_WAVE_PROBE` already priced it -- no census needed -- at
+**`pre-plans dup=1393042/8489237` = 16.4%**.
+
+**USER, immediately and correctly: *"Don't we already do something like this with the transposition
+table?"*** Yes, and that is the entire answer. Five dedup mechanisms already exist (TT; `FSLineCache`;
+`MTG_CANON_SIMKEY`, default-ON, which collapses play-order permutations; the variant dedup; the m2
+host's `node_key_origin`, which has the identical record-never-skip gap). The call order is
+`apply -> BuildDedupKey(s) -> FSLineTail -> SimulateEndAndStartNextTurn(s2) -> FSLineWin(s2) ->
+BuildSimKey + lc->find`, so the duplicate's SUBTREE is already a cache hit and only the approach cost
+is left. The hypothesis was that the approach cost is CHARGED, which would convert into coverage on a
+unit-ceilinged cell -- the thing §5's lever could not do.
+
+**Measured, and the hypothesis is refuted.** 32 completing games of the H5 s8008 cell, both arms:
+
+| | off | on | |
+|---|---:|---:|---|
+| **charged units** | 68,842,378 | 68,842,478 | **1.0000x -- fewer on 0 of 25 games** |
+| play digests | | | 0 of 32 differ (identity held) |
+| wall | 1,198.4 s | 1,198.0 s | 0.9996x, median 0.9960x, 16/32 faster |
+| abandonment (49-game run) | 17/49 | 17/49 | 0 rescued, 0 lost |
+
+248,695 skips fired and removed **zero** simulated turn-steps. The skipped work was already being
+collapsed by the memos. And the one positive-looking figure -- ceiling-bound wall -- is **unstable
+across two runs of the same 17 games**: 0.9694x (34 jobs) vs 0.9036x (98 jobs), while the off-arm moved
+only 1.8%, so it is pool contention rather than the lever.
+
+**Verdict: kept, default OFF, measured NEGATIVE.** The firing counter stays so the next person can see
+it is live and still worthless.
+
+### Two process traps from this section
+
+1. **`MTG_SLOW_GAME_MS=0` SILENCES the per-game report; it is not a 0 ms threshold.** Three scripts
+   here set 0 expecting "report every game" and emitted no unit lines at all, which is why the first
+   49-game readout printed `NO PAIRED UNIT DATA` for its headline metric. Use `=1`. (The §5 unit
+   comparison is unaffected -- it read `[goldfish] ABANDONED` lines, a separate path.)
+2. **A firing counter with no PRINTER is not a firing counter.** The first `MTG_FS_PRE_STATE_SKIP` A/B
+   was read with the counter wired and never reported, so its 0.9694x had no evidence behind it that
+   the new path ran at all -- the standing trap in
+   [[digest-equality-can-mean-broken]]. Trace that it fires BEFORE reading any A/B.
+3. **Selecting the population for the metric makes the metric vacuous.** That same A/B sampled only
+   the 17 games that were ALREADY ceiling-bound and then reported "abandonment 17/17 -> 17/17" --
+   a result selected for, which also removed the marginal games where a rescue is the most likely.

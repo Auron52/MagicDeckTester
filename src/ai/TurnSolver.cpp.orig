@@ -26,7 +26,6 @@
 #include <cstdint>
 #include <cstdlib>
 #include <functional>
-#include <iterator>  // std::back_inserter (the plan-dominance census's set_difference sink)
 #include <climits>   // INT_MAX (the human pre-tap "flush the rest" sentinel)
 #include <limits>
 #include <memory>
@@ -781,25 +780,6 @@ static std::atomic<long long> g_bp_condemn_act_drops{0};
 // every drop is a candidate removed from the odometer, so the subsets over it are never enumerated.
 static std::atomic<long long> g_dig_mana_last_drops{0};
 static bool DigManaLastOn();   // defined with the predicate, beside AnyHandCastableNow
-// MTG_FS_PRE_STATE_SKIP firing counter: ORDINARY plans (bp_choice < 0) skipped on FSLineWin's frontier
-// because an earlier sibling already scored the same post-apply state. Zero with the lever on means the
-// rule never fired -- the standing trap in this family ([[digest-equality-can-mean-broken]]).
-static std::atomic<long long> g_fs_pre_state_skips{0};
-static bool FsPreStateSkipOn();   // defined with the skip, in FSLineWin's frontier loop
-// PLAN-LEVEL SUBSET DOMINANCE CENSUS (MTG_PLANDOM_CENSUS) -- prices the USER's rule 2026-09-25
-// ("skip candidates that play strictly less than an alternative. Since more is always better in this
-// deck") BEFORE anything is built, so that if the answer is "few" the idea costs a counter instead of
-// an implementation. Definitions and the three tiers live with the census itself, immediately above
-// EnumeratePlansWithLandUncached; these counters are at file scope only because the rollout-stats
-// reporter above reads them. Census ONLY -- it prunes nothing and cannot move play.
-static std::atomic<long long> g_plandom_nodes{0};      // frontiers examined
-static std::atomic<long long> g_plandom_plans{0};      // plans on them (the branching factor)
-static std::atomic<long long> g_plandom_dup{0};        // ...with an action multiset EQUAL to another's
-static std::atomic<long long> g_plandom_dup_ord{0};    // ...and in the SAME ORDER (a true duplicate, not a permutation)
-static std::atomic<long long> g_plandom_perm{0};       // ...a strict subset, extras all land/permanent
-static std::atomic<long long> g_plandom_nonskred{0};   // ...extras also activations/draws, never Skred
-static std::atomic<long long> g_plandom_any{0};        // ...extras unrestricted (the upper bound)
-static std::atomic<long long> g_plandom_capped{0};     // frontiers too wide for the O(n^2) scan
 // MTG_BP_NEW_ONLY firing counters (see BpDeriveContinuationList). `lists` = continuation lists the
 // filter saw, `seen` = entries, then where each entry went: dropped, or kept because it USES a card
 // that arrived at the breakpoint / casts a card the PLAN itself still has pending. A lever with no
@@ -1656,46 +1636,6 @@ namespace
                              " from hand and the pool could not fund both)\n";
                 if (g_dig_mana_last_drops.load() == 0)
                 { std::cerr << "  NO POWER -- the rule never fired.\n"; }
-            }
-            if (g_fs_pre_state_skips.load() > 0 || FsPreStateSkipOn())
-            {
-                std::cerr << "[rollout-stats] fs_pre_state_skip skips="
-                          << g_fs_pre_state_skips.load()
-                          << "  (ORDINARY frontier plans whose post-apply state an earlier sibling"
-                             " had already scored)\n";
-                if (g_fs_pre_state_skips.load() == 0)
-                {
-                    std::cerr << "  NO POWER -- the rule never fired. Any work delta is NOT this"
-                                 " lever. Check `bp_variants_here`: the skip lives inside it, so a"
-                                 " frontier carrying no breakpoint variant never computes the key.\n";
-                }
-            }
-            if (g_plandom_nodes.load() > 0)
-            {
-                const double np = static_cast<double>(g_plandom_plans.load());
-                const long long nn = g_plandom_nodes.load();
-                std::cerr << "[rollout-stats] plandom census: frontiers=" << nn
-                          << " plans=" << g_plandom_plans.load()
-                          << " (mean width " << (np / static_cast<double>(nn)) << ")"
-                          << "  capped=" << g_plandom_capped.load() << "\n";
-                auto pct = [np](long long v)
-                { return np > 0 ? (100.0 * static_cast<double>(v) / np) : 0.0; };
-                std::cerr << "  dup(equal multiset)  " << g_plandom_dup.load()
-                          << " (" << pct(g_plandom_dup.load()) << "%)\n"
-                          << "   ...of which SAME ORDER " << g_plandom_dup_ord.load()
-                          << " (" << pct(g_plandom_dup_ord.load())
-                          << "%)  <-- removable by construction; the rest are cast-order permutations\n"
-                          << "  perm-only extras     " << g_plandom_perm.load()
-                          << " (" << pct(g_plandom_perm.load()) << "%)   <-- the USER's rule\n"
-                          << "  + activations/draws  " << g_plandom_nonskred.load()
-                          << " (" << pct(g_plandom_nonskred.load()) << "%)\n"
-                          << "  any extras (BOUND)   " << g_plandom_any.load()
-                          << " (" << pct(g_plandom_any.load()) << "%)\n";
-                if (g_plandom_any.load() == 0)
-                {
-                    std::cerr << "  NO MASS -- no plan on any frontier was a strict subset of"
-                                 " another. The prune has nothing to remove.\n";
-                }
             }
             if (g_bp_newopt_samename.load() > 0 || BpCondemnNewOptByNameEnabled())
             {
@@ -6879,14 +6819,6 @@ static bool DigManaWantedInHand(const GameState& state, const ManaCost& act_cost
     }
     if (cheapest < 0) { return false; }               // nothing in hand wants this mana
     return static_cast<int>(pool.Total()) < cheapest + act_cost.ManaValue();
-}
-
-// MTG_FS_PRE_STATE_SKIP -- see the long rationale at the skip site in FSLineWin's frontier loop.
-// Per-job so one pooled batch can carry both arms (heurarm slot FS_PRE_STATE_SKIP).
-static bool FsPreStateSkipOn()
-{
-    static const bool env_on = EnvOn("MTG_FS_PRE_STATE_SKIP");
-    return heurarm::Flag(heurarm::FS_PRE_STATE_SKIP, env_on);
 }
 
 static bool DigManaLastOn()
@@ -19333,21 +19265,6 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
         // worlds) and only realises the effect if paid, so a stranded outlet is a no-op, not a phantom.
         // Skirk's MANA outlet (sac_outlet_add_mana_color set) is NOT emitted here -- it floats mana and
         // needs the mana-solver float path (separate follow-up); this pass is the value outlets only.
-        //
-        // Death-watcher drain is a property of the BOARD, not of the outlet, so it is memoised across
-        // the outlet loop below: candidate-B Fungus fields four Utopia Mycons plus Psychotrope,
-        // Vitaspore and Deathspore, every one of them asking the same "Saproling" question, and an
-        // un-memoised DrainPerDeathOfSubtype would walk the whole (wide) board once per outlet -- the
-        // board-level-scan-per-creature defect this session spent its optimisation rounds removing.
-        // Keyed on the subtype because that is its only outlet-dependent input.
-        std::vector<std::pair<std::string, int>> drain_memo;
-        auto drain_for = [&](const std::string& sub) -> int
-        {
-            for (const std::pair<std::string, int>& e : drain_memo) { if (e.first == sub) { return e.second; } }
-            const int d = DrainPerDeathOfSubtype(state, state.active_player_index, sub);
-            drain_memo.emplace_back(sub, d);
-            return d;
-        };
         for (const Permanent& src : state.battlefield)
         {
             if (src.controller_index != state.active_player_index) { continue; }
@@ -19702,23 +19619,13 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
                 // conservatism, as the damage-outlet burst below.
                 const int lethal_drain =
                     heurarm::Flag(heurarm::SAC_DRAIN_LETHAL, s_drain_lethal_env)
-                        ? drain_for(need_sub) : 0;
+                        ? DrainPerDeathOfSubtype(state, state.active_player_index, need_sub) : 0;
                 if (lethal_drain > 0)
                 {
                     const int opp_life = state.players[1 - state.active_player_index].life;
-                    const int kl = (opp_life + lethal_drain - 1) / lethal_drain;   // fewest lethal sacs
-                    // EMITTED ONLY WHEN THE LINE ACTUALLY WINS -- `kl > V` means the board cannot
-                    // reach lethal, and clamping to V there (what this did until 2026-09-25) is what
-                    // turned a SHORT-CIRCUIT into a menu WIDENER. USER: *"why would the short-circuit
-                    // increase enumeration? It should be an easy check that we potentially only even
-                    // do once per turn."* Exactly right, and the clamp was the reason it did not
-                    // behave like one: every state holding Slimefoot + any Saproling grew an extra
-                    // SacForMana action -- fanned out once PER CANDIDATE COLOUR for an any-colour
-                    // outlet like Utopia Mycon -- which the odometer then crossed with every other
-                    // choice. Gated on real lethality the emission is free by construction: in a
-                    // non-lethal state the menu is byte-identical, and in a lethal one the
-                    // board-lethal cut ends the turn's enumeration on the spot.
-                    if (kl <= V && kl >= 2 && kl != k) { emit_mana_burst(kl); }
+                    int kl = (opp_life + lethal_drain - 1) / lethal_drain;   // fewest lethal sacs
+                    if (kl > V) { kl = V; }
+                    if (kl >= 2 && kl != k) { emit_mana_burst(kl); }
                 }
             }
 
@@ -19735,7 +19642,7 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
             // dealt by OnCreatureDies, this only lets the burst be SIZED for it.
             const int drain_per =
                 heurarm::Flag(heurarm::SAC_DRAIN_LETHAL, s_drain_lethal_env)
-                    ? drain_for(need_sub) : 0;
+                    ? DrainPerDeathOfSubtype(state, state.active_player_index, need_sub) : 0;
             if (!is_mana_outlet && (sd->params.sac_outlet_damage + drain_per) > 0)
             {
                 const int D = sd->params.sac_outlet_damage + drain_per;
@@ -19748,15 +19655,7 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
                 }
                 const int opp_life = state.players[1 - state.active_player_index].life;
                 int k = (opp_life + D - 1) / D;   // ceil(opp_life / D): fewest sacs that could be lethal
-                if (k > V)
-                {
-                    // A DRAIN-ONLY burst (the outlet deals nothing itself -- every Fungus outlet)
-                    // exists solely to express a kill, so when the board cannot reach lethal there
-                    // is nothing to express and emitting a clamped, non-lethal burst only widens
-                    // the menu. A real damage outlet (Siege-Gang) keeps the sac-all-for-max-reach
-                    // clamp it has always had -- that path is byte-identical, arm on or off.
-                    k = (sd->params.sac_outlet_damage == 0) ? 0 : V;
-                }
+                if (k > V) { k = V; }             // cap at available victims (sac-all for max reach)
                 if (k >= 2)
                 {
                     Action b;
@@ -38508,204 +38407,6 @@ static std::vector<TurnSolver::Plan> EnumerateM2PlansBody(const GameState& state
     return plans;
 }
 
-static constexpr std::size_t kPlanDomAssertedSize = 376;   // pinned; see the static_assert below
-// ---- PLAN-LEVEL SUBSET DOMINANCE CENSUS (MTG_PLANDOM_CENSUS, default OFF) ----------------------
-//
-// USER 2026-09-25: *"We could also potentially skip candidates that play strictly less than an
-// alternative."* / *"Since more is always better in this deck."* This measures how much of the
-// frontier such a prune could remove, before any prune exists -- the census is the whole point, and
-// if the mass is small the idea dies for the price of these counters.
-//
-// WHY HERE AND NOT IN Solve::consider. The list this runs on is the one EnumeratePlansWithLand
-// hands the search, and its SIZE IS THE BRANCHING FACTOR: dropping a plan here removes an entire
-// subtree (a committed line, its rollout, its recursion). The same subset test inside
-// Solve::consider would save only a scoring pass, because consider keeps exactly one winner however
-// many subsets it is shown. The census sits after AppendBreakpointVariants/AppendSubdecisionAxes so
-// it sees the true frontier, variants included, rather than the pre-fan-out list.
-//
-// COMPARABILITY IS HANDLED BY FOLDING THE LAND DROP INTO THE MULTISET, which is exact rather than
-// a convention: two plans playing DIFFERENT lands each hold a key the other lacks, so neither is a
-// subset and they are automatically incomparable (right -- a Mountain is not more than a Forest);
-// "no land" vs "land X" leaves X as the lone extra, and a land drop is free, so the no-land plan
-// really is playing strictly less. fetch_target / land_face / rad_mode ride the land key, so two
-// plans that differ only in HOW a land arrives are incomparable too.
-//
-// THREE TIERS, because "more is better" is NOT uniformly true and a census that assumed it would be
-// measuring the assumption instead of the deck:
-//   perm     -- every extra action the dominator plays is a LAND DROP or a PERMANENT cast. This is
-//               the tier the user's own refinements circle, and the only one with no give-back: a
-//               permanent deployed is board the goldfish keeps.
-//   nonskred -- extras may ALSO be activations and non-permanent DRAW spells (*"anything that draws
-//               is also okay to play"*), but never a non-permanent that merely spends mana.
-//   any      -- extras unrestricted. Reported as the upper bound ONLY. Adopting this tier would
-//               prune a plan because a rival casts Skred -- *"which we should not cast"* -- i.e.
-//               exactly backwards for this deck.
-// The tiers NEST (perm <= nonskred <= any), so the gap between columns is itself the reading: it
-// says how much of the mass depends on counting an activation, or a wasted cast, as "more".
-//
-// The class rides the KEY's first character, so classifying a multiset difference is reading a char
-// rather than re-deriving a definition at a second site.
-static std::string PlanDomKey(const Action& a)
-{
-    char cls = 'A';   // activation, or any play whose payload is not a permanent on our board
-    if (a.kind == Action::Kind::PlayLand) { cls = 'P'; }
-    else if (a.kind == Action::Kind::CastFromHand || a.kind == Action::Kind::CastFromGraveyard)
-    {
-        const CardDefinition* d = a.def;
-        if (d == nullptr) { cls = 'N'; }   // unknown -> fail CLOSED (never counted as "more")
-        else
-        {
-            const bool perm  = !(d->card.IsInstant() || d->card.IsSorcery());
-            const bool draws = d->params.etb_self_draw > 0 || d->params.cast_draw > 0;
-            cls = perm ? 'P' : (draws ? 'A' : 'N');
-        }
-    }
-    std::string k(1, cls);
-    k += std::to_string(static_cast<int>(a.kind));
-    k += '|'; k += a.card_name.str();
-    k += '|'; k += std::to_string(a.sac_source_id);
-    k += '|'; k += a.tutor_target.str();
-    k += '|'; k += std::to_string(a.chosen_x);
-    return k;
-}
-
-// A new Plan field is INVISIBLE to the axes key above (fail-OPEN: it makes two different plans
-// compare equal and inflates every column). Pin the size so adding one is a build failure that lands
-// the author here -- the device Dominance.h uses for the same hazard on GameState/Permanent/Player.
-static_assert(sizeof(TurnSolver::Plan) == kPlanDomAssertedSize,
-              "TurnSolver::Plan changed: add the new field to PlanDomCensus's Xaxes key (an omitted "
-              "field silently over-counts the census), then update kPlanDomAssertedSize.");
-
-static void PlanDomCensus(const std::vector<TurnSolver::Plan>& all)
-{
-    static const bool s_on = EnvOn("MTG_PLANDOM_CENSUS");
-    if (!s_on || all.size() < 2) { return; }
-    // The scan is O(n^2) in the frontier width and this is instrumentation, so a pathological
-    // frontier is COUNTED rather than walked -- an unbounded census would reprice the run it is
-    // meant to measure.
-    static const int s_cap = EnvInt("MTG_PLANDOM_CAP", 512);
-    if (static_cast<int>(all.size()) > s_cap)
-    { g_plandom_capped.fetch_add(1, std::memory_order_relaxed); return; }
-
-    // Keys are INTERNED PER FRONTIER to small ints, and every comparison below runs on the ints.
-    // A string-compared version of this scan is O(width^2 x actions x strlen) per frontier and would
-    // reprice the very run it is measuring -- the census has to be cheap enough that its own cost is
-    // not the finding. The intern id carries the class in its low 2 bits so the tier test stays a
-    // mask rather than a second lookup.
-    std::unordered_map<std::string, int> intern;
-    std::vector<std::vector<int>> keys(all.size());
-    // `ordered` is the SAME keys in plan order, kept alongside the sorted multiset for one reason: a
-    // multiset-equal pair may be an ORDER PERMUTATION rather than a true duplicate, and cast order is
-    // load-bearing here (it decides which source pays, and a draw mid-sequence re-solves the phase).
-    // So the census must separate "the same play twice" from "the same cards in a different
-    // sequence" -- the first is removable by construction, the second is a real alternative and the
-    // engine has a whole canonicalisation lever (MTG_CANON_SIMKEY) for its state-level twin.
-    std::vector<std::vector<int>> ordered(all.size());
-    auto id_of = [&intern](const std::string& s, char cls) -> int
-    {
-        auto it = intern.find(s);
-        if (it != intern.end()) { return it->second; }
-        const int cbits = (cls == 'P') ? 0 : (cls == 'A' ? 1 : 2);   // 0 permanent, 1 activation, 2 waste
-        const int id    = (static_cast<int>(intern.size()) << 2) | cbits;
-        intern.emplace(s, id);
-        return id;
-    };
-    for (std::size_t i = 0; i < all.size(); ++i)
-    {
-        std::vector<int>& k = keys[i];
-        k.reserve(all[i].actions.size() + 2);
-        for (const Action& a : all[i].actions)
-        { const std::string s = PlanDomKey(a); k.push_back(id_of(s, s[0])); }
-        if (all[i].land_decided && !all[i].land_to_play.empty())
-        {
-            k.push_back(id_of("Pland|" + all[i].land_to_play + "|" + all[i].fetch_target + "|"
-                              + all[i].land_face + "|" + std::to_string(all[i].rad_mode), 'P'));
-        }
-        // EXACT-MATCH KEY for EVERY plan-level sub-decision axis, pushed unconditionally (including
-        // each field's "unset" -1/0), so two plans disagreeing on any axis each hold a key the other
-        // lacks and are incomparable. These are searched dimensions, not plays: a different
-        // breakpoint continuation or scry choice is a different LINE, not "less of the same line".
-        //
-        // AN OMITTED FIELD HERE IS FAIL-**OPEN**, WHICH IS WHY THE LIST IS EXHAUSTIVE AND ASSERTED.
-        // The first version of this census folded four fields (bp_choice, bp_at, dig_choice,
-        // etbdig_choice) of the twenty-one that exist, and carried a comment claiming an omission
-        // "costs REACH, never correctness". That is exactly backwards, and it is the same hazard
-        // Dominance.h documents: a field the key cannot see makes two DIFFERENT plans compare EQUAL,
-        // so `dup` and every subset tier are over-counted. Snow makes it concrete -- it has eight
-        // repeatable card-to-hand permanents, so bp_all / bp_wave0 / bp_sched / bp_base / bp_self are
-        // live on most frontiers, and all five were invisible. The static_assert below turns a newly
-        // added Plan field into a BUILD FAILURE rather than a silently inflated census.
-        {
-            std::string x = "Xaxes";
-            auto add  = [&x](long long v) { x += '|'; x += std::to_string(v); };
-            auto adds = [&x](const std::string& s) { x += '|'; x += s; };
-            const TurnSolver::Plan& pl = all[i];
-            add(pl.land_decided); adds(pl.land_to_play); adds(pl.fetch_target); adds(pl.land_face);
-            add(pl.rad_mode);     add(pl.scry_choice);   add(pl.etbdig_choice);
-            add(pl.tutor_choice); add(pl.tapmode_choice); add(pl.freshmode_choice);
-            add(pl.lackey_choice); add(pl.fling_victim_choice);
-            add(pl.tectonic_mode_choice); add(pl.tectonic_keep_choice);
-            add(pl.ponder_choice); add(pl.discard_choice); add(pl.vial_charge_choice);
-            add(pl.saga_target_choice); add(pl.saga_ch1_choice); add(pl.dig_choice);
-            add(pl.bp_choice); add(pl.bp_at); add(pl.bp_all); add(pl.bp_wave0);
-            add(pl.bp_sched);  add(pl.bp_base); add(pl.bp_self);
-            for (int s : pl.sac_pins)             { add(s); }
-            x += "|bpacts";
-            for (const Action& a : pl.breakpoint_actions) { adds(PlanDomKey(a)); }
-            for (const std::string& w : pl.would_drop)    { adds(w); }
-            add(pl.human_action_order);   // human-play only; present so the list is exhaustive
-            add(static_cast<long long>(pl.human_pre_taps.size()));
-            add(pl.human_untap_need);
-            k.push_back(id_of(x, 'N'));   // class 'N': could never be mistaken for "more"
-        }
-        ordered[i] = k;                     // plan order, before the sort destroys it
-        std::sort(k.begin(), k.end());
-    }
-
-    g_plandom_nodes.fetch_add(1, std::memory_order_relaxed);
-    g_plandom_plans.fetch_add(static_cast<long long>(all.size()), std::memory_order_relaxed);
-    std::vector<int> extra;
-    for (std::size_t i = 0; i < all.size(); ++i)
-    {
-        bool dup = false, dup_ord = false, perm = false, nonskred = false, any = false;
-        // No early exit once `perm` is found: the scan must still reach a j > i to decide `dup`, and
-        // a census whose columns are undercounted by a shortcut is worse than a slower census. The
-        // width cap above is what bounds the cost.
-        for (std::size_t j = 0; j < all.size(); ++j)
-        {
-            if (i == j) { continue; }
-            if (keys[i].size() > keys[j].size()) { continue; }
-            if (!std::includes(keys[j].begin(), keys[j].end(), keys[i].begin(), keys[i].end()))
-            { continue; }
-            if (keys[i].size() == keys[j].size())
-            {
-                // Equal multisets. Charge it to the LOWER index only, so a duplicate pair is one
-                // removable plan rather than two (deleting both would delete the line).
-                if (j > i) { dup = true; if (ordered[i] == ordered[j]) { dup_ord = true; } }
-                continue;
-            }
-            extra.clear();
-            std::set_difference(keys[j].begin(), keys[j].end(), keys[i].begin(), keys[i].end(),
-                               std::back_inserter(extra));
-            bool all_perm = true, all_nonskred = true;
-            for (int e : extra)
-            {
-                const int cls = e & 3;
-                if (cls != 0) { all_perm = false; }
-                if (cls == 2) { all_nonskred = false; }
-            }
-            any = true;
-            if (all_nonskred) { nonskred = true; }
-            if (all_perm)     { perm = true; }
-        }
-        if (dup)      { g_plandom_dup.fetch_add(1, std::memory_order_relaxed); }
-        if (dup_ord)  { g_plandom_dup_ord.fetch_add(1, std::memory_order_relaxed); }
-        if (perm)     { g_plandom_perm.fetch_add(1, std::memory_order_relaxed); }
-        if (nonskred) { g_plandom_nonskred.fetch_add(1, std::memory_order_relaxed); }
-        if (any)      { g_plandom_any.fetch_add(1, std::memory_order_relaxed); }
-    }
-}
-
 static std::vector<TurnSolver::Plan> EnumeratePlansWithLandUncached(const GameState& state,
                                                                     bool is_pre_combat)
 {
@@ -39523,7 +39224,6 @@ static std::vector<TurnSolver::Plan> EnumeratePlansWithLandUncached(const GameSt
     TRACE("plans", "T%d EnumeratePlansWithLand -> %zu plans (lands=%zu, hand=%zu)",
           state.turn_number, all.size(), land_names.size(), ap.hand.size());
     PROF_ADD(plans_generated, all.size());
-    PlanDomCensus(all);   // MTG_PLANDOM_CENSUS only; prunes nothing (see the census above)
     return all;
 }
 
@@ -45119,44 +44819,8 @@ static TurnSolver::SearchLine FSLineWin(const GameState& state, int depth, int m
             }
             if (dupe_trace_pre && fresh)
             { pre_key_origin.emplace(mk, std::make_pair(uint8_t(p.bp_choice >= 0 ? 2 : 0), DupeSig(p))); }
-            // MTG_FS_PRE_STATE_SKIP (default OFF): let an ORDINARY plan skip too, not just a variant.
-            //
-            // The key and `fresh` above are already computed for every plan on this frontier; today
-            // the answer is thrown away unless the plan carries a bp_choice, so an ordinary plan that
-            // lands on a state an earlier sibling already scored is simulated and priced again. That
-            // is pure recomputation: a node's value is a function of its STATE, not of the route
-            // taken to it, so the second arrival has the same future by construction.
-            //
-            // WHY THIS IS A DIFFERENT CLASS OF RISK FROM THE DOMINANCE PRUNE. This is an IDENTITY
-            // relation, so the evaluator is irrelevant -- which is exactly the assumption
-            // MTG_DOM_PRUNE needs and cannot have (it orders states by a leaf that is a greedy
-            // rollout plus a GBDT, neither monotone in resources; see eot-dominance-pruning.md).
-            // The only failure mode here is a KEY HOLE in BuildDedupKey, i.e. a future-determining
-            // field it cannot see colliding two genuinely different states -- findable and
-            // permanently fixable, and the existing variant dedup already stakes itself on the same
-            // key's completeness.
-            //
-            // NOT BYTE-IDENTICAL, and the mechanism is already measured rather than guessed. "A later
-            // equivalent state can only score worse" rests on the B&B cutoff only tightening, which is
-            // incomplete at a FINITE budget: a later sibling searches a warmer TT and can complete
-            // more search in the same ms. The ident_mismatch probe put that at 2,851 / 34.4M pairs
-            // (0.008%), 96% of it traced to the TT returning values computed under different
-            // alpha/beta bounds (MTG_TT_CAP=1 cut the rate 27x); ~0.003% survives with the caches
-            // capped, which bounds any real key hole. So the gate that means something here is
-            // MUST-FIND at --budget-ms 0, where truncation cannot confound it -- and that is also the
-            // budget the value-leaf depth matrix runs, so gate and workload coincide.
-            //
-            // It is a `continue`, not an erase, so bp_base / bp_self -- which ARE positional indices
-            // into `pre` and are explicitly remapped after MoveOrderPlans sorts -- are untouched.
-            const bool skip_dup = !fresh
-                && (p.bp_choice >= 0 || FsPreStateSkipOn());
-            if (skip_dup)
-            {
-                if (p.bp_choice < 0)
-                { g_fs_pre_state_skips.fetch_add(1, std::memory_order_relaxed); }
-                if (rec_vals) { node_vals.push_back(max_turns + 1); }
-                continue;
-            }
+            if (!fresh && p.bp_choice >= 0)
+            { if (rec_vals) { node_vals.push_back(max_turns + 1); } continue; }
         }
         // A plan that kills the active player via its own on-cast triggers (Eidolon of
         // the Great Revel) or self-damage cannot win: those triggers go on top of the
@@ -53389,13 +53053,6 @@ TurnSolver::LineCheck TurnSolver::CheckLine(const GameState& state_in, bool is_p
     std::vector<std::string> sortedSuspends = spec.suspends;
     std::sort(sortedSuspends.begin(), sortedSuspends.end());
     const bool suspend_declared   = !spec.suspends.empty();
-    // ADVENTURE (CR 715) -- compared UNCONDITIONALLY, unlike every verb around it. See the note on
-    // LineSpec::adventures: the adventure half is a CastFromHand of the same card as the creature,
-    // so an empty declaration cannot mean "legacy, match by name" -- by name they are identical.
-    // Empty means "cast the creature", and that has to be enforced or the viewer's plain cast could
-    // silently resolve as the adventure.
-    std::vector<std::string> sortedAdventures = spec.adventures;
-    std::sort(sortedAdventures.begin(), sortedAdventures.end());
     std::vector<std::string> sortedAnimates = spec.animates;
     std::sort(sortedAnimates.begin(), sortedAnimates.end());
     const bool animate_declared   = !spec.animates.empty();
@@ -53457,7 +53114,6 @@ TurnSolver::LineCheck TurnSolver::CheckLine(const GameState& state_in, bool is_p
         // >= 2) -- the flexible sacout fallback below only bends counts for these.
         std::vector<std::string> sacLoopNames;
         std::vector<std::string> attachAllNames, sfPutNames, channelNames, suspendNames;
-        std::vector<std::string> adventureNames;
         // One entry per Equip action: (equipment name, equipment m_number, host m_number). Matched
         // against spec.equips by EquipsMatch below, which honours the 0 wildcards.
         std::vector<LineSpec::EquipSpec> equipActs;
@@ -53506,10 +53162,6 @@ TurnSolver::LineCheck TurnSolver::CheckLine(const GameState& state_in, bool is_p
             { channelNames.push_back(a.card_name); continue; }
             if (suspend_declared && a.kind == Action::Kind::Suspend)
             { suspendNames.push_back(a.card_name); continue; }
-            // NO `continue`: an adventure IS a hand cast and still belongs in the cast multiset, so
-            // the human declares `cast=Brightcap Badger` exactly as they would for the creature and
-            // `adventure=` only picks the MODE (the bestow shape, not the channel shape).
-            if (a.adventure) { adventureNames.push_back(a.card_name); }
             if (animate_declared && a.kind == Action::Kind::AnimateLand)
             { animateNames.push_back(a.card_name); continue; }
             if (taptoken_declared && a.kind == Action::Kind::TapForTokenPay)
@@ -53612,11 +53264,6 @@ TurnSolver::LineCheck TurnSolver::CheckLine(const GameState& state_in, bool is_p
             std::vector<std::string> v2 = suspendNames;
             std::sort(v2.begin(), v2.end());
             if (v2 != sortedSuspends) { continue; }
-        }
-        {
-            std::vector<std::string> v2 = adventureNames;
-            std::sort(v2.begin(), v2.end());
-            if (v2 != sortedAdventures) { continue; }   // unconditional -- see sortedAdventures
         }
         if (animate_declared)
         {
@@ -53972,87 +53619,6 @@ TurnSolver::LineCheck TurnSolver::CheckLine(const GameState& state_in, bool is_p
                     addSub(a.card_name + " replicate+" + std::to_string(a.replicate_count),
                            a.card_name + " replicate", "+" + std::to_string(a.replicate_count),
                            a.card_name, "replicate");
-                }
-                // DEVOUR COUNT (CR 702.81, Mycoloth "Devour 2"): how many creatures the cast eats on
-                // the way in. Same shape and same failure as splice/replicate above -- every k
-                // enumerates as a CastFromHand of the same card name, so with no sub they shared a
-                // signature, the dedup below kept the first enumerated and the human's count was
-                // decided for them.
-                //
-                // USER-REPORTED (candidate-B Fungus, seed 9, 2026-09-25): "I still do not get to
-                // pick what is sacrificed to Mycoloth", and then, unambiguously: "For seed 9 I was
-                // given no choice of what to sacrifice PERIOD." Both halves of that are this sub.
-                // `--validate-line "cast=Mycoloth"` returned ONE variant with `"subs": []`, so the
-                // viewer auto-accepted it -- the count was committed silently, and because the
-                // resolution-time victim prompt only opens where the count leaves a genuine choice,
-                // devouring the whole board asked nothing either. The COUNT is the decision the card
-                // is about (this turn's attackers and Utopia Mycon fodder against a permanent
-                // +1/+1-counter engine), which is why EnumeratePlans fans it in autonomous play too
-                // and refuses to cap it -- and why collapsing it in the viewer was the one place the
-                // human lost it.
-                //
-                // Emitted for every k >= 0 (k = 0 is a real and frequently-correct line: the bodies
-                // are usually worth more attacking); -1 is the "not a devour cast" sentinel every
-                // other card carries and emits nothing, so no other deck's signature moves.
-                if (a.devour_count >= 0)
-                {
-                    addSub(a.card_name + " devour " + std::to_string(a.devour_count),
-                           a.card_name + " devours", std::to_string(a.devour_count),
-                           a.card_name, "devour");
-                }
-                // FLOAT COLOUR of a sac-for-mana activation (Utopia Mycon's "add one mana of any
-                // color"). Same shape and same failure as devour above, and by far the widest:
-                // WHICH colour the sacrifice floats had no sub, so the only way a human could say
-                // "{B}, not {G}" was to pick a DIFFERENT PLAN -- which is precisely why the
-                // enumeration has to fan a plan per colour per outlet, and why the menu drowns.
-                //
-                // MEASURED (candidate-B Fungus seed 12 gi 0 T4, two Utopia Mycons out, cap at its
-                // default 200): 200 plans emitted, 49 distinct plays once float colour is ignored,
-                // 151 slots -- 76% of the human's entire menu -- spent on pure colour permutations,
-                // with ONE play appearing eighteen times. Mycon adds any colour, so the ceiling is
-                // 5^n, not 2^n; that frame shows only {G}/{B} because those are the colours some
-                // cast could consume.
-                //
-                // This is not merely an ugly menu. It is the seed-8 display-cap defect on a much
-                // bigger axis (docs/design/searched-cast-order-not-reported.md): the cap keeps 200
-                // plans, so 151 slots holding the same play in different mana are 151 real, distinct
-                // plays pushed out of the menu entirely. USER 2026-09-25: "the chooser is pretty
-                // poor. We should have a cleaner way to choose the mode that is not multiplicative",
-                // and "I don't actually need the sacrifice option very often."
-                //
-                // With the colour expressible as a DIMENSION, variants differing only by it share a
-                // signature, collapse to one representative, and the viewer's existing dimension
-                // walk asks for it -- rendered as a compact list rather than N identical card
-                // thumbnails, because every choice here shares the source's art (the `sameCard`
-                // rule in renderDimPick). CheckLine is viewer-only (sole caller --validate-line),
-                // so this is GT-neutral; NARROWING the enumeration's colour fan would be a real play
-                // change and is deliberately NOT done here.
-                //
-                // ONLY WHEN THE HUMAN DECLARED THE SACRIFICE. An UNdeclared SacForMana is not a play
-                // the human chose -- the matcher treats it as an implicit one-shot mana source, "tap
-                // and sacrifice for a float, exactly like auto-tapping a land" (see the planSacs note
-                // above), and the pool sort already prefers the plan that does NOT spend it. We do
-                // not ask which land's face the engine tapped, so we must not ask which colour it
-                // floated either: doing so splits a pair the dedup was right to collapse and turns a
-                // correct auto-`accept` into a question about a sacrifice the human never asked for.
-                //
-                // Caught by test/scenarios/fungus_spore_activation_with_cast.json, which committed
-                // `cast=Thallid Shell-Dweller;cast=Sporesower Thallid` -- no sacrifice declared --
-                // and began returning `choose` between that line and the same line PLUS a Utopia
-                // Mycon sac. The scenario was right and the ungated sub was wrong.
-                //
-                // Declared (`sacout=Utopia Mycon; cast=...`), the colour IS the human's -- they
-                // committed the sacrifice, so which mana it makes is theirs to pick, and that is the
-                // case the dimension exists for.
-                //
-                // Also gated on a non-empty chosen_float_color, which only a SacForMana-class
-                // activation carries, so no other deck's signature moves.
-                if (sacout_declared && !a.chosen_float_color.str().empty())
-                {
-                    const std::string col = a.chosen_float_color.str();
-                    addSub(a.card_name + " float {" + col + "}",
-                           a.card_name + " floats", "{" + col + "}",
-                           a.card_name, "color");
                 }
                 // Maelstrom Archangel FREE CAST: with a banked charge, "pay for this spell" and
                 // "spend the bank on it" are two genuinely different lines (the freed mana funds
@@ -55363,52 +54929,4 @@ std::vector<std::string> TurnSolver::CanonicalNonSacCastOrder(const GameState& s
     names.reserve(order.size());
     for (int i : order) { names.push_back(plan.actions[i].card_name); }
     return names;
-}
-
-// THE ORDER THE PLAN WILL ACTUALLY BE CAST IN -- which for an ordering-searched plan is NOT the
-// canonical sort above.
-//
-// apply_plan_actions has two routes: `searched_order` casts in VECTOR order, everything else sorts
-// by CastOrderLess. BpPrepayPrefix already mirrors that split ("the vector order for a
-// searched_order plan, otherwise the canonical CastOrderLess sort"), and its comment says why
-// re-deriving it with separate logic is a lockstep hazard. The viewer's `cast_order_canonical` was
-// the one consumer that never got the split, so it reported the SORT for plans the engine executes
-// in vector order.
-//
-// USER-REPORTED (candidate-B Fungus, seed 8 game-index 0 turn 3, 2026-09-25): "The mana usage is
-// just bad in this line. It fails to keep the Peat Bog despite the fact that it isn't difficult to
-// do so." The committed plan cast Shroofus Sproutsire before Sol Ring, so the {2}{G} was paid off
-// Forest + Peat Bog's LAST depletion counter and the land was sacrificed -- while the Sol Ring the
-// same line cast sat untapped. Cast Sol Ring first and its own {C}{C} pays the {2}: Peat Bog lives.
-// Both orderings were enumerated (indices 444 and 445) and BOTH advertised
-// `cast_order_canonical: [Sol Ring, Shroofus Sproutsire]`, so nothing on the wire distinguished the
-// line that wastes a land from the line that does not. See
-// docs/design/searched-cast-order-not-reported.md.
-std::vector<std::string> TurnSolver::RealisedNonSacCastOrder(const GameState& state, const Plan& plan)
-{
-    if (!plan.searched_order) { return CanonicalNonSacCastOrder(state, plan); }
-    std::vector<std::string> names;
-    for (const Action& a : plan.actions)
-    {
-        if (a.kind == Action::Kind::CastFromHand && !a.sacrifice_land)
-        { names.push_back(a.card_name); }
-    }
-    return names;
-}
-
-bool TurnSolver::CastOrderIsCanonical(const GameState& state, const Plan& plan)
-{
-    // A plan that takes the canonical route IS canonical by construction.
-    if (!plan.searched_order) { return true; }
-    // Otherwise: would the stable_sort above be a no-op? `is_sorted` under the same comparator
-    // answers that exactly, in at most k-1 comparisons and with no allocation -- which matters
-    // because the display cap runs this over every plan of a go-off fan.
-    const Action* prev = nullptr;
-    for (const Action& a : plan.actions)
-    {
-        if (a.kind != Action::Kind::CastFromHand || a.sacrifice_land) { continue; }
-        if (prev != nullptr && CastOrderLess(state, a, *prev)) { return false; }
-        prev = &a;
-    }
-    return true;
 }
