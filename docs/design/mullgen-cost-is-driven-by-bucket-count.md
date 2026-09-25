@@ -261,3 +261,65 @@ because **the cost is K=22 and K is a property of the decklist.**
   198.9 s). Fixing that shortens each of the 3,044,192 rollouts; it does not reduce their number.
   Both are needed; neither substitutes for the other.
 * `docs/design/keepgen-no-off-switches.md` -- why the floor/cap schedule has no knob to cheapen.
+
+## UPDATE 2026-09-25d — the restart: discovery is 5x faster, and the journal was correctly REFUSED
+
+Relaunched overnight at the user's request (`bash scripts/mullgen.sh run
+decks/Fungus/candidate-b-2026-09 fast`, 13:04Z). Two things happened in the first twelve minutes,
+and they pull in opposite directions.
+
+### The optimisation work DID land where the user feels it
+
+USER 2026-09-24: *"Discovery is the one phase that we actually wait for."*
+
+| | first run (2026-09-24) | this restart |
+|---|---|---|
+| equivalence discovery, 8,800 rollouts | **3,484 s (58 min)** | **702 s (11.7 min)** |
+| buckets found | 22 | 22 |
+
+**4.96x on the same work**, from the three rounds of board-width fixes (`ebc09d8d`/`60f25db2`,
+`cb9b5ca3`, `64ff2b4e`). Discovery is dominated by exactly the wide-board rollouts those fixes
+target, and unlike the floor pass it is a FIXED amount of work — so the speedup shows up undiluted.
+This is the counterpoint to UPDATE 2026-09-25c's "1.53x on a cell bought 1.05x of the job": the same
+engine work is worth 5x on one phase and ~nothing on another, because the phases sample different
+regions of the cell space. **Report both, or the optimisation looks worthless when it is not.**
+
+K came back **22** again, unchanged — so the cost driver is a stable property of the decklist, not
+something that drifts run to run.
+
+### The journal was discarded, and that is the gate working
+
+```
+[keepgen] equivalence cache ... fingerprint MISMATCH -- re-discovering
+[keepgen] RESUME(journal): PLAY-DIGEST MISMATCH -- ... was rolled by play f1f8288da6dff73e,
+          this run plays e0ffdb608cd70b25 -- REFUSING (its rollouts are not this run's rollouts;
+          resuming would pool two engines into one sidecar)
+```
+
+93,096 banked cell-sides (6.1% of the floor pass) are gone. The cause is a genuine Fungus play
+change landed since the cache was written — `8fcee60e fix(fungus): Brightcap Badger's end-step
+Saproling never arrived` is the obvious candidate (Brightcap Badger is in this list and appears in
+the gen's own slow-log hands), with `6d793515 fix(sac)` a second possibility. Both are correctness
+fixes, so the old journal's labels were produced by an engine that mis-played a card in the deck.
+Refusing them is right; pooling them would have fitted the table to two different engines.
+
+Note the asymmetry with [[fungus-mulligan-adopted-2026-09-24]], where a killed gen DID resume across
+a moved HEAD: there the session's engine work was byte-identical and the digest recomputed to the
+same value. **`play_digest` is the thing to check, and it is a behavioural digest — a perf commit
+keeps it, a card fix does not.** The cached fingerprint's other fields (`disco_ver` 4, empty
+`policy_fp`) were unchanged; only the digest moved.
+
+### The consequence for a non-final list, stated plainly
+
+This is the third distinct cost this list has paid, and only one of them is about the engine:
+
+1. K=22 makes the floor pass weeks (UPDATE 2026-09-25b).
+2. Every correctness fix to a card in the deck invalidates all banked work.
+3. Discovery must be re-run on each such fix (now 12 min, was 58).
+
+Consequence 3 is now cheap. Consequence 2 is what makes a days-long generation on an
+actively-debugged list a losing race: the list is being hand-played to FIND card bugs, and each bug
+found resets the generation. That sharpens the existing conclusion (§"Pricing the fix", point 3)
+from *"not automatically worth generating for a non-final list"* to something stronger:
+**a list under active bug-hunting cannot hold a multi-day generation at all** — the two activities
+are mutually destructive, and the hand-played references are worth more than the keep table.

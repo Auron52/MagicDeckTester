@@ -337,3 +337,72 @@ swept in with the rest.** The fusion runs inside the apply, after the enumerator
 the sacrifice's mana — so paying `{4}` there would debit mana the subset's accounting never charged.
 That is the phantom-mana shape `MTG_SAC_NO_PHANTOM_FLOAT` was just fixed to remove. Widening to
 mana-costed makers requires the COST to be visible to the enumerator, not just to the apply.
+
+## OPEN — the fusion fires inside a line the human DECLARED (user ruling, 2026-09-25)
+
+**Not started.** Recorded here because the ruling is the user's and the diagnosis below is a
+*hypothesis*, not a verified cause — do not implement from it without reproducing first.
+
+### The report
+
+> *"So we get some weird behaviour where it creates and then immediately sacs the creature."*
+> *"It should only do one or the other."* *"(and the one I specified)"*
+
+Candidate-B Fungus, seed 12. The human declares `sacout=Utopia Mycon` and nothing else. The engine
+matches a plan in which it first removes three spore counters to make a Saproling and then eats that
+Saproling for `{G}` — two ability activations for one declared one.
+
+### Why this is a different complaint from the ones above
+
+Everything above this section is about the fusion being **too narrow** (*"We should probably not
+restrict it at all"*). This one is the opposite face of the same mechanism: under a **declared human
+line** the fusion is too **wide**, because it manufactures an activation the human did not ask for.
+
+That is not the `HUMAN PLAY NARROWS NOTHING` rule (CLAUDE.md) in tension with itself. That rule
+forbids hiding a legal menu entry from a human. Here nothing is hidden — the human is *given* an
+activation they did not declare, inside a line whose whole contract is "these are the plays I am
+making". The declared line is a specification, and the fusion silently adds a term to it.
+
+Note that the expressibility half is now CLOSED (`c2316d0f`, 2026-09-25): the two abilities are two
+separate click targets on the card — body = the spore ability, 🩸 tag = the sacrifice — so a human
+can say "spore only", "sacrifice only", or both, and each encodes distinctly. Before that commit the
+fusion was arguably covering for a menu that could not express the difference. It can now.
+
+### What is VERIFIED
+
+* `SacForMana` sacrifices **itself** (Lotus Bloom); `SacCreatureOutlet` eats a **different**
+  permanent (Skirk Prospector, Utopia Mycon) — `src/ai/TurnSolver.h:40-53`. The "an implicit mana
+  source needs no declaration" premise is sound for the first and wrong for the second.
+* The matcher treats them asymmetrically when the line does **not** declare an outlet
+  (`sacout_declared == false`, `src/ai/TurnSolver.cpp:53354`): an undeclared `SacForMana` is absorbed
+  silently by `++planSacs` (`:53488`), while an undeclared `SacCreatureOutlet` falls through to
+  `orderNames` and must therefore appear in the human's `cast=` multiset.
+* The seed-12 line **does** declare its outlet, so it takes the `sacout_declared` branch at `:53479`
+  and the asymmetry above is NOT what admits it. The fusion is the remaining suspect.
+* The fusion's gate (`src/ai/TurnSolver.cpp` ~19397) fires exactly when `victim_id < 0` — i.e. the
+  board offers no victim at all — and then sets `kSameLineSacVictim`, resolved and created at apply
+  time (`src/core/SpellEffects.h:11519`).
+
+### The HYPOTHESIS (unverified)
+
+T4 of that game also holds `cast: Tukatongue Thallid`, whose ETB creates a 1/1 Saproling. If the
+`victim_id < 0` test is answered against the **pre-line** board, the fusion fires believing there is
+no fodder while the line's own cast is about to supply some — so the engine spends three spore
+counters it did not need to spend. That would make the visible symptom ("creates, then immediately
+sacs") a *second*, redundant Saproling rather than a wrong one.
+
+**This has not been reproduced.** Confirm the ordering first: the enumerator's board state at
+`~19397` versus the position of the fodder-making cast in the plan. If the ordering turns out to be
+fine, the cause is elsewhere and this paragraph is wrong.
+
+### The shape a fix should take
+
+Gate the fusion on the **declaration**, not on `HumanPlayActive()`. A blanket human-play gate is the
+wrong instrument twice over: it would also remove the fusion from lines where the human genuinely
+wants it, and it makes the engine play differently for a human than for itself, which is the failure
+the viewer exists to catch rather than to cause. The precise statement is: *when the line is
+human-declared, a fused fodder-maker activation is legal only if that activation is itself declared.*
+Both halves are now expressible in the viewer, so this costs the human nothing.
+
+Carries reference-drift risk (it removes plans the matcher can currently reach), so it needs its own
+regression + viewer-protocol gate, not just a scenario.
