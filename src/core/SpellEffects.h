@@ -4069,6 +4069,29 @@ namespace tokenstats
         }
     };
     inline Dumper g_dumper;
+
+    // PERIODIC PROGRESS (MTG_TOKEN_STATS only -- zero cost unset, and behind the same On() test
+    // CreateTokenFromProto already performs, so it adds one masked compare on a path that is
+    // already paying an atomic increment).
+    //
+    // It exists because the workload that matters cannot be measured by running it to completion:
+    // the ten worst candidate-B keep cells take 1.7-7.1 HOURS each, and the short cells are a
+    // DIFFERENT workload. Profiled 2026-09-25, the worst cells are token-churn-bound (_M_erase
+    // 26.0% self, CreateTokenFromProto 17.8%) while an 8-cell 15-43 s basket is enumeration-bound
+    // (6.0% / 4.8%, with the Subset* predicates on top). Churn only appears once a rollout has
+    // built a 200-wide board, which is a late-game property, so no short cell is a proxy for it.
+    // Emitting "tokens so far" against a monotonic clock turns the worst cells themselves into a
+    // fixed-duration THROUGHPUT probe: same cell, same seed, same deterministic sequence of work,
+    // so tokens/s is directly comparable between two binaries. The alternative -- reading the
+    // counter out of a live process -- needs ptrace, which this container forbids (yama
+    // ptrace_scope=1 with a read-only /proc/sys).
+    inline const std::chrono::steady_clock::time_point g_t0 = std::chrono::steady_clock::now();
+    inline void Progress(unsigned long long n)
+    {
+        const double s = std::chrono::duration<double>(std::chrono::steady_clock::now() - g_t0).count();
+        std::fprintf(stderr, "[token-progress] tokens=%llu t=%.2f\n", n, s);
+    }
+    inline constexpr unsigned long long kProgressMask = (1ull << 20) - 1;   // every ~1.05M tokens
 }
 
 inline void FireCreatureEnterWatchers(GameState& state, int entered_controller, int entered_index)
@@ -4789,7 +4812,12 @@ inline TokenProto BuildTokenProto(int                              power,
 // BuildTokenProto above. The token number still advances exactly one per body, in the same order.
 inline void CreateTokenFromProto(GameState& state, int controller_index, const TokenProto& proto)
 {
-    if (tokenstats::On()) { tokenstats::g_tokens.fetch_add(1, std::memory_order_relaxed); }
+    if (tokenstats::On())
+    {
+        const unsigned long long prev =
+            tokenstats::g_tokens.fetch_add(1, std::memory_order_relaxed);
+        if ((prev & tokenstats::kProgressMask) == 0) { tokenstats::Progress(prev); }
+    }
     Permanent token;
     token.card              = proto.card;                  // interned name -> a handle copy
     token.card.m_number     = state.next_token_number++;   // unique per-copy id (GameState.h note)
@@ -4989,8 +5017,18 @@ inline void PerformEndStepLifegainTokens(GameState& state)
     // gained) from a full battlefield walk with a LookupCached per permanent into one integer test.
     // Byte-identical by construction: the scan creates nothing and mutates nothing, and the counter
     // it gates on cannot be changed by walking the board.
+    //
+    // ...AND THE PREMISE OF THAT PARAGRAPH EXPIRED (fixed 2026-09-25). "Every one of these triggers
+    // is worded 'if you gained life this turn'" was true on 2026-09-19 and false as soon as
+    // Brightcap Badger landed: its trigger reads NO condition (endstep_tokens_unconditional, tested
+    // per-card below), so this early-out returned before the test that was supposed to exempt it and
+    // the Badger's end-step Saproling never arrived on a deck that gains no life -- i.e. on
+    // candidate-B Fungus, every game. USER-REPORTED in the play viewer: "It doesn't even produce
+    // saprolings at the end of turn." The skip is still correct and still worth having for the
+    // CONDITIONAL family, so it is gated on the per-GAME stamp rather than removed; that stamp is
+    // false for every deck without such a card, which keeps their fast path byte-identical.
     const int gained_this_turn = state.players[active].life_gained_this_turn;
-    if (gained_this_turn <= 0) { return; }
+    if (gained_this_turn <= 0 && !state.deck_has_unconditional_endstep_tokens) { return; }
     // Snapshot the TRIGGERING definitions first: the tokens created below push_back onto the
     // battlefield (invalidating references) and, for a copy of an Ajani's Pridemate token, resolve
     // to a real definition -- neither may add a trigger to this turn's set.

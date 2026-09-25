@@ -1011,6 +1011,9 @@ void GoldFishRunner::StampDeckTraits(GameState& state, const Decklist& deck)
         // the loop's per-permanent `enter_watcher` byte is computed from, which is what makes the
         // skip byte-identical by construction rather than by measurement.
         bool creature_enter_watcher = false;
+        // Brightcap Badger's unconditional end-step trigger -- gates the hoisted lifegain
+        // early-out in PerformEndStepLifegainTokens (see GameState::deck_has_unconditional_endstep_tokens).
+        bool uncond_endstep = false;
         auto scan = [&](const std::vector<Card>& zone)
         {
             for (const Card& c : zone)
@@ -1033,6 +1036,8 @@ void GoldFishRunner::StampDeckTraits(GameState& state, const Decklist& deck)
                 if (d->params.doubles_tokens)   { token_doubler = true; }
                 if (d->params.doubles_counters) { counter_doubler = true; }
                 if (DefHasCreatureEnterWatcher(d->params)) { creature_enter_watcher = true; }
+                if (d->params.endstep_tokens_unconditional && d->params.endstep_lifegain_tokens > 0)
+                { uncond_endstep = true; }
             }
         };
         scan(deck.mainboard);
@@ -1042,6 +1047,8 @@ void GoldFishRunner::StampDeckTraits(GameState& state, const Decklist& deck)
         state.deck_has_dragon_ping       = garth || dragon_ping;
         state.deck_has_sac_mana_outlet   = garth || sac_mana_outlet;
         state.deck_has_mana_grant        = garth || mana_grant;
+        // Garth can COPY a card, so he holds every gate open -- same treatment as the five above.
+        state.deck_has_unconditional_endstep_tokens = garth || uncond_endstep;
         // MTG_ETB_WATCHER_GATES (default ON): with the lever off the two new flags stay at their
         // GameState default of TRUE, i.e. both scans keep running exactly as before -- which is the
         // control arm of the cost A/B, carried per job so one pooled batch measures both.

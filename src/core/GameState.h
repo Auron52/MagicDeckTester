@@ -350,6 +350,25 @@ struct GameState
     // partially built GameState) keeps the scan and stays correct, it just does not skip work.
     // Erring the other way would silently drop mana the board really has.
     bool                     deck_has_mana_grant        = true;   // granted_tap_mana_subtypes in the list
+    // Brightcap Badger again, for its OTHER half. PerformEndStepLifegainTokens opens with a hoisted
+    // `if (life_gained_this_turn <= 0) return;`, added 2026-09-19 and justified in its own comment
+    // as byte-identical because "EVERY one of these triggers is worded 'if you gained life this
+    // turn'". The Badger, authored afterwards, falsified that premise: its trigger reads no
+    // condition at all (endstep_tokens_unconditional), so the early-out swallowed it outright and
+    // on candidate-B Fungus -- a deck that gains no life -- the end-step Saproling NEVER arrived.
+    // USER-REPORTED in the play viewer, 2026-09-25: "It doesn't even produce saprolings at the end
+    // of turn."
+    //
+    // The early-out is still worth keeping for the conditional family (it turns the common no-life
+    // turn into one integer test instead of a board walk with a LookupCached per permanent), so it
+    // is gated on this stamp rather than deleted. Stamped false when no card in the list carries
+    // endstep_tokens_unconditional -- every deck but this one -- which keeps their fast path
+    // byte-identical by construction.
+    //
+    // DEFAULTS TRUE, the same safety direction as its siblings above: an unstamped state (a unit
+    // test, a --scenario board) does the scan and stays CORRECT, it merely skips no work. Erring
+    // the other way is precisely the bug this field exists to fix.
+    bool                     deck_has_unconditional_endstep_tokens = true;
     // TWO MORE OF THE SAME, found 2026-09-19 by re-reading the cascade after the three above were
     // added. Those three closed the walks whose guard sat OUTSIDE the loop; these two are the ones
     // whose guard sits INSIDE it, which is the same defect wearing a param check:

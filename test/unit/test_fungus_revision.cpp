@@ -1440,3 +1440,199 @@ TEST_CASE("The creature-enter watcher cascade is gated per DECK, and the gate is
         CHECK_FALSE(Def("Brightcap Badger").enter_watcher);
     }
 }
+
+// -------------------------------------------------------------------------------------------
+// Brightcap Badger's END STEP trigger -- USER-REPORTED 2026-09-25: "It doesn't even produce
+// saprolings at the end of turn."
+//
+// The trigger reads NO condition ("At the beginning of your end step, create a 1/1 green Saproling
+// creature token"), which is exactly what endstep_tokens_unconditional encodes. It shares
+// PerformEndStepLifegainTokens with the Ocelot Pride family, and on 2026-09-19 that function gained
+// a hoisted early-out -- `if (life_gained_this_turn <= 0) return;` -- justified in its own comment
+// as "byte-identical by construction" because "EVERY one of these triggers is worded 'if you gained
+// life this turn'". That was true when it was written and the Badger, added afterwards, falsified
+// it: the early-out returns before the per-card unconditional check can run, so on a deck that
+// gains no life -- which is candidate-B Fungus every game -- the trigger never fired at all.
+//
+// There was no test that the trigger FIRES; the existing Badger tests check the card data and the
+// Frolic payload only. That is the hole this closes.
+TEST_CASE("Brightcap Badger: the end-step Saproling arrives WITHOUT any lifegain")
+{
+    EnsureCardsLoaded();
+
+    SUBCASE("no life gained this turn -- the trigger is unconditional and must still fire")
+    {
+        GameState s = Fresh();
+        Put(s, "Brightcap Badger", 0, 40);
+        s.players[0].life_gained_this_turn = 0;   // candidate-B Fungus, every turn
+        PerformEndStepLifegainTokens(s);
+        CHECK(CountSaprolings(s) == 1);
+    }
+
+    SUBCASE("it is still doubled by Doubling Season -- it rides the universal cascade")
+    {
+        GameState s = Fresh();
+        Put(s, "Brightcap Badger", 0, 40);
+        Put(s, "Doubling Season", 0, 90);
+        s.players[0].life_gained_this_turn = 0;
+        PerformEndStepLifegainTokens(s);
+        CHECK(CountSaprolings(s) == 2);
+    }
+
+    SUBCASE("two Badgers are two triggers")
+    {
+        GameState s = Fresh();
+        Put(s, "Brightcap Badger", 0, 40);
+        Put(s, "Brightcap Badger", 0, 41);
+        s.players[0].life_gained_this_turn = 0;
+        PerformEndStepLifegainTokens(s);
+        CHECK(CountSaprolings(s) == 2);
+    }
+
+    SUBCASE("controller-scoped: the opponent's Badger does not make US a Saproling")
+    {
+        GameState s = Fresh();
+        Put(s, "Brightcap Badger", 1, 40);
+        s.players[0].life_gained_this_turn = 0;
+        PerformEndStepLifegainTokens(s);          // active player is 0
+        CHECK(CountSaprolings(s) == 0);
+    }
+
+    SUBCASE("the CONDITIONAL family is untouched -- no lifegain still means no Cat")
+    {
+        // The early-out exists for this case and must keep working: Ocelot Pride reads
+        // "if you gained life this turn", so a turn with none fires nothing.
+        GameState s = Fresh();
+        Put(s, "Ocelot Pride", 0, 50);
+        s.players[0].life_gained_this_turn = 0;
+        PerformEndStepLifegainTokens(s);
+        CHECK(s.battlefield.size() == 1);         // just the Pride
+    }
+
+    SUBCASE("...and still fires when life WAS gained")
+    {
+        GameState s = Fresh();
+        Put(s, "Ocelot Pride", 0, 50);
+        s.players[0].life_gained_this_turn = 3;
+        PerformEndStepLifegainTokens(s);
+        CHECK(s.battlefield.size() > 1);
+    }
+}
+
+// -------------------------------------------------------------------------------------------
+// Brightcap Badger's MANA GRANT -- USER-REPORTED 2026-09-25: "Brightcap Badger turning critters
+// into mana producers is not working."
+//
+// "Each Fungus and Saproling you control has '{T}: Add {G}.'" The population it exists to affect is
+// entirely TOKENS, which have no CardDefinition, so the grant is resolved through the shared mana
+// oracle against the permanent's own Card. These assertions pin the end-to-end answer -- what
+// AvailableManaPool actually reports -- rather than the predicate in isolation, because the
+// predicate was already right when the report came in.
+TEST_CASE("Brightcap Badger: the grant turns Saprolings into {G} sources in the real pool")
+{
+    EnsureCardsLoaded();
+
+    SUBCASE("no Badger -- a Saproling token taps for nothing (the baseline)")
+    {
+        GameState s = Fresh();
+        PutSaprolingToken(s, 60, /*sick=*/false);
+        CHECK(AvailableManaPool(s).Total() == 0);
+    }
+
+    SUBCASE("Badger on board -- a settled Saproling token is a {G} source")
+    {
+        GameState s = Fresh();
+        Put(s, "Brightcap Badger", 0, 40);
+        PutSaprolingToken(s, 60, /*sick=*/false);
+        CHECK(AvailableManaPool(s).green >= 1);
+    }
+
+    SUBCASE("the grant scales with the board -- four settled Saprolings are four {G}")
+    {
+        GameState s = Fresh();
+        Put(s, "Brightcap Badger", 0, 40);
+        for (int i = 0; i < 4; ++i) { PutSaprolingToken(s, 60 + i, /*sick=*/false); }
+        CHECK(AvailableManaPool(s).green >= 4);
+    }
+
+    SUBCASE("CR 302.6 -- a Saproling created THIS turn cannot use a granted {T}")
+    {
+        // This is correct behaviour, not a bug, and it is the single most likely thing to look
+        // like one at the table: the deck's tokens arrive summoning-sick and the grant is a {T}
+        // ability. Pinned so the fix for the report above can never "fix" it by removing the rule.
+        GameState s = Fresh();
+        Put(s, "Brightcap Badger", 0, 40);
+        PutSaprolingToken(s, 60, /*sick=*/true);
+        CHECK(AvailableManaPool(s).green == 0);
+    }
+
+    SUBCASE("...and a haste grant lifts it -- the Concordant Crossroads interaction")
+    {
+        GameState s = Fresh();
+        Put(s, "Brightcap Badger", 0, 40);
+        Put(s, "Concordant Crossroads", 0, 91);
+        PutSaprolingToken(s, 60, /*sick=*/true);
+        CHECK(AvailableManaPool(s).green >= 1);
+    }
+
+    SUBCASE("the grant reaches FUNGUS too, not just Saprolings -- both subtypes are listed")
+    {
+        GameState s = Fresh();
+        Put(s, "Brightcap Badger", 0, 40);
+        Put(s, "Thallid", 0, 61, /*sick=*/false);     // a Fungus creature card
+        CHECK(AvailableManaPool(s).green >= 1);
+    }
+
+    SUBCASE("controller-scoped -- the opponent's Saproling is not OUR mana")
+    {
+        GameState s = Fresh();
+        Put(s, "Brightcap Badger", 0, 40);
+        const int idx = PutSaprolingToken(s, 60, /*sick=*/false);
+        s.battlefield[static_cast<std::size_t>(idx)].controller_index = 1;
+        s.battlefield[static_cast<std::size_t>(idx)].owner_index      = 1;
+        CHECK(AvailableManaPool(s).green == 0);
+    }
+}
+
+// The VIEWER's half of the same question. HumanPreTapFaces is what decides whether a permanent is
+// clickable as a mana source in the play GUI, and its own comment says it "MUST match the payer,
+// not merely approximate it ... a human offered fewer faces than the search can use would be shown
+// a board they cannot play." The user's report is exactly that symptom, so pin the two together.
+TEST_CASE("Brightcap Badger: the viewer offers the granted tap the payer would take")
+{
+    EnsureCardsLoaded();
+
+    SUBCASE("a settled Saproling token is hand-tappable for {G}")
+    {
+        GameState s = Fresh();
+        Put(s, "Brightcap Badger", 0, 40);
+        const int idx = PutSaprolingToken(s, 60, /*sick=*/false);
+        CHECK(HumanPreTapFaces(s, s.battlefield[static_cast<std::size_t>(idx)]) == "G");
+    }
+
+    SUBCASE("...and the engine's pool agrees -- viewer and payer answer the same question")
+    {
+        GameState s = Fresh();
+        Put(s, "Brightcap Badger", 0, 40);
+        const int idx = PutSaprolingToken(s, 60, /*sick=*/false);
+        const bool viewer_offers = !HumanPreTapFaces(s, s.battlefield[static_cast<std::size_t>(idx)]).empty();
+        const bool payer_counts  = AvailableManaPool(s).green >= 1;
+        CHECK(viewer_offers == payer_counts);
+    }
+
+    SUBCASE("a sick Saproling is offered NOTHING -- and the payer does not count it either")
+    {
+        GameState s = Fresh();
+        Put(s, "Brightcap Badger", 0, 40);
+        const int idx = PutSaprolingToken(s, 60, /*sick=*/true);
+        CHECK(HumanPreTapFaces(s, s.battlefield[static_cast<std::size_t>(idx)]).empty());
+        CHECK(AvailableManaPool(s).green == 0);
+    }
+
+    SUBCASE("no Badger -- not clickable")
+    {
+        GameState s = Fresh();
+        const int idx = PutSaprolingToken(s, 60, /*sick=*/false);
+        CHECK(HumanPreTapFaces(s, s.battlefield[static_cast<std::size_t>(idx)]).empty());
+    }
+}
