@@ -1,0 +1,386 @@
+{
+  "seed": 10, "game_index": 9, "win_turn": 5, "won": true,
+  "mulligan": { "count": 1, "bottom": [47] },
+  "decisions": [
+    { "chosen": 0, "decision": {
+  "decision_index": 0,
+  "type": "mulligan",
+  "turn": 0,
+  "me": { "life": 20, "battlefield": [] },
+  "opponent": { "life": 20, "battlefield": [] },
+  "mulligan_count": 0,
+  "on_the_play": true,
+  "to_bottom": 0,
+  "hand": [{ "num": 57, "name": "Vitaspore Thallid" }, { "num": 43, "name": "Sporecrown Thallid" }, { "num": 53, "name": "Utopia Mycon" }, { "num": 31, "name": "Psychotrope Thallid" }, { "num": 54, "name": "Utopia Mycon" }, { "num": 11, "name": "Doubling Season" }, { "num": 9, "name": "Deathspore Thallid" }],
+  "ai_choice": 0,
+  "note": "reply 1 to KEEP this hand (then bottom 0 card(s)), or 0 to mulligan again"
+}
+},
+    { "chosen": 1, "decision": {
+  "decision_index": 1,
+  "type": "mulligan",
+  "turn": 0,
+  "me": { "life": 20, "battlefield": [] },
+  "opponent": { "life": 20, "battlefield": [] },
+  "mulligan_count": 1,
+  "on_the_play": true,
+  "to_bottom": 1,
+  "hand": [{ "num": 52, "name": "Undercellar Myconid" }, { "num": 47, "name": "Tukatongue Thallid" }, { "num": 36, "name": "Secluded Courtyard" }, { "num": 8, "name": "Concordant Crossroads" }, { "num": 37, "name": "Secluded Courtyard" }, { "num": 3, "name": "Blooming Marsh" }, { "num": 45, "name": "Sporecrown Thallid" }],
+  "ai_choice": 1,
+  "note": "reply 1 to KEEP this hand (then bottom 1 card(s)), or 0 to mulligan again"
+}
+},
+    { "chosen": 1, "decision": {
+  "decision_index": 2,
+  "type": "bottom",
+  "turn": 0,
+  "me": { "life": 20, "battlefield": [] },
+  "opponent": { "life": 20, "battlefield": [] },
+  "bottom_step": 0,
+  "bottom_total": 1,
+  "hand": [{ "num": 52, "name": "Undercellar Myconid", "win_optimal": true }, { "num": 47, "name": "Tukatongue Thallid", "win_optimal": true }, { "num": 36, "name": "Secluded Courtyard", "win_optimal": true }, { "num": 8, "name": "Concordant Crossroads", "win_optimal": true }, { "num": 37, "name": "Secluded Courtyard", "win_optimal": true }, { "num": 3, "name": "Blooming Marsh", "win_optimal": true }, { "num": 45, "name": "Sporecrown Thallid", "win_optimal": true }],
+  "ai_choice": { "index": 2, "num": 36, "name": "Secluded Courtyard" },
+  "ai_set": [],
+  "note": "reply the hand INDEX (0-based) of the card to put on the bottom (step 1 of 1)"
+}
+},
+    { "chosen": 0, "decision": {
+  "decision_index": 3,
+  "main_ordinal": 0,
+  "type": "main_phase",
+  "turn": 1,
+  "phase": "pre_main",
+  "on_the_play": true,
+  "mdfc_backs": ["Boulderloft Pathway", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [], "vial_counters": [], "hand": [{ "num": 3, "name": "Blooming Marsh", "cost": "", "mv": 0, "kind": "land" }, { "num": 8, "name": "Concordant Crossroads", "cost": "{G}", "mv": 1, "kind": "permanent" }, { "num": 36, "name": "Secluded Courtyard", "cost": "", "mv": 0, "kind": "land" }, { "num": 37, "name": "Secluded Courtyard", "cost": "", "mv": 0, "kind": "land" }, { "num": 45, "name": "Sporecrown Thallid", "cost": "{1}{G}", "mv": 2, "kind": "permanent", "is_creature": true }, { "num": 52, "name": "Undercellar Myconid", "cost": "{2}{G}", "mv": 3, "kind": "permanent", "is_creature": true }], "graveyard": [], "library_size": 54, "land_drops_left": 1 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "1/1 Creature", "idx": 0, "num": 500000, "is_land": false }] },
+  "plans": [
+    { "index": 0, "summary": "land=Blooming Marsh; cast: Concordant Crossroads", "land": "Blooming Marsh", "casts": ["Concordant Crossroads"], "actions": [{ "card": "Concordant Crossroads" }] },
+    { "index": 1, "summary": "land=Secluded Courtyard; cast: Concordant Crossroads", "land": "Secluded Courtyard", "casts": ["Concordant Crossroads"], "actions": [{ "card": "Concordant Crossroads" }] },
+    { "index": 2, "summary": "land=Blooming Marsh; cast: (nothing)", "land": "Blooming Marsh", "casts": [], "actions": [] },
+    { "index": 3, "summary": "land=Secluded Courtyard; cast: (nothing)", "land": "Secluded Courtyard", "casts": [], "actions": [] },
+    { "index": 4, "summary": "land=none; cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 4,
+  "type": "main_phase",
+  "turn": 1,
+  "phase": "pre_main",
+  "on_the_play": true,
+  "mdfc_backs": ["Boulderloft Pathway", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Blooming Marsh", "idx": 1, "num": 3, "tapped": true, "is_land": true }, { "name": "Concordant Crossroads", "idx": 2, "num": 8, "is_land": false }], "vial_counters": [], "hand": [{ "num": 36, "name": "Secluded Courtyard", "cost": "", "mv": 0, "kind": "land" }, { "num": 37, "name": "Secluded Courtyard", "cost": "", "mv": 0, "kind": "land" }, { "num": 45, "name": "Sporecrown Thallid", "cost": "{1}{G}", "mv": 2, "kind": "permanent", "is_creature": true }, { "num": 52, "name": "Undercellar Myconid", "cost": "{2}{G}", "mv": 3, "kind": "permanent", "is_creature": true }], "graveyard": [], "library_size": 54, "land_drops_left": 0 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "1/1 Creature", "idx": 0, "num": 500000, "is_land": false }] },
+  "plans": [
+    { "index": 0, "summary": "cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 5,
+  "type": "main_phase",
+  "turn": 1,
+  "phase": "post_main",
+  "on_the_play": true,
+  "mdfc_backs": ["Boulderloft Pathway", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Blooming Marsh", "idx": 1, "num": 3, "tapped": true, "is_land": true }, { "name": "Concordant Crossroads", "idx": 2, "num": 8, "is_land": false }], "vial_counters": [], "hand": [{ "num": 36, "name": "Secluded Courtyard", "cost": "", "mv": 0, "kind": "land" }, { "num": 37, "name": "Secluded Courtyard", "cost": "", "mv": 0, "kind": "land" }, { "num": 45, "name": "Sporecrown Thallid", "cost": "{1}{G}", "mv": 2, "kind": "permanent", "is_creature": true }, { "num": 52, "name": "Undercellar Myconid", "cost": "{2}{G}", "mv": 3, "kind": "permanent", "is_creature": true }], "graveyard": [], "library_size": 54, "land_drops_left": 0 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "1/1 Creature", "idx": 0, "num": 500000, "is_land": false }] },
+  "plans": [
+    { "index": 0, "summary": "cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
+}
+},
+    { "chosen": 0, "decision": {
+  "decision_index": 6,
+  "main_ordinal": 1,
+  "type": "main_phase",
+  "turn": 2,
+  "phase": "pre_main",
+  "on_the_play": true,
+  "drew": [{ "turn": 2, "card": "Vitaspore Thallid" }],
+  "mdfc_backs": ["Boulderloft Pathway", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Blooming Marsh", "idx": 1, "num": 3, "is_land": true, "taps": "BG" }, { "name": "Concordant Crossroads", "idx": 2, "num": 8, "is_land": false }], "vial_counters": [], "hand": [{ "num": 36, "name": "Secluded Courtyard", "cost": "", "mv": 0, "kind": "land" }, { "num": 37, "name": "Secluded Courtyard", "cost": "", "mv": 0, "kind": "land" }, { "num": 45, "name": "Sporecrown Thallid", "cost": "{1}{G}", "mv": 2, "kind": "permanent", "is_creature": true }, { "num": 52, "name": "Undercellar Myconid", "cost": "{2}{G}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 58, "name": "Vitaspore Thallid", "cost": "{1}{G}", "mv": 2, "kind": "permanent", "is_creature": true }], "graveyard": [], "library_size": 53, "land_drops_left": 1 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "1/1 Creature", "idx": 0, "num": 500000, "is_land": false }, { "name": "1/1 Creature", "idx": 3, "num": 500001, "is_land": false }] },
+  "plans": [
+    { "index": 0, "summary": "land=Secluded Courtyard; cast: Sporecrown Thallid", "land": "Secluded Courtyard", "casts": ["Sporecrown Thallid"], "actions": [{ "card": "Sporecrown Thallid" }] },
+    { "index": 1, "summary": "land=Secluded Courtyard; cast: Vitaspore Thallid", "land": "Secluded Courtyard", "casts": ["Vitaspore Thallid"], "actions": [{ "card": "Vitaspore Thallid" }] },
+    { "index": 2, "summary": "land=Secluded Courtyard; cast: (nothing)", "land": "Secluded Courtyard", "casts": [], "actions": [] },
+    { "index": 3, "summary": "land=none; cast: (nothing)", "land": null, "casts": [], "actions": [] },
+    { "index": 4, "summary": "land=Secluded Courtyard; cast: Vitaspore Thallid", "land": "Secluded Courtyard", "casts": ["Vitaspore Thallid"], "actions": [{ "card": "Vitaspore Thallid" }] },
+    { "index": 5, "summary": "land=Secluded Courtyard; cast: Vitaspore Thallid", "land": "Secluded Courtyard", "casts": ["Vitaspore Thallid"], "actions": [{ "card": "Vitaspore Thallid" }] },
+    { "index": 6, "summary": "land=Secluded Courtyard; cast: Vitaspore Thallid", "land": "Secluded Courtyard", "casts": ["Vitaspore Thallid"], "actions": [{ "card": "Vitaspore Thallid" }] },
+    { "index": 7, "summary": "land=Secluded Courtyard; cast: Vitaspore Thallid", "land": "Secluded Courtyard", "casts": ["Vitaspore Thallid"], "actions": [{ "card": "Vitaspore Thallid" }] },
+    { "index": 8, "summary": "land=Secluded Courtyard; cast: Vitaspore Thallid", "land": "Secluded Courtyard", "casts": ["Vitaspore Thallid"], "actions": [{ "card": "Vitaspore Thallid" }] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 7,
+  "type": "main_phase",
+  "turn": 2,
+  "phase": "pre_main",
+  "on_the_play": true,
+  "mdfc_backs": ["Boulderloft Pathway", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Blooming Marsh", "idx": 1, "num": 3, "tapped": true, "is_land": true }, { "name": "Concordant Crossroads", "idx": 2, "num": 8, "is_land": false }, { "name": "Secluded Courtyard", "idx": 4, "num": 36, "tapped": true, "is_land": true }, { "name": "Sporecrown Thallid", "idx": 5, "num": 45, "is_land": false }], "vial_counters": [], "hand": [{ "num": 37, "name": "Secluded Courtyard", "cost": "", "mv": 0, "kind": "land" }, { "num": 52, "name": "Undercellar Myconid", "cost": "{2}{G}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 58, "name": "Vitaspore Thallid", "cost": "{1}{G}", "mv": 2, "kind": "permanent", "is_creature": true }], "graveyard": [], "library_size": 53, "land_drops_left": 0 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "1/1 Creature", "idx": 0, "num": 500000, "is_land": false }, { "name": "1/1 Creature", "idx": 3, "num": 500001, "is_land": false }] },
+  "plans": [
+    { "index": 0, "summary": "cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 8,
+  "type": "main_phase",
+  "turn": 2,
+  "phase": "post_main",
+  "on_the_play": true,
+  "events": [{ "turn": 2, "kind": "combat", "text": "⚔ attacked: Sporecrown Thallid (2) — 2 to opponent (20→18)" }],
+  "mdfc_backs": ["Boulderloft Pathway", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Blooming Marsh", "idx": 1, "num": 3, "tapped": true, "is_land": true }, { "name": "Concordant Crossroads", "idx": 2, "num": 8, "is_land": false }, { "name": "Secluded Courtyard", "idx": 4, "num": 36, "tapped": true, "is_land": true }, { "name": "Sporecrown Thallid", "idx": 5, "num": 45, "tapped": true, "is_land": false }], "vial_counters": [], "hand": [{ "num": 37, "name": "Secluded Courtyard", "cost": "", "mv": 0, "kind": "land" }, { "num": 52, "name": "Undercellar Myconid", "cost": "{2}{G}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 58, "name": "Vitaspore Thallid", "cost": "{1}{G}", "mv": 2, "kind": "permanent", "is_creature": true }], "graveyard": [], "library_size": 53, "land_drops_left": 0 },
+  "opponent": { "life": 18, "battlefield": [{ "name": "1/1 Creature", "idx": 0, "num": 500000, "is_land": false }, { "name": "1/1 Creature", "idx": 3, "num": 500001, "is_land": false }] },
+  "plans": [
+    { "index": 0, "summary": "cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
+}
+},
+    { "chosen": 0, "decision": {
+  "decision_index": 9,
+  "main_ordinal": 2,
+  "type": "main_phase",
+  "turn": 3,
+  "phase": "pre_main",
+  "on_the_play": true,
+  "drew": [{ "turn": 3, "card": "Blooming Marsh" }],
+  "mdfc_backs": ["Boulderloft Pathway", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Blooming Marsh", "idx": 1, "num": 3, "is_land": true, "taps": "BG" }, { "name": "Concordant Crossroads", "idx": 2, "num": 8, "is_land": false }, { "name": "Secluded Courtyard", "idx": 4, "num": 36, "is_land": true, "taps": "C" }, { "name": "Sporecrown Thallid", "idx": 5, "num": 45, "is_land": false }], "vial_counters": [], "hand": [{ "num": 4, "name": "Blooming Marsh", "cost": "", "mv": 0, "kind": "land" }, { "num": 37, "name": "Secluded Courtyard", "cost": "", "mv": 0, "kind": "land" }, { "num": 52, "name": "Undercellar Myconid", "cost": "{2}{G}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 58, "name": "Vitaspore Thallid", "cost": "{1}{G}", "mv": 2, "kind": "permanent", "is_creature": true }], "graveyard": [], "library_size": 52, "land_drops_left": 1 },
+  "opponent": { "life": 18, "battlefield": [{ "name": "1/1 Creature", "idx": 0, "num": 500000, "is_land": false }, { "name": "1/1 Creature", "idx": 3, "num": 500001, "is_land": false }, { "name": "2/2 Creature", "idx": 6, "num": 500002, "is_land": false }] },
+  "plans": [
+    { "index": 0, "summary": "land=Blooming Marsh; cast: Undercellar Myconid", "land": "Blooming Marsh", "casts": ["Undercellar Myconid"], "actions": [{ "card": "Undercellar Myconid" }] },
+    { "index": 1, "summary": "land=Blooming Marsh; cast: Vitaspore Thallid", "land": "Blooming Marsh", "casts": ["Vitaspore Thallid"], "actions": [{ "card": "Vitaspore Thallid" }] },
+    { "index": 2, "summary": "land=Secluded Courtyard; cast: Undercellar Myconid", "land": "Secluded Courtyard", "casts": ["Undercellar Myconid"], "actions": [{ "card": "Undercellar Myconid" }] },
+    { "index": 3, "summary": "land=Secluded Courtyard; cast: Vitaspore Thallid", "land": "Secluded Courtyard", "casts": ["Vitaspore Thallid"], "actions": [{ "card": "Vitaspore Thallid" }] },
+    { "index": 4, "summary": "land=none; cast: Vitaspore Thallid", "land": null, "casts": ["Vitaspore Thallid"], "actions": [{ "card": "Vitaspore Thallid" }] },
+    { "index": 5, "summary": "land=Blooming Marsh; cast: (nothing)", "land": "Blooming Marsh", "casts": [], "actions": [] },
+    { "index": 6, "summary": "land=Secluded Courtyard; cast: (nothing)", "land": "Secluded Courtyard", "casts": [], "actions": [] },
+    { "index": 7, "summary": "land=none; cast: (nothing)", "land": null, "casts": [], "actions": [] },
+    { "index": 8, "summary": "land=Blooming Marsh; cast: Vitaspore Thallid", "land": "Blooming Marsh", "casts": ["Vitaspore Thallid"], "actions": [{ "card": "Vitaspore Thallid" }] },
+    { "index": 9, "summary": "land=Blooming Marsh; cast: Vitaspore Thallid", "land": "Blooming Marsh", "casts": ["Vitaspore Thallid"], "actions": [{ "card": "Vitaspore Thallid" }] },
+    { "index": 10, "summary": "land=Blooming Marsh; cast: Vitaspore Thallid", "land": "Blooming Marsh", "casts": ["Vitaspore Thallid"], "actions": [{ "card": "Vitaspore Thallid" }] },
+    { "index": 11, "summary": "land=Blooming Marsh; cast: Vitaspore Thallid", "land": "Blooming Marsh", "casts": ["Vitaspore Thallid"], "actions": [{ "card": "Vitaspore Thallid" }] },
+    { "index": 12, "summary": "land=Blooming Marsh; cast: Vitaspore Thallid", "land": "Blooming Marsh", "casts": ["Vitaspore Thallid"], "actions": [{ "card": "Vitaspore Thallid" }] },
+    { "index": 13, "summary": "land=Secluded Courtyard; cast: Vitaspore Thallid", "land": "Secluded Courtyard", "casts": ["Vitaspore Thallid"], "actions": [{ "card": "Vitaspore Thallid" }] },
+    { "index": 14, "summary": "land=Secluded Courtyard; cast: Vitaspore Thallid", "land": "Secluded Courtyard", "casts": ["Vitaspore Thallid"], "actions": [{ "card": "Vitaspore Thallid" }] },
+    { "index": 15, "summary": "land=Secluded Courtyard; cast: Vitaspore Thallid", "land": "Secluded Courtyard", "casts": ["Vitaspore Thallid"], "actions": [{ "card": "Vitaspore Thallid" }] },
+    { "index": 16, "summary": "land=Secluded Courtyard; cast: Vitaspore Thallid", "land": "Secluded Courtyard", "casts": ["Vitaspore Thallid"], "actions": [{ "card": "Vitaspore Thallid" }] },
+    { "index": 17, "summary": "land=Secluded Courtyard; cast: Vitaspore Thallid", "land": "Secluded Courtyard", "casts": ["Vitaspore Thallid"], "actions": [{ "card": "Vitaspore Thallid" }] },
+    { "index": 18, "summary": "land=none; cast: Vitaspore Thallid", "land": null, "casts": ["Vitaspore Thallid"], "actions": [{ "card": "Vitaspore Thallid" }] },
+    { "index": 19, "summary": "land=none; cast: Vitaspore Thallid", "land": null, "casts": ["Vitaspore Thallid"], "actions": [{ "card": "Vitaspore Thallid" }] },
+    { "index": 20, "summary": "land=none; cast: Vitaspore Thallid", "land": null, "casts": ["Vitaspore Thallid"], "actions": [{ "card": "Vitaspore Thallid" }] },
+    { "index": 21, "summary": "land=none; cast: Vitaspore Thallid", "land": null, "casts": ["Vitaspore Thallid"], "actions": [{ "card": "Vitaspore Thallid" }] },
+    { "index": 22, "summary": "land=none; cast: Vitaspore Thallid", "land": null, "casts": ["Vitaspore Thallid"], "actions": [{ "card": "Vitaspore Thallid" }] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 10,
+  "type": "main_phase",
+  "turn": 3,
+  "phase": "pre_main",
+  "on_the_play": true,
+  "mdfc_backs": ["Boulderloft Pathway", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "1/1 Saproling Token", "idx": 9, "num": 1000, "is_land": false }, { "name": "Blooming Marsh", "idx": 1, "num": 3, "tapped": true, "is_land": true }, { "name": "Blooming Marsh", "idx": 7, "num": 4, "tapped": true, "is_land": true }, { "name": "Concordant Crossroads", "idx": 2, "num": 8, "is_land": false }, { "name": "Secluded Courtyard", "idx": 4, "num": 36, "tapped": true, "is_land": true }, { "name": "Sporecrown Thallid", "idx": 5, "num": 45, "is_land": false }, { "name": "Undercellar Myconid", "idx": 8, "num": 52, "is_land": false, "taps": "WUBRG" }], "vial_counters": [], "hand": [{ "num": 37, "name": "Secluded Courtyard", "cost": "", "mv": 0, "kind": "land" }, { "num": 58, "name": "Vitaspore Thallid", "cost": "{1}{G}", "mv": 2, "kind": "permanent", "is_creature": true }], "graveyard": [], "library_size": 52, "land_drops_left": 0 },
+  "opponent": { "life": 18, "battlefield": [{ "name": "1/1 Creature", "idx": 0, "num": 500000, "is_land": false }, { "name": "1/1 Creature", "idx": 3, "num": 500001, "is_land": false }, { "name": "2/2 Creature", "idx": 6, "num": 500002, "is_land": false }] },
+  "plans": [
+    { "index": 0, "summary": "cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 11,
+  "type": "main_phase",
+  "turn": 3,
+  "phase": "post_main",
+  "on_the_play": true,
+  "events": [{ "turn": 3, "kind": "combat", "text": "⚔ attacked: Sporecrown Thallid (2), Undercellar Myconid (2), 1/1 Saproling Token (2) — 6 to opponent (18→12)" }],
+  "mdfc_backs": ["Boulderloft Pathway", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "1/1 Saproling Token", "idx": 9, "num": 1000, "tapped": true, "is_land": false }, { "name": "Blooming Marsh", "idx": 1, "num": 3, "tapped": true, "is_land": true }, { "name": "Blooming Marsh", "idx": 7, "num": 4, "tapped": true, "is_land": true }, { "name": "Concordant Crossroads", "idx": 2, "num": 8, "is_land": false }, { "name": "Secluded Courtyard", "idx": 4, "num": 36, "tapped": true, "is_land": true }, { "name": "Sporecrown Thallid", "idx": 5, "num": 45, "tapped": true, "is_land": false }, { "name": "Undercellar Myconid", "idx": 8, "num": 52, "tapped": true, "is_land": false }], "vial_counters": [], "hand": [{ "num": 37, "name": "Secluded Courtyard", "cost": "", "mv": 0, "kind": "land" }, { "num": 58, "name": "Vitaspore Thallid", "cost": "{1}{G}", "mv": 2, "kind": "permanent", "is_creature": true }], "graveyard": [], "library_size": 52, "land_drops_left": 0 },
+  "opponent": { "life": 12, "battlefield": [{ "name": "1/1 Creature", "idx": 0, "num": 500000, "is_land": false }, { "name": "1/1 Creature", "idx": 3, "num": 500001, "is_land": false }, { "name": "2/2 Creature", "idx": 6, "num": 500002, "is_land": false }] },
+  "plans": [
+    { "index": 0, "summary": "cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
+}
+},
+    { "chosen": 0, "cast_order": ["*", "Utopia Mycon", "Vitaspore Thallid"], "decision": {
+  "decision_index": 12,
+  "main_ordinal": 3,
+  "type": "main_phase",
+  "turn": 4,
+  "phase": "pre_main",
+  "on_the_play": true,
+  "drew": [{ "turn": 4, "card": "Utopia Mycon" }],
+  "mdfc_backs": ["Boulderloft Pathway", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "1/1 Saproling Token", "idx": 9, "num": 1000, "is_land": false }, { "name": "Blooming Marsh", "idx": 1, "num": 3, "is_land": true, "taps": "BG" }, { "name": "Blooming Marsh", "idx": 7, "num": 4, "is_land": true, "taps": "BG" }, { "name": "Concordant Crossroads", "idx": 2, "num": 8, "is_land": false }, { "name": "Secluded Courtyard", "idx": 4, "num": 36, "is_land": true, "taps": "C" }, { "name": "Sporecrown Thallid", "idx": 5, "num": 45, "is_land": false }, { "name": "Undercellar Myconid", "idx": 8, "num": 52, "is_land": false, "taps": "WUBRG" }], "vial_counters": [], "hand": [{ "num": 37, "name": "Secluded Courtyard", "cost": "", "mv": 0, "kind": "land" }, { "num": 56, "name": "Utopia Mycon", "cost": "{G}", "mv": 1, "kind": "permanent", "is_creature": true }, { "num": 58, "name": "Vitaspore Thallid", "cost": "{1}{G}", "mv": 2, "kind": "permanent", "is_creature": true }], "graveyard": [], "library_size": 51, "land_drops_left": 1 },
+  "opponent": { "life": 12, "battlefield": [{ "name": "1/1 Creature", "idx": 0, "num": 500000, "is_land": false }, { "name": "1/1 Creature", "idx": 3, "num": 500001, "is_land": false }, { "name": "2/2 Creature", "idx": 6, "num": 500002, "is_land": false }] },
+  "plans": [
+    { "index": 0, "summary": "land=Secluded Courtyard; cast: Utopia Mycon, Vitaspore Thallid", "land": "Secluded Courtyard", "casts": ["Utopia Mycon", "Vitaspore Thallid"], "cast_order_canonical": ["Utopia Mycon", "Vitaspore Thallid"], "actions": [{ "card": "Utopia Mycon" }, { "card": "Vitaspore Thallid" }] },
+    { "index": 1, "summary": "land=Secluded Courtyard; cast: Vitaspore Thallid, Utopia Mycon", "land": "Secluded Courtyard", "casts": ["Vitaspore Thallid", "Utopia Mycon"], "cast_order_canonical": ["Vitaspore Thallid", "Utopia Mycon"], "actions": [{ "card": "Vitaspore Thallid" }, { "card": "Utopia Mycon" }] },
+    { "index": 2, "summary": "land=none; cast: Utopia Mycon, Vitaspore Thallid", "land": null, "casts": ["Utopia Mycon", "Vitaspore Thallid"], "cast_order_canonical": ["Utopia Mycon", "Vitaspore Thallid"], "actions": [{ "card": "Utopia Mycon" }, { "card": "Vitaspore Thallid" }] },
+    { "index": 3, "summary": "land=none; cast: Vitaspore Thallid, Utopia Mycon", "land": null, "casts": ["Vitaspore Thallid", "Utopia Mycon"], "cast_order_canonical": ["Vitaspore Thallid", "Utopia Mycon"], "actions": [{ "card": "Vitaspore Thallid" }, { "card": "Utopia Mycon" }] },
+    { "index": 4, "summary": "land=Secluded Courtyard; cast: Vitaspore Thallid", "land": "Secluded Courtyard", "casts": ["Vitaspore Thallid"], "actions": [{ "card": "Vitaspore Thallid" }] },
+    { "index": 5, "summary": "land=none; cast: Vitaspore Thallid", "land": null, "casts": ["Vitaspore Thallid"], "actions": [{ "card": "Vitaspore Thallid" }] },
+    { "index": 6, "summary": "land=Secluded Courtyard; cast: Utopia Mycon", "land": "Secluded Courtyard", "casts": ["Utopia Mycon"], "actions": [{ "card": "Utopia Mycon" }] },
+    { "index": 7, "summary": "land=none; cast: Utopia Mycon", "land": null, "casts": ["Utopia Mycon"], "actions": [{ "card": "Utopia Mycon" }] },
+    { "index": 8, "summary": "land=Secluded Courtyard; cast: (nothing)", "land": "Secluded Courtyard", "casts": [], "actions": [] },
+    { "index": 9, "summary": "land=none; cast: (nothing)", "land": null, "casts": [], "actions": [] },
+    { "index": 10, "summary": "land=Secluded Courtyard; cast: Utopia Mycon, Vitaspore Thallid", "land": "Secluded Courtyard", "casts": ["Utopia Mycon", "Vitaspore Thallid"], "cast_order_canonical": ["Utopia Mycon", "Vitaspore Thallid"], "actions": [{ "card": "Utopia Mycon" }, { "card": "Vitaspore Thallid" }] },
+    { "index": 11, "summary": "land=Secluded Courtyard; cast: Utopia Mycon, Vitaspore Thallid", "land": "Secluded Courtyard", "casts": ["Utopia Mycon", "Vitaspore Thallid"], "cast_order_canonical": ["Utopia Mycon", "Vitaspore Thallid"], "actions": [{ "card": "Utopia Mycon" }, { "card": "Vitaspore Thallid" }] },
+    { "index": 12, "summary": "land=Secluded Courtyard; cast: Utopia Mycon, Vitaspore Thallid", "land": "Secluded Courtyard", "casts": ["Utopia Mycon", "Vitaspore Thallid"], "cast_order_canonical": ["Utopia Mycon", "Vitaspore Thallid"], "actions": [{ "card": "Utopia Mycon" }, { "card": "Vitaspore Thallid" }] },
+    { "index": 13, "summary": "land=Secluded Courtyard; cast: Utopia Mycon, Vitaspore Thallid", "land": "Secluded Courtyard", "casts": ["Utopia Mycon", "Vitaspore Thallid"], "cast_order_canonical": ["Utopia Mycon", "Vitaspore Thallid"], "actions": [{ "card": "Utopia Mycon" }, { "card": "Vitaspore Thallid" }] },
+    { "index": 14, "summary": "land=Secluded Courtyard; cast: Utopia Mycon, Vitaspore Thallid", "land": "Secluded Courtyard", "casts": ["Utopia Mycon", "Vitaspore Thallid"], "cast_order_canonical": ["Utopia Mycon", "Vitaspore Thallid"], "actions": [{ "card": "Utopia Mycon" }, { "card": "Vitaspore Thallid" }] },
+    { "index": 15, "summary": "land=Secluded Courtyard; cast: Vitaspore Thallid, Utopia Mycon", "land": "Secluded Courtyard", "casts": ["Vitaspore Thallid", "Utopia Mycon"], "cast_order_canonical": ["Vitaspore Thallid", "Utopia Mycon"], "actions": [{ "card": "Vitaspore Thallid" }, { "card": "Utopia Mycon" }] },
+    { "index": 16, "summary": "land=Secluded Courtyard; cast: Vitaspore Thallid, Utopia Mycon", "land": "Secluded Courtyard", "casts": ["Vitaspore Thallid", "Utopia Mycon"], "cast_order_canonical": ["Vitaspore Thallid", "Utopia Mycon"], "actions": [{ "card": "Vitaspore Thallid" }, { "card": "Utopia Mycon" }] },
+    { "index": 17, "summary": "land=Secluded Courtyard; cast: Vitaspore Thallid, Utopia Mycon", "land": "Secluded Courtyard", "casts": ["Vitaspore Thallid", "Utopia Mycon"], "cast_order_canonical": ["Vitaspore Thallid", "Utopia Mycon"], "actions": [{ "card": "Vitaspore Thallid" }, { "card": "Utopia Mycon" }] },
+    { "index": 18, "summary": "land=Secluded Courtyard; cast: Vitaspore Thallid, Utopia Mycon", "land": "Secluded Courtyard", "casts": ["Vitaspore Thallid", "Utopia Mycon"], "cast_order_canonical": ["Vitaspore Thallid", "Utopia Mycon"], "actions": [{ "card": "Vitaspore Thallid" }, { "card": "Utopia Mycon" }] },
+    { "index": 19, "summary": "land=Secluded Courtyard; cast: Vitaspore Thallid, Utopia Mycon", "land": "Secluded Courtyard", "casts": ["Vitaspore Thallid", "Utopia Mycon"], "cast_order_canonical": ["Vitaspore Thallid", "Utopia Mycon"], "actions": [{ "card": "Vitaspore Thallid" }, { "card": "Utopia Mycon" }] },
+    { "index": 20, "summary": "land=none; cast: Utopia Mycon, Vitaspore Thallid", "land": null, "casts": ["Utopia Mycon", "Vitaspore Thallid"], "cast_order_canonical": ["Utopia Mycon", "Vitaspore Thallid"], "actions": [{ "card": "Utopia Mycon" }, { "card": "Vitaspore Thallid" }] },
+    { "index": 21, "summary": "land=none; cast: Utopia Mycon, Vitaspore Thallid", "land": null, "casts": ["Utopia Mycon", "Vitaspore Thallid"], "cast_order_canonical": ["Utopia Mycon", "Vitaspore Thallid"], "actions": [{ "card": "Utopia Mycon" }, { "card": "Vitaspore Thallid" }] },
+    { "index": 22, "summary": "land=none; cast: Utopia Mycon, Vitaspore Thallid", "land": null, "casts": ["Utopia Mycon", "Vitaspore Thallid"], "cast_order_canonical": ["Utopia Mycon", "Vitaspore Thallid"], "actions": [{ "card": "Utopia Mycon" }, { "card": "Vitaspore Thallid" }] },
+    { "index": 23, "summary": "land=none; cast: Utopia Mycon, Vitaspore Thallid", "land": null, "casts": ["Utopia Mycon", "Vitaspore Thallid"], "cast_order_canonical": ["Utopia Mycon", "Vitaspore Thallid"], "actions": [{ "card": "Utopia Mycon" }, { "card": "Vitaspore Thallid" }] },
+    { "index": 24, "summary": "land=none; cast: Utopia Mycon, Vitaspore Thallid", "land": null, "casts": ["Utopia Mycon", "Vitaspore Thallid"], "cast_order_canonical": ["Utopia Mycon", "Vitaspore Thallid"], "actions": [{ "card": "Utopia Mycon" }, { "card": "Vitaspore Thallid" }] },
+    { "index": 25, "summary": "land=none; cast: Vitaspore Thallid, Utopia Mycon", "land": null, "casts": ["Vitaspore Thallid", "Utopia Mycon"], "cast_order_canonical": ["Vitaspore Thallid", "Utopia Mycon"], "actions": [{ "card": "Vitaspore Thallid" }, { "card": "Utopia Mycon" }] },
+    { "index": 26, "summary": "land=none; cast: Vitaspore Thallid, Utopia Mycon", "land": null, "casts": ["Vitaspore Thallid", "Utopia Mycon"], "cast_order_canonical": ["Vitaspore Thallid", "Utopia Mycon"], "actions": [{ "card": "Vitaspore Thallid" }, { "card": "Utopia Mycon" }] },
+    { "index": 27, "summary": "land=none; cast: Vitaspore Thallid, Utopia Mycon", "land": null, "casts": ["Vitaspore Thallid", "Utopia Mycon"], "cast_order_canonical": ["Vitaspore Thallid", "Utopia Mycon"], "actions": [{ "card": "Vitaspore Thallid" }, { "card": "Utopia Mycon" }] },
+    { "index": 28, "summary": "land=none; cast: Vitaspore Thallid, Utopia Mycon", "land": null, "casts": ["Vitaspore Thallid", "Utopia Mycon"], "cast_order_canonical": ["Vitaspore Thallid", "Utopia Mycon"], "actions": [{ "card": "Vitaspore Thallid" }, { "card": "Utopia Mycon" }] },
+    { "index": 29, "summary": "land=none; cast: Vitaspore Thallid, Utopia Mycon", "land": null, "casts": ["Vitaspore Thallid", "Utopia Mycon"], "cast_order_canonical": ["Vitaspore Thallid", "Utopia Mycon"], "actions": [{ "card": "Vitaspore Thallid" }, { "card": "Utopia Mycon" }] },
+    { "index": 30, "summary": "land=Secluded Courtyard; cast: Vitaspore Thallid", "land": "Secluded Courtyard", "casts": ["Vitaspore Thallid"], "actions": [{ "card": "Vitaspore Thallid" }] },
+    { "index": 31, "summary": "land=Secluded Courtyard; cast: Vitaspore Thallid", "land": "Secluded Courtyard", "casts": ["Vitaspore Thallid"], "actions": [{ "card": "Vitaspore Thallid" }] },
+    { "index": 32, "summary": "land=Secluded Courtyard; cast: Vitaspore Thallid", "land": "Secluded Courtyard", "casts": ["Vitaspore Thallid"], "actions": [{ "card": "Vitaspore Thallid" }] },
+    { "index": 33, "summary": "land=Secluded Courtyard; cast: Vitaspore Thallid", "land": "Secluded Courtyard", "casts": ["Vitaspore Thallid"], "actions": [{ "card": "Vitaspore Thallid" }] },
+    { "index": 34, "summary": "land=Secluded Courtyard; cast: Vitaspore Thallid", "land": "Secluded Courtyard", "casts": ["Vitaspore Thallid"], "actions": [{ "card": "Vitaspore Thallid" }] },
+    { "index": 35, "summary": "land=none; cast: Vitaspore Thallid", "land": null, "casts": ["Vitaspore Thallid"], "actions": [{ "card": "Vitaspore Thallid" }] },
+    { "index": 36, "summary": "land=none; cast: Vitaspore Thallid", "land": null, "casts": ["Vitaspore Thallid"], "actions": [{ "card": "Vitaspore Thallid" }] },
+    { "index": 37, "summary": "land=none; cast: Vitaspore Thallid", "land": null, "casts": ["Vitaspore Thallid"], "actions": [{ "card": "Vitaspore Thallid" }] },
+    { "index": 38, "summary": "land=none; cast: Vitaspore Thallid", "land": null, "casts": ["Vitaspore Thallid"], "actions": [{ "card": "Vitaspore Thallid" }] },
+    { "index": 39, "summary": "land=none; cast: Vitaspore Thallid", "land": null, "casts": ["Vitaspore Thallid"], "actions": [{ "card": "Vitaspore Thallid" }] },
+    { "index": 40, "summary": "land=Secluded Courtyard; cast: Utopia Mycon", "land": "Secluded Courtyard", "casts": ["Utopia Mycon"], "actions": [{ "card": "Utopia Mycon" }] },
+    { "index": 41, "summary": "land=Secluded Courtyard; cast: Utopia Mycon", "land": "Secluded Courtyard", "casts": ["Utopia Mycon"], "actions": [{ "card": "Utopia Mycon" }] },
+    { "index": 42, "summary": "land=Secluded Courtyard; cast: Utopia Mycon", "land": "Secluded Courtyard", "casts": ["Utopia Mycon"], "actions": [{ "card": "Utopia Mycon" }] },
+    { "index": 43, "summary": "land=Secluded Courtyard; cast: Utopia Mycon", "land": "Secluded Courtyard", "casts": ["Utopia Mycon"], "actions": [{ "card": "Utopia Mycon" }] },
+    { "index": 44, "summary": "land=Secluded Courtyard; cast: Utopia Mycon", "land": "Secluded Courtyard", "casts": ["Utopia Mycon"], "actions": [{ "card": "Utopia Mycon" }] },
+    { "index": 45, "summary": "land=none; cast: Utopia Mycon", "land": null, "casts": ["Utopia Mycon"], "actions": [{ "card": "Utopia Mycon" }] },
+    { "index": 46, "summary": "land=none; cast: Utopia Mycon", "land": null, "casts": ["Utopia Mycon"], "actions": [{ "card": "Utopia Mycon" }] },
+    { "index": 47, "summary": "land=none; cast: Utopia Mycon", "land": null, "casts": ["Utopia Mycon"], "actions": [{ "card": "Utopia Mycon" }] },
+    { "index": 48, "summary": "land=none; cast: Utopia Mycon", "land": null, "casts": ["Utopia Mycon"], "actions": [{ "card": "Utopia Mycon" }] },
+    { "index": 49, "summary": "land=none; cast: Utopia Mycon", "land": null, "casts": ["Utopia Mycon"], "actions": [{ "card": "Utopia Mycon" }] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 13,
+  "main_ordinal": 4,
+  "type": "main_phase",
+  "turn": 4,
+  "phase": "pre_main",
+  "on_the_play": true,
+  "mdfc_backs": ["Boulderloft Pathway", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "1/1 Saproling Token", "idx": 9, "num": 1000, "is_land": false }, { "name": "Blooming Marsh", "idx": 1, "num": 3, "tapped": true, "is_land": true }, { "name": "Blooming Marsh", "idx": 7, "num": 4, "tapped": true, "is_land": true }, { "name": "Concordant Crossroads", "idx": 2, "num": 8, "is_land": false }, { "name": "Secluded Courtyard", "idx": 4, "num": 36, "is_land": true, "taps": "C" }, { "name": "Secluded Courtyard", "idx": 10, "num": 37, "tapped": true, "is_land": true }, { "name": "Sporecrown Thallid", "idx": 5, "num": 45, "is_land": false }, { "name": "Undercellar Myconid", "idx": 8, "num": 52, "is_land": false, "taps": "WUBRG" }, { "name": "Utopia Mycon", "idx": 11, "num": 56, "is_land": false }, { "name": "Vitaspore Thallid", "idx": 12, "num": 58, "is_land": false }], "vial_counters": [], "hand": [], "graveyard": [], "library_size": 51, "land_drops_left": 0 },
+  "opponent": { "life": 12, "battlefield": [{ "name": "1/1 Creature", "idx": 0, "num": 500000, "is_land": false }, { "name": "1/1 Creature", "idx": 3, "num": 500001, "is_land": false }, { "name": "2/2 Creature", "idx": 6, "num": 500002, "is_land": false }] },
+  "plans": [
+    { "index": 0, "summary": "land=none; cast: Vitaspore Thallid: sac 1 Saproling", "land": null, "casts": ["Vitaspore Thallid"], "actions": [{ "card": "Vitaspore Thallid", "src_num": 58, "activate": true, "sacout": true, "sac_count": 1 }] },
+    { "index": 1, "summary": "land=none; cast: Utopia Mycon: sac 1 Saproling for {G}×1", "land": null, "casts": ["Utopia Mycon"], "actions": [{ "card": "Utopia Mycon", "src_num": 56, "activate": true, "sacout": true, "sac_count": 1, "float_color": "G" }] },
+    { "index": 2, "summary": "land=none; cast: Utopia Mycon: sac 1 Saproling for {B}×1", "land": null, "casts": ["Utopia Mycon"], "actions": [{ "card": "Utopia Mycon", "src_num": 56, "activate": true, "sacout": true, "sac_count": 1, "float_color": "B" }] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 14,
+  "main_ordinal": 5,
+  "type": "main_phase",
+  "turn": 4,
+  "phase": "post_main",
+  "on_the_play": true,
+  "events": [{ "turn": 4, "kind": "combat", "text": "⚔ attacked: Sporecrown Thallid (2), Undercellar Myconid (2), 1/1 Saproling Token (2), Utopia Mycon (1), Vitaspore Thallid (2) — 9 to opponent (12→3)" }],
+  "mdfc_backs": ["Boulderloft Pathway", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "1/1 Saproling Token", "idx": 9, "num": 1000, "tapped": true, "is_land": false }, { "name": "Blooming Marsh", "idx": 1, "num": 3, "tapped": true, "is_land": true }, { "name": "Blooming Marsh", "idx": 7, "num": 4, "tapped": true, "is_land": true }, { "name": "Concordant Crossroads", "idx": 2, "num": 8, "is_land": false }, { "name": "Secluded Courtyard", "idx": 4, "num": 36, "is_land": true, "taps": "C" }, { "name": "Secluded Courtyard", "idx": 10, "num": 37, "tapped": true, "is_land": true }, { "name": "Sporecrown Thallid", "idx": 5, "num": 45, "tapped": true, "is_land": false }, { "name": "Undercellar Myconid", "idx": 8, "num": 52, "tapped": true, "is_land": false }, { "name": "Utopia Mycon", "idx": 11, "num": 56, "tapped": true, "is_land": false }, { "name": "Vitaspore Thallid", "idx": 12, "num": 58, "tapped": true, "is_land": false }], "vial_counters": [], "hand": [], "graveyard": [], "library_size": 51, "land_drops_left": 0 },
+  "opponent": { "life": 3, "battlefield": [{ "name": "1/1 Creature", "idx": 0, "num": 500000, "is_land": false }, { "name": "1/1 Creature", "idx": 3, "num": 500001, "is_land": false }, { "name": "2/2 Creature", "idx": 6, "num": 500002, "is_land": false }] },
+  "plans": [
+    { "index": 0, "summary": "land=none; cast: Vitaspore Thallid: sac 1 Saproling", "land": null, "casts": ["Vitaspore Thallid"], "actions": [{ "card": "Vitaspore Thallid", "src_num": 58, "activate": true, "sacout": true, "sac_count": 1 }] },
+    { "index": 1, "summary": "land=none; cast: Utopia Mycon: sac 1 Saproling for {G}×1", "land": null, "casts": ["Utopia Mycon"], "actions": [{ "card": "Utopia Mycon", "src_num": 56, "activate": true, "sacout": true, "sac_count": 1, "float_color": "G" }] },
+    { "index": 2, "summary": "land=none; cast: Utopia Mycon: sac 1 Saproling for {B}×1", "land": null, "casts": ["Utopia Mycon"], "actions": [{ "card": "Utopia Mycon", "src_num": 56, "activate": true, "sacout": true, "sac_count": 1, "float_color": "B" }] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
+}
+},
+    { "chosen": 6, "decision": {
+  "decision_index": 15,
+  "main_ordinal": 6,
+  "type": "main_phase",
+  "turn": 5,
+  "phase": "pre_main",
+  "on_the_play": true,
+  "drew": [{ "turn": 5, "card": "Hickory Woodlot" }],
+  "mdfc_backs": ["Boulderloft Pathway", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "1/1 Saproling Token", "idx": 9, "num": 1000, "is_land": false }, { "name": "Blooming Marsh", "idx": 1, "num": 3, "is_land": true, "taps": "BG" }, { "name": "Blooming Marsh", "idx": 7, "num": 4, "is_land": true, "taps": "BG" }, { "name": "Concordant Crossroads", "idx": 2, "num": 8, "is_land": false }, { "name": "Secluded Courtyard", "idx": 4, "num": 36, "is_land": true, "taps": "C" }, { "name": "Secluded Courtyard", "idx": 10, "num": 37, "is_land": true, "taps": "C" }, { "name": "Sporecrown Thallid", "idx": 5, "num": 45, "is_land": false }, { "name": "Undercellar Myconid", "idx": 8, "num": 52, "is_land": false, "taps": "WUBRG" }, { "name": "Utopia Mycon", "idx": 11, "num": 56, "is_land": false, "counters": [{ "kind": "spore", "label": "spore", "count": 1 }] }, { "name": "Vitaspore Thallid", "idx": 12, "num": 58, "is_land": false, "counters": [{ "kind": "spore", "label": "spore", "count": 1 }] }], "vial_counters": [], "hand": [{ "num": 20, "name": "Hickory Woodlot", "cost": "", "mv": 0, "kind": "land" }], "graveyard": [], "library_size": 50, "land_drops_left": 1 },
+  "opponent": { "life": 3, "battlefield": [{ "name": "1/1 Creature", "idx": 0, "num": 500000, "is_land": false }, { "name": "1/1 Creature", "idx": 3, "num": 500001, "is_land": false }, { "name": "2/2 Creature", "idx": 6, "num": 500002, "is_land": false }] },
+  "plans": [
+    { "index": 0, "summary": "land=Hickory Woodlot; cast: Vitaspore Thallid: sac 1 Saproling", "land": "Hickory Woodlot", "casts": ["Vitaspore Thallid"], "actions": [{ "card": "Vitaspore Thallid", "src_num": 58, "activate": true, "sacout": true, "sac_count": 1 }] },
+    { "index": 1, "summary": "land=none; cast: Vitaspore Thallid: sac 1 Saproling", "land": null, "casts": ["Vitaspore Thallid"], "actions": [{ "card": "Vitaspore Thallid", "src_num": 58, "activate": true, "sacout": true, "sac_count": 1 }] },
+    { "index": 2, "summary": "land=Hickory Woodlot; cast: Utopia Mycon: sac 1 Saproling for {G}×1", "land": "Hickory Woodlot", "casts": ["Utopia Mycon"], "actions": [{ "card": "Utopia Mycon", "src_num": 56, "activate": true, "sacout": true, "sac_count": 1, "float_color": "G" }] },
+    { "index": 3, "summary": "land=Hickory Woodlot; cast: Utopia Mycon: sac 1 Saproling for {B}×1", "land": "Hickory Woodlot", "casts": ["Utopia Mycon"], "actions": [{ "card": "Utopia Mycon", "src_num": 56, "activate": true, "sacout": true, "sac_count": 1, "float_color": "B" }] },
+    { "index": 4, "summary": "land=none; cast: Utopia Mycon: sac 1 Saproling for {G}×1", "land": null, "casts": ["Utopia Mycon"], "actions": [{ "card": "Utopia Mycon", "src_num": 56, "activate": true, "sacout": true, "sac_count": 1, "float_color": "G" }] },
+    { "index": 5, "summary": "land=none; cast: Utopia Mycon: sac 1 Saproling for {B}×1", "land": null, "casts": ["Utopia Mycon"], "actions": [{ "card": "Utopia Mycon", "src_num": 56, "activate": true, "sacout": true, "sac_count": 1, "float_color": "B" }] },
+    { "index": 6, "summary": "land=Hickory Woodlot; cast: (nothing)", "land": "Hickory Woodlot", "casts": [], "actions": [] },
+    { "index": 7, "summary": "land=none; cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 16,
+  "main_ordinal": 7,
+  "type": "main_phase",
+  "turn": 5,
+  "phase": "pre_main",
+  "on_the_play": true,
+  "mdfc_backs": ["Boulderloft Pathway", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "1/1 Saproling Token", "idx": 9, "num": 1000, "is_land": false }, { "name": "Blooming Marsh", "idx": 1, "num": 3, "is_land": true, "taps": "BG" }, { "name": "Blooming Marsh", "idx": 7, "num": 4, "is_land": true, "taps": "BG" }, { "name": "Concordant Crossroads", "idx": 2, "num": 8, "is_land": false }, { "name": "Hickory Woodlot", "idx": 13, "num": 20, "tapped": true, "is_land": true, "counters": [{ "kind": "depletion", "label": "depletion", "count": 2 }] }, { "name": "Secluded Courtyard", "idx": 4, "num": 36, "is_land": true, "taps": "C" }, { "name": "Secluded Courtyard", "idx": 10, "num": 37, "is_land": true, "taps": "C" }, { "name": "Sporecrown Thallid", "idx": 5, "num": 45, "is_land": false }, { "name": "Undercellar Myconid", "idx": 8, "num": 52, "is_land": false, "taps": "WUBRG" }, { "name": "Utopia Mycon", "idx": 11, "num": 56, "is_land": false, "counters": [{ "kind": "spore", "label": "spore", "count": 1 }] }, { "name": "Vitaspore Thallid", "idx": 12, "num": 58, "is_land": false, "counters": [{ "kind": "spore", "label": "spore", "count": 1 }] }], "vial_counters": [], "hand": [], "graveyard": [], "library_size": 50, "land_drops_left": 0 },
+  "opponent": { "life": 3, "battlefield": [{ "name": "1/1 Creature", "idx": 0, "num": 500000, "is_land": false }, { "name": "1/1 Creature", "idx": 3, "num": 500001, "is_land": false }, { "name": "2/2 Creature", "idx": 6, "num": 500002, "is_land": false }] },
+  "plans": [
+    { "index": 0, "summary": "land=none; cast: Vitaspore Thallid: sac 1 Saproling", "land": null, "casts": ["Vitaspore Thallid"], "actions": [{ "card": "Vitaspore Thallid", "src_num": 58, "activate": true, "sacout": true, "sac_count": 1 }] },
+    { "index": 1, "summary": "land=none; cast: Utopia Mycon: sac 1 Saproling for {G}×1", "land": null, "casts": ["Utopia Mycon"], "actions": [{ "card": "Utopia Mycon", "src_num": 56, "activate": true, "sacout": true, "sac_count": 1, "float_color": "G" }] },
+    { "index": 2, "summary": "land=none; cast: Utopia Mycon: sac 1 Saproling for {B}×1", "land": null, "casts": ["Utopia Mycon"], "actions": [{ "card": "Utopia Mycon", "src_num": 56, "activate": true, "sacout": true, "sac_count": 1, "float_color": "B" }] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
+}
+}
+  ],
+  "final_events": [
+    { "turn": 5, "kind": "combat", "text": "⚔ attacked: Sporecrown Thallid (2), Undercellar Myconid (2), 1/1 Saproling Token (2), Utopia Mycon (1), Vitaspore Thallid (2) — 9 to opponent (3→-6)" }
+  ]
+}
