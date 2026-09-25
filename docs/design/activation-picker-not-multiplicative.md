@@ -123,6 +123,45 @@ could produce (see the `queueActivation` fix already landed).
 
 This also removes the cross product at the point where the user meets it: two tags, not five rows.
 
+#### BUILT (2026-09-25)
+
+`splitActivationOptions` / `affordanceOptions` / `collapseSacCount` in `tools/play/index.html`, with a
+`.sacactbadge` 🩸 tag rendered bottom-RIGHT (the ⟳ activation badge owns bottom-left) by **both**
+`bfThumb` and `auraAttThumb` — the second one matters, because the body click now resolves to the
+PRIMARY ability, so a split source drawn on the attached-permanent path without its tag would have had
+no route to its sacrifice at all. `toggleActivate(name, which)` takes `'sac'` from the tag; the at-cap
+removal is scoped to the affordance clicked, so the body takes back the spore activation and the tag
+takes back the sacrifice, with a fall-through to "the last of any kind" so a one-sided queue is never
+stuck.
+
+**The split only happens when BOTH sides exist.** A permanent whose only ability is a sac outlet
+(Skirk Prospector, Carrion Feeder, Deathspore Thallid) keeps its plain body click and grows no tag —
+moving a lone affordance onto a tag would have made every ordinary sac outlet in every other deck look
+abilityless.
+
+**`sac_count` came out too, and it was the last multiplicative axis.** Measured at the reported frame
+(candidate-B Fungus seed 11 gi 10 T4), Utopia Mycon offered **three** picker rows for two abilities:
+
+```
+('remove three spore counters: create a Saproling', sacout=False, sac_count=None)
+(None, sacout=True, sac_count=1)
+(None, sacout=True, sac_count=2)
+```
+
+The engine enumerates a burst outlet once per K it has demand for, so the K fan is a menu axis for
+something the human already expresses by **clicking the outlet again** — the cap is the largest burst
+any plan offers, each click queues one more `sacout=` entry, and `CheckLine`'s loop-count fold matches
+a flexible count per outlet name. `collapseSacCount` therefore keeps one representative per
+(verb, mode, payload) shape — the smallest K — so the tag is a single click and 🩸 ×2 is how you say
+two. Sources with two genuinely different sac abilities keep both rows; only the K fan collapses.
+
+Net at that frame: **three rows behind a modal → two click targets, no modal.**
+
+Covered by `testAbilityTagAffordance` in `test/viewer_client_check.js`, driven against the exact action
+shapes probed from the engine: body-click-is-primary, tag-is-`sacout=`, no double-fire when the click
+lands on the tag inside the thumb, no tag for a sac-only or sac-less permanent, and the K fan
+collapsing for both a split source and a sac-only one.
+
 ### Viewer — the victim is a MULTI-SELECT, and the count is its cardinality
 
 Choosing the sac tag opens a **multi-select over the legal victims** — "pick 2" — with the count

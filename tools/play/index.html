@@ -256,6 +256,16 @@
       border-radius:4px; font-size:9px; font-weight:700; padding:0 3px; z-index:2; cursor:pointer; }
   .thumb.act-src { cursor:pointer; box-shadow:0 0 0 1px #6b4a8a inset; }
   .thumb.act-src:hover { box-shadow:0 0 0 2px #c58cf0, 0 0 8px rgba(197,140,240,.45); }
+  /* SEPARATE TAG for the SAC OUTLET half of a permanent with two activated abilities (USER
+     2026-09-25: "separate the two abilities using a tag ... you click on a different part of the
+     card or the tag at the bottom" + "I don't actually need the sacrifice option very often").
+     The body click is the PRIMARY ability; this tag is the sacrifice. Deliberately blood-red and
+     small: the rare, irreversible option must not look like the default one. Bottom-RIGHT, so it
+     never sits under the ⟳ activation badge (bottom-left). */
+  .thumb .sacactbadge { position:absolute; bottom:2px; right:2px; background:rgba(214,92,92,.96); color:#140b0b;
+      border-radius:4px; font-size:9px; font-weight:700; padding:0 3px; z-index:3; cursor:pointer; }
+  .thumb .sacactbadge:hover { background:#f07575; box-shadow:0 0 6px rgba(240,117,117,.75); }
+  .thumb .sacactbadge.on { background:#f07575; box-shadow:0 0 0 1px #2a0f0f inset; }
   /* MANUAL TAP/PAY (docs/design/viewer-manual-tap-pay.md): a mana source you may tap YOURSELF for
      this line. Only visible while the ⛏ Tap mana toggle is armed -- a permanent whose only extra
      affordance is a fallback most turns never use must not carry a badge all the time. */
@@ -1184,6 +1194,56 @@ function clickActivationOptions(name){
   }
   return opts;
 }
+// ---- ABILITY SELECTION IS AN AFFORDANCE ON THE CARD, NOT A MODAL LIST -----------------------
+// USER 2026-09-25: "Maybe a better option would be to separate the two abilities using a tag? So you
+// click on a different part of the card or the tag at the bottom?" and "I don't actually need the
+// sacrifice option very often." (Both follow "the chooser is pretty poor. We should have a cleaner
+// way to choose the mode that is not multiplicative".)
+//
+// So a permanent's activations are split by AFFORDANCE rather than listed together: the CARD BODY is
+// the primary ability, and a small tag at the bottom is the sac outlet. For Utopia Mycon -- the
+// reported card, with one spore ability and one sac outlet -- this removes the modal ENTIRELY: two
+// click targets, no list to read, and the option the user rarely wants is the deliberate one rather
+// than a coin flip in a grid.
+//
+// SPLIT ONLY WHEN BOTH SIDES EXIST. A permanent whose only ability IS a sac outlet (Skirk Prospector,
+// Carrion Feeder) keeps its plain body click and grows no tag -- there is nothing to disambiguate, and
+// moving its only affordance to a tag would hide it. Same the other way for a permanent with no sac.
+// sac_count IS NOT A MENU AXIS. The engine enumerates a burst outlet once per K it has demand for --
+// at the reported frame Utopia Mycon offered "sacrifice 1 for mana" AND "sacrifice 2 for mana" beside
+// its spore ability, i.e. three rows for two abilities. That is the last of the cross product the user
+// objected to, and it is redundant: the COUNT is already expressed by clicking the outlet again (the
+// cap is the largest burst any plan offers, and each click queues one more `sacout=` entry, which
+// CheckLine's loop-count fold matches). So the sac side collapses to ONE representative -- the
+// smallest K -- and the human states the count with clicks. One click, one body, 🩸 ×2 when they want
+// two. See docs/design/activation-picker-not-multiplicative.md.
+function collapseSacCount(sac){
+  if (sac.length <= 1) { return sac; }
+  const k = o => { const m = /(\d+)/.exec(o.actLabel || ''); return m ? +m[1] : 1; };
+  // Group by everything EXCEPT the count, so an outlet with two genuinely different sac abilities
+  // (different verbs/payloads) keeps both rows -- only the K fan collapses.
+  const byShape = new Map();
+  for (const o of sac) {
+    const shape = (o.verb||'cast') + '|' + (o.mode!=null?o.mode:'') + '|' + (o.name||'');
+    const cur = byShape.get(shape);
+    if (!cur || k(o) < k(cur)) { byShape.set(shape, o); }
+  }
+  return [...byShape.values()];
+}
+function splitActivationOptions(name){
+  const opts = clickActivationOptions(name) || [];
+  const sac = collapseSacCount(opts.filter(o=>o.sacout)), primary = opts.filter(o=>!o.sacout);
+  return (sac.length && primary.length) ? { primary, sac, split:true }
+                                        : { primary:(sac.length?sac:primary), sac:[], split:false };
+}
+// Does this permanent get a sacrifice TAG? Only when the split is real (see above).
+function hasSacTag(name){ return splitActivationOptions(name).split; }
+// The options ONE click target offers. `which` is 'sac' for the tag, anything else for the body.
+// Unsplit sources return every option, so nothing outside the two-ability case changes.
+function affordanceOptions(name, which){
+  const s = splitActivationOptions(name);
+  return (s.split && which==='sac') ? s.sac : s.primary;
+}
 // Can THIS battlefield Equipment (permanent `srcNum`) be dragged onto a creature right now? Scoped
 // to the copy, so a loose Bonesplitter does not advertise the hosts that only the copy in hand (via
 // a cast-and-equip plan) can reach -- a menu entry that is a silent no-op is exactly what the
@@ -1210,7 +1270,10 @@ function clickActivateCount(name){
 // A source offering SEVERAL distinct activations (Stoneforge: which Equipment to put; a Jitte:
 // which counter mode) opens a picker instead of guessing — the same click-then-choose shape the
 // Aether Vial deploy already uses.
-function toggleActivate(name){
+// `which` names the click TARGET: 'sac' when the sacrifice tag at the bottom of the card was
+// clicked, otherwise the card body. It only matters for a permanent whose abilities split both ways
+// (see splitActivationOptions); everything else behaves exactly as it did.
+function toggleActivate(name, which){
   if (S.over || !S.decision || S.decision.type!=='main_phase') return;
   hideVerdict();
   // Clicking the armed outlet again disarms it (the Vial's cancel gesture, verbatim).
@@ -1218,7 +1281,8 @@ function toggleActivate(name){
     S.blinkMode=null; flashHint(`${name}: blink cancelled.`); renderBoard(); return;
   }
   S.blinkMode=null;   // arming a different source drops the old arm
-  const opts = clickActivationOptions(name);
+  const split = splitActivationOptions(name);
+  const opts = affordanceOptions(name, which);
   // Equip-only source: there is nothing to click. Say what the gesture IS rather than doing
   // nothing, which is how a removed affordance reads as a broken one.
   if (!opts.length) {
@@ -1229,7 +1293,15 @@ function toggleActivate(name){
   }
   const cap = activatableSources()[name]||0, have = clickActivateCount(name);
   if (have >= cap) {                                  // at the cap -> clicking removes the last one
-    const i = S.plan.map(p=>p.kind==='activate'&&p.src===name&&p.verb!=='equip').lastIndexOf(true);
+    // Scoped to the affordance that was clicked: the cap is a per-SOURCE total (the largest burst any
+    // plan offers), so with both abilities queued the body click must take back the spore activation
+    // and the tag must take back the sacrifice. Falling back to "the last of any kind" keeps a
+    // one-sided queue removable from either target rather than leaving the human stuck at the cap.
+    const wantSac = split.split && which==='sac';
+    const mine = p => p.kind==='activate' && p.src===name && p.verb!=='equip'
+                   && (!split.split || (!!p.sacout === wantSac));
+    let i = S.plan.map(mine).lastIndexOf(true);
+    if (i < 0) { i = S.plan.map(p=>p.kind==='activate'&&p.src===name&&p.verb!=='equip').lastIndexOf(true); }
     // Through LB.removeFusedAt, not a bare splice: clicking a fused Investigate off has to take its
     // deferred Clue crack with it. A bare splice left the crack queued as an orphan segment that
     // would try to sacrifice a Clue nothing had made -- the same reason the chip's ✕ (removePlanAt)
@@ -1641,6 +1713,12 @@ function bfThumb(o) {   // battlefield entry {name, is_land, is_le, counters?}
   const clickOpts = (!S.over && !le && !isVial && !canSac) ? clickActivationOptions(o.name) : [];
   const actCap = clickOpts.length ? (activatableSources()[o.name]||0) : 0;
   const actN = actCap ? clickActivateCount(o.name) : 0;
+  // SAC-OUTLET TAG: a second click target for the sacrifice half, so the card BODY means the primary
+  // ability. Only when the permanent really has both (splitActivationOptions) -- a pure sac outlet
+  // keeps its plain body click and grows no tag.
+  const sacTag = actCap ? splitActivationOptions(o.name) : { split:false };
+  const sacTagN = sacTag.split
+    ? S.plan.filter(p=>p.kind==='activate'&&p.src===o.name&&p.sacout).length : 0;
   // Drag-to-equip source: an Equipment (attached or not) the engine offers an Equip for this phase.
   const eqDrag = !le && !isVial && !canSac && isEquipDragSource(o.name, o.num);
   const eqN = eqDrag ? S.plan.filter(p=>p.kind==='activate'&&p.verb==='equip'&&p.srcNum===o.num).length : 0;
@@ -1651,7 +1729,11 @@ function bfThumb(o) {   // battlefield entry {name, is_land, is_le, counters?}
   const attrs = le ? ' data-le="1" title="click to discard lands to Land’s Edge"'
               : isVial ? ` data-vial="${charge.count}" title="click to deploy a creature with mana value ${charge.count} via this Vial"`
               : canSac ? ` data-sacdig="${esc(o.name)}" title="click to sacrifice ${esc(o.name)} to draw a card"`
-              : actCap ? ` data-activate="${esc(o.name)}" title="click to activate ${esc(o.name)}’s ability this phase${actN?' (click again to remove)':''}"` : '';
+              // With a sac tag present the body click is specifically the PRIMARY ability, so the
+              // tooltip has to name it -- "click to activate its ability" would be a lie about which.
+              : actCap ? ` data-activate="${esc(o.name)}" title="${sacTag.split
+                  ? `click to ${esc((sacTag.primary[0]||{}).actLabel || 'activate ' + o.name)} — the 🩸 tag at the bottom right is the sacrifice instead`
+                  : `click to activate ${esc(o.name)}’s ability this phase`}${actN?' (click again to remove)':''}"` : '';
   // Equipment drags onto a creature, the way an Aura does. draggable + data-equip is all wireBoard
   // needs; a source that ALSO has click activations (a Jitte) keeps both, so its thumb is clickable
   // for the counter modes and draggable for the attach.
@@ -1677,6 +1759,8 @@ function bfThumb(o) {   // battlefield entry {name, is_land, is_le, counters?}
     (le?`<span class="lebadge">⚡${S.leMode?' active':''}</span>`:'')+
     (canSac?`<span class="digbadge" title="sacrifice ${esc(o.name)} to draw a card">🩸 sac</span>`:'')+
     (actCap?`<span class="actbadge" title="activated ability available">⟳${actN?` ×${actN}`:''}</span>`:'')+
+    // The sacrifice half of a two-ability permanent, as its own click target (see .sacactbadge).
+    (sacTag.split?`<span class="sacactbadge${sacTagN?' on':''}" data-sacact="${esc(o.name)}" title="${esc((sacTag.sac[0]||{}).actLabel || 'sacrifice a creature')} — a SEPARATE ability from clicking the card${sacTagN?' (click again to remove one)':''}">🩸${sacTagN?` ×${sacTagN}`:''}</span>`:'')+
     (eqDrag?`<span class="eqbadge" title="drag onto one of your creatures to equip it">⚔ drag${eqN?` ×${eqN}`:''}</span>`:'')+
     (o.tapped?`<span class="tapbadge" title="tapped">⤵</span>`:'')+
     ((o.taps&&S.tapMode)?`<span class="pretapbadge" title="click to tap ${esc(o.name)} yourself for {${esc(String(o.taps).split('').join('} or {'))}}${(o.tap_auras||[]).length?` — you will also pick the colour of ${esc((o.tap_auras||[]).map(a=>a.name).join(' and '))}’s bonus mana`:''}${o.tap_energy?` — a COLOURED tap costs ${o.tap_energy} energy, its {C} mode is free`:''}">⛏${tapN?` ×${tapN}`:''}</span>`:'')+
@@ -1719,18 +1803,27 @@ function auraAttThumb(o, z, top) {
   const actCap = clickOpts.length ? (activatableSources()[o.name]||0) : 0;
   const actN   = actCap ? clickActivateCount(o.name) : 0;
   const what   = o.is_equip ? 'equipping' : 'enchanting';
+  // The sac tag belongs on EVERY path that draws an activatable permanent, not just bfThumb: the body
+  // click now resolves to the PRIMARY ability, so a split source drawn here without its tag would have
+  // no route to its sacrifice at all. Same asymmetry that once made an attached Equipment unusable.
+  const sacTag = actCap ? splitActivationOptions(o.name) : { split:false };
+  const sacTagN = sacTag.split
+    ? S.plan.filter(p=>p.kind==='activate'&&p.src===o.name&&p.sacout).length : 0;
   // An ATTACHED Equipment stays a drag source: dragging it onto another creature is how you MOVE it
   // (Grafted Wargear's re-host, parking the Greaves on the next threat). Before, that was a click;
   // it is the same gesture as the first attach now, which is the point of the change.
   const eqDrag = isEquipDragSource(o.name, o.num);
   const eqN    = eqDrag ? S.plan.filter(p=>p.kind==='activate'&&p.verb==='equip'&&p.srcNum===o.num).length : 0;
-  const attrs  = actCap ? ` data-activate="${esc(o.name)}" title="${esc(o.name)} — ${what}; click to use its ability this phase${actN?' (click again to remove)':''}"`
+  const attrs  = actCap ? ` data-activate="${esc(o.name)}" title="${esc(o.name)} — ${what}; click to ${sacTag.split
+                    ? `${esc((sacTag.primary[0]||{}).actLabel || 'use its ability')} — the 🩸 tag is the sacrifice instead`
+                    : 'use its ability this phase'}${actN?' (click again to remove)':''}"`
                : eqDrag ? ` title="${esc(o.name)} — ${what}; drag onto another of your creatures to move it"`
                         : ` title="${esc(o.name)} — ${what}"`;
   const eqAttr = eqDrag ? ` draggable="true" data-equip="${esc(o.name)}" data-equipnum="${o.num||0}"` : '';
   return `<span class="thumb spell aura-att${actCap?' act-src':''}${eqDrag?' equip-src':''}${(actN||eqN)?' act-on':''}" style="z-index:${z};top:${top}px" data-name="${esc(o.name)}"${attrs}${eqAttr}>`+
     `<img loading="lazy" src="${scryImg(o.name,'small')}" onerror="this.style.opacity=.15"/>`+
     (actCap?`<span class="actbadge" title="activated ability available">⟳${actN?` ×${actN}`:''}</span>`:'')+
+    (sacTag.split?`<span class="sacactbadge${sacTagN?' on':''}" data-sacact="${esc(o.name)}" title="${esc((sacTag.sac[0]||{}).actLabel || 'sacrifice a creature')} — a SEPARATE ability from clicking the card${sacTagN?' (click again to remove one)':''}">🩸${sacTagN?` ×${sacTagN}`:''}</span>`:'')+
     (eqDrag?`<span class="eqbadge" title="drag onto another creature to move it">⚔ drag${eqN?` ×${eqN}`:''}</span>`:'')+
     `<em>${esc(o.name)}</em></span>`;
 }
@@ -2433,6 +2526,11 @@ function wireBoard() {
   // one activation into this phase's line; clicking past the cap removes the last one.
   $('board').querySelectorAll('.thumb[data-activate]').forEach(t =>
     t.onclick = e => { e.stopPropagation(); toggleActivate(t.dataset.activate); });
+  // ...and the SAC TAG is its own click target on the same thumb: the card body means the primary
+  // ability, the tag means the sacrifice. Wired AFTER data-activate and stopping propagation, so a
+  // click that lands on the tag does not also fire the body handler underneath it.
+  $('board').querySelectorAll('[data-sacact]').forEach(t =>
+    t.onclick = e => { e.stopPropagation(); toggleActivate(t.dataset.sacact, 'sac'); });
   // ARMED BLINK: every legal target lights up and takes the click, so the choice is made on the
   // board. Wired LAST so it wins over the data-activate handler above -- a legal target can itself
   // be an activatable permanent (blinking your own Essence Depleter is a real play), and while the

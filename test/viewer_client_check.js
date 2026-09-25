@@ -1285,6 +1285,150 @@ function testMdfcLandFace(win) {
   return fails;
 }
 
+// ABILITY SELECTION AS AN AFFORDANCE ON THE CARD, not a modal list (synthetic board, no binary).
+//
+// USER 2026-09-25, after "the chooser is pretty poor. We should have a cleaner way to choose the mode
+// that is not multiplicative": "Maybe a better option would be to separate the two abilities using a
+// tag? So you click on a different part of the card or the tag at the bottom?" and "I don't actually
+// need the sacrifice option very often."
+//
+// Utopia Mycon is the reported card: "remove three spore counters: create a Saproling" AND "sacrifice
+// a Saproling: add one mana of any colour". The three properties, each silently losable:
+//   1. the CARD BODY queues the primary ability -- NOT a modal, and NOT the sacrifice;
+//   2. the TAG queues the sacrifice, encoded `sacout=` (the verb CheckLine matches the sac kinds by);
+//   3. a permanent with only ONE kind of ability grows NO tag, so a pure sac outlet (Skirk Prospector)
+//      keeps its plain body click rather than having its only affordance hidden behind a tag.
+// (3) is the regression risk: hiding a lone ability behind a tag would make every sac outlet in every
+// other deck look abilityless.
+function testAbilityTagAffordance(win) {
+  const S = win.__getS(), fails = [];
+  const chk = (c, m) => { if (!c) fails.push(m); };
+  const perm = (num, name) => ({ idx: num, num, name, tapped: false, is_land: false, kind: 'creature' });
+  // Two actions on ONE permanent, exactly as the engine emits them: both `activate`, distinguished by
+  // `act_label` (its own wording) and `sacout`. Neither carries a `verb` -- CheckLine matches both by
+  // the source name -- which is why the viewer has to tell them apart itself.
+  const mk = (idx, actions, bf) => ({
+    type: 'main_phase', decision_index: idx, turn: 4, phase: 'pre_main', on_the_play: false,
+    me: { life: 20, library_size: 40, land_drops_left: 1, graveyard: [], hand: [],
+          battlefield: bf },
+    opponent: { life: 20, battlefield: [] },
+    plans: [{ index: 0, summary: 'activations', land: null, casts: [], actions }],
+  });
+  const reset = d => { S.decision = d; S.prev = null; S.plan = []; S.over = false; S.busy = false;
+                       S.handOrder = []; S.leMode = false; S.vialMode = null; S.actPick = null;
+                       S._actSrcFor = null; S._actSrc = null; S._actOpts = null;
+                       win.renderBoard(); };
+
+  const MYCON = [perm(11, 'Utopia Mycon'), perm(12, '1/1 Saproling Token')];
+  const BOTH = [
+    { card: 'Utopia Mycon', activate: true, act_label: 'remove three spore counters: create a Saproling' },
+    { card: 'Utopia Mycon', activate: true, sacout: true, sac_count: 1 },
+  ];
+  reset(mk(7, BOTH, MYCON));
+  const body = win.document.querySelector('#board .thumb[data-activate="Utopia Mycon"]');
+  const tag  = win.document.querySelector('#board [data-sacact="Utopia Mycon"]');
+  chk(!!body, 'a two-ability permanent still takes a body click');
+  chk(!!tag,  'a permanent with BOTH a primary ability and a sac outlet grows the sacrifice tag');
+  chk(body && /remove three spore counters/.test(body.getAttribute('title') || ''),
+      'the body tooltip names the PRIMARY ability, not "activate its ability"');
+  chk(tag && /sacrifice/i.test(tag.getAttribute('title') || ''),
+      'the tag tooltip says it is the sacrifice');
+
+  // (1) The body click queues the PRIMARY ability directly -- no modal at all, which is the whole
+  // point of the change (two click targets instead of a cross-product list).
+  if (body) {
+    body.dispatchEvent(new win.MouseEvent('click', { bubbles: true }));
+    chk(S.actPick == null, 'body click opens NO modal picker (the tag is the other ability)');
+    chk(S.plan.length === 1 && !S.plan[0].sacout,
+        `body click queues the primary ability, got ${JSON.stringify(S.plan)}`);
+    chk(win.LineBuild.encodeLine(S.plan) === 'cast=Utopia Mycon',
+        `the primary encodes as cast=, got "${win.LineBuild.encodeLine(S.plan)}"`);
+  }
+  // (2) The tag queues the SACRIFICE, and it encodes as sacout= -- the verb CheckLine matches the
+  // SacForMana / SacCreatureOutlet kinds by. Writing cast= here is the bug fixed in 32ce19cc.
+  reset(mk(8, BOTH, MYCON));
+  const tag2 = win.document.querySelector('#board [data-sacact="Utopia Mycon"]');
+  if (tag2) {
+    tag2.dispatchEvent(new win.MouseEvent('click', { bubbles: true }));
+    chk(S.actPick == null, 'tag click opens no modal either');
+    chk(S.plan.length === 1 && !!S.plan[0].sacout,
+        `tag click queues the SACRIFICE, got ${JSON.stringify(S.plan)}`);
+    chk(win.LineBuild.encodeLine(S.plan) === 'sacout=Utopia Mycon',
+        `the sacrifice encodes as sacout=, got "${win.LineBuild.encodeLine(S.plan)}"`);
+  }
+  // A click on the tag must NOT also fire the body handler underneath it (the tag sits inside the
+  // thumb). One gesture, one activation.
+  chk(S.plan.length === 1, 'a tag click does not also queue the body ability (no double-fire)');
+
+  // (3) SAC-ONLY permanent: no tag, and the body click still queues the sacrifice. Hiding a lone
+  // ability behind a tag would make every ordinary sac outlet look abilityless.
+  reset(mk(9, [{ card: 'Skirk Prospector', activate: true, sacout: true, sac_count: 1 }],
+              [perm(21, 'Skirk Prospector'), perm(22, 'Mogg War Marshal')]));
+  chk(!win.document.querySelector('#board [data-sacact="Skirk Prospector"]'),
+      'a permanent whose ONLY ability is a sac outlet grows no tag');
+  const solo = win.document.querySelector('#board .thumb[data-activate="Skirk Prospector"]');
+  chk(!!solo, 'a sac-only permanent keeps its plain body click');
+  if (solo) {
+    solo.dispatchEvent(new win.MouseEvent('click', { bubbles: true }));
+    chk(win.LineBuild.encodeLine(S.plan) === 'sacout=Skirk Prospector',
+        `a sac-only body click still encodes sacout=, got "${win.LineBuild.encodeLine(S.plan)}"`);
+  }
+  // ...and the mirror: a permanent with only a NON-sac ability grows no tag either.
+  reset(mk(10, [{ card: 'Krenko, Mob Boss', activate: true, act_label: 'create X 1/1 Goblins' }],
+               [perm(31, 'Krenko, Mob Boss')]));
+  chk(!win.document.querySelector('#board [data-sacact="Krenko, Mob Boss"]'),
+      'a permanent with no sac outlet grows no tag');
+
+  // sac_count IS NOT A MENU AXIS. This is the shape the engine really emits at the reported frame:
+  // the spore ability PLUS "sacrifice 1 for mana" PLUS "sacrifice 2 for mana" -- three rows for two
+  // abilities, and the last of the cross product the user objected to. The count belongs to repeated
+  // CLICKS, so the tag must collapse the K fan and stay a single click.
+  const KFAN = [
+    { card: 'Utopia Mycon', activate: true, act_label: 'remove three spore counters: create a Saproling' },
+    { card: 'Utopia Mycon', activate: true, sacout: true, sac_count: 1 },
+    { card: 'Utopia Mycon', activate: true, sacout: true, sac_count: 2 },
+  ];
+  reset(mk(12, KFAN, MYCON));
+  const kt = win.document.querySelector('#board [data-sacact="Utopia Mycon"]');
+  chk(!!kt, 'K fan: the tag is still drawn');
+  if (kt) {
+    kt.dispatchEvent(new win.MouseEvent('click', { bubbles: true }));
+    chk(S.actPick == null, 'K fan: the tag does NOT open a modal over "sacrifice 1" / "sacrifice 2"');
+    chk(S.plan.length === 1 && !!S.plan[0].sacout,
+        `K fan: one click queues ONE sacrifice, got ${JSON.stringify(S.plan)}`);
+    // Two bodies are stated by clicking twice, which is what the cap (the largest burst) allows.
+    win.document.querySelector('#board [data-sacact="Utopia Mycon"]')
+       .dispatchEvent(new win.MouseEvent('click', { bubbles: true }));
+    chk(S.plan.filter(p => p.sacout).length === 2,
+        `K fan: clicking again queues a SECOND sacrifice, got ${JSON.stringify(S.plan)}`);
+    chk(win.LineBuild.encodeLine(S.plan) === 'sacout=Utopia Mycon;sacout=Utopia Mycon',
+        `K fan: two clicks encode two sacout= entries, got "${win.LineBuild.encodeLine(S.plan)}"`);
+  }
+  // The body click is unaffected by the K fan sitting beside it.
+  reset(mk(13, KFAN, MYCON));
+  const kb = win.document.querySelector('#board .thumb[data-activate="Utopia Mycon"]');
+  if (kb) {
+    kb.dispatchEvent(new win.MouseEvent('click', { bubbles: true }));
+    chk(S.plan.length === 1 && !S.plan[0].sacout,
+        `K fan: the body click still queues the primary ability, got ${JSON.stringify(S.plan)}`);
+  }
+  // A SAC-ONLY outlet with a K fan collapses too, so its body click stays a single click rather than
+  // opening a modal that asks "how many" -- the count is clicks there as well.
+  reset(mk(14, [{ card: 'Skirk Prospector', activate: true, sacout: true, sac_count: 1 },
+                { card: 'Skirk Prospector', activate: true, sacout: true, sac_count: 3 }],
+               [perm(21, 'Skirk Prospector'), perm(22, 'Mogg War Marshal')]));
+  const sk = win.document.querySelector('#board .thumb[data-activate="Skirk Prospector"]');
+  if (sk) {
+    sk.dispatchEvent(new win.MouseEvent('click', { bubbles: true }));
+    chk(S.actPick == null, 'K fan: a sac-only outlet opens no "how many" modal');
+    chk(S.plan.length === 1 && !!S.plan[0].sacout,
+        `K fan: a sac-only click queues one sacrifice, got ${JSON.stringify(S.plan)}`);
+  }
+  reset(mk(15, BOTH, MYCON));
+  S.plan = [];
+  return fails;
+}
+
 // MOVING an ATTACHED Equipment onto a SECOND creature with the SAME NAME (synthetic board, no
 // binary). Two defects meet in this one gesture, both user-reported 2026-09-01:
 //   * "When equipping, the equipment remains in two places, in the plan and separately on the
@@ -1607,6 +1751,10 @@ async function testColorlessFirstTapOrder() {
     const lfFails = testMdfcLandFace(win);
     if (lfFails.length) { anyFail = true; console.log(`✗ mdfc land face: ${lfFails.length} fail`); lfFails.forEach(m => console.log('  - ' + m)); }
     else { console.log('✓ MDFC land back playable from the palette (badge → land= line, gated on the offer)'); }
+    // Ability selection as a tag on the card rather than a modal list (fast, DOM-only).
+    const atFails = testAbilityTagAffordance(win);
+    if (atFails.length) { anyFail = true; console.log(`✗ ability tag affordance: ${atFails.length} fail`); atFails.forEach(m => console.log('  - ' + m)); }
+    else { console.log('✓ ability tag affordance (body = primary ability, 🩸 tag = the sacrifice; no tag when there is nothing to split)'); }
     // Moving an attached Equipment onto a SECOND same-named creature (fast, DOM-only).
     const emFails = testEquipMoveRendersOnce(win);
     if (emFails.length) { anyFail = true; console.log(`✗ equip move: ${emFails.length} fail`); emFails.forEach(m => console.log('  - ' + m)); }
