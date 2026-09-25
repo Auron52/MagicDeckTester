@@ -506,6 +506,21 @@ async function startGame(win, sc) {
   const opt = Array.from(win.document.getElementById('deck').options).find(o => o.value.replace(/\.[^.]+$/, '') === sc.deck);
   if (!opt) throw new Error('deck not listed: ' + sc.deck);
   win.document.getElementById('deck').value = opt.value;
+  // A check that pins a CARD has to pin the LIST too. #deck holds only a deck NAME; the archived
+  // lists live in #version as their own entries (server.js listDecks: id "<file>@<variant>"), and
+  // fillVersions defaults to the SHIPPING list. So a card the shipping list has since cut leaves the
+  // check silently playing a game it never meant to play -- which is exactly what happened to the
+  // colourless-first repro when Wirewood Lodge was cut from StompySurprise. Match on the entry id
+  // rather than DECK_META: that is a top-level `const`, so it is a lexical global and NOT a property
+  // of `window` (the same reason the panel bridges are injected explicitly).
+  win.fillVersions();
+  if (sc.version) {
+    const vsel = win.document.getElementById('version');
+    const vopt = Array.from(vsel.options).find(o => o.value.endsWith('@' + sc.version));
+    if (!vopt) throw new Error(`deck ${sc.deck} has no archived list "${sc.version}"`);
+    if (vopt.disabled) throw new Error(`archived list ${sc.version} is unplayable (no profile)`);
+    vsel.value = vopt.value;
+  }
   win.document.getElementById('seed').value = String(sc.seed);
   // NO #maxturns input: ce487708 removed the box because max_turns keys the search's horizon, so
   // it is a FIXED const (MAX_TURNS = 8) rather than a user setting. This line used to write it and
@@ -1643,7 +1658,11 @@ async function testColorlessFirstTapOrder() {
   const fails = [];
   const chk = (c, m) => { if (!c) fails.push(m); };
   const win = buildDom(); await settle(win);
-  await startGame(win, { deck: 'StompySurprise', seed: 9, turns: 8 });
+  // The list matters as much as the seed: Wirewood Lodge was CUT when StompySurprise was revised, so
+  // on the shipping list this game has no Lodge to play and the check failed on its own setup rather
+  // than on the payment it exists to guard. The reported game belongs to the list it was reported on,
+  // which is archived and still selectable -- so pin it (2026-09-25).
+  await startGame(win, { deck: 'StompySurprise', version: 'v1-arborelf-worldspine4', seed: 9, turns: 8 });
   const st = () => S(win);
   let guard = 0;
   while (guard++ < 10 && st().decision && st().decision.type === 'mulligan') {
