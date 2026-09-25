@@ -130,6 +130,10 @@ prefix-scoped prepay), one more was proposed and killed on 2026-09-23:
   apparatus. The floor pass alone is therefore ~10 h, and generation + sub-tables + the 12-seed x
   500-game validation is a multi-day commitment, not an overnight one. It is journalled per cell and
   resumes on the identical command, so stopping it costs only the live cell.
+  **AND THE 167x WAS PARTLY AN ARTEFACT -- see [§4](#4-that-run-was-never-configured-the-2026-09-25-labeller-derivation).**
+  That run labelled at **d5/b20**, the built-in gen default, because the deck has no `.value.json` to
+  say otherwise. No other deck in the repo labels anywhere near that. Corrected to a derived d2/b1 it
+  runs at 35-45 rollouts/s and FAST projects **~81 h** instead of ~136 h.
 * **Shipping `leaf: none`.** Would make the V arm's 571 core-h moot and stop phase A ever running
   again. StompySurprise and Goblins already ship this shape; note their sidecars still carry a real
   `eval_model` and a full `value_leaf_table`, so it is a `value_play` setting, not an absent file.
@@ -781,3 +785,98 @@ by `AIEngine.cpp:852`. So the keep table above is worth ~17% of the tail, not th
 is meaningless: all ten keep their opening seven, so `BottomCards` is never entered and the arm
 cannot show an effect. That selection (the most expensive games) anti-correlates with mulliganing --
 14 of the 15 most expensive games in the ledger take zero mulligans.
+
+## 4. That run was never configured (the 2026-09-25 labeller derivation)
+
+The cancelled 2026-09-24 generation's own log header says it:
+
+    rollout depth   : 5  (source: gen-default)
+    rollout budget  : 20 ms  (source: gen-default)
+
+"gen-default" means the deck has no `.value.json`, so `src/analyzer/main.cpp`'s
+`vp.MullGenDepth(5)` / `vp.MullGenBudgetMs(20)` fell all the way through to the built-in default.
+**Every other deck in the repo carries a MEASURED setting, and none of them is anything like that:**
+`mull_gen_depth` is **1 on 12 of 23 decks** (median 2, max 6), and `mull_gen_budget_ms` is **3 on 18 of
+23** (max 20). So the least tractable deck in the suite was labelling its mulligan cells at the most
+expensive setting any deck uses. That is also where the 30 s / 52 s / **161 s** single rollouts in that
+log come from, and it means the headline "~167x slower than the `mulligan-profile.md` ~110/s/core guide"
+was never purely a statement about Snow -- it was substantially a statement about d5/b20.
+
+There is **no env override**: the only route is `value_play.mull_gen_depth` in `<deck>.value.json`.
+
+### The sweep (prescribed, not invented)
+
+`docs/design/fivecolour-mullgen-labeller-sweep.md`, whose subject deck was in the same position (FAST
+projected 220 h), uses the comp-scorer's **hand mode** -- which exists exactly for a deck with no
+mulligan artifacts yet, because the bucket map a composition needs is an *output* of the generation
+being configured. 200 openers from the real opening distribution, forced kept (the gen's shape), R=30,
+`MTG_SCORE_HAND_SEED` fixed so **every arm scores the same hands** (common random numbers, so arms
+compare element-wise). Script: `logs/snowopt/mullgen_labeller.sh` + `mullgen_labeller_report.py`.
+
+**A labeller is judged on RANK fidelity, never on its mean.** A uniform shift in hand scores flips no
+keep -- the policy compares a 7-card hand against its own 6-card sub-hands and both move together.
+DISPERSION is what re-orders pairs and flips decisions.
+
+| arm | units/rollout | cheaper | rho | shift | disp | pair-agree (11,378 pairs) | wall |
+|---|---:|---:|---:|---:|---:|---:|---:|
+| **d5/b20** (the gen default) | 52,189 | 1.00x | 1.0000 | 0 | 0 | 100.0% | 8m11s |
+| d3/b20 | 50,269 | 1.04x | **1.0000** | +0.0000 | **0.0000** | 100.0% | 8m06s |
+| d3/b10 | 30,267 | 1.72x | 0.9992 | +0.0052 | 0.0212 | 100.0% | 5m23s |
+| d3/b3 | 21,080 | 2.48x | 0.9987 | +0.0092 | 0.0281 | 100.0% | 4m00s |
+| d2/b3 | 20,918 | 2.49x | 0.9986 | +0.0088 | 0.0277 | 100.0% | 4m00s |
+| **d2/b1** | **18,202** | **2.87x** | 0.9984 | +0.0087 | 0.0294 | **100.0%** | **3m27s** |
+| d1/b3 | 20,333 | 2.57x | 0.9985 | +0.0087 | 0.0290 | 100.0% | 3m56s |
+| d1/b1 | 18,012 | 2.90x | 0.9984 | +0.0088 | 0.0303 | 100.0% | 3m22s |
+| d0/b0 | (0 units) | -- | **0.9125** | **+0.5683** | **0.3408** | **97.4%** | -- |
+
+Draw side agrees throughout (d2/b1 rho 0.9987, disp 0.0255).
+
+**Three results, in order of how much they change:**
+
+1. **Depth 5 buys literally nothing over depth 3.** `d3/b20` ranks the 200 hands *identically* --
+   rho 1.0000, dispersion 0.0000, every one of 11,378 separated pairs ordered the same -- at 1.04x the
+   cost. The BUDGET binds first. This is the same finding the FiveColour sweep reached ("budget was the
+   unswept knob"), and it means the gen default's depth was pure waste on this deck.
+2. **The fidelity floor is ~2.9x, and everything above it is free.** Every arm from d3/b10 down to
+   d1/b1 keeps **100.0% pairwise ordering agreement** with rho >= 0.9984 and dispersion <= 0.030 turns
+   -- a third of the flip_eps the generator itself uses (0.02) is the scale to compare that against.
+3. **d0/b0 is a cliff, not the next step down.** The greedy labeller shifts +0.57 turns, its dispersion
+   is 11x d2/b1's, and it drops to 97.4% ordering agreement. It also reports **zero work units**, which
+   is the CHARGED/UNCHARGED split of §2b showing up again: greedy work is invisible to
+   `SearchBudget`. Not usable.
+
+**Chosen: d2/b1** -- within 1% of the cheapest arm, marginally better dispersion than d1/b1 on both
+sides, and the same setting the FiveColour precedent adopted. Installed as
+`decks/Snow/Snow.value.json`, carrying `value_play.mull_gen_depth`/`mull_gen_budget_ms` and nothing
+else.
+
+### What it does and does not change
+
+* **Play is untouched, verified.** Smoke with the file in place: **93 passed, 0 failed, 0 configs
+  changed.** A presence-only sidecar with no `eval_model` and no `target_depth` leaves
+  `value_play.present()/drives()` false (`MulliganProfileIO.h`). This had to be *measured*, not
+  assumed -- CLAUDE.md warns that sidecar presence activates the value-leaf hybrid, and it is the
+  `eval_model` that does so.
+* **K is unchanged at 17.** Discovery deliberately runs at shipped play settings, not `mull_gen_*`
+  (the 2026-08-15 split), so a cheaper labeller cannot re-bucket the deck. Re-verified: the scout
+  re-discovered and got 17 raw buckets again.
+* **`expected_buckets` is deliberately NOT set.** Recording K is the user's bucket ruling, not
+  something a derivation may install.
+
+### The corrected projection, and it is still not an overnight job
+
+Measured on the live floor pass at d2/b1: **35-45 rollouts/s** on 32 cores, against 21/s at d5/b20.
+Note this is **1.7x in wall, not the 2.87x the units promised** -- per-unit wall is higher at shallow
+depth because the uncharged greedy work is a larger share of it, which is §2b's lesson restated.
+
+| setting | floor rate | FAST | COMPLETE |
+|---|---:|---:|---:|
+| d5/b20 (the cancelled run) | 21/s | 136 h | 272 h |
+| d2/b1 (derived) | 35.2/s | **81 h** | 162 h |
+| d2/b1, optimistic | 45/s | 64 h | 127 h |
+
+So the derivation turns a ~136 h FAST run into a ~64-81 h one. That is a real 1.7x and it removes an
+embarrassing misconfiguration, but it is still ~10x the 8 h `MTG_KEEP_OVERNIGHT_H` target: this is a
+multi-night, journal-resumed commitment, not something that fits a window. The remaining levers are
+the deck tweak (-1 Rimescale Dragon +1 Rimefeather Owl takes K to 16 and cells to 0.769x, so ~62 h --
+the user's decklist call) and the search work in §2, none of which is close to an order of magnitude.
