@@ -19445,6 +19445,8 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
             }
             if (emit_canonical) { actions.push_back(std::move(a)); }
 
+            // Read once for BOTH bursts below (the mana one and the damage one).
+            static const bool s_drain_lethal_env = EnvOn("MTG_SAC_DRAIN_LETHAL");
             // Multi-sac MANA BURST (Skirk Prospector): "Sacrifice a Goblin: Add {R}" is REPEATABLE, so
             // the single-sac action alone under-models it (1 mana/turn) -- the ramp-into-Muxus/Krenko line
             // is impossible for the search. Emit ONE extra bounded burst: sac k Goblins for k*{R}, where k
@@ -19473,7 +19475,7 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
                 }
                 int k = (reach_mv > base) ? (reach_mv - base + per - 1) / per : 0;   // sacs to reach it
                 if (k > V) { k = V; }
-                if (k >= 2)
+                auto emit_mana_burst = [&](int kk)
                 {
                     Action b;
                     b.kind               = Action::Kind::SacForMana;
@@ -19481,9 +19483,9 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
                     b.hand_index         = -1;
                     b.sac_source_id      = src.card.m_number;
                     b.sac_victim_id      = 0;                 // canonical victims chosen at apply
-                    b.sac_count          = k;
+                    b.sac_count          = kk;
                     b.cost               = ManaCost{};
-                    b.ritual_float       = k * per;           // k*{R}; apply derives the sac count
+                    b.ritual_float       = kk * per;          // k*{R}; apply derives the sac count
                     b.chosen_float_color = sd->params.sac_outlet_add_mana_color;
                     b.is_noncreature     = true;
                     b.eval               = 0;
@@ -19504,6 +19506,33 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
                     {
                         actions.push_back(std::move(b));
                     }
+                };
+                if (k >= 2) { emit_mana_burst(k); }
+
+                // LETHAL-SIZED MANA BURST (2026-09-25). The demand-driven `k` above is sized to
+                // reach a CAST -- it asks "how much mana do I need?" -- so a free repeatable outlet
+                // whose sacrifices are themselves lethal is invisible to it. Utopia Mycon with
+                // Slimefoot, the Stowaway out is exactly that: every Saproling eaten is a point of
+                // face damage, the ability costs nothing and taps nothing, so N Saprolings are N
+                // damage at instant speed with no combat and no summoning sickness. USER
+                // 2026-09-25: *"you have X saprolings that are more than the opponents life and
+                // Slimefoot out ... sacrificing all of them first main in a short-circuit may be
+                // faster"*, and *"Utopia Mycon, Vitaspore and Deathspore are all valid sacrifice
+                // options"* -- the sac count is bounded by the SAPROLINGS, not by the outlets.
+                //
+                // Emitted as a SECOND burst rather than by widening `k`, because the two answer
+                // different questions and the mana one must keep its own sizing (a lethal-sized
+                // float would over-credit the mana solver). Same drain arithmetic, and the same
+                // conservatism, as the damage-outlet burst below.
+                const int lethal_drain =
+                    heurarm::Flag(heurarm::SAC_DRAIN_LETHAL, s_drain_lethal_env)
+                        ? DrainPerDeathOfSubtype(state, state.active_player_index, need_sub) : 0;
+                if (lethal_drain > 0)
+                {
+                    const int opp_life = state.players[1 - state.active_player_index].life;
+                    int kl = (opp_life + lethal_drain - 1) / lethal_drain;   // fewest lethal sacs
+                    if (kl > V) { kl = V; }
+                    if (kl >= 2 && kl != k) { emit_mana_burst(kl); }
                 }
             }
 
@@ -19513,9 +19542,17 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
             // sacs that could be lethal (ceil(opp_life / damage)), capped at the number of victims; emitted
             // only when k >= 2 (else the single action already covers it). cost/damage are pre-scaled by
             // k; the trailing apply pass pays k*cost (a stranded burst is a no-op, both worlds).
-            if (!is_mana_outlet && sd->params.sac_outlet_damage > 0)
+            // DRAIN-AWARE (2026-09-25). `D` used to be the outlet's own sac_outlet_damage alone,
+            // which is ZERO for every outlet Fungus plays -- so no burst was ever emitted for this
+            // deck even with Slimefoot, the Stowaway on the battlefield turning each Saproling
+            // death into a point of face damage. See DrainPerDeathOfSubtype: the drain is already
+            // dealt by OnCreatureDies, this only lets the burst be SIZED for it.
+            const int drain_per =
+                heurarm::Flag(heurarm::SAC_DRAIN_LETHAL, s_drain_lethal_env)
+                    ? DrainPerDeathOfSubtype(state, state.active_player_index, need_sub) : 0;
+            if (!is_mana_outlet && (sd->params.sac_outlet_damage + drain_per) > 0)
             {
-                const int D = sd->params.sac_outlet_damage;
+                const int D = sd->params.sac_outlet_damage + drain_per;
                 int V = 0;
                 for (const Permanent& v : state.battlefield)
                 {

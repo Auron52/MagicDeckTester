@@ -9360,6 +9360,48 @@ inline void DestroyTokensCreatedBy(GameState& state, int source_number)
 // Thallid's -1/-1 aimed at our own Saproling is the former ONLY while such a watcher is out; with
 // no watcher it is a pure loss, and the ranking has to be able to tell the difference rather than
 // assuming the combo is always live.
+// Damage the controller's DEATH WATCHERS deal to the opponent for EACH death of a creature
+// carrying `victim_subtype`. Slimefoot, the Stowaway: 1 per Saproling, "each opponent".
+//
+// WHY THIS EXISTS -- IT CLOSES A LETHAL-PROJECTION GAP, not a heuristic one. The multi-sac lethal
+// burst in TurnSolver sizes itself from the outlet's OWN sac_outlet_damage, and every sac outlet in
+// the Fungus list has none: Utopia Mycon adds mana, Psychotrope draws, Vitaspore grants haste,
+// Deathspore shrinks. The damage comes from the WATCHER instead. So the search could not represent
+// "sacrifice N Saprolings to a free, repeatable outlet for exactly N to the face" as a single
+// action at all, and had to assemble the kill one activation at a time across a board of hundreds
+// of tokens -- which it usually never did, so the game ran on, the board doubled again, and the
+// cost of the cell exploded. The drain is ALREADY dealt at execution time by OnCreatureDies; this
+// only lets the search SEE what the apply has always done.
+//
+// CONSERVATIVE BY CONSTRUCTION. A subtype-gated watcher is credited only when the outlet REQUIRES
+// that same subtype of its fodder, so the victims are known to match; an outlet that eats anything
+// credits nothing. Under-crediting merely fails to emit a burst (today's behaviour); over-crediting
+// would claim a lethal that is not there, which is the direction that must never happen.
+// Self-death watchers (empty dies_watch_subtype) are excluded: they pay only for their OWN death,
+// never for the fodder's.
+inline int DrainPerDeathOfSubtype(const GameState& state, int controller,
+                                  const std::string& victim_subtype)
+{
+    if (victim_subtype.empty()) { return 0; }   // unknown victims -> credit nothing
+    const CardDatabase& db = CardDatabase::Instance();
+    int per = 0;
+    for (const Permanent& w : state.battlefield)
+    {
+        if (w.controller_index != controller) { continue; }
+        if (w.def_absent) { continue; }
+        const CardDefinition* wd = db.LookupCached(w.card);
+        if (wd == nullptr) { continue; }
+        const CardParams& wp = wd->params;
+        if (wp.dies_trigger_damage <= 0)          { continue; }
+        if (wp.dies_watch_subtype.empty())        { continue; }   // self-death only
+        if (wp.dies_watch_subtype != victim_subtype) { continue; }
+        // Same scaling OnCreatureDies applies, so the projection and the apply agree exactly.
+        per += wp.dies_trigger_damage
+             * (wp.dies_trigger_damage_each_opponent ? gamesetup::OpponentHeads() : 1);
+    }
+    return per;
+}
+
 // watcher_idx (optional): pre-filtered battlefield indices of the controller's PAYING death
 // watchers (BoardSources::deaths). The caller that matters asks this question once per creature on
 // the board, so the walk below is O(creatures x board); the `pays` disjunction it is looking for is

@@ -20418,8 +20418,13 @@ bool FungusProvider::FodderSacUseful(const GameState& s, const Permanent& src,
 bool FungusProvider::DeferSacOutletPreCombat(const GameState& s, const Permanent& src,
                                              bool is_mana_outlet) const
 {
-    static const bool env_on = EnvOn("MTG_FUNGUS_SHRINK_SAC_PAYER");
-    if (!heurarm::Flag(heurarm::FUNGUS_SHRINK_SAC_PAYER, env_on)) { return false; }
+    // ITS OWN ARM, not the payer gate's. Folding the two together is exactly the mistake the
+    // FUNGUS_M2_GATE comment warns about, and it cost a measurement: a combined A/B on 2026-09-25
+    // came back >=2.9x SLOWER and could not say which half did it. Deferring is the expensive
+    // suspect -- it makes the second main NECESSARY on turns that previously skipped it, and every
+    // such turn then solves twice.
+    static const bool env_on = EnvOn("MTG_FUNGUS_SHRINK_SAC_M2");
+    if (!heurarm::Flag(heurarm::FUNGUS_SHRINK_SAC_M2, env_on)) { return false; }
     if (is_mana_outlet)      { return false; }   // Mycon: pre-combat float funds a cast
     if (!s.uses_second_main) { return false; }   // nowhere to defer TO -> would delete, not move
     const CardDefinition* d = CardDatabase::Instance().LookupCached(src.card);
@@ -20430,7 +20435,37 @@ bool FungusProvider::DeferSacOutletPreCombat(const GameState& s, const Permanent
                      || p.sac_outlet_creates_tokens > 0 || p.sac_outlet_grants_haste
                      || p.sac_outlet_add_mana_amount > 0 || p.sac_outlet_add_counter_to_self > 0
                      || p.sac_outlet_self_pump_power != 0 || p.sac_outlet_self_pump_toughness != 0;
-    return shrink && !other;                     // Deathspore only; Vitaspore's haste stays pre-combat
+    if (!shrink || other) { return false; }      // Deathspore only; Vitaspore's haste stays pre-combat
+
+    // NEVER DEFER A KILL. USER 2026-09-25: *"It's still correct to move to the second main if it
+    // doesn't make lethal, but not if it can end the game early."* Deferring is a tempo trade -- the
+    // body attacks first, then dies -- and that trade is only available if the game is still going
+    // after combat. If the sacrifices on hand are already lethal, pushing them behind combat does
+    // not trade anything, it just makes the search traverse a whole first main and combat before it
+    // can find a win that was available immediately (and on these boards it frequently never gets
+    // there). The same carve-out the base FodderSacUseful rule documents: "except toward lethal".
+    //
+    // ROUNDED THE OPPOSITE WAY TO THE BURST SIZING, deliberately. DrainPerDeathOfSubtype is
+    // conservative because over-crediting there would claim a lethal that does not exist. Here the
+    // failure directions are reversed: under-estimating loses a real kill, over-estimating merely
+    // leaves the outlet pre-combat and costs a little search. So this counts EVERY legal victim and
+    // credits the full per-death drain to each.
+    const int me   = src.controller_index;
+    const int per  = p.sac_outlet_damage
+                   + DrainPerDeathOfSubtype(s, me, p.sac_creature_requires_subtype);
+    if (per > 0)
+    {
+        int victims = 0;
+        for (const Permanent& v : s.battlefield)
+        {
+            if (v.controller_index != me || !v.card.IsCreature()) { continue; }
+            if (!p.sac_creature_requires_subtype.empty()
+                && !CardHasSubtype(v.card, p.sac_creature_requires_subtype)) { continue; }
+            ++victims;
+        }
+        if (victims * per >= s.players[1 - me].life) { return false; }   // lethal NOW -> keep it here
+    }
+    return true;
 }
 
 // See the ruling and the dominance argument quoted on the declaration (DecisionProviders.h), and

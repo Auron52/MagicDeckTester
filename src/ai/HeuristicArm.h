@@ -250,6 +250,8 @@ enum Slot : int
     SAC_FODDER_TAP_MAKER,     // MTG_SAC_FODDER_TAP_MAKER  ...and the maker may pay {T} (Krenko feeding Skirk) -- MOVES GOBLINS (default OFF)
     ENTER_WATCHER_GATE,       // MTG_ENTER_WATCHER_GATE   FireCreatureEnterWatchers' own cascade loop is skipped when the DECKLIST holds no creature-enter watcher (default ON; =0 walks the board as before, which must be byte-identical)
     FUNGUS_SHRINK_SAC_PAYER,  // MTG_FUNGUS_SHRINK_SAC_PAYER  a SHRINK-ONLY sac outlet (Deathspore Thallid) is offered only when a death-payer is on the board or in hand (default OFF)
+    FUNGUS_SHRINK_SAC_M2,     // MTG_FUNGUS_SHRINK_SAC_M2     ...and, SEPARATELY, that outlet is deferred to the second main (default OFF; its own arm because opening m2 on more turns is a large cost -- see FUNGUS_M2_GATE)
+    SAC_DRAIN_LETHAL,         // MTG_SAC_DRAIN_LETHAL        the multi-sac LETHAL burst is sized by outlet damage PLUS the per-death drain of our death watchers (Slimefoot / Pashalik Mons). Adds an action, so it moves GT (default OFF)
     COUNT
 };
 
@@ -466,6 +468,8 @@ inline const char* Name(int slot)
         "MTG_SAC_FODDER_TAP_MAKER",
         "MTG_ENTER_WATCHER_GATE",
         "MTG_FUNGUS_SHRINK_SAC_PAYER",
+        "MTG_FUNGUS_SHRINK_SAC_M2",
+        "MTG_SAC_DRAIN_LETHAL",
     };
     // The enum and this table are ONE mapping split across two lists: a slot added to one and not
     // the other silently shifts every lever after it (a manifest asking for lever X would set Y).
