@@ -555,3 +555,128 @@ Same engine, and only one of the two lists makes the layout hurt.
 **Sizing, honestly:** (1)+(2) attack a 32% share and plausibly return ~1.3x; they are mechanical and
 byte-identical. (3) is the one that could change the verdict, and it is a real design change.
 None of this is implemented yet.
+
+## 2026-09-25 (later) — the 22x LOCATED: one game in 24, and a 2.95x lever that is not free
+
+> **CORRECTION to the section above.** It called the gap "a CACHE-LAYOUT defect". The layout defect
+> was real and is fixed (`57a67598`), but it is worth **0.65%**, not the gap. Measured below. The
+> section's diagnosis of *where* the cost is — board mechanics, not search — survives; its
+> implication that fixing the layout would collect it does not.
+
+### Where candidate B's cost actually is
+
+Same 24 games, same seed / depth / budget (d1/b3), same profile shape, **same average win turn
+(5.5417)**, one arm at a time on the box:
+
+| list | wall | ratio |
+|---|---|---|
+| shipped Fungus | 1.8 s | 1x |
+| candidate B | 40.7 s | **22.4x** |
+
+And it is not spread over the 24 games. With `MTG_SLOW_GAME_MS=300`:
+
+* **game 11 alone = 21.6 s = 53% of the whole job.** Games 11 + 10 + 17 = **80%**.
+* game 11 burns **1,339,602 work units** against a typical ~25,000 — so the search visits ~53x more
+  NODES, it is not merely slower per node.
+* shipped Fungus's worst game in the same 24 is 357 ms.
+
+Repro: `--seed 90011 --game-index 11 --games 1 --depth 1 --budget-ms 3 --ignore-play-profile`.
+
+**What that game is.** It wins on turn 7, and the turn-7 board is **136 permanents of which 120 are
+identical "1/1 Saproling Token"** and 8 more are identical "0/0 Saproling Token" — 94% of the board
+is two duplicate groups (Saproling Burst + Doubling Season). `perf record` on it is **FLAT**: the top
+symbol is `BuildSimKey` at 3.95%, nothing else over 3%. That is the signature of work VOLUME, and it
+is why no micro-optimisation moves it.
+
+`MTG_BF_CENSUS=1 MTG_ROLLOUT_STATS=1` on that game:
+
+```
+bf_census mean_width=57.1 max_width=896      68% of candidate mass at width >= 129
+bf_shape  chosen_x=456524 share=0.817        <- 82% of all candidate mass is ONE axis
+bf_src    Saproling Burst activations=393475 distinct_physical_sources=1
+bf_scored greedy_subsets=10479713
+```
+
+**One physical Saproling Burst emitted 393,475 activation actions in one game.** Shipped Fungus runs
+zero Saproling Burst and zero Undercellar Myconid; candidate B runs four of each. That is the 22x.
+
+### The 2.36x that was not there — and the comparator hole behind it
+
+`bf_width` on that game read `repeat_share=0.576 collapse=2.36x`: 58% of everything handed to the
+scorer looked like the SAME plan twice, which reads as a free 2.36x in an enumeration-side dedup —
+a skip this file's own comments already contemplate. **It was false**, and the thing that caught it
+is the safety number the same census prints beside it:
+
+```
+dedup_exact repeats=321620 state_agreed=16046 exact_FALSE=305574
+```
+
+95% of the "repeats" reached a DIFFERENT post-apply state. Its header says that means the comparator
+is blind, and it was: **`BpCandFingerprint` never folded `Action::devour_count`**, so "cast Mycoloth
+devouring 0" and "cast Mycoloth devouring 3" were fingerprint-identical. Folding it (`b219b565`):
+
+| | before | after |
+|---|---|---|
+| `repeat_share` | 0.576 | **0.00072** |
+| `collapse` | 2.36x | **1.00072x** |
+| `exact_FALSE` | 305,574 | **0** |
+
+So there is no dedup prize, and a skip built on the old fingerprint would have silently deleted
+305,574 genuinely different lines. It was also not only a census bug: that fingerprint keys the wave
+walker's W0Len memo (`BpLenRecord` / `BpLenKey`), so the collision let a stillborn-slot length
+learned under one devour count be reused under another. Latent — every gate is byte-identical — but
+wrong.
+
+**Method note worth keeping.** Two holes had already been patched by hand at that site (`rock_mana`,
+`breakpoint_casts`) and this was the third. Guessing field-by-field failed twice here; what worked in
+one run was (a) re-applying the same plan to two pristine copies of the same parent to prove the
+apply was deterministic and therefore the comparator guilty, then (b) `ExactFalseActionDiff`, which
+diffs all 62 `Action` fields against the twin plan sharing the fingerprint. That helper is kept
+(census-only) so a fourth hole is READ OFF A RUN rather than reasoned about.
+
+### The lever that does move it: `MTG_FUNGUS_SHRINK_SAC_M2` — 2.95x, and it is the USER's call
+
+Priced against the worst game, every default-OFF Fungus lever, one at a time:
+
+| lever | game 11 |
+|---|---|
+| baseline | 21.92 s |
+| `MTG_FUNGUS_DEVOUR_CANDS` | 21.43 s |
+| `MTG_FUNGUS_SHRINK_SAC_PAYER` | 21.40 s |
+| `MTG_SAC_AXIS` / `MTG_FUNGUS_SPORE_POOL` / `MTG_SAC_OUTLET_POOL` | 21.9–22.1 s |
+| **`MTG_FUNGUS_SHRINK_SAC_M2`** | **6.80 s (3.22x)** |
+
+This is the lever built TODAY from the user's own directive (*"we should move this into the second
+main along with Mycoloth"*), left default OFF because a combined A/B "came back >=2.9x SLOWER and
+could not say which half did it". **This is that attribution, and the sign is the other way for this
+half.**
+
+| block | arm | wall (serial, alone on the box) | avg win turn | games changed |
+|---|---|---|---|---|
+| tail block, 24 games seed 90000 | base | 22.60 / 21.97 s | 5.5417 | — |
+| | **m2** | **7.51 / 7.46 s (2.95x)** | **5.5417** | 1 better (gi11 7->6), 1 worse (gi12 6->7) |
+| general, 200 games seed 70000 | base | 23.8 / 23.5 s | 5.4200 | — |
+| | m2 | 22.7 / 23.2 s (~1.02x) | 5.4150 | 3 of 200; paired t = **-0.58** |
+| shipped Fungus, 200 games | m2 | — | 5.5750 | **digest IDENTICAL** — inert on the shipped list |
+
+Game 11 itself: 22,518 ms -> 7,117 ms, units 1,339,602 -> 543,628.
+
+**The shape is the point, and it is the right shape for generation.** The lever is ~1.0x on a median
+game and ~3x on the tail — and the tail is where generation cost lives (576 rollouts >= 30 s were
+32.6% of the whole candidate-B run). An average-based A/B will therefore always under-read it, which
+is exactly how it came to be filed as "slower".
+
+**THE COST, and it is why this is not an agent decision.** It MOVES the keepgen play digest:
+`e0ffdb608cd70b25` -> `e0b7376940011349`. Adopting it **discards the 344,625 banked cell-sides**.
+Contrast `MTG_DECISION_WORK_X=1000`, which was chosen precisely at the point where the digest does
+not move. So the trade is: ~3x on the expensive rollouts, against restarting the generation.
+
+### What is left, ranked
+
+1. **The chosen-X axis on repeatable token-makers** — 82% of candidate mass, one Saproling Burst
+   emitting 393,475 activations. Nothing has been built here. This is the only remaining lever in
+   the 5–20x class and it is a real design change, not a tuning knob.
+2. `MTG_FUNGUS_SHRINK_SAC_M2` — measured above, awaiting the user's adoption call.
+3. **Closed, do not re-open:** enumeration-side exact dedup (1.0007x after the fingerprint fix);
+   cache layout (0.65%, landed); the budget ceiling (1.33x, landed); `SweepDeadFadeTokens` batching
+   (refuted — `OnCreatureDies` runs between erases).
