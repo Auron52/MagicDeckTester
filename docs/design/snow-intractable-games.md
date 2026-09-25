@@ -531,10 +531,66 @@ So there are **two separate modelling gaps**, and neither is a search problem:
    payment. It must be EXACT: a permissive pool admits unpayable subsets and moves play, and this
    area already has a design doc of its own (`colour-blind-subset-affordability.md`) -- so it is a
    deliberate mana-modelling change, not a skip to bolt on.
-2. **`tap_debit` IS TOO PESSIMISTIC, 18.1%.** 54.2 million times, the flat pool said "no total" only
-   because `tap_debit` had reserved a source for another use -- and the real payment then paid
-   anyway. That is 54.2M expensive backtracks caused by a reservation the executor does not honour.
-   Likely the cheaper of the two to fix, and independently checkable by the same self-check shape.
+2. **`tap_debit` IS TOO PESSIMISTIC, 18.1%** -- was the guess. It is the opposite, and the real
+   answer turned out to be much bigger than the 18.1% that pointed at it. See below.
+
+### The rescue lets a source pay for its own tap (MTG_RESCUE_TAP_SOURCE)
+
+`SubsetPayableWithFilters` pays every selected action's mana cost -- casts AND `{cost}, {T}`
+activations -- but **never applies the activation's own `{T}`**. So Scrying Sheets (`{1}{S}, {T}` to
+dig, and it also taps for `{C}`) can pay for its OWN activation and stay available to fund the rest
+of the subset. That is exactly the self-funding behaviour `PermAbilityTapDebitOf` removes from the
+flat path, whose flag comment calls it *"a correctness fix, not a heuristic -- the plans it drops are
+ones the engine could never execute."* This function is the hole in that fix: the flat check drops the
+plan, `any_filter` routes it here, and this re-admits it.
+
+`PermAbilityTapDebitOf` is exact (`full - AvailableManaPool(state, &p)`), so the flat side was never
+the suspect -- which is why the 18.1% clue above pointed the wrong way.
+
+**The size of it, measured by arming the fix on the whole cell:**
+
+    rescued:  299,864,980  ->  13,208      (a 99.996% collapse)
+
+and all three per-clause `rescued-anyway` counters go to **0**, including the 370M debited-`eff` one.
+So essentially **every** rescue this deck was getting was a self-funding artifact; with the `{T}`
+applied the real payment agrees with the flat path everywhere, and the 13,208 that remain are the
+genuine filter routings the mechanism exists for.
+
+**It is a TRADE, not a clean win, and that is why it ships default OFF.**
+
+| axis | result |
+|---|---|
+| decks affected | **Snow only** -- 90 of 93 smoke configs byte-identical (it needs `any_filter`) |
+| smoke, searched d3/d5 | `slower=0 faster=0 play-changed=12`; aggregates unchanged (6.1200, 6.2200) |
+| smoke, d0 greedy | `slower=3 faster=5`; mean 6.7060 -> 6.7040, but `gi413` goes **8 -> loss** |
+| H5 d5 cell (49 games) | **-0.0312 turns**, 30/32 digests identical, the 2 that move are BOTH better (`g12` 7->6) |
+| cost | 0.995x cell wall; `entered` RISES 5.9% as the search redistributes its breadth |
+| abandonment | unchanged, 17 of 49 |
+
+Every aggregate improves and nothing on the searched axis regresses, but three d0 games get worse and
+one of them loses a game it used to win. By the standing bar -- a clean win is *no* regression on
+*any* axis against the shipped baseline -- that is a reserved decision, so the flag is OFF and the
+evidence is here rather than in ground truth.
+
+**WHY REMOVING PLANS IMPROVES PLAY** (the direction is not obvious). The engine's own
+`etb_untap_lands` note states the cost of an unsound enumeration credit: *"the enumerator spends its
+breadth offering plans whose mana the executor then cannot make."* A self-funding plan that wins the
+score gets committed, the executor then cannot pay it, and the cast is silently dropped -- so the
+line actually played is worse than the line chosen. Removing them makes the search commit to plans it
+can perform.
+
+**AND WHY d0 CAN STILL LOSE.** At d0 the greedy IS the decision, with no search above it to pick a
+different plan. The likely mechanism for the three regressions is PARTIAL EXECUTION: a subset
+`{activate Sheets, cast X}` whose activation is unaffordable is still executed as "cast X", which is
+a real line. Tightening the gate deletes the whole subset rather than degrading it, so unless the
+enumerator separately offers `{cast X}` alone, that line is lost. If so the better fix is at
+emission -- offer the subset without the unaffordable activation -- rather than at the payability
+gate. **Not yet verified**: it needs `snow_smoke_d0_s1001 gi413` replayed, which is the concrete
+repro to start from.
+
+**COST IS NOT THE REASON TO DO IT.** Skipping ~300M expensive real payments is worth almost nothing
+(0.995x), because the freed breadth is immediately spent elsewhere -- `entered` rises 5.9%. The case
+for this change is correctness and searched-play quality, not speed.
 
 ### A sound shortcut that turned out not to be worth much (measured, kept default OFF)
 

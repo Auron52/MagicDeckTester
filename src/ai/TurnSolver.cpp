@@ -5648,6 +5648,15 @@ static const bool* WidenHaveWithSubsetRocks(const bool have[5], bool scratch[5],
     return widened ? scratch : have;
 }
 
+// MTG_RESCUE_TAP_SOURCE -- see the note inside SubsetPayableWithFilters. Default OFF: it makes the
+// rescue STRICTER, so it removes plans and moves ground truth; adopting it is a rebaseline, not a
+// silent perf tweak.
+static bool RescueTapSourceOn()
+{
+    static const bool on = EnvOn("MTG_RESCUE_TAP_SOURCE");
+    return on;
+}
+
 static bool SubsetPayableWithFilters(const GameState& state, const std::vector<Action>& cands,
                                      const std::vector<int>& sel)
 {
@@ -5678,6 +5687,35 @@ static bool SubsetPayableWithFilters(const GameState& state, const std::vector<A
     // rest of it lives.
     PayScratch _pay_scratch(state);
     GameState& cp = _pay_scratch.Board();
+    // SELF-FUNDING ACTIVATIONS (MTG_RESCUE_TAP_SOURCE, default OFF pending a rebaseline).
+    //
+    // The loop below pays every selected action's mana cost -- casts AND `{cost}, {T}` activations --
+    // but never applies the activation's own {T}. So a Scrying Sheets ("{1}{S}, {T}: look at the top
+    // card", and it also taps for {C}) can pay for its OWN activation and stay available to fund the
+    // rest of the subset. That is precisely the self-funding behaviour PermAbilityTapDebitOf removes
+    // from the flat path, whose flag comment calls it "a correctness fix, not a heuristic -- the
+    // plans it drops are ones the engine could never execute". This function is the hole in that fix:
+    // the flat check drops the plan, `any_filter` sends it here, and this re-admits it.
+    //
+    // MEASURED, H5 s8008 whole cell (MTG_ENUM_STATS): of 299,864,980 subsets this function rescued,
+    // 54,226,702 (18.1%) had been rejected by the flat path for lacking TOTAL mana once the tapped
+    // source's own yield was debited -- i.e. they are rescued only because the tap is missing here.
+    // Each one also costs a board copy plus a full TapForCost backtrack, and a PAYABLE verdict is the
+    // expensive one (~60 backtracker nodes against ~1 to refute), so this is a correctness gap and a
+    // hot path at the same time.
+    //
+    // Tapping happens BEFORE any payment because a source reserved by one activation must be
+    // unavailable to every cost in the subset, not just the ones sequenced after it.
+    if (RescueTapSourceOn())
+    {
+        for (int j : sel)
+        {
+            const Action& a = cands[j];
+            if (a.kind != Action::Kind::ActivatePermAbility || a.sac_source_id <= 0) { continue; }
+            if (!PermAbilityTaps(a.ability_mode)) { continue; }
+            SetPermTapped(cp, cp.active_player_index, a.sac_source_id, true);
+        }
+    }
     // Pay each selected cast's mana cost with real sources; taps persist across casts in cp, so a
     // filter consumed by one cast is unavailable to the next. Mana producers (rocks) pay first and
     // join the board so their mana is online for later casts in the subset.
