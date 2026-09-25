@@ -1,0 +1,646 @@
+{
+  "seed": 6, "game_index": 5, "win_turn": 6, "won": true,
+  "mulligan": { "count": 0, "bottom": [] },
+  "decisions": [
+    { "chosen": 1, "decision": {
+  "decision_index": 0,
+  "type": "mulligan",
+  "turn": 0,
+  "me": { "life": 20, "battlefield": [] },
+  "opponent": { "life": 20, "battlefield": [] },
+  "mulligan_count": 0,
+  "on_the_play": true,
+  "to_bottom": 0,
+  "hand": [{ "num": 43, "name": "Sporecrown Thallid" }, { "num": 19, "name": "Hickory Woodlot" }, { "num": 49, "name": "Undercellar Myconid" }, { "num": 27, "name": "Peat Bog" }, { "num": 11, "name": "Doubling Season" }, { "num": 36, "name": "Secluded Courtyard" }, { "num": 44, "name": "Sporecrown Thallid" }],
+  "ai_choice": 1,
+  "note": "reply 1 to KEEP this hand (then bottom 0 card(s)), or 0 to mulligan again"
+}
+},
+    { "chosen": 0, "decision": {
+  "decision_index": 1,
+  "main_ordinal": 0,
+  "type": "main_phase",
+  "turn": 1,
+  "phase": "pre_main",
+  "on_the_play": true,
+  "mdfc_backs": ["Boulderloft Pathway", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [], "vial_counters": [], "hand": [{ "num": 11, "name": "Doubling Season", "cost": "{4}{G}", "mv": 5, "kind": "permanent" }, { "num": 19, "name": "Hickory Woodlot", "cost": "", "mv": 0, "kind": "land" }, { "num": 27, "name": "Peat Bog", "cost": "", "mv": 0, "kind": "land" }, { "num": 36, "name": "Secluded Courtyard", "cost": "", "mv": 0, "kind": "land" }, { "num": 43, "name": "Sporecrown Thallid", "cost": "{1}{G}", "mv": 2, "kind": "permanent", "is_creature": true }, { "num": 44, "name": "Sporecrown Thallid", "cost": "{1}{G}", "mv": 2, "kind": "permanent", "is_creature": true }, { "num": 49, "name": "Undercellar Myconid", "cost": "{2}{G}", "mv": 3, "kind": "permanent", "is_creature": true }], "graveyard": [], "library_size": 53, "land_drops_left": 1 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "2/2 Creature", "idx": 0, "num": 500000, "is_land": false }] },
+  "plans": [
+    { "index": 0, "summary": "land=Hickory Woodlot; cast: (nothing)", "land": "Hickory Woodlot", "casts": [], "actions": [] },
+    { "index": 1, "summary": "land=Secluded Courtyard; cast: (nothing)", "land": "Secluded Courtyard", "casts": [], "actions": [] },
+    { "index": 2, "summary": "land=Peat Bog; cast: (nothing)", "land": "Peat Bog", "casts": [], "actions": [] },
+    { "index": 3, "summary": "land=none; cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 2,
+  "type": "main_phase",
+  "turn": 1,
+  "phase": "pre_main",
+  "on_the_play": true,
+  "mdfc_backs": ["Boulderloft Pathway", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Hickory Woodlot", "idx": 1, "num": 19, "tapped": true, "is_land": true, "counters": [{ "kind": "depletion", "label": "depletion", "count": 2 }] }], "vial_counters": [], "hand": [{ "num": 11, "name": "Doubling Season", "cost": "{4}{G}", "mv": 5, "kind": "permanent" }, { "num": 27, "name": "Peat Bog", "cost": "", "mv": 0, "kind": "land" }, { "num": 36, "name": "Secluded Courtyard", "cost": "", "mv": 0, "kind": "land" }, { "num": 43, "name": "Sporecrown Thallid", "cost": "{1}{G}", "mv": 2, "kind": "permanent", "is_creature": true }, { "num": 44, "name": "Sporecrown Thallid", "cost": "{1}{G}", "mv": 2, "kind": "permanent", "is_creature": true }, { "num": 49, "name": "Undercellar Myconid", "cost": "{2}{G}", "mv": 3, "kind": "permanent", "is_creature": true }], "graveyard": [], "library_size": 53, "land_drops_left": 0 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "2/2 Creature", "idx": 0, "num": 500000, "is_land": false }] },
+  "plans": [
+    { "index": 0, "summary": "cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 3,
+  "type": "main_phase",
+  "turn": 1,
+  "phase": "post_main",
+  "on_the_play": true,
+  "mdfc_backs": ["Boulderloft Pathway", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Hickory Woodlot", "idx": 1, "num": 19, "tapped": true, "is_land": true, "counters": [{ "kind": "depletion", "label": "depletion", "count": 2 }] }], "vial_counters": [], "hand": [{ "num": 11, "name": "Doubling Season", "cost": "{4}{G}", "mv": 5, "kind": "permanent" }, { "num": 27, "name": "Peat Bog", "cost": "", "mv": 0, "kind": "land" }, { "num": 36, "name": "Secluded Courtyard", "cost": "", "mv": 0, "kind": "land" }, { "num": 43, "name": "Sporecrown Thallid", "cost": "{1}{G}", "mv": 2, "kind": "permanent", "is_creature": true }, { "num": 44, "name": "Sporecrown Thallid", "cost": "{1}{G}", "mv": 2, "kind": "permanent", "is_creature": true }, { "num": 49, "name": "Undercellar Myconid", "cost": "{2}{G}", "mv": 3, "kind": "permanent", "is_creature": true }], "graveyard": [], "library_size": 53, "land_drops_left": 0 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "2/2 Creature", "idx": 0, "num": 500000, "is_land": false }] },
+  "plans": [
+    { "index": 0, "summary": "cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
+}
+},
+    { "chosen": 4, "decision": {
+  "decision_index": 4,
+  "main_ordinal": 1,
+  "type": "main_phase",
+  "turn": 2,
+  "phase": "pre_main",
+  "on_the_play": true,
+  "drew": [{ "turn": 2, "card": "Vitaspore Thallid" }],
+  "mdfc_backs": ["Boulderloft Pathway", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Hickory Woodlot", "idx": 1, "num": 19, "is_land": true, "taps": "G", "counters": [{ "kind": "depletion", "label": "depletion", "count": 2 }] }], "vial_counters": [], "hand": [{ "num": 11, "name": "Doubling Season", "cost": "{4}{G}", "mv": 5, "kind": "permanent" }, { "num": 27, "name": "Peat Bog", "cost": "", "mv": 0, "kind": "land" }, { "num": 36, "name": "Secluded Courtyard", "cost": "", "mv": 0, "kind": "land" }, { "num": 43, "name": "Sporecrown Thallid", "cost": "{1}{G}", "mv": 2, "kind": "permanent", "is_creature": true }, { "num": 44, "name": "Sporecrown Thallid", "cost": "{1}{G}", "mv": 2, "kind": "permanent", "is_creature": true }, { "num": 49, "name": "Undercellar Myconid", "cost": "{2}{G}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 57, "name": "Vitaspore Thallid", "cost": "{1}{G}", "mv": 2, "kind": "permanent", "is_creature": true }], "graveyard": [], "library_size": 52, "land_drops_left": 1 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "2/2 Creature", "idx": 0, "num": 500000, "is_land": false }] },
+  "plans": [
+    { "index": 0, "summary": "land=Peat Bog; cast: Sporecrown Thallid", "land": "Peat Bog", "casts": ["Sporecrown Thallid"], "actions": [{ "card": "Sporecrown Thallid" }] },
+    { "index": 1, "summary": "land=Secluded Courtyard; cast: Sporecrown Thallid", "land": "Secluded Courtyard", "casts": ["Sporecrown Thallid"], "actions": [{ "card": "Sporecrown Thallid" }] },
+    { "index": 2, "summary": "land=none; cast: Sporecrown Thallid", "land": null, "casts": ["Sporecrown Thallid"], "actions": [{ "card": "Sporecrown Thallid" }] },
+    { "index": 3, "summary": "land=Peat Bog; cast: Vitaspore Thallid", "land": "Peat Bog", "casts": ["Vitaspore Thallid"], "actions": [{ "card": "Vitaspore Thallid" }] },
+    { "index": 4, "summary": "land=Secluded Courtyard; cast: Undercellar Myconid", "land": "Secluded Courtyard", "casts": ["Undercellar Myconid"], "actions": [{ "card": "Undercellar Myconid" }] },
+    { "index": 5, "summary": "land=Secluded Courtyard; cast: Vitaspore Thallid", "land": "Secluded Courtyard", "casts": ["Vitaspore Thallid"], "actions": [{ "card": "Vitaspore Thallid" }] },
+    { "index": 6, "summary": "land=none; cast: Vitaspore Thallid", "land": null, "casts": ["Vitaspore Thallid"], "actions": [{ "card": "Vitaspore Thallid" }] },
+    { "index": 7, "summary": "land=Peat Bog; cast: (nothing)", "land": "Peat Bog", "casts": [], "actions": [] },
+    { "index": 8, "summary": "land=Secluded Courtyard; cast: (nothing)", "land": "Secluded Courtyard", "casts": [], "actions": [] },
+    { "index": 9, "summary": "land=none; cast: (nothing)", "land": null, "casts": [], "actions": [] },
+    { "index": 10, "summary": "land=Peat Bog; cast: Vitaspore Thallid", "land": "Peat Bog", "casts": ["Vitaspore Thallid"], "actions": [{ "card": "Vitaspore Thallid" }] },
+    { "index": 11, "summary": "land=Peat Bog; cast: Vitaspore Thallid", "land": "Peat Bog", "casts": ["Vitaspore Thallid"], "actions": [{ "card": "Vitaspore Thallid" }] },
+    { "index": 12, "summary": "land=Peat Bog; cast: Vitaspore Thallid", "land": "Peat Bog", "casts": ["Vitaspore Thallid"], "actions": [{ "card": "Vitaspore Thallid" }] },
+    { "index": 13, "summary": "land=Peat Bog; cast: Vitaspore Thallid", "land": "Peat Bog", "casts": ["Vitaspore Thallid"], "actions": [{ "card": "Vitaspore Thallid" }] },
+    { "index": 14, "summary": "land=Peat Bog; cast: Vitaspore Thallid", "land": "Peat Bog", "casts": ["Vitaspore Thallid"], "actions": [{ "card": "Vitaspore Thallid" }] },
+    { "index": 15, "summary": "land=Secluded Courtyard; cast: Vitaspore Thallid", "land": "Secluded Courtyard", "casts": ["Vitaspore Thallid"], "actions": [{ "card": "Vitaspore Thallid" }] },
+    { "index": 16, "summary": "land=Secluded Courtyard; cast: Vitaspore Thallid", "land": "Secluded Courtyard", "casts": ["Vitaspore Thallid"], "actions": [{ "card": "Vitaspore Thallid" }] },
+    { "index": 17, "summary": "land=Secluded Courtyard; cast: Vitaspore Thallid", "land": "Secluded Courtyard", "casts": ["Vitaspore Thallid"], "actions": [{ "card": "Vitaspore Thallid" }] },
+    { "index": 18, "summary": "land=Secluded Courtyard; cast: Vitaspore Thallid", "land": "Secluded Courtyard", "casts": ["Vitaspore Thallid"], "actions": [{ "card": "Vitaspore Thallid" }] },
+    { "index": 19, "summary": "land=Secluded Courtyard; cast: Vitaspore Thallid", "land": "Secluded Courtyard", "casts": ["Vitaspore Thallid"], "actions": [{ "card": "Vitaspore Thallid" }] },
+    { "index": 20, "summary": "land=none; cast: Vitaspore Thallid", "land": null, "casts": ["Vitaspore Thallid"], "actions": [{ "card": "Vitaspore Thallid" }] },
+    { "index": 21, "summary": "land=none; cast: Vitaspore Thallid", "land": null, "casts": ["Vitaspore Thallid"], "actions": [{ "card": "Vitaspore Thallid" }] },
+    { "index": 22, "summary": "land=none; cast: Vitaspore Thallid", "land": null, "casts": ["Vitaspore Thallid"], "actions": [{ "card": "Vitaspore Thallid" }] },
+    { "index": 23, "summary": "land=none; cast: Vitaspore Thallid", "land": null, "casts": ["Vitaspore Thallid"], "actions": [{ "card": "Vitaspore Thallid" }] },
+    { "index": 24, "summary": "land=none; cast: Vitaspore Thallid", "land": null, "casts": ["Vitaspore Thallid"], "actions": [{ "card": "Vitaspore Thallid" }] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 5,
+  "type": "main_phase",
+  "turn": 2,
+  "phase": "pre_main",
+  "on_the_play": true,
+  "mdfc_backs": ["Boulderloft Pathway", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "1/1 Saproling Token", "idx": 4, "num": 1000, "is_land": false }, { "name": "Hickory Woodlot", "idx": 1, "num": 19, "tapped": true, "is_land": true, "counters": [{ "kind": "depletion", "label": "depletion", "count": 1 }] }, { "name": "Secluded Courtyard", "idx": 2, "num": 36, "tapped": true, "is_land": true }, { "name": "Undercellar Myconid", "idx": 3, "num": 49, "is_land": false }], "vial_counters": [], "hand": [{ "num": 11, "name": "Doubling Season", "cost": "{4}{G}", "mv": 5, "kind": "permanent" }, { "num": 27, "name": "Peat Bog", "cost": "", "mv": 0, "kind": "land" }, { "num": 43, "name": "Sporecrown Thallid", "cost": "{1}{G}", "mv": 2, "kind": "permanent", "is_creature": true }, { "num": 44, "name": "Sporecrown Thallid", "cost": "{1}{G}", "mv": 2, "kind": "permanent", "is_creature": true }, { "num": 57, "name": "Vitaspore Thallid", "cost": "{1}{G}", "mv": 2, "kind": "permanent", "is_creature": true }], "graveyard": [], "library_size": 52, "land_drops_left": 0 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "2/2 Creature", "idx": 0, "num": 500000, "is_land": false }] },
+  "plans": [
+    { "index": 0, "summary": "cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 6,
+  "type": "main_phase",
+  "turn": 2,
+  "phase": "post_main",
+  "on_the_play": true,
+  "mdfc_backs": ["Boulderloft Pathway", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "1/1 Saproling Token", "idx": 4, "num": 1000, "is_land": false }, { "name": "Hickory Woodlot", "idx": 1, "num": 19, "tapped": true, "is_land": true, "counters": [{ "kind": "depletion", "label": "depletion", "count": 1 }] }, { "name": "Secluded Courtyard", "idx": 2, "num": 36, "tapped": true, "is_land": true }, { "name": "Undercellar Myconid", "idx": 3, "num": 49, "is_land": false }], "vial_counters": [], "hand": [{ "num": 11, "name": "Doubling Season", "cost": "{4}{G}", "mv": 5, "kind": "permanent" }, { "num": 27, "name": "Peat Bog", "cost": "", "mv": 0, "kind": "land" }, { "num": 43, "name": "Sporecrown Thallid", "cost": "{1}{G}", "mv": 2, "kind": "permanent", "is_creature": true }, { "num": 44, "name": "Sporecrown Thallid", "cost": "{1}{G}", "mv": 2, "kind": "permanent", "is_creature": true }, { "num": 57, "name": "Vitaspore Thallid", "cost": "{1}{G}", "mv": 2, "kind": "permanent", "is_creature": true }], "graveyard": [], "library_size": 52, "land_drops_left": 0 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "2/2 Creature", "idx": 0, "num": 500000, "is_land": false }] },
+  "plans": [
+    { "index": 0, "summary": "cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
+}
+},
+    { "chosen": 15, "decision": {
+  "decision_index": 7,
+  "main_ordinal": 2,
+  "type": "main_phase",
+  "turn": 3,
+  "phase": "pre_main",
+  "on_the_play": true,
+  "drew": [{ "turn": 3, "card": "Blooming Marsh" }],
+  "mdfc_backs": ["Boulderloft Pathway", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "1/1 Saproling Token", "idx": 4, "num": 1000, "is_land": false }, { "name": "Hickory Woodlot", "idx": 1, "num": 19, "is_land": true, "taps": "G", "counters": [{ "kind": "depletion", "label": "depletion", "count": 1 }] }, { "name": "Secluded Courtyard", "idx": 2, "num": 36, "is_land": true, "taps": "C" }, { "name": "Undercellar Myconid", "idx": 3, "num": 49, "is_land": false, "taps": "WUBRG" }], "vial_counters": [], "hand": [{ "num": 3, "name": "Blooming Marsh", "cost": "", "mv": 0, "kind": "land" }, { "num": 11, "name": "Doubling Season", "cost": "{4}{G}", "mv": 5, "kind": "permanent" }, { "num": 27, "name": "Peat Bog", "cost": "", "mv": 0, "kind": "land" }, { "num": 43, "name": "Sporecrown Thallid", "cost": "{1}{G}", "mv": 2, "kind": "permanent", "is_creature": true }, { "num": 44, "name": "Sporecrown Thallid", "cost": "{1}{G}", "mv": 2, "kind": "permanent", "is_creature": true }, { "num": 57, "name": "Vitaspore Thallid", "cost": "{1}{G}", "mv": 2, "kind": "permanent", "is_creature": true }], "graveyard": [], "library_size": 51, "land_drops_left": 1 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "2/2 Creature", "idx": 0, "num": 500000, "is_land": false }] },
+  "plans": [
+    { "index": 0, "summary": "land=Peat Bog; cast: Sporecrown Thallid, Sporecrown Thallid", "land": "Peat Bog", "casts": ["Sporecrown Thallid", "Sporecrown Thallid"], "cast_order_canonical": ["Sporecrown Thallid", "Sporecrown Thallid"], "actions": [{ "card": "Sporecrown Thallid" }, { "card": "Sporecrown Thallid" }] },
+    { "index": 1, "summary": "land=Blooming Marsh; cast: Sporecrown Thallid, Sporecrown Thallid", "land": "Blooming Marsh", "casts": ["Sporecrown Thallid", "Sporecrown Thallid"], "cast_order_canonical": ["Sporecrown Thallid", "Sporecrown Thallid"], "actions": [{ "card": "Sporecrown Thallid" }, { "card": "Sporecrown Thallid" }] },
+    { "index": 2, "summary": "land=none; cast: Sporecrown Thallid, Sporecrown Thallid", "land": null, "casts": ["Sporecrown Thallid", "Sporecrown Thallid"], "cast_order_canonical": ["Sporecrown Thallid", "Sporecrown Thallid"], "actions": [{ "card": "Sporecrown Thallid" }, { "card": "Sporecrown Thallid" }] },
+    { "index": 3, "summary": "land=Peat Bog; cast: Sporecrown Thallid, Vitaspore Thallid", "land": "Peat Bog", "casts": ["Sporecrown Thallid", "Vitaspore Thallid"], "cast_order_canonical": ["Sporecrown Thallid", "Vitaspore Thallid"], "actions": [{ "card": "Sporecrown Thallid" }, { "card": "Vitaspore Thallid" }] },
+    { "index": 4, "summary": "land=Peat Bog; cast: Vitaspore Thallid, Sporecrown Thallid", "land": "Peat Bog", "casts": ["Vitaspore Thallid", "Sporecrown Thallid"], "cast_order_canonical": ["Vitaspore Thallid", "Sporecrown Thallid"], "actions": [{ "card": "Vitaspore Thallid" }, { "card": "Sporecrown Thallid" }] },
+    { "index": 5, "summary": "land=Blooming Marsh; cast: Sporecrown Thallid, Vitaspore Thallid", "land": "Blooming Marsh", "casts": ["Sporecrown Thallid", "Vitaspore Thallid"], "cast_order_canonical": ["Sporecrown Thallid", "Vitaspore Thallid"], "actions": [{ "card": "Sporecrown Thallid" }, { "card": "Vitaspore Thallid" }] },
+    { "index": 6, "summary": "land=Blooming Marsh; cast: Vitaspore Thallid, Sporecrown Thallid", "land": "Blooming Marsh", "casts": ["Vitaspore Thallid", "Sporecrown Thallid"], "cast_order_canonical": ["Vitaspore Thallid", "Sporecrown Thallid"], "actions": [{ "card": "Vitaspore Thallid" }, { "card": "Sporecrown Thallid" }] },
+    { "index": 7, "summary": "land=none; cast: Sporecrown Thallid, Vitaspore Thallid", "land": null, "casts": ["Sporecrown Thallid", "Vitaspore Thallid"], "cast_order_canonical": ["Sporecrown Thallid", "Vitaspore Thallid"], "actions": [{ "card": "Sporecrown Thallid" }, { "card": "Vitaspore Thallid" }] },
+    { "index": 8, "summary": "land=none; cast: Vitaspore Thallid, Sporecrown Thallid", "land": null, "casts": ["Vitaspore Thallid", "Sporecrown Thallid"], "cast_order_canonical": ["Vitaspore Thallid", "Sporecrown Thallid"], "actions": [{ "card": "Vitaspore Thallid" }, { "card": "Sporecrown Thallid" }] },
+    { "index": 9, "summary": "land=Peat Bog; cast: Sporecrown Thallid", "land": "Peat Bog", "casts": ["Sporecrown Thallid"], "actions": [{ "card": "Sporecrown Thallid" }] },
+    { "index": 10, "summary": "land=Blooming Marsh; cast: Sporecrown Thallid", "land": "Blooming Marsh", "casts": ["Sporecrown Thallid"], "actions": [{ "card": "Sporecrown Thallid" }] },
+    { "index": 11, "summary": "land=none; cast: Sporecrown Thallid", "land": null, "casts": ["Sporecrown Thallid"], "actions": [{ "card": "Sporecrown Thallid" }] },
+    { "index": 12, "summary": "land=Peat Bog; cast: Vitaspore Thallid", "land": "Peat Bog", "casts": ["Vitaspore Thallid"], "actions": [{ "card": "Vitaspore Thallid" }] },
+    { "index": 13, "summary": "land=Blooming Marsh; cast: Vitaspore Thallid", "land": "Blooming Marsh", "casts": ["Vitaspore Thallid"], "actions": [{ "card": "Vitaspore Thallid" }] },
+    { "index": 14, "summary": "land=none; cast: Vitaspore Thallid", "land": null, "casts": ["Vitaspore Thallid"], "actions": [{ "card": "Vitaspore Thallid" }] },
+    { "index": 15, "summary": "land=Blooming Marsh; cast: Doubling Season", "land": "Blooming Marsh", "casts": ["Doubling Season"], "actions": [{ "card": "Doubling Season" }] },
+    { "index": 16, "summary": "land=Peat Bog; cast: (nothing)", "land": "Peat Bog", "casts": [], "actions": [] },
+    { "index": 17, "summary": "land=Blooming Marsh; cast: (nothing)", "land": "Blooming Marsh", "casts": [], "actions": [] },
+    { "index": 18, "summary": "land=none; cast: (nothing)", "land": null, "casts": [], "actions": [] },
+    { "index": 19, "summary": "land=Peat Bog; cast: Sporecrown Thallid, Vitaspore Thallid", "land": "Peat Bog", "casts": ["Sporecrown Thallid", "Vitaspore Thallid"], "cast_order_canonical": ["Sporecrown Thallid", "Vitaspore Thallid"], "actions": [{ "card": "Sporecrown Thallid" }, { "card": "Vitaspore Thallid" }] },
+    { "index": 20, "summary": "land=Peat Bog; cast: Sporecrown Thallid, Vitaspore Thallid", "land": "Peat Bog", "casts": ["Sporecrown Thallid", "Vitaspore Thallid"], "cast_order_canonical": ["Sporecrown Thallid", "Vitaspore Thallid"], "actions": [{ "card": "Sporecrown Thallid" }, { "card": "Vitaspore Thallid" }] },
+    { "index": 21, "summary": "land=Peat Bog; cast: Sporecrown Thallid, Vitaspore Thallid", "land": "Peat Bog", "casts": ["Sporecrown Thallid", "Vitaspore Thallid"], "cast_order_canonical": ["Sporecrown Thallid", "Vitaspore Thallid"], "actions": [{ "card": "Sporecrown Thallid" }, { "card": "Vitaspore Thallid" }] },
+    { "index": 22, "summary": "land=Peat Bog; cast: Sporecrown Thallid, Vitaspore Thallid", "land": "Peat Bog", "casts": ["Sporecrown Thallid", "Vitaspore Thallid"], "cast_order_canonical": ["Sporecrown Thallid", "Vitaspore Thallid"], "actions": [{ "card": "Sporecrown Thallid" }, { "card": "Vitaspore Thallid" }] },
+    { "index": 23, "summary": "land=Peat Bog; cast: Sporecrown Thallid, Vitaspore Thallid", "land": "Peat Bog", "casts": ["Sporecrown Thallid", "Vitaspore Thallid"], "cast_order_canonical": ["Sporecrown Thallid", "Vitaspore Thallid"], "actions": [{ "card": "Sporecrown Thallid" }, { "card": "Vitaspore Thallid" }] },
+    { "index": 24, "summary": "land=Peat Bog; cast: Vitaspore Thallid, Sporecrown Thallid", "land": "Peat Bog", "casts": ["Vitaspore Thallid", "Sporecrown Thallid"], "cast_order_canonical": ["Vitaspore Thallid", "Sporecrown Thallid"], "actions": [{ "card": "Vitaspore Thallid" }, { "card": "Sporecrown Thallid" }] },
+    { "index": 25, "summary": "land=Peat Bog; cast: Vitaspore Thallid, Sporecrown Thallid", "land": "Peat Bog", "casts": ["Vitaspore Thallid", "Sporecrown Thallid"], "cast_order_canonical": ["Vitaspore Thallid", "Sporecrown Thallid"], "actions": [{ "card": "Vitaspore Thallid" }, { "card": "Sporecrown Thallid" }] },
+    { "index": 26, "summary": "land=Peat Bog; cast: Vitaspore Thallid, Sporecrown Thallid", "land": "Peat Bog", "casts": ["Vitaspore Thallid", "Sporecrown Thallid"], "cast_order_canonical": ["Vitaspore Thallid", "Sporecrown Thallid"], "actions": [{ "card": "Vitaspore Thallid" }, { "card": "Sporecrown Thallid" }] },
+    { "index": 27, "summary": "land=Peat Bog; cast: Vitaspore Thallid, Sporecrown Thallid", "land": "Peat Bog", "casts": ["Vitaspore Thallid", "Sporecrown Thallid"], "cast_order_canonical": ["Vitaspore Thallid", "Sporecrown Thallid"], "actions": [{ "card": "Vitaspore Thallid" }, { "card": "Sporecrown Thallid" }] },
+    { "index": 28, "summary": "land=Peat Bog; cast: Vitaspore Thallid, Sporecrown Thallid", "land": "Peat Bog", "casts": ["Vitaspore Thallid", "Sporecrown Thallid"], "cast_order_canonical": ["Vitaspore Thallid", "Sporecrown Thallid"], "actions": [{ "card": "Vitaspore Thallid" }, { "card": "Sporecrown Thallid" }] },
+    { "index": 29, "summary": "land=Blooming Marsh; cast: Sporecrown Thallid, Vitaspore Thallid", "land": "Blooming Marsh", "casts": ["Sporecrown Thallid", "Vitaspore Thallid"], "cast_order_canonical": ["Sporecrown Thallid", "Vitaspore Thallid"], "actions": [{ "card": "Sporecrown Thallid" }, { "card": "Vitaspore Thallid" }] },
+    { "index": 30, "summary": "land=Blooming Marsh; cast: Sporecrown Thallid, Vitaspore Thallid", "land": "Blooming Marsh", "casts": ["Sporecrown Thallid", "Vitaspore Thallid"], "cast_order_canonical": ["Sporecrown Thallid", "Vitaspore Thallid"], "actions": [{ "card": "Sporecrown Thallid" }, { "card": "Vitaspore Thallid" }] },
+    { "index": 31, "summary": "land=Blooming Marsh; cast: Sporecrown Thallid, Vitaspore Thallid", "land": "Blooming Marsh", "casts": ["Sporecrown Thallid", "Vitaspore Thallid"], "cast_order_canonical": ["Sporecrown Thallid", "Vitaspore Thallid"], "actions": [{ "card": "Sporecrown Thallid" }, { "card": "Vitaspore Thallid" }] },
+    { "index": 32, "summary": "land=Blooming Marsh; cast: Sporecrown Thallid, Vitaspore Thallid", "land": "Blooming Marsh", "casts": ["Sporecrown Thallid", "Vitaspore Thallid"], "cast_order_canonical": ["Sporecrown Thallid", "Vitaspore Thallid"], "actions": [{ "card": "Sporecrown Thallid" }, { "card": "Vitaspore Thallid" }] },
+    { "index": 33, "summary": "land=Blooming Marsh; cast: Sporecrown Thallid, Vitaspore Thallid", "land": "Blooming Marsh", "casts": ["Sporecrown Thallid", "Vitaspore Thallid"], "cast_order_canonical": ["Sporecrown Thallid", "Vitaspore Thallid"], "actions": [{ "card": "Sporecrown Thallid" }, { "card": "Vitaspore Thallid" }] },
+    { "index": 34, "summary": "land=Blooming Marsh; cast: Vitaspore Thallid, Sporecrown Thallid", "land": "Blooming Marsh", "casts": ["Vitaspore Thallid", "Sporecrown Thallid"], "cast_order_canonical": ["Vitaspore Thallid", "Sporecrown Thallid"], "actions": [{ "card": "Vitaspore Thallid" }, { "card": "Sporecrown Thallid" }] },
+    { "index": 35, "summary": "land=Blooming Marsh; cast: Vitaspore Thallid, Sporecrown Thallid", "land": "Blooming Marsh", "casts": ["Vitaspore Thallid", "Sporecrown Thallid"], "cast_order_canonical": ["Vitaspore Thallid", "Sporecrown Thallid"], "actions": [{ "card": "Vitaspore Thallid" }, { "card": "Sporecrown Thallid" }] },
+    { "index": 36, "summary": "land=Blooming Marsh; cast: Vitaspore Thallid, Sporecrown Thallid", "land": "Blooming Marsh", "casts": ["Vitaspore Thallid", "Sporecrown Thallid"], "cast_order_canonical": ["Vitaspore Thallid", "Sporecrown Thallid"], "actions": [{ "card": "Vitaspore Thallid" }, { "card": "Sporecrown Thallid" }] },
+    { "index": 37, "summary": "land=Blooming Marsh; cast: Vitaspore Thallid, Sporecrown Thallid", "land": "Blooming Marsh", "casts": ["Vitaspore Thallid", "Sporecrown Thallid"], "cast_order_canonical": ["Vitaspore Thallid", "Sporecrown Thallid"], "actions": [{ "card": "Vitaspore Thallid" }, { "card": "Sporecrown Thallid" }] },
+    { "index": 38, "summary": "land=Blooming Marsh; cast: Vitaspore Thallid, Sporecrown Thallid", "land": "Blooming Marsh", "casts": ["Vitaspore Thallid", "Sporecrown Thallid"], "cast_order_canonical": ["Vitaspore Thallid", "Sporecrown Thallid"], "actions": [{ "card": "Vitaspore Thallid" }, { "card": "Sporecrown Thallid" }] },
+    { "index": 39, "summary": "land=none; cast: Sporecrown Thallid, Vitaspore Thallid", "land": null, "casts": ["Sporecrown Thallid", "Vitaspore Thallid"], "cast_order_canonical": ["Sporecrown Thallid", "Vitaspore Thallid"], "actions": [{ "card": "Sporecrown Thallid" }, { "card": "Vitaspore Thallid" }] },
+    { "index": 40, "summary": "land=none; cast: Sporecrown Thallid, Vitaspore Thallid", "land": null, "casts": ["Sporecrown Thallid", "Vitaspore Thallid"], "cast_order_canonical": ["Sporecrown Thallid", "Vitaspore Thallid"], "actions": [{ "card": "Sporecrown Thallid" }, { "card": "Vitaspore Thallid" }] },
+    { "index": 41, "summary": "land=none; cast: Sporecrown Thallid, Vitaspore Thallid", "land": null, "casts": ["Sporecrown Thallid", "Vitaspore Thallid"], "cast_order_canonical": ["Sporecrown Thallid", "Vitaspore Thallid"], "actions": [{ "card": "Sporecrown Thallid" }, { "card": "Vitaspore Thallid" }] },
+    { "index": 42, "summary": "land=none; cast: Sporecrown Thallid, Vitaspore Thallid", "land": null, "casts": ["Sporecrown Thallid", "Vitaspore Thallid"], "cast_order_canonical": ["Sporecrown Thallid", "Vitaspore Thallid"], "actions": [{ "card": "Sporecrown Thallid" }, { "card": "Vitaspore Thallid" }] },
+    { "index": 43, "summary": "land=none; cast: Sporecrown Thallid, Vitaspore Thallid", "land": null, "casts": ["Sporecrown Thallid", "Vitaspore Thallid"], "cast_order_canonical": ["Sporecrown Thallid", "Vitaspore Thallid"], "actions": [{ "card": "Sporecrown Thallid" }, { "card": "Vitaspore Thallid" }] },
+    { "index": 44, "summary": "land=none; cast: Vitaspore Thallid, Sporecrown Thallid", "land": null, "casts": ["Vitaspore Thallid", "Sporecrown Thallid"], "cast_order_canonical": ["Vitaspore Thallid", "Sporecrown Thallid"], "actions": [{ "card": "Vitaspore Thallid" }, { "card": "Sporecrown Thallid" }] },
+    { "index": 45, "summary": "land=none; cast: Vitaspore Thallid, Sporecrown Thallid", "land": null, "casts": ["Vitaspore Thallid", "Sporecrown Thallid"], "cast_order_canonical": ["Vitaspore Thallid", "Sporecrown Thallid"], "actions": [{ "card": "Vitaspore Thallid" }, { "card": "Sporecrown Thallid" }] },
+    { "index": 46, "summary": "land=none; cast: Vitaspore Thallid, Sporecrown Thallid", "land": null, "casts": ["Vitaspore Thallid", "Sporecrown Thallid"], "cast_order_canonical": ["Vitaspore Thallid", "Sporecrown Thallid"], "actions": [{ "card": "Vitaspore Thallid" }, { "card": "Sporecrown Thallid" }] },
+    { "index": 47, "summary": "land=none; cast: Vitaspore Thallid, Sporecrown Thallid", "land": null, "casts": ["Vitaspore Thallid", "Sporecrown Thallid"], "cast_order_canonical": ["Vitaspore Thallid", "Sporecrown Thallid"], "actions": [{ "card": "Vitaspore Thallid" }, { "card": "Sporecrown Thallid" }] },
+    { "index": 48, "summary": "land=none; cast: Vitaspore Thallid, Sporecrown Thallid", "land": null, "casts": ["Vitaspore Thallid", "Sporecrown Thallid"], "cast_order_canonical": ["Vitaspore Thallid", "Sporecrown Thallid"], "actions": [{ "card": "Vitaspore Thallid" }, { "card": "Sporecrown Thallid" }] },
+    { "index": 49, "summary": "land=Peat Bog; cast: Vitaspore Thallid", "land": "Peat Bog", "casts": ["Vitaspore Thallid"], "actions": [{ "card": "Vitaspore Thallid" }] },
+    { "index": 50, "summary": "land=Peat Bog; cast: Vitaspore Thallid", "land": "Peat Bog", "casts": ["Vitaspore Thallid"], "actions": [{ "card": "Vitaspore Thallid" }] },
+    { "index": 51, "summary": "land=Peat Bog; cast: Vitaspore Thallid", "land": "Peat Bog", "casts": ["Vitaspore Thallid"], "actions": [{ "card": "Vitaspore Thallid" }] },
+    { "index": 52, "summary": "land=Peat Bog; cast: Vitaspore Thallid", "land": "Peat Bog", "casts": ["Vitaspore Thallid"], "actions": [{ "card": "Vitaspore Thallid" }] },
+    { "index": 53, "summary": "land=Peat Bog; cast: Vitaspore Thallid", "land": "Peat Bog", "casts": ["Vitaspore Thallid"], "actions": [{ "card": "Vitaspore Thallid" }] },
+    { "index": 54, "summary": "land=Blooming Marsh; cast: Vitaspore Thallid", "land": "Blooming Marsh", "casts": ["Vitaspore Thallid"], "actions": [{ "card": "Vitaspore Thallid" }] },
+    { "index": 55, "summary": "land=Blooming Marsh; cast: Vitaspore Thallid", "land": "Blooming Marsh", "casts": ["Vitaspore Thallid"], "actions": [{ "card": "Vitaspore Thallid" }] },
+    { "index": 56, "summary": "land=Blooming Marsh; cast: Vitaspore Thallid", "land": "Blooming Marsh", "casts": ["Vitaspore Thallid"], "actions": [{ "card": "Vitaspore Thallid" }] },
+    { "index": 57, "summary": "land=Blooming Marsh; cast: Vitaspore Thallid", "land": "Blooming Marsh", "casts": ["Vitaspore Thallid"], "actions": [{ "card": "Vitaspore Thallid" }] },
+    { "index": 58, "summary": "land=Blooming Marsh; cast: Vitaspore Thallid", "land": "Blooming Marsh", "casts": ["Vitaspore Thallid"], "actions": [{ "card": "Vitaspore Thallid" }] },
+    { "index": 59, "summary": "land=none; cast: Vitaspore Thallid", "land": null, "casts": ["Vitaspore Thallid"], "actions": [{ "card": "Vitaspore Thallid" }] },
+    { "index": 60, "summary": "land=none; cast: Vitaspore Thallid", "land": null, "casts": ["Vitaspore Thallid"], "actions": [{ "card": "Vitaspore Thallid" }] },
+    { "index": 61, "summary": "land=none; cast: Vitaspore Thallid", "land": null, "casts": ["Vitaspore Thallid"], "actions": [{ "card": "Vitaspore Thallid" }] },
+    { "index": 62, "summary": "land=none; cast: Vitaspore Thallid", "land": null, "casts": ["Vitaspore Thallid"], "actions": [{ "card": "Vitaspore Thallid" }] },
+    { "index": 63, "summary": "land=none; cast: Vitaspore Thallid", "land": null, "casts": ["Vitaspore Thallid"], "actions": [{ "card": "Vitaspore Thallid" }] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 8,
+  "type": "main_phase",
+  "turn": 3,
+  "phase": "pre_main",
+  "on_the_play": true,
+  "mdfc_backs": ["Boulderloft Pathway", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "1/1 Saproling Token", "idx": 3, "num": 1000, "is_land": false }, { "name": "Blooming Marsh", "idx": 4, "num": 3, "tapped": true, "is_land": true }, { "name": "Doubling Season", "idx": 5, "num": 11, "is_land": false }, { "name": "Secluded Courtyard", "idx": 1, "num": 36, "tapped": true, "is_land": true }, { "name": "Undercellar Myconid", "idx": 2, "num": 49, "tapped": true, "is_land": false }], "vial_counters": [], "hand": [{ "num": 27, "name": "Peat Bog", "cost": "", "mv": 0, "kind": "land" }, { "num": 43, "name": "Sporecrown Thallid", "cost": "{1}{G}", "mv": 2, "kind": "permanent", "is_creature": true }, { "num": 44, "name": "Sporecrown Thallid", "cost": "{1}{G}", "mv": 2, "kind": "permanent", "is_creature": true }, { "num": 57, "name": "Vitaspore Thallid", "cost": "{1}{G}", "mv": 2, "kind": "permanent", "is_creature": true }], "graveyard": ["Hickory Woodlot"], "library_size": 51, "land_drops_left": 0 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "2/2 Creature", "idx": 0, "num": 500000, "is_land": false }] },
+  "plans": [
+    { "index": 0, "summary": "cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 9,
+  "type": "main_phase",
+  "turn": 3,
+  "phase": "post_main",
+  "on_the_play": true,
+  "events": [{ "turn": 3, "kind": "combat", "text": "⚔ attacked: 1/1 Saproling Token (1) — 1 to opponent (20→19)" }],
+  "mdfc_backs": ["Boulderloft Pathway", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "1/1 Saproling Token", "idx": 3, "num": 1000, "tapped": true, "is_land": false }, { "name": "Blooming Marsh", "idx": 4, "num": 3, "tapped": true, "is_land": true }, { "name": "Doubling Season", "idx": 5, "num": 11, "is_land": false }, { "name": "Secluded Courtyard", "idx": 1, "num": 36, "tapped": true, "is_land": true }, { "name": "Undercellar Myconid", "idx": 2, "num": 49, "tapped": true, "is_land": false }], "vial_counters": [], "hand": [{ "num": 27, "name": "Peat Bog", "cost": "", "mv": 0, "kind": "land" }, { "num": 43, "name": "Sporecrown Thallid", "cost": "{1}{G}", "mv": 2, "kind": "permanent", "is_creature": true }, { "num": 44, "name": "Sporecrown Thallid", "cost": "{1}{G}", "mv": 2, "kind": "permanent", "is_creature": true }, { "num": 57, "name": "Vitaspore Thallid", "cost": "{1}{G}", "mv": 2, "kind": "permanent", "is_creature": true }], "graveyard": ["Hickory Woodlot"], "library_size": 51, "land_drops_left": 0 },
+  "opponent": { "life": 19, "battlefield": [{ "name": "2/2 Creature", "idx": 0, "num": 500000, "is_land": false }] },
+  "plans": [
+    { "index": 0, "summary": "cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
+}
+},
+    { "chosen": 0, "decision": {
+  "decision_index": 10,
+  "main_ordinal": 3,
+  "type": "main_phase",
+  "turn": 4,
+  "phase": "pre_main",
+  "on_the_play": true,
+  "drew": [{ "turn": 4, "card": "Peat Bog" }],
+  "mdfc_backs": ["Boulderloft Pathway", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "1/1 Saproling Token", "idx": 3, "num": 1000, "is_land": false }, { "name": "Blooming Marsh", "idx": 4, "num": 3, "is_land": true, "taps": "BG" }, { "name": "Doubling Season", "idx": 5, "num": 11, "is_land": false }, { "name": "Secluded Courtyard", "idx": 1, "num": 36, "is_land": true, "taps": "C" }, { "name": "Undercellar Myconid", "idx": 2, "num": 49, "is_land": false, "taps": "WUBRG" }], "vial_counters": [], "hand": [{ "num": 27, "name": "Peat Bog", "cost": "", "mv": 0, "kind": "land" }, { "num": 28, "name": "Peat Bog", "cost": "", "mv": 0, "kind": "land" }, { "num": 43, "name": "Sporecrown Thallid", "cost": "{1}{G}", "mv": 2, "kind": "permanent", "is_creature": true }, { "num": 44, "name": "Sporecrown Thallid", "cost": "{1}{G}", "mv": 2, "kind": "permanent", "is_creature": true }, { "num": 57, "name": "Vitaspore Thallid", "cost": "{1}{G}", "mv": 2, "kind": "permanent", "is_creature": true }], "graveyard": ["Hickory Woodlot"], "library_size": 50, "land_drops_left": 1 },
+  "opponent": { "life": 19, "battlefield": [{ "name": "2/2 Creature", "idx": 0, "num": 500000, "is_land": false }] },
+  "plans": [
+    { "index": 0, "summary": "land=Peat Bog; cast: Sporecrown Thallid", "land": "Peat Bog", "casts": ["Sporecrown Thallid"], "actions": [{ "card": "Sporecrown Thallid" }] },
+    { "index": 1, "summary": "land=none; cast: Sporecrown Thallid", "land": null, "casts": ["Sporecrown Thallid"], "actions": [{ "card": "Sporecrown Thallid" }] },
+    { "index": 2, "summary": "land=Peat Bog; cast: Vitaspore Thallid", "land": "Peat Bog", "casts": ["Vitaspore Thallid"], "actions": [{ "card": "Vitaspore Thallid" }] },
+    { "index": 3, "summary": "land=none; cast: Vitaspore Thallid", "land": null, "casts": ["Vitaspore Thallid"], "actions": [{ "card": "Vitaspore Thallid" }] },
+    { "index": 4, "summary": "land=Peat Bog; cast: (nothing)", "land": "Peat Bog", "casts": [], "actions": [] },
+    { "index": 5, "summary": "land=none; cast: (nothing)", "land": null, "casts": [], "actions": [] },
+    { "index": 6, "summary": "land=Peat Bog; cast: Vitaspore Thallid", "land": "Peat Bog", "casts": ["Vitaspore Thallid"], "actions": [{ "card": "Vitaspore Thallid" }] },
+    { "index": 7, "summary": "land=Peat Bog; cast: Vitaspore Thallid", "land": "Peat Bog", "casts": ["Vitaspore Thallid"], "actions": [{ "card": "Vitaspore Thallid" }] },
+    { "index": 8, "summary": "land=Peat Bog; cast: Vitaspore Thallid", "land": "Peat Bog", "casts": ["Vitaspore Thallid"], "actions": [{ "card": "Vitaspore Thallid" }] },
+    { "index": 9, "summary": "land=Peat Bog; cast: Vitaspore Thallid", "land": "Peat Bog", "casts": ["Vitaspore Thallid"], "actions": [{ "card": "Vitaspore Thallid" }] },
+    { "index": 10, "summary": "land=Peat Bog; cast: Vitaspore Thallid", "land": "Peat Bog", "casts": ["Vitaspore Thallid"], "actions": [{ "card": "Vitaspore Thallid" }] },
+    { "index": 11, "summary": "land=none; cast: Vitaspore Thallid", "land": null, "casts": ["Vitaspore Thallid"], "actions": [{ "card": "Vitaspore Thallid" }] },
+    { "index": 12, "summary": "land=none; cast: Vitaspore Thallid", "land": null, "casts": ["Vitaspore Thallid"], "actions": [{ "card": "Vitaspore Thallid" }] },
+    { "index": 13, "summary": "land=none; cast: Vitaspore Thallid", "land": null, "casts": ["Vitaspore Thallid"], "actions": [{ "card": "Vitaspore Thallid" }] },
+    { "index": 14, "summary": "land=none; cast: Vitaspore Thallid", "land": null, "casts": ["Vitaspore Thallid"], "actions": [{ "card": "Vitaspore Thallid" }] },
+    { "index": 15, "summary": "land=none; cast: Vitaspore Thallid", "land": null, "casts": ["Vitaspore Thallid"], "actions": [{ "card": "Vitaspore Thallid" }] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 11,
+  "type": "main_phase",
+  "turn": 4,
+  "phase": "pre_main",
+  "on_the_play": true,
+  "mdfc_backs": ["Boulderloft Pathway", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "1/1 Saproling Token", "idx": 3, "num": 1000, "is_land": false }, { "name": "Blooming Marsh", "idx": 4, "num": 3, "tapped": true, "is_land": true }, { "name": "Doubling Season", "idx": 5, "num": 11, "is_land": false }, { "name": "Peat Bog", "idx": 6, "num": 27, "tapped": true, "is_land": true, "counters": [{ "kind": "depletion", "label": "depletion", "count": 4 }] }, { "name": "Secluded Courtyard", "idx": 1, "num": 36, "tapped": true, "is_land": true }, { "name": "Sporecrown Thallid", "idx": 7, "num": 43, "is_land": false }, { "name": "Undercellar Myconid", "idx": 2, "num": 49, "is_land": false, "taps": "WUBRG" }], "vial_counters": [], "hand": [{ "num": 28, "name": "Peat Bog", "cost": "", "mv": 0, "kind": "land" }, { "num": 44, "name": "Sporecrown Thallid", "cost": "{1}{G}", "mv": 2, "kind": "permanent", "is_creature": true }, { "num": 57, "name": "Vitaspore Thallid", "cost": "{1}{G}", "mv": 2, "kind": "permanent", "is_creature": true }], "graveyard": ["Hickory Woodlot"], "library_size": 50, "land_drops_left": 0 },
+  "opponent": { "life": 19, "battlefield": [{ "name": "2/2 Creature", "idx": 0, "num": 500000, "is_land": false }] },
+  "plans": [
+    { "index": 0, "summary": "cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 12,
+  "type": "main_phase",
+  "turn": 4,
+  "phase": "post_main",
+  "on_the_play": true,
+  "events": [{ "turn": 4, "kind": "combat", "text": "⚔ attacked: Undercellar Myconid (2), 1/1 Saproling Token (2) — 4 to opponent (19→15)" }],
+  "mdfc_backs": ["Boulderloft Pathway", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "1/1 Saproling Token", "idx": 3, "num": 1000, "tapped": true, "is_land": false }, { "name": "Blooming Marsh", "idx": 4, "num": 3, "tapped": true, "is_land": true }, { "name": "Doubling Season", "idx": 5, "num": 11, "is_land": false }, { "name": "Peat Bog", "idx": 6, "num": 27, "tapped": true, "is_land": true, "counters": [{ "kind": "depletion", "label": "depletion", "count": 4 }] }, { "name": "Secluded Courtyard", "idx": 1, "num": 36, "tapped": true, "is_land": true }, { "name": "Sporecrown Thallid", "idx": 7, "num": 43, "is_land": false }, { "name": "Undercellar Myconid", "idx": 2, "num": 49, "tapped": true, "is_land": false }], "vial_counters": [], "hand": [{ "num": 28, "name": "Peat Bog", "cost": "", "mv": 0, "kind": "land" }, { "num": 44, "name": "Sporecrown Thallid", "cost": "{1}{G}", "mv": 2, "kind": "permanent", "is_creature": true }, { "num": 57, "name": "Vitaspore Thallid", "cost": "{1}{G}", "mv": 2, "kind": "permanent", "is_creature": true }], "graveyard": ["Hickory Woodlot"], "library_size": 50, "land_drops_left": 0 },
+  "opponent": { "life": 15, "battlefield": [{ "name": "2/2 Creature", "idx": 0, "num": 500000, "is_land": false }] },
+  "plans": [
+    { "index": 0, "summary": "cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
+}
+},
+    { "chosen": 1, "cast_order": ["*", "Vitaspore Thallid", "Sporecrown Thallid"], "decision": {
+  "decision_index": 13,
+  "main_ordinal": 4,
+  "type": "main_phase",
+  "turn": 5,
+  "phase": "pre_main",
+  "on_the_play": true,
+  "drew": [{ "turn": 5, "card": "Doubling Season" }],
+  "mdfc_backs": ["Boulderloft Pathway", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "1/1 Saproling Token", "idx": 3, "num": 1000, "is_land": false }, { "name": "Blooming Marsh", "idx": 4, "num": 3, "is_land": true, "taps": "BG" }, { "name": "Doubling Season", "idx": 5, "num": 11, "is_land": false }, { "name": "Peat Bog", "idx": 6, "num": 27, "is_land": true, "taps": "B", "counters": [{ "kind": "depletion", "label": "depletion", "count": 4 }] }, { "name": "Secluded Courtyard", "idx": 1, "num": 36, "is_land": true, "taps": "C" }, { "name": "Sporecrown Thallid", "idx": 7, "num": 43, "is_land": false }, { "name": "Undercellar Myconid", "idx": 2, "num": 49, "is_land": false, "taps": "WUBRG" }], "vial_counters": [], "hand": [{ "num": 12, "name": "Doubling Season", "cost": "{4}{G}", "mv": 5, "kind": "permanent" }, { "num": 28, "name": "Peat Bog", "cost": "", "mv": 0, "kind": "land" }, { "num": 44, "name": "Sporecrown Thallid", "cost": "{1}{G}", "mv": 2, "kind": "permanent", "is_creature": true }, { "num": 57, "name": "Vitaspore Thallid", "cost": "{1}{G}", "mv": 2, "kind": "permanent", "is_creature": true }], "graveyard": ["Hickory Woodlot"], "library_size": 49, "land_drops_left": 1 },
+  "opponent": { "life": 15, "battlefield": [{ "name": "2/2 Creature", "idx": 0, "num": 500000, "is_land": false }] },
+  "plans": [
+    { "index": 0, "summary": "land=Peat Bog; cast: Sporecrown Thallid, Vitaspore Thallid", "land": "Peat Bog", "casts": ["Sporecrown Thallid", "Vitaspore Thallid"], "cast_order_canonical": ["Sporecrown Thallid", "Vitaspore Thallid"], "actions": [{ "card": "Sporecrown Thallid" }, { "card": "Vitaspore Thallid" }] },
+    { "index": 1, "summary": "land=Peat Bog; cast: Vitaspore Thallid, Sporecrown Thallid", "land": "Peat Bog", "casts": ["Vitaspore Thallid", "Sporecrown Thallid"], "cast_order_canonical": ["Vitaspore Thallid", "Sporecrown Thallid"], "actions": [{ "card": "Vitaspore Thallid" }, { "card": "Sporecrown Thallid" }] },
+    { "index": 2, "summary": "land=none; cast: Sporecrown Thallid, Vitaspore Thallid", "land": null, "casts": ["Sporecrown Thallid", "Vitaspore Thallid"], "cast_order_canonical": ["Sporecrown Thallid", "Vitaspore Thallid"], "actions": [{ "card": "Sporecrown Thallid" }, { "card": "Vitaspore Thallid" }] },
+    { "index": 3, "summary": "land=none; cast: Vitaspore Thallid, Sporecrown Thallid", "land": null, "casts": ["Vitaspore Thallid", "Sporecrown Thallid"], "cast_order_canonical": ["Vitaspore Thallid", "Sporecrown Thallid"], "actions": [{ "card": "Vitaspore Thallid" }, { "card": "Sporecrown Thallid" }] },
+    { "index": 4, "summary": "land=Peat Bog; cast: Sporecrown Thallid", "land": "Peat Bog", "casts": ["Sporecrown Thallid"], "actions": [{ "card": "Sporecrown Thallid" }] },
+    { "index": 5, "summary": "land=none; cast: Sporecrown Thallid", "land": null, "casts": ["Sporecrown Thallid"], "actions": [{ "card": "Sporecrown Thallid" }] },
+    { "index": 6, "summary": "land=Peat Bog; cast: Vitaspore Thallid", "land": "Peat Bog", "casts": ["Vitaspore Thallid"], "actions": [{ "card": "Vitaspore Thallid" }] },
+    { "index": 7, "summary": "land=none; cast: Vitaspore Thallid", "land": null, "casts": ["Vitaspore Thallid"], "actions": [{ "card": "Vitaspore Thallid" }] },
+    { "index": 8, "summary": "land=Peat Bog; cast: Doubling Season", "land": "Peat Bog", "casts": ["Doubling Season"], "actions": [{ "card": "Doubling Season" }] },
+    { "index": 9, "summary": "land=none; cast: Doubling Season", "land": null, "casts": ["Doubling Season"], "actions": [{ "card": "Doubling Season" }] },
+    { "index": 10, "summary": "land=Peat Bog; cast: (nothing)", "land": "Peat Bog", "casts": [], "actions": [] },
+    { "index": 11, "summary": "land=none; cast: (nothing)", "land": null, "casts": [], "actions": [] },
+    { "index": 12, "summary": "land=Peat Bog; cast: Sporecrown Thallid, Vitaspore Thallid", "land": "Peat Bog", "casts": ["Sporecrown Thallid", "Vitaspore Thallid"], "cast_order_canonical": ["Sporecrown Thallid", "Vitaspore Thallid"], "actions": [{ "card": "Sporecrown Thallid" }, { "card": "Vitaspore Thallid" }] },
+    { "index": 13, "summary": "land=Peat Bog; cast: Sporecrown Thallid, Vitaspore Thallid", "land": "Peat Bog", "casts": ["Sporecrown Thallid", "Vitaspore Thallid"], "cast_order_canonical": ["Sporecrown Thallid", "Vitaspore Thallid"], "actions": [{ "card": "Sporecrown Thallid" }, { "card": "Vitaspore Thallid" }] },
+    { "index": 14, "summary": "land=Peat Bog; cast: Sporecrown Thallid, Vitaspore Thallid", "land": "Peat Bog", "casts": ["Sporecrown Thallid", "Vitaspore Thallid"], "cast_order_canonical": ["Sporecrown Thallid", "Vitaspore Thallid"], "actions": [{ "card": "Sporecrown Thallid" }, { "card": "Vitaspore Thallid" }] },
+    { "index": 15, "summary": "land=Peat Bog; cast: Sporecrown Thallid, Vitaspore Thallid", "land": "Peat Bog", "casts": ["Sporecrown Thallid", "Vitaspore Thallid"], "cast_order_canonical": ["Sporecrown Thallid", "Vitaspore Thallid"], "actions": [{ "card": "Sporecrown Thallid" }, { "card": "Vitaspore Thallid" }] },
+    { "index": 16, "summary": "land=Peat Bog; cast: Sporecrown Thallid, Vitaspore Thallid", "land": "Peat Bog", "casts": ["Sporecrown Thallid", "Vitaspore Thallid"], "cast_order_canonical": ["Sporecrown Thallid", "Vitaspore Thallid"], "actions": [{ "card": "Sporecrown Thallid" }, { "card": "Vitaspore Thallid" }] },
+    { "index": 17, "summary": "land=Peat Bog; cast: Vitaspore Thallid, Sporecrown Thallid", "land": "Peat Bog", "casts": ["Vitaspore Thallid", "Sporecrown Thallid"], "cast_order_canonical": ["Vitaspore Thallid", "Sporecrown Thallid"], "actions": [{ "card": "Vitaspore Thallid" }, { "card": "Sporecrown Thallid" }] },
+    { "index": 18, "summary": "land=Peat Bog; cast: Vitaspore Thallid, Sporecrown Thallid", "land": "Peat Bog", "casts": ["Vitaspore Thallid", "Sporecrown Thallid"], "cast_order_canonical": ["Vitaspore Thallid", "Sporecrown Thallid"], "actions": [{ "card": "Vitaspore Thallid" }, { "card": "Sporecrown Thallid" }] },
+    { "index": 19, "summary": "land=Peat Bog; cast: Vitaspore Thallid, Sporecrown Thallid", "land": "Peat Bog", "casts": ["Vitaspore Thallid", "Sporecrown Thallid"], "cast_order_canonical": ["Vitaspore Thallid", "Sporecrown Thallid"], "actions": [{ "card": "Vitaspore Thallid" }, { "card": "Sporecrown Thallid" }] },
+    { "index": 20, "summary": "land=Peat Bog; cast: Vitaspore Thallid, Sporecrown Thallid", "land": "Peat Bog", "casts": ["Vitaspore Thallid", "Sporecrown Thallid"], "cast_order_canonical": ["Vitaspore Thallid", "Sporecrown Thallid"], "actions": [{ "card": "Vitaspore Thallid" }, { "card": "Sporecrown Thallid" }] },
+    { "index": 21, "summary": "land=Peat Bog; cast: Vitaspore Thallid, Sporecrown Thallid", "land": "Peat Bog", "casts": ["Vitaspore Thallid", "Sporecrown Thallid"], "cast_order_canonical": ["Vitaspore Thallid", "Sporecrown Thallid"], "actions": [{ "card": "Vitaspore Thallid" }, { "card": "Sporecrown Thallid" }] },
+    { "index": 22, "summary": "land=none; cast: Sporecrown Thallid, Vitaspore Thallid", "land": null, "casts": ["Sporecrown Thallid", "Vitaspore Thallid"], "cast_order_canonical": ["Sporecrown Thallid", "Vitaspore Thallid"], "actions": [{ "card": "Sporecrown Thallid" }, { "card": "Vitaspore Thallid" }] },
+    { "index": 23, "summary": "land=none; cast: Sporecrown Thallid, Vitaspore Thallid", "land": null, "casts": ["Sporecrown Thallid", "Vitaspore Thallid"], "cast_order_canonical": ["Sporecrown Thallid", "Vitaspore Thallid"], "actions": [{ "card": "Sporecrown Thallid" }, { "card": "Vitaspore Thallid" }] },
+    { "index": 24, "summary": "land=none; cast: Sporecrown Thallid, Vitaspore Thallid", "land": null, "casts": ["Sporecrown Thallid", "Vitaspore Thallid"], "cast_order_canonical": ["Sporecrown Thallid", "Vitaspore Thallid"], "actions": [{ "card": "Sporecrown Thallid" }, { "card": "Vitaspore Thallid" }] },
+    { "index": 25, "summary": "land=none; cast: Sporecrown Thallid, Vitaspore Thallid", "land": null, "casts": ["Sporecrown Thallid", "Vitaspore Thallid"], "cast_order_canonical": ["Sporecrown Thallid", "Vitaspore Thallid"], "actions": [{ "card": "Sporecrown Thallid" }, { "card": "Vitaspore Thallid" }] },
+    { "index": 26, "summary": "land=none; cast: Sporecrown Thallid, Vitaspore Thallid", "land": null, "casts": ["Sporecrown Thallid", "Vitaspore Thallid"], "cast_order_canonical": ["Sporecrown Thallid", "Vitaspore Thallid"], "actions": [{ "card": "Sporecrown Thallid" }, { "card": "Vitaspore Thallid" }] },
+    { "index": 27, "summary": "land=none; cast: Vitaspore Thallid, Sporecrown Thallid", "land": null, "casts": ["Vitaspore Thallid", "Sporecrown Thallid"], "cast_order_canonical": ["Vitaspore Thallid", "Sporecrown Thallid"], "actions": [{ "card": "Vitaspore Thallid" }, { "card": "Sporecrown Thallid" }] },
+    { "index": 28, "summary": "land=none; cast: Vitaspore Thallid, Sporecrown Thallid", "land": null, "casts": ["Vitaspore Thallid", "Sporecrown Thallid"], "cast_order_canonical": ["Vitaspore Thallid", "Sporecrown Thallid"], "actions": [{ "card": "Vitaspore Thallid" }, { "card": "Sporecrown Thallid" }] },
+    { "index": 29, "summary": "land=none; cast: Vitaspore Thallid, Sporecrown Thallid", "land": null, "casts": ["Vitaspore Thallid", "Sporecrown Thallid"], "cast_order_canonical": ["Vitaspore Thallid", "Sporecrown Thallid"], "actions": [{ "card": "Vitaspore Thallid" }, { "card": "Sporecrown Thallid" }] },
+    { "index": 30, "summary": "land=none; cast: Vitaspore Thallid, Sporecrown Thallid", "land": null, "casts": ["Vitaspore Thallid", "Sporecrown Thallid"], "cast_order_canonical": ["Vitaspore Thallid", "Sporecrown Thallid"], "actions": [{ "card": "Vitaspore Thallid" }, { "card": "Sporecrown Thallid" }] },
+    { "index": 31, "summary": "land=none; cast: Vitaspore Thallid, Sporecrown Thallid", "land": null, "casts": ["Vitaspore Thallid", "Sporecrown Thallid"], "cast_order_canonical": ["Vitaspore Thallid", "Sporecrown Thallid"], "actions": [{ "card": "Vitaspore Thallid" }, { "card": "Sporecrown Thallid" }] },
+    { "index": 32, "summary": "land=Peat Bog; cast: Vitaspore Thallid", "land": "Peat Bog", "casts": ["Vitaspore Thallid"], "actions": [{ "card": "Vitaspore Thallid" }] },
+    { "index": 33, "summary": "land=Peat Bog; cast: Vitaspore Thallid", "land": "Peat Bog", "casts": ["Vitaspore Thallid"], "actions": [{ "card": "Vitaspore Thallid" }] },
+    { "index": 34, "summary": "land=Peat Bog; cast: Vitaspore Thallid", "land": "Peat Bog", "casts": ["Vitaspore Thallid"], "actions": [{ "card": "Vitaspore Thallid" }] },
+    { "index": 35, "summary": "land=Peat Bog; cast: Vitaspore Thallid", "land": "Peat Bog", "casts": ["Vitaspore Thallid"], "actions": [{ "card": "Vitaspore Thallid" }] },
+    { "index": 36, "summary": "land=Peat Bog; cast: Vitaspore Thallid", "land": "Peat Bog", "casts": ["Vitaspore Thallid"], "actions": [{ "card": "Vitaspore Thallid" }] },
+    { "index": 37, "summary": "land=none; cast: Vitaspore Thallid", "land": null, "casts": ["Vitaspore Thallid"], "actions": [{ "card": "Vitaspore Thallid" }] },
+    { "index": 38, "summary": "land=none; cast: Vitaspore Thallid", "land": null, "casts": ["Vitaspore Thallid"], "actions": [{ "card": "Vitaspore Thallid" }] },
+    { "index": 39, "summary": "land=none; cast: Vitaspore Thallid", "land": null, "casts": ["Vitaspore Thallid"], "actions": [{ "card": "Vitaspore Thallid" }] },
+    { "index": 40, "summary": "land=none; cast: Vitaspore Thallid", "land": null, "casts": ["Vitaspore Thallid"], "actions": [{ "card": "Vitaspore Thallid" }] },
+    { "index": 41, "summary": "land=none; cast: Vitaspore Thallid", "land": null, "casts": ["Vitaspore Thallid"], "actions": [{ "card": "Vitaspore Thallid" }] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 14,
+  "main_ordinal": 5,
+  "type": "main_phase",
+  "turn": 5,
+  "phase": "pre_main",
+  "on_the_play": true,
+  "mdfc_backs": ["Boulderloft Pathway", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "1/1 Saproling Token", "idx": 3, "num": 1000, "is_land": false }, { "name": "Blooming Marsh", "idx": 4, "num": 3, "tapped": true, "is_land": true }, { "name": "Doubling Season", "idx": 5, "num": 11, "is_land": false }, { "name": "Peat Bog", "idx": 6, "num": 27, "tapped": true, "is_land": true, "counters": [{ "kind": "depletion", "label": "depletion", "count": 3 }] }, { "name": "Peat Bog", "idx": 8, "num": 28, "tapped": true, "is_land": true, "counters": [{ "kind": "depletion", "label": "depletion", "count": 4 }] }, { "name": "Secluded Courtyard", "idx": 1, "num": 36, "tapped": true, "is_land": true }, { "name": "Sporecrown Thallid", "idx": 7, "num": 43, "is_land": false }, { "name": "Sporecrown Thallid", "idx": 10, "num": 44, "is_land": false }, { "name": "Undercellar Myconid", "idx": 2, "num": 49, "is_land": false, "taps": "WUBRG" }, { "name": "Vitaspore Thallid", "idx": 9, "num": 57, "is_land": false }], "vial_counters": [], "hand": [{ "num": 12, "name": "Doubling Season", "cost": "{4}{G}", "mv": 5, "kind": "permanent" }], "graveyard": ["Hickory Woodlot"], "library_size": 49, "land_drops_left": 0 },
+  "opponent": { "life": 15, "battlefield": [{ "name": "2/2 Creature", "idx": 0, "num": 500000, "is_land": false }] },
+  "plans": [
+    { "index": 0, "summary": "land=none; cast: Vitaspore Thallid: sac 1 creature", "land": null, "casts": ["Vitaspore Thallid"], "actions": [{ "card": "Vitaspore Thallid", "src_num": 57, "activate": true, "sacout": true, "sac_count": 1 }] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 15,
+  "main_ordinal": 6,
+  "type": "main_phase",
+  "turn": 5,
+  "phase": "post_main",
+  "on_the_play": true,
+  "events": [{ "turn": 5, "kind": "combat", "text": "⚔ attacked: Undercellar Myconid (3), 1/1 Saproling Token (3), Sporecrown Thallid (3) — 9 to opponent (15→6)" }],
+  "mdfc_backs": ["Boulderloft Pathway", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "1/1 Saproling Token", "idx": 3, "num": 1000, "tapped": true, "is_land": false }, { "name": "Blooming Marsh", "idx": 4, "num": 3, "tapped": true, "is_land": true }, { "name": "Doubling Season", "idx": 5, "num": 11, "is_land": false }, { "name": "Peat Bog", "idx": 6, "num": 27, "tapped": true, "is_land": true, "counters": [{ "kind": "depletion", "label": "depletion", "count": 3 }] }, { "name": "Peat Bog", "idx": 8, "num": 28, "tapped": true, "is_land": true, "counters": [{ "kind": "depletion", "label": "depletion", "count": 4 }] }, { "name": "Secluded Courtyard", "idx": 1, "num": 36, "tapped": true, "is_land": true }, { "name": "Sporecrown Thallid", "idx": 7, "num": 43, "tapped": true, "is_land": false }, { "name": "Sporecrown Thallid", "idx": 10, "num": 44, "is_land": false }, { "name": "Undercellar Myconid", "idx": 2, "num": 49, "tapped": true, "is_land": false }, { "name": "Vitaspore Thallid", "idx": 9, "num": 57, "is_land": false }], "vial_counters": [], "hand": [{ "num": 12, "name": "Doubling Season", "cost": "{4}{G}", "mv": 5, "kind": "permanent" }], "graveyard": ["Hickory Woodlot"], "library_size": 49, "land_drops_left": 0 },
+  "opponent": { "life": 6, "battlefield": [{ "name": "2/2 Creature", "idx": 0, "num": 500000, "is_land": false }] },
+  "plans": [
+    { "index": 0, "summary": "land=none; cast: Vitaspore Thallid: sac 1 creature", "land": null, "casts": ["Vitaspore Thallid"], "actions": [{ "card": "Vitaspore Thallid", "src_num": 57, "activate": true, "sacout": true, "sac_count": 1 }] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
+}
+},
+    { "chosen": 4, "decision": {
+  "decision_index": 16,
+  "main_ordinal": 7,
+  "type": "main_phase",
+  "turn": 6,
+  "phase": "pre_main",
+  "on_the_play": true,
+  "drew": [{ "turn": 6, "card": "Saproling Burst" }],
+  "mdfc_backs": ["Boulderloft Pathway", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "1/1 Saproling Token", "idx": 3, "num": 1000, "is_land": false }, { "name": "Blooming Marsh", "idx": 4, "num": 3, "is_land": true, "taps": "BG" }, { "name": "Doubling Season", "idx": 5, "num": 11, "is_land": false }, { "name": "Peat Bog", "idx": 6, "num": 27, "is_land": true, "taps": "B", "counters": [{ "kind": "depletion", "label": "depletion", "count": 3 }] }, { "name": "Peat Bog", "idx": 8, "num": 28, "is_land": true, "taps": "B", "counters": [{ "kind": "depletion", "label": "depletion", "count": 4 }] }, { "name": "Secluded Courtyard", "idx": 1, "num": 36, "is_land": true, "taps": "C" }, { "name": "Sporecrown Thallid", "idx": 7, "num": 43, "is_land": false }, { "name": "Sporecrown Thallid", "idx": 10, "num": 44, "is_land": false }, { "name": "Undercellar Myconid", "idx": 2, "num": 49, "is_land": false, "taps": "WUBRG" }, { "name": "Vitaspore Thallid", "idx": 9, "num": 57, "is_land": false, "counters": [{ "kind": "spore", "label": "spore", "count": 2 }] }], "vial_counters": [], "hand": [{ "num": 12, "name": "Doubling Season", "cost": "{4}{G}", "mv": 5, "kind": "permanent" }, { "num": 32, "name": "Saproling Burst", "cost": "{4}{G}", "mv": 5, "kind": "permanent" }], "graveyard": ["Hickory Woodlot"], "library_size": 48, "land_drops_left": 1 },
+  "opponent": { "life": 6, "battlefield": [{ "name": "2/2 Creature", "idx": 0, "num": 500000, "is_land": false }] },
+  "plans": [
+    { "index": 0, "summary": "land=none; cast: Doubling Season, Vitaspore Thallid: sac 1 creature", "land": null, "casts": ["Doubling Season", "Vitaspore Thallid"], "actions": [{ "card": "Doubling Season" }, { "card": "Vitaspore Thallid", "src_num": 57, "activate": true, "sacout": true, "sac_count": 1 }] },
+    { "index": 1, "summary": "land=none; cast: Saproling Burst, Vitaspore Thallid: sac 1 creature", "land": null, "casts": ["Saproling Burst", "Vitaspore Thallid"], "actions": [{ "card": "Saproling Burst" }, { "card": "Vitaspore Thallid", "src_num": 57, "activate": true, "sacout": true, "sac_count": 1 }] },
+    { "index": 2, "summary": "land=none; cast: Vitaspore Thallid: sac 1 creature", "land": null, "casts": ["Vitaspore Thallid"], "actions": [{ "card": "Vitaspore Thallid", "src_num": 57, "activate": true, "sacout": true, "sac_count": 1 }] },
+    { "index": 3, "summary": "land=none; cast: Doubling Season", "land": null, "casts": ["Doubling Season"], "actions": [{ "card": "Doubling Season" }] },
+    { "index": 4, "summary": "land=none; cast: Saproling Burst", "land": null, "casts": ["Saproling Burst"], "actions": [{ "card": "Saproling Burst" }] },
+    { "index": 5, "summary": "land=none; cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
+}
+},
+    { "chosen": 2, "decision": {
+  "decision_index": 17,
+  "main_ordinal": 8,
+  "type": "main_phase",
+  "turn": 6,
+  "phase": "pre_main",
+  "on_the_play": true,
+  "mdfc_backs": ["Boulderloft Pathway", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "1/1 Saproling Token", "idx": 3, "num": 1000, "is_land": false }, { "name": "Blooming Marsh", "idx": 4, "num": 3, "tapped": true, "is_land": true }, { "name": "Doubling Season", "idx": 5, "num": 11, "is_land": false }, { "name": "Peat Bog", "idx": 6, "num": 27, "tapped": true, "is_land": true, "counters": [{ "kind": "depletion", "label": "depletion", "count": 2 }] }, { "name": "Peat Bog", "idx": 8, "num": 28, "tapped": true, "is_land": true, "counters": [{ "kind": "depletion", "label": "depletion", "count": 3 }] }, { "name": "Saproling Burst", "idx": 11, "num": 32, "is_land": false, "counters": [{ "kind": "fade", "label": "fade", "count": 14 }] }, { "name": "Secluded Courtyard", "idx": 1, "num": 36, "is_land": true, "taps": "C" }, { "name": "Sporecrown Thallid", "idx": 7, "num": 43, "is_land": false }, { "name": "Sporecrown Thallid", "idx": 10, "num": 44, "is_land": false }, { "name": "Undercellar Myconid", "idx": 2, "num": 49, "is_land": false, "taps": "WUBRG" }, { "name": "Vitaspore Thallid", "idx": 9, "num": 57, "is_land": false, "counters": [{ "kind": "spore", "label": "spore", "count": 2 }] }], "vial_counters": [], "hand": [{ "num": 12, "name": "Doubling Season", "cost": "{4}{G}", "mv": 5, "kind": "permanent" }], "graveyard": ["Hickory Woodlot"], "library_size": 48, "land_drops_left": 1 },
+  "opponent": { "life": 6, "battlefield": [{ "name": "2/2 Creature", "idx": 0, "num": 500000, "is_land": false }] },
+  "plans": [
+    { "index": 0, "summary": "land=none; cast: Saproling Burst: remove a fade counter: create a Saproling, Vitaspore Thallid: sac 1 creature", "land": null, "casts": ["Saproling Burst", "Vitaspore Thallid"], "actions": [{ "card": "Saproling Burst", "src_num": 32, "activate": true, "x": 1 }, { "card": "Vitaspore Thallid", "src_num": 57, "activate": true, "sacout": true, "sac_count": 1 }] },
+    { "index": 1, "summary": "land=none; cast: Vitaspore Thallid: sac 1 creature", "land": null, "casts": ["Vitaspore Thallid"], "actions": [{ "card": "Vitaspore Thallid", "src_num": 57, "activate": true, "sacout": true, "sac_count": 1 }] },
+    { "index": 2, "summary": "land=none; cast: Saproling Burst: remove a fade counter: create a Saproling", "land": null, "casts": ["Saproling Burst"], "actions": [{ "card": "Saproling Burst", "src_num": 32, "activate": true, "x": 1 }] },
+    { "index": 3, "summary": "land=none; cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
+}
+},
+    { "chosen": 2, "decision": {
+  "decision_index": 18,
+  "main_ordinal": 9,
+  "type": "main_phase",
+  "turn": 6,
+  "phase": "pre_main",
+  "on_the_play": true,
+  "events": [{ "turn": 6, "kind": "token", "text": "🍄 Saproling Burst: removes a fade counter (13 left) -> Saproling 13/13" }],
+  "mdfc_backs": ["Boulderloft Pathway", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "0/0 Saproling Token", "idx": 12, "num": 1001, "is_land": false }, { "name": "0/0 Saproling Token", "idx": 13, "num": 1002, "is_land": false }, { "name": "1/1 Saproling Token", "idx": 3, "num": 1000, "is_land": false }, { "name": "Blooming Marsh", "idx": 4, "num": 3, "tapped": true, "is_land": true }, { "name": "Doubling Season", "idx": 5, "num": 11, "is_land": false }, { "name": "Peat Bog", "idx": 6, "num": 27, "tapped": true, "is_land": true, "counters": [{ "kind": "depletion", "label": "depletion", "count": 2 }] }, { "name": "Peat Bog", "idx": 8, "num": 28, "tapped": true, "is_land": true, "counters": [{ "kind": "depletion", "label": "depletion", "count": 3 }] }, { "name": "Saproling Burst", "idx": 11, "num": 32, "is_land": false, "counters": [{ "kind": "fade", "label": "fade", "count": 13 }] }, { "name": "Secluded Courtyard", "idx": 1, "num": 36, "is_land": true, "taps": "C" }, { "name": "Sporecrown Thallid", "idx": 7, "num": 43, "is_land": false }, { "name": "Sporecrown Thallid", "idx": 10, "num": 44, "is_land": false }, { "name": "Undercellar Myconid", "idx": 2, "num": 49, "is_land": false, "taps": "WUBRG" }, { "name": "Vitaspore Thallid", "idx": 9, "num": 57, "is_land": false, "counters": [{ "kind": "spore", "label": "spore", "count": 2 }] }], "vial_counters": [], "hand": [{ "num": 12, "name": "Doubling Season", "cost": "{4}{G}", "mv": 5, "kind": "permanent" }], "graveyard": ["Hickory Woodlot"], "library_size": 48, "land_drops_left": 1 },
+  "opponent": { "life": 6, "battlefield": [{ "name": "2/2 Creature", "idx": 0, "num": 500000, "is_land": false }] },
+  "plans": [
+    { "index": 0, "summary": "land=none; cast: Saproling Burst: remove a fade counter: create a Saproling, Vitaspore Thallid: sac 1 creature", "land": null, "casts": ["Saproling Burst", "Vitaspore Thallid"], "actions": [{ "card": "Saproling Burst", "src_num": 32, "activate": true, "x": 1 }, { "card": "Vitaspore Thallid", "src_num": 57, "activate": true, "sacout": true, "sac_count": 1 }] },
+    { "index": 1, "summary": "land=none; cast: Vitaspore Thallid: sac 1 creature", "land": null, "casts": ["Vitaspore Thallid"], "actions": [{ "card": "Vitaspore Thallid", "src_num": 57, "activate": true, "sacout": true, "sac_count": 1 }] },
+    { "index": 2, "summary": "land=none; cast: Saproling Burst: remove a fade counter: create a Saproling", "land": null, "casts": ["Saproling Burst"], "actions": [{ "card": "Saproling Burst", "src_num": 32, "activate": true, "x": 1 }] },
+    { "index": 3, "summary": "land=none; cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
+}
+},
+    { "chosen": 2, "decision": {
+  "decision_index": 19,
+  "main_ordinal": 10,
+  "type": "main_phase",
+  "turn": 6,
+  "phase": "pre_main",
+  "on_the_play": true,
+  "events": [{ "turn": 6, "kind": "token", "text": "🍄 Saproling Burst: removes a fade counter (12 left) -> Saproling 12/12" }],
+  "mdfc_backs": ["Boulderloft Pathway", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "0/0 Saproling Token", "idx": 12, "num": 1001, "is_land": false }, { "name": "0/0 Saproling Token", "idx": 13, "num": 1002, "is_land": false }, { "name": "0/0 Saproling Token", "idx": 14, "num": 1003, "is_land": false }, { "name": "0/0 Saproling Token", "idx": 15, "num": 1004, "is_land": false }, { "name": "1/1 Saproling Token", "idx": 3, "num": 1000, "is_land": false }, { "name": "Blooming Marsh", "idx": 4, "num": 3, "tapped": true, "is_land": true }, { "name": "Doubling Season", "idx": 5, "num": 11, "is_land": false }, { "name": "Peat Bog", "idx": 6, "num": 27, "tapped": true, "is_land": true, "counters": [{ "kind": "depletion", "label": "depletion", "count": 2 }] }, { "name": "Peat Bog", "idx": 8, "num": 28, "tapped": true, "is_land": true, "counters": [{ "kind": "depletion", "label": "depletion", "count": 3 }] }, { "name": "Saproling Burst", "idx": 11, "num": 32, "is_land": false, "counters": [{ "kind": "fade", "label": "fade", "count": 12 }] }, { "name": "Secluded Courtyard", "idx": 1, "num": 36, "is_land": true, "taps": "C" }, { "name": "Sporecrown Thallid", "idx": 7, "num": 43, "is_land": false }, { "name": "Sporecrown Thallid", "idx": 10, "num": 44, "is_land": false }, { "name": "Undercellar Myconid", "idx": 2, "num": 49, "is_land": false, "taps": "WUBRG" }, { "name": "Vitaspore Thallid", "idx": 9, "num": 57, "is_land": false, "counters": [{ "kind": "spore", "label": "spore", "count": 2 }] }], "vial_counters": [], "hand": [{ "num": 12, "name": "Doubling Season", "cost": "{4}{G}", "mv": 5, "kind": "permanent" }], "graveyard": ["Hickory Woodlot"], "library_size": 48, "land_drops_left": 1 },
+  "opponent": { "life": 6, "battlefield": [{ "name": "2/2 Creature", "idx": 0, "num": 500000, "is_land": false }] },
+  "plans": [
+    { "index": 0, "summary": "land=none; cast: Saproling Burst: remove a fade counter: create a Saproling, Vitaspore Thallid: sac 1 creature", "land": null, "casts": ["Saproling Burst", "Vitaspore Thallid"], "actions": [{ "card": "Saproling Burst", "src_num": 32, "activate": true, "x": 1 }, { "card": "Vitaspore Thallid", "src_num": 57, "activate": true, "sacout": true, "sac_count": 1 }] },
+    { "index": 1, "summary": "land=none; cast: Vitaspore Thallid: sac 1 creature", "land": null, "casts": ["Vitaspore Thallid"], "actions": [{ "card": "Vitaspore Thallid", "src_num": 57, "activate": true, "sacout": true, "sac_count": 1 }] },
+    { "index": 2, "summary": "land=none; cast: Saproling Burst: remove a fade counter: create a Saproling", "land": null, "casts": ["Saproling Burst"], "actions": [{ "card": "Saproling Burst", "src_num": 32, "activate": true, "x": 1 }] },
+    { "index": 3, "summary": "land=none; cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
+}
+},
+    { "chosen": 2, "decision": {
+  "decision_index": 20,
+  "main_ordinal": 11,
+  "type": "main_phase",
+  "turn": 6,
+  "phase": "pre_main",
+  "on_the_play": true,
+  "events": [{ "turn": 6, "kind": "token", "text": "🍄 Saproling Burst: removes a fade counter (11 left) -> Saproling 11/11" }],
+  "mdfc_backs": ["Boulderloft Pathway", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "0/0 Saproling Token", "idx": 17, "num": 1006, "is_land": false }, { "name": "0/0 Saproling Token", "idx": 12, "num": 1001, "is_land": false }, { "name": "0/0 Saproling Token", "idx": 13, "num": 1002, "is_land": false }, { "name": "0/0 Saproling Token", "idx": 14, "num": 1003, "is_land": false }, { "name": "0/0 Saproling Token", "idx": 15, "num": 1004, "is_land": false }, { "name": "0/0 Saproling Token", "idx": 16, "num": 1005, "is_land": false }, { "name": "1/1 Saproling Token", "idx": 3, "num": 1000, "is_land": false }, { "name": "Blooming Marsh", "idx": 4, "num": 3, "tapped": true, "is_land": true }, { "name": "Doubling Season", "idx": 5, "num": 11, "is_land": false }, { "name": "Peat Bog", "idx": 6, "num": 27, "tapped": true, "is_land": true, "counters": [{ "kind": "depletion", "label": "depletion", "count": 2 }] }, { "name": "Peat Bog", "idx": 8, "num": 28, "tapped": true, "is_land": true, "counters": [{ "kind": "depletion", "label": "depletion", "count": 3 }] }, { "name": "Saproling Burst", "idx": 11, "num": 32, "is_land": false, "counters": [{ "kind": "fade", "label": "fade", "count": 11 }] }, { "name": "Secluded Courtyard", "idx": 1, "num": 36, "is_land": true, "taps": "C" }, { "name": "Sporecrown Thallid", "idx": 7, "num": 43, "is_land": false }, { "name": "Sporecrown Thallid", "idx": 10, "num": 44, "is_land": false }, { "name": "Undercellar Myconid", "idx": 2, "num": 49, "is_land": false, "taps": "WUBRG" }, { "name": "Vitaspore Thallid", "idx": 9, "num": 57, "is_land": false, "counters": [{ "kind": "spore", "label": "spore", "count": 2 }] }], "vial_counters": [], "hand": [{ "num": 12, "name": "Doubling Season", "cost": "{4}{G}", "mv": 5, "kind": "permanent" }], "graveyard": ["Hickory Woodlot"], "library_size": 48, "land_drops_left": 1 },
+  "opponent": { "life": 6, "battlefield": [{ "name": "2/2 Creature", "idx": 0, "num": 500000, "is_land": false }] },
+  "plans": [
+    { "index": 0, "summary": "land=none; cast: Saproling Burst: remove a fade counter: create a Saproling, Vitaspore Thallid: sac 1 creature", "land": null, "casts": ["Saproling Burst", "Vitaspore Thallid"], "actions": [{ "card": "Saproling Burst", "src_num": 32, "activate": true, "x": 1 }, { "card": "Vitaspore Thallid", "src_num": 57, "activate": true, "sacout": true, "sac_count": 1 }] },
+    { "index": 1, "summary": "land=none; cast: Vitaspore Thallid: sac 1 creature", "land": null, "casts": ["Vitaspore Thallid"], "actions": [{ "card": "Vitaspore Thallid", "src_num": 57, "activate": true, "sacout": true, "sac_count": 1 }] },
+    { "index": 2, "summary": "land=none; cast: Saproling Burst: remove a fade counter: create a Saproling", "land": null, "casts": ["Saproling Burst"], "actions": [{ "card": "Saproling Burst", "src_num": 32, "activate": true, "x": 1 }] },
+    { "index": 3, "summary": "land=none; cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
+}
+},
+    { "chosen": 1, "decision": {
+  "decision_index": 21,
+  "main_ordinal": 12,
+  "type": "main_phase",
+  "turn": 6,
+  "phase": "pre_main",
+  "on_the_play": true,
+  "events": [{ "turn": 6, "kind": "token", "text": "🍄 Saproling Burst: removes a fade counter (10 left) -> Saproling 10/10" }],
+  "mdfc_backs": ["Boulderloft Pathway", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "0/0 Saproling Token", "idx": 19, "num": 1008, "is_land": false }, { "name": "0/0 Saproling Token", "idx": 18, "num": 1007, "is_land": false }, { "name": "0/0 Saproling Token", "idx": 17, "num": 1006, "is_land": false }, { "name": "0/0 Saproling Token", "idx": 12, "num": 1001, "is_land": false }, { "name": "0/0 Saproling Token", "idx": 13, "num": 1002, "is_land": false }, { "name": "0/0 Saproling Token", "idx": 14, "num": 1003, "is_land": false }, { "name": "0/0 Saproling Token", "idx": 15, "num": 1004, "is_land": false }, { "name": "0/0 Saproling Token", "idx": 16, "num": 1005, "is_land": false }, { "name": "1/1 Saproling Token", "idx": 3, "num": 1000, "is_land": false }, { "name": "Blooming Marsh", "idx": 4, "num": 3, "tapped": true, "is_land": true }, { "name": "Doubling Season", "idx": 5, "num": 11, "is_land": false }, { "name": "Peat Bog", "idx": 6, "num": 27, "tapped": true, "is_land": true, "counters": [{ "kind": "depletion", "label": "depletion", "count": 2 }] }, { "name": "Peat Bog", "idx": 8, "num": 28, "tapped": true, "is_land": true, "counters": [{ "kind": "depletion", "label": "depletion", "count": 3 }] }, { "name": "Saproling Burst", "idx": 11, "num": 32, "is_land": false, "counters": [{ "kind": "fade", "label": "fade", "count": 10 }] }, { "name": "Secluded Courtyard", "idx": 1, "num": 36, "is_land": true, "taps": "C" }, { "name": "Sporecrown Thallid", "idx": 10, "num": 44, "is_land": false }, { "name": "Sporecrown Thallid", "idx": 7, "num": 43, "is_land": false }, { "name": "Undercellar Myconid", "idx": 2, "num": 49, "is_land": false, "taps": "WUBRG" }, { "name": "Vitaspore Thallid", "idx": 9, "num": 57, "is_land": false, "counters": [{ "kind": "spore", "label": "spore", "count": 2 }] }], "vial_counters": [], "hand": [{ "num": 12, "name": "Doubling Season", "cost": "{4}{G}", "mv": 5, "kind": "permanent" }], "graveyard": ["Hickory Woodlot"], "library_size": 48, "land_drops_left": 1 },
+  "opponent": { "life": 6, "battlefield": [{ "name": "2/2 Creature", "idx": 0, "num": 500000, "is_land": false }] },
+  "plans": [
+    { "index": 0, "summary": "land=none; cast: Saproling Burst: remove a fade counter: create a Saproling, Vitaspore Thallid: sac 1 creature", "land": null, "casts": ["Saproling Burst", "Vitaspore Thallid"], "actions": [{ "card": "Saproling Burst", "src_num": 32, "activate": true, "x": 1 }, { "card": "Vitaspore Thallid", "src_num": 57, "activate": true, "sacout": true, "sac_count": 1 }] },
+    { "index": 1, "summary": "land=none; cast: Vitaspore Thallid: sac 1 creature", "land": null, "casts": ["Vitaspore Thallid"], "actions": [{ "card": "Vitaspore Thallid", "src_num": 57, "activate": true, "sacout": true, "sac_count": 1 }] },
+    { "index": 2, "summary": "land=none; cast: Saproling Burst: remove a fade counter: create a Saproling", "land": null, "casts": ["Saproling Burst"], "actions": [{ "card": "Saproling Burst", "src_num": 32, "activate": true, "x": 1 }] },
+    { "index": 3, "summary": "land=none; cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
+}
+},
+    { "chosen": 0, "decision": {
+  "decision_index": 22,
+  "type": "sacrifice",
+  "source": "Vitaspore Thallid",
+  "turn": 6,
+  "mdfc_backs": ["Boulderloft Pathway", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "0/0 Saproling Token", "idx": 19, "num": 1008, "is_land": false }, { "name": "0/0 Saproling Token", "idx": 18, "num": 1007, "is_land": false }, { "name": "0/0 Saproling Token", "idx": 17, "num": 1006, "is_land": false }, { "name": "0/0 Saproling Token", "idx": 12, "num": 1001, "is_land": false }, { "name": "0/0 Saproling Token", "idx": 13, "num": 1002, "is_land": false }, { "name": "0/0 Saproling Token", "idx": 14, "num": 1003, "is_land": false }, { "name": "0/0 Saproling Token", "idx": 15, "num": 1004, "is_land": false }, { "name": "0/0 Saproling Token", "idx": 16, "num": 1005, "is_land": false }, { "name": "1/1 Saproling Token", "idx": 3, "num": 1000, "is_land": false }, { "name": "Blooming Marsh", "idx": 4, "num": 3, "tapped": true, "is_land": true }, { "name": "Doubling Season", "idx": 5, "num": 11, "is_land": false }, { "name": "Peat Bog", "idx": 6, "num": 27, "tapped": true, "is_land": true, "counters": [{ "kind": "depletion", "label": "depletion", "count": 2 }] }, { "name": "Peat Bog", "idx": 8, "num": 28, "tapped": true, "is_land": true, "counters": [{ "kind": "depletion", "label": "depletion", "count": 3 }] }, { "name": "Saproling Burst", "idx": 11, "num": 32, "is_land": false, "counters": [{ "kind": "fade", "label": "fade", "count": 10 }] }, { "name": "Secluded Courtyard", "idx": 1, "num": 36, "is_land": true, "taps": "C" }, { "name": "Sporecrown Thallid", "idx": 10, "num": 44, "is_land": false }, { "name": "Sporecrown Thallid", "idx": 7, "num": 43, "is_land": false }, { "name": "Undercellar Myconid", "idx": 2, "num": 49, "is_land": false, "taps": "WUBRG" }, { "name": "Vitaspore Thallid", "idx": 9, "num": 57, "is_land": false, "counters": [{ "kind": "spore", "label": "spore", "count": 2 }] }], "vial_counters": [], "hand": [{ "num": 12, "name": "Doubling Season", "cost": "{4}{G}", "mv": 5, "kind": "permanent" }], "graveyard": ["Hickory Woodlot"], "library_size": 48, "land_drops_left": 1 },
+  "opponent": { "life": 6, "battlefield": [{ "name": "2/2 Creature", "idx": 0, "num": 500000, "is_land": false }] },
+  "heuristic_default": 0,
+  "allow_decline": false,
+  "options": [{ "index": 0, "perm_index": 3, "tapped": false, "name": "1/1 Saproling Token", "label": "1/1 Saproling Token" }, { "index": 1, "perm_index": 12, "tapped": false, "name": "0/0 Saproling Token", "label": "0/0 Saproling Token" }, { "index": 2, "perm_index": 13, "tapped": false, "name": "0/0 Saproling Token", "label": "0/0 Saproling Token" }, { "index": 3, "perm_index": 14, "tapped": false, "name": "0/0 Saproling Token", "label": "0/0 Saproling Token" }, { "index": 4, "perm_index": 15, "tapped": false, "name": "0/0 Saproling Token", "label": "0/0 Saproling Token" }, { "index": 5, "perm_index": 16, "tapped": false, "name": "0/0 Saproling Token", "label": "0/0 Saproling Token" }, { "index": 6, "perm_index": 17, "tapped": false, "name": "0/0 Saproling Token", "label": "0/0 Saproling Token" }, { "index": 7, "perm_index": 18, "tapped": false, "name": "0/0 Saproling Token", "label": "0/0 Saproling Token" }, { "index": 8, "perm_index": 19, "tapped": false, "name": "0/0 Saproling Token", "label": "0/0 Saproling Token" }],
+  "note": "reply an option index -- the creature to sacrifice. Default = the AI's pick."
+}
+},
+    { "chosen": 0, "decision": {
+  "decision_index": 23,
+  "type": "dig",
+  "source": "Vitaspore Thallid",
+  "turn": 6,
+  "mdfc_backs": ["Boulderloft Pathway", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "0/0 Saproling Token", "idx": 18, "num": 1008, "is_land": false }, { "name": "0/0 Saproling Token", "idx": 17, "num": 1007, "is_land": false }, { "name": "0/0 Saproling Token", "idx": 16, "num": 1006, "is_land": false }, { "name": "0/0 Saproling Token", "idx": 15, "num": 1005, "is_land": false }, { "name": "0/0 Saproling Token", "idx": 14, "num": 1004, "is_land": false }, { "name": "0/0 Saproling Token", "idx": 11, "num": 1001, "is_land": false }, { "name": "0/0 Saproling Token", "idx": 12, "num": 1002, "is_land": false }, { "name": "0/0 Saproling Token", "idx": 13, "num": 1003, "is_land": false }, { "name": "Blooming Marsh", "idx": 3, "num": 3, "tapped": true, "is_land": true }, { "name": "Doubling Season", "idx": 4, "num": 11, "is_land": false }, { "name": "Peat Bog", "idx": 5, "num": 27, "tapped": true, "is_land": true, "counters": [{ "kind": "depletion", "label": "depletion", "count": 2 }] }, { "name": "Peat Bog", "idx": 7, "num": 28, "tapped": true, "is_land": true, "counters": [{ "kind": "depletion", "label": "depletion", "count": 3 }] }, { "name": "Saproling Burst", "idx": 10, "num": 32, "is_land": false, "counters": [{ "kind": "fade", "label": "fade", "count": 10 }] }, { "name": "Secluded Courtyard", "idx": 1, "num": 36, "is_land": true, "taps": "C" }, { "name": "Sporecrown Thallid", "idx": 9, "num": 44, "is_land": false }, { "name": "Sporecrown Thallid", "idx": 6, "num": 43, "is_land": false }, { "name": "Undercellar Myconid", "idx": 2, "num": 49, "is_land": false, "taps": "WUBRG" }, { "name": "Vitaspore Thallid", "idx": 8, "num": 57, "is_land": false, "counters": [{ "kind": "spore", "label": "spore", "count": 2 }] }], "vial_counters": [], "hand": [{ "num": 12, "name": "Doubling Season", "cost": "{4}{G}", "mv": 5, "kind": "permanent" }], "graveyard": ["1/1 Saproling Token", "Hickory Woodlot"], "library_size": 48, "land_drops_left": 1 },
+  "opponent": { "life": 6, "battlefield": [{ "name": "2/2 Creature", "idx": 0, "num": 500000, "is_land": false }] },
+  "heuristic_default": 0,
+  "examined": [{ "index": 0, "legal": true, "name": "0/0 Saproling Token" }, { "index": 1, "legal": true, "name": "0/0 Saproling Token" }, { "index": 2, "legal": true, "name": "0/0 Saproling Token" }, { "index": 3, "legal": true, "name": "0/0 Saproling Token" }, { "index": 4, "legal": true, "name": "0/0 Saproling Token" }, { "index": 5, "legal": true, "name": "0/0 Saproling Token" }, { "index": 6, "legal": true, "name": "0/0 Saproling Token" }, { "index": 7, "legal": true, "name": "0/0 Saproling Token" }, { "index": 8, "legal": true, "name": "Sporecrown Thallid" }, { "index": 9, "legal": true, "name": "Sporecrown Thallid" }, { "index": 10, "legal": true, "name": "2/2 Creature" }, { "index": 11, "legal": true, "name": "Undercellar Myconid" }, { "index": 12, "legal": true, "name": "Vitaspore Thallid" }],
+  "note": "reply an examined index to put that card into your hand, or -1 to take nothing. Default = the AI's pick."
+}
+},
+    { "chosen": 1, "decision": {
+  "decision_index": 24,
+  "main_ordinal": 13,
+  "type": "main_phase",
+  "turn": 6,
+  "phase": "pre_main",
+  "on_the_play": true,
+  "events": [{ "turn": 6, "kind": "sacrifice", "text": "💀 Vitaspore Thallid: sacrificed 1/1 Saproling Token" }, { "turn": 6, "kind": "pump", "text": "⚡ Vitaspore Thallid: 0/0 Saproling Token gains haste" }],
+  "mdfc_backs": ["Boulderloft Pathway", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "0/0 Saproling Token", "idx": 18, "num": 1008, "is_land": false }, { "name": "0/0 Saproling Token", "idx": 17, "num": 1007, "is_land": false }, { "name": "0/0 Saproling Token", "idx": 16, "num": 1006, "is_land": false }, { "name": "0/0 Saproling Token", "idx": 15, "num": 1005, "is_land": false }, { "name": "0/0 Saproling Token", "idx": 14, "num": 1004, "is_land": false }, { "name": "0/0 Saproling Token", "idx": 11, "num": 1001, "is_land": false }, { "name": "0/0 Saproling Token", "idx": 12, "num": 1002, "is_land": false }, { "name": "0/0 Saproling Token", "idx": 13, "num": 1003, "is_land": false }, { "name": "Blooming Marsh", "idx": 3, "num": 3, "tapped": true, "is_land": true }, { "name": "Doubling Season", "idx": 4, "num": 11, "is_land": false }, { "name": "Peat Bog", "idx": 5, "num": 27, "tapped": true, "is_land": true, "counters": [{ "kind": "depletion", "label": "depletion", "count": 2 }] }, { "name": "Peat Bog", "idx": 7, "num": 28, "tapped": true, "is_land": true, "counters": [{ "kind": "depletion", "label": "depletion", "count": 3 }] }, { "name": "Saproling Burst", "idx": 10, "num": 32, "is_land": false, "counters": [{ "kind": "fade", "label": "fade", "count": 10 }] }, { "name": "Secluded Courtyard", "idx": 1, "num": 36, "is_land": true, "taps": "C" }, { "name": "Sporecrown Thallid", "idx": 9, "num": 44, "is_land": false }, { "name": "Sporecrown Thallid", "idx": 6, "num": 43, "is_land": false }, { "name": "Undercellar Myconid", "idx": 2, "num": 49, "is_land": false, "taps": "WUBRG" }, { "name": "Vitaspore Thallid", "idx": 8, "num": 57, "is_land": false, "counters": [{ "kind": "spore", "label": "spore", "count": 2 }] }], "vial_counters": [], "hand": [{ "num": 12, "name": "Doubling Season", "cost": "{4}{G}", "mv": 5, "kind": "permanent" }], "graveyard": ["1/1 Saproling Token", "Hickory Woodlot"], "library_size": 48, "land_drops_left": 1 },
+  "opponent": { "life": 6, "battlefield": [{ "name": "2/2 Creature", "idx": 0, "num": 500000, "is_land": false }] },
+  "plans": [
+    { "index": 0, "summary": "land=none; cast: Saproling Burst: remove a fade counter: create a Saproling, Vitaspore Thallid: sac 1 creature", "land": null, "casts": ["Saproling Burst", "Vitaspore Thallid"], "actions": [{ "card": "Saproling Burst", "src_num": 32, "activate": true, "x": 1 }, { "card": "Vitaspore Thallid", "src_num": 57, "activate": true, "sacout": true, "sac_count": 1 }] },
+    { "index": 1, "summary": "land=none; cast: Vitaspore Thallid: sac 1 creature", "land": null, "casts": ["Vitaspore Thallid"], "actions": [{ "card": "Vitaspore Thallid", "src_num": 57, "activate": true, "sacout": true, "sac_count": 1 }] },
+    { "index": 2, "summary": "land=none; cast: Saproling Burst: remove a fade counter: create a Saproling", "land": null, "casts": ["Saproling Burst"], "actions": [{ "card": "Saproling Burst", "src_num": 32, "activate": true, "x": 1 }] },
+    { "index": 3, "summary": "land=none; cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
+}
+},
+    { "chosen": 0, "decision": {
+  "decision_index": 25,
+  "type": "sacrifice",
+  "source": "Vitaspore Thallid",
+  "turn": 6,
+  "mdfc_backs": ["Boulderloft Pathway", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "0/0 Saproling Token", "idx": 18, "num": 1008, "is_land": false }, { "name": "0/0 Saproling Token", "idx": 17, "num": 1007, "is_land": false }, { "name": "0/0 Saproling Token", "idx": 16, "num": 1006, "is_land": false }, { "name": "0/0 Saproling Token", "idx": 15, "num": 1005, "is_land": false }, { "name": "0/0 Saproling Token", "idx": 14, "num": 1004, "is_land": false }, { "name": "0/0 Saproling Token", "idx": 11, "num": 1001, "is_land": false }, { "name": "0/0 Saproling Token", "idx": 12, "num": 1002, "is_land": false }, { "name": "0/0 Saproling Token", "idx": 13, "num": 1003, "is_land": false }, { "name": "Blooming Marsh", "idx": 3, "num": 3, "tapped": true, "is_land": true }, { "name": "Doubling Season", "idx": 4, "num": 11, "is_land": false }, { "name": "Peat Bog", "idx": 5, "num": 27, "tapped": true, "is_land": true, "counters": [{ "kind": "depletion", "label": "depletion", "count": 2 }] }, { "name": "Peat Bog", "idx": 7, "num": 28, "tapped": true, "is_land": true, "counters": [{ "kind": "depletion", "label": "depletion", "count": 3 }] }, { "name": "Saproling Burst", "idx": 10, "num": 32, "is_land": false, "counters": [{ "kind": "fade", "label": "fade", "count": 10 }] }, { "name": "Secluded Courtyard", "idx": 1, "num": 36, "is_land": true, "taps": "C" }, { "name": "Sporecrown Thallid", "idx": 9, "num": 44, "is_land": false }, { "name": "Sporecrown Thallid", "idx": 6, "num": 43, "is_land": false }, { "name": "Undercellar Myconid", "idx": 2, "num": 49, "is_land": false, "taps": "WUBRG" }, { "name": "Vitaspore Thallid", "idx": 8, "num": 57, "is_land": false, "counters": [{ "kind": "spore", "label": "spore", "count": 2 }] }], "vial_counters": [], "hand": [{ "num": 12, "name": "Doubling Season", "cost": "{4}{G}", "mv": 5, "kind": "permanent" }], "graveyard": ["1/1 Saproling Token", "Hickory Woodlot"], "library_size": 48, "land_drops_left": 1 },
+  "opponent": { "life": 6, "battlefield": [{ "name": "2/2 Creature", "idx": 0, "num": 500000, "is_land": false }] },
+  "heuristic_default": 0,
+  "allow_decline": false,
+  "options": [{ "index": 0, "perm_index": 11, "tapped": false, "name": "0/0 Saproling Token", "label": "0/0 Saproling Token" }, { "index": 1, "perm_index": 12, "tapped": false, "name": "0/0 Saproling Token", "label": "0/0 Saproling Token" }, { "index": 2, "perm_index": 13, "tapped": false, "name": "0/0 Saproling Token", "label": "0/0 Saproling Token" }, { "index": 3, "perm_index": 14, "tapped": false, "name": "0/0 Saproling Token", "label": "0/0 Saproling Token" }, { "index": 4, "perm_index": 15, "tapped": false, "name": "0/0 Saproling Token", "label": "0/0 Saproling Token" }, { "index": 5, "perm_index": 16, "tapped": false, "name": "0/0 Saproling Token", "label": "0/0 Saproling Token" }, { "index": 6, "perm_index": 17, "tapped": false, "name": "0/0 Saproling Token", "label": "0/0 Saproling Token" }, { "index": 7, "perm_index": 18, "tapped": false, "name": "0/0 Saproling Token", "label": "0/0 Saproling Token" }],
+  "note": "reply an option index -- the creature to sacrifice. Default = the AI's pick."
+}
+},
+    { "chosen": 0, "decision": {
+  "decision_index": 26,
+  "type": "dig",
+  "source": "Vitaspore Thallid",
+  "turn": 6,
+  "mdfc_backs": ["Boulderloft Pathway", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "0/0 Saproling Token", "idx": 17, "num": 1008, "is_land": false }, { "name": "0/0 Saproling Token", "idx": 16, "num": 1007, "is_land": false }, { "name": "0/0 Saproling Token", "idx": 15, "num": 1006, "is_land": false }, { "name": "0/0 Saproling Token", "idx": 11, "num": 1002, "is_land": false }, { "name": "0/0 Saproling Token", "idx": 12, "num": 1003, "is_land": false }, { "name": "0/0 Saproling Token", "idx": 13, "num": 1004, "is_land": false }, { "name": "0/0 Saproling Token", "idx": 14, "num": 1005, "is_land": false }, { "name": "Blooming Marsh", "idx": 3, "num": 3, "tapped": true, "is_land": true }, { "name": "Doubling Season", "idx": 4, "num": 11, "is_land": false }, { "name": "Peat Bog", "idx": 5, "num": 27, "tapped": true, "is_land": true, "counters": [{ "kind": "depletion", "label": "depletion", "count": 2 }] }, { "name": "Peat Bog", "idx": 7, "num": 28, "tapped": true, "is_land": true, "counters": [{ "kind": "depletion", "label": "depletion", "count": 3 }] }, { "name": "Saproling Burst", "idx": 10, "num": 32, "is_land": false, "counters": [{ "kind": "fade", "label": "fade", "count": 10 }] }, { "name": "Secluded Courtyard", "idx": 1, "num": 36, "is_land": true, "taps": "C" }, { "name": "Sporecrown Thallid", "idx": 9, "num": 44, "is_land": false }, { "name": "Sporecrown Thallid", "idx": 6, "num": 43, "is_land": false }, { "name": "Undercellar Myconid", "idx": 2, "num": 49, "is_land": false, "taps": "WUBRG" }, { "name": "Vitaspore Thallid", "idx": 8, "num": 57, "is_land": false, "counters": [{ "kind": "spore", "label": "spore", "count": 2 }] }], "vial_counters": [], "hand": [{ "num": 12, "name": "Doubling Season", "cost": "{4}{G}", "mv": 5, "kind": "permanent" }], "graveyard": ["0/0 Saproling Token", "1/1 Saproling Token", "Hickory Woodlot"], "library_size": 48, "land_drops_left": 1 },
+  "opponent": { "life": 6, "battlefield": [{ "name": "2/2 Creature", "idx": 0, "num": 500000, "is_land": false }] },
+  "heuristic_default": 0,
+  "examined": [{ "index": 0, "legal": true, "name": "0/0 Saproling Token" }, { "index": 1, "legal": true, "name": "0/0 Saproling Token" }, { "index": 2, "legal": true, "name": "0/0 Saproling Token" }, { "index": 3, "legal": true, "name": "0/0 Saproling Token" }, { "index": 4, "legal": true, "name": "0/0 Saproling Token" }, { "index": 5, "legal": true, "name": "0/0 Saproling Token" }, { "index": 6, "legal": true, "name": "0/0 Saproling Token" }, { "index": 7, "legal": true, "name": "Sporecrown Thallid" }, { "index": 8, "legal": true, "name": "Sporecrown Thallid" }, { "index": 9, "legal": true, "name": "2/2 Creature" }, { "index": 10, "legal": true, "name": "Undercellar Myconid" }, { "index": 11, "legal": true, "name": "Vitaspore Thallid" }],
+  "note": "reply an examined index to put that card into your hand, or -1 to take nothing. Default = the AI's pick."
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 27,
+  "main_ordinal": 14,
+  "type": "main_phase",
+  "turn": 6,
+  "phase": "pre_main",
+  "on_the_play": true,
+  "events": [{ "turn": 6, "kind": "sacrifice", "text": "💀 Vitaspore Thallid: sacrificed 0/0 Saproling Token" }, { "turn": 6, "kind": "pump", "text": "⚡ Vitaspore Thallid: 0/0 Saproling Token gains haste" }],
+  "mdfc_backs": ["Boulderloft Pathway", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "0/0 Saproling Token", "idx": 17, "num": 1008, "is_land": false }, { "name": "0/0 Saproling Token", "idx": 16, "num": 1007, "is_land": false }, { "name": "0/0 Saproling Token", "idx": 15, "num": 1006, "is_land": false }, { "name": "0/0 Saproling Token", "idx": 11, "num": 1002, "is_land": false }, { "name": "0/0 Saproling Token", "idx": 12, "num": 1003, "is_land": false }, { "name": "0/0 Saproling Token", "idx": 13, "num": 1004, "is_land": false }, { "name": "0/0 Saproling Token", "idx": 14, "num": 1005, "is_land": false }, { "name": "Blooming Marsh", "idx": 3, "num": 3, "tapped": true, "is_land": true }, { "name": "Doubling Season", "idx": 4, "num": 11, "is_land": false }, { "name": "Peat Bog", "idx": 5, "num": 27, "tapped": true, "is_land": true, "counters": [{ "kind": "depletion", "label": "depletion", "count": 2 }] }, { "name": "Peat Bog", "idx": 7, "num": 28, "tapped": true, "is_land": true, "counters": [{ "kind": "depletion", "label": "depletion", "count": 3 }] }, { "name": "Saproling Burst", "idx": 10, "num": 32, "is_land": false, "counters": [{ "kind": "fade", "label": "fade", "count": 10 }] }, { "name": "Secluded Courtyard", "idx": 1, "num": 36, "is_land": true, "taps": "C" }, { "name": "Sporecrown Thallid", "idx": 9, "num": 44, "is_land": false }, { "name": "Sporecrown Thallid", "idx": 6, "num": 43, "is_land": false }, { "name": "Undercellar Myconid", "idx": 2, "num": 49, "is_land": false, "taps": "WUBRG" }, { "name": "Vitaspore Thallid", "idx": 8, "num": 57, "is_land": false, "counters": [{ "kind": "spore", "label": "spore", "count": 2 }] }], "vial_counters": [], "hand": [{ "num": 12, "name": "Doubling Season", "cost": "{4}{G}", "mv": 5, "kind": "permanent" }], "graveyard": ["0/0 Saproling Token", "1/1 Saproling Token", "Hickory Woodlot"], "library_size": 48, "land_drops_left": 1 },
+  "opponent": { "life": 6, "battlefield": [{ "name": "2/2 Creature", "idx": 0, "num": 500000, "is_land": false }] },
+  "plans": [
+    { "index": 0, "summary": "land=none; cast: Saproling Burst: remove a fade counter: create a Saproling, Vitaspore Thallid: sac 1 creature", "land": null, "casts": ["Saproling Burst", "Vitaspore Thallid"], "actions": [{ "card": "Saproling Burst", "src_num": 32, "activate": true, "x": 1 }, { "card": "Vitaspore Thallid", "src_num": 57, "activate": true, "sacout": true, "sac_count": 1 }] },
+    { "index": 1, "summary": "land=none; cast: Vitaspore Thallid: sac 1 creature", "land": null, "casts": ["Vitaspore Thallid"], "actions": [{ "card": "Vitaspore Thallid", "src_num": 57, "activate": true, "sacout": true, "sac_count": 1 }] },
+    { "index": 2, "summary": "land=none; cast: Saproling Burst: remove a fade counter: create a Saproling", "land": null, "casts": ["Saproling Burst"], "actions": [{ "card": "Saproling Burst", "src_num": 32, "activate": true, "x": 1 }] },
+    { "index": 3, "summary": "land=none; cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
+}
+}
+  ],
+  "final_events": [
+    { "turn": 6, "kind": "combat", "text": "⚔ attacked: Undercellar Myconid (3), Sporecrown Thallid (3), Vitaspore Thallid (3), Sporecrown Thallid (3), 0/0 Saproling Token (12) — 24 to opponent (6→-18)" }
+  ]
+}
