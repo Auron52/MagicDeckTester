@@ -101,6 +101,23 @@ is lossless at the settings it was tested at (32/32 digests identical, 0 unrecov
 rejections), and a units-budgeted labeller is precisely where "lossless" needs re-proving before
 being trusted, since the budget is denominated in the units the flag removes.
 
+## 5. A live collision risk on this box, for whoever reads this first
+
+Another session pushed `9d8e1718` at 13:18 UTC about **relaunching candidate B's (Fungus) mulligan
+generation overnight**. At 13:25 only one engine process exists -- this Snow gen, PID 3827293 at
+3,122% -- so they are not running now. But if that gen starts while this one is up, **both are
+wrong**: generations must run alone (CLAUDE.md), and the wall-clock projection in section 2 is void
+the moment the box is shared. Whoever notices first should check
+`ps -eo pid,etime,pcpu,args | grep mtg` before drawing any conclusion from a rate, and coordinate
+rather than assume the other run is stale -- neither of these is an agent's own experiment to kill,
+so neither may be stopped unilaterally past the ~10 minute mark.
+
+Note also their finding, which bears on Snow directly: a journal resume is refused by a **card fix**
+but survives a **perf commit**, because `play_digest` is behavioural. Snow's resume today therefore
+says today's three commits changed no Snow behaviour -- it does not promise the next one won't.
+
+## 6. If `MTG_FOLD_SEARCH_ODO` is armed later
+
 If the user arms it, the honest sequence is: prove digest-identity at d2/b1 first, and only then
 accept that it voids the journal and re-run the floor -- ~11.5% off a ~24 h run is ~2.8 h, against
 ~3.6 h of floor to redo, so **it does not pay for itself on this run** and only makes sense if the
