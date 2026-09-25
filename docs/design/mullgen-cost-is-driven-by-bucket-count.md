@@ -227,8 +227,32 @@ since the lord prefilter was added. Plus two purely local ones: `CreatureHasLife
 Gates: play digest `f1f8288da6dff73e` unchanged, scenarios 103/103, unit SUCCESS (2,635,895
 assertions), smoke 93 passed with `configs changed: 0` and `play-changed=0` on both arms.
 
-**1.53x does not change the verdict in UPDATE 2026-09-25b.** The floor pass was 7–26 days; it is now
-5–17 days. Still weeks, still because K=22.
+### ...and the aggregate barely moved, which is the honest headline
+
+The 1.53x is a **cell** number. Resuming the generation on the same odometer region and reading the
+same 900 s monitor window as the two previous rounds:
+
+| | haste fix only | + bulk tokens | + board scans |
+|---|---|---|---|
+| `roll7` @ 900 s | 621 | 1403 | **1465** |
+| journal cell-sides @ 900 s | 191 | 582 | **613** |
+| vs. previous round | — | 3.05x | **1.05x** |
+
+**1.53x on the worst cell bought ~1.05x of generation throughput.** That is not a contradiction and
+it is not a measurement error — it is what fixing a TAIL looks like. The sac-outlet blowup is cubic
+only on boards that actually get wide with a Deathspore Thallid in play; most cells in this region
+never reach that shape, so shortening the worst cell by a third leaves the bulk of the work
+untouched. The two previous rounds were different in kind: `DoublerShift` and the haste scans were
+on paths *every* wide-board rollout takes, which is why they moved the aggregate 3.05x.
+
+**The practical rule: rank the next optimisation by its share of the AGGREGATE, not by the worst
+cell's profile.** The worst cell is the right place to *find* a defect and the wrong place to price
+one. A slow-cell profile over-weights whatever is pathological about that hand.
+
+**The verdict in UPDATE 2026-09-25b is unchanged, and now barely even dented.** At the measured
+0.681 cell-sides/s this region's remaining floor pass is **24.5 days** (was 25.8). Three rounds of
+engine work totalling ~870x on a worst cell have moved the floor pass from ~26 days to ~24.5 days,
+because **the cost is K=22 and K is a property of the decklist.**
 
 ## Related
 
