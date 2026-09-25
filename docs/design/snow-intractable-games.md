@@ -133,7 +133,7 @@ prefix-scoped prepay), one more was proposed and killed on 2026-09-23:
   **AND THE 167x WAS PARTLY AN ARTEFACT -- see [§4](#4-that-run-was-never-configured-the-2026-09-25-labeller-derivation).**
   That run labelled at **d5/b20**, the built-in gen default, because the deck has no `.value.json` to
   say otherwise. No other deck in the repo labels anywhere near that. Corrected to a derived d2/b1 it
-  runs at 35-45 rollouts/s and FAST projects **~81 h** instead of ~136 h.
+  runs at **60 roll7/s against 20.8**, so FAST projects **~47 h** instead of ~137 h.
 * **Shipping `leaf: none`.** Would make the V arm's 571 core-h moot and stop phase A ever running
   again. StompySurprise and Goblins already ship this shape; note their sidecars still carry a real
   `eval_model` and a full `value_leaf_table`, so it is a `value_play` setting, not an absent file.
@@ -865,18 +865,45 @@ else.
 
 ### The corrected projection, and it is still not an overnight job
 
-Measured on the live floor pass at d2/b1: **35-45 rollouts/s** on 32 cores, against 21/s at d5/b20.
-Note this is **1.7x in wall, not the 2.87x the units promised** -- per-unit wall is higher at shallow
-depth because the uncharged greedy work is a larger share of it, which is §2b's lesson restated.
+Both rates below are the **floor phase of a live `fast` run**, which is the only apples-to-apples
+comparison available: `roll7` per second off the monitor line, at the same recipe (R30 adaptive, floor
+R=2), on the same 32 cores.
 
-| setting | floor rate | FAST | COMPLETE |
+| setting | floor rate (roll7/s) | FAST | COMPLETE |
 |---|---:|---:|---:|
-| d5/b20 (the cancelled run) | 21/s | 136 h | 272 h |
-| d2/b1 (derived) | 35.2/s | **81 h** | 162 h |
-| d2/b1, optimistic | 45/s | 64 h | 127 h |
+| d5/b20 -- the cancelled run, averaged over its whole 6.5 h life | 20.8 | 137 h | 275 h |
+| **d2/b1 -- derived** | **60.4** | **47 h** | 95 h |
 
-So the derivation turns a ~136 h FAST run into a ~64-81 h one. That is a real 1.7x and it removes an
-embarrassing misconfiguration, but it is still ~10x the 8 h `MTG_KEEP_OVERNIGHT_H` target: this is a
-multi-night, journal-resumed commitment, not something that fits a window. The remaining levers are
-the deck tweak (-1 Rimescale Dragon +1 Rimefeather Owl takes K to 16 and cells to 0.769x, so ~62 h --
-the user's decklist call) and the search work in §2, none of which is close to an order of magnitude.
+**2.90x in wall, against 2.87x predicted from work units.** Those agreeing is worth noting: on this
+deck the unit currency and wall clock track each other across a 20x budget change, which is not
+something §2b's CHARGED/UNCHARGED split guaranteed.
+
+Do NOT compare either figure against the earlier `recommend` scout's 35-45/s -- that pass runs floor
+R=1, i.e. half the rollouts per cell, so it is a different quantity. An earlier version of this section
+made that comparison and reported 1.7x / ~81 h; both were wrong.
+
+**It is still not an overnight job.** ~47 h FAST is ~6x the 8 h `MTG_KEEP_OVERNIGHT_H` target: a
+multi-night, journal-resumed commitment. And it is an OPTIMISTIC 47 h, for a reason the parallel
+Fungus work states plainly (`mullgen-cost-is-driven-by-bucket-count.md`, UPDATE 2026-09-25): *"an
+average rollout rate measured early is not a projection"* -- the odometer walks the cell space in
+bucket-index order, so an early rate samples the cheapest corner, and on candidate B the rate fell
+6.5x once it left that corner. The remaining levers are the deck tweak (-1 Rimescale Dragon +1
+Rimefeather Owl takes K to 16 and cells to 0.769x, so ~36 h -- the user's decklist call) and the
+BUDGET-CURRENCY repair the user has already ruled for (`slow-rollout-tail-and-the-uncharged-greedy-walk.md`,
+USER RULING 2026-09-24: *"fix the BUDGET, not discovery"*), which is the one direction with an order of
+magnitude in it -- and which will change what a budget buys, and therefore the play digest, and
+therefore invalidate any journal banked before it lands.
+
+### Two corrections to this section's own process, worth more than the result
+
+1. **`logs/<Deck>_mullgen/gen.log` is APPENDED (`>>` in `scripts/mullgen.sh`).** Reading its first
+   settings block gives you the OLDEST run's configuration. That is how the 2026-09-25 `fast` launch
+   was killed six minutes in for "running at d5/b20" when it was running correctly at d2/b1 -- the
+   header read was 2026-09-24's. Always take the LAST block:
+   `L=$(grep -n "MULLIGAN PROFILE GEN SETTINGS" gen.log | tail -1 | cut -d: -f1)`.
+2. **`scripts/derive_mullgen_setting.py` already exists** (landed 629a6107 by the parallel Fungus
+   work, same day) and is the prescribed route. The sweep above was hand-rolled before it was found;
+   the method matches -- `MTG_SCORE_HANDS`, paired openers, rank fidelity, a rho floor -- and its rule
+   is "cheapest arm clearing the floor", which on this table picks **d1/b1** rather than the d2/b1
+   installed. They are 1% apart in cost and 0.001 apart in dispersion, so this is not worth
+   regenerating for; but the script is what a future deck should use.
