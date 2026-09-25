@@ -431,7 +431,13 @@ the board already changed. The byte-identical angle there is closed.
 A flat profile with no hotspot is the signature of **work volume, not a bad function**. Candidate B
 costs **0.786 core-s/rollout** against the shipped Fungus list's **0.197** at identical depth,
 budget and horizon; strip the whole >=30 s tail and the remaining bulk is still **0.53** — 2.7x the
-shipped list. That residue is real width (five land types, four token doublers), not waste.
+shipped list.
+
+> **CORRECTION, same day.** The sentence that stood here — "that residue is real width, not waste" —
+> was an inference from the flat profile, not a measurement, and it is **WRONG**. See the next
+> section: profiling the shipped list on the SAME binary shows the two profiles have different
+> *shapes*, and the residue is a cache-layout defect. The original 0.197 was also a cross-binary
+> figure (it predates the board-width fixes), so the 4x ratio itself was never apples-to-apples.
 
 ### CONCLUSION — the per-rollout axis is nearly exhausted; the cell-count axis is not
 
@@ -467,3 +473,85 @@ reverted a default-flip of the sibling lever on 2026-09-22).
 Note what this does and does not claim. It does not make the budget honest — a decision may still
 spend 999x its stated bound. It removes the top 0.17% that spend more than a thousand times it, and
 that is 24.6% of all work.
+
+---
+
+## 2026-09-25 — the bulk gap is a CACHE-LAYOUT defect, not board width (user was right)
+
+The section above concluded the per-rollout residue was inherent width. **That was wrong**, and the
+user pushed back on exactly the right sentence: *"There must be something in how we are handling the
+engine if it is that much slower than the original list."* There is. Here is the measurement.
+
+### First, two errors in the comparison that produced "4x"
+
+1. **It was cross-binary.** Candidate B's 0.786 core-s/rollout is the current binary; the shipped
+   list's 0.197 comes from a run predating the board-width fixes. Ratios across binaries are exactly
+   what `perf-ratios-are-scoped-to-deck-artifacts` warns about.
+2. **A value-leaf confound was suspected and REFUTED.** `decks/Fungus/Fungus.value.json` carries a
+   real 120-tree `eval_model` + `value_leaf_table`; candidate B's is metadata-only. Since a missing
+   value leaf is priced at 1.35-84.8x, this looked decisive. It is not: stripping the model from the
+   shipped sidecar (keeping `value_play` so depth/budget stay d1/b3) leaves the play digest at
+   `8d83c48e723b26b7` and the 64-game battery at **2 s in both arms**. The leaf does not engage on
+   this path. Do not re-run this A/B.
+
+The battery does show the real gap cleanly, same settings, same binary: **shipped 2 s, candidate B
+22 s — 11x.**
+
+### The profiles have different SHAPES, not different magnitudes
+
+Both `perf record -F 199` for 150 s at full saturation (24 threads), so self-% is comparable as
+absolute CPU:
+
+| symbol | shipped | candidate B | ratio |
+|---|---|---|---|
+| `OnCreatureDies` | 0.13% | 3.30% | **25x** |
+| `GatherBoardSources` | 0.17% | 2.22% | **13x** |
+| `CreateTokens` | 0.51% | 6.46% | **12.7x** |
+| `__memmove` (GameState clones) | 1.44% | 7.56% | **5.3x** |
+| `FireEtbWatchers` | 0.29% | 1.42% | 4.9x |
+| `SweepDeadFadeTokens` | 0.00% | 0.90% | new (Saproling Burst) |
+| `BuildSimKey` | 2.52% | 5.12% | 2.0x |
+| `SolveUncached` consider lambda | **5.36%** | 2.49% | 0.46x |
+| `EnumeratePlanPositions` | **3.98%** | 1.15% | 0.29x |
+
+**Board mechanics: 7% of the shipped list, 32% of candidate B. The SEARCH share falls.** Candidate B
+is not thinking harder — it is churning board state and thinking less.
+
+### The cause, from the annotation rather than the symbol
+
+`sizeof(Permanent) = 320` bytes (five cache lines; `Card` alone is 136). `perf annotate` on the two
+hottest board walks:
+
+```
+GatherBoardSources:  29.94%  cmpb $0x0,0x101(%rbx)      <- ONE BYTE at offset 257
+                      2.18%  lea  0x0(%rbp,%rbp,4),%rbx <- index*5, i.e. a 320-BYTE STRIDE
+OnCreatureDies:      35.75%  mov  %r13,%rdi             <- LookupCached arg setup
+                      1.19%  cmp  0x88(%r13),%eax       <- offset 136 = controller_index
+```
+
+**A board walk touches a fresh cache line per permanent to read one byte.** On a board of hundreds
+of interchangeable Saprolings that is the whole cost. This is the identical signature recorded for
+the `CreateToken` doubler fix (then 296 bytes, 47.88%+49.25% on two field loads) — the struct has
+since grown to 320.
+
+Candidate B reaches those boards because it plays 4x Doubling Season **and** 4x Saproling Burst,
+4x Mycoloth, 4x Undercellar Myconid; the shipped list has 19 Forests, 2 Mycoloth and no Burst.
+Same engine, and only one of the two lists makes the layout hurt.
+
+### The levers, all byte-identical (so they PRESERVE the banked journal)
+
+1. **Hot/cold split — the targeted one.** The hot walks read one or two small fields
+   (`def_absent` at 0x101, `controller_index` at 0x88, `is_token`, `created_by_number`). A parallel
+   array of those bytes makes a scan touch one cache line per ~64 permanents instead of one per
+   permanent. Directly aimed at the measured 29.94% instruction.
+2. **Shrink `Permanent`.** 320 -> ~160 B halves both the clone bytes (`__memmove`, 7.56%) and the
+   stride. Much of the struct is `int` where `int16_t` would do, and `Permanent* attached_to` is
+   documented in its own comment as **a dead stub**.
+3. **Pool identical tokens onto a count axis.** The structural answer — hundreds of Saprolings that
+   are genuinely interchangeable are stored as hundreds of 320-byte objects. This is the only lever
+   in the 5-20x class. Precedent is good but NOT the same thing: `MTG_SAC_OUTLET_POOL` (adopted
+   2026-09-23, 2.29x on the heaviest cell) pooled the *action*, not the *permanent*.
+
+**Sizing, honestly:** (1)+(2) attack a 32% share and plausibly return ~1.3x; they are mechanical and
+byte-identical. (3) is the one that could change the verdict, and it is a real design change.
+None of this is implemented yet.
