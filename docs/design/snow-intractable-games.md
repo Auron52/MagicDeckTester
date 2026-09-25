@@ -907,3 +907,129 @@ therefore invalidate any journal banked before it lands.
    is "cheapest arm clearing the floor", which on this table picks **d1/b1** rather than the d2/b1
    installed. They are 1% apart in cost and 0.001 apart in dispersion, so this is not worth
    regenerating for; but the script is what a future deck should use.
+
+## 5. Rule 1: don't offer a dig activation while the mana could deploy a permanent (MTG_DIG_MANA_LAST)
+
+**USER 2026-09-25**, refined across six messages, and the refinements are the specification:
+
+> *"Is it time to try out the 'don't activate draw abilities until you are playing your current
+> threats' rule?"* → *"we need to be a bit careful about it, though, since putting down junk may not
+> be better than drawing"* → *"I guess anything that draws is also okay to play."* → *"Acceleration
+> may also be all right, so it likely would be just when we can max out our mana from cards in
+> hand"* → *"(not including Skred, which we should not cast)"* → *"It's a real question as to whether
+> this will be 100% lossless, but it seems worth a try."*
+
+And then the correction that decided the SHAPE, after a first answer that reached for ordering levers:
+
+> *"No, what I mean is drop the possibility to do activations while you can use the mana for
+> something else in hand."*
+
+That is a PRUNE AT ENUMERATION, not a reordering. Ordering was already structurally settled — dig
+activations run after every cast in both worlds (`apply_trailing_activations` in the rollout,
+`exec_trailing_activations` in the executor) — so an ordering lever could not have done anything.
+
+### What it is
+
+`DigManaWantedInHand` (TurnSolver.cpp, beside `AnyHandCastableNow`) plus a single gate at the
+`CollectActions` TapDraw emission site. The activation is not OFFERED when the pool cannot fund both
+the cheapest castable thing in hand and the activation. Every one of the user's refinements is
+derived from card PARAMS rather than a name list, so it generalises:
+
+| in hand | counts as a use of the mana? | why |
+|---|---|---|
+| land | **no** | the drop is free; it never rivals the mana |
+| any permanent (incl. mana rocks/dorks) | **yes** | *"acceleration may also be all right"* |
+| non-permanent that draws (`cast_draw` / `etb_self_draw`) | **yes** | *"anything that draws is also okay to play"* |
+| non-permanent that does not draw (**Skred**) | **no** | spends mana, leaves nothing: *"which we should not cast"* |
+| `goldfish_inert` | **no** | by definition it does nothing here |
+
+Applied at `CollectActions` ONLY. Deliberately not at `BpAvailablePermAbilityModes`, not at
+`CollectActivationKeys` (memo keys stay at least as fine, so no false sharing), and not at `CheckLine`
+— human play keeps the full offer, the standing rule for every judgment prune in this engine.
+
+### Measured at a FINITE budget: quality-neutral, cost-neutral-to-worse
+
+4 held-out seeds (9401-9404), 4 cells, 14,000 games, both arms in one pooled batch:
+
+| depth | games | off | on | delta | digests identical |
+|---|---:|---:|---:|---:|---:|
+| d0 | 4,000 | 6.7343 | 6.7330 | **-0.0013** | 0/4 |
+| d2/b1 | 1,200 | 6.0300 | 6.0300 | +0.0000 | 0/4 |
+| d3/b10 | 1,200 | 6.0241 | 6.0241 | +0.0000 | 0/4 |
+| d5/b20 | 600 | 5.9117 | 5.9117 | +0.0000 | 0/4 |
+
+Wall: d2 0.91-0.98x, d3 0.97-0.98x, **d5 1.07-1.13x WORSE**. That sign pattern is the third
+independent measurement of *freed breadth is respent* (§2b): under a budget the search spends its
+allowance regardless, so removing candidates redistributes work instead of removing it, and the
+deeper the budget lets it go the more there is to respend into.
+
+**A correction to this doc's own earlier claim.** A 150-game one-seed probe reported the play digest
+BYTE-IDENTICAL at d2 and d3. The 14,000-game run gives **0 of 16 cells identical**. The byte-identity
+was a one-seed artifact; do not cite it.
+
+### Measured at budget_ms 0 -- and this is where it pays, for a reason I predicted wrongly
+
+The H5 s8008 cell (depth 5, `budget_ms: 0`, `abandon_units` 40M, max_turns 8, `MTG_LAZY_LEAF=1`),
+2 arms x 49 games, read out BY FATE because this cell's aggregate wall has already made a lossless
+11.5% win read as a 1.8% regression (§1).
+
+| readout | off | on | |
+|---|---:|---:|---|
+| **abandonment** | 17/49 (34.7%) | 17/49 (34.7%) | 0 rescued, 0 lost |
+| **charged units**, ceiling-bound | 680,012,784 | 680,012,839 | **1.000000x** (max per-game gap 2,035 of 40,000,000) |
+| **wall**, ceiling-bound (90.8% of the cell) | 22,509.9 s | 20,452.0 s | **0.9086x**, 14 of 17 faster |
+| **wall**, completing | 2,277.0 s | 2,210.6 s | 0.9708x summed, median **1.0167x** |
+| **play digests**, completing | | | **32 of 32 IDENTICAL** |
+| **cell wall** | 24,786.9 s | 22,662.6 s | **0.9143x** |
+
+**I predicted the saving would show up as a lower abandonment rate. It did not -- that is a flat
+null, 17/49 both arms, nothing rescued and nothing lost.** It showed up instead as the one thing the
+CHARGED/UNCHARGED framing (§2b) says to look for and I did not look for here: the ceiling-bound games
+do **provably identical charged work** -- 1.000000x, agreeing to 0.005% per game because both arms
+stop at the same 40M-unit ceiling -- and still finish **9.1% sooner**. The removed candidates were
+never simulated turn-steps. They were enumeration, payability tests and scoring inside the greedy
+walk, which `SearchBudget::Consume` does not charge, so deleting them lowers wall PER UNIT. That is
+the definition of an uncharged-work saving, measured directly rather than argued.
+
+**And at b0 it is LOSSLESS, which is the user's own open question answered.** 32 of 32 completing
+games byte-identical, 0 abandoned games rescued or lost. The finite-budget digest movement above is
+therefore budget TRUNCATION, not a quality loss: at unbounded budget the search reaches the same play
+without the removed candidates, i.e. they are never part of an optimal line at depth 5 over 8 turns.
+Consistent with the means: unchanged to 4 dp at d2/d3/d5 and BETTER at d0 (-0.0013).
+
+The median `1.0167x` on completing games is not a counter-example. That population is 9.2% of the
+cell's wall, and the slowdowns are confined to games under 50 s where a few ms is 10%; every
+completing game over 100 s is faster (gi=12 1047.8 -> 1030.2 s, gi=47 254.6 -> 207.9 s, gi=8
+165.7 -> 145.6 s).
+
+### The generator's own labeller: a POLICY change, not a free speedup
+
+The user's hypothesis: *"In the mulligan profile generation, though, it might help more, since we use
+a lower depth?"* Re-asked with the comp-scorer hand mode (the same harness that derived d2/b1 in §4),
+whose `units_per_rollout` is deterministic and immune to host load:
+
+```
+off  units_per_rollout=18202.3      on  units_per_rollout=17560.3      -3.5%
+```
+
+**Confirmed.** But the same run shows **41 of 200 hands score differently**, so at b1 the lever
+re-ranks the labeller. The gen's table is a function of that ranking, so this is a table-policy
+change for the mulligan stage, not a free speedup -- and per
+[[bucket-ruling-is-user-only]]-adjacent discipline, changing what the table measures is the user's
+call, not an optimisation to take. Judge it on RANK fidelity if it is ever considered (§4), never on
+the mean.
+
+### Where this leaves the lever
+
+Default **OFF** (`heurarm::DIG_MANA_LAST` / `MTG_DIG_MANA_LAST`), and the default-off path is proven
+inert: digests byte-identical to HEAD on three cells by name-keyed pairing (d0 `d383ecaa6e23cd7f`,
+d2 `849fe310eb25c531`, d3 `8cb3f2dae18654c4`), smoke 93 passed / 0 failed / 0 configs changed.
+
+- **For a `budget_ms: 0` workload -- which is what the value-leaf depth matrix runs -- it is an 8.6%
+  wall saving with provably identical charged work and identical play.** That is the clean-win shape.
+- **For anything at a finite budget it is not a cost win** and at d5/b20 it is 7-13% worse.
+- **For the mulligan generator it is a policy question**, not an optimisation.
+
+The firing counter (`[rollout-stats] dig_mana_last drops=`) exists because this family's standing trap
+is a narrowing whose digests match because it emitted nothing ([[digest-equality-can-mean-broken]]);
+a zero count prints `NO POWER` rather than letting silence read as neutrality.

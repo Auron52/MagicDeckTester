@@ -773,6 +773,13 @@ static bool BpCondemnNewOptSpellOnly();   // defined with the rule, next to the 
 // MTG_BP_CONDEMN_ACTIVATION firing counter: activations dropped because their slot in the
 // provider's ACTIVATION order had already passed when the site fired. Zero => the rule never fired.
 static std::atomic<long long> g_bp_condemn_act_drops{0};
+// MTG_DIG_MANA_LAST firing counter: tap-draw activations never OFFERED because the mana they wanted
+// could deploy a permanent from hand instead. Zero with the lever on => the rule never fired, which is
+// the standing trap this family has (a widening/narrowing change whose digests match because it emitted
+// nothing -- see [[digest-equality-can-mean-broken]]). The count is also the branching cut itself:
+// every drop is a candidate removed from the odometer, so the subsets over it are never enumerated.
+static std::atomic<long long> g_dig_mana_last_drops{0};
+static bool DigManaLastOn();   // defined with the predicate, beside AnyHandCastableNow
 // MTG_BP_NEW_ONLY firing counters (see BpDeriveContinuationList). `lists` = continuation lists the
 // filter saw, `seen` = entries, then where each entry went: dropped, or kept because it USES a card
 // that arrived at the breakpoint / casts a card the PLAN itself still has pending. A lever with no
@@ -1619,6 +1626,15 @@ namespace
                           << g_bp_condemn_act_drops.load()
                           << "  (activations whose slot in the ACTIVATION order had already passed)\n";
                 if (g_bp_condemn_act_drops.load() == 0)
+                { std::cerr << "  NO POWER -- the rule never fired.\n"; }
+            }
+            if (g_dig_mana_last_drops.load() > 0 || DigManaLastOn())
+            {
+                std::cerr << "[rollout-stats] dig_mana_last drops="
+                          << g_dig_mana_last_drops.load()
+                          << "  (tap-draw activations NOT OFFERED: the mana could deploy a permanent"
+                             " from hand and the pool could not fund both)\n";
+                if (g_dig_mana_last_drops.load() == 0)
                 { std::cerr << "  NO POWER -- the rule never fired.\n"; }
             }
             if (g_bp_newopt_samename.load() > 0 || BpCondemnNewOptByNameEnabled())
@@ -6745,6 +6761,70 @@ static bool AnyHandCastableNow(const GameState& state)
         if (pool.CanPay(EffectiveCost(*d, state))) { return true; }
     }
     return false;
+}
+
+// MTG_DIG_MANA_LAST -- DON'T OFFER a tap-draw activation while its mana could deploy a permanent
+// from hand instead. USER 2026-09-25: *"drop the possibility to do activations while you can use the
+// mana for something else in hand"*, and the justification for the deck it was asked for: *"more is
+// always better in this deck"* -- every permanent Snow casts is a snow permanent feeding Abominable
+// Treefolk's and Rimefeather Owl's CDAs and Marit Lage's Slumber threshold, so mana turned into board
+// is mana turned into clock.
+//
+// IT IS A PRUNE AT EMISSION, which is the whole point. The candidate never enters the odometer, so the
+// subsets containing it are never enumerated, never payability-tested and never scored. Ordering the
+// activation later (SnowProvider::ActivationOrderRank, and the trailing pass that already runs after
+// every cast) cannot do this -- it reorders work rather than removing it.
+//
+// THE USER'S THREE EXCLUSIONS, all param-derived so nothing is named:
+//   * "anything that draws is also okay to play" -- a cast-draw (etb_self_draw / cast_draw: Ice-Fang
+//     Coatl, Arcum's Astrolabe) counts as a legitimate USE of the mana, so it defers the dig.
+//   * "acceleration may also be all right" -- a mana permanent counts too (Coldsteel Heart, Boreal
+//     Druid). They cannot fund anything the turn they land, but they are still board.
+//   * "not including Skred, which we should not cast" -- a NON-PERMANENT that does not draw is not a
+//     use of the mana. On this deck that is exactly Skred, and the existing cast order already
+//     classifies it the same way ("goldfish-INERT... mana spent on it is mana not spent developing").
+//
+// AND THE CONTEST HAS TO BE REAL. The gate fires only when the pool cannot fund BOTH the cheapest
+// castable permanent AND the activation -- otherwise there is no competition for the mana and dropping
+// the dig would be pure loss. That is the user's *"just when we can max out our mana from cards in
+// hand"*.
+//
+// NOT LOSSLESS, and the user said so up front (*"it's a real question as to whether this will be 100%
+// lossless"*). What it gives up is the dig-then-deploy line: breakpoint site 8 exists precisely so a
+// card the dig FINDS is castable the same turn, so a turn that digs first can sometimes deploy more in
+// total than a turn that deploys first. The gate forbids that line whenever the mana is contested. It
+// also uses a TOTALS test for the joint affordability -- a colour-exact joint read would be a payment
+// solve per emission, which is the cost this gate exists to avoid -- so it can fire on a pool whose
+// colours could not actually have cast the rival anyway.
+static bool DigManaWantedInHand(const GameState& state, const ManaCost& act_cost)
+{
+    const Player& ap = state.ActivePlayer();
+    if (ap.hand.empty()) { return false; }
+    ManaPool pool = AvailableManaPool(state);
+    pool.AddPool(state.floating_mana);
+    int cheapest = -1;
+    for (const Card& c : ap.hand)
+    {
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(c);
+        if (!d)                       { continue; }
+        if (d->card.IsLand())         { continue; }   // the drop is free; it never rivals the mana
+        if (d->params.goldfish_inert) { continue; }   // can never be cast at all
+        const bool draws = d->params.etb_self_draw > 0 || d->params.cast_draw > 0;
+        const bool perm  = !(d->card.IsInstant() || d->card.IsSorcery());
+        if (!perm && !draws)          { continue; }   // Skred: spends mana, leaves nothing behind
+        const ManaCost ec = EffectiveCost(*d, state);
+        if (!pool.CanPay(ec))         { continue; }
+        const int mv = ec.ManaValue();
+        if (cheapest < 0 || mv < cheapest) { cheapest = mv; }
+    }
+    if (cheapest < 0) { return false; }               // nothing in hand wants this mana
+    return static_cast<int>(pool.Total()) < cheapest + act_cost.ManaValue();
+}
+
+static bool DigManaLastOn()
+{
+    static const bool env = EnvOn("MTG_DIG_MANA_LAST");
+    return heurarm::Flag(heurarm::DIG_MANA_LAST, env);
 }
 
 // Estimate how many times a creature placed NOW will attack before the game ends.
@@ -18758,6 +18838,19 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
                         if (!topd || !CardHasSupertypeNamed(
                                 topd->card, sd->params.tap_draw_requires_top_supertype))
                         { continue; }
+                    }
+                    // MANA-CONTESTED DIG (MTG_DIG_MANA_LAST, default OFF) -- see DigManaWantedInHand.
+                    // Sibling of the gate directly above and deliberately placed beside it, but the two
+                    // are different in kind and the comments must not be read as one: that one is a
+                    // LOSSLESS dominated-action removal (a non-snow top card makes the activation
+                    // strictly pointless), this one is a HEURISTIC narrowing that can cost a real line.
+                    // Autonomous only, for the same reason: a human keeps the full offer.
+                    if (m.mode == Action::AbilityMode::TapDraw && DigManaLastOn()
+                        && !HumanPlayActive() && DigManaWantedInHand(state, cost))
+                    {
+                        if (s_rollout_stats)
+                        { g_dig_mana_last_drops.fetch_add(1, std::memory_order_relaxed); }
+                        continue;
                     }
                     // IceCounter (Rimefeather Owl): only a NON-snow permanent gains anything from
                     // an ice counter (every permanent the deck plays is already snow), so cap the

@@ -252,6 +252,7 @@ enum Slot : int
     FUNGUS_SHRINK_SAC_PAYER,  // MTG_FUNGUS_SHRINK_SAC_PAYER  a SHRINK-ONLY sac outlet (Deathspore Thallid) is offered only when a death-payer is on the board or in hand (default OFF)
     FUNGUS_SHRINK_SAC_M2,     // MTG_FUNGUS_SHRINK_SAC_M2     ...and, SEPARATELY, that outlet is deferred to the second main (default OFF; its own arm because opening m2 on more turns is a large cost -- see FUNGUS_M2_GATE)
     SAC_DRAIN_LETHAL,         // MTG_SAC_DRAIN_LETHAL        the multi-sac LETHAL burst is sized by outlet damage PLUS the per-death drain of our death watchers (Slimefoot / Pashalik Mons). Adds an action, so it moves GT (default OFF)
+    DIG_MANA_LAST,            // MTG_DIG_MANA_LAST        a tap-draw activation is NOT OFFERED while the mana it wants could deploy a PERMANENT from hand instead (default OFF; a HEURISTIC narrowing, not lossless)
     COUNT
 };
 
@@ -470,6 +471,7 @@ inline const char* Name(int slot)
         "MTG_FUNGUS_SHRINK_SAC_PAYER",
         "MTG_FUNGUS_SHRINK_SAC_M2",
         "MTG_SAC_DRAIN_LETHAL",
+        "MTG_DIG_MANA_LAST",
     };
     // The enum and this table are ONE mapping split across two lists: a slot added to one and not
     // the other silently shifts every lever after it (a manifest asking for lever X would set Y).
