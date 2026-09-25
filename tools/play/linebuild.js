@@ -87,6 +87,7 @@
   //   ooze=       Scavenging Ooze's exile (names the EXILED graveyard card)    (LineSpec::ooze_exiles)
   //   channel=    Twinshot Sniper's from-HAND channel ability (names the card) (LineSpec::channels)
   //   suspend=    Lotus Bloom's from-HAND Suspend (names the card)             (LineSpec::suspends)
+  //   adventure=  Brightcap Badger's adventure half (names the PARENT card)     (LineSpec::adventures)
   //   blink=      Emiel / Eldrazi Displacer, "<outlet>[@<target m_number>]"    (LineSpec::blinks)
   // The verbs whose value is a MODE INT rather than a card name. Kept as a set so encodeLine has one
   // rule instead of a growing `v === 'jittemode' || v === 'gyexile' || ...` chain.
@@ -409,6 +410,13 @@
     for (const p of plan) if (p.kind !== 'land' && p.kind !== 'le' && p.kind !== 'vial' && p.kind !== 'retrace' && !isPreTap(p) && lineVerb(p) === 'cast') parts.push('cast=' + p.name);
     for (const p of plan) if (p.kind === 'vial') parts.push('vial=' + p.name);
     for (const p of plan) if (p.kind === 'retrace') parts.push('retrace=' + p.name);
+    // ADVENTURE (CR 715) rides ALONGSIDE its own `cast=`, not instead of it -- the adventure half is
+    // genuinely a cast of that hand card, so the entry keeps its ordinary kind and the cast loop
+    // above has already emitted `cast=<parent>`. This token only says WHICH MODE, which is why it is
+    // a flag on a normal cast entry rather than a kind of its own like channel/suspend (those are
+    // not casts at all). The engine compares the adventure set unconditionally, so omitting the
+    // token means "cast the creature".
+    for (const p of plan) if (p.adventure) parts.push('adventure=' + p.name);
     // Board activations that are neither a hand cast nor a pass need their own verb -- a line made
     // up ONLY of them used to encode as 'pass' (CheckLine stage 0). MODE_VERBS name the MODE INT,
     // every other verb names a card.

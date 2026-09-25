@@ -472,10 +472,52 @@ static std::string SummarizePlan(const TurnSolver::Plan& plan, const GameState& 
                 // artifact, not a creature); only SacCreatureOutlet feeds creatures to an outlet.
                 // The shared "creature(s)" suffix mislabeled a Treasure crack as "sac 1 creature"
                 // (three independent 2026-08-11 Mirrorwing sweep agents flagged it). Text-only.
-                tag = (a.kind == Action::Kind::SacForMana)
-                    ? a.card_name + ": sacrifice"
-                    : a.card_name + ": sac " + std::to_string(k)
-                    + (k == 1 ? " creature" : " creatures");
+                // WHAT IS ACTUALLY EATEN, and WHERE IT COMES FROM (USER-REPORTED 2026-09-25).
+                //
+                // The two branches below were written for Lotus Bloom and Siege-Gang, and both read
+                // wrong for a creature outlet with a required victim subtype -- Utopia Mycon, whose
+                // mana half routes through SacForMana with the victim "chosen canonically at apply".
+                // So the SacForMana branch's own comment ("sacrifices the SOURCE ITSELF ... an
+                // artifact, not a creature") is false for it, and the plan rendered as
+                //     "Utopia Mycon: sacrifice for {G}x1"
+                // with nothing saying WHAT died. Worse, when no legal victim is on the board the
+                // same-line fodder rule (docs/design/sac-fodder-created-in-the-same-line.md) has the
+                // line MAKE one first -- here Mycon's own three spore counters become two Saprolings
+                // under Doubling Season and one of those is eaten, for a NET GAIN of a Saproling and
+                // a saved Peat Bog. None of that appeared in the summary, so the line read as "lose a
+                // creature for nothing" and the human reasonably refused it:
+                //   "we should not sacrifice our critters to Utopia Mycon. We have enough on board"
+                //   "So I lose a creature for nothing."
+                // The engine was right and the sentence describing it was wrong -- the viewer-issue-#4
+                // lesson this very switch exists to serve. Name the subtype, and say when the fodder
+                // is minted by this same line.
+                const CardDefinition* od = a.def ? a.def
+                                                 : CardDatabase::Instance().Lookup(a.card_name);
+                const std::string need_sub =
+                    od ? od->params.sac_creature_requires_subtype : std::string();
+                std::string victim = need_sub.empty() ? std::string("creature") : need_sub;
+                if (od && od->params.sac_creature_outlet && !need_sub.empty())
+                {
+                    tag = a.card_name + ": sac " + std::to_string(k) + " " + victim
+                        + (k == 1 ? "" : "s");
+                    // Is there one to eat RIGHT NOW? If not, the line has to create it, and that is
+                    // the whole difference between "I lose a creature" and "I gain one and spend it".
+                    int have = 0;
+                    for (const Permanent& v : s.battlefield)
+                    {
+                        if (v.controller_index != s.active_player_index || !v.card.IsCreature())
+                        { continue; }
+                        if (CardHasSubtype(v.card, need_sub)) { ++have; }
+                    }
+                    if (have < k) { tag += " (this line makes the " + victim + " first)"; }
+                }
+                else
+                {
+                    tag = (a.kind == Action::Kind::SacForMana)
+                        ? a.card_name + ": sacrifice"
+                        : a.card_name + ": sac " + std::to_string(k)
+                        + (k == 1 ? " creature" : " creatures");
+                }
                 if (a.kind == Action::Kind::SacForMana && !a.chosen_float_color.empty())
                 { tag += " for {" + a.chosen_float_color + "}\xC3\x97" + std::to_string(std::max(1, a.ritual_float)); }
                 else if (a.direct_damage > 0) { tag += " \xE2\x86\x92 " + std::to_string(a.direct_damage) + " damage"; }
@@ -1560,6 +1602,25 @@ static void WriteDecisionJson(std::ostream& os, const GameState& s,
                 if (ac.kind == Action::Kind::SacForMana
                  || ac.kind == Action::Kind::SacCreatureOutlet)
                 { os << ", \"sacout\": true, \"sac_count\": " << std::max(1, ac.sac_count); }
+                // `act_label` = what THIS activation does, in words. USER-REPORTED 2026-09-25:
+                // "How can I activate the remove counters ability on Utopia Mycon or Deathspore
+                // Thallid? ... The choice is not given when both are available."
+                //
+                // A permanent with TWO activated abilities emitted two actions that were identical
+                // on the wire -- both `activate: true` with no `verb` (neither needs one: `cast=`
+                // is unambiguous for both because CheckLine matches them by the SOURCE name) -- so
+                // the viewer's activation-option dedup key collapsed them to one entry and the
+                // picker never opened. Utopia Mycon is exactly that card: "remove three spore
+                // counters: create a Saproling" and "sacrifice a Saproling: add one mana of any
+                // colour", and the Thallid family all share the shape. The engine already owns the
+                // wording (PermAbilityLabel), so send it and let the picker key and label on it --
+                // the same lesson the `blink` note above records ("without the target in the key
+                // every variant deduped to one unlabelled entry").
+                if (ac.kind == Action::Kind::ActivatePermAbility)
+                {
+                    os << ", \"act_label\": ";
+                    JsonStr(os, PermAbilityLabel(ac.ability_mode));
+                }
                 // `verb` = the LineSpec token the GUI must write for this activation. Absent means the
                 // ordinary `cast=<card>` (matched inside CheckLine's orderNames multiset), which is
                 // what the kinds above use. A kind needs its own verb exactly when `cast=<name>` would
@@ -1665,7 +1726,17 @@ static void WriteDecisionJson(std::ostream& os, const GameState& s,
             //    instant for two Saprolings from a {3}{G} 3/4. The verb also matters to the human
             //    because the modes are not interchangeable: taking the adventure leaves the
             //    creature castable later, while hard-casting it spends the adventure forever.
-            if (ac.adventure) { os << ", \"adventure\": true, \"verb\": \"adventure\""; }
+            if (ac.adventure)
+            {
+                os << ", \"adventure\": true, \"verb\": \"adventure\"";
+                // ...and WHICH spell the adventure actually casts, so the viewer badge can name it
+                // ("cast Fungus Frolic") instead of showing the creature's name twice. The parent's
+                // definition owns the link; the action carries only the parent name.
+                const CardDefinition* pdef = ac.def ? ac.def
+                                                    : CardDatabase::Instance().Lookup(ac.card_name);
+                if (pdef && !pdef->params.adventure_face_name.empty())
+                { os << ", \"adventure_name\": "; JsonStr(os, pdef->params.adventure_face_name); }
+            }
             if (!ac.tutor_target.empty()) { os << ", \"tutor_target\": "; JsonStr(os, ac.tutor_target); }
             if (ac.chosen_x > 0)          { os << ", \"x\": " << ac.chosen_x; }
             if (ac.ponder_keep >= 0)      { os << ", \"ponder_keep\": " << ac.ponder_keep; }
@@ -2953,6 +3024,8 @@ static TurnSolver::LineSpec ParseLineSpec(const std::string& spec)
         else if (key == "gyreturn")  { ls.gy_returns.push_back(val); }    // Haven rebuy (returned card)
         else if (key == "gyplay")    { ls.gy_plays.push_back(val); }      // Kaldring gy-play (played card)
         else if (key == "channel")   { ls.channels.push_back(val); }      // from-hand channel ability
+        // Adventure (CR 715): cast the adventure half rather than the creature. See LineSpec.
+        else if (key == "adventure") { ls.adventures.push_back(val); }
         else if (key == "suspend")   { ls.suspends.push_back(val); }      // from-hand Suspend (Lotus Bloom)
         else if (key == "animate")   { ls.animates.push_back(val); }      // Mutavault "{1}: 2/2"
         else if (key == "taptoken")  { ls.tap_tokens.push_back(val); }    // Sliver Hive "{5},{T}: token"

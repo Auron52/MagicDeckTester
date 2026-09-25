@@ -53086,6 +53086,13 @@ TurnSolver::LineCheck TurnSolver::CheckLine(const GameState& state_in, bool is_p
     std::vector<std::string> sortedSuspends = spec.suspends;
     std::sort(sortedSuspends.begin(), sortedSuspends.end());
     const bool suspend_declared   = !spec.suspends.empty();
+    // ADVENTURE (CR 715) -- compared UNCONDITIONALLY, unlike every verb around it. See the note on
+    // LineSpec::adventures: the adventure half is a CastFromHand of the same card as the creature,
+    // so an empty declaration cannot mean "legacy, match by name" -- by name they are identical.
+    // Empty means "cast the creature", and that has to be enforced or the viewer's plain cast could
+    // silently resolve as the adventure.
+    std::vector<std::string> sortedAdventures = spec.adventures;
+    std::sort(sortedAdventures.begin(), sortedAdventures.end());
     std::vector<std::string> sortedAnimates = spec.animates;
     std::sort(sortedAnimates.begin(), sortedAnimates.end());
     const bool animate_declared   = !spec.animates.empty();
@@ -53147,6 +53154,7 @@ TurnSolver::LineCheck TurnSolver::CheckLine(const GameState& state_in, bool is_p
         // >= 2) -- the flexible sacout fallback below only bends counts for these.
         std::vector<std::string> sacLoopNames;
         std::vector<std::string> attachAllNames, sfPutNames, channelNames, suspendNames;
+        std::vector<std::string> adventureNames;
         // One entry per Equip action: (equipment name, equipment m_number, host m_number). Matched
         // against spec.equips by EquipsMatch below, which honours the 0 wildcards.
         std::vector<LineSpec::EquipSpec> equipActs;
@@ -53195,6 +53203,10 @@ TurnSolver::LineCheck TurnSolver::CheckLine(const GameState& state_in, bool is_p
             { channelNames.push_back(a.card_name); continue; }
             if (suspend_declared && a.kind == Action::Kind::Suspend)
             { suspendNames.push_back(a.card_name); continue; }
+            // NO `continue`: an adventure IS a hand cast and still belongs in the cast multiset, so
+            // the human declares `cast=Brightcap Badger` exactly as they would for the creature and
+            // `adventure=` only picks the MODE (the bestow shape, not the channel shape).
+            if (a.adventure) { adventureNames.push_back(a.card_name); }
             if (animate_declared && a.kind == Action::Kind::AnimateLand)
             { animateNames.push_back(a.card_name); continue; }
             if (taptoken_declared && a.kind == Action::Kind::TapForTokenPay)
@@ -53297,6 +53309,11 @@ TurnSolver::LineCheck TurnSolver::CheckLine(const GameState& state_in, bool is_p
             std::vector<std::string> v2 = suspendNames;
             std::sort(v2.begin(), v2.end());
             if (v2 != sortedSuspends) { continue; }
+        }
+        {
+            std::vector<std::string> v2 = adventureNames;
+            std::sort(v2.begin(), v2.end());
+            if (v2 != sortedAdventures) { continue; }   // unconditional -- see sortedAdventures
         }
         if (animate_declared)
         {

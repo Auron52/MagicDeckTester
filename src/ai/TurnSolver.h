@@ -1664,6 +1664,23 @@ public:
         // moment a suspend card with a payable cost is added. EMPTY => legacy matching (a Suspend
         // action matches by card name inside the ordinary cast multiset), so no saved reference moves.
         std::vector<std::string> suspends;
+        // "adventure=<card name>": cast the ADVENTURE half instead of the creature (CR 715 --
+        // Brightcap Badger // Fungus Frolic). USER-REPORTED 2026-09-25: "The viewer seems to have no
+        // way to cast the adventure Fungus Frolic."
+        //
+        // UNLIKE channel= and suspend= THIS IS NOT A DECLARED-VS-LEGACY SPLIT, and the difference is
+        // the whole reason those two could not just be copied. A Channel or a Suspend is its own
+        // Action::Kind, so an undeclared line matching by card name still names an unambiguous
+        // action. The adventure half is a CastFromHand of the SAME card with a different cost and
+        // different text -- the two modes are indistinguishable in the cast multiset -- so the
+        // adventure set is compared ALWAYS, not only when non-empty: declaring nothing means "cast
+        // the creature", which is the only reading under which a line says what the human meant.
+        //
+        // That is safe to make unconditional because Brightcap Badger is the engine's FIRST and
+        // ONLY adventure card (verified: it is the sole card in cards.json carrying
+        // adventure_face_name) and NO saved reference plays it, so there is no line in the repo
+        // whose meaning this can move.
+        std::vector<std::string> adventures;
         // "animate=<land name>" / "taptoken=<land name>": the two greedy mana sinks, now real
         // human-play activations (Mutavault's "{1}: becomes a 2/2", Sliver Hive's "{5},{T}: create a
         // Sliver"). One entry per activation; EMPTY keeps the legacy card-name-in-casts matching, so

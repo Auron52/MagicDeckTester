@@ -976,6 +976,23 @@ function suspendSources() {
   return out;
 }
 function suspendCountFor(name) { return S.plan.filter(p => p.kind === 'suspend' && p.name === name).length; }
+// ADVENTURE (CR 715 -- Brightcap Badger // Fungus Frolic). The fourth from-hand route on a thumb,
+// and the one that most needs its own affordance: unlike the land face, channel and suspend, BOTH
+// modes are ordinary casts of the same card, so every gesture on the thumb (click, double-click,
+// drag) queues the creature and the adventure half was unreachable. USER-REPORTED 2026-09-25: "The
+// viewer seems to have no way to cast the adventure Fungus Frolic."
+// Maps parent name -> the adventure spell's own name, so the badge can say what it casts.
+function adventureSources() {
+  const d = S.decision;
+  if (!d || d.type !== 'main_phase') return {};
+  if (S._advFor === d.decision_index && S._adv) return S._adv;
+  const out = {};
+  (d.plans || []).forEach(p => (p.actions || []).forEach(a => {
+    if (a && a.adventure && a.card) out[a.card] = a.adventure_name || 'its adventure'; }));
+  S._advFor = d.decision_index; S._adv = out;
+  return out;
+}
+function adventureCountFor(name) { return S.plan.filter(p => p.adventure && p.name === name).length; }
 function digSources() {
   const d = S.decision;
   if (!d || d.type !== 'main_phase') return { cyc:{}, sac:{} };
@@ -1045,10 +1062,27 @@ function activatableSources(){
       // to one activation and re-prompts, plus ONE extra "finish the combo" plan carrying the go-off
       // count (TurnSolver's fold (a)). Those two are the same verb on the same target and would
       // dedupe to a single entry, which would hide the shortcut behind the single blink.
-      const key = (a.verb||'cast')+'|'+(a.mode!=null?a.mode:'')+'|'+payload
+      // ...and the ABILITY joins the key for exactly the reason the blink target did. A permanent
+      // with two activated abilities emits two actions that are identical on the wire -- both
+      // `activate: true`, neither carrying a `verb` (neither needs one: CheckLine matches both by
+      // the source name) -- so `cast||Utopia Mycon` was the key for BOTH "remove three spore
+      // counters: create a Saproling" and "sacrifice a Saproling for mana". They deduped to a single
+      // entry and the picker never opened. USER 2026-09-25: "The choice is not given when both are
+      // available." `act_label` is the engine's own wording for the ability (PermAbilityLabel) and
+      // `sacout` separates the sac half, which carries no label of its own.
+      const actKey = (a.act_label || '') + (a.sacout ? '|sac'+(a.sac_count||1)+'|'+(a.float_color||'') : '');
+      const key = (a.verb||'cast')+'|'+(a.mode!=null?a.mode:'')+'|'+payload+'|'+actKey
                 + (a.verb==='blink' ? '|'+a.blink_target+'|'+(a.blink_count||1) : '');
       (opts[src]=opts[src]||{})[key] = { verb:a.verb||'cast', mode:(a.mode!=null?a.mode:null), name:payload,
                                          repeatable:!!a.repeatable,
+                                         // What the picker SHOWS for this ability. Without it two
+                                         // abilities of one permanent render as the same bare card
+                                         // name even once they stop deduping.
+                                         actLabel:(a.act_label
+                                                   || (a.sacout ? ('sacrifice ' + (a.sac_count||1)
+                                                        + (a.float_color ? ' for {'+a.float_color+'}' : ''))
+                                                      : null)),
+                                         sacout:!!a.sacout,
                                          makesClue:!!a.makes_clue,
                                          blinkTarget:(a.verb==='blink' ? a.blink_target : undefined),
                                          blinkCount:(a.verb==='blink' ? (a.blink_count||1) : undefined),
@@ -2204,6 +2238,8 @@ function renderHand() {
     const chN    = canCh ? channelCountFor(c.name) : 0;
     const canSu  = !!suspendSources()[c.name];         // suspendable from hand -- badge to exile it
     const suN    = canSu ? suspendCountFor(c.name) : 0;
+    const advNm  = adventureSources()[c.name] || null;  // adventure half available -- badge to cast it
+    const advN   = advNm ? adventureCountFor(c.name) : 0;
     html += `<span class="thumb ${land?'land':'spell'} ${q?'queued':''} ${spent?'spent':''} ${lehot?'lehot':''} ${vialhot?'vialhot':''}" data-name="${esc(c.name)}" draggable="true" data-card="${esc(c.name)}" data-kind="${c.kind}">`+
       `<img loading="lazy" src="${scryImg(c.name,'small')}" alt="${esc(c.name)}" onerror="this.style.opacity=.15"/>`+
       (leN?`<span class="lealloc" title="${leN} copy/copies discarded to Land’s Edge">⚡${leN}</span>`:'')+
@@ -2224,6 +2260,10 @@ function renderHand() {
       // Suspend: the same shape as channel -- another way to play THIS card, which the ordinary
       // cast gesture would silently take instead.
       (canSu?`<span class="landface" data-suspend="${esc(c.name)}" title="SUSPEND — exile ${esc(c.name)} from hand with time counters instead of casting it${suN?' (click again to take it back)':''}">⌛ suspend${suN>1?` ×${suN}`:''}</span>`:'')+
+      // Adventure: the same shape again, and the reason it is REQUIRED rather than a convenience is
+      // that both modes are casts of this very card -- the thumb's own click already casts the
+      // creature, so without this badge the adventure half has no gesture at all.
+      (advNm?`<span class="landface" data-adventure="${esc(c.name)}" title="ADVENTURE — cast ${esc(advNm)} instead of the creature; ${esc(c.name)} is then exiled and castable later${advN?' (click again to take it back)':''}">🗺 ${esc(advNm)}${advN>1?` ×${advN}`:''}</span>`:'')+
       (total>1?`<span class="pip">×${total}</span>`:'')+(q?`<span class="qct">${q}</span>`:'')+
       `<em>${esc(c.name)}${c.cost?` <span style="color:var(--muted)">${esc(c.cost)}</span>`:''}</em></span>`;
   }
@@ -2287,6 +2327,21 @@ function renderHand() {
       if (i >= 0) { S.plan.splice(i, 1); flashHint(`Took back ${nm}'s suspend.`); }
       else { S.plan.push({ name: nm, kind: 'suspend' });
              flashHint(`Suspending ${nm} — it is exiled with time counters and arrives later. Commit the phase to resolve it.`); }
+      renderBoard(); };
+    b.ondblclick = e => { e.stopPropagation(); e.preventDefault(); };
+  });
+  // Adventure badge: same toggle contract. The entry keeps the card's ORDINARY hand kind and merely
+  // carries `adventure`, because this is a real cast of this card -- encodeLine emits both
+  // `cast=<name>` and `adventure=<name>`, which is what tells the engine which of the two casts of
+  // the same card the human meant.
+  row.querySelectorAll('.landface[data-adventure]').forEach(b => {
+    b.onclick = e => { e.stopPropagation(); e.preventDefault();
+      const nm = b.dataset.adventure;
+      const kd = (b.closest('.thumb') || {}).dataset ? b.closest('.thumb').dataset.kind : 'permanent';
+      const i = S.plan.map(p => !!p.adventure && p.name === nm).lastIndexOf(true);
+      if (i >= 0) { S.plan.splice(i, 1); flashHint(`Took back ${nm}'s adventure.`); }
+      else { S.plan.push({ name: nm, kind: kd, adventure: true });
+             flashHint(`Casting ${nm}'s adventure — ${adventureSources()[nm] || 'the adventure half'}. ${nm} is exiled and castable later.`); }
       renderBoard(); };
     b.ondblclick = e => { e.stopPropagation(); e.preventDefault(); };
   });
@@ -3310,6 +3365,11 @@ function activationPickerHtml(pick){
                    // so this picker only ever offers real, one-at-a-time plays. Click it again to
                    // stack a second -- the line commits them as consecutive segments.
                    : o.verb==='blink'     ? `Blink ${o.blinkTargetName||'a creature'} — exile it and return it`
+                   // The engine's own wording for the ability (`act_label` <- PermAbilityLabel), so
+                   // a permanent with two of them reads as two different plays instead of "Activate
+                   // Utopia Mycon" twice. Without it the picker this fix opens would be as
+                   // undifferentiated as the single entry it replaced.
+                   : o.actLabel           ? `${o.name} — ${o.actLabel}`
                    :                        `Activate ${o.name}`;
   let h=`<h3>${esc(pick.src)} — choose an ability</h3>`;
   h+=`<div class="sub">This permanent offers more than one activation this phase. Pick the one to add to your line, then <b>Commit phase</b>.</div>`;
