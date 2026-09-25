@@ -11913,6 +11913,19 @@ static uint64_t BpCandFingerprint(const TurnSolver::Plan& p, int blind = kBlindN
         fold(static_cast<uint64_t>(a.chosen_x + 7) * 31 + static_cast<uint64_t>(a.splice_count));
         fold(static_cast<uint64_t>(a.sac_source_id) * 131 + static_cast<uint64_t>(a.sac_victim_id));
         fold(static_cast<uint64_t>(a.sac_count) * 17 + static_cast<uint64_t>(a.discard_lands));
+        // `devour_count` -- MUST be folded, and it was the third hole found at this site (after
+        // rock_mana and breakpoint_casts). "Cast Mycoloth devouring 0" and "cast Mycoloth devouring
+        // 3" were fingerprint-IDENTICAL: same kind, name, hand_index, chosen_x, sac ids. On Fungus
+        // candidate B that made 57.6% of scored candidates read as literal repeats while the
+        // dedup's own safety number said 95% of them landed on DIFFERENT post-apply states
+        // (exact_FALSE=305,574) -- the signature of a blind comparator, confirmed by re-applying
+        // the same plan to two pristine copies of the same parent and getting the same key both
+        // times. +2 because the sentinel -1 ("not a devour cast") is a live value.
+        // WHY IT IS NOT JUST A CENSUS BUG: this fingerprint keys the wave walker's W0Len memo
+        // (BpLenRecord / BpLenKey), so the collision let a stillborn-slot length learned from one
+        // devour count be reused for another. main.cpp's viewer identity key already folded it,
+        // with the note "THE COUNT AXES BELONG IN THE IDENTITY ... genuinely different plays".
+        fold(static_cast<uint64_t>(a.devour_count + 2) * 97);
         fold(static_cast<uint64_t>(a.soulfire_own_targets + 3) * 13
              + static_cast<uint64_t>(a.enchant_target));
         fold(static_cast<uint64_t>(a.convoke_green) * 37
@@ -11944,6 +11957,215 @@ static uint64_t BpCandFingerprint(const TurnSolver::Plan& p, int blind = kBlindN
     fold(static_cast<uint64_t>(p.tectonic_keep_choice + 2) * 73);
     return h;
 }
+// DIAGNOSTIC ONLY (MTG_DEDUP_CENSUS). Names every Action field on which two candidates that share an
+// `efp` actually differ -- i.e. the comparator's blind spots, enumerated instead of guessed. Two
+// holes have already been found and patched at that site by hand (rock_mana, breakpoint_casts); this
+// exists so a third is read off a run rather than reasoned about. Not used by any live path.
+static std::string ExactFalseActionDiff(const Action& x, const Action& y)
+{
+    std::string out;
+    auto add = [&out](const char* f, const std::string& a, const std::string& b)
+    { if (!out.empty()) { out += " "; } out += std::string(f) + "(" + a + "!=" + b + ")"; };
+    if (static_cast<long long>(x.kind) != static_cast<long long>(y.kind))
+    { add("kind", std::to_string(static_cast<long long>(x.kind)),
+           std::to_string(static_cast<long long>(y.kind))); }
+    if (static_cast<long long>(x.hand_index) != static_cast<long long>(y.hand_index))
+    { add("hand_index", std::to_string(static_cast<long long>(x.hand_index)),
+           std::to_string(static_cast<long long>(y.hand_index))); }
+    if (static_cast<long long>(x.equiv_tag) != static_cast<long long>(y.equiv_tag))
+    { add("equiv_tag", std::to_string(static_cast<long long>(x.equiv_tag)),
+           std::to_string(static_cast<long long>(y.equiv_tag))); }
+    if (static_cast<long long>(x.equiv_ord) != static_cast<long long>(y.equiv_ord))
+    { add("equiv_ord", std::to_string(static_cast<long long>(x.equiv_ord)),
+           std::to_string(static_cast<long long>(y.equiv_ord))); }
+    if (static_cast<long long>(x.sacrifice_land) != static_cast<long long>(y.sacrifice_land))
+    { add("sacrifice_land", std::to_string(static_cast<long long>(x.sacrifice_land)),
+           std::to_string(static_cast<long long>(y.sacrifice_land))); }
+    if (static_cast<long long>(x.discard_lands) != static_cast<long long>(y.discard_lands))
+    { add("discard_lands", std::to_string(static_cast<long long>(x.discard_lands)),
+           std::to_string(static_cast<long long>(y.discard_lands))); }
+    if (static_cast<long long>(x.vial_bf_index) != static_cast<long long>(y.vial_bf_index))
+    { add("vial_bf_index", std::to_string(static_cast<long long>(x.vial_bf_index)),
+           std::to_string(static_cast<long long>(y.vial_bf_index))); }
+    if (static_cast<long long>(x.dig_sacrifice) != static_cast<long long>(y.dig_sacrifice))
+    { add("dig_sacrifice", std::to_string(static_cast<long long>(x.dig_sacrifice)),
+           std::to_string(static_cast<long long>(y.dig_sacrifice))); }
+    if (static_cast<long long>(x.land_rad_mode) != static_cast<long long>(y.land_rad_mode))
+    { add("land_rad_mode", std::to_string(static_cast<long long>(x.land_rad_mode)),
+           std::to_string(static_cast<long long>(y.land_rad_mode))); }
+    if (static_cast<long long>(x.alt_cost) != static_cast<long long>(y.alt_cost))
+    { add("alt_cost", std::to_string(static_cast<long long>(x.alt_cost)),
+           std::to_string(static_cast<long long>(y.alt_cost))); }
+    if (static_cast<long long>(x.alt_lifegain) != static_cast<long long>(y.alt_lifegain))
+    { add("alt_lifegain", std::to_string(static_cast<long long>(x.alt_lifegain)),
+           std::to_string(static_cast<long long>(y.alt_lifegain))); }
+    if (static_cast<long long>(x.ability_mode) != static_cast<long long>(y.ability_mode))
+    { add("ability_mode", std::to_string(static_cast<long long>(x.ability_mode)),
+           std::to_string(static_cast<long long>(y.ability_mode))); }
+    if (static_cast<long long>(x.ritual_float) != static_cast<long long>(y.ritual_float))
+    { add("ritual_float", std::to_string(static_cast<long long>(x.ritual_float)),
+           std::to_string(static_cast<long long>(y.ritual_float))); }
+    if (static_cast<long long>(x.chosen_x) != static_cast<long long>(y.chosen_x))
+    { add("chosen_x", std::to_string(static_cast<long long>(x.chosen_x)),
+           std::to_string(static_cast<long long>(y.chosen_x))); }
+    if (static_cast<long long>(x.splice_count) != static_cast<long long>(y.splice_count))
+    { add("splice_count", std::to_string(static_cast<long long>(x.splice_count)),
+           std::to_string(static_cast<long long>(y.splice_count))); }
+    if (static_cast<long long>(x.sac_source_id) != static_cast<long long>(y.sac_source_id))
+    { add("sac_source_id", std::to_string(static_cast<long long>(x.sac_source_id)),
+           std::to_string(static_cast<long long>(y.sac_source_id))); }
+    if (static_cast<long long>(x.sac_victim_id) != static_cast<long long>(y.sac_victim_id))
+    { add("sac_victim_id", std::to_string(static_cast<long long>(x.sac_victim_id)),
+           std::to_string(static_cast<long long>(y.sac_victim_id))); }
+    if (static_cast<long long>(x.needs_cast_mask) != static_cast<long long>(y.needs_cast_mask))
+    { add("needs_cast_mask", std::to_string(static_cast<long long>(x.needs_cast_mask)),
+           std::to_string(static_cast<long long>(y.needs_cast_mask))); }
+    if (static_cast<long long>(x.sac_count) != static_cast<long long>(y.sac_count))
+    { add("sac_count", std::to_string(static_cast<long long>(x.sac_count)),
+           std::to_string(static_cast<long long>(y.sac_count))); }
+    if (static_cast<long long>(x.pooled_sac) != static_cast<long long>(y.pooled_sac))
+    { add("pooled_sac", std::to_string(static_cast<long long>(x.pooled_sac)),
+           std::to_string(static_cast<long long>(y.pooled_sac))); }
+    if (static_cast<long long>(x.gy_exile_mode) != static_cast<long long>(y.gy_exile_mode))
+    { add("gy_exile_mode", std::to_string(static_cast<long long>(x.gy_exile_mode)),
+           std::to_string(static_cast<long long>(y.gy_exile_mode))); }
+    if (static_cast<long long>(x.loyalty_ability) != static_cast<long long>(y.loyalty_ability))
+    { add("loyalty_ability", std::to_string(static_cast<long long>(x.loyalty_ability)),
+           std::to_string(static_cast<long long>(y.loyalty_ability))); }
+    if (static_cast<long long>(x.free_cast) != static_cast<long long>(y.free_cast))
+    { add("free_cast", std::to_string(static_cast<long long>(x.free_cast)),
+           std::to_string(static_cast<long long>(y.free_cast))); }
+    if (static_cast<long long>(x.phyrexian_life) != static_cast<long long>(y.phyrexian_life))
+    { add("phyrexian_life", std::to_string(static_cast<long long>(x.phyrexian_life)),
+           std::to_string(static_cast<long long>(y.phyrexian_life))); }
+    if (static_cast<long long>(x.convoke_green) != static_cast<long long>(y.convoke_green))
+    { add("convoke_green", std::to_string(static_cast<long long>(x.convoke_green)),
+           std::to_string(static_cast<long long>(y.convoke_green))); }
+    if (static_cast<long long>(x.convoke_other) != static_cast<long long>(y.convoke_other))
+    { add("convoke_other", std::to_string(static_cast<long long>(x.convoke_other)),
+           std::to_string(static_cast<long long>(y.convoke_other))); }
+    if (static_cast<long long>(x.soulfire_own_targets) != static_cast<long long>(y.soulfire_own_targets))
+    { add("soulfire_own_targets", std::to_string(static_cast<long long>(x.soulfire_own_targets)),
+           std::to_string(static_cast<long long>(y.soulfire_own_targets))); }
+    if (static_cast<long long>(x.mint_gain) != static_cast<long long>(y.mint_gain))
+    { add("mint_gain", std::to_string(static_cast<long long>(x.mint_gain)),
+           std::to_string(static_cast<long long>(y.mint_gain))); }
+    if (static_cast<long long>(x.mint_hand_magnet) != static_cast<long long>(y.mint_hand_magnet))
+    { add("mint_hand_magnet", std::to_string(static_cast<long long>(x.mint_hand_magnet)),
+           std::to_string(static_cast<long long>(y.mint_hand_magnet))); }
+    if (static_cast<long long>(x.mint_magnet) != static_cast<long long>(y.mint_magnet))
+    { add("mint_magnet", std::to_string(static_cast<long long>(x.mint_magnet)),
+           std::to_string(static_cast<long long>(y.mint_magnet))); }
+    if (static_cast<long long>(x.crackle_targets) != static_cast<long long>(y.crackle_targets))
+    { add("crackle_targets", std::to_string(static_cast<long long>(x.crackle_targets)),
+           std::to_string(static_cast<long long>(y.crackle_targets))); }
+    if (static_cast<long long>(x.max_casts_after) != static_cast<long long>(y.max_casts_after))
+    { add("max_casts_after", std::to_string(static_cast<long long>(x.max_casts_after)),
+           std::to_string(static_cast<long long>(y.max_casts_after))); }
+    if (static_cast<long long>(x.enchant_target) != static_cast<long long>(y.enchant_target))
+    { add("enchant_target", std::to_string(static_cast<long long>(x.enchant_target)),
+           std::to_string(static_cast<long long>(y.enchant_target))); }
+    if (static_cast<long long>(x.evoke) != static_cast<long long>(y.evoke))
+    { add("evoke", std::to_string(static_cast<long long>(x.evoke)),
+           std::to_string(static_cast<long long>(y.evoke))); }
+    if (static_cast<long long>(x.adventure) != static_cast<long long>(y.adventure))
+    { add("adventure", std::to_string(static_cast<long long>(x.adventure)),
+           std::to_string(static_cast<long long>(y.adventure))); }
+    if (static_cast<long long>(x.bestow) != static_cast<long long>(y.bestow))
+    { add("bestow", std::to_string(static_cast<long long>(x.bestow)),
+           std::to_string(static_cast<long long>(y.bestow))); }
+    if (static_cast<long long>(x.ponder_keep) != static_cast<long long>(y.ponder_keep))
+    { add("ponder_keep", std::to_string(static_cast<long long>(x.ponder_keep)),
+           std::to_string(static_cast<long long>(y.ponder_keep))); }
+    if (static_cast<long long>(x.devour_count) != static_cast<long long>(y.devour_count))
+    { add("devour_count", std::to_string(static_cast<long long>(x.devour_count)),
+           std::to_string(static_cast<long long>(y.devour_count))); }
+    if (static_cast<long long>(x.replicate_count) != static_cast<long long>(y.replicate_count))
+    { add("replicate_count", std::to_string(static_cast<long long>(x.replicate_count)),
+           std::to_string(static_cast<long long>(y.replicate_count))); }
+    if (static_cast<long long>(x.eval) != static_cast<long long>(y.eval))
+    { add("eval", std::to_string(static_cast<long long>(x.eval)),
+           std::to_string(static_cast<long long>(y.eval))); }
+    if (static_cast<long long>(x.direct_damage) != static_cast<long long>(y.direct_damage))
+    { add("direct_damage", std::to_string(static_cast<long long>(x.direct_damage)),
+           std::to_string(static_cast<long long>(y.direct_damage))); }
+    if (static_cast<long long>(x.is_noncreature) != static_cast<long long>(y.is_noncreature))
+    { add("is_noncreature", std::to_string(static_cast<long long>(x.is_noncreature)),
+           std::to_string(static_cast<long long>(y.is_noncreature))); }
+    if (static_cast<long long>(x.card_mv) != static_cast<long long>(y.card_mv))
+    { add("card_mv", std::to_string(static_cast<long long>(x.card_mv)),
+           std::to_string(static_cast<long long>(y.card_mv))); }
+    if (static_cast<long long>(x.vial_attack_power) != static_cast<long long>(y.vial_attack_power))
+    { add("vial_attack_power", std::to_string(static_cast<long long>(x.vial_attack_power)),
+           std::to_string(static_cast<long long>(y.vial_attack_power))); }
+    if (static_cast<long long>(x.haste_attack_power) != static_cast<long long>(y.haste_attack_power))
+    { add("haste_attack_power", std::to_string(static_cast<long long>(x.haste_attack_power)),
+           std::to_string(static_cast<long long>(y.haste_attack_power))); }
+    if (static_cast<long long>(x.haste_prowess) != static_cast<long long>(y.haste_prowess))
+    { add("haste_prowess", std::to_string(static_cast<long long>(x.haste_prowess)),
+           std::to_string(static_cast<long long>(y.haste_prowess))); }
+    if (static_cast<long long>(x.is_draw) != static_cast<long long>(y.is_draw))
+    { add("is_draw", std::to_string(static_cast<long long>(x.is_draw)),
+           std::to_string(static_cast<long long>(y.is_draw))); }
+    if (static_cast<long long>(x.has_spectacle) != static_cast<long long>(y.has_spectacle))
+    { add("has_spectacle", std::to_string(static_cast<long long>(x.has_spectacle)),
+           std::to_string(static_cast<long long>(y.has_spectacle))); }
+    if (static_cast<long long>(x.is_draw_until_nonland) != static_cast<long long>(y.is_draw_until_nonland))
+    { add("is_draw_until_nonland", std::to_string(static_cast<long long>(x.is_draw_until_nonland)),
+           std::to_string(static_cast<long long>(y.is_draw_until_nonland))); }
+    if (static_cast<long long>(x.discard_land_damage) != static_cast<long long>(y.discard_land_damage))
+    { add("discard_land_damage", std::to_string(static_cast<long long>(x.discard_land_damage)),
+           std::to_string(static_cast<long long>(y.discard_land_damage))); }
+    if (static_cast<long long>(x.rec_mana_casts) != static_cast<long long>(y.rec_mana_casts))
+    { add("rec_mana_casts", std::to_string(static_cast<long long>(x.rec_mana_casts)),
+           std::to_string(static_cast<long long>(y.rec_mana_casts))); }
+    if (static_cast<long long>(x.rec_pump_target) != static_cast<long long>(y.rec_pump_target))
+    { add("rec_pump_target", std::to_string(static_cast<long long>(x.rec_pump_target)),
+           std::to_string(static_cast<long long>(y.rec_pump_target))); }
+    if (x.card_name.str() != y.card_name.str()) { add("card_name", x.card_name.str(), y.card_name.str()); }
+    if (x.land_face.str() != y.land_face.str()) { add("land_face", x.land_face.str(), y.land_face.str()); }
+    if (x.land_fetch_target.str() != y.land_fetch_target.str()) { add("land_fetch_target", x.land_fetch_target.str(), y.land_fetch_target.str()); }
+    if (x.tutor_target.str() != y.tutor_target.str()) { add("tutor_target", x.tutor_target.str(), y.tutor_target.str()); }
+    if (x.victim_name.str() != y.victim_name.str()) { add("victim_name", x.victim_name.str(), y.victim_name.str()); }
+    if (x.chosen_float_color.str() != y.chosen_float_color.str()) { add("chosen_float_color", x.chosen_float_color.str(), y.chosen_float_color.str()); }
+    if (x.trick_hand_target != y.trick_hand_target)
+    { add("trick_hand_target", x.trick_hand_target, y.trick_hand_target); }
+    if (x.rock_mana.white != y.rock_mana.white)
+    { add("rock_mana.white", std::to_string(x.rock_mana.white), std::to_string(y.rock_mana.white)); }
+    if (x.rock_mana.blue != y.rock_mana.blue)
+    { add("rock_mana.blue", std::to_string(x.rock_mana.blue), std::to_string(y.rock_mana.blue)); }
+    if (x.rock_mana.black != y.rock_mana.black)
+    { add("rock_mana.black", std::to_string(x.rock_mana.black), std::to_string(y.rock_mana.black)); }
+    if (x.rock_mana.red != y.rock_mana.red)
+    { add("rock_mana.red", std::to_string(x.rock_mana.red), std::to_string(y.rock_mana.red)); }
+    if (x.rock_mana.green != y.rock_mana.green)
+    { add("rock_mana.green", std::to_string(x.rock_mana.green), std::to_string(y.rock_mana.green)); }
+    if (x.rock_mana.colorless != y.rock_mana.colorless)
+    { add("rock_mana.colorless", std::to_string(x.rock_mana.colorless), std::to_string(y.rock_mana.colorless)); }
+    if (x.rock_mana.wild != y.rock_mana.wild)
+    { add("rock_mana.wild", std::to_string(x.rock_mana.wild), std::to_string(y.rock_mana.wild)); }
+    if (x.cost.generic != y.cost.generic)
+    { add("cost.generic", std::to_string(x.cost.generic), std::to_string(y.cost.generic)); }
+    if (x.cost.white != y.cost.white)
+    { add("cost.white", std::to_string(x.cost.white), std::to_string(y.cost.white)); }
+    if (x.cost.blue != y.cost.blue)
+    { add("cost.blue", std::to_string(x.cost.blue), std::to_string(y.cost.blue)); }
+    if (x.cost.black != y.cost.black)
+    { add("cost.black", std::to_string(x.cost.black), std::to_string(y.cost.black)); }
+    if (x.cost.red != y.cost.red)
+    { add("cost.red", std::to_string(x.cost.red), std::to_string(y.cost.red)); }
+    if (x.cost.green != y.cost.green)
+    { add("cost.green", std::to_string(x.cost.green), std::to_string(y.cost.green)); }
+    if (x.cost.colorless != y.cost.colorless)
+    { add("cost.colorless", std::to_string(x.cost.colorless), std::to_string(y.cost.colorless)); }
+    if (x.cost.x_pips != y.cost.x_pips)
+    { add("cost.x_pips", std::to_string(x.cost.x_pips), std::to_string(y.cost.x_pips)); }
+    if (x.breakpoint_casts.size() != y.breakpoint_casts.size())
+    { add("breakpoint_casts.size", std::to_string(x.breakpoint_casts.size()),
+           std::to_string(y.breakpoint_casts.size())); }
+    return out;
+}
+
 // Channel from the k=0 child apply's in-scope enumeration back to the node host: the number of
 // DISTINCT cand fingerprints in the list the apply just indexed (-1 = not computed). The host
 // must never enumerate the list itself (CantripOrderScope -- the walker's lesson), so this rides
@@ -49767,6 +49989,9 @@ TurnSolver::Plan TurnSolver::SolveWithLookahead(const GameState& state, bool is_
         // break, which is a different claim from the interchangeable-copy one and needs its own
         // safety number. exact_FALSE is that number and it must be 0.
         std::unordered_set<std::uint64_t> census_exact;
+        // ...and the FIRST plan behind each efp, so an exact_FALSE can be DIFFED against its twin
+        // instead of eyeballed. Census-only; never allocated on a live run.
+        std::unordered_map<std::uint64_t, Plan> census_exact_first;
         // Searched-breakpoint variant dedup -- see the identical guard in FSLineWin. Records every
         // candidate's post-apply state but only SKIPS a bp_choice variant, so runs without variants
         // (and MTG_BP_SEARCH=0) never enter it and stay byte-identical.
@@ -49971,6 +50196,7 @@ TurnSolver::Plan TurnSolver::SolveWithLookahead(const GameState& state, bool is_
                     efp = efp * 1099511628211ull + static_cast<std::uint64_t>(plan.bp_at + 2);
                     efp = efp * 1099511628211ull + static_cast<std::uint64_t>(plan.bp_base + 2);
                     const bool exact_dup = !census_exact.insert(efp).second;
+                    if (!exact_dup) { census_exact_first.emplace(efp, plan); }
                     auto dd_ins = census_seen.emplace(BuildDedupKey(copy),
                                                       DedupFirstSeen{dd_fam, plan.bp_choice});
                     const bool state_dup = !dd_ins.second;
@@ -50013,15 +50239,50 @@ TurnSolver::Plan TurnSolver::SolveWithLookahead(const GameState& state, bool is_
                                     s += a.card_name.str() + "|k"
                                        + std::to_string(static_cast<int>(a.kind))
                                        + "|x" + std::to_string(a.chosen_x)
+                                       + "|dv" + std::to_string(a.devour_count)
                                        + "[s" + std::to_string(a.sac_source_id)
                                        + ",h" + std::to_string(a.hand_index) + "]";
                                 }
+                                // The PLAN-level fields BpCandFingerprint does not fold either.
+                                // sac_pins and breakpoint_actions are both apply-read (IsApplyEmptyPlan
+                                // tests them), so a difference here is a comparator hole, not a
+                                // state-dependent apply.
+                                std::string pins;
+                                for (int v : plan.sac_pins)
+                                { pins += (pins.empty() ? "" : ",") + std::to_string(v); }
+                                std::string bacts;
+                                for (const Action& ba : plan.breakpoint_actions)
+                                { bacts += (bacts.empty() ? "" : ",") + ba.card_name.str()
+                                         + "/k" + std::to_string(static_cast<int>(ba.kind)); }
                                 std::fprintf(stderr,
-                                             "EXACT-FALSE t%d d%d %s land=%d/%s bp=%d :: %s\n",
+                                             "EXACT-FALSE t%d d%d %s land=%d/%s bp=%d dig=%d "
+                                             "pins=[%s] bacts=[%s] :: %s\n",
                                              state.turn_number, depth,
                                              is_pre_combat ? "pre" : "post",
                                              plan.land_decided ? 1 : 0, plan.land_to_play.c_str(),
-                                             plan.bp_choice, s.empty() ? "(empty)" : s.c_str());
+                                             plan.bp_choice, plan.dig_choice,
+                                             pins.c_str(), bacts.c_str(),
+                                             s.empty() ? "(empty)" : s.c_str());
+                                auto fit = census_exact_first.find(efp);
+                                if (fit != census_exact_first.end())
+                                {
+                                    const Plan& tw = fit->second;
+                                    if (tw.actions.size() != plan.actions.size())
+                                    {
+                                        std::fprintf(stderr, "   DIFF actions.size %zu vs %zu\n",
+                                                     tw.actions.size(), plan.actions.size());
+                                    }
+                                    else
+                                    {
+                                        for (std::size_t ai = 0; ai < plan.actions.size(); ++ai)
+                                        {
+                                            const std::string d =
+                                                ExactFalseActionDiff(tw.actions[ai], plan.actions[ai]);
+                                            if (!d.empty())
+                                            { std::fprintf(stderr, "   DIFF a[%zu] %s\n", ai, d.c_str()); }
+                                        }
+                                    }
+                                }
                             }
                         }
                     }
@@ -50111,6 +50372,7 @@ TurnSolver::Plan TurnSolver::SolveWithLookahead(const GameState& state, bool is_
                     efp = efp * 1099511628211ull + static_cast<std::uint64_t>(plan.bp_at + 2);
                     efp = efp * 1099511628211ull + static_cast<std::uint64_t>(plan.bp_base + 2);
                     const bool exact_dup = !census_exact.insert(efp).second;
+                    if (!exact_dup) { census_exact_first.emplace(efp, plan); }
                     auto dd_ins = census_seen.emplace(BuildDedupKey(copy),
                                                       DedupFirstSeen{dd_fam, plan.bp_choice});
                     const bool state_dup = !dd_ins.second;
@@ -50153,15 +50415,50 @@ TurnSolver::Plan TurnSolver::SolveWithLookahead(const GameState& state, bool is_
                                     s += a.card_name.str() + "|k"
                                        + std::to_string(static_cast<int>(a.kind))
                                        + "|x" + std::to_string(a.chosen_x)
+                                       + "|dv" + std::to_string(a.devour_count)
                                        + "[s" + std::to_string(a.sac_source_id)
                                        + ",h" + std::to_string(a.hand_index) + "]";
                                 }
+                                // The PLAN-level fields BpCandFingerprint does not fold either.
+                                // sac_pins and breakpoint_actions are both apply-read (IsApplyEmptyPlan
+                                // tests them), so a difference here is a comparator hole, not a
+                                // state-dependent apply.
+                                std::string pins;
+                                for (int v : plan.sac_pins)
+                                { pins += (pins.empty() ? "" : ",") + std::to_string(v); }
+                                std::string bacts;
+                                for (const Action& ba : plan.breakpoint_actions)
+                                { bacts += (bacts.empty() ? "" : ",") + ba.card_name.str()
+                                         + "/k" + std::to_string(static_cast<int>(ba.kind)); }
                                 std::fprintf(stderr,
-                                             "EXACT-FALSE t%d d%d %s land=%d/%s bp=%d :: %s\n",
+                                             "EXACT-FALSE t%d d%d %s land=%d/%s bp=%d dig=%d "
+                                             "pins=[%s] bacts=[%s] :: %s\n",
                                              state.turn_number, depth,
                                              is_pre_combat ? "pre" : "post",
                                              plan.land_decided ? 1 : 0, plan.land_to_play.c_str(),
-                                             plan.bp_choice, s.empty() ? "(empty)" : s.c_str());
+                                             plan.bp_choice, plan.dig_choice,
+                                             pins.c_str(), bacts.c_str(),
+                                             s.empty() ? "(empty)" : s.c_str());
+                                auto fit = census_exact_first.find(efp);
+                                if (fit != census_exact_first.end())
+                                {
+                                    const Plan& tw = fit->second;
+                                    if (tw.actions.size() != plan.actions.size())
+                                    {
+                                        std::fprintf(stderr, "   DIFF actions.size %zu vs %zu\n",
+                                                     tw.actions.size(), plan.actions.size());
+                                    }
+                                    else
+                                    {
+                                        for (std::size_t ai = 0; ai < plan.actions.size(); ++ai)
+                                        {
+                                            const std::string d =
+                                                ExactFalseActionDiff(tw.actions[ai], plan.actions[ai]);
+                                            if (!d.empty())
+                                            { std::fprintf(stderr, "   DIFF a[%zu] %s\n", ai, d.c_str()); }
+                                        }
+                                    }
+                                }
                             }
                         }
                     }
