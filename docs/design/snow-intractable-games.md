@@ -1136,3 +1136,83 @@ it is live and still worthless.
 3. **Selecting the population for the metric makes the metric vacuous.** That same A/B sampled only
    the 17 games that were ALREADY ceiling-bound and then reported "abandonment 17/17 -> 17/17" --
    a result selected for, which also removed the marginal games where a rescue is the most likely.
+
+## 7. The Snow cast order, measured at last -- and it is worse (2026-09-25)
+
+`MTG_SNOW_CAST_ORDER` and its five sub-levers (`SNOW_ORDER_FIXER`, `SNOW_ORDER_SPLIT`,
+`SNOW_ACT_ORDER`, `SNOW_ORDER_DRAW_EARLY`, `SNOW_ORDER_TAPDRAW_EARLY`) were written from the user's own
+2026-09-15 and 2026-09-18 wording, have shipped default OFF since, and **no doc in this repo recorded a
+verdict on any of them.** The arms existed; the measurement did not. `logs/snowopt/castorder_sweep.sh`
+was written on the morning of 2026-09-25 and never run. This is that run.
+
+7 arms x 4 seeds (**9101-9104**, held out from every tier -- smoke 1001, regression 2002/3003, overnight
+4004-7007 -- and from the 9001-9004 the self-funding work used) x d0/d3/d5, **84 jobs, 40,600 games, ONE
+pooled batch**, 32 threads, 1,546 s wall / 48,746 s CPU (3,181% = 31.8 of 32 cores, checked at 90 s).
+Measured on engine `afc34763`; two viewer commits (`e7b6c6e0`, `c2316d0f`) landed during the run and
+touch `SpellEffects.h` / `GameLogger` / `main.cpp`, so re-run before quoting these digests against a
+later HEAD -- the MEANS are what the argument rests on, and those are differences between arms that all
+shared one binary.
+
+| arm | d0 (4,000) | d3 (1,200) | d5 (600) | seeds better/worse/= |
+|---|---:|---:|---:|---|
+| base (shipped) | 6.6990 | 6.0541 | 5.9666 | -- |
+| `order` (the full rule) | +0.0040 | **+0.0125** | +0.0050 | 0/4/0 . 0/4/0 . 0/3/1 |
+| `drawearly` | +0.0020 | +0.0059 | +0.0050 | 0/4/0 . 0/4/0 . 0/3/1 |
+| `drawtap` | +0.0020 | +0.0059 | +0.0050 | 0/4/0 . 0/4/0 . 0/3/1 |
+| `nofixer` (order minus the hoist) | **+0.0303** | +0.0075 | +0.0084 | 0/4/0 . 0/4/0 . 0/4/0 |
+| `nosplit` (order minus the tie split) | +0.0040 | +0.0125 | +0.0050 | 0/4/0 . 0/4/0 . 0/3/1 |
+| `noact` (order minus Sheets-before-Augur) | **-0.0020** | +-0.0000 | **-0.0066** | 4/0/0 . 0/0/4 . 4/0/0 |
+
+**`ident` is 0 of 4 in every cell of every arm**, so each lever demonstrably reached the play -- the
+`MTG_FS_PRE_STATE_SKIP` trap from section 6 does not apply here.
+
+**The headline: `MTG_SNOW_CAST_ORDER` as written is WORSE at all three depths, on every seed.** 0/4/0 at
+d0 and d3 is 8 of 8 paired cells against it. It stays default OFF, and now for a measured reason rather
+than a procedural one. The user's caution about the rule was well placed.
+
+### The attribution is worth more than the headline, because the arms disagree in three ways
+
+1. **The Astrolabe hoist is LOAD-BEARING, and it is the only sub-lever that clearly earns its place.**
+   Removing it costs **+0.0303 turns at d0** -- 7.6x the whole `order` arm's own regression, and worse
+   on 4 of 4 seeds at every depth. So within the ordering, putting the fixer right after the land drop
+   is doing real work; the rule's net loss is in spite of it, not because of it.
+2. **`MTG_SNOW_ACT_ORDER` (Scrying Sheets activates before Frost Augur) is the harmful part.** Dropping
+   it improves `order` by 0.0060 at d0 and **0.0117 at d5**, and carries `noact` BELOW the shipped
+   baseline: 4 of 4 seeds better at d0, 4 of 4 better at d5, 4 of 4 exactly equal at d3 -- **8 better,
+   0 worse, 4 tied**, p ~ 0.004 on a sign test over the non-tied cells. That is the same evidential
+   strength that refuted `MTG_ACT_TAP_RESERVE` in section 2c, and it points the same way: on this deck,
+   a rule about WHICH snow source acts first costs more in mana flexibility than the ordering buys.
+   Sheets taps for `{C}` as well as digging, so committing it first spends a source the turn's other
+   activation may have needed -- the identical mechanism, at the activation layer instead of the
+   payment layer.
+3. **`MTG_SNOW_ORDER_SPLIT` changes the play and changes NOTHING ELSE.** `nosplit` matches `order` to
+   four decimal places in all three depth cells -- and the per-cell digests all DIFFER
+   (`order_d0_s9101 = d7736425660c2749` vs `nosplit_d0_s9101 = acf94116da96e931`). So the within-cost
+   tie split (mana -> permanent -> non-permanent) reorders real casts in every game and moves the
+   outcome in none of them, across 5,800 games. It is not inert code; it is a distinction without an
+   outcome, which is the cheapest kind of lever to delete.
+4. **The draw band helps the rule and does not save it.** `drawearly` halves `order`'s d0 and d3
+   regressions (+0.0040 -> +0.0020, +0.0125 -> +0.0059), which is evidence FOR the user's 2026-09-18
+   ask ("move all of the draw to just after Astrolabe") as an amendment to the rule -- but both draw
+   arms are still worse than base at all three depths on 4 of 4 seeds. And `drawtap` is byte-for-byte
+   the same result as `drawearly` in every cell, so moving the tap-draw PERMANENTS into that band is a
+   no-op on this list.
+
+### What this does and does not authorise
+
+Nothing here is adopted. Cast order is user-reviewed per deck by the set site's own rule, and the one
+arm that measures BETTER than the shipped baseline (`noact`) is a play change worth 2-7 thousandths of a
+turn -- which is the magnitude the section-2c held-out work showed can flip sign between depths on a
+single seed. The 8-of-8-plus-4-ties pattern is stronger than that, but `noact` is still
+`MTG_SNOW_CAST_ORDER` ON, i.e. adopting it would turn on the whole ordering machinery to gain a
+hundredth of a turn, and it has not been run against the 93-config smoke tier at all.
+
+The two conclusions that ARE settled, and cost nothing to act on:
+
+* **`MTG_SNOW_CAST_ORDER` stays OFF**, measured, not deferred.
+* **`MTG_SNOW_ORDER_SPLIT` is outcome-neutral on 5,800 games** while provably changing play, so it can
+  be deleted rather than carried as an untested arm.
+
+The useful negative for planning: none of this touches the abandonment rate, and the whole sweep's
+effect range (0.03 turns at the extreme) is an order of magnitude below what the H5 matrix's censoring
+does to its own mean win turn. Cast order is a play-quality question on this deck, not a cost one.
