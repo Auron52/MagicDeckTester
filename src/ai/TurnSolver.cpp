@@ -19265,6 +19265,21 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
         // worlds) and only realises the effect if paid, so a stranded outlet is a no-op, not a phantom.
         // Skirk's MANA outlet (sac_outlet_add_mana_color set) is NOT emitted here -- it floats mana and
         // needs the mana-solver float path (separate follow-up); this pass is the value outlets only.
+        //
+        // Death-watcher drain is a property of the BOARD, not of the outlet, so it is memoised across
+        // the outlet loop below: candidate-B Fungus fields four Utopia Mycons plus Psychotrope,
+        // Vitaspore and Deathspore, every one of them asking the same "Saproling" question, and an
+        // un-memoised DrainPerDeathOfSubtype would walk the whole (wide) board once per outlet -- the
+        // board-level-scan-per-creature defect this session spent its optimisation rounds removing.
+        // Keyed on the subtype because that is its only outlet-dependent input.
+        std::vector<std::pair<std::string, int>> drain_memo;
+        auto drain_for = [&](const std::string& sub) -> int
+        {
+            for (const std::pair<std::string, int>& e : drain_memo) { if (e.first == sub) { return e.second; } }
+            const int d = DrainPerDeathOfSubtype(state, state.active_player_index, sub);
+            drain_memo.emplace_back(sub, d);
+            return d;
+        };
         for (const Permanent& src : state.battlefield)
         {
             if (src.controller_index != state.active_player_index) { continue; }
@@ -19619,13 +19634,23 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
                 // conservatism, as the damage-outlet burst below.
                 const int lethal_drain =
                     heurarm::Flag(heurarm::SAC_DRAIN_LETHAL, s_drain_lethal_env)
-                        ? DrainPerDeathOfSubtype(state, state.active_player_index, need_sub) : 0;
+                        ? drain_for(need_sub) : 0;
                 if (lethal_drain > 0)
                 {
                     const int opp_life = state.players[1 - state.active_player_index].life;
-                    int kl = (opp_life + lethal_drain - 1) / lethal_drain;   // fewest lethal sacs
-                    if (kl > V) { kl = V; }
-                    if (kl >= 2 && kl != k) { emit_mana_burst(kl); }
+                    const int kl = (opp_life + lethal_drain - 1) / lethal_drain;   // fewest lethal sacs
+                    // EMITTED ONLY WHEN THE LINE ACTUALLY WINS -- `kl > V` means the board cannot
+                    // reach lethal, and clamping to V there (what this did until 2026-09-25) is what
+                    // turned a SHORT-CIRCUIT into a menu WIDENER. USER: *"why would the short-circuit
+                    // increase enumeration? It should be an easy check that we potentially only even
+                    // do once per turn."* Exactly right, and the clamp was the reason it did not
+                    // behave like one: every state holding Slimefoot + any Saproling grew an extra
+                    // SacForMana action -- fanned out once PER CANDIDATE COLOUR for an any-colour
+                    // outlet like Utopia Mycon -- which the odometer then crossed with every other
+                    // choice. Gated on real lethality the emission is free by construction: in a
+                    // non-lethal state the menu is byte-identical, and in a lethal one the
+                    // board-lethal cut ends the turn's enumeration on the spot.
+                    if (kl <= V && kl >= 2 && kl != k) { emit_mana_burst(kl); }
                 }
             }
 
@@ -19642,7 +19667,7 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
             // dealt by OnCreatureDies, this only lets the burst be SIZED for it.
             const int drain_per =
                 heurarm::Flag(heurarm::SAC_DRAIN_LETHAL, s_drain_lethal_env)
-                    ? DrainPerDeathOfSubtype(state, state.active_player_index, need_sub) : 0;
+                    ? drain_for(need_sub) : 0;
             if (!is_mana_outlet && (sd->params.sac_outlet_damage + drain_per) > 0)
             {
                 const int D = sd->params.sac_outlet_damage + drain_per;
@@ -19655,7 +19680,15 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
                 }
                 const int opp_life = state.players[1 - state.active_player_index].life;
                 int k = (opp_life + D - 1) / D;   // ceil(opp_life / D): fewest sacs that could be lethal
-                if (k > V) { k = V; }             // cap at available victims (sac-all for max reach)
+                if (k > V)
+                {
+                    // A DRAIN-ONLY burst (the outlet deals nothing itself -- every Fungus outlet)
+                    // exists solely to express a kill, so when the board cannot reach lethal there
+                    // is nothing to express and emitting a clamped, non-lethal burst only widens
+                    // the menu. A real damage outlet (Siege-Gang) keeps the sac-all-for-max-reach
+                    // clamp it has always had -- that path is byte-identical, arm on or off.
+                    k = (sd->params.sac_outlet_damage == 0) ? 0 : V;
+                }
                 if (k >= 2)
                 {
                     Action b;
