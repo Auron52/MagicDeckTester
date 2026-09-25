@@ -448,7 +448,22 @@ Priced against the 23.86M-rollout projection (~9 days at 24 cores):
 count**, which `mullgen-cost-is-driven-by-bucket-count.md` prices and which is a decklist property,
 not an engine one. Do not re-open the budget direction expecting more than this table.
 
-**NOT ADOPTED.** X=1000 is free by the repo's own resume gate, but `play_digest` is a 64-game
-behavioural sample, not a proof of byte-identity. Before wiring it into `scripts/mullgen.sh` (the
-"enable per-run (generation drivers)" half that was never done) it needs `scenarios.sh` + smoke
-with configs-changed 0. That gate has not been run.
+### ADOPTED 2026-09-25 — generation-side only, gate green
+
+`play_digest` is a 64-game behavioural sample, not a proof of byte-identity, so X=1000 was gated
+before wiring:
+
+* `test/scenarios.sh`: **103 passed / 0 failed** with the ceiling armed, and a line-by-line diff of
+  every scenario's `win_turn` / `opponent_life` / `active_life` against the unarmed run is **empty**.
+* `test/regression.sh --smoke`: **93 passed / 0 failed / 0 new, rc=0**, against committed ground
+  truth — reproduced twice. The smoke fingerprint is `<avg>[/<play_digest>]` per case, so this is a
+  per-case play-digest match, not just an aggregate one.
+
+Wired into `scripts/mullgen.sh` as `MTG_DECISION_WORK_X="${MTG_DECISION_WORK_X:-1000}"` on the gen
+invocation — overridable from the environment, and **generation-side only**. It must NOT become an
+engine default: the Melira measurements are the standing reason (dead as a play lever, and the user
+reverted a default-flip of the sibling lever on 2026-09-22).
+
+Note what this does and does not claim. It does not make the budget honest — a decision may still
+spend 999x its stated bound. It removes the top 0.17% that spend more than a thousand times it, and
+that is 24.6% of all work.

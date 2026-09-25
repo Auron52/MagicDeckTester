@@ -421,6 +421,22 @@ case "$CMD" in
     # A regen must keep the incumbent to compare against -- and to restore if the new one loses.
     if [ -e "$PROF" ]; then cp -f "$PROF" "$PREV"; log "regeneration: incumbent saved -> $PREV"; fi
     log "=== GEN ($(stamp)) deck=$STEM recipe=$RECIPE ==="
+    # Per-decision work ceiling (src/ai/DecisionWorkMeter.h). SearchBudget counts one unit per
+    # simulated turn-step, so the greedy subset walk inside a step bills NOTHING against it -- on a
+    # token-doubler board that lets a 3 ms budget buy a 16,319 s rollout. Measured over 74,860 armed
+    # candidate-B decisions against a 2,700-unit nominal budget: p50 is 0.5x budget (the bound is not
+    # mis-set, it is disconnected), p99 is 235x, max is 28,191x. This is the "enable per-run
+    # (generation drivers)" half that the lever shipped with in 2026-09 and that was never wired.
+    #
+    # X=1000 -- a ceiling one THOUSAND times the stated budget -- is the boundary, chosen against the
+    # resume gate rather than by taste: it removes 24.6% of all billed units (1.33x) while leaving the
+    # keepgen play digest at e0ffdb608cd70b25, so a banked journal still RESUMES and the discovery
+    # cache still hits. X=500 moves the digest and would discard every banked cell-side. Gated
+    # 2026-09-25: scenarios 103/103 with zero per-scenario diff, smoke 93/93 vs committed GT rc=0
+    # (twice). Generation-side only, per the Melira ruling that the ceiling is dead as a PLAY lever
+    # (analysis-Melira Pod.md) -- do NOT promote it to an engine default. Set MTG_DECISION_WORK_X in
+    # the environment to override; see docs/design/slow-rollout-tail-and-the-uncharged-greedy-walk.md.
+    MTG_DECISION_WORK_X="${MTG_DECISION_WORK_X:-1000}" \
     "$BIN" "$DECK" --cards-json src/cards/data/cards.json --gen-mulligan "$RECIPE" \
       >> "$OUT/gen.log" 2>&1 || { log "GENERATION FAILED -- see $OUT/gen.log"; exit 1; }
     [ -e "$PROF" ] || { log "gen produced no profile (below the R>=10 floor?) -- see $OUT/gen.log"; exit 1; }
