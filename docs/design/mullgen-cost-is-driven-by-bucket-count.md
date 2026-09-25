@@ -89,6 +89,34 @@ re-discovery). Do not reach for the file first while iterating.
    is explicitly a candidate. Spending days of box time fitting a keep table to a mana base that
    may not survive the next revision is the expensive kind of thorough.
 
+## UPDATE 2026-09-25 — after a 65x engine speedup, the verdict is UNCHANGED
+
+The slow rollouts this run exposed were largely an O(N^2) board-width defect in the haste scans,
+fixed in `b4c7f657` + `19d3e3a8`: the replayed slow cell went **41.0/42.9/45.1 s -> 0.65 s (~65x)**
+and the smoke suite's batch makespan halved (185 s -> 88 s). Byte-identical (smoke 93 / regression
+129, `play-changed: 0`). So the per-rollout cost axis is now genuinely much cheaper.
+
+**It does not rescue this generation.** Resuming the gen on the new binary (discovery a CACHE HIT,
+journal resumed at 81,298 cell-sides -- the `play_digest` is unchanged, so prior work survives):
+
+| | first run (old binary) | resumed probe (new binary) |
+|---|---|---|
+| rate | 9.8 roll7/s | **0.63 roll7/s** |
+| slow (>30 s) cells | 620 in ~9 h | **640 in 15 min** |
+| worst cell | 25,713 s | 873 s |
+
+The rate fell *despite* the speedup because the odometer left the cheap corner of the hand space.
+The first run only ever covered **5.3%** of cells, all of them free of buckets 0-6; the probe has
+moved into the **Doubling Season x3/x4** cells (540 of its 640 slow cells hold Doubling Season, 247
+hold Mycoloth). Four Doubling Seasons is a **16x** token multiplier and Sol Ring deploys it early,
+so those boards are astronomically wide. Pre-optimization those same cells would have been ~65x
+worse -- i.e. 10+ hours EACH.
+
+**The lesson for sizing: an average rollout rate measured early is not a projection.** The cell space
+is wildly heterogeneous and the odometer walks it in bucket-index order, so the early rate is
+sampled from the cheapest corner. The 86 h floor-pass estimate above was optimistic for that reason,
+not pessimistic.
+
 ## Related
 
 * `docs/design/slow-rollout-tail-and-the-uncharged-greedy-walk.md` -- the *other*, independent cost
