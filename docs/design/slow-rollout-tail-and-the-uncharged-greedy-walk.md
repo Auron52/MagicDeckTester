@@ -322,3 +322,133 @@ it to ~13-16 h, still over the ~8 h window, so the repair is necessary and not s
 
 Full context, including the cancelled run's state and the resumable 30 MB journal:
 `docs/design/snow-generation-cost-2026-09-25.md` section 4c.
+## MEASURED 2026-09-25 — the currency gap is 4 ORDERS OF MAGNITUDE, and bounding it buys 1.33x
+
+The user's ruling above says to fix the budget. This section measures what that is actually worth,
+on the real candidate-B keepgen workload, and the honest answer is **much less than the diagnosis
+suggests**. Record it so nobody re-runs this hoping for a different number.
+
+**Read this next to the Snow section above — they disagree about where the money is, and both are
+right.** On Snow the >=30 s tail is **4.8%** of the run ("the median rollout is the cost"); on Fungus
+candidate B it is **32.6%**. So *a tail ceiling is a deck-shaped lever*, worth ~5% on an ordinary
+deck and ~1.3-1.5x on one with a token doubler feeding a sacrifice outlet. Neither number
+generalises; measure the deck. The two sections also test different levers, and the difference is
+what makes this one adoptable: Snow measured `MTG_SOLVE_CHARGE`, which moves scores and so runs into
+open question 4 (a table fitted under an engine we do not ship). The ceiling below is chosen
+*precisely at the point where it does not move them* — same play digest, same resumable journal —
+so question 4 does not bite it.
+
+### The right lever is NOT `MTG_SOLVE_CHARGE` — it is `MTG_DECISION_WORK_X`
+
+`src/ai/DecisionWorkMeter.h`. Both are default-off dead levers, but they differ in shape, and the
+difference is exactly the doc's open question 3 ("is a flat charge even the right shape?"):
+
+* `MTG_SOLVE_CHARGE` bills **every** `consider()` visit 1:1, so it shaves **every** walk and moves
+  every board's search. Melira measured it at **613→370 s but avg 4.96→5.24 (−0.28t)** — rejected
+  for play (`docs/design/analysis-Melira Pod.md`), and the user reverted a default-flip 2026-09-22.
+* `MTG_DECISION_WORK_X` is a **per-decision TOTAL ceiling** at `base_budget x X`. It is not a tax on
+  every walk, it is a cap that binds only on the tail — and it **already bills the greedy subset
+  walk**, through the `else if (decisionwork::Armed())` branch at `TurnSolver.cpp:23397`, with NO
+  need to touch `MTG_SOLVE_CHARGE` at all. It also stops SOFTLY: the existing `Overrun` path makes
+  iterative deepening commit the deepest completed pass, deterministically.
+
+The Melira doc measured the ceiling DEAD **as a play lever** (X=10 lost the win, X=100 saved
+nothing) and explicitly reserved the machinery "for attribution and **generation-side use**". This
+is that generation-side use.
+
+### How broken the currency is, measured (74,860 armed decisions, 2.96e9 units)
+
+`MTG_DECISION_WORK_X=100000000 MTG_DECISION_WORK_DEBUG=1` on the real candidate-B floor pass —
+a ceiling so high nothing trips, so the meter is pure instrumentation. Nominal budget **2,700
+units** (3 ms x 900/virtual-ms):
+
+| | units | vs budget |
+|---|---|---|
+| p50 | 1,482 | **0.5x** |
+| p90 | 33,345 | 12.3x |
+| p99 | 634,319 | 234.9x |
+| p99.9 | 4,007,489 | 1,484.3x |
+| **max** | **76,114,923** | **28,190.7x** |
+
+**The median decision is comfortably UNDER budget.** The budget is not too tight and it is not
+mis-set: it is simply not connected to the tail, exactly as the root-cause section says. One
+decision in this sample spent 28,191 times its stated bound.
+
+### What a ceiling buys, and the wall it hits
+
+| ceiling | trips | units removed | speedup | play digest |
+|---|---|---|---|---|
+| X=10000 | 0.007% | 4.8% | 1.05x | unchanged |
+| X=5000 | 0.025% | 8.7% | 1.10x | unchanged |
+| X=2000 | 0.076% | 17.2% | 1.21x | unchanged |
+| **X=1000** | **0.172%** | **24.6%** | **1.33x** | **unchanged — `e0ffdb608cd70b25`** |
+| X=500 | 0.409% | 33.5% | 1.50x | **MOVES** -> `a46cec7fafa66603` |
+| X=100 | 2.141% | 58.5% | 2.41x | **MOVES** -> `0cae3360bd3f19a3` |
+
+**X=1000 is the boundary**, verified directly against the resume gate rather than argued: with the
+banked journal in place, `MTG_DECISION_WORK_X=1000` prints
+`RESUME(journal): reloaded 344625 cell-sides` and takes the discovery cache hit, while X=100 prints
+`equivalence cache fingerprint MISMATCH -- re-discovering`. So at X=1000 the whole banked
+generation survives; below it, nothing does.
+
+That is the trap in this lever, stated plainly: **it is play-neutral precisely BECAUSE it almost
+never fires.** The 64-game d1/b3 battery confirms it from the other side — its top-12 slowest
+rollouts total 85.5 s at baseline and 79.6 s at X=1000, a ~7% move on games that are not
+degenerate. The generation's hand distribution is far more skewed than the battery's, which is why
+the unit counterfactual (24.6%) is worth more there than the battery suggests.
+
+### Ranked against the AGGREGATE, which is the only ranking that counts
+
+From the cancelled run's own log (`awk 'NR>1891'`, 23,102 s wall, ~149 core-hours of generation):
+
+* **576 rollouts >= 30 s consumed 48.6 core-hours — 32.6% of ALL generation compute, from 0.084% of
+  the 683,735 rollouts.**
+* **8 rollouts (0.0012%) consumed 20.1 core-hours — 13.5% of the entire machine.** Worst single
+  rollout **16,319 s against a 3 ms budget**.
+* 7 of those 8 hands hold Doubling Season; Mycoloth is in 3 of the top 4. Same structure this
+  document already fingered — a token doubler feeding a sacrifice outlet — now with devour on top.
+  They are mana-light hands that never win early, so they play all 8 horizon turns on a huge board.
+
+So even PERFECT elimination of the >=30 s tail is **1.48x**. The ceiling reaches 1.33x of that
+without moving play at all, which is most of what is available from this direction.
+
+### Where the other 4x is NOT
+
+An aggregate `perf` profile of the real floor pass (`build/Profile`, 62k DWARF samples, all 24
+threads — deliberately aggregate, because ranking by the worst cell bought 1.05x last round and a
+stale wrong-cell profile bought 1.06x the round before) is **flat**. No symbol exceeds 8% self:
+
+```
+7.6% __memmove_avx (GameState clones)   6.5% CreateTokens        5.1% BuildSimKey
+4.8% SimulateEndAndStartNextTurn        3.3% OnCreatureDies      ~12% the mana/payment family
+28.4% SimulateEndAndStartNextTurn INCLUSIVE   13.0% SweepDeadFadeTokens INCLUSIVE
+```
+
+`SweepDeadFadeTokens` still shows 6.6% under it in `vector<Permanent>::erase`, but that erase
+**cannot** be batched into a compaction pass: `OnCreatureDies` runs between erases and must observe
+the board already changed. The byte-identical angle there is closed.
+
+A flat profile with no hotspot is the signature of **work volume, not a bad function**. Candidate B
+costs **0.786 core-s/rollout** against the shipped Fungus list's **0.197** at identical depth,
+budget and horizon; strip the whole >=30 s tail and the remaining bulk is still **0.53** — 2.7x the
+shipped list. That residue is real width (five land types, four token doublers), not waste.
+
+### CONCLUSION — the per-rollout axis is nearly exhausted; the cell-count axis is not
+
+Priced against the 23.86M-rollout projection (~9 days at 24 cores):
+
+| lever | multiple | cost |
+|---|---|---|
+| `MTG_DECISION_WORK_X=1000` | **1.33x** | none — digest unchanged, journal + gencache preserved |
+| X=100 | 2.41x | voids 344k cell-sides; needs scenarios+smoke+regression+held-out |
+| perfect tail elimination | 1.48x (ceiling) | not reachable |
+| bucket merge K=22 -> K=14 | **~12x on cells** | a mana-base decision, the user's to make |
+
+**The engine axis tops out near 1.3–2.4x. The 5–20x the user is asking for is only in the bucket
+count**, which `mullgen-cost-is-driven-by-bucket-count.md` prices and which is a decklist property,
+not an engine one. Do not re-open the budget direction expecting more than this table.
+
+**NOT ADOPTED.** X=1000 is free by the repo's own resume gate, but `play_digest` is a 64-game
+behavioural sample, not a proof of byte-identity. Before wiring it into `scripts/mullgen.sh` (the
+"enable per-run (generation drivers)" half that was never done) it needs `scenarios.sh` + smoke
+with configs-changed 0. That gate has not been run.
