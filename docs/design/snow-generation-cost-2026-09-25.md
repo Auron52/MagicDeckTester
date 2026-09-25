@@ -110,6 +110,48 @@ is lossless at the settings it was tested at (32/32 digests identical, 0 unrecov
 rejections), and a units-budgeted labeller is precisely where "lossless" needs re-proving before
 being trusted, since the budget is denominated in the units the flag removes.
 
+## 4b. `frozen 0.0%` at six hours is the EXPECTED shape here -- do not kill on it
+
+At 19:13 UTC (6.0 h in) the monitor reads:
+
+```
+monitor: 21602s  phase=floor  roll7=125596 (0/s)  rollsub=1418968 (92/s)
+         frozen=0/351944 (0.0%)  sub=162004/162004 (100.0%, 0.0/s)  subwave=0x126499
+```
+
+Every number that looks bad there is correct:
+
+* **`frozen 0.0%` because size-7 refine has not started.** Cells freeze in the refine phase, and
+  refine is LAST -- after the size-7 floor, the sub-table floor, and the adaptive sub-refine. There is
+  no partial-credit readout before it.
+* **`roll7` flat at 125,596 because the size-7 floor is DONE** (124,572 was the predicted remainder)
+  and the speculation filler has saturated. All 32 cores are on sub-refine rollouts.
+* **`sub 100%` is the sub FLOOR, reached at 1.58 h.** The work since is the adaptive sub-refine, which
+  has no done/total by construction -- its work is the shrinking set of still-ambiguous bottoming
+  argmins.
+* **`subwave=0x126499` means wave 1 is still being FED,** not that nothing has happened. `subwave`
+  increments only after a wave's whole enqueue loop commits, and that loop is QCAP-throttled, so it
+  advances at the rate the pool drains it. 126,499 of 162,004 sub cell-sides were still ambiguous
+  after the floor; ~1.09M rollouts of that wave have drained in 4.4 h at 69/s.
+
+**The shape is also, precisely, that of a known pathology -- which is why it is worth writing down
+that this is not it.** `keepgen-producer-barrier-and-durability.md` records a FiveColour run where
+cores stayed 100% busy and `frozen` sat at 0 for **140-230 h** because an unbounded speculation filler
+ran a full NC*2 sweep between `sub_refine_step()` calls -- "a filler that can outrun the progress step
+it fills for is a barrier in disguise, and worse than the worker-side barriers this design removed,
+because those were visible as idle cores." That fix is in this binary (the bounded `spec_chunk`
+persistent cursor, `ExhaustiveKeep.cpp:3955-3990`), and the live proof is that `rollsub` advances at
+all: it is incremented **at enqueue, inside the wave's own feed loop**, so a stalled wave clock would
+show `rollsub` frozen, not climbing at 92/s.
+
+**What is genuinely unknown, and it is the projection's main risk.** `subwave` is still 0, and the
+wave-size decay IS the remaining-work signal. Until wave 1 commits and wave 2 is sized, there is no
+way to tell "one big wave nearly done" from "several more to come". And the sub side is already
+running hotter than section 2's Melira calibration: at ~16 rollouts per task, wave 1 alone projects
+~2.05M rollouts, against the 1.7M that calibration predicted for **all** sub work. Section 2's total
+therefore rests on the size-7 refine estimate (2.89M rollouts, ~10 h at the observed rate) plus a sub
+tail that is now the wider of the two error bars.
+
 ## 5. A live collision risk on this box, for whoever reads this first
 
 Another session pushed `9d8e1718` at 13:18 UTC about **relaunching candidate B's (Fungus) mulligan
