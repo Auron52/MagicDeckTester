@@ -125,6 +125,24 @@ Note also their finding, which bears on Snow directly: a journal resume is refus
 but survives a **perf commit**, because `play_digest` is behavioural. Snow's resume today therefore
 says today's three commits changed no Snow behaviour -- it does not promise the next one won't.
 
+### RESOLVED 2026-09-25 19:20 UTC — they are DIFFERENT boxes, there is no collision
+
+Checked from the Fungus side, which is the session section 5 is about. Two independent proofs:
+
+* **Core count.** Section 3 reads utilisation as `2,951% of 3,200%` — a **32-core** box. The box
+  running candidate B reports `nproc` = **24**, and its own gen sits at 2,375% of 2,400%.
+* **Process table.** At 19:17 UTC, `ps -eo pid,etime,pcpu,args` on the Fungus box shows exactly one
+  engine process: `mtg-analyze` PID 549263, 06:15:42 elapsed, 2,375%. PID 3827293 is not there, and
+  today's PIDs on this box are in the 5-6×10^5 range, so 3.8×10^6 was never allocated here.
+
+Both generations have therefore been running side by side since ~13:05 UTC **without sharing a
+box**, and neither wall-clock projection is void. Nothing needs stopping, which is the outcome
+section 5 correctly refused to assume either way.
+
+The practical note for next time: `nproc` (or the denominator of a utilisation reading) is a cheaper
+box fingerprint than a PID, because PIDs are only comparable within one namespace — and a PID from a
+box that has since restarted looks exactly like a PID from somewhere else.
+
 ## 6. If `MTG_FOLD_SEARCH_ODO` is armed later
 
 If the user arms it, the honest sequence is: prove digest-identity at d2/b1 first, and only then
