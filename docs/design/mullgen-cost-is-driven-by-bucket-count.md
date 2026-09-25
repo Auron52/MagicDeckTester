@@ -323,3 +323,49 @@ found resets the generation. That sharpens the existing conclusion (§"Pricing t
 from *"not automatically worth generating for a non-final list"* to something stronger:
 **a list under active bug-hunting cannot hold a multi-day generation at all** — the two activities
 are mutually destructive, and the hand-played references are worth more than the keep table.
+
+## UPDATE 2026-09-25e — CORRECTION: the floor pass is running ~18x faster than 25c measured
+
+**The "24.5 days" figure in UPDATE 25c is wrong for the current binary.** Six hours into the
+restart, the floor pass is **21.3% done (323,920 / 1,522,096 cell-sides)** at a sustained
+**15.1 cell-sides/s**, with no decay — the per-block trend is 9.8 → 12.2 → 14.9 → 22.5 → 15.8.
+
+### The like-for-like comparison, at the SAME odometer position
+
+25c's probe resumed at 81,298 cell-sides (5.3%) and measured 613 cell-sides in 900 s = **0.681/s**.
+This run passed that same position (81,460) at t=8,100 s, having done 43,868 cell-sides in the
+preceding 3,600 s = **12.19/s**. Same region of the cell space, **17.9x**.
+
+So the pessimistic projection was not a property of the cell space after all — it was a property of
+the binary, and of a 900 s window. Remaining floor pass at the sustained rate: **~22 h**, not weeks.
+
+### What changed, and the caveat that stops this being a clean A/B
+
+Commits landed after 25c was written (`e230994a`) that it never measured:
+
+* `8adafbb2` perf(tokens) — prefilter the fade sweep, build the token card once (2.4x on its cell).
+  Directly on the spore/fade path this deck lives on.
+* `1445d9d0` perf(permanent) — `Permanent` made trivially copyable, so battlefield erase/realloc
+  become `memmove`. An aggregate board-width win, i.e. exactly the kind 25c says to rank by.
+* `6d793515` fix(sac) — the drain-lethal burst was a menu WIDENER rather than a short-circuit.
+  Removing a widening removes search, not just time per node.
+
+**The caveat:** `8fcee60e` (Brightcap Badger's end-step Saproling) changed how this deck PLAYS, which
+is why the journal was refused (UPDATE 25d). So the two measurements are not the same workload — the
+cells may be cheaper partly because the deck now plays differently, not only because the engine is
+faster. This is a before/after across a play change, not a controlled A/B, and should not be quoted
+as "the optimisations bought 18x".
+
+### The tail is still there and still does not dominate
+
+563 slow (>30 s) keep-rollouts in 648,075 (**0.087%**), 446 of them (79%) holding Doubling Season —
+the same concentration 25b found. The worst single rollout is 16,319 s. At 24 cores one stuck thread
+costs 1/24 of throughput, which is why an intact tail and a healthy aggregate coexist. The budget
+problem `slow-rollout-tail-and-the-uncharged-greedy-walk.md` describes is unfixed; it is just no
+longer the thing setting the wall clock.
+
+### What is still unpriced
+
+Adaptive refine toward cap R=30, and the 560,212 sub-table batches. Neither has ever been measured on
+this list, and `frozen` is still 0.0% — so "floor pass in ~22 h" is not "the generation finishes in
+~22 h". Do not restate it as one.
