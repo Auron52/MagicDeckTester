@@ -6189,7 +6189,11 @@ void AIEngine::CastSpellFromHand(GameState& state, Card& hand_card, ManaPool& av
     // unset, EffectHandler read value_or(-1) = "PUT, ask the provider", and the executor flickered
     // the provider's pick while the rollout (which passes 0 straight through) declined -- the line
     // the search scored was not the line the game played. Param-gated: no other deck moves.
-    if (chosen_x > 0 || chosen_x == kEtbKxHeuristic || def->params.etb_blink_permanent)
+    // Kitesail Larcenist (etb_treasurify_each_player) likewise: chosen_x is the searched own-side
+    // Treasure target's m_number, 0 = "none", and the human-only kEtbKxHeuristic = "choose on
+    // resolution" -- all three must reach FireOwnEtbTriggers exactly as the rollout passes them.
+    if (chosen_x > 0 || chosen_x == kEtbKxHeuristic || def->params.etb_blink_permanent
+        || def->params.etb_treasurify_each_player)
     { entry.chosen_x = chosen_x; }
     // Soulfire Eruption: carry the searched own-creature target count so EffectHandler's dig
     // exiles the same N cards and kills the same own creatures as the rollout (lockstep).

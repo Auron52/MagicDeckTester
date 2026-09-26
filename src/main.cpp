@@ -393,6 +393,16 @@ static std::string SummarizePlan(const TurnSolver::Plan& plan, const GameState& 
                     tag += " \xE2\x86\x92 " + a.tutor_target.str();
                     if (a.chosen_x > 0) { tag += " (X=" + std::to_string(a.chosen_x) + ")"; }
                 }
+                // Kitesail Larcenist: WHICH own permanent becomes a Treasure is the whole difference
+                // between the cast variants -- name it, or the menu holds identical twins.
+                else if (const CardDefinition* ld = a.def ? a.def : CardDatabase::Instance().Lookup(a.card_name);
+                         ld && ld->params.etb_treasurify_each_player)
+                {
+                    if (a.chosen_x > 0)
+                    { tag += " \xE2\x86\x92 Treasure: " + AuraHostLabel(s, a.chosen_x); }
+                    else if (a.chosen_x == kEtbKxHeuristic) { tag += " (Treasure: choose on resolution)"; }
+                    else { tag += " (no Treasure)"; }
+                }
                 break;
             case Action::Kind::CastFromGraveyard: tag = a.card_name + " (retrace)"; break;
             case Action::Kind::ActivateVial:      tag = a.card_name + " (vial)"; break;
@@ -1851,6 +1861,15 @@ static void WriteDecisionJson(std::ostream& os, const GameState& s,
             }
             if (!ac.tutor_target.empty()) { os << ", \"tutor_target\": "; JsonStr(os, ac.tutor_target); }
             if (ac.chosen_x > 0)          { os << ", \"x\": " << ac.chosen_x; }
+            // Kitesail Larcenist: the searched own-side Treasure target (0 = none, -2 = choose on
+            // resolution), named, so the GUI and a claude-play agent can tell the variants apart.
+            if (const CardDefinition* ld = ac.def ? ac.def : CardDatabase::Instance().Lookup(ac.card_name);
+                ac.kind == Action::Kind::CastFromHand && ld && ld->params.etb_treasurify_each_player)
+            {
+                os << ", \"treasurify_target\": " << ac.chosen_x;
+                if (ac.chosen_x > 0)
+                { os << ", \"treasurify_target_label\": "; JsonStr(os, AuraHostLabel(s, ac.chosen_x)); }
+            }
             if (ac.ponder_keep >= 0)      { os << ", \"ponder_keep\": " << ac.ponder_keep; }
             // `soulfire_own_targets` is an OVERLOADED int (TurnSolver.h:335). For Soulfire Eruption it
             // is what its name says -- a COUNT of own creatures targeted; for Natural Order it carries
@@ -2493,6 +2512,35 @@ static void WriteFlickerDecisionJson(std::ostream& os, const GameState& s, const
     });
     d.Note("reply an option index -- the permanent to exile and return (it re-enters untapped and "
            "fresh; its ETB/LTB triggers fire), or -1 to decline the flicker. Default = the AI's pick.");
+}
+
+// Kitesail Larcenist `treasurify` decision: for ONE player's side, the human picks WHICH artifact or
+// creature that player controls becomes a Treasure artifact (loses every other type and ability), or
+// -1 for none ("up to one"). Fired for the OPPONENT side always, and for the own side on an Aether
+// Vial put or the "choose on resolution" cast variant (a normal cast variant already carried the own
+// pick). Options are every legal target on that side -- nothing narrowed.
+static void WriteTreasurifyDecisionJson(std::ostream& os, const GameState& s, const std::string& source,
+                                        int side_player, const std::vector<int>& legal,
+                                        int heuristic_default, int decision_index)
+{
+    const bool yours = side_player == s.active_player_index;
+    DecisionJson d(os, decision_index);
+    d.Type("treasurify").Source(source).Turn(s.turn_number)
+     .Board(s).HeuristicDefault(heuristic_default);
+    d.Str("side", yours ? "yours" : "opponent");
+    d.Array("options", legal.size(), [&](std::size_t i)
+    {
+        const Permanent& p = s.battlefield[legal[i]];
+        os << "{ \"index\": " << i << ", \"perm_index\": " << legal[i] << ", \"tapped\": "
+           << (p.tapped ? "true" : "false") << ", \"name\": "; JsonStr(os, p.card.m_name.str());
+        os << ", \"label\": ";
+        JsonStr(os, (yours ? std::string("your ") : std::string("opponent's ")) + p.card.m_name.str());
+        os << " }";
+    });
+    d.Note(std::string("reply an option index -- the ") + (yours ? "permanent of YOURS" : "OPPONENT's permanent")
+           + " that becomes a Treasure artifact ({T}, sacrifice: one mana of any colour; it loses every"
+             " other card type and ability -- a converted Vial stops being a Vial, a converted Pirate"
+             " stops being a creature), or -1 for none (\"up to one\"). Default = the AI's pick.");
 }
 
 // ETB-dig decision (Acclaimed Contender): the player picks WHICH examined card enters hand (or
@@ -3385,6 +3433,7 @@ g_play_dragon_chooser = nullptr;
 g_play_sac_tutor_chooser = nullptr;
 g_play_revive_chooser = nullptr;
 g_play_flicker_chooser = nullptr;
+g_play_treasurify_chooser = nullptr;
 g_play_rummage_chooser = nullptr;
 g_play_lackey_chooser = nullptr;
 g_play_free_cast_chooser = nullptr;
@@ -3654,6 +3703,7 @@ struct ClaudePlayHarness
     SacTutorChooser       sac_tutor_chooser;
     ReviveChooser         revive_chooser;
     BounceChooser         flicker_chooser;
+    BounceChooser         treasurify_chooser;
     RummageChooser        rummage_chooser;
     DiscardChooser        discard_chooser;
     EIChooser             ei_chooser;
@@ -4965,6 +5015,40 @@ void ClaudePlayHarness::InstallCardChoosers(AIEngine& ai)
             std::exit(70);
         };
     g_play_flicker_chooser = &flicker_chooser;
+
+    // Kitesail Larcenist (treasurify): per side, the player picks which artifact/creature becomes a
+    // Treasure, or -1 for none. `controller` here is the SIDE being chosen for (FireOwnEtbTriggers
+    // passes it), so the prompt can say whose permanent it is. Shares the --choices stream; reply =
+    // option index or -1. Default = the provider's TreasurifyTarget pick (none).
+    treasurify_chooser =
+        [this](const GameState& s, int controller, const std::string& source,
+            const std::vector<int>& legal, int heuristic_pick) -> int
+        {
+            int di = static_cast<int>(cursor);
+        claude_retry_30:  // --interactive: new picks arrived on stdin; re-test the consume branch
+            if (cursor < choices.size())
+            {
+                int chosen = choices[cursor++];
+                ++decisions_made;
+                if (chosen < -1 || chosen >= static_cast<int>(legal.size())) { chosen = heuristic_pick; }
+                if (!log_dir.empty())
+                {
+                    std::ostringstream ss;
+                    ss << "{ \"chosen\": " << chosen << ", \"decision\": ";
+                    WriteTreasurifyDecisionJson(ss, s, source, controller, legal, heuristic_pick, di);
+                    ss << "}";
+                    trace.push_back(ss.str());
+                }
+                return chosen;
+            }
+            std::cout << "<<<CLAUDE_DECISION>>>\n";
+            WriteTreasurifyDecisionJson(std::cout, s, source, controller, legal, heuristic_pick, di);
+            std::cout << "<<<END_DECISION>>>\n";
+            std::cout.flush();
+            if (AwaitMoreChoices()) { goto claude_retry_30; }
+            std::exit(70);
+        };
+    g_play_treasurify_chooser = &treasurify_chooser;
 
     // Celes rummage: the player picks which hand cards to discard (any number; the +1 draw is
     // unconditional). Same reply shape as sac_tutor/revive: one 0/1 flag per candidate.

@@ -386,6 +386,16 @@ extern thread_local BounceChooser* g_play_fling_chooser;
 // the flicker outright. Nulled by RevealLogPause for every search scope -> rollouts identical.
 extern thread_local BounceChooser* g_play_flicker_chooser;
 
+// ---- Human-play Kitesail Larcenist chooser (which permanent becomes a Treasure) ------------------
+// "For each player, choose up to one other target artifact or creature that player controls ...
+// become Treasure artifacts". The OWN-side pick on a CAST rides the searched chosen_x plan variants
+// (bucket A); this chooser covers what no cast variant carries: the OWN side on a PUT (Aether Vial)
+// or on the human-only "choose on resolution" variant, and the OPPONENT side always (autonomous play
+// declines it -- provably inert). Same shape as the flicker chooser (legal battlefield indices + a
+// heuristic option pick), reply -1 = choose none ("up to one"). Nulled by RevealLogPause for every
+// search scope -> autonomous play and every rollout are byte-identical.
+extern thread_local BounceChooser* g_play_treasurify_chooser;
+
 // ---- Human-play attach-host chooser (Armored Skyhunter's attack-dig attach) -----------------
 // The Skyhunter attack trigger may put an Equipment onto the battlefield and attach it to a
 // creature you control. WHICH card to put reuses the DIG chooser (examined cards + legal
@@ -914,6 +924,7 @@ inline bool AllPlayHooksNull()
         && g_play_dragon_chooser == nullptr
         && g_play_sac_tutor_chooser == nullptr && g_play_lackey_chooser == nullptr
         && g_play_revive_chooser == nullptr && g_play_flicker_chooser == nullptr
+        && g_play_treasurify_chooser == nullptr
         && g_play_rummage_chooser == nullptr
         && g_play_free_cast_chooser == nullptr && g_play_lightpaws_chooser == nullptr
         && g_play_demonstrate_chooser == nullptr
@@ -962,6 +973,7 @@ struct RevealLogPause
     SacTutorChooser* saved_sacttchooser;
     ReviveChooser* saved_revchooser;
     BounceChooser* saved_flickchooser;
+    BounceChooser* saved_treasurifychooser;
     RummageChooser* saved_rumchooser;
     LackeyChooser* saved_lackeychooser;
     FreeCastChooser* saved_freecastchooser;
@@ -1012,6 +1024,7 @@ struct RevealLogPause
         saved_dragchooser = g_play_dragon_chooser; saved_sacttchooser = g_play_sac_tutor_chooser;
         saved_revchooser = g_play_revive_chooser;
         saved_flickchooser = g_play_flicker_chooser;
+        saved_treasurifychooser = g_play_treasurify_chooser;
         saved_rumchooser = g_play_rummage_chooser;
         saved_lackeychooser = g_play_lackey_chooser;
         saved_freecastchooser = g_play_free_cast_chooser;
@@ -1037,6 +1050,7 @@ struct RevealLogPause
         g_play_land_rad_chooser = nullptr; g_play_dragon_chooser = nullptr;
         g_play_sac_tutor_chooser = nullptr; g_play_revive_chooser = nullptr;
         g_play_flicker_chooser = nullptr; g_play_rummage_chooser = nullptr;
+        g_play_treasurify_chooser = nullptr;
         g_play_lackey_chooser = nullptr; g_play_free_cast_chooser = nullptr;
         g_play_demonstrate_chooser = nullptr;
         g_play_attack_mode_chooser = nullptr;
@@ -1062,6 +1076,7 @@ struct RevealLogPause
                         g_play_dragon_chooser = saved_dragchooser; g_play_sac_tutor_chooser = saved_sacttchooser;
                         g_play_revive_chooser = saved_revchooser;
                         g_play_flicker_chooser = saved_flickchooser;
+                        g_play_treasurify_chooser = saved_treasurifychooser;
                         g_play_rummage_chooser = saved_rumchooser;
                         g_play_lackey_chooser = saved_lackeychooser;
                         g_play_free_cast_chooser = saved_freecastchooser;
@@ -1115,7 +1130,7 @@ struct ComboOffApplyPause
     RummageChooser* c16; LackeyChooser* c17; FreeCastChooser* c18; DemonstrateChooser* c19;
     LightPawsChooser* c20; FirebreatheChooser* c21; StorageHoldChooser* c22; TutorChooser* c23;
     BounceChooser* c24; FirebreatheChooser* c25; TapPrefChooser* c26; LoyaltyTargetChooser* c27;
-    AttackModeChooser* c28; BounceChooser* c29;
+    AttackModeChooser* c28; BounceChooser* c29; BounceChooser* c30;
     ComboOffApplyPause()
     {
         c0 = g_play_top_chooser;        c1 = g_play_target_chooser;
@@ -1134,6 +1149,7 @@ struct ComboOffApplyPause
         c26 = g_play_tap_pref_chooser;  c27 = g_play_loyalty_chooser;
         c28 = g_play_attack_mode_chooser;
         c29 = g_play_fling_chooser;
+        c30 = g_play_treasurify_chooser;
         g_play_top_chooser = nullptr;        g_play_target_chooser = nullptr;
         g_play_bounce_chooser = nullptr;     g_play_dig_chooser = nullptr;
         g_play_discard_chooser = nullptr;    g_play_ei_chooser = nullptr;
@@ -1150,6 +1166,7 @@ struct ComboOffApplyPause
         g_play_tap_pref_chooser = nullptr;   g_play_loyalty_chooser = nullptr;
         g_play_attack_mode_chooser = nullptr;
         g_play_fling_chooser = nullptr;
+        g_play_treasurify_chooser = nullptr;
     }
     ~ComboOffApplyPause()
     {
@@ -1169,6 +1186,7 @@ struct ComboOffApplyPause
         g_play_tap_pref_chooser = c26;  g_play_loyalty_chooser = c27;
         g_play_attack_mode_chooser = c28;
         g_play_fling_chooser = c29;
+        g_play_treasurify_chooser = c30;
     }
     ComboOffApplyPause(const ComboOffApplyPause&)            = delete;
     ComboOffApplyPause& operator=(const ComboOffApplyPause&) = delete;

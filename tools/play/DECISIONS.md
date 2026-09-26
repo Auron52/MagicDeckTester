@@ -70,6 +70,7 @@ bottom prompt (`promptPanelHtml`). Line numbers are hints — anchor on the symb
 | `sac_tutor` | `g_play_sac_tutor_chooser` (`SacTutorChooser`) | `PerformUpkeepSacTutor` (SpellEffects.h, shared executor+rollout) | `WriteSacTutorDecisionJson` | `sacTutorPanelHtml` | modal |
 | `revive` | `g_play_revive_chooser` (`ReviveChooser`) | `PerformReturnFromGraveyardToBattlefield` (SpellEffects.h, shared executor+rollout) | `WriteReviveDecisionJson` | `revivePanelHtml` | modal |
 | `flicker` | `g_play_flicker_chooser` (`BounceChooser`) | `FireOwnEtbTriggers` blink block (SpellEffects.h, shared executor+rollout) | `WriteFlickerDecisionJson` | `promptPanelHtml` (board prompt) | prompt |
+| `treasurify` | `g_play_treasurify_chooser` (`BounceChooser`; `controller` arg = the SIDE being chosen for) | `FireOwnEtbTriggers` Larcenist block (SpellEffects.h, shared executor+rollout) -- one prompt per player | `WriteTreasurifyDecisionJson` (adds `side`: `yours`/`opponent`) | `promptPanelHtml` (board prompt, both boards) | prompt |
 | `rummage` | `g_play_rummage_chooser` (`RummageChooser`) | `FireOwnEtbTriggers` rummage block (SpellEffects.h, shared executor+rollout) | `WriteRummageDecisionJson` | `rummagePanelHtml` | modal |
 | `lightpaws` | `g_play_lightpaws_chooser` (`LightPawsChooser`) | `PerformLightPawsAttach` (SpellEffects.h, shared executor+rollout) | `WriteLightPawsDecisionJson` | `lightPawsPanelHtml` | modal |
 | `vial_charge` | `AIEngine::SetExternalVialChooser` | Vial upkeep charge | `WriteVialDecisionJson` | `promptPanelHtml` | board |
@@ -524,6 +525,21 @@ fresh; ETB/LTB triggers fire), or declines outright ("you may" — reply −1). 
 provider's `FlickerTarget` pick (tapped Pod > spent persist body > Reveillark > tapped land >
 Finks > tutors > decline). The `etb_blink_permanent` param maps to `flicker` in the auditor
 manifest.
+
+**Kitesail Larcenist `treasurify` ETB target:** "for each player, choose up to one other target
+artifact or creature that player controls" -- the chosen permanents become Treasure artifacts and
+lose every other type and ability. The OWN-side pick on a hand cast rides the searched chosen_x
+plan variants (bucket A: one per non-equivalent own artifact/creature + "no Treasure"; the plan
+label reads `Kitesail Larcenist -> Treasure: <name>`), and human play gets one extra variant,
+`(Treasure: choose on resolution)`, which defers the own pick to this chooser over the LIVE board --
+the only way to name a permanent an earlier cast of the same line put down. This `treasurify`
+board prompt fires for the OWN side on that variant or an Aether Vial put, and for the OPPONENT side
+on every resolution (autonomous play chooses none there -- the passive opponent's creatures never
+attack, block or get read). Options are every legal target on that side, never narrowed; reply =
+option index, or -1 for none ("up to one"). Default = the provider's `TreasurifyTarget` pick (none),
+so the prompt seeds NO selection unless the engine actually picked one, and it is deliberately NOT
+in `ONE_OPTION_AUTO` (a single option is still a real convert-or-not choice). The
+`etb_treasurify_each_player` param maps to `treasurify` in the auditor manifest.
 
 **Celes, Rune Knight `rummage` ETB discard:** when Celes enters (cast or put), the human picks
 WHICH hand cards to discard — any number, zero included (the draw is discards + 1 either way).

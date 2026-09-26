@@ -6148,6 +6148,43 @@ namespace etbcolorstats
     inline Dumper g_dumper;
 }
 
+// Kitesail Larcenist: rewrite battlefield permanent `bi` IN PLACE into a Treasure artifact -- "the
+// chosen permanents become Treasure artifacts with '{T}, Sacrifice this artifact: Add one mana of any
+// color' and lose all other abilities". Per the Scryfall rulings it loses its other card types and
+// subtypes and keeps its supertypes. The engine realises that as the existing "Treasure Token"
+// definition (sac_for_mana_amount 1 -> a live, searched pay-sac source, the Gold Rush / Corsair
+// machinery), which is why the NAME changes too (definitions are looked up by name; the rules keep
+// the name -- a disclosed, inert difference). Card::Rename drops the m_def memo, so every
+// LookupCached reader immediately sees the Treasure and NOTHING of the old card (a converted Aether
+// Vial has no Vial behaviour, a converted Corsair Captain no lord, a converted Mimic no counters
+// replacement). Kept as-is: per-copy id, controller, tapped state (a Vial tapped to put Larcenist
+// becomes a TAPPED Treasure), entered_this_turn, token-ness, counters (inert on a noncreature
+// artifact), colour, printed mana cost, supertypes. Edits in place -> no index ever shifts.
+// Anything attached to it falls off (an Equipment/Aura on a now-noncreature), the attach-reset
+// precedent of the bounce path.
+inline void TreasurifyPermanent(GameState& state, int bi)
+{
+    if (bi < 0 || bi >= static_cast<int>(state.battlefield.size())) { return; }
+    Permanent& q = state.battlefield[bi];
+    q.card.Rename("Treasure Token");
+    q.card.m_type_mask = 0;
+    q.card.AddType(CardType::Artifact);
+    q.card.m_subtypes     = std::vector<std::string>{ "Treasure" };
+    q.card.m_keyword_mask = 0;
+    q.card.m_power.reset();
+    q.card.m_toughness.reset();
+    q.is_animated       = false;
+    q.chosen_subtype_id = 0;   // the chosen creature type went with the subtypes
+    const int num = q.card.m_number;
+    const int ctl = q.controller_index;
+    for (Permanent& e : state.battlefield)
+    {
+        if (e.controller_index != ctl) { continue; }
+        if (e.aura_attached_to == num) { e.aura_attached_to = 0; }
+        if (e.equipped_to      == num) { e.equipped_to      = 0; }
+    }
+}
+
 inline void FireOwnEtbTriggers(GameState& state, int controller, int entered_index,
                            const std::string& chosen_tutor = "", int etb_kx = -1)
 {
@@ -6616,6 +6653,64 @@ inline void FireOwnEtbTriggers(GameState& state, int controller, int entered_ind
             EmitPlayEvent(state.turn_number, "draw",
                           "\xF0\x9F\x83\x8F " + def->card.m_name.str() + " -- discarded "
                           + std::to_string(n_disc) + ", drew " + std::to_string(n_draw));
+        }
+    }
+
+    // Kitesail Larcenist: "When this creature enters, for each player, choose up to one other target
+    // artifact or creature that player controls. ... the chosen permanents become Treasure artifacts"
+    // (TreasurifyPermanent). OWN side on a CAST: the searched chosen_x axis (etb_kx = the target's
+    // m_number, 0 = none -- "up to one" is a real choice); on a PUT (Aether Vial, etb_kx < 0) there is
+    // no cast variant, so DecisionProvider::TreasurifyTarget resolves it (default: none). OPPONENT
+    // side: always the provider (default none -- the passive opponent's creatures never attack or
+    // block and nothing in the list reads them, so converting one is provably inert). The human
+    // picks through the `treasurify` chooser wherever the search did not already carry the pick: the
+    // own side on a PUT or on the human-only "choose on resolution" variant, and the opponent side
+    // always -- over EVERY legal target. Chooser nulled in every search scope -> lockstep.
+    // A target that is gone by resolution (the plan sacrificed it) is an illegal target: no effect.
+    // In place, so entered_index stays valid for the Felidar block below.
+    if (p.etb_treasurify_each_player)
+    {
+        const int self_num = state.battlefield[entered_index].card.m_number;
+        for (int side = 0; side < 2; ++side)
+        {
+            const int who = side == 0 ? controller : 1 - controller;   // "for each player"
+            std::vector<int> legal;
+            for (int bi = 0; bi < static_cast<int>(state.battlefield.size()); ++bi)
+            {
+                const Permanent& bp = state.battlefield[bi];
+                if (bp.controller_index != who || bp.card.m_number == self_num) { continue; }
+                if (!bp.card.IsCreature() && !bp.card.HasType(CardType::Artifact)) { continue; }
+                legal.push_back(bi);
+            }
+            if (legal.empty()) { continue; }
+            const bool carried = (who == controller) && etb_kx >= 0;   // searched cast pick (0 = none)
+            int tgt = carried ? etb_kx
+                              : ResolveProvider(state).TreasurifyTarget(state, controller, self_num, who);
+            if (!carried && g_play_treasurify_chooser != nullptr)
+            {
+                int heur = -1;
+                for (std::size_t li = 0; li < legal.size(); ++li)
+                { if (state.battlefield[legal[li]].card.m_number == tgt) { heur = static_cast<int>(li); break; } }
+                const int chosen = (*g_play_treasurify_chooser)(
+                    state, who, def->card.m_name.str(), legal, heur);
+                tgt = (chosen >= 0 && chosen < static_cast<int>(legal.size()))
+                    ? state.battlefield[legal[chosen]].card.m_number : 0;   // -1 = none
+            }
+            if (tgt <= 0) { continue; }
+            for (int bi : legal)
+            {
+                if (state.battlefield[bi].card.m_number != tgt) { continue; }
+                if (g_play_event_sink && !g_tap_speculating)
+                {
+                    EmitPlayEvent(state.turn_number, "trigger",
+                                  "\xF0\x9F\x92\xB0 " + def->card.m_name.str() + " -- "
+                                  + (who == controller ? "your " : "opponent's ")
+                                  + state.battlefield[bi].card.m_name.str()
+                                  + " becomes a Treasure");
+                }
+                TreasurifyPermanent(state, bi);
+                break;
+            }
         }
     }
 

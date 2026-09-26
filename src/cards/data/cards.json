@@ -3958,7 +3958,7 @@
     "Treasure"
    ],
    "keywords": [],
-   "oracle_text": "{T}, Sacrifice this artifact: Add one mana of any color. [Token definition (created by Jared Carthalion's -6 all-colors rider; never in a decklist). Modeled via the Lotus-Bloom sac-for-mana machinery: sac_for_mana_amount=1, colour searched (chosen_float_color variants).]",
+   "oracle_text": "{T}, Sacrifice this artifact: Add one mana of any color. [Token definition (never in a decklist): created by Jared Carthalion's -6 all-colors rider and Corsair Captain's ETB (CreateTreasureTokens), and the definition a Kitesail Larcenist target is rewritten INTO in place (TreasurifyPermanent). Modeled via the Lotus-Bloom sac-for-mana machinery: sac_for_mana_amount=1, colour searched (chosen_float_color variants).]",
    "template": "custom",
    "parameters": {
     "sac_for_mana_amount": 1
@@ -9143,6 +9143,28 @@
    "parameters": {
     "reveal_or_pay_subtype": "Pirate",
     "reveal_or_pay_cost": "{2}"
+   }
+  },
+  {
+   "name": "Kitesail Larcenist",
+   "mana_cost": "{2}{U}",
+   "types": [
+    "Creature"
+   ],
+   "subtypes": [
+    "Human",
+    "Pirate"
+   ],
+   "keywords": [
+    "Flying",
+    "Ward"
+   ],
+   "power": 2,
+   "toughness": 3,
+   "oracle_text": "Flying, ward {1}\nWhen this creature enters, for each player, choose up to one other target artifact or creature that player controls. For as long as this creature remains on the battlefield, the chosen permanents become Treasure artifacts with \"{T}, Sacrifice this artifact: Add one mana of any color\" and lose all other abilities. [ETB = etb_treasurify_each_player, fired from the universal FireOwnEtbTriggers cascade (hand cast AND Aether Vial put, executor and rollout lockstep). The chosen permanent is rewritten IN PLACE (TreasurifyPermanent) into the existing 'Treasure Token' definition via Card::Rename (the definition memo is reset, so NOTHING of the old card survives: a converted Aether Vial has no Vial behaviour, a converted Corsair Captain no lord, a converted Mimic no counter replacement): card types -> Artifact only, subtypes -> Treasure only (Scryfall ruling: it loses its other card types and subtypes), keywords cleared, no P/T, attached Auras/Equipment fall off. It KEEPS supertypes (ruling), its per-copy id, tapped state (a Vial tapped to put Larcenist becomes a TAPPED Treasure, usable next turn), entered_this_turn, token-ness, counters (inert on a noncreature artifact), colour and printed mana cost. Its sac-for-mana is the live, searched Treasure pay-sac source (the Corsair / Gold Rush machinery, incl. the global fresh-hold doctrine for a permanent that entered this turn). A converted Pirate/Construct stops being a creature: it drops out of Corsair Captain's and Adaptive Automaton's lord, Dire Fleet Captain's attacking-Pirate count and Forerunner's enter watch, and it counts as an artifact for Goblin Tomb Raider. OWN side is SEARCHED: cast variants carry chosen_x = the target's m_number, 0 = none ('up to one' is a real choice), folded by name|tapped|sick|token|counters|Vial charge; an existing non-creature Treasure is skipped (converting it is a no-op = none); human play also gets a 'choose on resolution' variant. A Vial PUT resolves via DecisionProvider::TreasurifyTarget (default none); the human picks via the `treasurify` decision. OPPONENT side: autonomous play chooses none; the human is prompted (`treasurify`, every legal target). [PARTIAL / PROVISIONAL deferrals, pending user sign-off: (1) opponent-side auto-none in autonomous play -- provably inert: opponent spawns never attack or block and no card in the list reads opponent permanents; (2) the 'for as long as this creature remains on the battlefield' REVERT is not modelled -- Larcenist cannot leave the battlefield in this list (no creature sacrifice outlet, bounce or flicker; Siren Stormtamer sacrifices only itself; the passive opponent removes nothing; not legendary); (3) the NAME is retained by the rules but the engine renames to 'Treasure Token' (definitions are looked up by name) -- inert here: the legend rule could only bite between two converted same-named legendaries (Malcolm is the only legendary, x1), and nothing reads a sacrificed card's graveyard name; (4) Flying is inert (no blocks are modelled); (5) Ward {1} is inert (the opponent never targets).]]",
+   "template": "vanilla_creature",
+   "parameters": {
+    "etb_treasurify_each_player": true
    }
   },
   {

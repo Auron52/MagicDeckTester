@@ -2679,6 +2679,15 @@ struct CardParams
     // per-target ones. Cast-time target rides the plan variant; put-into-play entries resolve via
     // DecisionProvider::FlickerTarget + the `flicker` viewer decision.
     bool                    etb_blink_permanent  = false;
+    // Kitesail Larcenist: "When this creature enters, for each player, choose up to one other target
+    // artifact or creature that player controls. For as long as this creature remains on the
+    // battlefield, the chosen permanents become Treasure artifacts with '{T}, Sacrifice this artifact:
+    // Add one mana of any color' and lose all other abilities." Fired from FireOwnEtbTriggers (cast
+    // and Vial put, both worlds); the chosen permanent is rewritten IN PLACE by TreasurifyPermanent.
+    // OWN side on a cast = the searched chosen_x axis (target m_number, 0 = none); a PUT and the
+    // OPPONENT side resolve via DecisionProvider::TreasurifyTarget (default none), human-overridable
+    // via the `treasurify` decision.
+    bool                    etb_treasurify_each_player = false;
 
     // Training Grounds: "Activated abilities of creatures you control cost {2} less to activate.
     // This effect can't reduce the mana in that cost to less than one mana." A STATIC cost reducer

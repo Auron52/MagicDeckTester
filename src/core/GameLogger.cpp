@@ -52,6 +52,7 @@ thread_local DragonChooser*  g_play_dragon_chooser = nullptr;
 thread_local SacTutorChooser* g_play_sac_tutor_chooser = nullptr;
 thread_local ReviveChooser* g_play_revive_chooser = nullptr;
 thread_local BounceChooser* g_play_flicker_chooser = nullptr;
+thread_local BounceChooser* g_play_treasurify_chooser = nullptr;
 thread_local RummageChooser* g_play_rummage_chooser = nullptr;
 thread_local LackeyChooser*  g_play_lackey_chooser = nullptr;
 thread_local FreeCastChooser* g_play_free_cast_chooser = nullptr;

@@ -17725,6 +17725,46 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
             }
             continue;
         }
+        // Kitesail Larcenist (etb_treasurify_each_player): WHICH own artifact/creature becomes a
+        // Treasure is a real searched axis -- usually "none" (a body or an engine traded for one mana),
+        // occasionally right (a dead or just-tapped Aether Vial becomes +1 mana of any colour). chosen_x
+        // carries the target's m_number (0 = none, "up to one"), riding the etb_kx channel to
+        // FireOwnEtbTriggers; the opponent side is not a plan axis (provider: none; human: chooser).
+        // Targets fold by an equivalence key (lossless): same name + tapped + sick + token-ness +
+        // counters + Vial charge are interchangeable -- the charge is in the key because the Vial
+        // left UNconverted differs. An existing non-creature Treasure is skipped: converting it is
+        // a no-op, identical to "none". NOT narrowed further -- every other legal own target is
+        // offered (human play sees them all). Human play also gets one "choose on resolution"
+        // variant (kEtbKxHeuristic), which hands the own-side pick to the `treasurify` chooser over
+        // the LIVE board -- the only way to target a permanent an earlier cast of the same plan put
+        // down. Autonomous play never emits it.
+        if (def.params.etb_treasurify_each_player)
+        {
+            { Action v = a; v.chosen_x = 0; actions.push_back(std::move(v)); }   // choose none
+            if (HumanPlayActive())
+            { Action v = a; v.chosen_x = kEtbKxHeuristic; actions.push_back(std::move(v)); }
+            std::vector<std::string> seen_tk;
+            for (const Permanent& t : state.battlefield)
+            {
+                if (t.controller_index != state.active_player_index) { continue; }
+                if (!t.card.IsCreature() && !t.card.HasType(CardType::Artifact)) { continue; }
+                if (!t.card.IsCreature() && t.card.m_name.str() == "Treasure Token") { continue; }
+                std::string key = t.card.m_name.str();
+                key += t.tapped ? "|t" : "|u";
+                key += t.entered_this_turn ? "|s" : "|r";
+                key += t.is_token ? "|k" : "|c";
+                key += "|v" + std::to_string(t.charge_counters);
+                for (const Counter& c : t.counters)
+                { key += "|" + std::to_string(static_cast<int>(c.type)) + ":" + std::to_string(c.count); }
+                if (std::find(seen_tk.begin(), seen_tk.end(), key) != seen_tk.end()) { continue; }
+                seen_tk.push_back(std::move(key));
+                Action v   = a;
+                v.chosen_x = t.card.m_number;
+                v.eval     = a.eval - 1;   // converting trades a permanent for one mana: rarely right
+                actions.push_back(std::move(v));
+            }
+            continue;
+        }
         if (def.params.etb_destroy_own_noncreature_max > 0 && TeraKHeuristicEnabled())
         {
             if (HumanPlayActive() || DecisionUnpruned(UnprunedGate::TeraK))
@@ -36253,6 +36293,10 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
                         // DISTINCT plans (core invariant); gated on the param.
                         + ((act.def && act.def->params.etb_blink_permanent)
                            ? ("#F" + std::to_string(act.chosen_x)) : "")
+                        // Kitesail Larcenist: distinct Treasure targets (and "none", and the
+                        // human-only choose-on-resolution variant) are DISTINCT plans; gated.
+                        + ((act.def && act.def->params.etb_treasurify_each_player)
+                           ? ("#L" + std::to_string(act.chosen_x)) : "")
                         // MYCOLOTH'S DEVOUR COUNT (CR 702.81): "devour 0" and "devour 5" are
                         // DIFFERENT SPELLS -- different board, different permanent, different clock.
                         // Exactly the #S/#V/#K/#B/#X/#F case, and it was simply never added here.

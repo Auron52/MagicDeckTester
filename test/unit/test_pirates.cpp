@@ -14,6 +14,8 @@
 #include "ai/AIEngine.h"
 #include "ai/ManaPayment.h"
 #include "ai/TurnSolver.h"
+#include "core/EffectHandler.h"
+#include "core/GameLogger.h"
 
 #include "mtg_test_seam.h"
 
@@ -354,7 +356,7 @@ TEST_CASE("Daring Buccaneer: a lone Buccaneer pays {2}; a second copy in hand IS
 TEST_CASE("Daring Buccaneer: another Pirate card in hand makes it cost {R}")
 {
     EnsureCardsLoaded();
-    for (const char* other : {"Corsair Captain", "Siren Stormtamer", "Goblin Tomb Raider", "Staunch Crewmate"})
+    for (const char* other : {"Corsair Captain", "Kitesail Larcenist", "Siren Stormtamer", "Goblin Tomb Raider", "Staunch Crewmate"})
     {
         CAPTURE(other);
         CHECK(EffectiveSpellCost(Def("Daring Buccaneer"), BuccaneerBoard(0, {"Daring Buccaneer", other}), 1).ManaValue() == 1);
@@ -435,4 +437,194 @@ TEST_CASE("Daring Buccaneer: the executor charges the second lone Buccaneer {2}{
     int tapped = 0;
     for (const Permanent& p : s.battlefield) { if (p.tapped) { ++tapped; } }
     CHECK(tapped == 4);   // {R} + {2}{R}
+}
+
+// ---- Kitesail Larcenist: "for each player, choose up to one other target artifact or creature ...
+// the chosen permanents become Treasure artifacts ... and lose all other abilities" ---------------
+
+namespace
+{
+
+// Larcenist enters (cast semantics: etb_kx = the searched own-side pick, 0 = none; -1 = a PUT).
+int LarcenistEnters(GameState& s, int number, int etb_kx)
+{
+    const int idx = Put(s, "Kitesail Larcenist", 0, number, /*sick=*/true);
+    FireEtbWatchers(s, 0, idx);
+    FireOwnEtbTriggers(s, 0, idx, std::string(), etb_kx);
+    return idx;
+}
+
+int PutOpp(GameState& s, const std::string& name, int number)
+{
+    const int i = Put(s, name, 1, number);
+    s.battlefield[i].owner_index = 1;
+    return i;
+}
+
+}   // namespace
+
+TEST_CASE("Kitesail Larcenist: converting your own tapped Aether Vial -> a TAPPED Treasure with no Vial behaviour")
+{
+    EnsureCardsLoaded();
+    GameState s = PiratesState();
+    const int vi = Put(s, "Aether Vial", 0, 80);
+    s.battlefield[vi].tapped          = true;
+    s.battlefield[vi].charge_counters = 3;
+    REQUIRE(CardDatabase::Instance().LookupCached(s.battlefield[vi].card) == &Def("Aether Vial"));
+    LarcenistEnters(s, 81, /*etb_kx=*/80);
+    const Permanent& t = ByNumber(s, 80);
+    CHECK(t.card.m_name.str() == "Treasure Token");
+    CHECK(t.tapped);                                          // tapped state carries over
+    CHECK(t.card.HasType(CardType::Artifact));
+    CHECK_FALSE(t.card.IsCreature());
+    CHECK(CardHasSubtype(t.card, "Treasure"));
+    const CardDefinition* d = CardDatabase::Instance().LookupCached(t.card);
+    REQUIRE(d == &Def("Treasure Token"));                     // the memo was reset: no stale Vial def
+    CHECK_FALSE(d->params.upkeep_adds_charge);
+    CHECK(d->params.sac_for_mana_amount == 1);
+    CHECK(CountTreasuresControlled(s, 0) == 1);
+}
+
+TEST_CASE("Kitesail Larcenist: a converted UNTAPPED Vial is no longer offered as a Vial")
+{
+    EnsureCardsLoaded();
+    GameState s = BuccaneerBoard(1, {"Daring Buccaneer"});
+    const int vi = Put(s, "Aether Vial", 0, 80);
+    s.battlefield[vi].charge_counters = 1;
+    auto offers_vial = [&](const GameState& g)
+    {
+        for (const TurnSolver::Plan& p : TurnSolver::EnumerateMainPlans(g, true))
+        { if (HasVialPut(p, "Daring Buccaneer")) { return true; } }
+        return false;
+    };
+    REQUIRE(offers_vial(s));
+    LarcenistEnters(s, 81, 80);
+    CHECK_FALSE(offers_vial(s));
+}
+
+TEST_CASE("Kitesail Larcenist: choosing none (chosen_x 0) leaves the board unchanged")
+{
+    EnsureCardsLoaded();
+    GameState s = PiratesState();
+    Put(s, "Aether Vial", 0, 80);
+    Put(s, "Corsair Captain", 0, 10);
+    PutOpp(s, "Corsair Captain", 500);                          // an opponent body: autonomous = none
+    LarcenistEnters(s, 81, /*etb_kx=*/0);
+    CHECK(ByNumber(s, 80).card.m_name.str() == "Aether Vial");
+    CHECK(ByNumber(s, 10).card.m_name.str() == "Corsair Captain");
+    CHECK(ByNumber(s, 500).card.m_name.str() == "Corsair Captain");
+    CHECK(CountTreasuresControlled(s, 0) == 0);
+    // A PUT (etb_kx -1) with the default provider also converts nothing, on either side.
+    LarcenistEnters(s, 82, /*etb_kx=*/-1);
+    CHECK(CountTreasuresControlled(s, 0) == 0);
+    CHECK(CountTreasuresControlled(s, 1) == 0);
+}
+
+TEST_CASE("Kitesail Larcenist: a converted Treasure counts as an artifact for Goblin Tomb Raider")
+{
+    EnsureCardsLoaded();
+    GameState s = PiratesState();
+    Put(s, "Goblin Tomb Raider", 0, 40, /*sick=*/true);
+    Put(s, "Dire Fleet Captain", 0, 41);
+    CHECK_FALSE(CanAttackFull(ByNumber(s, 40), s.battlefield, 0));
+    LarcenistEnters(s, 81, /*etb_kx=*/41);
+    CHECK(ByNumber(s, 41).card.HasType(CardType::Artifact));
+    CHECK(CanAttackFull(ByNumber(s, 40), s.battlefield, 0));
+    CHECK(LivePower(s, 40) == 2);
+}
+
+TEST_CASE("Kitesail Larcenist: a converted Pirate stops counting for Corsair Captain (both directions)")
+{
+    EnsureCardsLoaded();
+    GameState s = PiratesState();
+    Put(s, "Corsair Captain", 0, 10);
+    Put(s, "Dire Fleet Captain", 0, 11);
+    Put(s, "Staunch Crewmate", 0, 12);
+    CHECK(LivePower(s, 11) == 3);                               // 2/2 + Corsair's +1/+1
+    // Convert the LORD: its "other Pirates get +1/+1" is gone with its definition.
+    LarcenistEnters(s, 81, /*etb_kx=*/10);
+    CHECK(LivePower(s, 11) == 2);
+    CHECK_FALSE(ByNumber(s, 10).card.IsCreature());
+    CHECK_FALSE(CardHasSubtype(ByNumber(s, 10).card, "Pirate"));
+    // Convert a buffed Pirate under a second lord: it is no longer a creature or a Pirate.
+    Put(s, "Corsair Captain", 0, 13);
+    LarcenistEnters(s, 82, /*etb_kx=*/12);
+    const Permanent& c = ByNumber(s, 12);
+    CHECK_FALSE(c.card.IsCreature());
+    CHECK_FALSE(CardHasSubtype(c.card, "Pirate"));
+    CHECK_FALSE(c.card.m_power.has_value());
+    CHECK(LivePower(s, 11) == 3);                               // the new Corsair still buffs Dire Fleet
+}
+
+TEST_CASE("Kitesail Larcenist: the human treasurify chooser covers the opponent's side")
+{
+    EnsureCardsLoaded();
+    GameState s = PiratesState();
+    PutOpp(s, "Dire Fleet Captain", 500);
+    std::vector<int> seen_sides;
+    BounceChooser pick_first = [&](const GameState&, int side, const std::string&,
+                                   const std::vector<int>& legal, int heur) -> int
+    {
+        seen_sides.push_back(side);
+        CHECK(heur == -1);                                      // the provider's default is none
+        return side == 1 && !legal.empty() ? 0 : -1;
+    };
+    g_play_treasurify_chooser = &pick_first;
+    Put(s, "Aether Vial", 0, 80);
+    LarcenistEnters(s, 81, /*etb_kx=*/0);   // own side carried by the cast (none) -> no own prompt
+    g_play_treasurify_chooser = nullptr;
+    REQUIRE(seen_sides.size() == 1);
+    CHECK(seen_sides[0] == 1);
+    CHECK(ByNumber(s, 500).card.m_name.str() == "Treasure Token");
+    CHECK(ByNumber(s, 80).card.m_name.str() == "Aether Vial");
+}
+
+TEST_CASE("Kitesail Larcenist: the enumerator offers none + each own artifact/creature, never an existing Treasure")
+{
+    EnsureCardsLoaded();
+    GameState s = BuccaneerBoard(3, {"Kitesail Larcenist"});
+    for (auto& p : s.battlefield) { p.card = Def("Island").card; p.card.m_number = 300 + (&p - &s.battlefield[0]); }
+    Put(s, "Aether Vial", 0, 80);
+    Put(s, "Dire Fleet Captain", 0, 41);
+    CreateTreasureTokens(s, 0, 1);
+    s.battlefield.back().entered_this_turn = false;
+    const int treasure_num = s.battlefield.back().card.m_number;
+    std::vector<int> xs;
+    for (const TurnSolver::Plan& p : TurnSolver::EnumerateMainPlans(s, true))
+    {
+        for (const Action& a : p.actions)
+        {
+            if (a.kind == Action::Kind::CastFromHand && a.card_name.str() == "Kitesail Larcenist"
+                && std::find(xs.begin(), xs.end(), a.chosen_x) == xs.end())
+            { xs.push_back(a.chosen_x); }
+        }
+    }
+    CHECK(std::find(xs.begin(), xs.end(), 0) != xs.end());
+    CHECK(std::find(xs.begin(), xs.end(), 80) != xs.end());
+    CHECK(std::find(xs.begin(), xs.end(), 41) != xs.end());
+    CHECK(std::find(xs.begin(), xs.end(), treasure_num) == xs.end());
+    CHECK(std::find(xs.begin(), xs.end(), kEtbKxHeuristic) == xs.end());   // human-play only
+}
+
+TEST_CASE("Kitesail Larcenist: the executor carries the searched target (and none) to resolution")
+{
+    EnsureCardsLoaded();
+    for (int pick : {0, 80})
+    {
+        CAPTURE(pick);
+        GameState s = BuccaneerBoard(0, {});
+        for (int k = 0; k < 3; ++k) { Put(s, "Island", 0, 300 + k); }
+        Put(s, "Aether Vial", 0, 80);
+        s.players[0].hand.push_back(HandCard("Kitesail Larcenist", 81));
+        AIEngine eng;
+        ManaPool avail = AvailableManaPool(s);
+        MtgTestSeam::CastSpellFromHand(eng, s, s.players[0].hand.back(), avail, pick);
+        REQUIRE(s.stack.size() == 1);
+        const StackEntry entry = s.stack.back();
+        s.stack.pop_back();
+        REQUIRE(entry.chosen_x.has_value());
+        CHECK(*entry.chosen_x == pick);
+        EffectHandler::Resolve(s, entry, Def("Kitesail Larcenist"));
+        CHECK((ByNumber(s, 80).card.m_name.str() == "Treasure Token") == (pick == 80));
+    }
 }

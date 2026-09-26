@@ -1328,6 +1328,7 @@ CardParams CardDatabase::BuildParamsFromJson(const json& params) const
     p.blink_returns_tapped          = params.value("blink_returns_tapped", false);
     p.blink_own_only                = params.value("blink_own_only", false);
     p.etb_blink_permanent           = params.value("etb_blink_permanent", false);
+    p.etb_treasurify_each_player    = params.value("etb_treasurify_each_player", false);
     p.reduces_creature_activation   = params.value("reduces_creature_activation", 0);
     p.reduces_cycling_activation    = params.value("reduces_cycling_activation", 0);
     p.cycle_trigger_damage_each_opponent =

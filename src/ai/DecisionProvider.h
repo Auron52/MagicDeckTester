@@ -228,6 +228,18 @@ public:
     virtual int FlickerTarget(const GameState&, int /*controller*/, int /*self_num*/) const
     { return 0; }
 
+    // TreasurifyTarget -- Kitesail Larcenist's ETB ("for each player, choose up to one other target
+    // artifact or creature that player controls ... become Treasure artifacts"): the m_number of the
+    // permanent `target_player` controls to convert, or 0 to choose none. Consulted on the PUT path
+    // (Aether Vial -- no cast variant carries the choice; a cast rides the searched chosen_x axis for
+    // the OWN side) and for the OPPONENT side (target_player != controller), which autonomous play
+    // leaves alone. `self_num` = Larcenist's own m_number ("other" excludes it). Default declines on
+    // both sides: converting an own permanent trades a body/engine for one mana, and the passive
+    // opponent's creatures never attack, block or get read, so converting one is provably inert.
+    virtual int TreasurifyTarget(const GameState&, int /*controller*/, int /*self_num*/,
+                                 int /*target_player*/) const
+    { return 0; }
+
     // FetchCandidates -- fetch priority: ordered land-name candidates for a fetchland.
     virtual std::vector<std::string>
     FetchCandidates(const GameState& s, int controller, const CardParams& fetch_pp) const = 0;

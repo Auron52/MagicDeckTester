@@ -1874,7 +1874,7 @@ function zoneRow(items, cls='') { return `<div class="row ${cls}">${items.length
 // `dec` null, so the panel is hidden and the decision is unanswerable — the game just stalls on a
 // dead board (how lackey_put/echo/land_entry shipped: panel + wiring + commit written, whitelist
 // never updated). test/viewer_decision_types_check.js pins this list against src/main.cpp.
-const SUBDECISIONS = ['scry','reorder','surveil','target','vial_charge','bounce','sacrifice','dig','discard','divide','expressive_iteration','retrace_discard','replicate','mulligan','bottom','dragon','lightpaws','firebreathe','storage_hold','lackey_put','free_cast','demonstrate','echo','land_entry','tutor_etb','sac_tutor','revive','rummage','attach_host','flicker','jitte','choose_color','attack_mode'];
+const SUBDECISIONS = ['scry','reorder','surveil','target','vial_charge','bounce','sacrifice','dig','discard','divide','expressive_iteration','retrace_discard','replicate','mulligan','bottom','dragon','lightpaws','firebreathe','storage_hold','lackey_put','free_cast','demonstrate','echo','land_entry','tutor_etb','sac_tutor','revive','rummage','attach_host','flicker','treasurify','jitte','choose_color','attack_mode'];
 // The plan the engine flagged as a go-off, or null.
 //
 // TWO STRENGTHS, and the button says which (USER 2026-09-10: *"we require a much more aggressive,
@@ -1945,7 +1945,7 @@ function renderBoard() {
   // clickable) underneath.
   const isMain = !S.over && d.type === 'main_phase';
   const dec = (!S.over && SUBDECISIONS.includes(d.type)) ? d.type : null;
-  const boardClick = dec==='target' || dec==='bounce' || dec==='sacrifice' || dec==='vial_charge' || dec==='attach_host' || dec==='flicker';
+  const boardClick = dec==='target' || dec==='bounce' || dec==='sacrifice' || dec==='vial_charge' || dec==='attach_host' || dec==='flicker' || dec==='treasurify';
   if (boardClick && S._selFor !== d.decision_index) initBoardSel(d);
   // HAND-CLICK decisions -- the hand's answer to boardClick. The objects being chosen among are
   // cards sitting in YOUR HAND, so they are picked by clicking them where they already are, not in a
@@ -3356,6 +3356,11 @@ function initBoardSel(d){
   if (d.type==='target'){
     const def=(d.options||[]).find(o=>o.index===d.heuristic_default)||{targets:[]};
     (def.targets||[]).forEach(t=>S.boardSel.add(tgtKey(t)));
+  } else if (d.type==='treasurify'){
+    // "up to one": the engine's default is usually NONE (-1), so seed only a real pick -- never
+    // fall back to the first option, which would preselect a conversion nobody chose.
+    const def=(d.options||[]).find(o=>o.index===d.heuristic_default);
+    if (def) S.boardSel.add('m:'+def.perm_index);
   } else if (d.type==='bounce' || d.type==='sacrifice' || d.type==='attach_host' || d.type==='flicker'){
     const def=(d.options||[]).find(o=>o.index===d.heuristic_default)||(d.options||[])[0];
     if (def) S.boardSel.add('m:'+def.perm_index);
@@ -3380,7 +3385,7 @@ function initHandSel(d){
 function toggleHandSel(oi){ S.handSel = (S.handSel===oi) ? null : oi; renderBoard(); }
 function legalTargetKeys(d){
   if (d.type==='target') return new Set((d.legal_targets||[]).map(tgtKey));
-  if (d.type==='bounce' || d.type==='sacrifice' || d.type==='attach_host' || d.type==='flicker') return new Set((d.options||[]).map(o=>'m:'+o.perm_index));
+  if (d.type==='bounce' || d.type==='sacrifice' || d.type==='attach_host' || d.type==='flicker' || d.type==='treasurify') return new Set((d.options||[]).map(o=>'m:'+o.perm_index));
   return new Set();
 }
 function toggleSel(d, key, max){
@@ -3400,14 +3405,14 @@ function wireDecisionBoard(d, dec){
       t.onclick=e=>{ e.stopPropagation(); toggleHandSel(+t.dataset.hpick); };
     });
   }
-  if (dec==='target' || dec==='bounce' || dec==='sacrifice' || dec==='soulfire_targets' || dec==='attach_host' || dec==='flicker'){
+  if (dec==='target' || dec==='bounce' || dec==='sacrifice' || dec==='soulfire_targets' || dec==='attach_host' || dec==='flicker' || dec==='treasurify'){
     const legal=legalTargetKeys(d);
     // A multi-victim sacrifice takes `need` bodies, not one -- and when need === the candidate count
     // every one of them dies, so the board is highlighted (they ARE the victims) but NOT clickable:
     // there is no choice to make and letting a click deselect one would only be able to produce an
     // un-confirmable state.
     const ro = dec==='sacrifice' && sacBurstForced(d);
-    const max = (dec==='bounce'||dec==='attach_host'||dec==='flicker')?1
+    const max = (dec==='bounce'||dec==='attach_host'||dec==='flicker'||dec==='treasurify')?1
               : dec==='sacrifice' ? sacBurstNeed(d)
               : (dec==='soulfire_targets'?(d.count||1):(d.max_targets||1));
     board.querySelectorAll('.thumb[data-idx]').forEach(t=>{
@@ -4146,6 +4151,18 @@ function promptPanelHtml(d, dec){
       `<span class="spacer"></span><button id="decnoattach" class="ghost">Decline</button>`+
       `<button id="decconfirm" class="primary" ${sel.length?'':'disabled'}>Confirm</button></div>`;
   }
+  if (dec==='treasurify'){
+    // Kitesail Larcenist's ETB, ONE prompt per player: which of THAT player's artifacts/creatures
+    // becomes a Treasure, or none ("up to one"). Board click, like flicker; the side is in d.side.
+    const sel=[...(S.boardSel||[])];
+    const opt=sel.length?(d.options||[]).find(o=>'m:'+o.perm_index===sel[0]):null;
+    const yours=d.side!=='opponent';
+    return `<h3>${esc(d.source||'Kitesail Larcenist')} — turn ${yours?'one of YOUR':'one of the OPPONENT’s'} permanents into a Treasure?</h3>`+
+      `<div class="sub">Click ${yours?'one of your':'one of the opponent’s'} artifacts or creatures: it becomes a Treasure artifact ({T}, sacrifice: one mana of any colour) and loses every other type and ability — a converted Aether Vial stops being a Vial, a converted Pirate stops being a creature (and stops counting for your Pirate cards). Or choose none. The AI's pick is preselected (usually none).</div>`+
+      `<div class="pbtns"><span class="pcount">Becomes a Treasure: <b>${opt?esc(opt.label||opt.name):'(none)'}</b></span>`+
+      `<span class="spacer"></span><button id="decnoattach" class="ghost">None</button>`+
+      `<button id="decconfirm" class="primary" ${sel.length?'':'disabled'}>Confirm</button></div>`;
+  }
   const max=d.max_targets||1, n=(S.boardSel||new Set()).size;
   // Planeswalker LOYALTY ability target: d.loyalty says what happens to the chosen permanent
   // ("turned into a green 3/3 Elk with no abilities"), and d.source names the ability
@@ -4295,6 +4312,7 @@ function wireDecisionPanel(d, dec){
     // flicker reuses the same button as its "Decline" (reply -1 = no flicker at all).
     const na=panel.querySelector('#decnoattach');
     if (na) na.onclick=()=>pushChoice(d, -1, dec==='flicker' ? `${d.source}: decline flicker`
+                                           : dec==='treasurify' ? `${d.source}: no Treasure (${d.side==='opponent'?'opponent':'yours'})`
                                                              : `${d.source}: leave unattached`);
   }
 }
@@ -4709,6 +4727,9 @@ function commitBoardSel(d, dec){
   } else if (dec==='flicker'){
     const opt=(d.options||[]).find(o=>'m:'+o.perm_index===sel[0]);
     oi=opt?opt.index:d.heuristic_default; lab=`${d.source}: flicker ${opt?opt.name:'permanent'}`;
+  } else if (dec==='treasurify'){
+    const opt=(d.options||[]).find(o=>'m:'+o.perm_index===sel[0]);
+    oi=opt?opt.index:-1; lab=`${d.source}: ${opt?(opt.label||opt.name)+' becomes a Treasure':'no Treasure'}`;
   } else if (dec==='soulfire_targets'){
     const want=sel.map(k=>+k.slice(2)).sort((a,b)=>a-b).join('|');
     const opt=(d.options||[]).find(o=>(o.perm_indices||[]).slice().sort((a,b)=>a-b).join('|')===want);

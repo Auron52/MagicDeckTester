@@ -170,6 +170,11 @@ MANIFEST = {
     # board-pick chooser (g_play_flicker_chooser in FireOwnEtbTriggers' blink block, reply -1 =
     # decline) wired 2026-09-05. Default = the provider's FlickerTarget pick.
     "etb_blink_permanent":   ("flicker",              truthy),
+    # Kitesail Larcenist: the OWN-side Treasure target on a cast rides the CastFromHand chosen_x
+    # plan-variant axis (+ "none", + the human-only choose-on-resolution variant); the OPPONENT
+    # side (always) and the own side on an Aether Vial put surface the `treasurify` board-pick
+    # chooser (g_play_treasurify_chooser in FireOwnEtbTriggers, reply -1 = none), wired 2026-09-26.
+    "etb_treasurify_each_player": ("treasurify",      truthy),
     # Ranger of Eos: the up-to-two pick surfaces through the existing sac_tutor multi-pick
     # chooser at resolution (PerformEtbTutorToHandMulti), on the cast and the put path alike.
     "etb_tutor_hand_count":  ("sac_tutor",            positive),
