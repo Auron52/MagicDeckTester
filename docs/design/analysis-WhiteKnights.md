@@ -248,8 +248,10 @@ measurement (5e), not an assumption — recorded below once run.
 
 ## RESUME HERE — latest state (2026-09-26, after the value-leaf run)
 
-**Everything in the analyze-deck workflow is DONE. The deck ships a FITTED VALUE LEAF. What is left is
-bookkeeping plus four user sign-offs.**
+**THE WHOLE PIPELINE IS COMPLETE — profile → value leaf → mulligan, all three stages generated,
+validated and shipping.** The deck carries a fitted value leaf *and* an exhaustive keep+bottoming table.
+No bookkeeping remains; what is left is entirely **user sign-offs** (see *Open questions*, 8 items, none
+blocking) and **nothing is pushed**.
 
 | item | state |
 |---|---|
@@ -259,7 +261,8 @@ bookkeeping plus four user sign-offs.**
 | Value-leaf pipeline | **ALL 8 PHASES COMPLETE** (0/A/B/C/C.5/D/E/F), freeze intact `bb5d1038`, matrix 52/52 @400g, 11,288 rows, held-out RMSE 0.4236 |
 | Search shape | **FITTED LEAF ADOPTED** (`721fe1b6`), superseding the leaf:none shape. `ladder: "single"` stays REJECTED |
 | Reference bench | **10/10 EXACT after the user's re-play** — human 4.400 · search 4.400 · 0 short · 0 faster |
-| Mulligan profile | **GENERATION STARTED 2026-09-26** (user: *"we may as well start generation"*) — the last pipeline stage, now unblocked because phase F derived its contract |
+| Mulligan profile | **GENERATED, VALIDATED, LIVE** — 37 min, keep **−0.1985 t (16/16)**, confounded bottoming **−0.0489 t (16/16)**, both gates passed. 42,271 compositions |
+| **Deck speed, shipped** | **4.320 at d3/d5**, slowest win **T6** (was 4.520 / T8 before the leaf and keep table) |
 | Commits | `80ef7c34` deck+engine · `bb5d1038` lazy-leaf opt-out · `343366c3` leaf measurement · `6508fb37` references · `ce64976d` bench cache · `9bec6d2e` refline tool · `721fe1b6` leaf adoption. **Nothing pushed.** |
 
 ### The value leaf: adopted, and my earlier "no leaf" call was wrong on COST
@@ -326,14 +329,19 @@ candidate list is the honest ceiling here rather than a list that reads complete
    was too weak: it is a real, reproducible improvement at the deck's shipped depth — confirmed on the
    ladder's own seed base by `scripts/wk_ladder_arm_isolate.py` (4.4900/T7 across four arms, 300/300
    identical digests), and in the same direction as the 8,000-game paired screen.
-3. **Four sign-offs**, none blocking: `expected_buckets = 14`; the Acclaimed Contender "legendary
-   artifact" residue (the deck's only bracket note); `attack_tokens_require_self_attacking` as
-   viewer-inert; and whether `Knights` + `WhiteKnights` both stay.
-4. **Two deferred defects**, both written up:
+3. ~~Mulligan profile.~~ **DONE — generated, validated, live.** Keep −0.1985 t and confounded bottoming
+   −0.0489 t, both 16/16 seeds. The pipeline is now complete end to end.
+4. **Sign-offs — the only category left.** See *Open questions* for all eight; the four that are
+   decisions rather than FYIs: `expected_buckets = 14`; the Acclaimed Contender "legendary artifact"
+   residue (the deck's only bracket note); `attack_tokens_require_self_attacking` as viewer-inert; and
+   whether `Knights` + `WhiteKnights` both stay.
+5. **Two deferred defects**, both written up:
    [haste-from-equipment-not-projected.md](haste-from-equipment-not-projected.md) (moves 5 GT tiers) and
    [lazy-leaf-corrupts-the-h5-reference.md](lazy-leaf-corrupts-the-h5-reference.md) (fleet-wide; default
    left armed deliberately, `MTG_VL_LAZY_LEAF=0` opts out).
-5. **Play server** was left running on `http://localhost:8080`.
+6. **Play server** still running on `http://localhost:8080` (verified responding). Note the deck's play
+   has changed under the keep table, so newly hand-played references will be against a *different*
+   mulligan policy than the 10 already committed — those were played on the static keep rule.
 
 ---
 
@@ -621,22 +629,35 @@ Card scores, and the three readings that are actually load-bearing:
 metric here. Figures below are from the pooled batch in `scripts/wk_firing_evidence.sh` with the
 deck's **profile attached** (`logs/wk_firing/report_postfix.txt`):
 
-| config | games | avg win turn | slowest win |
-|---|---|---|---|
-| d0 | 600 | 4.735 | T7 |
-| d3 b10 | 300 | 4.520 | T8 |
-| d5 b20 | 300 | **4.490** | **T7** |
-| d5 **b2000** | 150 | 4.507 | T7 |
-| 2HG (life 30, 2 heads) | 200 | 5.275 | — |
+**THESE ARE THE FINAL FIGURES — with the exhaustive keep table live** (`logs/wk_ladder_keep/`). The
+leafless → fitted-leaf → keep-table progression is shown so nothing is attributed to the wrong stage:
 
-**Monotone in depth and never worse deeper** (4.735 → 4.520 → 4.490), and the slowest-win column is
-how that can be read without trusting a threshold: the worst game lands at T7–T8 against a `max_turns`
-far above it.
+| config | games | leafless | + fitted leaf | **+ keep table (SHIPPED)** | slowest win |
+|---|---|---|---|---|---|
+| d0 | 600 | 4.735 | 4.735 | **4.543** | T7 → **T6** |
+| d3 b10 | 300 | 4.520 | 4.520 | **4.320** | T8 → **T6** |
+| d5 b20 | 300 | 4.520 | 4.490 | **4.320** | T8 → **T6** |
+| d5 **b2000** | 150 | 4.507 | 4.507 | **4.320** | T7 → **T6** |
+| 2HG (life 30, 2 heads) | 200 | 5.275 | 5.275 | **5.200** | T7 |
 
-**REFRESHED 2026-09-26 under the ADOPTED FITTED LEAF.** These are the numbers as the deck ships today.
-Exactly **one** cell moved from the leafless figures: `d5 b20` **4.520 → 4.490, slowest T8 → T7**. All
-15 firing rows, the d0 / d3 / d5-b2000 ladder rows, the 2HG row and the paired budget check came back
-**byte-identical**.
+**Monotone in depth and never worse deeper** (4.543 → 4.320 → 4.320), and the slowest-win column is how
+that can be read without trusting a threshold: the worst game now lands at **T6** against a `max_turns`
+far above it. The tail the earlier tables showed at T7–T8 is gone.
+
+**The keep table is worth far more than anything else measured on this deck** — about **−0.19 turns**,
+against battle cry's 0.20 t for an entire card mechanic, and it moved every configuration. Two
+independent confirmations that this is real rather than a seed accident:
+* its own validation A/B put keep at **−0.1985 t, 16/16 seeds, mean/se −60.0** (below), and
+* the `d3 b10` ladder cell moved **−0.200** on a *different* seed base (4401 vs the A/B's) with a
+  different apparatus. Two instruments, two seed bases, the same number.
+
+The three deepest cells now all read **4.3200**: once the opening hand is chosen well, the remaining
+variance this deck has is not something more search can reach.
+
+**Refreshed twice on 2026-09-26, in stage order.** First under the **adopted fitted leaf**, where
+exactly *one* cell moved (`d5 b20` 4.520 → 4.490, slowest T8 → T7) and all 15 firing rows, the other
+three ladder rows, the 2HG row and the paired budget check came back **byte-identical**. Then again
+under the **exhaustive keep table**, which moved every cell (column 4 above).
 
 *That pattern is predicted, not lucky.* The three-way sidecar comparison (Step 2d) found the fitted
 leaf **byte-identical to both the leafless shape and the bare ladder at d0 and d3**, and the firing
@@ -644,9 +665,10 @@ cases are all d0 or d3 b10, so the firing table could not have moved. d5 is the 
 where the leaf changes play at all — and there it is *better*, which is the same direction the paired
 8,000-game screen saw at 0.34–0.42x the units.
 
-**`d5 b2000` reading 4.507 against `d5 b20`'s 4.490 is NOT a budget inversion.** The two cells are
-different sample sizes (150 vs 300 games); on the 150 games they share, the paired check is **0
-earlier, 0 later, 150 identical**. The gap is the extra 150 games in the b20 cell, not the budget.
+**The `d5 b2000` vs `d5 b20` comparison is not a budget effect either way.** At the leaf stage b2000
+read 4.507 against b20's 4.490, which is *not* an inversion: the cells are different sample sizes (150
+vs 300 games) and on the 150 they share the paired check is **0 earlier, 0 later, 150 identical**. Under
+the keep table both read **4.3200**. The suite budget does not constrain this deck at any stage.
 
 **Two traps for anyone re-running `scripts/wk_firing_evidence.sh`:**
 * **The script prints to STDOUT and writes no report file.** `logs/wk_firing/report_postfix.txt` is a
@@ -1199,7 +1221,9 @@ superseded. Log: `logs/wk_stage4/profile_run.txt`; the pre-fix profile is kept a
 * **Discard analysis: DISCARD_INERT** — 400 games at d3 reached **zero** cleanup-shed decisions from
   either caller, so there is no policy to derive. Consistent with the deck: it empties its hand.
 * Baseline speed, now measured **with the profile attached**: **avg win turn 4.765 at d0** (400 g),
-  4.527 at d3, 5.275 in 2HG.
+  4.527 at d3, 5.275 in 2HG. **These are the STATIC-keep figures and are retained deliberately as the
+  baseline the exhaustive keep table is measured against** — under that table the same three cells read
+  **4.620 / 4.400 / 5.200** (`logs/wk_ladder_keep/`).
 * Coverage re-reported clean in the same run: `"missing": []`, 17/17 cards `full`.
 
 ### What the bug was worth, measured
@@ -1872,7 +1896,58 @@ leave in place while that sign-off is outstanding, and they are worth stating pr
   key is a one-line edit to the sidecar; the table stays valid. That is what makes this a question that
   cannot block the run (the *"does this answer change what the run computes?"* test).
 
-## The exhaustive mulligan profile — GENERATING (started 2026-09-26 05:27 UTC)
+## The exhaustive mulligan profile — GENERATED, VALIDATED AND LIVE (2026-09-26)
+
+**`bash scripts/mullgen.sh run decks/WhiteKnights complete` → VALIDATION PASSED, exit 0.** Generation
+took **37 minutes** (05:27:10 → 06:04:28 UTC), comfortably inside the ~1.4 h upper-bound projection —
+the adaptive keep schedule trimmed it as the scout predicted it would. Report:
+`logs/whiteknights_mullgen/VALIDATION.txt`; generation log `gen.log`.
+
+### Both hard gates cleared decisively
+
+The bar is the user's: **"at all worse on average" is a reject**, no significance margin.
+
+| gate | arms | delta | seeds | mean/se | verdict |
+|---|---|---|---|---|---|
+| **keep** | exhaustive 4.3157 vs static 4.5142 | **−0.198500 t** | **16/16** | **−60.03** | **ok** |
+| **bottoming** (CONFOUNDED, mode 3) | blind 4.3827 vs lookahead 4.4316 | **−0.048875 t** | **16/16** | **−17.71** | **ok** |
+
+Neither is close to the bar — every one of the 32 seed-arm pairs favours the new table, and the keep
+spread is min −0.2250 / median −0.1960 / max −0.1770, i.e. it never even approached zero.
+
+**The bottoming arm is the one worth reading carefully, because a naive version of it is rigged.** It
+compares *blind* exhaustive bottoming against the *lookahead* policy with the library reshuffled after
+the decision **and** the mid-game shuffle salts re-derived (`MTG_CONFOUND_BOTTOM=3`). Without that
+correction the lookahead is scored on the very library order it peeked at and wins for free; mode 1 —
+which reshuffles draw order but leaves the salts pointing at the same mid-game shuffles — leaks 0.073 t
+in the lookahead's favour and has already failed one perfectly good table. So **blind bottoming beating
+lookahead by 0.049 t here is a genuine result, not an artefact of a generous harness.**
+
+### Artifacts, and their fingerprints
+
+| field | value |
+|---|---|
+| profile | `decks/WhiteKnights/WhiteKnights.keepmodel.exhaustive.profile.json.gz` (988 KB from 21.6 MB) |
+| raw (poolable) | `WhiteKnights.keepmodel.exhaustive.raw.json.gz` (727 KB from 6.5 MB) |
+| entries | **42,271 compositions**, 14 buckets |
+| `bottoming_enabled` | **true** — baked in unconditionally; there is no generation-time off switch |
+| `effective_R` / `max_mull` | 40 / 6 |
+| `commit` | `083c4108` — the freeze |
+| `play_digest` | `9dbbfbd40bfe8140` — matches the scout's, so the labels are the shipped play's |
+
+Uncompressed variants are gitignored (`decks/**/*.keepmodel.exhaustive*.json`); the `.gz` pair is the
+committed form, matching `decks/CritterLifegain/`. **The `.gz` was verified to actually load after
+compressing** rather than assumed — `[keeptable] built 42271 compositions (34.6 MB) in 0.51 s from
+...profile.json.gz`, then 400 games at d5/b20 played clean. Worth checking because keep is
+**presence-gated on the filename**: a profile the engine cannot resolve fails silently and open, and the
+whole table would simply not apply.
+
+**One thing the run could NOT do: the regression suite step was skipped** — `decks/WhiteKnights` is not
+in `test/regression_cases.sh`, so there is no GT tier to move. That is reported, not waved through; it is
+open question 8. The two A/Bs are hard gates and both passed, so the profile is validated; what is
+missing is only the suite's *additional* cross-deck report, which by design is never a rejection anyway.
+
+### Original pre-generation record (kept — the projection it was launched against)
 
 The last stage of the pipeline, started on the user's instruction (*"we may as well start generation"*)
 now that the value leaf is closed and both bookkeeping items are done.
