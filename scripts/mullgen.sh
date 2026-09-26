@@ -242,6 +242,11 @@ run_regression(){
     log "--- regression: $DECK is not in test/regression_cases.sh -- skipping (nothing to move) ---"
     return 0
   fi
+  # INCLUDE THE 2HG VARIANT KEY. `--deck=<k>` matches case keys EXACTLY, and a "<k>2hg" case is a
+  # separate key -- so asking for just $key silently leaves the deck's 2HG cases un-run. That is the
+  # tier most likely to catch a per-opponent/starting-life mistake (WhiteKnights' Hero token gate is
+  # observable ONLY at two heads), i.e. exactly what you would not want quietly skipped.
+  if grep -qE "\"[[:space:]]*${key}2hg[[:space:]]" test/regression_cases.sh; then key="$key,${key}2hg"; fi
   log "--- regression (deck=$key), for VISIBILITY -- cannot reject ($(stamp)) ---"
   bash test/regression.sh --deck="$key" > "$OUT/regression.log" 2>&1
   local rc=$?
@@ -312,7 +317,14 @@ quarantine(){
 # whose profile had been compressed for commit reported "no profile to validate" about a profile that
 # was live and working. Both failures fired together on WhiteKnights, 2026-09-26.
 validate_preflight(){
-  [ -e "$PROF" ] || { [ -e "$PROF.gz" ] && PROF=$PROF.gz; }
+  if [ ! -e "$PROF" ] && [ -e "$PROF.gz" ]; then
+    PROF=$PROF.gz
+    # The QUARANTINE and PREV names must carry the same suffix as the profile we actually resolved.
+    # Otherwise a failing gzipped profile is moved to a plain `.DISABLED.json` holding gzip bytes, and
+    # re-enabling it by renaming back -- the documented way to undo a quarantine -- produces a
+    # `.profile.json` that is not JSON. Deactivation is the failure path, so its naming has to be right.
+    DIS=$DIS.gz; PREV=$PREV.gz
+  fi
   [ -e "$RAW" ]  || { [ -e "$RAW.gz" ]  && RAW=$RAW.gz; }
   [ -e "$PROF" ] || { echo "no profile to validate: $PROF (nor $PROF.gz)"; exit 1; }
   [ -e "$BASE" ] || { echo "missing base/static profile: $BASE"; exit 1; }
@@ -328,7 +340,13 @@ validate(){
   # there (see docs/design/confounded-bottoming-gate-failures.md).
   python3 - "$PROF" "$RAW" <<'PY' || exit 1
 import json, sys, gzip, os
-ek = (json.load(open(sys.argv[1])) or {}).get("exhaustive_keep") or {}
+# GZIP-AWARE, like the raw reader below: the COMMITTED form of the profile is gzipped (the
+# uncompressed name is gitignored) and the engine resolves either, so validate must too. A plain
+# open() here died with "'utf-8' codec can't decode byte 0x8b" -- a gzip magic byte -- on the first
+# deck that was validated after being compressed for commit.
+def _load(p):
+    return json.load(gzip.open(p, "rt") if p.endswith(".gz") else open(p))
+ek = (_load(sys.argv[1]) or {}).get("exhaustive_keep") or {}
 K, ents = len(ek.get("buckets") or []), (ek.get("entries") or [])
 bad = sum(1 for e in ents if not e.get("bottom_keep") or any(len(r) != K for r in e["bottom_keep"]))
 if not ents or not ek.get("bottoming_enabled") or bad:

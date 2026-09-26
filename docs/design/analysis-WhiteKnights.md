@@ -263,6 +263,7 @@ blocking) and **nothing is pushed**.
 | Reference bench | **10/10 EXACT after the user's re-play** — human 4.400 · search 4.400 · 0 short · 0 faster |
 | Mulligan profile | **GENERATED, VALIDATED, LIVE** — 37 min, keep **−0.1985 t (16/16)**, confounded bottoming **−0.0489 t (16/16)**, both gates passed. 42,271 compositions |
 | **Deck speed, shipped** | **4.320 at d3/d5**, slowest win **T6** (was 4.520 / T8 before the leaf and keep table) |
+| Regression suite | **IN — 26 cases, 3 tiers + 2HG, GT accepted.** Membership is now a **gated** step that blocks both generators (`scripts/suite_gate.py`); cost 97.5 ms/game = **0.09x** the 3x limit |
 | Commits | `80ef7c34` deck+engine · `bb5d1038` lazy-leaf opt-out · `343366c3` leaf measurement · `6508fb37` references · `ce64976d` bench cache · `9bec6d2e` refline tool · `721fe1b6` leaf adoption. **Nothing pushed.** |
 
 ### The value leaf: adopted, and my earlier "no leaf" call was wrong on COST
@@ -1993,6 +1994,103 @@ That `bucket [2]` merge is a small independent confirmation of the reference aud
 discovered from 400 probes that Dauntless Bodyguard and Venerable Knight are interchangeable, which is
 the same fact the `claude_s3_gi2` line turned on (two 2/1s for `{W}` beat one Worthy Knight).
 
+## Regression suite — ADDED (2026-09-26), and it is now a GATED pipeline step
+
+**The deck is in the suite: 26 cases, 3 tiers plus 2HG, all ground truth accepted.** This closes the
+one thing `mullgen.sh` could not do (§*The exhaustive mulligan profile* → the skipped regression step),
+and it is now **enforced** rather than remembered.
+
+### The gate (user directive, 2026-09-26)
+
+> Suite membership is a **required step of the analysis**, and the value-leaf and mulligan generators
+> **error early** without it — *"it becomes a required part of the pipeline that we can't just skip
+> over."*
+
+`scripts/suite_gate.py` is the shared check. `valueleaf.sh run` calls it per deck **before phase 0
+freezes a commit**; `mullgen.sh run` calls it **before it truncates its report or plays a game**. Both
+exit 3, leaving no queue dir, no report and no artifacts. `verify_deck.py` also gained a **blocking
+`suite` gate** (sign-off key `suite:not_a_case`) so it is caught at analysis time too.
+`MTG_ALLOW_UNTESTED_DECK=1` overrides and is a **user** decision.
+
+**Why a gate and not the note that already existed.** `verify_deck.py` had been printing the right
+warning all along — *"WhiteKnights is NOT a regression case, so NO digest tracks its play"* — as a 6a
+disclosure nobody had to act on. It fired in our own run, at line 395 of `logs/wk_verify2/verify.txt`,
+and its remedy text was literally "add the deck to the suite". Nothing consumed it. Meanwhile
+`mullgen.sh`'s `run_regression` logs `skipping (nothing to move)` and returns **0**, so this deck's
+profile reported **VALIDATION PASSED** having run one fewer check than every other deck gets.
+
+### The 3x cost rule, and where this deck lands
+
+A deck may be added only if its cost is **≤ 3x the most expensive deck that already has BOTH a value
+leaf and a mulligan profile**. Measured over all 25 suite decks in one pooled tier run
+(`test/suite_cost.json`):
+
+| | deck | ms/game |
+|---|---|---|
+| reference | **fivecolour** | 1033.5 |
+| | hinata | 594.6 |
+| | melira | 578.5 |
+| **budget for a new deck** | | **3100.4** |
+| **WhiteKnights** | | **97.5 → 0.09x of the limit** |
+
+Comfortably inside — the deck is the 12th cheapest of 25. (Snow is costlier still at 4178.8 ms/game but
+is **not** a yardstick: it has no mulligan profile, its generation having been cancelled at 6.47 h.)
+The gated number is per-game core-ms at the deck's worst *searched* case, not total tier time, because
+total is intrinsic cost × the game counts we choose and so is gameable by shrinking them.
+
+### Case sizing, and one genuine finding
+
+Mirrors `knights` — same tribe, same speed class — but checked against a real probe rather than copied:
+**d0 2.3 ms/game · d3 b10 48.9 · d5 b20 7.0 · 2HG d0 2.5.**
+
+**`d3 b10` is ~7x COSTLIER per game than `d5 b20` on this deck.** Going *shallower* at a starved budget
+costs more, because the search re-searches instead of committing —
+`derive_mullgen_setting.py` measured the same effect independently (`d3 b20` = 5.87x `d5 b20`). So the
+**d3 row is the one to trim first** if the smoke budget ever tightens, which is the opposite of the
+intuition that deeper is dearer. Whole-deck cost: ~16 core-s smoke, ~40 core-s regression, ~4.6 core-min
+overnight; filtered to this deck the overnight tier finishes in **12 s wall**. No other deck needed
+trimming.
+
+**2HG cases are included at the RELEVANT-deck level, not as a canary**, and on direct evidence: the
+firing harness shows Hero of Bladehold's `attack_tokens_per_opponent` gate is observable **only at two
+heads** (49/200 games differ there, 0/400 at one head). It is arithmetically inert at one head, so a
+normal case *structurally cannot* see it. Adeline's token clause is genuinely per-opponent, so both
+sides of the "each opponent × heads" class sit in this one deck.
+
+### What adding it immediately caught — 12 stale GT keys on two OTHER decks
+
+The first **full-tier** run of the session (the cost measurement required it) reported
+**REGRESSION DETECTED: 123 passed, 12 failed** — 6 `angels` keys and 6 `minotaur` keys, all **digest-only
+with averages identical to 4 decimal places**. The smoke tier had 6 more of the same.
+
+Analysed per game before anything was accepted:
+
+| tier | keys | games compared | **win turns moved** |
+|---|---|---|---|
+| regression | 12 | 4,500 | **0** |
+| smoke | 6 | 2,600 | **0** |
+
+Digests differ in ~4% of games; **no outcome moved anywhere**. Mechanism: this session's engine work
+touched shared enumeration and pruning paths (`TurnSolver.cpp` +132, `Dominance.h` +28,
+`SpellEffects.h` +361, `CardDatabase.h` +110), so an equally-good line gets selected in a different
+order. Angels' share was already documented in this ledger as the deliberately-kept Resplendent Angel
+diagnostic-label change. Rebaselined as verified-neutral (`0b21cbaa`, `09ebe589`).
+
+**This is the gate's value, demonstrated on its first use.** The churn sat unrebaselined for the entire
+session *because* the deck under analysis was not in the suite: every run was filtered to one deck, and
+a filtered run cannot see collateral movement in the other 24. It was harmless — but nothing had looked,
+and nothing would have.
+
+**Still outstanding:** the **overnight** tier has very likely inherited the same angels/minotaur churn
+(same code paths, same decks), but it is an ~8 h run, so it is flagged for the user to schedule rather
+than launched. WhiteKnights' own 16 overnight keys are already accepted.
+
+Two `mullgen.sh` defects were found by hitting them and are fixed in the same work: `validate` resolved
+only the **uncompressed** profile name (so any deck whose profile had been gzipped for commit — the
+committed form — reported "no profile to validate" about a live, working profile), and the dispatch
+**truncated `VALIDATION.txt` before that check ran**, so a failed preflight destroyed the previous
+validation record. A check that can only refuse must not be able to damage state.
+
 ## Approved deferrals
 
 *(none yet — the two reclassified Stage-1 notes were FIXED, not deferred; the "legendary artifact"
@@ -2051,8 +2149,11 @@ is why no card in this run adds a `Keyword` enumerator.
    2026-09-21 directive (*"Please arm it"*) and the prior verification was done on Snow, so flipping it
    for every deck is your call, not a bug-fix I should take unilaterally. `MTG_VL_LAZY_LEAF=0` opts out
    today. See [lazy-leaf-corrupts-the-h5-reference.md](lazy-leaf-corrupts-the-h5-reference.md).
-8. **Add WhiteKnights to the regression suite?** Currently no GT tier exists for it, which is why
-   Stage 6 §3's figures come from a standalone batch instead of a suite run.
+8. ~~Add WhiteKnights to the regression suite?~~ **DONE 2026-09-26 — 26 cases, 3 tiers + 2HG, all GT
+   accepted**, and suite membership is now a **gated** pipeline step that blocks both generators. See
+   *Regression suite* above. One follow-up for the user to schedule: the **overnight tier** likely
+   carries the same angels/minotaur digest churn the other two tiers did (verified harmless there,
+   0 win turns moved in 7,100 games), but re-running it is ~8 h so it was not launched.
 
 **Decisions I took provisionally rather than blocking on** (all reversible, each recorded above):
 adopted the **fitted value leaf** as a pre-approved clean win (quality indistinguishable-to-better at
