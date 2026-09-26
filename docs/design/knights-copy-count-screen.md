@@ -1056,10 +1056,17 @@ decklist), so adoption step 3 is a copy, not a transcription. **Provisional unti
 | | *gone:* Acclaimed Contender 3, Aether Vial 3, Valiant Knight 1, Lightning Greaves 1 | |
 | **60** | | **14 cards changed** |
 
-Still mono-white, still 24 lands, curve unchanged at the top (`{2}{W}{W}`). The shape of the change is
-**eight one-ofs and two-ofs collapsed into four-ofs**: the shipped list held five singletons and played
-like five different decks, and the candidate is the same deck drawn more consistently — which is exactly
-what the win-turn distribution below shows.
+Still mono-white, still 24 lands, curve unchanged at the top (`{2}{W}{W}`). **The shape of the change is
+that the singletons got resolved.** The shipped list held *seven* one-ofs — Valiant Knight, Silverblade
+Paladin, Adeline, Lightning Greaves, Sol Ring, Swords to Plowshares, Unexpectedly Absent — plus a
+two-of Benalish Marshal. Of the four the screen is allowed to price, **every one went to 0 or to 4**
+(Valiant Knight and Greaves out, Silverblade and Adeline to four), Marshal went 2→4, and the only
+singletons left standing are the three it cannot price: Sol Ring on legality grounds and the two
+interaction spells because goldfishing cannot value interaction.
+
+So the candidate is not a different deck; it is **the same deck with the variance taken out** — which is
+exactly what the win-turn distribution below shows, and it is why the one thing it loses is the outlier
+draw.
 
 ### WHY Knight Exemplar is the worst card — from `cards.json`, not from a story
 
