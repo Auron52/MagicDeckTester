@@ -1955,14 +1955,34 @@ is why no card in this run adds a `Keyword` enumerator.
    transcribed from oracle text, not a choice a human could make differently. This is the
    classification whose absence was previously holding the `viewer` gate; the gate now passes on it.
    `audit_viewer_decisions.py`'s own self-guard says such a call needs the user's OK.
-4. **`ladder: "single"` — rejected as a TRADE, needs a ruling.** Cheaper on units at every
+4. **`expected_buckets = 14` in `WhiteKnights.value.json`** — written by the value leaf's phase F,
+   which explicitly asks for confirmation. Per *bucket ruling is user-only* this is your call, not an
+   agent's derivation. **It is safe to leave pending and safe to remove:** the independent pre-check
+   measured K = 14 as well, so the key records what discovery found rather than overriding it; the guard
+   never fired; and deleting it would not invalidate the generated table. See *The exhaustive mulligan
+   profile* above.
+5. **`ladder: "single"` — rejected as a TRADE, needs a ruling.** Cheaper on units at every
    configuration but **7 games worse at d3b20 (z −2.6)**. I did not adopt it and recommend not
-   adopting it; `leaf: "none"` (the clean half) *was* adopted. Full table in *Search shape* above.
-5. **The deferred haste-from-Equipment projection fix** — improves the search but moves **five GT
-   tiers**. See `docs/design/haste-from-equipment-not-projected.md`.
-6. **Add WhiteKnights to the regression suite?** Currently no GT tier exists for it.
+   adopting it. Note this is now the *only* rejected shape item: the `leaf: "none"` shape that was
+   adopted alongside it has since been **superseded by the fitted value leaf**, which is strictly
+   better (0.31–0.38x units at d5, and now a measured 4.520 → 4.490 at the shipped depth). Full table
+   in *Search shape* above.
+6. **The deferred haste-from-Equipment projection fix** — improves the search but moves **five GT
+   tiers**. See [haste-from-equipment-not-projected.md](haste-from-equipment-not-projected.md).
+7. **`MTG_LAZY_LEAF` — a FLEET-WIDE defect, and the only item here that is not WhiteKnights-specific.**
+   Documented "answer-identical", measured **0 better / 141 worse at H5** over 800 paired games. H5 is
+   the escalation cap, i.e. the reference every value-leaf verdict is measured against, and the bias
+   runs toward *adopting* leaves. **I deliberately did NOT change the default** — arming it was your
+   2026-09-21 directive (*"Please arm it"*) and the prior verification was done on Snow, so flipping it
+   for every deck is your call, not a bug-fix I should take unilaterally. `MTG_VL_LAZY_LEAF=0` opts out
+   today. See [lazy-leaf-corrupts-the-h5-reference.md](lazy-leaf-corrupts-the-h5-reference.md).
+8. **Add WhiteKnights to the regression suite?** Currently no GT tier exists for it, which is why
+   Stage 6 §3's figures come from a standalone batch instead of a suite run.
 
 **Decisions I took provisionally rather than blocking on** (all reversible, each recorded above):
-adopted `leaf: "none"` as a pre-approved clean win; rejected `ladder: "single"` as a trade; kept the
-Resplendent Angel diagnostic-label fix despite the GT digest churn it causes; fixed the `card_costs`
-audit rather than deferring its two red entries.
+adopted the **fitted value leaf** as a pre-approved clean win (quality indistinguishable-to-better at
+0.31–0.38x the units, reproduced on disjoint seeds); before that, adopted `leaf: "none"` on the same
+basis, now superseded; rejected `ladder: "single"` as a trade; chose **COMPLETE** over `fast` for the
+mulligan recipe (1.4 h vs 0.7 h, and nothing here is cost-constrained); kept the Resplendent Angel
+diagnostic-label fix despite the GT digest churn it causes; fixed the `card_costs` audit rather than
+deferring its two red entries.
