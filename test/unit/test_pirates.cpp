@@ -420,7 +420,31 @@ TEST_CASE("Daring Buccaneer: Vial-putting the only other Pirate leaves the Bucca
     }
     CHECK(bucc_alone);
     CHECK(vial_alone);
-    CHECK_FALSE(both);    // the Corsair has left the hand -> {2}{R} on one Mountain
+    CHECK(both);          // offered -- but ONLY in the puts-last order (next test)
+}
+
+TEST_CASE("Daring Buccaneer: a Vial put + Buccaneer affordable only puts-last is offered puts-last, and resolves at {R}")
+{
+    // One Mountain. Puts-first the Corsair has left the hand -> Buccaneer is {2}{R}: unaffordable.
+    // Puts-last (Plan::vial_after_casts) it reveals the Corsair still in hand -> {R}. The enumerator's
+    // puts-last pricing retry must emit that plan, flagged, and never the puts-first one.
+    EnsureCardsLoaded();
+    GameState s = BuccaneerBoard(1, {"Daring Buccaneer", "Corsair Captain"});
+    const int vi = Put(s, "Aether Vial", 0, 70);
+    s.battlefield[vi].charge_counters = 3;
+    const TurnSolver::Plan* pick = nullptr;
+    const std::vector<TurnSolver::Plan> plans = TurnSolver::EnumerateMainPlans(s, true);
+    for (const TurnSolver::Plan& p : plans)
+    {
+        if (!(HasVialPut(p, "Corsair Captain") && BuccaneerCasts(p) > 0)) { continue; }
+        CHECK(p.vial_after_casts);
+        pick = &p;
+    }
+    REQUIRE(pick != nullptr);
+    GameState after = s;
+    TurnSolver::ApplyPlan(after, *pick, true);
+    CHECK(CountNamed(after, "Daring Buccaneer") == 1);
+    CHECK(CountNamed(after, "Corsair Captain") == 1);
 }
 
 TEST_CASE("Daring Buccaneer: the executor charges the second lone Buccaneer {2}{R}")
@@ -856,4 +880,36 @@ TEST_CASE("Vial order: the enumerator offers the casts-first variant only where 
         s.players[0].hand.push_back(HandCard("Dire Fleet Captain", 4));
         CHECK(variants(s) == 0);
     }
+}
+
+TEST_CASE("Vial order: a searched_order plan with the Vial put deferred puts it after EVERY cast")
+{
+    // "Metallic Mimic, Siren Stormtamer, then Staunch Crewmate (vial)": with a Mimic already on the
+    // board the Crewmate enters with TWO counters (one per Mimic), and the explicit cast order holds.
+    EnsureCardsLoaded();
+    GameState s = PiratesState();
+    Enter(s, "Metallic Mimic", 0, 1);
+    for (int k = 0; k < 3; ++k) { Put(s, "Spirebluff Canal", 0, 300 + k); }
+    const int vi = Put(s, "Aether Vial", 0, 2);
+    s.battlefield[vi].charge_counters = 2;
+    s.players[0].hand.push_back(HandCard("Metallic Mimic", 3));
+    s.players[0].hand.push_back(HandCard("Siren Stormtamer", 4));
+    s.players[0].hand.push_back(HandCard("Staunch Crewmate", 5));
+    TurnSolver::Plan plan;
+    plan.land_decided = true;
+    for (const char* n : {"Metallic Mimic", "Siren Stormtamer"})
+    {
+        Action c;
+        c.kind = Action::Kind::CastFromHand; c.card_name = n; c.def = &Def(n);
+        plan.actions.push_back(c);
+    }
+    Action v;
+    v.kind = Action::Kind::ActivateVial; v.card_name = "Staunch Crewmate";
+    plan.actions.push_back(v);
+    plan.searched_order   = true;
+    plan.vial_after_casts = true;
+    CHECK(TurnSolver::VialOrderMatters(plan));
+    TurnSolver::ApplyPlan(s, plan, true);
+    CHECK(PlusCounters(ByNumber(s, 5)) == 2);   // Crewmate: both Mimics
+    CHECK(PlusCounters(ByNumber(s, 4)) == 2);   // Stormtamer: both Mimics (cast after the 2nd Mimic)
 }

@@ -5853,6 +5853,19 @@ static bool AnyRevealCostCand(const std::vector<Action>& cands)
     for (const Action& a : cands) { if (IsRevealCostCast(a)) { return true; } }
     return false;
 }
+// PUTS-LAST pricing mode (Plan::vial_after_casts). 0 (default) prices the subset in the order
+// every base plan realises -- Vial puts leave the hand BEFORE any cast. 1 prices it in the
+// vial_after_casts order: the Vial-put cards are still in hand for every cast, so a Daring Buccaneer
+// can reveal one of them. Set only by EnumeratePlans' eval_and_push retry (RevealVialsLastScope)
+// for a subset puts-first pricing rejected and puts-last pricing is cheaper for, and the plan that
+// retry emits carries vial_after_casts -- so the pricing always matches the order the apply takes.
+static thread_local int g_reveal_vials_last = 0;
+struct RevealVialsLastScope
+{
+    const int saved;
+    RevealVialsLastScope() : saved(g_reveal_vials_last) { g_reveal_vials_last = 1; }
+    ~RevealVialsLastScope() { g_reveal_vials_last = saved; }
+};
 static RevealSurcharge SameSubsetRevealSurcharge(const GameState& state,
                                                  const std::vector<Action>& cands,
                                                  const std::vector<int>& sel,
@@ -5885,8 +5898,8 @@ static RevealSurcharge SameSubsetRevealSurcharge(const GameState& state,
     for (int j : sel)
     {
         const Action& a = cands[j];
-        if (a.kind == Action::Kind::ActivateVial || a.kind == Action::Kind::Suspend
-            || a.kind == Action::Kind::Channel)
+        if ((a.kind == Action::Kind::ActivateVial && g_reveal_vials_last == 0)
+            || a.kind == Action::Kind::Suspend || a.kind == Action::Kind::Channel)
         { remove_one(base, a.card_name); }
         else if (a.kind == Action::Kind::CastFromHand) { casts.push_back(j); }
     }
@@ -5933,6 +5946,26 @@ static RevealSurcharge SameSubsetRevealSurcharge(const GameState& state,
     const bool rank_worse = rank_order.all.ManaValue() > plan_order.all.ManaValue();
     if (charged) { *charged = rank_worse ? ch2 : ch1; }
     return rank_worse ? rank_order : plan_order;
+}
+
+// Would the PUTS-LAST order (Plan::vial_after_casts) price this subset strictly cheaper than the
+// default puts-first order? Only then is a puts-first rejection worth re-trying puts-last. Cheap
+// guards first: a Vial put and a reveal-cost cast must both be selected, which no deck but Pirates
+// can produce.
+static bool RevealCheaperVialsLast(const GameState& state, const std::vector<Action>& cands,
+                                   const std::vector<int>& sel)
+{
+    bool vial = false, reveal = false;
+    for (int j : sel)
+    {
+        if (cands[j].kind == Action::Kind::ActivateVial) { vial = true; }
+        else if (IsRevealCostCast(cands[j]))              { reveal = true; }
+    }
+    if (!vial || !reveal) { return false; }
+    const int first = SameSubsetRevealSurcharge(state, cands, sel).all.ManaValue();
+    RevealVialsLastScope _last;
+    const int last = SameSubsetRevealSurcharge(state, cands, sel).all.ManaValue();
+    return last < first;
 }
 
 static bool SubsetPayableWithFiltersImpl(const GameState& state, const std::vector<Action>& cands,
@@ -34587,7 +34620,28 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
     }
     // Evaluate one selected combination (a list of candidate indices) and, if
     // feasible, append the resulting plan. Mirrors the former per-mask body.
+    std::function<void(const std::vector<int>&)> eval_and_push_body;
+    // PUTS-LAST RETRY (Plan::vial_after_casts). A subset holding a Vial put and a Daring Buccaneer can
+    // be affordable ONLY if the put resolves after the casts (the Pirate still in hand is the reveal).
+    // Default pricing is puts-first, so such a subset was rejected and the line was inexpressible. When
+    // the body pushes nothing and puts-last pricing is strictly cheaper, re-run it under that pricing
+    // and mark the plan it emits vial_after_casts, which is the order both apply worlds then realise.
+    // RevealCheaperVialsLast is false unless a Vial put AND a reveal-cost cast are selected, so every
+    // other deck takes exactly one body call, as before. foldsel's one-shot flag is re-armed for the
+    // retry so it sees what the first call saw.
     auto eval_and_push = [&](const std::vector<int>& sel)
+    {
+        const bool from_odo = foldsel::g_from_odometer;
+        const std::size_t before = plans.size();
+        eval_and_push_body(sel);
+        if (!any_reveal_cost || plans.size() != before) { return; }
+        if (!RevealCheaperVialsLast(state, cands, sel)) { return; }
+        RevealVialsLastScope _last;
+        foldsel::g_from_odometer = from_odo;
+        eval_and_push_body(sel);
+        if (plans.size() > before) { plans.back().vial_after_casts = true; }
+    };
+    eval_and_push_body = [&](const std::vector<int>& sel)
     {
         const bool fold_from_odometer = foldsel::Take();   // see foldsel / consider()
         // SATURATED SUBSET COLLAPSE: keep ONE variant per distinct (action, target) and drop the
@@ -36782,6 +36836,16 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
             // tap for three. Casting Living Wish first spends Conservatory on ITS pips, so Trace has
             // no white left, is dropped, and the combo turn dies. The dropping ordering sorts FIRST,
             // so it is the one a player naturally picks -- which is why it has to SAY so.
+            // ...and this ordering's PUTS-LAST twin (Plan::vial_after_casts). AppendVialOrderVariants
+            // skips searched_order plans, so without this a plan with >= 2 reorderable casts could
+            // never put its Vial creature after them ("Mimic, Stormtamer, then Crewmate (vial)" -- two
+            // counters). Built from EVERY ordering, before the state dedup below: two orderings that
+            // collide puts-first can differ puts-last. Gated on VialOrderMatters (params only), so no
+            // other deck ever builds one. A plan the puts-last pricing retry already emitted
+            // (vial_after_casts set) is re-ordered as-is and needs no twin.
+            const bool want_vtwin = !p.vial_after_casts && TurnSolver::VialOrderMatters(cand);
+            TurnSolver::Plan vcand;
+            if (want_vtwin) { vcand = cand; vcand.vial_after_casts = true; vcand.would_drop.clear(); }
             if (seen_states.insert(BuildDedupKey(copy)).second)
             {
                 // Combat is order-independent, so inherit the base plan's combat-based win; a reordering
@@ -36789,6 +36853,20 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
                 // kills outright. Keeps winning orderings sorted first (not cut under budget).
                 cand.wins_this_turn = p.wins_this_turn || (OpponentHasLost(copy));
                 ordered.push_back(std::move(cand));
+            }
+            if (want_vtwin)
+            {
+                std::vector<std::string> vdropped;
+                if (g_order_drop_label) { g_enum_drop_names = &vdropped; }
+                GameState vcopy = state;
+                ApplyPlanDirect(vcopy, vcand, is_pre_combat);
+                g_enum_drop_names = nullptr;
+                vcand.would_drop = std::move(vdropped);
+                if (seen_states.insert(BuildDedupKey(vcopy)).second)
+                {
+                    vcand.wins_this_turn = p.wins_this_turn || OpponentHasLost(vcopy);
+                    ordered.push_back(std::move(vcand));
+                }
             }
         }
         // No ordering survived (every one places an Aura before its creature): keep the base plan
@@ -39851,9 +39929,12 @@ static void AppendSubdecisionAxes(const GameState& state, bool is_pre_combat,
 // under the PUTS-FIRST order (SameSubsetRevealSurcharge removes the Vial-put cards from hand before
 // walking the casts). Running the puts later can only leave MORE cards in hand for a reveal, and a
 // Vial put spends no mana, so the clone never costs more than the base -- never an under-priced line
-// the apply cannot pay. (The converse gap -- a subset affordable ONLY puts-last, e.g. a Buccaneer
-// that needs to reveal the Pirate a tight-mana turn also Vial-puts -- is not enumerated. Recorded as
-// a residual in the Pirates ledger.)
+// the apply cannot pay. The converse -- a subset affordable ONLY puts-last (a Buccaneer revealing
+// the Pirate the same turn Vial-puts) -- is emitted by EnumeratePlans' eval_and_push retry under
+// puts-last pricing, already flagged, so it is skipped here.
+//
+// searched_order plans (the cast-ordering expansion: human play / MTG_SEARCH_ORDER / Dragonstorm)
+// are skipped here because that expansion builds their puts-last twins itself, per ordering.
 //
 // LOCKSTEP SCOPE. Excluded: any plan that opens a mid-turn breakpoint (PlanOpensBreakpoint), because
 // the two worlds realise a breakpoint's continuation at different points of their cast loops and the
