@@ -1032,6 +1032,35 @@ which is a live lead, but following it needs a card the deck does not own. That 
 >
 > This is what **round J** measures; the correction, not the original claim, is the live state.
 
+### The current best WhiteKnights list, in full — `h_wk_ke2_sp4`, −0.3114 late-weighted
+
+Already on disk as `logs/deckcmp/WhiteKnights/h_wk_ke2_sp4/WhiteKnights.txt` (the driver writes each arm's
+decklist), so adoption step 3 is a copy, not a transcription. **Provisional until round J lands.**
+
+| n | card | vs shipped |
+|---|---|---|
+| 4 | Dauntless Bodyguard | — |
+| 4 | Venerable Knight | — |
+| 4 | Worthy Knight | — |
+| 4 | Accorder Paladin | — |
+| 4 | **Adeline, Resplendent Cathar** | **1 → 4** |
+| 4 | **Benalish Marshal** | **2 → 4** |
+| 4 | **Silverblade Paladin** | **1 → 4** |
+| 3 | Hero of Bladehold | — |
+| 2 | **Knight Exemplar** | **4 → 2** |
+| 1 | Sol Ring | — |
+| 1 | Swords to Plowshares | — |
+| 1 | Unexpectedly Absent | — |
+| 20 | **Plains** | **22 → 20** |
+| 4 | **Remote Farm** | **0 → 4** (introduced) |
+| | *gone:* Acclaimed Contender 3, Aether Vial 3, Valiant Knight 1, Lightning Greaves 1 | |
+| **60** | | **14 cards changed** |
+
+Still mono-white, still 24 lands, curve unchanged at the top (`{2}{W}{W}`). The shape of the change is
+**eight one-ofs and two-ofs collapsed into four-ofs**: the shipped list held five singletons and played
+like five different decks, and the candidate is the same deck drawn more consistently — which is exactly
+what the win-turn distribution below shows.
+
 ### WHY Knight Exemplar is the worst card — from `cards.json`, not from a story
 
 The Exemplar result has been explained so far as *"its indestructible-and-first-strike half is inert
