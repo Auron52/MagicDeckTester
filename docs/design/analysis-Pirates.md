@@ -76,6 +76,51 @@ tip (the main tree held another session's uncommitted discard-gate WIP).
 3. **Oko's Elk keeps its old definition** — `elk_transform` renames to "Elk" but never clears the cached
    `Card::m_def`, so `LookupCached` still returns e.g. Birds of Paradise's definition (FiveColour).
 
+## Stage 4 — baseline profile (2026-09-26)
+
+`analyze_deck.py --no-rebuild`: 19 card scores (1000 games, d5), default static keep (min_lands 1,
+max 5, no hand-score gate), no mulligan flags. Cost diagnostic NO_COST_INTERACTIONS. Discard analysis
+**DISCARD_INERT** — over 400 d3 games no cleanup shed is reached by either the real game or the rollout,
+so the authored bucket policy (see "Discard policy") is currently unexercised; it exists for the gate
+and for off-curve hands. Provider routing: Pirates -> `PiratesProvider` (chunk 3).
+
+## Stage 5 — verification (2026-09-26)
+
+* **Box note:** a sibling container held the box at load ~24/24 all session; budgets are VIRTUAL
+  (`SearchBudget::FromVirtualMs`), so results are unaffected — every run here was capped at 12 threads
+  and serialized one at a time.
+* **verify_deck:** coverage PASS (19/19 full), card_fields PASS, viewer PASS, viewer_wiring PASS (dig,
+  target, treasurify, vial_charge), mismatch PASS (no nonconv / fd-diverge, seeds 7001-7002 x 60, both
+  arms), play_invariants PASS. card_costs FAIL is **pre-existing and not Pirates**: two Fungus cards
+  (Brightcap Badger, Fungus Frolic) whose Scryfall cost is a two-part `{3}{G} // {2}{G}` — left for
+  the Fungus owner; NOT signed off here. claude_sweep: recorded below.
+* **Depth sweep (5b), paired per game from the suite runs:** d5 vs d3 — 0 worse / 1 better over 225
+  paired games (smoke s1001 + regression s2002/s3003); d0 ≈ +0.3 turns vs d3. Monotone; clock ~T4.5
+  is plausible for this curve.
+* **Horizon-honest tie-break (5c2):** 0 changed games of 60,000 paired at PLAY settings (d5 b20,
+  provider Pirates; 12 blocks + 48 fresh blocks). The leaf publishes and flips ties (1.86M publishes,
+  90k flips in the Stage 4 run) but never moves a win turn — the deck wins well inside the horizon.
+  Verdict: unbindable -> **keep default ON** (costs nothing).
+* **Fresh-hold A/B (Corsair's same-turn Treasure):** `MTG_PAYSAC_FRESH_HOLD=0` vs default, 3000
+  paired games at play settings: **delta 0.0000** (0 better / 0 worse). The lever fires (1 of 300
+  games plays differently at the action level, same win turn) but a same-turn Treasure never buys
+  a turn here — within a plan an ETB-minted Treasure is not counted anyway, and by the next decision
+  the leftover hand rarely has a 1-drop that changes the clock. The narrowing is measured-inert for
+  Pirates; the PROVISIONAL deferral stands on that evidence.
+* **Suite:** Pirates added to smoke (d0 1000 / d3 150 b10 / d5 75 b20 @1001 + pirates2hg d3 50) and
+  regression (same counts @2002/@3003). Measured in the tier: d3 ~0.73 s/game, d5 ~1.3 s/game, no
+  SLOW-GAME. Overnight tier NOT added yet (adding rows without baselining that tier strands NEW keys —
+  the Fungus precedent); sizing would mirror Giants.
+* **GT movement from this branch's engine fixes:** only FiveColour moved (Oko Elk `Card::Rename`
+  fix). Searched: slower 2 / faster 2 in regression, 0 / 1 in smoke; d0 slower 2. The slower
+  searched game (s3003 gi53, 5->6 at d3 AND d5) was traced: the OLD binary Elked Deathrite Shaman on
+  T3 and still cast Cosmic Spider-Man ({W}{U}{B}{R}{G}) on T5 from 4 lands — the fifth mana came from
+  the Elk tapping via Deathrite's retained definition, i.e. the phantom the fix removes. The new
+  binary's T6 holds at b10/b100/b1000/b5000 (structural, not churn). Verdict: correctness, accepted.
+  Melira Pod (keyword-mask + Felidar fixes) stayed byte-identical at suite seeds; both fixes are
+  pinned by unit tests that fail without them.
+
+
 ## Approved deferrals
 
 (none yet — every deferral below is PROVISIONAL until the user signs it off)
@@ -151,36 +196,30 @@ behind `MTG_PIRATES_BUCKET_DISCARD` (default ON, `=0` restores the generic max-M
 3. OK to classify the new params in `audit_viewer_decisions.py` INERT_PARAMS (script self-guard)?
 4. Corsair's same-turn Treasure: lift the fresh-hold for non-trick Treasures (A/B-measured)? Default: measure.
 
-## RESUME STATE (2026-09-26, pre-compaction)
+## RESUME STATE (2026-09-26, second compaction)
 
-* **Worktree:** `/tmp/pirates-wt`, branch `pirates-analysis` (based on origin tip `c29b9a61`). The main
-  tree `/workspaces/MagicDeckTester` holds ANOTHER session's uncommitted discard-gate WIP (cards.json,
-  DecisionProviders.*, verify_deck.py, CLAUDE.md, discard_policy_audit.py, 15 proposal docs) — never
-  commit or revert it from here. This ledger and `decks/Pirates/Pirates.cod` are still UNCOMMITTED in
-  the worktree. Drafts: `/workspaces/MagicDeckTester/logs/pirates/drafts/*.md`.
-* **Committed locally (not pushed):** `52bb7af9` keyword mask -> 64 bit (+Ward); `23369f3b` chunk 1
-  (11 cards + chosen-type infra; 179 unit tests pass; coverage: only Buccaneer + Larcenist missing).
-* **In flight:** integrator chunk 2 (background agent) — commits, in order: Felidar decline fix,
-  Oko Elk m_def fix (+ Card rename helper), Daring Buccaneer (EffectiveSpellCost + per-subset
-  surcharge + SubsetPayableSequential bookkeeping), Kitesail Larcenist (+ `treasurify` viewer decision).
-* **Next — chunk 3:** `PiratesProvider : DeckProvider` (NOT VialProvider — Vial policy is root default;
-  VialProvider only adds Knights-gated cast order); route it ABOVE `anti` in DetectDecisionProvider
-  (Forerunner's tutor_to_top trips `anti`) with a signature OR-ed from several Pirates-only params;
-  `Certificate()` answer; `TutorSearchWidth` >= 9 (9 distinct Pirate names; default 6);
-  bucketed discard policy per `/workspaces/MagicDeckTester/docs/design/discard-bucket-authoring-brief.md`
-  behind `MTG_PIRATES_BUCKET_DISCARD` + `docs/design/pirates-discard-policy-proposal.md` (USER review);
-  cast-order proposals (Malcolm/Mimic, Buccaneer first, Forerunner first) are USER-reviewed — propose only.
-  Then `python3 scripts/provider_audit.py --check`.
-* **BOX HOLD:** load avg ~24/24 from a sibling container (likely the Fungus generation; nothing
-  visible in this container). One-batch-at-a-time rule => NO smoke/regression/sweeps until the box is
-  quiet (a background watcher loop was checking `/proc/loadavg` < 8 for 10 min). Builds + unit tests OK.
-* **Then:** smoke tier (byte-identity except Melira Pod [keyword, Felidar] / FiveColour [Elk] — each
-  changed game needs a verdict; accept per regression-testing skill), Stage 4 profile
-  (`analyze_deck.py --no-rebuild`), Stage 5 (`verify_deck.py`, nonconv/fd-diverge, d0/3/5 sweep,
-  leaf_tiebreak_check, claude-play sweep ~15-20 Opus/Sonnet agents, viewer audit), fresh-hold A/B
-  (`MTG_PAYSAC_FRESH_HOLD=0`) to bound Corsair's same-turn Treasure narrowing, add Pirates to the
-  regression suite, push via this worktree (`git pull --rebase` first; rebuild + smoke after rebase),
-  watch CI (Windows).
+* **Worktree:** `/tmp/pirates-wt`, branch `pirates-analysis` (base origin `c29b9a61`; origin had not
+  moved at last fetch). Main tree holds another session's uncommitted discard-gate WIP — never touch it.
+  Control worktree `/tmp/pirates-ctl` (detached at `909177c8`, pre-Elk-fix build) — remove when done.
+* **Committed locally, NOT pushed:** keyword mask, chunks 1-3, Felidar + Elk fixes, sweep fixes A–G,
+  B follow-up (`62f8f5ac` tip before this ledger commit).
+* **UNCOMMITTED in the worktree:** `test/regression_cases.sh` (Pirates smoke + regression + pirates2hg
+  rows) and `decks/Pirates/Pirates.profile.json` (Stage 4). Commit them WITH the GT accept.
+* **Stage 4/5 DONE** (see those sections + "Claude-play sweep"). Last smoke: 89 pass / 4 FAIL (all
+  FiveColour, Elk fix) / 4 NEW (Pirates). Last regression: 123 / 6 FAIL (all FiveColour) / 5 NEW.
+  Verdicts recorded in Stage 5. NOT YET ACCEPTED.
+* **Open before accepting:** viewer_protocol_check went 23 ok/301 repaired -> 20 ok/304 repaired
+  (0 play-drift, 0 enum-gap). Likely the sweep fixes' menu changes (Harbinger decline in Giants,
+  hidden Islet twins, vial-order variants) shifting human-play plan lists; confirm which 3 refs by
+  diffing `--verbose` runs of the checker under `/tmp/pirates-ctl` vs current binary (the run was in
+  flight at compaction: logs/vpc_*.txt).
+* **Then:** `bash test/regression.sh --smoke --accept` and `bash test/regression.sh --accept`
+  (the last runs of each tier are the ones to accept; both must be from the CURRENT binary),
+  `python3 test/check_gt_logs.py`, commit code-free artefacts; `git fetch && git rebase
+  origin/phase-1-2-deck-analyzer` (rebuild + smoke if origin moved); push via the worktree
+  (`git push origin pirates-analysis:phase-1-2-deck-analyzer`); `gh run watch`; report Windows.
+* **Awaiting the USER (going over them after compaction):** PROVISIONAL deferrals (Approved deferrals
+  section, + gi11 ETB-dig same-turn cast), discard policy proposal, cast-order proposals 2a–2d.
 
 ## Chunk 3 landed (2026-09-26) — provider, routing, certificate, tutor width, discard policy
 
@@ -285,3 +324,33 @@ integrator (the orchestrator runs the suite).
 * gi13's autonomous bench still ends with a counterless Buccaneer: the casts-first variant IS enumerated, but both orders win T4 and the win-turn tie keeps the base (puts-first) plan. The search's metric does not price the +1/+1; not a defect.
 * Found, NOT fixed (pre-existing, other decks): the ROLLOUT's whole-turn batch prepay (`BatchPrepayMainCasts`) runs BEFORE its Vial loop (inside `apply_plan_actions`) while the EXECUTOR deploys Vial puts first and prepays after. Payment-quality only (casts reprice live), but it means the two worlds prepay from different boards on Vial turns (a Vial-put cost reducer such as Goblin Warchief, or a Buccaneer reveal). Worth an fd-diverge look on Goblins/Knights.
 * F/gi14's name-dedup is Pirates-only; Acclaimed Contender (Knights) keeps copy-occupied slots under the base ranking — the same reach hole, left for a Knights-measured change.
+
+## Claude-play sweep
+- commit: `62f8f5ac` (confirmation pass at `6576822c`; the B follow-up only adds plan variants, re-verified by the gi7 repro)
+- seeds: 777000 games: 24 (gi 0-23; 20 first pass + 12 confirmation replays incl. 4 fresh)
+- flags: 0 unresolved
+- gi11 (Claude T4 vs search T5) is a ROOT-CAUSED DEFERRAL, not an unresolved flag: an ETB-dug card cannot be cast the same turn at search depth; engine-wide (Knights), previously rejected in the rollout 2026-08-19; see docs/design/etb-dig-same-turn-cast.md. PROVISIONAL until the user signs it off.
+- gi20 (search unwon vs Claude T5): baseline static keep kept an uncastable hand — mulligan-stage evidence, not a play defect.
+
+### Sweep detail
+#### First pass
+- commit: `94b4582e` + chunk 3 (`4016c6c4` tip), profile from Stage 4
+- seeds: base 777000, games 0-19 (20), Opus player agents, d5/b200 benchmark
+- outcomes: 18 ties; Claude faster in 2 (gi11 T4 vs T5, gi14 T4 vs T5); Claude slower in 0
+- flags raised (all verified against code/cards.json; fixes in "Sweep fixes"):
+  A. human play: Forerunner optional tutor has no decline plan (gi4, gi10, gi18)
+  B. one plan always resolves Vial puts before casts -> Mimic-then-Vial inexpressible (gi5, gi7, gi13, gi17); gi13 bench also counterless
+  C. Fiery Islet plans duplicated 6x in the human menu (gi4, 5, 7, 9, 11, 13, 16)
+  D. Vial-put Crewmate: ETB dig before Mimic's as-enters counters (gi7)
+  E. main-phase drain to 0 does not end the game before combat (gi10)
+  F. misplay candidates gi11 (dig -> same-turn Buccaneer), gi14 (dig took Vial over hasty Raider)
+  G. SLOW-GAME repro label prints --game-index 0 under --game-index N
+- dismissed (cosmetic / documented): Courtyard shows taps "C"; global mdfc_backs list; Courtyard-paid Bolt offered then dropped (documented MTG_CCO_NONCREATURE_POOL narrowing); own Treasure offered as a no-op treasurify pick in human play
+
+### Confirmation pass (post-fix, HEAD `6576822c`)
+- games: 12 (gi 4,5,7,10,11,13,14,17 re-played + fresh gi 20-23), Opus players
+- outcomes: 10 ties; Claude faster in 2 — gi11 (deferred: ETB-dig card cast same turn, docs/design/etb-dig-same-turn-cast.md), gi20 (baseline static keep kept an uncastable 2-Mountain 7 -> mulligan-stage evidence, not play)
+- fixes confirmed live: A (Forerunner decline, library unshuffled), B (casts-first copy, 2-entry plans), C (Islet twins hidden), D (Vial-put Crewmate dig sees Mimic counters), F/gi14 (search now digs Raider, wins T4 vs T5 before)
+- new: B residual — casts-first copy missing for plans with >=2 reorderable hand casts (gi7) -> fixed in follow-up
+- cosmetic, not fixed: summary order for Vial plans outside VialOrderMatters (Vial put listed last though it resolves first; fleet-wide, pre-existing, touching it would perturb other decks' reference replays); human dig heuristic_default ignores the searched pick; payer taps Fiery Islet (1 life) when a painless source is free (life inert in goldfish)
+
