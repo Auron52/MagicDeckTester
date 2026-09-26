@@ -296,6 +296,7 @@ add_executable(mtg-test
     test/unit/test_keep_table.cpp
     test/unit/test_angels_tribal.cpp
     test/unit/test_game_work_meter.cpp
+    test/unit/test_keyword_mask.cpp
 )
 target_link_libraries(mtg-test PRIVATE mtg-core doctest::doctest)
 # Run from the SOURCE dir: the tests load src/cards/data/cards.json, and ctest's default working

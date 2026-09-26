@@ -473,7 +473,11 @@ inline uint64_t FungibilityKey(const Permanent& p)
     uint64_t h = 1469598103934665603ull;
     Mix(h, p.card.m_name_hash);
     Mix(h, static_cast<uint64_t>(p.card.m_type_mask)      << 32 | p.card.m_supertype_mask);
-    Mix(h, static_cast<uint64_t>(p.card.m_color_mask)     << 32 | p.card.m_keyword_mask);
+    // Keyword mask is 64-bit (enum Keyword has > 32 values). The LOW 32 bits keep their old slot beside
+    // the colour mask so a deck with no high keyword bits hashes exactly as before; the high word is
+    // mixed separately, and only when non-zero, so it can never collide with the colour bits.
+    Mix(h, static_cast<uint64_t>(p.card.m_color_mask)     << 32 | (p.card.m_keyword_mask & 0xffffffffull));
+    if (const uint64_t kw_hi = p.card.m_keyword_mask >> 32) { Mix(h, kw_hi ^ 0x9e3779b97f4a7c15ull); }
     Mix(h, static_cast<uint64_t>(p.card.m_power.value_or(-99) + 100) << 32
          | static_cast<uint64_t>(p.card.m_toughness.value_or(-99) + 100));
     Mix(h, (p.card.m_is_staged ? 1ull : 0ull) | (p.card.m_impulse_no_land ? 2ull : 0ull)

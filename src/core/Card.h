@@ -124,8 +124,23 @@ enum class Keyword
     // structurally via CardParams::convoke (cast-time cost reduction from tapping creatures, see
     // ConvokeBodies). Kept only so the Scryfall keywords field stays faithful; no engine code reads
     // this enumerator.
-    Convoke
+    Convoke,
+    // Ward (Kitesail Larcenist's "ward {1}"): an INERT
+    // keyword-ability tag -- "whenever this becomes the target of a spell or ability an opponent
+    // controls, counter it unless that player pays {cost}." Provably inert vs the passive goldfish
+    // opponent, which never casts spells or activates abilities, so nothing ever targets our
+    // permanents. Kept only so the Scryfall keywords field ["Ward"] stays faithful; no engine code
+    // reads it.
+    Ward,
+    // Sentinel: MUST stay last. Keyword ordinals are bit indices into Card::m_keyword_mask (uint64_t).
+    KeywordCount_
 };
+// The keyword mask is a uint64_t bitset indexed by enumerator ordinal. Before 2026-09-26 it was a
+// uint32_t with Bit() = `1u << k`, so Persist(32) / Evoke(33) / Convoke(34) were undefined behaviour
+// and on x86 (shift count masked to 5 bits) silently aliased Haste / Flying / Trample -- giving
+// Kitchen Finks and Murderous Redcap phantom HASTE. This assert stops the next overflow at compile time.
+static_assert(static_cast<int>(Keyword::KeywordCount_) <= 64,
+              "Keyword enum outgrew Card::m_keyword_mask (uint64_t) -- widen the mask");
 enum class Supertype { Legendary, Basic, Snow, World };
 
 struct ManaCost
@@ -299,8 +314,8 @@ struct Card
     // dispatch is by template/params, not by parsing rules text at runtime.
     //
     // The small-enum sets (types / supertypes / colors / keywords) are stored as
-    // bitmasks rather than std::vector. Each enum has < 32 distinct values, so a
-    // membership set fits in one uint32_t: copying is a register move (no per-copy
+    // bitmasks rather than std::vector. Types/supertypes/colors have < 32 values and
+    // fit a uint32_t; Keyword has > 32 and uses a uint64_t. Copying is a register move (no per-copy
     // heap allocation) and Has*() is an O(1) bit test instead of a linear scan.
     // This is the dominant clone cost on the hot path -- every card formerly paid
     // a heap alloc/free for its (always non-empty) type set on each GameState copy.
@@ -359,7 +374,9 @@ struct Card
     uint32_t    m_type_mask      = 0;    // set of CardType  (see Bit())
     uint32_t    m_supertype_mask = 0;    // set of Supertype
     uint32_t    m_color_mask     = 0;    // set of Color
-    uint32_t    m_keyword_mask   = 0;    // set of Keyword
+    uint64_t    m_keyword_mask   = 0;    // set of Keyword (uint64_t: the enum has > 32 values -- see
+                                         // the static_assert after enum Keyword). Offset 40, so the
+                                         // hot block still ends at exactly byte 64.
     std::optional<int>     m_power;      // null for non-creatures
     std::optional<int>     m_toughness;
     // ---- end of the hot block (exactly 64 bytes) ------------------------------------------------
@@ -369,7 +386,6 @@ struct Card
     ManaCost m_mana_cost;
     SubtypeSet  m_subtypes;              // creature/land subtypes (e.g. "Sliver", "Goblin", "Mountain"):
                                          // interned-id storage, iterates as std::string (see SubtypeSet)
-    int         m_staged_expiry = 0; // last turn this staged card may be played (CR 406); valid when m_is_staged
     bool        m_is_staged = false; // true while the card is a staged (exiled) card in hand
     // Apex of Power impulse-exile marker: this staged card was exiled by Apex ("you may cast SPELLS
     // from among them"), so if it is a LAND it may NOT be PLAYED (a land is played, not cast; CR 601.2).
@@ -377,12 +393,17 @@ struct Card
     // / Soulfire staged cards, whose lands MUST stay playable. The land-play sites skip a staged card
     // with this bit; every other card leaves it false -> byte-identical. Travels with the card (copied).
     bool        m_impulse_no_land = false;
+    // Placed AFTER the two bools (2026-09-26): with m_keyword_mask widened to 64 bits the hot block is
+    // a full 64 bytes, so the tail is mana(48) + subtypes(10) + 2 bools = 60, and this int fills bytes
+    // 124-127 -- keeping sizeof(Card) at 128 (it would pad to 136 in the old int-then-bools order).
+    int         m_staged_expiry = 0; // last turn this staged card may be played (CR 406); valid when m_is_staged
 
-    // The enum value's ordinal is its bit index; every enum above has < 32 values.
+    // The enum value's ordinal is its bit index. CardType/Supertype/Color have < 32 values; Keyword
+    // has > 32, so its mask and Bit() are 64-bit (a 32-bit `1u << 32` is UB -- see enum Keyword).
     static constexpr uint32_t Bit(CardType t)  { return 1u << static_cast<int>(t); }
     static constexpr uint32_t Bit(Supertype s) { return 1u << static_cast<int>(s); }
     static constexpr uint32_t Bit(Color c)     { return 1u << static_cast<int>(c); }
-    static constexpr uint32_t Bit(Keyword k)   { return 1u << static_cast<int>(k); }
+    static constexpr uint64_t Bit(Keyword k)   { return uint64_t{1} << static_cast<int>(k); }
 
     // Recompute m_name_hash; call after any assignment to m_name. The hash must match
     // exactly what BuildSimKey/graveyard folding used before (std::hash<std::string>).

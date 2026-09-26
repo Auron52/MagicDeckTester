@@ -415,6 +415,7 @@ static Keyword KeywordFromString(const std::string& s)
     if (s == "Persist")       { return Keyword::Persist; }    // inert tag; mechanic is param-modelled
     if (s == "Evoke")         { return Keyword::Evoke; }      // inert tag; mechanic is param-modelled
     if (s == "Convoke")       { return Keyword::Convoke; }    // inert tag; mechanic is param-modelled
+    if (s == "Ward")          { return Keyword::Ward; }       // inert tag; provably inert vs passive opp
     throw std::runtime_error("Unknown keyword: " + s);
 }
 
