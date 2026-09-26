@@ -140,7 +140,26 @@ def run_batch(deck_file, mt, depth, seed, offset, batch, value_on, value_min_dep
         # NOT ARMED ON V. The value leaf is already O(1), so there is little to defer and the ~1%
         # probe is most of what you would get; and leaving V untouched keeps the arm-to-arm COST read
         # honest against every earlier run of this table. Revisit only with a V-arm measurement.
-        env["MTG_LAZY_LEAF"]="1"
+        # OVERRIDABLE SINCE 2026-09-26, default unchanged ("1" -- the user's "Please arm it" above).
+        # WHY an opt-out now exists: the ANSWER-IDENTICAL claim in the comment above is FALSE at H5 on
+        # WhiteKnights. Paired per game index, H-cell conditions, 200 games x the matrix's own 4 seeds:
+        # H1-H4 are exactly identical (200/200 digests, 0 better / 0 worse), and H5 is
+        # 0 better / 141 WORSE over 800 games, d_avg ~+0.18 turns, with the units ratio collapsing to
+        # 0.307 at H5 alone versus 0.79-1.02 elsewhere -- i.e. the lever skips most of that rung's work
+        # rather than trimming it. The identity argument above only covers the case where the leafless
+        # pass PROVES a win; it says nothing about a decision where no in-horizon win exists, which is
+        # where the ladder's deeper information is what picks the better line.
+        #
+        # This matters more than a measurement error because H5 is the ESCALATION CAP, so "trust the
+        # leaf" MEANS "the leaf matches H5" -- H5 is the reference every V cell is judged against.
+        # Inflating it makes the heuristic ladder look worse and the leaf look BETTER than it is, so the
+        # bias runs toward ADOPTING a leaf. Not the conservative direction.
+        #
+        # The prior verification was on SNOW (d3/d4/d5), not here, so this may be deck-shaped; the
+        # default is therefore left alone rather than flipped on one deck's evidence. Set
+        # MTG_VL_LAZY_LEAF=0 to measure the true heuristic reference.
+        # Full record: docs/design/lazy-leaf-corrupts-the-h5-reference.md
+        env["MTG_LAZY_LEAF"]=os.environ.get("MTG_VL_LAZY_LEAF","1")
     cmd=[MTG, deck_file, "--seed", str(seed+offset), "--game-index", str(offset), "--games", str(batch),
          "--max-turns", str(mt), "--threads", "1", "--ignore-play-profile", "--depth", str(depth)]
     if deck_profile: cmd += ["--profile", deck_profile]
