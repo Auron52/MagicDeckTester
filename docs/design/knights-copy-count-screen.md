@@ -1172,6 +1172,60 @@ Bladehold — is a tie the apparatus cannot break** ([[a-null-must-not-break-a-t
 costs about **0.015 t** against the retracted `h_wk_ke2_sp4`, not the ~0.029 a naive chain of the two
 Exemplar rungs would suggest, because the Silverblade copies can be bought elsewhere.
 
+### USER RULING 2026-09-26 — ADELINE AT 3, and the reasoning is worth preserving
+
+> *"I think that those objections make me prefer Adeline at 3 rather than 4. She is really quite good, but
+> the effects that are worse against removal or blockers shouldn't be understated."* … *"And it helps that
+> the 4th copy seems to add less in this simulation."*
+
+Both halves of that are supported by what is on the record. Adeline's per-copy marginals were **−0.048 /
+−0.044 / −0.024** for copies 2/3/4 — so the 4th copy is worth **about half** what the 2nd and 3rd are, and
+it is the copy most exposed to the two biases: it is the one most likely to be a **stranded duplicate**
+under the legend rule (which the engine does enforce, `EnforceLegendRule`, CR 704.5j), and the marginal
+value it does have is the inflated kind, since her power is the creature count and nothing here ever chump
+blocks her. **Taking the copy whose measured value is smallest AND whose measured value is least
+trustworthy is the right one to give up.**
+
+**The settled counts, all four by user ruling:** Knight Exemplar **4**, Benalish Marshal **4**, Adeline
+**3**, Valiant Knight **0**.
+
+#### The current best WhiteKnights list under all four rulings
+
+`j2_ad3_sp4` — Adeline 3 with the freed slot to a 4th Silverblade Paladin (a measured null at −0.0013, so
+the swap is close to free on the modelled axis):
+
+| n | card | vs shipped |
+|---|---|---|
+| 4 | Dauntless Bodyguard | — |
+| 4 | Venerable Knight | — |
+| 4 | Worthy Knight | — |
+| 4 | Accorder Paladin | — |
+| 4 | **Silverblade Paladin** | **1 → 4** |
+| 4 | **Benalish Marshal** | **2 → 4** |
+| 4 | Knight Exemplar | — *(ruling: stays)* |
+| 3 | **Adeline, Resplendent Cathar** | **1 → 3** *(ruling: not 4)* |
+| 3 | Hero of Bladehold | — |
+| 1 | Sol Ring | — |
+| 1 | Swords to Plowshares | — |
+| 1 | Unexpectedly Absent | — |
+| 19 | **Plains** | **22 → 19** |
+| 4 | **Remote Farm** | **0 → 4** (introduced) |
+| | *gone:* Acclaimed Contender 3, Aether Vial 3, Valiant Knight 1, Lightning Greaves 1 | |
+| **60** | | **11 cards changed** |
+
+23 lands, still mono-white, curve still topping at `{2}{W}{W}`. Its pooled figure lands with round J′; the
+Adeline-4 version of the same chassis measured **−0.2959**, and the 4th Adeline is worth ~−0.024 of that, so
+expect roughly **−0.27** — better than the shipped list by more than this deck's entire exhaustive keep
+table (−0.1985), on 11 changed cards rather than 14.
+
+**A limitation to state rather than bury.** Round J′ was launched before the Adeline ruling, so its four
+cut-arms (Bodyguard, Venerable Knight, Worthy Knight, Accorder Paladin) sit on an **Adeline-4** chassis.
+Their arm-vs-arm differences remain exact — `j2_dbg3_sp4 − j2_ad3_sp4` is precisely *"is cutting a Bodyguard
+better or worse than cutting the 4th Adeline"* — but their **levels** are against a list that will not ship.
+Adeline's count does interact with the other creatures (her power is the creature count, so cheap bodies
+feed her), though only to second order. The round was left running rather than restarted a second time;
+anything that looks adoptable gets re-measured on the Adeline-3 chassis before it is believed.
+
 ### WHY the Knight Exemplar LORD HALF is weak — from `cards.json`, not from a story
 
 **Read this section as an explanation of the ~−0.010 rate cost only.** It explains why Exemplar's *anthem*
