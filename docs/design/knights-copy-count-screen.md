@@ -958,6 +958,76 @@ with the base null at +0.004 quantifying the gap. Consequence: for Knights the s
 mildly **flattering** the variants (own −0.0702 vs shared −0.0735 on the winner), the opposite direction
 to WhiteKnights. Both are small, and in both cases the real-table number is the one to use.
 
+### Round H on WhiteKnights — Knight Exemplar keeps getting worse, and the deck runs out of cards
+
+Pooled over blocks 7.0M / 7.4M, reference = round G's winner `g_ke3` (its table reused, so it sits on the
+*same* seed block as the new arms — that is what makes the pair below exact):
+
+| arm | long | 2hg | std | **pooled** | step vs `g_ke3` | meas. | conf. |
+|---|---|---|---|---|---|---|---|
+| **`h_wk_ke2_sp4`** Exemplar 3→**2**, Silverblade 4 | −0.2737 | −0.4211 | −0.2411 | **−0.3114** | **−0.0120** | −0.0131 | −0.0109 |
+| `h_wk_hob2_sp4` Hero 3→2, Silverblade 4 | −0.2594 | −0.4108 | −0.2389 | −0.3007 | −0.0013 | −0.0017 | −0.0010 |
+| `g_ke3` | −0.2626 | −0.4042 | −0.2342 | −0.2994 | — | | |
+
+Both new arms hold **Silverblade 4**, so Silverblade cancels exactly and the difference isolates the
+payer: **Exemplar 3→2 minus Hero 3→2 = −0.0107**. Hero 3→2 is a measured null (round G: −0.0002), so
+
+* **Knight Exemplar 3→2 is worth a further −0.0107** — and the ladder has *still* not turned over
+  (4→3 was ~−0.0095, 3→2 is −0.0107, if anything steeper).
+* **The 4th Silverblade is worth ~−0.0013**, i.e. nothing — confirming round G's read that the 22-land
+  rung's apparent gain was the *3rd* Silverblade and the 4th adds nothing.
+
+So the finding is about one card: **Knight Exemplar is simply bad in this deck, and what replaces it barely
+matters.** That is a coherent story — the lord's indestructible-and-first-strike half is inert against a
+passive opponent, leaving a 2/2 body and a +1/+1 anthem that Benalish Marshal already provides more
+cheaply.
+
+**And this is where the card pool runs out.** Cutting a 3rd Exemplar needs somewhere to put the slot, and
+in `h_wk_ke2_sp4` every remaining option is already refuted or unmeasurable:
+
+| candidate for the slot | status |
+|---|---|
+| Bodyguard / Venerable / Worthy / Accorder / Silverblade / Adeline / Marshal | **already at 4** |
+| Hero of Bladehold 3→4 | measured **+0.0037 worse** |
+| Plains 21 (25 lands) | measured **+0.0127 worse** |
+| Swords to Plowshares, Unexpectedly Absent | **deliberately never tested** — goldfishing cannot price interaction |
+| Sol Ring 1→2+ | untested, and raising it is a format/character decision, not a copy count |
+
+**`h_wk_ke2_sp4` at −0.3114 pooled is therefore the end of the road for WhiteKnights on the current card
+pool** — 14 of 60 cards changed, still mono-white, still 24 lands. The Exemplar ladder is still sloping,
+which is a live lead, but following it needs a card the deck does not own. That is precisely the
+*"I will let you know later if there are any other cards I would like to try"* decision.
+
+## RESUME HERE — the road to a FINAL Knights list
+
+**State at 2026-09-26 21:15Z.** WhiteKnights is finished (above). Knights' round H is **in flight**:
+`logs/wk_screen/run_h.sh` (pid 91714) started its Knights measurement at 20:19Z — three R=40 tables at
+~33 min each, then three batches, then the held-out confirmation at seed 7.6M. Expect ~22:50Z. Logs land
+at `logs/wk_screen/out/h_kn_{long,2hg,std}.log` and `hc_kn_*.log`; read with
+`python3 logs/wk_screen/pool_h.py h_kn hc_kn g_kn_ac2_ad3`.
+
+**What round H answers:** the one combination the slot arithmetic allows (`h_kn_ad4_l21` — Contender 0,
+Adeline 4, 21 lands), and whether the land ladder turns over at 23, paid for two independent ways
+(`h_kn_ad2_l23` with Adeline copies, `h_kn_moz3_l23` with a Marshal of Zhalfir).
+
+**What is STILL MISSING for a final Knights list, in priority order:**
+
+1. **Knight Exemplar in Knights is the big untested axis.** Screen 7 measured 4→3 at **−0.0368** on the
+   shared apparatus — the second-best cut in that deck after Acclaimed Contender — but it has **never been
+   combined** with the Contender/Adeline/land changes, and never measured on a real table. WhiteKnights'
+   round H makes this urgent: that deck's Exemplar ladder is still sloping at 3→2, and Knights runs the
+   same four copies with the same passive-opponent inertness. **This is almost certainly the largest
+   remaining gain in Knights and it should be round I.**
+2. **Extend whichever ladder round H leaves sloping** (lands, or Adeline, or both).
+3. **Knights' Exemplar and land axes compete for the same slots**, exactly as Contender and Adeline did,
+   so round I has to be a combination round rather than a set of independent rungs.
+4. **Not blocking, but unresolved:** the land ladder's payer confound (Acclaimed Contender) is only
+   partly broken by `h_kn_moz3_l23`; and Knights' sideboard promotions remain out of scope by the user's
+   *"optimize on the set we have for now"*.
+
+**Do not re-run anything already on disk.** Thirteen keep tables exist under `logs/deckcmp/{WhiteKnights,
+Knights}/<tag>/` and `gen_table` reuses them on (counts, R) — reference arms and held-out blocks are free.
+
 ## Open questions for the user (surfaced, not blocking)
 
 1. **Ranking weights.** The Angels campaign ranked arms late-weighted — `long` 0.5 / `2hg` 0.3 /
