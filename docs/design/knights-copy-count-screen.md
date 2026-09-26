@@ -1245,6 +1245,76 @@ Adeline's count does interact with the other creatures (her power is the creatur
 feed her), though only to second order. The round was left running rather than restarted a second time;
 anything that looks adoptable gets re-measured on the Adeline-3 chassis before it is believed.
 
+### BENALISH MARSHAL 2→4 WAS NEVER MEASURED — nine rounds of assumption, and round M
+
+The user asked whether Marshal 2→4 was established empirically, noting their own agreement was *"just a
+hypothesis … I still want to do it based on empirical data"*. Checking instead of assuming: **it was not.**
+
+**What the record actually contains.** The only *isolated* measurement is screen 3's group B, where the cut
+was held fixed (Valiant Knight 1→0) and only the sink varied — and the 3rd Marshal was the
+**second-weakest of five**:
+
+| the freed slot becomes | Δ std | Δ 2HG | Δ long | late-wtd |
+|---|---|---|---|---|
+| 2nd Adeline | −0.0233 | −0.0776 | −0.0403 | **−0.0481** |
+| 2nd Silverblade Paladin | −0.0190 | −0.0295 | −0.0257 | −0.0255 |
+| **3rd Benalish Marshal** | **−0.0097** | **−0.0004** | **−0.0031** | **−0.0037** |
+| a 23rd Plains | −0.0101 | −0.0028 | +0.0058 | −0.0016 |
+| 4th Hero of Bladehold | +0.0065 | +0.0036 | +0.0089 | +0.0072 *worse* |
+
+**And the per-format split makes it worse, not better: the 3rd Marshal is a DEAD NULL in 2HG (−0.0004)
+and near-null in long (−0.0031). All of its value is at 20 life** — i.e. the case is weakest in exactly
+the two formats carrying **0.8 of the late weight**. That is a coherent shape for an anthem (it matters
+most pushing the last few points of a short game, least when 60 damage is required), but it is not support
+for a 4-of.
+
+**The −0.0208 that has been quoted for it is a BUNDLE, not a Marshal number.** `a_ac1_bm4` is *Contender
+3→1 **and** Marshal 2→4 together*; cutting Contender was independently good, and the half-sized
+`a_ac2_bm3` (one swap each way) measured −0.0132. Quoting the bundle as evidence for the Marshal half was
+an error, and it propagated into the candidate tables above.
+
+**Why it nonetheless might be right now.** Marshal is the deck's **only** `affects_all_creatures` lord —
+Knight Exemplar, Valiant Knight, Inspiring Veteran and Marshal of Zhalfir are all `["Knight"]` — so its
+value scales with the **creature count**, and screen 3 measured it on the SHIPPED chassis with Adeline 1
+and Silverblade 1. The settled list has far more creatures (Adeline 3 making a token per attack — two in
+2HG — Worthy Knight 4, Silverblade 4). So the null may be an artifact of the old chassis. That is a
+hypothesis with exactly the status the user's was.
+
+**Round M** (`mkspec_m.py`, `run_m.sh`, seeds 10.2M / 10.6M, 4 arms, 3 new tables) decides it on the
+settled chassis. The sink is the 24th Plains, and one arm exists purely to price it:
+
+| arm | change from `j2_ad3_sp4` | purpose |
+|---|---|---|
+| `j2_ad3_sp4` | — | reference; its table comes from round J′, so it is free and on this round's seed block |
+| `m_sp3_p20` | Silverblade 4→**3**, Plains 19→**20** | **prices the 24th land in this chassis**, paying with a card round H measured as a null (−0.0013) |
+| `m_bm3_p20` | Marshal 4→**3**, Plains 19→**20** | minus the row above = **Marshal's 4th copy with the land cancelled exactly** |
+| `m_bm2_p20_hob4` | Marshal 4→**2**, Plains 19→**20**, Hero 3→**4** | the 3rd copy as well; Hero's 4th has a measured price (+0.0037) |
+
+Both user rulings are asserted as invariants of every arm in the generator (Exemplar 4, Adeline 3), so a
+future edit cannot silently reopen a settled count.
+
+### Every round tested all three formats, and 2HG's heads are provably LIVE
+
+Recorded because the question was asked and because the repo's own convention
+([[2hg-opponent-heads]]) warns that heads are **often inert** and must be proven rather than assumed.
+
+| format | `starting_life` | `opponent_heads` | games per arm | weight |
+|---|---|---|---|---|
+| long | 40 | 1 | 20,000 paired | 0.5 |
+| 2hg | **30** | **2** | 20,000 paired | 0.3 |
+| std | 20 | 1 | 20,000 paired | 0.2 |
+
+Every arm of every screen and every round ran all three, and the held-out block repeats all three. **The
+heads are live for this deck, and Adeline is the proof:** `attack_tokens_per_opponent` defaults to `true`
+(`src/cards/CardDatabase.h:761`, read at `CardDatabase.cpp:855`, whose comment names Adeline), so at
+`opponent_heads: 2` she creates **two** tokens per attack, faithful to her *"for each opponent"* clause —
+while Hero of Bladehold sets the flag `false` explicitly, so his flat two Soldiers correctly do not scale.
+That asymmetry is why Adeline's gain concentrates in 2HG and it is a real card behaviour, not a life-total
+artifact.
+
+2HG is also where the largest effects appear (the candidate: −0.4211 in 2hg against −0.2411 in std), which
+is why a card measuring **null there** — as the 3rd Marshal does — is a real problem for its case.
+
 ### WHY the Knight Exemplar LORD HALF is weak — from `cards.json`, not from a story
 
 **Read this section as an explanation of the ~−0.010 rate cost only.** It explains why Exemplar's *anthem*
