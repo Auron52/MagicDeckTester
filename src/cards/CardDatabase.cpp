@@ -1094,6 +1094,18 @@ CardParams CardDatabase::BuildParamsFromJson(const json& params) const
     p.reduces_spell_subtype_creature_only =
         params.value("reduces_spell_subtype_creature_only", false);
     p.chooses_creature_type     = params.value("chooses_creature_type", false);
+    p.chosen_type_added_to_self = params.value("chosen_type_added_to_self", false);
+    p.own_creature_enters_opp_life_loss = params.value("own_creature_enters_opp_life_loss", 0);
+    // Goblin Tomb Raider: "As long as you control an artifact, this creature gets +1/+0 and has haste."
+    p.static_artifact_threshold = params.value("static_artifact_threshold", 0);
+    p.static_artifact_power     = params.value("static_artifact_power", 0);
+    p.static_artifact_tough     = params.value("static_artifact_tough", 0);
+    p.static_artifact_haste     = params.value("static_artifact_haste", false);
+    // Malcolm, the Eyes: "Whenever you cast your second spell each turn, investigate."
+    p.nth_spell_trigger_n       = params.value("nth_spell_trigger_n", 0);
+    p.nth_spell_investigate     = params.value("nth_spell_investigate", 0);
+    p.other_chosen_subtype_enters_counters = params.value("other_chosen_subtype_enters_counters", 0);
+    p.lord_affects_chosen_subtype = params.value("lord_affects_chosen_subtype", false);
     p.etb_self_creates_tokens   = params.value("etb_self_creates_tokens", 0);
     p.etb_damage_any            = params.value("etb_damage_any", 0);
     p.etb_destroy_opp_creature  = params.value("etb_destroy_opp_creature", false);
@@ -1131,6 +1143,7 @@ CardParams CardDatabase::BuildParamsFromJson(const json& params) const
     p.etb_reveal_put_creatures_only = params.value("etb_reveal_put_creatures_only", false);
     p.etb_reveal_put_max_mv     = params.value("etb_reveal_put_max_mv", 0);
     p.attack_pump_power_per_other_matching = params.value("attack_pump_power_per_other_matching", 0);
+    p.attack_pump_tough_per_other_matching = params.value("attack_pump_tough_per_other_matching", 0);
     p.attack_self_pump_per_other_subtype   = params.value("attack_self_pump_per_other_subtype", std::string());
     p.attack_self_pump_power    = params.value("attack_self_pump_power", 0);
     p.attack_self_pump_tough    = params.value("attack_self_pump_tough", 0);
@@ -1202,6 +1215,7 @@ CardParams CardDatabase::BuildParamsFromJson(const json& params) const
     p.pump_per_treasure_power     = params.value("pump_per_treasure_power", 0);
     p.pump_per_treasure_tough     = params.value("pump_per_treasure_tough", 0);
     p.creates_treasures           = params.value("creates_treasures", 0);
+    p.etb_creates_treasures       = params.value("etb_creates_treasures", 0);
     p.grants_temp_haste           = params.value("grants_temp_haste", false);
     p.counters_on_target          = params.value("counters_on_target", 0);
     p.cast_lifegain               = params.value("cast_lifegain", 0);

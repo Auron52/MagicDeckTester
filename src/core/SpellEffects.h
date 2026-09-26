@@ -857,6 +857,8 @@ inline void TapLargestOppCreature(GameState&, int controller);
 inline int LethalToughness(const Permanent& p, const GameState& state);
 inline void FireOwnEtbTriggers(GameState&, int controller, int entered_index,
                            const std::string& chosen_tutor, int etb_kx);
+inline void CreateTreasureTokens(GameState& state, int controller, int n);   // defined below
+inline void CreateClueTokens(GameState& state, int controller, int n);       // defined below
 // etb_kx sentinel: "PUT entry with no searched destroy-K axis -- pick heuristically at
 // resolution" (full rationale at kEtbKxHeuristic's consumers near HeuristicEtbDestroyK).
 constexpr int kEtbKxHeuristic = -2;
@@ -3099,6 +3101,7 @@ inline void FireOnCastTriggers(GameState& state, const CardDefinition& cast_def)
     struct TokenSpec { int n, p, t; std::vector<std::string> subs; std::string color;
                        std::vector<std::string> kws; };
     std::vector<TokenSpec> to_create;
+    int clues = 0;   // Malcolm's investigate, deferred past the loop like to_create
 
     int bf_size = static_cast<int>(state.battlefield.size());
     for (int i = 0; i < bf_size; ++i)
@@ -3106,6 +3109,23 @@ inline void FireOnCastTriggers(GameState& state, const CardDefinition& cast_def)
         const Permanent& p = state.battlefield[i];
         const CardDefinition* def = CardDatabase::Instance().LookupCached(p.card);
         if (!def) { continue; }
+
+        // Malcolm, the Eyes: "Whenever you cast your SECOND spell each turn, investigate." Every
+        // cast site increments spells_cast_this_turn BEFORE calling here, so == N is exact; it
+        // counts spells cast before Malcolm entered (CR 603.2) and Malcolm is on the stack, not
+        // the battlefield, during his own cast. Vial puts are not casts. Param-gated.
+        if (def->params.nth_spell_trigger_n > 0 && def->params.nth_spell_investigate > 0
+            && p.controller_index == active
+            && state.spells_cast_this_turn == def->params.nth_spell_trigger_n)
+        {
+            clues += def->params.nth_spell_investigate;
+            if (g_play_event_sink)
+            {
+                EmitPlayEvent(state.turn_number, "ability",
+                              def->card.m_name.str() + " -- spell #"
+                              + std::to_string(def->params.nth_spell_trigger_n) + ": investigate");
+            }
+        }
 
         if (def->params.on_cast_trigger_max_mv > 0 && mv <= def->params.on_cast_trigger_max_mv)
         {
@@ -3228,6 +3248,8 @@ inline void FireOnCastTriggers(GameState& state, const CardDefinition& cast_def)
 
     for (const TokenSpec& s : to_create)
     { CreateTokens(state, active, s.n, s.p, s.t, s.subs, s.color, s.kws); }   // bulk
+    // After the loop: CreateClueTokens push_backs onto the battlefield (would invalidate `p`).
+    if (clues > 0) { CreateClueTokens(state, active, clues); }
 }
 
 // Returns the total {power_bonus, toughness_bonus} granted to `creature` by all
@@ -3268,12 +3290,52 @@ inline void FireOnCastTriggers(GameState& state, const CardDefinition& cast_def)
 // (haste granters like Cloudshredder Sliver) do not become P/T lords. Byte-identical for every
 // existing deck: the only non-lord-template card with a power_bonus is a sorcery (never a
 // battlefield permanent).
+// ---- Conditional artifact static (Goblin Tomb Raider: "As long as you control an artifact, this
+// creature gets +1/+0 and has haste"). Placed here, ahead of ComputeLordBonus and CanAttackFull,
+// its two consumers. EXACT rules reading: ANY artifact you control (Treasure and Clue tokens count).
+inline bool ControlsAtLeastNArtifacts(const std::vector<Permanent>& bf, int ctl, int n)
+{
+    if (n <= 0) { return false; }
+    int k = 0;
+    for (const Permanent& q : bf)
+    { if (q.controller_index == ctl && q.card.HasType(CardType::Artifact) && ++k >= n) { return true; } }
+    return false;
+}
+// PROJECTION-ONLY twin: counts only artifacts that no plan can consume for value this turn -- a
+// nontoken artifact that is not itself a sac-for-mana source (Aether Vial, Metallic Mimic,
+// Adaptive Automaton). A Treasure or Clue is excluded because the same plan may sacrifice it before
+// combat, so an enumeration projection that counted it could OVER-credit the Raider's hasty attack.
+// Used ONLY where a projection must never over-credit (CollectActions' haste stamp); the real
+// declare-attackers legality uses the exact ControlsAtLeastNArtifacts.
+inline bool ControlsAtLeastNDurableArtifacts(const std::vector<Permanent>& bf, int ctl, int n)
+{
+    if (n <= 0) { return false; }
+    int k = 0;
+    for (const Permanent& q : bf)
+    {
+        if (q.controller_index != ctl || !q.card.HasType(CardType::Artifact) || q.is_token) { continue; }
+        const CardDefinition* qd = CardDatabase::Instance().LookupCached(q.card);
+        if (qd && (qd->params.sac_for_mana_amount > 0 || qd->params.sac_draw_cost.has_value())) { continue; }
+        if (++k >= n) { return true; }
+    }
+    return false;
+}
+inline bool HasConditionalSelfHaste(const Card& c, const std::vector<Permanent>& bf, int ctl,
+                                    bool durable_only = false)
+{
+    const CardDefinition* d = CardDatabase::Instance().LookupCached(c);
+    if (!d || !d->params.static_artifact_haste) { return false; }
+    return durable_only ? ControlsAtLeastNDurableArtifacts(bf, ctl, d->params.static_artifact_threshold)
+                        : ControlsAtLeastNArtifacts(bf, ctl, d->params.static_artifact_threshold);
+}
+
 inline bool IsLordPermanent(const CardDefinition& def)
 {
     if (def.tmpl == CardTemplate::LordEffect) { return true; }
     return def.card.IsCreature()
         && (def.params.power_bonus != 0 || def.params.tough_bonus != 0)
-        && (!def.params.subtypes_affected.empty() || def.params.affects_all_creatures);
+        && (!def.params.subtypes_affected.empty() || def.params.affects_all_creatures
+            || def.params.lord_affects_chosen_subtype);
 }
 
 // TAKES THE WHOLE GameState, not just the battlefield (changed 2026-08-23 for Neheb, the Worthy).
@@ -3330,6 +3392,16 @@ inline std::pair<int,int> ComputeLordBonus(
         {
             pb += sdef->params.life_threshold_pump_power;
             tb += sdef->params.life_threshold_pump_tough;
+        }
+        // Goblin Tomb Raider: "As long as you control an artifact, this creature gets +1/+0" --
+        // the same conditional-static shape as Serra Ascendant above, keyed on artifacts controlled.
+        // Same sdef lookup; param-gated -> byte-identical for every other card.
+        if (sdef && sdef->params.static_artifact_threshold > 0
+            && ControlsAtLeastNArtifacts(battlefield, controller_index,
+                                         sdef->params.static_artifact_threshold))
+        {
+            pb += sdef->params.static_artifact_power;
+            tb += sdef->params.static_artifact_tough;
         }
         // Borderland Behemoth: "This creature gets +4/+4 for each other Giant you control" -- the
         // STATIC twin of attack_self_pump_per_other_subtype. Counts BODIES you control carrying
@@ -3392,6 +3464,15 @@ inline std::pair<int,int> ComputeLordBonus(
         if (ldef->params.affects_all_creatures)
         {
             matches = true;   // anthem for every creature you control (Benalish Marshal)
+        }
+        else if (ldef->params.lord_affects_chosen_subtype)
+        {
+            // Adaptive Automaton: "Other creatures you control of the CHOSEN type get +1/+1." The
+            // match set is this lord permanent's chosen_subtype_id (set at the enter cascade), read
+            // against the creature's LIVE subtypes -- so another Automaton / a Mimic that chose the
+            // same type matches. An animated land (all creature types) matches as for any lord.
+            matches = lord.chosen_subtype_id != SubtypeRegistry::kNone
+                   && (all_creature_types || creature.m_subtypes.HasId(lord.chosen_subtype_id));
         }
         else if (all_creature_types && !ldef->params.subtypes_affected.empty())
         {
@@ -3868,6 +3949,8 @@ inline bool CanTapNow(const Permanent& p, const std::vector<Permanent>& battlefi
     // "Gains haste until end of turn" (Expedite): haste lifts the summoning-sick {T} restriction
     // too (CR 302.6), so a hasted fresh mana dork may tap for mana the turn it arrives.
     if (p.temp_haste) { return true; }
+    // Goblin Tomb Raider's conditional haste (artifact controlled) lifts the {T} restriction too.
+    if (HasConditionalSelfHaste(p.card, battlefield, p.controller_index)) { return true; }
     if (HasHasteFromLords(p.card, battlefield, p.controller_index, p.is_animated,
                           hs ? &hs->lords : nullptr))
     {
@@ -3901,6 +3984,7 @@ inline bool CanAttackFull(
     if (!p.entered_this_turn && !p.gained_control_this_turn) { return true; }
     if (p.card.HasKeyword(Keyword::Haste))      { return true; }
     if (p.temp_haste)                           { return true; }
+    if (HasConditionalSelfHaste(p.card, battlefield, controller_index)) { return true; }   // Tomb Raider
     if (HasHasteFromLords(p.card, battlefield, controller_index, p.is_animated,
                           hs ? &hs->lords : nullptr)) { return true; }
     return HasHasteFromEquip(p, battlefield, controller_index, hs ? &hs->equips : nullptr);
@@ -3922,6 +4006,9 @@ inline bool CanAttackFull(
     if (!p.entered_this_turn && !p.gained_control_this_turn) { return true; }
     if (p.card.HasKeyword(Keyword::Haste))      { return true; }
     if (p.temp_haste)                           { return true; }   // Expedite until-EOT haste
+    // Goblin Tomb Raider: "as long as you control an artifact, ... has haste" -- evaluated AT
+    // declare-attackers against the live board, in both worlds (this is the one legality gate).
+    if (HasConditionalSelfHaste(p.card, battlefield, controller_index)) { return true; }
     if (HasHasteFromLords(p.card, battlefield, controller_index, p.is_animated)) { return true; }
     return HasHasteFromEquip(p, battlefield, controller_index);
 }
@@ -4308,6 +4395,19 @@ inline void FireCreatureEnterWatchers(GameState& state, int entered_controller, 
                                   + std::to_string(x) + " counters (" + ename + " entered)");
                 }
             }
+        }
+        // Forerunner of the Coalition: "Whenever another Pirate YOU CONTROL enters, each opponent
+        // loses 1 life." Life LOSS (not damage) x OpponentHeads (2HG: the team loses per head).
+        // "Another" = the loop's own-index skip; "Pirate" = enters_subtype_ok on the entrant's LIVE
+        // battlefield subtypes, which already carry a Metallic Mimic / Adaptive Automaton's chosen
+        // type (appended above this call in FireEtbWatchers).
+        if (wp.own_creature_enters_opp_life_loss > 0 && w.controller_index == entered_controller
+            && enters_subtype_ok(wp))
+        {
+            const int opp = 1 - w.controller_index;
+            state.players[opp].life -= wp.own_creature_enters_opp_life_loss * gamesetup::OpponentHeads();
+            if (opp != state.active_player_index) { state.opponent_lost_life_this_turn = true; }
+            if (log) { note(opp, w.card.m_name.str()); }
         }
         // "Whenever a creature an opponent controls enters, that player loses N" (Suture Priest
         // clause 2 -- the drain engine; life LOSS, not damage).
@@ -5172,8 +5272,16 @@ inline uint16_t DominantCreatureSubtypeId(const GameState& state, int controller
     for (const SuspendedCard& s : p.suspended_cards) { tally(ZoneCard(s.card)); }
     // Tokens are excluded: they are not deck cards, and counting them would let a board of Lathliss
     // 5/5s re-decide the tribe mid-game (breaking the game-constant property above).
+    // A Metallic Mimic / Adaptive Automaton on the battlefield carries its CHOSEN type appended to
+    // its own Card copy; tally its PRINTED card instead, so the answer stays the game-constant it is
+    // documented to be (and a board of Mimics cannot vote twice). Every other permanent is tallied
+    // exactly as before -> byte-identical for every deck without the param.
     for (const Permanent& q : state.battlefield)
-    { if (q.controller_index == controller && !q.is_token) { tally(q.card); } }
+    {
+        if (q.controller_index != controller || q.is_token) { continue; }
+        const CardDefinition* qd = q.def_absent ? nullptr : CardDatabase::Instance().LookupCached(q.card);
+        tally((qd && qd->params.chosen_type_added_to_self) ? qd->card : q.card);
+    }
 
     uint16_t best = SubtypeRegistry::kNone;
     int      best_n = 0;
@@ -5295,10 +5403,19 @@ inline void FireEtbWatchers(GameState& state, int controller, int entered_index)
     {
         const Permanent& e = state.battlefield[entered_index];
         const CardDefinition* ed = CardDatabase::Instance().LookupCached(e.card);
-        if (ed && ed->params.chooses_creature_type)
+        if (ed && ChoosesCreatureTypeOnEnter(ed->params))
         {
-            state.battlefield[entered_index].chosen_subtype_id =
-                DominantCreatureSubtypeId(state, e.controller_index);
+            const uint16_t chosen = DominantCreatureSubtypeId(state, e.controller_index);
+            state.battlefield[entered_index].chosen_subtype_id = chosen;
+            // Metallic Mimic / Adaptive Automaton: "This creature is the chosen type in addition to
+            // its other types." Written onto the BATTLEFIELD permanent's own Card copy (layer 4),
+            // never the definition, so on-board readers see e.g. Pirate while the same card in
+            // hand/library stays a printed Shapeshifter/Construct. Done HERE, before the as-enters
+            // counter block and the enter-trigger watchers below, so a Mimic/Automaton entering is
+            // already the chosen type for another Mimic's replacement (CR 614.12) and for
+            // Forerunner-style "another Pirate enters" triggers.
+            if (ed->params.chosen_type_added_to_self)
+            { state.battlefield[entered_index].card.m_subtypes.push_back_id(chosen); }
         }
     }
     // ---- AS-ENTERS +1/+1 COUNTERS, a REPLACEMENT EFFECT (CR 614) ----------------------------
@@ -5338,7 +5455,18 @@ inline void FireEtbWatchers(GameState& state, int controller, int entered_index)
         {
             if (w.controller_index != ectrl) { continue; }
             const CardDefinition* wd = CardDatabase::Instance().LookupCached(w.card);
-            if (!wd || wd->params.other_subtype_enters_counters_per_each <= 0
+            if (!wd) { continue; }
+            // Metallic Mimic: "Each OTHER creature you control of the CHOSEN type enters with an
+            // additional +1/+1 counter." Same CR 614 replacement slot as Giada; keyed on the
+            // watcher's chosen_subtype_id (set when IT entered) and the entrant's LIVE subtypes --
+            // which already include the entrant's own chosen type if it is a Mimic/Automaton
+            // (assigned above), so a second Mimic naming Pirate gets the counter. "Other" by address.
+            if (wd->params.other_chosen_subtype_enters_counters > 0
+                && w.chosen_subtype_id != SubtypeRegistry::kNone
+                && &w != &state.battlefield[entered_index]
+                && state.battlefield[entered_index].card.m_subtypes.HasId(w.chosen_subtype_id))
+            { add += wd->params.other_chosen_subtype_enters_counters; }
+            if (wd->params.other_subtype_enters_counters_per_each <= 0
                 || wd->params.other_subtype_enters_counters_subtype.empty()) { continue; }
             const std::string& sub = wd->params.other_subtype_enters_counters_subtype;
             // The ENTRANT must match the watched subtype ("each other ANGEL"), and must not be the
@@ -6266,6 +6394,21 @@ inline void FireOwnEtbTriggers(GameState& state, int controller, int entered_ind
         CreateToken(state, controller, p.etb_created_token_power,
                     p.etb_created_token_toughness, p.etb_created_token_subtypes,
                     p.created_token_color, HasteKeywords(p.created_token_haste));
+    }
+    // (1-t) ETB Treasure mint (Corsair Captain: "When this creature enters, create a Treasure
+    //     token"). The existing "Treasure Token" def via the Gold Rush helper; a live pay-sac source
+    //     subject to the §2a fresh-hold (banked this turn unless a copy-magnet / Heroism is live --
+    //     see PaySacSpendableNow). This one site covers every entry route (cast, Vial put, both
+    //     worlds). Param-gated -> byte-identical for every other deck.
+    if (p.etb_creates_treasures > 0)
+    {
+        CreateTreasureTokens(state, controller, p.etb_creates_treasures);
+        if (g_play_event_sink && !g_tap_speculating)
+        {
+            EmitPlayEvent(state.turn_number, "ability",
+                          def->card.m_name.str() + " -- create "
+                          + std::to_string(p.etb_creates_treasures) + " Treasure");
+        }
     }
 
     // (1b) ETB OPPONENT-token gift (Hunted Phantasm: "target opponent creates five 1/1 red Goblin
@@ -10416,7 +10559,8 @@ inline void ApplyAttackSelfPumps(GameState& state, int controller,
         const CardParams& p = d->params;
 
         // Piledriver: +power per OTHER attacking creature whose subtype is in subtypes_affected.
-        if (p.attack_pump_power_per_other_matching > 0 && !p.subtypes_affected.empty())
+        if ((p.attack_pump_power_per_other_matching > 0 || p.attack_pump_tough_per_other_matching > 0)
+            && !p.subtypes_affected.empty())
         {
             int others = 0;
             for (int oidx : attacker_indices)
@@ -10432,6 +10576,8 @@ inline void ApplyAttackSelfPumps(GameState& state, int controller,
                 if (m) { ++others; }
             }
             self.temp_power_bonus += p.attack_pump_power_per_other_matching * others;
+            // Dire Fleet Captain's toughness half (0 for Piledriver -> byte-identical).
+            self.temp_tough_bonus += p.attack_pump_tough_per_other_matching * others;
         }
 
         // Muxus: +power/+tough per OTHER permanent you control whose subtype matches.

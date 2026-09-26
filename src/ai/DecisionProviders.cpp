@@ -475,11 +475,16 @@ static bool DuplicateEntryOrDeathHasUpside(const GameState& s, int controller,
             && (wp.own_creature_enters_lifegain > 0
                 || wp.own_creature_enters_lifegain_toughness
                 || wp.own_creature_enters_self_counters > 0
-                || wp.own_creature_enters_draw > 0))
+                || wp.own_creature_enters_draw > 0
+                || wp.own_creature_enters_opp_life_loss > 0))   // Forerunner of the Coalition
         { return true; }
         // Giada-class CR 614 as-enters replacement (counters on the entering Angel).
         if (wp.other_subtype_enters_counters_per_each > 0
             && one(wp.other_subtype_enters_counters_subtype))
+        { return true; }
+        // Metallic Mimic: a duplicate of a card carrying Mimic's CHOSEN type enters with a counter.
+        if (wp.other_chosen_subtype_enters_counters > 0
+            && def.card.m_subtypes.HasId(p.chosen_subtype_id))
         { return true; }
         // Lathliss-class "whenever another <subtype> you control enters, create a token".
         if (wp.etb_other_subtype_creates_tokens && one(wp.etb_token_requires_subtype))

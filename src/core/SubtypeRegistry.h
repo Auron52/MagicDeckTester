@@ -201,6 +201,16 @@ public:
         }
     }
 
+    // Append an ALREADY-INTERNED id (no registry access, so safe on any worker thread). Skips
+    // kNone and an id already present, and caps at kCap. Used for "this creature is the chosen type
+    // in addition to its other types" (Metallic Mimic / Adaptive Automaton), which appends the chosen
+    // creature type to the BATTLEFIELD permanent's own Card copy only.
+    void push_back_id(uint16_t id)
+    {
+        if (id == SubtypeRegistry::kNone || HasId(id) || m_count >= kCap) { return; }
+        m_ids[m_count++] = id;
+    }
+
     // Assign from a name list (e.g. a token's subtypes from CardParams). The names must be
     // pre-interned at load so this only does read-only Intern lookups at runtime.
     SubtypeSet& operator=(const std::vector<std::string>& names)

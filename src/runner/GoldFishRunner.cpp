@@ -304,6 +304,7 @@ bool GoldFishRunner::DeckFeedsCombat(const Decklist& deck)
         if (p.scales_per_matching || p.affects_all_creatures
             || p.domain_self_pump || p.power_equals_creature_count)          { return true; }
         if (p.life_threshold_pump_life > 0)                                  { return true; }   // Serra Ascendant's +5/+5
+        if (p.static_artifact_threshold > 0)                                 { return true; }   // Goblin Tomb Raider's +1/+0 + haste
         if (p.pt_equals_snow_permanents_you_control
             || p.pt_equals_snow_permanents_on_battlefield)                   { return true; }
         // AURA pumps live on their own params (aura_power_bonus / aura_scale_*), which this scan
@@ -526,7 +527,8 @@ std::uint32_t GoldFishRunner::DeckGraveyardReaders(const Decklist& deck)
         // cards for any deck with a sac-for-mana source or an Apex-style impulse cast.
         // `creates_treasures` counts because the Treasure Token IS such a source and is NOT in the
         // decklist to be scanned -- which is how mirrorwing reaches this path.
-        if (p.sac_for_mana_amount > 0 || p.creates_treasures > 0 || p.impulse_exile > 0)
+        if (p.sac_for_mana_amount > 0 || p.creates_treasures > 0 || p.etb_creates_treasures > 0
+            || p.impulse_exile > 0)
         { m |= GyR_ColorDemand; }
     }
     // MISSED CLASS 4 (a learned model branching on graveyard_size) is NOT here: it is a per-GAME
@@ -1029,6 +1031,8 @@ void GoldFishRunner::StampDeckTraits(GameState& state, const Decklist& deck)
                 if (d->params.other_subtype_enters_counters_per_each > 0
                     && !d->params.other_subtype_enters_counters_subtype.empty())
                 { subtype_enter_counters = true; }
+                // Metallic Mimic's chosen-type as-enters counter rides the same presence gate.
+                if (d->params.other_chosen_subtype_enters_counters > 0) { subtype_enter_counters = true; }
                 if (d->params.other_creature_etb_counter_cost.has_value()
                     && d->params.other_creature_etb_counters > 0)
                 { etb_counter_payer = true; }

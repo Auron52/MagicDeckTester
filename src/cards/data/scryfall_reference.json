@@ -19,6 +19,15 @@
     "toughness": "3",
     "type_line": "Creature — Human Knight"
   },
+  "Adaptive Automaton": {
+    "cmc": 3.0,
+    "keywords": [],
+    "mana_cost": "{3}",
+    "oracle_text": "As this creature enters, choose a creature type.\nThis creature is the chosen type in addition to its other types.\nOther creatures you control of the chosen type get +1/+1.",
+    "power": "2",
+    "toughness": "2",
+    "type_line": "Artifact Creature — Construct"
+  },
   "Adarkar Wastes": {
     "cmc": 0.0,
     "keywords": [],
@@ -340,6 +349,15 @@
     "power": null,
     "toughness": null,
     "type_line": "Artifact"
+  },
+  "Blackcleave Cliffs": {
+    "cmc": 0.0,
+    "keywords": [],
+    "mana_cost": "",
+    "oracle_text": "This land enters tapped unless you control two or fewer other lands.\n{T}: Add {B} or {R}.",
+    "power": null,
+    "toughness": null,
+    "type_line": "Land"
   },
   "Blasted Landscape": {
     "cmc": 0.0,
@@ -693,6 +711,17 @@
     "toughness": null,
     "type_line": "Land"
   },
+  "Corsair Captain": {
+    "cmc": 3.0,
+    "keywords": [
+      "Treasure"
+    ],
+    "mana_cost": "{2}{U}",
+    "oracle_text": "When this creature enters, create a Treasure token. (It's an artifact with \"{T}, Sacrifice this token: Add one mana of any color.\")\nOther Pirates you control get +1/+1.",
+    "power": "2",
+    "toughness": "2",
+    "type_line": "Creature — Human Pirate"
+  },
   "Cosmic Spider-Man": {
     "cmc": 5.0,
     "keywords": [
@@ -856,6 +885,15 @@
     "power": "2",
     "toughness": "1",
     "type_line": "Creature — Eldrazi"
+  },
+  "Dire Fleet Captain": {
+    "cmc": 2.0,
+    "keywords": [],
+    "mana_cost": "{B}{R}",
+    "oracle_text": "Whenever this creature attacks, it gets +1/+1 until end of turn for each other attacking Pirate.",
+    "power": "2",
+    "toughness": "2",
+    "type_line": "Creature — Orc Pirate"
   },
   "Disenchant": {
     "cmc": 2.0,
@@ -1215,6 +1253,15 @@
     "toughness": null,
     "type_line": "Land"
   },
+  "Forerunner of the Coalition": {
+    "cmc": 3.0,
+    "keywords": [],
+    "mana_cost": "{2}{B}",
+    "oracle_text": "When this creature enters, you may search your library for a Pirate card, reveal it, then shuffle and put that card on top.\nWhenever another Pirate you control enters, each opponent loses 1 life.",
+    "power": "2",
+    "toughness": "2",
+    "type_line": "Creature — Human Pirate"
+  },
   "Forest": {
     "cmc": 0.0,
     "keywords": [],
@@ -1493,6 +1540,15 @@
     "power": "1",
     "toughness": "2",
     "type_line": "Creature — Goblin Warrior"
+  },
+  "Goblin Tomb Raider": {
+    "cmc": 1.0,
+    "keywords": [],
+    "mana_cost": "{R}",
+    "oracle_text": "As long as you control an artifact, this creature gets +1/+0 and has haste.",
+    "power": "1",
+    "toughness": "2",
+    "type_line": "Creature — Goblin Pirate"
   },
   "Goblin Warchief": {
     "cmc": 3.0,
@@ -2212,6 +2268,19 @@
     "toughness": null,
     "type_line": "Instant"
   },
+  "Malcolm, the Eyes": {
+    "cmc": 2.0,
+    "keywords": [
+      "Flying",
+      "Haste",
+      "Investigate"
+    ],
+    "mana_cost": "{U}{R}",
+    "oracle_text": "Flying, haste\nWhenever you cast your second spell each turn, investigate. (Create a Clue token. It's an artifact with \"{2}, Sacrifice this token: Draw a card.\")",
+    "power": "2",
+    "toughness": "2",
+    "type_line": "Legendary Creature — Siren Pirate"
+  },
   "Mana Cannons": {
     "cmc": 3.0,
     "keywords": [],
@@ -2294,6 +2363,15 @@
     "power": null,
     "toughness": null,
     "type_line": "Land"
+  },
+  "Metallic Mimic": {
+    "cmc": 2.0,
+    "keywords": [],
+    "mana_cost": "{2}",
+    "oracle_text": "As this creature enters, choose a creature type.\nThis creature is the chosen type in addition to its other types.\nEach other creature you control of the chosen type enters with an additional +1/+1 counter on it.",
+    "power": "2",
+    "toughness": "1",
+    "type_line": "Artifact Creature — Shapeshifter"
   },
   "Mind Stone": {
     "cmc": 2.0,
@@ -3255,6 +3333,17 @@
     "toughness": "1",
     "type_line": "Creature — Sliver"
   },
+  "Siren Stormtamer": {
+    "cmc": 1.0,
+    "keywords": [
+      "Flying"
+    ],
+    "mana_cost": "{U}",
+    "oracle_text": "Flying\n{U}, Sacrifice this creature: Counter target spell or ability that targets you or a creature you control.",
+    "power": "1",
+    "toughness": "1",
+    "type_line": "Creature — Siren Pirate Wizard"
+  },
   "Skirk Prospector": {
     "cmc": 1.0,
     "keywords": [],
@@ -3415,6 +3504,15 @@
     "toughness": null,
     "type_line": "Enchantment — Aura"
   },
+  "Spirebluff Canal": {
+    "cmc": 0.0,
+    "keywords": [],
+    "mana_cost": "",
+    "oracle_text": "This land enters tapped unless you control two or fewer other lands.\n{T}: Add {U} or {R}.",
+    "power": null,
+    "toughness": null,
+    "type_line": "Land"
+  },
   "Spirit Link": {
     "cmc": 1.0,
     "keywords": [
@@ -3454,6 +3552,15 @@
     "power": "4",
     "toughness": "4",
     "type_line": "Creature — Fungus"
+  },
+  "Staunch Crewmate": {
+    "cmc": 2.0,
+    "keywords": [],
+    "mana_cost": "{1}{U}",
+    "oracle_text": "When this creature enters, look at the top four cards of your library. You may reveal an artifact or Pirate card from among them and put it into your hand. Put the rest on the bottom of your library in a random order.",
+    "power": "2",
+    "toughness": "1",
+    "type_line": "Creature — Human Pirate"
   },
   "Steam Vents": {
     "cmc": 0.0,

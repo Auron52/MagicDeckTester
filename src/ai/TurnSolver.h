@@ -511,6 +511,13 @@ struct Action
                                        // projection silently misses a cast Goblin Guide / Monastery
                                        // Swiftspear. Stamped once by CollectActions (both enumerators
                                        // share it), 0 for every non-creature / summoning-sick cast.
+    // Goblin Tomb Raider (static_artifact_haste) cast with NO durable artifact on board: its hasty
+    // attack power IF the same subset also puts a durable artifact onto the battlefield
+    // (adds_durable_artifact on another selected action). Credited into haste_cast_atk only then.
+    int  cond_artifact_haste_power = 0;
+    // This cast / Vial put adds a DURABLE artifact (nontoken, not a sac-for-mana/sac-draw source:
+    // Aether Vial, Metallic Mimic, Adaptive Automaton) -- see ControlsAtLeastNDurableArtifacts.
+    bool adds_durable_artifact = false;
     bool haste_prowess         = false;// ... and it has prowess, so the plan's noncreature casts pump
                                        // it too (canonical cast order puts prowess creatures first).
     bool is_draw               = false;// DrawSpell / DrawX (Plan-B draw-early variants)

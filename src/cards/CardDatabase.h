@@ -1757,6 +1757,46 @@ struct CardParams
     // a printed-subtype reducer (Goblin Warchief / Dragonspeaker Shaman) -> byte-identical.
     bool chooses_creature_type = false;
 
+    // ---- "As this creature enters, choose a creature type. This creature is the chosen type in
+    // addition to its other types." (Metallic Mimic, Adaptive Automaton) -- 2026-09-26, Pirates.
+    // DELIBERATELY SEPARATE from chooses_creature_type: that flag also means "subtype cost reducer"
+    // at ~10 pricing sites (ManaPayment / TurnSolver / DecisionProviders), so reusing it would hand
+    // Mimic a phantom {1} discount on every Pirate. Any of the three params below makes the card
+    // choose a type at the universal enter cascade (FireEtbWatchers) via the shared
+    // DominantCreatureSubtypeId -> Permanent::chosen_subtype_id (see ChoosesCreatureTypeOnEnter).
+    //
+    // chosen_type_added_to_self: the chosen id is APPENDED to the BATTLEFIELD permanent's own
+    // card.m_subtypes (never the printed definition), so every CardHasSubtype(perm.card, ...) reader
+    // -- lords, the Piledriver attack count, enters_watch_subtypes watchers -- sees it in executor
+    // AND rollout, while hand/library cards (read via ZoneCard / printed defs) keep only their
+    // printed Shapeshifter / Construct type (CR 205: the choice exists only on the battlefield).
+    bool chosen_type_added_to_self = false;
+    // Metallic Mimic: "Each OTHER creature you control of the chosen type enters with an additional
+    // N +1/+1 counter(s)." A CR 614 replacement applied in FireEtbWatchers' as-enters counter block
+    // (below the entrant's own type choice, above the enter-trigger watchers). NOT Giada's
+    // other_subtype_enters_counters_* -- that param is the Angels routing signature.
+    int  other_chosen_subtype_enters_counters = 0;
+    // Adaptive Automaton: a lord_effect whose match set is THIS permanent's chosen_subtype_id instead
+    // of the static subtypes_affected list (ComputeLordBonus::process_lord).
+    bool lord_affects_chosen_subtype = false;
+
+    // ---- "As long as you control N or more artifacts, this creature gets +P/+T [and has haste]"
+    // (Goblin Tomb Raider, N=1). A conditional STATIC self-buff (CR 611.3), continuously checked:
+    // P/T in ComputeLordBonus beside Serra Ascendant's life_threshold_pump; haste in CanAttackFull /
+    // CanTapNow via HasConditionalSelfHaste. Deliberately NOT a printed Haste keyword (that would be
+    // unconditional). 0 threshold = off -> byte-identical for every other card.
+    int  static_artifact_threshold = 0;
+    int  static_artifact_power     = 0;
+    int  static_artifact_tough     = 0;
+    bool static_artifact_haste     = false;
+
+    // ---- "Whenever you cast your Nth spell each turn, ..." (Malcolm, the Eyes: N=2, investigate).
+    // Fired in FireOnCastTriggers when GameState::spells_cast_this_turn == nth_spell_trigger_n (the
+    // counter is incremented before the trigger at every cast site). nth_spell_investigate = Clues
+    // created (CreateClueTokens, the "Clue Token" def). 0 = off.
+    int  nth_spell_trigger_n   = 0;
+    int  nth_spell_investigate = 0;
+
     // ETB fixed-token creation ("When THIS creature enters, create N 1/1 red Goblin tokens" —
     // Mogg War Marshal 1, Siege-Gang Commander 3). > 0 fires at THIS permanent's own ETB, using
     // the shared etb_created_token_power/toughness/subtypes spec (Lathliss). A card sets exactly
@@ -1806,6 +1846,9 @@ struct CardParams
     // it; +power per OTHER declared attacker whose subtype is in subtypes_affected (self-excluded),
     // applied at declare-attackers in both worlds (mirrors attack_trigger_life_loss's scan).
     int attack_pump_power_per_other_matching = 0;
+    // Toughness twin of the above, same crowd (Dire Fleet Captain: "+1/+1 until end of turn for each
+    // other attacking Pirate"). Applied alongside the power half in ApplyAttackSelfPumps.
+    int attack_pump_tough_per_other_matching = 0;
     // Attack self-pump, base = other CONTROLLED matching permanents (Muxus: "Whenever Muxus
     // attacks, it gets +1/+1 until end of turn for each other Goblin you control"). Non-empty
     // subtype gates it; +power/+tough per OTHER permanent you control whose subtype matches.
@@ -2182,6 +2225,12 @@ struct CardParams
     // Gold Rush: "Create a Treasure token." -> N "Treasure Token" permanents (existing cards.json
     // token def; its sac-for-mana machinery prices/spends them).
     int  creates_treasures = 0;
+    // Corsair Captain: "When this creature enters, create N Treasure token(s)." An OWN-ETB mint, fired
+    // in the universal FireOwnEtbTriggers cascade via CreateTreasureTokens (cast AND Aether Vial put,
+    // executor and rollout alike). Deliberately NOT creates_treasures: that param is the Mirrorwing
+    // solo-target-trick mint and ~a dozen trick-specific pricing/provider sites key on it.
+    // The Treasure is subject to the global §2a fresh-hold (PaySacSpendableNow) like any mint.
+    int  etb_creates_treasures = 0;
     // Expedite: "target creature gains haste until end of turn" -> Permanent::temp_haste (read by
     // CanAttackFull / CanTapNow -- a hasted fresh dork may tap for mana; reset each cleanup).
     bool grants_temp_haste = false;
@@ -2315,6 +2364,11 @@ struct CardParams
     // battlefield permanent, not only creatures) and Righteous Valkyrie (gain the entrant's
     // toughness).
     std::vector<std::string> enters_watch_subtypes;
+    // Forerunner of the Coalition: "Whenever another Pirate YOU CONTROL enters, each opponent LOSES
+    // N life." Filtered by enters_watch_subtypes; fired in FireCreatureEnterWatchers as life LOSS
+    // (not damage) x gamesetup::OpponentHeads(). NOT opp_creature_enters_life_loss (Suture Priest:
+    // the ENTRANT's controller loses, and it is the `gift` routing signature).
+    int  own_creature_enters_opp_life_loss = 0;
     // Giada, Font of Hope: "Each OTHER Angel you control enters with an additional +1/+1 counter
     // on it for each Angel you ALREADY control." A REPLACEMENT EFFECT (CR 614), not a trigger --
     // applied in FireEtbWatchers ABOVE the FireCreatureEnterWatchers call, so the counters are on
@@ -2820,6 +2874,15 @@ struct CardDefinition
 // trigger is silently skipped on every board. (The filter-only params -- creature_enters_min_power,
 // own_creature_enters_draw, enters_watch_subtypes -- are deliberately NOT terms: they narrow a
 // payload, they are never a payload, so a definition carrying only those fires nothing.)
+// "As this permanent enters, choose a creature type": the Incubator reducer form OR the Mimic /
+// Automaton "is the chosen type" form. Gates the choice at FireEtbWatchers only -- every PRICING site
+// keeps reading chooses_creature_type alone, so the Mimic family never becomes a cost reducer.
+inline bool ChoosesCreatureTypeOnEnter(const CardParams& p)
+{
+    return p.chooses_creature_type || p.chosen_type_added_to_self
+        || p.lord_affects_chosen_subtype || p.other_chosen_subtype_enters_counters > 0;
+}
+
 inline bool DefHasCreatureEnterWatcher(const CardParams& p)
 {
     return p.any_creature_enters_lifegain > 0
@@ -2827,7 +2890,8 @@ inline bool DefHasCreatureEnterWatcher(const CardParams& p)
         || p.own_creature_enters_lifegain_toughness
         || p.own_creature_enters_self_counters > 0
         || p.any_creature_enters_self_counters_power
-        || p.opp_creature_enters_life_loss > 0;
+        || p.opp_creature_enters_life_loss > 0
+        || p.own_creature_enters_opp_life_loss > 0;   // Forerunner of the Coalition (2026-09-26)
 }
 
 // Singleton registry of all known card definitions.

@@ -7113,7 +7113,8 @@ static int EvalCard(const CardDefinition& def, const GameState& state, int chose
         // evaluated IN HAND, so HasHasteFromLords cannot see it on the battlefield yet.
         bool haste = def.card.HasKeyword(Keyword::Haste)
                   || HasHasteFromLords(def.card, state.battlefield, state.active_player_index)
-                  || (def.params.grants_haste && def.params.affects_all_creatures);
+                  || (def.params.grants_haste && def.params.affects_all_creatures)
+                  || HasConditionalSelfHaste(def.card, state.battlefield, state.active_player_index);
         int  attacks = ExpectedAttacks(state);
         if (!haste && attacks > 0) { --attacks; }
         return power * attacks * DMG + cascade_credit + lifegain_deck_credit;
@@ -7246,7 +7247,9 @@ static int EvalCard(const CardDefinition& def, const GameState& state, int chose
             int power = (cdef->card.m_power.value_or(0) + lord_pb) * (ds ? 2 : 1);
             bool haste = cdef->card.HasKeyword(Keyword::Haste)
                       || HasHasteFromLords(cdef->card, state.battlefield,
-                                           state.active_player_index);
+                                           state.active_player_index)
+                      || HasConditionalSelfHaste(cdef->card, state.battlefield,
+                                                 state.active_player_index);
             int attacks = std::max(1, ExpectedAttacks(state) - (haste ? 1 : 2));
             best = std::max(best, power * attacks * DMG);
         }
@@ -8840,6 +8843,14 @@ static std::uint64_t ActionFoldSig(const Action& a)
     FoldMix(h, static_cast<std::uint64_t>(a.card_mv));
     FoldMix(h, static_cast<std::uint64_t>(a.vial_attack_power));
     FoldMix(h, static_cast<std::uint64_t>(a.haste_attack_power));
+    // Tomb Raider projection fields: 0/false for every card without them, and FoldMix of a zero is
+    // still a mix step -- so fold ONLY when set, keeping every other deck's signature byte-identical.
+    if (a.cond_artifact_haste_power != 0 || a.adds_durable_artifact)
+    {
+        FoldMix(h, 0x7A11Dull);
+        FoldMix(h, static_cast<std::uint64_t>(a.cond_artifact_haste_power));
+        FoldMix(h, a.adds_durable_artifact ? 1u : 0u);
+    }
     FoldMix(h, a.haste_prowess ? 1u : 0u);
     FoldMix(h, a.is_draw ? 1u : 0u);
     FoldMix(h, a.has_spectacle ? 1u : 0u);
@@ -11363,14 +11374,12 @@ static std::size_t EtbDigCandidateCountNow(const GameState& state, const CardPar
     std::size_t matches = 0;
     for (int i = 0; i < n; ++i)
     {
+        // Same predicate as PerformEtbDig's legal-candidate loop (CardMatchesTypeName on the printed
+        // card), so the searched axis is sized by exactly what resolution will accept.
         const CardDefinition* d = CardDatabase::Instance().LookupCached(ap.library[i]);
-        const SubtypeSet& subs = d ? d->card.m_subtypes : ap.library[i].m_subtypes;
+        const Card& pc = d ? d->card : ap.library[i];
         for (const std::string& want : pp.etb_dig_subtypes)
-        {
-            bool match = false;
-            for (const std::string& cs : subs) { if (cs == want) { match = true; break; } }
-            if (match) { ++matches; break; }
-        }
+        { if (CardMatchesTypeName(pc, want)) { ++matches; break; } }
     }
     return matches;
 }
@@ -14326,7 +14335,8 @@ static DecisionProvider::MainPhase ClassifyMainPhase(const GameState& state,
         || p.scales_per_matching || p.affects_all_creatures || p.domain_self_pump
         || p.power_equals_creature_count
         || p.pt_equals_snow_permanents_you_control
-        || p.pt_equals_snow_permanents_on_battlefield)
+        || p.pt_equals_snow_permanents_on_battlefield
+        || p.static_artifact_threshold > 0)   // Goblin Tomb Raider: hasty whenever an artifact is out
     { return MP::Main1; }
     // CARD-DEPENDENCY-MAP pull-forward (docs/design/card-dependency-map.md, USER 2026-08-15):
     // a card's phase is a consequence of the deck's dependency graph. A lifegain->loss ENABLER
@@ -14439,7 +14449,9 @@ static DecisionProvider::MainPhase ClassifyMainPhase(const GameState& state,
             // Hellkite").
             if (def.card.HasKeyword(Keyword::Haste)
                 || HasHasteFromLords(def.card, state.battlefield,
-                                     state.active_player_index))
+                                     state.active_player_index)
+                || HasConditionalSelfHaste(def.card, state.battlefield,
+                                           state.active_player_index))
             { return MP::Main1; }
             // VIGILANT MANA SCALER exception (condemn-dig): the m1 pump costs the scaler's
             // mana; the winning lines attack first and pay post-combat -> genuinely
@@ -14475,7 +14487,9 @@ static DecisionProvider::MainPhase ClassifyMainPhase(const GameState& state,
                 // scaler; capacity-one equip access -> Both (protection-aware).
                 if (def.card.HasKeyword(Keyword::Haste)
                     || HasHasteFromLords(def.card, state.battlefield,
-                                         state.active_player_index))
+                                         state.active_player_index)
+                    || HasConditionalSelfHaste(def.card, state.battlefield,
+                                               state.active_player_index))
                 { return MP::Main1; }
                 if (scaling_attacker)
                 { return BoardHasVigilantManaScalerAttacker(state) ? MP::Both : MP::Main1; }
@@ -17451,9 +17465,16 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
         // Gated on power > 0, which is also precisely when every provider's ShouldAttackWith returns
         // true (Generic always; the AntiLifegain/Hinata overrides hold back only 0-power no-trigger
         // dorks) -- so the projection cannot claim an attack the real DeclareAttackers won't make.
+        // Goblin Tomb Raider: a DURABLE artifact already on board hastes it for this whole turn (the
+        // projection deliberately ignores Treasures/Clues, which the plan may sacrifice first -- the
+        // never-over-credit direction; the real declare-attackers test is exact).
+        const bool cond_haste_now = HasConditionalSelfHaste(def.card, state.battlefield,
+                                                            state.active_player_index,
+                                                            /*durable_only=*/true);
         if (def.card.IsCreature()
             && (def.card.HasKeyword(Keyword::Haste)
-                || HasHasteFromLords(def.card, state.battlefield, state.active_player_index)))
+                || HasHasteFromLords(def.card, state.battlefield, state.active_player_index)
+                || cond_haste_now))
         {
             auto [lord_pb, lord_tb] = ComputeLordBonus(def.card, state,
                                                        state.active_player_index);
@@ -17468,6 +17489,27 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
                 a.haste_prowess      = def.card.HasKeyword(Keyword::Prowess);
             }
         }
+        else if (def.card.IsCreature() && def.params.static_artifact_haste)
+        {
+            // No durable artifact yet: stamp the CONDITIONAL power, credited by the subset loops
+            // only when another selected action adds a durable artifact (Mimic / Automaton / Vial).
+            // ComputeLordBonus already includes the +P if ANY artifact (even a Treasure) is out;
+            // otherwise add it, since the credited world is one where a durable artifact exists.
+            auto [lord_pb, lord_tb] = ComputeLordBonus(def.card, state, state.active_player_index);
+            (void)lord_tb;
+            const bool any_art = ControlsAtLeastNArtifacts(state.battlefield, state.active_player_index,
+                                                           def.params.static_artifact_threshold);
+            const bool ds = def.card.HasKeyword(Keyword::DoubleStrike)
+                         || HasDoubleStrikeFromLords(def.card, state.battlefield,
+                                                     state.active_player_index);
+            const int power = (def.card.m_power.value_or(0) + lord_pb
+                               + (any_art ? 0 : def.params.static_artifact_power)) * (ds ? 2 : 1);
+            if (power > 0) { a.cond_artifact_haste_power = power; }
+        }
+        // A cast that puts a DURABLE artifact onto the battlefield (the other half of the credit).
+        if (def.card.HasType(CardType::Artifact) && def.params.sac_for_mana_amount <= 0
+            && !def.params.sac_draw_cost.has_value())
+        { a.adds_durable_artifact = true; }
         if (IsManaRitual(def)) { a.ritual_float = RitualFloatAmount(state, def, a.chosen_x); }  // Irencrag burst
         // "When this creature enters, untap up to N lands" (Peregrine Drake 5 / Cloud of Faeries 2).
         //
@@ -17831,9 +17873,12 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
                        || HasDoubleStrikeFromLords(copt->card, state.battlefield,
                                                    state.active_player_index);
                 int power = (copt->card.m_power.value_or(0) + lord_pb) * (ds ? 2 : 1);
+                // Vial on board = an artifact on board, so a Vial-dropped Tomb Raider is hasty.
                 bool haste = copt->card.HasKeyword(Keyword::Haste)
                           || HasHasteFromLords(copt->card, state.battlefield,
-                                               state.active_player_index);
+                                               state.active_player_index)
+                          || HasConditionalSelfHaste(copt->card, state.battlefield,
+                                                     state.active_player_index);
                 int attacks = ExpectedAttacks(state);
                 if (!haste && attacks > 0) { --attacks; }
 
@@ -24450,6 +24495,8 @@ TurnSolver::Plan TurnSolver::SolveUncached(const GameState& state, bool is_pre_c
         int haste_cast_atk     = 0;   // hard-cast haste creatures attacking this turn
         int haste_cast_prowess = 0;   // ... of which have prowess (pumped by this plan's casts)
         int discard_lands_used = 0;  // lands consumed by additional costs (retrace, LE)
+        int  cond_art_haste       = 0;     // Tomb Raider: hasty only if the subset adds a durable artifact
+        bool subset_adds_artifact = false;
 
         for (int j : sel)
         {
@@ -24481,6 +24528,8 @@ TurnSolver::Plan TurnSolver::SolveUncached(const GameState& state, bool is_pre_c
             total_eval        += c.eval;
             vial_haste_atk    += c.vial_attack_power;
             haste_cast_atk    += c.haste_attack_power;
+            cond_art_haste    += c.cond_artifact_haste_power;
+            if (c.adds_durable_artifact) { subset_adds_artifact = true; }
             if (c.haste_prowess) { ++haste_cast_prowess; }
 
             for (const TriggerSource& src : trigger_sources)
@@ -24488,6 +24537,9 @@ TurnSolver::Plan TurnSolver::SolveUncached(const GameState& state, bool is_pre_c
                 if (c.card_mv <= src.max_mv) { self_damage += src.damage; }
             }
         }
+        // Goblin Tomb Raider: a same-subset DURABLE artifact (Mimic / Automaton / Vial) hastes it by
+        // declare-attackers. Zero for every deck without static_artifact_haste -> byte-identical.
+        if (subset_adds_artifact) { haste_cast_atk += cond_art_haste; }
 
         // Hinata combo: a ritual cast in THIS subset floats mana for the rest of the subset.
         // Credit its gross float to the affordable pool (the ritual's own cost is already in
@@ -34415,6 +34467,8 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
         int haste_cast_atk     = 0;   // hard-cast haste creatures attacking this turn
         int haste_cast_prowess = 0;   // ... of which have prowess (pumped by this plan's casts)
         int discard_lands_used = 0;  // lands consumed by additional costs (retrace, LE)
+        int  cond_art_haste       = 0;     // Tomb Raider: hasty only if the subset adds a durable artifact
+        bool subset_adds_artifact = false;
 
         for (int j : sel)
         {
@@ -34439,12 +34493,17 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
             total_eval     += c.eval;
             vial_haste_atk += c.vial_attack_power;
             haste_cast_atk += c.haste_attack_power;
+            cond_art_haste += c.cond_artifact_haste_power;
+            if (c.adds_durable_artifact) { subset_adds_artifact = true; }
             if (c.haste_prowess) { ++haste_cast_prowess; }
             for (const TriggerSource& src : trigger_sources)
             {
                 if (c.card_mv <= src.max_mv) { self_damage += src.damage; }
             }
         }
+        // Goblin Tomb Raider: a same-subset DURABLE artifact (Mimic / Automaton / Vial) hastes it by
+        // declare-attackers. Zero for every deck without static_artifact_haste -> byte-identical.
+        if (subset_adds_artifact) { haste_cast_atk += cond_art_haste; }
 
         // Same-turn ramp credit. Ritual float (Reality Spasm / Irencrag) credited as wild; a mana
         // rock cast in THIS subset (Sol Ring -> {C}{C}) credited by its REAL produced colours, but

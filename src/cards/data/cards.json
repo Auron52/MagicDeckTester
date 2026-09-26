@@ -466,7 +466,7 @@
    ],
    "subtypes": [],
    "keywords": [],
-   "oracle_text": "As this land enters, choose a creature type. {T}: Add {C}. {T}: Add one mana of any color. Spend this mana only to cast a creature spell of the chosen type. [Simplified: modelled as producing all five colors; ETB choice and color restriction not modelled]",
+   "oracle_text": "As this land enters, choose a creature type.\n{T}: Add {C}.\n{T}: Add one mana of any color. Spend this mana only to cast a creature spell of the chosen type. [Modelled as producing all five colours plus {C}. colored_creature_only enforces the restriction in the payer (ProducesForPayment / TapFlowInfeasible / the backtracking payer): for a noncreature spell, or any activated ability, this land yields only {C}. So it cannot pay Lightning Bolt's {R} or Siren Stormtamer's {U}, but it pays generic costs such as Aether Vial {1} and a Clue's {2}. The ETB creature-type choice is simplified to 'any creature spell'. That is outcome-exact for Pirates: every creature except Metallic Mimic {2} and Adaptive Automaton {3} is a Pirate, and those two cost only generic mana, which the land's unrestricted {C} pays identically. Search-side only: with MTG_CCO_NONCREATURE_POOL off (default) the noncreature enumeration pool counts this land as any-colour, so a Bolt plan relying on it can be offered and is then refused by the payer (no illegal play).]",
    "template": "basic_land",
    "parameters": {
     "produces": [
@@ -8912,6 +8912,253 @@
     "attack_trigger_impulse_exile": 2,
     "attack_trigger_impulse_playable": 1,
     "attack_trigger_impulse_expiry_next_turn": true
+   }
+  },
+  {
+   "name": "Metallic Mimic",
+   "mana_cost": "{2}",
+   "types": [
+    "Artifact",
+    "Creature"
+   ],
+   "subtypes": [
+    "Shapeshifter"
+   ],
+   "keywords": [],
+   "power": 2,
+   "toughness": 1,
+   "oracle_text": "As this creature enters, choose a creature type.\nThis creature is the chosen type in addition to its other types.\nEach other creature you control of the chosen type enters with an additional +1/+1 counter on it. [GENERIC -- the type is not baked in. CLAUSE 1 (choose a creature type): chosen_type_added_to_self makes the ETB choice at the universal enter cascade (FireEtbWatchers) via the shared DominantCreatureSubtypeId -> Permanent::chosen_subtype_id (Pirate in Pirates), identical in executor and rollout, cast or Aether Vial put. Deck-constant, so not surfaced to the human: the deck's own tribe weakly dominates every alternative for this card (both its effects touch only creatures you control, and nothing in the list penalises a type). PROVISIONAL inert-gap disclosure. CLAUSE 2 (is the chosen type in addition): the chosen id is APPENDED to the BATTLEFIELD permanent's own subtypes, never the printed card -- so on the battlefield Mimic IS a Pirate (Corsair Captain's and Adaptive Automaton's lords, Dire Fleet Captain's attacking-Pirate count, Forerunner of the Coalition's 'another Pirate enters' drain) while in hand/library it is only a Shapeshifter (not a Forerunner tutor target, not a Pirate for a reveal cost; Staunch Crewmate can still take it as an ARTIFACT). CLAUSE 3 is a CR 614 REPLACEMENT: other_chosen_subtype_enters_counters 1, applied in FireEtbWatchers' as-enters counter block AFTER the entrant's own type choice and ABOVE the enter-trigger watchers, so a second Mimic / an Adaptive Automaton naming the same type enters with the counter (CR 614.12) and the counter is on the body before any enter trigger reads it. 'Other' by permanent address. Simultaneous-enter ruling (a creature entering WITH Mimic gets no counter) is inert: the engine resolves enters one at a time and nothing in this list puts Mimic and a Pirate onto the battlefield simultaneously.]",
+   "template": "vanilla_creature",
+   "parameters": {
+    "chosen_type_added_to_self": true,
+    "other_chosen_subtype_enters_counters": 1
+   }
+  },
+  {
+   "name": "Adaptive Automaton",
+   "mana_cost": "{3}",
+   "types": [
+    "Artifact",
+    "Creature"
+   ],
+   "subtypes": [
+    "Construct"
+   ],
+   "keywords": [],
+   "power": 2,
+   "toughness": 2,
+   "oracle_text": "As this creature enters, choose a creature type.\nThis creature is the chosen type in addition to its other types.\nOther creatures you control of the chosen type get +1/+1. [GENERIC -- the type is not baked in. CLAUSE 1: ETB choice via the shared DominantCreatureSubtypeId at FireEtbWatchers -> Permanent::chosen_subtype_id (deck-constant; not surfaced -- same weak-dominance argument and PROVISIONAL inert-gap disclosure as Metallic Mimic). CLAUSE 2: chosen_type_added_to_self appends the chosen id to the BATTLEFIELD permanent's subtypes only -- so it receives Corsair Captain's +1/+1 and other Automatons' +1/+1, counts for Dire Fleet Captain, triggers Forerunner, and gets Metallic Mimic's counter; in hand/library it is only a Construct. CLAUSE 3: lord_effect with lord_affects_chosen_subtype (ComputeLordBonus matches creatures carrying THIS permanent's chosen_subtype_id instead of a static subtypes_affected list), +1/+1, lord_excludes_self by address, so N Automatons each get +(N-1). Known narrowing: hand-card VALUATION heuristics score an Automaton/Mimic in hand from its printed card (no chosen type yet) -- move-ordering only; the lookahead runs the real enter code.]",
+   "template": "lord_effect",
+   "parameters": {
+    "chosen_type_added_to_self": true,
+    "lord_affects_chosen_subtype": true,
+    "power_bonus": 1,
+    "tough_bonus": 1,
+    "lord_excludes_self": true
+   }
+  },
+  {
+   "name": "Corsair Captain",
+   "mana_cost": "{2}{U}",
+   "types": [
+    "Creature"
+   ],
+   "subtypes": [
+    "Human",
+    "Pirate"
+   ],
+   "keywords": [],
+   "power": 2,
+   "toughness": 2,
+   "oracle_text": "When this creature enters, create a Treasure token. (It's an artifact with \"{T}, Sacrifice this token: Add one mana of any color.\")\nOther Pirates you control get +1/+1. [LORD: lord_effect + subtypes_affected (Pirate) + lord_excludes_self (Inspiring Veteran's shape) in ComputeLordBonus -- the one shared P/T site combat, the lethal SBA and board eval read, so executor and rollout move together; 'Other' by permanent address, so copies buff each other and never themselves. Reaches Metallic Mimic / Adaptive Automaton once they carry the chosen type Pirate on the battlefield. ETB TREASURE: etb_creates_treasures 1, fired in the universal FireOwnEtbTriggers cascade (cast and Aether Vial put, both worlds) through CreateTreasureTokens -> the existing 'Treasure Token' def (sac_for_mana_amount 1: a live pay-sac source, any colour, colour searched). [PARTIAL / PROVISIONAL: under the global §2a fresh-hold doctrine (MTG_PAYSAC_FRESH_HOLD, default ON; PaySacSpendableNow / FreshHoldActive) a Treasure that entered THIS turn is banked -- invisible to payment -- unless a copy-magnet or Frontline Heroism is live, and this deck has neither; the searched fresh-spend axis (MTG_FRESH_SPEND_AXIS) keys on creates_treasures only, so it does not release it either. Real Magic lets you crack it at once (e.g. T3 Captain on 3 lands, crack for Daring Buccaneer or Aether Vial). Executor and rollout agree, so this is a NARROWING, not a divergence; whether to exempt this mint is an open orchestrator/user decision.] The Treasure is an artifact (Goblin Tomb Raider sees it) but not a creature or Pirate.]",
+   "template": "lord_effect",
+   "parameters": {
+    "subtypes_affected": [
+     "Pirate"
+    ],
+    "power_bonus": 1,
+    "tough_bonus": 1,
+    "lord_excludes_self": true,
+    "etb_creates_treasures": 1
+   }
+  },
+  {
+   "name": "Dire Fleet Captain",
+   "mana_cost": "{B}{R}",
+   "types": [
+    "Creature"
+   ],
+   "subtypes": [
+    "Orc",
+    "Pirate"
+   ],
+   "keywords": [],
+   "power": 2,
+   "toughness": 2,
+   "oracle_text": "Whenever this creature attacks, it gets +1/+1 until end of turn for each other attacking Pirate. [Attack trigger on the Goblin Piledriver self-pump in the shared ApplyAttackSelfPumps (executor CombatPhase + rollout SimulateCombat, lockstep): attack_pump_power_per_other_matching 1 + attack_pump_tough_per_other_matching 1 over subtypes_affected (Pirate), counting OTHER declared attackers (self-excluded) whose LIVE battlefield subtypes include Pirate -- so a Metallic Mimic / Adaptive Automaton that chose Pirate counts. Counted once at declare-attackers (the bonus is locked in on resolution, CR 608.2h) and cleared at cleanup. The toughness half is faithful but inert vs the passive opponent (it never blocks or deals damage). Known shared under-count: the enumerator's this-turn attack projection (PendingAttackDamage) ignores every attack self-pump (Piledriver too) -- the safe direction; real combat is exact.]",
+   "template": "vanilla_creature",
+   "parameters": {
+    "attack_pump_power_per_other_matching": 1,
+    "attack_pump_tough_per_other_matching": 1,
+    "subtypes_affected": [
+     "Pirate"
+    ]
+   }
+  },
+  {
+   "name": "Goblin Tomb Raider",
+   "mana_cost": "{R}",
+   "types": [
+    "Creature"
+   ],
+   "subtypes": [
+    "Goblin",
+    "Pirate"
+   ],
+   "keywords": [],
+   "power": 1,
+   "toughness": 2,
+   "oracle_text": "As long as you control an artifact, this creature gets +1/+0 and has haste. [CONDITIONAL STATIC (CR 611.3, continuously checked) keyed on controlling >= static_artifact_threshold (1) artifacts -- ANY permanent you control with the Artifact type: Aether Vial, Metallic Mimic, Adaptive Automaton, Corsair Captain's Treasure, Malcolm's Clue. +1/+0 = static_artifact_power 1 inside ComputeLordBonus (beside Serra Ascendant's life-threshold pump), so every combat/eval/SBA read site sees it and it switches off the moment the last artifact leaves. HASTE = static_artifact_haste, read by CanAttackFull (the single declare-attackers legality gate of the executor and every rollout attack site) and CanTapNow, against the live board AT declare-attackers -- so an artifact cast earlier in the same main phase hastes a Raider cast this turn, and a Vial-dropped Raider is always hasty. Deliberately NOT in keywords (that would be unconditional). Enumeration projection is CONSERVATIVE by design: the hard-cast this-turn attack credit counts only DURABLE artifacts (nontoken, not a sac-for-mana/sac-draw source) already on board or cast/put by the same subset; a Treasure/Clue the plan might sacrifice first is never credited (never over-credit). Move-ordering heuristics (EvalCard, ClassifyMainPhase) use the exact any-artifact test.]",
+   "template": "vanilla_creature",
+   "parameters": {
+    "static_artifact_threshold": 1,
+    "static_artifact_power": 1,
+    "static_artifact_tough": 0,
+    "static_artifact_haste": true
+   }
+  },
+  {
+   "name": "Forerunner of the Coalition",
+   "mana_cost": "{2}{B}",
+   "types": [
+    "Creature"
+   ],
+   "subtypes": [
+    "Human",
+    "Pirate"
+   ],
+   "keywords": [],
+   "power": 2,
+   "toughness": 2,
+   "oracle_text": "When this creature enters, you may search your library for a Pirate card, reveal it, then shuffle and put that card on top.\nWhenever another Pirate you control enters, each opponent loses 1 life. [CLAUSE 1 (ETB tutor to TOP): the Giant Harbinger machinery -- tutor_to_top + tutor_types (Pirate) + tutor_shuffle_after + tutor_optional. 'Pirate card' resolves through CardMatchesTypeName's SUBTYPE fallback on the LIBRARY card's PRINTED subtypes, so Metallic Mimic / Adaptive Automaton are correctly NOT Pirate cards in the library (their chosen type exists only on the battlefield). PerformTutor erases the card, ShuffleAfterSearch (CR 701.19c), then puts it on top and stamps top_stacked_*; 'reveal it' is the viewer's one-card reveal. WHICH Pirate is the searched tutor axis (main_phase plan variants on a cast; the tutor_etb chooser on a Vial put). 'You MAY search' is modelled: tutor_optional adds the decline variant (a to-top fetch replaces the next draw). CLAUSE 2 (drain): own_creature_enters_opp_life_loss 1 filtered by enters_watch_subtypes (Pirate), fired from FireCreatureEnterWatchers (the universal enter cascade: cast, Aether Vial put and tokens, executor and rollout identically). LIFE LOSS, not damage, x OpponentHeads ('each opponent'). 'Another' = the loop's own-index skip; 'you control' = watcher controller == entrant controller. A Metallic Mimic / Adaptive Automaton that chose Pirate IS a Pirate as it enters (its chosen type is appended above the watcher call), so it triggers the drain.]",
+   "template": "custom",
+   "parameters": {
+    "tutor_to_top": true,
+    "tutor_types": [
+     "Pirate"
+    ],
+    "tutor_shuffle_after": true,
+    "tutor_optional": true,
+    "own_creature_enters_opp_life_loss": 1,
+    "enters_watch_subtypes": [
+     "Pirate"
+    ]
+   }
+  },
+  {
+   "name": "Staunch Crewmate",
+   "mana_cost": "{1}{U}",
+   "types": [
+    "Creature"
+   ],
+   "subtypes": [
+    "Human",
+    "Pirate"
+   ],
+   "keywords": [],
+   "power": 2,
+   "toughness": 1,
+   "oracle_text": "When this creature enters, look at the top four cards of your library. You may reveal an artifact or Pirate card from among them and put it into your hand. Put the rest on the bottom of your library in a random order. [etb_dig_count 4 with etb_dig_subtypes (Artifact, Pirate); each filter name is matched by CardMatchesTypeName on the PRINTED card (PerformEtbDig AND the search's axis sizer EtbDigCandidateCountNow), so a card-type name tests the type and anything else tests the subtype. Legal hits: every Pirate plus Aether Vial, Metallic Mimic and Adaptive Automaton (artifacts; Mimic/Automaton are not Pirates in the library). No gate condition. Fires on a cast and on a Vial put, in lockstep. 'You may' = take nothing is allowed (human -1 / empty ranked list). The pick is ranked by the provider (EtbDigCandidates) and searched (MTG_ETBDIG_AXIS); human play uses the dig chooser. 'Random order' to the bottom is modelled as look order, which a goldfish cannot observe (etb_dig precedent). Reveal is inert vs a passive opponent.]",
+   "template": "vanilla_creature",
+   "parameters": {
+    "etb_dig_count": 4,
+    "etb_dig_subtypes": [
+     "Artifact",
+     "Pirate"
+    ]
+   }
+  },
+  {
+   "name": "Malcolm, the Eyes",
+   "mana_cost": "{U}{R}",
+   "types": [
+    "Creature"
+   ],
+   "supertypes": [
+    "Legendary"
+   ],
+   "subtypes": [
+    "Siren",
+    "Pirate"
+   ],
+   "keywords": [
+    "Flying",
+    "Investigate",
+    "Haste"
+   ],
+   "power": 2,
+   "toughness": 2,
+   "oracle_text": "Flying, haste\nWhenever you cast your second spell each turn, investigate. (Create a Clue token. It's an artifact with \"{2}, Sacrifice this token: Draw a card.\") [All clauses modelled. Haste is a real keyword; Flying is inert (the passive opponent never blocks). The trigger fires in FireOnCastTriggers, shared by the executor and the rollout, when GameState::spells_cast_this_turn == nth_spell_trigger_n (2); the counter is incremented before the trigger at every cast site, so the test is exact and counts spells cast before Malcolm entered (CR 603.2). Malcolm is on the stack, not the battlefield, during his own cast, so he never triggers off himself; Aether Vial puts are not casts. nth_spell_investigate 1 -> CreateClueTokens (the 'Clue Token' def, whose {2}-sac-draw is a real searched ActivatePermAbility), created after the trigger loop. The trigger resolves at cast time, ahead of the second spell (the engine's standard cast-trigger collapse; no opponent interaction exists). Legend rule: shared EnforceLegendRule (one copy in the list).]",
+   "template": "vanilla_creature",
+   "parameters": {
+    "nth_spell_trigger_n": 2,
+    "nth_spell_investigate": 1
+   }
+  },
+  {
+   "name": "Siren Stormtamer",
+   "mana_cost": "{U}",
+   "types": [
+    "Creature"
+   ],
+   "subtypes": [
+    "Siren",
+    "Pirate",
+    "Wizard"
+   ],
+   "keywords": [
+    "Flying"
+   ],
+   "power": 1,
+   "toughness": 1,
+   "oracle_text": "Flying\n{U}, Sacrifice this creature: Counter target spell or ability that targets you or a creature you control. [Modelled as a 1/1 Pirate flier (vanilla_creature); its Pirate type is live for every Pirate reader in the list. Flying is inert (the passive opponent never blocks). [PARTIAL / PROVISIONAL: the activated ability '{U}, Sacrifice: Counter target spell or ability that targets you or a creature you control' is deliberately NOT modelled. (1) It can never be legally activated here: it needs a spell or ability targeting you or your creature, and the passive opponent casts and activates nothing; the deck's own such stack objects (a self-aimed Lightning Bolt, Kitesail Larcenist choosing its own permanent) are optional, and countering your own optional spell/trigger is never better than not making it -- the engine also has no priority window to respond to your own stack object. (2) Even if legal, the sacrifice is strictly dominated: no card in the list has a death trigger, dies-watcher, persist or LTB return. So it does NOT carry sac_creature_outlet (which would offer an illegal, targetless activation in human play).]]",
+   "template": "vanilla_creature",
+   "parameters": {}
+  },
+  {
+   "name": "Spirebluff Canal",
+   "mana_cost": "",
+   "types": [
+    "Land"
+   ],
+   "subtypes": [],
+   "keywords": [],
+   "oracle_text": "This land enters tapped unless you control two or fewer other lands.\n{T}: Add {U} or {R}. [Fastland: fastland_max_other_lands 2 -- LandWouldEnterTapped counts the lands the active player controls (the land being played is still in hand, so each counts as 'other') and it enters tapped iff that count > 2. Same predicate on the executor drop, the rollout drop and the enumerator's priced land copy. Fully modelled.]",
+   "template": "basic_land",
+   "parameters": {
+    "produces": [
+     "U",
+     "R"
+    ],
+    "fastland_max_other_lands": 2
+   }
+  },
+  {
+   "name": "Blackcleave Cliffs",
+   "mana_cost": "",
+   "types": [
+    "Land"
+   ],
+   "subtypes": [],
+   "keywords": [],
+   "oracle_text": "This land enters tapped unless you control two or fewer other lands.\n{T}: Add {B} or {R}. [Fastland: fastland_max_other_lands 2 -- LandWouldEnterTapped counts the lands the active player controls (the land being played is still in hand, so each counts as 'other') and it enters tapped iff that count > 2. Same predicate on the executor drop, the rollout drop and the enumerator's priced land copy. Fully modelled.]",
+   "template": "basic_land",
+   "parameters": {
+    "produces": [
+     "B",
+     "R"
+    ],
+    "fastland_max_other_lands": 2
    }
   }
  ]

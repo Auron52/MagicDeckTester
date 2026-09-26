@@ -656,14 +656,16 @@ bool PerformEtbDig(GameState& state, int controller_index,
     std::vector<int> legal;
     for (int i = 0; i < static_cast<int>(examined.size()); ++i)
     {
+        // Each filter name goes through CardMatchesTypeName on the PRINTED card: a card-TYPE name
+        // ("Artifact" -- Staunch Crewmate's "artifact or Pirate card") tests the type, anything else
+        // falls back to the subtype scan, so a subtype-only filter ("Knight", Acclaimed Contender)
+        // matches exactly as before. Printed card, so a Metallic Mimic in the library is an
+        // Artifact but NOT a Pirate (its chosen type exists only on the battlefield).
         const CardDefinition* d = CardDatabase::Instance().LookupCached(examined[i]);
-        const SubtypeSet& subs = d ? d->card.m_subtypes : examined[i].m_subtypes;
+        const Card& pc = d ? d->card : examined[i];
         bool match = false;
         for (const std::string& want : pp.etb_dig_subtypes)
-        {
-            for (const std::string& cs : subs) { if (cs == want) { match = true; break; } }
-            if (match) { break; }
-        }
+        { if (CardMatchesTypeName(pc, want)) { match = true; break; } }
         if (match) { legal.push_back(i); }
     }
     // WHICH match to take is provider-owned (EtbDigCandidates). The base rule is the historical
