@@ -530,6 +530,13 @@ winner won anyway, by 0.024. But further rounds under this apparatus buy less an
 step is not another screen, it is generating a real mulligan profile and value leaf for the candidate
 and measuring it standalone — which is the **adoption** path and the user's decision.
 
+> **Superseded by round G (below), and the "safe direction" reading was right but incomplete.** The
+> keep-table half of that next step was authorised by the user and has now been done: every arm plays a
+> table generated for its own counts. The two biases did run against the candidate — worth **0.039 t** in
+> total — so the shared apparatus was *understating* the effect, not producing it. What is still
+> outstanding from this paragraph is the **value leaf**, which round G does not touch: every arm still
+> plays the shipped list's `.value.json`. That remains part of adoption.
+
 ### The one axis left open
 
 ~~**Aether Vial 3→2 in WhiteKnights.**~~ **CLOSED by screens 6 and F**: cutting Vial to 2 is −0.0154
@@ -542,6 +549,12 @@ tested, and it was worse), and the land count at 24 (20 Plains + 4 Remote Farm; 
 was optimal, but the Vial cut changed the mana-source total). Each is a small effect against an
 apparatus that is now stretched, which is the argument for generating real artifacts before chasing
 them.
+
+> **ALL THREE ARE NOW CLOSED by round G**, on real per-arm tables and held-out confirmed:
+> **Knight Exemplar 4→3 ADOPT** (it is the worst card in the list), **Hero of Bladehold 3→2 a null**
+> (stay at 3), **land count 24 CORRECT** (25 is worse, 22–23 is worth nothing net of the card that
+> replaced the land). The argument in the last sentence was the right one: generating the artifacts first
+> is what turned a −0.0102 hint into a replicated result.
 
 ## Round G — the real-table round, and the alias was hiding something
 
@@ -710,8 +723,13 @@ the whole curve, both decks on their own tables, `long`, 20,000 paired games:
 
 | win turn | 4 | **5** | **6** | 7 | 8 | 9 | 10 | 11 | unwon |
 |---|---|---|---|---|---|---|---|---|---|
-| shipped list | 671 | 12,585 | 5,476 | 997 | 197 | 57 | 15 | 2 | 2 |
-| **candidate** | 839 | **16,264** | **2,368** | 416 | 90 | 14 | 9 | 0 | 0 |
+| shipped list | 671 | 12,585 | 5,476 | 997 | 197 | 57 | 15 | 2 | **0** |
+| **candidate** | 839 | **16,264** | **2,368** | 416 | 90 | 14 | 9 | 0 | **0** |
+
+**Nothing goes unwon** — across all 280,000 games of the six-arm run the slowest win is turn 12 against an
+18-turn cap, so the loss-penalized mean (`max_turns + 1` for an unwon game) is doing no work at all here
+and every delta in this round is a pure win-turn delta. Worth stating because it is not generally true;
+on other decks the penalty carries part of the effect.
 
 **The candidate converts turn-6 kills into turn-5 kills and cuts the turn-7-and-later population by
 ~60%.** Turn-4 wins — the nut draws — improve only modestly (671 → 839). Per game: **28.1% faster, 63.7%
@@ -894,3 +912,18 @@ it would replace.
 3. **Knights' sideboard is full of main-deck candidates** — Hero of Bladehold, 2 Accorder Paladin,
    Kinsbaile Cavalier, Student of Warfare, Valiant Knight. Promoting any is an *introduced card* for
    that list and needs its own alias; it is out of scope for screens 1–4 and would be screen 5.
+   **Round G removes the apparatus obstacle**: an introduced card gets its own bucket by construction
+   when the table is generated for the arm holding it, so no alias is needed and the `own` column would be
+   clean. What is left is a scope question, not a method one — *"I will let you know later if there are
+   any other cards I would like to try, but let's optimize on the set we have for now"* (user,
+   2026-09-26) reads as holding this back, and a sideboard card is arguably already "the set we have".
+   **Not run; say the word and it is one spec.**
+4. **Adoption.** `g_ke3` at −0.3036 is a bigger measured gain than anything else on this deck, and its
+   keep table already exists (`logs/deckcmp/WhiteKnights/g_ke3/`). Adoption still owes it a **value leaf**
+   — round G left every arm on the shipped list's `.value.json` — plus a real mulligan profile in the deck
+   folder, suite cases and ground truth, and the predecessor archived with its references moved. None of
+   that was started: no `decks/` folder was created ([[never-commit-screening-lists]]).
+5. **`expected_buckets` for the candidate is 12, not 14.** If `g_ke3` is adopted its `value_play`
+   block needs that number, and per [[bucket-ruling-is-user-only]] recording discovered K is the user's
+   call to make. Nothing has been edited — the scratch generations ran under `MTG_KEEP_ACCEPT_K=1` in an
+   isolated directory.
