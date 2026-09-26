@@ -12822,6 +12822,24 @@ std::string DragonsProvider::SelectDigSource(const GameState& s, const ManaPool&
 }
 bool DragonsProvider::DigDecisionSearched() const { return true; }
 
+// ---- PiratesProvider::EtbDigCandidates ---------------------------------------------------------
+// The base rule's list (every legal match, look order) with same-NAME copies folded onto the first.
+// See the header for why that is exact and what it made reachable.
+std::vector<int> PiratesProvider::EtbDigCandidates(const GameState& /*s*/, int /*controller*/,
+                                                   const std::vector<Card>& examined,
+                                                   const std::vector<int>& legal) const
+{
+    std::vector<int> out;
+    out.reserve(legal.size());
+    for (int i : legal)
+    {
+        bool dup = false;
+        for (int j : out) { if (examined[j].m_name == examined[i].m_name) { dup = true; break; } }
+        if (!dup) { out.push_back(i); }
+    }
+    return out;
+}
+
 // ---- PiratesProvider::CleanupDiscardCandidates ------------------------------
 //
 // AI-AUTHORED role-bucket policy, PENDING USER REVIEW (authored 2026-09-26; rationale, the card-by-

@@ -244,3 +244,26 @@ TEST_CASE("Pirates discard: the ranking names EVERY hand card (no max-MV fall-th
     const std::vector<int> order = Rank(s);
     CHECK(order.size() == s.players[0].hand.size());
 }
+
+TEST_CASE("Pirates ETB dig: same-name copies fold onto the first; index 0 is the base rule's pick")
+{
+    // Pirates 5d sweep gi14: top four = Aether Vial, Aether Vial, Siren Stormtamer, Goblin Tomb
+    // Raider. The base list (all four) put the Raider at rank 3, outside the axis's 3-slot window.
+    std::vector<Card> examined;
+    for (const char* n : {"Aether Vial", "Aether Vial", "Siren Stormtamer", "Goblin Tomb Raider"})
+    {
+        Card c;
+        c.m_name = n;
+        c.RehashName();
+        c.m_number = static_cast<int>(examined.size()) + 1;
+        examined.push_back(c);
+    }
+    const std::vector<int> legal = {0, 1, 2, 3};
+    GameState s;
+    const std::vector<int> ranked = PiratesProvider().EtbDigCandidates(s, 0, examined, legal);
+    CHECK(ranked == std::vector<int>{0, 2, 3});
+    CHECK(PiratesProvider().EtbDigSearchWidth() >= 4);   // every distinct name of a 4-card look
+    // The base provider is untouched (other decks: Acclaimed Contender keeps look order + copies).
+    CHECK(GenericProvider().EtbDigCandidates(s, 0, examined, legal) == legal);
+    CHECK(GenericProvider().EtbDigSearchWidth() == 0);
+}

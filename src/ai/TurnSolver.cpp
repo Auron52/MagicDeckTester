@@ -11440,16 +11440,20 @@ static bool EtbDigAxisEnabled()
 // calling a small delta a win" rule, applied to calling one a non-win. The distribution
 // (MTG_ETBDIG_TRACE: 5.9% one legal match, 60.0% two, 6.9% three, 23.4% four, 3.7% five, mean 2.6)
 // explains the shape: past 3 the extra candidates are ones the provider already ranked last.
-static std::size_t EtbDigAxisWidth()
+// PROVIDER-OWNED since 2026-09-26 (DecisionProvider::EtbDigSearchWidth; 0 == this default of 3), the
+// TutorSearchWidth pattern: MTG_ETBDIG_WIDTH, when set, still overrides every provider for the A/B.
+static std::size_t EtbDigAxisWidth(const GameState& state)
 {
-    static const std::size_t w = []() -> std::size_t
+    static const std::size_t env_w = []() -> std::size_t
     {
         const char* v = std::getenv("MTG_ETBDIG_WIDTH");
-        if (v == nullptr || *v == '\0') { return 3; }
+        if (v == nullptr || *v == '\0') { return 0; }   // 0 == not set
         const int n = std::atoi(v);
         return n < 1 ? 1 : static_cast<std::size_t>(n);
     }();
-    return w;
+    if (env_w > 0) { return env_w; }
+    const int pw = ResolveProvider(state).EtbDigSearchWidth();
+    return pw > 0 ? static_cast<std::size_t>(pw) : 3;
 }
 
 // SEARCHED PONDER KEEP-vs-SHUFFLE. The decision has never actually been searched: the variants were
@@ -11517,17 +11521,23 @@ static std::size_t EtbDigCandidateCountNow(const GameState& state, const CardPar
 {
     const Player& ap = state.players[state.active_player_index];
     const int n = std::min(pp.etb_dig_count, static_cast<int>(ap.library.size()));
-    std::size_t matches = 0;
+    std::vector<Card> examined;
+    std::vector<int>  legal;
     for (int i = 0; i < n; ++i)
     {
         // Same predicate as PerformEtbDig's legal-candidate loop (CardMatchesTypeName on the printed
         // card), so the searched axis is sized by exactly what resolution will accept.
         const CardDefinition* d = CardDatabase::Instance().LookupCached(ap.library[i]);
         const Card& pc = d ? d->card : ap.library[i];
+        examined.push_back(ap.library[i]);
         for (const std::string& want : pp.etb_dig_subtypes)
-        { if (CardMatchesTypeName(pc, want)) { ++matches; break; } }
+        { if (CardMatchesTypeName(pc, want)) { legal.push_back(i); break; } }
     }
-    return matches;
+    // ...and through the SAME provider ranking the resolution indexes, so a provider that folds
+    // candidates (PiratesProvider's name-dedup) sizes the axis by the list it will really index. The
+    // base ranking returns `legal` unchanged, so every other deck counts exactly as before.
+    if (legal.empty()) { return 0; }
+    return ResolveProvider(state).EtbDigCandidates(state, state.active_player_index, examined, legal).size();
 }
 
 // SEARCHED GOBLIN LACKEY PUT. The put is free and lands after attackers are declared, so like the
@@ -38933,7 +38943,7 @@ static void AppendSubdecisionAxes(const GameState& state, bool is_pre_combat,
     // the five breakpoint sites, so no re-solve follows and the card cannot be cast this turn. The
     // pick therefore cannot interact with the rest of this turn's subset -- the condition that makes
     // a second axis equivalent to the cross product rather than an approximation of it.
-    if (EtbDigAxisEnabled() && EtbDigAxisWidth() > 1 && !HumanPlayActive())
+    if (EtbDigAxisEnabled() && EtbDigAxisWidth(state) > 1 && !HumanPlayActive())
     {
         std::vector<TurnSolver::Plan> extra;
         for (const TurnSolver::Plan& p : all)
@@ -38947,7 +38957,7 @@ static void AppendSubdecisionAxes(const GameState& state, bool is_pre_combat,
                 const CardDefinition* d = CardDatabase::Instance().Lookup(act.card_name);
                 if (d == nullptr || d->params.etb_dig_count <= 0) { continue; }
                 const std::size_t cands_now = EtbDigCandidateCountNow(state, d->params);
-                const std::size_t k = std::min(cands_now, EtbDigAxisWidth());
+                const std::size_t k = std::min(cands_now, EtbDigAxisWidth(state));
                 TRACE("etbdig", "T%d %s cands_now=%zu -> %zu variants",
                       state.turn_number, act.card_name.c_str(), cands_now, k > 0 ? k - 1 : 0);
                 for (std::size_t c = 1; c < k; ++c)

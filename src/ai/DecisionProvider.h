@@ -1877,6 +1877,12 @@ public:
         const GameState& s, int controller, const std::vector<Card>& examined,
         const std::vector<int>& legal) const;
 
+    // EtbDigSearchWidth -- how many of EtbDigCandidates' entries the searched ETB-dig axis scores
+    // (INCLUDING index 0). 0 == the engine default (3, the Knights-measured knee; see
+    // EtbDigAxisWidth in TurnSolver.cpp). MTG_ETBDIG_WIDTH overrides every provider for the A/B.
+    // Provider-owned for the same reason TutorSearchWidth is: the useful breadth is a per-deck fact.
+    virtual int EtbDigSearchWidth() const { return 0; }
+
     // ReplicateCounts -- Hatchery Sliver replicate: how many token copies to pay for on cast.
     // Returns candidate counts in PREFERENCE order; index 0 is what a non-branching caller takes. A
     // NEGATIVE entry means "as many as the pool affords" (greedy max), which is the default.

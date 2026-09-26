@@ -1861,6 +1861,20 @@ public:
     // still overrides for the A/B.
     int TutorSearchWidth() const override { return 9; }
 
+    // Staunch Crewmate's dig ("look at the top four ... reveal an artifact or Pirate card"). Two
+    // fixes to the searched pick's REACH, neither a ranking judgement (index 0 stays the base rule's
+    // first legal match in look order, so the unsearched default is unchanged):
+    //   * NAME-DEDUP. Two copies of one card are one choice -- the rest go to the bottom "in a random
+    //     order", and taking copy A or copy B leaves the same NAMES in the same examined order -- but
+    //     each copy used to occupy one of the axis's 3 slots. Pirates 5d sweep gi14: top four =
+    //     Aether Vial, Aether Vial, Siren Stormtamer, Goblin Tomb Raider; the window held Vial, Vial,
+    //     Stormtamer, so the second Tomb Raider (a hasty exact T4 kill) was unreachable at every budget
+    //     (T5 invariant across b200..b20000).
+    //   * WIDTH 4 = the dig's own look count, so every distinct legal name is scored (lossless).
+    std::vector<int> EtbDigCandidates(const GameState&, int, const std::vector<Card>& examined,
+                                      const std::vector<int>& legal) const override;
+    int EtbDigSearchWidth() const override { return 4; }
+
     // The authored BUCKET policy (two buckets -- MANA with a Vial sub-role, THREATS catch-all).
     // The generic fallback's tier B is DESCENDING MANA VALUE, which on this deck pitches the lords
     // (Corsair Captain, Adaptive Automaton -- the 3-drops) first and keeps Siren Stormtamer.
