@@ -4540,6 +4540,53 @@ static bool SecondMainUnproductive(const GameState& state)
             if (PaymentManaCovers(state, d->card.IsCreature(), need))
             { return false; }                          // a payable deferred cast: solve it
         }
+        // ...AND A FREE ABILITY THAT ONLY EXISTS NOW. Everything above asks about CASTS, priced in
+        // mana -- so an ability whose cost is COUNTERS is invisible to it, and a permanent that
+        // ENTERED in main 1 was not on the battlefield when main 1 enumerated. Those two holes
+        // intersect on exactly one thing in this pool and it is the deck's best card: a Saproling
+        // Burst cast pre-combat can be activated the moment it resolves (no {T}, no mana, CR 302.6
+        // does not restrict it), and the post-combat main is the only window the engine has to do
+        // it -- but this gate closed that window, because there was no payable CAST in hand.
+        //
+        // MEASURED, and this is the defect the user's invariant was written to catch. USER
+        // 2026-09-26: *"there should be zero first turns with no Saproling activations and also
+        // none where you have fewer than 2 saprolings out by the end of the turn."* Over 25 real
+        // games, 9 of 13 Saproling Bursts got ZERO activations on the turn they landed -- a 69%
+        // violation rate -- and every one of them looked like this: `MAIN_1 [PLAY_LAND, CAST_SPELL
+        // Saproling Burst] / COMBAT / MAIN_2 []`. The counters then tick away at upkeep for free, so
+        // the delay is not merely tempo: the tokens it eventually makes are permanently smaller.
+        //
+        // Deliberately scoped to permanents that entered THIS turn. A source already on the
+        // battlefield was offered in main 1 and re-opening the phase for it is the duplicate
+        // enumeration this gate exists to prevent.
+        //
+        // DOCTRINE NOTE, because this is adjacent to something the user has already ruled out.
+        // USER 2026-09-08: *"The more important thing is that we don't have extra mains to search"*
+        // -- never add a searched second main to paper over a main-1 expressibility hole; fix the
+        // APPLY instead (EdfAutoGoOffAfterCasts is the shipped precedent). This is NOT that: Fungus
+        // already runs a post-combat main, and nothing here adds a phase to the turn. What it does
+        // is stop a GATE from deleting a legal, free, high-value action from a phase the deck is
+        // already paying for. It does raise the m2 SOLVE count, which is the cost that doctrine is
+        // actually about -- so it gets its own arm and its own measurement rather than riding in.
+        // ADOPTED 2026-09-26, DEFAULT ON, and it is the larger half of the pair by an order of
+        // magnitude. Same pooled held-out batch: -0.12625 turns at the labelling depth (t = -18.42,
+        // 2,400 games) and -0.13886 at the play depth (t = -21.31, 1,750 games), while still running
+        // 2.01x / 1.37x FASTER than the ladder baseline -- the extra m2 solves are far more than
+        // paid for by the games that stop taking an extra turn. MTG_M2_FREE_ACTIVATION=0 restores
+        // the old gate.
+        static const bool s_m2_free = EnvOn("MTG_M2_FREE_ACTIVATION", true);
+        if (!heurarm::Flag(heurarm::M2_FREE_ACTIVATION, s_m2_free)) { return true; }
+        for (const Permanent& p : state.battlefield)
+        {
+            if (p.controller_index != state.active_player_index) { continue; }
+            if (!p.entered_this_turn)                            { continue; }
+            const CardDefinition* pd = CardDatabase::Instance().LookupCached(p.card);
+            if (pd == nullptr)                                   { continue; }
+            const CardParams& pp = pd->params;
+            if ((pp.fade_saproling_cost  > 0 && p.fade_counters  >= pp.fade_saproling_cost)
+             || (pp.spore_saproling_cost > 0 && p.spore_counters >= pp.spore_saproling_cost))
+            { return false; }                          // a free counter-paid activation: solve it
+        }
         return true;                                   // nothing castable -> the phase is empty
     }
     if (!s_force && !m2prov.SkipsUnproductiveSecondMain()) { return false; }
@@ -14772,6 +14819,653 @@ namespace poolaudit
 // its counter), so this one is counted from the start. Printed with the hybrid diagnostics.
 inline std::atomic<long long>& EquipTokenHosts() { static std::atomic<long long> v{0}; return v; }
 
+// =================================================================================================
+// FADE K-AXIS LANDMARKS (MTG_FADE_K_WINDOW) -- the board/hand READ, and the menu built from it.
+// =================================================================================================
+//
+// Saproling Burst's "Remove a fade counter: create an X/X Saproling, X = counters left" is the
+// single widest axis this engine enumerates. MTG_BF_CENSUS on Fungus candidate B's worst game put
+// 82% of ALL candidate mass on the chosen-X shape, of which ONE physical Burst contributed 393,475
+// activation actions -- because Doubling Season doubles fade counters as they are PUT ON, so four
+// Seasons take a Fading 7 to 7 * 2^4 = 112 counters and the naive ladder then offers 112 candidates.
+//
+// A naive cap is WRONG -- k is a genuine interior optimum -- so what replaces the ladder is a set of
+// LANDMARKS, each the argmax of an objective this board actually has. USER 2026-09-25/26 specified
+// the objectives and, on the second pass, the rule that decides WHICH of them are on the menu:
+//
+//   *"You probably only need to consider activating to put out 2 or 3 saprolings for maximum attack
+//     power, counters-2 for maximum board presence and maybe counters-1 for maximum sacrifice."*
+//   *"Maybe with Slimefoot out and the opponent low enough possibly removing all of the counters
+//     could be correct, since you might want them all to die to win this turn."*
+//   *"We should indeed project until we find a winning line this turn or next. If we don't at all
+//     you would just go for 2 or 3. (maybe searched)"*
+//   *"But we shouldn't mess anything up based on the current board (and hand). So, if you have
+//     beastmaster ascension in hand dropping 5 saprolings could easily be the play. (or on board)"*
+//   *"Naturally with haste available we should be looking for lines that win this turn."*
+//   *"Note that with saprolings already out from the previous turn often our answer is to do
+//     nothing on subsequent turns."*
+//
+// So this is NOT a fixed window. It is a projection: price each landmark against the real board and
+// hand, keep the ones that can win this turn or next, and otherwise fall back to the power peak.
+// That last clause is the one that pays -- on most turns nothing wins, so the menu is three entries.
+//
+// FIVE THINGS THE ARITHMETIC HAS TO GET RIGHT, all of them specific to this card:
+//
+//  1. THE TOKENS ARE A CDA POINTING AT THE SOURCE. Every token this Burst ever made is X/X for the
+//     LIVE counter total (RefreshFadeTokens), so activating shrinks the bodies already on the
+//     battlefield. k bodies off C counters is not "k new tokens", it is (own + k) bodies ALL at
+//     (C-k). This is exactly the user's "with saprolings already out ... often our answer is to do
+//     nothing": with own tokens out the power argmax slides DOWN, and the formula below reproduces
+//     that -- at own >= n*M/c it goes to zero and only the bank landmark survives.
+//  2. FADING TICKS AT UPKEEP. Next turn's combat sees the tokens one size SMALLER, and at zero they
+//     die. That is why "leave 2" is the max-board-presence landmark and not "leave 1": leaving 1
+//     means the upkeep takes it to 0 and every body dies before it can attack.
+//  3. THE ANTHEMS MOVE THE DEATH LINE. Sporecrown Thallid (+1/+1 to Fungus/Saproling) and a LIVE
+//     Beastmaster Ascension (+5/+5) lift an X/X at X=0 off zero, so "leave 0" stops being a pile of
+//     corpses and starts being a real board. Every threshold below is computed against the measured
+//     anthem, never against a hardcoded 0.
+//  4. DEATH IS A DAMAGE SOURCE. Slimefoot, the Stowaway drains per Saproling death, so "pop
+//     everything" is a burst of N to the face -- and with a sac outlet (Utopia Mycon, Deathspore,
+//     Vitaspore, Psychotrope) EVERY Saproling can be converted, not just the ones that hit zero.
+//  5. HASTE EXISTS IN THIS POOL. Concordant Crossroads gives all creatures haste and Vitaspore
+//     Thallid buys it one body at a time, so fresh tokens can attack the turn they are made. With
+//     haste live the this-turn projection includes them; without it, it cannot.
+//
+// NOT LOSSLESS, and not claimed to be: it is a heuristic narrowing of a searched menu, behind its
+// own HeuristicArm slot, adopted only on a held-out play A/B. What it is careful about is the one
+// failure mode that would make it indefensible -- deleting the line the CURRENT board and hand make
+// correct. Every board-driven landmark below stays on the menu whether or not a kill is projected.
+struct FadeBoardRead
+{
+    int  opp_life        = 1;
+    int  ready_power     = 0;   // power that can attack THIS turn, lord/anthem folded in
+    int  next_power      = 0;   // ...and next turn, when summoning sickness has cleared
+    int  ready_attackers = 0;   // bodies that can attack THIS turn
+    int  next_attackers  = 0;   // ...and next turn, once summoning sickness has cleared
+    // SLIMEFOOT'S DRAIN, in two strengths. `drain_per_death` is what is ON THE BATTLEFIELD, i.e.
+    // what a narrowing decision may be PROVED against; `drain_per_death_opt` also credits a copy in
+    // HAND that this turn's mana can actually deploy, which is only ever used to ADD a landmark.
+    // USER 2026-09-26: *"If we have haste or slimefoot on board (or in hand with enough mana or
+    // utopia mycon available) we should kill this turn. Otherwise we should aim to kill next
+    // turn."* The Utopia Mycon clause is the sharp part -- the Burst's own Saprolings are the mana
+    // that casts the Slimefoot that then drains for each of them.
+    int  drain_per_death     = 0;   // per Saproling death, x OpponentHeads()
+    int  drain_per_death_opt = 0;
+    int  saps_alive      = 0;   // Saprolings we control (a sac outlet turns each into drain)
+    bool sac_outlet      = false;
+    int  sac_outlets     = 0;   // ...how many, i.e. how many bodies a turn's sacrifices can want
+    bool sac_mana_outlet = false;   // Utopia Mycon: a body IS a mana, so hand cards become castable
+    bool sac_value_outlet = false;  // ...or Psychotrope Thallid: a body IS a card. See k_fodder.
+    // HASTE, split in two because the two routes are priced differently. Concordant Crossroads
+    // ("all creatures have haste") makes EVERY fresh token an attacker for free; Vitaspore Thallid
+    // ("Sacrifice a Saproling: target creature gains haste") buys it one body at a time and pays a
+    // body for each, so it can arm at most half the Saprolings. Both put the this-turn power peak
+    // on the menu -- USER 2026-09-26: *"Naturally with haste available we should be looking for
+    // lines that win this turn. (Vitaspore or Concordant)"* -- but only the free one is allowed to
+    // credit a full-board swing in the KILL projection, because over-crediting there SUPPRESSES
+    // landmarks, which is the one direction this heuristic must not err in.
+    bool haste_all       = false;
+    bool haste_outlet    = false;
+    int  sap_anthem_p    = 0;   // static bonus a FRESH Saproling token already gets...
+    int  sap_anthem_t    = 0;   // ...the toughness half is what decides whether an X/X at 0 dies
+    int  quest_need      = 0;   // attackers needed in ONE combat to switch an Ascension on (0=n/a)
+    int  quest_power     = 0;   // ...and the power it then grants every creature
+    bool quest_present   = false;   // an Ascension on board or in hand, not yet online
+    bool devour_waiting  = false;   // a devour body in hand: fodder COUNT is the axis it reads
+    // Per-source token census. Eight is more Saproling Bursts than any legal deck plays; an
+    // overflow simply misses the add-back correction, which widens the menu (the safe direction).
+    int  src_num[8]      = {};
+    int  src_tokens[8]   = {};
+    int  src_ready[8]    = {};
+    int  src_n           = 0;
+
+    static bool AffectsSaprolings(const std::vector<std::string>& subs)
+    { return std::find(subs.begin(), subs.end(), "Saproling") != subs.end(); }
+
+    int TokensOf(int num) const
+    { for (int i = 0; i < src_n; ++i) { if (src_num[i] == num) { return src_tokens[i]; } } return 0; }
+    int ReadyOf(int num) const
+    { for (int i = 0; i < src_n; ++i) { if (src_num[i] == num) { return src_ready[i]; } } return 0; }
+};
+
+// ONE battlefield walk plus one hand walk, built lazily and at most once per CollectActions (the
+// `haste` lambda's pattern, and for the same reason: this is a millions-of-calls hot path and only
+// a Saproling Burst board ever reaches it).
+static FadeBoardRead ReadFadeBoard(const GameState& state)
+{
+    FadeBoardRead r;
+    const int           me = state.active_player_index;
+    const CardDatabase& db = CardDatabase::Instance();
+    const Player&       ap = state.players[me];
+    r.opp_life = std::max(0, state.players[1 - me].life);
+
+    const BoardSources bs = GatherBoardSources(state.battlefield, me);
+
+    // What a FRESH Saproling token already gets. Sporecrown Thallid's +1/+1 and a live Beastmaster
+    // Ascension's +5/+5 both land here, through the same ComputeLordBonus every combat site uses --
+    // so the death line below is the engine's own, not a second opinion about it.
+    {
+        Card tok;
+        tok.AddType(CardType::Creature);
+        tok.m_subtypes = { "Saproling" };
+        tok.m_power     = 0;
+        tok.m_toughness = 0;
+        const auto [pb, tb] =
+            ComputeLordBonus(tok, state, me, false, nullptr, &bs.lords, &bs.anthems);
+        r.sap_anthem_p = pb;
+        r.sap_anthem_t = tb;
+    }
+
+    int  q_need_ctr = -1;      // fewest counters any one Ascension still needs (-1 = none seen)
+    int  q_per      = 0;
+    bool q_live     = false;
+
+    for (const Permanent& p : state.battlefield)
+    {
+        if (p.controller_index != me) { continue; }
+        const CardDefinition* d = db.LookupCached(p.card);
+        if (d != nullptr)
+        {
+            const CardParams& q = d->params;
+            // Slimefoot: "Whenever a Saproling you control dies, deal 1 to each opponent."
+            if (q.dies_trigger_damage > 0 && q.dies_watch_subtype == "Saproling")
+            { r.drain_per_death += q.dies_trigger_damage
+                                 * (q.dies_trigger_damage_each_opponent
+                                      ? gamesetup::OpponentHeads() : 1); }
+            if (IsSacManaOutlet(q) && (q.sac_creature_requires_subtype.empty()
+                                       || q.sac_creature_requires_subtype == "Saproling"))
+            { r.sac_mana_outlet = true; r.sac_value_outlet = true; }
+            if (q.sac_creature_outlet && q.sac_outlet_draw > 0) { r.sac_value_outlet = true; }
+            // Anything that can kill a Saproling ON DEMAND -- that is what converts a board of
+            // bodies into Slimefoot damage, and it is why the kill projection is not limited to
+            // the tokens that hit zero toughness by themselves.
+            if (q.sac_creature_outlet && (q.sac_creature_requires_subtype.empty()
+                                          || q.sac_creature_requires_subtype == "Saproling"))
+            { r.sac_outlet = true; ++r.sac_outlets;
+              if (q.sac_outlet_grants_haste) { r.haste_outlet = true; } }   // Vitaspore Thallid
+            if (q.grants_haste && (q.affects_all_creatures
+                                   || FadeBoardRead::AffectsSaprolings(q.subtypes_affected)))
+            { r.haste_all = true; }                                         // Concordant Crossroads
+            if (q.quest_anthem_threshold > 0)
+            {
+                const int rem = q.quest_anthem_threshold - std::max(0, p.quest_counters);
+                if (rem <= 0) { q_live = true; }
+                else
+                {
+                    r.quest_present = true;
+                    q_need_ctr = (q_need_ctr < 0) ? rem : std::min(q_need_ctr, rem);
+                }
+                q_per        = std::max(q_per, q.quest_counter_per_attacker);
+                r.quest_power = std::max(r.quest_power, q.quest_anthem_power);
+            }
+        }
+        if (p.created_by_number != 0)
+        {
+            int i = 0;
+            for (; i < r.src_n; ++i) { if (r.src_num[i] == p.created_by_number) { break; } }
+            if (i == r.src_n && r.src_n < 8) { r.src_num[r.src_n++] = p.created_by_number; }
+            if (i < 8 && i < r.src_n)
+            {
+                ++r.src_tokens[i];
+                if (CanAttackFull(p, state.battlefield, me)) { ++r.src_ready[i]; }
+            }
+        }
+        if (!p.card.IsCreature() && !p.is_animated) { continue; }
+        if (CardHasSubtype(p.card, "Saproling")) { ++r.saps_alive; }
+        const auto [pb, tb] =
+            ComputeLordBonus(p.card, state, me, p.is_animated, &p, &bs.lords, &bs.anthems);
+        (void)tb;
+        const int pw = std::max(0, p.EffectivePower() + pb);
+        // NEXT turn everything we control untaps and summoning sickness has cleared, so every body
+        // is an attacker -- including the 0-power ones, which still add an Ascension quest counter.
+        r.next_power += pw;
+        ++r.next_attackers;
+        if (CanAttackFull(p, state.battlefield, me)) { r.ready_power += pw; ++r.ready_attackers; }
+    }
+
+    // Mana the turn can already produce, for the "is that hand card actually castable" tests below.
+    // One walk, and only on this path -- the whole read is behind the Saproling Burst gate.
+    ManaPool mp = AvailableManaPool(state);
+    mp.AddPool(state.floating_mana);
+    const int mana_now = static_cast<int>(mp.Total());
+    r.drain_per_death_opt = r.drain_per_death;
+    for (const Card& c : ap.hand)
+    {
+        const CardDefinition* d = db.LookupCached(c);
+        if (d == nullptr) { continue; }
+        const CardParams& q = d->params;
+        if (q.devour > 0) { r.devour_waiting = true; }
+        // A Slimefoot in hand is a this-turn drain engine IF this turn can pay for it -- either off
+        // the mana already available, or off a Utopia Mycon that eats Saprolings for any colour.
+        if (q.dies_trigger_damage > 0 && q.dies_watch_subtype == "Saproling")
+        {
+            if (r.sac_mana_outlet || mana_now >= d->card.m_mana_cost.ManaValue())
+            { r.drain_per_death_opt += q.dies_trigger_damage
+                                     * (q.dies_trigger_damage_each_opponent
+                                          ? gamesetup::OpponentHeads() : 1); }
+        }
+        // ...and the same for a VALUE outlet still in hand. USER 2026-09-26: *"(or Psychotrope in
+        // hand since it can be cast)"*. The line it enables is the dig -- make the whole board, eat
+        // it for cards, and *"if we draw into haste we can go off"* -- so a castable Psychotrope
+        // makes the max-bodies landmark worth offering exactly as a resolved one does.
+        if (q.sac_creature_outlet
+            && (q.sac_creature_requires_subtype.empty()
+                || q.sac_creature_requires_subtype == "Saproling")
+            && (q.sac_outlet_draw > 0 || IsSacManaOutlet(q))
+            && (r.sac_mana_outlet || mana_now >= d->card.m_mana_cost.ManaValue()))
+        { r.sac_value_outlet = true; }
+        if (q.grants_haste && (q.affects_all_creatures
+                               || FadeBoardRead::AffectsSaprolings(q.subtypes_affected)))
+        { r.haste_all = true; }
+        if (q.quest_anthem_threshold > 0)
+        {
+            // A hand copy enters with no counters, so it needs the whole threshold from one combat.
+            r.quest_present = true;
+            const int rem = q.quest_anthem_threshold;
+            q_need_ctr     = (q_need_ctr < 0) ? rem : std::min(q_need_ctr, rem);
+            q_per          = std::max(q_per, q.quest_counter_per_attacker);
+            r.quest_power  = std::max(r.quest_power, q.quest_anthem_power);
+        }
+    }
+
+    // Quest counters are PUT ON, so Doubling Season doubles each attacker's trigger separately --
+    // four attackers under one Season cross a threshold of seven. An Ascension already online needs
+    // nothing (its anthem is already inside sap_anthem_p above).
+    if (!q_live && q_need_ctr > 0 && q_per > 0)
+    {
+        const int per = q_per << DoublerShift(state, me, /*for_tokens=*/false);
+        r.quest_need  = (q_need_ctr + per - 1) / per;
+    }
+    else { r.quest_present = false; }
+    return r;
+}
+
+// The landmark menu for ONE Saproling Burst, ascending. `own` is how many live tokens this source
+// already made (they shrink with every activation) and `ready_own` how many of those can attack
+// this turn; `ntok` is tokens per activation AFTER the token doubler.
+static std::vector<int> FadeKLandmarks(const FadeBoardRead& r, int C, int cost, int ntok,
+                                       int fade_max_k, int own, int ready_own)
+{
+    const int A_p = r.sap_anthem_p;
+    const int A_t = r.sap_anthem_t;
+    const int n   = std::max(1, ntok);
+    const int c   = std::max(1, cost);
+
+    // EXACT ARGMAXES, scanned rather than solved. A closed form was used first and it was subtly
+    // wrong for the objective that matters: it maximised ONE turn's swing, and this card's payoff
+    // is a stream. Scanning is <= 112 iterations against an axis whose whole problem is that it
+    // offers up to 112 candidates, so the cost is noise and the arithmetic is exact -- including
+    // the anthem, the bodies already out, and the token doubler.
+    auto bodies    = [&](int k) { return own + k * n; };
+    auto size_now  = [&](int k) { return C - k * c + A_p; };        // this turn
+    auto size_next = [&](int k) { return C - k * c - 1 + A_p; };    // ...after the upkeep tick
+    // ...and the same scan with the tie broken the OTHER way, toward MORE BODIES. Used only where
+    // bodies are the resource being bought (the value-outlet dig), because there the tie is not a
+    // tie: off a 14-counter Burst under a Doubling Season, k=6 gives 12 bodies at 7/7 and k=7 gives
+    // 14 at 6/6 next turn -- both 84 power, but the second is two more things to sacrifice. USER
+    // 2026-09-26: *"you would spend 7 counters and have 14 7/7s that would become 6/6s on the next
+    // turn. This would give you enough gas to attempt to go off while still ensuring you leave up
+    // some to finish the opponent next turn."*
+    auto argmax_wide = [&](auto value) -> int
+    {
+        int bk = 0; long long bv = -1;
+        for (int k = 1; k <= fade_max_k; ++k)
+        { const long long v = value(k); if (v >= bv) { bv = v; bk = k; } }
+        return bk;
+    };
+    auto argmax = [&](auto value) -> int
+    {
+        int bk = 0; long long bv = -1;
+        // `>` and not `>=`: on a tie take the SMALLEST k, because the smaller one spends fewer
+        // counters and leaves the Burst alive longer for the same payoff.
+        for (int k = 1; k <= fade_max_k; ++k)
+        { const long long v = value(k); if (v > bv) { bv = v; bk = k; } }
+        return bk;
+    };
+
+    // MAX SWING IN ONE COMBAT -- next turn, or this turn if the bodies can be hasted.
+    const int k_pow_next = argmax([&](int k)
+                           { return 1LL * bodies(k) * std::max(0, size_next(k)); });
+    const int k_pow_now  = argmax([&](int k)
+                           { return 1LL * bodies(k) * std::max(0, size_now(k)); });
+    // MAX DAMAGE OVER THE BURST'S WHOLE LIFE, which is the objective the user worked out by hand
+    // and it is NOT the same argmax. Off a Fading 7: k=2 leaves five counters, so two bodies swing
+    // 8, 6, 4, 2 = 20 before they hit 0/0, while k=3 swings 9, 6, 3 = 18. The single-combat peak
+    // picks 3; the stream picks 2. USER 2026-09-26: *"2 saprolings deal 20 over a number of turns
+    // 8, 6, 4, 2 but that is pretty slow. 3 is faster at 9,6,3 but only totals 18."* Both are real
+    // answers to different questions -- total versus speed -- and avg WIN TURN is the objective, so
+    // both belong on the menu. That is the user's original "2 or 3", derived rather than assumed.
+    const int k_lifetime = argmax([&](int k)
+    {
+        const int R = C - k * c;                      // counters left after committing
+        if (R <= 0) { return 0LL; }                   // everything dies on the spot: no stream
+        // The bodies attack once per remaining counter, one size smaller each turn (the upkeep
+        // tick), and are destroyed with the Burst when it runs out.
+        long long stream = 1LL * (R - 1) * R / 2 + 1LL * A_p * (R - 1);
+        if (r.haste_all) { stream += std::max(0, size_now(k)); }   // ...and once more, right now
+        return 1LL * bodies(k) * stream;
+    });
+    // Largest k whose bodies survive the fading tick and can therefore ATTACK next turn.
+    const int k_presence = (C + A_t - 2) / c;
+    // Largest k whose bodies are alive RIGHT NOW: devour fodder, sac fodder, blockers.
+    const int k_fodder   = (C + A_t - 1) / c;
+    const int k_all      = fade_max_k;           // every counter: the Slimefoot drain burst
+
+    // The damage projections.
+    //
+    // THE PROJECTIONS COME IN PAIRS, AND THE ASYMMETRY IS THE WHOLE SOUNDNESS ARGUMENT. A landmark
+    // is SUPPRESSED when the base menu already wins, so the base's damage must be what it can
+    // PROVE (`_lo`: no sac-outlet conversion, because each sacrifice needs its own action in the
+    // same plan; no haste we still have to buy; no Ascension anthem we still have to fill). A
+    // landmark is ADMITTED when it might win, so its damage is the OPTIMISTIC read (`_hi`). Scoring
+    // both sides with the optimistic function -- which is what the first cut did -- makes the base
+    // look like a winner it is not and deletes the real line. Measured: 5 of 1,250 held-out games
+    // a turn slower at play depth, t=+2.24 against, before this split.
+    auto deaths = [&](int k) -> int
+    {
+        const int all_saps = r.saps_alive + k * n;                 // everything a sac outlet can eat
+        if (r.sac_outlet)             { return all_saps; }
+        if (C - k * c + A_t <= 0)     { return bodies(k); }        // ...or the toughness SBA alone
+        return 0;
+    };
+    auto dmg_now = [&](int k) -> long long
+    {
+        const int size = C - k * c + A_p;
+        // Fresh tokens only swing with haste. Free haste arms all of them; the sac-outlet route
+        // pays a Saproling per grant, so at most half the Saprolings can end up attacking.
+        int atk = ready_own;
+        if      (r.haste_all)    { atk = bodies(k); }
+        else if (r.haste_outlet) { atk = std::min(bodies(k),
+                                                  ready_own + (r.saps_alive + k * n) / 2); }
+        long long d = r.ready_power - 1LL * ready_own * std::max(0, C + A_p)
+                    + 1LL * atk * std::max(0, size);
+        return d + 1LL * r.drain_per_death_opt * deaths(k);
+    };
+    auto dmg_next = [&](int k) -> long long
+    {
+        const int size  = C - k * c - 1 + A_p;
+        const int tough = C - k * c - 1 + A_t;
+        const int bod   = (tough > 0) ? bodies(k) : 0;
+        long long d     = r.next_power - 1LL * own * std::max(0, C + A_p)
+                        + 1LL * bod * std::max(0, size);
+        const int atkrs = r.next_attackers - own + bod;
+        if (r.quest_need > 0 && atkrs >= r.quest_need) { d += 1LL * atkrs * r.quest_power; }
+        return d + 1LL * r.drain_per_death_opt * deaths(k);
+    };
+    // ...and the two conservative twins the base menu is judged by.
+    auto dmg_now_lo = [&](int k) -> long long
+    {
+        const int size = C - k * c + A_p;
+        const int atk  = r.haste_all ? bodies(k) : ready_own;
+        long long d    = r.ready_power - 1LL * ready_own * std::max(0, C + A_p)
+                       + 1LL * atk * std::max(0, size);
+        if (C - k * c + A_t <= 0) { d += 1LL * r.drain_per_death * bodies(k); }   // SBA deaths only
+        return d;
+    };
+    auto dmg_next_lo = [&](int k) -> long long
+    {
+        const int size  = C - k * c - 1 + A_p;
+        const int tough = C - k * c - 1 + A_t;
+        const int bod   = (tough > 0) ? bodies(k) : 0;
+        return r.next_power - 1LL * own * std::max(0, C + A_p) + 1LL * bod * std::max(0, size);
+    };
+
+    // ===========================================================================================
+    // COMMIT ON THE TURN IT LANDS, THEN LEAVE IT ALONE. This split is the heart of the heuristic,
+    // and it is the USER's ruling (2026-09-26), not an inference:
+    //
+    //   *"We should always activate some amount on the turn it enters."*
+    //   *"To get the saprolings to not be summoning sick next turn or to attack with haste this
+    //     turn."*
+    //   *"After that turn we would only rarely activate, maybe for sacrifice targets or maybe to
+    //     enable slimefoot."*
+    //   *"Because doing so weakens the saprolings we dropped."*
+    //
+    // That last clause is the whole card. The tokens are a CDA on the SOURCE's counter total, so a
+    // later activation does not add a body to a board -- it adds a body and SHRINKS EVERY BODY
+    // ALREADY THERE, including the ones that have lost summoning sickness and are about to attack.
+    // Holding counters back buys nothing either, because fading spends one at every upkeep for
+    // free: the "bank a bigger body later" reading the old comment at the emission site offers is
+    // simply wrong, since the body you make later tracks the same falling counter as the body you
+    // make now. So the entire decision collapses onto ONE turn, and `own == 0` -- no live bodies
+    // from this source yet -- is what identifies it.
+    //
+    // MEASURED, and it is why this split is worth the code: over 41,219 emissions on a 12-game
+    // labelling block, ladder width 7 (a full, untouched Fading 7) was 2% while widths 2-6 were
+    // 78%. Almost every emission the engine paid for was a re-activation of a Burst it had already
+    // dribbled down -- inside one turn's search as much as across turns, because "activate 3 then
+    // 2 more" reaches the same board as the single k=5 the menu already offers.
+    std::vector<int> base;
+    auto push = [&](std::vector<int>& v, int k)
+    { if (k >= 1 && k <= fade_max_k
+          && std::find(v.begin(), v.end(), k) == v.end()) { v.push_back(k); } };
+    const bool fresh = (own == 0);
+    if (fresh)
+    {
+        // THE TURN IT LANDS. Commit. Note k=1 is deliberately NOT seeded here: "activate some
+        // amount" means the amount some objective actually wants, and offering the one-counter
+        // dribble is what produced the 2-6 width mass above. It comes back below only if nothing
+        // else is representable.
+        push(base, k_lifetime);   // most total damage  ("2")
+        push(base, k_pow_next);   // most damage soonest ("3")
+        if (r.haste_all || r.haste_outlet) { push(base, k_pow_now); }
+        // MAX BOARD PRESENCE -- one of the three objectives the user named ("counters-2"). The
+        // power peak maximises what THIS source swings for; presence maximises the BODY COUNT that
+        // lives to attack, and body count is what the rest of the deck reads: a later Ascension's
+        // quest counters, a later Mycoloth's devour, every sac outlet, every future anthem.
+        push(base, k_presence);
+        if (base.empty()) { push(base, 1); }
+        // ...AND NEVER FEWER THAN TWO SAPROLINGS. USER 2026-09-26: *"there should be zero first
+        // turns with no Saproling activations and also none where you have fewer than 2 saprolings
+        // out by the end of the turn. 1 out to attack with limited haste from Vitaspore is a
+        // possible actual play, but after doing that you would want to make it 2-3 saprolings for
+        // next turn."* One body is not a clock on any of the curves above -- off a Fading 7 it
+        // swings 5, 4, 3, 2, 1 for eleven total against twenty life -- so the only reason to stop
+        // at one is Vitaspore buying it haste for a single attack, and that case keeps k=1.
+        const int k_min = r.haste_outlet ? 1 : std::min((2 + n - 1) / n, fade_max_k);
+        if (k_min > 1)
+        {
+            std::vector<int> keep;
+            for (int k : base) { if (k >= k_min) { keep.push_back(k); } }
+            if (keep.empty()) { keep.push_back(k_min); }
+            base.swap(keep);
+        }
+    }
+    // ...and on every later node the base menu is EMPTY. The default is to do nothing, which the
+    // plan expresses by simply omitting the action, and each entry below has to name its payoff.
+
+    std::vector<int> out = base;
+
+    // "MAYBE FOR SACRIFICE TARGETS" -- and *maybe* is the operative word, so this is a SHORTFALL
+    // test, not a max. Enough bodies to feed the outlets we control, nothing more: making one
+    // Saproling to feed a hungry Utopia Mycon is worth a counter, and shrinking the whole board to
+    // make five spare ones is not.
+    if (r.sac_outlets > 0 && r.saps_alive < r.sac_outlets)
+    { push(out, (r.sac_outlets - r.saps_alive + n - 1) / n); }
+
+    // BOARD- AND HAND-DRIVEN LANDMARKS. These are on the menu whether or not anything is projected
+    // to win, because they are the lines the CURRENT board makes correct -- the user's Beastmaster
+    // Ascension case is exactly this, and dropping it would be the combo-invisible-as-WIDTH failure.
+    if (r.quest_present)
+    {
+        // Smallest k that fields enough attackers to fill the quest in ONE combat next turn, capped
+        // at the bodies that actually survive the fading tick. Infeasible -> offer the most bodies
+        // we can field, which is the best attempt at it.
+        // SEVEN ATTACKERS IN ONE COMBAT is what fills a fresh Beastmaster Ascension (threshold 7,
+        // one quest counter per declared attacker, each trigger doubled by a Doubling Season). USER
+        // 2026-09-26: *"in the cases where beastmaster is available, we would want to check if we
+        // can have 7 attackers with it next turn or this turn. In that case, we may want to drop
+        // more."* r.quest_need is already that attacker count, computed from the live counters, the
+        // real threshold and the doubler -- so this asks the user's question directly and answers it
+        // for BOTH combats: next turn off the bodies that will have lost summoning sickness, and
+        // this turn if something can give them haste.
+        const int have  = r.next_attackers - own;
+        const int need  = std::max(0, r.quest_need - have);
+        const int k_asc = std::max(1, (need + n - 1) / n);
+        if (r.haste_all)
+        {
+            const int have_now = r.ready_attackers - ready_own;
+            const int need_now = std::max(0, r.quest_need - have_now);
+            push(out, std::min(std::max(1, (need_now + n - 1) / n), k_fodder));
+        }
+        // The best attempt, and ONLY that: pushing k_presence unconditionally beside it put the
+        // widest landmark on the menu on every turn either Ascension was live, which is most of
+        // them on this list and is not what the user asked for.
+        push(out, std::min(k_asc, k_presence));
+        // AND THE PEAK UNDER THE ANTHEM THE ATTACK ITSELF SWITCHES ON. The base peak prices each
+        // body at (size), but a combat that crosses the quest threshold prices it at (size + 5) --
+        // the triggers resolve in the declare-attackers step, before damage, so the anthem applies
+        // to the SAME combat that fills it. That moves the argmax a long way toward more bodies,
+        // and it is the arithmetic behind the user's *"if you have beastmaster ascension in hand
+        // dropping 5 saprolings could easily be the play"*: fielding the extra bodies is worth it
+        // twice over, once for the quest counters and once for the +5/+5 each of them then carries.
+        const int k_asc_pow = argmax([&](int k)
+        { return 1LL * bodies(k) * std::max(0, size_next(k) + r.quest_power); });
+        push(out, std::min(k_asc_pow, k_presence));
+    }
+    // A VALUE OUTLET ALSO WANTS THE MAXIMUM, and this is the distinction the shortfall test above
+    // cannot make. Deathspore's -1/-1 and Vitaspore's haste grant are SHRINK-ONLY: one body does the
+    // job and a second is waste. Utopia Mycon and Psychotrope Thallid are VALUE outlets -- a body is
+    // a mana, a body is a card -- so every additional one converts, and the argmax is the whole
+    // board. USER 2026-09-26: *"with Psychotrope and Utopia Mycon out it would make sense to create
+    // something like 14 instead and sacrifice some of them to draw."*
+    if (r.sac_value_outlet)
+    {
+        // The GAS landmark: the balanced point, not the maximum count. Eating the board for cards
+        // only works if the board is still a clock afterwards -- 26 bodies at 1/1 off a 14-counter
+        // Burst is not gas, it is a pile of corpses at the next upkeep.
+        push(out, argmax_wide([&](int k)
+             { return 1LL * bodies(k) * std::max(0, size_next(k)); }));
+    }
+
+    // DEVOUR is the other body-consumer that genuinely wants the MAXIMUM, because it reads a count
+    // and converts it into permanent +1/+1 counters before the bodies can be shrunk by anything --
+    // so unlike the sac outlets above, "as many as possible" really is its argmax. Hand-gated: a
+    // Mycoloth already on the battlefield has devoured already.
+    if (r.devour_waiting) { push(out, k_fodder); }
+
+    // THE KILL PROJECTION. A landmark outside the base menu earns its place by reaching a kill the
+    // base menu does not -- and a kill THIS turn beats a kill next turn, which is the whole primary
+    // objective (avg win turn), so the two are tested separately rather than as one disjunction.
+    // A PROJECTED KILL NARROWS THE MENU TO ONE ENTRY. It took the user saying it twice for this to
+    // land the right way round: I first built the kill projection as a WIDENING gate (admit the big
+    // landmarks when they reach a kill the peaks do not), and that is backwards. Once some k wins,
+    // every larger k is spending counters for nothing -- so the answer is the SMALLEST k that wins,
+    // and the peaks, the presence landmark and the fodder landmark are all irrelevant.
+    //
+    //   *"any number of activations with doubling season is a kill next turn and this turn with
+    //    haste"*
+    //
+    // ...which is exactly the case where the ladder is widest: a Doubling Season takes a Fading 7 to
+    // 14 counters AND mints two tokens per activation, so ONE activation is 2 bodies at 13/13 = 26
+    // power against 20 life. The old code answered that board with a six-wide peak fan. It now
+    // answers it with `{1}`.
+    //
+    // JUDGED BY THE CONSERVATIVE PROJECTION, because this is a narrowing: we may only collapse the
+    // menu onto a k we can PROVE wins, never one that merely might. A this-turn kill is preferred
+    // outright over a next-turn kill -- avg win turn is the objective -- and if neither is provable
+    // the optimistic read still ADMITS the big landmarks below, which is the widening direction and
+    // therefore allowed to be generous.
+    // THE MARGIN IS THE FREE COUNTER, AND IT IS +2 WHEN THE HASTE HAS TO BE BOUGHT. Spending one
+    // counter past the minimum costs nothing real -- fading removes it at the next upkeep either way
+    // -- and under a Doubling Season it doubles the bodies, so it is pure redundancy. USER, on a
+    // 14-counter Burst: *"2 creatures can attack for lethal. (but we may as well pull 2 counters and
+    // make it 4)"* and *"That way it is a clear kill even in 2HG."* Vitaspore Thallid grants haste by
+    // SACRIFICING a Saproling, so a kill that needs it needs a body to spend buying it -- that one is
+    // not margin, it is fuel: *"maybe pull 3 counters in case we need to use Vitaspore for haste."*
+    // Concordant Crossroads grants haste free and keeps +1. (2HG needs no special case: opp_life is
+    // read live and a two-headed game starts at 30, so the projection already demands the bigger
+    // number.)
+    const int margin = (r.haste_outlet && !r.haste_all) ? 2 : 1;
+    int k_win_now = 0, k_win_next = 0;
+    for (int k = 1; k <= fade_max_k; ++k)
+    { if (dmg_now_lo(k) >= r.opp_life) { k_win_now = k; break; } }
+    for (int k = 1; k <= fade_max_k; ++k)
+    { if (dmg_next_lo(k) >= r.opp_life) { k_win_next = k; break; } }
+    if (k_win_now || k_win_next)
+    {
+        // ONE OPTION. USER 2026-09-26: *"But either way, it is a trivial decision. And should
+        // definitely be narrowed to one option."* A this-turn kill beats a next-turn kill outright
+        // (avg win turn is the objective); past that there is nothing to search, so the menu is a
+        // single k and the whole rest of this function is skipped.
+        const int win = k_win_now ? k_win_now : k_win_next;
+        out.assign(1, std::min(win + margin, fade_max_k));
+        // ...WITH ONE EXCEPTION, AND THE USER NAMED IT: *"narrowed to one means we might still need
+        // to consider the option where will kill all of the saprolings for Slimefoot if we don't
+        // have haste."* Slimefoot's drain is a SECOND, INDEPENDENT CLOCK. Combat needs the bodies to
+        // survive summoning sickness; the drain needs them to DIE, which they do on the spot at zero
+        // counters, so it fires the turn the Burst lands with no haste anywhere. When the only
+        // provable kill is a combat one NEXT turn, a drain line that might close it THIS turn is a
+        // whole turn faster and has to stay on the menu -- it is judged on the optimistic read
+        // precisely because it is being added rather than removed.
+        if (!k_win_now && r.drain_per_death_opt > 0)
+        {
+            for (int k : { k_fodder, k_all })
+            { if (k >= 1 && k <= fade_max_k && dmg_now(k) >= r.opp_life) { push(out, k); break; } }
+        }
+    }
+    else
+    {
+        // Nothing wins yet. The big landmarks are admitted on the OPTIMISTIC read -- they are being
+        // added, not removed, so generosity is the safe direction here.
+        for (int k : { k_presence, k_fodder, k_all })
+        {
+            if (k < 1 || k > fade_max_k) { continue; }
+            if (dmg_now(k) >= r.opp_life || dmg_next(k) >= r.opp_life) { push(out, k); }
+        }
+    }
+
+    std::sort(out.begin(), out.end());
+    out.erase(std::unique(out.begin(), out.end()), out.end());
+
+    // MTG_FADE_K_DUMP=1 -- DIAGNOSTIC ONLY, never branches play. Prints the board read, every
+    // landmark and the menu it produced, deduped by the inputs so one situation prints once. This
+    // is the instrument to reach for when the lever loses a game: the question is always "which k
+    // did the ladder have that the menu did not", and an aggregate cannot answer it.
+    static const bool s_dump = EnvOn("MTG_FADE_K_DUMP");
+    if (s_dump)
+    {
+        // A TRUE HISTOGRAM of the ladder width, printed at exit. Deliberately separate from the
+        // deduped line dump below: that one caps at 400 DISTINCT lines, so reading a width
+        // distribution off it biases hard toward whatever printed first, and doing exactly that
+        // once produced a "widths are 2-6, there are no big ladders" conclusion that had to be
+        // withdrawn. Counts, not samples.
+        struct Hist {
+            std::atomic<long long> n[129]{};
+            ~Hist() {
+                std::fprintf(stderr, "[fade-k] ladder-width histogram (emissions):\n");
+                for (int i = 0; i <= 128; ++i)
+                { if (n[i].load()) { std::fprintf(stderr, "    width %3d : %lld\n", i, n[i].load()); } }
+            }
+        };
+        static Hist s_hist;
+        s_hist.n[std::min(fade_max_k, 128)].fetch_add(1, std::memory_order_relaxed);
+    }
+    if (s_dump)
+    {
+        static std::mutex            s_mx;
+        static std::set<std::string> s_seen;
+        char buf[512];
+        std::snprintf(buf, sizeof buf,
+            "C=%d c=%d n=%d own=%d rdy=%d | life=%d rp=%d np=%d na=%d drain=%d saps=%d sac=%d "
+            "hA=%d hO=%d Ap=%d At=%d qneed=%d qpow=%d dev=%d || now=%d next=%d pres=%d fod=%d all=%d"
+            " win_now=%d win_next=%d",
+            C, c, n, own, ready_own, r.opp_life, r.ready_power, r.next_power, r.next_attackers,
+            r.drain_per_death, r.saps_alive, (int)r.sac_outlet, (int)r.haste_all,
+            (int)r.haste_outlet, A_p, A_t, r.quest_need, r.quest_power, (int)r.devour_waiting,
+            k_pow_now, k_pow_next, k_presence, k_fodder, k_all, k_win_now, k_win_next);
+        std::string line = buf;
+        line += " => {";
+        for (std::size_t i = 0; i < out.size(); ++i)
+        { line += (i ? "," : "") + std::to_string(out[i]); }
+        line += "} of 1.." + std::to_string(fade_max_k);
+        std::lock_guard<std::mutex> lk(s_mx);
+        if (s_seen.size() < 400 && s_seen.insert(line).second)
+        { std::fprintf(stderr, "[fade-k] %s\n", line.c_str()); }
+    }
+    return out;
+}
+
 static std::vector<Action> CollectActions(const GameState& state, bool is_pre_combat)
 {
     const Player& ap = state.ActivePlayer();
@@ -14793,6 +15487,15 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
         { haste_src = GatherHasteSources(state.battlefield, state.active_player_index);
           haste_ready = true; }
         return &haste_src;
+    };
+    // The fade k-axis board/hand read (MTG_FADE_K_WINDOW), lazy for exactly the same reason: only a
+    // Saproling Burst holding enough counters to be worth narrowing ever asks for it, and it is one
+    // battlefield walk plus one hand walk shared by every Burst on the board.
+    bool          fade_read_ready = false;
+    FadeBoardRead fade_read_val;
+    auto fade_read = [&]() -> const FadeBoardRead& {
+        if (!fade_read_ready) { fade_read_val = ReadFadeBoard(state); fade_read_ready = true; }
+        return fade_read_val;
     };
 
     if (poolaudit::Enabled()) { poolaudit::Probe(state, is_pre_combat ? "collect-m1" : "collect-m2"); }
@@ -19351,72 +20054,51 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
                     && !DecisionUnpruned(UnprunedGate::BlinkTarget))
                 {
                     counts.clear();
-                    // OFFER THE LANDMARKS INSTEAD OF WALKING THE LADDER (MTG_FADE_K_WINDOW,
-                    // default OFF).
+                    // OFFER THE LANDMARKS INSTEAD OF WALKING THE LADDER (MTG_FADE_K_WINDOW).
+                    // The objectives, the board/hand read they are priced against and the user
+                    // quotes they come from all live on FadeKLandmarks / ReadFadeBoard, above
+                    // CollectActions -- this site only supplies the source's own numbers.
                     //
-                    // This axis is the single biggest source of search width on a Saproling Burst
-                    // board: MTG_BF_CENSUS on candidate B's worst game measured 82% of ALL candidate
-                    // mass on the chosen-X shape, of which ONE physical Saproling Burst contributed
-                    // 393,475 activation actions. `fade_counters` is not bounded by Fading 7 either
-                    // -- Doubling Season doubles counters as they are PUT ON, so four of them take a
-                    // Burst to 7 * 2^4 = 112 counters and this loop then offers 112 candidates.
-                    //
-                    // The block above is right that a naive cap is WRONG -- k is a genuine INTERIOR
-                    // optimum. But "the interior optimum" is only ONE objective, and USER 2026-09-26
-                    // named the others, which is what this set is built from:
-                    //
-                    //   *"only need to consider activating to put out 2 or 3 saprolings for maximum
-                    //    attack power, counters-2 for maximum board presence and maybe counters-1
-                    //    for maximum sacrifice."*
-                    //
-                    // Those are three DIFFERENT objectives over the same k, and the parabola only
-                    // expresses the first:
-                    //   k near C/(2*cost)  MAX TOTAL POWER. k bodies of (C-k*cost) each, so power is
-                    //                      k*(C-k*cost) -- an inverted parabola. For an undoubled
-                    //                      Fading 7 its peak IS the user's "2 or 3" (k=3 -> 3x4/4).
-                    //   k leaving 2        MAX BOARD PRESENCE. The most bodies that still SURVIVE
-                    //                      combat and an SBA, and the most declared attackers for
-                    //                      Beastmaster Ascension's quest counters.
-                    //   k leaving 1        MAX BODY COUNT among bodies that live at all -- devour
-                    //                      fodder for Mycoloth, sacrifice fodder for the outlets.
-                    //   k leaving 0        DELIBERATELY KEPT, though the block above calls it "a pile
-                    //                      of 0/0s that die on the spot". On THIS list that is a
-                    //                      payoff, not a waste: Slimefoot, the Stowaway drains one
-                    //                      per Saproling death, so popping everything is a burst of
-                    //                      N damage and can be the kill. Dropping it would be exactly
-                    //                      the combo-invisible-as-WIDTH failure -- a line the
-                    //                      enumerator never offers is unreachable at any depth.
-                    //   k = 1              BANK the counters: a bigger single body later.
-                    //
-                    // So <= 6 candidates replace up to 112, and every one of them is the argmax of
-                    // some objective the deck actually has. USER also noted a further refinement --
-                    // *"If there is no way to win this turn the 2 or 3 options are the best bet"* --
-                    // i.e. gate the large-k landmarks on a reachable kill. That is deliberately NOT
-                    // built here: it needs a lethal projection at enumeration time, and this set is
-                    // measurable on its own first.
-                    //
-                    // NOT LOSSLESS and not claimed to be: a heuristic narrowing of a searched menu,
-                    // default OFF behind its own HeuristicArm slot, adopted only on a held-out play
-                    // A/B -- the protocol MTG_FUNGUS_SHRINK_SAC_M2 went through. Ascending order is
-                    // preserved so survivors keep their relative enumeration order and the
-                    // downstream tie-breaks are undisturbed.
-                    static const bool s_fade_window = EnvOn("MTG_FADE_K_WINDOW");
-                    const int kFadeWindowFloor = 6;   // below this the full ladder is already cheap
+                    // Ascending order is preserved so survivors keep their relative enumeration
+                    // order and the downstream tie-breaks are undisturbed.
+                    // ADOPTED 2026-09-26, DEFAULT ON. Held out over seven fresh seeds, both arms
+                    // and both depths in ONE pooled batch: at the d1/b3 labelling depth (2,400
+                    // games) -0.00417 turns at 2.04x, and at the d5/b20 play depth (1,750 games)
+                    // -0.00400 turns at t = -3.24, 1.50x. Better AND faster in both regimes, which
+                    // is what the strict-improvement bar asks for. MTG_FADE_K_WINDOW=0 restores the
+                    // full ladder. See docs/design/fade-k-axis-landmarks.md.
+                    static const bool s_fade_window = EnvOn("MTG_FADE_K_WINDOW", true);
+                    // THE FLOOR IS 2, i.e. wherever there is a choice at all, and that is a
+                    // MEASURED retraction of a 12 I shipped for about an hour. The reasoning for a
+                    // high floor was that a narrowing should only be paid for where the ladder is
+                    // wide, and at the time it was right: the menu was deleting one candidate out
+                    // of six and losing games for it. What changed is the commit-then-leave-alone
+                    // split below -- once a post-entry node offers nothing at all, the small
+                    // ladders are exactly where the win is, because 78% of all emissions are on a
+                    // Burst that has already been dribbled down. Swept on a 100-game labelling
+                    // block (ladder 69.99s / avg 5.5100):
+                    //     floor 12 -> 57.34s avg 5.5200
+                    //     floor  6 -> 50.56s avg 5.5000
+                    //     floor  2 -> 43.36s avg 5.4900   <- faster AND better than the ladder
+                    static const int s_fade_floor = EnvInt("MTG_FADE_K_FLOOR", 2);
                     if (heurarm::Flag(heurarm::FADE_K_WINDOW, s_fade_window)
-                        && fade_max_k >= kFadeWindowFloor)
+                        && fade_max_k >= s_fade_floor)
                     {
-                        const int cost = sd->params.fade_saproling_cost;
-                        const int C    = src.fade_counters;
-                        // argmax over the reals of k*(C - k*cost) is C/(2*cost).
-                        const int peak = C / (2 * cost);
-                        // "leave R counters on the Burst" -> k = (C - R) / cost.
-                        auto leave = [C, cost](int r) { return (C - r) / cost; };
-                        for (int k : { 1, peak, leave(2), leave(1), leave(0) })
-                        {
-                            if (k < 1 || k > fade_max_k) { continue; }
-                            if (!counts.empty() && counts.back() >= k) { continue; }
-                            counts.push_back(k);
-                        }
+                        const FadeBoardRead& fr = fade_read();
+                        // Tokens per activation AFTER the token doubler -- CreateToken is where
+                        // Doubling Season's token half hooks, so one Season is two per activation.
+                        const int ntok = std::max(1, sd->params.fade_creates_tokens)
+                                       << DoublerShift(state, state.active_player_index,
+                                                       /*for_tokens=*/true);
+                        counts = FadeKLandmarks(fr, src.fade_counters,
+                                                sd->params.fade_saproling_cost, ntok, fade_max_k,
+                                                fr.TokensOf(src.card.m_number),
+                                                fr.ReadyOf(src.card.m_number));
+                        // AN EMPTY MENU IS A REAL ANSWER HERE, and it is the common one: on any
+                        // node where this Burst already has bodies out, the user's rule is to leave
+                        // it alone unless a named payoff asks otherwise, and "leave it alone" is
+                        // expressed by not offering the activation at all. Do NOT backfill a k=1 --
+                        // that is the dribble the split exists to delete.
                     }
                     else
                     {

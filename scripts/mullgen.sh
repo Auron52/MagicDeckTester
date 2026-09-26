@@ -437,24 +437,14 @@ case "$CMD" in
     # (analysis-Melira Pod.md) -- do NOT promote it to an engine default. Set MTG_DECISION_WORK_X in
     # the environment to override; see docs/design/slow-rollout-tail-and-the-uncharged-greedy-walk.md.
     #
-    # Fade-outlet activation-COUNT landmarks (TurnSolver.cpp, the fade_saproling_cost block).
-    # Saproling Burst's k-axis is the single widest thing on a Fungus board: MTG_BF_CENSUS put 82%
-    # of ALL candidate mass on the chosen-X shape, one physical Burst emitting 393,475 activation
-    # actions in ONE game, because Doubling Season doubles fade counters as they are put on (7 * 2^4
-    # = 112 counters -> 112 candidates). The lever offers the LANDMARKS of that axis instead -- bank
-    # 1, the k*(C-k) power peak, and leaving 2 / 1 / 0 counters (max survivable bodies, max bodies,
-    # and the all-0/0 Slimefoot drain-burst, which is a kill line rather than a waste on a list
-    # running Slimefoot). <= 6 candidates instead of up to 112.
-    #
-    # GENERATION-SIDE ONLY, and default OFF in the engine, because it is a HEURISTIC narrowing of a
-    # searched menu and its play evidence does not clear the strict-improvement bar: 744 held-out
-    # games showed ZERO win-turn changes in 144 at the d5/b20 PLAY depth, but 2 of 600 changed at
-    # the d1/b3 LABELLING depth and both were worse (+0.0033 turns, t=+1.42 -- not significant, but
-    # the point estimate is negative). It is wired HERE because labelling is where the cost is:
-    # 2.70x on candidate B's worst rollout, candidate mass 2.53x smaller. Same placement rationale
-    # and same precedent as the ceiling above. Set MTG_FADE_K_WINDOW=0 to override.
+    # NOTHING ELSE BELONGS HERE. The fade k-axis landmark lever (MTG_FADE_K_WINDOW) was wired at
+    # this line on 2026-09-25 and REMOVED on 2026-09-26 at the user's instruction -- *"I don't want
+    # generation-side rules. You should work to make my heuristic workable for play."* A narrowing
+    # that is only safe during generation is a narrowing that labels a deck the engine does not
+    # play, and the gap between the two is exactly what a keep table is supposed to close. It is now
+    # a board-and-hand projection that earns its place in PLAY (TurnSolver.cpp, FadeKLandmarks), so
+    # generation inherits it from the engine default like every other play rule.
     MTG_DECISION_WORK_X="${MTG_DECISION_WORK_X:-1000}" \
-    MTG_FADE_K_WINDOW="${MTG_FADE_K_WINDOW:-1}" \
     "$BIN" "$DECK" --cards-json src/cards/data/cards.json --gen-mulligan "$RECIPE" \
       >> "$OUT/gen.log" 2>&1 || { log "GENERATION FAILED -- see $OUT/gen.log"; exit 1; }
     [ -e "$PROF" ] || { log "gen produced no profile (below the R>=10 floor?) -- see $OUT/gen.log"; exit 1; }

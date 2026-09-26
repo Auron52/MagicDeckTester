@@ -254,7 +254,8 @@ enum Slot : int
     SAC_DRAIN_LETHAL,         // MTG_SAC_DRAIN_LETHAL        the multi-sac LETHAL burst is sized by outlet damage PLUS the per-death drain of our death watchers (Slimefoot / Pashalik Mons). Adds an action, so it moves GT (default OFF)
     FS_PRE_STATE_SKIP,        // MTG_FS_PRE_STATE_SKIP   an ORDINARY plan on FSLineWin's frontier is SKIPPED when an earlier sibling already scored its post-apply state (default OFF; an IDENTITY collapse, not a dominance ordering)
     DIG_MANA_LAST,            // MTG_DIG_MANA_LAST        a tap-draw activation is NOT OFFERED while the mana it wants could deploy a PERMANENT from hand instead (default OFF; a HEURISTIC narrowing, not lossless)
-    FADE_K_WINDOW,            // MTG_FADE_K_WINDOW        the fade-outlet activation-COUNT ladder (Saproling Burst) is SAMPLED at {1, peak+-1, max} instead of walked 1..max -- k*(C-k) is an analytic parabola, so the interior optimum the full ladder exists to protect is kept while <=5 candidates replace up to 26 (default OFF; a HEURISTIC narrowing, not lossless)
+    M2_FREE_ACTIVATION,       // MTG_M2_FREE_ACTIVATION  the post-combat PRODUCTIVITY gate also opens the phase for a FREE counter-paid activation on a permanent that entered this turn (Saproling Burst cast in main 1). Without it 69% of Bursts sat idle the turn they landed -- but it adds m2 solves, which the 2026-09-08 "no extra mains to search" doctrine is about, ADOPTED 2026-09-26, default ON: -0.126t labelling / -0.139t play on seven held-out seeds, and still 2.01x/1.37x faster
+    FADE_K_WINDOW,            // MTG_FADE_K_WINDOW        the fade-outlet activation-COUNT ladder (Saproling Burst) is replaced by a PROJECTED LANDMARK MENU: the power peak (with the bodies already out folded in), plus a Beastmaster-Ascension attacker threshold, plus the leave-2/leave-1/leave-0 lines ONLY when they reach a kill this turn or next that the peak does not. Up to 112 candidates become ~3. ADOPTED 2026-09-26, default ON (-0.004t at both depths, 2.04x/1.50x). See docs/design/fade-k-axis-landmarks.md (a HEURISTIC narrowing, not lossless)
     COUNT
 };
 
@@ -475,6 +476,7 @@ inline const char* Name(int slot)
         "MTG_SAC_DRAIN_LETHAL",
         "MTG_FS_PRE_STATE_SKIP",
         "MTG_DIG_MANA_LAST",
+        "MTG_M2_FREE_ACTIVATION",
         "MTG_FADE_K_WINDOW",
     };
     // The enum and this table are ONE mapping split across two lists: a slot added to one and not
