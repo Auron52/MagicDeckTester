@@ -46,11 +46,19 @@ Release first: `./build.sh` (never raw `cmake` — see CLAUDE.md; a bare `cmake`
 
 ## The three modes
 
-| Mode | Flag | Budget | Cadence | Seeds |
-|------|------|--------|---------|-------|
-| smoke | `--smoke` | < 15 min | frequently / before every push | 1001 |
-| regression | *(default)* | < 45 min | before committing | 2002, 3003 |
-| overnight | `--overnight` | < 8 h | while sleeping | 4004, 5005, 6006, 7007 |
+| Mode | Flag | Budget (ceiling) | MEASURED makespan | Cadence | Seeds |
+|------|------|--------|--------|---------|-------|
+| smoke | `--smoke` | < 15 min | ~2 min | frequently / before every push | 1001 |
+| regression | *(default)* | < 45 min | ~5 min | before committing | 2002, 3003 |
+| overnight | `--overnight` | < 8 h | **12m52s** (2026-09-26, 309 jobs, 32 cores) | any time — see below | 4004, 5005, 6006, 7007 |
+
+> **THE BUDGET COLUMN IS A CEILING, NOT AN ESTIMATE — do not defer the overnight tier on it.**
+> "< 8 h" is the *sizing rule* for the matrix, not what a run costs. Measured 2026-09-26 on a
+> 32-core box: the full overnight tier is **12 minutes 52 seconds** of batch makespan. Read that
+> number before telling a user a tier is theirs to schedule: on 2026-09-26 an agent deferred the
+> overnight as "~8 h, so that's yours to schedule rather than mine to launch", quoting this table,
+> and the tier had by then gone **six days and ~100 `src/` commits** without a full rebaseline. It
+> then took one coffee break. If you have a reason to think a tier is stale, just run it.
 
 Seeds are **disjoint across modes on purpose**, so running more modes covers more
 seeds. Budgets are shared across all decks — see "Adding a deck" below.
@@ -164,7 +172,41 @@ Record *why* you accepted a known regression, in the ground truth itself:
 `# accepted-with-regressions` provenance line into `regression_gt.txt`. A future agent
 seeing a red-looking baseline then finds the reasoning instead of re-deriving it.
 
-This is not hypothetical. `8dc20bdc` (dragonstorm's no-win tie-break opt-out) shipped
+> **A full accept DROPS that mode's prior notes — carry anything still binding into the new one.**
+> `regression.sh` keeps other modes' notes but filters out `^# accepted-with-regressions ($MODE,`
+> when the accept is not `--deck`-scoped. That is deliberate (a full re-accept re-measures every
+> cell of the mode, so an old partial note describes a baseline that no longer exists) — but it
+> silently discards rulings that *do* still bind. On 2026-09-26 it removed a **USER decision** from
+> 2026-09-20 about Angels' off-policy d3 cells, whose cells the new accept was still carrying. The
+> diff-around-every-accept step below is what caught it. So before a full accept: read the existing
+> notes, decide which rationale survives, and paste it into your own note.
+> **The note must be ONE LINE.** It is emitted as `echo "# ... : $ACCEPT_ACK"`, so an embedded
+> newline writes a second line with **no `#`**, which then parses as a ground-truth key. Flatten it
+> (`tr '\n' ' '`) and verify afterwards that every non-comment line still matches
+> `^<key>=<avg>(/<digest>)?$`.
+
+**It has now happened TWICE to the overnight tier specifically, and there is a one-line check for it.**
+Every rebaseline in a busy window tends to be `--smoke` + regression, because those are the tiers an
+agent just ran; overnight then accumulates the entire window silently. Measured 2026-09-26: **six
+days, ~100 `src/` commits, 185 of 309 keys FAILing**, and the GT header already carried the same
+diagnosis from the previous occurrence. Before assuming a red overnight cell is *your* change, ask
+which commits ever moved an overnight key:
+
+```bash
+for c in $(git log --format=%h -25 -- test/regression_gt.txt); do
+  printf '%s overnight-lines=%s %s\n' "$c" \
+    "$(git show "$c" -- test/regression_gt.txt | grep -cE '^[+-][a-z].*_overnight_')" \
+    "$(git log -1 --format='%ad %s' --date=short "$c")"
+done
+```
+
+A column of `overnight-lines=0` down the whole window means the tier is simply behind, and the right
+diff partner is **the prior committed code**, not that stale GT (rule 5). The decisive form is a
+paired A/B against the last commit before your own work, run **from its own worktree** — measured that
+way, 2026-09-26's session contributed **0 changed win turns in 295,920 games** to a tier showing 185
+FAILs, which no amount of reasoning about the GT could have established.
+
+This is not hypothetical either. `8dc20bdc` (dragonstorm's no-win tie-break opt-out) shipped
 with the note *"STILL OUTSTANDING: the overnight tier has not been rebaselined … so
 overnight WILL show a real per-key regression there"*. Two days later the next agent
 found those cells red and spent a session re-deriving evidence that already existed in
