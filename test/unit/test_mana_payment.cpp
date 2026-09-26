@@ -25,14 +25,7 @@
 #include <string>
 #include <vector>
 
-// Friend of AIEngine (see AIEngine.h): the only sanctioned way for tests to reach the
-// executor's private payment path.
-struct MtgTestSeam
-{
-    static bool TapForCost(AIEngine& e, GameState& s, const ManaCost& c, ManaPool& avail,
-                           bool for_creature)
-    { return e.TapForCost(s, c, avail, for_creature); }
-};
+#include "mtg_test_seam.h"   // MtgTestSeam: friend of AIEngine (executor private paths)
 
 namespace
 {

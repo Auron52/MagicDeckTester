@@ -6184,7 +6184,13 @@ void AIEngine::CastSpellFromHand(GameState& state, Card& hand_card, ManaPool& av
     // resolve K as -1 (destroy nothing) while the rollout (which passes the int directly)
     // projected -- an executor/rollout divergence by construction. chosen_x defaults to 0 for
     // every other cast, so no other deck's entries move.
-    if (chosen_x > 0 || chosen_x == kEtbKxHeuristic) { entry.chosen_x = chosen_x; }
+    // Felidar Guardian (etb_blink_permanent) ALSO carries a ZERO: on this card chosen_x is the
+    // searched flicker target's m_number and 0 is the searched DECLINE. Dropping it left the entry
+    // unset, EffectHandler read value_or(-1) = "PUT, ask the provider", and the executor flickered
+    // the provider's pick while the rollout (which passes 0 straight through) declined -- the line
+    // the search scored was not the line the game played. Param-gated: no other deck moves.
+    if (chosen_x > 0 || chosen_x == kEtbKxHeuristic || def->params.etb_blink_permanent)
+    { entry.chosen_x = chosen_x; }
     // Soulfire Eruption: carry the searched own-creature target count so EffectHandler's dig
     // exiles the same N cards and kills the same own creatures as the rollout (lockstep).
     if (own_targets > 0) { entry.soulfire_own_targets = own_targets; }
