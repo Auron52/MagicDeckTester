@@ -1032,6 +1032,48 @@ which is a live lead, but following it needs a card the deck does not own. That 
 >
 > This is what **round J** measures; the correction, not the original claim, is the live state.
 
+### WHY Knight Exemplar is the worst card — from `cards.json`, not from a story
+
+The Exemplar result has been explained so far as *"its indestructible-and-first-strike half is inert
+against a passive opponent, leaving a 2/2 and an anthem Benalish Marshal provides more cheaply."* That is
+true but it is not the reason, and the real reason is a single line of card data:
+
+| card | modelled anthem | what it pumps |
+|---|---|---|
+| **Knight Exemplar** | `lord_effect`, `subtypes_affected: ["Knight"]`, +1/+1 | Knights only |
+| **Benalish Marshal** | `lord_effect`, `affects_all_creatures: true`, +1/+1 | **everything** |
+
+and every token this deck makes is **not a Knight**:
+
+| token source | `*_token_subtypes` | pumped by Exemplar? | by Marshal? |
+|---|---|---|---|
+| Adeline, Resplendent Cathar (per attack) | `["Human"]` | **no** | yes |
+| Hero of Bladehold (two per attack) | `["Soldier"]` | **no** | yes |
+| Worthy Knight (per Knight cast) | `["Human"]` | **no** | yes |
+
+**So Knight Exemplar's anthem covers a shrinking fraction of the board exactly as the deck's damage moves
+into tokens — and the candidate moved it there on purpose,** taking Adeline 1→4 and Benalish Marshal 2→4.
+On a turn-4 attack (the candidate's modal win) with Adeline and a Hero deployed, a large part of the
+attacking power is Humans and Soldiers that Exemplar does not see and Marshal does. Exemplar's remaining
+printed text is `keywords: ["First Strike"]`, which is modelled but worthless with no blockers, plus the
+indestructible grant, which does not appear in its `parameters` at all — so it is genuinely not modelled,
+exactly as the bracket note claims.
+
+**This explains two results with one fact:** why Marshal 2→4 was a gain, and why Exemplar is the list's
+worst card. It also **predicts** rather than merely rationalises, which is the test
+[[dont-rationalize-a-measured-cut]] sets: if Exemplar's anthem is being diluted by tokens, its marginal
+must get *worse* as the token count grows. It does — the ladder steepens (4→3 ≈ **−0.0095**, 3→2 =
+**−0.0107**) rather than flattening as a saturating lord would. And it predicts that **2→1 keeps paying**,
+which is `j_wk_ke1_hob4` in round J. If that rung comes back flat, this mechanism is wrong.
+
+**A related audit, free from the same data.** Exactly **8 of the candidate's 60 slots** are cards the
+engine declares to have no abilities whatsoever — `"template": "vanilla_creature"` with empty `keywords`
+*and* empty `parameters` — and they are precisely **Dauntless Bodyguard ×4 and Venerable Knight ×4**.
+Every other card in the list carries parameters. The two differ in no modelled field at all: same
+`{W}`, same 2/1, same `["Human","Knight"]`, same empty everything, with **`name` and `oracle_text` the
+only fields that differ between their JSON entries**. That is why round J's
+`j_wk_dbg3_hob4` / `j_wk_vk3_hob4` pair is an exact null control rather than an approximate one.
+
 ### The final list's CHARACTER changed, and it gave up the nut draw to do it
 
 From round H's preserved per-game data (`logs/wk_screen/out/floor_WhiteKnights_09.err` = held-out std,
