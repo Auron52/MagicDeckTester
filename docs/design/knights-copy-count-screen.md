@@ -1025,8 +1025,32 @@ Adeline 4, 21 lands), and whether the land ladder turns over at 23, paid for two
    partly broken by `h_kn_moz3_l23`; and Knights' sideboard promotions remain out of scope by the user's
    *"optimize on the set we have for now"*.
 
+**Round I is already written**, parameterised on round H's endorsed land count:
+
+```
+python3 logs/wk_screen/mkspec_i.py <L>        # prints the arms + the tag list
+python3 scripts/deck_compare.py logs/wk_screen/i_knights_long.json --floor <tags> --dry-run
+```
+
+Its five arms hold Contender 0 and Adeline 4 (both settled) and vary **Knight Exemplar** 4 / 3 / 2 / 0
+against the remaining sinks, reading the Exemplar axis off **matched pairs** rather than a moving base.
+Two arms pay the second Exemplar slot differently — one with a land, one with Haytham's 4th copy (a
+measured null) — which is what separates *"Exemplar is bad"* from *"lands are good"*. The generator
+**asserts the slot ledger balances** for every arm (frees = uses); that assertion is the check that would
+have caught round F's 57-card arm. At L=22 the reference arm is deliberately named `h_kn_ad4_l21` because
+it is byte-identical to round H's, which makes it free.
+
 **Do not re-run anything already on disk.** Thirteen keep tables exist under `logs/deckcmp/{WhiteKnights,
 Knights}/<tag>/` and `gen_table` reuses them on (counts, R) — reference arms and held-out blocks are free.
+Note `deck_compare` holds a per-deck `.lock` and will refuse a second run on the same deck, including a
+`--dry-run`: that guard exists because two runs would rewrite each other's `numbering.json` while jobs are
+still reading it.
+
+**All of `logs/wk_screen/` is gitignored** (repo convention: log/output dirs live under `logs/`), so the
+specs and readers are on disk only — this document is the committed record. The readers are
+`gread.py` (one bracket log → a table), `pool_g.py` / `pool_gkn.py` / `pool_h.py` (pool two blocks),
+`dist.py` (per-game win-turn distribution), `snap_floor.sh` and `snap_out.sh` (preserve each batch's
+per-game data and per-job cost, both of which the driver otherwise overwrites per invocation).
 
 ## Open questions for the user (surfaced, not blocking)
 
