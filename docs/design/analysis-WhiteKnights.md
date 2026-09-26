@@ -246,7 +246,79 @@ Open question for the cast-order hook: `VialProvider::CastOrderRank` under `MTG_
 was reviewed and adopted for the *Knights* list. Whether it transfers to this list is a
 measurement (5e), not an assumption — recorded below once run.
 
-## RESUME HERE (2026-09-26)
+## RESUME HERE — latest state (2026-09-26, after the value-leaf run)
+
+**Everything in the analyze-deck workflow is DONE. The deck ships a FITTED VALUE LEAF. What is left is
+bookkeeping plus four user sign-offs.**
+
+| item | state |
+|---|---|
+| Stages 1–6 + 6a | **DONE** (report at `## Stage 6 — Report`) |
+| verify_deck.py | all gates PASS as of the **leaf:none** sidecar — **NEEDS ONE RE-RUN under the adopted leaf** |
+| Value-leaf pipeline | **ALL 8 PHASES COMPLETE** (0/A/B/C/C.5/D/E/F), freeze intact `bb5d1038`, matrix 52/52 @400g, 11,288 rows, held-out RMSE 0.4236 |
+| Search shape | **FITTED LEAF ADOPTED** (`721fe1b6`), superseding the leaf:none shape. `ladder: "single"` stays REJECTED |
+| Reference bench | **0/10 shortfalls** — engine matches or beats the human on every reference |
+| Commits | `80ef7c34` deck+engine · `bb5d1038` lazy-leaf opt-out · `343366c3` leaf measurement · `6508fb37` references · `ce64976d` bench cache · `9bec6d2e` refline tool · `721fe1b6` leaf adoption. **Nothing pushed.** |
+
+### The value leaf: adopted, and my earlier "no leaf" call was wrong on COST
+
+`decks/WhiteKnights/WhiteKnights.value.json` now carries the fitted model (53,666 bytes) —
+0.31–0.38x the leafless shape's units at d5, quality indistinguishable (0 better / 2 worse over 16,000
+paired d5 games on two disjoint seed bases), **exactly 1.00x and byte-identical at d3**. Detail in
+*Search shape* → Step 2b/2c/2d. `value_play` carries only `expected_buckets: 14`.
+
+**Two traps in that run, both worth not re-learning:**
+1. `phase_train` copies the LIVE sidecar and adds only `eval_model`, so an adopted `leaf: "none"`
+   survives into the staged model and `AttachValueSidecar` swaps the fitted trees for `Constant()`.
+   Move a shape sidecar aside before generating, and check the staged `value_play` before believing
+   any result.
+2. **Phase F must run AFTER adoption.** Before adoption it picked `d1 b3`; after, play settings became
+   both cheapest (752 vs 1084 units/roll) and exact (rho 1.0000), so the answer flipped to *no
+   override*. Running it in its normal position would have written a setting 1.44x costlier on the
+   shipped deck at worse fidelity.
+
+### Reference bench — the engine never loses to the human
+
+`python3 scripts/ref_bench.py --deck whiteknights --log-root logs/wk_refbench` on the 10 committed
+hand-played references (`references/WhiteKnights/`, commit `6508fb37`), each game's recorded mulligan
+**forced** so the comparison isolates play:
+
+* **human 4.700 · search 4.400 · 0/10 shortfalls · hand_mismatch 0/10.** 7 exact, 3 the search wins a
+  turn earlier. Cached for the viewer in `test/ref_bench.json`.
+
+**The three faster games were audited for clairvoyance and ALL THREE ARE CLAIRVOYANCE-FREE**, so the
+user may re-play them (their standing rule: *"if the decision is clairvoyant in nature I will just
+leave it"*). Every card the engine cast was already in hand when cast, and each divergence follows a
+principle applicable blind. Reprint any line with `python3 scripts/wk_ref_line.py <stem>`:
+
+| game | the one decision | principle |
+|---|---|---|
+| `claude_s1_gi0` | T2: **Worthy Knight (2/2)**, not Lightning Greaves | Greaves is `{2}` — the whole turn — and adds no power. Its shroud is inert vs a passive opponent and its haste only pays on a creature cast *that same turn* |
+| `claude_s2_gi1` | T2: **Accorder Paladin (3/1)**, not Knight Exemplar | Exemplar buffs "**other** Knights", so into an empty board it is a textless 2/2. Play the lord after its targets exist |
+| `claude_s3_gi2` | T3: **two 1-drops**, not one 2-drop | Venerable Knight and Dauntless Bodyguard are both **2/1 for `{W}`** — 4 power for 2 mana vs Worthy Knight's 2 |
+
+Caveat that runs the user's way on s1: Greaves-for-haste is exactly the line the search *cannot*
+project (the deferred defect below), so it under-rates that plan and still won a turn faster.
+
+### Outstanding
+
+1. **Re-run `verify_deck.py`** under the adopted leaf (last run was on the leaf:none sidecar; all gates
+   passed then).
+2. **Refresh the Stage-4/5/6 tables** — win turns there were measured on the leafless shape. The only
+   cell known to move is `wk_lad_d5_b20` 4.520 → 4.490 (slowest T8 → T7) on its 300-game seed base,
+   which is within seed noise (the 8,000-game paired screen was 0 better / 0 worse at that config).
+3. **Four sign-offs**, none blocking: `expected_buckets = 14`; the Acclaimed Contender "legendary
+   artifact" residue (the deck's only bracket note); `attack_tokens_require_self_attacking` as
+   viewer-inert; and whether `Knights` + `WhiteKnights` both stay.
+4. **Two deferred defects**, both written up:
+   [haste-from-equipment-not-projected.md](haste-from-equipment-not-projected.md) (moves 5 GT tiers) and
+   [lazy-leaf-corrupts-the-h5-reference.md](lazy-leaf-corrupts-the-h5-reference.md) (fleet-wide; default
+   left armed deliberately, `MTG_VL_LAZY_LEAF=0` opts out).
+5. **Play server** was left running on `http://localhost:8080`.
+
+---
+
+## Earlier resume block (2026-09-26, pre-value-leaf)
 
 **Stages 1–5 are DONE. The bug found in Stage 5d is fixed and every number it invalidated has been
 re-measured. What remains is the Stage 6 write-up and two user sign-offs.**
