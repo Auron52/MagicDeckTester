@@ -543,6 +543,165 @@ was optimal, but the Vial cut changed the mana-source total). Each is a small ef
 apparatus that is now stretched, which is the argument for generating real artifacts before chasing
 them.
 
+## Round G — the real-table round, and the alias was hiding something
+
+**User mandate, 2026-09-26:** *"If you need to generate a new mulligan profile or two, you probably can,
+since the cost is relatively low. Just try to do it primarily for cases that are difficult to represent,
+like type changes or significant sets of changes."* And, a few minutes later: *"Land count is one of
+those things we'll likely need multiple profiles for."*
+
+That is exactly right, and it names the reason rounds A–F could not answer the land question at all: the
+exhaustive keep table's **buckets ARE the land/spell partition**, and its cells are compositions over
+them. A table fitted to a 22-Plains list does not merely weight a 20-Plains list slightly wrongly — it
+is a different grid.
+
+### The route (and why it needs no new authority)
+
+`scripts/deck_compare.py --floor <tags>` with **`"bracket": "generate"`** already does this: it calls
+`gen_table` per arm and builds a keep table **for that arm's own counts**, next to that arm's decklist
+under `logs/deckcmp/<Deck>/<tag>/`. Three things make it the right instrument here rather than
+`mullgen.sh`:
+
+* **It is the approved screening route**, so no `MTG_ALLOW_UNTESTED_DECK=1` is involved — that gate
+  lives in `mullgen.sh`/`valueleaf.sh`, and this path calls `mtg-analyze` directly. Nothing had to be
+  waived, and no candidate list went into `decks/` ([[never-commit-screening-lists]]).
+* **`floor_R` is set to each deck's SHIPPED `effective_R`** — 40 for WhiteKnights, 60 for Knights —
+  instead of the driver's default 10. A default-R bracket is the "throwaway low-R table that plays
+  ~0.032–0.06 t weaker", which is the single biggest reason a generated bracket *overstates* its floor.
+  At the shipped R the `own` column stops being only a bound and becomes a **result**: each list
+  measured on a table fitted to itself, i.e. as it would actually ship.
+* **The tables are generated once and reused across all three formats.** `spec.out` is keyed on the
+  base decklist's basename, not the spec filename, so three single-format specs over one base share
+  `logs/deckcmp/WhiteKnights/` and `gen_table` reuse (keyed on the arm's exact counts + R) fires for
+  formats two and three. Three specs are necessary because `floor()` calls `spec.job(..., fmt="")` and
+  therefore cannot span a named `formats` map — there is no multi-format bracket in this driver.
+
+Measured generation cost on this box (32 cores, saturated — load average 32.4/32): **~10 min** for the
+candidate's K=12 table, **~18 min** for the shipped list's K=14 one. "Relatively low" was correct.
+
+### The timing is unusually clean
+
+`git log 083c4108..HEAD -- src/` is **empty** — zero engine commits since WhiteKnights' shipped keep
+table was generated. So for this deck the driver's standard *"NOTE this bracket mixes engine states"*
+warning is a false positive in the only sense that matters: the generated tables and the shipped one
+come from the same engine. That is not true of Knights, whose table dates to `1b3c94fb` (2026-07-14),
+**1,328 `src/` commits back** — see the Knights subsection.
+
+### THE BUCKET STRUCTURE CHANGES SHAPE, AND THAT IS ITSELF THE HEADLINE
+
+The candidate's discovery found **K=12**, against the shipped list's **K=14**. The guard in
+`ExhaustiveKeep.cpp:905` refused until `MTG_KEEP_ACCEPT_K=1` was set, because `gen_table` copies the
+*shipped* deck's `.value.json` in beside the arm and that file carries `expected_buckets = 14` — a
+contract belonging to a different decklist. **This is not a bucket ruling** and
+[[bucket-ruling-is-user-only]] is not in tension with it: no `<stem>.buckets.json` was installed, no
+`expected_buckets` was edited anywhere, and K=12 is *K as discovered*, which that same note names as the
+correct default. It happened in an isolated scratch directory, which is the recipe the note prescribes.
+
+| | shipped list (K=14) | candidate (K=12) |
+|---|---|---|
+| 0 | Lightning Greaves + Swords + Unexpectedly Absent | Swords + Unexpectedly Absent |
+| 1 | Dauntless Bodyguard + Venerable Knight | Dauntless Bodyguard + Venerable Knight |
+| | Acclaimed Contender · Aether Vial · Valiant Knight | — *(all three cut)* |
+| | Plains | Plains |
+| | *(Remote Farm had no bucket; the alias put it in Plains)* | **Remote Farm — ITS OWN BUCKET** |
+
+14 − 3 cut buckets + 1 new bucket = 12. The hand space goes from **68,377 distinct hands to 39,774**, a
+42% reduction — so at equal R the candidate's table is both cheaper to build and better covered per unit
+of generation cost. That is a real shippable property of the list, not an artifact.
+
+### The alias was a mis-specification, and it ran in five screens
+
+**Equivalence discovery put Remote Farm in a bucket of its own — it is NOT behaviourally equivalent to
+a Plains.** Every Remote Farm screen in this campaign (screens 1, 2 and the combination rounds) used
+`scripts/alias_card_into_bucket.py` to file it under Plains, because that was the only way to give an
+introduced card a bucket without generating. The card is *played* correctly either way — the
+implementation is unaffected — but the keep/mulligan DECISION on a hand holding one was made by looking
+up the cell for that many **Plains**, and Remote Farm enters tapped, carries two depletion counters and
+sacrifices itself. Those are exactly the properties a keep decision cares about.
+
+**Which direction that error runs, and why the earlier results survive it.** A mis-specified cell value
+degrades decision quality; it does not systematically flatter. The arm keeps hands it should have
+mulliganed, and the arm holding the mis-bucketed card is the only one that pays. So the alias is a
+**one-sided handicap on the Remote Farm arms** — the same one-way structure as the `d*` misfit — and
+those arms won anyway. Round G removes the handicap instead of bounding it, which is the difference
+between [[isolate-the-axis-dont-difference-decks]]'s "measure the conclusion" and bounding the bias.
+
+**The generate route also retires the alias entirely for future screens.** An introduced card gets its
+own bucket by construction when the table is generated for the arm that holds it, so
+`alias_card_into_bucket.py` is only needed when one wants to avoid generating.
+
+### What round G measures
+
+One spec per format (`logs/wk_screen/g_whiteknights_{long,2hg,std}.json`, built by `mkspec_g.py`),
+base = the **shipped** list, six arms, 20,000 games each, seed block 6.2M, `max_turns` 18. Read with
+`logs/wk_screen/gread.py`.
+
+| arm | what it is | lands |
+|---|---|---|
+| `g_cand` | the confirmed round-F winner `f_ad4_av0_ac0` | 24 |
+| `g_l22` | Plains 18, Silverblade 4 | 22 |
+| `g_l23` | Plains 19, Silverblade 3 | 23 |
+| `g_l25` | Plains 21, Silverblade 1 | 25 |
+| `g_ke3` | Knight Exemplar 4→3, Silverblade 3 | 24 |
+| `g_hob2` | Hero of Bladehold 3→2, Silverblade 3 | 24 |
+
+**Silverblade Paladin is the swap partner on purpose.** A land count cannot be screened alone — 61 cards
+is not a deck, so every land added is a spell cut and the measured effect is always the *pair*. The
+partner therefore wants the flattest marginal available, and Silverblade's 3rd copy measured **−0.0071**
+in round F, the smallest live marginal left in the list. Read `g_ke3` and `g_hob2` net of that −0.0071 to
+recover the copy axis alone.
+
+**The arm-vs-arm arithmetic on the `own` column is exact, and worth being precise about.** For two arms
+X and Y of one invocation, `own(X) − own(Y) = X@own_X − Y@own_Y`, because `base@own_base` is literally
+the same job on the same 20,000 game indices and cancels rather than merely averaging out. The point
+estimate of every ladder step is therefore exact; its standard error is *not* recoverable from the
+printed per-arm ses (they share the base cell's variance, so `sqrt(se_X² + se_Y²)` overstates it), and
+`gread.py` labels that column a **bound**, never the se.
+
+Two biases are known to run against the raised-count arms and are left in place because they are
+one-sided in the safe direction: `g_ke3`/`g_hob2` raise Silverblade to 3 against a shipped table that
+enumerates 0..1, so **12.79%** of their hands fall through on the *shared* column (hence
+`max_fallback: 0.15`, which exists only to stop the driver swapping in a pool table and breaking
+comparability with rounds A–F). Their `own` column has no fall-through at all, by construction — which
+is why only the `own` column is read for those two.
+
+### Round G headline — the real table makes the candidate BETTER, by 0.039 t
+
+`logs/wk_screen/out/g_wk_long_headline.log`, `long` (40 life), 20,000 paired games, seed block 6.2M:
+
+| apparatus | delta | se | ident |
+|---|---|---|---|
+| shared (aliased shipped) table | −0.2100 | 0.0050 | 68.0% |
+| **each arm's own R=40 table** | **−0.2487** | 0.0053 | 63.8% |
+| apparatus bias | −0.0386 | 0.0046 | **t = −8.31** |
+| floor = \|bias\| + 2se | 0.0479 | | effect/floor **4.39x** |
+
+Three things to take from this, in order of importance.
+
+**1. The shared apparatus was UNDERSTATING the candidate, not inventing it.** Round F's held-out `long`
+figure was −0.2131 and round G's shared column is −0.2100 on a fourth disjoint seed block — a clean
+replication. Moving to real per-arm tables then moves the effect *further from zero*, to −0.2487. So the
+apparatus was never the source of the result; it was masking about a sixth of it. The `d*` bound
+("> 0.84 t — the apparatus cannot explain it") is now superseded by a direct measurement that agrees and
+goes one better: it says which way the residual ran.
+
+**2. The per-arm nulls are the cleanest control this campaign has produced.**
+
+| null (own table vs shared) | value | reading |
+|---|---|---|
+| base | **−0.00135 ± 0.00306** | the freshly generated R=40 table for the shipped list is **indistinguishable from the shipped table itself** |
+| `g_cand` | **−0.03995 ± 0.00365** | the candidate plays 0.040 t better on a table built for it |
+
+The base null being zero is the load-bearing check. It says the generation route *reproduces the shipped
+artifact's strength* — as it should, given 0 `src/` commits and matching R=40 — so the two columns' levels
+are directly comparable and the whole −0.0386 bias is attributable to the candidate's side alone. A
+bracket where the control null is non-zero cannot say that.
+
+**3. The alias's error is now measured, and it ran the way predicted.** 0.040 t, against the arm holding
+Remote Farm. That is the concrete cost of filing a tapped, self-sacrificing, depletion-countered land
+under the Plains bucket for the keep decision: not a bias that flattered the new card, a **handicap** on
+the arm that played it. Five screens carried it, and the candidate won all of them anyway.
+
 ## Open questions for the user (surfaced, not blocking)
 
 1. **Ranking weights.** The Angels campaign ranked arms late-weighted — `long` 0.5 / `2hg` 0.3 /
