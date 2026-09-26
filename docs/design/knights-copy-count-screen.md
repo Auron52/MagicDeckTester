@@ -1245,6 +1245,102 @@ Adeline's count does interact with the other creatures (her power is the creatur
 feed her), though only to second order. The round was left running rather than restarted a second time;
 anything that looks adoptable gets re-measured on the Adeline-3 chassis before it is believed.
 
+### "ATTACKS RECEIVED" may be the metric that explains the whole campaign — INDICATIVE, round L confirms
+
+The user, on the settled list: *"I'll admit to being a little surprised that Hero of Bladehold is holding
+up, but I guess the remote farm + sol ring acceleration is helping it out?"* and then the sharper version:
+***"It is a good card, but you need to deploy it early enough for it to be good in goldfish."***
+
+That second remark names a statistic no screen in this campaign has ever reported, and it is exactly
+computable from `--log-dir` logs. **A creature cast on turn C in a game won on turn W attacks `W − C`
+times**, because it is summoning sick the turn it lands. So a card cast on the winning turn contributes
+*literally nothing*, and for Hero of Bladehold — whose entire payload is an attack trigger — zero attacks
+means a 3/4 that did nothing at all. `logs/wk_screen/curve_probe.py` reports it.
+
+**⚠ THE NUMBERS BELOW ARE INDICATIVE ONLY — do not cite them as results.** They come from the 79 logs left
+by the turn-3 replay, which were *selected* for having been turn-3 kills in a different apparatus. That
+selection biases the sample toward fast, accelerated draws, and it is the **shipped** list, not the settled
+one (hence Remote Farm at 0%). `run_l.sh` reruns this on 3,000 unselected games of the settled list.
+
+| card | never cast | casts that **never attacked** | mean attacks |
+|---|---|---|---|
+| Accorder Paladin | 24% | **17%** | 1.52 |
+| Worthy Knight | 57% | 21% | 1.32 |
+| Silverblade Paladin | 87% | 30% | 0.80 |
+| Adeline, Resplendent Cathar | 86% | 36% | 0.73 |
+| **Hero of Bladehold** | **81%** | **53%** | **0.60** |
+| **Knight Exemplar** | **72%** | **60%** | **0.44** |
+
+**If this holds on an unbiased sample it is the unifying mechanism of the entire campaign**, and it is a
+better one than any of the card-by-card stories told above, because it predicts all of them from one fact:
+*a card that arrives after the race is over contributes nothing, so value is dominated by mana cost.*
+
+* It explains why every attempt to cut a **one- or two-drop** measured *worse* — Dauntless Bodyguard
+  (+0.0087), Worthy Knight (+0.0042). Those are the cards that actually attack.
+* It explains **Knight Exemplar's weak lord half** without the token-subtype story needing to do any work:
+  60% of its casts never attack at all. A lord that is not on the battlefield during the attack pumps
+  nothing, whatever its subtype filter says.
+* It explains why the **4th Hero is worse than nothing** (+0.0037) while the 3rd is a null: extra copies of
+  the most expensive card in the deck are the most likely to be stranded.
+* It explains why the **25th land is clearly wrong** (+0.0144) — more lands means fewer of the cheap
+  threats that do the work.
+* And it is the same fact the campaign already stated about its biggest result, from the other direction:
+  *"nearly all the value is seeing her earlier"* for Adeline. **Arrival time, not card quality, is what
+  this apparatus is mostly measuring.**
+
+**On the acceleration question specifically: Sol Ring was in play at 40% of Hero casts against a base rate
+of ~16–18% at turns 2–4 — a ~2.4× enrichment.** So the user's hypothesis has support: Sol Ring genuinely
+does deploy Hero ahead of curve, via the `{2}` of `{2}{W}{W}` (T1 Sol Ring → T2 two lands → Hero on turn
+**two**). Remote Farm should do the same one turn later (it enters tapped but taps for `{W}{W}`, so
+T1 Farm / T2 land / T3 land yields four mana on turn **three**), and it cannot be seen in this sample
+because the shipped list holds none. **But the enrichment figure is exactly what the selection bias would
+manufacture**, since turn-3 kills need acceleration by definition — so it must be re-measured before it is
+believed.
+
+#### CORRECTION, same session: attacks are NOT a uniform currency, and Hero needs exactly ONE
+
+The user immediately found the flaw in the metric above: *"it does attack for 7 + 1 for each pre-existing
+creature on board, so I suspect it usually wins on the turn it attacks."*
+
+That arithmetic is exact. Hero attacks for **3** (himself) **+ 2×2** for the two Soldier tokens — they are
+created *tapped and attacking* and, because both triggers fire on the same attack with tokens ordered
+first, they receive their own **battle cry** pump — **= 7**, plus **+1 per pre-existing attacker** (battle
+cry reads "each *other* attacking creature", so Hero does not pump himself). So counting "attacks received"
+prices a Hero swing identically to a 2/1 swing, which is badly wrong, and the table above understates him.
+
+Measuring it directly — same caveats, same biased 79-log sample:
+
+| | turns | mean damage |
+|---|---|---|
+| Hero able to attack (cast on an earlier turn) | 9 | **20.00** |
+| Hero not available | 232 | 7.85 |
+| **gap** | | **+12.15** |
+| LETHAL turn, Hero able | 7 | 22.86 |
+| LETHAL turn, Hero not | 72 | 14.82 |
+
+**The predicted package is 7 + 1 per pre-existing attacker; at the 4–5 bodies these boards hold that is
+11–12, against a measured gap of +12.15.** The card-data arithmetic and the logged damage agree to within
+noise, which is a genuine cross-check of the engine's battle-cry-on-tokens implementation as well as of the
+claim. **And 7 of the 9 Hero-attacking turns were the lethal turn — 78%.** The user's *"usually wins on the
+turn it attacks"* is supported.
+
+**This resolves the apparent paradox in Hero's copy count.** He does not need to attack often; he needs to
+attack **once**, and he does so in 47% of games. So the right reading of "mean 0.60 attacks" is not
+*"weak"* but *"either on time or irrelevant"* — and that is exactly why the **3rd copy is a null and the
+4th is negative**: in a deck that kills on turn 4–5 you only ever cast one, so extra copies buy *finding*
+him, never *using* him. That is the same sharply-diminishing shape as Adeline's legend-rule problem,
+reached by a completely different mechanism, and it suggests a general rule for this deck: **for anything
+at the top of the curve, redundancy is worth only what it adds to the chance of having one on time.**
+
+It also means the "attacks received" table must be read as *attacks × damage-per-attack*, never as a count.
+Knight Exemplar's 60%-dead figure still stands as written, because a lord's payload is small and continuous
+rather than a single large burst — but Hero's 53% does not mean what it looks like.
+
+**A caution against over-reading this, too.** "Attacks received" is a property of the *apparatus*, not of
+Magic. Against a real opponent the game lasts longer, so late arrivals matter more and the metric
+compresses — which is another way of saying this engine systematically prefers cheap cards. That is worth
+holding next to the fact that the campaign's recommendations are overwhelmingly *"more cheap threats"*.
+
 ### BENALISH MARSHAL 2→4 WAS NEVER MEASURED — nine rounds of assumption, and round M
 
 The user asked whether Marshal 2→4 was established empirically, noting their own agreement was *"just a
