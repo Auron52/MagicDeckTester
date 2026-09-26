@@ -702,6 +702,188 @@ Remote Farm. That is the concrete cost of filing a tapped, self-sacrificing, dep
 under the Plains bucket for the keep decision: not a bias that flattered the new card, a **handicap** on
 the arm that played it. Five screens carried it, and the candidate won all of them anyway.
 
+### WHERE the gain comes from — it is a tail collapse, not a faster nut draw
+
+A mean says how much, never where. The per-game data (`logs/wk_screen/dist.py` over the preserved batch
+stderr — `run_batch` rewrites `floor.err` per invocation, so `snap_floor.sh` copies each one aside) gives
+the whole curve, both decks on their own tables, `long`, 20,000 paired games:
+
+| win turn | 4 | **5** | **6** | 7 | 8 | 9 | 10 | 11 | unwon |
+|---|---|---|---|---|---|---|---|---|---|
+| shipped list | 671 | 12,585 | 5,476 | 997 | 197 | 57 | 15 | 2 | 2 |
+| **candidate** | 839 | **16,264** | **2,368** | 416 | 90 | 14 | 9 | 0 | 0 |
+
+**The candidate converts turn-6 kills into turn-5 kills and cuts the turn-7-and-later population by
+~60%.** Turn-4 wins — the nut draws — improve only modestly (671 → 839). Per game: **28.1% faster, 63.7%
+identical, 8.1% slower**, a 3.5:1 ratio, with the shift histogram concentrated at ±1 turn (4,641 one-turn
+gains against 1,394 one-turn losses).
+
+**That distribution is the strongest form this result could have taken.** The gain sits in mana
+consistency and deployment — the stumbling games — which is the part of the curve a goldfish simulator
+models most reliably. It is *not* concentrated in the nut-draw ceiling, which is exactly where
+goldfishing is known to overstate an all-in deck ([[goldfish-bias-has-two-readouts]], and the Stompy
+lesson that the sim overstates all-in deploy). An edit that won by raising its best-case would deserve
+the goldfish discount; this one does not.
+
+### A free secondary finding: the candidate is 39% cheaper to simulate
+
+Per-job core-ms, from the batch result table the driver does not report
+(`logs/wk_screen/out/floor_jobs.log`, captured by `snap_out.sh`):
+
+| cell | ms/game | digest |
+|---|---|---|
+| shipped list on its own table | **68.1** | `5d7b4ae6a8e4da9f` |
+| candidate on its own table | **41.7** | `35cfb1b1be7c6da3` |
+| shipped list on the shared table | 81.2 | `583279701d9ad226` |
+| candidate on the shared table | 56.2 | `90f14384734bcadb` |
+
+Cutting three Aether Vial is most of it — Vial's activation branching is what the search pays for, and it
+is also why the shipped list took **32 minutes** to build a keep table against the candidate's **10**.
+This matters beyond tidiness: `suite_gate.py --cost` gates suite membership on per-game core-ms at the
+deck's worst searched case under the **3x rule**, so an adopted candidate would be a cheaper suite member
+than the list it replaces, not a more expensive one.
+
+Two smaller notes from the same table. The shipped list is *pricier on its own generated table than on
+the shipped one* (68.1 vs 81.2 — the other direction) while landing at the same mean (5.3853 vs 5.3866)
+and a different digest, so the two tables of that deck disagree on some keeps without either being
+better. And the candidate's 56.2 → 41.7 saving on moving to its own table is the 7.85% fall-through going
+away: those hands were dropping to the heuristic fallback, which the skill prices at ~22x per game.
+
+### Round G, all six arms, all three formats — NO sign flips anywhere
+
+`own` column = each arm on a keep table generated for its own counts, R=40, 20,000 paired games per
+format, seed block 6.2M. Late-weighted long 0.5 / 2hg 0.3 / std 0.2.
+
+| arm | long | 2hg | std | **late-wtd** | on the shared table |
+|---|---|---|---|---|---|
+| **`g_ke3`** Exemplar 4→3, Silverblade 3 | −0.2654 | −0.4148 | −0.2460 | **−0.3063** | −0.2579 |
+| `g_l22` 22 lands, Silverblade 4 | −0.2572 | −0.4018 | −0.2376 | −0.2967 | −0.2338 |
+| `g_hob2` Hero 3→2, Silverblade 3 | −0.2524 | −0.4056 | −0.2422 | −0.2963 | −0.2510 |
+| `g_l23` 23 lands, Silverblade 3 | −0.2560 | −0.4011 | −0.2376 | −0.2959 | −0.2419 |
+| `g_cand` the round-F candidate | −0.2487 | −0.3956 | −0.2337 | −0.2898 | −0.2436 |
+| `g_l25` 25 lands, Silverblade 1 | −0.2326 | −0.3796 | −0.2258 | −0.2753 | −0.2354 |
+
+**The candidate is −0.2898 late-weighted on real tables, against −0.2436 on the shared one** — and that
+shared figure independently replicates round F's −0.2417 on a fourth disjoint seed block. So the real
+apparatus makes the candidate **19% better**, in the same direction in all three formats. The control
+null is clean in all three too: base measures **−0.00135 / −0.00320 / +0.00070** against the shipped
+table, i.e. zero everywhere.
+
+Every arm's bias runs in the expected direction (each table flatters the deck it was fit to) at
+t = −7.0 to −18.2, and every arm clears its floor by 2.0–5.9x.
+
+### The land count: FLAT from 22 to 24, clearly wrong at 25
+
+Ladder steps on the `own` column (exact point estimates — the base cell is one job and cancels; the last
+column is an upper *bound* on the se, not the se):
+
+| step | long | 2hg | std | **late-wtd** | se bound |
+|---|---|---|---|---|---|
+| 22 lands (Silverblade 4) − 24 | −0.0085 | −0.0062 | −0.0039 | **−0.0069** | 0.0047 |
+| 23 lands (Silverblade 3) − 24 | −0.0073 | −0.0055 | −0.0039 | **−0.0061** | 0.0046 |
+| **25 lands (Silverblade 1) − 24** | **+0.0161** | **+0.0160** | **+0.0079** | **+0.0144** | 0.0046 |
+
+**25 lands is worse by +0.0144 — 3.1x the se bound and the same sign in all three formats. Do not go up.**
+
+The 22 and 23 rungs measure *better* by ~0.006–0.007, but that is the whole point of the Silverblade
+confound and it has to be read honestly: those arms gained Silverblade copies, and a 3rd Silverblade
+measured −0.0071 on its own in round F. The apparent gain from cutting lands is therefore **fully
+accounted for by the card that replaced them**. There is no evidence that the 24-land mana base is wrong,
+and the 25-land rung says positively that it is not too small.
+
+**The matched pairs settle it without leaning on round F at all.** `g_l23`, `g_ke3` and `g_hob2` all hold
+**Silverblade 3**, so Silverblade cancels exactly between them and the difference is purely *which card
+paid for it*:
+
+| what paid for the 3rd Silverblade | late-wtd vs `g_cand` | vs paying with a Plains |
+|---|---|---|
+| **a Knight Exemplar** (`g_ke3`) | **−0.0166** | **−0.0105** |
+| a Hero of Bladehold (`g_hob2`) | −0.0066 | −0.0005 |
+| the 24th land (`g_l23`) | −0.0061 | — |
+
+So: **the 4th Knight Exemplar is the worst card in the candidate list.** Cutting it for a 3rd Silverblade
+Paladin is worth **−0.0166 late-weighted**, consistent in all three formats (−0.0167 / −0.0192 / −0.0123)
+at 3.6x the se bound, and it beats paying with a land by 0.0105. Net of Silverblade's own −0.0071 that
+puts **Knight Exemplar 4→3 at about −0.0095 — which replicates the −0.0102 measured on the shipped list**
+in an earlier round, by an independent route.
+
+Hero of Bladehold 3→2 is a **null** (−0.0005 against the land, after Silverblade cancels). Combined with
+the earlier finding that a 4th Hero is +0.0037 worse, **3 is right and the axis is closed.**
+
+### The updated candidate
+
+`g_ke3` — the round-F list with **Knight Exemplar 4→3 and Silverblade Paladin 2→3** — measures
+**−0.3063 late-weighted** on its own table. That is **1.54x this deck's exhaustive keep table (−0.1985)**,
+and it is 13 of 60 cards changed from the shipped list.
+
+### Held-out confirmation — and the winner got BIGGER, not smaller
+
+Seed block 6.6M, same six arms, same generated tables (`gen_table` reuse is keyed on the arm's counts + R,
+not the seed, so the confirmation cost only its batches). Pooled over both blocks = **40,000 paired games
+per format** (`logs/wk_screen/pool_g.py`):
+
+| arm | long | 2hg | std | **pooled late-wtd** | step vs `g_cand` |
+|---|---|---|---|---|---|
+| **`g_ke3`** | −0.2638 | −0.4115 | −0.2412 | **−0.3036** | **−0.0184** |
+| `g_hob2` | −0.2470 | −0.3997 | −0.2373 | −0.2908 | −0.0056 |
+| `g_l23` | −0.2516 | −0.3956 | −0.2308 | −0.2906 | −0.0055 |
+| `g_l22` | −0.2517 | −0.3947 | −0.2298 | −0.2902 | −0.0050 |
+| `g_cand` | −0.2442 | −0.3916 | −0.2280 | −0.2852 | — |
+| `g_l25` | −0.2304 | −0.3771 | −0.2210 | −0.2725 | **+0.0127** |
+
+**`g_ke3`'s marginal over the candidate GREW on held-out seeds: −0.0166 → −0.0202**, and it is negative in
+all three formats on both blocks (−0.0225 / −0.0206 / −0.0140 on the confirmation). A screen winner is
+selection-biased and normally shrinks; this one did not, which is about as strong as a six-arm screen's
+winner can come back. [[replicate-trades-before-ruling]] killed 3 of 6 adoptable-looking trades once —
+this is the opposite outcome.
+
+**Everything else replicates too, including one useful shrink.** 25 lands stays clearly worse (+0.0144 →
++0.0109, pooled **+0.0127**, positive in all six format-blocks). Hero 3→2 stays a null. And the 22-land
+rung **shrank to nothing** (−0.0069 → −0.0031, with 2hg and std landing at +0.0002 / +0.0004) — which is
+exactly what the Silverblade-confound reading predicted: at 22 lands the *4th* Silverblade is what came
+along, and a 4th Silverblade is worth nothing.
+
+**Pooled matched pairs at Silverblade 3, where Silverblade cancels exactly:**
+
+| what paid for the 3rd Silverblade | pooled, vs paying with the 24th land |
+|---|---|
+| **a Knight Exemplar** | **−0.0129** |
+| a Hero of Bladehold | −0.0002 (a dead null) |
+
+**The land count is settled: 24 (20 Plains + 4 Remote Farm) is right.** Moving up to 25 is worse,
+moving down to 22–23 is worth nothing once the card that replaced the land is accounted for, and the one
+real gain on the axis is not a land at all — it is that **the 4th Knight Exemplar is the worst card in the
+list**, and a 3rd Silverblade Paladin should have its slot.
+
+### FINAL WhiteKnights candidate — `g_ke3`, −0.3036 late-weighted
+
+Thirteen of 60 cards differ from the shipped list. Still mono-white, still 24 lands, 60 cards.
+
+| n | card | change from shipped |
+|---|---|---|
+| 20 | Plains | 22 → 20 |
+| 4 | Remote Farm | **new** |
+| 4 | Dauntless Bodyguard | — |
+| 4 | Venerable Knight | — |
+| 4 | Worthy Knight | — |
+| **3** | **Knight Exemplar** | **4 → 3** *(round G)* |
+| 3 | Hero of Bladehold | — *(confirmed: 2 is a null, 4 is worse)* |
+| 1 | Sol Ring | — |
+| 1 | Swords to Plowshares | — *(never tested — goldfish cannot price interaction)* |
+| 1 | Unexpectedly Absent | — *(same)* |
+| 4 | Accorder Paladin | — |
+| **3** | **Silverblade Paladin** | **1 → 3** *(round F took it to 2, round G to 3)* |
+| 4 | Adeline, Resplendent Cathar | 1 → 4 |
+| 4 | Benalish Marshal | 2 → 4 |
+| — | Acclaimed Contender | 3 → 0 |
+| — | Aether Vial | 3 → 0 |
+| — | Valiant Knight | 1 → 0 |
+| — | Lightning Greaves | 1 → 0 |
+
+**−0.3036 late-weighted is 1.53x this deck's exhaustive keep table (−0.1985)**, which was previously the
+largest single improvement measured on it. It is also **~1.7x cheaper per game to simulate** than the list
+it would replace.
+
 ## Open questions for the user (surfaced, not blocking)
 
 1. **Ranking weights.** The Angels campaign ranked arms late-weighted — `long` 0.5 / `2hg` 0.3 /
