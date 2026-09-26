@@ -1082,6 +1082,24 @@ must get *worse* as the token count grows. It does — the ladder steepens (4→
 **−0.0107**) rather than flattening as a saturating lord would. And it predicts that **2→1 keeps paying**,
 which is `j_wk_ke1_hob4` in round J. If that rung comes back flat, this mechanism is wrong.
 
+**A near-miss worth recording, because it would have invalidated the campaign's headline.** Hero of
+Bladehold's bracket note says its token count is flat *"so `attack_tokens_per_opponent` is false, **unlike
+Adeline's**"* — yet Adeline's JSON carries no such key at all. If an absent key defaulted to `false`,
+Adeline would be under-modelled in 2HG, which is both the format where her measured gain is largest and a
+0.3 weight in the ranking. It does not: `src/cards/CardDatabase.h:761` declares
+`attack_tokens_per_opponent = true` and `CardDatabase.cpp:855` reads it with a `true` default, explicitly
+to preserve the historical unconditional `OpponentHeads()` multiply — Adeline is named in that comment.
+So Adeline really does make **two** tokens per attack at `opponent_heads: 2`, faithful to her *"for each
+opponent"* clause, while Hero's flat two Soldiers correctly do not scale.
+
+**That turns the format split from a curiosity into a mechanism.** Adeline's gain concentrates in 2HG in
+*both* decks (WhiteKnights 2hg −0.4211 vs std −0.2411; Knights' Adeline arm −0.0457 in 2hg) because she
+genuinely doubles her token output there — and since her power is `power_equals_creature_count`, the
+tokens she makes also grow her own power, so the effect compounds rather than adding. The 0.3 weight 2HG
+carries is therefore pricing a real card behaviour, not an artifact of the life total. Worth stating
+plainly because [[2hg-opponent-heads]] warns that heads are **often inert** and must be proven live rather
+than assumed — here they are provably live, and this is the card that makes them so.
+
 **A related audit, free from the same data.** Exactly **8 of the candidate's 60 slots** are cards the
 engine declares to have no abilities whatsoever — `"template": "vanilla_creature"` with empty `keywords`
 *and* empty `parameters` — and they are precisely **Dauntless Bodyguard ×4 and Venerable Knight ×4**.
