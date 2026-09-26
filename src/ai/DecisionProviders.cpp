@@ -12822,6 +12822,302 @@ std::string DragonsProvider::SelectDigSource(const GameState& s, const ManaPool&
 }
 bool DragonsProvider::DigDecisionSearched() const { return true; }
 
+// ---- PiratesProvider::CleanupDiscardCandidates ------------------------------
+//
+// AI-AUTHORED role-bucket policy, PENDING USER REVIEW (authored 2026-09-26; rationale, the card-by-
+// card role table and the doubts are in docs/design/pirates-discard-policy-proposal.md). Adoption
+// is a user review, the same gate as cast order -- this ships default-on only so the verify gate
+// and the rollout see the deck's own buckets rather than max-MV, and =0 is the A/B hatch.
+//
+// WHY THIS DECK NEEDS ONE. The shared fallback's tier B is descending mana value. On this list that
+// is exactly backwards: the 3-drops are the LORDS (Corsair Captain, Adaptive Automaton) and the
+// drain engine (Forerunner), and the 1-drops are the least valuable bodies in the deck (Siren
+// Stormtamer -- a 1/1 flier whose activation is unmodelled -- Daring Buccaneer, Goblin Tomb Raider).
+// Max-MV pitches a Corsair Captain and keeps a Stormtamer.
+//
+// SHAPE: SIMPLE AGGRO -> TWO buckets (brief: "simple decks have 2 buckets like mana and threats"),
+// with the Aether Vial as a sub-role of MANA. The curve tops at 3 and there is no combo and no ramp.
+//
+//   MANA / LANDS: enough to reach FOUR mana sources, board counted first. The curve tops at 3; a
+//     fourth source pays a lone Daring Buccaneer's {2}, a Fiery Islet sac, or a Vial-plus-3-drop
+//     turn. The FIRST TWO land slots are filled before the threat floor (a hand that cannot make
+//     its second land drop does nothing), the rest after it. Colour coverage first: a land that adds
+//     a colour the hand needs and board+already-kept lands lack is taken ahead of any other land.
+//     Secluded Courtyard / Unclaimed Territory (`colored_creature_only`) cover every colour for a
+//     CREATURE spell but none for Lightning Bolt.
+//   MANA / VIAL (`upkeep_adds_charge`): ONE, and only while no Vial is on the battlefield AND the
+//     board has at most two lands. A Vial is a turn-1/2 play; held into the turns where this deck
+//     actually sheds it needs several ticks before it deploys anything. A second Vial with one
+//     already on board is surplus.
+//   THREATS: the catch-all ("extra spells should always be threats"), with a hard FLOOR of 3 kept
+//     ahead of the late land slots. Everything past the floor is overflow, shed weakest first.
+//
+// THREAT VALUE is read from PARAMS (a screening swap keeps its tier; names never appear):
+//   lord (power_bonus + subtypes_affected / lord_affects_chosen_subtype)          100 (+4 Treasure)
+//   other_chosen_subtype_enters_counters (Metallic Mimic)                          92
+//   attack_pump_power_per_other_matching (Dire Fleet Captain)                      86
+//   own_creature_enters_opp_life_loss / tutor_to_top creature (Forerunner)         82
+//   flier carrying a value param (nth_spell_investigate / etb_treasurify_*)        72 (+3 haste)
+//   etb_dig_count (Staunch Crewmate)                                               62
+//   non-creature direct damage (Lightning Bolt)                                    56
+//   any other creature: 30 + 4*power + 2*toughness + 4 flying, plus the conditional static
+//     (static_artifact_*) only while an artifact is on our battlefield or in hand ~38-46
+//   anything else                                                                  20
+//
+// DISTANCE-TO-PLAYABLE (bounded): reach = board sources + every land in hand; a threat's distance
+// is max(0, effective cost - reach) + 1 if a colour it needs has no source on board or in hand. A
+// board Aether Vial whose counters (+1 for the next tick) reach the creature's mana value erases
+// the distance. Daring Buccaneer's effective cost is 1 with another Pirate CARD in hand (the
+// reveal) and 1 + reveal_or_pay_cost otherwise. A threat at distance >= 2 is FAR and sheds ahead
+// of every threat that is not; distance 1 is a normal next-land-drop and does not demote.
+//
+// SHED ORDER (overflow first, weakest first; then the quota members read backwards):
+//   S0 a legendary whose name is already on our battlefield (or earlier in hand) -- a dead card
+//   S1 surplus lands: fewest colours first, a Fiery Islet (`sacrifice_draw_cost`) last among them
+//   S2 surplus Vials
+//   S3 overflow threats: FAR before near, then lowest value first
+//   tail: every quota-kept card, last-acquired first -- so the list names EVERY hand card and
+//     index 0 is always determined (the Mirrorwing gi295 lesson: an under-covering list hands the
+//     rest of the decision back to max-MV).
+//
+// NOT here, deliberately (search-owned): "Bolt is lethal next turn", "a lord makes the alpha strike
+// lethal" -- both are damage projections, and a cleanup ranking cannot see them honestly.
+std::vector<int> PiratesProvider::CleanupDiscardCandidates(
+    const GameState& s, const std::vector<std::string>* required_pieces) const
+{
+    static const bool s_bucket = EnvOn("MTG_PIRATES_BUCKET_DISCARD", true);
+    if (!s_bucket) { return GenericProvider::CleanupDiscardCandidates(s, required_pieces); }
+
+    const int me = s.active_player_index;
+    const Player& ap = s.players[me];
+    const int n = static_cast<int>(ap.hand.size());
+    if (n <= 0) { return GenericProvider::CleanupDiscardCandidates(s, required_pieces); }
+
+    // Every characteristic read goes through the DEFINITION: a hand card is a name-only placeholder.
+    auto def_at  = [&](int i) { return CardDatabase::Instance().LookupCached(ap.hand[i]); };
+    auto mv_of   = [&](int i) { return CleanupDiscardManaValue(ap.hand[i]); };
+    auto is_land = [&](int i) { return CleanupDiscardIsLand(ap.hand[i]); };
+    auto is_vial = [&](int i) { const CardDefinition* d = def_at(i); return d && d->params.upkeep_adds_charge; };
+
+    // ---- board census, netted before any quota --------------------------------------------------
+    // colour bits: 0 W, 1 U, 2 B, 3 R, 4 G. `any_*` = produces the colour for ANY spell; `cre_*` =
+    // for a creature spell only (Secluded Courtyard / Unclaimed Territory).
+    auto colour_bit = [](Color c) -> unsigned
+    {
+        switch (c)
+        {
+            case Color::White: return 1u << 0;
+            case Color::Blue:  return 1u << 1;
+            case Color::Black: return 1u << 2;
+            case Color::Red:   return 1u << 3;
+            case Color::Green: return 1u << 4;
+            default:           return 0u;
+        }
+    };
+    auto land_bits = [&](const CardDefinition* d, unsigned& any, unsigned& cre)
+    {
+        if (d == nullptr) { return; }
+        unsigned b = 0;
+        for (Color c : d->params.produces) { b |= colour_bit(c); }
+        if (d->params.colored_creature_only) { cre |= b; } else { any |= b; }
+    };
+    int board_sources = 0, board_lands = 0, board_vials = 0, vial_counters = -1;
+    bool board_artifact = false;
+    unsigned board_any = 0, board_cre = 0;
+    std::vector<std::string> board_legends;
+    for (const Permanent& p : s.battlefield)
+    {
+        if (p.controller_index != me) { continue; }
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+        if (p.card.IsLand()) { ++board_lands; ++board_sources; land_bits(d, board_any, board_cre); }
+        else if (d && d->params.mana_rock) { ++board_sources; }
+        if (p.card.HasType(CardType::Artifact)) { board_artifact = true; }
+        if (d && d->params.upkeep_adds_charge)
+        { ++board_vials; vial_counters = std::max(vial_counters, p.charge_counters); }
+        if (p.card.HasSupertype(Supertype::Legendary)) { board_legends.push_back(p.card.m_name.str()); }
+    }
+
+    // ---- partition the hand ---------------------------------------------------------------------
+    std::vector<int> lands, vials, threats, dead;
+    std::vector<std::string> seen_legends = board_legends;
+    unsigned hand_any = 0, hand_cre = 0;
+    for (int i = 0; i < n; ++i)
+    {
+        if (ap.hand[i].m_is_staged) { continue; }
+        const CardDefinition* d = def_at(i);
+        if (is_land(i)) { lands.push_back(i); land_bits(d, hand_any, hand_cre); continue; }
+        if (is_vial(i)) { vials.push_back(i); continue; }
+        if (d && d->card.HasSupertype(Supertype::Legendary))
+        {
+            const std::string nm = ap.hand[i].m_name.str();
+            if (std::find(seen_legends.begin(), seen_legends.end(), nm) != seen_legends.end())
+            { dead.push_back(i); continue; }
+            seen_legends.push_back(nm);
+        }
+        threats.push_back(i);
+    }
+    const int reach = board_sources + static_cast<int>(lands.size());
+    // An artifact switches on the conditional statics (Goblin Tomb Raider). Count one we HOLD as
+    // well as one on board: 12 of this list's spells are artifacts (Vial, Mimic, Automaton) and a
+    // Tomb Raider held beside one is a 2/2 haste the next turn, not a 1/2.
+    bool artifact_available = board_artifact;
+    for (int i = 0; i < n && !artifact_available; ++i)
+    {
+        if (ap.hand[i].m_is_staged || is_land(i)) { continue; }
+        const CardDefinition* d = def_at(i);
+        artifact_available = d && d->card.HasType(CardType::Artifact);
+    }
+    const unsigned all_any = board_any | hand_any;
+    const unsigned all_cre = all_any | board_cre | hand_cre;
+
+    // ---- threat value + distance ----------------------------------------------------------------
+    auto threat_value = [&](int i) -> int
+    {
+        const CardDefinition* d = def_at(i);
+        if (d == nullptr) { return 20; }
+        const CardParams& p = d->params;
+        const Card& c = d->card;
+        if (!c.IsCreature()) { return p.damage > 0 ? 56 : 20; }
+        if (p.power_bonus > 0 && (!p.subtypes_affected.empty() || p.lord_affects_chosen_subtype))
+        { return 100 + (p.etb_creates_treasures > 0 ? 4 : 0); }
+        if (p.other_chosen_subtype_enters_counters > 0)  { return 92; }
+        if (p.attack_pump_power_per_other_matching > 0)  { return 86; }
+        if (p.own_creature_enters_opp_life_loss > 0 || p.tutor_to_top) { return 82; }
+        if (c.HasKeyword(Keyword::Flying)
+            && (p.nth_spell_investigate > 0 || p.etb_treasurify_each_player))
+        { return 72 + (c.HasKeyword(Keyword::Haste) ? 3 : 0); }
+        if (p.etb_dig_count > 0) { return 62; }
+        int v = 30 + 4 * c.m_power.value_or(0) + 2 * c.m_toughness.value_or(0)
+              + (c.HasKeyword(Keyword::Flying) ? 4 : 0);
+        if (p.static_artifact_threshold > 0 && artifact_available)
+        { v += 4 * p.static_artifact_power + (p.static_artifact_haste ? 4 : 0); }
+        return v;
+    };
+    auto distance = [&](int i) -> int
+    {
+        const CardDefinition* d = def_at(i);
+        if (d == nullptr) { return 0; }
+        const Card& c = d->card;
+        const CardParams& p = d->params;
+        int cost = mv_of(i);
+        if (!p.reveal_or_pay_subtype.empty() && p.reveal_or_pay_cost.has_value())
+        {
+            bool reveal = false;
+            for (int j = 0; j < n && !reveal; ++j)
+            {
+                if (j == i || ap.hand[j].m_is_staged) { continue; }
+                const CardDefinition* dj = def_at(j);
+                reveal = dj && CardHasSubtype(dj->card, p.reveal_or_pay_subtype);
+            }
+            if (!reveal) { cost += p.reveal_or_pay_cost->ManaValue(); }
+        }
+        // A board Vial deploys a creature of MV == counters, colour-blind; the next tick is +1.
+        if (c.IsCreature() && board_vials > 0 && mv_of(i) <= vial_counters + 1) { return 0; }
+        const ManaCost& mc = c.m_mana_cost;
+        unsigned need = 0;
+        if (mc.white > 0) { need |= 1u << 0; }
+        if (mc.blue  > 0) { need |= 1u << 1; }
+        if (mc.black > 0) { need |= 1u << 2; }
+        if (mc.red   > 0) { need |= 1u << 3; }
+        if (mc.green > 0) { need |= 1u << 4; }
+        const unsigned have = c.IsCreature() ? all_cre : all_any;
+        return std::max(0, cost - reach) + ((need & ~have) != 0 ? 1 : 0);
+    };
+    std::vector<int> tval(static_cast<std::size_t>(n), 0), far(static_cast<std::size_t>(n), 0);
+    for (int i : threats) { tval[i] = threat_value(i); far[i] = distance(i) >= 2 ? 1 : 0; }
+    // Best first: near before far, then value, then hand order (stable).
+    std::stable_sort(threats.begin(), threats.end(), [&](int a, int b)
+    {
+        if (far[a] != far[b]) { return far[a] < far[b]; }
+        return tval[a] > tval[b];
+    });
+
+    // ---- land keep order: colour coverage first, then breadth, a Fiery Islet ahead on ties -----
+    // What the hand needs: coloured pips of its non-land cards (creature pips vs non-creature pips
+    // separately, because a creature-only land pays only the former).
+    unsigned need_cre = 0, need_any = 0;
+    for (int i : threats)
+    {
+        const CardDefinition* d = def_at(i);
+        if (d == nullptr) { continue; }
+        const ManaCost& mc = d->card.m_mana_cost;
+        unsigned b = 0;
+        if (mc.white > 0) { b |= 1u << 0; }
+        if (mc.blue  > 0) { b |= 1u << 1; }
+        if (mc.black > 0) { b |= 1u << 2; }
+        if (mc.red   > 0) { b |= 1u << 3; }
+        if (mc.green > 0) { b |= 1u << 4; }
+        if (d->card.IsCreature()) { need_cre |= b; } else { need_any |= b; }
+    }
+    auto popcount = [](unsigned x) { int k = 0; while (x) { x &= x - 1; ++k; } return k; };
+    auto breadth = [&](int i)
+    {
+        const CardDefinition* d = def_at(i);
+        unsigned any = 0, cre = 0;
+        land_bits(d, any, cre);
+        return 2 * popcount(any | cre) + ((d && d->params.sacrifice_draw_cost.has_value()) ? 1 : 0);
+    };
+    std::vector<int> land_order;
+    {
+        std::vector<int> pool = lands;
+        unsigned cov_any = board_any, cov_cre = board_any | board_cre;
+        while (!pool.empty())
+        {
+            int best = -1, best_gain = -1, best_breadth = -1;
+            for (int i : pool)
+            {
+                unsigned any = 0, cre = 0;
+                land_bits(def_at(i), any, cre);
+                const unsigned new_any = (need_any & ~cov_any) & any;
+                const unsigned new_cre = (need_cre & ~cov_cre) & (any | cre);
+                const int gain = popcount(new_any | new_cre);
+                const int br = breadth(i);
+                if (gain > best_gain || (gain == best_gain && br > best_breadth))
+                { best = i; best_gain = gain; best_breadth = br; }
+            }
+            land_order.push_back(best);
+            unsigned any = 0, cre = 0;
+            land_bits(def_at(best), any, cre);
+            cov_any |= any; cov_cre |= any | cre;
+            pool.erase(std::find(pool.begin(), pool.end(), best));
+        }
+    }
+
+    // ---- quotas, in acquisition (= priority) order ----------------------------------------------
+    const int kSourceTarget = 4;
+    const int kEarlyLands   = 2;
+    const int kThreatFloor  = 3;
+    int land_need = std::max(0, kSourceTarget - board_sources);
+    std::vector<char> keep(static_cast<std::size_t>(n), 0);
+    std::vector<int>  taken;
+    auto take = [&](int i) { keep[static_cast<std::size_t>(i)] = 1; taken.push_back(i); };
+    std::size_t li = 0;
+    for (int k = 0; k < kEarlyLands && land_need > 0 && li < land_order.size(); ++k, --land_need)
+    { take(land_order[li++]); }
+    for (int k = 0; k < kThreatFloor && k < static_cast<int>(threats.size()); ++k)
+    { take(threats[static_cast<std::size_t>(k)]); }
+    for (; land_need > 0 && li < land_order.size(); --land_need) { take(land_order[li++]); }
+    if (board_vials == 0 && board_lands <= 2 && !vials.empty()) { take(vials.front()); }
+
+    // ---- shed order ----------------------------------------------------------------------------
+    std::vector<int>  shed;
+    std::vector<char> listed(static_cast<std::size_t>(n), 0);
+    auto put = [&](int i)
+    {
+        if (listed[static_cast<std::size_t>(i)] || ap.hand[i].m_is_staged) { return; }
+        listed[static_cast<std::size_t>(i)] = 1; shed.push_back(i);
+    };
+    auto put_unkept = [&](int i) { if (!keep[static_cast<std::size_t>(i)]) { put(i); } };
+
+    for (int i : dead) { put(i); }                                                        // S0
+    for (auto it = land_order.rbegin(); it != land_order.rend(); ++it) { put_unkept(*it); } // S1
+    for (int i : vials) { put_unkept(i); }                                                // S2
+    for (auto it = threats.rbegin(); it != threats.rend(); ++it) { put_unkept(*it); }     // S3
+    for (auto it = taken.rbegin(); it != taken.rend(); ++it) { put(*it); }                // tail
+
+    return CleanupDiscardRankingWithOrder(s, required_pieces, shed);
+}
+
 // ---- DragonsProvider::CleanupDiscardCandidates ------------------------------
 //
 // USER-AUTHORED role-bucket policy (approved 2026-08-30; see

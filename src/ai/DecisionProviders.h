@@ -1830,6 +1830,8 @@ public:
 // Hooks held (everything else inherits Generic byte-for-byte):
 //   * Certificate -- NotAssessed (see the body for what a sound one must model).
 //   * TutorSearchWidth 9 -- a COVERAGE fix, not a heuristic (see the override).
+//   * CleanupDiscardCandidates -- the authored bucket policy, MTG_PIRATES_BUCKET_DISCARD (default
+//     ON; =0 restores the generic ranking). docs/design/pirates-discard-policy-proposal.md.
 //   * CastOrderRank -- deliberately NOT overridden: cast order is a USER review per deck, and the
 //     proposals (Malcolm vs Mimic, Buccaneer first, Forerunner first) sit in the ledger unadopted.
 class PiratesProvider : public DeckProvider
@@ -1859,6 +1861,12 @@ public:
     // still overrides for the A/B.
     int TutorSearchWidth() const override { return 9; }
 
+    // The authored BUCKET policy (two buckets -- MANA with a Vial sub-role, THREATS catch-all).
+    // The generic fallback's tier B is DESCENDING MANA VALUE, which on this deck pitches the lords
+    // (Corsair Captain, Adaptive Automaton -- the 3-drops) first and keeps Siren Stormtamer.
+    // MTG_PIRATES_BUCKET_DISCARD=0 -> generic base (A/B hatch).
+    std::vector<int> CleanupDiscardCandidates(
+        const GameState&, const std::vector<std::string>*) const override;
 };
 
 // Eldrazi Displacer / Emiel flicker combo. An INFINITE-MANA deck, and the first one here whose
