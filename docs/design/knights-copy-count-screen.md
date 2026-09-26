@@ -998,6 +998,92 @@ pool** — 14 of 60 cards changed, still mono-white, still 24 lands. The Exempla
 which is a live lead, but following it needs a card the deck does not own. That is precisely the
 *"I will let you know later if there are any other cards I would like to try"* decision.
 
+> **CORRECTION, 2026-09-26 22:00Z — the two paragraphs above are WRONG, and the table is right but
+> misread.** The error is one of kind, not degree, and it is worth naming precisely because it is an easy
+> one to repeat.
+>
+> **A sink price is not a refutation.** Hero of Bladehold's 4th copy at **+0.0037** and the 25th land at
+> **+0.0127** were each compared against *zero* and marked "refuted". But they are not being asked to be
+> good on their own — they are being asked to be **cheaper than the cut that pays for them**. Knight
+> Exemplar 3→2 is worth **−0.0107**, so `Exemplar 2→1 + Hero 3→4` projects to **−0.0107 + 0.0037 ≈
+> −0.0070**, still a clear gain; even the worst sink, a 25th land, nets ≈ +0.0020, i.e. roughly break-even
+> rather than "refuted". **The ladder was never blocked.** What the table actually shows is that
+> WhiteKnights is *sink-starved* — its cheapest slot costs +0.0037 — which raises the bar on every future
+> cut but does not close the axis.
+>
+> **And "already at 4" answered the wrong question.** It is a correct *sink* argument (you cannot add a
+> 5th) and it was silently read as a *screening* claim. It is not one: **Dauntless Bodyguard, Venerable
+> Knight, Worthy Knight and Accorder Paladin — 16 of the candidate's 60 slots — have never been varied in
+> any round.** They were never cut-tested, only never-addable. Compare
+> [[cut-ladders-never-ask-what-to-add]], which is this same blind spot pointing the other way.
+>
+> **The sharpest part: two of those four are, in this simulator, the same card, and both are blank.**
+> From `src/cards/data/cards.json`:
+>
+> | card | cost | body | modelled text |
+> |---|---|---|---|
+> | Dauntless Bodyguard | `{W}` | 2/1 Human Knight | **none** — its own bracket note says the ETB choice and sacrifice-for-indestructible are *inert in goldfishing*: the passive opponent deals no damage and casts no removal, so indestructible never matters and sacrificing a 2/1 is never correct |
+> | Venerable Knight | `{W}` | 2/1 Human Knight | **none** — bracket note again: the death trigger never fires, because creatures never die here (no blockers, no opponent removal) |
+>
+> Same cost, same body, same subtypes — so Worthy Knight's *"whenever you cast a Knight spell"* and
+> Adeline's creature count treat them identically. **The deck runs eight copies of a vanilla 2/1 Knight
+> for `{W}`.** That is the Knight Exemplar shape exactly — a card carried for text this apparatus cannot
+> reward — except Exemplar at least keeps its +1/+1 lord half and these two keep nothing at all.
+>
+> This is what **round J** measures; the correction, not the original claim, is the live state.
+
+### Round J on WhiteKnights — the 16 unscreened cards, and the rung round H left open
+
+Generator `logs/wk_screen/mkspec_j.py`, runner `logs/wk_screen/run_j.sh <pid>` (chained on round H's
+captured PID, because `bracket: generate` must be alone on the box). Seeds **8.6M / 9.0M**, `floor_R: 40`,
+`max_fallback: 0.30`, seven arms, **six new tables**, 16 cells in **one** pooled batch.
+
+**The design in one line: every arm holds the same one-slot sink and cuts one card, so the sink price is
+common to all of them and cancels exactly in every arm-vs-arm difference.** The sink is Hero of Bladehold
+3→4, the cheapest one the deck has (+0.0037). That leaves the *level* against the reference carrying the
+sink's price, and the *differences* carrying pure card-vs-card reads — which is the round H trick
+(Silverblade 4 on both arms) generalised to five payers at once.
+
+| arm | change from `h_wk_ke2_sp4` | what it answers |
+|---|---|---|
+| **`h_wk_ke2_sp4`** | — (reference; round H's table **reused**) | puts every pair on *this* round's seed block |
+| `j_wk_ke1_hob4` | Exemplar 2→**1**, Hero 3→4 | does the Exemplar ladder pay a **third** time? |
+| `j_wk_dbg3_hob4` | Dauntless Bodyguard 4→**3**, Hero 3→4 | the one-drops, never screened |
+| `j_wk_vk3_hob4` | Venerable Knight 4→**3**, Hero 3→4 | **the same change again** — see below |
+| `j_wk_wor3_hob4` | Worthy Knight 4→**3**, Hero 3→4 | the token engine — expected to be *good* |
+| `j_wk_acc3_hob4` | Accorder Paladin 4→**3**, Hero 3→4 | battle cry 3/1 — expected to be *good* |
+| `j_wk_ke1_l25` | Exemplar 2→**1**, Plains 20→**21** | matched pair vs `j_wk_ke1_hob4`: **re-prices the sink** in *this* list |
+
+Three things about that table are load-bearing:
+
+* **`j_wk_dbg3_hob4` vs `j_wk_vk3_hob4` is a free null control.** Because the two cards are identical in
+  every modelled respect, these arms make *the same change to the same list* — expectation exactly zero —
+  yet their games are independent, since numbering and shuffle key on card identity. So the gap between
+  them is pure apparatus noise **measured on this round's own seeds**, which is a stronger check than any
+  analytic bound, and it costs one table. Pooling the two also doubles the sample on *"cut a one-drop"*,
+  which is the answer we actually want.
+* **The two two-drops are in there to be refutations.** If Worthy Knight and Accorder Paladin also measure
+  as cuts, the round is not finding bad cards — it is finding that the apparatus rewards *removing
+  anything*, and the whole ladder is suspect. A screen where every arm can only confirm the hypothesis is
+  not a screen. These two are the arms that can falsify it.
+* **`j_wk_ke1_l25` exists because the sink prices are stale.** Both were measured in a list with Exemplar
+  3 and Silverblade 3; the curve has moved twice since. If the 25th land is now the *cheaper* home, every
+  rung above it is understated.
+
+**Why a ladder here and a combination round in Knights.** The two decks fail in opposite directions.
+Knights has slots to spare (Contender 4→0 frees four) and **competing sinks**, so its arms must allocate.
+WhiteKnights is **sink-starved** — everything good is at 4 and the entire sink inventory is two entries —
+so only one slot is ever in play per arm, there is nothing to allocate, and a combination round would only
+blur the reads.
+
+**One arm deliberately absent: Sol Ring.** It is the only untested sink, and probably the most likely card
+in the deck to move the number — it pays the `{2}` of Hero of Bladehold and the `{1}` of both two-drops,
+which is the same "land that makes two mana" logic that made 4 Remote Farm a *gain* (Remote Farm taps for
+`{W}{W}`, and the deck is full of `{1}{W}{W}` three-drops plus a `{W}{W}{W}` Marshal). But a 2nd Sol Ring
+is illegal in every format this list could be read as — banned in Modern and Legacy, restricted in
+Vintage, singleton in Commander — and Sol Ring at exactly 1 next to Haytham Kenway is what makes the pool
+read as Commander-flavoured casual. So it is a **question for the user, not an arm**: one word, one table.
+
 ## RESUME HERE — the road to a FINAL Knights list
 
 **State at 2026-09-26 21:15Z.** WhiteKnights is finished (above). Knights' round H is **in flight**:
