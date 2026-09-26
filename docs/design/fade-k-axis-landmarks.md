@@ -141,8 +141,34 @@ depth, where generation cost lives.
 | + fade landmark menu | 37.14 s (**1.98x**) | 5.4700 |
 | + free-activation gate | **34.00 s (2.17x)** | **5.3400** |
 
-Faster *and* 0.17 turns better on the primary objective. Held-out validation across seven fresh
-seeds at both depths: see the results block below.
+Faster *and* 0.17 turns better on the primary objective.
+
+### Held out — seven fresh seeds, both arms and both depths, ONE pooled batch
+
+| regime | menu alone | + the m2 gate |
+|---|---|---|
+| labelling d1/b3, 2,400 games | -0.00417 t (t = -1.39), **2.04x** | **-0.12625 t (t = -18.42), 2.01x** |
+| play d5/b20, 1,750 games | -0.00400 t (t = -3.24), **1.50x** | **-0.13886 t (t = -21.31), 1.37x** |
+
+Better *and* faster in both regimes, so both are ADOPTED default ON (`81c8e863`). Gates: scenarios
+103/103, smoke 93/93 with **0 configs changed** (the shipped Fungus list runs no Saproling Burst, so
+both levers are inert there), regression 129/129 including reference reproducibility, CI green on
+Linux and Windows including determinism parity.
+
+### What it does to GENERATION, which is what this was for
+
+Candidate B, `mullgen.sh run` on a copy under `logs/`, alone on the box. Against the two earlier
+runs recorded in `slow-rollout-tail-and-the-uncharged-greedy-walk.md`:
+
+| stage | baseline | + M2 shrink-sac | + old fixed window | **+ this work** |
+|---|---|---|---|---|
+| d1/b3 play-digest battery (64 games) | 27 s | — | — | **7 s (3.9x)** |
+| equivalence discovery | 702 s | 614 s | 533 s | **471 s (1.49x)** |
+| floor-pass journal at the 900 s mark | 6,978 | — | 9,667 | **20,543 (2.94x)** |
+
+Bucket count is unchanged at K=22, so none of this came from a coarser table. The play digest moved
+to `36a65944fd138cd0`, which discards the banked journal — already accepted by the user when
+`MTG_FUNGUS_SHRINK_SAC_M2` was adopted, and re-discovery was forced regardless.
 
 ## Deferred
 
