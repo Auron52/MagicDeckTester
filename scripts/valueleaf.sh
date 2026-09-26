@@ -422,6 +422,19 @@ if [ ${#DECK_DIRS[@]} -gt 0 ]; then
         _key=$(echo "$_stem" | tr '[:upper:]' '[:lower:]' | tr -c 'a-z0-9\n' '_')
         [ -d "$_dd" ] || { echo "no such deck dir: $_dd"; exit 2; }
         [ -e "$_dd/$_stem.profile.json" ] || { echo "no profile at $_dd/$_stem.profile.json -- run analyze_deck.py first"; exit 2; }
+        # REGRESSION-SUITE MEMBERSHIP IS A PRECONDITION (user directive, 2026-09-26). Checked here --
+        # per deck, before phase 0 freezes anything and before a single game is played -- because the
+        # whole point is an EARLY error. A deck outside the suite has no ground truth, so nothing
+        # detects when an engine change breaks the play this leaf is about to be fitted to.
+        # MTG_ALLOW_UNTESTED_DECK=1 overrides, and that is a USER decision, never an agent's: an agent
+        # that hits this gate reports it and stops, exactly as it would for the cost rule.
+        if [ "${MTG_ALLOW_UNTESTED_DECK:-0}" != 1 ]; then
+            python3 scripts/suite_gate.py --require "$_dd" >/dev/null || {
+                python3 scripts/suite_gate.py --require "$_dd"
+                echo "value-leaf generation REFUSED for $_stem (set MTG_ALLOW_UNTESTED_DECK=1 to override -- user only)"
+                exit 3
+            }
+        fi
         # ROW SEED BASE. phase_split recovers which deck a pooled row belongs to with
         # `seed / 100000`, so the bases must be DISTINCT whenever more than one deck shares a queue.
         #   * one deck  -> the historical literal 900000. Every existing single-deck queue's rows on

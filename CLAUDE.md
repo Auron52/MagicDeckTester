@@ -175,6 +175,33 @@ optimized); the regression harness expects a pre-built binary at `build/Release/
   without going through `--batch` therefore has NO utilisation reporting — which is one
   more reason the pooled queue is the only route.
 
+- **A DECK MUST BE IN THE REGRESSION SUITE BEFORE THE VALUE LEAF OR MULLIGAN PROFILE (user
+  directive, 2026-09-26).** Adding the deck to `test/regression_cases.sh` is a **required step of
+  the analysis**, and both generators now **refuse to start** (exit 3) without it:
+  `scripts/valueleaf.sh run` checks per deck before phase 0 freezes anything, and
+  `scripts/mullgen.sh run` checks before it truncates its report or plays a game. The shared check is
+  `python3 scripts/suite_gate.py --require decks/<Deck>`.
+  * **It is a gate because a note did not work.** `verify_deck.py` already disclosed *"<deck> is NOT a
+    regression case, so NO digest tracks its play"* — as a 6a disclosure nobody had to act on, and it
+    was duly skipped. Worse, `mullgen.sh`'s own regression step silently logs `not in
+    test/regression_cases.sh -- skipping (nothing to move)` and returns 0, so a profile can report
+    **VALIDATION PASSED** having run one fewer check than every other deck gets. WhiteKnights shipped
+    exactly that way on 2026-09-26.
+  * **Why it must come FIRST:** a value leaf and a keep table are *fitted to the deck's play*. With no
+    suite cases there is no ground truth, so no engine change can ever be shown to have broken that
+    play — the hours go into artifacts whose foundation nothing is checking.
+  * **THE 3x COST RULE.** A deck may be added only if its tested cost is **≤ 3x the most expensive deck
+    that already has BOTH a value leaf and a mulligan profile** (often Hinata). Check with
+    `suite_gate.py --cost decks/<Deck>`; the table is `test/suite_cost.json`, refilled by
+    `--measure-all` from **one pooled tier run** (never a per-deck loop — that is the "waves are a
+    loop" defect). The gated number is per-game core-ms at the deck's worst *searched* case, not total
+    tier time, because total is confounded by the game counts we choose and so is gameable by sizing.
+  * **If it is over 3x: do NOT add it and do NOT skip the suite.** Report it to the user at the end;
+    **getting the deck into that range becomes the first goal**, ahead of both generators. An
+    intractable deck is a performance problem to fix, not a deck to quietly exempt.
+  * `MTG_ALLOW_UNTESTED_DECK=1` overrides. That is a **USER** decision, never an agent's — an agent
+    that hits either gate reports it and stops.
+
 - **GENERATION STAGES ARE STRICTLY SERIAL, IN ORDER, AT THE RIGHT SETTINGS (user directive,
   2026-08-31).** The per-deck pipeline is **profile → value leaf → mulligan**, and each stage —
   including a *scout* or `recommend` probe — runs **alone on the box, only after the previous

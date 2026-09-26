@@ -516,6 +516,20 @@ arms by construction.
 
 ## Adding a deck to the suite
 
+**This is MANDATORY and it GATES the two expensive stages (user directive, 2026-09-26).**
+`scripts/valueleaf.sh run` and `scripts/mullgen.sh run` both refuse (exit 3) for a deck that is not a
+regression case — see `analyze-deck.md` Stage 5j. And a deck qualifies only if its cost is **≤ 3x the
+most expensive deck that already has both a value leaf and a mulligan profile**:
+
+```
+python3 scripts/suite_gate.py --cost decks/<Deck>     # the 3x verdict
+python3 scripts/suite_gate.py --report               # the whole cost table + the current reference
+python3 scripts/suite_gate.py --measure-all          # refill the table from ONE pooled tier run
+```
+
+Over 3x → report it to the user and make getting it into range the first goal; do **not** add it anyway
+and do **not** exempt the deck from the suite.
+
 1. Add the deck + profile and get it implemented/analyzed (see `analyze-deck.md`).
 2. Add `[<name>]=...` to `DECK_FILE` and `DECK_PROF` in `regression_cases.sh`.
 3. Add cases to `SMOKE_CASES` / `REGRESSION_CASES` / `OVERNIGHT_CASES` — **ALL THREE, or
@@ -530,6 +544,14 @@ arms by construction.
 5. Run each mode, inspect, `--accept`, and commit the new ground truth **in the same change**
    as the rows. For a per-deck run, pass the SAME `--deck=` to `--accept` — without it the accept
    treats the run as full-mode and drops that tier's earlier `accepted-with-regressions` notes (rows without GT strand NEW keys for whoever runs that tier next).
+   Scope with `--deck=<name>,<name>2hg` — the `2hg` suffix is a SEPARATE key and is not matched
+   by `--deck=<name>`, so omitting it silently leaves the 2HG cases un-run and un-accepted.
+6. **Diff `test/regression_gt.txt` around every accept.** A filtered accept once erased another deck's
+   provenance note (2026-09-20); the guard for that is in place now, but the diff is how it was caught
+   and it costs nothing. Expect exactly your new keys plus the header line to change.
+   Also note a **filtered run pollutes the per-game audit**: decks that did not run keep stale `.wins`
+   from an earlier run, and the audit diffs those against current GT, so it reports "play differs" for
+   decks you never touched. Check `.wins` mtimes before believing any of it — promotion itself is safe.
 
 The smoke matrix is also where to pin a few **known-troublesome specific games**
 (by seed) as decks reveal them, so the fast gate catches the bugs that bite.

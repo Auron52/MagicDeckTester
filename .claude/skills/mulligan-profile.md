@@ -9,6 +9,28 @@ user asks to **generate / regenerate / pool / A-B / adopt a mulligan (keep or bo
 Full design + validation history: [docs/design/exhaustive-keep-policy.md](../../docs/design/exhaustive-keep-policy.md).
 
 
+## HARD PRECONDITION — the deck MUST be in the regression suite (user directive, 2026-09-26)
+
+`scripts/mullgen.sh run` **refuses to start** (exit 3) unless the deck resolves to a key in
+`test/regression_cases.sh`. The check runs before the report is truncated and before any rollout, so the
+error is early and destroys nothing.
+
+```
+python3 scripts/suite_gate.py --require decks/<Deck>    # what the driver calls
+python3 scripts/suite_gate.py --cost    decks/<Deck>    # the 3x rule (see analyze-deck Stage 5j)
+```
+
+**Why this driver specifically needed it:** `run_regression` silently logs `not in
+test/regression_cases.sh -- skipping (nothing to move)` and returns 0 for a non-suite deck, so the
+adoption reports **VALIDATION PASSED** having run one fewer check than every other deck gets. The two
+A/Bs are still hard gates, but the suite report — the thing that would catch collateral damage to other
+decks — just vanishes. WhiteKnights shipped that way on 2026-09-26 before this gate existed.
+
+A deck may only be ADDED to the suite if its cost is ≤ **3x** the most expensive deck that already has
+both a value leaf and a mulligan profile. If it is over: report it to the user and make getting it into
+range the first goal — **do not** generate anyway and do not exempt the deck.
+`MTG_ALLOW_UNTESTED_DECK=1` overrides and is a USER decision, never an agent's.
+
 ## SERIAL, IN ORDER, AND ONLY AFTER THE VALUE LEAF (user directive, 2026-08-31)
 
 **profile -> value leaf -> mulligan.** A mulligan generation *or* its `recommend` scout runs ALONE

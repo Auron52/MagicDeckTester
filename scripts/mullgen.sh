@@ -300,10 +300,27 @@ quarantine(){
   log "!!! full A/B output: $OUT/"
 }
 
-validate(){
-  [ -e "$PROF" ] || { echo "no profile to validate: $PROF"; exit 1; }
+# PREFLIGHT for validate, deliberately SEPARATE from validate() so it can run BEFORE $REPORT is
+# truncated. These checks used to be validate()'s opening lines while the dispatch truncated the
+# report first, so a preflight FAILURE wiped the previous run's VALIDATION.txt on its way out --
+# destroying the only on-disk record of the last validation while changing nothing else. A check that
+# can only refuse must not be able to damage state.
+#
+# It also resolves the GZIPPED artifact names. The committed form of both the profile and the raw IS
+# gzipped (the uncompressed names are gitignored -- see the per-deck layout policy) and the ENGINE
+# resolves either, but this driver looked only at the uncompressed name. So `validate` on any deck
+# whose profile had been compressed for commit reported "no profile to validate" about a profile that
+# was live and working. Both failures fired together on WhiteKnights, 2026-09-26.
+validate_preflight(){
+  [ -e "$PROF" ] || { [ -e "$PROF.gz" ] && PROF=$PROF.gz; }
+  [ -e "$RAW" ]  || { [ -e "$RAW.gz" ]  && RAW=$RAW.gz; }
+  [ -e "$PROF" ] || { echo "no profile to validate: $PROF (nor $PROF.gz)"; exit 1; }
   [ -e "$BASE" ] || { echo "missing base/static profile: $BASE"; exit 1; }
   [ -x build/Release/mtg ] || { echo "build/Release/mtg missing -- run ./build.sh"; exit 1; }
+}
+
+validate(){
+  validate_preflight
 
   # Artifact check first: it is free, and a malformed table makes every game below meaningless.
   # It reads the RAW as well as the profile, because the profile records only the DECISIONS -- it
@@ -414,9 +431,22 @@ PY
 
 case "$CMD" in
   status)   status_report ;;
-  validate) : > "$REPORT"; validate ;;
+  validate) validate_preflight; : > "$REPORT"; validate ;;
   run)
     [ -x "$BIN" ] || { echo "$BIN missing -- run ./build.sh"; exit 1; }
+    # REGRESSION-SUITE MEMBERSHIP IS A PRECONDITION (user directive, 2026-09-26). Checked BEFORE the
+    # report is truncated and before any rollout, so the error is early and destroys nothing. Without
+    # it this driver's own run_regression step silently logs "not in test/regression_cases.sh --
+    # skipping (nothing to move)" and returns 0, so the adoption reports PASSED having run one fewer
+    # check than every other deck gets -- which is exactly what happened on WhiteKnights.
+    # MTG_ALLOW_UNTESTED_DECK=1 overrides, and that is a USER decision, never an agent's.
+    if [ "${MTG_ALLOW_UNTESTED_DECK:-0}" != 1 ]; then
+      python3 scripts/suite_gate.py --require "$DECKDIR" >/dev/null || {
+        python3 scripts/suite_gate.py --require "$DECKDIR"
+        echo "mulligan generation REFUSED for $STEM (set MTG_ALLOW_UNTESTED_DECK=1 to override -- user only)"
+        exit 3
+      }
+    fi
     : > "$REPORT"
     # A regen must keep the incumbent to compare against -- and to restore if the new one loses.
     if [ -e "$PROF" ]; then cp -f "$PROF" "$PREV"; log "regeneration: incumbent saved -> $PREV"; fi

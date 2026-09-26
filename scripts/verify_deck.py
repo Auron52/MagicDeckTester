@@ -33,6 +33,11 @@ Gates (blocking unless noted):
                    defaults; assert determinism + integrity + progress (runtime; --no-sweep skips)
   claude_sweep  -- workstream 4b: the Claude-DRIVEN judgment sweep, recorded in the per-deck
                    ledger ('## Claude-play sweep'); absent->SKIP, unresolved flags->FAIL, clean->PASS
+  suite         -- is the deck a case in test/regression_cases.sh? No cases means NO ground truth
+                   watches its play, and both expensive stages are FITTED to that play, so the
+                   value-leaf and mulligan generators REFUSE outright (user directive, 2026-09-26).
+                   This gate is the earlier, cheaper warning; sign off `suite:not_a_case` for a deck
+                   deliberately kept out. 3x cost rule: scripts/suite_gate.py --cost
 
 Sign-off: the ledger's "## Approved deferrals" section (user-owned) lists keys like
 `coverage:Ignoble Hierarch` or `viewer_wiring:land_entry`. A blocking failure whose every
@@ -504,6 +509,35 @@ def _git_head():
     return out.strip() if rc == 0 else ""
 
 
+def gate_suite(deck_path):
+    """Is this deck a regression case? BLOCKING (user directive, 2026-09-26).
+
+    This was already reported -- as a *disclosure* buried in gate_claude_sweep's staleness note, and
+    only when the sweep commit happened to differ from HEAD. A note nobody has to act on is exactly
+    what got skipped, so it is promoted to a gate of its own with a sign-off-able finding key.
+
+    A deck outside the suite has NO ground truth, so no engine change can ever be shown to have broken
+    its play -- and both expensive stages (value leaf, mulligan table) are FITTED to that play.
+    `valueleaf.sh run` and `mullgen.sh run` refuse outright; this gate is the earlier, cheaper warning
+    at analysis time. Sign off with `suite:not_a_case` under '## Approved deferrals' if a deck is
+    deliberately never going in the suite -- which is the user's call, not an agent's.
+    """
+    try:
+        p = subprocess.run([sys.executable, str(ROOT / "scripts/suite_gate.py"),
+                            "--require", str(deck_path)],
+                           cwd=ROOT, capture_output=True, text=True)
+    except OSError as e:
+        return Gate("suite", ERROR, True, f"could not run suite_gate.py: {e}")
+    if p.returncode == 0:
+        return Gate("suite", PASS, True, p.stdout.strip().split("--")[0].strip() or "in the suite")
+    stem = deck_stem(deck_path)
+    return Gate("suite", FAIL, True, f"{stem} is NOT in test/regression_cases.sh",
+                [("suite:not_a_case",
+                  f"{stem} has no regression cases, so no ground truth tracks its play. The value "
+                  f"leaf and mulligan profile are BLOCKED until it is added (3x cost rule: "
+                  f"scripts/suite_gate.py --cost). See analyze-deck.md Stage 5j.")])
+
+
 def gate_claude_sweep(deck_path):
     """workstream 4b (judgment half): the Claude-DRIVEN play sweep (analyze-deck 5d /
     Workflow, one agent per game) is an expensive, user-initiated step whose result is
@@ -675,6 +709,7 @@ def main():
         gate_mismatch(deck, profile, seeds, args.games, args.no_sweep),
         gate_play_invariants(deck, profile, seeds, args.games, args.no_sweep),
         gate_claude_sweep(deck),
+        gate_suite(deck),
     ]
 
     approved = read_approved(deck)

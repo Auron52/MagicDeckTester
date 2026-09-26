@@ -946,12 +946,70 @@ searched-width escalation. History and rulings: `docs/design/per-deck-discard-an
 
 ---
 
+## Stage 5j — Regression-suite membership (MANDATORY GATE — both generators are BLOCKED until it is done)
+
+**User directive, 2026-09-26: adding the deck to `test/regression_cases.sh` is a required step of the
+analysis, not a suggestion, and the value leaf and mulligan profile cannot be generated until it is
+done.** Both drivers now refuse early:
+
+```
+python3 scripts/suite_gate.py --require decks/<Deck>   # exit 3 if absent (what the drivers call)
+python3 scripts/suite_gate.py --cost    decks/<Deck>   # the 3x rule
+python3 scripts/suite_gate.py --report                 # the whole cost table
+```
+
+`scripts/valueleaf.sh run` and `scripts/mullgen.sh run` both call `--require` **before** freezing a
+commit, truncating a report or playing a single game, and exit 3 with the remedy.
+`MTG_ALLOW_UNTESTED_DECK=1` overrides — that is a **USER** decision, never an agent's. An agent that
+hits this gate reports it and stops.
+
+**Why this is a gate and not a note.** Stage 6 item 3 below has always asked for win turns *from a
+regression-suite run*, so the skill already assumed membership — it just never enforced it, and so it
+got skipped. The cost of skipping is quiet and compounding:
+* **Nothing watches the deck's play.** No suite cases means no ground truth, so no engine change can
+  ever be shown to have broken this deck. `verify_deck.py` already says exactly this, but only as a
+  *disclosure* under 6a that nobody has to act on.
+* **The expensive stages get spent on unwatched play.** A value leaf and a keep table are fitted TO the
+  deck's play. Generating them for a deck with no GT spends hours on artifacts whose foundation nothing
+  is checking.
+* **`mullgen.sh`'s own validation silently loses a check.** For a non-suite deck its regression step
+  logs `not in test/regression_cases.sh -- skipping (nothing to move)` and returns 0, so the adoption
+  reports **PASSED** having run one fewer check than every other deck gets. That is what happened on
+  WhiteKnights (2026-09-26) and is what prompted this gate.
+
+### The 3x cost rule (user, 2026-09-26)
+
+> A deck is added **only if its tested cost is ≤ 3x the most expensive deck that already has BOTH a
+> value leaf and a mulligan profile** (in practice that reference is often Hinata).
+
+Those decks are the right yardstick: they are the ones that have been all the way through this
+pipeline, so they define what the suite has already been shown to absorb.
+
+**If the deck is over 3x: do NOT add it anyway, and do NOT skip the suite.** Report it to the user at
+the end, and **getting the deck into that range becomes the FIRST GOAL** — optimisation work comes
+*before* the value leaf and the mulligan profile. That ordering is the point: an intractable deck is a
+performance problem to fix, not a deck to quietly exempt.
+
+**What is measured** is `cost_per_game_ms` — the max per-game core-ms over the deck's *searched*
+(depth>0) cases. Not total tier time, because total is intrinsic cost × the game counts we chose, so a
+pathologically slow deck given 5 games per case would pass a total-cost gate while still being the
+slowest deck in the repo. Per-game cost is the deck's own expense and cannot be gamed by sizing. Total
+core-ms is reported alongside, since that is what actually consumes the budget. Measurements cache in
+`test/suite_cost.json`; `--measure-all` fills it from **one pooled full-tier run** (never a loop of
+per-deck runs — that would be the "waves are a loop" defect for no benefit).
+
+Then follow `.claude/skills/regression-testing.md` → *Adding a deck to the suite*: add `DECK_FILE` /
+`DECK_PROF` entries, size cases from a timing probe against a deck of similar speed, add a `<deck>2hg`
+case if the deck has any per-opponent or starting-life-sensitive card, run each tier, inspect, and
+`--accept`. **Diff `test/regression_gt.txt` around each accept** — that is how a filtered accept was
+once caught erasing another deck's provenance note.
+
 ## Stage 6 — Report to User
 
 Present a concise summary:
 1. **Cards implemented this run**: list any new/updated implementations, noting the tier used for each
 2. **Mulligan profile**: the optimised settings (and notable card scores / required-piece flags)
-3. **Win rate / average win turn**: from a regression-suite run on the new profile (the analyzer no longer reports these)
+3. **Win rate / average win turn**: from a regression-suite run on the new profile (the analyzer no longer reports these). Stage 5j makes this always available — before that gate existed, a non-suite deck had to substitute a standalone batch and disclose the deviation
 4. **Verification (Stage 5)**: which checks ran and their outcomes — nonconv/fd-diverge clean (or what was found and fixed), the multi-depth sanity result, any budget-starvation threshold noted, the (~15-20 game) claude-play sweep result (games played, flags raised and their resolution, win-turn comparison vs the search), and the **play-viewer decision surface (5h)**: any new decision types wired this run for the deck's cards, and confirmation that no card choice is left silently auto-resolved (or the disclosed known gaps that are)
 5. **Encoded heuristics & assumptions disclosure** (mandatory — see Stage 6a): the full reviewable list of every assumption and heuristic that shapes this deck's results, so the user can catch anything unexpected and decide whether it should be full-searched instead.
 6. **Accepted deferrals**: bracket-noted items the user agreed to skip (Tier 4), with the bracket text shown
