@@ -1032,6 +1032,48 @@ which is a live lead, but following it needs a card the deck does not own. That 
 >
 > This is what **round J** measures; the correction, not the original claim, is the live state.
 
+### The final list's CHARACTER changed, and it gave up the nut draw to do it
+
+From round H's preserved per-game data (`logs/wk_screen/out/floor_WhiteKnights_09.err` = held-out std,
+`_08.err` = held-out 2hg; `dist.py`, 20,000 paired games each, both arms on their **own** R=40 table):
+
+| win turn | **std** shipped | **std** `h_wk_ke2_sp4` | **2hg** shipped | **2hg** `h_wk_ke2_sp4` |
+|---|---|---|---|---|
+| 3 | **76** | **0** | **10** | **0** |
+| 4 | 12,979 | **17,600** | 3,880 | **10,143** |
+| 5 | 6,421 | 2,239 | 13,479 | 9,124 |
+| 6 | 461 | 140 | 2,220 | 602 |
+| 7 | 53 | 4 | 344 | 111 |
+| 8+ | 10 | 0 | 67 | 20 |
+| unwon | 0 | 0 | 0 | 0 |
+| mean | 4.3736 | **4.1293** | 4.9617 | **4.5373** |
+| | *28.4% faster / 65.7% same / 6.0% slower* | | *42.5% faster / 50.2% same / 7.3% slower* | |
+
+Two things to take from this, one good and one that is a genuine cost:
+
+* **The gain is still a tail collapse, and it got cleaner.** Turn 5 → turn 4 is now the dominant
+  conversion (std turn-4 wins up **35%**), turn 6 is down 70%, turn 7 down 92%, and past turn 7 the
+  candidate simply does not appear. Zero unwon games on either side, so the loss penalty does no work
+  anywhere in this campaign. This is the part of the curve a goldfish simulator models most reliably.
+* **THE CANDIDATE HAS NO TURN-3 KILL AT ALL.** The shipped list wins on turn 3 in 76 of 20,000 std games
+  (0.38%) and 10 of 20,000 2hg games; the candidate does it **zero** times in either. That is a real
+  change in the deck's character, not a rounding artifact, and it points the *opposite* way to everything
+  else here: the candidate is strictly more consistent and strictly less explosive. It also runs straight
+  into the known blind spot — a goldfish sim **overstates** all-in deploy (see
+  [[stompy-list-settle-resume]]) — so the 0.38% it is giving up is the part of the shipped list the
+  apparatus was *already* flattering, which makes the trade better in reality than it looks here, not
+  worse. Worth the user's attention regardless, because "I want the nut draw" is a taste, not a number.
+* **Likely donor: Aether Vial (3→0) — but this is a HYPOTHESIS, not a measurement.** Vial is the only card
+  in the shipped list that converts a hand into a board faster than mana allows, which is what a turn-3
+  kill requires. Per [[dont-rationalize-a-measured-cut]] a mechanism invented after the numbers explains
+  them and does not extend them, so it is flagged rather than asserted. It is cheap to settle and has not
+  been: every arm in rounds G–J holds Vial 0, so no existing snapshot isolates it. The test is a
+  `--log-dir` probe over the shipped list's turn-3 games ([[goldfish-bias-has-two-readouts]]).
+
+The apparatus understatement is also visible here as raw counts rather than a delta: on the stale shared
+table the candidate wins on turn 4 only **16,501** times instead of **17,600** (std). The old table was
+mulliganing away ~1,100 of its turn-4 hands.
+
 ### Round J on WhiteKnights — the 16 unscreened cards, and the rung round H left open
 
 Generator `logs/wk_screen/mkspec_j.py`, runner `logs/wk_screen/run_j.sh <pid>` (chained on round H's
@@ -1083,6 +1125,48 @@ which is the same "land that makes two mana" logic that made 4 Remote Farm a *ga
 is illegal in every format this list could be read as — banned in Modern and Legacy, restricted in
 Vintage, singleton in Commander — and Sol Ring at exactly 1 next to Haytham Kenway is what makes the pool
 read as Commander-flavoured casual. So it is a **question for the user, not an arm**: one word, one table.
+
+### ADOPTION RUNBOOK for WhiteKnights — what it costs, and the order that cannot be rearranged
+
+**Nothing here has been done, and nothing here should be started before the user says so.** Written out
+because the ordering constraints are the kind that are cheap to honour in advance and expensive to
+discover halfway through.
+
+**First, the thing to understand before deciding: adoption THROWS AWAY the shipped artifacts.** The
+shipped `WhiteKnights.keepmodel.exhaustive.profile.json.gz` (37 min, K=14, 42,271 compositions, worth
+**−0.1985 t** on its own) and the shipped `WhiteKnights.value.json` are both **fitted to the shipped
+decklist's play**. A 14-card change invalidates both — they are engine-state-and-decklist fingerprints,
+not portable models. So the price of a −0.3114 list is regenerating the whole pipeline. That is the real
+decision, and it is why this is the user's call and not a "clean win" adopted on evidence: per
+[[fresh-full-was-not-a-clean-win]], *clean* means no regression on any axis, and the candidate does
+regress on one (no turn-3 kill at all) while also owing hours of regeneration.
+
+**The suite gate is already satisfied** — `suite_gate.py --require decks/WhiteKnights` returns rc=0,
+regression key `whiteknights` (plus `whiteknights2hg`). So both generators will start, and
+`MTG_ALLOW_UNTESTED_DECK` is **not** needed. (The CLAUDE.md note recording that WhiteKnights once shipped
+outside the suite describes a state that has since been fixed.) The **3x cost rule** is comfortably clear
+in the right direction too: the candidate is **~1.7x cheaper per game** than the shipped list.
+
+| # | step | why it is where it is |
+|---|---|---|
+| 0 | **Wait for round J.** | The list is not final. If a one-drop or the Exemplar rung pays, the decklist changes and every step below would have to be redone. |
+| 1 | `git mv` the shipped list + all five sidecars into **`decks/WhiteKnights/v1-vial3-exemplar4/`** | The archive convention (`CritterLifegain/v1-thune4-basilica`). The slug names the two things the candidate most decisively removes. |
+| 2 | `git mv references/WhiteKnights/claude_s*_gi*.json` → **`references/WhiteKnights/v1-vial3-exemplar4/`** (all **10**) | A reference belongs to the list it was played on (`server.js` `refsOnArchivedList`). Leaving them at top level silently credits the OLD list's 10/10-exact hand-played games to the NEW one. **`git mv` only** — never `rm`, never `checkout`; references are commit-only. |
+| 3 | Write the new `decks/WhiteKnights/WhiteKnights.cod` | The only step that is a decklist edit. |
+| 4 | **profile** — `scripts/analyze_deck.py decks/WhiteKnights/WhiteKnights.cod` | Nothing downstream is meaningful without it, and the screen's own Rule 0 is that a profile must be attached to every measurement. |
+| 5 | **value leaf** — `bash scripts/valueleaf.sh run decks/WhiteKnights` | Must precede the mulligan: `mullgen` reads `mull_gen_depth` / `mull_gen_budget_ms` / `expected_buckets` from `.value.json`, which this step writes. Run it before and the gen silently inherits the *play* depth. |
+| 6 | **mulligan** — `bash scripts/mullgen.sh run decks/WhiteKnights` | Last, and **alone on the box** — as must 4 and 5. Not scheduling politeness: sidecar *presence* activates the hybrid in play, so a table dropped mid-run changes the very play a neighbour is fitting. |
+| 7 | **GT** — rebaseline `whiteknights`, `whiteknights2hg` and accept | The deck's play genuinely changed, so GT **must** move. This is a real rebaseline, not a rubber stamp; do not hand-edit. |
+| 8 | `suite_gate.py --measure-all` to refresh `test/suite_cost.json` | Needs an **exclusive box** — it is a timing measurement. One pooled tier run, never a per-deck loop. |
+
+**Steps 4–6 are strictly serial and each runs alone.** Steps 1–3 are free. Step 8 is bookkeeping.
+
+**Two sign-offs to collect at adoption time, neither blocking any of the above:**
+
+* **`expected_buckets` 14 → 12.** The candidate discovers **K=12** where the shipped list finds 14, because
+  Remote Farm earns its own bucket. Recording discovered K is the user's call
+  ([[bucket-ruling-is-user-only]]); the guard never fired, so nothing needs regenerating either way.
+* **Whether both `Knights` and `WhiteKnights` continue to ship**, which has been open since the analysis.
 
 ## RESUME HERE — the road to a FINAL Knights list
 
