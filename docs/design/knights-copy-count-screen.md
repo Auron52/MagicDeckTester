@@ -1280,6 +1280,88 @@ in the right direction too: the candidate is **~1.7x cheaper per game** than the
   ([[bucket-ruling-is-user-only]]); the guard never fired, so nothing needs regenerating either way.
 * **Whether both `Knights` and `WhiteKnights` continue to ship**, which has been open since the analysis.
 
+### Round H on Knights — the land ladder TURNS OVER, and Adeline outbids the land
+
+Pooled over blocks 7.2M / 7.6M, reference = screen 7's winner `g_kn_ac2_ad3`. Every arm's held-out block
+agrees with its measurement, and the top two **grew** on held-out rather than shrinking:
+
+| arm | Contender / Adeline / lands | long | 2hg | std | **pooled** | step vs ref | meas. | conf. |
+|---|---|---|---|---|---|---|---|---|
+| **`h_kn_ad4_l21`** | 0 / **4** / **21** | −0.0753 | −0.2006 | −0.0650 | **−0.1108** | **−0.0383** | −0.0336 | −0.0430 |
+| `g_kn_l22` | 0 / 3 / 22 | −0.0628 | −0.1654 | −0.0675 | −0.0946 | −0.0221 | −0.0197 | −0.0244 |
+| `h_kn_moz3_l23` | 0 / 3 / 23, −1 MoZ | −0.0522 | −0.1666 | −0.0595 | −0.0880 | −0.0155 | −0.0147 | −0.0163 |
+| `h_kn_ad2_l23` | 0 / **2** / 23 | −0.0478 | −0.1179 | −0.0681 | −0.0729 | **−0.0004** | −0.0006 | −0.0001 |
+| `g_kn_ac2_ad3` | 2 / 3 / 20 | −0.0539 | −0.1316 | −0.0304 | −0.0725 | — ref | | |
+
+* **THE LAND LADDER TURNS OVER AT 23, and it was paid for two independent ways to make sure.** Both
+  23-land arms come in *worse* than the 22-land arm: −0.0880 paying with a Marshal of Zhalfir, −0.0729
+  paying with an Adeline. Round G's monotone 20→21→22 does not extend, so the answer to the question round
+  H existed to ask is **no**.
+* **The binding constraint is not the land count — it is that ADELINE OUTBIDS THE LAND.**
+  `h_kn_ad4_l21` (21 lands, Adeline 4) beats `g_kn_l22` (22 lands, Adeline 3) by **−0.0162**. And
+  `h_kn_ad2_l23`, which buys the 23rd land by giving up an Adeline, is a **total null** (−0.0004): the land
+  gives back precisely what the Adeline was worth. So Knights' land count settles at **21** *because* the
+  4th Adeline wins the slot, not because 21 is a magic number.
+* **`h_kn_ad4_l21` is the best Knights list measured: −0.1108 pooled**, Contender 4→0, Adeline 1→4,
+  20→21 lands. Four slots freed, three to Adeline and one to a Plains, exactly as the slot arithmetic
+  predicted was the only way to have both of round G's good ideas.
+
+### Knights runs FIFTEEN Knight-only lords, and Knight Exemplar is dominated by two of them
+
+The same `cards.json` read that explained WhiteKnights applies here, and it lands differently — which is
+worth stating carefully, because the tempting move is to transfer the WhiteKnights conclusion wholesale.
+
+| lord | cost | body | anthem | copies in Knights |
+|---|---|---|---|---|
+| Inspiring Veteran | `{R}{W}` | 2/2 | `["Knight"]` +1/+1 | 4 |
+| Marshal of Zhalfir | `{W}{U}` | 2/2 | `["Knight"]` +1/+1 | 4 |
+| **Knight Exemplar** | `{1}{W}{W}` | 2/2 | `["Knight"]` +1/+1 | **4** |
+| Haytham Kenway | `{2}{W}{U}` | 3/3 | `["Knight"]` **+2/+2** | 3 |
+| Benalish Marshal | `{W}{W}{W}` | 3/3 | **all creatures** | 4 |
+
+**Knight Exemplar is DOMINATED on rate: it costs three mana for the identical effect that Inspiring
+Veteran and Marshal of Zhalfir supply for two, and its only additional text — first strike, and the
+indestructible grant that is not in its `parameters` at all — is inert against a passive opponent.** That
+is a card-level dominance argument, which is the kind [[a-null-must-not-break-a-tie]] asks for, and it is
+independent of any measurement. Screen 7's −0.0368 for 4→3 is consistent with it.
+
+**But the WhiteKnights mechanism does NOT transfer wholesale, and this is the important half.** Over there
+the Knight-only anthems were bad because the deck's damage had moved into Human and Soldier *tokens* that
+those anthems cannot see. Knights is a genuine tribal deck: **15 of its 60 slots are Knight-only lords**,
+and its only token source is Worthy Knight (Adeline aside), with no Hero of Bladehold in the main. Most of
+a Knights board really is Knights, so the dilution effect that condemned Exemplar in WhiteKnights is much
+weaker here. Knights is also not mono-white — Inspiring Veteran is `{R}{W}`, Marshal of Zhalfir `{W}{U}`,
+Haytham `{2}{W}{U}`, which is what the Unclaimed Territory / Secluded Courtyard / Tournament Grounds mana
+base exists to support. **The lords are the deck's identity, not a misload.** This is the same reason
+Knights keeps Aether Vial where WhiteKnights cuts it, and the fifth axis on which the two decks disagree.
+
+**So the interesting tension in Knights is the one round H just created.** Adeline is herself a Knight (so
+the lords pump *her*), but her tokens are plain Humans that 15 of the deck's 60 cards cannot pump — and she
+still won the slot four times over. That says the next Knights question is **not** "more Adeline" but
+**which lord to cut**, and unlike WhiteKnights there are *four* lord types to rank rather than one.
+
+### Round I as written is now MIS-SPECIFIED — do not run it
+
+`logs/wk_screen/mkspec_i.py` was built before round H landed, and round H invalidated its sink. Every one
+of its arms pays for an Exemplar cut **with a land**, walking the count to 22, 23 and 24:
+
+| arm | Exemplar | lands |
+|---|---|---|
+| `h_kn_ad4_l21` (ref) | 4 | 21 |
+| `i_kn_ke3_l22` | 3 | 22 |
+| `i_kn_ke2_l23` | 2 | **23** |
+| `i_kn_ke2_l22_h4` | 2 | 22 + Haytham 4 |
+| `i_kn_ke0_l24_h4` | 0 | **24** + Haytham 4 |
+
+Round H has just shown the 23rd land is **negative**, so two of those arms buy a good cut with a bad sink
+and report the sum; the Exemplar axis would be confounded with a land axis that is now known to point the
+wrong way. **The fix is the round J structure:** fix the *cheapest* sink — **Haytham Kenway 3→4, a measured
+null from round G** — on every arm, and cut one card per arm, so the sink price is common and cancels in
+every pair. With four lord types to rank that is also the only shape that can rank them: arms cutting one
+Exemplar, one Inspiring Veteran, one Marshal of Zhalfir and one Haytham, all against the same sink.
+See [[sink-price-is-not-a-refutation]]. The `L` parameter should be dropped entirely — its slot ledger only
+balances at `L=22`, which is a coincidence of the one-land-per-cut design rather than a choice.
+
 ## RESUME HERE — the road to a FINAL Knights list
 
 **State at 2026-09-26 21:15Z.** WhiteKnights is finished (above). Knights' round H is **in flight**:
