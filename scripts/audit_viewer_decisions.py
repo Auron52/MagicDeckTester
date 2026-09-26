@@ -1195,6 +1195,11 @@ def modeled_tokens(card):
     # choice (sac victim variants), so its "sacrifice a/an" phrase is covered.
     if p.get("sac_additional_creature_color"):
         t.add("sacrifice")
+    # Kitesail Larcenist: "for each player, choose up to one other target artifact or creature" IS
+    # the treasurify choice (own side = chosen_x plan variants, both sides = the treasurify chooser),
+    # so both the 'target' and the 'choose up to' (modal) phrases are covered.
+    if p.get("etb_treasurify_each_player"):
+        t.update({"target", "modal"})
     return t
 
 
