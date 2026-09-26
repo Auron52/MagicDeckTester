@@ -7507,7 +7507,9 @@ int main(int argc, char* argv[])
             {
                 if (result.win_turns[i] <= 0)
                 {
-                    std::cout << "  game " << i
+                    // game = the GLOBAL index (base_game_index + i): it is what --game-index
+                    // must carry for the replay to draw the same opponent spawn pattern.
+                    std::cout << "  game " << (base_game_index + i)
                               << "  seed " << (result.seed + static_cast<uint64_t>(i)) << "\n";
                 }
             }

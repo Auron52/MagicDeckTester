@@ -806,7 +806,12 @@ RunResult GoldFishRunner::Run(const Decklist& deck, int num_games, uint64_t base
                         // so a single-game replay needs --seed (base_seed+gi) --game-index gi (which
                         // then runs loop index 0 against that same shuffle + spawn pattern). Same
                         // convention as the "Unwon games" repro list in main.cpp. Printing the bare
-                        // base_seed silently replays game 0 instead.
+                        // base_seed silently replays game 0 instead. gi= / --game-index carry the
+                        // GLOBAL index (base_game_index + gi), matching the batch path's twin: a
+                        // `--seed S --game-index 13 --games 1` run used to print `--game-index 0`,
+                        // whose replay draws a different opponent spawn pattern (PATTERNS[gi % 10]).
+                        // The log FILE name keeps the local index on purpose -- tools key it with the
+                        // run's base seed (<base_seed>_game_<local gi>, see mw_libation_setups.py).
                         // units= alongside ms=, for the reason spelled out at the batch path's twin
                         // of this line: ms is wall on a shared box and cannot carry an A/B, units is
                         // the deterministic work meter, and the RATIO of the two is the per-unit
@@ -814,8 +819,9 @@ RunResult GoldFishRunner::Run(const Decklist& deck, int num_games, uint64_t base
                         std::fprintf(stderr,
                             "[goldfish] SLOW-GAME %lldms  gi=%d wt=%d units=%lld  repro: --seed %llu "
                             "--game-index %d --games 1\n",
-                            ms, gi, win_turn, g_units,
-                            static_cast<unsigned long long>(base_seed + static_cast<uint64_t>(gi)), gi);
+                            ms, base_game_index + gi, win_turn, g_units,
+                            static_cast<unsigned long long>(base_seed + static_cast<uint64_t>(gi)),
+                            base_game_index + gi);
                         std::fflush(stderr);
                     }
                 }
