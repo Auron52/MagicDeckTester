@@ -254,10 +254,12 @@ bookkeeping plus four user sign-offs.**
 | item | state |
 |---|---|
 | Stages 1–6 + 6a | **DONE** (report at `## Stage 6 — Report`) |
-| verify_deck.py | all gates PASS as of the **leaf:none** sidecar — **NEEDS ONE RE-RUN under the adopted leaf** |
+| verify_deck.py | **RE-RUN under the adopted leaf — `GATE PASS`, exit 0, every gate green** (`logs/wk_verify2/verify.txt`). `card_costs` shows SKIP only because the run was `--no-network`; it passed 319/319 on the network run earlier the same day |
+| Ledger tables | **REFRESHED under the adopted leaf.** One cell moved: §3 `d5 b20` 4.520 → **4.490** (slowest T8 → T7). Firing table and Stage 4 byte-identical |
 | Value-leaf pipeline | **ALL 8 PHASES COMPLETE** (0/A/B/C/C.5/D/E/F), freeze intact `bb5d1038`, matrix 52/52 @400g, 11,288 rows, held-out RMSE 0.4236 |
 | Search shape | **FITTED LEAF ADOPTED** (`721fe1b6`), superseding the leaf:none shape. `ladder: "single"` stays REJECTED |
-| Reference bench | **0/10 shortfalls** — engine matches or beats the human on every reference |
+| Reference bench | **10/10 EXACT after the user's re-play** — human 4.400 · search 4.400 · 0 short · 0 faster |
+| Mulligan profile | **GENERATION STARTED 2026-09-26** (user: *"we may as well start generation"*) — the last pipeline stage, now unblocked because phase F derived its contract |
 | Commits | `80ef7c34` deck+engine · `bb5d1038` lazy-leaf opt-out · `343366c3` leaf measurement · `6508fb37` references · `ce64976d` bench cache · `9bec6d2e` refline tool · `721fe1b6` leaf adoption. **Nothing pushed.** |
 
 ### The value leaf: adopted, and my earlier "no leaf" call was wrong on COST
@@ -283,30 +285,47 @@ paired d5 games on two disjoint seed bases), **exactly 1.00x and byte-identical 
 hand-played references (`references/WhiteKnights/`, commit `6508fb37`), each game's recorded mulligan
 **forced** so the comparison isolates play:
 
-* **human 4.700 · search 4.400 · 0/10 shortfalls · hand_mismatch 0/10.** 7 exact, 3 the search wins a
-  turn earlier. Cached for the viewer in `test/ref_bench.json`.
+* **FINAL, after the user's re-play: human 4.400 · search 4.400 · 0/10 shortfalls · 0 faster than the
+  human · hand_mismatch 0/10.** All ten games now agree exactly. Cached for the viewer in
+  `test/ref_bench.json` (stamped `src` 565f5a7397f8).
+* The first bench read **human 4.700 · search 4.400**, 7 exact and 3 where the search won a turn
+  earlier.
 
-**The three faster games were audited for clairvoyance and ALL THREE ARE CLAIRVOYANCE-FREE**, so the
-user may re-play them (their standing rule: *"if the decision is clairvoyant in nature I will just
-leave it"*). Every card the engine cast was already in hand when cast, and each divergence follows a
-principle applicable blind. Reprint any line with `python3 scripts/wk_ref_line.py <stem>`:
+**Those three were audited for clairvoyance and all three were CLAIRVOYANCE-FREE**, so they were
+handed back to the user rather than written off (their standing rule: *"if the decision is clairvoyant
+in nature I will just leave it"*). The user re-played exactly those three, **confirmed independently
+that none required knowing the library** — *"yes, they were possible without clairvoyance in this
+case"* — and all three now win T4. Reprint any line with `python3 scripts/wk_ref_line.py <stem>`:
 
-| game | the one decision | principle |
-|---|---|---|
-| `claude_s1_gi0` | T2: **Worthy Knight (2/2)**, not Lightning Greaves | Greaves is `{2}` — the whole turn — and adds no power. Its shroud is inert vs a passive opponent and its haste only pays on a creature cast *that same turn* |
-| `claude_s2_gi1` | T2: **Accorder Paladin (3/1)**, not Knight Exemplar | Exemplar buffs "**other** Knights", so into an empty board it is a textless 2/2. Play the lord after its targets exist |
-| `claude_s3_gi2` | T3: **two 1-drops**, not one 2-drop | Venerable Knight and Dauntless Bodyguard are both **2/1 for `{W}`** — 4 power for 2 mana vs Worthy Knight's 2 |
+| game | the one decision | principle | after re-play |
+|---|---|---|---|
+| `claude_s1_gi0` | T2: **Worthy Knight (2/2)**, not Lightning Greaves | Greaves is `{2}` — the whole turn — and adds no power. Its shroud is inert vs a passive opponent and its haste only pays on a creature cast *that same turn* | T4 win; the only remaining divergence is the T4 cast (user **Knight Exemplar**, search **Acclaimed Contender**) and **both are lethal that turn**, so it does not separate them |
+| `claude_s2_gi1` | T2: **Accorder Paladin (3/1)**, not Knight Exemplar | Exemplar buffs "**other** Knights", so into an empty board it is a textless 2/2. Play the lord after its targets exist | T4 win, and the line now matches the search **cast-for-cast** |
+| `claude_s3_gi2` | T3: **two 1-drops**, not one 2-drop | Venerable Knight and Dauntless Bodyguard are both **2/1 for `{W}`** — 4 power for 2 mana vs Worthy Knight's 2 | T4 win, line matches the search **cast-for-cast** |
 
-Caveat that runs the user's way on s1: Greaves-for-haste is exactly the line the search *cannot*
-project (the deferred defect below), so it under-rates that plan and still won a turn faster.
+Caveat that ran the user's way on s1: Greaves-for-haste is exactly the line the search *cannot*
+project (the deferred defect below), so it under-rated that plan and still won a turn faster.
+
+**A reporting gap in `wk_ref_line.py`, found while auditing this and now fixed:** attackers are
+recovered by diffing `tapped` flags across the MAIN_1 → COMBAT boundary, because the `ATTACK` action
+carries only `damage`/`oppLife`. **A vigilant attacker never taps, so it was silently missing from
+every attacker list** — and on this deck that is not an edge case: Adeline has vigilance *and* power
+equal to your creature count, so she is routinely the largest attacker in the swing. On T4 of
+`claude_s1_gi0` she supplied **8 of the 15 damage** while not appearing at all. The tool now names
+vigilance candidates separately (untapped non-land creatures already on board before combat, excluding
+anything cast that turn, which is summoning-sick); the trace schema carries no `attacking` flag, so a
+candidate list is the honest ceiling here rather than a list that reads complete.
 
 ### Outstanding
 
-1. **Re-run `verify_deck.py`** under the adopted leaf (last run was on the leaf:none sidecar; all gates
-   passed then).
-2. **Refresh the Stage-4/5/6 tables** — win turns there were measured on the leafless shape. The only
-   cell known to move is `wk_lad_d5_b20` 4.520 → 4.490 (slowest T8 → T7) on its 300-game seed base,
-   which is within seed noise (the 8,000-game paired screen was 0 better / 0 worse at that config).
+1. ~~Re-run `verify_deck.py` under the adopted leaf.~~ **DONE — `GATE PASS`, exit 0.**
+2. ~~Refresh the Stage-4/5/6 tables.~~ **DONE.** One cell moved, exactly the one predicted:
+   `wk_lad_d5_b20` **4.520 → 4.490**, slowest **T8 → T7**. Everything else byte-identical, which
+   Step 2d predicts (the leaf is byte-identical to leafless *and* to bare at d0 and d3, and every
+   other table cell is a d0 or d3 configuration). The earlier note that this was "within seed noise"
+   was too weak: it is a real, reproducible improvement at the deck's shipped depth — confirmed on the
+   ladder's own seed base by `scripts/wk_ladder_arm_isolate.py` (4.4900/T7 across four arms, 300/300
+   identical digests), and in the same direction as the 8,000-game paired screen.
 3. **Four sign-offs**, none blocking: `expected_buckets = 14`; the Acclaimed Contender "legendary
    artifact" residue (the deck's only bracket note); `attack_tokens_require_self_attacking` as
    viewer-inert; and whether `Knights` + `WhiteKnights` both stay.
@@ -606,19 +625,37 @@ deck's **profile attached** (`logs/wk_firing/report_postfix.txt`):
 |---|---|---|---|
 | d0 | 600 | 4.735 | T7 |
 | d3 b10 | 300 | 4.520 | T8 |
-| d5 b20 | 300 | 4.520 | T8 |
+| d5 b20 | 300 | **4.490** | **T7** |
 | d5 **b2000** | 150 | 4.507 | T7 |
 | 2HG (life 30, 2 heads) | 200 | 5.275 | — |
 
-**Monotone in depth and never worse deeper**, and the slowest-win column is how that can be read
-without trusting a threshold: the worst game lands at T7–T8 against a `max_turns` far above it.
+**Monotone in depth and never worse deeper** (4.735 → 4.520 → 4.490), and the slowest-win column is
+how that can be read without trusting a threshold: the worst game lands at T7–T8 against a `max_turns`
+far above it.
 
-These are the numbers **as the deck now ships**, i.e. with the `leaf: "none"` sidecar adopted (below).
-Re-running the whole firing harness before and after that adoption moved exactly **one** cell —
-`d3 b10` from 4.523 to 4.520 — and left all 15 firing rows, the other three ladder rows, the 2HG row
-and the paired budget check byte-identical. That is the expected size: the screen measured the d3
-divergence rate at roughly 1 game in 4,000, so on a 300-game cell it is visible on one seed base and
-not another.
+**REFRESHED 2026-09-26 under the ADOPTED FITTED LEAF.** These are the numbers as the deck ships today.
+Exactly **one** cell moved from the leafless figures: `d5 b20` **4.520 → 4.490, slowest T8 → T7**. All
+15 firing rows, the d0 / d3 / d5-b2000 ladder rows, the 2HG row and the paired budget check came back
+**byte-identical**.
+
+*That pattern is predicted, not lucky.* The three-way sidecar comparison (Step 2d) found the fitted
+leaf **byte-identical to both the leafless shape and the bare ladder at d0 and d3**, and the firing
+cases are all d0 or d3 b10, so the firing table could not have moved. d5 is the only configuration
+where the leaf changes play at all — and there it is *better*, which is the same direction the paired
+8,000-game screen saw at 0.34–0.42x the units.
+
+**`d5 b2000` reading 4.507 against `d5 b20`'s 4.490 is NOT a budget inversion.** The two cells are
+different sample sizes (150 vs 300 games); on the 150 games they share, the paired check is **0
+earlier, 0 later, 150 identical**. The gap is the extra 150 games in the b20 cell, not the budget.
+
+**Two traps for anyone re-running `scripts/wk_firing_evidence.sh`:**
+* **The script prints to STDOUT and writes no report file.** `logs/wk_firing/report_postfix.txt` is a
+  hand-saved copy, so reading it after a fresh run gives the *previous* run's numbers. That is exactly
+  how the `d5 b20` move was first mis-read as "no change" here — the file was 5 hours stale. Redirect
+  the run and read what you redirected.
+* Its `wk`/`wk_d3`/`wk_2hg` win turns (4.765 / 4.527 / 5.275) are the **Stage 4 baseline-speed
+  figures**, on a different seed base (1001) from the ladder's (4401). They are unchanged by the leaf
+  and Stage 4 needed no refresh.
 
 **Deviation from the skill, stated plainly: item 3 asks for these from a regression-suite run, and
 WhiteKnights is NOT in the regression suite.** The figures above come from a standalone pooled batch
@@ -1080,6 +1117,12 @@ so every `wt` figure here is new. Full output: `logs/wk_firing/report_postfix.tx
 | Hero's flat token gate | 0/400 | 0/150 | **49/200** | 5.275 → 5.250 (2HG) | FIRES only at 2 heads, **as predicted by construction** |
 | Acclaimed Contender's widened dig | 5/400 | 2/150 | 2/200 | 4.765 → 4.765 | FIRES; closes the last outstanding Stage-1 item |
 
+**RE-RUN AGAIN 2026-09-26 under the ADOPTED FITTED LEAF: every one of the 15 rows and every `wt`
+figure came back byte-identical, so the table above needed no edit.** This is a prediction confirmed
+rather than a coincidence — Step 2d measured the fitted leaf as byte-identical to both the leafless
+shape and the bare ladder at d0 and d3, and all three firing cases run at d0 or d3 b10. The one cell
+the leaf does move (`d5 b20`) is in the §3 ladder, not here.
+
 Every row still fires, and the pattern is unchanged from the pre-fix run — which is the useful
 negative result here. The Hero fix did not silently kill a neighbouring mechanism: had the new
 `attack_tokens_require_self_attacking` gate been over-tight (say, suppressing Adeline too, or
@@ -1104,6 +1147,34 @@ Three of these rows are findings, not just green ticks:
    i.e. Lightning Greaves — which is stronger evidence than the `MTG_ETBDIG_TRACE` candidate counts
    (those confirm `looked=5`, the widened count, with 1–5 legal matches, but do not name the cards).
    **This closes the last outstanding verification item from the previous session.**
+
+#### USER-FLAGGED BIAS: battle cry's 0.20 turns is the most goldfish-inflated number in this ledger
+
+The user, on reviewing the reference games (2026-09-26): **"Accorder Paladin is notably better in
+goldfishing than in real play."** That is correct, it is *not* a modelling gap, and it lands squarely on
+the biggest number in the firing table — so it is recorded here rather than left implicit.
+
+Accorder Paladin is a **3/1 for `{1}{W}`** whose battle cry pumps every *other* attacker. `cards.json`
+models it fully (`battle_cry_power`, applied at declare-attackers to every other attacker, tokens
+included, stacking across copies) — the bracket note confirms nothing is deferred. The inflation is
+entirely the **format**, via three compounding effects that all point the same way:
+
+1. **A 3/1 has no downside here.** The passive opponent never blocks and never casts removal, so one
+   toughness costs nothing. In real play a 3/1 trades down to almost any blocker and dies to every
+   burn spell in the format.
+2. **Battle cry pays off in proportion to board width, and nothing ever narrows the board.** Its value
+   scales with the number of *other* attackers; a real opponent's blockers and sweepers are exactly what
+   keep that count low, and neither exists. Adeline and Hero tokens make this deck maximally wide.
+3. **It rewards attacking every turn unconditionally.** There is never a turn where holding back is
+   right, so the trigger fires every combat from the moment it lands.
+
+**So read the 0.20-turn figure as an upper bound on a real deck, while keeping it as a valid within-sim
+result.** The digest columns are unaffected — both arms share one apparatus and one format, so "battle
+cry fires in 275/400 games" stays exactly true. What is format-dependent is the *worth*, which is why
+the firing harness reports firing and win-turn in separate columns. Same caveat class as the passive
+opponent row in the 6a table, and the same reason Swords to Plowshares prices at −0.257: this
+simulator **overstates an all-out attacker and understates interaction**. Accorder Paladin is the
+clearest single beneficiary in the list.
 
 ### Firing evidence required before reading ANY A/B (the "equality can mean BROKEN" rule)
 Each new mechanism must be shown to FIRE, not merely to build:

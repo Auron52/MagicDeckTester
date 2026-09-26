@@ -8,7 +8,9 @@ Sources, and they are DIFFERENT SHAPES, which is the only fiddly part:
   ENGINE  logs/<bench-log-root>/<deck>__<ref-stem>_gi<N>.json  -- written by ref_bench.py's
           --game-trace-dir. A list of per-PHASE records: {turn, phase, actions[], boardAfter{}}.
           Attackers are not named in the ATTACK action (it carries only damage/oppLife), so they are
-          recovered by diffing the tapped flags on the battlefield between MAIN_1 and COMBAT.
+          recovered by diffing the tapped flags on the battlefield between MAIN_1 and COMBAT. That
+          diff CANNOT see a vigilant attacker (it never taps) and the trace has no `attacking`
+          flag, so vigilance candidates are named separately -- see the comment at the ATTACK arm.
   HUMAN   references/<Deck>/claude_s<S>_gi<G>.json -- the viewer's saved decision stream:
           {decisions[{decision{type,turn,plans[]}, chosen}], win_turn, mulligan}. The human's play is
           recorded as the PLAN INDEX chosen, so the line has to be read back out of the plan summary.
@@ -55,8 +57,12 @@ def engine_line(path):
     per = {}
     order = []
     prev_tapped = {}
+    cast_this_turn = set()
+    cur_turn = None
     for rec in e.get("turns", []):
         t = rec.get("turn")
+        if t != cur_turn:
+            cur_turn, cast_this_turn = t, set()
         if t not in per:
             per[t] = []
             order.append(t)
@@ -75,6 +81,7 @@ def engine_line(path):
                 per[t].append(f"land {nm}")
             elif ty == "CAST_SPELL":
                 mana = a.get("manaPaid")
+                cast_this_turn.add(nm)
                 per[t].append(f"cast {nm}" + (f"  [{mana}]" if mana else ""))
             elif ty == "ATTACK":
                 # Attackers = creatures that became tapped crossing into COMBAT. The ATTACK action
@@ -82,7 +89,21 @@ def engine_line(path):
                 swung = [names.get(cid, "?") for cid, tp in tapped_now.items()
                          if tp and not prev_tapped.get(cid) and not _is_land(bf, cid)]
                 who = ", ".join(sorted(swung)) if swung else "(attackers not recoverable)"
-                per[t].append(f"ATTACK for {a.get('damage')}  -> opp {a.get('oppLife')}   [{who}]")
+                # A VIGILANT ATTACKER NEVER TAPS, so the diff above cannot see it -- and the trace
+                # records only `tapped`, never an `attacking` flag. WhiteKnights hits this on every
+                # Adeline game: she has vigilance AND power equal to your creature count, so she is
+                # routinely the largest attacker while being invisible here (T4 of claude_s1_gi0:
+                # 8 of the 15 damage). Name the candidates rather than print a list that reads
+                # complete -- untapped non-land creatures that were already out before this combat,
+                # excluding anything cast this turn (summoning-sick, so it cannot have attacked).
+                vig = sorted({names.get(cid, "?") for cid in prev_tapped
+                              if cid in tapped_now and not tapped_now[cid]
+                              and not _is_land(bf, cid)
+                              and names.get(cid) not in cast_this_turn})
+                line = f"ATTACK for {a.get('damage')}  -> opp {a.get('oppLife')}   [{who}]"
+                if vig:
+                    line += f"  (+ any of these if vigilant: {', '.join(vig)})"
+                per[t].append(line)
             elif ty:
                 per[t].append(f"{ty.lower()} {nm}".strip())
         if ph != "DRAW":
@@ -120,7 +141,14 @@ def main():
                 stems.append(stem)
 
     if not stems:
-        print("no games selected (run scripts/ref_bench.py --deck whiteknights --log-root logs/wk_refbench first)")
+        # Reaching here with traces present is the GOOD outcome, not an error: the default selection
+        # is "games the engine beat the human on", and after the 2026-09-26 re-play that set is empty.
+        have = glob.glob(os.path.join(BENCH, "whiteknights__*.json"))
+        if have:
+            print(f"the engine beat the human on NO reference ({len(have)} traces checked) -- "
+                  "pass --all or a stem to print a line anyway")
+            return 0
+        print("no traces found -- run scripts/ref_bench.py --deck whiteknights --log-root logs/wk_refbench first")
         return 1
 
     for stem in stems:
