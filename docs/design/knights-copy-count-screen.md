@@ -140,6 +140,9 @@ That is why Haytham is the default sink — see the caveat below.
 | 3 | creature/count, WhiteKnights (14 arms) | `logs/wk_screen/cr_whiteknights.json` | **DONE + top two CONFIRMED** |
 | 4 | creature/count, Knights (11 arms) | `logs/wk_screen/cr_knights.json` | **DONE + top two CONFIRMED** |
 | 5 | COMBINATION, WhiteKnights (cumulative + leave-one-out) | `logs/wk_screen/comb_whiteknights.json` | **DONE + CONFIRMED — −0.136 t** |
+| 6 | open axes on top of `c4_all`, WhiteKnights | `logs/wk_screen/d_whiteknights.json` | **DONE** |
+| 7 | DECOMPOSITION of the Knights winner | `logs/wk_screen/e_knights.json` | **DONE** — it was one change, not three |
+| 8 | round F, WhiteKnights (stacking screen 6's wins) | `logs/wk_screen/f_whiteknights.json` | **DONE + CONFIRMED — −0.2417 t** |
 
 ### Screen 1 result — Remote Farm on WhiteKnights: ADOPT 4, and the ladder never turns over
 
@@ -409,39 +412,136 @@ Per [[never-commit-screening-lists]] this stays here until the user adopts it; o
 references moved to `references/WhiteKnights/v1-<slug>/`**, then earns its own mulligan profile, value
 leaf and regression ground truth (a screen's number is a ranking, not that deck's strength).
 
-| n | card | change |
+This is `f_ad4_av0_ac0`, the confirmed round-F winner at **−0.2417 late-weighted**:
+
+| n | card | change | evidence |
+|---|---|---|---|
+| 20 | Plains | **22 → 20** | 22 was optimal on the shipped list; the Vial cut moved the total |
+| 4 | Remote Farm | **new** | rf ladder monotone in 3 formats; d* > 0.84 t |
+| 4 | Dauntless Bodyguard | — | cutting it measured **+0.0179 WORSE** |
+| 4 | Venerable Knight | — | (Knights' analogue cut was a null/worse) |
+| 4 | Worthy Knight | — | cutting it measured +0.0042 worse |
+| — | Acclaimed Contender | **3 → 0** | the best cut source at every step |
+| — | Valiant Knight | **1 → 0** | its `{3}{W}{W}` grant is near-unaffordable |
+| 4 | Knight Exemplar | — | 4→3 was −0.0102 on the OLD list; **untested on this one** |
+| 3 | Hero of Bladehold | — | a 4th is **+0.0037 worse**; 3→2 untested |
+| 1 | Sol Ring | — | |
+| 1 | Swords to Plowshares | — | **deliberately never tested** — goldfish cannot price interaction |
+| 1 | Unexpectedly Absent | — | same |
+| 4 | Accorder Paladin | — | already 4; battle cry is the most goldfish-inflated number here |
+| 2 | Silverblade Paladin | **1 → 2** | a 3rd is only −0.0071 |
+| **4** | **Adeline, Resplendent Cathar** | **1 → 4** | **−0.048 / −0.044 / −0.024 per copy** |
+| — | Aether Vial | **3 → 0** | **−0.0423**, no sign flip (unlike Knights) |
+| — | Lightning Greaves | **1 → 0** | matches the reference bench and the Angels campaign |
+| 4 | Benalish Marshal | **2 → 4** | |
+
+60 cards, 24 lands, still **mono-white**. Twelve cards differ from the shipped list.
+
+**Knights' equivalent**: screen 7 decomposed the confirmed −0.0479 arm and showed Haytham's 4th copy
+contributes nothing, so the change is **Acclaimed Contender 4→2, Adeline 1→3** —
+**held-out confirmed (seed 4460000) at std −0.0285 / 2HG −0.1316 / long −0.0539, pooled over 40,000
+paired games per format → late-weighted −0.0721.** Do **not** cut Venerable Knight, and Remote Farm
+does **not** go in this list.
+
+### Screens 6–8 — Adeline is the deck's most underplayed card, and Vial should go
+
+**Screen 6** (`logs/wk_screen/d_whiteknights.json`, out `d_wk.log`) tested the axes left open on top of
+`c4_all`, which it also re-measured as a reference: **−0.1371 late-weighted against the earlier run's
+−0.1357, replicating on a third disjoint seed block.** Marginals vs `c4_all`:
+
+| arm | late-weighted | marginal |
 |---|---|---|
-| 18 | Plains | **22 → 18** |
-| 4 | Remote Farm | **new** |
-| 4 | Dauntless Bodyguard | — (cutting it measured WORSE, +0.0179) |
-| 4 | Venerable Knight | — |
-| 4 | Worthy Knight | — (cutting it measured worse, +0.0042) |
-| 1 | Acclaimed Contender | **3 → 1** |
-| — | Valiant Knight | **1 → 0** |
-| 4 | Knight Exemplar | — |
-| 3 | Hero of Bladehold | — (a 4th measured worse, +0.0072) |
-| 1 | Sol Ring | — |
-| 1 | Swords to Plowshares | — **deliberately never tested** (goldfish cannot price interaction) |
-| 1 | Unexpectedly Absent | — same |
-| 4 | Accorder Paladin | — (already 4; battle cry is the most goldfish-inflated number here) |
-| 2 | Silverblade Paladin | **1 → 2** |
-| 2 | Adeline, Resplendent Cathar | **1 → 2** |
-| 3 | Aether Vial | — (see the open axis below) |
-| — | Lightning Greaves | **1 → 0** |
-| 4 | Benalish Marshal | **2 → 4** |
+| `d_ad3_ac0` Contender 1→0, **Adeline 2→3** | −0.1811 | **−0.0440** |
+| `d_av2_ad3` Vial 3→2, **Adeline 2→3** | −0.1808 | −0.0437 |
+| `d_av0_p21` **cut all 3 Vial** → Plains 21 | −0.1733 | −0.0362 |
+| `d_sp3_ac0` Contender 1→0, Silverblade 2→3 | −0.1580 | −0.0209 |
+| `d_av2_p19` Vial 3→2, Plains 19 | −0.1525 | −0.0154 |
+| `d_av2_ac2` Vial 3→2, Contender 1→2 | −0.1383 | −0.0012 (nothing) |
 
-60 cards, still **mono-white**.
+**Round F** (`f_whiteknights.json`, out `f_wk.log`) stacked those. Matched-pair marginals: cutting all
+3 Vial for Plains **−0.0423**, a 4th Adeline **−0.0242**, a 3rd Silverblade only −0.0071, a 4th Hero
+**+0.0037 still worse**. Winner `f_ad4_av0_ac0` at **−0.2418**, held-out confirmed (seed 5430000) with
+shrinkage indistinguishable from zero in all three formats — pooled **std −0.1718 / 2HG −0.3360 /
+long −0.2131 → late-weighted −0.2417 over 40,000 paired games per format.**
 
-**Knights' equivalent**, confirmed at −0.0479 late-weighted: Acclaimed Contender 4→2, Haytham Kenway
-3→4, Adeline 1→2. Remote Farm does **not** go in this list.
+**That is larger than this deck's exhaustive keep table (−0.1985) — the biggest improvement measured on
+it by any means.**
+
+**The Adeline ladder, and it is the campaign's headline:**
+
+| copies | marginal (late-weighted) |
+|---|---|
+| 1 → 2 | **−0.048** |
+| 2 → 3 | **−0.044** |
+| 3 → 4 | **−0.024** |
+
+Diminishing but strongly positive all the way to the legal maximum, for a **legendary** creature whose
+extra copies cannot add a second battlefield instance. Nearly all the value is *seeing her earlier*.
+**Screen 7 on Knights (`e_knights.json`) reproduces this independently**: its confirmed 3-card winner
+decomposes to ONE change — `e_ac3_ad2` (Contender 4→3, Adeline 1→2) measures −0.0402 against the
+3-card arm's −0.0405, so **Haytham's 4th copy and the second Contender cut contribute nothing** — and
+a 3rd Adeline again nearly doubles it (−0.0714). Knights' cut source matters too but far less:
+Contender −0.0402 > Exemplar −0.0368 > Vial −0.0254 >> **Venerable Knight 0.0001, a null** (do not cut
+it; +0.0314 at 20 life).
+
+**Aether Vial: cut it in WhiteKnights, keep it in Knights.** WhiteKnights' Vial cut is −0.0423 with
+*no* sign flip (−0.0440 / −0.0322 / −0.0355 across std/2HG/long). Knights' is the campaign's biggest
+sign flip and was rejected. Same card, third case of the two decks wanting opposite things.
+
+**A fourth card-score inversion:** in Knights, cutting Acclaimed Contender beats cutting Aether Vial
+(−0.0402 vs −0.0254) even though Vial's marginal (−0.364) is far worse than Contender's. See
+[[card-scores-invert-against-play]].
+
+### The apparatus question is CLOSED by d*, and an earlier caveat here was too pessimistic
+
+**Correction to the screen-1 note above.** It said Remote Farm's bias floor "cannot be measured on the
+approved route". That is true of `--floor` (the empirical bracket, which would have to *generate*), but
+`d*` asks the same question analytically and was available all along. It was missing from every Remote
+Farm screen for a mundane reason: `deck_compare` guards the block on `raw_sidecar(spec.profile)`, which
+resolves `.raw.json.gz` directory-relative off the **profile** path, and the alias scratch dir held only
+the profile, value model and table. Five screens ran without it. `setup_alias.sh` now copies the raw
+sidecar too; `logs/wk_screen/dstar.py` recomputes it after the fact (the alias does not touch the raw,
+so it is the same number the driver would have printed).
+
+Computed against the 0.054 t measured reference (burn's Skullcrack→Bolt), bigger = safer:
+
+| arm | effect | d* | verdict |
+|---|---|---|---|
+| `f_ad4_av0_ac0` | −0.2417 | **> 0.84 t** | the bound never reaches the effect — **apparatus cannot explain it** |
+| `f_ad3_av0_ac0` | −0.2176 | > 0.84 t | same |
+| `d_ad3_ac0` | −0.1753 | > 0.84 t | same |
+| `c4_all` | −0.1371 | > 0.84 t | same |
+| `c1_ad2` | −0.0451 | 0.133 t | safe (2.5x the reference) |
+| `rf4` | −0.0252 | > 0.84 t | same |
+| `rf2` | −0.0142 | 0.158 t | safe |
+| `rf1` | −0.0081 | 0.050 t | below the reference — could be apparatus (not a recommendation) |
+
+So for `rf4` the accounting is now **complete**: the weighting half is reproduced exactly by
+reweighting, composition coverage is measured at **0.0000%**, and the rollout half is bounded with room
+to spare. The only arm the apparatus could account for is `rf1`, which nothing recommends.
+
+### Where this STOPS being copy-count tuning
+
+`ident` falls to **59–73%** on the round-F arms and the candidate differs from the shipped list in 12 of
+60 cards. Two biases still run **against** the candidate, which is the safe direction — the shared keep
+table was fitted to the SHIPPED library, and composition fall-through (7.85% on the winner, the highest
+in the screen, vs 4.90% on the arm below it) penalises the arm holding the most raised copies. The
+winner won anyway, by 0.024. But further rounds under this apparatus buy less and less: the honest next
+step is not another screen, it is generating a real mulligan profile and value leaf for the candidate
+and measuring it standalone — which is the **adoption** path and the user's decision.
 
 ### The one axis left open
 
-**Aether Vial 3→2 in WhiteKnights.** It measured −0.0154 standalone, but in that arm the freed slot
-went to a 3rd Benalish Marshal — and Marshal is already at 4 in `c4_all`, so the sink is taken and the
-change was never tested on top of the winning list. A follow-up needs a different destination for that
-slot (a 19th land, Contender back to 2, or an untested Adeline 2→3). Everything else in the pool has
-been measured in both directions.
+~~**Aether Vial 3→2 in WhiteKnights.**~~ **CLOSED by screens 6 and F**: cutting Vial to 2 is −0.0154
+with a 19th Plains and ~0 with a 2nd Contender, and cutting it to **0** is −0.0423. Vial comes out of
+WhiteKnights entirely.
+
+What is left untested on the *final* candidate, in rough order of promise: **Knight Exemplar 4→3**
+(−0.0102 on the shipped list, never retested on the new one), **Hero of Bladehold 3→2** (only 3→4 was
+tested, and it was worse), and the land count at 24 (20 Plains + 4 Remote Farm; the shipped list's 22
+was optimal, but the Vial cut changed the mana-source total). Each is a small effect against an
+apparatus that is now stretched, which is the argument for generating real artifacts before chasing
+them.
 
 ## Open questions for the user (surfaced, not blocking)
 
