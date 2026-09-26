@@ -94,14 +94,60 @@ PROVISIONAL:
 - **Daring Buccaneer** reveal-vs-pay auto-resolves to reveal (paying {2} when a reveal is possible is
   strictly dominated).
 
+## Discard policy
+
+**Status: AUTHORED, implemented default-on, PENDING USER REVIEW** (adoption is a user review — the same
+gate as cast order; nothing here records a confirmation). Full proposal:
+`docs/design/pirates-discard-policy-proposal.md`. Code: `PiratesProvider::CleanupDiscardCandidates`
+behind `MTG_PIRATES_BUCKET_DISCARD` (default ON, `=0` restores the generic max-MV ranking).
+
+* Shape: simple aggro → **two buckets**, MANA (lands + a Vial sub-role) and THREATS (catch-all).
+* MANA / LANDS: reach **4 sources** net of board; the first two land slots before the threat floor,
+  the rest after. Colour coverage first (creature-only lands cover creature pips, never Bolt's),
+  then breadth; a Fiery Islet is the last surplus land shed.
+* MANA / VIAL: **1** only while no Vial is on board and the board has ≤ 2 lands; else surplus.
+* THREATS: hard floor **3**; overflow shed FAR-first (distance ≥ 2 incl. a missing colour; a board Vial
+  or Buccaneer's reveal erases it), then by a param-derived value: lords 100–104 > Mimic 92 > Dire
+  Fleet Captain 86 > Forerunner 82 > Malcolm 75 / Larcenist 72 > Crewmate 62 > Bolt 56 > 1-drops ~38–46.
+* Shed order: dead legend → surplus lands → surplus Vials → overflow threats → quota tail (every hand
+  card named; no max-MV fall-through).
+* Gate: the main tree's `scripts/discard_policy_audit.py` classifier (run against this worktree via a
+  symlinked scratch root under `logs/daudit/`) reports **Pirates → OK** (not MISSING / PATCH-ONLY /
+  INHERITED).
+* Doubts for the user (§8 of the proposal): land target 4 vs 3; the Vial rule; the 1-drop order; Bolt's
+  slot; floor-before-late-lands; fastlands not demoted; Treasures not counted.
+* Evidence still owed: `--discard-analysis` + non-inferiority vs `=0`, after the Stage 4 profile.
+
 ## Open questions for the user
 
 (collected here; never blocking — defaults taken are stated)
 
 1. Sign off the PROVISIONAL deferrals above.
-2. Cast order (user-reviewed per deck): Malcolm vs Metallic Mimic first (Clue vs +1/+1 counter);
-   Daring Buccaneer ahead of other Pirate casts (keeps a reveal available); Forerunner ahead of other
-   Pirates (catch their drains). Default: search-visible provider ranks as listed, pending review.
+2. **Cast order (USER review — NOTHING ADOPTED).** `PiratesProvider` does NOT override
+   `CastOrderRank`; the deck runs the ROOT default (`GenericProvider::CastOrderRank`: creatures 10,
+   other non-creatures 20, mana rocks 5, accelerant tiers 15/16/18) and the search decides every
+   ordering the canonical line leaves open. Proposals, each to be measured behind a default-OFF
+   `MTG_PIRATES_*` lever only after sign-off:
+   * **2a — Metallic Mimic before Malcolm (and before every other Pirate).** Mimic's +1/+1 counter
+     is permanent and accrues to every Pirate cast after it; Malcolm's Clue fires on the SECOND spell
+     of the turn regardless of which spells, so Malcolm need only not be the turn's first-and-only
+     spell. Proposed: Mimic rank 8 (< creatures 10) whenever another Pirate is cast the same turn;
+     Malcolm stays at 10. No counter-case found: Malcolm's haste attack happens in combat after both
+     have resolved, and cast first he would himself receive Mimic's counter only if Mimic preceded him.
+   * **2b — Daring Buccaneer FIRST among Pirate casts.** Its cost is `{R}` only while another Pirate
+     CARD is in hand to reveal; casting the other Pirates first can strand it at `{2}{R}`. The
+     enumerator already prices this per subset (chunk 2's order-aware surcharge), so the rank only
+     matters for the canonical line. Proposed: Buccaneer rank 9 when a reveal is available.
+   * **2c — Forerunner of the Coalition FIRST among the non-Buccaneer Pirates.** Its drain is
+     "whenever ANOTHER Pirate you control enters", so every Pirate cast before it drains nothing.
+     Tension with 2a (Mimic first grows the Forerunner too) and 2b. Proposed total: Buccaneer 7 (cheap,
+     reveal-dependent) → Mimic 8 → Forerunner 9 → other creatures 10. If the mana only allows two,
+     the search decides which.
+   * **2d — Vial-put pick.** Which creature a Vial at N counters puts in is today the root Vial policy
+     plus the search. Proposal: prefer Forerunner / a lord at N=3 over Kitesail Larcenist, and Mimic
+     at N=2 over Crewmate/Malcolm/Dire Fleet Captain (same reasoning as 2a/2c). This is a *put-order*
+     heuristic, not a charge policy — the charge policy (`WantVialCharge`) stays root.
+   Default taken: root order, pending review.
 3. OK to classify the new params in `audit_viewer_decisions.py` INERT_PARAMS (script self-guard)?
 4. Corsair's same-turn Treasure: lift the fresh-hold for non-trick Treasures (A/B-measured)? Default: measure.
 
@@ -135,3 +181,71 @@ PROVISIONAL:
   (`MTG_PAYSAC_FRESH_HOLD=0`) to bound Corsair's same-turn Treasure narrowing, add Pirates to the
   regression suite, push via this worktree (`git pull --rebase` first; rebuild + smoke after rebase),
   watch CI (Windows).
+
+## Chunk 3 landed (2026-09-26) — provider, routing, certificate, tutor width, discard policy
+
+Integrated serially in `/tmp/pirates-wt` (branch `pirates-analysis`, local, NOT pushed).
+
+| commit | what |
+|---|---|
+| `097e913f` | `PiratesProvider : DeckProvider` — routing above `anti`, `Certificate()` NotAssessed, `TutorSearchWidth` 9; routing/width unit tests |
+| `d5d6220e` | authored bucketed cleanup-discard policy behind `MTG_PIRATES_BUCKET_DISCARD` (default ON) + `docs/design/pirates-discard-policy-proposal.md` + 7 discard unit tests |
+| (this commit) | ledger: `## Discard policy`, cast-order proposals 2a–2d, this section |
+
+**Routing.** Before: Pirates → **AntiLifegain** (Forerunner's `tutor_to_top`; also Mill and Unpredictable
+Cyclone → AntiLifegain). Signature = `reveal_or_pay_subtype` | `etb_treasurify_each_player` |
+`attack_pump_tough_per_other_matching` | `nth_spell_investigate` | `own_creature_enters_opp_life_loss`
+(five cards; each param carried by no other card in `cards.json`). Deliberately excluded: `tutor_to_top`,
+the colourless Mimic/Automaton chosen-type params, `etb_creates_treasures`, `static_artifact_*`.
+Verification:
+* `scripts/provider_audit.py --check` over all 25 profiled decks: **identical** to the pre-change run
+  (only the "not assessed" certificate count moves 22 → 23 for the new class). Saved:
+  `logs/pirates_chunk3/provider_audit_{before,after}.txt`.
+* `--batch` probe of the three unprofiled lists: Pirates → **Pirates**; Mill, Unpredictable Cyclone →
+  AntiLifegain (unchanged).
+* Unit test pins the provider of EVERY folder in `decks/` (and fails if a new folder appears without an
+  entry), plus the signature's survival of any single-card cut.
+* Byte-identical play for every other deck holds **by construction** (the signature params exist only
+  on Pirates cards; nothing else changed for another deck). Smoke NOT run (box hold) — see PROVISIONAL.
+
+**Why DeckProvider and not the AntiLifegain it rode.** The skill's "derive from what the deck actually
+routes to today" protects play-neutrality for an already-measured deck; Pirates was never measured on
+AntiLifegain, which was a misroute, and deriving from it would import `TutorSearchWidth` 2 (hiding 7 of
+9 Forerunner targets) and another deck's buckets. PROVISIONAL-by-default only in that the user has not
+seen it; the RESUME STATE already prescribed DeckProvider.
+
+**Tutor width.** 9 distinct Pirate names in the library (Mimic/Automaton are Pirates only on the
+battlefield); generic candidates are in shuffle order, base width 6 → 3 names unreachable per game. Width
+only feeds the TurnSolver tutor axis (`TutorAxisWidth`, additive, one rollout per extra target) and
+GoblinsProvider internals; `MTG_TUTOR_WIDTH` still overrides.
+
+**Results.**
+* `./build.sh` clean; `build/Release/mtg-test` **207/207 pass** (10 new Pirates-provider cases).
+* `python3 scripts/audit_viewer_decisions.py decks/Pirates/Pirates.cod --no-sweep`: exit 0; expected
+  decisions `dig, target, treasurify, vial_charge`; oracle cross-check clean.
+* `analyze_deck.py --coverage-only`: **19/19 full**.
+* Discard gate (main tree's `discard_policy_audit.py` classifier run against this tree): **Pirates → OK**.
+* Sanity: `build/Release/mtg decks/Pirates/Pirates.cod --games 10 --threads 2 --seed 4242` → avg 5.10,
+  per-game win turns `-,4,4,5,5,4,5,5,5,5` — **identical** to the pre-chunk-3 run of the same seed
+  (`logs/pirates_sanity`). Game 0 is unwon in both: two Mountains, no blue/black, and the Aether Vial
+  **never charges** — because there is no `.profile.json` yet, so `vial_target_mv` = 0 (the known
+  profile-less behaviour, `src/analyzer/main.cpp` note). NOT a play bug; it disappears with the Stage 4
+  profile. The three cleanup sheds in that game match the policy (FAR Forerunner/Larcenist shed first).
+
+**PROVISIONAL (awaiting the user):**
+* The discard policy itself (default ON, user review pending) and its seven doubts.
+* Cast-order proposals 2a–2d (nothing adopted; root order in force).
+* Smoke / regression byte-identity NOT run — box held by a sibling container (one-batch rule). Owed
+  before push, together with the Melira Pod / FiveColour verdicts from chunks 1–2.
+
+**Found in another deck (not fixed — out of scope):** `GiantsProvider` does not override
+`TutorSearchWidth`, and Giants holds **7** distinct Giant names for Giant Harbinger (Inferno Titan,
+Sunrise Sovereign, Giant Harbinger, Borderland Behemoth, Hamletback Goliath, Surtland Flinger, Tectonic
+Giant) against the base width 6 — the same shuffle-order coverage hole fixed here for Pirates, one name
+unreachable per game. A width-7 override would widen (not narrow); it changes Giants' play, so it needs
+its own measurement and GT verdict.
+
+**Next:** unchanged from RESUME STATE after chunk 3 — smoke (when the box is quiet), Stage 4 profile
+(`analyze_deck.py --no-rebuild`), then `--discard-analysis`, Stage 5 (`verify_deck.py` incl. the
+`discard_policy` gate once the main tree's gate lands), claude-play sweep, fresh-hold A/B, suite entry,
+rebase + push + CI watch.
