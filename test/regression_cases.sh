@@ -23,6 +23,7 @@ declare -A DECK_FILE=(
   [burn]=decks/burn/burn.txt
   [th]=decks/treasure_hunt/treasure_hunt.txt
   [knights]=decks/Knights/Knights.cod
+  [whiteknights]=decks/WhiteKnights/WhiteKnights.cod
   [antilife]=decks/Anti-Lifegain/Anti-Lifegain.cod
   [hinata]=decks/Hinata2/Hinata2.cod
   [dragonstorm]=decks/Dragonstorm/Dragonstorm.cod
@@ -50,6 +51,7 @@ declare -A DECK_PROF=(
   [burn]=decks/burn/burn.profile.json
   [th]=decks/treasure_hunt/treasure_hunt.profile.json
   [knights]=decks/Knights/Knights.profile.json
+  [whiteknights]=decks/WhiteKnights/WhiteKnights.profile.json
   [antilife]=decks/Anti-Lifegain/Anti-Lifegain.profile.json
   [hinata]=decks/Hinata2/Hinata2.profile.json
   [dragonstorm]=decks/Dragonstorm/Dragonstorm.profile.json
@@ -104,6 +106,15 @@ SMOKE_CASES=(
   "knights 0 1001 1000 0"
   "knights 3 1001  250 10"
   "knights 5 1001  150 20"
+  # whiteknights: knights' sizing exactly -- same tribe, same speed class (kills ~T4.3). Measured
+  # 2.3 ms/game at d0, 7.0 at d5 b20 and 48.9 at d3 b10, so this whole block is ~16 core-s. NOTE the
+  # d3-vs-d5 inversion: d3 b10 is ~7x COSTLIER per game than d5 b20 here, because a starved budget at
+  # shallow depth re-searches instead of committing (the same effect derive_mullgen_setting.py measured
+  # as d3 b20 = 5.87x d5 b20). So the d3 row, not the d5 row, is this deck's expensive one -- size that
+  # one first if the smoke budget ever needs trimming.
+  "whiteknights 0 1001 1000 0"
+  "whiteknights 3 1001  250 10"
+  "whiteknights 5 1001  150 20"
   "antilife 0 1001 1000 0"
   "antilife 3 1001  250 10"
   "antilife 5 1001  150 20"
@@ -269,6 +280,12 @@ SMOKE_CASES=(
   "minotaur2hg   3 1001  100 10"
   "goblins2hg    3 1001   75 10"
   "knights2hg    3 1001   75 10"
+  # whiteknights2hg: treated as a RELEVANT deck, not a canary, and the evidence is direct. Its firing
+  # harness shows Hero of Bladehold's attack_tokens_per_opponent gate is observable ONLY at 2 heads
+  # (49/200 games differ there, 0/400 at one head) -- it is arithmetically inert at 1 head, so a normal
+  # case structurally cannot see it. The deck also runs Adeline, whose token clause IS per-opponent, so
+  # both sides of the "each opponent x heads" class sit in one deck. ~4 core-s.
+  "whiteknights2hg 3 1001  75 10"
   "fivecolour2hg 3 1001   40 10"
   "fluctuator2hg 3 1001   75 10"
   # angels2hg: antilife/minotaur sizing. Angels is one of the cheapest decks in the matrix
@@ -371,6 +388,12 @@ REGRESSION_CASES=(
   "knights 3 3003  300 10"
   "knights 5 2002  250 20"
   "knights 5 3003  250 20"
+  # whiteknights: knights' sizing, disjoint seeds from smoke (1001). ~40 core-s total.
+  "whiteknights 0 2002 1000 0"
+  "whiteknights 3 2002  300 10"
+  "whiteknights 3 3003  300 10"
+  "whiteknights 5 2002  250 20"
+  "whiteknights 5 3003  250 20"
   # antilife: re-added at 1/10 virtual-ms (see smoke block + search-perf-investigation memory).
   "antilife 0 2002 1000 0"
   "antilife 3 2002  300 10"
@@ -482,6 +505,7 @@ REGRESSION_CASES=(
   "minotaur2hg   3 2002  150 10"
   "goblins2hg    3 2002  100 10"
   "knights2hg    3 2002  100 10"
+  "whiteknights2hg 3 2002 100 10"
   "fivecolour2hg 3 2002   50 10"
   "fluctuator2hg 3 2002  100 10"
   # angels2hg: antilife/minotaur sizing again (~10 core-s at 0.066 s/game).
@@ -606,6 +630,22 @@ OVERNIGHT_CASES=(
   "knights 5 5005 1000 40"
   "knights 5 6006 1000 40"
   "knights 5 7007 1000 40"
+  # whiteknights: knights' 4-seed sweep. d0 ~19 core-s, d5 b40 ~36 core-s; the d3 b20 rows dominate at
+  # ~220 core-s for the reason noted in the smoke block (shallow depth + starved budget is the costly
+  # corner on this deck, not deep search). ~4.6 core-min for the tier, which is noise against the 8 h
+  # wall budget -- no other deck needed trimming to fit it.
+  "whiteknights 0 4004 2000 0"
+  "whiteknights 0  6006 2000 0"
+  "whiteknights 0  8008 2000 0"
+  "whiteknights 0 10010 2000 0"
+  "whiteknights 3 4004 1000 20"
+  "whiteknights 3 5005 1000 20"
+  "whiteknights 3 6006 1000 20"
+  "whiteknights 3 7007 1000 20"
+  "whiteknights 5 4004 1000 40"
+  "whiteknights 5 5005 1000 40"
+  "whiteknights 5 6006 1000 40"
+  "whiteknights 5 7007 1000 40"
   # antilife: re-added at 1/10 virtual-ms (see smoke block + search-perf-investigation memory).
   "antilife 0 4004 2000 0"
   "antilife 0  6006 2000 0"
@@ -904,6 +944,10 @@ OVERNIGHT_CASES=(
   "knights2hg    5 5005 300 40"
   "knights2hg    5 6006 300 40"
   "knights2hg    5 7007 300 40"
+  "whiteknights2hg 5 4004 300 40"
+  "whiteknights2hg 5 5005 300 40"
+  "whiteknights2hg 5 6006 300 40"
+  "whiteknights2hg 5 7007 300 40"
   "fivecolour2hg 5 4004 100 20"
   "fivecolour2hg 5 5005 100 20"
   "fivecolour2hg 5 6006 100 20"
