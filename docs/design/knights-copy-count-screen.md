@@ -1012,10 +1012,29 @@ which is a live lead, but following it needs a card the deck does not own. That 
 > cut but does not close the axis.
 >
 > **And "already at 4" answered the wrong question.** It is a correct *sink* argument (you cannot add a
-> 5th) and it was silently read as a *screening* claim. It is not one: **Dauntless Bodyguard, Venerable
-> Knight, Worthy Knight and Accorder Paladin — 16 of the candidate's 60 slots — have never been varied in
-> any round.** They were never cut-tested, only never-addable. Compare
+> 5th) and it was silently read as a *screening* claim. It is not one. Compare
 > [[cut-ladders-never-ask-what-to-add]], which is this same blind spot pointing the other way.
+>
+> **CORRECTION TO THE CORRECTION, same day: the claim "Dauntless Bodyguard, Venerable Knight, Worthy
+> Knight and Accorder Paladin — 16 of 60 slots — have never been varied" was WRONG, and overstated the
+> gap by half.** Checking the screen-3 table above rather than trusting the phrase:
+>
+> | card | actually varied? |
+> |---|---|
+> | Dauntless Bodyguard | **YES** — `a_db3_bm3`, 4→3 measures **+0.0087 worse** (+0.0179 at 20 life), recorded "do not cut it" |
+> | Worthy Knight | **YES** — `a_wk3_bm3`, 4→3 measures **+0.0042 worse**, recorded "don't" |
+> | Venerable Knight | Not in WhiteKnights — but screen 7 tested it in **Knights** (a null, 0.0001; +0.0314 at 20 life, "do not cut it"), *and* it is provably the same card as Dauntless Bodyguard in this engine, so its answer is already known by identity |
+> | Accorder Paladin | **NO — never varied in either deck** |
+>
+> So the untested block is **8 slots, not 16**, and after the identity argument the one genuinely open
+> card is **Accorder Paladin**. Worse, I had already been told about it: the user said in an earlier round
+> *"Accorder Paladin is notably better in goldfishing than in real play"* — a 3/1's toughness is free
+> against an opponent that never blocks — and it is recorded near the top of this very document.
+>
+> **That asymmetry is the useful part, and it is the mirror of the Knight Exemplar case.** Accorder Paladin
+> is **over**-valued here, so the two possible results are not equally trustworthy: a measured *"cut it"*
+> would be **strong** evidence (bad even while flattered), while a measured *"don't cut it"* is **weak**
+> (exactly what an inflated card produces). State which of those the number is before reading it.
 >
 > **The sharpest part: two of those four are, in this simulator, the same card, and both are blank.**
 > From `src/cards/data/cards.json`:
