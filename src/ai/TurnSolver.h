@@ -693,6 +693,19 @@ public:
         // MTG_UNPRUNED), which dedups orderings by end-of-phase state.
         bool searched_order = false;
 
+        // VIAL PUTS AFTER THE HAND CASTS (Pirates 5d sweep, 2026-09-26). Both apply worlds resolve
+        // every ActivateVial BEFORE the hand casts by default (lords / cost reducers put by the Vial
+        // are live for the spells), so "cast Metallic Mimic, THEN Vial-put a Pirate" -- the Pirate
+        // entering with Mimic's +1/+1 counter -- was inexpressible in one plan, as were a Vial-put
+        // Pirate entering after a cast Forerunner of the Coalition (a drain) and a Daring Buccaneer
+        // cast while the Pirate about to be Vial-put still sits in hand to reveal. true == this plan
+        // runs its Vial puts right after its hand/graveyard casts instead (ApplyPlanDirect's
+        // apply_plan_actions and AIEngine::TakeTurn's main loop, lockstep). Emitted ONLY as a post-
+        // dedup VARIANT of a base plan (AppendVialOrderVariants) when VialOrderMatters says the order
+        // can change the outcome -- a param-gated predicate no pre-Pirates card satisfies -- so every
+        // other deck is byte-identical, and the search, not a rule, picks the order.
+        bool vial_after_casts = false;
+
         // HUMAN-DECLARED ACTION ORDER (viewer only; MTG_HUMAN_LINE_ORDER). searched_order pins the
         // order of the hand CASTS only -- board activations still run in ApplyPlanDirect's trailing
         // pass, i.e. after every cast and among themselves in whatever order the ENUMERATOR emitted
@@ -1408,6 +1421,14 @@ public:
     // #10 cast-order: canonical (executor clean-set) order of a plan's non-sac hand casts, for the
     // viewer to diff the human's queued order against (equal => don't emit --cast-order).
     static std::vector<std::string> CanonicalNonSacCastOrder(const GameState& state, const Plan& plan);
+
+    // Can the order of this plan's Vial puts relative to its hand casts change the outcome? True iff
+    // the plan holds at least one ActivateVial AND a non-sacrifice hand cast of an entering-effect
+    // SOURCE (other_chosen_subtype_enters_counters -- Metallic Mimic; own_creature_enters_opp_life_loss
+    // -- Forerunner of the Coalition) or of a reveal-cost card (reveal_or_pay_cost -- Daring
+    // Buccaneer). Params only, no state: it gates AppendVialOrderVariants' emission and keys the
+    // resolution-order summary / CheckLine sub, so it must not move between enumeration and display.
+    static bool VialOrderMatters(const Plan& plan);
     // ...and the order this plan will ACTUALLY be cast in: the vector order for a searched_order
     // plan, the canonical sort otherwise. Same rule apply_plan_actions applies (and BpPrepayPrefix
     // already mirrors) -- see the note on the definition for why reporting the canonical sort for

@@ -12152,6 +12152,9 @@ static uint64_t BpCandFingerprint(const TurnSolver::Plan& p, int blind = kBlindN
     fold(static_cast<uint64_t>(p.saga_ch1_choice + 3) * 61);
     fold(static_cast<uint64_t>(p.vial_charge_choice + 2) * 53
          + static_cast<uint64_t>(p.searched_order ? 1 : 0));
+    // Vial-order variant: same actions, different resolution order -> a different plan. Folded only
+    // when set, so every plan without it fingerprints exactly as before.
+    if (p.vial_after_casts) { fold(0x5649414cull); }
     // Surtland Flinger victim. MUST be folded: omitting it collapses the fling variants back to
     // one and silently re-steals the decision the axis exists to give the search (the 2026-06-30
     // plan_signature tutor precedent). +3 because -2 (decline) is a live value here.
@@ -12421,7 +12424,7 @@ static bool IsApplyEmptyPlan(const TurnSolver::Plan& p)
         && p.fling_victim_choice == -1 && p.tectonic_mode_choice == -1
         && p.tectonic_keep_choice == -1
         && p.saga_ch1_choice == -1
-        && !p.searched_order && p.atk_dork_release == -1
+        && !p.searched_order && !p.vial_after_casts && p.atk_dork_release == -1
         && p.bp_choice == -1 && p.bp_at == 0 && !p.bp_all && !p.bp_wave0;
 }
 // Companion channel (filled by the k=0 apply's in-scope enumeration, node site 3 only): the
@@ -24186,6 +24189,7 @@ namespace solvememo
     {
         if (a.value != b.value || a.wins_this_turn != b.wins_this_turn
             || a.searched_order != b.searched_order || a.land_decided != b.land_decided
+            || a.vial_after_casts != b.vial_after_casts
             || a.land_to_play != b.land_to_play || a.fetch_target != b.fetch_target
             || a.land_face != b.land_face || a.actions.size() != b.actions.size())
         { return false; }
@@ -28238,6 +28242,11 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
     // OWN apply_trailing_activations call, so an inline dispatch there would apply it twice). Both
     // of those sites are !s_human_play-gated today; this makes the guarantee structural instead.
     bool human_seq_inline = false;
+    // Plan::vial_after_casts, armed for the TOP-LEVEL plan only and consumed at the entry of the
+    // apply_plan_actions call it governs (the human_seq_inline discipline): a continuation re-entering
+    // the lambda mid-plan runs its own Vial puts first, as every continuation always has. Lockstep twin:
+    // AIEngine::TakeTurn's `vial_after` (deferred deploy loop after its graveyard casts).
+    bool vial_after_armed = false;
     // DIAGNOSTIC (MTG_LINE_ORDER_TRACE, default OFF, zero cost when off): one line per action the
     // main-phase apply performs, in the order it performs it. The realised sequence is otherwise
     // unobservable from outside -- the decision JSON reports life events and draws, not order --
@@ -30752,9 +30761,19 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
         // trailing sac loop skips them so they are not double-cast. Empty for every plan without a
         // hoisted Spectacle enabler.
         std::set<size_t> spec_hoisted_sac;
-        for (const Action& a : acts)
+        struct VialAfterScope
         {
-            if (a.kind == Action::Kind::ActivateVial) { apply_vial(a.card_name); }
+            bool& flag; const bool saved;
+            explicit VialAfterScope(bool& f) : flag(f), saved(f) { f = false; }
+            ~VialAfterScope() { flag = saved; }
+        } _vial_after(vial_after_armed);
+        const bool defer_vials = _vial_after.saved;
+        if (!defer_vials)
+        {
+            for (const Action& a : acts)
+            {
+                if (a.kind == Action::Kind::ActivateVial) { apply_vial(a.card_name); }
+            }
         }
         // MANA-UNLOCK equip (see TurnSolver::ApplyManaUnlockEquips): the haste it grants is what
         // pays for a later cast in this plan, so it must fire the moment both pieces are on the
@@ -31053,6 +31072,15 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
             if (a.kind == Action::Kind::CastFromGraveyard)
             {
                 cast_loyalty_ability = a.loyalty_ability; cast_devour_count = a.devour_count; apply_one(a.card_name, false, true, a.discard_lands, false, 0, std::string{}, a.chosen_x, a.soulfire_own_targets, a.ponder_keep, a.crackle_targets, a.splice_count, a.chosen_float_color, a.enchant_target, a.bestow, a.replicate_count, a.convoke_green, a.convoke_other, a.phyrexian_life, a.evoke, a.adventure);
+            }
+        }
+        // Plan::vial_after_casts: the Vial puts this plan deferred, right after its last cast --
+        // the same point AIEngine::TakeTurn deploys them (after its graveyard-cast loop).
+        if (defer_vials)
+        {
+            for (const Action& a : acts)
+            {
+                if (a.kind == Action::Kind::ActivateVial) { apply_vial(a.card_name); }
             }
         }
 
@@ -31884,9 +31912,11 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
     // tap could be performed inside a sub-plan instead of the line -- moot today, since the branch
     // above has already drained them, but the invariant should not depend on that.
     pre_taps_armed = plan.searched_order;
+    vial_after_armed = plan.vial_after_casts;
     apply_plan_actions(plan.actions, plan.searched_order);
     pre_taps_armed   = false;
     human_seq_inline = false;
+    vial_after_armed = false;
 
     // Krenko, Mob Boss taps AFTER the main casts, so X = Goblins you control counts this turn's
     // developed board (the tokens then count toward Skirk fuel / a later attack). Free ({T} only).
@@ -39799,6 +39829,54 @@ static void AppendSubdecisionAxes(const GameState& state, bool is_pre_combat,
     }
 }
 
+// SEARCHED VIAL-PUT ORDER (Plan::vial_after_casts). For every BASE plan whose Vial puts and hand casts
+// can interact (TurnSolver::VialOrderMatters -- a Metallic Mimic / Forerunner of the Coalition /
+// Daring Buccaneer cast alongside a Vial put), append ONE clone that runs the puts after the casts.
+// The base keeps the historical puts-first order, so both orders are scored and the SEARCH decides:
+// neither is a dominance rule (a Vial-put Mimic before a cast Pirate wants puts-first; a cast Mimic
+// before a Vial-put Pirate wants puts-last; Vial-put Forerunner + cast Mimic is a real trade of one
+// drain against one +1/+1 counter).
+//
+// SOUND PRICING. The clone inherits the base's affordability verdict, which the enumerator reached
+// under the PUTS-FIRST order (SameSubsetRevealSurcharge removes the Vial-put cards from hand before
+// walking the casts). Running the puts later can only leave MORE cards in hand for a reveal, and a
+// Vial put spends no mana, so the clone never costs more than the base -- never an under-priced line
+// the apply cannot pay. (The converse gap -- a subset affordable ONLY puts-last, e.g. a Buccaneer
+// that needs to reveal the Pirate a tight-mana turn also Vial-puts -- is not enumerated. Recorded as
+// a residual in the Pirates ledger.)
+//
+// LOCKSTEP SCOPE. Excluded: any plan that opens a mid-turn breakpoint (PlanOpensBreakpoint), because
+// the two worlds realise a breakpoint's continuation at different points of their cast loops and the
+// deferred puts would have to be threaded through both; and breakpoint continuation lists
+// (g_bp_enum_depth > 0), which are not new decisions. Base plans only (every other axis pin at its
+// default), so the axis stays additive. Byte-identical for every deck without the gate params.
+static void AppendVialOrderVariants(const GameState& state, std::vector<TurnSolver::Plan>& all)
+{
+    if (g_bp_enum_depth != 0 || all.empty()) { return; }
+    static const bool s_on = EnvOn("MTG_VIAL_ORDER_AXIS", true);   // DEFAULT ON; =0 disables
+    if (!s_on) { return; }
+    std::vector<TurnSolver::Plan> extra;
+    for (const TurnSolver::Plan& p : all)
+    {
+        if (p.vial_after_casts || p.searched_order) { continue; }
+        if (p.bp_choice >= 0 || p.scry_choice >= 0 || p.etbdig_choice >= 0 || p.tutor_choice >= 0
+            || p.lackey_choice >= 0 || p.ponder_choice >= 0 || p.discard_choice >= 0
+            || p.vial_charge_choice >= 0 || p.fling_victim_choice != -1
+            || p.tectonic_mode_choice != -1 || p.tectonic_keep_choice != -1
+            || p.saga_target_choice != -1 || p.saga_ch1_choice != -1 || p.dig_choice >= 0
+            || !p.sac_pins.empty() || p.freshmode_choice != 0 || p.tapmode_choice != 0)
+        { continue; }
+        if (!TurnSolver::VialOrderMatters(p)) { continue; }
+        if (PlanOpensBreakpoint(state, p) != 0) { continue; }
+        TurnSolver::Plan v = p;
+        v.vial_after_casts = true;
+        v.bp_wave0 = false;   // a clone does not inherit wave 0's fan-out (MTG_BP_AXIS_W0_CLEAR)
+        extra.push_back(std::move(v));
+    }
+    all.insert(all.end(), std::make_move_iterator(extra.begin()),
+                          std::make_move_iterator(extra.end()));
+}
+
 // One body for EnumeratePlansM2Memoized's three call points (memo-off fallback, verify
 // recompute, cache miss): the bare cast-only enumeration, plus -- under MTG_M2_AXES -- the m1
 // host's post-dedup sub-decision axis fan-out. Sharing one body is what keeps a verify recompute
@@ -39814,6 +39892,7 @@ static std::vector<TurnSolver::Plan> EnumerateM2PlansBody(const GameState& state
     { AppendBreakpointVariants(state, plans); }
     if (M2AxesEnabled() && g_bp_enum_depth == 0)
     { AppendSubdecisionAxes(state, /*is_pre_combat=*/false, plans); }
+    AppendVialOrderVariants(state, plans);   // self-gated on g_bp_enum_depth == 0
     return plans;
 }
 
@@ -39963,6 +40042,7 @@ static void PlanDomCensus(const std::vector<TurnSolver::Plan>& all)
             for (const Action& a : pl.breakpoint_actions) { adds(PlanDomKey(a)); }
             for (const std::string& w : pl.would_drop)    { adds(w); }
             add(pl.human_action_order);   // human-play only; present so the list is exhaustive
+            add(pl.vial_after_casts);
             add(static_cast<long long>(pl.human_pre_taps.size()));
             add(pl.human_untap_need);
             k.push_back(id_of(x, 'N'));   // class 'N': could never be mistaken for "more"
@@ -40062,6 +40142,9 @@ static std::vector<TurnSolver::Plan> EnumeratePlansWithLandUncached(const GameSt
         // guard AppendBreakpointVariants applies above).
         if (!is_pre_combat && M2AxesEnabled() && g_bp_enum_depth == 0)
         { AppendSubdecisionAxes(state, is_pre_combat, plans); }
+        // The vial-order axis runs on the no-drop path too (m1 AND m2): a Vial deck spends most of
+        // its turns with no land left to play, which is exactly when the puts and casts pile up.
+        AppendVialOrderVariants(state, plans);
         return plans;
     }
 
@@ -40828,6 +40911,7 @@ static std::vector<TurnSolver::Plan> EnumeratePlansWithLandUncached(const GameSt
 
     AppendBreakpointVariants(state, all);
     AppendSubdecisionAxes(state, is_pre_combat, all);
+    AppendVialOrderVariants(state, all);
 
     TRACE("plans", "T%d EnumeratePlansWithLand -> %zu plans (lands=%zu, hand=%zu)",
           state.turn_number, all.size(), land_names.size(), ap.hand.size());
@@ -55533,6 +55617,14 @@ TurnSolver::LineCheck TurnSolver::CheckLine(const GameState& state_in, bool is_p
                 }
             }
         }
+        // Vial-put ORDER (Plan::vial_after_casts) is a plan-level sub-decision wherever it can change
+        // the outcome: both variants carry the same casts and puts, so without a sub they would share
+        // a signature and the viewer could never commit "cast Mimic, then Vial-put the Pirate".
+        if (TurnSolver::VialOrderMatters(p))
+        {
+            const std::string when = p.vial_after_casts ? "after the casts" : "before the casts";
+            addSub("Aether Vial timing " + when, "Aether Vial timing", when, "Aether Vial", "vial_order");
+        }
         // Fetchland target is a plan-level sub-decision (cracking a fetch chooses what to get).
         if (!p.fetch_target.empty()) { addSub(p.land_to_play + " fetches " + p.fetch_target, p.land_to_play + " fetches", p.fetch_target, p.fetch_target, "fetch"); }
         // MDFC (Pathway) face is a plan-level sub-decision: both faces carry land_to_play == the hand
@@ -56733,6 +56825,26 @@ void TurnSolver::ApplyPlan(GameState& state, const Plan& plan, bool is_pre_comba
 // omit => byte-identical / references stay clean). Opaque sets (draw/stage/cascade breakpoint cards)
 // keep their plan/breakpoint order in the executor, not this sort; there the diff may over-report a
 // reorder, which is benign -- the engine then honours the human's exact queued order via searched_order.
+bool TurnSolver::VialOrderMatters(const Plan& plan)
+{
+    // Cheap pass first: this runs over every plan of every enumeration of every deck, and almost none
+    // hold a Vial put -- so no card lookup happens unless one does.
+    if (std::none_of(plan.actions.begin(), plan.actions.end(), [](const Action& a)
+                     { return a.kind == Action::Kind::ActivateVial; }))
+    { return false; }
+    for (const Action& a : plan.actions)
+    {
+        if (a.kind != Action::Kind::CastFromHand || a.sacrifice_land) { continue; }
+        const CardDefinition* d = a.def ? a.def : CardDatabase::Instance().Lookup(a.card_name);
+        if (d == nullptr) { continue; }
+        if (d->params.other_chosen_subtype_enters_counters > 0
+            || d->params.own_creature_enters_opp_life_loss > 0
+            || d->params.reveal_or_pay_cost.has_value())
+        { return true; }
+    }
+    return false;
+}
+
 std::vector<std::string> TurnSolver::CanonicalNonSacCastOrder(const GameState& state, const Plan& plan)
 {
     std::vector<int> order;

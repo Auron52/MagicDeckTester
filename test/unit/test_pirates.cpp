@@ -751,3 +751,109 @@ TEST_CASE("Forerunner drain lethal in a main phase is a win the rollout apply se
     CHECK(OpponentHasLost(s));
 }
 
+// ---- Vial-put order (Plan::vial_after_casts) ---------------------------------------------------
+
+namespace
+{
+
+TurnSolver::Plan CastAndVial(const std::string& cast, const std::string& vial, bool after)
+{
+    TurnSolver::Plan plan;
+    plan.land_decided = true;
+    Action c;
+    c.kind      = Action::Kind::CastFromHand;
+    c.card_name = cast;
+    c.def       = &Def(cast);
+    plan.actions.push_back(c);
+    Action v;
+    v.kind      = Action::Kind::ActivateVial;
+    v.card_name = vial;
+    plan.actions.push_back(v);
+    plan.vial_after_casts = after;
+    return plan;
+}
+
+int UntappedLands(const GameState& s)
+{
+    int n = 0;
+    for (const Permanent& p : s.battlefield) { if (p.card.IsLand() && !p.tapped) { ++n; } }
+    return n;
+}
+
+}   // namespace
+
+TEST_CASE("Vial order: cast Metallic Mimic THEN Vial-put a Pirate gives the Pirate Mimic's counter")
+{
+    EnsureCardsLoaded();
+    for (bool after : {false, true})
+    {
+        CAPTURE(after);
+        GameState s = PiratesState();
+        for (int k = 0; k < 2; ++k) { Put(s, "Mountain", 0, 300 + k); }
+        const int vi = Put(s, "Aether Vial", 0, 2);
+        s.battlefield[vi].charge_counters = 2;
+        s.players[0].hand.push_back(HandCard("Metallic Mimic", 3));
+        s.players[0].hand.push_back(HandCard("Dire Fleet Captain", 4));
+        const TurnSolver::Plan plan = CastAndVial("Metallic Mimic", "Dire Fleet Captain", after);
+        CHECK(TurnSolver::VialOrderMatters(plan));
+        TurnSolver::ApplyPlan(s, plan, /*is_pre_combat=*/true);
+        REQUIRE(CountNamed(s, "Metallic Mimic") == 1);
+        REQUIRE(CountNamed(s, "Dire Fleet Captain") == 1);
+        CHECK(PlusCounters(ByNumber(s, 4)) == (after ? 1 : 0));
+    }
+}
+
+TEST_CASE("Vial order: a Daring Buccaneer cast before the Vial put still reveals the Pirate")
+{
+    // Hand Buccaneer + Corsair Captain, Vial at 3. Puts-first: Corsair leaves the hand, Buccaneer
+    // has nothing to reveal and costs {2}{R}. Casts-first: it reveals the Corsair and costs {R}.
+    EnsureCardsLoaded();
+    for (bool after : {false, true})
+    {
+        CAPTURE(after);
+        GameState s = BuccaneerBoard(3, {"Daring Buccaneer", "Corsair Captain"});
+        const int vi = Put(s, "Aether Vial", 0, 70);
+        s.battlefield[vi].charge_counters = 3;   // Corsair Captain is MV 3
+        const TurnSolver::Plan plan = CastAndVial("Daring Buccaneer", "Corsair Captain", after);
+        TurnSolver::ApplyPlan(s, plan, true);
+        REQUIRE(CountNamed(s, "Daring Buccaneer") == 1);
+        REQUIRE(CountNamed(s, "Corsair Captain") == 1);
+        CHECK(UntappedLands(s) == (after ? 2 : 0));
+    }
+}
+
+TEST_CASE("Vial order: the enumerator offers the casts-first variant only where the order can matter")
+{
+    EnsureCardsLoaded();
+    auto variants = [](const GameState& s)
+    {
+        int n = 0;
+        for (const TurnSolver::Plan& p : TurnSolver::EnumerateMainPlans(s, true))
+        {
+            if (!p.vial_after_casts) { continue; }
+            ++n;
+            CHECK(TurnSolver::VialOrderMatters(p));
+        }
+        return n;
+    };
+    {
+        GameState s = PiratesState();
+        for (int k = 0; k < 2; ++k) { Put(s, "Mountain", 0, 300 + k); }
+        const int vi = Put(s, "Aether Vial", 0, 2);
+        s.battlefield[vi].charge_counters = 2;
+        s.players[0].hand.push_back(HandCard("Metallic Mimic", 3));
+        s.players[0].hand.push_back(HandCard("Dire Fleet Captain", 4));
+        CHECK(variants(s) > 0);
+    }
+    {
+        // No entering-effect source among the casts: Vial-put Dire Fleet Captain + cast Goblin Tomb
+        // Raider resolves identically either way -> no variant (and no other deck ever gets one).
+        GameState s = PiratesState();
+        for (int k = 0; k < 2; ++k) { Put(s, "Mountain", 0, 300 + k); }
+        const int vi = Put(s, "Aether Vial", 0, 2);
+        s.battlefield[vi].charge_counters = 2;
+        s.players[0].hand.push_back(HandCard("Goblin Tomb Raider", 3));
+        s.players[0].hand.push_back(HandCard("Dire Fleet Captain", 4));
+        CHECK(variants(s) == 0);
+    }
+}

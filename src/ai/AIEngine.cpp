@@ -4615,9 +4615,16 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
     // see a drop from an earlier plan on this worker thread. No-op unless the audit is on.
     if (AffordAuditOn()) { ResetDroppedCastNumbers(); }
 
-    for (const Action& a : plan.actions)
+    // Plan::vial_after_casts (lockstep twin of ApplyPlanDirect's vial_after_armed): this plan's Vial
+    // puts are deployed after its graveyard casts instead of here. Top-level plan only -- the
+    // continuation and recorded-script replays above deploy theirs first, as always.
+    const bool vial_after = plan.vial_after_casts;
+    if (!vial_after)
     {
-        if (a.kind == Action::Kind::ActivateVial) { deploy_via_vial(a.card_name); resolve_now(); }
+        for (const Action& a : plan.actions)
+        {
+            if (a.kind == Action::Kind::ActivateVial) { deploy_via_vial(a.card_name); resolve_now(); }
+        }
     }
     // Lotus Bloom: apply SacForMana (float the chosen colour) and Suspend BEFORE the batch pre-pay /
     // casts, exactly as the rollout's ApplyPlanDirect does at this same logical point -> lockstep. Both
@@ -4978,6 +4985,17 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
         if (staged_break || bp_trunc_exec) { break; }
         if (a.kind == Action::Kind::CastFromGraveyard)
         { cast_from_graveyard(a.card_name, a.discard_lands); note_draw_engine(a.card_name); resolve_now(); }
+    }
+    // Plan::vial_after_casts: the deferred Vial puts, at the point ApplyPlanDirect's apply_plan_actions
+    // deploys them (after its graveyard casts). Unguarded by staged_break / bp_trunc_exec on purpose,
+    // like the rollout's apply_vial: the variant is only ever emitted for plans that open no
+    // breakpoint (AppendVialOrderVariants), so neither flag can be set here.
+    if (vial_after)
+    {
+        for (const Action& a : plan.actions)
+        {
+            if (a.kind == Action::Kind::ActivateVial) { deploy_via_vial(a.card_name); resolve_now(); }
+        }
     }
 
     // Deferred-for-tutor drop (LandDropAfterHandLandTutor, depth-0 only): the pre-combat land
