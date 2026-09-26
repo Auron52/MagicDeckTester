@@ -1,5 +1,5 @@
 {
-  "seed": 1, "game_index": 0, "win_turn": 5, "won": true,
+  "seed": 1, "game_index": 0, "win_turn": 4, "won": true,
   "mulligan": { "count": 0, "bottom": [] },
   "decisions": [
     { "chosen": 1, "decision": {
@@ -68,7 +68,7 @@
   "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
 }
 },
-    { "chosen": 2, "decision": {
+    { "chosen": 0, "decision": {
   "decision_index": 4,
   "main_ordinal": 1,
   "type": "main_phase",
@@ -92,16 +92,15 @@
 },
     { "chosen": -1, "decision": {
   "decision_index": 5,
-  "main_ordinal": 2,
   "type": "main_phase",
   "turn": 2,
   "phase": "pre_main",
   "on_the_play": false,
   "mdfc_backs": ["Boulderloft Pathway", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
-  "me": { "life": 20, "battlefield": [{ "name": "Lightning Greaves", "idx": 3, "num": 25, "is_equip": true, "is_land": false }, { "name": "Plains", "idx": 0, "num": 26, "tapped": true, "is_land": true }, { "name": "Plains", "idx": 2, "num": 27, "tapped": true, "is_land": true }, { "name": "Venerable Knight", "idx": 1, "num": 53, "is_land": false }], "vial_counters": [], "hand": [{ "num": 1, "name": "Acclaimed Contender", "cost": "{2}{W}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 8, "name": "Adeline, Resplendent Cathar", "cost": "{1}{W}{W}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 21, "name": "Knight Exemplar", "cost": "{1}{W}{W}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 28, "name": "Plains", "cost": "", "mv": 0, "kind": "land" }, { "num": 57, "name": "Worthy Knight", "cost": "{1}{W}", "mv": 2, "kind": "permanent", "is_creature": true }], "graveyard": [], "library_size": 51, "land_drops_left": 0 },
+  "me": { "life": 20, "battlefield": [{ "name": "Plains", "idx": 0, "num": 26, "tapped": true, "is_land": true }, { "name": "Plains", "idx": 2, "num": 27, "tapped": true, "is_land": true }, { "name": "Venerable Knight", "idx": 1, "num": 53, "is_land": false }, { "name": "Worthy Knight", "idx": 3, "num": 57, "is_land": false }], "vial_counters": [], "hand": [{ "num": 1, "name": "Acclaimed Contender", "cost": "{2}{W}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 8, "name": "Adeline, Resplendent Cathar", "cost": "{1}{W}{W}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 21, "name": "Knight Exemplar", "cost": "{1}{W}{W}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 25, "name": "Lightning Greaves", "cost": "{2}", "mv": 2, "kind": "permanent" }, { "num": 28, "name": "Plains", "cost": "", "mv": 0, "kind": "land" }], "graveyard": [], "library_size": 51, "land_drops_left": 0 },
   "opponent": { "life": 20, "battlefield": [] },
   "plans": [
-    { "index": 0, "summary": "land=none; cast: equip Lightning Greaves → Venerable Knight", "land": null, "casts": [], "activations": ["Lightning Greaves"], "actions": [{ "card": "Lightning Greaves", "src_num": 25, "activate": true, "verb": "equip", "equip_host": 53, "equip_host_name": "Venerable Knight", "equip_src": 25 }] }
+    { "index": 0, "summary": "cast: (nothing)", "land": null, "casts": [], "actions": [] }
   ],
   "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
   "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
@@ -109,53 +108,44 @@
 },
     { "chosen": -1, "decision": {
   "decision_index": 6,
-  "main_ordinal": 3,
   "type": "main_phase",
   "turn": 2,
   "phase": "post_main",
   "on_the_play": false,
   "events": [{ "turn": 2, "kind": "combat", "text": "⚔ attacked: Venerable Knight (2) — 2 to opponent (20→18)" }],
   "mdfc_backs": ["Boulderloft Pathway", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
-  "me": { "life": 20, "battlefield": [{ "name": "Lightning Greaves", "idx": 3, "num": 25, "is_equip": true, "is_land": false }, { "name": "Plains", "idx": 0, "num": 26, "tapped": true, "is_land": true }, { "name": "Plains", "idx": 2, "num": 27, "tapped": true, "is_land": true }, { "name": "Venerable Knight", "idx": 1, "num": 53, "tapped": true, "is_land": false }], "vial_counters": [], "hand": [{ "num": 1, "name": "Acclaimed Contender", "cost": "{2}{W}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 8, "name": "Adeline, Resplendent Cathar", "cost": "{1}{W}{W}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 21, "name": "Knight Exemplar", "cost": "{1}{W}{W}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 28, "name": "Plains", "cost": "", "mv": 0, "kind": "land" }, { "num": 57, "name": "Worthy Knight", "cost": "{1}{W}", "mv": 2, "kind": "permanent", "is_creature": true }], "graveyard": [], "library_size": 51, "land_drops_left": 0 },
+  "me": { "life": 20, "battlefield": [{ "name": "Plains", "idx": 0, "num": 26, "tapped": true, "is_land": true }, { "name": "Plains", "idx": 2, "num": 27, "tapped": true, "is_land": true }, { "name": "Venerable Knight", "idx": 1, "num": 53, "tapped": true, "is_land": false }, { "name": "Worthy Knight", "idx": 3, "num": 57, "is_land": false }], "vial_counters": [], "hand": [{ "num": 1, "name": "Acclaimed Contender", "cost": "{2}{W}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 8, "name": "Adeline, Resplendent Cathar", "cost": "{1}{W}{W}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 21, "name": "Knight Exemplar", "cost": "{1}{W}{W}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 25, "name": "Lightning Greaves", "cost": "{2}", "mv": 2, "kind": "permanent" }, { "num": 28, "name": "Plains", "cost": "", "mv": 0, "kind": "land" }], "graveyard": [], "library_size": 51, "land_drops_left": 0 },
   "opponent": { "life": 18, "battlefield": [] },
   "plans": [
-    { "index": 0, "summary": "land=none; cast: equip Lightning Greaves → Venerable Knight", "land": null, "casts": [], "activations": ["Lightning Greaves"], "actions": [{ "card": "Lightning Greaves", "src_num": 25, "activate": true, "verb": "equip", "equip_host": 53, "equip_host_name": "Venerable Knight", "equip_src": 25 }] }
+    { "index": 0, "summary": "cast: (nothing)", "land": null, "casts": [], "actions": [] }
   ],
   "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
   "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
 }
 },
-    { "chosen": 3, "cast_order": ["*", "Knight Exemplar", "Lightning Greaves"], "decision": {
+    { "chosen": 1, "decision": {
   "decision_index": 7,
-  "main_ordinal": 4,
+  "main_ordinal": 2,
   "type": "main_phase",
   "turn": 3,
   "phase": "pre_main",
   "on_the_play": false,
   "drew": [{ "turn": 3, "card": "Acclaimed Contender" }],
   "mdfc_backs": ["Boulderloft Pathway", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
-  "me": { "life": 20, "battlefield": [{ "name": "Lightning Greaves", "idx": 3, "num": 25, "is_equip": true, "is_land": false }, { "name": "Plains", "idx": 0, "num": 26, "is_land": true, "taps": "W" }, { "name": "Plains", "idx": 2, "num": 27, "is_land": true, "taps": "W" }, { "name": "Venerable Knight", "idx": 1, "num": 53, "is_land": false }], "vial_counters": [], "hand": [{ "num": 1, "name": "Acclaimed Contender", "cost": "{2}{W}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 2, "name": "Acclaimed Contender", "cost": "{2}{W}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 8, "name": "Adeline, Resplendent Cathar", "cost": "{1}{W}{W}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 21, "name": "Knight Exemplar", "cost": "{1}{W}{W}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 28, "name": "Plains", "cost": "", "mv": 0, "kind": "land" }, { "num": 57, "name": "Worthy Knight", "cost": "{1}{W}", "mv": 2, "kind": "permanent", "is_creature": true }], "graveyard": [], "library_size": 50, "land_drops_left": 1 },
+  "me": { "life": 20, "battlefield": [{ "name": "Plains", "idx": 0, "num": 26, "is_land": true, "taps": "W" }, { "name": "Plains", "idx": 2, "num": 27, "is_land": true, "taps": "W" }, { "name": "Venerable Knight", "idx": 1, "num": 53, "is_land": false }, { "name": "Worthy Knight", "idx": 3, "num": 57, "is_land": false }], "vial_counters": [], "hand": [{ "num": 1, "name": "Acclaimed Contender", "cost": "{2}{W}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 2, "name": "Acclaimed Contender", "cost": "{2}{W}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 8, "name": "Adeline, Resplendent Cathar", "cost": "{1}{W}{W}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 21, "name": "Knight Exemplar", "cost": "{1}{W}{W}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 25, "name": "Lightning Greaves", "cost": "{2}", "mv": 2, "kind": "permanent" }, { "num": 28, "name": "Plains", "cost": "", "mv": 0, "kind": "land" }], "graveyard": [], "library_size": 50, "land_drops_left": 1 },
   "opponent": { "life": 18, "battlefield": [] },
   "plans": [
-    { "index": 0, "summary": "land=Plains; cast: Acclaimed Contender, equip Lightning Greaves → Acclaimed Contender", "land": "Plains", "casts": ["Acclaimed Contender"], "activations": ["Lightning Greaves"], "actions": [{ "card": "Acclaimed Contender" }, { "card": "Lightning Greaves", "src_num": 25, "activate": true, "verb": "equip", "equip_host": 1, "equip_host_name": "Acclaimed Contender", "equip_src": 25 }] },
-    { "index": 1, "summary": "land=Plains; cast: Acclaimed Contender, equip Lightning Greaves → Venerable Knight", "land": "Plains", "casts": ["Acclaimed Contender"], "activations": ["Lightning Greaves"], "actions": [{ "card": "Acclaimed Contender" }, { "card": "Lightning Greaves", "src_num": 25, "activate": true, "verb": "equip", "equip_host": 53, "equip_host_name": "Venerable Knight", "equip_src": 25 }] },
-    { "index": 2, "summary": "land=Plains; cast: Acclaimed Contender", "land": "Plains", "casts": ["Acclaimed Contender"], "actions": [{ "card": "Acclaimed Contender" }] },
-    { "index": 3, "summary": "land=Plains; cast: Knight Exemplar, equip Lightning Greaves → Knight Exemplar", "land": "Plains", "casts": ["Knight Exemplar"], "activations": ["Lightning Greaves"], "actions": [{ "card": "Knight Exemplar" }, { "card": "Lightning Greaves", "src_num": 25, "activate": true, "verb": "equip", "equip_host": 21, "equip_host_name": "Knight Exemplar", "equip_src": 25 }] },
-    { "index": 4, "summary": "land=Plains; cast: Adeline, Resplendent Cathar, equip Lightning Greaves → Adeline, Resplendent Cathar", "land": "Plains", "casts": ["Adeline, Resplendent Cathar"], "activations": ["Lightning Greaves"], "actions": [{ "card": "Adeline, Resplendent Cathar" }, { "card": "Lightning Greaves", "src_num": 25, "activate": true, "verb": "equip", "equip_host": 8, "equip_host_name": "Adeline, Resplendent Cathar", "equip_src": 25 }] },
-    { "index": 5, "summary": "land=Plains; cast: Worthy Knight, equip Lightning Greaves → Worthy Knight", "land": "Plains", "casts": ["Worthy Knight"], "activations": ["Lightning Greaves"], "actions": [{ "card": "Worthy Knight" }, { "card": "Lightning Greaves", "src_num": 25, "activate": true, "verb": "equip", "equip_host": 57, "equip_host_name": "Worthy Knight", "equip_src": 25 }] },
-    { "index": 6, "summary": "land=none; cast: Worthy Knight, equip Lightning Greaves → Worthy Knight", "land": null, "casts": ["Worthy Knight"], "activations": ["Lightning Greaves"], "actions": [{ "card": "Worthy Knight" }, { "card": "Lightning Greaves", "src_num": 25, "activate": true, "verb": "equip", "equip_host": 57, "equip_host_name": "Worthy Knight", "equip_src": 25 }] },
-    { "index": 7, "summary": "land=Plains; cast: Knight Exemplar, equip Lightning Greaves → Venerable Knight", "land": "Plains", "casts": ["Knight Exemplar"], "activations": ["Lightning Greaves"], "actions": [{ "card": "Knight Exemplar" }, { "card": "Lightning Greaves", "src_num": 25, "activate": true, "verb": "equip", "equip_host": 53, "equip_host_name": "Venerable Knight", "equip_src": 25 }] },
-    { "index": 8, "summary": "land=Plains; cast: Adeline, Resplendent Cathar, equip Lightning Greaves → Venerable Knight", "land": "Plains", "casts": ["Adeline, Resplendent Cathar"], "activations": ["Lightning Greaves"], "actions": [{ "card": "Adeline, Resplendent Cathar" }, { "card": "Lightning Greaves", "src_num": 25, "activate": true, "verb": "equip", "equip_host": 53, "equip_host_name": "Venerable Knight", "equip_src": 25 }] },
-    { "index": 9, "summary": "land=Plains; cast: Worthy Knight, equip Lightning Greaves → Venerable Knight", "land": "Plains", "casts": ["Worthy Knight"], "activations": ["Lightning Greaves"], "actions": [{ "card": "Worthy Knight" }, { "card": "Lightning Greaves", "src_num": 25, "activate": true, "verb": "equip", "equip_host": 53, "equip_host_name": "Venerable Knight", "equip_src": 25 }] },
-    { "index": 10, "summary": "land=none; cast: Worthy Knight, equip Lightning Greaves → Venerable Knight", "land": null, "casts": ["Worthy Knight"], "activations": ["Lightning Greaves"], "actions": [{ "card": "Worthy Knight" }, { "card": "Lightning Greaves", "src_num": 25, "activate": true, "verb": "equip", "equip_host": 53, "equip_host_name": "Venerable Knight", "equip_src": 25 }] },
-    { "index": 11, "summary": "land=Plains; cast: Knight Exemplar", "land": "Plains", "casts": ["Knight Exemplar"], "actions": [{ "card": "Knight Exemplar" }] },
-    { "index": 12, "summary": "land=Plains; cast: Adeline, Resplendent Cathar", "land": "Plains", "casts": ["Adeline, Resplendent Cathar"], "actions": [{ "card": "Adeline, Resplendent Cathar" }] },
-    { "index": 13, "summary": "land=Plains; cast: Worthy Knight", "land": "Plains", "casts": ["Worthy Knight"], "actions": [{ "card": "Worthy Knight" }] },
-    { "index": 14, "summary": "land=none; cast: Worthy Knight", "land": null, "casts": ["Worthy Knight"], "actions": [{ "card": "Worthy Knight" }] },
-    { "index": 15, "summary": "land=Plains; cast: equip Lightning Greaves → Venerable Knight", "land": "Plains", "casts": [], "activations": ["Lightning Greaves"], "actions": [{ "card": "Lightning Greaves", "src_num": 25, "activate": true, "verb": "equip", "equip_host": 53, "equip_host_name": "Venerable Knight", "equip_src": 25 }] },
-    { "index": 16, "summary": "land=none; cast: equip Lightning Greaves → Venerable Knight", "land": null, "casts": [], "activations": ["Lightning Greaves"], "actions": [{ "card": "Lightning Greaves", "src_num": 25, "activate": true, "verb": "equip", "equip_host": 53, "equip_host_name": "Venerable Knight", "equip_src": 25 }] },
-    { "index": 17, "summary": "land=Plains; cast: (nothing)", "land": "Plains", "casts": [], "actions": [] },
-    { "index": 18, "summary": "land=none; cast: (nothing)", "land": null, "casts": [], "actions": [] }
+    { "index": 0, "summary": "land=Plains; cast: Acclaimed Contender", "land": "Plains", "casts": ["Acclaimed Contender"], "actions": [{ "card": "Acclaimed Contender" }] },
+    { "index": 1, "summary": "land=Plains; cast: Adeline, Resplendent Cathar", "land": "Plains", "casts": ["Adeline, Resplendent Cathar"], "actions": [{ "card": "Adeline, Resplendent Cathar" }] },
+    { "index": 2, "summary": "land=Plains; cast: Knight Exemplar", "land": "Plains", "casts": ["Knight Exemplar"], "actions": [{ "card": "Knight Exemplar" }] },
+    { "index": 3, "summary": "land=Plains; cast: Lightning Greaves, equip Lightning Greaves → Venerable Knight", "land": "Plains", "casts": ["Lightning Greaves"], "activations": ["Lightning Greaves"], "actions": [{ "card": "Lightning Greaves" }, { "card": "Lightning Greaves", "src_num": 25, "activate": true, "verb": "equip", "equip_host": 53, "equip_host_name": "Venerable Knight", "equip_src": 25 }] },
+    { "index": 4, "summary": "land=Plains; cast: Lightning Greaves, equip Lightning Greaves → Worthy Knight", "land": "Plains", "casts": ["Lightning Greaves"], "activations": ["Lightning Greaves"], "actions": [{ "card": "Lightning Greaves" }, { "card": "Lightning Greaves", "src_num": 25, "activate": true, "verb": "equip", "equip_host": 57, "equip_host_name": "Worthy Knight", "equip_src": 25 }] },
+    { "index": 5, "summary": "land=none; cast: Lightning Greaves, equip Lightning Greaves → Venerable Knight", "land": null, "casts": ["Lightning Greaves"], "activations": ["Lightning Greaves"], "actions": [{ "card": "Lightning Greaves" }, { "card": "Lightning Greaves", "src_num": 25, "activate": true, "verb": "equip", "equip_host": 53, "equip_host_name": "Venerable Knight", "equip_src": 25 }] },
+    { "index": 6, "summary": "land=none; cast: Lightning Greaves, equip Lightning Greaves → Worthy Knight", "land": null, "casts": ["Lightning Greaves"], "activations": ["Lightning Greaves"], "actions": [{ "card": "Lightning Greaves" }, { "card": "Lightning Greaves", "src_num": 25, "activate": true, "verb": "equip", "equip_host": 57, "equip_host_name": "Worthy Knight", "equip_src": 25 }] },
+    { "index": 7, "summary": "land=Plains; cast: Lightning Greaves", "land": "Plains", "casts": ["Lightning Greaves"], "actions": [{ "card": "Lightning Greaves" }] },
+    { "index": 8, "summary": "land=none; cast: Lightning Greaves", "land": null, "casts": ["Lightning Greaves"], "actions": [{ "card": "Lightning Greaves" }] },
+    { "index": 9, "summary": "land=Plains; cast: (nothing)", "land": "Plains", "casts": [], "actions": [] },
+    { "index": 10, "summary": "land=none; cast: (nothing)", "land": null, "casts": [], "actions": [] }
   ],
   "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
   "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
@@ -163,16 +153,15 @@
 },
     { "chosen": -1, "decision": {
   "decision_index": 8,
-  "main_ordinal": 5,
   "type": "main_phase",
   "turn": 3,
   "phase": "pre_main",
   "on_the_play": false,
   "mdfc_backs": ["Boulderloft Pathway", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
-  "me": { "life": 20, "battlefield": [{ "name": "Knight Exemplar", "idx": 5, "num": 21, "is_land": false }, { "name": "Lightning Greaves", "idx": 3, "num": 25, "is_equip": true, "attached_to": 21, "is_land": false }, { "name": "Plains", "idx": 0, "num": 26, "tapped": true, "is_land": true }, { "name": "Plains", "idx": 2, "num": 27, "tapped": true, "is_land": true }, { "name": "Plains", "idx": 4, "num": 28, "tapped": true, "is_land": true }, { "name": "Venerable Knight", "idx": 1, "num": 53, "is_land": false }], "vial_counters": [], "hand": [{ "num": 1, "name": "Acclaimed Contender", "cost": "{2}{W}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 2, "name": "Acclaimed Contender", "cost": "{2}{W}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 8, "name": "Adeline, Resplendent Cathar", "cost": "{1}{W}{W}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 57, "name": "Worthy Knight", "cost": "{1}{W}", "mv": 2, "kind": "permanent", "is_creature": true }], "graveyard": [], "library_size": 50, "land_drops_left": 0 },
+  "me": { "life": 20, "battlefield": [{ "name": "1/1 Human Token", "idx": 5, "num": 1000, "is_land": false }, { "name": "Adeline, Resplendent Cathar", "idx": 6, "num": 8, "is_land": false }, { "name": "Plains", "idx": 0, "num": 26, "tapped": true, "is_land": true }, { "name": "Plains", "idx": 2, "num": 27, "tapped": true, "is_land": true }, { "name": "Plains", "idx": 4, "num": 28, "tapped": true, "is_land": true }, { "name": "Venerable Knight", "idx": 1, "num": 53, "is_land": false }, { "name": "Worthy Knight", "idx": 3, "num": 57, "is_land": false }], "vial_counters": [], "hand": [{ "num": 1, "name": "Acclaimed Contender", "cost": "{2}{W}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 2, "name": "Acclaimed Contender", "cost": "{2}{W}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 21, "name": "Knight Exemplar", "cost": "{1}{W}{W}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 25, "name": "Lightning Greaves", "cost": "{2}", "mv": 2, "kind": "permanent" }], "graveyard": [], "library_size": 50, "land_drops_left": 0 },
   "opponent": { "life": 18, "battlefield": [] },
   "plans": [
-    { "index": 0, "summary": "land=none; cast: equip Lightning Greaves → Venerable Knight", "land": null, "casts": [], "activations": ["Lightning Greaves"], "actions": [{ "card": "Lightning Greaves", "src_num": 25, "activate": true, "verb": "equip", "equip_host": 53, "equip_host_name": "Venerable Knight", "equip_src": 25 }] }
+    { "index": 0, "summary": "cast: (nothing)", "land": null, "casts": [], "actions": [] }
   ],
   "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
   "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
@@ -180,56 +169,51 @@
 },
     { "chosen": -1, "decision": {
   "decision_index": 9,
-  "main_ordinal": 6,
   "type": "main_phase",
   "turn": 3,
   "phase": "post_main",
   "on_the_play": false,
-  "events": [{ "turn": 3, "kind": "combat", "text": "⚔ attacked: Venerable Knight (3), Knight Exemplar (2) — 5 to opponent (18→13)" }],
+  "events": [{ "turn": 3, "kind": "combat", "text": "⚔ attacked: Venerable Knight (2), Worthy Knight (2), 1/1 Human Token (1) — 5 to opponent (18→13)" }],
   "mdfc_backs": ["Boulderloft Pathway", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
-  "me": { "life": 20, "battlefield": [{ "name": "Knight Exemplar", "idx": 5, "num": 21, "tapped": true, "is_land": false }, { "name": "Lightning Greaves", "idx": 3, "num": 25, "is_equip": true, "attached_to": 21, "is_land": false }, { "name": "Plains", "idx": 0, "num": 26, "tapped": true, "is_land": true }, { "name": "Plains", "idx": 2, "num": 27, "tapped": true, "is_land": true }, { "name": "Plains", "idx": 4, "num": 28, "tapped": true, "is_land": true }, { "name": "Venerable Knight", "idx": 1, "num": 53, "tapped": true, "is_land": false }], "vial_counters": [], "hand": [{ "num": 1, "name": "Acclaimed Contender", "cost": "{2}{W}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 2, "name": "Acclaimed Contender", "cost": "{2}{W}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 8, "name": "Adeline, Resplendent Cathar", "cost": "{1}{W}{W}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 57, "name": "Worthy Knight", "cost": "{1}{W}", "mv": 2, "kind": "permanent", "is_creature": true }], "graveyard": [], "library_size": 50, "land_drops_left": 0 },
+  "me": { "life": 20, "battlefield": [{ "name": "1/1 Human Token", "idx": 5, "num": 1000, "is_land": false }, { "name": "1/1 Human Token", "idx": 7, "num": 1001, "tapped": true, "is_land": false }, { "name": "Adeline, Resplendent Cathar", "idx": 6, "num": 8, "is_land": false }, { "name": "Plains", "idx": 0, "num": 26, "tapped": true, "is_land": true }, { "name": "Plains", "idx": 2, "num": 27, "tapped": true, "is_land": true }, { "name": "Plains", "idx": 4, "num": 28, "tapped": true, "is_land": true }, { "name": "Venerable Knight", "idx": 1, "num": 53, "tapped": true, "is_land": false }, { "name": "Worthy Knight", "idx": 3, "num": 57, "tapped": true, "is_land": false }], "vial_counters": [], "hand": [{ "num": 1, "name": "Acclaimed Contender", "cost": "{2}{W}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 2, "name": "Acclaimed Contender", "cost": "{2}{W}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 21, "name": "Knight Exemplar", "cost": "{1}{W}{W}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 25, "name": "Lightning Greaves", "cost": "{2}", "mv": 2, "kind": "permanent" }], "graveyard": [], "library_size": 50, "land_drops_left": 0 },
   "opponent": { "life": 13, "battlefield": [] },
   "plans": [
-    { "index": 0, "summary": "land=none; cast: equip Lightning Greaves → Venerable Knight", "land": null, "casts": [], "activations": ["Lightning Greaves"], "actions": [{ "card": "Lightning Greaves", "src_num": 25, "activate": true, "verb": "equip", "equip_host": 53, "equip_host_name": "Venerable Knight", "equip_src": 25 }] }
+    { "index": 0, "summary": "cast: (nothing)", "land": null, "casts": [], "actions": [] }
   ],
   "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
   "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
 }
 },
-    { "chosen": 1, "cast_order": ["*", "Adeline, Resplendent Cathar", "Lightning Greaves"], "decision": {
+    { "chosen": 2, "decision": {
   "decision_index": 10,
-  "main_ordinal": 7,
+  "main_ordinal": 3,
   "type": "main_phase",
   "turn": 4,
   "phase": "pre_main",
   "on_the_play": false,
   "drew": [{ "turn": 4, "card": "Plains" }],
   "mdfc_backs": ["Boulderloft Pathway", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
-  "me": { "life": 20, "battlefield": [{ "name": "Knight Exemplar", "idx": 5, "num": 21, "is_land": false }, { "name": "Lightning Greaves", "idx": 3, "num": 25, "is_equip": true, "attached_to": 21, "is_land": false }, { "name": "Plains", "idx": 0, "num": 26, "is_land": true, "taps": "W" }, { "name": "Plains", "idx": 2, "num": 27, "is_land": true, "taps": "W" }, { "name": "Plains", "idx": 4, "num": 28, "is_land": true, "taps": "W" }, { "name": "Venerable Knight", "idx": 1, "num": 53, "is_land": false }], "vial_counters": [], "hand": [{ "num": 1, "name": "Acclaimed Contender", "cost": "{2}{W}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 2, "name": "Acclaimed Contender", "cost": "{2}{W}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 8, "name": "Adeline, Resplendent Cathar", "cost": "{1}{W}{W}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 29, "name": "Plains", "cost": "", "mv": 0, "kind": "land" }, { "num": 57, "name": "Worthy Knight", "cost": "{1}{W}", "mv": 2, "kind": "permanent", "is_creature": true }], "graveyard": [], "library_size": 49, "land_drops_left": 1 },
+  "me": { "life": 20, "battlefield": [{ "name": "1/1 Human Token", "idx": 5, "num": 1000, "is_land": false }, { "name": "1/1 Human Token", "idx": 7, "num": 1001, "is_land": false }, { "name": "Adeline, Resplendent Cathar", "idx": 6, "num": 8, "is_land": false }, { "name": "Plains", "idx": 0, "num": 26, "is_land": true, "taps": "W" }, { "name": "Plains", "idx": 2, "num": 27, "is_land": true, "taps": "W" }, { "name": "Plains", "idx": 4, "num": 28, "is_land": true, "taps": "W" }, { "name": "Venerable Knight", "idx": 1, "num": 53, "is_land": false }, { "name": "Worthy Knight", "idx": 3, "num": 57, "is_land": false }], "vial_counters": [], "hand": [{ "num": 1, "name": "Acclaimed Contender", "cost": "{2}{W}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 2, "name": "Acclaimed Contender", "cost": "{2}{W}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 21, "name": "Knight Exemplar", "cost": "{1}{W}{W}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 25, "name": "Lightning Greaves", "cost": "{2}", "mv": 2, "kind": "permanent" }, { "num": 29, "name": "Plains", "cost": "", "mv": 0, "kind": "land" }], "graveyard": [], "library_size": 49, "land_drops_left": 1 },
   "opponent": { "life": 13, "battlefield": [] },
   "plans": [
-    { "index": 0, "summary": "land=Plains; cast: Acclaimed Contender, equip Lightning Greaves → Acclaimed Contender", "land": "Plains", "casts": ["Acclaimed Contender"], "activations": ["Lightning Greaves"], "actions": [{ "card": "Acclaimed Contender" }, { "card": "Lightning Greaves", "src_num": 25, "activate": true, "verb": "equip", "equip_host": 1, "equip_host_name": "Acclaimed Contender", "equip_src": 25 }] },
-    { "index": 1, "summary": "land=Plains; cast: Adeline, Resplendent Cathar, equip Lightning Greaves → Adeline, Resplendent Cathar", "land": "Plains", "casts": ["Adeline, Resplendent Cathar"], "activations": ["Lightning Greaves"], "actions": [{ "card": "Adeline, Resplendent Cathar" }, { "card": "Lightning Greaves", "src_num": 25, "activate": true, "verb": "equip", "equip_host": 8, "equip_host_name": "Adeline, Resplendent Cathar", "equip_src": 25 }] },
-    { "index": 2, "summary": "land=none; cast: Acclaimed Contender, equip Lightning Greaves → Acclaimed Contender", "land": null, "casts": ["Acclaimed Contender"], "activations": ["Lightning Greaves"], "actions": [{ "card": "Acclaimed Contender" }, { "card": "Lightning Greaves", "src_num": 25, "activate": true, "verb": "equip", "equip_host": 1, "equip_host_name": "Acclaimed Contender", "equip_src": 25 }] },
-    { "index": 3, "summary": "land=none; cast: Adeline, Resplendent Cathar, equip Lightning Greaves → Adeline, Resplendent Cathar", "land": null, "casts": ["Adeline, Resplendent Cathar"], "activations": ["Lightning Greaves"], "actions": [{ "card": "Adeline, Resplendent Cathar" }, { "card": "Lightning Greaves", "src_num": 25, "activate": true, "verb": "equip", "equip_host": 8, "equip_host_name": "Adeline, Resplendent Cathar", "equip_src": 25 }] },
-    { "index": 4, "summary": "land=Plains; cast: Acclaimed Contender, equip Lightning Greaves → Venerable Knight", "land": "Plains", "casts": ["Acclaimed Contender"], "activations": ["Lightning Greaves"], "actions": [{ "card": "Acclaimed Contender" }, { "card": "Lightning Greaves", "src_num": 25, "activate": true, "verb": "equip", "equip_host": 53, "equip_host_name": "Venerable Knight", "equip_src": 25 }] },
-    { "index": 5, "summary": "land=Plains; cast: Adeline, Resplendent Cathar, equip Lightning Greaves → Venerable Knight", "land": "Plains", "casts": ["Adeline, Resplendent Cathar"], "activations": ["Lightning Greaves"], "actions": [{ "card": "Adeline, Resplendent Cathar" }, { "card": "Lightning Greaves", "src_num": 25, "activate": true, "verb": "equip", "equip_host": 53, "equip_host_name": "Venerable Knight", "equip_src": 25 }] },
-    { "index": 6, "summary": "land=none; cast: Acclaimed Contender, equip Lightning Greaves → Venerable Knight", "land": null, "casts": ["Acclaimed Contender"], "activations": ["Lightning Greaves"], "actions": [{ "card": "Acclaimed Contender" }, { "card": "Lightning Greaves", "src_num": 25, "activate": true, "verb": "equip", "equip_host": 53, "equip_host_name": "Venerable Knight", "equip_src": 25 }] },
-    { "index": 7, "summary": "land=none; cast: Adeline, Resplendent Cathar, equip Lightning Greaves → Venerable Knight", "land": null, "casts": ["Adeline, Resplendent Cathar"], "activations": ["Lightning Greaves"], "actions": [{ "card": "Adeline, Resplendent Cathar" }, { "card": "Lightning Greaves", "src_num": 25, "activate": true, "verb": "equip", "equip_host": 53, "equip_host_name": "Venerable Knight", "equip_src": 25 }] },
-    { "index": 8, "summary": "land=Plains; cast: Acclaimed Contender", "land": "Plains", "casts": ["Acclaimed Contender"], "actions": [{ "card": "Acclaimed Contender" }] },
-    { "index": 9, "summary": "land=Plains; cast: Adeline, Resplendent Cathar", "land": "Plains", "casts": ["Adeline, Resplendent Cathar"], "actions": [{ "card": "Adeline, Resplendent Cathar" }] },
-    { "index": 10, "summary": "land=none; cast: Acclaimed Contender", "land": null, "casts": ["Acclaimed Contender"], "actions": [{ "card": "Acclaimed Contender" }] },
-    { "index": 11, "summary": "land=none; cast: Adeline, Resplendent Cathar", "land": null, "casts": ["Adeline, Resplendent Cathar"], "actions": [{ "card": "Adeline, Resplendent Cathar" }] },
-    { "index": 12, "summary": "land=Plains; cast: Worthy Knight, equip Lightning Greaves → Worthy Knight", "land": "Plains", "casts": ["Worthy Knight"], "activations": ["Lightning Greaves"], "actions": [{ "card": "Worthy Knight" }, { "card": "Lightning Greaves", "src_num": 25, "activate": true, "verb": "equip", "equip_host": 57, "equip_host_name": "Worthy Knight", "equip_src": 25 }] },
-    { "index": 13, "summary": "land=none; cast: Worthy Knight, equip Lightning Greaves → Worthy Knight", "land": null, "casts": ["Worthy Knight"], "activations": ["Lightning Greaves"], "actions": [{ "card": "Worthy Knight" }, { "card": "Lightning Greaves", "src_num": 25, "activate": true, "verb": "equip", "equip_host": 57, "equip_host_name": "Worthy Knight", "equip_src": 25 }] },
-    { "index": 14, "summary": "land=Plains; cast: Worthy Knight, equip Lightning Greaves → Venerable Knight", "land": "Plains", "casts": ["Worthy Knight"], "activations": ["Lightning Greaves"], "actions": [{ "card": "Worthy Knight" }, { "card": "Lightning Greaves", "src_num": 25, "activate": true, "verb": "equip", "equip_host": 53, "equip_host_name": "Venerable Knight", "equip_src": 25 }] },
-    { "index": 15, "summary": "land=none; cast: Worthy Knight, equip Lightning Greaves → Venerable Knight", "land": null, "casts": ["Worthy Knight"], "activations": ["Lightning Greaves"], "actions": [{ "card": "Worthy Knight" }, { "card": "Lightning Greaves", "src_num": 25, "activate": true, "verb": "equip", "equip_host": 53, "equip_host_name": "Venerable Knight", "equip_src": 25 }] },
-    { "index": 16, "summary": "land=Plains; cast: Worthy Knight", "land": "Plains", "casts": ["Worthy Knight"], "actions": [{ "card": "Worthy Knight" }] },
-    { "index": 17, "summary": "land=none; cast: Worthy Knight", "land": null, "casts": ["Worthy Knight"], "actions": [{ "card": "Worthy Knight" }] },
-    { "index": 18, "summary": "land=Plains; cast: equip Lightning Greaves → Venerable Knight", "land": "Plains", "casts": [], "activations": ["Lightning Greaves"], "actions": [{ "card": "Lightning Greaves", "src_num": 25, "activate": true, "verb": "equip", "equip_host": 53, "equip_host_name": "Venerable Knight", "equip_src": 25 }] },
-    { "index": 19, "summary": "land=none; cast: equip Lightning Greaves → Venerable Knight", "land": null, "casts": [], "activations": ["Lightning Greaves"], "actions": [{ "card": "Lightning Greaves", "src_num": 25, "activate": true, "verb": "equip", "equip_host": 53, "equip_host_name": "Venerable Knight", "equip_src": 25 }] },
-    { "index": 20, "summary": "land=Plains; cast: (nothing)", "land": "Plains", "casts": [], "actions": [] },
-    { "index": 21, "summary": "land=none; cast: (nothing)", "land": null, "casts": [], "actions": [] }
+    { "index": 0, "summary": "land=Plains; cast: Acclaimed Contender", "land": "Plains", "casts": ["Acclaimed Contender"], "actions": [{ "card": "Acclaimed Contender" }] },
+    { "index": 1, "summary": "land=none; cast: Acclaimed Contender", "land": null, "casts": ["Acclaimed Contender"], "actions": [{ "card": "Acclaimed Contender" }] },
+    { "index": 2, "summary": "land=Plains; cast: Knight Exemplar", "land": "Plains", "casts": ["Knight Exemplar"], "actions": [{ "card": "Knight Exemplar" }] },
+    { "index": 3, "summary": "land=none; cast: Knight Exemplar", "land": null, "casts": ["Knight Exemplar"], "actions": [{ "card": "Knight Exemplar" }] },
+    { "index": 4, "summary": "land=Plains; cast: Lightning Greaves, equip Lightning Greaves → Venerable Knight", "land": "Plains", "casts": ["Lightning Greaves"], "activations": ["Lightning Greaves"], "actions": [{ "card": "Lightning Greaves" }, { "card": "Lightning Greaves", "src_num": 25, "activate": true, "verb": "equip", "equip_host": 53, "equip_host_name": "Venerable Knight", "equip_src": 25 }] },
+    { "index": 5, "summary": "land=Plains; cast: Lightning Greaves, equip Lightning Greaves → Worthy Knight", "land": "Plains", "casts": ["Lightning Greaves"], "activations": ["Lightning Greaves"], "actions": [{ "card": "Lightning Greaves" }, { "card": "Lightning Greaves", "src_num": 25, "activate": true, "verb": "equip", "equip_host": 57, "equip_host_name": "Worthy Knight", "equip_src": 25 }] },
+    { "index": 6, "summary": "land=Plains; cast: Lightning Greaves, equip Lightning Greaves → 1/1 Human Token", "land": "Plains", "casts": ["Lightning Greaves"], "activations": ["Lightning Greaves"], "actions": [{ "card": "Lightning Greaves" }, { "card": "Lightning Greaves", "src_num": 25, "activate": true, "verb": "equip", "equip_host": 1000, "equip_host_name": "1/1 Human Token", "equip_src": 25 }] },
+    { "index": 7, "summary": "land=Plains; cast: Lightning Greaves, equip Lightning Greaves → Adeline, Resplendent Cathar", "land": "Plains", "casts": ["Lightning Greaves"], "activations": ["Lightning Greaves"], "actions": [{ "card": "Lightning Greaves" }, { "card": "Lightning Greaves", "src_num": 25, "activate": true, "verb": "equip", "equip_host": 8, "equip_host_name": "Adeline, Resplendent Cathar", "equip_src": 25 }] },
+    { "index": 8, "summary": "land=Plains; cast: Lightning Greaves, equip Lightning Greaves → 1/1 Human Token", "land": "Plains", "casts": ["Lightning Greaves"], "activations": ["Lightning Greaves"], "actions": [{ "card": "Lightning Greaves" }, { "card": "Lightning Greaves", "src_num": 25, "activate": true, "verb": "equip", "equip_host": 1001, "equip_host_name": "1/1 Human Token", "equip_src": 25 }] },
+    { "index": 9, "summary": "land=none; cast: Lightning Greaves, equip Lightning Greaves → Venerable Knight", "land": null, "casts": ["Lightning Greaves"], "activations": ["Lightning Greaves"], "actions": [{ "card": "Lightning Greaves" }, { "card": "Lightning Greaves", "src_num": 25, "activate": true, "verb": "equip", "equip_host": 53, "equip_host_name": "Venerable Knight", "equip_src": 25 }] },
+    { "index": 10, "summary": "land=none; cast: Lightning Greaves, equip Lightning Greaves → Worthy Knight", "land": null, "casts": ["Lightning Greaves"], "activations": ["Lightning Greaves"], "actions": [{ "card": "Lightning Greaves" }, { "card": "Lightning Greaves", "src_num": 25, "activate": true, "verb": "equip", "equip_host": 57, "equip_host_name": "Worthy Knight", "equip_src": 25 }] },
+    { "index": 11, "summary": "land=none; cast: Lightning Greaves, equip Lightning Greaves → 1/1 Human Token", "land": null, "casts": ["Lightning Greaves"], "activations": ["Lightning Greaves"], "actions": [{ "card": "Lightning Greaves" }, { "card": "Lightning Greaves", "src_num": 25, "activate": true, "verb": "equip", "equip_host": 1000, "equip_host_name": "1/1 Human Token", "equip_src": 25 }] },
+    { "index": 12, "summary": "land=none; cast: Lightning Greaves, equip Lightning Greaves → Adeline, Resplendent Cathar", "land": null, "casts": ["Lightning Greaves"], "activations": ["Lightning Greaves"], "actions": [{ "card": "Lightning Greaves" }, { "card": "Lightning Greaves", "src_num": 25, "activate": true, "verb": "equip", "equip_host": 8, "equip_host_name": "Adeline, Resplendent Cathar", "equip_src": 25 }] },
+    { "index": 13, "summary": "land=none; cast: Lightning Greaves, equip Lightning Greaves → 1/1 Human Token", "land": null, "casts": ["Lightning Greaves"], "activations": ["Lightning Greaves"], "actions": [{ "card": "Lightning Greaves" }, { "card": "Lightning Greaves", "src_num": 25, "activate": true, "verb": "equip", "equip_host": 1001, "equip_host_name": "1/1 Human Token", "equip_src": 25 }] },
+    { "index": 14, "summary": "land=Plains; cast: Lightning Greaves", "land": "Plains", "casts": ["Lightning Greaves"], "actions": [{ "card": "Lightning Greaves" }] },
+    { "index": 15, "summary": "land=none; cast: Lightning Greaves", "land": null, "casts": ["Lightning Greaves"], "actions": [{ "card": "Lightning Greaves" }] },
+    { "index": 16, "summary": "land=Plains; cast: (nothing)", "land": "Plains", "casts": [], "actions": [] },
+    { "index": 17, "summary": "land=none; cast: (nothing)", "land": null, "casts": [], "actions": [] }
   ],
   "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
   "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
@@ -237,100 +221,15 @@
 },
     { "chosen": -1, "decision": {
   "decision_index": 11,
-  "main_ordinal": 8,
   "type": "main_phase",
   "turn": 4,
   "phase": "pre_main",
   "on_the_play": false,
   "mdfc_backs": ["Boulderloft Pathway", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
-  "me": { "life": 20, "battlefield": [{ "name": "Adeline, Resplendent Cathar", "idx": 7, "num": 8, "is_land": false }, { "name": "Knight Exemplar", "idx": 5, "num": 21, "is_land": false }, { "name": "Lightning Greaves", "idx": 3, "num": 25, "is_equip": true, "attached_to": 8, "is_land": false }, { "name": "Plains", "idx": 0, "num": 26, "tapped": true, "is_land": true }, { "name": "Plains", "idx": 2, "num": 27, "tapped": true, "is_land": true }, { "name": "Plains", "idx": 4, "num": 28, "tapped": true, "is_land": true }, { "name": "Plains", "idx": 6, "num": 29, "is_land": true, "taps": "W" }, { "name": "Venerable Knight", "idx": 1, "num": 53, "is_land": false }], "vial_counters": [], "hand": [{ "num": 1, "name": "Acclaimed Contender", "cost": "{2}{W}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 2, "name": "Acclaimed Contender", "cost": "{2}{W}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 57, "name": "Worthy Knight", "cost": "{1}{W}", "mv": 2, "kind": "permanent", "is_creature": true }], "graveyard": [], "library_size": 49, "land_drops_left": 0 },
+  "me": { "life": 20, "battlefield": [{ "name": "1/1 Human Token", "idx": 5, "num": 1000, "is_land": false }, { "name": "1/1 Human Token", "idx": 7, "num": 1001, "is_land": false }, { "name": "1/1 Human Token", "idx": 9, "num": 1002, "is_land": false }, { "name": "Adeline, Resplendent Cathar", "idx": 6, "num": 8, "is_land": false }, { "name": "Knight Exemplar", "idx": 10, "num": 21, "is_land": false }, { "name": "Plains", "idx": 0, "num": 26, "tapped": true, "is_land": true }, { "name": "Plains", "idx": 2, "num": 27, "tapped": true, "is_land": true }, { "name": "Plains", "idx": 4, "num": 28, "tapped": true, "is_land": true }, { "name": "Plains", "idx": 8, "num": 29, "is_land": true, "taps": "W" }, { "name": "Venerable Knight", "idx": 1, "num": 53, "is_land": false }, { "name": "Worthy Knight", "idx": 3, "num": 57, "is_land": false }], "vial_counters": [], "hand": [{ "num": 1, "name": "Acclaimed Contender", "cost": "{2}{W}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 2, "name": "Acclaimed Contender", "cost": "{2}{W}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 25, "name": "Lightning Greaves", "cost": "{2}", "mv": 2, "kind": "permanent" }], "graveyard": [], "library_size": 49, "land_drops_left": 0 },
   "opponent": { "life": 13, "battlefield": [] },
   "plans": [
-    { "index": 0, "summary": "land=none; cast: equip Lightning Greaves → Venerable Knight", "land": null, "casts": [], "activations": ["Lightning Greaves"], "actions": [{ "card": "Lightning Greaves", "src_num": 25, "activate": true, "verb": "equip", "equip_host": 53, "equip_host_name": "Venerable Knight", "equip_src": 25 }] },
-    { "index": 1, "summary": "land=none; cast: equip Lightning Greaves → Knight Exemplar", "land": null, "casts": [], "activations": ["Lightning Greaves"], "actions": [{ "card": "Lightning Greaves", "src_num": 25, "activate": true, "verb": "equip", "equip_host": 21, "equip_host_name": "Knight Exemplar", "equip_src": 25 }] }
-  ],
-  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
-  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
-}
-},
-    { "chosen": -1, "decision": {
-  "decision_index": 12,
-  "main_ordinal": 9,
-  "type": "main_phase",
-  "turn": 4,
-  "phase": "post_main",
-  "on_the_play": false,
-  "events": [{ "turn": 4, "kind": "combat", "text": "⚔ attacked: Venerable Knight (3), Knight Exemplar (2), Adeline, Resplendent Cathar (5), 1/1 Human Token (1) — 11 to opponent (13→2)" }],
-  "mdfc_backs": ["Boulderloft Pathway", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
-  "me": { "life": 20, "battlefield": [{ "name": "1/1 Human Token", "idx": 8, "num": 1000, "tapped": true, "is_land": false }, { "name": "Adeline, Resplendent Cathar", "idx": 7, "num": 8, "is_land": false }, { "name": "Knight Exemplar", "idx": 5, "num": 21, "tapped": true, "is_land": false }, { "name": "Lightning Greaves", "idx": 3, "num": 25, "is_equip": true, "attached_to": 8, "is_land": false }, { "name": "Plains", "idx": 0, "num": 26, "tapped": true, "is_land": true }, { "name": "Plains", "idx": 2, "num": 27, "tapped": true, "is_land": true }, { "name": "Plains", "idx": 4, "num": 28, "tapped": true, "is_land": true }, { "name": "Plains", "idx": 6, "num": 29, "is_land": true, "taps": "W" }, { "name": "Venerable Knight", "idx": 1, "num": 53, "tapped": true, "is_land": false }], "vial_counters": [], "hand": [{ "num": 1, "name": "Acclaimed Contender", "cost": "{2}{W}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 2, "name": "Acclaimed Contender", "cost": "{2}{W}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 57, "name": "Worthy Knight", "cost": "{1}{W}", "mv": 2, "kind": "permanent", "is_creature": true }], "graveyard": [], "library_size": 49, "land_drops_left": 0 },
-  "opponent": { "life": 2, "battlefield": [] },
-  "plans": [
-    { "index": 0, "summary": "land=none; cast: equip Lightning Greaves → 1/1 Human Token", "land": null, "casts": [], "activations": ["Lightning Greaves"], "actions": [{ "card": "Lightning Greaves", "src_num": 25, "activate": true, "verb": "equip", "equip_host": 1000, "equip_host_name": "1/1 Human Token", "equip_src": 25 }] },
-    { "index": 1, "summary": "land=none; cast: equip Lightning Greaves → Venerable Knight", "land": null, "casts": [], "activations": ["Lightning Greaves"], "actions": [{ "card": "Lightning Greaves", "src_num": 25, "activate": true, "verb": "equip", "equip_host": 53, "equip_host_name": "Venerable Knight", "equip_src": 25 }] },
-    { "index": 2, "summary": "land=none; cast: equip Lightning Greaves → Knight Exemplar", "land": null, "casts": [], "activations": ["Lightning Greaves"], "actions": [{ "card": "Lightning Greaves", "src_num": 25, "activate": true, "verb": "equip", "equip_host": 21, "equip_host_name": "Knight Exemplar", "equip_src": 25 }] }
-  ],
-  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
-  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
-}
-},
-    { "chosen": 10, "cast_order": ["*", "Worthy Knight", "Lightning Greaves"], "decision": {
-  "decision_index": 13,
-  "main_ordinal": 10,
-  "type": "main_phase",
-  "turn": 5,
-  "phase": "pre_main",
-  "on_the_play": false,
-  "drew": [{ "turn": 5, "card": "Worthy Knight" }],
-  "mdfc_backs": ["Boulderloft Pathway", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
-  "me": { "life": 20, "battlefield": [{ "name": "1/1 Human Token", "idx": 8, "num": 1000, "is_land": false }, { "name": "Adeline, Resplendent Cathar", "idx": 7, "num": 8, "is_land": false }, { "name": "Knight Exemplar", "idx": 5, "num": 21, "is_land": false }, { "name": "Lightning Greaves", "idx": 3, "num": 25, "is_equip": true, "attached_to": 8, "is_land": false }, { "name": "Plains", "idx": 0, "num": 26, "is_land": true, "taps": "W" }, { "name": "Plains", "idx": 2, "num": 27, "is_land": true, "taps": "W" }, { "name": "Plains", "idx": 4, "num": 28, "is_land": true, "taps": "W" }, { "name": "Plains", "idx": 6, "num": 29, "is_land": true, "taps": "W" }, { "name": "Venerable Knight", "idx": 1, "num": 53, "is_land": false }], "vial_counters": [], "hand": [{ "num": 1, "name": "Acclaimed Contender", "cost": "{2}{W}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 2, "name": "Acclaimed Contender", "cost": "{2}{W}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 57, "name": "Worthy Knight", "cost": "{1}{W}", "mv": 2, "kind": "permanent", "is_creature": true }, { "num": 58, "name": "Worthy Knight", "cost": "{1}{W}", "mv": 2, "kind": "permanent", "is_creature": true }], "graveyard": [], "library_size": 48, "land_drops_left": 1 },
-  "opponent": { "life": 2, "battlefield": [] },
-  "plans": [
-    { "index": 0, "summary": "land=none; cast: Worthy Knight, Worthy Knight, equip Lightning Greaves → Worthy Knight", "land": null, "casts": ["Worthy Knight", "Worthy Knight"], "activations": ["Lightning Greaves"], "cast_order_canonical": ["Worthy Knight", "Worthy Knight"], "actions": [{ "card": "Worthy Knight" }, { "card": "Worthy Knight" }, { "card": "Lightning Greaves", "src_num": 25, "activate": true, "verb": "equip", "equip_host": 57, "equip_host_name": "Worthy Knight", "equip_src": 25 }] },
-    { "index": 1, "summary": "land=none; cast: Worthy Knight, Worthy Knight, equip Lightning Greaves → Venerable Knight", "land": null, "casts": ["Worthy Knight", "Worthy Knight"], "activations": ["Lightning Greaves"], "cast_order_canonical": ["Worthy Knight", "Worthy Knight"], "actions": [{ "card": "Worthy Knight" }, { "card": "Worthy Knight" }, { "card": "Lightning Greaves", "src_num": 25, "activate": true, "verb": "equip", "equip_host": 53, "equip_host_name": "Venerable Knight", "equip_src": 25 }] },
-    { "index": 2, "summary": "land=none; cast: Worthy Knight, Worthy Knight, equip Lightning Greaves → Knight Exemplar", "land": null, "casts": ["Worthy Knight", "Worthy Knight"], "activations": ["Lightning Greaves"], "cast_order_canonical": ["Worthy Knight", "Worthy Knight"], "actions": [{ "card": "Worthy Knight" }, { "card": "Worthy Knight" }, { "card": "Lightning Greaves", "src_num": 25, "activate": true, "verb": "equip", "equip_host": 21, "equip_host_name": "Knight Exemplar", "equip_src": 25 }] },
-    { "index": 3, "summary": "land=none; cast: Worthy Knight, Worthy Knight, equip Lightning Greaves → 1/1 Human Token", "land": null, "casts": ["Worthy Knight", "Worthy Knight"], "activations": ["Lightning Greaves"], "cast_order_canonical": ["Worthy Knight", "Worthy Knight"], "actions": [{ "card": "Worthy Knight" }, { "card": "Worthy Knight" }, { "card": "Lightning Greaves", "src_num": 25, "activate": true, "verb": "equip", "equip_host": 1000, "equip_host_name": "1/1 Human Token", "equip_src": 25 }] },
-    { "index": 4, "summary": "land=none; cast: Worthy Knight, Worthy Knight", "land": null, "casts": ["Worthy Knight", "Worthy Knight"], "cast_order_canonical": ["Worthy Knight", "Worthy Knight"], "actions": [{ "card": "Worthy Knight" }, { "card": "Worthy Knight" }] },
-    { "index": 5, "summary": "land=none; cast: Acclaimed Contender, equip Lightning Greaves → Acclaimed Contender", "land": null, "casts": ["Acclaimed Contender"], "activations": ["Lightning Greaves"], "actions": [{ "card": "Acclaimed Contender" }, { "card": "Lightning Greaves", "src_num": 25, "activate": true, "verb": "equip", "equip_host": 1, "equip_host_name": "Acclaimed Contender", "equip_src": 25 }] },
-    { "index": 6, "summary": "land=none; cast: Acclaimed Contender, equip Lightning Greaves → Venerable Knight", "land": null, "casts": ["Acclaimed Contender"], "activations": ["Lightning Greaves"], "actions": [{ "card": "Acclaimed Contender" }, { "card": "Lightning Greaves", "src_num": 25, "activate": true, "verb": "equip", "equip_host": 53, "equip_host_name": "Venerable Knight", "equip_src": 25 }] },
-    { "index": 7, "summary": "land=none; cast: Acclaimed Contender, equip Lightning Greaves → Knight Exemplar", "land": null, "casts": ["Acclaimed Contender"], "activations": ["Lightning Greaves"], "actions": [{ "card": "Acclaimed Contender" }, { "card": "Lightning Greaves", "src_num": 25, "activate": true, "verb": "equip", "equip_host": 21, "equip_host_name": "Knight Exemplar", "equip_src": 25 }] },
-    { "index": 8, "summary": "land=none; cast: Acclaimed Contender, equip Lightning Greaves → 1/1 Human Token", "land": null, "casts": ["Acclaimed Contender"], "activations": ["Lightning Greaves"], "actions": [{ "card": "Acclaimed Contender" }, { "card": "Lightning Greaves", "src_num": 25, "activate": true, "verb": "equip", "equip_host": 1000, "equip_host_name": "1/1 Human Token", "equip_src": 25 }] },
-    { "index": 9, "summary": "land=none; cast: Acclaimed Contender", "land": null, "casts": ["Acclaimed Contender"], "actions": [{ "card": "Acclaimed Contender" }] },
-    { "index": 10, "summary": "land=none; cast: Worthy Knight, equip Lightning Greaves → Worthy Knight", "land": null, "casts": ["Worthy Knight"], "activations": ["Lightning Greaves"], "actions": [{ "card": "Worthy Knight" }, { "card": "Lightning Greaves", "src_num": 25, "activate": true, "verb": "equip", "equip_host": 57, "equip_host_name": "Worthy Knight", "equip_src": 25 }] },
-    { "index": 11, "summary": "land=none; cast: Worthy Knight, equip Lightning Greaves → Venerable Knight", "land": null, "casts": ["Worthy Knight"], "activations": ["Lightning Greaves"], "actions": [{ "card": "Worthy Knight" }, { "card": "Lightning Greaves", "src_num": 25, "activate": true, "verb": "equip", "equip_host": 53, "equip_host_name": "Venerable Knight", "equip_src": 25 }] },
-    { "index": 12, "summary": "land=none; cast: Worthy Knight, equip Lightning Greaves → Knight Exemplar", "land": null, "casts": ["Worthy Knight"], "activations": ["Lightning Greaves"], "actions": [{ "card": "Worthy Knight" }, { "card": "Lightning Greaves", "src_num": 25, "activate": true, "verb": "equip", "equip_host": 21, "equip_host_name": "Knight Exemplar", "equip_src": 25 }] },
-    { "index": 13, "summary": "land=none; cast: Worthy Knight, equip Lightning Greaves → 1/1 Human Token", "land": null, "casts": ["Worthy Knight"], "activations": ["Lightning Greaves"], "actions": [{ "card": "Worthy Knight" }, { "card": "Lightning Greaves", "src_num": 25, "activate": true, "verb": "equip", "equip_host": 1000, "equip_host_name": "1/1 Human Token", "equip_src": 25 }] },
-    { "index": 14, "summary": "land=none; cast: Worthy Knight", "land": null, "casts": ["Worthy Knight"], "actions": [{ "card": "Worthy Knight" }] },
-    { "index": 15, "summary": "land=none; cast: equip Lightning Greaves → Venerable Knight", "land": null, "casts": [], "activations": ["Lightning Greaves"], "actions": [{ "card": "Lightning Greaves", "src_num": 25, "activate": true, "verb": "equip", "equip_host": 53, "equip_host_name": "Venerable Knight", "equip_src": 25 }] },
-    { "index": 16, "summary": "land=none; cast: equip Lightning Greaves → Knight Exemplar", "land": null, "casts": [], "activations": ["Lightning Greaves"], "actions": [{ "card": "Lightning Greaves", "src_num": 25, "activate": true, "verb": "equip", "equip_host": 21, "equip_host_name": "Knight Exemplar", "equip_src": 25 }] },
-    { "index": 17, "summary": "land=none; cast: equip Lightning Greaves → 1/1 Human Token", "land": null, "casts": [], "activations": ["Lightning Greaves"], "actions": [{ "card": "Lightning Greaves", "src_num": 25, "activate": true, "verb": "equip", "equip_host": 1000, "equip_host_name": "1/1 Human Token", "equip_src": 25 }] },
-    { "index": 18, "summary": "land=none; cast: (nothing)", "land": null, "casts": [], "actions": [] }
-  ],
-  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
-  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
-}
-},
-    { "chosen": -1, "decision": {
-  "decision_index": 14,
-  "main_ordinal": 11,
-  "type": "main_phase",
-  "turn": 5,
-  "phase": "pre_main",
-  "on_the_play": false,
-  "mdfc_backs": ["Boulderloft Pathway", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
-  "me": { "life": 20, "battlefield": [{ "name": "1/1 Human Token", "idx": 8, "num": 1000, "is_land": false }, { "name": "Adeline, Resplendent Cathar", "idx": 7, "num": 8, "is_land": false }, { "name": "Knight Exemplar", "idx": 5, "num": 21, "is_land": false }, { "name": "Lightning Greaves", "idx": 3, "num": 25, "is_equip": true, "attached_to": 57, "is_land": false }, { "name": "Plains", "idx": 0, "num": 26, "tapped": true, "is_land": true }, { "name": "Plains", "idx": 2, "num": 27, "tapped": true, "is_land": true }, { "name": "Plains", "idx": 4, "num": 28, "is_land": true, "taps": "W" }, { "name": "Plains", "idx": 6, "num": 29, "is_land": true, "taps": "W" }, { "name": "Venerable Knight", "idx": 1, "num": 53, "is_land": false }, { "name": "Worthy Knight", "idx": 9, "num": 57, "is_land": false }], "vial_counters": [], "hand": [{ "num": 1, "name": "Acclaimed Contender", "cost": "{2}{W}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 2, "name": "Acclaimed Contender", "cost": "{2}{W}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 58, "name": "Worthy Knight", "cost": "{1}{W}", "mv": 2, "kind": "permanent", "is_creature": true }], "graveyard": [], "library_size": 48, "land_drops_left": 1 },
-  "opponent": { "life": 2, "battlefield": [] },
-  "plans": [
-    { "index": 0, "summary": "land=none; cast: Worthy Knight, equip Lightning Greaves → Worthy Knight", "land": null, "casts": ["Worthy Knight"], "activations": ["Lightning Greaves"], "actions": [{ "card": "Worthy Knight" }, { "card": "Lightning Greaves", "src_num": 25, "activate": true, "verb": "equip", "equip_host": 58, "equip_host_name": "Worthy Knight", "equip_src": 25 }] },
-    { "index": 1, "summary": "land=none; cast: Worthy Knight, equip Lightning Greaves → Venerable Knight", "land": null, "casts": ["Worthy Knight"], "activations": ["Lightning Greaves"], "actions": [{ "card": "Worthy Knight" }, { "card": "Lightning Greaves", "src_num": 25, "activate": true, "verb": "equip", "equip_host": 53, "equip_host_name": "Venerable Knight", "equip_src": 25 }] },
-    { "index": 2, "summary": "land=none; cast: Worthy Knight, equip Lightning Greaves → Knight Exemplar", "land": null, "casts": ["Worthy Knight"], "activations": ["Lightning Greaves"], "actions": [{ "card": "Worthy Knight" }, { "card": "Lightning Greaves", "src_num": 25, "activate": true, "verb": "equip", "equip_host": 21, "equip_host_name": "Knight Exemplar", "equip_src": 25 }] },
-    { "index": 3, "summary": "land=none; cast: Worthy Knight, equip Lightning Greaves → Adeline, Resplendent Cathar", "land": null, "casts": ["Worthy Knight"], "activations": ["Lightning Greaves"], "actions": [{ "card": "Worthy Knight" }, { "card": "Lightning Greaves", "src_num": 25, "activate": true, "verb": "equip", "equip_host": 8, "equip_host_name": "Adeline, Resplendent Cathar", "equip_src": 25 }] },
-    { "index": 4, "summary": "land=none; cast: Worthy Knight, equip Lightning Greaves → 1/1 Human Token", "land": null, "casts": ["Worthy Knight"], "activations": ["Lightning Greaves"], "actions": [{ "card": "Worthy Knight" }, { "card": "Lightning Greaves", "src_num": 25, "activate": true, "verb": "equip", "equip_host": 1000, "equip_host_name": "1/1 Human Token", "equip_src": 25 }] },
-    { "index": 5, "summary": "land=none; cast: Worthy Knight", "land": null, "casts": ["Worthy Knight"], "actions": [{ "card": "Worthy Knight" }] },
-    { "index": 6, "summary": "land=none; cast: equip Lightning Greaves → Venerable Knight", "land": null, "casts": [], "activations": ["Lightning Greaves"], "actions": [{ "card": "Lightning Greaves", "src_num": 25, "activate": true, "verb": "equip", "equip_host": 53, "equip_host_name": "Venerable Knight", "equip_src": 25 }] },
-    { "index": 7, "summary": "land=none; cast: equip Lightning Greaves → Knight Exemplar", "land": null, "casts": [], "activations": ["Lightning Greaves"], "actions": [{ "card": "Lightning Greaves", "src_num": 25, "activate": true, "verb": "equip", "equip_host": 21, "equip_host_name": "Knight Exemplar", "equip_src": 25 }] },
-    { "index": 8, "summary": "land=none; cast: equip Lightning Greaves → Adeline, Resplendent Cathar", "land": null, "casts": [], "activations": ["Lightning Greaves"], "actions": [{ "card": "Lightning Greaves", "src_num": 25, "activate": true, "verb": "equip", "equip_host": 8, "equip_host_name": "Adeline, Resplendent Cathar", "equip_src": 25 }] },
-    { "index": 9, "summary": "land=none; cast: equip Lightning Greaves → 1/1 Human Token", "land": null, "casts": [], "activations": ["Lightning Greaves"], "actions": [{ "card": "Lightning Greaves", "src_num": 25, "activate": true, "verb": "equip", "equip_host": 1000, "equip_host_name": "1/1 Human Token", "equip_src": 25 }] },
-    { "index": 10, "summary": "land=none; cast: (nothing)", "land": null, "casts": [], "actions": [] }
+    { "index": 0, "summary": "cast: (nothing)", "land": null, "casts": [], "actions": [] }
   ],
   "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
   "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
@@ -338,6 +237,6 @@
 }
   ],
   "final_events": [
-    { "turn": 5, "kind": "combat", "text": "⚔ attacked: Venerable Knight (3), Knight Exemplar (2), Adeline, Resplendent Cathar (7), 1/1 Human Token (1), Worthy Knight (3), 1/1 Human Token (1) — 17 to opponent (2→-15)" }
+    { "turn": 4, "kind": "combat", "text": "⚔ attacked: Venerable Knight (3), Worthy Knight (3), 1/1 Human Token (1), Adeline, Resplendent Cathar (9), 1/1 Human Token (1), 1/1 Human Token (1) — 18 to opponent (13→-5)" }
   ]
 }
