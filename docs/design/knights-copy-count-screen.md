@@ -902,6 +902,62 @@ Thirteen of 60 cards differ from the shipped list. Still mono-white, still 24 la
 largest single improvement measured on it. It is also **~1.7x cheaper per game to simulate** than the list
 it would replace.
 
+### Round G on Knights — and the land count goes the OTHER WAY
+
+Knights' shipped keep table was built at `1b3c94fb` (2026-07-14), **1,328 `src/` commits** before HEAD, so
+unlike WhiteKnights this deck has never been screened on an apparatus its own engine produced. Six tables
+at **R=40**, deliberately not its shipped R=60 — that choice was made in advance, on the measurement that
+WhiteKnights' Aether-Vial-holding list cost 3.2x more to generate than the Vial-less one, and Knights
+holds **four** Vial in every arm. R does not bias the `own` column (both sides of every comparison are
+generated at the same R); what it costs is the bias line, which was never going to be clean for a deck
+whose shared table is 1,328 commits stale.
+
+Pooled over both blocks (measurement 6.4M, held-out 6.8M — 40,000 paired games per format,
+`logs/wk_screen/pool_gkn.py`), against screen 7's confirmed winner as the reference:
+
+| arm | long | 2hg | std | **pooled** | step vs winner | meas. | conf. |
+|---|---|---|---|---|---|---|---|
+| **`g_kn_l22`** Contender→0, **22 lands** | −0.0633 | −0.1671 | −0.0649 | **−0.0947** | **−0.0245** | −0.0271 | −0.0220 |
+| **`g_kn_ac1_ad4`** Contender→1, **Adeline 4** | −0.0607 | −0.1760 | −0.0422 | **−0.0916** | **−0.0214** | −0.0194 | −0.0234 |
+| `g_kn_ac0_ad4h` +Haytham 4 | −0.0527 | −0.1775 | −0.0365 | −0.0869 | −0.0166 | −0.0164 | −0.0169 |
+| `g_kn_l21` Contender→1, 21 lands | −0.0572 | −0.1512 | −0.0520 | −0.0843 | −0.0141 | −0.0149 | −0.0133 |
+| `g_kn_ac2_ad3` **screen 7's winner** | −0.0505 | −0.1303 | −0.0295 | −0.0702 | — | | |
+
+**Screen 7's winner replicates on a real table: −0.0702 pooled against the −0.0721 it measured on the
+shared one.** That is the third independent block for this arm and it has not moved.
+
+**1. Knights' Adeline ladder ALSO runs to the legal maximum.** Adeline 3→4 is a further **−0.0214**
+pooled, negative in all six format-blocks, se bound 0.0021 — a 10:1 margin, and it *grew* on held-out
+seeds (−0.0194 → −0.0234). This independently reproduces the campaign's headline in the second deck:
+extra copies of a legendary creature keep paying, because the value is seeing her earlier.
+
+**2. Knights wants MORE lands — the opposite of WhiteKnights.** 20 → 21 → 22 is monotone
+(−0.0141, −0.0245) and **has not turned over**. WhiteKnights, meanwhile, is correct at 24 with 25 worse.
+That is the **fourth axis on which these two decks want opposite things**, after Remote Farm, Aether Vial
+and the Plains count.
+
+The confound is the payer: the ladder buys lands with Acclaimed Contender, and screen 7 found Contender
+cuts beyond the second contribute nothing, so the gain is most likely the lands. That inference leans on
+a shared-apparatus finding and is *not* eliminated here — which is why round H pays for the 23rd land a
+second way, with a Marshal of Zhalfir.
+
+**3. The two ideas cannot be combined without choosing.** Cutting Contender to 0 frees exactly four
+slots; Adeline absorbs at most three of them (1→4) and Plains the rest. So "22 lands + Adeline 3" and
+"21 lands + Adeline 4" both spend all four, and 23 lands requires cutting something round G never touched.
+Round H tests the one combination the arithmetic allows (`h_kn_ad4_l21`).
+
+**4. A clean format split, and it makes mechanical sense.** Relative to the winner, the *land* arm's gain
+is concentrated at 20 life (std −0.0354) while the *Adeline* arm's is concentrated in 2HG (2hg −0.0457,
+std only −0.0127). Against 60 points of life across two heads an extra threat compounds; at 20 life what
+matters is curving out without stumbling. The same reason the two arms are close overall and want
+different formats.
+
+**5. The bias runs POSITIVE here, exactly as predicted, and that is the R gap not a defect.** Every null
+is positive — both decks play slightly *weaker* on a fresh R=40 table than on Knights' shipped R=60 one —
+with the base null at +0.004 quantifying the gap. Consequence: for Knights the stale shared table was
+mildly **flattering** the variants (own −0.0702 vs shared −0.0735 on the winner), the opposite direction
+to WhiteKnights. Both are small, and in both cases the real-table number is the one to use.
+
 ## Open questions for the user (surfaced, not blocking)
 
 1. **Ranking weights.** The Angels campaign ranked arms late-weighted — `long` 0.5 / `2hg` 0.3 /
