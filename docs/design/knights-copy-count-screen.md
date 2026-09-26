@@ -1068,7 +1068,115 @@ So the candidate is not a different deck; it is **the same deck with the varianc
 exactly what the win-turn distribution below shows, and it is why the one thing it loses is the outlier
 draw.
 
-### WHY Knight Exemplar is the worst card — from `cards.json`, not from a story
+### USER RULING 2026-09-26 — KNIGHT EXEMPLAR STAYS AT 4, and the measurement was never evidence against it
+
+> *"Knight Exemplar is not really under consideration for cutting. The indestructible is too effective to
+> give up against removal and sweepers."* … *"though it would be cuttable if it wasn't also a lord."*
+
+**This ruling is correct and the campaign's numbers do not contradict it — they never addressed it.** Knight
+Exemplar's indestructible grant does not appear in its `parameters` at all: the card carries only
+`subtypes_affected`, `power_bonus`, `tough_bonus` and a `First Strike` keyword. It is *genuinely
+unmodelled*, because the passive opponent casts no removal and no sweepers, so there is nothing for it to
+protect against. Every figure this campaign produced for cutting Knight Exemplar — −0.0095, −0.0107,
+−0.0166 — priced **a 2/2 Knight-only lord and nothing else**.
+
+**The error was mine and it was an error of reading, not of arithmetic.** The card's own bracket note says
+*"indestructible grant + first strike inert in goldfishing"*, and I quoted it repeatedly as *support* for
+cutting the card. It is the opposite: a bracket note is a statement that **this apparatus cannot see part
+of the card**, i.e. a warning that the measurement is a floor on the card's value, not an estimate of it.
+[[bracket-notes-are-the-judgement-call]] says exactly this — *an under-modelled card flatters the arm that
+cuts it* — and I built a mechanism section (below) that made the wrong conclusion more persuasive rather
+than testing it. The user's second remark is the precise correction: the lord half **is** weak, which is
+what the sim measured; the card is kept because the lord half plus the indestructible half together earn
+the slot, and only the first of those is on the record.
+
+**So the right output for a card like this is a PRICE, not a verdict.** Knight Exemplar's rate cost is
+about **−0.0095 to −0.0107 t per copy** — that is what the indestructible insurance costs in goldfish
+speed, and whether the insurance is worth it is a judgement about the metagame that this engine cannot
+make. Presenting it as *"the list's worst card"* was the mistake.
+
+#### The audit this forces: which other cuts rest on unmodelled text?
+
+Every card the campaign moved, checked against its `cards.json` entry:
+
+| card | campaign verdict | is the cut resting on unmodelled text? |
+|---|---|---|
+| **Knight Exemplar** 4→2 | cut | **YES — indestructible grant absent from `parameters`.** REVERSED by the user |
+| **Lightning Greaves** 1→0 | cut | **YES — "shroud documented-inert (the passive opponent never targets our permanents)". Shroud is removal protection.** Haste *is* modelled, so the cut is partly earned — but only partly |
+| Acclaimed Contender 3→0 | cut | No. The `PARTIAL` is the "legendary artifact" clause, and it is genuinely inert *in this deck* — Sol Ring and Aether Vial are both plain Artifacts. The dig itself is fully modelled |
+| Aether Vial 3→0 | cut | No. Fully modelled; its note describes an AI heuristic, not a gap |
+| Valiant Knight 1→0 | cut | No. *"Both clauses modelled"*, including the activated double-strike pump. **User agrees: "Valiant Knight is an easy cut"** |
+| Plains 22→19/20 | cut | No. Lands are fully modelled |
+| Adeline 1→4 | **added** | No gap — but **OVER-valued**, see below |
+| Benalish Marshal 2→4 | **added** | No. Fully modelled. **User agrees it should be a 4-of** |
+| Silverblade Paladin 1→3 | added | No. Soulbond fully modelled; the partner *ranking* is a disclosed narrowing |
+| Accorder Paladin, Hero of Bladehold, Worthy Knight | untouched | No. All fully modelled |
+| Remote Farm 0→4 | added | No. Fully modelled |
+| Swords to Plowshares, Unexpectedly Absent | never tested | Correctly excluded — goldfishing cannot price interaction |
+
+**Two of the campaign's cuts rest on unmodelled protective text, and both are now suspect: Knight Exemplar
+(reversed) and Lightning Greaves.** Greaves is a 1-of so the stakes are small, but the reasoning is the
+same and it should be the user's call, not the screen's.
+
+**And the two never-screened one-drops are in the same class.** Dauntless Bodyguard's entire text is
+*"sacrifice this: another creature gains indestructible"* and Venerable Knight's entire text is a **death**
+trigger — both documented inert here for exactly the reason Exemplar's grant is, namely that nothing ever
+kills our creatures. Round J′ measures them, but the result is *the rate cost of that insurance*, not a
+verdict. Stated in advance so the number cannot be misread the way Exemplar's was.
+
+#### The bias runs BOTH ways — Adeline is OVER-valued for a symmetrical reason
+
+The user, unprompted, supplied the mirror image:
+
+> *"Part of her problem is that she is overstated in goldfish, because she does damage equal to the number
+> of critters on board and cannot be chump blocked."* … *"However, I agree she is good nonetheless."*
+
+This is right, and it is the same defect seen from the other side. Adeline's power is
+`power_equals_creature_count`, so she is always the largest attacker in the list — and **a rational
+opponent chump-blocks the largest attacker.** One 1/1 token denies her entire contribution, and vigilance
+does not help against blockers. This engine has **no blockers at all**, so every point of her power
+connects every turn. Worse for the estimate: Silverblade Paladin's soulbond partner is picked by highest
+effective power, so Adeline is usually the paired creature and usually has **double strike** — doubling the
+damage that a single chump block would deny.
+
+So the apparatus **under**-values protection (Exemplar, Greaves, Bodyguard, Venerable Knight) and
+**over**-values a lone oversized unblockable-in-practice attacker (Adeline), and the two biases point in
+opposite directions on the same list. Neither is a reason to distrust the *ranking* of fully-modelled
+cards against each other; both are reasons the absolute numbers are not deckbuilding verdicts.
+
+**What is measurable about it, and what is not.** Estimating what the deck would do against a real blocker
+is not measurable here — any such number would be a model invented for the occasion. What *is* exactly
+measurable is the **exposure**: Adeline's power IS the creature count, and each turn's total damage is
+recorded, so her share of the lethal attack can be computed from board state with no combat
+reimplementation. `logs/wk_screen/adeline_probe.py` reports it at both 1× and 2× (double strike), alongside
+how often a 4th copy is **stranded** in hand under the legend rule — the user's other objection.
+`run_l.sh` runs it on the Adeline-4 and Adeline-3 lists once round J′ frees the box.
+
+#### What the list becomes with Exemplar locked at 4
+
+Round G already measured three Exemplar-4 arms, so this costs nothing to answer:
+
+| Exemplar-4 arm | late-wtd | |
+|---|---|---|
+| `g_l22` 22 lands, Silverblade 4 | **−0.2967** | |
+| `g_hob2` Hero 3→2, Silverblade 3 | **−0.2963** | |
+| `g_l23` 23 lands, Silverblade 3 | **−0.2959** | ← round J′'s base |
+| `g_cand` round-F candidate, Silverblade 2 | −0.2898 | |
+| `g_l25` 25 lands, Silverblade 1 | −0.2753 | |
+
+The top three are **within 0.0008 of each other**, far inside the ~0.0046 se bound — a genuine three-way
+tie. All three beat `g_cand` by ~0.007, and round G's own reading is that *all* of that is the 3rd
+Silverblade (−0.0071 standalone). So the honest statement is: **the Exemplar-4 list is the round-F
+candidate plus a 3rd Silverblade Paladin, and which slot pays for it — the 24th land, or a Hero of
+Bladehold — is a tie the apparatus cannot break** ([[a-null-must-not-break-a-tie]]). Locking Exemplar at 4
+costs about **0.015 t** against the retracted `h_wk_ke2_sp4`, not the ~0.029 a naive chain of the two
+Exemplar rungs would suggest, because the Silverblade copies can be bought elsewhere.
+
+### WHY the Knight Exemplar LORD HALF is weak — from `cards.json`, not from a story
+
+**Read this section as an explanation of the ~−0.010 rate cost only.** It explains why Exemplar's *anthem*
+is the weakest of the deck's three, which is a real finding; it does **not** argue for cutting the card,
+and the paragraphs below that treat "cut Exemplar" as a conclusion are superseded by the ruling above.
 
 The Exemplar result has been explained so far as *"its indestructible-and-first-strike half is inert
 against a passive opponent, leaving a 2/2 and an anthem Benalish Marshal provides more cheaply."* That is
