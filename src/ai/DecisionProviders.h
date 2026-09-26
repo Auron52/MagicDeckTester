@@ -1814,6 +1814,53 @@ public:
         const GameState&, const std::vector<std::string>*) const override;
 };
 
+// Pirates (U/R/b Aether Vial Pirate tribal: Corsair Captain / Metallic Mimic / Adaptive Automaton /
+// Dire Fleet Captain / Forerunner of the Coalition). Onboarded 2026-09-26.
+//
+// DERIVES FROM DeckProvider, NOT from the provider the list happened to trip. Forerunner of the
+// Coalition carries `tutor_to_top`, which ALONE sets the `anti` signature, so before this class
+// existed the deck rode AntiLifegainProvider -- whose TutorSearchWidth is 2 and whose discard
+// buckets are keyed on another deck's cards. That is the archetype-neutral misroute class (the
+// eighth occurrence, after Mirrorwing, StompySurprise, Minotaur, Dragons, Melira Pod, Fungus and
+// Giants), not a routing anybody chose, so the deck is NOT play-neutral against its accidental
+// provider -- it had never been measured there, and deriving from it would import unmeasured
+// narrowing. It is NOT VialProvider either: the Aether Vial charge policy is the ROOT default
+// (GenericProvider::WantVialCharge); VialProvider adds only the Knights-gated cast order.
+//
+// Hooks held (everything else inherits Generic byte-for-byte):
+//   * Certificate -- NotAssessed (see the body for what a sound one must model).
+//   * TutorSearchWidth 9 -- a COVERAGE fix, not a heuristic (see the override).
+//   * CastOrderRank -- deliberately NOT overridden: cast order is a USER review per deck, and the
+//     proposals (Malcolm vs Mimic, Buccaneer first, Forerunner first) sit in the ledger unadopted.
+class PiratesProvider : public DeckProvider
+{
+public:
+    CertStance Certificate() const override
+    { return { CertState::NotAssessed,
+               "NOT ASSESSED. Test: is combat the ONLY route to the opponent's life? It is NOT -- "
+               "Forerunner of the Coalition drains 1 whenever another Pirate enters (including at "
+               "INSTANT speed off an Aether Vial, and a chosen-Pirate Metallic Mimic / Adaptive "
+               "Automaton), Lightning Bolt deals 3 to the face, and Malcolm (keyword) and Goblin "
+               "Tomb Raider (with an artifact -- a Vial, a Treasure, a Mimic) have HASTE, so this "
+               "turn's attackers are NOT exactly the CanAttackFull set at the start of the turn. A "
+               "winless-this-turn proof must bound the drain count (Pirate entries reachable from "
+               "hand + Vial + Treasures), the Bolt, and haste bodies before it can be sound. See "
+               "SnowProvider/FungusProvider for the worked shape." }; }
+    const char* Name() const override { return "Pirates"; }
+
+    // Forerunner of the Coalition searches for "a Pirate card", and this list holds NINE distinct
+    // Pirate names in its library (Daring Buccaneer, Corsair Captain, Kitesail Larcenist, Malcolm,
+    // Staunch Crewmate, Goblin Tomb Raider, Dire Fleet Captain, Forerunner, Siren Stormtamer --
+    // Metallic Mimic / Adaptive Automaton are Pirates on the BATTLEFIELD only). The generic
+    // candidate list is in LIBRARY (= shuffle) order and the base width is 6, so in any game the
+    // search could never reach three of them -- which three decided by the shuffle, not by a
+    // judgement. Width 9 makes every name reachable. A coverage fix (it widens, never narrows);
+    // the axis is ADDITIVE (one rollout per extra target), so the cost is bounded. MTG_TUTOR_WIDTH
+    // still overrides for the A/B.
+    int TutorSearchWidth() const override { return 9; }
+
+};
+
 // Eldrazi Displacer / Emiel flicker combo. An INFINITE-MANA deck, and the first one here whose
 // enumeration is unbounded by construction rather than merely wide: blinking a Peregrine Drake
 // ("untap up to five lands") refunds more mana than the outlet's activation costs, so "how many

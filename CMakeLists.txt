@@ -298,6 +298,7 @@ add_executable(mtg-test
     test/unit/test_game_work_meter.cpp
     test/unit/test_keyword_mask.cpp
     test/unit/test_pirates.cpp
+    test/unit/test_pirates_provider.cpp
     test/unit/test_etb_target_carriage.cpp
     test/unit/test_in_place_rename.cpp
 )

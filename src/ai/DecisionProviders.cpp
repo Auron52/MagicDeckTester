@@ -9791,6 +9791,7 @@ namespace
     const AurasProvider          g_auras;
     const EldraziFlickerProvider g_eldrazi_flicker;
     const MeliraPodProvider      g_melira_pod;
+    const PiratesProvider        g_pirates;
 }
 
 const DecisionProvider& DefaultProvider()
@@ -9855,6 +9856,19 @@ const DecisionProvider& DetectDecisionProvider(const Decklist& deck)
     bool angels = false;
     bool knights = false;    // Knight tribal on Aether Vial -- KnightsProvider DERIVES from Vial
     bool breaching = false;  // Breaching Dragonstorm cascade/free-cast pile -- rode Generic
+    // PIRATES (U/R/b Vial Pirate tribal). MUST return ABOVE `anti`: Forerunner of the Coalition's
+    // tutor_to_top ALONE sets that signature (the Giant Harbinger / Worldly Tutor path), which is the
+    // EIGHTH occurrence of the archetype-neutral misroute class -- until 2026-09-26 this deck rode
+    // AntiLifegainProvider, whose TutorSearchWidth of 2 would have hidden seven of Forerunner's nine
+    // Pirate names. Signature = Pirates-only gated params OR'd across FIVE different cards (Daring
+    // Buccaneer, Kitesail Larcenist, Dire Fleet Captain, Malcolm the Eyes, Forerunner of the
+    // Coalition), all new in the 2026-09-26 onboarding and verified carried by NO other card in
+    // cards.json, so a deckbuilding swap that cuts one cannot silently lose the routing.
+    // Deliberately EXCLUDES: tutor_to_top (the neutral param causing the bug); the chosen-type
+    // params of Metallic Mimic / Adaptive Automaton (COLOURLESS tribal staples any tribal deck may
+    // add -- the Lightning Greaves exclusion); and etb_creates_treasures / static_artifact_* (they
+    // describe behaviour a Treasure or artifact deck would plausibly run, not this archetype).
+    bool pirates = false;
     for (const Card& c : deck.mainboard)
     {
         const CardDefinition* def = CardDatabase::Instance().LookupCached(c);
@@ -9863,6 +9877,16 @@ const DecisionProvider& DetectDecisionProvider(const Decklist& deck)
 
         // NOTE: `is_land_aura` is deliberately NOT a term here -- see the flag's declaration.
         if (p.blink_cost.has_value() || p.etb_untap_lands > 0) { eldrazi = true; }
+
+        // Pirates -- see the flag's declaration for why these five and not the others.
+        if (!p.reveal_or_pay_subtype.empty()
+            || p.etb_treasurify_each_player
+            || p.attack_pump_tough_per_other_matching > 0
+            || p.nth_spell_investigate > 0
+            || p.own_creature_enters_opp_life_loss > 0)
+        {
+            pirates = true;
+        }
 
         // CritterLifegain: OR-ed across three different payoff cards' params (Ajani's Pridemate /
         // Voice of the Blessed, Archangel of Thune, Heliod) so a deckbuilding swap cannot lose it;
@@ -10222,6 +10246,10 @@ const DecisionProvider& DetectDecisionProvider(const Decklist& deck)
     // still runs on exactly its hooks, so this is play-neutral. Must sit ABOVE `vial`.
     if (knights)     { return g_knights; }
     if (breaching)   { return g_breaching_dragonstorm; }
+    // Pirates: ABOVE anti (Forerunner's tutor_to_top) -- see the flag. Placed this high because its
+    // signature is carried by no other deck, so the position is free and no later signature a
+    // future Pirates card might trip can capture it first.
+    if (pirates)     { return g_pirates; }
     // ABOVE everything: this deck's own signature is unambiguous, and its tutor_to_hand would
     // otherwise be read as anti-lifegain (see the flag's comment).
     if (critter)     { return g_critter; }
