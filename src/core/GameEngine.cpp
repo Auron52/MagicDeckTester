@@ -617,7 +617,9 @@ void GameEngine::CombatPhase(GameState& state)
     // least one creature is attacking; the new tokens deal damage this combat too.
     if (!atk_idx.empty())
     {
-        int tok_start = FireAttackCreateTokens(state, state.active_player_index);
+        // atk_idx is passed, not omitted: a creature-scoped token trigger (Hero of Bladehold's
+        // "whenever THIS CREATURE attacks") must fire only when its own source is in that list.
+        int tok_start = FireAttackCreateTokens(state, state.active_player_index, &atk_idx);
         for (int i = tok_start; i < static_cast<int>(state.battlefield.size()); ++i)
         {
             atk_idx.push_back(i);
@@ -628,6 +630,12 @@ void GameEngine::CombatPhase(GameState& state)
     // per other Goblin you control): applied at declare-attackers BEFORE the damage loop reads power,
     // as until-end-of-turn temp bonuses. Mirrors TurnSolver::SimulateCombat (lockstep). Gated inert.
     ApplyAttackSelfPumps(state, state.active_player_index, atk_idx);
+
+    // Battle cry (Accorder Paladin, Hero of Bladehold): each OTHER attacking creature gets +1/+0
+    // per attacking battle-cry source. AFTER the token block above, so Hero's own Soldiers and
+    // Adeline's Human are pumped too (CR 603.3b -- the player orders simultaneous attack triggers,
+    // and tokens-first is strictly dominant here). Mirrors TurnSolver::SimulateCombat. Gated inert.
+    ApplyBattleCry(state, state.active_player_index, atk_idx);
 
     // Two-Headed Hellkite attack-trigger draw (attack_draw_cards): drawn at declare-attackers,
     // so the cards are in hand for the post-combat main. Mirrors TurnSolver::SimulateCombat.
@@ -787,6 +795,7 @@ void GameEngine::CleanupStep(GameState& state)
         p.temp_tough_bonus      = 0;
         p.temp_haste            = false;   // "gains haste until end of turn" (Expedite) expires
         p.temp_lifelink         = false;   // Heliod's "gains lifelink until end of turn" expires
+        p.temp_double_strike    = false;   // Valiant Knight's team "gain double strike until EOT"
         p.is_animated           = false;
     }
 

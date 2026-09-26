@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<cockatrice_deck version="1">
+    <lastLoadedTimestamp>Fri Sep 25 13:55:05 2026</lastLoadedTimestamp>
+    <deckname></deckname>
+    <format></format>
+    <bannerCard providerId=""></bannerCard>
+    <comments></comments>
+    <tags/>
+    <zone name="main">
+        <card number="4" name="Dauntless Bodyguard"/>
+        <card number="4" name="Venerable Knight"/>
+        <card number="4" name="Worthy Knight"/>
+        <card number="3" name="Acclaimed Contender"/>
+        <card number="1" name="Valiant Knight"/>
+        <card number="4" name="Knight Exemplar"/>
+        <card number="3" name="Hero of Bladehold"/>
+        <card number="22" name="Plains"/>
+        <card number="1" name="Sol Ring"/>
+        <card number="1" name="Swords to Plowshares"/>
+        <card number="1" name="Unexpectedly Absent"/>
+        <card number="4" name="Accorder Paladin"/>
+        <card number="1" name="Silverblade Paladin"/>
+        <card number="1" name="Adeline, Resplendent Cathar"/>
+        <card number="3" name="Aether Vial"/>
+        <card number="1" name="Lightning Greaves"/>
+        <card number="2" name="Benalish Marshal"/>
+    </zone>
+</cockatrice_deck>

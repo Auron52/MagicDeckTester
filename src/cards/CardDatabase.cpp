@@ -850,6 +850,15 @@ CardParams CardDatabase::BuildParamsFromJson(const json& params) const
     p.attack_token_toughness       = params.value("attack_token_toughness", 0);
     for (const std::string& s : params.value("attack_token_subtypes", json::array()))
         p.attack_token_subtypes.push_back(s);
+    // Default TRUE preserves the historical unconditional OpponentHeads() multiply, so Adeline and
+    // every existing deck stay byte-identical; a FLAT-count card (Hero of Bladehold's "create two")
+    // sets it false. See the CardParams comment for why this is not inert in 2HG.
+    p.attack_tokens_per_opponent   = params.value("attack_tokens_per_opponent", true);
+    // Default FALSE = Adeline's player-scoped "whenever YOU attack"; true = Hero of Bladehold's
+    // creature-scoped "whenever THIS CREATURE attacks". See the CardParams comment.
+    p.attack_tokens_require_self_attacking =
+        params.value("attack_tokens_require_self_attacking", false);
+    p.battle_cry_power             = params.value("battle_cry_power", 0);
 
     // --- Dragonstorm kill-engine (Scourge / Lathliss / Utvara) ---
     p.dragon_ping_on_enter             = params.value("dragon_ping_on_enter", false);
@@ -1307,6 +1316,9 @@ CardParams CardDatabase::BuildParamsFromJson(const json& params) const
     p.firebreathing_grants_lifelink = params.value("firebreathing_grants_lifelink", false);
     p.etb_token_includes_self       = params.value("etb_token_includes_self", false);
     p.team_pump_grants_haste        = params.value("team_pump_grants_haste", false);
+    p.team_pump_grants_double_strike = params.value("team_pump_grants_double_strike", false);
+    p.soulbond                      = params.value("soulbond", false);
+    p.soulbond_grants_double_strike = params.value("soulbond_grants_double_strike", false);
     p.sacrifice_watch_pump_power    = params.value("sacrifice_watch_pump_power", 0);
     p.sac_outlet_allows_enchantment = params.value("sac_outlet_allows_enchantment", false);
     p.sac_outlet_excludes_self      = params.value("sac_outlet_excludes_self", false);

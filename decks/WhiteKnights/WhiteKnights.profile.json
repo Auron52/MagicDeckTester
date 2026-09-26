@@ -1,0 +1,69 @@
+{
+  "card_scores": {
+    "Acclaimed Contender": [
+      -0.11540827052535096
+    ],
+    "Accorder Paladin": [
+      0.3569033393765162,
+      0.0008595988538679933
+    ],
+    "Adeline, Resplendent Cathar": [
+      0.21294261294261307
+    ],
+    "Aether Vial": [
+      -0.083183728374709
+    ],
+    "Benalish Marshal": [
+      0.07251537914618655
+    ],
+    "Dauntless Bodyguard": [
+      0.21038623234431242,
+      -0.2022998003167391
+    ],
+    "Hero of Bladehold": [
+      -0.06365657293919735
+    ],
+    "Knight Exemplar": [
+      -0.045005310361104556
+    ],
+    "Lightning Greaves": [
+      0.08194546794399482
+    ],
+    "Silverblade Paladin": [
+      0.051998335124042505
+    ],
+    "Sol Ring": [
+      0.32457142857142873
+    ],
+    "Swords to Plowshares": [
+      -0.256908709738898
+    ],
+    "Unexpectedly Absent": [
+      -0.22870749484566044
+    ],
+    "Valiant Knight": [
+      -0.1232445634305579
+    ],
+    "Venerable Knight": [
+      0.21989336807314697,
+      -0.07966713972390682
+    ],
+    "Worthy Knight": [
+      0.0707254724776627,
+      -0.12469799703842188
+    ]
+  },
+  "hand_score_threshold": -1e+18,
+  "mulligan": {
+    "bottom_order": "count_first",
+    "curve_check": "two_drop",
+    "max_lands": 5,
+    "min_color_sources": {},
+    "min_lands": 1,
+    "min_playable": 0,
+    "required_pieces": [],
+    "stop_at": 4
+  },
+  "version": 1,
+  "vial_target_mv": 3
+}

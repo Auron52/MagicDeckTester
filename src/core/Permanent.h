@@ -257,6 +257,19 @@ struct Permanent
                                             // sites in lockstep; folded into the sim key only when set.
                                             // Never set outside PermAbilityMode::GrantLifelink ->
                                             // byte-identical elsewhere.
+    bool      temp_double_strike   = false; // "gain double strike until end of turn" (Valiant Knight's
+                                            // {3}{W}{W}, a TEAM grant over team_pump_subtypes). Read
+                                            // ONLY by CreatureHasDoubleStrike -- the single shared
+                                            // oracle all three damage sites consult -- so it cannot be
+                                            // honoured in combat but missed by the search's projection.
+                                            // Reset at BOTH cleanup sites in lockstep; folded into the
+                                            // sim key only when set. Unlike temp_haste this changes NO
+                                            // eligibility (it is not a CanAttack/CanTapNow input), so
+                                            // it needs no CanAttackFull wiring. Never set outside the
+                                            // team_pump_grants_double_strike payload -> byte-identical
+                                            // elsewhere. Placed beside temp_lifelink in the 2026-09-25
+                                            // cache layout (a bool in the cold bool run), not in the
+                                            // scan-hot first 192 bytes.
     bool      exile_at_end         = false; // Twinflame token: "exile those tokens at the beginning
                                             // of the next end step." Swept (battlefield -> exile) at
                                             // BOTH end-of-turn sites in lockstep; folded into the
@@ -319,6 +332,17 @@ struct Permanent
     // identically in the executor and the rollout. 0 = kNone = this permanent chooses nothing,
     // which is every card but the Incubator -> byte-identical everywhere else.
     uint16_t  chosen_subtype_id     = 0;
+    // SOULBOND pair (CR 702.46b, Silverblade Paladin): the PARTNER's card.m_number, 0 = unpaired.
+    // Set only on the permanent that HAS soulbond (the equipped_to pattern -- one side holds the
+    // link). READ-TIME VERIFIED by SoulbondPartnerIndex: every read re-checks the partner is still
+    // on the battlefield under the same controller, so there are ZERO detach sites to maintain and
+    // a pair broken by the partner leaving is correct by construction. m_number is unique per copy
+    // and never reused, so a stale value cannot re-resolve onto a different creature. Folded into
+    // the sim key / transposition key gated on NONZERO, so every deck without soulbond keeps its
+    // exact prior keys. NOT until-EOT -- it survives cleanup, so it is deliberately absent from
+    // both cleanup resets and from AtCleanBoundary (see the Dominance.h note). Sits with the other
+    // cold ints after the 2026-09-25 cache layout, outside the scan-hot first 192 bytes.
+    int       paired_with          = 0;
     int       damage               = 0;    // reset each cleanup step
     int       temp_power_bonus     = 0;    // accumulated "until end of turn" boosts; reset each cleanup
     int       temp_tough_bonus     = 0;

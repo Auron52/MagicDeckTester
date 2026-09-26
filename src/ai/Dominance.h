@@ -131,7 +131,27 @@
 // 136 -> 128 in the same pass (see the member-order contract at the top of Card.h).
 // THE ONE THING TO CHECK when this number next moves: whether it moved because a FIELD changed
 // (classify it below) or only because the layout did (nothing to do here but the number).
-static_assert(sizeof(Permanent) == 288,
+// The two entries below were written against the OLD 320-byte layout on the other machine the same
+// day (WhiteKnights); at the rebase their fields were placed into the new layout (temp_double_strike
+// beside temp_lifelink, paired_with beside the cold ints) and the number re-measured: 288 -> 296.
+// 320 -> 320 (2026-09-25): Permanent gained `temp_double_strike` (Valiant Knight's "{3}{W}{W}:
+// Knights you control gain double strike until end of turn"). THE SIZE DID NOT CHANGE -- the bool
+// landed in existing padding -- so the static_assert below did NOT fire, which is exactly why this
+// note is here: a new field can slip past that guard entirely, and the assert is a tripwire for
+// LAYOUT changes, not a complete census of state. Classification: BOUNDARY ASSERTION, the verbatim
+// temp_lifelink argument -- until-EOT state that cleanup clears, folded into AtCleanBoundary beside
+// temp_haste/temp_lifelink (a state still carrying it is refused, never compared), so it needs no
+// DomAxis. Do not read the unchanged number as "nothing to classify".
+// 320 -> 328 (2026-09-25): Permanent gained `paired_with`, the SOULBOND partner's m_number
+// (CR 702.46b, Silverblade Paladin). Classification: an EXACT-MATCH field, folded into Build()
+// below gated on nonzero -- NOT a boundary assertion and NOT an axis. It is future-determining
+// (which creature is paired decides who double-strikes for the rest of the game) and no direction
+// can be declared over it (pairing the biggest body is better now, but the pair persists and the
+// partner can be outgrown). It is emphatically NOT until-EOT state: it survives cleanup, so putting
+// it in AtCleanBoundary beside temp_double_strike would have refused every comparison from the turn
+// a Paladin pairs onward -- the two new fields on this card pair look alike and are classified
+// oppositely, which is the whole reason this log exists.
+static_assert(sizeof(Permanent) == 296,
               "Permanent changed size -- fold any new field into dominance::Build() (see the "
               "MAINTENANCE HAZARD note at the top of Dominance.h) before updating this number.");
 // The point of CounterList: this is what makes the erase path a memmove. If a future field breaks
@@ -436,6 +456,7 @@ inline bool AtCleanBoundary(const GameState& s)
         if (p.temp_power_bonus != 0 || p.temp_tough_bonus != 0)     { return false; }
         if (p.temp_haste || p.is_animated || p.exile_at_end)        { return false; }
         if (p.temp_lifelink)                                        { return false; }   // Heliod until-EOT grant
+        if (p.temp_double_strike)                                   { return false; }   // Valiant Knight until-EOT grant
         if (p.marked_for_destruction)                               { return false; }
     }
     return true;
@@ -822,6 +843,14 @@ inline DomSnap Build(const GameState& s, const DecisionProvider& prov,
         // exactly rather than compare. Set only on the ETB / Larcenist Treasures and cleared at the
         // untap, so every other deck's key is unchanged.
         if (p.fresh_hold_exempt) { mfold(0xF4E5ull); }
+        // Soulbond partner (Silverblade Paladin, CR 702.46b): an EXACT-MATCH field, not an axis.
+        // WHICH creature is paired decides who double-strikes for the rest of the game, and no
+        // direction can be declared over it (pairing the bigger body is better now, but the pair
+        // persists and the partner may be outgrown). Unlike temp_double_strike this is NOT until-EOT
+        // state, so it is deliberately absent from AtCleanBoundary -- it legitimately survives
+        // cleanup and must be COMPARED rather than refused. Nonzero-gated: every deck without
+        // soulbond keeps its exact prior key.
+        if (p.paired_with != 0) { mfold(0x50B0Dull); mfold(static_cast<std::uint64_t>(p.paired_with)); }
         if (wired)
         {
             mfold(0xA77Aull);

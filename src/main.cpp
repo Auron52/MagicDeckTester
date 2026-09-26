@@ -626,8 +626,29 @@ static std::string SummarizePlan(const TurnSolver::Plan& plan, const GameState& 
                 }
                 else
                 {
-                    tag = a.card_name + ": team +" + std::to_string(k)
-                        + "/+0 and haste"
+                    // Mode 2, the TEAM grant, read from the params rather than hardcoded. It used
+                    // to print "team +K/+0 and haste" literally, which was wrong two ways: K is the
+                    // activation COUNT, not the power (it only coincided because Sethron's
+                    // team_pump_power is 1), and the keyword rider is no longer always haste --
+                    // Valiant Knight's "{3}{W}{W}: Knights you control gain double strike" would
+                    // have been shown as "team +1/+0 and haste", i.e. a description of a different
+                    // card. Same class of gap as the mode-3 branch above.
+                    const CardDefinition* pd = CardDatabase::Instance().Lookup(a.card_name);
+                    const int  tp = pd ? pd->params.team_pump_power : 0;
+                    const bool th = pd && pd->params.team_pump_grants_haste;
+                    const bool td = pd && pd->params.team_pump_grants_double_strike;
+                    const std::string who =
+                        (pd && !pd->params.team_pump_subtypes.empty())
+                            ? pd->params.team_pump_subtypes.front() + "s"
+                            : std::string("team");
+                    std::string what;
+                    if (tp != 0) { what = "+" + std::to_string(tp * k) + "/+0"; }
+                    auto add = [&what](const char* kw)
+                    { if (!what.empty()) { what += " and "; } what += kw; };
+                    if (th) { add("haste"); }
+                    if (td) { add("double strike"); }
+                    if (what.empty()) { what = "(no effect)"; }   // should be unreachable
+                    tag = a.card_name + ": " + who + " " + what
                         + (k > 1 ? " \xC3\x97" + std::to_string(k) : std::string());
                 }
                 break;
@@ -2996,7 +3017,15 @@ static void WriteDiscardDecisionJson(std::ostream& os, const GameState& s,
         JsonStr(os, (hi >= 0 && hi < static_cast<int>(ap.hand.size())) ? ap.hand[hi].m_name.str() : std::string());
         os << " }";
     });
-    d.Note("reply a hand index -- the card to discard. Default = the AI's pick.");
+    // "a hand index" was AMBIGUOUS and the ambiguity was load-bearing: the reply is matched against
+    // `options[].index`, which is the engine's DRAW-ORDER hand index, while `me.hand` in the board
+    // JSON right above is sorted ALPHABETICALLY by name. So counting positions in the displayed hand
+    // yields the wrong card. Worse, an index that is not in options does NOT error -- the chooser
+    // silently substitutes the heuristic pick -- so the mistake shows up as an unexplained discard
+    // several turns later. That cost a Stage-5d sweep agent five wrong discards on WhiteKnights.
+    d.Note("reply the `index` VALUE of one of the options below (the engine's draw-order hand index) "
+           "-- NOT a position in the displayed `me.hand`, which is sorted by name. An index that is "
+           "not in options is silently replaced by the AI's pick. Default = the AI's pick.");
 }
 
 // Expressive Iteration: enumerate the legal (hand_idx, exile_idx) splits over `look` looked cards
@@ -3054,7 +3083,13 @@ static void WriteRetraceDiscardDecisionJson(std::ostream& os, const GameState& s
         JsonStr(os, (hi >= 0 && hi < static_cast<int>(ap.hand.size())) ? ap.hand[hi].m_name.str() : std::string());
         os << " }";
     });
-    d.Note("reply a hand index -- the land to discard as this spell's Retrace additional cost. Default = the AI's pick.");
+    // Same trap as the cleanup discard above, and SHARPER here: these options are only the LANDS in
+    // hand, so the indices are never the contiguous 0..n-1 that make a position-count accidentally
+    // work. See the comment on WriteDiscardDecisionJson's note.
+    d.Note("reply the `index` VALUE of one of the options below (the engine's draw-order hand index) "
+           "-- NOT a position in this options list and NOT a position in the displayed `me.hand`, "
+           "which is sorted by name. This is the land to discard as this spell's Retrace additional "
+           "cost. Default = the AI's pick.");
 }
 
 // Replicate decision (Hatchery Sliver, and any Sliver spell it grants replicate to): the player picks
@@ -3090,8 +3125,25 @@ static void WriteAttachHostDecisionJson(std::ostream& os, const GameState& s,
         JsonStr(os, p.card.m_name.str());
         os << ", \"label\": "; JsonStr(os, p.card.m_name.str()); os << " }";
     });
-    d.Note("reply an option index -- the creature to attach the put Equipment to, or -1 to "
-           "leave it unattached. Default = the AI's pick (best attacker).");
+    // TWO CONSUMERS SHARE THIS TYPE, and the note has to say which one is asking. The original is
+    // Armored Skyhunter's attack-dig ("attach this put Equipment to a creature"); soulbond
+    // (Silverblade Paladin) reuses the same board-click shape for "pair with a creature". Flagged by
+    // the Stage-5d sweep: a soulbond prompt reading "the creature to attach the put Equipment to",
+    // with no Equipment anywhere in the game, is read by humans AND by future sweep agents.
+    // Discriminated on the SOURCE card's own param -- for the Skyhunter path `source` is the
+    // Equipment's name (soulbond false); for soulbond it is the pairing creature's.
+    const CardDefinition* sd = CardDatabase::Instance().Lookup(source);
+    if (sd != nullptr && sd->params.soulbond)
+    {
+        d.Note("reply an option index -- the unpaired creature to PAIR with (soulbond, CR 702.46b), "
+               "or -1 to decline the pairing. While paired, both creatures keep the bonus for as "
+               "long as you control both. Default = the AI's pick (highest effective power).");
+    }
+    else
+    {
+        d.Note("reply an option index -- the creature to attach the put Equipment to, or -1 to "
+               "leave it unattached. Default = the AI's pick (best attacker).");
+    }
 }
 
 // Jitte counter-spend decision (Umezawa's Jitte): at combat, how many charge counters to spend

@@ -97,14 +97,26 @@ cleanup discards stay on the engine heuristics. Build Release first: `./build.sh
 
 ### Stateless-replay protocol
 
-A game is fully determined by `(deck, seed, game-index, choices)`. Each invocation
-replays the deterministic game applying the prior `--choices`, then prints the next
-decision and exits:
+A game is fully determined by `(deck, seed, choices)`. Each invocation replays the
+deterministic game applying the prior `--choices`, then prints the next decision and exits:
 
 ```bash
 ./build/Release/mtg <deck>.txt --profile <deck>.profile.json \
-  --claude-play --seed <S> --game-index <GI> --max-turns 8 --reveal 6 --choices "<CSV>"
+  --claude-play --seed <S> --max-turns 8 --reveal 6 --choices "<CSV>"
 ```
+
+> **`--game-index` DOES NOT VARY THE GAME under `--claude-play` — do not sweep over it.**
+> `RunClaudePlay` calls `SetupGame(deck, seed)`, so your library order and every draw come from
+> the **seed alone**; `game_index` is passed only to `PopulateOpponentSpawns`, which populates the
+> passive opponent's board (and those bodies never attack or block). The single-deck benchmark path
+> (`--games 1`) ignores it for the same reason. Verified empirically: two game-indices at one seed
+> deal byte-identical opening hands and report the same win turn. `--game-index` earns its keep in
+> the **batch/reference** world, where it selects which game of a multi-game run you are addressing
+> — a distinction worth keeping straight, because the viewer's saved references are named
+> `claude_s<seed>_gi<index>`, which makes `gi` look load-bearing here when it is not.
+> *(This warning exists because an earlier version of this section put `--game-index <GI>` in the
+> example above. A 15-agent sweep was fanned over 15 game-indices and unknowingly played the same
+> game 15 times; the agents only salvaged it by independently noticing and probing on their own.)*
 
 - Start with **no** `--choices` (or empty). The command prints ONE decision between
   `<<<CLAUDE_DECISION>>>` and `<<<END_DECISION>>>` and exits **70** ("more input
@@ -138,10 +150,22 @@ decision and exits:
   bottoms, BD banks to hand, CT leaves it exiled). `"demonstrate"` — copy yes/no: reply
   **1** to copy, **0** not to. `"target"` — an option-list pick at resolution (e.g.
   Sakashima's Protege's copy-an-entrant choice; `min_targets: 0` means an empty pick
-  declines). Each self-documents via its `note` field. All decision types share the one
-  `--choices` stream in the order they occur (mulligan/bottom first, then per turn a
-  vial_charge before its main_phase). Not emitted under `--force-mulligan` (that
-  reconstructs a fixed hand on the engine).
+  declines). `"attach_host"` — pick which permanent an entering object attaches or pairs
+  to: reply the `options` index, or **-1** to decline. Covers Equipment/Aura hosts **and
+  soulbond pairing** (Silverblade Paladin). Each self-documents via its `note` field. All
+  decision types share the one `--choices` stream in the order they occur (mulligan/bottom
+  first, then per turn a vial_charge before its main_phase). Not emitted under
+  `--force-mulligan` (that reconstructs a fixed hand on the engine).
+
+  > **`-1` IS NOT A UNIVERSAL "PASS" — check the `type` before you reply.** On a
+  > `main_phase` decision `-1` means "cast nothing", which is a normal way to advance. On
+  > `attach_host`, `free_cast` and `target` the same `-1` **declines the choice**, and the
+  > effect is silently lost. This has already produced a false bug report: a 2026-09-26
+  > sweep agent appended a routine `-1` to move a turn along, thereby declining a soulbond
+  > pairing, and read the resulting single-strike damage as "soulbond's double strike is
+  > missing". It dissolved the moment they inspected the decision they had answered. If a
+  > mechanism looks absent, **replay the CSV printing each decision's `type`** and confirm
+  > you did not decline it — before writing it up.
 - `--reveal N` exposes the top N upcoming draws (partial clairvoyance). The search is
   fully clairvoyant; reveal gives the player a fair-ish, limited foresight.
 

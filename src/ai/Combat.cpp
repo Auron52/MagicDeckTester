@@ -147,11 +147,10 @@ CombatDamageResult ResolveCombatDamage(GameState& state, const std::vector<int>&
         auto [lord_pb, lord_tb] = ComputeLordBonus(p.card, state, active, animated, &p, &lord_idx,
                                                    &bs.anthems);
         (void)lord_tb;
-        const bool ds = (animated
-            ? HasDoubleStrikeFromLords(p.card, state.battlefield, active, true, &ds_idx)
-            : (p.card.HasKeyword(Keyword::DoubleStrike)
-               || HasDoubleStrikeFromLords(p.card, state.battlefield, active, false, &ds_idx)))
-            || HasDoubleStrikeFromEquipment(p, state);   // Kor Duelist / Balan (KittyEquipment)
+        // The single shared oracle (SpellEffects.h) -- printed keyword, subtype lords, Equipment
+        // grants, Valiant Knight's until-EOT activation and Silverblade Paladin's soulbond pair, in
+        // one place, so this site and TurnSolver's two projections cannot drift apart.
+        const bool ds = CreatureHasDoubleStrike(p, state, &ds_idx);
         int base_pw = p.EffectivePower() + lord_pb + exalted_bonus;
         const CardDefinition* adef = CardDatabase::Instance().LookupCached(p.card);
         if (adef)

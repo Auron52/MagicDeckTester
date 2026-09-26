@@ -750,6 +750,67 @@ struct CardParams
     int                      attack_token_power     = 0;
     int                      attack_token_toughness = 0;
     std::vector<std::string> attack_token_subtypes;
+    // Does attack_creates_tokens scale with the OPPONENT COUNT? Adeline says "for each opponent,
+    // create a ... token", so hers does (x2 in 2HG). Hero of Bladehold says "create TWO ... tokens"
+    // -- a FLAT count that must NOT scale. The multiply by gamesetup::OpponentHeads() used to be
+    // unconditional at both the apply site (FireAttackCreateTokens) and the projection
+    // (TurnSolver::PendingAttackDamage), which is inert in 1-opponent goldfishing but doubles a
+    // flat-count card in any 2HG case (this repo ships angels2hg / knights2hg / melira2hg).
+    // DEFAULT true == the historical behaviour, so Adeline and every existing deck are
+    // byte-identical; a flat-count card sets it false.
+    bool                     attack_tokens_per_opponent = true;
+
+    // Does the token trigger require the SOURCE ITSELF to be a declared attacker?
+    //
+    // THE TWO CARDS THAT USE attack_creates_tokens HAVE DIFFERENT TRIGGER SCOPES, and the
+    // difference is one word of oracle text:
+    //   Adeline:            "Whenever YOU attack, for each opponent, create a ... token"
+    //                       -> PLAYER-scoped. Fires on any attack; she need not attack herself.
+    //   Hero of Bladehold:  "Whenever THIS CREATURE attacks, create two ... tokens"
+    //                       -> CREATURE-scoped. Requires Hero to be a DECLARED attacker (CR 508.1),
+    //                          so a summoning-sick Hero makes nothing on the turn it lands.
+    //
+    // FOUND BY THE STAGE-5d CLAUDE-PLAY SWEEP, 2026-09-25, which is exactly what that sweep is for:
+    // Hero was implemented by reusing Adeline's param family, inheriting her player-scoped gate, so
+    // a sick Hero created two attacking Soldiers (plus their battle-cry pump) a full turn early --
+    // measured in 9 of 40 games, and it moved a win turn. NO harness could have caught it: the
+    // executor and the rollout share this function, so they were wrong in LOCKSTEP (no fd-diverge,
+    // no nonconv), the digests were self-consistent, and the new unit tests all declared Hero as an
+    // attacker, so the one untested branch was the only broken one.
+    //
+    // The same distinction was reasoned about correctly for battle cry on the SAME CARD (see
+    // battle_cry_power below: "the source must ITSELF be attacking ... hence the sources are drawn
+    // from attacker_indices, not from a battlefield scan") and simply not carried across to the
+    // token half. DEFAULT false = the historical player-scoped behaviour, so Adeline is
+    // byte-identical; Hero sets it true.
+    bool                     attack_tokens_require_self_attacking = false;
+
+    // BATTLE CRY (CR 702.92) -- Accorder Paladin, Hero of Bladehold. "Whenever this creature
+    // attacks, each OTHER attacking creature gets +1/+0 until end of turn." Applied at
+    // declare-attackers by ApplyBattleCry (SpellEffects.h) in BOTH worlds (GameEngine::CombatPhase
+    // executor + TurnSolver::SimulateCombat rollout) as Permanent::temp_power_bonus, which the
+    // CR 514.2 cleanup already zeroes -- so the duration is free and executor/rollout stay lockstep.
+    //
+    // Deliberately NOT modelled by reusing attack_pump_matching_power (Kragma Warcaller), for two
+    // independent reasons. Semantically: Kragma's source need not be attacking and does not
+    // self-exclude, while battle cry requires BOTH ("whenever THIS creature attacks", "each OTHER").
+    // Structurally: attack_pump_matching_power is OR-ed into the MINOTAUR archetype signature in
+    // SelectDecisionProvider, so reusing it would silently route any battle-cry deck to
+    // MinotaurProvider -- the archetype-neutral-param misroute class that has already caught
+    // Mirrorwing, StompySurprise, Minotaur and Dragons.
+    //
+    // ON PROVIDER SIGNATURES, corrected: an earlier version of this comment said battle_cry_power
+    // "must NOT be added to any provider signature". That overreached. The hazard above is REUSING a
+    // param another archetype already claims; a NEW, gated param that no other deck sets is exactly
+    // what a signature should be keyed on, and this one is OR-ed into the WhiteKnights signature
+    // alongside soulbond and team_pump_grants_double_strike. What must not happen is adding it to
+    // some OTHER deck's signature.
+    //
+    // Instances STACK and CROSS-PUMP: each attacker gets (sum of battle_cry_power over the
+    // controller's ATTACKING sources) minus its own, so the team bonus is K*(A+T-1) for K
+    // battle-cry attackers among A declared attackers and T tokens put in attacking -- NOT K.
+    // Doubled on a double-striker. 0 = not a battle-cry creature -> byte-identical elsewhere.
+    int                      battle_cry_power = 0;
 
     // --- Dragonstorm kill-engine (Scourge of Valkas / Lathliss / Utvara Hellkite) ---
     // All new paths are gated on these params, so decks that never set them are byte-identical.
@@ -2593,6 +2654,55 @@ struct CardParams
     // Action::Kind::TeamPumpActivate that sets Permanent::temp_haste (and the same +1/+0) on every
     // matching creature. Menace is inert (no blockers; disclosed deferral D7). false = no haste.
     bool team_pump_grants_haste = false;
+
+    // Valiant Knight: "{3}{W}{W}: Knights you control gain double strike until end of turn."
+    // Structurally the SAME card shape as Sethron above -- a mana-costed, subtype-filtered,
+    // until-EOT TEAM keyword grant -- so it rides the same team_pump_cost/_subtypes fields and the
+    // same Action::Kind::ActivatePump mode 2, with team_pump_power left at 0 (the grant adds no
+    // power). Sets Permanent::temp_double_strike on every matching creature, read by the single
+    // CreatureHasDoubleStrike oracle.
+    //
+    // WHY NOT the combat-time firebreathing converter (ApplyFirebreathing), which is where a team
+    // +1/+0 goes: that converter picks activations by a damage-per-MANA ratio, and this repo's rule
+    // at that exact site is that an activation whose value the ratio cannot price must be enumerated
+    // as a searched main-phase ActivatePump instead (the standing exclusions are
+    // firebreathing_discard, which cannot price a CARD, and firebreathing_grants_lifelink, which
+    // cannot price LIFE). Double strike cannot be priced there either: its value is a MULTIPLIER on
+    // whatever the team's power ends up being after every other pump in the same window, not a flat
+    // increment. team_pump_power = 0 also keeps it out of that converter by construction, since the
+    // converter requires team_pump_power > 0.
+    //
+    // WHY NOT a new PermAbilityMode (the Heliod lifelink_grant_cost pipeline, the other obvious
+    // precedent): that enum's ordinal is a PERSISTED BIT INDEX (`1u << int(mode)`), and its
+    // mode->cost chain, PermAbilityTaps, the projection read and PermAbilityLabel are four sites
+    // that each compile clean and fail INVISIBLY if a new mode is missed. Riding mode 2 needs none
+    // of them. Heliod's grant is also single-TARGET, where this one is team-wide and idempotent.
+    //
+    // K IS CAPPED AT 1 for a keyword-only grant (team_pump_power == 0): a second activation is
+    // provably a no-op (the flag is already set and no power accrues), so enumerating K>1 would both
+    // waste search branches and put a guaranteed-no-op option in the human-play plan menu -- the
+    // Wirewood Lodge phantom-option rule. false = no double strike grant -> byte-identical.
+    bool team_pump_grants_double_strike = false;
+
+    // SOULBOND (CR 702.46b) -- Silverblade Paladin. "You may pair this creature with another
+    // unpaired creature when either enters. They remain paired for as long as you control both of
+    // them." The PAIRING is `soulbond`; the PAYLOAD is a separate flag because soulbond itself
+    // grants nothing (other soulbond creatures give flying, lifelink, vigilance, ...).
+    //
+    // State lives in Permanent::paired_with on the SOULBOND side only -- the partner's m_number,
+    // 0 = unpaired -- which is the `equipped_to` pattern (one side holds the link, the other side is
+    // found by a gated scan). It is READ-TIME VERIFIED: every read re-checks that the partner is
+    // still on the battlefield under the same controller, so a partner leaving needs NO detach site
+    // at all (contrast equipped_to, which is maintained at 8 death sites and is where that class of
+    // bug lives). m_number is unique per copy and never reused, so a stale number can never
+    // accidentally re-resolve onto a different creature.
+    //
+    // That read-time rule also gets the rules right for free: CR says the pair breaks when you stop
+    // controlling either one and does NOT re-form, and soulbond only triggers "when either enters".
+    // A verified-false read makes the source unpaired again, so it legitimately pairs with the NEXT
+    // creature to enter -- which is exactly the printed behaviour.
+    bool soulbond = false;
+    bool soulbond_grants_double_strike = false;
 
     // Slaughter-Priest of Mogis: "Whenever you sacrifice a permanent, this creature gets +2/+0
     // until end of turn." > 0 gates a SACRIFICE WATCHER on this permanent, fired from the shared

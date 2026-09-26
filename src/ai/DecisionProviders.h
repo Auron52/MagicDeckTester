@@ -457,6 +457,45 @@ public:
     const char* Name() const override { return "Knights"; }
 };
 
+// WhiteKnights (2026-09-25) -- mono-white Knight tribal on Aether Vial, a DIFFERENT shipping list
+// from Knights above. An EMPTY derivation of KnightsProvider: it inherits every judgement hook
+// byte-for-byte (the Vial charge policy from VialProvider, the USER-reviewed MTG_KNIGHTS_ORDER cast
+// order, and the root defaults for everything else), so it exists for the reasons the
+// every-deck-owns-a-provider rule gives -- a name in scripts/provider_audit.py and a place to hold a
+// certificate -- and NOT to narrow anything.
+//
+// WHY IT IS NEEDED AT ALL: both lists trip the `knights` signature (both mainboards run Knight
+// Exemplar, Worthy Knight and Acclaimed Contender), so without this they would SHARE a provider and
+// provider_audit.py --check would fail. Routed ABOVE the knights branch.
+//
+// HOW THE TWO ARE TOLD APART, stated plainly because it is the fragile part: the WhiteKnights
+// signature is OR-ed over battle_cry_power / soulbond / team_pump_grants_double_strike -- four
+// different cards (Accorder Paladin, Hero of Bladehold, Silverblade Paladin, Valiant Knight) across
+// three params, all new and gated, so no other shipped deck's MAINBOARD sets any of them. But note
+// that `Knights` lists Accorder Paladin, Hero of Bladehold and Valiant Knight in its SIDEBOARD, and
+// the signature scan reads deck.mainboard only. So the discrimination survives a swap within
+// WhiteKnights, and would break if one of those three were moved into Knights' MAINBOARD.
+//
+// That fragility is bounded, and it is worth saying why: because this is an EMPTY derivation, a
+// misroute between these two providers is PLAY-NEUTRAL -- WhiteKnights running on KnightsProvider
+// behaves identically, since there is no hook here to lose. The cost of getting it wrong is the
+// audit name and the certificate, not the deck's play. If either list ever earns a measured hook,
+// that stops being true and the signature needs a sturdier discriminator.
+class WhiteKnightsProvider : public KnightsProvider
+{
+public:
+    CertStance Certificate() const override
+    { return { CertState::NotAssessed, "NOT ASSESSED, and this list is HARDER to bound than Knights, "
+               "not easier. Combat looks like the sole route (no burn, no drain), but three separate "
+               "things have to be priced first: Aether Vial puts a creature onto the battlefield at "
+               "instant speed; Valiant Knight's {3}{W}{W} grants the whole team DOUBLE STRIKE, so a "
+               "board's reach can double at will for mana already counted; and Silverblade Paladin's "
+               "soulbond doubles one more body for free. Lightning Greaves also grants HASTE, so a "
+               "creature's damage is not deferred to the next turn. Any 'provably winless this turn' "
+               "bound that ignores the double-strike activation is simply wrong." }; }
+    const char* Name() const override { return "WhiteKnights"; }
+};
+
 
 // Mono-red Burn (Searing Blaze's landfall damage is the deck's signature): once it has enough
 // lands in play (its curve tops at mana value 2), it BANKS further land drops so a future

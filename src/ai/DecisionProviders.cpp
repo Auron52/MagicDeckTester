@@ -836,6 +836,37 @@ int DecisionProvider::AttackDigAttachHost(
     return best_num;
 }
 
+int DecisionProvider::SoulbondPartner(
+    const GameState& s, int controller, const Permanent& source,
+    const std::vector<int>& candidate_bf_indices) const
+{
+    int best_num = 0, best_pw = -1;
+    for (int idx : candidate_bf_indices)
+    {
+        if (idx < 0 || idx >= static_cast<int>(s.battlefield.size())) { continue; }
+        const Permanent& c = s.battlefield[idx];
+        if (c.card.m_number == source.card.m_number) { continue; }   // "ANOTHER unpaired creature"
+        // Effective power as the board really sees it: printed + until-EOT bonuses, plus lords and
+        // anthems, plus the characteristic-defining term. Adeline is printed 0/4 with
+        // power_equals_creature_count, so DynamicBasePower is what stops her being valued at 0 --
+        // she is routinely this deck's largest creature and therefore its best pair.
+        const CardDefinition* cd = CardDatabase::Instance().LookupCached(c.card);
+        int pw = c.EffectivePower()
+               + ComputeLordBonus(c.card, s, controller, c.is_animated, &c).first;
+        if (cd != nullptr)
+        {
+            if (c.is_animated) { pw += cd->params.animate_power; }
+            pw += DynamicBasePower(*cd, s, controller);
+        }
+        if (pw > best_pw || (pw == best_pw && best_num != 0 && c.card.m_number < best_num))
+        {
+            best_pw  = pw;
+            best_num = c.card.m_number;
+        }
+    }
+    return best_num;   // 0 = no legal partner (the caller's list was empty), i.e. stay unpaired
+}
+
 // ---- Base rules for the remaining ported built-ins -------------------------------------------
 // Each reproduces the historical inline pick at index 0, so every port is byte-identical. See the
 // hook declarations in DecisionProvider.h for what each rule says and where it looks weak.
@@ -9769,6 +9800,7 @@ namespace
     const AngelsProvider         g_angels;
     const BreachingDragonstormProvider g_breaching_dragonstorm;
     const KnightsProvider        g_knights;
+    const WhiteKnightsProvider   g_white_knights;
     const AntiLifegainProvider   g_antilife;
     const TreasureHuntProvider   g_treasure;
     const VialProvider           g_vial;
@@ -9855,6 +9887,7 @@ const DecisionProvider& DetectDecisionProvider(const Decklist& deck)
     // proof and a name in the audit -- see the always-own-a-provider block above the routing chain.
     bool angels = false;
     bool knights = false;    // Knight tribal on Aether Vial -- KnightsProvider DERIVES from Vial
+    bool wknights = false;   // WhiteKnights: the OTHER Knight list -- derives from Knights
     bool breaching = false;  // Breaching Dragonstorm cascade/free-cast pile -- rode Generic
     // PIRATES (U/R/b Vial Pirate tribal). MUST return ABOVE `anti`: Forerunner of the Coalition's
     // tutor_to_top ALONE sets that signature (the Giant Harbinger / Worldly Tutor path), which is the
@@ -9926,6 +9959,28 @@ const DecisionProvider& DetectDecisionProvider(const Decklist& deck)
                 || has_knight(p.etb_dig_subtypes))
             { knights = true; }
         }
+
+        // WhiteKnights -- the SECOND shipping Knight list, which trips every term of the `knights`
+        // signature above (same Knight Exemplar / Worthy Knight / Acclaimed Contender core), so it
+        // needs its own discriminator or the two decks share a provider and provider_audit.py
+        // --check fails. OR-ed over FOUR different cards across THREE params, per the
+        // one-swap-cannot-lose-the-routing discipline:
+        //   battle_cry_power               -- Accorder Paladin, Hero of Bladehold
+        //   soulbond                       -- Silverblade Paladin
+        //   team_pump_grants_double_strike -- Valiant Knight
+        // All three are NEW this change and gated (0/false inert), so no pre-existing deck's
+        // mainboard can set them -- which is the property that makes this additive rather than
+        // capable of taking another deck off a provider it was measured on.
+        //
+        // Deliberately NOT keyed on Sol Ring / Lightning Greaves / Swords to Plowshares: those are
+        // colourless-or-white STAPLES any deck might splash, which is exactly the class the Dragons
+        // signature block excluded.
+        //
+        // Read the WhiteKnightsProvider comment for why `Knights` listing three of these four cards
+        // in its SIDEBOARD does not break this (the scan is over deck.mainboard) and why a misroute
+        // between these two providers would be play-neutral anyway.
+        if (p.battle_cry_power > 0 || p.soulbond || p.team_pump_grants_double_strike)
+        { wknights = true; }
 
         // Breaching Dragonstorm. OR-ed across its namesake (the exile-until-nonland free cast),
         // Creative Technique (demonstrate) and the Dragon self-bounce. This deck reached the
@@ -10242,6 +10297,13 @@ const DecisionProvider& DetectDecisionProvider(const Decklist& deck)
     // (see the flag's comment). GenericProvider on purpose: a new deck earns its own provider only
     // once it has a measured hook to hold, and until then it gets no narrowing at all.
     if (angels)      { return g_angels; }
+    // WhiteKnights ABOVE Knights, and that order is the whole point: WhiteKnights trips BOTH
+    // signatures (it shares the Knight Exemplar / Worthy Knight / Acclaimed Contender core), so
+    // below the `knights` branch it would never be reached and the two lists would share a
+    // provider -- which provider_audit.py --check exists to reject. An EMPTY derivation of
+    // KnightsProvider, so this is play-neutral by construction: every judgement hook is inherited
+    // byte-for-byte and there is nothing here to narrow.
+    if (wknights)    { return g_white_knights; }
     // Knights: KnightsProvider, which DERIVES FROM VialProvider -- the deck rode VialProvider and
     // still runs on exactly its hooks, so this is play-neutral. Must sit ABOVE `vial`.
     if (knights)     { return g_knights; }

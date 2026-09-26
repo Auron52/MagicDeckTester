@@ -5529,9 +5529,29 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
             {
                 const int n = ApplyActivatePump(state, state.active_player_index, a.sac_source_id,
                                                 a.gy_exile_mode, a.chosen_x);
+                // Label built from the PARAMS, not hardcoded. It used to read "team pump + haste"
+                // for every mode != 1, which was already wrong for mode 3 (Resplendent Angel's self
+                // pump + lifelink) and became wrong again for Valiant Knight's double-strike grant
+                // (team_pump_power 0, no haste) -- flagged by the Stage-5d sweep as "the label omits
+                // the actual effect", and a mislabelled event is what misdirects the NEXT diagnosis.
                 if (m_logger && n > 0)
-                { m_logger->LogAbility(a.sac_source_id, bf_name(a.sac_source_id),
-                                       a.gy_exile_mode == 1 ? "pump (discard)" : "team pump + haste"); }
+                {
+                    const CardDefinition* ad = CardDatabase::Instance().Lookup(a.card_name);
+                    std::string what;
+                    if (a.gy_exile_mode == 1)      { what = "pump (discard)"; }
+                    else if (a.gy_exile_mode == 3) { what = "self pump + lifelink"; }
+                    else
+                    {
+                        if (ad && ad->params.team_pump_power != 0)
+                        { what = "team +" + std::to_string(ad->params.team_pump_power) + "/+0"; }
+                        auto add = [&what](const char* kw)
+                        { if (!what.empty()) { what += " and "; } what += kw; };
+                        if (ad && ad->params.team_pump_grants_haste)         { add("haste"); }
+                        if (ad && ad->params.team_pump_grants_double_strike) { add("double strike"); }
+                        if (what.empty()) { what = "team pump"; }
+                    }
+                    m_logger->LogAbility(a.sac_source_id, bf_name(a.sac_source_id), what);
+                }
             }
         }
         else if (a.kind == Action::Kind::UntapCreature)

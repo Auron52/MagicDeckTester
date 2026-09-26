@@ -495,10 +495,21 @@ inline uint64_t FungibilityKey(const Permanent& p)
          | (p.exile_at_end ? 512ull : 0ull)
          | (p.is_animated ? 1024ull : 0ull)
          | (p.is_token ? 2048ull : 0ull)
-         | (p.echo_resolved ? 4096ull : 0ull));
+         | (p.echo_resolved ? 4096ull : 0ull)
+         | (p.temp_double_strike ? 8192ull : 0ull));   // Valiant Knight until-EOT team grant
     // Fresh-hold exemption (MTG_ETB_TREASURE_SPEND): an exempt fresh Treasure pays this turn, a
     // held one does not, so they are not fungible. Mixed only when set -> every other key unchanged.
     if (p.fresh_hold_exempt) { Mix(h, 0xF4E5F4E5ull); }
+    // Soulbond partner (Silverblade Paladin). A full int, not a bit: WHICH creature is paired is
+    // what decides who double-strikes, so two otherwise-identical Paladins paired to different
+    // bodies are NOT fungible.
+    //
+    // GATED ON NONZERO, and that is not a micro-optimisation. An unconditional Mix would change
+    // this hash's VALUE for every permanent in every deck -- grouping would survive (the same
+    // constant folded into both sides preserves equality), but hash values reach disk via the
+    // memo/keep artifacts, so "byte-identical" would stop being true for reasons nothing in play
+    // requires. The nonzero gate is the house convention for exactly this.
+    if (p.paired_with != 0) { Mix(h, static_cast<uint64_t>(p.paired_with)); }
     Mix(h, static_cast<uint64_t>(p.damage) << 32 | static_cast<uint64_t>(p.pending_death_trigger));
     Mix(h, static_cast<uint64_t>(p.temp_power_bonus) << 32 | static_cast<uint64_t>(p.temp_tough_bonus));
     Mix(h, static_cast<uint64_t>(p.charge_counters) << 32 | static_cast<uint64_t>(p.verse_counters));
@@ -2409,6 +2420,8 @@ static std::string BoardSignature(const GameState& s)
         e += "/p" + std::to_string(p.temp_power_bonus) + "," + std::to_string(p.temp_tough_bonus);
         if (p.temp_haste)   { e += "/h"; }    // Expedite until-EOT haste
         if (p.temp_lifelink){ e += "/ll"; }   // Heliod until-EOT lifelink grant
+        if (p.temp_double_strike) { e += "/ds"; }   // Valiant Knight until-EOT team grant
+        if (p.paired_with != 0) { e += "/sb" + std::to_string(p.paired_with); }   // soulbond pair
         if (p.exile_at_end) { e += "/x"; }    // Twinflame token, exiled at end step
         e += "/d" + std::to_string(p.damage);
         e += "/a" + std::to_string(p.aura_attached_to);
@@ -6914,11 +6927,9 @@ static std::vector<AttackingManaSource> CollectAttackingManaSources(const GameSt
         const bool animated = p.is_animated;
         auto [lord_pb, lord_tb] = ComputeLordBonus(p.card, state, active, animated, &p);
         (void)lord_tb;
-        const bool ds = (animated
-            ? HasDoubleStrikeFromLords(p.card, state.battlefield, active, true)
-            : (p.card.HasKeyword(Keyword::DoubleStrike)
-               || HasDoubleStrikeFromLords(p.card, state.battlefield, active)))
-            || HasDoubleStrikeFromEquipment(p, state);       // Kor Duelist / Balan
+        // The single shared oracle (SpellEffects.h); mirrors ResolveCombatDamage exactly. No
+        // prefilter here -- this function has no GatherBoardSources call of its own.
+        const bool ds = CreatureHasDoubleStrike(p, state);
         int base_pw = p.EffectivePower() + lord_pb;
         if (animated) { base_pw += def->params.animate_power; }
         base_pw += DynamicBasePower(*def, state, active);
@@ -6974,6 +6985,13 @@ static int PendingAttackDamage(const GameState& state)
     int dmg = 0;
     int active = state.active_player_index;
     std::vector<const Permanent*> attackers;
+    // Battle cry needs a SECOND pass (like exalted below) because each attacker's bonus depends on
+    // the final attacker set -- including the tokens added further down. Retained in parallel with
+    // `attackers`: this source's own battle_cry_power (for the "each OTHER" self-exclusion) and the
+    // ds flag already computed in the main loop, since the pump is doubled on a double-striker.
+    std::vector<int>  bc_of;
+    std::vector<bool> ds_of;
+    int bc_total = 0;
     // Board-source prefilter, gathered once (SpellEffects.h) -- this loop tests every creature and
     // the solver re-runs it per scored subset, so the unfiltered scans are quadratic in board size.
     // It used to gather the HASTE pair only; the lord / anthem / double-strike / attachment scans
@@ -6989,11 +7007,8 @@ static int PendingAttackDamage(const GameState& state)
         bool animated = p.is_animated;
         auto [lord_pb, lord_tb] = ComputeLordBonus(
             p.card, state, active, animated, &p, &bs.lords, &bs.anthems);
-        bool ds = (animated
-            ? HasDoubleStrikeFromLords(p.card, state.battlefield, active, true, &bs.ds)
-            : (p.card.HasKeyword(Keyword::DoubleStrike)
-               || HasDoubleStrikeFromLords(p.card, state.battlefield, active, false, &bs.ds)))
-            || HasDoubleStrikeFromEquipment(p, state);           // Kor Duelist / Balan
+        // The single shared oracle (SpellEffects.h); mirrors ResolveCombatDamage exactly.
+        const bool ds = CreatureHasDoubleStrike(p, state, &bs.ds);
         int base_pw = p.EffectivePower() + lord_pb;
         const CardDefinition* adef = CardDatabase::Instance().LookupCached(p.card);
         if (adef)
@@ -7017,6 +7032,10 @@ static int PendingAttackDamage(const GameState& state)
             else { dmg += base_pw * (ds ? 2 : 1); }
         }
         attackers.push_back(&p);
+        const int bc = adef ? adef->params.battle_cry_power : 0;
+        bc_of.push_back(bc);
+        ds_of.push_back(ds);
+        bc_total += bc;
     }
     dmg += CountAttackTriggerLifeLoss(state.battlefield, active, attackers);
     // Inferno Titan: 3 per attacking copy. Without this the search under-rates attacking with the
@@ -7032,8 +7051,11 @@ static int PendingAttackDamage(const GameState& state)
     if (static_cast<int>(attackers.size()) == 1)
     { dmg += CountExalted(state.battlefield, active); }
 
-    // Estimate attack-trigger tokens (Adeline) for this turn only: const path cannot create
-    // them, so add their immediate damage (token base power + anthem bonus) if attacking.
+    // Estimate attack-trigger tokens (Adeline, Hero of Bladehold) for this turn only: const path
+    // cannot create them, so add their immediate damage (token base power + anthem bonus) if
+    // attacking. `tok_count` is carried out of the block because the tokens enter ATTACKING and so
+    // receive the battle cry pump below.
+    int tok_count = 0;
     if (!attackers.empty())
     {
         for (const Permanent& p : state.battlefield)
@@ -7041,15 +7063,39 @@ static int PendingAttackDamage(const GameState& state)
             if (p.controller_index != active) { continue; }
             const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
             if (!d || d->params.attack_creates_tokens <= 0) { continue; }
+            // CREATURE-SCOPED trigger (Hero of Bladehold): only fires if the source itself is one of
+            // the attackers this projection counted. `attackers` holds pointers into this same
+            // battlefield vector, so the address IS the identity. Mirrors FireAttackCreateTokens --
+            // and this mirror is the half that fails SILENTLY: without it the search keeps pricing
+            // two phantom Soldiers plus their battle-cry pump for a Hero that cannot attack.
+            if (d->params.attack_tokens_require_self_attacking
+                && std::find(attackers.begin(), attackers.end(), &p) == attackers.end())
+            { continue; }
             Card tok;
             tok.AddType(CardType::Creature);
             tok.m_subtypes = d->params.attack_token_subtypes;
             tok.m_power    = d->params.attack_token_power;
             auto [tpb, ttb] = ComputeLordBonus(tok, state, active, false, nullptr,
                                                &bs.lords, &bs.anthems);
-            dmg += d->params.attack_creates_tokens * gamesetup::OpponentHeads()   // one per head (2HG)
-                 * (d->params.attack_token_power + tpb);
+            // One per head only when the oracle says "for each opponent" (Adeline). Hero of
+            // Bladehold's "create two" is a FLAT count and must not scale -- inert at 1 head,
+            // a doubling bug in the 2HG cases this repo ships. Mirrors FireAttackCreateTokens.
+            const int n = d->params.attack_creates_tokens
+                        * (d->params.attack_tokens_per_opponent ? gamesetup::OpponentHeads() : 1);
+            tok_count += n;
+            dmg += n * (d->params.attack_token_power + tpb);
         }
+    }
+
+    // Battle cry (CR 702.92), second pass: each attacker gets (bc_total - its own) -- the tokens
+    // above included, which is why this runs last. Doubled on a double-striker. Omitting this pass
+    // raises NO flag anywhere; the search would simply under-rate attacking by the whole team pump
+    // and mis-sequence the deck's best turn. Mirrors ApplyBattleCry (SpellEffects.h).
+    if (bc_total > 0)
+    {
+        for (size_t i = 0; i < bc_of.size(); ++i)
+        { dmg += (bc_total - bc_of[i]) * (ds_of[i] ? 2 : 1); }
+        dmg += bc_total * tok_count;   // tokens: no lord grants them double strike
     }
     return dmg;
 }
@@ -8693,7 +8739,7 @@ static const char* kReasonNames[kReasonCount] = {
     "damage/death-trigger/counters", "aura-or-equip-on-self", "marked_for_destruction",
     "temp_power/toughness", "charge/verse/storage counters", "storage_hold_this_turn",
     "garth_chosen_mask", "loyalty", "colored_cast_lifegain_used", "chosen_color (locked mana rock)",
-    "ice/age counters", "spore/quest counters", "temp_haste/lifelink/exile_at_end",
+    "ice/age counters", "spore/quest counters", "temp_haste/lifelink/double_strike/exile_at_end",
     "chosen_subtype_id", "is_animated/is_token/echo_resolved", "copy_printed_name",
     "something ATTACHED to it", "PLAIN (folded)"
 };
@@ -8809,7 +8855,7 @@ static bool PermIsPlainForFoldImpl(const GameState& state, const Permanent& p, i
                                     || p.fade_counters != 0))
     { return false; }
     why = foldcensus::kTempHasteEtc;
-    if (p.temp_haste || p.temp_lifelink || p.exile_at_end) { return false; }
+    if (p.temp_haste || p.temp_lifelink || p.temp_double_strike || p.exile_at_end) { return false; }
     why = foldcensus::kChosenSubtype;
     if (p.chosen_subtype_id != 0) { return false; }
     why = foldcensus::kAnimatedToken;
@@ -16250,7 +16296,23 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
             // but a HUMAN may still want the self-target cast -- never narrow the viewer.
             if (t == Targeting::NonlandPermanent)
             {
-                if (HumanPlayActive() && def.params.allow_self_target) { /* fall through: emit */ }
+                // ...but "never narrow the viewer" is about VALUE judgements, not legality. The
+                // spell targets, so CR 601.2c forbids casting it with no legal target at all --
+                // and a NONLAND-permanent target is not satisfied by lands. Without this check the
+                // cast was offered on a board of nothing but Plains and resolved as a pure no-op,
+                // burning the card and its mana (found 2026-09-26 by a claude-play sweep agent on
+                // seed 7823; repro `--choices "1,2,-1,-1,8,-1,-1,6"` put Unexpectedly Absent in
+                // the graveyard with both Plains tapped and the board unchanged).
+                // This mirrors the controller_lifegain (Swords to Plowshares) gate a few lines
+                // below, which already requires SOME creature on the battlefield for exactly this
+                // reason -- the two branches now agree.
+                bool any_nonland_permanent = false;
+                for (const Permanent& bp : state.battlefield)
+                {
+                    if (!bp.card.IsLand()) { any_nonland_permanent = true; break; }
+                }
+                if (HumanPlayActive() && def.params.allow_self_target && any_nonland_permanent)
+                { /* fall through: emit */ }
                 else { continue; }
             }
             else
@@ -17622,6 +17684,7 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
                 eq += "/" + std::to_string(p.temp_power_bonus) + ","
                           + std::to_string(p.temp_tough_bonus)
                           + (p.temp_haste ? "h" : "") + (p.temp_lifelink ? "L" : "")
+                          + (p.temp_double_strike ? "D" : "")
                           + "/c" + std::to_string(p.counters.size());
                 if (!seen_equiv.insert(eq).second) { continue; }
                 // The best dork's plain form is replaced by the cast-time pick (above); its strive
@@ -20861,9 +20924,15 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
                                         && sd->params.firebreathing_cost.has_value()
                                         && (sd->params.firebreathing_power > 0
                                             || sd->params.firebreathing_tough > 0);
-            const bool team_pump_haste   = sd->params.team_pump_grants_haste
+            //   mode 2 also covers Valiant Knight "{3}{W}{W}: Knights you control gain double
+            //           strike until end of turn" -- the same team-wide until-EOT keyword grant as
+            //           Sethron, with team_pump_power 0. It is here for the same reason mode 1 and 3
+            //           are: the combat converter's damage-per-mana ratio cannot price a MULTIPLIER
+            //           on the team's eventual power.
+            const bool team_pump_keyword = (sd->params.team_pump_grants_haste
+                                            || sd->params.team_pump_grants_double_strike)
                                         && sd->params.team_pump_cost.has_value();
-            if (self_pump_discard || self_pump_lifelink || team_pump_haste)
+            if (self_pump_discard || self_pump_lifelink || team_pump_keyword)
             {
                 const int  mode = self_pump_discard ? 1 : (self_pump_lifelink ? 3 : 2);
                 const ManaCost per = (self_pump_discard || self_pump_lifelink)
@@ -20874,6 +20943,13 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
                 if (mode == 1)
                 { kmax = std::min<int>(kmax, static_cast<int>(state.players[state.active_player_index].hand.size())); }
                 if (kmax > 3) { kmax = 3; }   // bounded branching; >3 activations/turn is fringe
+                // A KEYWORD-ONLY team grant (Valiant Knight: team_pump_power 0) is IDEMPOTENT -- the
+                // second activation sets an already-set flag and adds no power. Enumerating K>1
+                // would spend branches on provably identical states and, worse, put a
+                // guaranteed-no-op entry in the human-play plan menu, which is the phantom-option
+                // loop the Wirewood Lodge guard above exists to prevent. Sethron is unaffected: its
+                // team_pump_power is 1, so its K activations genuinely stack.
+                if (mode == 2 && sd->params.team_pump_power <= 0) { kmax = std::min(kmax, 1); }
                 // K copies of a HYBRID cost need K x its hybrid pips, and ManaCost holds at most 4
                 // (see its comment). Sethron's {2}{B/R} has one, so K<=3 already fits; the clamp is
                 // here so a future multi-hybrid activation cost cannot silently produce a cost whose
@@ -32934,7 +33010,8 @@ static void SimulateCombat(GameState& state)
     // Attack-trigger tokens (Adeline), tapped and attacking this combat, then persist.
     if (!atk_idx.empty())
     {
-        int tok_start = FireAttackCreateTokens(state, active);
+        // atk_idx passed for the creature-scoped gate -- mirrors GameEngine::CombatPhase (lockstep).
+        int tok_start = FireAttackCreateTokens(state, active, &atk_idx);
         for (int i = tok_start; i < static_cast<int>(state.battlefield.size()); ++i)
         {
             atk_idx.push_back(i);
@@ -32945,6 +33022,11 @@ static void SimulateCombat(GameState& state)
     // per other Goblin you control): applied at declare-attackers BEFORE the damage loop reads power,
     // as until-end-of-turn temp bonuses. Mirrors GameEngine::CombatPhase (executor). Gated inert.
     ApplyAttackSelfPumps(state, active, atk_idx);
+
+    // Battle cry (Accorder Paladin, Hero of Bladehold): each OTHER attacking creature gets +1/+0
+    // per attacking battle-cry source. AFTER the token block above so the new tokens are pumped.
+    // Mirrors GameEngine::CombatPhase (executor) -- lockstep. Gated inert.
+    ApplyBattleCry(state, active, atk_idx);
 
     // Two-Headed Hellkite attack-trigger draw (attack_draw_cards): drawn at declare-attackers,
     // so the cards are in hand for the post-combat main. Mirrors GameEngine::CombatPhase.
@@ -33154,6 +33236,7 @@ static bool SimulateEndAndStartNextTurn(GameState& state)
         p.temp_tough_bonus      = 0;
         p.temp_haste            = false;   // Expedite until-EOT haste expires (lockstep w/ CleanupStep)
         p.temp_lifelink         = false;   // Heliod's until-EOT lifelink grant expires (same lockstep)
+        p.temp_double_strike    = false;   // Valiant Knight's until-EOT team grant expires (CR 514.2)
         p.is_animated           = false;
     }
 
@@ -42475,6 +42558,13 @@ static TranspositionTable::Key BuildSimKey(const GameState& state, int depth, in
         // never sets them keeps the EXACT prior key (byte-identical).
         if (perm.temp_haste)   { Fold(tk, 0x7A57E); }
         if (perm.temp_lifelink){ Fold(tk, 0x11FE11); }   // Heliod's until-EOT lifelink grant
+        if (perm.temp_double_strike) { Fold(tk, 0x2D5D5); }   // Valiant Knight's until-EOT grant
+        // Soulbond pair (Silverblade Paladin). NONZERO-gated, so every deck without soulbond keeps
+        // its exact prior key. Future-determining: which creature is paired decides which body
+        // double-strikes for the rest of the game, so two boards differing only in the partner are
+        // NOT interchangeable.
+        if (perm.paired_with != 0)
+        { Fold(tk, 0x50B0Dull); Fold(tk, static_cast<uint64_t>(perm.paired_with)); }
         if (perm.exile_at_end) { Fold(tk, 0xE71E); }
         // Planeswalker loyalty + once-per-turn activation flag (found 2026-08-20 by the enum
         // memo's verify harness): loyalty is a DEDICATED field, not a Counter, and an

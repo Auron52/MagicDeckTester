@@ -90,6 +90,21 @@ MODELED_ELSEWHERE_KEYWORDS = {
     # Player::has_city_blessing, a per-player designation checked by RefreshCityBlessing,
     # not a keyword tag -- and not a combat/evasion keyword, so stripping it is safe.
     "ascend",
+    # Battle cry (CR 702.92, Accorder Paladin / Hero of Bladehold): modeled structurally via
+    # the `battle_cry_power` param -> ApplyBattleCry at declare-attackers, not a keyword tag.
+    # Unlike every other entry here this one is NOT a free choice of idiom -- Card::m_keyword_mask
+    # is uint32_t and the Keyword enum already holds 35 values, so a 36th enumerator would alias
+    # Deathtouch (docs/design/keyword-mask-overflow.md). Not a combat/evasion keyword in the sense
+    # this check protects (it grants no evasion and changes no combat legality, only power), so
+    # stripping the tag cannot mask a missing one.
+    "battle cry",
+    # Soulbond (CR 702.46b, Silverblade Paladin): modeled structurally via the `soulbond` param ->
+    # two pairing triggers in the enter cascade + Permanent::paired_with, not a keyword tag. Same
+    # hard constraint as battle cry above -- the Keyword enum is already over its 32-bit mask, so a
+    # new enumerator would alias an existing keyword. Soulbond grants no evasion and changes no
+    # combat legality by itself (its PAYLOAD is a separate param), so stripping the tag cannot mask
+    # a missing combat keyword.
+    "soulbond",
 }
 # Supertypes the engine does NOT model because they are inert in goldfishing:
 # Basic-ness is derived from the card name; the World rule never fires (one

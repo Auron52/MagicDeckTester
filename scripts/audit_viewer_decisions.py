@@ -248,6 +248,12 @@ MANIFEST = {
     # times) to activate it BEFORE attacking is a main_phase plan variant (ActivatePump); the
     # ability itself takes no target.
     "team_pump_grants_haste": ("main_phase",          truthy),
+    # Valiant Knight "{3}{W}{W}: Knights you control gain double strike until end of turn": the same
+    # shape as Sethron's rider above and the same decision surface -- whether to activate it before
+    # attacking is a main_phase plan variant (ActivatePump mode 2), and the ability takes no target,
+    # no mode and no division ("Knights you control" is exhaustive). K is capped at 1 because the
+    # grant is idempotent, so there is not even a count to choose.
+    "team_pump_grants_double_strike": ("main_phase",  truthy),
     # Slaughter-Priest's "Sacrifice another creature or an enchantment" widens the sac-outlet
     # victim filter; WHICH permanent dies is the existing `sacrifice` board-click decision.
     "sac_outlet_allows_enchantment": ("sacrifice",    truthy),
@@ -319,6 +325,14 @@ MANIFEST = {
     # decision (FireAttackDigAttach -> g_play_dig_chooser); WHICH creature it attaches to is the
     # new `attach_host` type (WriteAttachHostDecisionJson / attach_host board prompt).
     "attack_dig_attach_count": ("dig",                positive),
+    # ---- WhiteKnights (2026-09-25) ----
+    # Soulbond (CR 702.46b, Silverblade Paladin): "you MAY pair this creature with another unpaired
+    # creature" is a real choice with a real decline arm, and it REUSES the existing `attach_host`
+    # board-click above rather than inventing a type -- the shape is identical (pick one controlled
+    # creature, or -1 to decline), so only a new call site was needed. The chooser receives the full
+    # rules-legal partner set with the provider's SoulbondPartner pick preselected; that ranking is a
+    # NARROWING of the autonomous search and is disclosed in Stage 6a.
+    "soulbond":              ("attach_host",          truthy),
     # Umezawa's Jitte: counter-spend at combat is the turn-keyed `jitte` type (--jitte
     # side-channel, WriteJitteDecisionJson / jittePanelHtml); the -1/-1 and lifegain modes are
     # main_phase JitteModeAbility plan actions.
@@ -630,6 +644,11 @@ INERT_PARAMS = {
     # automatic triggers / static effects (no choice)
     "affects_all_creatures": "board-wide static, no target",
     "attack_creates_tokens": "automatic attack trigger",
+    # ---- WhiteKnights (2026-09-25) ----
+    "battle_cry_power": "battle cry (CR 702.92, Accorder Paladin / Hero of Bladehold) -- a mandatory automatic attack trigger with no 'may', no target, no mode and no division: the pump goes to EACH other attacking creature, exhaustively. The magnitude is the printed constant. Trigger ORDER against the same card's token trigger is a CR 603.3b choice but is resolved the one way a player would always take (tokens enter attacking FIRST, so they are pumped too), which is strictly dominant vs an opponent that never blocks -- more power on more bodies, no downside. The only decision is WHETHER to attack, which is the always-wired main_phase/attackers plan",
+    "attack_tokens_per_opponent": "whether attack_creates_tokens scales with the opponent count -- a reading of the card's own oracle ('for each opponent' vs a flat 'create two'), not a choice",
+    "attack_tokens_require_self_attacking": "the SCOPE of the attack_creates_tokens trigger -- whether it reads 'Whenever THIS CREATURE attacks' (Hero of Bladehold, true) or 'Whenever YOU attack' (Adeline, false, the default). A trigger CONDITION transcribed from the card's own oracle, not a choice: the player never elects it, and once the condition is met the tokens are mandatory (no 'may', no target, no count choice). The only decision anywhere near it is WHETHER to attack with the source, which is the always-wired main_phase/attackers plan. Added 2026-09-26 with the fix for a real defect -- Hero's tokens were firing on any attack, even with Hero itself home -- so the param exists precisely to make the two scopes distinguishable rather than to offer anything",
+    "soulbond_grants_double_strike": "the soulbond PAYLOAD (Silverblade Paladin, 'both creatures have double strike'). A static continuous effect with no target, no mode, no division and no 'may' -- CreatureHasDoubleStrike just reads it. The only decision on this card is WHICH creature to pair with, which is separately mapped to the `attach_host` board-click, with a decline arm for the printed 'you may pair'",
     "attack_trigger_life_loss": "automatic attack trigger",
     "cast_trigger_creates_tokens": "automatic on-cast trigger",
     "controller_lifegain_equals_power": "automatic lifegain",
@@ -1094,6 +1113,16 @@ DEFERRED_PARAMS = {
     "firebreathing_cost":   "Scourge firebreathing pump amount -- currently search-resolved w/ leftover "
                             "combat mana; user wants it a toggleable choice, ON by default (deferred to the "
                             "viewer options-menu toggle system)",
+    # SCOPE OF THIS ENTRY (narrowed 2026-09-25): it covers the COMBAT-TIME CONVERTER consumer of
+    # team_pump_cost -- ApplyFirebreathing spending leftover combat mana on Lathliss's +1/+0, where
+    # the deferred choice is the AMOUNT. It is NOT a blanket sign-off on every card that sets the
+    # param, because DEFERRED_PARAMS is keyed by param NAME and a new card setting team_pump_cost
+    # would otherwise inherit a deferral it was never granted (the same inherited-bracket-note trap
+    # that produced a fabricated note on Worthy Knight). Cards riding the SEARCHED ActivatePump path
+    # instead -- Sethron via team_pump_grants_haste, Valiant Knight via team_pump_grants_double_strike
+    # -- are genuinely SURFACED in the plan menu (both are mapped to `main_phase` in the manifest
+    # above) and are not relying on this deferral. For Valiant Knight there is no amount to defer at
+    # all: the grant is idempotent and K is capped at 1.
     "team_pump_cost":       "Lathliss team pump amount -- currently search-resolved; user wants it a "
                             "toggleable choice, ON by default (deferred to the options-menu toggle system)",
     "dragon_ping_on_enter": "Scourge ETB ping target -- any-target collapses to face in the goldfish; user "

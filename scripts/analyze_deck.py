@@ -400,13 +400,42 @@ def CheckExistingCoverage(card_names: list[str], cards_json: Path,
             gaps.append("Static 'damage can't be prevented' not implemented — needs engine support")
 
         # Unbracketed triggered abilities
-        # Skip the check if a known trigger parameter already implements the trigger.
-        trigger_implemented = (
-            params.get("on_cast_trigger_max_mv")
-            or params.get("death_trigger_damage")
-            or params.get("attack_trigger_damage")
-            or params.get("upkeep_adds_charge")
-        )
+        # Skip the check if a param already implements a trigger on this card.
+        #
+        # This used to be a hand-written list of FOUR param names, which is the same defect
+        # CardDatabase::LoadFromJson's subtype interning already fixed for itself ("naming the
+        # param fields one at a time ... covered 4 of the ~15 token-subtype params"). It produced
+        # a FALSE "partial" on every fully-implemented trigger outside those four -- Worthy
+        # Knight's cast_trigger_creates_tokens among them. That false positive is the dangerous
+        # direction: the only two ways to clear it are to implement something already implemented,
+        # or to invent a deferral bracket note for a clause that IS modelled. The second is a
+        # fabrication, and it is exactly what an inherited note on THIS card turned out to be.
+        #
+        # So match on the naming conventions instead. Every trigger-implementing param in
+        # cards.json is named for the event it hangs off: *_trigger_*, etb_*/enters_*, attack_*,
+        # upkeep_*/end_step_*, dies_*/death_*, cast_trigger_*, spore_*, combat_damage_*, plus a
+        # short tail of params whose names predate the convention.
+        #
+        # LIMITATION, stated rather than hidden: this answers "does this card model SOME trigger",
+        # not "is EVERY 'Whenever' clause modelled". A two-trigger card with one half dropped still
+        # reads clean here. That was equally true of the four-name list, and the backstops for it
+        # are elsewhere -- audit_card_fields.py's oracle-text diff against Scryfall, and
+        # audit_viewer_decisions.py's hard failure on an unclassified param.
+        TRIGGER_PARAM_RE = re.compile(
+            r"(_trigger_|^trigger_|^etb_|^enters_watch_|^attack_|^upkeep_|^end_step_|^dies_|"
+            r"^death_|^spore_|^combat_damage_|^landfall_|^sacrifice_watch_|^cast_trigger)")
+        TRIGGER_PARAMS_LEGACY = {
+            "persist",                        # "when this creature dies, return it"
+            "battle_cry_power",               # "whenever this creature attacks" (CR 702.92)
+            "quest_counter_per_attacker",     # "whenever you attack"
+            "any_creature_enters_self_counters_power",
+            "other_creature_gy_enter_team_counters",
+            "doubles_tokens", "doubles_counters",   # replacement effects on trigger output
+            "ascend",
+        }
+        trigger_implemented = any(
+            v and (TRIGGER_PARAM_RE.search(k) or k in TRIGGER_PARAMS_LEGACY)
+            for k, v in params.items())
         if not trigger_implemented:
             for trigger in ("Whenever ", "At the beginning of "):
                 if trigger in oracle and not deferred:

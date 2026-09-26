@@ -3744,6 +3744,112 @@ inline bool HasDoubleStrikeFromLords(
     return false;
 }
 
+// ---- SOULBOND (CR 702.46b) -- the read-time pair resolution --------------------------------------
+// Permanent::paired_with holds the PARTNER's m_number on the soulbond side only. These two helpers
+// are the ONLY way it is ever read, and both re-verify the partner against the live battlefield --
+// which is what makes the field need no detach maintenance: "they remain paired for as long as you
+// control both of them" is evaluated on every read rather than patched on every death.
+//
+// Returns the partner's battlefield INDEX, or -1 if `p` is not validly paired right now.
+inline int SoulbondPartnerIndex(const Permanent& p, const GameState& state)
+{
+    if (p.paired_with == 0) { return -1; }
+    for (int i = 0; i < static_cast<int>(state.battlefield.size()); ++i)
+    {
+        const Permanent& q = state.battlefield[i];
+        if (q.card.m_number != p.paired_with) { continue; }
+        // Same controller is the rules condition, not a convenience: losing control of either half
+        // breaks the pair (CR 702.46b). A creature must also still BE a creature to be paired.
+        if (q.controller_index != p.controller_index) { return -1; }
+        if (!q.card.IsCreature() && !q.is_animated)  { return -1; }
+        return i;
+    }
+    return -1;   // partner has left the battlefield: the pair is broken, no bookkeeping needed
+}
+
+// Is `card_number` already half of some live pair under `controller`? A creature may be in at most
+// ONE pair (CR 702.46b), so the pairing triggers must refuse an already-claimed partner. With a
+// single soulbond creature on board this can never fire; with two it is the difference between legal
+// play and both of them claiming the same body.
+inline bool SoulbondNumberIsClaimed(const GameState& state, int controller, int card_number)
+{
+    if (card_number == 0) { return false; }
+    for (const Permanent& s : state.battlefield)
+    {
+        if (s.controller_index != controller) { continue; }
+        if (s.paired_with != card_number) { continue; }
+        if (SoulbondPartnerIndex(s, state) < 0) { continue; }   // stale link, not a live claim
+        return true;
+    }
+    return false;
+}
+
+// THE single oracle for "does this creature deal double combat damage?", on the CreatureHasLifelink
+// precedent above -- one function that every damage site consults, so executor, rollout and the
+// search's projections cannot drift apart.
+//
+// WHY THIS EXISTS. The same three-way expression was open-coded at THREE sites (Combat.cpp's
+// ResolveCombatDamage, and TurnSolver's CollectAttackingManaSources + PendingAttackDamage), each
+// with its own copy of the animated/keyword/lord/equipment precedence. Every new grant had to be
+// added to all three; miss one and the failure is silent and asymmetric -- the search would price
+// an attack it then fails to deliver (or the reverse), which shows up only as slightly worse play.
+// Two of the WhiteKnights cards add a grant each (Valiant Knight's activated until-EOT grant and
+// Silverblade Paladin's soulbond pairing), which is what forced the consolidation.
+//
+// ds_idx (optional): the prefiltered grants_double_strike indices from GatherBoardSources; nullptr
+// walks the whole battlefield. Same contract as CreatureHasLifelink's granter_idx.
+//
+// NOTE on the printed keyword and `is_animated`: the three old sites skipped the HasKeyword check
+// on an animated permanent. Folding it in unconditionally is byte-identical, not a judgement call:
+// no card in cards.json carries a printed DoubleStrike keyword at all, and the only animatable
+// permanent is Mutavault (a land with no keywords), so that branch was unobservable.
+inline bool CreatureHasDoubleStrike(const Permanent& creature, const GameState& state,
+                                    const std::vector<int>* ds_idx = nullptr)
+{
+    if (creature.card.HasKeyword(Keyword::DoubleStrike)) { return true; }
+    // Valiant Knight's "{3}{W}{W}: Knights you control gain double strike until end of turn".
+    // A property of the CREATURE, not of a granting permanent, so it is deliberately NOT routed
+    // through the bs.ds prefilter (which lists grants_double_strike LORDS) -- that list stays
+    // exactly as correct as it was, and an empty one is still a proof about the lord scan alone.
+    if (creature.temp_double_strike) { return true; }
+    if (HasDoubleStrikeFromLords(creature.card, state.battlefield, creature.controller_index,
+                                 creature.is_animated, ds_idx))
+    { return true; }
+    if (HasDoubleStrikeFromEquipment(creature, state)) { return true; }   // Kor Duelist / Balan
+
+    // Silverblade Paladin's soulbond: "As long as this creature is paired with another creature,
+    // BOTH creatures have double strike." Symmetric, so it must be answerable from EITHER side --
+    // and the pair link is stored only on the soulbond side, so the partner's side needs a scan.
+    // That scan rides the SAME bs.ds prefilter as the lord check above (GatherBoardSources admits a
+    // soulbond_grants_double_strike permanent into bs.ds for exactly this reason), so it costs one
+    // pass over a list that is empty for every deck without such a card.
+    {
+        auto grants_via_pair = [&](const Permanent& s) -> bool
+        {
+            if (s.controller_index != creature.controller_index) { return false; }
+            if (s.def_absent) { return false; }            // token: no definition, never a source
+            const CardDefinition* sd = CardDatabase::Instance().LookupCached(s.card);
+            if (!sd || !sd->params.soulbond_grants_double_strike) { return false; }
+            const int partner = SoulbondPartnerIndex(s, state);
+            if (partner < 0) { return false; }             // not validly paired right now
+            // Either this IS the paired source, or this is its partner. Compared by per-copy
+            // m_number, not by name or address -- two Silverblades are different pairs.
+            return s.card.m_number == creature.card.m_number
+                || state.battlefield[partner].card.m_number == creature.card.m_number;
+        };
+        if (ds_idx)
+        {
+            for (int i : *ds_idx) { if (grants_via_pair(state.battlefield[i])) { return true; } }
+        }
+        else
+        {
+            for (const Permanent& s : state.battlefield)
+            { if (grants_via_pair(s)) { return true; } }
+        }
+    }
+    return false;
+}
+
 // ---------------------------------------------------------------------------------------------
 // BoardSources -- every board-level source list a per-creature combat loop needs, gathered in ONE
 // walk. The generalisation of HasteSources (above) and of ResolveCombatDamage's hand-rolled
@@ -3815,7 +3921,18 @@ inline BoardSources GatherBoardSources(const std::vector<Permanent>& battlefield
         if (q.equipped_to != 0 && pp.is_equipment && pp.equip_grants_haste)
         { bs.haste.equips.push_back(i); }
         if (IsLordPermanent(*qd))     { bs.lords.push_back(i); }
-        if (pp.grants_double_strike)  { bs.ds.push_back(i); }
+        // grants_double_strike is the subtype LORD (Thrumming Hivepool). soulbond_grants_double
+        // _strike (Silverblade Paladin) is admitted to the SAME list because it is likewise a
+        // permanent that grants double strike to a creature, and CreatureHasDoubleStrike's soulbond
+        // pass walks this list to answer from the PARTNER's side (the pair link lives only on the
+        // soulbond half, so the partner cannot find it without a scan). Widening keeps the
+        // BoardSources contract intact: the list is still a SUPERSET of the permanents whose
+        // predicate can return true, and HasDoubleStrikeFromLords still applies its own
+        // grants_double_strike test per permanent, so a soulbond source in here is correctly a
+        // no-op for the lord question. Missing this widening would have produced a feature that
+        // builds, digests clean, and never fires from the partner's side.
+        if (pp.grants_double_strike || pp.soulbond_grants_double_strike)
+        { bs.ds.push_back(i); }
         if (pp.hand_size_anthem_max >= 0 || pp.life_above_start_anthem_life > 0
             || pp.quest_anthem_threshold > 0)
         { bs.anthems.push_back(i); }
@@ -5584,6 +5701,136 @@ inline void FireEtbWatchers(GameState& state, int controller, int entered_index)
                 if (wd && wd->params.haste_on_flying_enter) { grant = true; break; }
             }
             if (grant) { state.battlefield[entered_index].temp_haste = true; }
+        }
+    }
+    // SOULBOND (CR 702.46b) -- Silverblade Paladin: "You may pair this creature with another
+    // unpaired creature when EITHER enters." Two triggers, and both have to live at this universal
+    // cascade because "either" is symmetric: the soulbond creature landing second is the obvious
+    // case, but a plain creature landing while an unpaired Silverblade already sits on the board
+    // pairs just as well, and only the shared cascade sees both (it also covers a creature PUT onto
+    // the battlefield -- an Aether Vial activation, which this deck does constantly -- not just a
+    // cast one, CR 603.6a).
+    //
+    // Gated on a soulbond permanent actually being in play, so every other deck pays one bool read.
+    {
+        Permanent& newcomer = state.battlefield[entered_index];
+        const int  nctrl    = newcomer.controller_index;
+        if (newcomer.card.IsCreature() || newcomer.is_animated)
+        {
+            bool any_soulbond = false;
+            for (const Permanent& w : state.battlefield)
+            {
+                if (w.controller_index != nctrl || w.def_absent) { continue; }
+                const CardDefinition* wd = CardDatabase::Instance().LookupCached(w.card);
+                if (wd && wd->params.soulbond) { any_soulbond = true; break; }
+            }
+            if (any_soulbond)
+            {
+                // The legal partner set for a given soulbond source: another creature under the same
+                // controller that is not already half of a live pair. Built here, ordered by the
+                // provider, never narrowed by it.
+                auto legal_partners = [&state](int ctrl, int source_number)
+                {
+                    std::vector<int> out;
+                    for (int i = 0; i < static_cast<int>(state.battlefield.size()); ++i)
+                    {
+                        const Permanent& c = state.battlefield[i];
+                        if (c.controller_index != ctrl) { continue; }
+                        if (!c.card.IsCreature() && !c.is_animated) { continue; }
+                        if (c.card.m_number == source_number) { continue; }   // "ANOTHER"
+                        // A creature already in a pair cannot join a second one, and neither can a
+                        // soulbond creature that is itself validly paired.
+                        if (SoulbondNumberIsClaimed(state, ctrl, c.card.m_number)) { continue; }
+                        if (SoulbondPartnerIndex(c, state) >= 0) { continue; }
+                        out.push_back(i);
+                    }
+                    return out;
+                };
+                // Resolve one soulbond source's optional pairing. Returns true if a pair was formed.
+                //
+                // `only_idx` restricts the candidate list to a single battlefield index, or is -1 for
+                // "any legal partner". This is NOT an optimisation -- it is the difference between
+                // soulbond's two abilities (CR 702.46b):
+                //   Trigger A: "You may pair this creature with another unpaired creature you control
+                //              as it enters"            -> any legal partner, so only_idx = -1.
+                //   Trigger B: "Whenever another creature you control enters, if this creature is
+                //              unpaired, you may pair it with THAT creature"
+                //                                       -> that creature ONLY, so only_idx = entrant.
+                // Passing -1 on Trigger B is a rules violation, not a wider choice: it lets the
+                // source pair with a creature that entered turns ago, which no ability permits. A
+                // 2026-09-26 sweep agent demonstrated exactly that and it swung a turn by 4 damage.
+                // The guards at the Trigger B call site already tested the NEWCOMER, so the intent
+                // was there -- it just never reached the candidate list.
+                auto try_pair = [&](int src_idx, int only_idx)
+                {
+                    Permanent& src = state.battlefield[src_idx];
+                    if (SoulbondPartnerIndex(src, state) >= 0) { return false; }   // already paired
+                    std::vector<int> cands = legal_partners(src.controller_index, src.card.m_number);
+                    if (only_idx >= 0)
+                    {
+                        // Keep the legality filter as the single source of truth and INTERSECT with
+                        // the restriction, rather than trusting only_idx to be legal on its own.
+                        const bool ok = std::find(cands.begin(), cands.end(), only_idx) != cands.end();
+                        cands.clear();
+                        if (ok) { cands.push_back(only_idx); }
+                    }
+                    if (cands.empty()) { return false; }
+                    int want = ResolveProvider(state).SoulbondPartner(
+                        state, src.controller_index, src, cands);
+                    // HUMAN PLAY: the same board-click decision type the Skyhunter attach uses --
+                    // the full rules-legal set with the heuristic pick preselected, and -1 declines
+                    // (the printed "you MAY pair"). The chooser never sees a narrowed list.
+                    if (g_play_attach_host_chooser)
+                    {
+                        int heur = -1;
+                        for (int i = 0; i < static_cast<int>(cands.size()); ++i)
+                        { if (state.battlefield[cands[i]].card.m_number == want) { heur = i; } }
+                        const int picked = (*g_play_attach_host_chooser)(
+                            state, src.controller_index, src.card.m_name.str(), cands, heur);
+                        if (picked == -1) { want = 0; }
+                        else if (picked >= 0 && picked < static_cast<int>(cands.size()))
+                        { want = state.battlefield[cands[picked]].card.m_number; }
+                    }
+                    if (want == 0) { return false; }                     // declined / none
+                    state.battlefield[src_idx].paired_with = want;
+                    if (g_play_event_sink && !g_tap_speculating)
+                    {
+                        // Resolved inline rather than via EnchantTargetName, which is defined
+                        // further down this header and so is not visible from the enter cascade.
+                        std::string pname = "creature #" + std::to_string(want);
+                        for (const Permanent& q : state.battlefield)
+                        { if (q.card.m_number == want) { pname = q.card.m_name.str(); break; } }
+                        EmitPlayEvent(state.turn_number, "trigger",
+                                      state.battlefield[src_idx].card.m_name.str()
+                                      + ": soulbond \xE2\x86\x92 paired with " + pname);
+                    }
+                    return true;
+                };
+
+                // Trigger A -- the SOULBOND creature is the one that entered. "another unpaired
+                // creature you control", unrestricted, so -1.
+                {
+                    const CardDefinition* nd = newcomer.def_absent
+                        ? nullptr : CardDatabase::Instance().LookupCached(newcomer.card);
+                    if (nd && nd->params.soulbond) { try_pair(entered_index, -1); }
+                }
+                // Trigger B -- a creature entered while one of OUR soulbond creatures is unpaired.
+                // Each such source triggers separately (CR 603.3b order = battlefield order, the
+                // house convention), but only until the newcomer is claimed: it can join one pair.
+                for (int i = 0; i < static_cast<int>(state.battlefield.size()); ++i)
+                {
+                    if (i == entered_index) { continue; }
+                    const Permanent& w = state.battlefield[i];
+                    if (w.controller_index != nctrl || w.def_absent) { continue; }
+                    const CardDefinition* wd = CardDatabase::Instance().LookupCached(w.card);
+                    if (!wd || !wd->params.soulbond) { continue; }
+                    const Permanent& nc = state.battlefield[entered_index];
+                    if (SoulbondNumberIsClaimed(state, nctrl, nc.card.m_number)) { break; }
+                    if (SoulbondPartnerIndex(nc, state) >= 0) { break; }
+                    // "...you may pair it with THAT creature" -- the entrant, and nothing else.
+                    try_pair(i, entered_index);
+                }
+            }
         }
     }
     // Puresteel Paladin: "Whenever an Equipment you control enters, you may draw a card." Lives
@@ -9502,7 +9749,7 @@ inline int ApplyActivatePump(GameState& state, int controller, int source_id, in
                               + std::to_string(sd->params.firebreathing_tough) + " and lifelink");
             }
         }
-        else   // mode 2 -- team pump + haste
+        else   // mode 2 -- team pump with keyword riders (Sethron: haste; Valiant Knight: double strike)
         {
             for (Permanent& q : state.battlefield)
             {
@@ -9514,12 +9761,29 @@ inline int ApplyActivatePump(GameState& state, int controller, int source_id, in
                 if (!m) { continue; }
                 q.temp_power_bonus += sd->params.team_pump_power;
                 if (sd->params.team_pump_grants_haste) { q.temp_haste = true; }
+                // Valiant Knight: "Knights you control gain double strike until end of turn."
+                // Idempotent (a flag, not an increment), which is why K is capped at 1 for a
+                // keyword-only grant in the enumeration.
+                if (sd->params.team_pump_grants_double_strike) { q.temp_double_strike = true; }
             }
             if (g_play_event_sink && !g_tap_speculating)
             {
+                // Built from the params rather than hardcoded: this branch used to say
+                // "Minotaurs +N/+0 and haste" literally, which would have described Valiant
+                // Knight's activation as pumping Minotaurs by 0 and granting haste.
+                std::string what;
+                if (sd->params.team_pump_power != 0)
+                { what = "+" + std::to_string(sd->params.team_pump_power) + "/+0"; }
+                auto add = [&what](const char* kw)
+                { if (!what.empty()) { what += " and "; } what += kw; };
+                if (sd->params.team_pump_grants_haste)         { add("haste"); }
+                if (sd->params.team_pump_grants_double_strike) { add("double strike"); }
+                const std::string who = sd->params.team_pump_subtypes.empty()
+                                            ? std::string("creatures you control")
+                                            : sd->params.team_pump_subtypes.front() + "s you control";
                 EmitPlayEvent(state.turn_number, "ability",
-                              state.battlefield[src].card.m_name.str() + ": Minotaurs +"
-                              + std::to_string(sd->params.team_pump_power) + "/+0 and haste");
+                              state.battlefield[src].card.m_name.str() + ": " + who + " "
+                              + what + " until end of turn");
             }
         }
         ++done;
@@ -10756,6 +11020,56 @@ inline void ApplyAttackSelfPumps(GameState& state, int controller,
                 if (m) { a.temp_power_bonus += sd->params.attack_pump_matching_power; }
             }
         }
+    }
+}
+
+// ---- BATTLE CRY (CR 702.92) -- Accorder Paladin, Hero of Bladehold -----------------------------
+// "Whenever this creature attacks, each OTHER attacking creature gets +1/+0 until end of turn."
+//
+// A TEAM attack trigger like Kragma Warcaller above, but with two differences that are exactly why
+// it is not modelled by reusing attack_pump_matching_power: the source must ITSELF be attacking,
+// and it excludes itself. Hence the sources are drawn from attacker_indices, not from a battlefield
+// scan.
+//
+// Multiple instances stack and CROSS-PUMP -- two Accorder Paladins each pump the other, so each
+// attacker ends at (bc_total - its own battle_cry_power). That subtraction IS the "each OTHER"
+// self-exclusion and generalises to any number of copies without a nested loop.
+//
+// Must be called in BOTH worlds immediately after ApplyAttackSelfPumps, and AFTER the attacker list
+// has been widened by FireAttackCreateTokens -- Hero's own two Soldiers and Adeline's Human are
+// "attacking creatures" and receive the pump (CR 603.3b lets the player order simultaneous attack
+// triggers, and putting the tokens in first is strictly dominant against an opponent that never
+// blocks). Duration is free: temp_power_bonus is already zeroed by the CR 514.2 cleanup.
+inline void ApplyBattleCry(GameState& state, int controller,
+                           const std::vector<int>& attacker_indices)
+{
+    if (attacker_indices.empty()) { return; }
+    const int bf_size = static_cast<int>(state.battlefield.size());
+
+    // Pass 1: total battle cry among the controller's ATTACKING creatures. Early-out keeps every
+    // non-battle-cry deck at one cheap scan of the attacker list.
+    int bc_total = 0;
+    for (int idx : attacker_indices)
+    {
+        if (idx < 0 || idx >= bf_size) { continue; }
+        const Permanent& src = state.battlefield[idx];
+        if (src.controller_index != controller) { continue; }
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(src.card);
+        if (!d) { continue; }
+        bc_total += d->params.battle_cry_power;
+    }
+    if (bc_total <= 0) { return; }
+
+    // Pass 2: each attacker gets the total MINUS its own contribution ("each other").
+    for (int idx : attacker_indices)
+    {
+        if (idx < 0 || idx >= bf_size) { continue; }
+        Permanent& a = state.battlefield[idx];
+        if (a.controller_index != controller) { continue; }
+        int own = 0;
+        if (const CardDefinition* d = CardDatabase::Instance().LookupCached(a.card))
+        { own = d->params.battle_cry_power; }
+        a.temp_power_bonus += bc_total - own;
     }
 }
 
@@ -12580,14 +12894,22 @@ inline void TapLargestOppCreature(GameState& state, int controller)
     if (pick >= 0) { state.battlefield[pick].tapped = true; }
 }
 
-// Fires "whenever you attack, create N tokens tapped and attacking" triggers (Adeline,
-// Resplendent Cathar: one 1/1 white Human per opponent = 1 in a single-opponent goldfish).
-// Only call when the active player is actually attacking (>= 1 declared attacker). Creates
-// the tokens TAPPED (they are "tapped and attacking") and returns the battlefield index
+// Fires "create N tokens tapped and attacking" ATTACK triggers (Adeline, Resplendent Cathar: one
+// 1/1 white Human per opponent = 1 in a single-opponent goldfish; Hero of Bladehold: a flat two
+// Soldiers). Only call when the active player is actually attacking (>= 1 declared attacker).
+// Creates the tokens TAPPED (they are "tapped and attacking") and returns the battlefield index
 // where the new tokens begin, so the caller adds [start, end) to this combat's attackers
 // (they bypass summoning sickness for this attack, then persist and attack normally next
 // turn). Token specs are gathered before creation to avoid range invalidation.
-inline int FireAttackCreateTokens(GameState& state, int controller_index)
+//
+// `attacker_indices` is the DECLARED attacker list and is REQUIRED for correctness, not an
+// optimisation: a source with attack_tokens_require_self_attacking must be in it. Adeline's trigger
+// is player-scoped ("whenever YOU attack") and ignores the list; Hero's is creature-scoped
+// ("whenever THIS CREATURE attacks") and a summoning-sick Hero must make nothing. Passing nullptr
+// restores the old unconditional behaviour and is only legal for a board with no creature-scoped
+// source -- callers in the two combat worlds must always pass the real list.
+inline int FireAttackCreateTokens(GameState& state, int controller_index,
+                                 const std::vector<int>* attacker_indices = nullptr)
 {
     int start = static_cast<int>(state.battlefield.size());
 
@@ -12599,9 +12921,26 @@ inline int FireAttackCreateTokens(GameState& state, int controller_index)
         if (p.controller_index != controller_index) { continue; }
         const CardDefinition* def = CardDatabase::Instance().LookupCached(p.card);
         if (!def || def->params.attack_creates_tokens <= 0) { continue; }
+        // CREATURE-SCOPED trigger (Hero of Bladehold): the source must itself be a declared
+        // attacker (CR 508.1). Without this a summoning-sick Hero created two attacking Soldiers --
+        // plus their battle-cry pump -- a full turn early, in 9 of 40 measured games. Found by the
+        // Stage-5d claude-play sweep; the executor and the rollout share this function, so both
+        // worlds were wrong in lockstep and no mismatch harness could see it.
+        if (def->params.attack_tokens_require_self_attacking)
+        {
+            if (attacker_indices == nullptr) { continue; }   // no attacker list => cannot be declared
+            bool declared = false;
+            for (int ai : *attacker_indices) { if (ai == i) { declared = true; break; } }
+            if (!declared) { continue; }
+        }
         // Adeline: "for each opponent, create a ... token ... attacking that player" -- one per
-        // head (2HG = x2; both heads share the team pool, so both tokens' damage counts).
-        to_create.push_back({def->params.attack_creates_tokens * gamesetup::OpponentHeads(),
+        // head (2HG = x2; both heads share the team pool, so both tokens' damage counts). Hero of
+        // Bladehold's "create two 1/1 white Soldier creature tokens" is a FLAT count with no
+        // per-opponent clause, so it sets attack_tokens_per_opponent=false and does not scale.
+        // Default true = the historical unconditional multiply, so Adeline is byte-identical.
+        to_create.push_back({def->params.attack_creates_tokens
+                                 * (def->params.attack_tokens_per_opponent
+                                        ? gamesetup::OpponentHeads() : 1),
                              def->params.attack_token_power,
                              def->params.attack_token_toughness,
                              def->params.attack_token_subtypes});

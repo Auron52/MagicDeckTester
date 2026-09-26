@@ -1013,7 +1013,7 @@
    "keywords": [],
    "power": 2,
    "toughness": 2,
-   "oracle_text": "Whenever you cast a Knight spell, create a 1/1 white Human creature token. [Simplified: the real card's 'three or more tokens -> exchange for a 2/2 Knight' clause is not modelled; the 1/1 Human tokens are kept (a minor under-count of late-game power).]",
+   "oracle_text": "Whenever you cast a Knight spell, create a 1/1 white Human creature token.",
    "template": "vanilla_creature",
    "parameters": {
     "cast_trigger_subtype": "Knight",
@@ -1038,12 +1038,14 @@
    "keywords": [],
    "power": 3,
    "toughness": 3,
-   "oracle_text": "When this creature enters, if you control another Knight, look at the top five cards of your library. You may reveal a Knight, Aura, Equipment, or legendary artifact card from among them and put it into your hand. Put the rest on the bottom of your library in a random order. [Only Knight is dug for: the deck contains no Auras/Equipment/legendary artifacts. The dug card enters hand and is cast a later turn (no same-turn re-solve).]",
+   "oracle_text": "When this creature enters, if you control another Knight, look at the top five cards of your library. You may reveal a Knight, Aura, Equipment, or legendary artifact card from among them and put it into your hand. Put the rest on the bottom of your library in a random order. [PARTIAL: 'legendary artifact' is a supertype+type pair, which etb_dig_subtypes (a SUBTYPE filter) cannot express; Knight/Aura/Equipment are all expressible and are filtered faithfully. WHY inert: no deck running this card holds a legendary artifact -- WhiteKnights' Sol Ring and Aether Vial are both plain 'Artifact', and Knights holds none either. The dug card enters hand and is cast a later turn (no same-turn re-solve).]",
    "template": "vanilla_creature",
    "parameters": {
     "etb_dig_count": 5,
     "etb_dig_subtypes": [
-     "Knight"
+     "Knight",
+     "Aura",
+     "Equipment"
     ],
     "etb_dig_requires_subtypes": [
      "Knight"
@@ -1074,6 +1076,36 @@
     "power_bonus": 1,
     "tough_bonus": 1,
     "lord_excludes_self": true
+   }
+  },
+  {
+   "name": "Valiant Knight",
+   "mana_cost": "{3}{W}",
+   "types": [
+    "Creature"
+   ],
+   "subtypes": [
+    "Human",
+    "Knight"
+   ],
+   "keywords": [],
+   "power": 3,
+   "toughness": 4,
+   "oracle_text": "Other Knights you control get +1/+1.\n{3}{W}{W}: Knights you control gain double strike until end of turn. [Both clauses modelled. The lord is Knight Exemplar's shape exactly (subtypes_affected Knight, +1/+1, lord_excludes_self). The activated grant rides team_pump_cost/_subtypes with team_pump_power 0 and team_pump_grants_double_strike -- structurally Sethron's '{2}{B/R}: Minotaurs you control get +1/+0 and gain haste' minus the power half -- and is enumerated as a searched main-phase Action::Kind::ActivatePump (mode 2), NOT converted by the combat-time firebreathing loop: that loop picks by damage-per-MANA and cannot price a MULTIPLIER on the team's eventual power, which is the same reason firebreathing_discard and firebreathing_grants_lifelink are excluded there. Sets Permanent::temp_double_strike on every Knight, read by the single CreatureHasDoubleStrike oracle and cleared at both cleanup sites. Note the grant says 'Knights you control', which INCLUDES this creature, unlike the lord clause's 'Other Knights'. K is capped at 1 because the grant is idempotent.]",
+   "template": "lord_effect",
+   "parameters": {
+    "subtypes_affected": [
+     "Knight"
+    ],
+    "power_bonus": 1,
+    "tough_bonus": 1,
+    "lord_excludes_self": true,
+    "team_pump_cost": "{3}{W}{W}",
+    "team_pump_power": 0,
+    "team_pump_subtypes": [
+     "Knight"
+    ],
+    "team_pump_grants_double_strike": true
    }
   },
   {
@@ -1200,6 +1232,72 @@
     "attack_token_toughness": 1,
     "attack_token_subtypes": [
      "Human"
+    ]
+   }
+  },
+  {
+   "name": "Accorder Paladin",
+   "mana_cost": "{1}{W}",
+   "types": [
+    "Creature"
+   ],
+   "subtypes": [
+    "Human",
+    "Knight"
+   ],
+   "keywords": [],
+   "power": 3,
+   "toughness": 1,
+   "oracle_text": "Battle cry (Whenever this creature attacks, each other attacking creature gets +1/+0 until end of turn.) [Battle cry is modelled structurally as battle_cry_power, NOT as a Keyword enumerator -- Card::m_keyword_mask is uint32_t and the Keyword enum already holds 35 values, so a 36th would alias Deathtouch (see docs/design/keyword-mask-overflow.md). Fully modelled: the pump is applied at declare-attackers to every other attacker, tokens included, and stacks across copies.]",
+   "template": "vanilla_creature",
+   "parameters": {
+    "battle_cry_power": 1
+   }
+  },
+  {
+   "name": "Silverblade Paladin",
+   "mana_cost": "{1}{W}{W}",
+   "types": [
+    "Creature"
+   ],
+   "subtypes": [
+    "Human",
+    "Knight"
+   ],
+   "keywords": [],
+   "power": 2,
+   "toughness": 2,
+   "oracle_text": "Soulbond (You may pair this creature with another unpaired creature when either enters. They remain paired for as long as you control both of them.)\nAs long as this creature is paired with another creature, both creatures have double strike. [Soulbond (CR 702.46b) modelled structurally as the `soulbond` param, NOT as a Keyword enumerator -- Card::m_keyword_mask is uint32_t and the Keyword enum already holds 35 values, so a 36th would alias Deathtouch (docs/design/keyword-mask-overflow.md). BOTH pairing triggers are implemented at the universal enter cascade, which is what 'when EITHER enters' requires: this creature entering pairs with an existing unpaired creature, AND a creature entering later pairs with this one if it is still unpaired -- including one PUT onto the battlefield by Aether Vial, not just a cast one (CR 603.6a). The pair lives in Permanent::paired_with on this side only and is READ-TIME VERIFIED against the live battlefield, so losing the partner breaks the pair with no bookkeeping and this creature may then pair with the next creature to enter, exactly as printed. The double-strike payload is symmetric and answered for both halves by the single CreatureHasDoubleStrike oracle. WHICH partner is the provider's SoulbondPartner hook (highest effective power, read through DynamicBasePower so Adeline's characteristic-defining power is not priced at 0) and is a real human decision, surfaced as the existing `attach_host` board-click with a decline arm for the printed 'you may'. The ranking is a NARROWING and is disclosed in Stage 6a.]",
+   "template": "vanilla_creature",
+   "parameters": {
+    "soulbond": true,
+    "soulbond_grants_double_strike": true
+   }
+  },
+  {
+   "name": "Hero of Bladehold",
+   "mana_cost": "{2}{W}{W}",
+   "types": [
+    "Creature"
+   ],
+   "subtypes": [
+    "Human",
+    "Knight"
+   ],
+   "keywords": [],
+   "power": 3,
+   "toughness": 4,
+   "oracle_text": "Battle cry (Whenever this creature attacks, each other attacking creature gets +1/+0 until end of turn.)\nWhenever this creature attacks, create two 1/1 white Soldier creature tokens that are tapped and attacking. [Battle cry modelled as battle_cry_power (see Accorder Paladin for why it is not a Keyword). The token count is FLAT -- no 'for each opponent' clause -- so attack_tokens_per_opponent is false, unlike Adeline's. Both triggers fire on the same attack, tokens first, so the two Soldiers receive the battle cry pump (CR 603.3b: the controller orders simultaneous triggers).]",
+   "template": "vanilla_creature",
+   "parameters": {
+    "battle_cry_power": 1,
+    "attack_creates_tokens": 2,
+    "attack_tokens_per_opponent": false,
+    "attack_tokens_require_self_attacking": true,
+    "attack_token_power": 1,
+    "attack_token_toughness": 1,
+    "attack_token_subtypes": [
+     "Soldier"
     ]
    }
   },

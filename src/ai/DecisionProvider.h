@@ -468,6 +468,24 @@ public:
         const GameState& s, int controller, const Card& equip_card,
         const std::vector<int>& attacker_bf_indices) const;
 
+    // SoulbondPartner -- CR 702.46b's "you MAY pair this creature with another unpaired creature":
+    // WHICH of the legal unpaired creatures to pair with (0 = decline the optional pairing).
+    // `candidate_bf_indices` is the rules-legal set the caller built (other unpaired creatures under
+    // the same controller); the provider only ORDERS it, it never widens or narrows legality.
+    //
+    // Base rule (out-of-line): the highest EFFECTIVE power, ties to lower card number. The payload
+    // in this engine is double strike, so the pair is worth the partner's power again -- pairing
+    // with the biggest body is the dominant pick, and unlike the equipment host above there is no
+    // "this combat" framing, since the pair persists across turns and is set at ETB (often before
+    // attackers exist).
+    //
+    // MUST read power through DynamicBasePower, not a static P/T: Adeline's power is a
+    // characteristic-defining ability (creature count) printed as 0, so a static read prices the
+    // deck's largest creature at nothing and the pick silently avoids her.
+    virtual int SoulbondPartner(
+        const GameState& s, int controller, const Permanent& source,
+        const std::vector<int>& candidate_bf_indices) const;
+
     // JitteSpendCount -- Umezawa's Jitte: how many charge counters to spend on "+2/+2 until end
     // of turn" for THIS attacker's combat damage. Default -1 = greedy spend-all INCLUDING the
     // double-strike mid-step earnings (see JitteDamageMath; per-turn damage-optimal). The one

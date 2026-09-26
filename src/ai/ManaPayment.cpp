@@ -182,6 +182,13 @@ static void VerifyPaySnapRestore(const std::vector<Permanent>& now,
         if (a.ice_counters != b.ice_counters)         { fail(i, "ice_counters"); }
         if (a.age_counters != b.age_counters)         { fail(i, "age_counters"); }
         if (a.temp_haste != b.temp_haste)             { fail(i, "temp_haste"); }
+        // The other two until-EOT keyword grants. temp_lifelink was missing here since it was added
+        // (2026-09-08) -- noticed while adding temp_double_strike beside it. Neither can be set by a
+        // payment path, so this is a completeness fix to a CHECKER, not a behaviour change: it can
+        // only turn a silent divergence into a loud one.
+        if (a.temp_lifelink != b.temp_lifelink)       { fail(i, "temp_lifelink"); }
+        if (a.temp_double_strike != b.temp_double_strike) { fail(i, "temp_double_strike"); }
+        if (a.paired_with != b.paired_with)           { fail(i, "paired_with"); }
         if (a.exile_at_end != b.exile_at_end)         { fail(i, "exile_at_end"); }
         if (a.chosen_subtype_id != b.chosen_subtype_id) { fail(i, "chosen_subtype_id"); }
         if (a.is_animated != b.is_animated)           { fail(i, "is_animated"); }

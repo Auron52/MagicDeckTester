@@ -19,6 +19,17 @@
     "toughness": "3",
     "type_line": "Creature — Human Knight"
   },
+  "Accorder Paladin": {
+    "cmc": 2.0,
+    "keywords": [
+      "Battle Cry"
+    ],
+    "mana_cost": "{1}{W}",
+    "oracle_text": "Battle cry (Whenever this creature attacks, each other attacking creature gets +1/+0 until end of turn.)",
+    "power": "3",
+    "toughness": "1",
+    "type_line": "Creature — Human Knight"
+  },
   "Adaptive Automaton": {
     "cmc": 3.0,
     "keywords": [],
@@ -1679,6 +1690,17 @@
     "toughness": "5",
     "type_line": "Legendary Enchantment Creature — God"
   },
+  "Hero of Bladehold": {
+    "cmc": 4.0,
+    "keywords": [
+      "Battle Cry"
+    ],
+    "mana_cost": "{2}{W}{W}",
+    "oracle_text": "Battle cry (Whenever this creature attacks, each other attacking creature gets +1/+0 until end of turn.)\nWhenever this creature attacks, create two 1/1 white Soldier creature tokens that are tapped and attacking.",
+    "power": "3",
+    "toughness": "4",
+    "type_line": "Creature — Human Knight"
+  },
   "Hibernation Sliver": {
     "cmc": 2.0,
     "keywords": [],
@@ -3336,6 +3358,17 @@
     "toughness": "2",
     "type_line": "Creature — Goblin"
   },
+  "Silverblade Paladin": {
+    "cmc": 3.0,
+    "keywords": [
+      "Soulbond"
+    ],
+    "mana_cost": "{1}{W}{W}",
+    "oracle_text": "Soulbond (You may pair this creature with another unpaired creature when either enters. They remain paired for as long as you control both of them.)\nAs long as this creature is paired with another creature, both creatures have double strike.",
+    "power": "2",
+    "toughness": "2",
+    "type_line": "Creature — Human Knight"
+  },
   "Simic Growth Chamber": {
     "cmc": 0.0,
     "keywords": [],
@@ -4008,6 +4041,15 @@
     "power": "6",
     "toughness": "6",
     "type_line": "Creature — Dragon"
+  },
+  "Valiant Knight": {
+    "cmc": 4.0,
+    "keywords": [],
+    "mana_cost": "{3}{W}",
+    "oracle_text": "Other Knights you control get +1/+1.\n{3}{W}{W}: Knights you control gain double strike until end of turn.",
+    "power": "3",
+    "toughness": "4",
+    "type_line": "Creature — Human Knight"
   },
   "Varchild's War-Riders": {
     "cmc": 2.0,
