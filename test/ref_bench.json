@@ -308,7 +308,7 @@
   "whiteknights": {
    "hand_mismatch": 0,
    "hand_mismatch_games": [],
-   "human": 4.7,
+   "human": 4.4,
    "max_turns": 8,
    "n": 10,
    "policy": "committed value_play",
