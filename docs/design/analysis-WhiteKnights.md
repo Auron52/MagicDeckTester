@@ -1790,11 +1790,20 @@ budget check unchanged. The tables above carry the shipped values.
 ## Mulligan-generation setting — DERIVED, and the answer is "no override"
 
 Per CLAUDE.md the per-deck pipeline is **profile → value leaf → mulligan**, and the mulligan generator
-reads `mull_gen_depth` / `mull_gen_budget_ms` from `value_play`. The value-leaf stage is now closed
-(answer: no leaf), so the next stage's documented first step is to *measure* the labeller setting
-rather than take a default — the user's standing instruction on this is explicit: *"We don't always
-want to take d3 b3 just because it is the default."* This is a measurement, not a generation, so it
-does not need a frozen commit.
+reads `mull_gen_depth` / `mull_gen_budget_ms` from `value_play`. The value-leaf stage is closed, so the
+next stage's documented first step is to *measure* the labeller setting rather than take a default —
+the user's standing instruction on this is explicit: *"We don't always want to take d3 b3 just because
+it is the default."* This is a measurement, not a generation, so it does not need a frozen commit.
+
+> **The table below was first produced when the deck shipped NO leaf, and phase F was re-run after the
+> fitted leaf was adopted. The answer did not merely survive — it got stronger.** Pre-adoption the
+> mechanical pick was `d1 b3`; post-adoption, play settings became both the *cheapest* arm (752 vs
+> 1,084 units/rollout) and the exact one (rho 1.0000), so the override disappeared on its own merits
+> rather than being declined. Two consequences: the "no override" conclusion is now the tool's own pick
+> and not a judgement call against it, and the bullet below about `value_trust_depth` being unset is
+> superseded (the deck now carries `value_trust_depth_candidate: 5`, shipped UNSET). **This is why phase
+> F must run after adoption** — in its normal position it would have written a setting 1.44x costlier on
+> the shipped deck at worse fidelity.
 
 `python3 scripts/derive_mullgen_setting.py decks/WhiteKnights/WhiteKnights.cod --hands 200`
 (`logs/wk_mullgen/derive_200.txt`; a 48-opener pass is in `derive.txt` for comparison):
@@ -1817,7 +1826,9 @@ The tool's mechanical pick is `d1 b3` — cheapest arm clearing the 0.990 rank-f
 * **Play settings are exact by construction** (rho 1.0000 — it *is* the reference) and already close
   to the cheapest arm. The tool's own rationale for emitting no override says exactly this: for such a
   deck "there is no trade-off to arbitrate". Formally that rule is gated on a value trust depth, which
-  this deck has none of (`value_trust_depth=None`, no leaf) — but the rationale applies regardless.
+  this deck had none of at the time (`value_trust_depth=None`, no leaf) — but the rationale applies
+  regardless, and after the leaf adoption the gate is moot because play settings are also the cheapest
+  arm (see the note above this table).
 * **Generation is not cost-constrained for this deck.** The precedents that *did* take an override
   were escaping real infeasibility: KittyEquipment 4.44x, Snow 2.87x, FiveColour 1.67x, each on a deck
   where generation was hours-to-days. WhiteKnights is a 22-land mono-white aggro deck that kills on
@@ -1845,8 +1856,67 @@ documents) — yet the *shape* keys still apply, because `DeckShapeScope` reads 
 the deck plays differently with the file than without it. So the reference policy used here (d5/b20)
 is right, and the message means "no play-settings override", not "no sidecar".
 
-**Still not derived, and deliberately:** `expected_buckets`. Recording K is the **user's bucket
-ruling**, never an agent's derivation, so it stays absent.
+**`expected_buckets`: phase F DID write it, as `14` — superseding the line that used to sit here saying
+it stays absent.** Recording K is the **user's bucket ruling**, never an agent's derivation, so this is
+flagged for sign-off (§ *Open questions*) rather than presented as settled. Three facts make it safe to
+leave in place while that sign-off is outstanding, and they are worth stating precisely because the
+"bucket ruling is user-only" rule is what would otherwise require reverting it before generating:
+
+* **It is a RECORD of what discovery found, not a policy that overrides it.** The pre-check measured
+  **K = 14** independently (`logs/wk_mullgen/discover.txt`: `17 distinct cards -> 14 classes`), which is
+  the same 14. So it asserts nothing discovery did not already conclude.
+* **It changed nothing the generation computed.** `expected_buckets` acts as a *guard* — generation
+  refuses if discovered K differs — and it did not fire, because K matched. The buckets themselves come
+  from `DiscoverEquivalence`, not from this key.
+* **Therefore removing it needs no regeneration.** If the user rules against recording K, deleting the
+  key is a one-line edit to the sidecar; the table stays valid. That is what makes this a question that
+  cannot block the run (the *"does this answer change what the run computes?"* test).
+
+## The exhaustive mulligan profile — GENERATING (started 2026-09-26 05:27 UTC)
+
+The last stage of the pipeline, started on the user's instruction (*"we may as well start generation"*)
+now that the value leaf is closed and both bookkeeping items are done.
+
+**Frozen at `083c4108`**, src tree `565f5a7397f8`, clean tree. Command — the one indivisible
+generate-and-validate route, never the bare binary:
+
+```
+bash scripts/mullgen.sh run decks/WhiteKnights complete      # -> logs/whiteknights_mullgen/gen.log
+bash scripts/mullgen.sh status decks/WhiteKnights            # progress
+```
+
+**Feasibility pre-check (run first, as the skill requires):**
+
+| quantity | value |
+|---|---|
+| **K (effective buckets)** | **14** — 17 distinct cards → 14 classes, matching `expected_buckets` |
+| merged: goldfish-inert class | `[1]` Lightning Greaves + Swords to Plowshares + Unexpectedly Absent |
+| merged: identical bodies | `[2]` Dauntless Bodyguard + Venerable Knight — **both 2/1 for `{W}`** |
+| distinct hands | **68,377** (size7 42,271 · size6 17,288 · size5 6,252 · size4 1,948 · size3 503 · size2 101 · size1 14) |
+| rollout settings | **R cap 40, depth 5, budget 20 ms** — all *gen-default*, i.e. the deck's shipped play, exactly as the "no override" derivation intended |
+| play digest | `9dbbfbd40bfe8140` (d5/b20, 64-game battery) |
+
+**Scout projection (`--gen-mulligan recommend`, `logs/wk_mullgen/recommend.txt`):** floor pass 123 s at
+1,104 rollouts/s → **COMPLETE ~1.4 h**, FAST ~0.7 h, against the ~8 h overnight target. **COMPLETE was
+chosen**: it is the definitive profile (full bottoming, R40), it fits the window with room to spare, and
+nothing about this deck is cost-constrained — `fast` exists to buy back 22–38% of generation on slow or
+large-K decks, which this is not.
+
+**No degenerate cell.** The slowest rollout through the floor pass was **3.6 s** against the 30 s
+slow-stream threshold, and the top-12 are all Aether-Vial-heavy hands (Vial ×2–×3), which is the
+expected shape: Vial adds instant-speed put-onto-battlefield branches. This is the check that is worth
+doing *before* committing hours, and it came back clean.
+
+Two efficiencies worth noting for the next deck:
+* **The scout was not wasted work.** `PROBE-CARRY: reused 136754 cell-sides (r=0/cell) ... byte-identical`
+  — the `recommend` run's R=1 slice is picked up as the real generation's r=0 layer automatically.
+* **Utilisation checked inside the first ten minutes** (CLAUDE.md): 27.7–28.8 of 32 cores busy, load
+  average 26. One pooled queue covers discovery, the digest battery, the sub-tables and the size-7
+  floor+refine, so cores idle only on the final live cell.
+
+That `bucket [2]` merge is a small independent confirmation of the reference audit: the engine
+discovered from 400 probes that Dauntless Bodyguard and Venerable Knight are interchangeable, which is
+the same fact the `claude_s3_gi2` line turned on (two 2/1s for `{W}` beat one Worthy Knight).
 
 ## Approved deferrals
 
