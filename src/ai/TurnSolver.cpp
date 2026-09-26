@@ -28166,20 +28166,33 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
             state.battlefield.push_back(perm);
             ap.hand.erase(hand_it);
             state.battlefield[vi].tapped = true;  // access by index — push_back may reallocate
-            // ETB dig / legend rule also apply to Vial-deployed creatures (Vial is not a
-            // cast, so no on-cast trigger, but the ETB still happens).
-            if (copt->params.etb_dig_count > 0)
-            {
-                PerformEtbDig(state, state.active_player_index, copt->params,
-                              &state.battlefield.back());
-            }
             // UNIVERSAL ETB cascade -- lockstep twin of AIEngine's deploy_via_vial (see the
             // comment there: a Vial-put Fanatic of Mogis fired no devotion burn, so the search
             // could never SEE a vial line's ETB value either).
+            const int entrant_slot = static_cast<int>(state.battlefield.size()) - 1;
             {
-                const int slot = static_cast<int>(state.battlefield.size()) - 1;
+                const int slot = entrant_slot;
                 FireEtbWatchers(state, state.active_player_index, slot);
                 FireOwnEtbTriggers(state, state.active_player_index, slot);
+            }
+            // ETB dig AFTER the enter cascade -- the order the hand-CAST path has always used
+            // (EnterBattlefield fires the watchers, then the dig; ApplyPlanDirect's cast branch
+            // likewise). It used to run first here, so a Vial-put Staunch Crewmate dug before
+            // Metallic Mimic's "enters with an additional +1/+1 counter" was applied -- a CR 614
+            // replacement, which modifies the entering event itself and so precedes every
+            // "when this enters" trigger (CR 603.6a). The entrant is addressed by its SLOT, not
+            // battlefield.back(): the cascade may push tokens after it (Corsair Captain's
+            // Treasure), and `self` is what the dig's "control ANOTHER <subtype>" test excludes.
+            // Guarded by name in case the cascade moved it: the trigger still resolves, with no
+            // `self` on the battlefield to exclude (not reachable by any current card). Lockstep twin:
+            // AIEngine's deploy_via_vial.
+            if (copt->params.etb_dig_count > 0)
+            {
+                const Permanent* self_p =
+                    (entrant_slot < static_cast<int>(state.battlefield.size())
+                     && state.battlefield[entrant_slot].card.m_name == copt->card.m_name)
+                        ? &state.battlefield[entrant_slot] : nullptr;
+                PerformEtbDig(state, state.active_player_index, copt->params, self_p);
             }
             if (copt->card.HasSupertype(Supertype::Legendary))
             {

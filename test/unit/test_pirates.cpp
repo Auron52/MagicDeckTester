@@ -628,3 +628,39 @@ TEST_CASE("Kitesail Larcenist: the executor carries the searched target (and non
         CHECK((ByNumber(s, 80).card.m_name.str() == "Treasure Token") == (pick == 80));
     }
 }
+
+// ---- Claude-play sweep fixes (2026-09-26) ------------------------------------------------------
+
+TEST_CASE("Vial-put Staunch Crewmate: Mimic's as-enters counter is on it BEFORE its ETB dig resolves")
+{
+    // CR 614 (enters-with counters is a replacement on the entering event) precedes CR 603.6a
+    // (the "when this enters" dig trigger). The hand-cast path always fired the enter cascade first;
+    // the Vial-put path dug first. Observed through the dig chooser, which sees the board AT the dig.
+    EnsureCardsLoaded();
+    GameState s = PiratesState();
+    Enter(s, "Metallic Mimic", 0, 1);
+    const int vi = Put(s, "Aether Vial", 0, 2);
+    s.battlefield[vi].charge_counters = 2;
+    s.players[0].hand.push_back(HandCard("Staunch Crewmate", 3));
+    int counters_at_dig = -1;
+    DigChooser chooser = [&](const GameState& st, int, const std::string&, const std::vector<Card>&,
+                             const std::vector<int>&, int heuristic_pick) -> int
+    {
+        for (const Permanent& p : st.battlefield)
+        { if (p.card.m_number == 3) { counters_at_dig = PlusCounters(p); } }
+        return heuristic_pick;
+    };
+    DigChooser* saved = g_play_dig_chooser;
+    g_play_dig_chooser = &chooser;
+    TurnSolver::Plan plan;
+    plan.land_decided = true;
+    Action a;
+    a.kind      = Action::Kind::ActivateVial;
+    a.card_name = "Staunch Crewmate";
+    plan.actions.push_back(a);
+    TurnSolver::ApplyPlan(s, plan, /*is_pre_combat=*/true);
+    g_play_dig_chooser = saved;
+    CHECK(counters_at_dig == 1);
+    CHECK(PlusCounters(ByNumber(s, 3)) == 1);
+    CHECK(s.players[0].hand.size() == 1);   // the dig took a Pirate
+}
