@@ -264,7 +264,9 @@ blocking) and **nothing is pushed**.
 | Mulligan profile | **GENERATED, VALIDATED, LIVE** — 37 min, keep **−0.1985 t (16/16)**, confounded bottoming **−0.0489 t (16/16)**, both gates passed. 42,271 compositions |
 | **Deck speed, shipped** | **4.320 at d3/d5**, slowest win **T6** (was 4.520 / T8 before the leaf and keep table) |
 | Regression suite | **IN — 26 cases, 3 tiers + 2HG, GT accepted.** Membership is now a **gated** step that blocks both generators (`scripts/suite_gate.py`); cost 97.5 ms/game = **0.09x** the 3x limit |
-| Commits | `80ef7c34` deck+engine · `bb5d1038` lazy-leaf opt-out · `343366c3` leaf measurement · `6508fb37` references · `ce64976d` bench cache · `9bec6d2e` refline tool · `721fe1b6` leaf adoption. **Nothing pushed.** |
+| Pipeline gate | **NEW, repo-wide:** suite membership now blocks the value-leaf and mulligan generators (`b6bc9bae`). 3x cost rule, reference **fivecolour 1033.5 ms/game** → budget 3100.4. Also fixed 5 driver defects found by using it |
+| Commits | **19, none pushed.** `80ef7c34` deck+engine · `bb5d1038` lazy-leaf opt-out · `343366c3` leaf measurement · `6508fb37` references · `ce64976d` bench cache · `9bec6d2e` refline tool · `721fe1b6` leaf adoption · `fc7a90ab`+`ecc0d086` ledger · `01b22009` re-played refs · `083c4108` bench cache · `a73e3a60`+`f3caca99` mullgen start · `00e16767` **keep-table adoption** · `b6bc9bae` **suite gate** · `0b21cbaa`+`09ebe589` GT rebaseline · `d339e7e8` **suite membership** · `8228d9c9` mullgen fixes |
+| ONE thing not run | The **overnight** tier very likely carries the same angels/minotaur digest churn the other two tiers did (verified harmless: **0 win turns moved in 7,100 games**). It is ~8 h, so it was flagged for the user to schedule, not launched |
 
 ### The value leaf: adopted, and my earlier "no leaf" call was wrong on COST
 
