@@ -22062,6 +22062,30 @@ inline void SpendFloatingTowardCost(ManaPool& reserve, ManaCost& cost, bool keep
     if (hold_c) { drain(cost.generic, reserve.colorless); }
 }
 
+// Daring Buccaneer's additional cost ("reveal a Pirate card from your hand or pay {2}", CR 601.2b):
+// true iff the active player's hand holds a reveal_or_pay_subtype card OTHER THAN the spell being
+// cast. At every cast site the spell is still in hand when it is priced (enumeration, the rollout's
+// apply_one and the executor's CastSpellFromHand all price before the erase), so exactly ONE hand
+// copy of the spell's own name is skipped as "self" -- a second copy of the same card is a
+// legitimate reveal. Staged (exiled-playable) cards are not in hand. The subtype test reads the
+// PRINTED CardDefinition (hand placeholders carry no types), so a Metallic Mimic in hand is a
+// Shapeshifter, not a Pirate -- its chosen type exists only on the battlefield (Scryfall ruling).
+// Inert (false) for a card without the param; callers gate on it first.
+inline bool CanRevealForAdditionalCost(const GameState& state, const CardDefinition& def)
+{
+    const std::string& want = def.params.reveal_or_pay_subtype;
+    if (want.empty()) { return false; }
+    bool self_skipped = false;
+    for (const Card& c : state.ActivePlayer().hand)
+    {
+        if (c.m_is_staged) { continue; }
+        if (!self_skipped && c.m_name == def.card.m_name) { self_skipped = true; continue; }
+        const CardDefinition* cdef = CardDatabase::Instance().LookupCached(c);
+        if (cdef && CardHasSubtype(cdef->card, want)) { return true; }
+    }
+    return false;
+}
+
 // True iff the active player's hand holds a card of a subtype this reveal land wants
 // (e.g. Island/Mountain for Frostboil Snarl) -- i.e. it CAN reveal to enter untapped.
 inline bool LandCanReveal(const GameState& state, const CardDefinition& def)

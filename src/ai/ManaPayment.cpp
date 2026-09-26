@@ -1387,6 +1387,26 @@ ManaCost EffectiveSpellCost(const CardDefinition& def, const GameState& state, i
         cost.green     += k * sc.green;
         cost.colorless += k * sc.colorless;
     }
+    // ADDITIONAL COST "reveal a <subtype> card or pay <cost>" (Daring Buccaneer: Pirate / {2}).
+    // CR 601.2f: total cost = mana cost + additional costs - reductions, so it joins the RAW cost
+    // here, before every reducer below (a Warchief-style Pirate discount would take the {2} off too).
+    // Paid only when no reveal is possible -- revealing is free and nothing reads what was revealed,
+    // so paying {2} while a reveal exists is strictly dominated and never chosen. Priced LIVE off the
+    // hand at every cast site (enumeration a.cost, apply_one, CastSpellFromHand, SubsetPayable-
+    // Sequential); the enumerator adds the same-turn ORDER effect separately (a Pirate cast or
+    // Vial-put earlier leaves the hand -- see SameSubsetRevealSurcharge). Param-gated: inert elsewhere.
+    if (def.params.reveal_or_pay_cost.has_value() && !def.params.reveal_or_pay_subtype.empty()
+        && !CanRevealForAdditionalCost(state, def))
+    {
+        const ManaCost& rc = *def.params.reveal_or_pay_cost;
+        cost.generic   += rc.generic;
+        cost.white     += rc.white;
+        cost.blue      += rc.blue;
+        cost.black     += rc.black;
+        cost.red       += rc.red;
+        cost.green     += rc.green;
+        cost.colorless += rc.colorless;
+    }
     if (def.params.affinity_for_subtype && !def.params.subtypes_affected.empty())
     {
         int reduction = 0;

@@ -9126,6 +9126,26 @@
    "parameters": {}
   },
   {
+   "name": "Daring Buccaneer",
+   "mana_cost": "{R}",
+   "types": [
+    "Creature"
+   ],
+   "subtypes": [
+    "Human",
+    "Pirate"
+   ],
+   "keywords": [],
+   "power": 2,
+   "toughness": 2,
+   "oracle_text": "As an additional cost to cast this spell, reveal a Pirate card from your hand or pay {2}. [ADDITIONAL COST (CR 601.2b/f): reveal_or_pay_subtype \"Pirate\" + reveal_or_pay_cost \"{2}\". The shared EffectiveSpellCost adds {2} generic to the TOTAL cost (before any reducer) iff the active player's hand holds NO OTHER Pirate card (CanRevealForAdditionalCost: one hand copy of this card's own name is skipped as the spell itself -- a second Buccaneer IS a legal reveal; staged/exiled cards are not in hand). 'Pirate card' = printed subtype, read from the CardDefinition: Metallic Mimic (Shapeshifter) and Adaptive Automaton (Construct) do NOT enable the reveal from hand -- their chosen type exists only on the battlefield (Scryfall ruling). REVEAL-VS-PAY is auto-resolved to REVEAL whenever a reveal is possible: revealing costs nothing, the passive opponent gains nothing from the information, and nothing in the engine reads revealed cards or mana spent, so paying {2} instead is STRICTLY DOMINATED; WHICH Pirate is revealed is inert (it stays in hand and can be revealed again for the next Buccaneer). ORDER within a turn matters (a Pirate cast or Aether-Vial-put earlier leaves the hand): executor and rollout price every cast LIVE off the hand, and the enumerator debits the {2} per subset where the realised order (Vial puts, then the casts in CastOrderLess or plan order -- the larger debit) leaves a Buccaneer with nothing to reveal (SameSubsetRevealSurcharge; also the batch prepay and both real-payment rescue walks). Putting it onto the battlefield with Aether Vial is not casting -- no additional cost. Vanilla 2/2 body otherwise.]",
+   "template": "vanilla_creature",
+   "parameters": {
+    "reveal_or_pay_subtype": "Pirate",
+    "reveal_or_pay_cost": "{2}"
+   }
+  },
+  {
    "name": "Spirebluff Canal",
    "mana_cost": "",
    "types": [

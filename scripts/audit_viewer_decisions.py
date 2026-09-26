@@ -985,6 +985,8 @@ INERT_PARAMS = {
     "own_creature_enters_opp_life_loss": "PROVISIONAL (Pirates): automatic enter trigger (Forerunner of the Coalition) -- mandatory, untargeted ('each opponent loses 1'), nothing to pick",
     "nth_spell_trigger_n": "PROVISIONAL (Pirates): automatic on-cast trigger count (Malcolm, the Eyes: second spell), no choice",
     "nth_spell_investigate": "PROVISIONAL (Pirates): mandatory investigate on the Nth spell (Malcolm); the Clue crack surfaces as a main_phase SacDraw plan action via the Clue Token def",
+    "reveal_or_pay_subtype": "PROVISIONAL (Pirates): Daring Buccaneer 'reveal a Pirate card from your hand or pay {2}' -- auto-REVEAL whenever possible because paying is STRICTLY DOMINATED (revealing is free; the passive opponent gains nothing from the information; nothing in the engine reads revealed cards or mana spent). WHICH Pirate is revealed is inert (it stays in hand). A human who wants the {2} line can still reach it by casting the last other Pirate first (every cast is priced live). DISCLOSED in 6a",
+    "reveal_or_pay_cost": "PROVISIONAL (Pirates): Daring Buccaneer's pay-instead amount ({2}) -- a printed constant of the additional cost, charged automatically only when no reveal is possible; no choice",
 }
 
 # Decisions the human makes by picking among main_phase PLAN VARIANTS or a board-click

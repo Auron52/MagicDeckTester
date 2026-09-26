@@ -5809,6 +5809,132 @@ static bool RescueTapSourceOn()
 // `tap_sources` is RescueTapSourceOn() at every production call site; the parameter exists so
 // MTG_RESCUE_TAP_TRACE can run the SAME code both ways on a rejection and print the flips. See the
 // wrapper below.
+// ---- Same-subset "reveal a <subtype> card or pay <cost>" surcharge (Daring Buccaneer) -----------
+// Action::cost prices each cast against the NODE's hand, where every card of the subset is still
+// present. But casts and Vial puts earlier in the SAME plan remove cards from the hand, so a
+// Buccaneer priced at {R} (a reveal was possible at the node) can find nothing left to reveal when
+// its turn comes: two lone Buccaneers are {R} + {2}{R}, not {R}{R}; Vial-putting the only other
+// Pirate then casting a Buccaneer is {2}{R}, not {R}. Summing a.cost UNDER-prices those subsets
+// relative to execution (executor and rollout reprice every cast LIVE off the hand), and an
+// under-priced subset is a line the apply cannot pay -- a dropped cast, and at d0 an fd-diverge.
+//
+// So walk the subset in the order the apply REALISES and debit reveal_or_pay_cost for each
+// reveal-cost cast whose node price assumed a reveal but which, at its position, has no OTHER card
+// of the subtype left in hand (one copy of its own name is skipped as self, exactly as
+// CanRevealForAdditionalCost does). Only ever DEBITS: a node price without the reveal already
+// carries the cost, and the walk only removes cards (a mid-turn draw that adds a Pirate -- Staunch
+// Crewmate's dig -- is a breakpoint re-solve that reprices from the new hand).
+//
+// WHICH ORDER. Both apply worlds (ApplyPlanDirect / AIEngine::TakeTurn) resolve every ActivateVial
+// first, then the hand casts: a clean set stable-sorted by CastOrderLess, an OrderingOpaque set in
+// plan order unless OpaqueCastOrderActive. Rather than re-derive which branch a set takes, the walk
+// prices BOTH the CastOrderLess order and the plan (selection) order and keeps the LARGER debit --
+// never under the realised order on either branch. (The two coincide whenever ranks tie. The range
+// ladder and the enabler hoists could reorder further; no reveal-cost card carries a range, and a
+// hoisted enabler is not a subtype card in any list that runs one -- revisit if that changes.)
+//
+// With one reveal subtype the debit is at most ONE reveal_or_pay_cost per subset: it lands only when
+// the LAST subtype card to leave the hand is itself a reveal-cost cast, and nothing stays behind.
+// `charged` receives the cands indices debited (for the real-payment walks, which add the cost to
+// that cast's own bill). Gated by the callers on any reveal-cost candidate -> inert elsewhere.
+struct RevealSurcharge
+{
+    ManaCost all;            // debit on the whole subset's bill
+    ManaCost noncreature;    // ... of which falls on noncreature casts (the noncreature pool test)
+};
+static bool IsRevealCostCast(const Action& a)
+{
+    return a.kind == Action::Kind::CastFromHand && a.def != nullptr && !a.alt_cost && !a.free_cast
+        && a.def->params.reveal_or_pay_cost.has_value()
+        && !a.def->params.reveal_or_pay_subtype.empty();
+}
+static bool AnyRevealCostCand(const std::vector<Action>& cands)
+{
+    for (const Action& a : cands) { if (IsRevealCostCast(a)) { return true; } }
+    return false;
+}
+static RevealSurcharge SameSubsetRevealSurcharge(const GameState& state,
+                                                 const std::vector<Action>& cands,
+                                                 const std::vector<int>& sel,
+                                                 std::vector<int>* charged = nullptr)
+{
+    RevealSurcharge out{};
+    if (charged) { charged->clear(); }
+    bool any = false;
+    for (int j : sel)
+    { if (IsRevealCostCast(cands[j]) && CanRevealForAdditionalCost(state, *cands[j].def)) { any = true; break; } }
+    if (!any) { return out; }
+
+    struct HandCard { InternedName name; const CardDefinition* def; };
+    thread_local std::vector<HandCard> base, hand;
+    base.clear();
+    for (const Card& c : state.ActivePlayer().hand)
+    {
+        if (c.m_is_staged) { continue; }
+        base.push_back({ c.m_name, CardDatabase::Instance().LookupCached(c) });
+    }
+    auto remove_one = [](std::vector<HandCard>& h, const InternedName& n)
+    {
+        for (std::size_t i = 0; i < h.size(); ++i)
+        { if (h[i].name == n) { h.erase(h.begin() + static_cast<long>(i)); return; } }
+    };
+    // Non-cast hand exits resolve before every hand cast (Vial puts; suspend / channel likewise
+    // leave the hand without a cast).
+    thread_local std::vector<int> casts, sorted;
+    casts.clear();
+    for (int j : sel)
+    {
+        const Action& a = cands[j];
+        if (a.kind == Action::Kind::ActivateVial || a.kind == Action::Kind::Suspend
+            || a.kind == Action::Kind::Channel)
+        { remove_one(base, a.card_name); }
+        else if (a.kind == Action::Kind::CastFromHand) { casts.push_back(j); }
+    }
+    thread_local std::vector<int> ch1, ch2;
+    auto walk = [&](const std::vector<int>& ord, std::vector<int>& ch) -> RevealSurcharge
+    {
+        RevealSurcharge r{};
+        ch.clear();
+        hand = base;
+        for (int j : ord)
+        {
+            const Action& a = cands[j];
+            if (IsRevealCostCast(a) && CanRevealForAdditionalCost(state, *a.def))
+            {
+                const std::string& want = a.def->params.reveal_or_pay_subtype;
+                bool self_skipped = false, found = false;
+                for (const HandCard& h : hand)
+                {
+                    if (!self_skipped && h.name == a.def->card.m_name) { self_skipped = true; continue; }
+                    if (h.def && CardHasSubtype(h.def->card, want)) { found = true; break; }
+                }
+                if (!found)
+                {
+                    const ManaCost& rc = *a.def->params.reveal_or_pay_cost;
+                    AddManaCost(r.all, rc);
+                    if (a.is_noncreature) { AddManaCost(r.noncreature, rc); }
+                    ch.push_back(j);
+                }
+            }
+            remove_one(hand, a.card_name);
+        }
+        return r;
+    };
+    const RevealSurcharge plan_order = walk(casts, ch1);
+    sorted = casts;
+    std::stable_sort(sorted.begin(), sorted.end(), [&](int x, int y)
+    { return CastOrderLess(state, cands[x], cands[y]); });
+    if (sorted == casts)
+    {
+        if (charged) { *charged = ch1; }
+        return plan_order;
+    }
+    const RevealSurcharge rank_order = walk(sorted, ch2);
+    const bool rank_worse = rank_order.all.ManaValue() > plan_order.all.ManaValue();
+    if (charged) { *charged = rank_worse ? ch2 : ch1; }
+    return rank_worse ? rank_order : plan_order;
+}
+
 static bool SubsetPayableWithFiltersImpl(const GameState& state, const std::vector<Action>& cands,
                                          const std::vector<int>& sel, bool tap_sources)
 {
@@ -5868,6 +5994,11 @@ static bool SubsetPayableWithFiltersImpl(const GameState& state, const std::vect
             SetPermTapped(cp, cp.active_player_index, a.sac_source_id, true);
         }
     }
+    // Same-subset reveal debit (Daring Buccaneer; see SameSubsetRevealSurcharge): a.cost priced a
+    // reveal the realised order cannot make, so that cast's real bill carries reveal_or_pay_cost.
+    // Empty (no reveal-cost cast in the subset) for every other deck.
+    thread_local std::vector<int> rv_charged;
+    SameSubsetRevealSurcharge(state, cands, sel, &rv_charged);
     // Pay each selected cast's mana cost with real sources; taps persist across casts in cp, so a
     // filter consumed by one cast is unavailable to the next. Mana producers (rocks) pay first and
     // join the board so their mana is online for later casts in the subset.
@@ -5916,11 +6047,15 @@ static bool SubsetPayableWithFiltersImpl(const GameState& state, const std::vect
                     lp.tapped = true; reserved_host = a.enchant_target; break;
                 }
             }
-            bool cost_ok = TapForCostDirect(cp, a.cost, for_creature);
+            ManaCost bill = a.cost;
+            if (!rv_charged.empty() && def
+                && std::find(rv_charged.begin(), rv_charged.end(), j) != rv_charged.end())
+            { AddManaCost(bill, *def->params.reveal_or_pay_cost); }
+            bool cost_ok = TapForCostDirect(cp, bill, for_creature);
             if (reserved_host > 0)
             {
                 SetPermTapped(cp, cp.active_player_index, reserved_host, false);
-                if (!cost_ok) { cost_ok = TapForCostDirect(cp, a.cost, for_creature); reserved_host = -1; }
+                if (!cost_ok) { cost_ok = TapForCostDirect(cp, bill, for_creature); reserved_host = -1; }
             }
             if (!cost_ok) { return false; }
             if (is_rock && def)   // freshly-cast rock joins the board so its mana funds later casts
@@ -6254,6 +6389,14 @@ static bool SubsetPayableSequential(const GameState& state, const std::vector<Ac
     const DecisionProvider& prov = ResolveProvider(state);
     std::stable_sort(order.begin(), order.end(), [&](int x, int y)
     { return prov.CastOrderRank(state, *cands[x].def) < prov.CastOrderRank(state, *cands[y].def); });
+    // Same-subset reveal debit (Daring Buccaneer). This walk never removes a cast card from the
+    // scratch hand, so its LIVE EffectiveCost keeps seeing Pirates already cast (two lone Buccaneers
+    // would be "rescued" at {R}{R}). Rather than erase-as-it-goes -- which would price only THIS
+    // walk's order, and the rescue must not under-price the order the apply really takes -- the
+    // cast SameSubsetRevealSurcharge debits (priced over both realisable orders) carries
+    // reveal_or_pay_cost on top of its live cost. Empty for every other deck.
+    thread_local std::vector<int> seq_rv_charged;
+    SameSubsetRevealSurcharge(state, cands, sel, &seq_rv_charged);
 
     // The walk over one candidate order, extracted so a second order can be priced (see the
     // untapper-hoisted retry below the first call).
@@ -6283,6 +6426,9 @@ static bool SubsetPayableSequential(const GameState& state, const std::vector<Ac
         {
             // Live cost -- the same recompute the rollout's apply_one performs at cast time.
             ManaCost ec = EffectiveCost(def, cp, a.splice_count + 1);
+            if (!seq_rv_charged.empty()
+                && std::find(seq_rv_charged.begin(), seq_rv_charged.end(), j) != seq_rv_charged.end())
+            { AddManaCost(ec, *def.params.reveal_or_pay_cost); }
             // Evoke (Reveillark): the alternate cost replaces the printed one (lockstep).
             if (a.evoke && def.params.evoke_cost.has_value()) { ec = *def.params.evoke_cost; }
             ec.generic  = std::max(0, ec.generic
@@ -24196,6 +24342,9 @@ TurnSolver::Plan TurnSolver::SolveUncached(const GameState& state, bool is_pre_c
     // below (MTG_LEAF_REDUCER_CREDIT). Inert for every deck without one.
     bool any_reducer = false;
     for (const Action& ra : cands) { if (ra.def && !ra.def->params.reduces_spell_color.empty()) { any_reducer = true; break; } }
+    // Same-subset reveal-or-pay additional cost (Daring Buccaneer) among the candidates -- gates the
+    // per-subset SameSubsetRevealSurcharge debit. Inert for every deck without one.
+    const bool any_reveal_cost = AnyRevealCostCand(cands);
     // NOTE: the same-turn cost-reducer (Ruby Medallion) generic credit is applied ONLY in
     // EnumeratePlans (the search's / viewer's plan list), NOT here in Solve's greedy consider(). The
     // credit is an OPTIMISTIC affordability hint (it assumes the reducer resolves before the spells it
@@ -24540,6 +24689,16 @@ TurnSolver::Plan TurnSolver::SolveUncached(const GameState& state, bool is_pre_c
         // Goblin Tomb Raider: a same-subset DURABLE artifact (Mimic / Automaton / Vial) hastes it by
         // declare-attackers. Zero for every deck without static_artifact_haste -> byte-identical.
         if (subset_adds_artifact) { haste_cast_atk += cond_art_haste; }
+        // Daring Buccaneer: debit the reveal a.cost assumed but the realised order cannot make (see
+        // SameSubsetRevealSurcharge). A DEBIT, not a credit -- it makes the bill exact rather than
+        // optimistic -- so it belongs in Solve's d0 greedy as much as in EnumeratePlans. Inert
+        // (any_reveal_cost false) for every deck without a reveal_or_pay card.
+        if (any_reveal_cost)
+        {
+            const RevealSurcharge rs = SameSubsetRevealSurcharge(state, cands, sel);
+            AddCostCarryingHybrids(combined, rs.all);
+            AddCostCarryingHybrids(noncreature_combined, rs.noncreature);
+        }
 
         // Hinata combo: a ritual cast in THIS subset floats mana for the rest of the subset.
         // Credit its gross float to the affordable pool (the ritual's own cost is already in
@@ -25780,7 +25939,10 @@ TurnSolver::Plan TurnSolver::SolveUncached(const GameState& state, bool is_pre_c
         // Costed independents (Scavenging Ooze's {G} exile) simply STAY in the key -- the verdict
         // is a function of the selected costed actions, and only the inert bits are masked out.
         {
-            const bool call_ok = !any_affinity && !any_reducer && !any_tap_debit && !any_filter;
+            // any_reveal_cost: a COSTLESS Vial put of a subtype card changes a Buccaneer's reveal
+            // debit, so an "inert" independent bit is not inert for payability there.
+            const bool call_ok = !any_affinity && !any_reducer && !any_tap_debit && !any_filter
+                              && !any_reveal_cost;
             unsigned inert_mask = 0;
             for (int b = 0; call_ok && b < num_ind; ++b)
             {
@@ -26600,6 +26762,7 @@ bool TurnSolver::BatchPrepayMainCasts(GameState& state, const std::vector<Action
     // that land contributes {C} only. Fixes an all-creature batch reading as unaffordable off these
     // lands -> casting fewer creatures. See docs/design/slivers-restricted-mana-tap-order-bug.md.
     bool all_creatures = true;
+    bool any_reveal_act = false;   // a reveal_or_pay cast (Daring Buccaneer) -> order-aware debit below
     for (const Action& a : acts)
     {
         // Ordered Garth tap (MTG_GARTH_ORDERED): the copy's cast pays INSIDE the ordered cast
@@ -26661,7 +26824,37 @@ bool TurnSolver::BatchPrepayMainCasts(GameState& state, const std::vector<Action
         part.black += ec.black; part.red += ec.red; part.green += ec.green;
         part.colorless += ec.colorless;
         if (!d->card.IsCreature()) { all_creatures = false; }
+        if (d->params.reveal_or_pay_cost.has_value()) { any_reveal_act = true; }
         ++eligible;
+    }
+    // Daring Buccaneer: the per-cast EffectiveCost above prices every reveal against the FULL hand,
+    // but the casts leave the hand one by one, so the last Pirate out may have nothing to reveal.
+    // Fold the same order-aware debit the enumerator charges into the joint bill, so the prepay
+    // taps for what the casts will really cost. The Vial puts have already resolved (both apply
+    // worlds deploy them before this call), so only the hand casts are walked. Payment quality
+    // only -- the casts still reprice live -- and inert for every deck without a reveal_or_pay card.
+    if (any_reveal_act)
+    {
+        thread_local std::vector<Action> rv_acts;
+        thread_local std::vector<int>    rv_sel;
+        rv_acts.clear(); rv_sel.clear();
+        for (const Action& a : acts)
+        {
+            if (a.kind != Action::Kind::CastFromHand || a.sacrifice_land || a.alt_cost) { continue; }
+            rv_acts.push_back(a);
+            if (rv_acts.back().def == nullptr)
+            { rv_acts.back().def = CardDatabase::Instance().Lookup(a.card_name); }
+            rv_sel.push_back(static_cast<int>(rv_acts.size()) - 1);
+        }
+        const RevealSurcharge rs = SameSubsetRevealSurcharge(state, rv_acts, rv_sel);
+        AddManaCost(combined, rs.all);
+        AddManaCost(c_nonc, rs.noncreature);
+        ManaCost crea_part = rs.all;
+        crea_part.generic   -= rs.noncreature.generic;   crea_part.white -= rs.noncreature.white;
+        crea_part.blue      -= rs.noncreature.blue;      crea_part.black -= rs.noncreature.black;
+        crea_part.red       -= rs.noncreature.red;       crea_part.green -= rs.noncreature.green;
+        crea_part.colorless -= rs.noncreature.colorless;
+        AddManaCost(c_crea, crea_part);
     }
     // A single cast is already optimal via the per-cast complete-solver fallback; the inter-cast
     // stranding needs >=2 casts sharing the pool. <2 -> decline (single-cast turns byte-identical).
@@ -33841,6 +34034,9 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
     // (mirrors Solve). Inert unless a reducer is a candidate -> every non-reducer deck byte-identical.
     bool any_reducer = false;
     for (const Action& ra : cands) { if (ra.def && !ra.def->params.reduces_spell_color.empty()) { any_reducer = true; break; } }
+    // Same-subset reveal-or-pay additional cost (Daring Buccaneer) among the candidates -- gates the
+    // per-subset SameSubsetRevealSurcharge debit. Inert for every deck without one.
+    const bool any_reveal_cost = AnyRevealCostCand(cands);
     // Same-turn COLOURED-pip reducer castable/vialable this turn (Ragemonger)? Gates the pip
     // credit below. Inert unless one is a candidate -> every non-Ragemonger deck byte-identical.
     bool any_col_reducer = false;
@@ -34504,6 +34700,16 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
         // Goblin Tomb Raider: a same-subset DURABLE artifact (Mimic / Automaton / Vial) hastes it by
         // declare-attackers. Zero for every deck without static_artifact_haste -> byte-identical.
         if (subset_adds_artifact) { haste_cast_atk += cond_art_haste; }
+        // Daring Buccaneer: debit the reveal a.cost assumed but the realised order cannot make (see
+        // SameSubsetRevealSurcharge). A DEBIT, not a credit -- it makes the bill exact rather than
+        // optimistic -- so it belongs in Solve's d0 greedy as much as in EnumeratePlans. Inert
+        // (any_reveal_cost false) for every deck without a reveal_or_pay card.
+        if (any_reveal_cost)
+        {
+            const RevealSurcharge rs = SameSubsetRevealSurcharge(state, cands, sel);
+            AddCostCarryingHybrids(combined, rs.all);
+            AddCostCarryingHybrids(noncreature_combined, rs.noncreature);
+        }
 
         // Same-turn ramp credit. Ritual float (Reality Spasm / Irencrag) credited as wild; a mana
         // rock cast in THIS subset (Sol Ring -> {C}{C}) credited by its REAL produced colours, but

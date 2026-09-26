@@ -11,8 +11,15 @@
 #include "core/SpellEffects.h"
 #include "core/SubtypeRegistry.h"
 #include "core/HeuristicDefaults.h"
+#include "ai/AIEngine.h"
+#include "ai/ManaPayment.h"
+#include "ai/TurnSolver.h"
 
+#include "mtg_test_seam.h"
+
+#include <algorithm>
 #include <string>
+#include <vector>
 
 namespace
 {
@@ -284,4 +291,148 @@ TEST_CASE("Staunch Crewmate digs an ARTIFACT (type filter) as well as a Pirate")
     REQUIRE(s.players[0].hand.size() == 1);
     CHECK(s.players[0].hand[0].m_name.str() == "Aether Vial");
     CHECK(s.players[0].library.size() == 4);
+}
+
+// ---- Daring Buccaneer: "reveal a Pirate card from your hand or pay {2}" ------------------------
+
+namespace
+{
+
+Card HandCard(const std::string& name, int number)
+{
+    Card c = Def(name).card;
+    c.m_number = number;
+    return c;
+}
+
+// Mountains on the battlefield + the given hand, pre-combat on turn 4.
+GameState BuccaneerBoard(int mountains, const std::vector<std::string>& hand)
+{
+    GameState s;
+    s.active_player_index = 0;
+    s.turn_number         = 4;
+    s.players[0].life = s.players[1].life = gamesetup::StartingLife();
+    int num = 200;
+    for (int k = 0; k < mountains; ++k) { Put(s, "Mountain", 0, num++); }
+    for (const std::string& n : hand) { s.players[0].hand.push_back(HandCard(n, num++)); }
+    for (int k = 0; k < 10; ++k) { s.players[0].library.push_back(Placeholder("Mountain", 900 + k)); }
+    return s;
+}
+
+int BuccaneerCasts(const TurnSolver::Plan& p)
+{
+    int n = 0;
+    for (const Action& a : p.actions)
+    { if (a.kind == Action::Kind::CastFromHand && a.card_name.str() == "Daring Buccaneer") { ++n; } }
+    return n;
+}
+
+bool HasVialPut(const TurnSolver::Plan& p, const std::string& name)
+{
+    for (const Action& a : p.actions)
+    { if (a.kind == Action::Kind::ActivateVial && a.card_name.str() == name) { return true; } }
+    return false;
+}
+
+}   // namespace
+
+TEST_CASE("Daring Buccaneer: a lone Buccaneer pays {2}; a second copy in hand IS a reveal")
+{
+    EnsureCardsLoaded();
+    const ManaCost lone = EffectiveSpellCost(Def("Daring Buccaneer"), BuccaneerBoard(0, {"Daring Buccaneer"}), 1);
+    CHECK(lone.ManaValue() == 3);
+    CHECK(lone.red == 1);
+    CHECK(lone.generic == 2);
+    // Two in hand: the first is {R} (it reveals the other); once it has left the hand, the second
+    // has nothing to reveal and costs {2}{R}. Total {R} + {2}{R}, not {R}{R}.
+    GameState two = BuccaneerBoard(0, {"Daring Buccaneer", "Daring Buccaneer"});
+    CHECK(EffectiveSpellCost(Def("Daring Buccaneer"), two, 1).ManaValue() == 1);
+    two.players[0].hand.erase(two.players[0].hand.begin());
+    CHECK(EffectiveSpellCost(Def("Daring Buccaneer"), two, 1).ManaValue() == 3);
+}
+
+TEST_CASE("Daring Buccaneer: another Pirate card in hand makes it cost {R}")
+{
+    EnsureCardsLoaded();
+    for (const char* other : {"Corsair Captain", "Siren Stormtamer", "Goblin Tomb Raider", "Staunch Crewmate"})
+    {
+        CAPTURE(other);
+        CHECK(EffectiveSpellCost(Def("Daring Buccaneer"), BuccaneerBoard(0, {"Daring Buccaneer", other}), 1).ManaValue() == 1);
+    }
+    // A staged (exiled-playable) Pirate is not "in your hand".
+    GameState st = BuccaneerBoard(0, {"Daring Buccaneer", "Corsair Captain"});
+    st.players[0].hand.back().m_is_staged = true;
+    CHECK(EffectiveSpellCost(Def("Daring Buccaneer"), st, 1).ManaValue() == 3);
+}
+
+TEST_CASE("Daring Buccaneer: Metallic Mimic / Adaptive Automaton in hand do NOT enable the reveal")
+{
+    EnsureCardsLoaded();
+    CHECK(EffectiveSpellCost(Def("Daring Buccaneer"), BuccaneerBoard(0, {"Daring Buccaneer", "Metallic Mimic"}), 1).ManaValue() == 3);
+    CHECK(EffectiveSpellCost(Def("Daring Buccaneer"), BuccaneerBoard(0, {"Daring Buccaneer", "Adaptive Automaton"}), 1).ManaValue() == 3);
+    // ... even with a chosen-Pirate Mimic on the BATTLEFIELD (that is not a card in hand).
+    GameState s = BuccaneerBoard(0, {"Daring Buccaneer"});
+    for (const char* n : {"Corsair Captain", "Dire Fleet Captain", "Goblin Tomb Raider"})
+    { for (int k = 0; k < 3; ++k) { s.players[0].library.push_back(Placeholder(n, 950 + k)); } }
+    Enter(s, "Metallic Mimic", 0, 60);
+    REQUIRE(CardHasSubtype(ByNumber(s, 60).card, "Pirate"));
+    CHECK(EffectiveSpellCost(Def("Daring Buccaneer"), s, 1).ManaValue() == 3);
+}
+
+TEST_CASE("Daring Buccaneer: the enumerator never offers the unaffordable two-Buccaneer subset")
+{
+    EnsureCardsLoaded();
+    {
+        // Two Mountains: {R} + {2}{R} = 4 > 2. One Buccaneer is fine; both together are not.
+        const GameState s = BuccaneerBoard(2, {"Daring Buccaneer", "Daring Buccaneer"});
+        int max_casts = 0;
+        for (const TurnSolver::Plan& p : TurnSolver::EnumerateMainPlans(s, /*is_pre_combat=*/true))
+        { max_casts = std::max(max_casts, BuccaneerCasts(p)); }
+        CHECK(max_casts == 1);
+        CHECK(BuccaneerCasts(TurnSolver::Solve(s, true)) <= 1);
+    }
+    {
+        // Four Mountains pay both.
+        const GameState s = BuccaneerBoard(4, {"Daring Buccaneer", "Daring Buccaneer"});
+        int max_casts = 0;
+        for (const TurnSolver::Plan& p : TurnSolver::EnumerateMainPlans(s, true))
+        { max_casts = std::max(max_casts, BuccaneerCasts(p)); }
+        CHECK(max_casts == 2);
+    }
+}
+
+TEST_CASE("Daring Buccaneer: Vial-putting the only other Pirate leaves the Buccaneer at {2}{R}")
+{
+    EnsureCardsLoaded();
+    GameState s = BuccaneerBoard(1, {"Daring Buccaneer", "Corsair Captain"});
+    const int vi = Put(s, "Aether Vial", 0, 70);
+    s.battlefield[vi].charge_counters = 3;
+    bool bucc_alone = false, vial_alone = false, both = false;
+    for (const TurnSolver::Plan& p : TurnSolver::EnumerateMainPlans(s, true))
+    {
+        const bool v = HasVialPut(p, "Corsair Captain");
+        const int  b = BuccaneerCasts(p);
+        if (v && b > 0)       { both = true; }
+        else if (b > 0)       { bucc_alone = true; }    // reveals the Corsair still in hand: {R}
+        else if (v)           { vial_alone = true; }
+    }
+    CHECK(bucc_alone);
+    CHECK(vial_alone);
+    CHECK_FALSE(both);    // the Corsair has left the hand -> {2}{R} on one Mountain
+}
+
+TEST_CASE("Daring Buccaneer: the executor charges the second lone Buccaneer {2}{R}")
+{
+    EnsureCardsLoaded();
+    GameState s = BuccaneerBoard(4, {"Daring Buccaneer", "Daring Buccaneer"});
+    AIEngine eng;
+    for (int k = 0; k < 2; ++k)
+    {
+        ManaPool avail = AvailableManaPool(s);
+        MtgTestSeam::CastSpellFromHand(eng, s, s.players[0].hand.front(), avail, 0);
+    }
+    CHECK(s.stack.size() == 2);
+    int tapped = 0;
+    for (const Permanent& p : s.battlefield) { if (p.tapped) { ++tapped; } }
+    CHECK(tapped == 4);   // {R} + {2}{R}
 }

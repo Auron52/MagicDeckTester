@@ -965,6 +965,17 @@ struct CardParams
     // opponent lifegain (-> damage under Tainted Remedy) at cast time. 0 = no alt cost.
     int         alt_lifegain_cost = 0;
     std::string alt_cost_requires_subtype;
+    // ADDITIONAL COST "reveal a <subtype> card from your hand or pay <cost>" (Daring Buccaneer:
+    // Pirate / {2}; CR 601.2b/f). The shared EffectiveSpellCost adds reveal_or_pay_cost to the TOTAL
+    // cost (before any reducer) iff the active player's hand holds NO OTHER card of the subtype
+    // (CanRevealForAdditionalCost: one copy of this card's own name is skipped as "self"; staged
+    // cards are not in hand; the test reads the printed CardDefinition, so a chosen-type Mimic in
+    // hand does NOT count). Reveal-vs-pay is auto-resolved to REVEAL whenever possible (paying is
+    // strictly dominated: nothing reads revealed information or mana spent). Same-turn order
+    // matters -- a subtype card cast or Vial-put earlier leaves the hand -- so the enumerator debits
+    // SameSubsetRevealSurcharge per subset. Empty subtype / unset cost = no such cost.
+    std::string              reveal_or_pay_subtype;
+    std::optional<ManaCost>  reveal_or_pay_cost;
     // The alt payload's wording: false = "an opponent gains N" (Invigorate) -- one player, always.
     // true = "EACH OTHER PLAYER gains N" (Skyshroud Cutter / Reverent Silence) -- in 2HG
     // (gamesetup::OpponentHeads() >= 2) that is BOTH opposing heads (x2 into their shared pool,
