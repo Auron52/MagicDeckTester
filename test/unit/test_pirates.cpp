@@ -726,3 +726,28 @@ TEST_CASE("Forerunner of the Coalition: autonomous enumeration never offers the 
     }
     CHECK(cast_seen);
 }
+
+TEST_CASE("Forerunner drain lethal in a main phase is a win the rollout apply sees at once")
+{
+    // Sweep finding E: the executor lets a main-1 drain to 0 continue into combat (0 -> -17 in the
+    // log) and records the win after combat -- the SAME turn. What must hold for the search is that
+    // the main-phase drain itself reads as lethal right after the plan apply (the wins_this_turn /
+    // OpponentHasLost checks that follow every ApplyPlanDirect), which this pins for a Vial put.
+    EnsureCardsLoaded();
+    GameState s = PiratesState();
+    Put(s, "Forerunner of the Coalition", 0, 1);
+    const int vi = Put(s, "Aether Vial", 0, 2);
+    s.battlefield[vi].charge_counters = 2;
+    s.players[0].hand.push_back(HandCard("Dire Fleet Captain", 3));
+    s.players[1].life = 1;
+    TurnSolver::Plan plan;
+    plan.land_decided = true;
+    Action a;
+    a.kind      = Action::Kind::ActivateVial;
+    a.card_name = "Dire Fleet Captain";
+    plan.actions.push_back(a);
+    TurnSolver::ApplyPlan(s, plan, /*is_pre_combat=*/true);
+    CHECK(s.players[1].life <= 0);
+    CHECK(OpponentHasLost(s));
+}
+
