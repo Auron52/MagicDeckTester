@@ -119,6 +119,12 @@ and for off-curve hands. Provider routing: Pirates -> `PiratesProvider` (chunk 3
   binary's T6 holds at b10/b100/b1000/b5000 (structural, not churn). Verdict: correctness, accepted.
   Melira Pod (keyword-mask + Felidar fixes) stayed byte-identical at suite seeds; both fixes are
   pinned by unit tests that fail without them.
+* **Viewer protocol check:** 23 ok / 301 repaired -> 20 ok / 304 repaired (0 play-drift, 0 enum-gap,
+  0 contract-fail). The 3 moved refs are all Giants (`claude_s1_gi0`, `claude_s3_gi2`, `claude_s8_gi7`):
+  same win turn, one main-phase menu index shifted +1/+2 each — sweep fix A's new decline plan for an
+  optional tutor (Giants' Harbinger) inserted into the human plan list. Content-anchored repair, not drift.
+* **GT ACCEPTED** (smoke + regression, binary built from `62f8f5ac`): FiveColour keys moved per the
+  verdict above; Pirates keys NEW. `check_gt_logs.py`: 515 consistent, 0 stale.
 
 
 ## Approved deferrals
@@ -161,7 +167,8 @@ behind `MTG_PIRATES_BUCKET_DISCARD` (default ON, `=0` restores the generic max-M
   INHERITED).
 * Doubts for the user (§8 of the proposal): land target 4 vs 3; the Vial rule; the 1-drop order; Bolt's
   slot; floor-before-late-lands; fastlands not demoted; Treasures not counted.
-* Evidence still owed: `--discard-analysis` + non-inferiority vs `=0`, after the Stage 4 profile.
+* Evidence: `--discard-analysis` ran after Stage 4 -> **DISCARD_INERT** (no cleanup shed reached in 400 d3
+  games, real or rollout; see Stage 4). Non-inferiority vs `=0` is therefore vacuous (no game can differ).
 
 ## Open questions for the user
 
@@ -196,30 +203,11 @@ behind `MTG_PIRATES_BUCKET_DISCARD` (default ON, `=0` restores the generic max-M
 3. OK to classify the new params in `audit_viewer_decisions.py` INERT_PARAMS (script self-guard)?
 4. Corsair's same-turn Treasure: lift the fresh-hold for non-trick Treasures (A/B-measured)? Default: measure.
 
-## RESUME STATE (2026-09-26, second compaction)
+## RESUME STATE (2026-09-26, final)
 
-* **Worktree:** `/tmp/pirates-wt`, branch `pirates-analysis` (base origin `c29b9a61`; origin had not
-  moved at last fetch). Main tree holds another session's uncommitted discard-gate WIP — never touch it.
-  Control worktree `/tmp/pirates-ctl` (detached at `909177c8`, pre-Elk-fix build) — remove when done.
-* **Committed locally, NOT pushed:** keyword mask, chunks 1-3, Felidar + Elk fixes, sweep fixes A–G,
-  B follow-up (`62f8f5ac` tip before this ledger commit).
-* **UNCOMMITTED in the worktree:** `test/regression_cases.sh` (Pirates smoke + regression + pirates2hg
-  rows) and `decks/Pirates/Pirates.profile.json` (Stage 4). Commit them WITH the GT accept.
-* **Stage 4/5 DONE** (see those sections + "Claude-play sweep"). Last smoke: 89 pass / 4 FAIL (all
-  FiveColour, Elk fix) / 4 NEW (Pirates). Last regression: 123 / 6 FAIL (all FiveColour) / 5 NEW.
-  Verdicts recorded in Stage 5. NOT YET ACCEPTED.
-* **Open before accepting:** viewer_protocol_check went 23 ok/301 repaired -> 20 ok/304 repaired
-  (0 play-drift, 0 enum-gap). Likely the sweep fixes' menu changes (Harbinger decline in Giants,
-  hidden Islet twins, vial-order variants) shifting human-play plan lists; confirm which 3 refs by
-  diffing `--verbose` runs of the checker under `/tmp/pirates-ctl` vs current binary (the run was in
-  flight at compaction: logs/vpc_*.txt).
-* **Then:** `bash test/regression.sh --smoke --accept` and `bash test/regression.sh --accept`
-  (the last runs of each tier are the ones to accept; both must be from the CURRENT binary),
-  `python3 test/check_gt_logs.py`, commit code-free artefacts; `git fetch && git rebase
-  origin/phase-1-2-deck-analyzer` (rebuild + smoke if origin moved); push via the worktree
-  (`git push origin pirates-analysis:phase-1-2-deck-analyzer`); `gh run watch`; report Windows.
-* **Awaiting the USER (going over them after compaction):** PROVISIONAL deferrals (Approved deferrals
-  section, + gi11 ETB-dig same-turn cast), discard policy proposal, cast-order proposals 2a–2d.
+* Stages 1–5 done; GT accepted; branch pushed to `phase-1-2-deck-analyzer` (see git log). Remaining
+  items are USER reviews only: PROVISIONAL deferrals (incl. gi11), the discard policy (§8 doubts), and
+  cast-order proposals 2a–2d. Overnight tier does not carry Pirates yet.
 
 ## Chunk 3 landed (2026-09-26) — provider, routing, certificate, tutor width, discard policy
 

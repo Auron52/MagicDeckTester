@@ -1,0 +1,86 @@
+{
+  "card_scores": {
+    "Adaptive Automaton": [
+      -0.048212545009648444,
+      -0.38495338120244327
+    ],
+    "Aether Vial": [
+      0.20108018488746016,
+      -0.37868435155412694
+    ],
+    "Blackcleave Cliffs": [
+      -0.05677236569685107
+    ],
+    "Corsair Captain": [
+      -0.02711675370295108,
+      -0.10301712421853715
+    ],
+    "Daring Buccaneer": [
+      0.2550506037278728,
+      0.0738241308793457
+    ],
+    "Dire Fleet Captain": [
+      0.02566377721657176,
+      -0.06227967097532261
+    ],
+    "Fiery Islet": [
+      0.04933826391592078
+    ],
+    "Forerunner of the Coalition": [
+      -0.08923216205511242
+    ],
+    "Goblin Tomb Raider": [
+      0.22921989308543989,
+      0.11873638344226567
+    ],
+    "Kitesail Larcenist": [
+      -0.16669676328886318
+    ],
+    "Lightning Bolt": [
+      -0.05061534272086021
+    ],
+    "Malcolm, the Eyes": [
+      0.0749801789557134
+    ],
+    "Metallic Mimic": [
+      0.041889725675225975,
+      -0.1698698897034543
+    ],
+    "Mountain": [
+      -0.010866306954436133,
+      -0.23913369304556387
+    ],
+    "Secluded Courtyard": [
+      -0.05333674688513401,
+      0.017683096630464412
+    ],
+    "Siren Stormtamer": [
+      -0.030854981586543317
+    ],
+    "Spirebluff Canal": [
+      0.004563139439935249,
+      -0.17504102524029097
+    ],
+    "Staunch Crewmate": [
+      0.06184467477842848,
+      -0.20544217687074795
+    ],
+    "Unclaimed Territory": [
+      0.04497851772287831,
+      -0.034727891156462576
+    ]
+  },
+  "hand_score_threshold": -1e+18,
+  "mulligan": {
+    "bottom_order": "count_first",
+    "curve_check": "two_drop",
+    "max_lands": 5,
+    "min_color_sources": {},
+    "min_lands": 1,
+    "min_playable": 0,
+    "required_pieces": [],
+    "stop_at": 4
+  },
+  "version": 1,
+  "vial_target_mv": 2
+}
