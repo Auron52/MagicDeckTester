@@ -1059,8 +1059,24 @@ printed text is `keywords: ["First Strike"]`, which is modelled but worthless wi
 indestructible grant, which does not appear in its `parameters` at all — so it is genuinely not modelled,
 exactly as the bracket note claims.
 
-**This explains two results with one fact:** why Marshal 2→4 was a gain, and why Exemplar is the list's
-worst card. It also **predicts** rather than merely rationalises, which is the test
+**The deck holds exactly three +1/+1 lords, and the campaign sorted them by this mechanism before anyone
+had articulated it:**
+
+| lord | cost | filter | what eight rounds of screening did to it |
+|---|---|---|---|
+| Valiant Knight | `{3}{W}` | `subtypes_affected: ["Knight"]` | **cut 1→0** (screen 3) |
+| Knight Exemplar | `{1}{W}{W}` | `subtypes_affected: ["Knight"]` | **cut 4→2** (rounds G, H) — still sloping |
+| Benalish Marshal | `{W}{W}{W}` | **`affects_all_creatures: true`** | **raised 2→4** (screen 3) |
+
+Both Knight-only lords were cut and the all-creatures lord was maxed, in **three separate screens, on
+three different seed blocks**, with the mechanism read out of `cards.json` only afterwards — so it cannot
+have steered any of them. That is about as good an independent coherence check as this campaign has
+produced, and it is the kind [[dont-rationalize-a-measured-cut]] actually allows: the numbers came first
+and the explanation has to fit all three or none.
+
+**This explains three results with one fact:** why Marshal 2→4 was a gain, why Valiant Knight was cut
+outright, and why Exemplar is the list's worst card. It also **predicts** rather than merely rationalises,
+which is the test
 [[dont-rationalize-a-measured-cut]] sets: if Exemplar's anthem is being diluted by tokens, its marginal
 must get *worse* as the token count grows. It does — the ladder steepens (4→3 ≈ **−0.0095**, 3→2 =
 **−0.0107**) rather than flattening as a saturating lord would. And it predicts that **2→1 keeps paying**,
