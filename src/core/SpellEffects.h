@@ -7772,8 +7772,10 @@ inline void ApplyLoyaltyAbility(GameState& state, int controller, int walker_id,
         if (ti >= 0)
         {
             Permanent& q = state.battlefield[ti];
-            q.card.m_name = "Elk";
-            q.card.RehashName();
+            // Rename, not a bare m_name assignment: it also drops the m_def memo, which otherwise
+            // kept resolving to the ORIGINAL card (an Elked Birds of Paradise kept its mana ability
+            // through LookupCached). "Elk" has no DB entry -> nullptr def, like any creature token.
+            q.card.Rename("Elk");
             q.card.m_type_mask    = 0;
             q.card.AddType(CardType::Creature);
             q.card.m_subtypes     = {"Elk"};

@@ -299,6 +299,7 @@ add_executable(mtg-test
     test/unit/test_keyword_mask.cpp
     test/unit/test_pirates.cpp
     test/unit/test_etb_target_carriage.cpp
+    test/unit/test_in_place_rename.cpp
 )
 target_link_libraries(mtg-test PRIVATE mtg-core doctest::doctest)
 # Run from the SOURCE dir: the tests load src/cards/data/cards.json, and ctest's default working

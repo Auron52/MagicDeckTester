@@ -409,6 +409,21 @@ struct Card
     // exactly what BuildSimKey/graveyard folding used before (std::hash<std::string>).
     void RehashName() { m_name_hash = std::hash<std::string>{}(m_name); }
 
+    // IN-PLACE rename of an existing card object (a battlefield permanent becoming something else:
+    // Oko's Elk, Kitesail Larcenist's Treasure). Assigning m_name alone is a trap: m_def memoizes
+    // the CardDatabase entry of the OLD name, so LookupCached would keep returning the original
+    // card's definition -- an Elked Birds of Paradise still tapping for mana. Rename keeps the
+    // three name-derived fields together: the name, its cached hash, and the def memo (reset to
+    // "unresolved", so the next LookupCached re-resolves the NEW name -- nullptr if it has no DB
+    // entry, the ordinary state of a creature token). Fresh Card objects (a token being built)
+    // need only m_name + RehashName, since their m_def is still nullptr.
+    void Rename(const std::string& name)
+    {
+        m_name = name;
+        RehashName();
+        m_def = nullptr;
+    }
+
     void AddType(CardType t)       { m_type_mask      |= Bit(t); }
     // Layer-4 type REMOVAL on a permanent's own Card copy (Heliod, Sun-Crowned: "isn't a creature"
     // below devotion five -- RefreshDevotionCreatures). Only ever applied to a battlefield
