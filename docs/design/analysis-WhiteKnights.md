@@ -1394,12 +1394,18 @@ were heuristic-quality or presentation notes, correctly not filed as rules bugs.
 
 ## Search shape — NO VALUE LEAF, and the probe's recommendation was overturned
 
-**Headline, in three parts:** the multi-configuration screen **rejected half of what the cheap probe
-recommended**; the leafless shape is adopted and measured; and the question *"would a FITTED leaf have
-been better?"* is **still open and should be settled by generating one**, because generation turns out
-to cost ~10–15 minutes for this deck (§ Step 2b). An earlier version of this section asserted "this
-deck should not have a value leaf generated" — that overstated `shape_probe`, which only ever compares
-**model-less** shapes and cannot speak to a fitted leaf.
+**Headline, in three parts:**
+
+1. The multi-configuration screen **rejected half of what the cheap probe recommended**
+   (`ladder: "single"` regresses at d3b20). `leaf: "none"` + `alpha: "relaxed"` is adopted and shipping.
+2. **A value leaf WAS then generated and measured, and it is ~3x CHEAPER than the adopted leafless
+   shape at d5, at indistinguishable quality** (§ Step 2d). It is **staged, not adopted**, and adopting
+   it is the recommendation. So the earlier claim in this section — "this deck should not have a value
+   leaf generated" — was **wrong**, and wrong specifically on the *cost* axis; the quality half of that
+   call held. `shape_probe` could not have settled it, because it only ranks **model-less** shapes.
+   Generation cost **5 minutes**.
+3. The whole detour also found a defect in the generator: `MTG_LAZY_LEAF` is not answer-identical at
+   H5, the cell every leaf verdict is measured against (§ Step 2c).
 
 ### Step 1 — the cheap early test said "no leaf" (so hours of generation were never spent)
 
@@ -1543,6 +1549,71 @@ none` sidecar caused it — it was the recently-changed thing, and it *was* affe
 equal play quality, which is exactly what it was adopted for). Four controls (lazy on/off × sidecar
 present/absent, `scripts/wk_h5_anomaly.sh`) were needed to separate them. Blaming the most recent
 change would have produced a confident, wrong retraction of a good adoption.
+
+### Step 2d — THE LEAF WAS GENERATED AND MEASURED. My "no leaf" call was WRONG on cost.
+
+Generation ran on the frozen commit `bb5d1038` with the defect above disarmed
+(`MTG_VL_LAZY_LEAF=0`), and it took **~5 minutes wall** — even cheaper than the ~10–15 min projection.
+Log `logs/wk_valueleaf/run.log`; staged model `logs/eval/WhiteKnights.value.STAGED.json` (53,666 bytes
+of fitted trees, `value_trust_depth_candidate: 5`, trust shipped UNSET).
+
+**A trap that had to be dodged first, and it would have silently invalidated everything.**
+`phase_train` builds the staged sidecar by copying the **live** one and adding only `eval_model`:
+
+```python
+if os.path.exists(live):
+    L = json.load(open(live))      # REgeneration: keep value_play/table/crossover until measured
+    L["eval_model"] = R["eval_model"]
+```
+
+The live sidecar is the adopted `leaf: "none"` shape — and `leaf: "none"` makes `AttachValueSidecar`
+substitute `Constant()`, so the fitted trees are **never consulted**. Generating with it in place would
+have produced a matrix whose V cells and phase-E A/B both measured the *leafless* shape while reporting
+on "the leaf", and every number would have looked neutral for the wrong reason. The generator's own
+phase-E output even names this as the usual cause of a dead trust experiment. So the sidecar was moved
+aside for the run; the staged file's `value_play` is correctly **absent**, which was verified before
+reading any result.
+
+**Phase E is not the comparison that matters.** With the sidecar moved aside, `live` is *bare* — the
+plain rollout ladder — so phase E answers "is the fitted leaf better than the plain ladder?"
+(−0.00050 turns, t −1.87, **0.11x** cost). But this deck does not ship the plain ladder; it ships the
+leafless escalation. `scripts/wk_leaf_vs_leafless.py` runs the three-way on the **sidecar route** (three
+scratch deck dirs differing only in `value.json`), 8 × 500 games per cell, paired per game index, on
+**two disjoint seed bases**:
+
+| config | leaf vs LEAFLESS (3,310,000+) | units | repro (9,910,000+) | units |
+|---|---|---|---|---|
+| d0b0 | 0/0, 4000/4000 identical | n/a | 0/0, 4000/4000 identical | n/a |
+| d3b10 | 0/0, **4000/4000 byte-identical** | **1.00x** | 0/0, **4000/4000 byte-identical** | **1.00x** |
+| d3b20 | 0/0, **4000/4000 byte-identical** | **1.00x** | 0/0, **4000/4000 byte-identical** | **1.00x** |
+| d5b20 | 0 better / 1 worse (z −1.0) | **0.42x** | **0 better / 0 worse** | **0.38x** |
+| d5b40 | 0 better / 1 worse (z −1.0) | **0.34x** | **0 better / 0 worse** | **0.31x** |
+
+**Pooled at d5: 0 better / 2 worse across 16,000 paired games (z −1.41, no sign). At d3: 16,000 games
+byte-identical.** Cost: the leaf is **2.4–3.2x cheaper than the leafless shape** at both d5
+configurations, and **exactly 1.00x at d3**.
+
+**So the correction is specific, and it is not about quality.** The two shapes are
+quality-indistinguishable everywhere — that part of the "no leaf" call holds. What was wrong is the
+**cost** claim: I concluded the deck did not want a leaf, and the fitted leaf is ~3x cheaper than the
+shape I adopted at the configuration the deck actually plays. `shape_probe` could not have told me
+that, because it only ranks model-less shapes; the only way to know was to generate one, and that cost
+five minutes.
+
+**The mechanism, which the numbers state plainly:** the leaf is *exactly inert at d3* — identical play,
+identical cost, 16,000 games — and pays only at d5. At d3 the search resolves inside its own horizon
+and never consults a leaf estimate, so there is nothing for a model to do; at d5 the horizon rollout is
+reached often enough that replacing it with an O(1) evaluator removes most of the work. That is the
+same "wins inside the horizon" mechanism this repo records for Goblins, with the boundary sitting
+between d3 and d5 for this deck rather than above d5.
+
+**NOT adopted — staged, and the recommendation is to adopt.** Held back rather than taken because it
+reverses a same-day documented adoption, because phase D itself says the trust question needs more
+games ("the fix here is MORE GAMES, not acceptance" on an inconclusive V4 gap), and because shipping a
+53 KB fitted model is a heavier, commit-bound artifact than a three-line shape file. The model stays at
+`logs/eval/WhiteKnights.value.STAGED.json`, which is the documented staged-not-adopted location; the
+deck still ships `leaf: "none"`. On the measured axes there is no trade — quality ties, cost is 3x
+better — so by the repo's clean-win rule this is adoptable on the user's word.
 
 ### Step 3 — the adopted file reproduces the arm that was screened (verified, not assumed)
 
