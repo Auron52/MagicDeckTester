@@ -1242,6 +1242,26 @@ static void WriteDecisionJson(std::ostream& os, const GameState& s,
             }
             if (has_collapse && !pod_reps.insert(key).second) { hide_bundle[i] = 1; }
         }
+        // SEARCHED-BREAKPOINT VARIANTS ARE HUMAN-PLAY TWINS (Pirates 5d sweep, 2026-09-26: every
+        // "land=Fiery Islet" plan appeared SIX times with identical summary, land, casts and
+        // outcome). A bp_choice >= 0 variant (AppendBreakpointVariants: W ranks x BpSearchDepth
+        // indices + the empty arm) differs from its base plan ONLY in which continuation the
+        // ENGINE re-solves at a mid-turn draw breakpoint -- and under human play there is no such
+        // re-solve: ApplyPlanDirect and the executor suppress every breakpoint continuation
+        // (`!s_human_play`), and the chooser re-fires so the human re-decides with the revealed
+        // cards. So in this menu every variant realises exactly its base plan. The Fiery Islet
+        // case is MTG_BP_DIG_SELF_SOURCE (a plan whose own land drop is a sac-draw land is fanned
+        // out, by design state-independently), but the reasoning holds for every site and deck.
+        // Hidden, not removed: the enumeration (and the root search's scoring) is untouched, every
+        // emitted plan keeps its REAL index, the uncapped protocol checker still sees every
+        // variant, and a picked variant is still emitted by the chosen-extra path below.
+        if (HumanPlayActive())
+        {
+            for (size_t i = 0; i < plans.size(); ++i)
+            {
+                if (plans[i].bp_choice >= 0) { hide_bundle[i] = 1; }
+            }
+        }
     }
     // DIVERSITY-AWARE display cap. With variant-heavy enumerations (tutor-target cross products)
     // the FIRST n_emit plans can all be variants of one cast set, hiding whole SPELLS from the
