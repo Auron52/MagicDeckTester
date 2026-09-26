@@ -664,3 +664,65 @@ TEST_CASE("Vial-put Staunch Crewmate: Mimic's as-enters counter is on it BEFORE 
     CHECK(PlusCounters(ByNumber(s, 3)) == 1);
     CHECK(s.players[0].hand.size() == 1);   // the dig took a Pirate
 }
+
+TEST_CASE("Forerunner of the Coalition: the human menu's named decline leaves the library untouched")
+{
+    EnsureCardsLoaded();
+    GameState s = PiratesState();
+    std::vector<int> before;
+    for (std::size_t i = 0; i < s.players[0].library.size(); ++i) { before.push_back(s.players[0].library[i].m_number); }
+    PerformTutor(s, 0, Def("Forerunner of the Coalition").params, kTutorDeclineTarget,
+                 "Forerunner of the Coalition");
+    REQUIRE(s.players[0].library.size() == before.size());
+    for (std::size_t i = 0; i < before.size(); ++i)
+    { CHECK(s.players[0].library[i].m_number == before[i]); }   // no fetch, no shuffle
+    // A named target still fetches to the top (the decline is the sentinel alone).
+    PerformTutor(s, 0, Def("Forerunner of the Coalition").params, "Corsair Captain",
+                 "Forerunner of the Coalition");
+    CHECK(s.players[0].library.front().m_name.str() == "Corsair Captain");
+}
+
+TEST_CASE("Forerunner of the Coalition: the declined cast resolves identically in the rollout apply")
+{
+    EnsureCardsLoaded();
+    GameState s = BuccaneerBoard(0, {"Forerunner of the Coalition"});
+    for (int k = 0; k < 3; ++k) { Put(s, "Blackcleave Cliffs", 0, 300 + k); }
+    s.players[0].library = Library{};
+    for (const char* n : {"Mountain", "Corsair Captain", "Dire Fleet Captain", "Mountain"})
+    { s.players[0].library.push_back(Placeholder(n, 900 + static_cast<int>(s.players[0].library.size()))); }
+    std::vector<int> before;
+    for (std::size_t i = 0; i < s.players[0].library.size(); ++i) { before.push_back(s.players[0].library[i].m_number); }
+    TurnSolver::Plan plan;
+    plan.land_decided = true;
+    Action a;
+    a.kind         = Action::Kind::CastFromHand;
+    a.card_name    = "Forerunner of the Coalition";
+    a.def          = &Def("Forerunner of the Coalition");
+    a.tutor_target = kTutorDeclineTarget;
+    plan.actions.push_back(a);
+    TurnSolver::ApplyPlan(s, plan, /*is_pre_combat=*/true);
+    CHECK(CountNamed(s, "Forerunner of the Coalition") == 1);
+    REQUIRE(s.players[0].library.size() == before.size());
+    for (std::size_t i = 0; i < before.size(); ++i)
+    { CHECK(s.players[0].library[i].m_number == before[i]); }
+}
+
+TEST_CASE("Forerunner of the Coalition: autonomous enumeration never offers the named decline")
+{
+    // The decline plan is HUMAN-PLAY only (the search's decline is the index axis, tutor_choice).
+    EnsureCardsLoaded();
+    GameState s = PiratesState();
+    for (int k = 0; k < 3; ++k) { Put(s, "Blackcleave Cliffs", 0, 300 + k); }
+    s.players[0].hand.push_back(HandCard("Forerunner of the Coalition", 81));
+    bool cast_seen = false;
+    for (const TurnSolver::Plan& p : TurnSolver::EnumerateMainPlans(s, true))
+    {
+        for (const Action& a : p.actions)
+        {
+            if (a.card_name.str() != "Forerunner of the Coalition") { continue; }
+            cast_seen = true;
+            CHECK(a.tutor_target.str() != kTutorDeclineTarget);
+        }
+    }
+    CHECK(cast_seen);
+}

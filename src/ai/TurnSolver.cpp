@@ -16777,6 +16777,15 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
             else
             {
                 cands = ResolveProvider(state).TutorCandidates(state, state.active_player_index, def.params);
+                // HUMAN PLAY: "you MAY search" gets its decline plan (kTutorDeclineTarget). Only for
+                // a card whose target the menu owns -- a tutor SPELL re-asks at resolution with -1 =
+                // decline (HumanPlayDefersTutorTarget), so it needs none. A tutor_to_top ETB such as
+                // Forerunner of the Coalition SPENDS the next draw, so keeping the current top is a
+                // real line. HumanPlayActive()-gated (false in every rollout and autonomous game), and
+                // only tutor_optional cards (Forerunner, Giant Harbinger) -> autonomous byte-identical.
+                if (HumanPlayActive() && def.params.tutor_optional && !cands.empty()
+                    && !HumanPlayDefersTutorTarget(def))
+                { cands.push_back(kTutorDeclineTarget); }
             }
             if (cands.empty()) { cands.push_back(std::string{}); }  // whiff: castable, fetches nothing
             // Emit ONE target here (the provider's best) and search the rest as a post-dedup AXIS

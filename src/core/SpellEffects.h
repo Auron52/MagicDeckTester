@@ -877,6 +877,18 @@ extern thread_local int g_scripted_tutor_choice;   // defined below (ScriptedTut
 // byte-identical. Note the human path could ALREADY decline (TutorAskResult::Declined); this
 // closes the opposite asymmetry -- the SEARCH could not.
 inline constexpr int kTutorDeclineChoice = 1000000;
+// ...and the NAMED twin of that decline, for HUMAN PLAY. The index axis above is autonomous-only
+// (every tutor fan-out that emits it is gated !HumanPlayActive()), while the human menu carries one
+// cast variant per NAMED target -- and for a PERMANENT whose ETB tutors (Forerunner of the
+// Coalition, Giant Harbinger) that menu is the human's ONLY say: its ETB fetches with
+// human_repick false, so no resolution frame re-asks (see HumanPlayDefersTutorTarget). So "you MAY
+// search" had no decline plan at all (Pirates 5d sweep, gi4/gi10/gi18). CollectActions appends this
+// as one more cast variant's tutor_target (human play, tutor_optional only); PerformTutor treats it as
+// a decline on every path, which keeps executor and rollout in lockstep for free (both hand the
+// action's tutor_target to the same PerformTutor). Readable on purpose -- it is the menu label
+// ("Forerunner of the Coalition -> (decline search)") -- and parenthesised so it can never be a
+// card name.
+inline constexpr const char* kTutorDeclineTarget = "(decline search)";
 inline int PermanentManaYield(const GameState&, const Permanent&, const CardDefinition&);   // defined below
 inline void EtbUntapLands(GameState&, int controller, int count, bool log_ledger = true);    // defined below
 inline void EtbUntapTapAheadIntoFloat(GameState&, int controller, int count,

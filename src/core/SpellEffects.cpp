@@ -137,6 +137,9 @@ void PerformTutor(GameState& state, int controller_index, const CardParams& pp,
     // replay, whiff, scripted), mirroring g_scripted_etbdig_choice's consumed-once semantics.
     const int scripted_pick = g_scripted_tutor_choice;
     g_scripted_tutor_choice = -1;
+    // The human menu's named decline (kTutorDeclineTarget). After the read-and-reset above, so the
+    // scripted pin is still consumed exactly once. Gated on tutor_optional like the index decline.
+    if (pp.tutor_optional && target_name == kTutorDeclineTarget) { return; }
     std::string want = target_name;
     if (want.empty())
     {

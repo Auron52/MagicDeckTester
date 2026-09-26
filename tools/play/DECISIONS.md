@@ -414,6 +414,13 @@ so distinct placements are human-distinguishable. NB the human-play `plan_signat
 or plans differing only in the aura's target collapse to the first-enumerated creature — a
 dead-decision bug the Auras claude-play sweep caught (2026-07-23) and fixed. The autonomous dedup
 still keys on cast NAMES only (byte-identical GT), delegating the target to the heuristic there.
+**Optional ETB tutors carry a decline variant** (`tutor_optional`: Forerunner of the Coalition, Giant
+Harbinger — "you MAY search"). A permanent's ETB tutor fetches with `human_repick` false, so the menu's
+named `tutor_target` variants are the human's only say; under human play `CollectActions` appends one
+more cast variant whose `tutor_target` is the sentinel `(decline search)` (`kTutorDeclineTarget`), which
+`PerformTutor` resolves as a decline on both the executor and rollout paths. A tutor SPELL needs none (its
+resolution `tutor_etb` frame already takes -1), and a Vial/put-route ETB tutor asks `tutor_etb` with -1 =
+decline. Autonomous enumeration never emits it (the search's decline is the `tutor_choice` index axis).
 `land_face` follows the same pattern: `EnumeratePlansWithLand` emits one land-play variant per face
 (both carry the front hand-card `land_to_play`, so both survive `CheckLine`'s land-name match and
 surface as a `face` choose sub); the DB synthesizes the back face (`mdfc_back_name`/`mdfc_back_produces`)
