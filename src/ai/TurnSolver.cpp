@@ -19351,7 +19351,77 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
                     && !DecisionUnpruned(UnprunedGate::BlinkTarget))
                 {
                     counts.clear();
-                    for (int k = 1; k <= fade_max_k; ++k) { counts.push_back(k); }
+                    // OFFER THE LANDMARKS INSTEAD OF WALKING THE LADDER (MTG_FADE_K_WINDOW,
+                    // default OFF).
+                    //
+                    // This axis is the single biggest source of search width on a Saproling Burst
+                    // board: MTG_BF_CENSUS on candidate B's worst game measured 82% of ALL candidate
+                    // mass on the chosen-X shape, of which ONE physical Saproling Burst contributed
+                    // 393,475 activation actions. `fade_counters` is not bounded by Fading 7 either
+                    // -- Doubling Season doubles counters as they are PUT ON, so four of them take a
+                    // Burst to 7 * 2^4 = 112 counters and this loop then offers 112 candidates.
+                    //
+                    // The block above is right that a naive cap is WRONG -- k is a genuine INTERIOR
+                    // optimum. But "the interior optimum" is only ONE objective, and USER 2026-09-26
+                    // named the others, which is what this set is built from:
+                    //
+                    //   *"only need to consider activating to put out 2 or 3 saprolings for maximum
+                    //    attack power, counters-2 for maximum board presence and maybe counters-1
+                    //    for maximum sacrifice."*
+                    //
+                    // Those are three DIFFERENT objectives over the same k, and the parabola only
+                    // expresses the first:
+                    //   k near C/(2*cost)  MAX TOTAL POWER. k bodies of (C-k*cost) each, so power is
+                    //                      k*(C-k*cost) -- an inverted parabola. For an undoubled
+                    //                      Fading 7 its peak IS the user's "2 or 3" (k=3 -> 3x4/4).
+                    //   k leaving 2        MAX BOARD PRESENCE. The most bodies that still SURVIVE
+                    //                      combat and an SBA, and the most declared attackers for
+                    //                      Beastmaster Ascension's quest counters.
+                    //   k leaving 1        MAX BODY COUNT among bodies that live at all -- devour
+                    //                      fodder for Mycoloth, sacrifice fodder for the outlets.
+                    //   k leaving 0        DELIBERATELY KEPT, though the block above calls it "a pile
+                    //                      of 0/0s that die on the spot". On THIS list that is a
+                    //                      payoff, not a waste: Slimefoot, the Stowaway drains one
+                    //                      per Saproling death, so popping everything is a burst of
+                    //                      N damage and can be the kill. Dropping it would be exactly
+                    //                      the combo-invisible-as-WIDTH failure -- a line the
+                    //                      enumerator never offers is unreachable at any depth.
+                    //   k = 1              BANK the counters: a bigger single body later.
+                    //
+                    // So <= 6 candidates replace up to 112, and every one of them is the argmax of
+                    // some objective the deck actually has. USER also noted a further refinement --
+                    // *"If there is no way to win this turn the 2 or 3 options are the best bet"* --
+                    // i.e. gate the large-k landmarks on a reachable kill. That is deliberately NOT
+                    // built here: it needs a lethal projection at enumeration time, and this set is
+                    // measurable on its own first.
+                    //
+                    // NOT LOSSLESS and not claimed to be: a heuristic narrowing of a searched menu,
+                    // default OFF behind its own HeuristicArm slot, adopted only on a held-out play
+                    // A/B -- the protocol MTG_FUNGUS_SHRINK_SAC_M2 went through. Ascending order is
+                    // preserved so survivors keep their relative enumeration order and the
+                    // downstream tie-breaks are undisturbed.
+                    static const bool s_fade_window = EnvOn("MTG_FADE_K_WINDOW");
+                    const int kFadeWindowFloor = 6;   // below this the full ladder is already cheap
+                    if (heurarm::Flag(heurarm::FADE_K_WINDOW, s_fade_window)
+                        && fade_max_k >= kFadeWindowFloor)
+                    {
+                        const int cost = sd->params.fade_saproling_cost;
+                        const int C    = src.fade_counters;
+                        // argmax over the reals of k*(C - k*cost) is C/(2*cost).
+                        const int peak = C / (2 * cost);
+                        // "leave R counters on the Burst" -> k = (C - R) / cost.
+                        auto leave = [C, cost](int r) { return (C - r) / cost; };
+                        for (int k : { 1, peak, leave(2), leave(1), leave(0) })
+                        {
+                            if (k < 1 || k > fade_max_k) { continue; }
+                            if (!counts.empty() && counts.back() >= k) { continue; }
+                            counts.push_back(k);
+                        }
+                    }
+                    else
+                    {
+                        for (int k = 1; k <= fade_max_k; ++k) { counts.push_back(k); }
+                    }
                 }
                 for (int k : counts)
                 {

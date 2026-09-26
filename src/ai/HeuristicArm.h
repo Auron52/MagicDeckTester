@@ -254,6 +254,7 @@ enum Slot : int
     SAC_DRAIN_LETHAL,         // MTG_SAC_DRAIN_LETHAL        the multi-sac LETHAL burst is sized by outlet damage PLUS the per-death drain of our death watchers (Slimefoot / Pashalik Mons). Adds an action, so it moves GT (default OFF)
     FS_PRE_STATE_SKIP,        // MTG_FS_PRE_STATE_SKIP   an ORDINARY plan on FSLineWin's frontier is SKIPPED when an earlier sibling already scored its post-apply state (default OFF; an IDENTITY collapse, not a dominance ordering)
     DIG_MANA_LAST,            // MTG_DIG_MANA_LAST        a tap-draw activation is NOT OFFERED while the mana it wants could deploy a PERMANENT from hand instead (default OFF; a HEURISTIC narrowing, not lossless)
+    FADE_K_WINDOW,            // MTG_FADE_K_WINDOW        the fade-outlet activation-COUNT ladder (Saproling Burst) is SAMPLED at {1, peak+-1, max} instead of walked 1..max -- k*(C-k) is an analytic parabola, so the interior optimum the full ladder exists to protect is kept while <=5 candidates replace up to 26 (default OFF; a HEURISTIC narrowing, not lossless)
     COUNT
 };
 
@@ -474,6 +475,7 @@ inline const char* Name(int slot)
         "MTG_SAC_DRAIN_LETHAL",
         "MTG_FS_PRE_STATE_SKIP",
         "MTG_DIG_MANA_LAST",
+        "MTG_FADE_K_WINDOW",
     };
     // The enum and this table are ONE mapping split across two lists: a slot added to one and not
     // the other silently shifts every lever after it (a manifest asking for lever X would set Y).
