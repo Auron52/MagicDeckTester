@@ -111,6 +111,10 @@ TEST_CASE("Pirates routing: every deck in decks/ resolves exactly as before, Pir
         {"Snow", "Snow"},                     {"StompySurprise", "Stompy"},
         {"burn", "Burn"},                     {"slivers_vial", "Vial"},
         {"treasure_hunt", "TreasureHunt"},
+        // WhiteKnights (adopted 2026-09-26 on the other machine; met this table at the 2026-09-27
+        // rebase): the second shipping Knight list, routed by its own signature ABOVE Knights --
+        // see the WhiteKnightsProvider note in DecisionProviders.cpp.
+        {"WhiteKnights", "WhiteKnights"},
         // Unprofiled lists (no .profile.json): pinned from a direct --batch probe of the pre-change
         // binary so a future signature cannot capture them unnoticed either.
         {"Mill", "AntiLifegain"},             {"Unpredictable Cyclone", "AntiLifegain"},
