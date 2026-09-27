@@ -952,3 +952,99 @@ line there.
 Ground truth is not yet rebaselined: this changes 6 smoke, 12 regression and 24 overnight
 fingerprints, and `--accept` is a deliberate promotion. `MTG_BP_WAVES=0` is the exact hatch
 (re-verified ALL PASS in every mode).
+
+## 2026-09-27 — "ZERO GREEDY IN THE SEARCH": what is already true, and what the real gap is
+
+**USER RULING, this session.** *"There should be 0 greedy anywhere in the search. If it turns on greedy
+then it should stay off until it is fixed."* Then the scope: *"Rollouts are outside of the search and are a
+known exception … Outside of the search window bounded by depth and budget is the only place where we can
+rely on greedy."* And the direction: *"Obviously just deleting greedy is not the solution. We need something
+to pick up the slack and that should be search … (but bounded just to new lines that are possible because we
+stopped at the breakpoint)."*
+
+### CONFIRMED: the search already has zero greedy continuations. Only the horizon leaf is greedy.
+
+Asked of the code, not the comments (`greedysite`, TurnSolver.cpp:4575):
+
+> *The ONE greedy `TurnSolver::Solve()` reached from inside the search: `SolveWithLookahead`'s depth<=0 base
+> case (site 90) — the horizon playout's per-turn policy, permitted by doctrine (USER 2026-09-05: greedy is
+> allowed only beyond the search horizon …). Every breakpoint continuation inside `ApplyPlanDirect` is now
+> either the plan's own searched choice (rank / chain / EMPTY arm / node child) or the EMPTY default; there
+> is no fallback `Solve()` to count (deleted 2026-09-17). Sites 0-8 therefore no longer exist here.*
+
+Live on the Contender fixture at d5: `GREEDY SITES inside search: s90=296 (acted 96) [horizon leaf only;
+no breakpoint fallback exists]`. Site 90 IS the depth<=0 base case, i.e. exactly "outside the search window
+bounded by depth and budget". **`MTG_BP_NO_GREEDY_CONT` has no live reader** — it was not left as a switch,
+the code was deleted. So the user's recollection is correct and the doctrine is already enforced.
+
+### CORRECTION — and the stale comment that caused it
+
+I told the user *"95% of the newly opened continuations are decided GREEDILY"*, quoting
+`breakpoints-should-key-on-hand-entry.md`. **That is wrong**, and `MTG_BP_HAND_ENTRY` cannot turn greedy on,
+because there is no fallback `Solve()` left to reach. The source of the error is a **stale field comment**:
+`BpProbe::untarget` (TurnSolver.cpp:~25246) still reads *"real scoring positions whose continuation is
+decided greedily"*, contradicting the `ovr_dup` comment three fields above it, which correctly records the
+2026-09-17 deletion. **Fix that comment.** (Same class as
+[[flag-default-is-not-the-arming-condition]]: a comment is a hypothesis, the code is the answer.)
+
+### WHAT ACTUALLY PICKS UP THE SLACK TODAY: the CANON, not search
+
+Traced on the Contender fixture (`MTG_BP5_TRACE=1`, `MTG_BP_HAND_ENTRY=1`, d5):
+
+```
+[bp5] T4 site=10 empty choice=-1 at=0 seen=-1 class=1 elig=0 cands=-1 ... casts: Venerable Knight
+```
+
+Arm reported `empty`, `elig=0` (this plan is not the variant exploring this occurrence) — **and yet the
+continuation casts the Knight.** The resolution is `out = ncands.front()`, i.e. **`cands[0]`, the
+enumerator's FIRST candidate, with `canon_used = true`** (TurnSolver.cpp:~27378 / ~27406). So an untargeted
+breakpoint is decided by a **deterministic heuristic pick**, not by greedy and not by nothing.
+
+**So the user's objection is right in substance while "greedy" is the wrong label:** the base plan is scored
+on a CANON continuation while its variants are scored on SEARCHED ones. `BpProbe::untarget`'s own comment
+already states the remedy — *"These need a searched REPLACEMENT, not deletion."* And the canon is already
+known to be actively harmful at this exact site: TurnSolver.cpp:~27391 records a **T4 -> T5 loss, invariant
+in every effort knob, recovered by suppressing the canon at site 10.**
+
+### The mechanism the user is describing ALREADY EXISTS, and it is node hosting
+
+`BpNodeEnabled` (ADOPTED 2026-09-02, default ON) *"hosts the continuation as a search node: it enumerates
+`EnumerateBreakpointPlans` on the post-draw state — the FULL drawn-card-aware list, uncapped — and resumes
+each candidate from the snapshot … scoring each through the normal combat/EOT + tail recursion under normal
+B&B cutoffs. Plus one explicit EMPTY continuation … so nothing is a lossy truncation."*
+
+That is precisely *"search, bounded just to new lines that are possible because we stopped at the
+breakpoint"*, with "stop here" kept in the option set.
+
+### THE REAL BLOCKER IS CALLER COVERAGE, NOT SITE COVERAGE — and it is already measured
+
+`BpNodeSites` has a note that settles the axis: *"it does not get near zero in-tree greedy. Widening the
+SITE set turns out to be the wrong axis — `greedysite::kNoHost` … shows that **52-100% of the remaining
+fallback is an apply NO CALLER IS HOSTING**."* Counted this session:
+
+| `ApplyPlanDirect` call sites | pass a capture | are node-HOSTING entry points |
+|---|---|---|
+| **53** | **7** | **2** (`node_host_here` at ~43676 and ~45127) |
+
+The other 5 capture-passers are prefix-cache captures or resumes. `BpNodeRootTurnOnly` then narrows even
+those two to the **root turn** by default. So the continuation is searched in a small minority of applies
+and canon-picked in the rest — which is the gap, stated in the user's own terms.
+
+### Consequence for `MTG_BP_HAND_ENTRY` (Contender's fix)
+
+It stays **OFF**, per the user's ruling, but the reason must be recorded accurately: **not** because it
+enables greedy (it cannot), but because the breakpoints it opens would mostly be **canon-decided rather than
+searched**, and site 10's canon has a measured harmful instance. Opening more occurrences that resolve by
+canon widens a heuristic surface, which is the opposite of the intent.
+
+### Work programme, in dependency order
+
+1. **Fix the stale `untarget` comment** (and the *"greedy Solve fallback"* mention at ~31002). Free, and it
+   is what produced a wrong report to the user.
+2. **Measure where canon actually decides**, per site per deck — `MTG_BP_CANON_AUDIT` / `canonaudit` already
+   exists, so this is a measurement, not a build. This is the baseline the rest is judged against.
+3. **Extend node HOSTING to more callers** (and re-test `BpNodeRootTurnOnly`), converting canon continuations
+   into searched ones. This is the axis the tree's own measurement points at; widening `BpNodeSites` is not.
+4. **Then** add site 10 to the hosted set and re-run the `MTG_BP_HAND_ENTRY` A/B. Only at that point does
+   turning it on buy searched continuations rather than more canon.
+5. GT moves at step 3 and again at step 4 — accept flow both times, never a rebaseline over the top.
