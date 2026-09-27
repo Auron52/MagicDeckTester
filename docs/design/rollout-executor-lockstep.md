@@ -52,6 +52,7 @@ hold different physical copies (#4 below was invisible until the trace showed `I
 | 6 | a cast recorded INSIDE a breakpoint continuation lost `chosen_float_color` / `enchant_target` | **FIXED** (below) |
 | 7 | a cast recorded INSIDE a breakpoint continuation carried no `cost`, so the executor's replay TRAITS read `mana_casts=0` and paid in a different world | **FIXED** behind `MTG_BP_REPLAY_COST`, default ON since 2026-09-22 (below) |
 | 8 | the replay derives its traits from the records of ONE nesting level, but the rollout paid under the WHOLE continuation it planned -- a nested breakpoint realises the planned tail one level down, so the outer level's `mana_casts` reads 1 where the rollout paid under 2 and the one-shot hold fires only on the replay side | **FIXED** (below): the record carries the scope it was paid under |
+| 9 | a continuation's **Aether Vial deploy** was applied by the rollout and RECORDED NOWHERE -- `apply_vial` never pushed onto the sink, unlike every other continuation action kind -- so the committed line replayed without the creature | **FIXED** -- found on both machines the same day; the fix that landed is `7ef0734b` (`MTG_BP_RECORD_VIAL`, default ON) |
 
 Rate per 500 games (seed 4004, 8 decks, 4000 games) after 1-4: **0 everywhere, Hinata included.**
 (Dragonstorm was 4-5 at the suite gate budgets before #1; Auras was 3 before #2; Hinata was 4 before
@@ -203,6 +204,48 @@ record time (under `MTG_BP_REPLAY_COST`), and `replay_recorded` installs the rec
 its derived ones (an unrecorded 0 keeps the derived value, so legacy records replay as before).
 The rollout's inline nested re-solve pays under the OUTER scope (it installs none of its own), and
 the record captures exactly that, so the nested Draught replays under `mana_casts = 2` too.
+
+## #9 — a continuation's Vial deploy was applied and recorded nowhere (2026-09-27)
+
+Found while adopting the site-10 hand-entry arming (`MTG_BP_HAND_ENTRY=1`): 10 searched smoke games
+lost a turn, and 6 of 7 root-caused ones stayed lost at `--budget-ms 0`, so it was never a budget
+effect. The clean repro is Knights seed 1115 d3 b0 (smoke `knights_smoke_d3_s1001 gi114`).
+
+`MTG_FD_TRACE` shows both arms committing the same verified `win=4` line at T2, and the arm's T3
+phase reads `land=Plains + Acclaimed Contender` -- a plain cast list. The search's own replay of that
+line (`[fd-pred]`) reaches `turn=3 my_creatures=4` and `turn=4 opp_life=0`; the executor reaches 3
+creatures and opp 3. `[fsw-board]` at the T3 node names the difference:
+
+```
+[fsw-board] T3 d2 p=land=Plains;Acclaimed Contender, cont=[] ... own=Venerable Knight#53(2T)
+            Dauntless Bodyguard#14(2T) Acclaimed Contender#1(3) Venerable Knight#54(2)
+```
+
+`Venerable Knight#54` is the card Contender dug; the site-10 continuation Vialed it in (Vial at 1,
+MV 1). The recorded continuation is `cont=[]`. `apply_vial` (TurnSolver::ApplyPlanDirect) put the
+creature on the battlefield and returned; `apply_one` records every cast into `sink_stack.back()`,
+`bp_play_searched_land` every land, `apply_continuation_precasts` every sac/suspend -- the Vial put
+was the one continuation action kind with no record. `AIEngine::replay_recorded` already dispatches
+`Kind::ActivateVial`, so the executor was ready for a record that never came. The base plan reached
+this line through `MTG_BP_BASE_CANON` (default 1: a base plan takes `cands.front()`), which is why
+the committed phase carried no `bp_choice` either.
+
+Fix: `apply_vial` records the put onto the current sink at the point it commits. This was found
+and fixed independently on both machines on 2026-09-27 -- the other side's `7ef0734b`
+(`MTG_BP_RECORD_VIAL`, default ON, `=0` restores the unrecorded put; it names the same Knights
+games, gi114/gi215/gi88, and `MTG_FD_ORACLE` 2 -> 0 over 150 games) is the one that landed, and this
+session's duplicate hunk was dropped at the rebase. What this session adds is the diagnostic that
+made it a read rather than an inference: `FdPlanText` now prints ` | bp[k<kind>:<card> ...]` and
+`bp_choice=k@at` on each committed phase, because a phase whose projection depends on its
+continuation was unreadable without it.
+
+Result: all five Knights losses (gi114 d3/d5, gi215, gi242, gi88) recovered at every depth d3-d9 and
+at both the shipped budget and b0; shipped defaults byte-identical (smoke 97/0/0) since no shipped
+config reaches a Vial continuation.
+
+The same session found a second, non-lockstep defect behind the remaining searched loss (th gi80):
+the section-level hand-entry window did not reset at inline breakpoints. See
+`breakpoints-should-key-on-hand-entry.md`, 2026-09-27.
 
 ## Both remaining leads: ROOT-CAUSED, and NEITHER is a lockstep bug
 

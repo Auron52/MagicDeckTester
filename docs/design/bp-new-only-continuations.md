@@ -649,3 +649,166 @@ Hinata), and site 9's entered-this-turn gate (the other agent's side). Two thing
 extending: the filter keys only `ActivatePermAbility` (other activation kinds are kept, so a deck
 that leans on one gets less of the saving until its kinds are keyed), and the "no attacker"
 cast-time trick target is legal only in a subset that casts a body.
+
+## 2026-09-27 — WAVE 0's MISSING STILLBORN TEST (`MTG_BP_ARM_NEW`): sound, and it does NOT pay
+
+**USER, restating the rule against the Acclaimed Contender fix:** *"It's important to consider that
+do nothing is already covered by the original line, we just need to continue playing that out. Only
+genuinely new lines (i.e. those that use our new options) need to be considered."*
+
+**The first half of that rule is THIS DOCUMENT and it has been default ON since 2026-09-22.** The
+continuation list already keeps only entries that USE a card that arrived. What was never applied is
+the *emission* side, and the tree already said so — `MTG_BP_W0_UNIF_COLLAPSE`'s header:
+*"NSKIP declines a WAVE slot whose ranks can only hand out something already scored. **Wave 0 has
+never had the equivalent test**, and it is where the redundancy actually is."*
+
+### The waste is real and was invisible
+
+`BpCands` bailed on `len <= 0` **before recording anything**, and the report skipped a site whose
+`n == 0`, so a breakpoint that opened and offered NOTHING printed nothing at all. Fixed (a per-site
+`EMPTY` counter plus a by-`apply@line` breakdown). Measured, knights d3 b10, 60 games, seed 1001,
+`MTG_BP_HAND_ENTRY=1 MTG_BP_NODE_S10=1`:
+
+| site | opens | EMPTY | share |
+|---|---|---|---|
+| `put_in_hand` (10) | 15,589 | 9,618 | **61.7%** |
+| `deferred_cantrip` (3) | 1,435 | 763 | 53.2% |
+
+**Knights opens ZERO searched breakpoints at shipped defaults at d3** — so hand-entry is not
+diluting an existing budget on this deck, it switches the whole mechanism on: +42% interior nodes
+(54,432 → 77,331) for an identical avg win turn.
+
+Where the empty-list applies are spent (`EMPTY … by apply@line`): FSLineWin frontier 2,097 /
+node child 763 / search wave 1,636 / **rollout frontier + wave 5,885 (61%)**.
+
+### What was built
+
+`MTG_BP_ARM_NEW` (default OFF): a BASE plan measures its breakpoint's continuation length through
+the ONE authority (`EnumerateBreakpointPlansRef`, memoized, so a non-empty list costs nothing extra),
+and the candidate loop declines that plan's wave-0 rank variants when the answer is 0 — before
+`ConsumeAt`, which is the whole point, since the dedup already skipped their rollouts but only after
+the units were spent.
+
+**Two soundness requirements, one of them found by measurement:**
+
+1. **Exactly one class-on breakpoint in the apply.** At a SECOND breakpoint a variant and its base
+   diverge by construction: `MTG_BP_NESTED_CANON` fires for a plan carrying a choice at an index it
+   is not targeting and hands the variant `ncands.front()`, while the base plan — carrying no choice
+   — is ineligible and takes EMPTY. The variant is then the only carrier of that line.
+2. **It is NOT byte-identical at a finite budget, and cannot be.** Declining a variant FREES its
+   units, and other nodes then search further. Same class as `MTG_FS_PRE_STATE_SKIP`, whose header
+   already prescribes the right gate: *"MUST-FIND at `--budget-ms 0`, where truncation cannot
+   confound it."* At shipped defaults, finite budget: smoke **95 passed / 2 failed**, both "score
+   unchanged, play differs" (burn d3 gi16, hinata d5 gi9).
+
+**THE SOUNDNESS GATE PASSES.** At `--budget-ms 0`, play is IDENTICAL on all 9 decks tested,
+*including both games that moved at finite budget*, while work drops.
+
+### Performance — and this is why it is NOT adopted
+
+| deck | nodes | best-of-3 wall | play (b0) | declined |
+|---|---|---|---|---|
+| mirrorwing d3 | **−5.35%** | +0.32% | IDENTICAL | 11,882 |
+| burn d3 | −3.85% | +1.56% | IDENTICAL | 5,576 |
+| th d3 | −2.37% | −0.50% | IDENTICAL | 5,727 |
+| knights d3 (hand-entry) | −2.64% | +0.28% | IDENTICAL | 1,968 |
+| melira d3 (hand-entry) | −1.28% | +0.30% | IDENTICAL | 10,390 |
+| hinata d3 | −0.75% | −0.44% | IDENTICAL | 2,165 |
+| auras d3 | −0.38% | +0.77% | IDENTICAL | 454 |
+
+**Nodes fall everywhere; wall clock does not move (±1.5%, no consistent sign).** The nodes it removes
+are the CHEAPEST ones — a declined apply replays a plan onto a copied state and hits a memoized
+enumeration, and its rollout was already deduped away. `interior_nodes` therefore OVERSTATES this
+saving, which is worth recording as a general caution about that counter.
+
+(A `plan.bp_wave0` gate was added on the theory that base plans without variants were paying
+pointless enumerations. It changed nodes and declines by **zero** — every base plan reaching a
+class-on breakpoint already had the marker — and mirrorwing's apparent +3.44% wall-clock loss was
+single-run noise, +0.32% at best-of-3.)
+
+### It does not recover the hand-entry regression
+
+Smoke on `MTG_BP_HAND_ENTRY=1 MTG_BP_NODE_S10=1`, with and without `MTG_BP_ARM_NEW=1`:
+**56 passed / 41 failed both ways, searched `slower=10 faster=1` both ways, and all 97 per-case play
+digests + avgs IDENTICAL** (diffed, not inferred).
+
+**So the d3/d5 quality regression is NOT the empty-list waste.** Removing that waste entirely — even
+the 61% of it sitting in rollout loops this lever does not reach — cannot recover it, because the
+waste is cheap and the regression is caused by the *legitimate* new search: hand-entry adds +24–42%
+nodes of REAL continuations at a fixed budget, and that is what dilutes everything else.
+
+**Where that leaves the arming rule.** The rule is right, it is sound, and it is already as narrow as
+the new-only filter can make it — the remaining opens are load-bearing by the filter's own test. So
+"narrow the arming further" is no longer an available remedy for the Contender fix's cost: the
+options are budget for the newly-opened work, or the USER's standing ruling that
+*"THE COST IS NOT AN ARGUMENT AGAINST OPENING THEM"* plus a demonstration that quality does not
+regress. Keep `MTG_BP_ARM_NEW` as a measured, sound, default-OFF cost lever; do not sell it as the
+fix for dilution.
+
+### ROOT CAUSE OF THE 10 SEARCHED LOSSES — a projection/realisation mismatch, not dilution
+
+**Correction to the section above.** It closed by saying the remaining cost was legitimate new search
+and the open question was whether it pays for its budget. **That was wrong.** The losses survive
+unlimited budget, so they are not a budget question at all.
+
+**Repro:** `mtg decks/Knights/Knights.cod --profile decks/Knights/Knights.profile.json --depth 3
+--budget-ms 0 --games 1 --seed 1115 --ignore-play-profile` (smoke `knights_smoke_d3_s1001 gi114`).
+
+At **T2 both arms dump IDENTICAL root plans** (`MTG_FS_ROOT_DUMP=2`) and commit the same plan with the
+same projection — `[fs-root] tail win=4 ... val=1700 land=Unclaimed Territory: Dauntless Bodyguard +
+Aether Vial` — and both play exactly that. **Flag-off delivers T4. `MTG_BP_HAND_ENTRY=1` delivers T5.**
+The committed line is not realised.
+
+| probe | result |
+|---|---|
+| which flag | **`MTG_BP_HAND_ENTRY` alone**; `MTG_BP_NODE_S10` and `MTG_BP_ARM_NEW` contribute nothing |
+| depth ladder at b0 | d3 / d5 / d7 / d9 **all T5** (flag-off T4 at every rung) |
+| budget | unchanged at shipped budget and at `--budget-ms 0` |
+| the other losses | 6 of 7 still worse at b0 (knights gi114 d3+d5, gi215, gi242, gi88, th gi80); only melira gi11 recovered, i.e. was churn |
+
+Observed play: flag-off T3 = `Plains + Adeline` -> T4 `Worthy Knight(Vial) + Inspiring Veteran +
+Venerable Knight` = 19 damage, win T4. Flag-on T3 = `Plains + Acclaimed Contender` (digs Venerable
+Knight) -> win T5.
+
+**This is the rollout/executor lockstep class** (`rollout-executor-lockstep.md` #7, #8), and it
+invalidates a claim made in `contender-same-turn-deploy-searched.md`: *"Both worlds already have twins
+(TurnSolver.cpp:26890/30909, AIEngine.cpp:2205/5762), so the bp_at lockstep holds by construction."*
+That is a claim, not a measurement, and it is now measurably false. The rollout arms site 10 at the
+SECTION level immediately before the deferred re-solve loop (gated `!deferred_cantrip_resolve`); the
+executor arms at `AIEngine.cpp:5764` off `exec_hand_at_section` + `HandGainedACard`. If those snapshot
+points do not coincide the two worlds disagree about what "arrived", `bp_at` numbering diverges, and the
+executor replays a continuation the search never scored.
+
+**So the ordering of work is now: fix the lockstep, THEN re-measure adoption.** Nothing about the
+arming rule or the node hosting is implicated, and `MTG_BP_ARM_NEW` should not be tuned against these
+games — it is measurably inert on them.
+
+**Diagnostic note worth keeping:** on this game `MTG_FS_ROOT_DUMP` emits at T1/T2 but **nothing at
+T3/T4** — the engine commits a multi-turn line and replays it, so a divergence first visible on turn N
+must be read at the turn the search actually ran.
+
+### USER DESIGN OBJECTION, 2026-09-27 — completeness is per depth, and W violates it
+
+> *"The key part here is that we cannot say we have fully searched depth 1 until we have gone through
+> all of the continuations."*
+
+Under that definition `BpSearchWidth()` is not a width knob — it is an **incompleteness inside depth 1**,
+and the present schedule is backwards: wave 0 takes the base plan plus k=0..W-1 (three of n), the search
+then spends budget going DEEPER, and depth 1's remaining continuations are left to whatever budget
+survives. Completing depth 1 before deepening is the alternative ordering, and it reorders the whole
+schedule, so it needs measuring rather than asserting.
+
+Also recorded as a correction: the claim that the deferred wave phase "reaches the rest only at budgets
+nobody runs" (repeated from a code comment in this file's own lineage) is **overstated**. The waves walk
+ranks W.. on whatever budget is LEFT, so at low depth — where the main search is cheap — there is
+leftover and they do reach further ranks; at high depth the main search consumes it. Coverage is
+depth-dependent and currently **unmeasured**; the `[bp-waves]` probe would give the curve.
+
+### RESOLVED 2026-09-27 — the mismatch above was two defects, both fixed
+
+The projection/realisation mismatch is `rollout-executor-lockstep.md` #9: a continuation's Aether
+Vial deploy was applied by the rollout and recorded nowhere, so the committed line replayed without
+the creature. The one searched loss that was not that (th gi80) was the section-level hand-entry
+window failing to reset at inline breakpoints, which double-armed site 10 and made the EMPTY overrun
+rank unreachable -- `breakpoints-should-key-on-hand-entry.md`, 2026-09-27. After both: no searched
+smoke loss under `MTG_BP_HAND_ENTRY=1` survives b0; shipped defaults 97/0/0 byte-identical.

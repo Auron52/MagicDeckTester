@@ -525,3 +525,42 @@ Owed before any adoption call:
 * Whether sites 9 and 10 should be ONE site is still the open question the 2026-09-19 section
   raises. This change makes the case stronger — they now answer one rule at one point in the turn —
   but renumbering still breaks the apply/executor lockstep, so it stays a separate, deliberate move.
+
+## 2026-09-27 — THE WINDOW MUST RESET AT EVERY BREAKPOINT (the th gi80 loss)
+
+The section-level check ("did the hand gain a card no arming class accounted for?") implemented
+"no class accounted for it" as `!deferred_cantrip_resolve`. That flag is set only by the DEFERRED
+classes (3 / 5 / 6 / site 10's cast window). The inline classes -- Treasure Hunt's DrawUntilNonland,
+resolved inside `apply_one` -- never set it, so their reveal read as unaccounted and the check opened
+a **second** site-10 breakpoint, at index 1, on an event index 0 had already re-decided.
+
+What that costs is not "one more breakpoint". Every wave variant targeting index 0 now carries a
+choice at an index it is not targeting, so `MTG_BP_NESTED_CANON` hands it `ncands.front()` at index
+1 -- for TH that is "play a land". The continuation that wins th s1081 at T3 is the EMPTY overrun
+(rank 10 = `cands.size()`): hold every revealed land so Land's Edge fires all of them. With a land
+played by the canon at index 1 it is the same post-apply state as a land-playing rank and the dedup
+drops it. `[fsw-wave]` at the T3 node `[Sandstone Needle, Island] hand=6`:
+
+```
+off: bp=2@0 after=14 | 5@0 after=20 | 7@0 after=14 | 8@0 after=14 | 9@0 after=14 | 10@0 after=0 kill=1
+on:  bp=2@0 after=14 | 5@0 after=20 | 7@0 after=14 | 9@0 after=14              (no rank 10 scored)
+```
+
+The T3 kill is unreachable at any budget; the T1 search commits `win=4`, the game wins T4 instead of
+T3. Under the flag Treasure Hunt d3 opened 2,867 site-10 breakpoints at T3 in this one game (1,464
+T3 nodes against 69), all on already-decided reveals.
+
+**The rule, corrected:** "accounted for" means "a breakpoint re-decided the hand after it entered".
+`bp_searched_plan` -- the one authority every class passes through -- re-takes `hand_at_section` and
+`seq_at_section` on entry, whatever the class and whether or not it is masked (a masked class is a
+deliberate prune; re-opening it as site 10 is the renumbering this rule forbids). The check before
+the deferred loop therefore sees only what entered after the last decision point. Executor twin:
+`exec_section_reset()` at the entry of `replay_recorded` and `resolve_draw_breakpoint`.
+
+Result: th gi80 T3 in both arms at the shipped budget and b0. Shipped defaults byte-identical (smoke
+97/0/0; the reset is inside `BpHandEntryEnabled()`). With this and the Vial record
+(`rollout-executor-lockstep.md` #9), NO searched smoke loss under `MTG_BP_HAND_ENTRY=1` survives
+`--budget-ms 0`: the three that remain (hinata2hg gi19, melira2hg gi11, melira d3 gi11, all 5 -> 6)
+are identical to shipped at b0 -- budget churn. Searched moves on the tier after both fixes:
+faster 5 (knights gi88, melira d5 gi23, whiteknights d3 gi116, d5 gi116, d5 gi66), slower 3 (the
+churn above); aggregate `slower=3 faster=11 equal=83` over the 97 cases.
