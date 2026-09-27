@@ -1,8 +1,44 @@
-# `card_costs` audit: Adventure cards misread + a rate-limited run passes falsely (DEFERRED)
+# `card_costs` audit: Adventure cards misread + a rate-limited run passes falsely (FIXED)
 
-**Status:** deferred 2026-09-27, evidence only, no fix applied. Found while analyzing Pirates, whose
-`verify_deck` run hit the Fungus `card_costs` failure; another agent reported it as not reproducible.
-This note shows it is, and why it can look otherwise.
+**Status: BOTH BUGS FIXED 2026-09-27.** This note was filed as deferred evidence; the analysis below
+was correct on both counts and both suggested fixes have been applied, with a network-free regression
+guard. Kept as-is below the line because the *reasoning* is the valuable part — the fix record is
+here at the top.
+
+| | fix | guard |
+|---|---|---|
+| Bug 1 (false RED) | `scripts/audit_card_costs.py` — a face-name match now wins **even when the top-level cost is filled**, which is the adventure case. Fallbacks for MDFC and for a split card entered as `"A // B"` are preserved. | `test/audit_card_costs_selftest.py` checks 1, 1b, 3, 4 |
+| Bug 2 (false GREEN) | Unresolved cards are split by **reason**: a Scryfall 404 is a genuinely custom card and stays non-fatal, while 429/timeout/DNS/5xx is a **did-not-run** — new **exit code 2**, and the audit no longer prints "All mana costs match" over zero comparisons. `verify_deck.py`'s `gate_card_costs` reports rc 2 as `cost audit INCOMPLETE -- N cost(s) UNVERIFIED`, never as a mismatch (the same doctrine its rc-124 branch already used). A mismatch still outranks incompleteness for the rc, but the partial coverage is disclosed in the same summary. | checks 2, 2b, 2c |
+
+`cards.json` was never wrong: Brightcap Badger is `{3}{G}` and Fungus Frolic is `{2}{G}`, both
+confirmed against live Scryfall (`layout: adventure`, faces carrying the correct per-half costs).
+The Fungus `card_costs` gate now passes on its own merits rather than because nothing was compared.
+
+**One correction to the note below, and it strengthens its case.** The offline repro cannot be
+cleared by the Bug 1 fix, because the committed snapshot `scryfall_reference.json` stores only the
+joined string and **no `card_faces`** for either name — there is no face to select. That is exactly
+why the snapshot-based `card_fields` gate still needs its reviewed allowlist entry, which is
+untouched here. The face fix applies to the **live** path, which does return faces. Deliberately
+not changed: the snapshot builder and `scryfall_divergences.json`. Making the snapshot store
+per-face costs would render those user-reviewed allowlist entries STALE — which `verify_deck`
+reports as blocking — so it would trade a real fix for a new false red.
+
+**Bug 2 was then demonstrated live, unprompted.** Two `verify_deck` runs of the same deck on the
+same commit, launched concurrently by one agent, disagreed purely on rate-limiting:
+
+```
+run A:  [FAIL ] card_costs   2 Scryfall cost mismatch(es)      <- resolved; found Bug 1
+run B:  [PASS ] card_costs   all mana costs match Scryfall     <- 429'd; compared nothing
+```
+
+The concurrency that triggers the 429 is partly self-inflicted — running two networked audits at
+once is enough to do it. Reading run B is how this was first reported as "not reproducible".
+
+---
+
+**Original note (as filed):** deferred 2026-09-27, evidence only, no fix applied. Found while
+analyzing Pirates, whose `verify_deck` run hit the Fungus `card_costs` failure; another agent
+reported it as not reproducible. This note shows it is, and why it can look otherwise.
 
 Checked at `phase-1-2-deck-analyzer` @ `42210a4f` (2026-09-27). The two repro scripts are in the
 appendix and need NO network. Save them and run them from the repo root:
@@ -63,16 +99,34 @@ Other ways the failure disappears:
 - `verify_deck --no-network` skips `card_costs` entirely (SKIP).
 - Running `audit_card_fields.py`, the snapshot check, passes because of the allowlist above.
 
-## Suggested fixes (not applied)
+## Suggested fixes — BOTH APPLIED (see the fix record at the top)
 
 1. **Adventure cards:** whenever `card_faces` is present, compare against the half whose `name`
    equals the cards.json entry, whether or not the top-level cost is filled. Keep face 0 as the
    fallback for a split card named "A // B". This clears Fungus without any sign-off and covers
    future Adventure cards.
+   → **Applied as described.** One refinement: face 0 is the fallback only when the top-level cost
+   is *empty*; when it is filled and no face name matches (a split card entered as `"A // B"`) the
+   joined top-level string is kept, since that is what such an entry should diff against.
 2. **False green:** a card that could not be resolved because of HTTP 429 or a network error must not
    let the audit report "All mana costs match". Either exit non-zero (did-not-run, like the gate's
    existing rc 124 branch), or have `gate_card_costs` treat any `HTTP 429`/network NOT RESOLVED line
    as a did-not-run FAIL. Genuinely custom cards (Scryfall 404) can stay non-fatal.
+   → **Applied, taking both halves of the suggestion:** the audit exits 2 *and* the gate reports
+   that rc as an explicit did-not-run. One implementation detail worth knowing if you touch
+   `fetch()`: its `"HTTP 429 (exhausted retries)"` string at the end of the retry loop is
+   **unreachable** — the final attempt returns from the `HTTPError` branch as plain `"HTTP 429"` —
+   so classification must match on the substring `429`, never on the longer message.
+
+## Still open (not part of this fix)
+
+- `scryfall_reference.json` holds no `card_faces`, so the **offline** `card_fields` check still
+  depends on a reviewed allowlist entry for these two names. Teaching the snapshot builder to store
+  per-face costs would let that entry retire, but it invalidates the existing reviewed entries and
+  so needs the user's sign-off — it is a snapshot-format change, not a bug fix.
+- Nothing rate-limits the audits against *each other*. Two concurrent networked gates 429 each
+  other reliably; with Bug 2 fixed that is now loud (rc 2) rather than silent, which is the
+  important half, but a shared throttle would avoid the wasted run.
 
 ## Appendix: repro scripts
 

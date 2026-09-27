@@ -149,6 +149,39 @@ def gate_card_costs(no_network):
         return Gate("card_costs", FAIL, True, "cost audit DID NOT COMPLETE (killed) -- no costs compared",
                     [("card_costs:*", f"cost audit did not complete: {err.strip()[:120]}; "
                                       f"no cost was compared -- this is a did-not-run, not a mismatch")])
+    # THE SAME DOCTRINE, ONE STEP FURTHER: rc 2 means the audit ran to the end but Scryfall
+    # rate-limited (429) or was unreachable for some cards, so their costs are UNVERIFIED. This
+    # used to be invisible -- an unresolved card did not move rc, so a fully-429'd run printed
+    # "All mana costs match Scryfall" and this gate reported PASS having compared nothing. Fail
+    # closed and name it as a did-not-run, never as a mismatch.
+    # Only the NOT COMPARED block counts as unverified. Deliberately excluded: HTTP 404 (a custom
+    # card, non-fatal by policy) and the "COST OK, CASCADE NOT CROSS-CHECKED" block (the cost DID
+    # verify). Both are disclosed by the audit's own output without moving this gate.
+    unverified = []
+    in_block = False
+    for ln in out.splitlines():
+        if ln.startswith("NOT COMPARED ("):
+            in_block = True
+            continue
+        if in_block:
+            if re.match(r"\s{2,}\S", ln):
+                unverified.append(ln.strip())
+            elif ln.strip():
+                in_block = False
+    if rc == 2:
+        if unverified:
+            why = (f"{len(unverified)} cost(s) UNVERIFIED (Scryfall rate-limited/unreachable)",
+                   f"{len(unverified)} card(s) could not be fetched, so their costs were never "
+                   f"compared -- a did-not-run, not a mismatch. Re-run when the rate limit clears.")
+        else:
+            # rc 2 with no unreachable card means nothing was compared at all (e.g. every card
+            # 404'd). Still a did-not-run, but do not blame a rate limit that was not involved.
+            why = ("no cost was compared at all",
+                   "the audit resolved no card, so nothing was verified -- a did-not-run, not a "
+                   "mismatch. Check the card file and Scryfall reachability.")
+        return Gate("card_costs", FAIL, True, f"cost audit INCOMPLETE -- {why[0]}",
+                    [("card_costs:*", why[1])]
+                    + [(f"card_costs:{ln.split(':')[0]}", ln) for ln in unverified[:10]])
     findings = []
     if rc != 0 or "MISMATCHES" in out:
         for ln in out.splitlines():
@@ -157,7 +190,14 @@ def gate_card_costs(no_network):
                 findings.append((f"card_costs:{m.group(1).strip()}", ln.strip()))
         if not findings:
             findings.append(("card_costs:*", f"cost audit non-zero (rc={rc})"))
-        return Gate("card_costs", FAIL, True, f"{len(findings)} Scryfall cost mismatch(es)", findings)
+        summary = f"{len(findings)} Scryfall cost mismatch(es)"
+        if unverified:
+            # A mismatch outranks incompleteness for the rc, but do not let the partial coverage
+            # go unsaid -- fixing these findings and re-running must not read as a full green.
+            summary += f"; a further {len(unverified)} cost(s) UNVERIFIED (Scryfall unreachable)"
+            findings.append(("card_costs:*", f"{len(unverified)} card(s) were never compared "
+                                            f"(Scryfall rate-limited/unreachable) -- this run is partial"))
+        return Gate("card_costs", FAIL, True, summary, findings)
     return Gate("card_costs", PASS, True, "all mana costs match Scryfall (cost/cmc only)")
 
 

@@ -282,7 +282,26 @@ A prose "fetch from Scryfall" reminder has repeatedly failed to stop a recalled-
 python scripts/audit_card_costs.py
 ```
 
-It fetches every costed `cards.json` entry's `mana_cost`/`cmc` from Scryfall and reports any divergence (and cross-checks `cascade_max_mv == cmc`), exiting non-zero on a mismatch. **Fix every mismatch by pasting the Scryfall value — do not rationalise a difference.** Only proceed when it reports "All mana costs match Scryfall" (cards that 429 are rate-limit transients, not failures; re-run or verify them by hand). Treat a non-zero exit as a hard stop, exactly like a build error.
+It fetches every costed `cards.json` entry's `mana_cost`/`cmc` from Scryfall and reports any divergence (and cross-checks `cascade_max_mv == cmc`). **Fix every mismatch by pasting the Scryfall value — do not rationalise a difference.** Treat a non-zero exit as a hard stop, exactly like a build error. Read the exit code, not the prose:
+
+| rc | meaning | what to do |
+|----|---------|------------|
+| 0 | every card resolved and matched | proceed |
+| 1 | a real mismatch | fix cards.json from the Scryfall value |
+| 2 | **DID-NOT-RUN** — some cost was never compared (Scryfall 429/timeout/unreachable, or nothing resolved at all) | **re-run when the limit clears.** Nothing is known to be wrong, and nothing is known to be right |
+
+**A 429 is NOT a transient to wave off — it is an unverified card.** This paragraph used to say the
+opposite ("cards that 429 are rate-limit transients, not failures"), and that instruction is how a
+real miscost could hide indefinitely: an unresolved card did not move the exit code, so a fully
+rate-limited run printed "All mana costs match Scryfall" and exited 0 having compared **nothing**.
+On 2026-09-27 two concurrent `verify_deck` runs of the same deck at the same commit disagreed — one
+FAIL, one PASS — purely on which had been rate-limited. Running two networked audits at once is
+itself enough to cause it, so **space them out**. The audit now exits 2 rather than claiming a clean
+bill of health, and prints a `NOT COMPARED` block naming each unverified card; `verify_deck`'s
+`card_costs` gate reports that as `cost audit INCOMPLETE`. See
+`docs/design/card-costs-audit-adventure-and-false-green.md`. If you genuinely cannot get a clean
+run, verify the affected cards **by hand** and say which ones — never record a rate-limited run as a
+pass.
 
 **Also reconcile the non-cost fields (`scripts/audit_card_fields.py`, workstream ②).** The cost audit only checks cost/cmc; `audit_card_fields.py` extends the same reality-diff to **P/T, types/subtypes/supertypes, keywords (all HARD)** and the **verbatim `oracle_text` (advisory — catches the Irencrag "Add six {R}" fabrication class)**. It diffs cards.json against a **committed** Scryfall snapshot (`src/cards/data/scryfall_reference.json`), so it is fast, offline, and deterministic once the snapshot exists:
 ```
