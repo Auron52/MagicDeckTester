@@ -265,6 +265,10 @@ enum Slot : int
     PIRATES_CAST_ORDER,       // MTG_PIRATES_CAST_ORDER    the USER-reviewed full Pirates cast order (see PiratesProvider::CastOrderRank; ADOPTED default ON 2026-09-27)
     PAYABLE_ORDER,            // MTG_PAYABLE_ORDER         the cast order is kept unless it projects UNPAYABLE (reveal-aware: a Daring Buccaneer's reveal leaves with the cards cast before it); then the maker hoist, then the nearest payable permutation of the same casts (ADOPTED default ON 2026-09-27)
     PD_SECOND_MAIN,           // MTG_PD_SECOND_MAIN        Prevent Damage: a symmetric sweeper (Pyrohemia / Rolling Earthquake) opens the searched SECOND main -- attack first, then sweep (PROVISIONAL default ON 2026-09-27; Stage 5 A/B prices it, m2 measured 4.25x elsewhere)
+    PD_DINA_LETHAL_GATE,      // MTG_PD_DINA_LETHAL_GATE   Prevent Damage: Dina's sac-pump is offered to the search only when an optimistic bound says it closes the game THIS turn (PROVISIONAL default ON 2026-09-27; a slot so the Stage 5 A/B pools both arms in one batch)
+    PD_DUP_LEGEND,            // MTG_PD_DUP_LEGEND         Prevent Damage: a duplicate Vito / Dina (dies to the legend rule on resolution) is offered only when its CAST can pay off -- a damaging cast trigger (Spellshock) with a gain engine (Tamanoa / Purity) on board or in hand -- or its entry/death has upside. Default ON (a dominated-cast prune); =0 = the generic whitelist only
+    PD_SELF_LETHAL_GUARD,     // MTG_PD_SELF_LETHAL_GUARD  Prevent Damage: never offer a cast plan whose first land tap dies to Manabarbs, nor a Rolling Earthquake whose X reaches our own life (no Purity) -- both lose (or at best draw) at once (default ON)
+    PD_LEAF_OWN_LIFE,         // MTG_PD_LEAF_OWN_LIFE      Prevent Damage: the no-win leaf tie-break also prices OUR life, strictly under the opponent-life term (life is this deck's fuel: pain, Spellshock and Manabarbs spend it). Stage 5 lever; see PreventDamageProvider::NoWinLeafPricesOwnLife
     COUNT
 };
 
@@ -496,6 +500,10 @@ inline const char* Name(int slot)
         "MTG_PIRATES_CAST_ORDER",
         "MTG_PAYABLE_ORDER",
         "MTG_PD_SECOND_MAIN",
+        "MTG_PD_DINA_LETHAL_GATE",
+        "MTG_PD_DUP_LEGEND",
+        "MTG_PD_SELF_LETHAL_GUARD",
+        "MTG_PD_LEAF_OWN_LIFE",
     };
     // The enum and this table are ONE mapping split across two lists: a slot added to one and not
     // the other silently shifts every lever after it (a manifest asking for lever X would set Y).

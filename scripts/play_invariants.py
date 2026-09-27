@@ -55,6 +55,9 @@ KNOWN_TYPES = {
     # so the generic fallback would decline every cast and diverge from autonomous play) and
     # Creative Technique's demonstrate yes/no (generic heuristic_default path).
     "free_cast", "demonstrate",
+    # tutor pick at RESOLUTION (main.cpp WriteTutorDecisionJson): every tutor CAST since 543f540d
+    # (2026-09-10) and a tutor ETB off a put. Single int, engine pick exposed as heuristic_default.
+    "tutor_etb",
 }
 D_START, D_END = "<<<CLAUDE_DECISION>>>", "<<<END_DECISION>>>"
 R_START, R_END = "<<<CLAUDE_RESULT>>>", "<<<END_RESULT>>>"
@@ -218,6 +221,18 @@ def drive_game(deck, profile, seed, gi, max_turns, reveal, determinism_samples=3
             # strictly increasing but legitimately non-contiguous. An untruncated menu must still
             # be exactly 0..n-1.
             truncated = isinstance(obj.get("plans_total"), int) and obj["plans_total"] > len(plans)
+            # A COLLAPSED menu (`plans_hidden` > 0: sac-loop bundles, the pod fan, the tutor/wish
+            # cast fan folded to one entry -- main.cpp hide_bundle) keeps REAL engine indices too,
+            # so it is strictly increasing with gaps; its indices must still fit inside
+            # emitted + hidden (the engine's own plan count).
+            hidden = obj.get("plans_hidden") if isinstance(obj.get("plans_hidden"), int) else 0
+            if hidden > 0 and not truncated:
+                top = max((p.get("index", -1) for p in plans if isinstance(p.get("index"), int)),
+                          default=-1)
+                if top >= len(plans) + hidden:
+                    flags.append(f"collapsed menu index {top} beyond emitted+hidden "
+                                 f"{len(plans) + hidden} at turn {obj.get('turn')}")
+                truncated = True   # strictly-increasing check below
             prev_idx = -1
             for i, p in enumerate(plans):
                 idx = p.get("index")

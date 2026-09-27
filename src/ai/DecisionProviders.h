@@ -309,6 +309,22 @@ public:
                "reach, and our own death, before it can be sound." }; }
     const char* Name() const override { return "PreventDamage"; }
     bool SelfDamageUseful(const GameState& s, int controller) const override;
+    // Our life is this deck's fuel (every tap and cast can cost it), so a no-win leaf that ties on
+    // opponent life prefers the line that kept more of it. MTG_PD_LEAF_OWN_LIFE; see the base hook.
+    bool NoWinLeafPricesOwnLife() const override;
+    // Manabarbs / Earthquake suicide guards (MTG_PD_SELF_LETHAL_GUARD, default ON): see the base
+    // hook and XCandidates. Rules-derived dominance prunes, not judgement.
+    bool GuardsSelfLethalPayment() const override;
+    // A second Vito / Dina dies to the legend rule on resolution. The generic prune only covers the
+    // enter-inert TEMPLATES, and both are `custom`, so a duplicate was always offered -- including to
+    // the greedy rollout, which took it (measured, Stage 5b s14001 gi196: {2}{B} + Spellshock 2 +
+    // Citadel 3 + Ancient Tomb 2 = 7 life for a card that died at once, 8 -> 1 life, then locked out
+    // of every cast for three turns). The cast is dominated unless the CAST itself pays: a damaging
+    // cast trigger (Spellshock) turned into a lifegain event by a gain engine (Tamanoa / Purity) --
+    // counted on board OR in hand, generously, since this plan may cast them first -- or the entry /
+    // death has upside (the base helper). MTG_PD_DUP_LEGEND (default ON; =0 = generic only).
+    bool OfferDuplicateLegendCast(const GameState& s, int controller,
+                                  const CardDefinition& def) const override;
     // 20 (was 16 in phase I1, sized for Living Wish's 13-name sideboard): Beseech the Queen ("a card
     // with mana value <= lands you control") reaches EVERY distinct name in the library -- 19 in
     // this list once four lands are out -- so any smaller width would leave names unsearchable. A

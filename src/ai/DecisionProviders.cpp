@@ -9850,6 +9850,58 @@ bool PreventDamageProvider::SelfDamageUseful(const GameState& s, int controller)
     return dmgev::SelfDamageGainEngine(s, controller);
 }
 
+bool PreventDamageProvider::NoWinLeafPricesOwnLife() const
+{
+    static const bool s_on = EnvOn("MTG_PD_LEAF_OWN_LIFE");
+    return heurarm::Flag(heurarm::PD_LEAF_OWN_LIFE, s_on);
+}
+
+bool PreventDamageProvider::GuardsSelfLethalPayment() const
+{
+    static const bool s_on = EnvOn("MTG_PD_SELF_LETHAL_GUARD", true);
+    return heurarm::Flag(heurarm::PD_SELF_LETHAL_GUARD, s_on);
+}
+
+bool PreventDamageProvider::OfferDuplicateLegendCast(const GameState& s, int controller,
+                                                     const CardDefinition& def) const
+{
+    if (!DeckProvider::OfferDuplicateLegendCast(s, controller, def)) { return false; }
+    static const bool s_env = EnvOn("MTG_PD_DUP_LEGEND", true);
+    if (!heurarm::Flag(heurarm::PD_DUP_LEGEND, s_env)) { return true; }
+    if (!def.card.HasSupertype(Supertype::Legendary) || !def.card.IsCreature()) { return true; }
+    bool dup = false;
+    for (const Permanent& p : s.battlefield)
+    {
+        if (p.controller_index == controller && p.card.m_name == def.card.m_name) { dup = true; break; }
+    }
+    if (!dup) { return true; }
+    if (DuplicateEntryOrDeathHasUpside(s, controller, def)) { return true; }
+    // A hand card only counts if this turn's mana could cast it AND the duplicate (the one line that
+    // needs it: cast the engine, then the duplicate for its trigger). A total-mana bound, so it can
+    // only over-offer; without it a Tamanoa stuck in hand re-opened the very line this prunes
+    // (gi196 T6: 3 mana, Tamanoa costs 4).
+    ManaPool pool = AvailableManaPool(s);
+    pool.AddPool(s.floating_mana);
+    const int budget = pool.Total() - def.card.m_mana_cost.ManaValue();
+    bool shock = false, engine = false;
+    auto scan = [&](const CardDefinition* d, bool in_hand)
+    {
+        if (d == nullptr) { return; }
+        if (in_hand && d->card.m_mana_cost.ManaValue() > budget) { return; }
+        if (d->params.on_cast_trigger_damage > 0) { shock = true; }
+        if (d->params.noncreature_damage_lifegain || d->params.prevent_noncombat_to_self_gain)
+        { engine = true; }
+    };
+    for (const Permanent& p : s.battlefield)
+    {
+        if (p.controller_index == controller)
+        { scan(CardDatabase::Instance().LookupCached(p.card), false); }
+    }
+    for (const auto& c : s.players[controller].hand)
+    { scan(CardDatabase::Instance().LookupCached(c), true); }
+    return shock && engine;
+}
+
 std::vector<int> PreventDamageProvider::XCandidates(const GameState& s, const CardDefinition& def,
                                                    int max_affordable) const
 {
@@ -9864,6 +9916,16 @@ std::vector<int> PreventDamageProvider::XCandidates(const GameState& s, const Ca
         if (d != nullptr && d->params.on_cast_trigger_damage > 0) { cast_trigger = true; break; }
     }
     if (!cast_trigger) { xs.erase(xs.begin()); }
+    // SELF-LETHAL X (MTG_PD_SELF_LETHAL_GUARD): the quake hits us for X in the SAME event it hits the
+    // opponent, and the SBA runs before any Tamanoa gain -- so X >= our life is a loss, or at best a
+    // DRAW when it also kills the opponent. Never a win, so dominated by casting smaller or not at all.
+    // The PingAllSelfSafe twin for Pyrohemia. Life read at enumeration (a gain earlier in the same plan
+    // is not credited -- the same approximation PingAllSelfSafe makes). Purity prevents it: no cap.
+    if (GuardsSelfLethalPayment() && !dmgev::PurityProtects(s, s.active_player_index))
+    {
+        const int life = s.players[s.active_player_index].life;
+        xs.erase(std::remove_if(xs.begin(), xs.end(), [life](int x) { return x >= life; }), xs.end());
+    }
     return xs;
 }
 
@@ -9872,7 +9934,8 @@ bool PreventDamageProvider::FodderSacUseful(const GameState& s, const Permanent&
 {
     if (!sd.params.sac_outlet_self_pump_power_from_victim) { return true; }
     // MTG_PD_DINA_LETHAL_GATE (DEFAULT ON; =0 = the attack-only gate, the A/B arm).
-    static const bool s_lethal_gate = EnvOn("MTG_PD_DINA_LETHAL_GATE", true);
+    static const bool s_lethal_gate_env = EnvOn("MTG_PD_DINA_LETHAL_GATE", true);
+    const bool s_lethal_gate = heurarm::Flag(heurarm::PD_DINA_LETHAL_GATE, s_lethal_gate_env);
     const int me = s.active_player_index;
     if (src.tapped || !CanAttackFull(src, s.battlefield, me)) { return false; }
     if (!s_lethal_gate) { return true; }

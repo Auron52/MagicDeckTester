@@ -9277,12 +9277,12 @@ inline void PerformDamageAllCreatures(GameState& state, int controller,
 namespace PdStats
 {
     enum Site { Bilbo, ShriekmawOpp, ShriekmawOwn, SlimeOwn, EtbRemoved, WitnessReturn, Eternalize,
-                Transmute, DinaPump, kSites };
+                Transmute, DinaPump, OwnDeath, kSites };
     inline const char* Name(int i)
     {
         static const char* k[] = { "bilbo_activation", "shriekmaw_kills_opp", "shriekmaw_kills_own",
                                    "slime_destroys_own", "etb_no_target", "witness_return",
-                                   "eternalize", "transmute", "dina_pump" };
+                                   "eternalize", "transmute", "dina_pump", "own_death" };
         return k[i];
     }
     inline bool Enabled() { static const bool v = EnvOn("MTG_PD_STATS"); return v; }

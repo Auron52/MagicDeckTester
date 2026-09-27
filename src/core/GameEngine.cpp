@@ -156,6 +156,27 @@ void GameEngine::RunTurn(GameState& state)
 // One turn, entered at `from`. NewTurn is the whole turn (the only entry the real game uses);
 // every later entry finishes a turn a rollout was launched part-way through. The step order and
 // the early-outs are identical either way -- this is a resume point, not a variant turn.
+// Diagnostic only (MTG_PD_STATS=1): count an own death and, for the REAL game, name its turn, so a
+// sweep can say how often the executor actually killed us -- the batch's [win] line reads -1 for a
+// death and for an ordinary no-win alike. No behaviour.
+static void NoteOwnDeath(const GameState& state)
+{
+    PdStats::Count(PdStats::OwnDeath);
+    // g_real_resolution: GameEngine also plays the mulligan-bottoming TRIAL playouts
+    // (AIEngine::RolloutWinTurn), whose deaths are hypothetical -- print only the real game's.
+    if (PdStats::Enabled() && g_real_resolution)
+    {
+        // The job's per-slot lever overrides (-1 unset / 0 / 1), so a pooled A/B can attribute a
+        // death to its arm: the same seed runs in every arm.
+        std::string arm;
+        for (int i = heurarm::PD_SECOND_MAIN; i < heurarm::COUNT; ++i)
+        { arm += std::to_string(static_cast<int>(heurarm::t_arm[static_cast<std::size_t>(i)])) + ","; }
+        std::fprintf(stderr, "[pd-own-death] seed=%llu turn=%d life=%d decked=%d arm=%s\n",
+                     static_cast<unsigned long long>(state.game_seed), state.turn_number,
+                     state.ActivePlayer().life, state.player_lost_on_draw ? 1 : 0, arm.c_str());
+    }
+}
+
 void GameEngine::RunTurnFrom(GameState& state, ResumeAt from)
 {
     const int at = static_cast<int>(from);
@@ -180,7 +201,8 @@ void GameEngine::RunTurnFrom(GameState& state, ResumeAt from)
     // that killed us ends the game here (CR 704.5a), before combat could gain the life back
     // (a lifelinking Faithmender) or deal the opponent a now-meaningless lethal. PlayOutFrom then
     // reads HasLost and returns the loss. The rollout's twin is in SimulateToEndImpl.
-    if (state.own_death_live && !CheckWinCondition(state) && SelfHasLost(state)) { return; }
+    if (state.own_death_live && !CheckWinCondition(state) && SelfHasLost(state))
+    { NoteOwnDeath(state); return; }
     if (at <= static_cast<int>(ResumeAt::Combat))
     {
         CombatPhase(state);
@@ -195,7 +217,8 @@ void GameEngine::RunTurnFrom(GameState& state, ResumeAt from)
         if (CheckWinCondition(state)) { return; }
     }
     if (at <= static_cast<int>(ResumeAt::Main2)) { MainPhase(state, /*is_pre_combat=*/false); }
-    if (state.own_death_live && !CheckWinCondition(state) && SelfHasLost(state)) { return; }
+    if (state.own_death_live && !CheckWinCondition(state) && SelfHasLost(state))
+    { NoteOwnDeath(state); return; }
     if (at <= static_cast<int>(ResumeAt::End))   { EndStep(state); }
     CleanupStep(state);
     // The passive opponent's notional draw for THEIR turn, which falls between ours (see

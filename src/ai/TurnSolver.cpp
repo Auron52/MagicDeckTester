@@ -5109,6 +5109,15 @@ inline long long Quantity(const GameState& state)
     {
         q -= 1000000000000LL - static_cast<long long>(state.inf_life_turn) * 1000000000LL;
     }
+    // OUR life, for a deck whose life is a spendable resource (DecisionProvider::
+    // NoWinLeafPricesOwnLife; default OFF, so every other deck is byte-identical). Clamped to
+    // [0, 999] and weighted 1000, so it sits strictly UNDER one point of opponent life and, like the
+    // development terms below, only orders positions that tie on it.
+    if (ResolveProvider(state).NoWinLeafPricesOwnLife())
+    {
+        const int mine = std::clamp(state.players[state.active_player_index].life, 0, 999);
+        q -= static_cast<long long>(mine) * 1000LL;
+    }
     // Secondary terms sit strictly UNDER the life term (a board count cannot reach 1000), so life
     // always outranks development -- these only order positions the life term ties.
     if (TbBoard() || TbPerms() || TbNonland())
@@ -26227,6 +26236,11 @@ TurnSolver::Plan TurnSolver::SolveUncached(const GameState& state, bool is_pre_c
         // Eidolon-style on-cast triggers go on top of the spell being cast (CR 603), so they
         // resolve BEFORE the spell. A plan that kills us via self-damage cannot win.
         if (dmgev::CastTriggerBill(state, self_damage, self_damage_max) >= ap.life) { return; }
+        // ...and a plan whose FIRST land tap already kills us (Manabarbs at low life) cannot win
+        // either. Provider-gated (GuardsSelfLethalPayment, default off) and armed-only.
+        if (combined.ManaValue() > static_cast<int>(state.floating_mana.Total())
+            && ResolveProvider(state).GuardsSelfLethalPayment()
+            && dmgev::FirstLandTapKills(state, state.active_player_index)) { return; }
 
         // FILL a scaled Magma cast UP from this plan's LEFTOVER mana (spend-all; the searched Crackle {X}
         // already took its 3-mana chunks, so the surplus is Magma's sub-chunk remainder). At most one Magma
@@ -36869,6 +36883,11 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
         }
 
         if (dmgev::CastTriggerBill(state, self_damage, self_damage_max) >= ap.life)
+        { _ct.label = "self-damage"; return; }
+        // Lockstep twin of Solve::consider's first-land-tap guard (see there).
+        if (combined.ManaValue() > static_cast<int>(state.floating_mana.Total())
+            && ResolveProvider(state).GuardsSelfLethalPayment()
+            && dmgev::FirstLandTapKills(state, state.active_player_index))
         { _ct.label = "self-damage"; return; }
 
         // FILL a scaled Magma cast UP from this plan's LEFTOVER mana (spend-all; the searched Crackle {X}
@@ -53185,7 +53204,11 @@ TurnSolver::Plan TurnSolver::SolveWithLookahead(const GameState& state, bool is_
             {
                 std::cerr << "  " << PlanDesc(plan)
                           << "  val=" << plan.value
-                          << "  win=" << win_turn << "\n";
+                          << "  win=" << win_turn;
+                // The graded no-win leaf (GradesNoWinLeaf) decides every equal-win-turn tie, so a
+                // trace that omits it cannot say why a no-win plan won (Prevent Damage 5b, g196).
+                if (leaf_tb != leafeval::kInvalid) { std::cerr << "  tb=" << leaf_tb; }
+                std::cerr << "\n";
             }
             // Tie-break. The primary key is unchanged -- a win inside the horizon always beats a
             // no-win. What changes (only with a leaf lever on) is the EQUAL case: where both lines

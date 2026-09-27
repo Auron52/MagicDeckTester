@@ -2067,6 +2067,18 @@ static void WriteDecisionJson(std::ostream& os, const GameState& s,
     if (emit_chosen_extra) { emit_plan(static_cast<size_t>(chosen_index), true); }
     os << "  ],\n";
     if (plans.size() > n_emit) { os << "  \"plans_total\": " << plans.size() << ",\n"; }
+    // COLLAPSED, NOT TRUNCATED: under the cap, the display collapses above (hide_bundle -- sac-loop
+    // bundles, the pod fan, the tutor/wish cast fan) still drop plans from the menu, and the
+    // survivors keep their REAL engine indices, so the list has gaps by design. Say how many were
+    // folded so a consumer can tell a legitimate gap from an emission bug (play_invariants.py
+    // checks emitted + hidden == the engine's plan count). Absent when nothing was hidden, so every
+    // menu without a collapse is byte-identical; the uncapped reference checker never sees it.
+    if (plans.size() <= n_emit)
+    {
+        size_t hidden = 0;
+        for (char h : hide_bundle) { hidden += h ? 1 : 0; }
+        if (hidden > 0) { os << "  \"plans_hidden\": " << hidden << ",\n"; }
+    }
     // THE MENU IS SHORTER THAN THE BOARD ALLOWS, AND THE CLIENT IS TOLD. `plans_total` above says
     // "the list you got is a top slice of the list the engine built"; this says "the list the
     // engine BUILT is itself a bounded slice of the legal plan space", which is a different and

@@ -378,6 +378,31 @@ inline int CastTriggerBill(const GameState& s, int sum, int max_single)
     return CountTamanoa(s, ctrl) > 0 ? max_single : sum;
 }
 
+// Does the FIRST land we tap for mana this payment kill us? Manabarbs ("whenever a player taps a
+// land for mana, deals 1 damage to that player", ANY controller's copy) resolves each instance as its
+// own damage event with an SBA check before its Tamanoa gain -- so with a Tamanoa out the first 1-point
+// hit must fit under our life, and without one every instance of that one tap lands first. The land's
+// own pain is ignored (a painless {C} mode may exist), so this is a LOWER bound on the bill: true
+// means certain death on the first tap, never a guess. Purity prevents it all. A non-land mana source
+// we control (a dork, a rock) could pay without tapping a land, so any untapped one voids the claim.
+// Floating mana is the caller's to net out. Armed boards only.
+inline bool FirstLandTapKills(const GameState& s, int ctrl)
+{
+    if (!s.dmg_events_armed || PurityProtects(s, ctrl)) { return false; }
+    int amts[16];
+    const int n = ManabarbsAmounts(s, amts, 16);
+    if (n == 0) { return false; }
+    for (const Permanent& p : s.battlefield)
+    {
+        if (p.controller_index != ctrl || p.tapped || p.card.IsLand()) { continue; }
+        const CardDefinition* d = Def(p);
+        if (d && !d->params.produces.empty()) { return false; }
+    }
+    int bill = 0, first = 0;
+    for (int i = 0; i < n; ++i) { bill += amts[i]; first = std::max(first, amts[i]); }
+    return (CountTamanoa(s, ctrl) > 0 ? first : bill) >= s.players[ctrl].life;
+}
+
 // RULES SAFETY of paying with pain, for a whole payment: even if EVERY pain land we can still tap in
 // this payment were tapped in its damaging mode, the pain alone must not take us to 0 before the
 // Tamanoa triggers resolve (the SBA runs first). Purity makes it always safe. Evaluated on the

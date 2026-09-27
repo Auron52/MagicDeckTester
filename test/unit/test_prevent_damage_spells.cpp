@@ -421,3 +421,79 @@ TEST_CASE("Green Sun's Zenith: the X axis reaches Dina at X = 2 (green), never V
     for (const Card& x : after.players[0].library) { if (x.m_name.str() == "Green Sun's Zenith") { in_lib = true; } }
     CHECK(in_lib);
 }
+
+// ---- Stage 5 verification guards (2026-09-27) ---------------------------------------------------
+// Found by reading real games (analysis ledger, "Stage 5 -- verification"): the search committed a
+// suicide Rolling Earthquake at 1 life under Manabarbs, and burned 7 life on a second Vito that the
+// legend rule killed on resolution. All three are dominance prunes derived from the rules.
+
+TEST_CASE("Stage 5: Rolling Earthquake's X never reaches our own life; Purity lifts the cap")
+{
+    GameState s = Board2();
+    s.players[0].life = 3;
+    CHECK(Prov2().XCandidates(s, D("Rolling Earthquake"), 5) == std::vector<int>{1, 2});
+    Put2(s, "Purity");
+    CHECK(Prov2().XCandidates(s, D("Rolling Earthquake"), 5) == std::vector<int>{1, 2, 3, 4, 5});
+}
+
+TEST_CASE("Stage 5: the first land tap under Manabarbs kills -- per event with Tamanoa, summed without")
+{
+    GameState s = Board2();
+    Put2(s, "Manabarbs");
+    s.players[0].life = 1;
+    CHECK(dmgev::FirstLandTapKills(s, 0));
+    s.players[0].life = 2;
+    CHECK_FALSE(dmgev::FirstLandTapKills(s, 0));
+    Put2(s, "Manabarbs", /*controller=*/1);        // "whenever a PLAYER taps a land": theirs hits us too
+    CHECK(dmgev::FirstLandTapKills(s, 0));         // 1 + 1 before any gain, no Tamanoa
+    Put2(s, "Tamanoa");
+    CHECK_FALSE(dmgev::FirstLandTapKills(s, 0));   // each 1-point barb is gained back before the next
+    s.players[0].life = 1;
+    CHECK(dmgev::FirstLandTapKills(s, 0));         // ...but the first one still kills at 1 (SBA first)
+    Put2(s, "Purity");
+    CHECK_FALSE(dmgev::FirstLandTapKills(s, 0));   // prevented
+    GameState u = Board2(/*armed=*/false);
+    Put2(u, "Manabarbs");
+    u.players[0].life = 1;
+    CHECK_FALSE(dmgev::FirstLandTapKills(u, 0));   // unarmed board: the legacy model, never asked
+}
+
+TEST_CASE("Stage 5: at 1 life under Manabarbs the enumerator offers no cast at all")
+{
+    GameState e = Board2();
+    for (int k = 0; k < 4; ++k) { Put2(e, "Mountain"); }
+    Put2(e, "Manabarbs");
+    Hand2(e, "Spellshock");
+    for (int k = 0; k < 10; ++k) { Lib2(e, "Mountain"); }
+    auto casts = [](const GameState& g)
+    {
+        int n = 0;
+        for (const TurnSolver::Plan& p : TurnSolver::EnumerateMainPlans(g, /*is_pre_combat=*/true))
+        { n += static_cast<int>(p.actions.size()); }
+        return n;
+    };
+    e.players[0].life = 5;
+    CHECK(casts(e) > 0);
+    e.players[0].life = 1;
+    CHECK(casts(e) == 0);
+}
+
+TEST_CASE("Stage 5: a duplicate Vito is offered only when its CAST can pay (Spellshock + a gain engine)")
+{
+    GameState s = Board2();
+    const CardDefinition& vito = D("Vito, Thorn of the Dusk Rose");
+    CHECK(Prov2().OfferDuplicateLegendCast(s, 0, vito));           // no copy out: an ordinary cast
+    Put2(s, "Vito, Thorn of the Dusk Rose");
+    CHECK_FALSE(Prov2().OfferDuplicateLegendCast(s, 0, vito));     // dies to the legend rule, for nothing
+    Put2(s, "Spellshock");
+    CHECK_FALSE(Prov2().OfferDuplicateLegendCast(s, 0, vito));     // its trigger only hurts us
+    Hand2(s, "Tamanoa");
+    CHECK_FALSE(Prov2().OfferDuplicateLegendCast(s, 0, vito));     // engine in hand, no mana for both
+    for (int k = 0; k < 7; ++k) { Put2(s, "Mountain"); }
+    CHECK(Prov2().OfferDuplicateLegendCast(s, 0, vito));           // Tamanoa then the duplicate: affordable
+    GameState t = Board2();
+    Put2(t, "Vito, Thorn of the Dusk Rose");
+    Put2(t, "Spellshock");
+    Put2(t, "Tamanoa");
+    CHECK(Prov2().OfferDuplicateLegendCast(t, 0, vito));           // the trigger becomes a drain
+}

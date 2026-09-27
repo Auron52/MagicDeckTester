@@ -799,6 +799,24 @@ public:
     //      number: dragonstorm's case was filed as "survives 20x" when it recovers at 100x.
     virtual bool GradesNoWinLeaf() const { return true; }
 
+    // NoWinLeafPricesOwnLife -- DEFAULT OFF (every deck byte-identical). When the graded no-win leaf
+    // above is live, also rank equal-opponent-life positions by OUR life, strictly UNDER the
+    // opponent-life term (never outranks one point of it). For a deck whose own life is a
+    // spendable RESOURCE -- pain lands, Spellshock and Manabarbs spend it, and at 1-2 life every
+    // further cast is barred by the own-death guards -- the damage-race proxy alone cannot tell a
+    // hopeless line that burned 7 life for nothing from one that kept it (Prevent Damage Stage 5b,
+    // s14001 gi196: a second Vito into the legend rule, 8 -> 1 life, then locked out for 3 turns;
+    // the two lines tied on opponent life and `plan.value` preferred the cast).
+    virtual bool NoWinLeafPricesOwnLife() const { return false; }
+
+    // GuardsSelfLethalPayment -- DEFAULT OFF (byte-identical). On an armed damage-event board, drop a
+    // cast plan whose FIRST land tap certainly kills us (dmgev::FirstLandTapKills: Manabarbs at low
+    // life). Such a plan cannot win -- we lose at the first tap, before any drain can land -- so it
+    // is dominated by passing. Measured need (Prevent Damage Stage 5, s20001 gi72): at 1 life under
+    // Manabarbs EVERY cast is a suicide, the greedy rollout took one each turn, so every leaf read
+    // kOwnDeath, the tie-break went blind and plan.value committed a real suicide Earthquake.
+    virtual bool GuardsSelfLethalPayment() const { return false; }
+
     // PhaseFilterRootTurnOnly -- per-deck ROOT-TURN AUTHORITY for the pre-combat Main2 filter
     // (the condemnation arc's lesson applied to the phase split, 2026-08-21): the filter fires
     // at REAL decision turns (executor play + the search's root turn, incl. its interior m2 and
