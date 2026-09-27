@@ -1,0 +1,44 @@
+{
+  "deck": "decks/WhiteKnights/WhiteKnights.cod",
+  "turn": 4,
+  "on_the_play": true,
+  "active_life": 20,
+  "opponent_life": 20,
+  "library_top": [
+    "Plains",
+    "Venerable Knight",
+    "Plains",
+    "Plains",
+    "Plains",
+    "Plains"
+  ],
+  "library_filler": "Plains",
+  "library_size": 30,
+  "depth": 5,
+  "budget_ms": 20,
+  "max_turns": 9,
+  "log_out": "logs/play/contender_same_turn_deploy_d5.json",
+  "_comment": "WhiteKnights (2026-09-27). The SEARCHED-DEPTH twin of whiteknights_contender_same_turn_deploy (same board, depth 5, the smoke tier's d5 budget). Pins that Acclaimed Contender's dig converts at searched depth too: cast Contender for {2}{W}, dig, take the Knight, cast it with the fourth Plains the same main phase. Reachable at depth > 0 since MTG_BP_ETB_DIG (an ETB dig opens the put-in-hand breakpoint in both worlds, so the acquired card is castable the turn it is dug) and MTG_BP_RECORD_VIAL, and hosted at the node under MTG_BP_HAND_ENTRY + MTG_BP_NODE_S10 (default ON 2026-09-27). ASSERT ON OPPONENT LIFE, not the win turn, for the same reason as the d0 fixture: both behaviours win on turn 7, and the same-turn deploy is worth exactly the 2 extra damage the 2/1's extra attack deals, -3 here versus -1 when the deploy is declined. This was an OPEN DEFECT at every searched depth until 2026-09-27 (docs/design/contender-same-turn-deploy-searched.md); this fixture is the guard that it stays closed.",
+  "battlefield": [
+    {
+      "name": "Plains"
+    },
+    {
+      "name": "Plains"
+    },
+    {
+      "name": "Plains"
+    },
+    {
+      "name": "Plains"
+    },
+    {
+      "name": "Venerable Knight"
+    }
+  ],
+  "hand": [
+    "Acclaimed Contender"
+  ],
+  "expect_win_turn": 7,
+  "expect_opponent_life": -3
+}

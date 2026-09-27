@@ -1,10 +1,12 @@
 # Breakpoints should key on CARDS ENTERING HAND, not on what was cast
 
-**Status: STEPS 1 AND 2 BUILT 2026-09-22 — step 1 ADOPTED (byte-identical), step 2 DEFAULT OFF
-pending a held-out confirm. Step 3's hazard is closed by construction.** See the 2026-09-22 section
-at the end of this document for what was built, what the census measured, and what is owed. The
-text below is the original audit, kept because it is the argument; read the 2026-09-22 section for
-current state, and note that **the audit's "30 sites" undercounted** — see there for why.
+**Status: ADOPTED 2026-09-27 — `MTG_BP_HAND_ENTRY` + `MTG_BP_NODE_S10` DEFAULT ON (`=0` reverts
+either).** Step 1 was adopted byte-identical on 2026-09-22; step 2 sat DEFAULT OFF while its searched
+losses were root-caused (two defects, both fixed on 2026-09-27 — see the two 2026-09-27 sections at
+the end) and was then adopted on the user's "turn it on and evaluate", with the three-tier audit
+recorded in the final section. Step 3's hazard is closed by construction. The text below is the
+original audit, kept because it is the argument; read the dated sections for current state, and note
+that **the audit's "30 sites" undercounted** — see the 2026-09-22 section for why.
 
 USER design direction: *"it makes sense to audit when the draws are happening or perhaps even to go
 so far as designing breakpoints around when we put cards in hand."* This doc is the audit that
@@ -564,3 +566,70 @@ Result: th gi80 T3 in both arms at the shipped budget and b0. Shipped defaults b
 are identical to shipped at b0 -- budget churn. Searched moves on the tier after both fixes:
 faster 5 (knights gi88, melira d5 gi23, whiteknights d3 gi116, d5 gi116, d5 gi66), slower 3 (the
 churn above); aggregate `slower=3 faster=11 equal=83` over the 97 cases.
+
+## 2026-09-27 — ADOPTED: `MTG_BP_HAND_ENTRY` + `MTG_BP_NODE_S10` default ON (USER: "turn it on and evaluate")
+
+Adopted as the measured pair. Cost re-measured on the adoption binary (60 games d3 b10, seed 1001),
+because the +42% quoted earlier was stale -- it predates origin's `MTG_BP_ETB_DIG` (Knights opened
+ZERO searched breakpoints at shipped defaults then; now the cast-Contender dig opens site 10 at
+shipped, 10,867 opens) and predates the window-reset fix above (Treasure Hunt no longer opens
+2,867 spurious site-10 breakpoints at T3):
+
+| arm | Knights interior nodes | avg | Treasure Hunt nodes | avg |
+|---|---|---|---|---|
+| shipped | 65,257 | 4.5333 | 232,465 | 4.0333 |
+| `HAND_ENTRY` | 74,212 (+13.7%) | 4.5333 | 232,465 (+0%) | 4.0333 |
+| `+NODE_S10` | 77,327 (+18.5%) | 4.5333 | 232,493 | 4.0333 |
+| `+ARM_NEW` (not adopted) | 76,439 | 4.5333 | 229,040 | 4.0333 |
+
+Where the remaining Knights cost comes from (`MTG_HAND_ENTRY_CENSUS`): the deck has ONE
+new-material route, Contender's dig. Shipped: 40,974 digs inside a cast apply (armed by ETB_DIG),
+7,603 outside one -- a **Vial-put Contender**, which has no cast window and is exactly the hole
+ETB_DIG's commit names. Under hand-entry the non-empty site-10 lists double (2,937 -> 5,931) and
+outside-cast digs go 7,603 -> 18,821, i.e. the search now values and explores the
+Vial -> Contender -> dig -> deploy line. 62% of the opens are still empty new-only lists (stillborn
+W variants); that is the cheap part `MTG_BP_ARM_NEW` declines (-1.1% nodes, wall clock flat), and
+it stays OFF.
+
+Beyond Knights the flag buys the class the census found in the first place -- activated abilities
+(Pod, Thallid), death triggers, ETBs off puts -- 68-100% of new material in Melira, Fungus and
+Goblins, none of which arms under the cast window alone.
+
+Guard: `test/scenarios/whiteknights_contender_same_turn_deploy_d5.json`, the searched-depth twin
+of the d0 fixture (`expect_opponent_life: -3` at depth 5).
+
+### The adoption audit (each tier run ONCE against the 2026-09-27 rebased GT `a21b790f`, then accepted)
+
+| tier | configs changed | searched slower | searched faster | searched play-changed | d0 slower / faster |
+|---|---|---|---|---|---|
+| smoke (101) | 36 | 3 | 1 | 59 | 36 / 130 |
+| regression (140) | 48 | 1 | 4 | 117 | 61 / 115 |
+| overnight (349) | 149 | 16 | 53 | 915 | 374 / 698 |
+
+Overnight searched moves by deck (191,800 searched games): knights 0 slower / 12 faster, pirates 1 / 13,
+goblins 1 / 5, goblins2hg 0 / 5, knights2hg 0 / 5, pirates2hg 0 / 4, whiteknights 0 / 2,
+whiteknights2hg 0 / 1, melira 6 / 3, hinata 4 / 1, snow 2 / 2, dragons 2 / 0; every other deck 0 / 0.
+The decks the flag was built for (Knights, WhiteKnights, Pirates, Goblins — Vial puts, ETB digs,
+activated abilities) are net faster; the slower side is concentrated in the budget-churn decks
+(Melira, Hinata) at the 10 ms tier budget.
+
+Overnight classifier (each of the 16 at 4x and 16x budget): **9 churn** (dragons gi142/gi284,
+melira ×6, pirates gi169 — all recover to the old turn) and **7 PERSIST**: goblins d5 s7007 gi525
+3→4 (draws diverge from T3), hinata d3 s5005 gi307 5→6 (diverge T5), hinata d5 s5005 gi52 4→5
+(diverge T1), **hinata d3+d5 s6006 gi286 5→6 with IDENTICAL draws** (the one clean like-for-like
+line regression), and **snow d3+d5 s6006 gi52 T8 → unwon** (draws diverge from T6 after a T5 line
+change: Kaldring instead of Boreal Druid). USER ruling 2026-09-27: *"We should be considering this
+deck-by-deck ... We don't want to lose quality on a deck. That said, I don't want to stop for now
+either. The change seems positive, but if there are decks that are overall worse we should pick them
+back up again on Monday."* → adopted; the net-worse decks (hinata +3, melira +3, dragons +2, snow
+2 unwon) are filed in `hand-entry-adoption-deck-followups.md` for 2026-09-28.
+
+Every searched SLOWER game was classified with `test/classify_turn_later.sh <tier>` (re-run at 4x and
+16x budget) and every one is **budget churn**: smoke hinata2hg gi19, melira2hg gi11, melira gi11 (all
+5→6, all recover to 5 at 4x and 16x — the same three games the pre-adoption smoke had already shown
+b0-identical); regression hinata d3 s3003 gi171 (5→7 at 10 ms, **T4** at both 4x and 16x, i.e. the
+new arm finds a line the baseline never reached once it has the budget to finish it). The searched
+FASTER games: smoke melira d5 gi23 6→5; regression knights d3 s2002 gi257 6→5, hinata d3 s2002
+gi122 6→5, hinata2hg d3 s2002 gi25 7→6, pirates d3 s2002 gi104 5→4. The d0 (greedy) rows move both
+ways because the site-10 continuation list changes which greedy first move is taken; d0 is the lighter
+bar and is not a searched result. Overnight: see the row appended below once it landed.

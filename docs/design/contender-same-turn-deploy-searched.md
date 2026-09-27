@@ -159,3 +159,17 @@ coverage, which removes the blind spot that owed item named.
 5. **Follow-up, separable:** give site 10 **node hosting**. The design doc calls it *"the one change with a
    reason to expect a different answer; everything else is re-rolling the same dice."* That is an
    optimisation of the fix, not the fix, and should not gate the correctness change.
+
+## CLOSED 2026-09-27
+
+Reachable at every searched depth now. Two things closed it: origin's `d4ef1f81` (`MTG_BP_ETB_DIG`,
+default ON -- `etb_dig_count` no longer claimed by `ParamKeyedDrawClass`, so site 10's outcome-keyed
+arming fires for the dig in both worlds, and the route is named in `PlanOpensBreakpoint` so the
+continuation is fanned rather than a canon default) and `7ef0734b` (`MTG_BP_RECORD_VIAL`: a
+continuation's Vial put is recorded for the replay -- the executor deployed nothing before). The
+Vial-put Contender (no cast window) is covered by `MTG_BP_HAND_ENTRY`, default ON the same day.
+Knights s1115 d3 b0 (smoke gi114) wins T4 at d3/d5/d7/d9 at shipped defaults; the searched-depth
+fixture `whiteknights_contender_same_turn_deploy_d5.json` asserts `opponent_life: -3` at depth 5.
+The Mirrorwing -0.1266 collision this doc warned about was the OLD route (deleting the claim with
+no clause); the shipped fix adds the clause, and Mirrorwing's smoke/regression/overnight digests
+are unchanged under it (2026-09-27 rebaseline).

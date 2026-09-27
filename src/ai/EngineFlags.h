@@ -717,7 +717,10 @@ inline bool BpPutInHandEnabled()
     return v;
 }
 
-// MTG_BP_HAND_ENTRY=1 -- THE REST OF THE GENERAL RULE (DEFAULT OFF, measuring).
+// MTG_BP_HAND_ENTRY -- THE REST OF THE GENERAL RULE. DEFAULT ON since 2026-09-27 (USER: "we should
+// turn it on and evaluate"); =0 reverts. Adopted together with MTG_BP_NODE_S10 (the node hosts site
+// 10, so a base plan's continuation there is an explicit EMPTY child plus the enumerated list rather
+// than an unchallengeable canon default) -- the pair that was measured.
 //
 // WHAT SITE 10 ALREADY DOES, and what it cannot. BpPutInHandEnabled asks the outcome instead of the
 // card -- but it asks it in ONE window: bracketing a CAST (`hand_at_cast` in the rollout,
@@ -760,13 +763,22 @@ inline bool BpPutInHandEnabled()
 // changed sequence means "ask the exact question". The exact question is HandGainedACard, a content
 // diff on the live state. See the header for the full argument.
 //
-// DEFAULT OFF because arming on every hand entry is STRICTLY MORE armings than today (the design
-// doc's own warning), and a breakpoint that opens is work whether or not it pays. The asymmetry
-// that decides the eventual adoption is the USER's: a missing arm is unreachable at any budget and
-// silent, an unhelpful arm is only cost.
+// It was DEFAULT OFF while measuring, because arming on every hand entry is STRICTLY MORE armings
+// (the design doc's own warning) and a breakpoint that opens is work whether or not it pays. What
+// the measurement found (2026-09-27, all in breakpoints-should-key-on-hand-entry.md and
+// rollout-executor-lockstep.md #9): the searched losses under the flag were two DEFECTS, not the
+// cost -- a continuation's Vial put was never recorded for the replay, and the section window did
+// not reset at inline breakpoints (double-arming site 10) -- and with both fixed no searched smoke
+// loss survives --budget-ms 0. Cost on the adoption binary (60 games d3 b10): Knights +13.7%
+// interior nodes (+18.5% with the node host), Treasure Hunt +0%, avg win turn identical; the smoke
+// tier read faster 5 / slower 3 with all three slower games budget churn. What the flag still buys
+// once MTG_BP_ETB_DIG covers the CAST-Contender dig is the Vial-put Contender in Knights and, the
+// larger case, the activated-ability / trigger / put-ETB entries that are 68-100% of new material in
+// Melira, Fungus and Goblins. The asymmetry that decided it is the USER's: a missing arm is
+// unreachable at any budget and silent, an unhelpful arm is only cost.
 inline bool BpHandEntryEnabled()
 {
-    static const bool v = EnvOn("MTG_BP_HAND_ENTRY");   // DEFAULT OFF (measuring); =1 enables
+    static const bool v = EnvOn("MTG_BP_HAND_ENTRY", true);   // DEFAULT ON (2026-09-27); =0 reverts
     return heurarm::Flag(heurarm::BP_HAND_ENTRY, v);
 }
 

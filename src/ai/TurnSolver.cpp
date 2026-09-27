@@ -12144,10 +12144,11 @@ static int BpNodeSitesBase()
 // [NOHOST] -- and the audit named the caller `apply@FSLineWin`, which IS a hosting call site. It
 // passes nullptr because node_host_here tests PlanOpensBreakpoint & the host set, and site 10 was
 // never in that set. So the plan opens the site (unmarked=0), the caller can host, and the capture is
-// declined purely by the site mask. Default OFF for the A/B.
+// declined purely by the site mask. DEFAULT ON since 2026-09-27, adopted with MTG_BP_HAND_ENTRY (the
+// measured pair; USER: "turn it on and evaluate"); =0 reverts.
 static int BpNodeHostSites()
 {
-    static const bool s10 = EnvOn("MTG_BP_NODE_S10");
+    static const bool s10 = EnvOn("MTG_BP_NODE_S10", true);
     return BpNodeSitesBase() | (s10 ? (1 << 10) : 0);
 }
 
