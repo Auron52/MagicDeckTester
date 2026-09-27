@@ -53,6 +53,7 @@ struct PermPaySnap
     int  depletion;   // first Depletion entry's count; -1 = no Depletion entry
     int  storage;
     bool eaten;       // §2b: marked as sac-outlet fodder by THIS payment attempt (Permanent::pay_sac_eaten)
+    std::uint8_t dmg_mark;   // Prevent Damage: Permanent::mana_tap_mark (0 on every unarmed board)
 };
 
 static const bool g_pay_snap_verify = EnvOn("MTG_PAY_SNAP_VERIFY");
@@ -111,7 +112,8 @@ static void SnapPayFields(const std::vector<Permanent>& bf, std::vector<PermPayS
         int dep = -1;
         for (const Counter& c : bf[i].counters)
         { if (c.type == Counter::Type::Depletion) { dep = c.count; break; } }
-        out[i] = PermPaySnap{ bf[i].tapped, dep, bf[i].storage_counters, bf[i].pay_sac_eaten };
+        out[i] = PermPaySnap{ bf[i].tapped, dep, bf[i].storage_counters, bf[i].pay_sac_eaten,
+                              bf[i].mana_tap_mark };
     }
 }
 
@@ -127,6 +129,7 @@ static void RestorePayFields(std::vector<Permanent>& bf, const std::vector<PermP
         p.tapped           = snap[i].tapped;
         p.storage_counters = snap[i].storage;
         p.pay_sac_eaten    = snap[i].eaten;   // §2b: a failed attempt eats nothing
+        p.mana_tap_mark    = snap[i].dmg_mark; // a failed attempt records no damage event
         if (snap[i].depletion >= 0)
         {
             for (Counter& c : p.counters)
@@ -174,6 +177,7 @@ static void VerifyPaySnapRestore(const std::vector<Permanent>& now,
         if (a.storage_counters != b.storage_counters) { fail(i, "storage_counters"); }
         if (a.storage_hold_this_turn != b.storage_hold_this_turn) { fail(i, "storage_hold_this_turn"); }
         if (a.pay_sac_eaten != b.pay_sac_eaten)       { fail(i, "pay_sac_eaten"); }
+        if (a.mana_tap_mark != b.mana_tap_mark)       { fail(i, "mana_tap_mark"); }
         if (a.garth_chosen_mask != b.garth_chosen_mask) { fail(i, "garth_chosen_mask"); }
         if (a.loyalty != b.loyalty)                   { fail(i, "loyalty"); }
         if (a.loyalty_activated_this_turn != b.loyalty_activated_this_turn) { fail(i, "loyalty_activated_this_turn"); }
@@ -254,7 +258,23 @@ void TapSourceIntoFloat(GameState& state, int active, Permanent& p, const CardDe
     // above. The `produces contains Colorless` half is load-bearing for byte-identity: a
     // painland with no {C} mode (how every painland was modelled before this deck) can still
     // be handed Color::Colorless for a GENERIC pip, and must keep taking its damage there.
-    if (def.params.tap_self_damage > 0)
+    if (state.dmg_events_armed)
+    {
+        // PREVENT DAMAGE (armed only): the tap is a damage EVENT + a land tap. The pain comes off our
+        // life now (unless Purity prevents it) and the triggers are recorded on the permanent for
+        // the payment's flush (core/DamageEvents.h). Same painless-{C} rule as below, except that
+        // a tap_self_damage_any_mode land (Ancient Tomb) hurts in every mode.
+        int pain = 0;
+        if (def.params.tap_self_damage > 0)
+        {
+            bool has_c_mode = false;
+            for (Color pc : EffectiveProducesFor(state, active, def, &p))
+            { if (pc == Color::Colorless) { has_c_mode = true; break; } }
+            pain = dmgev::PainForTap(def, col, has_c_mode);
+        }
+        dmgev::ArmedManaTap(state, active, p, pain);
+    }
+    else if (def.params.tap_self_damage > 0)
     {
         // ONE EffectiveProduces call: it returns a reference into a thread_local buffer that
         // the next call overwrites (see RitualTapAheadIntoFloat's note).
@@ -953,6 +973,7 @@ bool TapForCostSharedOnce(GameState& state, const ManaCost& cost_in, bool for_cr
             if (best_kind == 3)
             {
                 bp.tapped = true;
+                dmgev::MarkLandTap(state, bp);   // Manabarbs: a land tapped for mana (armed only)
                 floating.Add(Color::Colorless, 1);
                 if (available)
                 {
@@ -970,6 +991,7 @@ bool TapForCostSharedOnce(GameState& state, const ManaCost& cost_in, bool for_cr
                 const std::optional<Color> feed = UntapBurstFeedColor(*bdef);
                 const int by = UntapBurstBestYield(state, active, *bdef, /*require_tapped=*/true);
                 bp.tapped = true;
+                dmgev::MarkLandTap(state, bp);   // Manabarbs: a land tapped for mana (armed only)
                 ConsumeFloating(floating, *feed);
                 floating.Add(*feed, by);
                 if (available) { available->Add(*feed, -(by - 1)); }
@@ -1007,6 +1029,7 @@ bool TapForCostSharedOnce(GameState& state, const ManaCost& cost_in, bool for_cr
             }
             for (Color c : bdef->params.produces) { if (ConsumeFloating(floating, c)) { break; } }
             bp.tapped = true;
+            dmgev::MarkLandTap(state, bp);   // Manabarbs: a land tapped for mana (armed only)
             floating.Add(out, 2);
             if (available && available->wild > 0) { --available->wild; }
             return true;
@@ -1055,6 +1078,7 @@ bool TapForCostSharedOnce(GameState& state, const ManaCost& cost_in, bool for_cr
                     || def->params.filter_no_free_colorless   // Astrolabe: no free {C} mode
                     || !usable(p, *def)) { continue; }
                 p.tapped = true;
+                dmgev::MarkLandTap(state, p);   // Manabarbs: a land tapped for mana (armed only)
                 floating.Add(Color::Colorless, 1);
                 if (available)
                 {
@@ -1113,6 +1137,7 @@ bool TapForCostSharedOnce(GameState& state, const ManaCost& cost_in, bool for_cr
             }
             for (Color c : def->params.produces) { if (ConsumeFloating(floating, c)) { break; } }
             p.tapped = true;
+            dmgev::MarkLandTap(state, p);   // Manabarbs: a land tapped for mana (armed only)
             floating.Add(out, 2);
             if (available && available->wild > 0) { --available->wild; }  // filter counted as 1 wild in the pool
             return true;
@@ -1140,6 +1165,7 @@ bool TapForCostSharedOnce(GameState& state, const ManaCost& cost_in, bool for_cr
                 Color took;
                 if (!ConsumeFloatingAny(floating, took)) { continue; }
                 p.tapped = true;
+                dmgev::MarkLandTap(state, p);   // Manabarbs: a land tapped for mana (armed only)
                 for (Color c : def->params.produces) { floating.Add(c, 1); }
                 if (available && available->wild > 0) { --available->wild; }  // ramp filter counted as 1 wild
                 return true;
@@ -1165,6 +1191,7 @@ bool TapForCostSharedOnce(GameState& state, const ManaCost& cost_in, bool for_cr
                 Color took;
                 if (!ConsumeFloatingAny(floating, took)) { continue; }
                 p.tapped = true;
+                dmgev::MarkLandTap(state, p);   // Manabarbs: a land tapped for mana (armed only)
                 floating.Add(needed, 1);
                 if (available && available->wild > 0) { --available->wild; }   // counted as 1 wild
                 return true;
@@ -3338,8 +3365,31 @@ static std::uint64_t ScarceColorHoldMask(const GameState& state, const ManaCost&
 static bool TapForCostSharedImpl(GameState& state, const ManaCost& cost_in, bool for_creature,
                                  ManaPool* available, bool honor_legacy_cco);
 
+// Payment NESTING depth (the hybrid wrapper re-enters TapForCostShared once per colour assignment),
+// so the damage-event flush below runs once, at the OUTERMOST successful exit -- i.e. when the
+// payment has committed. See core/DamageEvents.h.
+static thread_local int t_pay_nest = 0;
+static bool TapForCostSharedDiag(GameState& state, const ManaCost& cost_in, bool for_creature,
+                                 ManaPool* available, bool honor_legacy_cco);
+
 bool TapForCostShared(GameState& state, const ManaCost& cost_in, bool for_creature,
                       ManaPool* available, bool honor_legacy_cco)
+{
+    if (!state.dmg_events_armed)
+    { return TapForCostSharedDiag(state, cost_in, for_creature, available, honor_legacy_cco); }
+    // PREVENT DAMAGE (armed only). The payment's taps recorded their triggers on the permanents
+    // (Permanent::mana_tap_mark); resolve them once the OUTERMOST payment has succeeded -- after the
+    // mana abilities, before the spell resolves, which is where the rules put those triggers (they
+    // go on the stack above the spell being cast). A failed payment restored every mark.
+    ++t_pay_nest;
+    struct NestGuard { ~NestGuard() { --t_pay_nest; } } nest_guard;
+    const bool ok = TapForCostSharedDiag(state, cost_in, for_creature, available, honor_legacy_cco);
+    if (ok && t_pay_nest == 1) { dmgev::FlushDamageEvents(state); }
+    return ok;
+}
+
+static bool TapForCostSharedDiag(GameState& state, const ManaCost& cost_in, bool for_creature,
+                                 ManaPool* available, bool honor_legacy_cco)
 {
     // TEMP DIAGNOSTIC (MTG_TAPDBG, default off): every REAL payment -- cost, outcome, energy delta,
     // which lands went from untapped to tapped. Reads clean because real payments are rare.

@@ -1011,6 +1011,15 @@ INERT_PARAMS = {
     "nth_spell_investigate": "Pirates: mandatory investigate on the Nth spell (Malcolm); the Clue crack surfaces as a main_phase SacDraw plan action via the Clue Token def",
     "reveal_or_pay_subtype": "Pirates: Daring Buccaneer 'reveal a Pirate card from your hand or pay {2}' -- auto-REVEAL whenever possible because paying is STRICTLY DOMINATED (revealing is free; the passive opponent gains nothing from the information; nothing in the engine reads revealed cards or mana spent). WHICH Pirate is revealed is inert (it stays in hand). A human who wants the {2} line can still reach it by casting the last other Pirate first (every cast is priced live). DISCLOSED in 6a",
     "reveal_or_pay_cost": "Pirates: Daring Buccaneer's pay-instead amount ({2}) -- a printed constant of the additional cost, charged automatically only when no reveal is possible; no choice",
+    # ---- Prevent Damage (2026-09-27, phase I1) -- the damage-event / lifegain-replacement core ----
+    "tap_self_damage_any_mode": "Ancient Tomb: the pain applies to its ONLY mana ability ({C}{C}) -- a land property read by the payment, no choice (same class as tap_self_damage)",
+    "noncreature_damage_lifegain": "Tamanoa: automatic 'whenever a noncreature source you control deals damage, you gain that much life' trigger -- no target, no may, no mode",
+    "land_tap_damage_each_player": "Manabarbs: automatic 'whenever a player taps a land for mana' damage trigger to the tapping player -- no target, no may. The damage-event triggers it and Tamanoa create resolve in the one order a player would always take (all lifegain first, then each Manabarbs hit), a CR 603.3b ordering choice that is weakly DOMINANT for survival and never worse for the drain -- disclosed, not surfaced",
+    "prevent_noncombat_to_self_gain": "Purity: a prevention+lifegain REPLACEMENT effect (no stack, no choice)",
+    "lifegain_multiplier": "Rhox Faithmender: lifegain REPLACEMENT (x2), no choice. When two replacements apply (Faithmender + Bilbo) CR 616.1 lets the affected player order them; the engine always takes +1 first, which is strictly better ((a+1)*2 > a*2+1) -- a dominated choice, disclosed",
+    "lifegain_plus": "Bilbo, Birthday Celebrant: lifegain REPLACEMENT (+1), no choice (ordering vs Faithmender: see lifegain_multiplier)",
+    "lifegain_target_opp_loses_that_much": "Vito: 'target opponent loses that much life' -- the only legal target is the one opponent (2HG: one head's worth off the shared pool), so the target is a forced non-choice",
+    "lifegain_each_opp_loses": "Dina: automatic 'each opponent loses 1 life' lifegain trigger -- no target, no may",
 }
 
 # Decisions the human makes by picking among main_phase PLAN VARIANTS or a board-click

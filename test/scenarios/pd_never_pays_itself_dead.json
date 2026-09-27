@@ -1,0 +1,27 @@
+{
+  "_comment": [
+    "Prevent Damage (2026-09-27, phase I1). The Tamanoa ruling: 'if a noncreature source you control",
+    "deals damage to you that drops your life total to 0 or less, you'll lose the game before",
+    "Tamanoa's ability can resolve.' At 1 life with Manabarbs out, ANY land tap is lethal (Manabarbs",
+    "deals 1; the state-based check runs before Tamanoa's trigger), so the sweep must tap NOTHING and",
+    "the engine must not lose. Board: Manabarbs, Tamanoa, Vito (sick; resumed at main 1), a Battlefield",
+    "Forge and a Forest, empty hand. Expect us still at 1 and the opponent untouched, no win. (The",
+    "complementary rules pin -- that paying ourselves to 0 LOSES even with Tamanoa out, and stays lost",
+    "-- is a direct unit test in test/unit/test_prevent_damage.cpp, since the engine never chooses it.)"
+  ],
+  "deck": "decks/Prevent Damage/Prevent Damage.cod",
+  "turn": 4, "on_the_play": true, "active_life": 1, "opponent_life": 20,
+  "resume_at": "main1",
+  "battlefield": [
+    { "name": "Manabarbs" },
+    { "name": "Tamanoa", "sick": true },
+    { "name": "Vito, Thorn of the Dusk Rose", "sick": true },
+    { "name": "Battlefield Forge" }, { "name": "Forest" }
+  ],
+  "hand": [],
+  "library_filler": "Forest", "library_size": 30,
+  "depth": 1, "budget_ms": 50, "max_turns": 4,
+  "expect_active_life": 1,
+  "expect_opponent_life": 20,
+  "expect_no_win": true
+}

@@ -510,6 +510,12 @@ struct CardParams
     // Pain land (e.g. Fiery Islet): tapping this land for mana costs the controller
     // this much life. Applied at tap time in TapForCost / TapForCostDirect.
     int tap_self_damage = 0;
+    // The pain applies to EVERY mode of the land's mana ability, including a {C} one (Ancient
+    // Tomb: "{T}: Add {C}{C}. This land deals 2 damage to you."). Every pain site treats a {C} tap
+    // of a land that HAS a {C} mode as the painless separate ability of a painland (Brushland's
+    // "{T}: Add {C}."), which is right for a painland and wrong for a land whose ONLY ability hurts.
+    // false (default) = the painland reading, so every existing card is unchanged.
+    bool tap_self_damage_any_mode = false;
 
     // Cycling (e.g. Lonely Sandbar, Forgotten Cave, Remote Isle): pay this cost and
     // discard the card from hand to draw a card. Modelled as an activated ability the
@@ -1641,6 +1647,39 @@ struct CardParams
     std::vector<std::string> lifegain_counters_subtypes;
     bool lifegain_target_own_counter         = false;
     int  own_creature_dies_lifegain          = 0;
+    // ---- Prevent Damage (2026-09-27): the damage-event / lifegain-replacement family ------------
+    // Every one of these is ARMED only in a game whose deck carries one of them
+    // (GameState::dmg_events_armed, stamped in GoldFishRunner::StampDeckTraits), so a deck without
+    // them keeps its raw `life -=` pain and its un-replaced GainLife byte-for-byte. See
+    // src/core/DamageEvents.h for the event model.
+    //   noncreature_damage_lifegain        -- Tamanoa: "Whenever a noncreature source you control
+    //                                         deals damage, you gain that much life." ONE trigger
+    //                                         per damage EVENT for the event's TOTAL (every
+    //                                         recipient), one per Tamanoa.
+    //   land_tap_damage_each_player        -- Manabarbs: "Whenever a player taps a land for mana,
+    //                                         Manabarbs deals N damage to that player." One event
+    //                                         per land tap per Manabarbs.
+    //   prevent_noncombat_to_self_gain     -- Purity: "If noncombat damage would be dealt to you,
+    //                                         prevent that damage. You gain life equal to the damage
+    //                                         prevented this way." A replacement (no stack).
+    //   lifegain_multiplier                -- Rhox Faithmender: "If you would gain life, you gain
+    //                                         twice that much life instead." 1 = none; two copies
+    //                                         multiply (x4).
+    //   lifegain_plus                      -- Bilbo, Birthday Celebrant: "If you would gain life,
+    //                                         you gain that much life plus 1 instead." Applied
+    //                                         BEFORE the multiplier (the affected player orders the
+    //                                         replacements, CR 616.1, and (a+1)*2 > a*2+1).
+    //   lifegain_target_opp_loses_that_much -- Vito, Thorn of the Dusk Rose: "Whenever you gain
+    //                                         life, target opponent loses that much life."
+    //   lifegain_each_opp_loses            -- Dina, Soul Steeper: "Whenever you gain life, each
+    //                                         opponent loses N life." Per EVENT, not per point.
+    bool noncreature_damage_lifegain         = false;
+    int  land_tap_damage_each_player         = 0;
+    bool prevent_noncombat_to_self_gain      = false;
+    int  lifegain_multiplier                 = 1;
+    int  lifegain_plus                       = 0;
+    bool lifegain_target_opp_loses_that_much = false;
+    int  lifegain_each_opp_loses             = 0;
     // ---- Ocelot Pride: end-step token trigger + ASCEND (the city's blessing) ----------------
     // "At the beginning of your end step, if you gained life this turn, create a 1/1 white Cat
     //  creature token. Then if you have the city's blessing, for each token you control that

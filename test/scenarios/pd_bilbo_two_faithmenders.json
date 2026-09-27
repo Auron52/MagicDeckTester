@@ -1,0 +1,26 @@
+{
+  "_comment": [
+    "Prevent Damage (2026-09-27, phase I1). The lifegain REPLACEMENT chain on a real Tamanoa trigger.",
+    "Board: Tamanoa, two Rhox Faithmenders, Bilbo, Vito (all sick; resumed at main 1), one untapped",
+    "Battlefield Forge, empty hand. The sweep taps the Forge coloured: 1 damage -> Tamanoa's gain of 1",
+    "-> Bilbo +1 FIRST (the affected player orders replacements, CR 616.1, and (a+1)*2*2 is best) ->",
+    "x2 -> x2 = 8 -> Vito drains 8. Us 20 -1 +8 = 27, opponent 12. Doubling before the +1 would read",
+    "26/15; a single Faithmender 23/16."
+  ],
+  "deck": "decks/Prevent Damage/Prevent Damage.cod",
+  "turn": 4, "on_the_play": true, "active_life": 20, "opponent_life": 20,
+  "resume_at": "main1",
+  "battlefield": [
+    { "name": "Tamanoa", "sick": true },
+    { "name": "Rhox Faithmender", "sick": true },
+    { "name": "Rhox Faithmender", "sick": true },
+    { "name": "Bilbo, Birthday Celebrant", "sick": true },
+    { "name": "Vito, Thorn of the Dusk Rose", "sick": true },
+    { "name": "Battlefield Forge" }
+  ],
+  "hand": [],
+  "library_filler": "Forest", "library_size": 30,
+  "depth": 1, "budget_ms": 50, "max_turns": 4,
+  "expect_active_life": 27,
+  "expect_opponent_life": 12
+}

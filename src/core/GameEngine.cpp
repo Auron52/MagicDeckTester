@@ -176,6 +176,11 @@ void GameEngine::RunTurnFrom(GameState& state, ResumeAt from)
         if (state.player_lost_on_draw) { return; }
     }
     if (at <= static_cast<int>(ResumeAt::Main1)) { MainPhase(state, /*is_pre_combat=*/true); }
+    // OWN DEATH (own_death_live decks only -- Prevent Damage, or MTG_OWN_DEATH_ALL): a main phase
+    // that killed us ends the game here (CR 704.5a), before combat could gain the life back
+    // (a lifelinking Faithmender) or deal the opponent a now-meaningless lethal. PlayOutFrom then
+    // reads HasLost and returns the loss. The rollout's twin is in SimulateToEndImpl.
+    if (state.own_death_live && !CheckWinCondition(state) && SelfHasLost(state)) { return; }
     if (at <= static_cast<int>(ResumeAt::Combat))
     {
         CombatPhase(state);
@@ -190,6 +195,7 @@ void GameEngine::RunTurnFrom(GameState& state, ResumeAt from)
         if (CheckWinCondition(state)) { return; }
     }
     if (at <= static_cast<int>(ResumeAt::Main2)) { MainPhase(state, /*is_pre_combat=*/false); }
+    if (state.own_death_live && !CheckWinCondition(state) && SelfHasLost(state)) { return; }
     if (at <= static_cast<int>(ResumeAt::End))   { EndStep(state); }
     CleanupStep(state);
     // The passive opponent's notional draw for THEIR turn, which falls between ours (see
@@ -557,6 +563,9 @@ void GameEngine::MainPhase(GameState& state, bool is_pre_combat)
     // Discard lands to Land's Edge after stack resolves so Treasure Hunt's drawn
     // lands are in hand and any Land's Edge cast this turn has entered the battlefield.
     m_ai.ActivateLandsEdge(state, is_pre_combat);
+
+    // Prevent Damage backstop (armed only): no tap-trigger may outlive the main phase.
+    dmgev::BackstopFlush(state, "GameEngine::MainPhase");
 
     if (m_logger)
     {

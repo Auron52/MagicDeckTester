@@ -315,6 +315,15 @@ struct Permanent
     // payment attempt (set and cleared inside one, restored by PermPaySnap on every failure
     // path), and never set at all while the lever is off -> byte-identical.
     bool      pay_sac_eaten          = false;
+    // DAMAGE-EVENT MARK of an in-flight mana tap (Prevent Damage, core/DamageEvents.h). A tap for
+    // mana during a payment cannot fire its triggers there (a payment backtracks, and the mana
+    // cache replays), so it RECORDS them on the permanent and dmgev::FlushDamageEvents resolves
+    // them once the payment has committed: bit0 = a LAND was tapped for mana (Manabarbs), bit1 =
+    // the pain was PREVENTED (Purity), bits 2..7 = the pain amount dealt to us (Tamanoa). Restored
+    // by PermPaySnap on every failure path exactly like pay_sac_eaten, carried by every whole-
+    // battlefield snapshot, and ZERO at every decision boundary (a flush clears it;
+    // MTG_DMG_EVENT_VERIFY asserts it). Never written while dmg_events_armed is false.
+    uint8_t   mana_tap_mark          = 0;
     bool      echo_resolved        = false; // Echo (Mogg War Marshal, Stingscourger; CardParams::echo_cost).
                                             // "At the beginning of your upkeep, if this came under your
                                             // control since your last upkeep, sacrifice it unless you pay

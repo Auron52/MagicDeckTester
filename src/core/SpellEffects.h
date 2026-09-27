@@ -1074,6 +1074,12 @@ inline bool IsLifegainToLossCard(const std::string& name)
 // nested recursion keeps it set. Display-only; never affects decisions.
 inline thread_local bool g_tap_speculating = false;
 struct TapSpeculationScope { bool prev; TapSpeculationScope() : prev(g_tap_speculating) { g_tap_speculating = true; } ~TapSpeculationScope() { g_tap_speculating = prev; } };
+inline bool TapSpeculatingNow() { return g_tap_speculating; }
+
+// Damage events / own death / lifegain replacement (Prevent Damage). Included HERE, mid-header, on
+// purpose: it needs TapSpeculatingNow() above and must precede the first pain site below
+// (TapDripLandsIfUseful). Inert unless GameState::dmg_events_armed -- see the header.
+#include "DamageEvents.h"
 
 inline void OpponentGainsLife(GameState& state, int controller_index, int amount,
                               const std::string& source = std::string())
@@ -1224,9 +1230,14 @@ inline void TapDripLandsIfUseful(GameState& state, int controller_index)
         const CardDefinition* def = CardDatabase::Instance().LookupCached(p.card);
         if (!def || def->params.tap_opponent_lifegain <= 0) { continue; }
         p.tapped = true;
-        if (def->params.tap_self_damage > 0) { state.players[controller_index].life -= def->params.tap_self_damage; }
+        // Armed (Prevent Damage): the coloured drip tap's pain is a damage EVENT (Tamanoa) and the
+        // tap a land tap (Manabarbs); both resolve at the flush below. Unarmed: the raw loss.
+        if (state.dmg_events_armed)
+        { dmgev::ArmedManaTap(state, controller_index, p, def->params.tap_self_damage); }
+        else if (def->params.tap_self_damage > 0) { state.players[controller_index].life -= def->params.tap_self_damage; }
         OpponentGainsLife(state, controller_index, def->params.tap_opponent_lifegain);
     }
+    dmgev::FlushDamageEvents(state);   // no-op unless armed
 }
 
 // Colour a Grove-of-the-Burnwillows-style drip land (tap_opponent_lifegain > 0) should produce
@@ -1283,7 +1294,11 @@ inline Color DripLandAnyPipColor(const GameState& state, int active,
     // (energy / cco) ever removes a Colorless mode, so the two reads agree for every pain source.
     // MTG_PAINLAND_C=0 restores the coloured-first taps (the one-binary A/B hatch; it also gates
     // the backtracker's {C}-first order + per-branch pain guard in SpellEffects.cpp).
-    if (PainlandCModeEnabled() && def.params.tap_self_damage > 0)
+    // PREVENT DAMAGE (armed only): when the provider says our own damage is USEFUL (Tamanoa pays it
+    // back, Purity turns it into lifegain -- see DecisionProvider::SelfDamageUseful), a generic pip
+    // takes the coloured, damaging mode instead: the pain is the point. Unarmed decks never ask.
+    if (PainlandCModeEnabled() && def.params.tap_self_damage > 0
+        && !dmgev::PayWithPain(state, active))
     {
         for (Color c : def.params.produces)
         { if (c == Color::Colorless) { return Color::Colorless; } }
@@ -1828,7 +1843,7 @@ inline void AnnihilateCounters(Permanent& p)
 // Definitions sit below CanAttackFull (the Heliod target heuristic needs it); declared here so the
 // early sites (Ancient Cornucopia's cast lifegain, the enter-watchers) can call them.
 inline void GainLife(GameState& state, int player, int amount);
-inline void FireLifegainWatchers(GameState& state, int player);
+inline void FireLifegainWatchers(GameState& state, int player, int amount = 0);
 inline void FireCreatureDiesWatchers(GameState& state, int dead_controller);
 inline void RefreshDevotionCreatures(GameState& state);
 // Doubling Season's multiplier exponent; defined beside CreateToken (the token chokepoint) but
@@ -4733,10 +4748,14 @@ inline void FireOppCreatureDies(GameState& state, int dead_controller)
 inline void GainLife(GameState& state, int player, int amount)
 {
     if (amount <= 0) { return; }
+    // Lifegain REPLACEMENT (Rhox Faithmender x2, Bilbo +1) -- armed decks only; identity otherwise.
+    // Applied to the EVENT before anything reads it, so life_gained_this_turn and the watchers (Vito's
+    // "that much") all see the replaced amount, as the rules say they must (CR 614.1).
+    if (state.dmg_events_armed) { amount = dmgev::ApplyLifegainReplacements(state, player, amount); }
     Player& pl = state.players[player];
     pl.life                  += amount;
     pl.life_gained_this_turn += amount;
-    FireLifegainWatchers(state, player);
+    FireLifegainWatchers(state, player, amount);
 }
 
 // Heliod's counter TARGET (autonomous default): the creature whose extra +1 converts to face
@@ -4817,7 +4836,7 @@ inline int CountLifegainCounterRecipients(const GameState& state, int player, co
     return n;
 }
 
-inline void FireLifegainWatchers(GameState& state, int player)
+inline void FireLifegainWatchers(GameState& state, int player, int amount)
 {
     // Speculative-tap regions save/restore LIFE around phantom taps but not counters; no
     // controller-side gain fires inside one today (they are mana-tap speculations), so this guard
@@ -4832,7 +4851,9 @@ inline void FireLifegainWatchers(GameState& state, int player)
         if (!qd) { continue; }
         const CardParams& qp = qd->params;
         if (qp.lifegain_self_counters > 0 || qp.lifegain_each_own_creature_counters > 0
-            || qp.lifegain_target_own_counter) { any = true; break; }
+            || qp.lifegain_target_own_counter
+            || qp.lifegain_target_opp_loses_that_much || qp.lifegain_each_opp_loses > 0)
+        { any = true; break; }
     }
     if (!any) { return; }
     // Re-entrancy guard: no watcher gains life today (they only add counters), so recursion cannot
@@ -4924,6 +4945,28 @@ inline void FireLifegainWatchers(GameState& state, int player)
                 if (log) { ev += (ev.empty() ? "" : ", ") + state.battlefield[i].card.m_name.str()
                                + " \xE2\x86\x92 +1/+1 on " + state.battlefield[pick].card.m_name.str(); }
             }
+        }
+        // Vito, Thorn of the Dusk Rose: "Whenever you gain life, target opponent loses that much
+        // life." LIFE LOSS, not damage (so no Tamanoa); ONE target opponent -- one head's worth even
+        // in 2HG, where the loss comes off the shared pool once. `amount` is the REPLACED gain
+        // (Faithmender / Bilbo already applied in GainLife), which is what "that much" reads.
+        // Dina, Soul Steeper: "Whenever you gain life, each opponent loses 1 life." Once per EVENT
+        // whatever the amount, x each opposing head. Both mark opponent_lost_life_this_turn.
+        // Guarded by the early-out above (param presence), so every other deck skips both.
+        if (wp.lifegain_target_opp_loses_that_much && amount > 0)
+        {
+            state.players[1 - player].life -= amount;
+            if (player == state.active_player_index) { state.opponent_lost_life_this_turn = true; }
+            if (log) { ev += (ev.empty() ? "" : ", ") + state.battlefield[i].card.m_name.str()
+                           + ": opponent loses " + std::to_string(amount); }
+        }
+        if (wp.lifegain_each_opp_loses > 0)
+        {
+            const int loss = wp.lifegain_each_opp_loses * gamesetup::OpponentHeads();
+            state.players[1 - player].life -= loss;
+            if (player == state.active_player_index) { state.opponent_lost_life_this_turn = true; }
+            if (log) { ev += (ev.empty() ? "" : ", ") + state.battlefield[i].card.m_name.str()
+                           + ": each opponent loses " + std::to_string(wp.lifegain_each_opp_loses); }
         }
     }
     if (log && !ev.empty())
@@ -25277,5 +25320,91 @@ inline void TryPumpThenSwordsRedirect(GameState& state, int active, int target_b
         state.battlefield[target_bi].temp_tough_bonus += pp.tough_bonus;
         ap.graveyard.push_back(inv);
         return;   // one redirect per Swords cast
+    }
+}
+
+// ---- PAIN SWEEP (Prevent Damage, 2026-09-27) ------------------------------------------------------
+// The Grove-drip sweep's twin (TapDripLandsIfUseful) for a board where tapping a land for mana is
+// itself the payoff: with Tamanoa out, a painland's coloured tap / an Ancient Tomb / a City of Brass
+// deals us damage that Tamanoa gives back (and Faithmender doubles, and Vito / Dina drain), and with
+// Manabarbs out EVERY land tap is a 1-damage event Tamanoa converts. Mana nobody spends is simply
+// lost (there is no mana burn), so a land left untapped at the end of the main phase is a free
+// drain forgone. This taps each still-untapped land we control, one at a time, resolving its
+// triggers (FlushDamageEvents) before the next -- so the next tap sees the life total the rules say
+// it sees, and a lethal Vito drain ends the sweep at once.
+//
+// A GREEDY MANA POLICY, not a searched decision: deterministic, at a fixed point (end of the
+// pre-combat main, beside TapDripLandsIfUseful at its three lockstep call sites -- ApplyPlanDirect,
+// AIEngine::TakeTurn, and the claude-play branch), exactly like the drip sweep it copies. The
+// repo's greedy-scope ruling allows greedy in mana policy; the ledger records it.
+//
+// SAFETY: a tap is taken only if its pain alone cannot kill us before the triggers resolve (the SBA
+// check runs first -- the Tamanoa ruling), and, with Manabarbs out, only if we can take the 1 after
+// the gains. Purity makes every hit a gain, so it is always safe. Nothing is swept without a gain
+// engine (Tamanoa / Purity) -- without one the damage would be pure loss.
+// SECOND MAIN: the lands are kept when a castable card in hand could want them after combat (the
+// DripManaWantedLaterThisTurn test, generalised to every land).
+// Inert unless dmg_events_armed.
+inline void TapPainSourcesIfUseful(GameState& state, int ctrl)
+{
+    if (!state.dmg_events_armed) { return; }
+    dmgev::BackstopFlush(state, "pain-sweep");   // nothing may still be pending from the main phase
+    if (dmgev::WonLocked(state) || state.players[ctrl].life <= 0) { return; }
+    const bool purity = dmgev::PurityProtects(state, ctrl);
+    const int  tam    = dmgev::CountTamanoa(state, ctrl);
+    if (!purity && tam == 0) { return; }   // no gain engine -> every hit would be pure loss
+    int barb_amt[16];
+    const int nbarb = dmgev::ManabarbsAmounts(state, barb_amt, 16);
+    int barb_max = 0;
+    for (int k = 0; k < nbarb; ++k) { barb_max = std::max(barb_max, barb_amt[k]); }
+    // The provider's judgement (is our damage useful?). Safety is checked PER TAP below, which is
+    // looser than the payment's whole-payment bound (PaymentPainSafe) because the sweep flushes
+    // after every tap -- each hit is paid back before the next is taken.
+    const bool pain_useful = ResolveProvider(state).SelfDamageUseful(state, ctrl);
+    if (!pain_useful && nbarb == 0) { return; }
+    if (state.uses_second_main)
+    {
+        int untapped = 0;
+        for (const Permanent& p : state.battlefield)
+        {
+            if (p.controller_index != ctrl || p.tapped) { continue; }
+            const CardDefinition* d = dmgev::Def(p);
+            if (d && (d->card.IsLand() || !d->params.produces.empty())) { ++untapped; }
+        }
+        for (const Card& c : state.players[ctrl].hand)
+        {
+            const CardDefinition* d = CardDatabase::Instance().LookupCached(c);
+            if (!d || d->card.IsLand()) { continue; }
+            if (d->card.m_mana_cost.ManaValue() <= untapped) { return; }   // keep the lands for main 2
+        }
+    }
+    const int n = static_cast<int>(state.battlefield.size());
+    for (int i = 0; i < n && i < static_cast<int>(state.battlefield.size()); ++i)
+    {
+        Permanent& p = state.battlefield[i];
+        if (p.controller_index != ctrl || p.tapped || !p.card.IsLand()) { continue; }
+        const CardDefinition* d = dmgev::Def(p);
+        if (!d) { continue; }
+        const std::vector<Color>& prod = EffectiveProducesFor(state, ctrl, *d, &p);
+        if (prod.empty()) { continue; }            // cannot be tapped for mana (a lone Reflecting Pool)
+        bool has_c = false, has_col = false;
+        for (Color c : prod) { if (c == Color::Colorless) { has_c = true; } else { has_col = true; } }
+        // Which mode: the damaging one when damage is useful; otherwise the painless {C} one if the
+        // land has it (a painland swept only for Manabarbs keeps its life).
+        Color col = has_c ? Color::Colorless : prod[0];
+        if (pain_useful && has_col)
+        { for (Color c : prod) { if (c != Color::Colorless) { col = c; break; } } }
+        const int pain = dmgev::PainForTap(*d, col, has_c);
+        if (pain == 0 && nbarb == 0) { continue; }  // nothing to gain from this tap
+        if (!purity)
+        {
+            const int life = state.players[ctrl].life;
+            if (life - pain <= 0) { continue; }                  // the SBA before Tamanoa resolves
+            if (nbarb > 0 && life - barb_max <= 0) { continue; } // each barb before its own Tamanoa
+        }
+        p.tapped = true;
+        dmgev::ArmedManaTap(state, ctrl, p, pain);
+        dmgev::FlushDamageEvents(state);
+        if (dmgev::WonLocked(state) || state.players[ctrl].life <= 0) { return; }
     }
 }

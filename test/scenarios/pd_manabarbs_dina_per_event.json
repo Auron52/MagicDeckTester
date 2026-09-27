@@ -1,0 +1,24 @@
+{
+  "_comment": [
+    "Prevent Damage (2026-09-27, phase I1). Dina drains 1 PER LIFEGAIN EVENT, and every Manabarbs",
+    "trigger is its own damage event. Board: Manabarbs, Tamanoa, Dina (sick; resumed at main 1),",
+    "two untapped Forests, empty hand. The pain sweep taps both Forests (a land tap is worth it with",
+    "Manabarbs + Tamanoa out): each tap -> Manabarbs deals 1 (one event) -> Tamanoa gains 1 (one",
+    "event) -> Dina drains 1. Two taps = two drains: us 20, opponent 18. An implementation that",
+    "summed the two barbs into one 2-damage event would read opponent 19."
+  ],
+  "deck": "decks/Prevent Damage/Prevent Damage.cod",
+  "turn": 4, "on_the_play": true, "active_life": 20, "opponent_life": 20,
+  "resume_at": "main1",
+  "battlefield": [
+    { "name": "Manabarbs" },
+    { "name": "Tamanoa", "sick": true },
+    { "name": "Dina, Soul Steeper", "sick": true },
+    { "name": "Forest" }, { "name": "Forest" }
+  ],
+  "hand": [],
+  "library_filler": "Forest", "library_size": 30,
+  "depth": 1, "budget_ms": 50, "max_turns": 4,
+  "expect_active_life": 20,
+  "expect_opponent_life": 18
+}

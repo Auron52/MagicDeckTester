@@ -786,6 +786,7 @@ CardParams CardDatabase::BuildParamsFromJson(const json& params) const
     p.etb_scry         = params.value("etb_scry", 0);
     p.etb_surveil      = params.value("etb_surveil", 0);
     p.tap_self_damage  = params.value("tap_self_damage", 0);
+    p.tap_self_damage_any_mode = params.value("tap_self_damage_any_mode", false);
     if (params.contains("cycling_cost"))
         p.cycling_cost = ManaCostFromString(params["cycling_cost"].get<std::string>());
     if (params.contains("sacrifice_draw_cost"))
@@ -1064,6 +1065,14 @@ CardParams CardDatabase::BuildParamsFromJson(const json& params) const
         p.lifegain_counters_subtypes.push_back(s);
     p.lifegain_target_own_counter         = params.value("lifegain_target_own_counter", false);
     p.own_creature_dies_lifegain          = params.value("own_creature_dies_lifegain", 0);
+    // Prevent Damage damage-event / lifegain-replacement family (see CardParams).
+    p.noncreature_damage_lifegain         = params.value("noncreature_damage_lifegain", false);
+    p.land_tap_damage_each_player         = params.value("land_tap_damage_each_player", 0);
+    p.prevent_noncombat_to_self_gain      = params.value("prevent_noncombat_to_self_gain", false);
+    p.lifegain_multiplier                 = params.value("lifegain_multiplier", 1);
+    p.lifegain_plus                       = params.value("lifegain_plus", 0);
+    p.lifegain_target_opp_loses_that_much = params.value("lifegain_target_opp_loses_that_much", false);
+    p.lifegain_each_opp_loses             = params.value("lifegain_each_opp_loses", 0);
     // Ocelot Pride's end-step token trigger + ascend (see CardParams for the model).
     p.endstep_lifegain_tokens             = params.value("endstep_lifegain_tokens", 0);
     p.endstep_token_power                 = params.value("endstep_token_power", 0);

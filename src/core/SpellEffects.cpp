@@ -1693,6 +1693,12 @@ static bool TapFlowInfeasible(const GameState& state, const ManaCost& cost, bool
 // Recursive worker. The public TapForCostBacktrack (below) is a thin wrapper so it can record the
 // payable/unpayable OUTCOME split under MTG_TAP_STATS; the recursion calls the WORKER directly, so a
 // wrapper call is always one top-level entry. Behaviour is identical to calling the worker directly.
+// PREVENT DAMAGE: dmgev::PayWithPain for THIS top-level solve (does a generic pip on a painland take
+// the damaging coloured mode?). Latched once by the public TapForCostBacktrack -- the answer is
+// invariant within a payment by construction (see dmgev::PaymentPainSafe) -- so the DFS does not
+// re-ask the provider per node, and so the mana cache can key it. False for every unarmed board.
+static thread_local bool g_bt_pay_with_pain = false;
+
 static bool TapForCostBacktrackWorker(GameState& state, const ManaCost& cost,
                                 bool for_creature, ManaPool floating,
                                 const std::vector<Color>* rp_colors,
@@ -2427,6 +2433,7 @@ static bool TapForCostBacktrackWorker(GameState& state, const ManaCost& cost,
         const int storage_snap = state.battlefield[i].storage_counters;   // burst zeroes it (undo below)
         const int src_max_net  = source_max_net(state.battlefield[i], *def); // captured pre-tap (storage_snap-aware)
         const int life_snap = state.players[active].life;
+        const std::uint8_t mark_snap = state.battlefield[i].mana_tap_mark;   // Prevent Damage (armed only)
         const int opp_life_snap = state.players[1 - active].life;   // for tap_opponent_lifegain undo
         const bool oll_snap = state.opponent_lost_life_this_turn;
 
@@ -2456,7 +2463,18 @@ static bool TapForCostBacktrackWorker(GameState& state, const ManaCost& cost,
             if (IsPaySacSource(*def)) { g_paysac_cracked = true; }
             DecrementDepletionOnTap(state.battlefield[i]);
             if (def->params.storage_land) { state.battlefield[i].storage_counters -= storage_burn; }
-            if (def->params.tap_self_damage > 0 && !painless)
+            // A tap_self_damage_any_mode land (Ancient Tomb) hurts in its {C} mode too: the {C} is
+            // its ONLY ability, not a painland's separate painless one. No unarmed deck runs one.
+            const bool hurts = def->params.tap_self_damage > 0
+                               && (!painless || def->params.tap_self_damage_any_mode);
+            if (state.dmg_events_armed)
+            {
+                // PREVENT DAMAGE: pain + the Manabarbs land tap recorded on the permanent; the
+                // payment's flush resolves them (core/DamageEvents.h). Undone below with the life.
+                dmgev::ArmedManaTap(state, active, state.battlefield[i],
+                                    hurts ? def->params.tap_self_damage : 0);
+            }
+            else if (hurts)
             { state.players[active].life -= def->params.tap_self_damage; }
             // Deathrite Shaman: the tap exiles a graveyard land (eligibility guaranteed one).
             // Remember which slot so a failed branch re-inserts it exactly (byte-identical undo).
@@ -2543,6 +2561,7 @@ static bool TapForCostBacktrackWorker(GameState& state, const ManaCost& cost,
                 gy.insert(gy.begin() + static_cast<std::ptrdiff_t>(gy_exiled_at), *gy_exiled_card);
             }
             state.players[active].life = life_snap;
+            state.battlefield[i].mana_tap_mark  = mark_snap;
             state.players[1 - active].life      = opp_life_snap;
             state.opponent_lost_life_this_turn  = oll_snap;
             state.players[active].energy_counters = energy_snap;
@@ -2785,8 +2804,11 @@ static bool TapForCostBacktrackWorker(GameState& state, const ManaCost& cost,
                 // first in `produces` -- and under collapse_colors the FIRST generic-interchangeable
                 // colour is the only one explored, so ordering is what decides. Coloured pips are
                 // untouched: they sit in special_mask and are explored regardless.
+                // PREVENT DAMAGE: when the pain is USEFUL (dmgev::PayWithPain, latched once per
+                // top-level solve in g_bt_pay_with_pain) the coloured, damaging mode keeps its
+                // place in front -- the hoist is exactly what that deck does not want.
                 static thread_local std::vector<Color> s_pain_order;
-                if (PainlandCModeEnabled() && def->params.tap_self_damage > 0
+                if (PainlandCModeEnabled() && def->params.tap_self_damage > 0 && !g_bt_pay_with_pain
                     && !order_ptr->empty() && (*order_ptr)[0] != Color::Colorless)
                 {
                     bool has_c = false;
@@ -2968,6 +2990,11 @@ struct ManaCacheTap
     std::uint64_t desc;   // canonical mode: the source's descriptor (0 in indexed mode)
     int idx;              // indexed mode: battlefield index. canonical mode: RANK within the group
     int storage_burn;     // counters this tap removed (0 for every non-storage source)
+    // Prevent Damage: the Permanent::mana_tap_mark this tap recorded (land tap / pain / prevented),
+    // replayed onto the hit so the payment's flush sees the same damage events. Per TAP because the
+    // events are per tap (Dina drains per event). Always 0 on an unarmed board. The pain it records
+    // depends on Purity and on the pay-with-pain mode, both hashed into the key when armed.
+    std::uint8_t dmg_mark;
 };
 // SCALING sources -- domain (Faeburrow Elder / Bloom Tender: one mana of each colour among ALL your
 // permanents) and scaled (Three Tree City: N of one colour, N = creatures you control). Both read
@@ -3155,6 +3182,19 @@ inline bool ManaCacheKey(const GameState& state, const ManaCost& cost, bool for_
     // flipped because only it plays drip lands in both configs. Constant within a job -> this fold
     // is byte-identical for every single-config run; mixed-heads pools stop sharing entries.
     mix(h2, 0xD21'4EAD5ull + static_cast<std::uint64_t>(gamesetup::OpponentHeads()));
+    // PREVENT DAMAGE (armed only -- unarmed keys are unchanged). A stored solve records the OBSERVED
+    // pain (self_life) and per-tap damage marks, and both depend on two things the source scan below
+    // cannot see: whether Purity prevents the pain, and whether this solve paid generic pips with the
+    // damaging mode (g_bt_pay_with_pain). Hash both. And a WON game (opponent dead, us alive) takes
+    // no pain at all (the won-lock), so its solves must neither be stored nor replayed into a live
+    // game: skip the cache there -- the cache is thread_local and outlives the game.
+    if (state.dmg_events_armed)
+    {
+        if (dmgev::WonLocked(state)) { return false; }
+        mix(h1, 0xDA3A6E0000ull
+                | (dmgev::PurityProtects(state, state.active_player_index) ? 1ull : 0ull)
+                | (g_bt_pay_with_pain ? 2ull : 0ull));
+    }
     // Canonical mode collects one descriptor per source and hashes the SORTED multiset; indexed mode
     // hashes the sequence as it stands. `canon` holds (descriptor, index) so the sort is stable on
     // index -- which is what makes position p mean "rank within its group" and match the DFS's
@@ -3459,6 +3499,14 @@ bool TapForCostBacktrack(GameState& state, const ManaCost& cost,
                          ManaPool* out_full_pool,
                          const std::vector<std::pair<int, const CardDefinition*>>* src_cands)
 {
+    // PREVENT DAMAGE: latch the pay-with-pain mode for this top-level solve (see g_bt_pay_with_pain).
+    // Saved/restored so a nested top-level call (none today) cannot leak it. Unarmed: stays false.
+    struct PainLatch
+    {
+        bool prev;
+        explicit PainLatch(bool v) : prev(g_bt_pay_with_pain) { g_bt_pay_with_pain = v; }
+        ~PainLatch() { g_bt_pay_with_pain = prev; }
+    } pain_latch(state.dmg_events_armed && dmgev::PayWithPain(state, state.active_player_index));
 
     // ---- PAYABLE MANA CACHE lookup (canonical batch-prepay shape only; see the block above) ----
     // SHAPE: rp_colors must be null (externally-supplied colours are not in the key) and the board must
@@ -3544,6 +3592,7 @@ bool TapForCostBacktrack(GameState& state, const ManaCost& cost,
                 }
                 Permanent& p = state.battlefield[idx];
                 p.tapped = true;
+                p.mana_tap_mark |= t.dmg_mark;   // Prevent Damage (0 unless armed)
                 const CardDefinition* td = CardDatabase::Instance().LookupCached(p.card);
                 if (!td) { continue; }
                 // CRACK FLAG on the REPLAY path. A cache hit re-taps the stored tap-set here rather
@@ -3782,7 +3831,7 @@ bool TapForCostBacktrack(GameState& state, const ManaCost& cost,
                         slot = 0;                                        // ORDINAL position in the source list
                         for (int q = 0; q < i; ++q) { if (mc_desc[q] != 0ull) { ++slot; } }
                     }
-                    e.taps.push_back({ desc, slot, burn });
+                    e.taps.push_back({ desc, slot, burn, p.mana_tap_mark });
                 }
             }
         }

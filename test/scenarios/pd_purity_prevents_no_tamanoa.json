@@ -1,0 +1,24 @@
+{
+  "_comment": [
+    "Prevent Damage (2026-09-27, phase I1). Purity: 'If noncombat damage would be dealt to you,",
+    "prevent that damage. You gain life equal to the damage prevented this way.' Board: Purity,",
+    "Tamanoa, Vito (sick; resumed at main 1), one untapped Battlefield Forge, empty hand. The sweep",
+    "taps the Forge coloured; its 1 damage is PREVENTED (so it is not dealt, and Tamanoa does NOT",
+    "trigger) and Purity gains 1 instead -- ONE lifegain event, so Vito drains 1. Us 21, opponent 19.",
+    "If Tamanoa wrongly triggered on the prevented damage the opponent would read 18."
+  ],
+  "deck": "decks/Prevent Damage/Prevent Damage.cod",
+  "turn": 4, "on_the_play": true, "active_life": 20, "opponent_life": 20,
+  "resume_at": "main1",
+  "battlefield": [
+    { "name": "Purity", "sick": true },
+    { "name": "Tamanoa", "sick": true },
+    { "name": "Vito, Thorn of the Dusk Rose", "sick": true },
+    { "name": "Battlefield Forge" }
+  ],
+  "hand": [],
+  "library_filler": "Forest", "library_size": 30,
+  "depth": 1, "budget_ms": 50, "max_turns": 4,
+  "expect_active_life": 21,
+  "expect_opponent_life": 19
+}

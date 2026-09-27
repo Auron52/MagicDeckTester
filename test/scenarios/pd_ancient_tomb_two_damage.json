@@ -1,0 +1,24 @@
+{
+  "_comment": [
+    "Prevent Damage (2026-09-27, phase I1). Ancient Tomb: '{T}: Add {C}{C}. This land deals 2 damage",
+    "to you.' -- the damage is on its ONLY ability (tap_self_damage_any_mode), not a painland's",
+    "coloured half, so even a {C} tap hurts. Board: Tamanoa, Rhox Faithmender, Vito (sick; resumed",
+    "at main 1), one untapped Ancient Tomb, empty hand. The sweep taps it: 2 damage (one event) ->",
+    "Tamanoa gains 2 -> doubled to 4 -> Vito drains 4. Us 20 -2 +4 = 22, opponent 16. Treating the",
+    "{C}{C} tap as painless (the painland reading) would leave 20/20."
+  ],
+  "deck": "decks/Prevent Damage/Prevent Damage.cod",
+  "turn": 4, "on_the_play": true, "active_life": 20, "opponent_life": 20,
+  "resume_at": "main1",
+  "battlefield": [
+    { "name": "Tamanoa", "sick": true },
+    { "name": "Rhox Faithmender", "sick": true },
+    { "name": "Vito, Thorn of the Dusk Rose", "sick": true },
+    { "name": "Ancient Tomb" }
+  ],
+  "hand": [],
+  "library_filler": "Forest", "library_size": 30,
+  "depth": 1, "budget_ms": 50, "max_turns": 4,
+  "expect_active_life": 22,
+  "expect_opponent_life": 16
+}

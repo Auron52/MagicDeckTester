@@ -9824,6 +9824,14 @@ namespace
     const EldraziFlickerProvider g_eldrazi_flicker;
     const MeliraPodProvider      g_melira_pod;
     const PiratesProvider        g_pirates;
+    const PreventDamageProvider  g_prevent_damage;
+}
+
+// Our own damage is useful whenever a gain engine is on the board (see the class comment). Rules
+// safety is the engine's job (dmgev::PayWithPain / TapPainSourcesIfUseful), not this judgement's.
+bool PreventDamageProvider::SelfDamageUseful(const GameState& s, int controller) const
+{
+    return dmgev::SelfDamageGainEngine(s, controller);
 }
 
 const DecisionProvider& DefaultProvider()
@@ -9902,11 +9910,25 @@ const DecisionProvider& DetectDecisionProvider(const Decklist& deck)
     // add -- the Lightning Greaves exclusion); and etb_creates_treasures / static_artifact_* (they
     // describe behaviour a Treasure or artifact deck would plausibly run, not this archetype).
     bool pirates = false;
+    // PREVENT DAMAGE (Manabarbs / Tamanoa / Vito / Dina). MUST return ABOVE EVERYTHING: Living
+    // Wish's and Beseech the Queen's tutor_to_hand set `anti` on their own, and Dina, Soul Steeper's
+    // sac outlet would set `goblin` -- the archetype-neutral misroute class (ninth occurrence).
+    // Signature = four damage-event / drain params OR'd across FOUR different cards (Tamanoa,
+    // Manabarbs, Vito, Dina), all new in the 2026-09-27 onboarding and carried by no other card in
+    // cards.json, so a deckbuilding swap that cuts one card cannot silently lose the routing.
+    // Deliberately EXCLUDES lifegain_multiplier / lifegain_plus (Rhox Faithmender, Bilbo): a
+    // lifegain doubler is exactly what a CritterLifegain / Angels list would plausibly add, which
+    // is the class of term this block must not key on.
+    bool prevent_damage = false;
     for (const Card& c : deck.mainboard)
     {
         const CardDefinition* def = CardDatabase::Instance().LookupCached(c);
         if (!def) { continue; }
         const CardParams& p = def->params;
+
+        if (p.noncreature_damage_lifegain || p.land_tap_damage_each_player > 0
+            || p.lifegain_target_opp_loses_that_much || p.lifegain_each_opp_loses > 0)
+        { prevent_damage = true; }
 
         // NOTE: `is_land_aura` is deliberately NOT a term here -- see the flag's declaration.
         if (p.blink_cost.has_value() || p.etb_untap_lands > 0) { eldrazi = true; }
@@ -10296,6 +10318,7 @@ const DecisionProvider& DetectDecisionProvider(const Decklist& deck)
     // Angels FIRST -- above critter, whose signature its 4 Archangel of Thune would otherwise set
     // (see the flag's comment). GenericProvider on purpose: a new deck earns its own provider only
     // once it has a measured hook to hold, and until then it gets no narrowing at all.
+    if (prevent_damage) { return g_prevent_damage; }
     if (angels)      { return g_angels; }
     // WhiteKnights ABOVE Knights, and that order is the whole point: WhiteKnights trips BOTH
     // signatures (it shares the Knight Exemplar / Worthy Knight / Acclaimed Contender core), so

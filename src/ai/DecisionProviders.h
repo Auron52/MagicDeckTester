@@ -278,6 +278,40 @@ public:
     const char* Name() const override { return "Giants"; }
 };
 
+// Prevent Damage (Manabarbs / painlands / Tamanoa / Rhox Faithmender / Vito / Dina). Onboarded
+// 2026-09-27. Derives from DeckProvider (== Generic behaviour). Before this class existed the list
+// tripped the `anti` signature through Living Wish's / Beseech the Queen's tutor_to_hand, and (once
+// Dina's sac outlet lands) the `goblin` one -- the archetype-neutral misroute class again -- so it
+// is routed at the TOP of DetectDecisionProvider, above every neutral term, and it never rode
+// either provider in a measurement: nothing measured is being taken away.
+//
+// Hooks held (everything else inherits Generic byte-for-byte):
+//   * Certificate -- NotAssessed (see the body).
+//   * SelfDamageUseful -- a JUDGEMENT: our own damage is useful whenever a gain engine is out
+//     (Tamanoa pays it back, Purity turns it into lifegain). The engine separately bounds it by
+//     RULES safety (dmgev::PaymentPainSafe / the sweep's per-tap check), so this hook never has to
+//     reason about dying. PROVISIONAL until Stage 5 measures the coloured-mode preference.
+//   * TutorSearchWidth 16 -- a COVERAGE fix, not a heuristic: Living Wish reaches a 13-card,
+//     13-name sideboard, and the base width 6 would leave seven names (which seven decided by
+//     decklist order) unreachable at every budget. Same argument as Pirates' 9 / EDF's 8.
+class PreventDamageProvider : public DeckProvider
+{
+public:
+    CertStance Certificate() const override
+    { return { CertState::NotAssessed,
+               "NOT ASSESSED. Test: is combat the ONLY route to the opponent's life? It is NOT -- "
+               "every land tap with Manabarbs out, every painland / Ancient Tomb / City of Brass "
+               "tap, Spellshock, Pyrohemia and Rolling Earthquake are damage events that Tamanoa "
+               "turns into lifegain, and Vito / Dina turn every lifegain event into opponent life "
+               "LOSS at any point in the turn (Pyrohemia is repeatable, so the count is unbounded "
+               "by cards in hand). A winless-this-turn proof must bound total lifegain events x "
+               "the Faithmender / Bilbo replacement chain x the drain watchers on board and in "
+               "reach, and our own death, before it can be sound." }; }
+    const char* Name() const override { return "PreventDamage"; }
+    bool SelfDamageUseful(const GameState& s, int controller) const override;
+    int  TutorSearchWidth() const override { return 16; }
+};
+
 // Angels (Giada / Lyra / Righteous Valkyrie lifegain-angels). Rode GenericProvider.
 class AngelsProvider : public DeckProvider
 {

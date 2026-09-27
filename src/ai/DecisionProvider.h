@@ -1639,6 +1639,18 @@ public:
     // -- that is a FACT about the board, not a decision, so it is not routed through here.
     virtual bool OpponentLifegainUseful(const GameState& /*s*/, int /*controller*/) const { return false; }
 
+    // SelfDamageUseful -- is damage to OURSELVES useful right now? The mirror of the hook above for
+    // the Prevent Damage deck: a painland / Ancient Tomb / City of Brass tap normally COSTS life, so
+    // the engine dodges it (a generic pip takes a painland's painless {C} mode). With Tamanoa out
+    // ("whenever a noncreature source you control deals damage, you gain that much life") or Purity
+    // (damage to you becomes lifegain) the hit is paid back -- and Vito / Dina turn the gain into
+    // damage -- so a deck whose engine wants it flips this true: a generic pip then takes the
+    // coloured, damaging mode, and the end-of-main pain sweep (TapPainSourcesIfUseful) taps leftover
+    // lands. Consulted ONLY on a board with GameState::dmg_events_armed; the engine separately bounds
+    // it by rules safety (dmgev::PaymentPainSafe -- never pay ourselves to 0 before the triggers
+    // resolve). Default false: pain is a cost.
+    virtual bool SelfDamageUseful(const GameState& /*s*/, int /*controller*/) const { return false; }
+
     // KeepFloor -- keep-floor: an archetype override that can FORCE the mulligan keep decision for a
     // hand the exhaustive keep table (or static rule) would otherwise misjudge. Consulted in the play
     // path (AIEngine::HandleMulligan) BEFORE the table, so ForceKeep overrides a table mulligan and

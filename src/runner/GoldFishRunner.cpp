@@ -1078,6 +1078,36 @@ void GoldFishRunner::StampDeckTraits(GameState& state, const Decklist& deck)
             state.deck_has_creature_enter_watcher = garth || creature_enter_watcher;
         }
     }
+    // PREVENT DAMAGE (2026-09-27): arm the damage-event model (core/DamageEvents.h) iff the deck --
+    // main OR sideboard, since a wish reaches the sideboard -- carries a card that makes our own
+    // damage or our lifegain observable: Tamanoa (noncreature damage -> lifegain), Manabarbs (land
+    // taps deal damage), Purity (prevention -> lifegain), Rhox Faithmender / Bilbo (lifegain
+    // replacement). Vito / Dina are deliberately NOT arming terms: their watchers are param-gated in
+    // FireLifegainWatchers and need nothing else, so a deck running only a drain watcher keeps the
+    // legacy pain model. Stamped HERE because every entry point -- GoldFishRunner::SetupGame (the
+    // runner, the batch, the analyzer, the keep generators), the scenario harness and the
+    // cast-order report -- calls this one function; nothing may arm it anywhere else.
+    // own_death_live: armed decks, plus every deck under the measurement-only MTG_OWN_DEATH_ALL=1
+    // (default OFF, so every unarmed deck is byte-identical).
+    {
+        auto arms = [](const std::vector<Card>& zone)
+        {
+            for (const Card& c : zone)
+            {
+                const CardDefinition* d = CardDatabase::Instance().LookupCached(c);
+                if (!d) { continue; }
+                const CardParams& p = d->params;
+                if (p.noncreature_damage_lifegain || p.land_tap_damage_each_player > 0
+                    || p.prevent_noncombat_to_self_gain || p.lifegain_multiplier > 1
+                    || p.lifegain_plus > 0)
+                { return true; }
+            }
+            return false;
+        };
+        state.dmg_events_armed = arms(deck.mainboard) || arms(deck.sideboard);
+        static const bool s_own_death_all = EnvOn("MTG_OWN_DEATH_ALL");   // DEFAULT OFF; measurement only
+        state.own_death_live = state.dmg_events_armed || s_own_death_all;
+    }
     // NOTE: opponent_library_dealt is deliberately NOT stamped here. It means "a library was
     // actually dealt", and only opponentdeck::Deal may raise it -- see the comment there. Callers
     // that stamp traits without running SetupGame (the scenario harness) must otherwise get the

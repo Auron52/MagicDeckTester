@@ -146,6 +146,15 @@
     "toughness": null,
     "type_line": "Artifact"
   },
+  "Ancient Tomb": {
+    "cmc": 0.0,
+    "keywords": [],
+    "mana_cost": "",
+    "oracle_text": "{T}: Add {C}{C}. This land deals 2 damage to you.",
+    "power": null,
+    "toughness": null,
+    "type_line": "Land"
+  },
   "Ancient Ziggurat": {
     "cmc": 0.0,
     "keywords": [],
@@ -305,6 +314,27 @@
     "toughness": "3",
     "type_line": "Legendary Creature — Cat Knight"
   },
+  "Basri, Tomorrow's Champion": {
+    "cmc": 1.0,
+    "keywords": [
+      "Cycling",
+      "Exert"
+    ],
+    "mana_cost": "{W}",
+    "oracle_text": "{W}, {T}, Exert Basri: Create a 1/1 white Cat creature token with lifelink. (An exerted creature won't untap during your next untap step.)\nCycling {2}{W} ({2}{W}, Discard this card: Draw a card.)\nWhen you cycle this card, Cats you control gain hexproof and indestructible until end of turn.",
+    "power": "2",
+    "toughness": "1",
+    "type_line": "Legendary Creature — Human Knight"
+  },
+  "Battlefield Forge": {
+    "cmc": 0.0,
+    "keywords": [],
+    "mana_cost": "",
+    "oracle_text": "{T}: Add {C}.\n{T}: Add {R} or {W}. This land deals 1 damage to you.",
+    "power": null,
+    "toughness": null,
+    "type_line": "Land"
+  },
   "Beastmaster Ascension": {
     "cmc": 3.0,
     "keywords": [],
@@ -322,6 +352,15 @@
     "power": "3",
     "toughness": "3",
     "type_line": "Creature — Human Knight"
+  },
+  "Bilbo, Birthday Celebrant": {
+    "cmc": 3.0,
+    "keywords": [],
+    "mana_cost": "{W}{B}{G}",
+    "oracle_text": "If you would gain life, you gain that much life plus 1 instead.\n{2}{W}{B}{G}, {T}, Exile Bilbo: Search your library for any number of creature cards, put them onto the battlefield, then shuffle. Activate only if you have 111 or more life.",
+    "power": "2",
+    "toughness": "3",
+    "type_line": "Legendary Creature — Halfling Rogue"
   },
   "Birds of Paradise": {
     "cmc": 1.0,
@@ -906,6 +945,15 @@
     "toughness": "1",
     "type_line": "Creature — Eldrazi"
   },
+  "Dina, Soul Steeper": {
+    "cmc": 2.0,
+    "keywords": [],
+    "mana_cost": "{B}{G}",
+    "oracle_text": "Whenever you gain life, each opponent loses 1 life.\n{1}, Sacrifice another creature: Dina gets +X/+0 until end of turn, where X is the sacrificed creature's power.",
+    "power": "1",
+    "toughness": "3",
+    "type_line": "Legendary Creature — Dryad Druid"
+  },
   "Dire Fleet Captain": {
     "cmc": 2.0,
     "keywords": [],
@@ -1435,6 +1483,15 @@
     "toughness": "4",
     "type_line": "Creature — Giant Shaman"
   },
+  "Gideon, Ally of Zendikar": {
+    "cmc": 4.0,
+    "keywords": [],
+    "mana_cost": "{2}{W}{W}",
+    "oracle_text": "+1: Until end of turn, Gideon becomes a 5/5 Human Soldier Ally creature with indestructible that's still a planeswalker. Prevent all damage that would be dealt to him this turn.\n0: Create a 2/2 white Knight Ally creature token.\n−4: You get an emblem with \"Creatures you control get +1/+1.\"",
+    "power": null,
+    "toughness": null,
+    "type_line": "Legendary Planeswalker — Gideon"
+  },
   "Gladecover Scout": {
     "cmc": 1.0,
     "keywords": [
@@ -1609,6 +1666,15 @@
     "power": null,
     "toughness": null,
     "type_line": "Artifact — Equipment"
+  },
+  "Grand Coliseum": {
+    "cmc": 0.0,
+    "keywords": [],
+    "mana_cost": "",
+    "oracle_text": "This land enters tapped.\n{T}: Add {C}.\n{T}: Add one mana of any color. This land deals 1 damage to you.",
+    "power": null,
+    "toughness": null,
+    "type_line": "Land"
   },
   "Grove of the Burnwillows": {
     "cmc": 0.0,
@@ -1961,6 +2027,15 @@
     "power": null,
     "toughness": null,
     "type_line": "Legendary Snow Artifact"
+  },
+  "Karplusan Forest": {
+    "cmc": 0.0,
+    "keywords": [],
+    "mana_cost": "",
+    "oracle_text": "{T}: Add {C}.\n{T}: Add {R} or {G}. This land deals 1 damage to you.",
+    "power": null,
+    "toughness": null,
+    "type_line": "Land"
   },
   "Karrthus, Tyrant of Jund": {
     "cmc": 7.0,
@@ -2329,6 +2404,15 @@
     "keywords": [],
     "mana_cost": "{2}{R}",
     "oracle_text": "Whenever you cast a multicolored spell, this enchantment deals X damage to any target, where X is the number of colors that spell is.",
+    "power": null,
+    "toughness": null,
+    "type_line": "Enchantment"
+  },
+  "Manabarbs": {
+    "cmc": 4.0,
+    "keywords": [],
+    "mana_cost": "{3}{R}",
+    "oracle_text": "Whenever a player taps a land for mana, this enchantment deals 1 damage to that player.",
     "power": null,
     "toughness": null,
     "type_line": "Enchantment"
@@ -2814,6 +2898,17 @@
     "toughness": "2",
     "type_line": "Creature — Human Knight"
   },
+  "Purity": {
+    "cmc": 6.0,
+    "keywords": [
+      "Flying"
+    ],
+    "mana_cost": "{3}{W}{W}{W}",
+    "oracle_text": "Flying\nIf noncombat damage would be dealt to you, prevent that damage. You gain life equal to the damage prevented this way.\nWhen Purity is put into a graveyard from anywhere, shuffle it into its owner's library.",
+    "power": "6",
+    "toughness": "6",
+    "type_line": "Creature — Elemental Incarnation"
+  },
   "Pyretic Ritual": {
     "cmc": 2.0,
     "keywords": [],
@@ -3022,6 +3117,17 @@
     "power": null,
     "toughness": null,
     "type_line": "Sorcery"
+  },
+  "Rhox Faithmender": {
+    "cmc": 4.0,
+    "keywords": [
+      "Lifelink"
+    ],
+    "mana_cost": "{3}{W}",
+    "oracle_text": "Lifelink (Damage dealt by this creature also causes you to gain that much life.)\nIf you would gain life, you gain twice that much life instead.",
+    "power": "1",
+    "toughness": "5",
+    "type_line": "Creature — Rhino Monk"
   },
   "Righteous Valkyrie": {
     "cmc": 3.0,
@@ -3744,6 +3850,24 @@
     "toughness": null,
     "type_line": "Enchantment"
   },
+  "Tamanoa": {
+    "cmc": 3.0,
+    "keywords": [],
+    "mana_cost": "{R}{G}{W}",
+    "oracle_text": "Whenever a noncreature source you control deals damage, you gain that much life.",
+    "power": "2",
+    "toughness": "4",
+    "type_line": "Creature — Spirit"
+  },
+  "Tarnished Citadel": {
+    "cmc": 0.0,
+    "keywords": [],
+    "mana_cost": "",
+    "oracle_text": "{T}: Add {C}.\n{T}: Add one mana of any color. This land deals 3 damage to you.",
+    "power": null,
+    "toughness": null,
+    "type_line": "Land"
+  },
   "Tectonic Giant": {
     "cmc": 4.0,
     "keywords": [],
@@ -4110,6 +4234,15 @@
     "power": "1",
     "toughness": "1",
     "type_line": "Creature — Fungus"
+  },
+  "Vito, Thorn of the Dusk Rose": {
+    "cmc": 3.0,
+    "keywords": [],
+    "mana_cost": "{2}{B}",
+    "oracle_text": "Whenever you gain life, target opponent loses that much life.\n{3}{B}{B}: Creatures you control gain lifelink until end of turn.",
+    "power": "1",
+    "toughness": "3",
+    "type_line": "Legendary Creature — Vampire Cleric"
   },
   "Vizier of Remedies": {
     "cmc": 2.0,

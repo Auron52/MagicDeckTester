@@ -120,6 +120,10 @@ TEST_CASE("Pirates routing: every deck in decks/ resolves exactly as before, Pir
         {"Mill", "AntiLifegain"},             {"Unpredictable Cyclone", "AntiLifegain"},
         // THE ONE CHANGE: was AntiLifegain (Forerunner of the Coalition's tutor_to_top).
         {"Pirates", "Pirates"},
+        // Prevent Damage (onboarded 2026-09-27): routed at the TOP by its own signature (Tamanoa /
+        // Manabarbs / Vito / Dina) -- it would otherwise ride AntiLifegain via Living Wish's
+        // tutor_to_hand. See the PreventDamageProvider note in DecisionProviders.h.
+        {"Prevent Damage", "PreventDamage"},
     };
 
     namespace fs = std::filesystem;

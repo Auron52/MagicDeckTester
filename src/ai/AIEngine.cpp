@@ -2828,6 +2828,8 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
         // MTG_PREPAY_SHRINK removed the over-tap (Anti-Lifegain s5/gi4: the recorded T4 kill needed
         // the two Grove drips and slipped to T5).
         if (is_pre_combat_main) { TapDripLandsIfUseful(state, state.active_player_index); }
+        // Prevent Damage pain sweep -- lockstep twin of ApplyPlanDirect's (armed only).
+        if (is_pre_combat_main) { TapPainSourcesIfUseful(state, state.active_player_index); }
 
         // Restore unplayed staged cards (mirror the normal end-of-TakeTurn restore):
         // cards cast were removed from hand; the rest, still flagged m_is_staged, go
@@ -5861,6 +5863,8 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
     // first. Inert without a Remedy active + an untapped tap_opponent_lifegain land (every deck but
     // Anti-Lifegain).
     if (is_pre_combat_main) { TapDripLandsIfUseful(state, state.active_player_index); }
+    // Prevent Damage pain sweep -- lockstep twin of ApplyPlanDirect's (armed only).
+    if (is_pre_combat_main) { TapPainSourcesIfUseful(state, state.active_player_index); }
 
     // SAME-MAIN GO-OFF: the realised-game half of ApplyPlanDirect's matching call (lockstep --
     // the search scored this plan WITH the go-off, so the executor must realise it too). Same

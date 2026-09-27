@@ -1,0 +1,27 @@
+{
+  "_comment": [
+    "Prevent Damage (2026-09-27, phase I1). The END-OF-MAIN PAIN SWEEP plus the whole damage-event",
+    "chain. Board: Tamanoa, Rhox Faithmender, Vito (all summoning sick -- mid-turn fixture resumed at",
+    "main 1, so nothing attacks), two untapped Battlefield Forges, empty hand. Nothing to cast, so",
+    "the only thing that can happen is TapPainSourcesIfUseful tapping each Forge in its COLOURED",
+    "mode (PreventDamageProvider::SelfDamageUseful: Tamanoa is out): each tap is ONE 1-damage event",
+    "from a noncreature source we control -> one Tamanoa trigger for 1 -> Faithmender doubles it to",
+    "2 -> Vito drains 2. So: us 20 -1 +2 -1 +2 = 22, opponent 20 -2 -2 = 16. A painless {C} sweep",
+    "would read 20/20; an un-doubled gain 20/18; a single aggregated event would still read 22/16",
+    "(Vito is affine), which is why the Dina fixture pins the event COUNT separately."
+  ],
+  "deck": "decks/Prevent Damage/Prevent Damage.cod",
+  "turn": 4, "on_the_play": true, "active_life": 20, "opponent_life": 20,
+  "resume_at": "main1",
+  "battlefield": [
+    { "name": "Tamanoa", "sick": true },
+    { "name": "Rhox Faithmender", "sick": true },
+    { "name": "Vito, Thorn of the Dusk Rose", "sick": true },
+    { "name": "Battlefield Forge" }, { "name": "Battlefield Forge" }
+  ],
+  "hand": [],
+  "library_filler": "Forest", "library_size": 30,
+  "depth": 1, "budget_ms": 50, "max_turns": 4,
+  "expect_active_life": 22,
+  "expect_opponent_life": 16
+}

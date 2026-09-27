@@ -151,6 +151,12 @@
 // it in AtCleanBoundary beside temp_double_strike would have refused every comparison from the turn
 // a Paladin pairs onward -- the two new fields on this card pair look alike and are classified
 // oppositely, which is the whole reason this log exists.
+// 296 -> 296 (2026-09-27, Prevent Damage): Permanent gained `mana_tap_mark` (a uint8_t in existing
+// padding -- the tripwire did not fire). Classification: BOUNDARY ASSERTION. It records a mana tap's
+// pending damage-event triggers only for the life of a payment and is cleared by the payment's flush
+// (a backstop flush runs at ApplyPlanDirect entry and at the end of every executor main phase), so a
+// state still carrying one is not at a clean boundary -- AtCleanBoundary refuses it rather than
+// comparing it. Never written on an unarmed board, so the refusal is byte-identical everywhere else.
 static_assert(sizeof(Permanent) == 296,
               "Permanent changed size -- fold any new field into dominance::Build() (see the "
               "MAINTENANCE HAZARD note at the top of Dominance.h) before updating this number.");
@@ -259,6 +265,12 @@ static_assert(sizeof(Player) == 200,
 // tripwire did not fire for the same padding reason. GameState itself gained no field of its own: an
 // emblem is a PLAYER object (CR 114), not game-wide state, which is what lets two Gideons under
 // different controllers hold independent counts.
+// 832 -> 832 (2026-09-27, Prevent Damage): GameState gained `dmg_events_armed` and `own_death_live`
+// (two bools in existing padding -- the tripwire did not fire). Classification: DECK CONSTANTS,
+// stamped once in StampDeckTraits and never written again -- nothing to fold, exactly like
+// deck_reads_mv_cast. The STATE they gate (our own death) needs no new fold either: a loss is
+// represented by parking our life at dmgev::kLostLife, and life_self is already an axis (MORE
+// dominates), so a dead line can never dominate a live one.
 static_assert(sizeof(GameState) == 832,
               "GameState changed size -- fold any new field into dominance::Build() (see the "
               "MAINTENANCE HAZARD note at the top of Dominance.h) before updating this number.");
@@ -475,6 +487,7 @@ inline bool AtCleanBoundary(const GameState& s)
         if (p.temp_lifelink)                                        { return false; }   // Heliod until-EOT grant
         if (p.temp_double_strike)                                   { return false; }   // Valiant Knight until-EOT grant
         if (p.marked_for_destruction)                               { return false; }
+        if (p.mana_tap_mark != 0)                                   { return false; }   // Prevent Damage: an unflushed tap trigger
     }
     return true;
 }

@@ -3511,7 +3511,7 @@
    ],
    "subtypes": [],
    "keywords": [],
-   "oracle_text": "Whenever this land becomes tapped, it deals 1 damage to you.\n{T}: Add one mana of any color. [WUBRG pain land: tap_self_damage 1 (mandatory whenever tapped for mana, applied at the shared tap sites). Our life loss is inert for the goldfish clock; it interacts only with our own life-cost accounting.]",
+   "oracle_text": "Whenever this land becomes tapped, it deals 1 damage to you.\n{T}: Add one mana of any color. [WUBRG pain land: tap_self_damage 1 (mandatory whenever tapped for mana, applied at the shared tap sites). Our life loss is inert for the goldfish clock in most decks; it interacts only with our own life-cost accounting. EXCEPT in a damage-event deck (Prevent Damage: GameState::dmg_events_armed), where the 1 damage is a damage EVENT from a noncreature source we control -- Tamanoa triggers on it and our own death is a state-based action. The printed ability is a TRIGGER ('whenever this land becomes tapped'), modelled as immediate damage at the tap: it resolves before the spell being paid for either way, which is all the engine can observe (no priority windows). Tapping it for a non-mana reason never happens in this engine.]",
    "template": "basic_land",
    "parameters": {
     "produces": [
@@ -9364,6 +9364,249 @@
      "R"
     ],
     "fastland_max_other_lands": 2
+   }
+  },
+  {
+   "name": "Battlefield Forge",
+   "mana_cost": "",
+   "types": [
+    "Land"
+   ],
+   "subtypes": [],
+   "keywords": [],
+   "oracle_text": "{T}: Add {C}.\n{T}: Add {R} or {W}. This land deals 1 damage to you. [Painland, both modes modelled (the Adarkar Wastes / Brushland shape): produces R/W/C, tap_self_damage 1 applies only to the COLOURED modes -- the {C} ability is separate and painless. In a damage-event deck (Tamanoa / Manabarbs / Purity -- GameState::dmg_events_armed) the coloured tap's 1 damage is a damage EVENT from a noncreature source we control, so Tamanoa triggers on it, and a generic pip takes the coloured mode when the provider says our damage is useful (SelfDamageUseful) and it is rules-safe. See src/core/DamageEvents.h.]",
+   "template": "basic_land",
+   "parameters": {
+    "produces": [
+     "R",
+     "W",
+     "C"
+    ],
+    "tap_self_damage": 1
+   }
+  },
+  {
+   "name": "Karplusan Forest",
+   "mana_cost": "",
+   "types": [
+    "Land"
+   ],
+   "subtypes": [],
+   "keywords": [],
+   "oracle_text": "{T}: Add {C}.\n{T}: Add {R} or {G}. This land deals 1 damage to you. [Painland, both modes modelled -- identical treatment to Battlefield Forge (R/G/C, 1 damage on the coloured modes only; a damage EVENT in an armed deck).]",
+   "template": "basic_land",
+   "parameters": {
+    "produces": [
+     "R",
+     "G",
+     "C"
+    ],
+    "tap_self_damage": 1
+   }
+  },
+  {
+   "name": "Tarnished Citadel",
+   "mana_cost": "",
+   "types": [
+    "Land"
+   ],
+   "subtypes": [],
+   "keywords": [],
+   "oracle_text": "{T}: Add {C}.\n{T}: Add one mana of any color. This land deals 3 damage to you. [Both modes modelled: '{T}: Add {C}' is a separate painless ability; the any-colour mode deals 3. Same pain rules as a painland (tap_self_damage 3 on the coloured modes only), so the {C} mode is taken for a generic pip unless the provider says our damage is useful. In an armed deck the 3 is ONE damage event (one Tamanoa trigger for 3, one Dina drain).]",
+   "template": "basic_land",
+   "parameters": {
+    "produces": [
+     "W",
+     "U",
+     "B",
+     "R",
+     "G",
+     "C"
+    ],
+    "tap_self_damage": 3
+   }
+  },
+  {
+   "name": "Grand Coliseum",
+   "mana_cost": "",
+   "types": [
+    "Land"
+   ],
+   "subtypes": [],
+   "keywords": [],
+   "oracle_text": "This land enters tapped.\n{T}: Add {C}.\n{T}: Add one mana of any color. This land deals 1 damage to you. [Enters tapped (enters_tapped). Both mana modes modelled: '{T}: Add {C}' is painless, the any-colour mode deals 1 -- the painland shape with five colours.]",
+   "template": "basic_land",
+   "parameters": {
+    "produces": [
+     "W",
+     "U",
+     "B",
+     "R",
+     "G",
+     "C"
+    ],
+    "tap_self_damage": 1,
+    "enters_tapped": true
+   }
+  },
+  {
+   "name": "Ancient Tomb",
+   "mana_cost": "",
+   "types": [
+    "Land"
+   ],
+   "subtypes": [],
+   "keywords": [],
+   "oracle_text": "{T}: Add {C}{C}. This land deals 2 damage to you. [produces {C}{C} (produces_amount 2) and deals 2 damage on EVERY tap: tap_self_damage_any_mode, because every pain site otherwise reads a {C} tap of a land with a {C} mode as a painland's separate painless ability -- which Ancient Tomb does not have (its only ability is the damaging one). Folded into the land signature ('pa'). In an armed deck each tap is one 2-damage event (Tamanoa gains 2 per Tamanoa).]",
+   "template": "basic_land",
+   "parameters": {
+    "produces": [
+     "C"
+    ],
+    "produces_amount": 2,
+    "tap_self_damage": 2,
+    "tap_self_damage_any_mode": true
+   }
+  },
+  {
+   "name": "Manabarbs",
+   "mana_cost": "{3}{R}",
+   "types": [
+    "Enchantment"
+   ],
+   "subtypes": [],
+   "keywords": [],
+   "oracle_text": "Whenever a player taps a land for mana, this enchantment deals 1 damage to that player. [land_tap_damage_each_player 1. Each land tapped for mana is its OWN 1-damage event from Manabarbs (a noncreature source we control), so each triggers Tamanoa separately and each resulting lifegain is its own event (Dina drains 1 per event). Every land tap for mana is recorded at the shared tap sites (greedy, backtracker, mana-cache replay, filter-land modes, drip / pain sweeps) and resolved after the payment commits (core/DamageEvents.h), after the Tamanoa triggers from the same payment -- we control both and order the gains first (CR 603.3b), which is never worse for survival. Two Manabarbs = two triggers per tap. [PARTIAL: 'a player' -- only OUR taps are modelled; the goldfish opponent never taps a land for mana (it has no lands and casts nothing -- mtg-ai.md), so its half is provably inert.] [PARTIAL: a land tapped for mana by a tap-ahead helper (ritual / ETB-untap float, Firebreathe, the EDF combo route) is flushed only at the next decision-boundary backstop, not before the spell it pays for -- none of those paths is reachable in this deck.]]",
+   "template": "custom",
+   "parameters": {
+    "land_tap_damage_each_player": 1
+   }
+  },
+  {
+   "name": "Tamanoa",
+   "mana_cost": "{R}{G}{W}",
+   "types": [
+    "Creature"
+   ],
+   "subtypes": [
+    "Spirit"
+   ],
+   "keywords": [],
+   "power": 2,
+   "toughness": 4,
+   "oracle_text": "Whenever a noncreature source you control deals damage, you gain that much life. [noncreature_damage_lifegain. ONE trigger per damage EVENT from a noncreature source we control, for the event's TOTAL damage to every recipient (a Pyrohemia activation hitting both players and every creature is one trigger), one trigger PER Tamanoa (each is its own lifegain event). Sources here: painland / City of Brass / Tarnished Citadel / Grand Coliseum / Ancient Tomb taps, Manabarbs, Spellshock, Pyrohemia, Rolling Earthquake. Prevented damage (Purity) is not dealt, so it does not trigger. Rulings honoured: a Tamanoa killed by the same event still triggers (the caller passes the pre-damage count); and if the damage takes US to 0 or less we lose to the state-based action BEFORE the trigger resolves -- the flush checks own death first (core/DamageEvents.h, SbaCheckpoint). NOT routed yet: generic noncreature burn through EffectHandler::ResolveDirectDamage and the Crackle / Soulfire self-hits -- no card in this deck deals damage that way.]",
+   "template": "custom",
+   "parameters": {
+    "noncreature_damage_lifegain": true
+   }
+  },
+  {
+   "name": "Rhox Faithmender",
+   "mana_cost": "{3}{W}",
+   "types": [
+    "Creature"
+   ],
+   "subtypes": [
+    "Rhino",
+    "Monk"
+   ],
+   "keywords": [
+    "Lifelink"
+   ],
+   "power": 1,
+   "toughness": 5,
+   "oracle_text": "Lifelink (Damage dealt by this creature also causes you to gain that much life.)\nIf you would gain life, you gain twice that much life instead. [Lifelink: the keyword (CreatureHasLifelink reads it; combat lifelink goes through the shared GainLife hook). lifegain_multiplier 2 -- a REPLACEMENT applied inside GainLife to every lifegain event of its controller, before any watcher reads the amount (so Vito drains the doubled amount). Two Faithmenders multiply (x4). With Bilbo, the affected player orders the replacements (CR 616.1) and +1 first is always at least as good: (a+1)*2.]",
+   "template": "custom",
+   "parameters": {
+    "lifegain_multiplier": 2
+   }
+  },
+  {
+   "name": "Vito, Thorn of the Dusk Rose",
+   "mana_cost": "{2}{B}",
+   "types": [
+    "Creature"
+   ],
+   "supertypes": [
+    "Legendary"
+   ],
+   "subtypes": [
+    "Vampire",
+    "Cleric"
+   ],
+   "keywords": [],
+   "power": 1,
+   "toughness": 3,
+   "oracle_text": "Whenever you gain life, target opponent loses that much life.\n{3}{B}{B}: Creatures you control gain lifelink until end of turn. [lifegain_target_opp_loses_that_much: fired from FireLifegainWatchers once per lifegain EVENT for the (replaced) amount gained. LIFE LOSS, not damage (so it never triggers Tamanoa); 'target opponent' = the one opponent (in 2HG, one head's worth off the shared pool). Legend rule: EnforceLegendRule keeps the oldest copy (no viewer decision -- disclosed). [PARTIAL -- TODO PHASE I3, PROVISIONAL: '{3}{B}{B}: Creatures you control gain lifelink until end of turn' is NOT implemented yet (needs a team-lifelink grant mode). Not claimed inert: it turns every attacking creature into a lifegain event that Vito then drains. Tracked in docs/design/analysis-Prevent Damage.md.]]",
+   "template": "custom",
+   "parameters": {
+    "lifegain_target_opp_loses_that_much": true
+   }
+  },
+  {
+   "name": "Dina, Soul Steeper",
+   "mana_cost": "{B}{G}",
+   "types": [
+    "Creature"
+   ],
+   "supertypes": [
+    "Legendary"
+   ],
+   "subtypes": [
+    "Dryad",
+    "Druid"
+   ],
+   "keywords": [],
+   "power": 1,
+   "toughness": 3,
+   "oracle_text": "Whenever you gain life, each opponent loses 1 life.\n{1}, Sacrifice another creature: Dina gets +X/+0 until end of turn, where X is the sacrificed creature's power. [lifegain_each_opp_loses 1: fired from FireLifegainWatchers once per lifegain EVENT whatever its size (so two Manabarbs taps under Tamanoa = two events = two drains), x each opposing head. Life loss, not damage. Legend rule: EnforceLegendRule keeps the oldest copy (no viewer decision -- disclosed). [PARTIAL -- TODO PHASE I3, PROVISIONAL: '{1}, Sacrifice another creature: Dina gets +X/+0' is NOT implemented yet (sac outlet with a power-of-victim self-pump). Not claimed inert. Tracked in docs/design/analysis-Prevent Damage.md.]]",
+   "template": "custom",
+   "parameters": {
+    "lifegain_each_opp_loses": 1
+   }
+  },
+  {
+   "name": "Bilbo, Birthday Celebrant",
+   "mana_cost": "{W}{B}{G}",
+   "types": [
+    "Creature"
+   ],
+   "supertypes": [
+    "Legendary"
+   ],
+   "subtypes": [
+    "Halfling",
+    "Rogue"
+   ],
+   "keywords": [],
+   "power": 2,
+   "toughness": 3,
+   "oracle_text": "If you would gain life, you gain that much life plus 1 instead.\n{2}{W}{B}{G}, {T}, Exile Bilbo: Search your library for any number of creature cards, put them onto the battlefield, then shuffle. Activate only if you have 111 or more life. [lifegain_plus 1: a REPLACEMENT inside GainLife, +1 per lifegain event, applied BEFORE any Faithmender doubling (CR 616.1: the affected player orders them, and (a+1)*2 > a*2+1). SIDEBOARD card, reachable via Living Wish / Green Sun's Zenith. [PARTIAL -- TODO PHASE I3, PROVISIONAL: the '{2}{W}{B}{G}, {T}, Exile Bilbo: search for any number of creature cards, put them onto the battlefield ... Activate only if you have 111 or more life' activation is NOT implemented yet. Reachable in principle (Purity + Faithmenders + Manabarbs); not claimed inert. Tracked in docs/design/analysis-Prevent Damage.md.]]",
+   "template": "custom",
+   "parameters": {
+    "lifegain_plus": 1
+   }
+  },
+  {
+   "name": "Purity",
+   "mana_cost": "{3}{W}{W}{W}",
+   "types": [
+    "Creature"
+   ],
+   "subtypes": [
+    "Elemental",
+    "Incarnation"
+   ],
+   "keywords": [
+    "Flying"
+   ],
+   "power": 6,
+   "toughness": 6,
+   "oracle_text": "Flying\nIf noncombat damage would be dealt to you, prevent that damage. You gain life equal to the damage prevented this way.\nWhen Purity is put into a graveyard from anywhere, shuffle it into its owner's library. [Flying: keyword (inert vs a goldfish that never blocks). prevent_noncombat_to_self_gain: every NONCOMBAT damage event to its controller is prevented and becomes a lifegain event of that size -- a replacement, applied at once (pain from a land tap is prevented at the tap; the gain resolves with the payment's other events). Prevented damage is not DEALT, so Tamanoa does not trigger on it. graveyard_replace_shuffle_library: the 'put into a graveyard from anywhere -> shuffle into library' clause, via the existing Progenitus / Worldspine path (dies, cleanup discard). [PARTIAL: modelled as a replacement where the card has a TRIGGER; the only observable difference is a window in which Purity sits in the graveyard, and nothing in this deck or the engine reads the graveyard in that window (no stack) -- disclosed.] SIDEBOARD card, reachable via Living Wish / Green Sun's Zenith.]",
+   "template": "custom",
+   "parameters": {
+    "prevent_noncombat_to_self_gain": true,
+    "graveyard_replace_shuffle_library": true
    }
   }
  ]

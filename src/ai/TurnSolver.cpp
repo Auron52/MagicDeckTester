@@ -4964,6 +4964,13 @@ namespace m2yield
 namespace leafeval
 {
 inline constexpr long long kInvalid = (std::numeric_limits<long long>::max)();
+// OWN DEATH (own_death_live decks only -- Prevent Damage). A line that killed us returns the no-win
+// turn like any other hopeless line, so the win-turn key alone TIES it with a line that merely did
+// not win -- and the fallback (plan.value) then happily picked the busier-looking suicide (measured:
+// 2 of 200 d3 sanity games cast a third Manabarbs into their own death). It publishes this instead
+// of kInvalid: a VALID quantity worse than every real one (Quantity is bounded far below it), so the
+// tie-break ranks any live no-win line above it. Never published on an unarmed deck.
+inline constexpr long long kOwnDeath = kInvalid - 1;
 
 // LOWER is better. Written by every rollout frame at every return point (see the FRAME RULE below)
 // and consumed by the pass loop immediately after its own SimulateToEnd call -- thread_local because
@@ -28236,6 +28243,9 @@ bool TurnSolver::BatchPrepayMainCasts(GameState& state, const std::vector<Action
         { g_wild_prepay_excess.fetch_add(pool.wild - combined.generic, std::memory_order_relaxed); }
     }
     state.floating_mana = pool;
+    // PREVENT DAMAGE (armed only): the batch prepay is a payment that bypasses TapForCostShared, so
+    // it resolves its own tap triggers here, once the whole-turn solve has committed.
+    dmgev::FlushDamageEvents(state);
     Pp(mixed_ok ? PP_OK_MIXED : PP_OK);
     _decl.ok = true; return true;
 }
@@ -28546,6 +28556,9 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
                             int caller_line)
 {
     g_apply_caller_line = caller_line;
+    // Prevent Damage backstop: no tap-trigger may be pending when a plan starts applying (armed only;
+    // MTG_DMG_EVENT_VERIFY aborts if one is -- a missed flush site).
+    dmgev::BackstopFlush(state, "ApplyPlanDirect");
     // MTG_BP_ARM_NEW: this apply's measured continuation lengths describe THIS apply only -- the
     // same convention g_bp_cands_last is reset under, and for the same reason: a stale length from
     // an earlier plan must never be attributed to this breakpoint. The candidate loop reads it
@@ -33302,6 +33315,9 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
     // a spell that needed Grove's mana tapped it first; once per turn (pre-combat main only). The
     // real executor (AIEngine::TakeTurn) calls the same helper at the same point -> lockstep.
     if (is_pre_combat) { TapDripLandsIfUseful(state, state.active_player_index); }
+    // PREVENT DAMAGE pain sweep (armed only; see TapPainSourcesIfUseful) -- the same end-of-main-1
+    // point as the drip sweep above, and lockstep with the executor's two call sites.
+    if (is_pre_combat) { TapPainSourcesIfUseful(state, state.active_player_index); }
 
     // SAME-MAIN GO-OFF (MTG_EDF_AUTOGOFF; see EdfAutoGoOffAfterCasts): the casts above may have
     // just assembled the flicker loop, and abilities of a creature cast THIS plan were never in
@@ -41200,6 +41216,9 @@ static std::vector<TurnSolver::Plan> EnumeratePlansWithLandUncached(const GameSt
         if (pp.taps_spawn_opp_token)          { s += "spw"; }
         // Pain land (Brushland / Horizon Canopy): tapping costs life.
         if (pp.tap_self_damage > 0)           { s += "pd" + std::to_string(pp.tap_self_damage); }
+        // Ancient Tomb's pain is in EVERY mode (a Sol Ring-yield {C}{C} land that hurts), unlike a
+        // painland's -- two lands otherwise alike on this signature play differently.
+        if (pp.tap_self_damage_any_mode)      { s += "pa"; }
         // Grove of the Burnwillows: tapping gives the OPPONENT life.
         if (pp.tap_opponent_lifegain > 0)     { s += "og" + std::to_string(pp.tap_opponent_lifegain); }
         // Fastland: enters untapped only while few other lands are out -- a turn-dependent ETB the
@@ -43190,6 +43209,10 @@ static int SimulateToEndImpl(GameState& state, int depth, int max_turns,
         // Abort only AFTER cutoff_turn so a line that wins exactly on cutoff_turn still
         // registers for the value tiebreak.
         if (state.turn_number > cutoff_turn) { leafeval::Publish(leafeval::kInvalid); return max_turns + 1; }
+        // OWN DEATH at the loop head: the line handed to this rollout had already killed us (the
+        // root turn's apply, before SimulateToEnd). Same no-Quantity rule as the in-loop checks.
+        if (state.own_death_live && !OpponentHasLost(state) && SelfHasLost(state))
+        { leafeval::Publish(leafeval::kOwnDeath); return max_turns + 1; }
 
         // DECKED when we got here -- the previous turn's end-of-turn opponent draw emptied their
         // library, and SimulateEndAndStartNextTurn deliberately left the counter on that turn.
@@ -43301,6 +43324,13 @@ static int SimulateToEndImpl(GameState& state, int depth, int max_turns,
         }
         int life_before_pl = state.Opponent().life;
         ApplyPlanDirect(state, pre_plan, true);   // future turn: no stamp (root-turn authority)
+        // OWN DEATH (own_death_live decks only -- Prevent Damage, or MTG_OWN_DEATH_ALL): a line
+        // that killed us is a LOSS, never a scored quantity -- publishing Quantity for a suicide
+        // line would let the no-win tiebreak prefer it (it may well have drained the opponent
+        // lower on its way down). It publishes kOwnDeath, which ranks below every live no-win
+        // line (see its note). Checked before the win test below would even run.
+        if (state.own_death_live && !OpponentHasLost(state) && SelfHasLost(state))
+        { leafeval::Publish(leafeval::kOwnDeath); return max_turns + 1; }
         if (g_fs_sim_trace > 0)
         {
             std::fprintf(stderr, "[fs-sim]    t%d m1 %s | after: %s opp=%d\n", state.turn_number,
@@ -43371,6 +43401,9 @@ static int SimulateToEndImpl(GameState& state, int depth, int max_turns,
                                      && !post_plan.land_decided;
             if (!(M2SkipEmptyApplyOn() && m2_apply_empty))
             { ApplyPlanDirect(state, post_plan, false); }
+            // OWN DEATH after the second main (see the main-1 twin above).
+            if (state.own_death_live && !OpponentHasLost(state) && SelfHasLost(state))
+            { leafeval::Publish(leafeval::kOwnDeath); return max_turns + 1; }
             if (g_fs_sim_trace > 0)
             {
                 std::fprintf(stderr, "[fs-sim]    t%d m2 %s | opp=%d\n", state.turn_number,

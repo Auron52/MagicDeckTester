@@ -294,6 +294,19 @@ struct GameState
     // key folds only; the accumulator itself always runs (cheap, and lockstep is simpler than
     // a conditional increment at five sites).
     bool                     deck_reads_mv_cast = false;
+    // Prevent Damage (2026-09-27) -- DECK CONSTANTS stamped by GoldFishRunner::StampDeckTraits.
+    //   dmg_events_armed: the deck (main + sideboard) carries a damage-event / lifegain-replacement
+    //     card (Tamanoa, Manabarbs, Purity, Rhox Faithmender, Bilbo). Arms the EVENT MODEL in
+    //     core/DamageEvents.h: our pain and Manabarbs taps become damage EVENTS whose triggers
+    //     resolve at a flush, lifegain goes through the replacement chain, and our own death is a
+    //     state-based action. False for every other deck, which keeps its raw `life -=` pain
+    //     byte-for-byte (every armed branch is `if (dmg_events_armed)`).
+    //   own_death_live: our own life total can LOSE the game (CR 704.5a). True when armed, or for
+    //     every deck under the measurement-only MTG_OWN_DEATH_ALL=1 (default OFF) -- the basis for a
+    //     later decision to un-gate own death globally. Read by OpponentHasLost below, the
+    //     rollout's own-death exit and the executor's main-phase break.
+    bool                     dmg_events_armed = false;
+    bool                     own_death_live   = false;
     // Deck-level stamp (GoldFishRunner::SetupGame), same shape and same rationale as
     // The LARGEST CardParams::endstep_lifegain_threshold over the cards in this deck that carry
     // endstep_lifegain_tokens, i.e. over everything that actually READS
@@ -702,5 +715,14 @@ inline bool OpponentHasLost(const GameState& s)
     // win, only a separately-reported marker + search tiebreak (see the field's comment), so the
     // game plays on until the actual kill. Because every consumer -- search projection, executor,
     // fd-oracle -- reads this one predicate, removing it here reverts all of them at once.
-    return s.Opponent().HasLost() || s.opponent_decked;
+    const bool raw = s.Opponent().HasLost() || s.opponent_decked;
+    // OWN DEATH (Prevent Damage, 2026-09-27; see own_death_live). A game in which we have ALREADY
+    // lost, or in which both players lost at the same state-based-action check (CR 104.4a, a
+    // DRAW), is not a win. Why reading OUR life here is exact rather than a guess about ordering:
+    // the armed damage model never lets our life drop after the opponent has lost (the won-lock in
+    // core/DamageEvents.h makes every later hit on us a no-op), and a loss is made sticky by
+    // parking our life at dmgev::kLostLife, so `our life <= 0 && opponent dead` can only mean
+    // "we died first" or "we died together". Unarmed decks read `raw` -- byte-identical.
+    if (s.own_death_live) { return raw && s.ActivePlayer().life > 0; }
+    return raw;
 }
