@@ -278,6 +278,17 @@ static std::string FdPlanText(const TurnSolver::Plan& p)
         s += " + " + a.card_name.str();
         if (a.chosen_x > 0) { s += "(x" + std::to_string(a.chosen_x) + ")"; }
     }
+    // The RECORDED continuation rides the phase too (replayed by the post-loop catch-all), and a
+    // committed line whose projection depends on it reads as a plain cast list without this:
+    // knights s1115 d3's T3 "Plains + Acclaimed Contender" only wins T4 WITH its recorded Vial.
+    if (!p.breakpoint_actions.empty())
+    {
+        s += " | bp[";
+        for (const Action& a : p.breakpoint_actions)
+        { s += "k" + std::to_string(static_cast<int>(a.kind)) + ":" + a.card_name.str() + " "; }
+        s += "]";
+    }
+    if (p.bp_choice >= 0) { s += " bp_choice=" + std::to_string(p.bp_choice) + "@" + std::to_string(p.bp_at); }
     return s;
 }
 
@@ -2200,9 +2211,18 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
     // note_draw_engine's is. At full depth the rollout's arming is recorded into
     // plan.breakpoint_actions and replayed by the site-agnostic post-loop catch-all below, so no
     // bp index is consumed here and no numbering moves.
+    // Both halves RESET at every breakpoint decision point (replay_recorded / resolve_draw_
+    // breakpoint), the twin of bp_searched_plan's reset -- see hand_at_section in ApplyPlanDirect
+    // for why "no class accounted for it" has to mean "since the last decision point".
     std::vector<int> exec_hand_at_section;
-    const uint32_t   exec_seq_at_section = g_hand_entry_seq;
+    uint32_t         exec_seq_at_section = g_hand_entry_seq;
     if (BpHandEntryEnabled()) { exec_hand_at_section = TurnSolver::HandCardNumbers(state); }
+    auto exec_section_reset = [&]()
+    {
+        if (!BpHandEntryEnabled()) { return; }
+        exec_hand_at_section = TurnSolver::HandCardNumbers(state);
+        exec_seq_at_section  = g_hand_entry_seq;
+    };
     // MTG_EXEC_DROP_REPLAN (LEVER, default OFF, 2026-09-17): a REAL-play cast of this pass was
     // dropped as unpayable, so the rest of the committed line was priced on a board that did not
     // happen (hinata s1001 gi392 d5 T5: Crackle with Power declared at X=4 for 12 mana with 11
@@ -4106,6 +4126,7 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
     std::function<void(const std::vector<Action>&)> replay_recorded =
         [&](const std::vector<Action>& recs)
     {
+        exec_section_reset();   // a breakpoint decision point (twin of bp_searched_plan's reset)
         if (EnvOn("MTG_FD_TRACE"))
         {
             std::fprintf(stderr, "[replay-bp] turn=%d recs=%d:", state.turn_number, (int)recs.size());
@@ -4232,6 +4253,7 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
     std::function<void(int)> resolve_draw_breakpoint = [&](int bp_depth)
     {
         if (bp_depth >= kMaxDrawBreakpointDepth || ++rdb_calls > kMaxDrawBreakpointCalls) { return; }
+        exec_section_reset();   // a breakpoint decision point (twin of bp_searched_plan's reset)
         // karoo_deferred: the executor reserves a Karoo drop for after the main cast loop exactly as
         // ApplyPlanDirect does, so it must tell the breakpoint enumeration the same thing -- a
         // RESERVED drop is not a declined one (MTG_BP_CONDEMN_LAND). Lockstep pair.

@@ -832,6 +832,13 @@ static std::atomic<long long> g_bp_newonly_kept_new{0};
 static std::atomic<long long> g_bp_newonly_kept_plan{0};
 static std::atomic<long long> g_bp_newonly_kept_act{0};      // kept by a newly AVAILABLE activation
 static std::atomic<long long> g_bp_newonly_kept_unknown{0};  // kept because the kind is not keyed
+// MTG_BP_ARM_NEW firing counters (see BpArmNewOn, far below). `measured` = base-plan applies that
+// asked the enumerator for a breakpoint's continuation length, `empty` = those that found no new
+// line, `declined` = wave-0 rank variants skipped as a result. At file scope only because the
+// rollout-stats reporter above reads them.
+static std::atomic<long long> g_bp_armnew_measured{0};
+static std::atomic<long long> g_bp_armnew_empty{0};
+static std::atomic<long long> g_bp_armnew_declined{0};
 static bool BpCondemnActivationEnabled();   // defined with the rule, next to the other condemn flags
 static std::atomic<long long> g_bp_cond_mark_in_window{0};  // condemned entries at rank < W
 static std::atomic<long long> g_bp_cond_mark_rank0{0};      // ...lists whose VALUE-BEST entry was condemned
@@ -1571,6 +1578,16 @@ namespace
                           << " kept_act=" << g_bp_newonly_kept_act.load()
                           << " kept_unknown=" << g_bp_newonly_kept_unknown.load()
                           << " kept_plan=" << g_bp_newonly_kept_plan.load() << "\n";
+            }
+            // MTG_BP_ARM_NEW firing counters (see BpArmNewOn). `declined` == 0 with measured > 0 is
+            // the inert-arm signature: the rule looked at breakpoints and never skipped anything.
+            if (g_bp_armnew_measured.load() > 0)
+            {
+                const long long am = g_bp_armnew_measured.load();
+                const long long ae = g_bp_armnew_empty.load();
+                std::cerr << "[rollout-stats] bp_armnew measured=" << am << " empty=" << ae
+                          << " empty_rate=" << (am ? static_cast<double>(ae) / am : 0.0)
+                          << " variants_declined=" << g_bp_armnew_declined.load() << "\n";
             }
             // DROP MODE FIRING COUNTERS (see BpCondemnDropMode). A lever with no firing counter
             // reads as "no effect" when it is really a no-op, which is this feature's established
@@ -3957,6 +3974,23 @@ bool TurnSolver::NewOnlyBreakpointContinuationsActive(const GameState& state)
 {
     return BpNewOnlyActive(state);
 }
+
+// MTG_BP_ARM_NEW -- WAVE 0's stillborn test: a breakpoint that offers NO new line gets no variants,
+// because "do nothing" is the base plan's own line and the base plan is already being played out.
+// Full argument and the measurement at g_bp_base_lens. DEFAULT OFF (measuring).
+//
+// PLAY-NEUTRAL BY CONSTRUCTION, and that is the gate to check it on: a declined variant would have
+// overrun its empty list, resolved to the unconditional EMPTY continuation, and landed on the state
+// the base plan's own apply produces -- which bp_seen_states already recognises and skips. So the
+// prediction is IDENTICAL digests with strictly fewer units, and both halves must be verified: a
+// digest match alone is also what a silently inert arm looks like (see the firing counters below).
+static bool BpArmNewOn()
+{
+    static const bool on = EnvOn("MTG_BP_ARM_NEW");
+    return on;
+}
+// Firing counters are declared with the other bp_newonly ones (the rollout-stats reporter above
+// reads them, and it sits at the top of the file).
 
 // (permanent, ability) -> one key. The permanent is its card.m_number (the stable per-instance id
 // every activation Action carries as sac_source_id); the ability is the PermAbilityMode value. Tokens
@@ -13431,6 +13465,57 @@ bool TurnSolver::InBpContinuation() { return g_bp_continuation_depth > 0; }
 // is eligible (the one at bp_at), so there is at most one write. Thread_local -- the search is
 // single-threaded per game, and the batch runner plays games concurrently.
 static thread_local int g_bp_cands_last = 0;
+
+// ---- WAVE 0's MISSING STILLBORN TEST (MTG_BP_ARM_NEW) ------------------------------------------
+//
+// USER 2026-09-27: *"do nothing is already covered by the original line, we just need to continue
+// playing that out. Only genuinely new lines (i.e. those that use our new options) need to be
+// considered."*
+//
+// WHAT THIS CLOSES. The deferred WAVE phase already declines a slot whose ranks can only hand out
+// something already scored (BpWaveNSkipOn's stillborn skip, and MTG_BP_NSKIP_GLOBAL mode 2 covers
+// exactly the rank-0 case: "a rank-0 slot is skippable exactly when the list is EMPTY"). WAVE 0 has
+// never had that test -- MTG_BP_W0_UNIF_COLLAPSE's own header says so -- and since MTG_BP_NEW_ONLY
+// went default ON (2026-09-22) the EMPTY list stopped being a corner case: the filter keeps only
+// continuations that USE a card that arrived, so a breakpoint whose arrival is not castable or
+// activatable here leaves NOTHING. Its W wave-0 variants then all overrun to the unconditional
+// EMPTY continuation -- which IS the base plan's own line -- and dedup away on state having already
+// spent their budget units and their ApplyPlanDirect.
+//
+// MEASURED (knights d3 b10, 60 games, seed 1001, MTG_BP_HAND_ENTRY=1 + MTG_BP_NODE_S10=1):
+// site 10 opened 15,589 times and 9,618 of those (61.7%) offered no new line; site 3, 53.2%. The
+// arm cost +42% interior nodes (54,432 -> 77,331) for an identical avg win turn, and 2 wasted
+// applies x 9,618 empty opens accounts for ~84% of that increase.
+//
+// WHY A MEASURED LENGTH AND NOT A PREDICATE. The emission decision (AppendBreakpointVariants) is
+// PRE-apply and cannot know what will arrive, let alone whether it will be castable with the mana
+// the plan leaves. Asking a second, cheaper question there would be a new predicate that has to
+// agree with the new-only filter forever -- the lockstep hazard this family has already paid for
+// twice. So the answer comes from the ONE authority, EnumerateBreakpointPlansRef, which is memoized
+// on state: a BASE plan's apply asks it (filling the memo the variants would have filled anyway, so
+// n > 0 costs nothing extra) and the candidate loop declines the variants when the answer is 0.
+//
+// Indexed by the ordinal of the class-on breakpoint within the apply -- the same numbering `bp_at`
+// uses -- and only filled for ordinals wave 0 can actually target (< BpSearchDepth()).
+static thread_local std::vector<int> g_bp_base_lens;
+
+// ...AND HOW MANY CLASS-ON BREAKPOINTS THE APPLY REACHED IN TOTAL. Required for soundness, and the
+// first cut was wrong without it: smoke at shipped defaults read 95 passed / 2 failed (burn d3 gi16,
+// hinata d5 gi9), both "score unchanged, play differs".
+//
+// WHY A DECLINED VARIANT IS NOT ALWAYS ITS BASE PLAN'S LINE. The identity argument is that a variant
+// whose targeted list is empty overruns to the unconditional EMPTY continuation, which is what the
+// base plan takes there too -- so the two land on one state and bp_seen_states already skips the
+// second. That holds only while the apply reaches ONE breakpoint. At a SECOND breakpoint the two
+// plans diverge by construction: MTG_BP_NESTED_CANON fires for a plan that carries a choice at an
+// index it is not targeting (`seen_before >= 0 && seen_before != plan.bp_at`), handing the variant
+// `ncands.front()`, while the base plan -- which carries no choice at all -- is ineligible for it and
+// takes EMPTY. The variant is then the ONLY carrier of that later-breakpoint line, and declining it
+// deletes a line rather than a duplicate. Wave 0 emits bp_at < BpSearchDepth() (1 by default), so
+// nothing else covers it.
+//
+// So the decline requires an EXACT identity: one class-on breakpoint, and its list empty.
+static thread_local int g_bp_base_bps = 0;
 
 // The same trick for the OTHER axis: how many breakpoints of a searchable class did this apply
 // actually reach? `bp_at` indexes them, and wave 0 only ever emits bp_at < BpSearchDepth(), so a
@@ -27068,20 +27153,55 @@ namespace
         std::atomic<uint64_t> unreachable[kBpSites]{};  // Σ max(cands.size()-W, 0) -- rank-gated OUT
         std::atomic<uint64_t> capped[kBpSites]{};       // breakpoints with cands.size() > W
         std::atomic<int>      maxlen[kBpSites]{};
+        // EMPTY LISTS -- the case this probe was BLIND to until 2026-09-27, and the one that
+        // decides the arming rule. `BpCands` bailed on `len <= 0` before recording anything, so a
+        // breakpoint that opened and offered NO continuation was invisible here; worse, the report
+        // below skipped a site whose every list was empty (`cnt == 0` -> continue), so such a site
+        // printed nothing at all and read as "never fires".
+        //
+        // It stopped being a corner case when MTG_BP_NEW_ONLY went default ON (2026-09-22): the
+        // filter keeps only continuations that USE a card that arrived, so a breakpoint whose
+        // arrival is not castable/activatable here now leaves an EMPTY list by design. Its W
+        // wave-0 variants all overrun to the unconditional EMPTY continuation, which is the base
+        // plan's own line -- so they dedup away on state (bp_seen_states) having already spent
+        // their budget units. That is pure dilution, and `empty` is how much of it there is.
+        // USER 2026-09-27: *"do nothing is already covered by the original line, we just need to
+        // continue playing that out. Only genuinely new lines (i.e. those that use our new
+        // options) need to be considered."*
+        std::atomic<uint64_t> empty[kBpSites]{};
+        // WHICH APPLY spent the wasted work. An empty list is only skippable at the loop that
+        // emitted the variant, so "how much waste is there" is useless without "where". Keyed by
+        // ApplyPlanDirect's caller line (g_apply_caller_line, the __builtin_LINE default argument)
+        // and split by whether the apply is inside a rollout, because a rollout frontier is a
+        // different loop with its own emission decision. Probe-only, mutex-guarded, off by default.
+        std::mutex                     empty_mu;
+        std::map<int, std::uint64_t>   empty_by_caller;      // caller line -> count (search)
+        std::map<int, std::uint64_t>   empty_by_caller_ro;   // ...inside a rollout
         ~BpCandsProbe()
         {
             if (!EnvOn("MTG_BP_CANDS_PROBE")) { return; }
             for (int i = 0; i < kBpSites; ++i)
             {
                 const uint64_t cnt = n[i].load(std::memory_order_relaxed);
-                if (cnt == 0) { continue; }
+                const uint64_t emp = empty[i].load(std::memory_order_relaxed);
+                // A site with ONLY empty lists still has to report -- see the `empty` note above.
+                if (cnt == 0 && emp == 0) { continue; }
+                if (cnt == 0)
+                {
+                    std::fprintf(stderr, "[bp-cands] %-58s n=0 EMPTY=%llu (every list empty:"
+                                 " opened %llu times, offered no new line)\n",
+                                 kBpSiteName[i], static_cast<unsigned long long>(emp),
+                                 static_cast<unsigned long long>(emp));
+                    continue;
+                }
                 const uint64_t tot = total[i].load(std::memory_order_relaxed);
                 const uint64_t rch = reach[i].load(std::memory_order_relaxed);
                 const uint64_t unr = unreachable[i].load(std::memory_order_relaxed);
                 const uint64_t cap = capped[i].load(std::memory_order_relaxed);
                 std::fprintf(stderr,
                              "[bp-cands] %-58s n=%llu mean=%.2f max=%d capped=%llu (%.1f%%)"
-                             " reach=%llu unreachable=%llu (%.1f%% of all continuations)\n",
+                             " reach=%llu unreachable=%llu (%.1f%% of all continuations)"
+                             " EMPTY=%llu (%.1f%% of opens)\n",
                              kBpSiteName[i], static_cast<unsigned long long>(cnt),
                              static_cast<double>(tot) / static_cast<double>(cnt),
                              maxlen[i].load(std::memory_order_relaxed),
@@ -27089,7 +27209,9 @@ namespace
                              100.0 * static_cast<double>(cap) / static_cast<double>(cnt),
                              static_cast<unsigned long long>(rch),
                              static_cast<unsigned long long>(unr),
-                             tot ? (100.0 * static_cast<double>(unr) / static_cast<double>(tot)) : 0.0);
+                             tot ? (100.0 * static_cast<double>(unr) / static_cast<double>(tot)) : 0.0,
+                             static_cast<unsigned long long>(emp),
+                             100.0 * static_cast<double>(emp) / static_cast<double>(cnt + emp));
                 std::fprintf(stderr, "[bp-cands]   len:");
                 for (int b = 0; b < kBpCandsBuckets; ++b)
                 {
@@ -27099,14 +27221,41 @@ namespace
                 }
                 std::fprintf(stderr, "\n");
             }
+            // WHERE the empty-list applies came from -- the map that says which loops a stillborn
+            // skip would have to live in to reach them (see empty_by_caller).
+            for (int ro = 0; ro < 2; ++ro)
+            {
+                const std::map<int, std::uint64_t>& m = ro ? empty_by_caller_ro : empty_by_caller;
+                if (m.empty()) { continue; }
+                std::uint64_t tot = 0;
+                for (const auto& kv : m) { tot += kv.second; }
+                std::fprintf(stderr, "[bp-cands]   EMPTY %s total=%llu by apply@line:",
+                             ro ? "in-rollout" : "in-search",
+                             static_cast<unsigned long long>(tot));
+                for (const auto& kv : m)
+                {
+                    std::fprintf(stderr, " %d=%llu", kv.first,
+                                 static_cast<unsigned long long>(kv.second));
+                }
+                std::fprintf(stderr, "\n");
+            }
         }
     };
     BpCandsProbe g_bp_cands_probe;
     inline void BpCands(int site, int len, int width)
     {
         static const bool on = EnvOn("MTG_BP_CANDS_PROBE");
-        if (!on || len <= 0) { return; }
+        if (!on) { return; }
         if (!BpSiteInRange(site, "bp-cands")) { return; }
+        // RECORD THE EMPTY LIST, then bail -- every stat below divides by a length. See `empty`.
+        if (len <= 0)
+        {
+            g_bp_cands_probe.empty[site].fetch_add(1, std::memory_order_relaxed);
+            std::lock_guard<std::mutex> lk(g_bp_cands_probe.empty_mu);
+            ++(g_rollout_nest > 0 ? g_bp_cands_probe.empty_by_caller_ro
+                                  : g_bp_cands_probe.empty_by_caller)[g_apply_caller_line];
+            return;
+        }
         const int reachable = len < width ? len : width;
         g_bp_cands_probe.n[site].fetch_add(1, std::memory_order_relaxed);
         g_bp_cands_probe.total[site].fetch_add(static_cast<uint64_t>(len), std::memory_order_relaxed);
@@ -28396,6 +28545,11 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
                             int caller_line)
 {
     g_apply_caller_line = caller_line;
+    // MTG_BP_ARM_NEW: this apply's measured continuation lengths describe THIS apply only -- the
+    // same convention g_bp_cands_last is reset under, and for the same reason: a stale length from
+    // an earlier plan must never be attributed to this breakpoint. The candidate loop reads it
+    // immediately after the call returns, before anything nested can clear it again.
+    if (BpArmNewOn()) { g_bp_base_lens.clear(); g_bp_base_bps = 0; }
     PROF_INC(applyplan_calls);
     {
         static const bool s_lp = EnvOn("MTG_WINLESS_STATS");
@@ -28616,8 +28770,20 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
     // GameState bumps the same thread-local counter, so an unchanged sequence proves nothing
     // entered (skip the diff) while a changed one only means "ask the exact question". See
     // core/HandEntry.h.
+    //
+    // THE WINDOW RESETS AT EVERY BREAKPOINT (2026-09-27, th s1081 T3). "A card no arming class
+    // accounted for" is not "no DEFERRED class armed": the inline classes (Treasure Hunt's
+    // DrawUntilNonland, resolved inside apply_one) never set deferred_cantrip_resolve, so the
+    // section check read their reveal as unaccounted and opened a SECOND site-10 breakpoint on the
+    // same event. Every variant targeting the first index then took the nested canon at the second
+    // (play a land), and the one continuation that wins -- the EMPTY overrun, hold every land for
+    // Land's Edge -- collapsed into a land-playing duplicate: a verified T3 kill became unreachable
+    // at any budget. The honest reading is "since the last DECISION POINT": bp_searched_plan
+    // re-takes both halves of the window on entry (it is the one authority every class passes
+    // through), so the check below sees only what entered after the last breakpoint re-decided the
+    // hand. Executor twin: replay_recorded / resolve_draw_breakpoint in AIEngine::TakeTurn.
     std::vector<int> hand_at_section;
-    const uint32_t   seq_at_section = g_hand_entry_seq;
+    uint32_t         seq_at_section = g_hand_entry_seq;
     if (BpHandEntryEnabled()) { hand_at_section = TurnSolver::HandCardNumbers(state); }
 
     // Which CLASS armed the deferred re-solve: a solo-target trick with a draw/Treasure payload is
@@ -28978,6 +29144,15 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
         // global value that the executor's replay reads as well.
         ++g_bp_fired_last;   // any occurrence, any class, any plan (see the declaration)
         ++g_bp_any_last;     // ...and the monotonic twin the NOBP gate reads (see g_bp_any_last)
+        // SECTION WINDOW RESET (MTG_BP_HAND_ENTRY; see hand_at_section): this breakpoint is a
+        // decision point on the hand as it stands, so everything that entered before it is now
+        // accounted for -- whatever its class, masked or not (a masked class is a deliberate
+        // prune, and re-opening it as site 10 would be exactly the renumbering the rule forbids).
+        if (BpHandEntryEnabled())
+        {
+            hand_at_section = TurnSolver::HandCardNumbers(state);
+            seq_at_section  = g_hand_entry_seq;
+        }
         const bool class_on    = (BpSiteMask() & (1 << site)) != 0;
         if (class_on) { ++g_bp_classon_last; }   // monotonic; delta-read by the uniform collapse
         const int  seen_before = (plan.bp_choice >= 0 && class_on) ? bp_seen++ : -1;
@@ -28996,6 +29171,45 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
         // phase opens it); the counter measures how much of the nesting lands there.
         const bool nested_blocked = plan.bp_choice >= 0 && class_on
                                  && seen_before >= BpSearchDepth();
+        // MTG_BP_ARM_NEW (see g_bp_base_lens): a BASE plan measures this breakpoint's continuation
+        // list so the candidate loop can decline variants that could only replay the base's own
+        // line. Base plans carry no bp_choice, so `eligible` is false for them and nothing below
+        // enumerates -- this is the one place that can ask.
+        //
+        // WHY THE ENUMERATION IS NOT A NEW COST: EnumerateBreakpointPlansRef is memoized on state,
+        // and when the list is non-empty the variants that follow would fill exactly this entry. The
+        // only case where this call is not repaid is the EMPTY one -- which is the case it exists to
+        // find, and where it saves W whole applies. By REFERENCE, size read immediately, no Plan
+        // copied out and nothing re-entered, per the lifetime contract below.
+        //
+        // Ordinal, not seen_before: `bp_seen` is deliberately not advanced for a base plan (that
+        // asymmetry is what keeps bp_at numbering in lockstep with the executor), so this counts
+        // class-on breakpoints itself, in the same order bp_at numbers them.
+        // `plan.bp_wave0` IS THE POINT OF THE GATE, not a refinement. AppendBreakpointVariants sets
+        // it on exactly the base plans it fanned out, so a plan without it has no variants for this
+        // measurement to decline -- and measuring it would be a pure added enumeration. Those plans
+        // are common, because PlanOpensBreakpoint is a PRE-apply predicate and plenty of plans reach
+        // a class-on breakpoint at apply time without having been marked before it. MEASURED: without
+        // this gate the node saving was real (mirrorwing -5.35%) but wall clock went the WRONG WAY
+        // (+3.44%), because the per-node cost rose by more than the nodes fell.
+        if (BpArmNewOn() && class_on && plan.bp_choice < 0 && !plan.bp_all && plan.bp_wave0
+            && g_bp_enum_depth == 0 && g_rollout_nest == 0 && !HumanPlayActive())
+        {
+            // EVERY class-on breakpoint counts toward the total, whether or not wave 0 targets it --
+            // that is the whole point of the total (see g_bp_base_bps).
+            ++g_bp_base_bps;
+            if (static_cast<int>(g_bp_base_lens.size()) < BpSearchDepth())
+            {
+                const std::size_t n =
+                    TurnSolver::EnumerateBreakpointPlansRef(state, is_pre_combat).size();
+                g_bp_base_lens.push_back(static_cast<int>(n));
+                if (s_rollout_stats)
+                {
+                    g_bp_armnew_measured.fetch_add(1, std::memory_order_relaxed);
+                    if (n == 0) { g_bp_armnew_empty.fetch_add(1, std::memory_order_relaxed); }
+                }
+            }
+        }
         bool resolved = false;
         // Set by either canon branch below, read by the unchallengeable-canon audit at the end.
         bool canon_used = false;
@@ -46947,6 +47161,14 @@ static TurnSolver::SearchLine FSLineWin(const GameState& state, int depth, int m
     // MTG_BP_WAVE_NSKIP only: continuation-list lengths this node's wave-0 variants measured, keyed
     // (base plan index << 8 | bp_at). Left empty when the flag is off, so the walker sees nullptr.
     BpWaveWalker::KnownLens bp_known_n;
+    // MTG_BP_ARM_NEW (see g_bp_base_lens): what each BASE plan's apply measured, keyed
+    // (plan index in `pre` << 8) | bp_at -- the same key shape bp_known_n uses. Deliberately a
+    // SEPARATE map: bp_known_n carries the wave phase's own (n, max_k) semantics, and seeding it
+    // from a base plan (which applies no rank, so has no max_k) would change what the stillborn
+    // skip means. A variant is declined only on an entry recorded by its OWN base plan, in this
+    // same frontier, from that plan's own apply -- never inferred across nodes.
+    const bool                             armnew_here = BpArmNewOn();
+    std::unordered_map<std::uint64_t, int> bp_base_n;
     // MTG_BP_NSKIP_GLOBAL only: this node's state dedup key, the cross-node half of the length
     // memo's key (see BpNSkipGlobalMode). Computed ONCE per node and only when the flag is on, so
     // the default path pays nothing and stays byte-identical.
@@ -47080,6 +47302,25 @@ static TurnSolver::SearchLine FSLineWin(const GameState& state, int depth, int m
             { winlesscert::g_max_pre.store(pre.size(), std::memory_order_relaxed); }
             winlesscert::MaybeProgress();
         }
+        // ---- WAVE 0's STILLBORN SKIP (MTG_BP_ARM_NEW) ------------------------------------------
+        // This plan is a plain rank variant whose OWN base plan already measured the breakpoint it
+        // targets and found no continuation. There is no rank 0 to take, so this apply can only
+        // overrun to the unconditional EMPTY continuation -- the base plan's own line, which this
+        // frontier is playing out anyway. Declining it BEFORE ConsumeAt is the whole point: the
+        // dedup below already skipped its rollout, but only after the units were spent.
+        // USER: *"do nothing is already covered by the original line ... Only genuinely new lines
+        // (i.e. those that use our new options) need to be considered."*
+        if (armnew_here && p.bp_choice >= 0 && p.bp_choice < kBpEmptyChoice && !p.bp_all
+            && p.bp_at == 0 && p.bp_base >= 0 && p.bp_base < static_cast<int>(pre.size()))
+        {
+            const auto it = bp_base_n.find((static_cast<std::uint64_t>(p.bp_base) << 8) | 0u);
+            if (it != bp_base_n.end() && it->second == 0)
+            {
+                if (s_rollout_stats)
+                { g_bp_armnew_declined.fetch_add(1, std::memory_order_relaxed); }
+                continue;
+            }
+        }
         if (bp_root && FsRootDumpTurn() == state.turn_number) { FsDumpPlan("scan", p, -1); }
         // Rollout trace for this root plan's tail (MTG_FS_ROOT_DUMP_SIM; see FsSimTraceScope).
         FsSimTraceScope _fst(bp_root && FsRootDumpTurn() == state.turn_number && FsRootDumpSimOn());
@@ -47101,6 +47342,16 @@ static TurnSolver::SearchLine FSLineWin(const GameState& state, int depth, int m
         const bool nskip_here = BpWaveNSkipOn();
         if (nskip_here) { g_bp_cands_last = 0; }
         ApplyPlanDirect(s, p, true, &bp, node_host_here ? &node_snap : nullptr);
+        // MTG_BP_ARM_NEW: harvest what THIS base plan's apply measured, keyed by its own index in
+        // `pre` so only its own variants can read it. Read here, immediately -- the tail recursion
+        // below applies further plans on this thread and clears the channel.
+        // EXACTLY ONE class-on breakpoint, or the variant is not this plan's line -- see
+        // g_bp_base_bps for the two smoke cases that proved it.
+        if (armnew_here && p.bp_choice < 0 && g_bp_base_bps == 1 && !g_bp_base_lens.empty())
+        {
+            const std::uint64_t base = static_cast<std::uint64_t>(&p - pre.data());
+            bp_base_n[(base << 8) | 0u] = g_bp_base_lens[0];
+        }
         // ZERO IS THE COMMON CASE AND MUST BE RECORDED. g_bp_cands_last == 0 means this apply
         // reached no eligible breakpoint of the searchable class (or found an empty list) at
         // bp_at -- and the wave slot's rank-W apply walks the IDENTICAL prefix (the two plans
@@ -47706,6 +47957,33 @@ static TurnSolver::SearchLine FSLineWin(const GameState& state, int depth, int m
                 AnimateLandsShared(s, nullptr);
                 ActivateTapTokensShared(s, nullptr);
                 SimulateCombat(s);
+                // DIG INSTRUMENT (MTG_FSW_TRACE / MTG_FSW_TURN): the wave-phase twin of the main
+                // loop's [fsw] line, printed BEFORE the this-turn-kill return so a rank that kills
+                // outright is visible too. Without it every rank past W is invisible to the trace --
+                // and a line that only exists at rank 10 (th s1081 T3) reads as "no plan at this
+                // node". `node=` is the pre-apply own-land list, to match nodes across two arms.
+                {
+                    static const bool s_fsw_w  = EnvOn("MTG_FSW_TRACE");
+                    static const int  s_fsw_wt = EnvInt("MTG_FSW_TURN", 2);
+                    if (s_fsw_w && state.turn_number == s_fsw_wt)
+                    {
+                        std::string sum, cont, node;
+                        if (v.land_decided) { sum += "land=" + v.land_to_play + ";"; }
+                        for (const Action& a : v.actions) { sum += a.card_name; sum += ","; }
+                        for (const Action& a : bp)
+                        { cont += "k" + std::to_string(static_cast<int>(a.kind)) + ":" + a.card_name + ","; }
+                        for (const Permanent& q : state.battlefield)
+                        { if (q.controller_index == state.active_player_index && q.card.IsLand())
+                          { node += q.card.m_name.str(); node += ","; } }
+                        std::fprintf(stderr, "[fsw-wave] T%d d%d oppL=%d node=[%s] hand=%zu p=%s bp=%d@%d after=%d kill=%d cont=[%s]\n",
+                                     state.turn_number, depth,
+                                     state.players[1 - state.active_player_index].life, node.c_str(),
+                                     state.ActivePlayer().hand.size(),
+                                     sum.empty() ? "(pass)" : sum.c_str(), v.bp_choice, v.bp_at,
+                                     s.players[1 - s.active_player_index].life,
+                                     OpponentHasLost(s) ? 1 : 0, cont.c_str());
+                    }
+                }
                 if (OpponentHasLost(s))       // wins THIS turn -> the earliest possible from here
                 {
                     if (BpWaveProbeOn()) { g_bp_wave_probe.improved.fetch_add(1); }
@@ -47718,6 +47996,16 @@ static TurnSolver::SearchLine FSLineWin(const GameState& state, int depth, int m
                 TurnSolver::SearchLine tail =
                     FSLineTail(s, depth - 1, max_turns, std::min(cutoff, best.win_turn), second_main,
                                tt, lc, budget, nullptr, eot_ptr);
+                // ...and the tail half of the [fsw-wave] line above (same gate).
+                {
+                    static const bool s_fsw_w  = EnvOn("MTG_FSW_TRACE");
+                    static const int  s_fsw_wt = EnvInt("MTG_FSW_TURN", 2);
+                    if (s_fsw_w && state.turn_number == s_fsw_wt)
+                    {
+                        std::fprintf(stderr, "[fsw-wave]   ^ bp=%d@%d tail=%d best=%d\n",
+                                     v.bp_choice, v.bp_at, tail.win_turn, best.win_turn);
+                    }
+                }
                 if (tail.win_turn < best.win_turn)
                 {
                     if (BpWaveProbeOn()) { g_bp_wave_probe.improved.fetch_add(1); }
