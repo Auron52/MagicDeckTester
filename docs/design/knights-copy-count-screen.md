@@ -2108,6 +2108,58 @@ maintenance log documents this exact blind spot ("size is a proxy, not a proof; 
 exactly the case it cannot catch"), so both entries were written into the log anyway. **Measured** from a
 scratch TU, not reasoned about.
 
+### Round O RESULT — GIDEON DOES NOT EARN A SLOT, and the reason is not the one predicted
+
+Completed 05:06Z, 2h16m, all six format-blocks rc=0. Read on the **own R=40** column; every arm cleared
+its apparatus floor by **3.8x**, so the shared apparatus is not producing the effect. Positive = WORSE.
+
+| arm | long (.5) | 2hg (.3) | std (.2) | **pooled** | meas | conf |
+|---|---|---|---|---|---|---|
+| `j2_ad3_sp4` (ref) | −0.2503 | −0.3415 | −0.2284 | **−0.2733** | ref | ref |
+| `o_gid1_vk` | +0.0019 | +0.0001 | +0.0085 | **+0.0027** | +0.0021 | +0.0033 |
+| `o_gid1_hob` | +0.0105 | +0.0044 | +0.0003 | **+0.0067** | +0.0041 | +0.0092 |
+| `o_gid2_vk` | +0.0077 | +0.0056 | +0.0239 | **+0.0103** | +0.0071 | +0.0134 |
+| `o_gid2_hob` | +0.0256 | +0.0115 | +0.0026 | **+0.0168** | +0.0137 | +0.0199 |
+
+**All four arms are worse, the ladder is monotone in copies, and every one replicates** — `meas` (seed
+12.4M) and `conf` (held-out 12.8M) agree in sign on all four, which is the [[replicate-trades-before-ruling]]
+bar. Against round J′'s measured null control (~0.0020), one copy is 1.4x the floor on the cheap payer and
+3x on the expensive one; two copies are unambiguous. **Gideon is not played.**
+
+**THE PAYER MATTERS HERE, and that is itself a result.** Round J′ found three payers agreeing within
+0.0014, which licensed "the payer is irrelevant and the gain belongs to the card". Not so this time — the
+`hob − vk` gap is **+0.0040 at one copy and +0.0065 at two**, far outside that agreement. So the two arms
+are answering two different questions, and both answers are no. It is also the expected direction: Hero of
+Bladehold is a real card (round L: **79% of his attacking turns were lethal**) while a Venerable Knight is
+the campaign's measured null, so cutting the Hero should cost more, and does.
+
+**The per-format split CROSSES, which is the interesting part and it refutes the stated prior.** The
+prediction on record was "Gideon is an emblem card in a turn-4 deck, too slow, he loses." He does lose —
+but not for that reason:
+
+* **vs Hero** (`_hob`): a dead null in std (+0.0003) and clearly worse in long (+0.0105).
+* **vs a 1-drop** (`_vk`): a near-null in long (+0.0019) and clearly worse in std (+0.0085).
+
+So he is squeezed from both sides rather than being simply slow: in the FAST format he is fine against a
+Hero but loses the tempo of a one-drop on curve; in the LONG format he is fine against a one-drop but is
+badly beaten by the Hero. Because the ranking is late-weighted (long 0.5 / 2hg 0.3 / std 0.2), the long
+column is what sinks the `_hob` arms pooled.
+
+A mechanism that fits both halves — Hero makes **two** bodies per attack plus battle cry, so his output
+compounds with the number of attack steps, whereas Gideon gives one 2/2 per turn or a one-shot +1/+1 — is
+consistent with round L's Hero data, but it is an explanation arrived at AFTER the numbers and so explains
+them rather than extending them ([[dont-rationalize-a-measured-cut]]). It is not evidence for any further
+cut.
+
+**Not a floor, and not an apparatus artifact.** All three abilities were implemented and each was
+separately proved to fire (above); smoke was 97/0 with zero play changes, so the base arm's round-J′ table
+was legitimately reused; and the `card_scores` marginal the driver printed for Gideon (**−0.0427**, i.e.
+"good") pointed the WRONG WAY, which is the fourth time that statistic has inverted against a measured
+screen — [[card-scores-invert-against-play]] holds.
+
+**WhiteKnights remains the settled 60 of round M.** Gideon joins Valiant Knight, Aether Vial, Acclaimed
+Contender and Lightning Greaves as measured-out.
+
 ## RESUME HERE — the road to a FINAL Knights list
 
 **State at 2026-09-26 21:15Z.** WhiteKnights is finished (above). Knights' round H is **in flight**:
