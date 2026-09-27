@@ -1898,6 +1898,42 @@ pays only against blockers and damage-based removal, neither of which exists her
 ≈ 0.008 in goldfish speed and buys resilience the engine cannot see — the same shape as Knight Exemplar's
 indestructible. User's call. See [[bracket-notes-are-the-judgement-call]].
 
+#### WHAT THE 4th MARSHAL IS COMPARED AGAINST — asked by the user, 2026-09-27
+
+The user's reaction was *"I'm a bit surprised on the Benalish Marshal, though. What are we comparing it
+against?"* — the right question, because the round M table reports a step against a reference and the
+reference is not "nothing". Three comparisons, ordered most- to least-robust:
+
+| # | the 4th Marshal is measured against | figure | what it assumes |
+|---|---|---|---|
+| 1 | **the 24th land** (a 20th Plains) | **−0.0081**, held-out −0.0097 | nothing; direct arm vs reference |
+| 2 | **the 4th Silverblade Paladin** | **−0.0100** | nothing; the land cancels in the matched pair |
+| 3 | **zero** (absolute value of the card) | **+0.003 … +0.009** | imports Silverblade's own worth |
+
+Row 2 is the one to quote. `m_bm3_p20` and `m_sp3_p20` each cut exactly one spell and add exactly the same
+land, so the land's price cancels and no constant is imported: **the 4th Marshal is 0.0100 worse than the
+4th Silverblade.** Row 3 is a range only because that anchor is **chassis-dependent** — the 4th Silverblade
+measured −0.007 in round J′'s chassis and −0.0013 in round H's. **The SIGN is stable under either anchor**
+(+0.003 vs +0.0087), so "mildly harmful in absolute terms" survives; only the magnitude moves. Do not quote
+a point estimate for row 3.
+
+**THE REFRAME THAT ANSWERS THE SURPRISE: nobody ever chose 4. It accumulated as a SINK.** The shipped
+WhiteKnights list runs **Benalish Marshal 2**. Screen A used *"+1 Marshal"* as its **common sink** — the
+cheapest way to absorb a freed slot without adding a new variable — and `a_ac1_bm4` used +2. Nine rounds
+later the count sat at 4 with **no isolated measurement behind it**, and the −0.0208 quoted in its favour
+was a **bundle** (`a_ac1_bm4` = Contender 3→1 *and* Marshal 2→4, where the Contender half was independently
+good). Quoting that bundle as a Marshal number was my error and it propagated into the candidate tables.
+The only isolated pre-M figure was the **3rd** Marshal as a sink: **−0.0037, second-weakest of five, and a
+dead null in 2HG.** So round M is not cutting a card the evidence endorsed — **it is removing an artifact of
+how the screens were constructed**, back toward the count the deck shipped with. That is why the result
+should be surprising only if one believed the 4 was ever measured.
+
+**A hypothesis, explicitly labelled as one** ([[dont-rationalize-a-measured-cut]]): the user's own
+Exemplar-4 ruling raises the deck's anthem saturation — Exemplar 4 + Marshal 4 + Accorder 4 + Hero 3 is 15
+pump sources in 60 cards, and since nearly every creature is a Knight, Exemplar's `+1/+1` already covers
+most of what Marshal's does. It fits, but it was arrived at after the numbers and is not evidence for any
+further cut.
+
 ### Round N — BASRI, TOMORROW'S CHAMPION, and the exert mechanic it forced
 
 User request: *"Please add Basri, Tomorrow's Champion (a new 2/1) to your tests."* Card data from **Scryfall,
@@ -2255,13 +2291,23 @@ still open:**
    **−0.0095**. Full diagnosis, deterministic repro, depth ladder and fix directions are in
    `docs/design/contender-same-turn-deploy-searched.md`. The fix moves GT for every `etb_dig` deck and
    needs the regression accept flow, so it is real work, not a rebaseline.
-2. **Two cuts are PRICED BUT UNRULED, both in the quarantine class** — a modelled benefit against
-   protection this passive-opponent engine cannot see. Each is the user's call, not a measurement's:
-   * **Benalish Marshal 4→3** (round M, −0.0081, grew on held-out). The `+1/+1` power half dominates the
-     race and is fully modelled; the toughness half pays only against blockers and damage-based removal,
-     neither of which exists here.
-   * **Lightning Greaves 1→0** (−0.0131). That figure prices only the haste; shroud is unmodelled removal
-     protection.
+2. **LIGHTNING GREAVES 1→0 IS RULED OUT (user, 2026-09-27): *"Dropping Lightning Greaves is okay if the
+   haste is not very good."*** The condition is met, and the per-format split is what establishes it
+   rather than the headline: the cut is **−0.0131** late-weighted but **−0.0184 in long against −0.0073 in
+   std**, i.e. it gains MOST at 40 life where haste matters least and LEAST at 20 life where haste should
+   shine. That is the shape a genuinely weak haste produces; the reverse would have suggested a
+   mismeasurement. Its sink was the **3rd Benalish Marshal** (screen A's common sink), worth −0.0037 alone,
+   so Greaves itself prices at ≈ **+0.009 — actively harmful**, not merely marginal. Mechanism: `{2}` with
+   equip `{0}` that adds no power, so in a deck whose modal win is turn 4 it spends a whole turn changing
+   nothing on board — and the hand-played reference bench had already shown the engine correctly declining
+   to equip it. Shroud (unmodelled removal protection) was the only half the sign-off was waiting on.
+   **Operationally this changes nothing: Greaves has been 0 in the candidate base since round C/D**, so
+   every round since ran on a Greaves-0 list. No re-measurement is owed.
+3. **Benalish Marshal 4→3 is PRICED BUT UNRULED** (round M, −0.0081, grew on held-out −0.0065 → −0.0097).
+   The `+1/+1` power half dominates the race and is fully modelled; the toughness half pays only against
+   blockers and damage-based removal, neither of which exists here — the quarantine class, so it gets a
+   price and never a verdict. User's call. **See the framing section below before reading the number as
+   "cutting a good card".**
 
 **Then adoption**, which is unstarted and is the expensive part — see the ADOPTION RUNBOOK section above.
 Note it throws away the shipped keep table (worth −0.1985 on its own) and the value leaf, so the list it
