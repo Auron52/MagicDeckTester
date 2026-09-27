@@ -182,6 +182,13 @@ enum class PermAbilityMode
     // own creatures die, so it is a genuinely searched axis (ManaSinkActivationCounts' full range).
     // Appended LAST so every existing mode's numeric value (plan signatures, ActKey slots) is kept.
     PingAll,
+    // {cost}, {T}, Exile this: Search your library for any number of creature cards, put them onto
+    // the battlefield, then shuffle. Activate only if you have N or more life  (Bilbo, Birthday
+    // Celebrant, "{2}{W}{B}{G}", N = 111; CardParams::life_gated_put_creatures_cost /
+    // activate_min_life). A {T} mode (summoning sickness applies), once per game (the source is
+    // exiled as part of the cost). WHICH creatures is a DecisionProvider choice at resolution
+    // (PutCreaturesFromLibraryPicks) and a multi-pick decision in human play. Appended last.
+    LifeGatedPutCreatures,
 };
 
 // Does this mode's cost include {T}? THE single source of truth, because three separate sites used

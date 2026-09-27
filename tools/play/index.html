@@ -978,7 +978,8 @@ function channelSources() {
   if (!d || d.type !== 'main_phase') return {};
   if (S._chFor === d.decision_index && S._ch) return S._ch;
   const out = {};
-  (d.plans || []).forEach(p => (p.actions || []).forEach(a => { if (a && a.channel && a.card) out[a.card] = true; }));
+  // Value 'transmute' (Dimir House Guard's Transmute rides the channel verb) only relabels the badge.
+  (d.plans || []).forEach(p => (p.actions || []).forEach(a => { if (a && a.channel && a.card) out[a.card] = a.transmute ? 'transmute' : true; }));
   S._chFor = d.decision_index; S._ch = out;
   return out;
 }
@@ -2021,7 +2022,7 @@ function renderBoard() {
     if(p.target && p.kind==='activate'){ return; }
     // 'channel' is a from-HAND ability: the card is discarded for an effect, so like an activation it
     // puts nothing onto the battlefield and belongs in the spells row, not the planned-permanents row.
-    if(p.kind==='retrace'||p.kind==='nonpermanent'||p.kind==='activate'||p.kind==='channel'||p.kind==='suspend'){ plannedSpells.push(plannedThumb(p,i,ord[i])); return; }
+    if(p.kind==='retrace'||p.kind==='nonpermanent'||p.kind==='activate'||p.kind==='channel'||p.kind==='suspend'||p.kind==='eternalize'){ plannedSpells.push(plannedThumb(p,i,ord[i])); return; }
     if(p.target){ return; }   // a queued aura with a target -> drawn overlapping its host (below)
     // The CAST half of a from-hand cast-and-equip: its equip half is already drawn on the host, so
     // drawing this too would put the same card in two places on the field.
@@ -2198,7 +2199,12 @@ function renderBoard() {
   }
   if (me.graveyard && me.graveyard.length) {
     const rset = new Set(me.retrace_gy||[]);   // graveyard spells castable via Retrace
-    const gyThumbs = me.graveyard.map(n => rset.has(n)
+    const eset = new Set(me.eternalize_gy||[]); // graveyard creatures with Eternalize (Timeless Witness)
+    const gyThumbs = me.graveyard.map(n => eset.has(n)
+      ? `<span class="thumb spell retrace-src" data-name="${esc(n)}" data-eternalize="1" title="click to ETERNALIZE from the graveyard (pay {5}{G}{G}, exile it: a 4/4 black Zombie token copy)">`+
+        `<img loading="lazy" src="${scryImg(n,'small')}" alt="${esc(n)}" onerror="this.style.opacity=.15"/>`+
+        `<span class="rtbadge" title="Eternalize — activate from here">⟳</span><em>${esc(n)}</em></span>`
+      : rset.has(n)
       ? `<span class="thumb spell retrace-src" data-name="${esc(n)}" data-retrace="1" title="click to cast from graveyard via Retrace (discards a land)">`+
         `<img loading="lazy" src="${scryImg(n,'small')}" alt="${esc(n)}" onerror="this.style.opacity=.15"/>`+
         `<span class="rtbadge" title="Retrace — cast from here, discarding a land">↩</span><em>${esc(n)}</em></span>`
@@ -2257,12 +2263,13 @@ function renderPlanbar() {
         `<span class="nm" data-name="${esc(p.name)}">⛏ tap ${esc(p.name)} → {${esc(p.color)}}${ac.length?` +{${esc(ac.join('} +{'))}}`:''}</span>`+
         `<span class="x" data-rm="${i}">✕</span></span>`;
     }
-    const cls = p.kind==='vial'?'vial':p.kind==='retrace'?'retrace':(p.kind==='activate'||p.kind==='channel'||p.kind==='suspend')?'act':(p.kind==='land'?'land':'spell');
+    const cls = p.kind==='vial'?'vial':p.kind==='retrace'?'retrace':(p.kind==='activate'||p.kind==='channel'||p.kind==='suspend'||p.kind==='eternalize')?'act':(p.kind==='land'?'land':'spell');
     // A board activation names WHAT it does where the verb already says so — "⟳ ability" on four
     // chips reading "Bonesplitter / Shadowspear / Balan / Stoneforge" tells you nothing about which
     // of them equips, attaches everything, or puts a card from hand.
-    const act = p.kind==='channel' ? ' ⚡ channel (discard)'
+    const act = p.kind==='channel' ? (channelSources()[p.name]==='transmute' ? ' ⚡ transmute (discard)' : ' ⚡ channel (discard)')
               : p.kind==='suspend' ? ' ⌛ suspend (exile)'
+              : p.kind==='eternalize' ? ' ⟳ eternalize (from graveyard)'
               : p.kind!=='activate' ? ''
               : p.verb==='gyexile'   ? ' ⟳ ' + (p.mode===2 ? 'exile a creature, gain 2' : 'exile an instant/sorcery, drain 2')
               : p.verb==='gyreturn'  ? ' ⟳ sac → return ' + p.name
@@ -2392,7 +2399,7 @@ function renderHand() {
       // Channel: the other way to play this card. Its own badge for the same reason the land face has
       // one -- every other route on this thumb casts the creature, so without it the ability could
       // not be expressed at all (user report #1).
-      (canCh?`<span class="landface" data-channel="${esc(c.name)}" title="CHANNEL — discard ${esc(c.name)} from hand to use its ability instead of casting it${chN?' (click again to take it back)':''}">⚡ channel${chN>1?` ×${chN}`:''}</span>`:'')+
+      (canCh?`<span class="landface" data-channel="${esc(c.name)}" title="${channelSources()[c.name]==='transmute'?'TRANSMUTE — discard '+esc(c.name)+' to search your library for a card with the same mana value (you pick it when it resolves)':'CHANNEL — discard '+esc(c.name)+' from hand to use its ability instead of casting it'}${chN?' (click again to take it back)':''}">⚡ ${channelSources()[c.name]==='transmute'?'transmute':'channel'}${chN>1?` ×${chN}`:''}</span>`:'')+
       // Suspend: the same shape as channel -- another way to play THIS card, which the ordinary
       // cast gesture would silently take instead.
       (canSu?`<span class="landface" data-suspend="${esc(c.name)}" title="SUSPEND — exile ${esc(c.name)} from hand with time counters instead of casting it${suN?' (click again to take it back)':''}">⌛ suspend${suN>1?` ×${suN}`:''}</span>`:'')+
@@ -2530,6 +2537,9 @@ function wireBoard() {
   // click a Retrace card in the graveyard to cast it from there (discards a land)
   $('board').querySelectorAll('.thumb[data-retrace]').forEach(t =>
     t.onclick = e => { e.stopPropagation(); retraceCard(t.dataset.name); });
+  // click an Eternalize card in the graveyard (Timeless Witness) to queue its eternalize
+  $('board').querySelectorAll('.thumb[data-eternalize]').forEach(t =>
+    t.onclick = e => { e.stopPropagation(); eternalizeCard(t.dataset.name); });
   // click a land with a sacrifice-to-draw ability (Fiery Islet) to sacrifice it for a card
   $('board').querySelectorAll('.thumb[data-sacdig]').forEach(t =>
     t.onclick = e => { e.stopPropagation(); const nm=t.dataset.sacdig;
@@ -2618,6 +2628,18 @@ function toggleVialMode(charge) {
   S.vialMode = (S.vialMode===charge) ? null : charge;
   if (S.vialMode!=null) { S.leMode=false;   // mutually exclusive click modes
     flashHint(`Aether Vial active — click a creature with mana value ${charge} in hand to deploy it free. Click the Vial again to cancel.`); }
+  renderBoard();
+}
+
+// Click an Eternalize card in the graveyard (Timeless Witness) to queue "{5}{G}{G}, exile it: a 4/4
+// black Zombie token copy". Toggles off if already queued. The engine offers it only when affordable.
+function eternalizeCard(name) {
+  if (S.over || !S.decision || S.decision.type!=='main_phase') return;
+  hideVerdict();
+  const existing = S.plan.findIndex(p=>p.kind==='eternalize' && p.name===name);
+  if (existing >= 0) { S.plan.splice(existing,1); renderBoard(); return; }
+  S.plan.push({name, kind:'eternalize'});
+  flashHint(`Eternalizing ${name} from the graveyard (a 4/4 black Zombie token copy). Commit to resolve.`);
   renderBoard();
 }
 
@@ -3877,8 +3899,13 @@ function dragonPanelHtml(d){
   // Initialize the selection ONCE per decision (re-renders on toggle must not wipe the user's picks).
   if (S._dragonFor !== d.decision_index){ S._dragonFor=d.decision_index; S.dragonSel=new Set(aiDragonSet(d)); }
   const sel=S.dragonSel, aiSet=new Set(aiDragonSet(d));
-  let h=`<h3>Dragonstorm — put which Dragons?</h3>`;
-  h+=`<div class="sub">Choose up to <b>${cap}</b> Dragon${cap===1?'':'s'} to put onto the battlefield. They enter in the order shown (Lathliss and Scourges first — they trigger off every later Dragon). The AI’s picks are preselected.</div>`;
+  // The same multi-pick serves Bilbo, Birthday Celebrant's "search your library for any number of
+  // creature cards" (source != Dragonstorm) -- word it for creatures there.
+  const isDs = !d.source || d.source==='Dragonstorm';
+  let h = isDs ? `<h3>Dragonstorm — put which Dragons?</h3>`
+               : `<h3>${esc(d.source)} — put which creature cards onto the battlefield?</h3>`;
+  h+= isDs ? `<div class="sub">Choose up to <b>${cap}</b> Dragon${cap===1?'':'s'} to put onto the battlefield. They enter in the order shown (Lathliss and Scourges first — they trigger off every later Dragon). The AI’s picks are preselected.</div>`
+           : `<div class="sub">Choose any number (up to <b>${cap}</b>) of creature cards from your library. A second copy of a legend you control dies to the legend rule. The AI’s picks are preselected.</div>`;
   h+=`<div class="tutgrid">`;
   (d.candidates||[]).forEach(c=>{
     const isSel=sel.has(c.index), isAI=aiSet.has(c.index);

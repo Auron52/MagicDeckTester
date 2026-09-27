@@ -30,6 +30,17 @@
     "toughness": "1",
     "type_line": "Creature — Human Knight"
   },
+  "Acidic Slime": {
+    "cmc": 5.0,
+    "keywords": [
+      "Deathtouch"
+    ],
+    "mana_cost": "{3}{G}{G}",
+    "oracle_text": "Deathtouch (Any amount of damage this deals to a creature is enough to destroy it.)\nWhen this creature enters, destroy target artifact, enchantment, or land.",
+    "power": "2",
+    "toughness": "2",
+    "type_line": "Creature — Ooze"
+  },
   "Adaptive Automaton": {
     "cmc": 3.0,
     "keywords": [],
@@ -953,6 +964,19 @@
     "power": "2",
     "toughness": "1",
     "type_line": "Creature — Eldrazi"
+  },
+  "Dimir House Guard": {
+    "cmc": 4.0,
+    "keywords": [
+      "Fear",
+      "Regenerate",
+      "Transmute"
+    ],
+    "mana_cost": "{3}{B}",
+    "oracle_text": "Fear (This creature can't be blocked except by artifact creatures and/or black creatures.)\nSacrifice a creature: Regenerate this creature.\nTransmute {1}{B}{B} ({1}{B}{B}, Discard this card: Search your library for a card with the same mana value as this card, reveal it, put it into your hand, then shuffle. Transmute only as a sorcery.)",
+    "power": "2",
+    "toughness": "3",
+    "type_line": "Creature — Skeleton"
   },
   "Dina, Soul Steeper": {
     "cmc": 2.0,
@@ -3480,6 +3504,18 @@
     "toughness": null,
     "type_line": "Legendary Land"
   },
+  "Shriekmaw": {
+    "cmc": 5.0,
+    "keywords": [
+      "Evoke",
+      "Fear"
+    ],
+    "mana_cost": "{4}{B}",
+    "oracle_text": "Fear (This creature can't be blocked except by artifact creatures and/or black creatures.)\nWhen this creature enters, destroy target nonartifact, nonblack creature.\nEvoke {1}{B} (You may cast this spell for its evoke cost. If you do, it's sacrificed when it enters.)",
+    "power": "3",
+    "toughness": "2",
+    "type_line": "Creature — Elemental"
+  },
   "Shroofus Sproutsire": {
     "cmc": 3.0,
     "keywords": [
@@ -4022,6 +4058,17 @@
     "power": null,
     "toughness": null,
     "type_line": "Land — Island Mountain"
+  },
+  "Timeless Witness": {
+    "cmc": 4.0,
+    "keywords": [
+      "Eternalize"
+    ],
+    "mana_cost": "{2}{G}{G}",
+    "oracle_text": "When this creature enters, return target card from your graveyard to your hand.\nEternalize {5}{G}{G} ({5}{G}{G}, Exile this card from your graveyard: Create a token that's a copy of it, except it's a 4/4 black Zombie Human Shaman with no mana cost. Eternalize only as a sorcery.)",
+    "power": "2",
+    "toughness": "1",
+    "type_line": "Creature — Human Shaman"
   },
   "Tournament Grounds": {
     "cmc": 0.0,

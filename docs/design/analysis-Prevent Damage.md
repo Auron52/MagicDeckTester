@@ -61,15 +61,18 @@ Living Wish, Vexing Shusher.
     `{2/B}` is MISPARSED as `{B}` today), Green Sun's Zenith (Chord + colour filter + self-shuffle),
     `DeckUsesSecondMain` for Pyrohemia/Earthquake (m2 cost 4.25x on record -> give it an A/B lever).
     Blueprint: `spells.md`.
-  * **I3 (then):** Vito mass-lifelink activation, Dina sac-pump, Shriekmaw (evoke gate widened;
-    mandatory own-target), Timeless Witness (searched gy return + eternalize), Dimir House Guard
-    (transmute), Acidic Slime (mandatory own target), Bilbo 111-life activation, viewer audit rows.
-    Blueprint: `creatures_sideboard.md`.
-- After I3: Stage 3 coverage loop -> Stage 4 profile -> 4a provider audit -> Stage 5 (verify_deck,
+  * **I3 DONE, committed locally (see Phase I3 below; smoke byte-identical, 292/292 unit, 116/116
+    scenarios, coverage 0 missing / 0 partial main+side, sanity 194/200 avg-win 5.856):** Vito team
+    lifelink, Dina sac-pump (+ lethal-gated provider judgement), Shriekmaw (ETB + evoke), Acidic
+    Slime, Timeless Witness (searched gy return + eternalize), Dimir House Guard (transmute;
+    regeneration PROVISIONAL deferral), Bilbo 111-life activation, viewer rows. Blueprint:
+    `creatures_sideboard.md`.
+- NEXT: Stage 3 coverage loop (already clean at I3 -- re-run to confirm) -> Stage 4 profile -> 4a provider audit -> Stage 5 (verify_deck,
   harnesses, depth sweep, 5c2 leaf tie-break, 5d claude-play fan-out (Opus), 5h viewer, 5i BUCKET
   discard policy — gate `discard_policy` is in the MAIN tree's uncommitted WIP, not upstream) ->
   add to all three regression tiers with GT -> Stage 6 report.
-- Branch `prevent-damage-analysis` is local only (nothing pushed). I1 committed 6a36b5d4; I2 committed on top of it. Next: I3.
+- Branch `prevent-damage-analysis` is local only (nothing pushed). I1 6a36b5d4, I2 0e62da55, I3 = the commit directly on top of 0e62da55
+  on top. Next: Stage 3/4/5 (the Stage 2 implementation is complete).
 
 ## Stage 2 — implementation
 
@@ -397,12 +400,169 @@ three B sources).
 - The Basri, Tomorrow's Champion `exert` keyword mismatch in `audit_card_fields.py` is pre-existing
   and not ours.
 
+### Phase I3 — the creatures' abilities + the sideboard (DONE 2026-09-27, committed locally)
+
+**Scope.** Vito's team lifelink, Dina's sac-pump, Bilbo's 111-life activation (built -- the recorded
+user decision), Shriekmaw, Acidic Slime, Timeless Witness, Dimir House Guard, Purity route check,
+legend rule, viewer surfacing, keyword tags. Blueprint `creatures_sideboard.md`.
+
+**Params (all new, all gated).** `team_pump_grants_lifelink` (Vito, riding `team_pump_cost`/
+`team_pump_power 0` -- ActivatePump mode 2, the Valiant Knight shape, NOT a new PermAbilityMode:
+see CardDatabase.h's note on why the mode enum is the fragile route), `sac_outlet_self_pump_power_from_victim`
+(Dina, on top of `sac_creature_outlet`/`sac_creature_cost {1}`/`sac_outlet_excludes_self`),
+`etb_destroy_nonartifact_nonblack` (Shriekmaw; + existing `evoke_cost`),
+`etb_destroy_artifact_enchantment_land` (Acidic Slime), `etb_return_gy_to_hand` + `eternalize_cost`
+(Timeless Witness), `transmute_cost` (Dimir House Guard), `life_gated_put_creatures_cost` +
+`activate_min_life` (Bilbo). Non-JSON: `CardParams::tutor_exact_mv` (Transmute's synthesized search).
+Keywords `Fear`, `Transmute`, `Eternalize` added to the enum as INERT tags (appended; Scryfall-faithful).
+
+**Files.** `CardDatabase.{h,cpp}`, `Card.h` (3 keywords; the Regenerate note corrected -- our own
+sweepers CAN destroy our creatures now), `Permanent.h` (`PermAbilityMode::LifeGatedPutCreatures`,
+appended, a {T} mode), `SubtypeRegistry.h` (`Zombie` runtime literal), `SpellEffects.h`
+(`PdStats` firing counters; `EtbDestroyTargetLegal`/`ResolveEtbDestroyMandatory`/
+`ResolveEtbReturnGyToHand` + their `FireOwnEtbTriggers` calls; Dina LKI pump in
+`ApplySacCreatureOutlet`; `ChooseSacOutletVictimIndex` honours `excludes_self`; `CanonicalSacVictim`
+self-guard; Vito in `ApplyActivatePump` mode 2; `TransmuteSearchParams`/`ApplyTransmute`;
+`ApplyEternalize`; Bilbo in `PermAbilitySourceLive` (life gate) / `PermAbilityLabel` /
+`ApplyPermAbility`; `PerformTutorToBattlefield(..., ask_human_despite_pin)`; `tutor_exact_mv` in
+`TutorNumericFilterOk`), `TurnSolver.{h,cpp}` (`Action::Kind::Eternalize` appended + `LineSpec::
+eternalizes`; enumeration: Vito beneficiary gate, Dina per-victim fan, Shriekmaw evoke gate,
+Transmute (Channel kind) fan, Eternalize, Witness per-gy-name post-pass, Bilbo in the three mode
+tables + `BpActivationAbilityUnambiguous`; signatures `#G`, `CHANNEL#..>target`, `ETERNALIZE#`;
+rollout apply; `IsTrailingActivation`; CheckLine `eternalize=`), `AIEngine.cpp` (executor twins,
+labels), `DecisionProvider.h` (`EtbDestroyTargetPick`, `GyReturnToHandPick`,
+`PutCreaturesFromLibraryPicks` -- deliberate default rankings), `DecisionProviders.{h,cpp}`
+(`PreventDamageProvider::FodderSacUseful` lethal gate, `EtbDestroyTargetPick` engine-last ranking),
+`GoldFishRunner.cpp` (`DeckGraveyardReaders` scans the SIDEBOARD for the Witness's two params only),
+`main.cpp` (labels, `transmute`/`eternalize` JSON, `eternalize_gy` state list, `eternalize=` verb),
+`tools/play/{index.html,linebuild.js,DECISIONS.md}`, `scripts/audit_viewer_decisions.py`, cards.json
+(4 new + Vito/Dina/Bilbo/Purity notes), `scryfall_reference.json` (+4 snapshot entries),
+`test/unit/test_prevent_damage_creatures.cpp` (new, in CMake), two `test/scenarios/pd_*.json`.
+
+**The model, per card.**
+- *Vito*: temp_lifelink on every creature we control AT RESOLUTION (CR 611.2c), K capped at 1; offered
+  only while an own attack-eligible creature lacks lifelink (lossless; keeps a no-op out of the human
+  menu). Each lifelink attacker = its own `GainLife` event in `ResolveCombatDamage` (existing, per the
+  Vito/Dina/Bilbo rulings) -> Faithmender/Bilbo replacement -> Vito "that much" + Dina 1. Combat
+  damage by a creature, so Tamanoa never triggers on it.
+- *Dina*: X = victim's LAST-KNOWN power (effective + lord bonus, floored 0 -- the Flinger expression),
+  read before both erases; the victim dies through `OnCreatureDies` (Purity shuffles). SEARCHED victim:
+  one variant per distinct (name, power, token) -- the canonical weakest-body pick would minimise X;
+  repeatable within a turn. Human: every variant + the `sacrifice` board-pick (the source now excluded).
+- *Shriekmaw*: mandatory target over both sides (CR 603.3d): an opponent spawn (colourless) when
+  present, else one of OUR nonblack creatures, else removed. Evoke {1}{B}: the Reveillark mechanism,
+  gate widened for ETB-destroy cards (Reveillark untouched), always offered (a Spellshock trigger).
+- *Acidic Slime*: always destroys one of OURS (the goldfish has no artifact/enchantment/land).
+- Target pick for both = `EtbDestroyTargetPick` (PD: opponent first; never Tamanoa/Faithmender/Purity/
+  Bilbo/Vito/Dina/Manabarbs/Spellshock/Pyrohemia while anything else is legal; then tapped land, lowest
+  MV, oldest). A RESOLUTION pick, NOT searched -- PROVISIONAL; human: full legal set via the
+  loyalty-chooser `target` shape (not prompted when forced).
+- *Timeless Witness*: gy return searched on the cast path (one variant per distinct gy name + the
+  unpinned base = provider pick on the live gy, the only route to a card that hits the gy earlier in the
+  same plan); human play gets the dig chooser at resolution instead. Eternalize {5}{G}{G}: a new
+  graveyard activation kind; exile, then a token copy from the definition with black-only / 4/4 / no
+  mana cost / +Zombie written on the token's own Card; its ETB fires again (unpinned).
+- *Dimir House Guard*: Transmute rides the Channel kind (from-hand, discard as cost) -> PerformTutor
+  over synthesized params (to hand, shuffle, exact MV 4 -- Manabarbs / Faithmender / Pyrohemia here);
+  one variant per legal name (autonomous), one target-less action + the tutor chooser (human).
+  Trailing activation, so the found card is castable next main. Regeneration: PROVISIONAL deferral
+  (open question 2; bracket-noted with the reasoning).
+- *Bilbo*: `LifeGatedPutCreatures` -- {T} (sickness applies), life >= 111 checked when activating
+  (before costs, CR 602.5b) by `PermAbilitySourceLive`, shared by enumeration and both applies; exile
+  Bilbo (cost), search, put, shuffle exactly once even if nothing is put, then the legend rule. WHICH
+  creatures ("any number") = `PutCreaturesFromLibraryPicks`: all creature cards EXCEPT a second copy of
+  a legend we control/already put and a creature whose mandatory ETB would destroy our own permanent
+  (Acidic Slime; Shriekmaw with no opponent creature). Human: the `dragon` multi-pick, provider pick
+  preselected. `MTG_PD_STATS=1` prints firing counters (bilbo_activation etc.) at exit.
+- *Purity*: every death route verified to reach the shuffle (sweepers, Dina sac, Shriekmaw destroy via
+  `OnCreatureDies`; cleanup discard via `MaybeReplaceGraveyardWithLibraryShuffle`); unit-tested for
+  the Dina and Shriekmaw routes.
+- *Legend rule* (2x Vito / 2x Dina / Bilbo): existing `EnforceLegendRule` keeps the OLDEST; there is
+  still NO viewer legend-keep decision -- disclosed.
+
+**Provider judgement found by measurement (PROVISIONAL, `MTG_PD_DINA_LETHAL_GATE`, default ON).**
+The first I3 sanity run (attack-only gate) went 193/200, avg-win 5.891, loss-penalised 6.00 (vs I2
+194 / 5.866 / 5.96), 27 outcome changes (8 faster / 18 slower / 1 lost) and +24% CPU. Root cause: the
+search sacrificed **Tamanoa 28x and Rhox Faithmender 8x** for a one-turn Dina pump; the 35 games with
+a Dina sac were 8 turns slower in total than the same seeds in I2 (the leaf prices the pump's damage
+now, not the gain engine's damage later -- a valuation horizon, confirmed not budget: the lost-lethal
+game 6 is identical at 5x budget). Fix: the MeliraPod "lethal exception" shape -- offer the sac only
+when an optimistic bound on this turn's damage (ready power + the mana-limited largest pumps, x the
+Vito/Faithmender drain multiplier, + Dina per attacker) reaches the opponent's life. After it: every
+inferred Dina sac lands on its game's winning turn.
+
+**Tests.** `test_prevent_damage_creatures.cpp` -- 11 cases: Vito grant (own only, incl. Vito) +
+per-attacker drains (opp 20 -> 9); grant offered once, not when no attacker lacks lifelink; Dina +6
+off Purity (LKI) and Purity back in the library (one shuffle); per-victim fan, never herself, gated by
+sickness and by the lethal gate; Shriekmaw: spawn first / Shusher over Tamanoa / Purity shuffles /
+all-black board = nothing; evoke variant {1}{B}; Slime: tapped land over Manabarbs, Manabarbs when
+sole; Witness: pinned / provider / empty gy / per-name fan; eternalize (exiled, token 4/4 black-only
+MV0 Zombie Shaman, re-triggers, not a Shriekmaw target); Transmute (MV-4 only, found to hand, self to
+gy, one shuffle, enumerator fan); Bilbo (gate 110/111, exile, 2 Tamanoa + 1 Dina, no 2nd Vito, no
+Slime, one shuffle). Scenarios: `pd_vito_team_lifelink` (24/9), `pd_dina_sac_purity_pump` (opp at 7:
+sac Purity, 7/3 Dina wins T4).
+
+**Verification (final binary).**
+- `./build.sh` clean. `mtg-test` 292/292 cases, 2,639,203 assertions. `scenarios.sh` 116/116.
+- Coverage (`analyze_deck.py --coverage-only`): 0 missing; all 26 names `full`, main AND side (13 SB
+  names reachable via Living Wish). Bracket notes only for disclosed inert/deferred clauses (list in
+  6a below).
+- Smoke: 101 passed, 0 failed, 0 new, play-changed = 0 (searched and d0), run twice (the second on the
+  final binary, after the lethal gate). Nothing accepted.
+- `viewer_protocol_check.py --strict --threads 20`: 345 refs, 30 ok / 304 repaired / 0 play-drift /
+  0 enum-gap / 10 mull-drift / 0 contract-fail; the ONE board-diverged ref (`Snow/claude_s4_gi3`) is
+  the pre-existing one I2 recorded.
+- `audit_viewer_decisions.py --no-sweep`: main zone clean; with the new opt-in `--sideboard` (the .cod
+  side zone -- this is a wish deck): no unmapped param; one advisory, Dimir House Guard's regeneration
+  "Sacrifice a creature" (its PROVISIONAL deferral note).
+- Deck sanity, 200 games d3/b20 s1000, `MTG_DMG_EVENT_VERIFY=1` (no abort), final binary:
+  **194/200 won, avg-win 5.856, loss-penalised 5.95** (I2: 194 / 5.866 / 5.96); 6 outcome changes
+  (4 faster: 46, 182, 183, 185 -- 182/185 via the Vito grant; 2 slower: 6 -- a T5 Earthquake X=0 drain
+  spent the T6 lethal Earthquake, same at 5x budget, a valuation call; 66 -- a T3 Spellshock-vs-Vito
+  divergence). CPU 19m39s user vs I2 17m18s (+14%). Deterministic (a rerun reproduces the unwon list and
+  per-game units). Real firings: Dina pump 34 (every one on a winning turn), Vito grant 4 (all on
+  winning turns); Shriekmaw / Slime / Witness / eternalize / transmute / Bilbo 0 in real play (each
+  thousands of times in rollouts; Bilbo 18 rollout firings).
+- **Living Wish fetches** (I3): Rhox Faithmender 46, Vito 35, Tamanoa 35, Brushland 20, Vexing Shusher 3,
+  Purity 3, Dina 2, Battlefield Forge 2 -- sensible (the engine pieces; a land when short); none of the
+  new SB cards is ever wished for, which matches their value here (Slime is net-negative, Shriekmaw
+  kills a body the goldfish never uses, Witness / House Guard are slow).
+- Costs: targeted `audit_card_costs.py` on the 8 new/edited cards: all 8 compared, all match.
+  `audit_card_fields.py --update` (the 8 cards) + offline diff: 456 checked, rc=1 on the ONE
+  pre-existing hard mismatch (Basri, Tomorrow's Champion `exert`, not ours); the new cards' P/T,
+  types and keywords match; their oracle advisories are the bracket notes.
+
+**Deviations from `creatures_sideboard.md`.**
+- Vito rides ActivatePump mode 2 (`team_pump_grants_lifelink`), not a new `GrantLifelinkTeam`
+  PermAbilityMode -- the Valiant Knight precedent, and the repo's own note that the mode enum's
+  per-mode tables fail invisibly.
+- Transmute rides the Channel kind/verb rather than a new verb (same from-hand shape); Eternalize got
+  its own kind + verb + graveyard click (no existing shape activates from the graveyard without a
+  board source).
+- Witness/Transmute human play defers the pick to a resolution chooser instead of named plan variants
+  (the `HumanPlayDefersTutorTarget` convention -- no CheckLine sub needed).
+- Bilbo's "any number" is a provider pick + human multi-pick, not searched (disclosed).
+
+**PROVISIONAL / flagged for Stage 5 and 6a.**
+- `MTG_PD_DINA_LETHAL_GATE` (default ON) -- the measured Dina fix; A/B it paired in Stage 5.
+- `EtbDestroyTargetPick` (Shriekmaw/Slime) and `GyReturnToHandPick` / `PutCreaturesFromLibraryPicks`
+  are reviewed rankings, not searched and not measured (the cards never fire in real play at n=200).
+- Dimir House Guard regeneration: PROVISIONAL deferral (open question 2).
+- Inert (goldfish never blocks/casts): Fear (House Guard, Shriekmaw), Deathtouch (Slime), Flying
+  (Purity); "can't be countered" (Shusher, pre-existing).
+- The executor's game log does not record sac-outlet activations (pre-existing, every outlet deck);
+  the Dina counts above are inferred from board diffs + `MTG_PD_STATS`.
+- Legend rule: no viewer keep decision (keeps the oldest).
+- `audit_viewer_decisions.py` gained `--sideboard` (opt-in so no other deck moves); `verify_deck`'s
+  viewer gate still audits the main zone only -- Stage 5 should run it with `--sideboard` for this deck.
+
 ## Open questions / provisional decisions (surfaced to user, not blocking)
 
 1. Own-death mid-turn as a GLOBAL rules fix? Default taken: GATED to armed decks; measure with
    `MTG_OWN_DEATH_ALL=1` over all tiers before deciding.
 2. Dimir House Guard regeneration: PROVISIONAL deferral (shield must be paid before the sweeper
-   resolves, sacrificing Tamanoa/Faithmender forfeits the very trigger the sweep is for).
+   resolves, sacrificing Tamanoa/Faithmender forfeits the very trigger the sweep is for). Bracket-noted
+   on the card in I3; still awaiting sign-off.
 3. Bilbo's 111-life activation: BUILD it (not deferred).
 4. End-of-main voluntary pain sweep (`TapPainSourcesIfUseful`) is a greedy mana policy — within
    the greedy-scope ruling, flagged for the user.
@@ -412,4 +572,9 @@ three B sources).
    Stage 5 decides on a paired held-out A/B. PROVISIONAL.
 7. Beseech / Living Wish tutor axis width 20 + nonland-first ordering. PROVISIONAL (coverage, not a
    measured ranking).
-
+8. Dina's sac-pump is offered to the autonomous search only when an optimistic bound says it can
+   close the game THIS turn (`MTG_PD_DINA_LETHAL_GATE`, default ON; the MeliraPod precedent). Without
+   it the search fed Tamanoa/Faithmender to Dina (measured, Phase I3). PROVISIONAL -- Stage 5 A/B.
+9. Shriekmaw / Acidic Slime own-side victim, Timeless Witness unpinned return, Bilbo's "any number"
+   put: provider rankings (not searched), reviewed not measured -- none fires in real play at n=200.
+   PROVISIONAL.

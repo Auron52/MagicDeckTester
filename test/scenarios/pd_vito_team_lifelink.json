@@ -1,0 +1,26 @@
+{
+  "_comment": [
+    "Prevent Damage (2026-09-27, phase I3). Vito's '{3}{B}{B}: Creatures you control gain lifelink",
+    "until end of turn' makes EACH attacker its own lifegain event. Board: Vito, Dina, Tamanoa (none",
+    "sick), five Overgrown Tombs (painless), empty hand. The search activates the grant (all five",
+    "lands) and attacks with all three: 1 + 1 + 2 combat; lifelink events of 1, 1, 2 -> Vito drains",
+    "1 + 1 + 2, Dina drains 1 per event (3). Lifelink damage is COMBAT damage by a creature, so Tamanoa",
+    "does not trigger. Us 20 + 4 = 24; opponent 20 - 4 - 4 - 3 = 9. Without the grant: 20 / 16; an",
+    "implementation that aggregated the three lifelink hits into ONE event would read opponent 11."
+  ],
+  "deck": "decks/Prevent Damage/Prevent Damage.cod",
+  "turn": 4, "on_the_play": true, "active_life": 20, "opponent_life": 20,
+  "resume_at": "main1",
+  "battlefield": [
+    { "name": "Vito, Thorn of the Dusk Rose" },
+    { "name": "Dina, Soul Steeper" },
+    { "name": "Tamanoa" },
+    { "name": "Overgrown Tomb" }, { "name": "Overgrown Tomb" }, { "name": "Overgrown Tomb" },
+    { "name": "Overgrown Tomb" }, { "name": "Overgrown Tomb" }
+  ],
+  "hand": [],
+  "library_filler": "Forest", "library_size": 30,
+  "depth": 1, "budget_ms": 50, "max_turns": 4,
+  "expect_active_life": 24,
+  "expect_opponent_life": 9
+}

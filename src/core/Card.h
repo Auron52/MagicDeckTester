@@ -83,10 +83,12 @@ enum class Keyword
     // only so the Scryfall keywords field stays faithful; no engine code reads it.
     Metalcraft,
     // Regenerate (Deathbellow Raider's "{2}{B}: Regenerate this creature"): an INERT keyword-ability
-    // tag. Regeneration is a replacement effect for DESTRUCTION, and nothing in this sim destroys our
-    // creatures (the opponent never blocks, casts, or removes -- see Combat.cpp, which has no blocker
-    // path at all), so the ability can never apply. Kept only so the Scryfall keywords field
-    // ["Regenerate"] stays faithful; no engine code reads it. Disclosed deferral D8.
+    // tag. Regeneration is a replacement effect for DESTRUCTION, and nothing the OPPONENT does
+    // destroys our creatures (it never blocks, casts, or removes -- see Combat.cpp, which has no
+    // blocker path at all). Kept only so the Scryfall keywords field ["Regenerate"] stays faithful;
+    // no engine code reads it. Disclosed deferral D8. (Prevent Damage, 2026-09-27: our OWN
+    // Pyrohemia / Rolling Earthquake / Shriekmaw CAN destroy Dimir House Guard, so its regeneration
+    // is not inert there -- a PROVISIONAL deferral recorded on that card and in its ledger.)
     Regenerate,
     // Bestow (Gnarled Scarhide): an INERT keyword-ability TAG -- the mechanic itself is fully modelled
     // structurally via CardParams::bestow_cost + Action::bestow + the DB's synthesized
@@ -132,6 +134,16 @@ enum class Keyword
     // permanents. Kept only so the Scryfall keywords field ["Ward"] stays faithful; no engine code
     // reads it.
     Ward,
+    // Fear (Dimir House Guard, Shriekmaw): an INERT evasion tag -- "can't be blocked except by
+    // artifact creatures and/or black creatures." Provably inert vs the passive goldfish opponent,
+    // which never blocks. Kept only so the Scryfall keywords field stays faithful.
+    Fear,
+    // Transmute (Dimir House Guard): an INERT keyword-ability tag -- the mechanic is modelled
+    // structurally via CardParams::transmute_cost (a from-hand Channel-kind action + ApplyTransmute).
+    Transmute,
+    // Eternalize (Timeless Witness): an INERT keyword-ability tag -- the mechanic is modelled
+    // structurally via CardParams::eternalize_cost (Action::Kind::Eternalize + ApplyEternalize).
+    Eternalize,
     // Sentinel: MUST stay last. Keyword ordinals are bit indices into Card::m_keyword_mask (uint64_t).
     KeywordCount_
 };

@@ -857,6 +857,13 @@ inline void TapLargestOppCreature(GameState&, int controller);
 inline int LethalToughness(const Permanent& p, const GameState& state);
 inline void FireOwnEtbTriggers(GameState&, int controller, int entered_index,
                            const std::string& chosen_tutor, int etb_kx);
+// Prevent Damage phase I3 ETBs (Shriekmaw / Acidic Slime / Timeless Witness), defined below.
+inline void ResolveEtbDestroyMandatory(GameState& state, int controller, int source_id,
+                                       const CardDefinition& def);
+inline void ResolveEtbReturnGyToHand(GameState& state, int controller, const std::string& chosen,
+                                     const std::string& source_name);
+inline bool EtbDestroyTargetLegal(const Permanent& q, const CardParams& p);
+inline bool EtbDestroyAnyLegal(const GameState& state, const CardParams& p);
 inline bool EtbTreasureSpendOn();   // defined below (MTG_ETB_TREASURE_SPEND, beside PaySacFreshHoldEnabled)
 inline void CreateTreasureTokens(GameState& state, int controller, int n,
                                  bool fresh_hold_exempt = false);   // defined below
@@ -1418,6 +1425,9 @@ TutorZoneView(const Player& ap, const std::vector<Card>* wish_pool)
 inline bool TutorNumericFilterOk(const Card& card, const CardParams& pp)
 {
     if (pp.tutor_max_mv >= 0 && card.m_mana_cost.ManaValue() > pp.tutor_max_mv) { return false; }
+    // Transmute's "a card with the same mana value as this card" (Dimir House Guard). Only ever set
+    // on ApplyTransmute's synthesized params -> byte-identical for every card-backed tutor.
+    if (pp.tutor_exact_mv >= 0 && card.m_mana_cost.ManaValue() != pp.tutor_exact_mv) { return false; }
     if (pp.tutor_max_toughness >= 0
         && (!card.m_toughness.has_value()
             || card.m_toughness.value() > pp.tutor_max_toughness)) { return false; }
@@ -2131,7 +2141,8 @@ inline void PerformTutorToBattlefield(GameState& state, int controller, const Ca
                                       const std::vector<std::string>& preferred = {},
                                       const std::string& source_name = {},
                                       int require_mv = -1,
-                                      int max_mv_cap = -1)
+                                      int max_mv_cap = -1,
+                                      bool ask_human_despite_pin = false)
 {
     // require_mv >= 0 (Birthing Pod: "a creature card with mana value equal to 1 plus the
     // sacrificed creature's mana value"): an EXACT printed-MV legality filter on the search.
@@ -2172,7 +2183,9 @@ inline void PerformTutorToBattlefield(GameState& state, int controller, const Ca
     // the human never once chose which Dragons entered -- on the card the whole deck is built to
     // cast. (The comment on the gate even said "the dialog stays for Dragonstorm (preferred always
     // empty)": true of the PARAMETER, false of the variable it actually tested.)
-    const bool pinned_by_plan = !preferred.empty();
+    // ask_human_despite_pin (Bilbo's activation): `preferred` is the provider's DEFAULT pick, not
+    // a plan pin -- the human still chooses at resolution, with it preselected.
+    const bool pinned_by_plan = !preferred.empty() && !ask_human_despite_pin;
     if (put_pref.empty())
     {
         put_pref = ResolveProvider(state).TutorToBattlefieldPutOrder(state, controller, pp, max_puts);
@@ -7025,6 +7038,25 @@ inline void FireOwnEtbTriggers(GameState& state, int controller, int entered_ind
     if (p.etb_destroy_opp_creature) { DestroyLargestOppCreature(state, controller); }
     if (p.etb_tap_opp_creature)     { TapLargestOppCreature(state, controller); }
 
+    // Shriekmaw ("destroy target nonartifact, nonblack creature") / Acidic Slime ("destroy target
+    // artifact, enchantment, or land"): MANDATORY targeted triggers over BOTH sides (CR 603.3d), so
+    // against the goldfish they hit OUR OWN permanent whenever the opponent offers none. Fired on
+    // every entry path (this function is the shared cascade). AFTER this, entered_index may be stale
+    // -- nothing below reads it for these two cards (the evoke sacrifice re-finds by m_number).
+    if (p.etb_destroy_nonartifact_nonblack || p.etb_destroy_artifact_enchantment_land)
+    {
+        ResolveEtbDestroyMandatory(state, controller,
+                                   state.battlefield[entered_index].card.m_number, *def);
+    }
+    // Timeless Witness: "return target card from your graveyard to your hand." `chosen_tutor` is the
+    // cast's searched graveyard pick (one plan variant per distinct graveyard name); empty on a put
+    // path / the unpinned variant -> the provider's resolution pick (human: the dig chooser).
+    if (p.etb_return_gy_to_hand)
+    {
+        ResolveEtbReturnGyToHand(state, controller, chosen_tutor,
+                                 state.battlefield[entered_index].card.m_name.str());
+    }
+
     // Celes, Rune Knight ETB rummage: "discard any number of cards, then draw that many cards
     // plus one." N chosen by a RESOLUTION heuristic on both the cast and the put path (uniform;
     // a searched cast-time N axis is a disclosed 5e refinement): discard the hand's EXCESS LANDS
@@ -8991,7 +9023,8 @@ inline int CanonicalSacVictim(const GameState& state, int controller, int source
             const CardDefinition* srcd = CardDatabase::Instance().LookupCached(v.card);
             if (srcd && (srcd->params.sac_outlet_add_counter_to_self > 0
                          || srcd->params.sac_outlet_self_pump_power > 0
-                         || srcd->params.sac_outlet_self_pump_toughness > 0)) { continue; }
+                         || srcd->params.sac_outlet_self_pump_toughness > 0
+                         || srcd->params.sac_outlet_self_pump_power_from_victim)) { continue; }
         }
         // A subtype filter constrains only CREATURES; an enchantment admitted by
         // allow_enchantment is legal fodder on its type alone (the oracle says "or an
@@ -9235,6 +9268,182 @@ inline void PerformDamageAllCreatures(GameState& state, int controller,
                       + " to each creature (" + std::to_string(hit) + " hit, "
                       + std::to_string(died.size()) + " died)");
     }
+}
+
+// ---- Prevent Damage phase I3 FIRING COUNTERS (MTG_PD_STATS=1 prints them at exit) -------------
+// Always counted (a relaxed atomic add on paths only the Prevent Damage cards reach), printed only
+// on request -- so a sweep can say whether a rare clause (Bilbo's 111-life activation above all)
+// EVER fires, and in real play vs only inside rollouts. g_real_resolution is diagnostic-only.
+namespace PdStats
+{
+    enum Site { Bilbo, ShriekmawOpp, ShriekmawOwn, SlimeOwn, EtbRemoved, WitnessReturn, Eternalize,
+                Transmute, DinaPump, kSites };
+    inline const char* Name(int i)
+    {
+        static const char* k[] = { "bilbo_activation", "shriekmaw_kills_opp", "shriekmaw_kills_own",
+                                   "slime_destroys_own", "etb_no_target", "witness_return",
+                                   "eternalize", "transmute", "dina_pump" };
+        return k[i];
+    }
+    inline bool Enabled() { static const bool v = EnvOn("MTG_PD_STATS"); return v; }
+    inline std::atomic<std::uint64_t> g_real[kSites]{};
+    inline std::atomic<std::uint64_t> g_roll[kSites]{};
+    inline void Count(Site s)
+    { (g_real_resolution ? g_real : g_roll)[s].fetch_add(1, std::memory_order_relaxed); }
+    struct Dumper
+    {
+        ~Dumper()
+        {
+            if (!Enabled()) { return; }
+            std::fprintf(stderr, "\n=== PD STATS (real / rollout) ===\n");
+            for (int i = 0; i < kSites; ++i)
+            {
+                std::fprintf(stderr, "  %-22s %10llu / %llu\n", Name(i),
+                             static_cast<unsigned long long>(g_real[i].load()),
+                             static_cast<unsigned long long>(g_roll[i].load()));
+            }
+        }
+    };
+    inline Dumper g_dumper;
+}
+
+// ---- Prevent Damage phase I3: the sideboard's MANDATORY ETB removal ----------------------------
+// Shriekmaw: "When this creature enters, destroy target nonartifact, nonblack creature."
+// Acidic Slime: "When this creature enters, destroy target artifact, enchantment, or land."
+// Both are TARGETED triggers with no "up to"/"you may", so if any legal target exists one MUST be
+// chosen (CR 603.3d), on EITHER side -- and the goldfish opponent owns only colourless, non-artifact
+// creature tokens (never an artifact, enchantment or land). So Shriekmaw kills an opponent spawn when
+// there is one and otherwise one of OUR nonblack creatures; Acidic Slime ALWAYS destroys one of our
+// own lands / enchantments. With no legal target the trigger is removed from the stack (nothing).
+inline bool EtbDestroyTargetLegal(const Permanent& q, const CardParams& p)
+{
+    if (p.etb_destroy_nonartifact_nonblack)
+    {
+        return q.card.IsCreature() && !q.card.HasType(CardType::Artifact)
+            && !q.card.HasColor(Color::Black);
+    }
+    if (p.etb_destroy_artifact_enchantment_land)
+    {
+        return q.card.HasType(CardType::Artifact) || q.card.IsEnchantment() || q.card.IsLand();
+    }
+    return false;
+}
+inline bool EtbDestroyAnyLegal(const GameState& state, const CardParams& p)
+{
+    for (const Permanent& q : state.battlefield) { if (EtbDestroyTargetLegal(q, p)) { return true; } }
+    return false;
+}
+
+inline void ResolveEtbDestroyMandatory(GameState& state, int controller, int source_id,
+                                       const CardDefinition& def)
+{
+    const CardParams& p = def.params;
+    std::vector<int> legal;
+    for (int i = 0; i < static_cast<int>(state.battlefield.size()); ++i)
+    {
+        if (EtbDestroyTargetLegal(state.battlefield[static_cast<std::size_t>(i)], p)) { legal.push_back(i); }
+    }
+    const std::string src_name = def.card.m_name.str();
+    if (legal.empty())
+    {
+        PdStats::Count(PdStats::EtbRemoved);
+        if (g_play_event_sink && !g_tap_speculating)
+        { EmitPlayEvent(state.turn_number, "trigger", src_name + ": no legal target -- the trigger is removed"); }
+        return;
+    }
+    int k = ResolveProvider(state).EtbDestroyTargetPick(state, controller, legal);
+    if (k < 0 || k >= static_cast<int>(legal.size())) { k = 0; }
+    // HUMAN PLAY: the full legal set, both sides (the loyalty/`target` board-click shape Heliod and
+    // the Saga chapters use). A forced single target is not a choice (CR 601.2c) -- no prompt.
+    if (g_play_loyalty_chooser && legal.size() > 1)
+    {
+        const char* what = p.etb_destroy_nonartifact_nonblack
+                         ? "destroyed (target nonartifact, nonblack creature -- mandatory)"
+                         : "destroyed (target artifact, enchantment, or land -- mandatory)";
+        const int c = (*g_play_loyalty_chooser)(state, controller, src_name, what, legal, k);
+        if (c >= 0 && c < static_cast<int>(legal.size())) { k = c; }
+    }
+    const int bi = legal[static_cast<std::size_t>(k)];
+    Permanent& q = state.battlefield[static_cast<std::size_t>(bi)];
+    if (q.card.HasKeyword(Keyword::Indestructible)) { return; }   // targeted, not destroyed
+    const Card dead = q.card;
+    const int  dead_ctrl = q.controller_index;
+    const bool was_creature = q.card.IsCreature();
+    const bool was_token = q.is_token;
+    const int  m1 = MinusCountersOn(q);
+    PdStats::Count(p.etb_destroy_artifact_enchantment_land ? PdStats::SlimeOwn
+                   : (dead_ctrl == controller ? PdStats::ShriekmawOwn : PdStats::ShriekmawOpp));
+    if (g_play_event_sink && !g_tap_speculating)
+    {
+        EmitPlayEvent(state.turn_number, "trigger",
+                      "\xF0\x9F\x92\x80 " + src_name + ": destroys "
+                      + (dead_ctrl == controller ? std::string("your ") : std::string("the opponent's "))
+                      + dead.m_name.str());
+    }
+    state.players[q.owner_index].graveyard.push_back(dead);
+    state.battlefield.erase(state.battlefield.begin() + bi);
+    for (Permanent& o : state.battlefield)
+    {
+        if (o.equipped_to      == dead.m_number) { o.equipped_to      = 0; }
+        if (o.aura_attached_to == dead.m_number) { o.aura_attached_to = 0; }
+    }
+    // A creature dies through the ordinary cascade (Purity's shuffle-into-library replacement, LTB,
+    // dies watchers); a land / enchantment just goes to the graveyard (nothing in the engine reads
+    // one leaving). Same shape as PerformDamageAllCreatures' pass 3.
+    if (was_creature)
+    {
+        OnCreatureDies(state, dead_ctrl, dead, was_token, m1);
+        if (dead_ctrl != controller) { FireOppCreatureDies(state, dead_ctrl); }
+    }
+    (void)source_id;
+}
+
+// Timeless Witness's ETB: "return target card from your graveyard to your hand." Targeted with no
+// "up to", so with a non-empty graveyard a card MUST be returned (CR 603.3d); an empty graveyard
+// removes the trigger. `chosen` = the cast's searched pick (a graveyard NAME); a pin that is no
+// longer in the graveyard (a line that moved it) or an empty pin takes the provider's resolution
+// pick (DecisionProvider::GyReturnToHandPick). Human play with no pin: the dig chooser over the
+// graveyard (mandatory -- a decline takes the default).
+inline void ResolveEtbReturnGyToHand(GameState& state, int controller, const std::string& chosen,
+                                     const std::string& source_name)
+{
+    Player& pl = state.players[controller];
+    if (pl.graveyard.empty()) { return; }
+    int pick = -1;
+    if (!chosen.empty())
+    {
+        for (int g = static_cast<int>(pl.graveyard.size()) - 1; g >= 0; --g)
+        { if (pl.graveyard[static_cast<std::size_t>(g)].m_name.str() == chosen) { pick = g; break; } }
+    }
+    if (pick < 0)
+    {
+        pick = ResolveProvider(state).GyReturnToHandPick(state, controller);
+        if (pick < 0 || pick >= static_cast<int>(pl.graveyard.size())) { pick = 0; }
+        if (g_play_dig_chooser && chosen.empty())
+        {
+            std::vector<Card> examined;
+            std::vector<int>  legal;
+            for (int g = 0; g < static_cast<int>(pl.graveyard.size()); ++g)
+            {
+                examined.push_back(ZoneCard(pl.graveyard[static_cast<std::size_t>(g)]));
+                legal.push_back(g);
+            }
+            const int c = (*g_play_dig_chooser)(state, controller,
+                                                source_name + " (return from graveyard)",
+                                                examined, legal, pick);
+            if (c >= 0 && c < static_cast<int>(pl.graveyard.size())) { pick = c; }
+        }
+    }
+    const Card back = pl.graveyard[static_cast<std::size_t>(pick)];
+    pl.graveyard.erase(pl.graveyard.begin() + pick);
+    PdStats::Count(PdStats::WitnessReturn);
+    if (g_play_event_sink && !g_tap_speculating)
+    {
+        EmitPlayEvent(state.turn_number, "trigger",
+                      "\xE2\x86\xA9 " + source_name + ": returns " + back.m_name.str()
+                      + " from the graveyard to hand");
+    }
+    EnterHand(state, controller, back, HandEntryReason::Recur);
 }
 
 // Rolling Earthquake ("deals X damage to each creature without horsemanship and each player") and
@@ -10066,6 +10275,11 @@ inline int ApplyActivatePump(GameState& state, int controller, int source_id, in
                 // Idempotent (a flag, not an increment), which is why K is capped at 1 for a
                 // keyword-only grant in the enumeration.
                 if (sd->params.team_pump_grants_double_strike) { q.temp_double_strike = true; }
+                // Vito, Thorn of the Dusk Rose: "Creatures you control gain lifelink until end of
+                // turn." Set on every creature we control NOW (CR 611.2c: one entering later this
+                // turn does not get it). Each lifelinking creature's combat damage is then its own
+                // lifegain event (ResolveCombatDamage), which Vito / Dina drain.
+                if (sd->params.team_pump_grants_lifelink) { q.temp_lifelink = true; }
             }
             if (g_play_event_sink && !g_tap_speculating)
             {
@@ -10079,6 +10293,7 @@ inline int ApplyActivatePump(GameState& state, int controller, int source_id, in
                 { if (!what.empty()) { what += " and "; } what += kw; };
                 if (sd->params.team_pump_grants_haste)         { add("haste"); }
                 if (sd->params.team_pump_grants_double_strike) { add("double strike"); }
+                if (sd->params.team_pump_grants_lifelink)      { add("lifelink"); }
                 const std::string who = sd->params.team_pump_subtypes.empty()
                                             ? std::string("creatures you control")
                                             : sd->params.team_pump_subtypes.front() + "s you control";
@@ -10105,7 +10320,8 @@ inline int ApplyActivatePump(GameState& state, int controller, int source_id, in
 // fine when a human is pointing at one.
 inline int ChooseSacOutletVictimIndex(GameState& state, int controller, int source_id,
                                       const std::string& need_sub, int heuristic_vid,
-                                      const std::string& source_name, bool self_only = false)
+                                      const std::string& source_name, bool self_only = false,
+                                      bool exclude_self = false)
 {
     if (!g_play_sacrifice_chooser) { return -1; }
     std::vector<int> cands;
@@ -10115,6 +10331,9 @@ inline int ChooseSacOutletVictimIndex(GameState& state, int controller, int sour
         if (v.controller_index != controller || !v.card.IsCreature()) { continue; }
         if (!need_sub.empty() && !CardHasSubtype(v.card, need_sub)) { continue; }
         if (self_only && v.card.m_number != source_id) { continue; }   // "Sacrifice THIS creature"
+        // "Sacrifice ANOTHER creature" (Dina, Soul Steeper; Slaughter-Priest): the source is never a
+        // legal victim. Human-play only (the chooser is null everywhere else).
+        if (exclude_self && v.card.m_number == source_id) { continue; }
         cands.push_back(i);
     }
     if (cands.empty())     { return -1; }
@@ -10422,11 +10641,25 @@ inline void ApplySacCreatureOutlet(GameState& state, int controller, int source_
       { src_name = p.card.m_name.str(); break; } }
     const int hidx = ChooseSacOutletVictimIndex(state, controller, source_id,
                                                 op->sac_creature_requires_subtype, victim_id, src_name,
-                                                op->sac_outlet_self_only);
+                                                op->sac_outlet_self_only,
+                                                op->sac_outlet_excludes_self);
     // Find + remove the chosen victim (a controlled creature of the required subtype; self-inclusive).
     Card victim; bool found = false; bool victim_tok = false; int victim_m1 = 0;
+    // Dina, Soul Steeper: "+X/+0 where X is the sacrificed creature's power" -- LAST-KNOWN
+    // information (Scryfall ruling: "the power the creature had when it was on the battlefield"),
+    // so it is read BEFORE each erase below, with the same expression Surtland Flinger's fling uses
+    // (effective power + lord bonus, floored at 0). Only read for that outlet.
+    const bool pump_from_victim = op->sac_outlet_self_pump_power_from_victim;
+    int victim_lki_power = 0;
+    auto lki_power = [&state](const Permanent& v) -> int
+    {
+        int pw = v.EffectivePower()
+               + ComputeLordBonus(v.card, state, v.controller_index, v.AnimatedAllTypes(), &v).first;
+        return pw < 0 ? 0 : pw;
+    };
     if (hidx >= 0)
     {
+        if (pump_from_victim) { victim_lki_power = lki_power(state.battlefield[hidx]); }
         victim = state.battlefield[hidx].card; found = true;
         victim_tok = state.battlefield[hidx].is_token;
         victim_m1  = MinusCountersOn(state.battlefield[hidx]);
@@ -10463,6 +10696,7 @@ inline void ApplySacCreatureOutlet(GameState& state, int controller, int source_
             if (op->sac_outlet_self_only && q.card.m_number != source_id)     { continue; }
             if (!op->sac_creature_requires_subtype.empty() && q.card.IsCreature()
                 && !CardHasSubtype(q.card, op->sac_creature_requires_subtype)) { continue; }
+            if (pump_from_victim) { victim_lki_power = lki_power(q); }
             victim = q.card; found = true; victim_tok = q.is_token;
             victim_m1 = MinusCountersOn(q);
             state.players[controller].graveyard.push_back(q.card);
@@ -10484,7 +10718,9 @@ inline void ApplySacCreatureOutlet(GameState& state, int controller, int source_
     const int ntok = op->sac_outlet_creates_tokens, tp = op->sac_outlet_token_power,
               tt = op->sac_outlet_token_toughness;
     const int self_ctr = op->sac_outlet_add_counter_to_self;
-    const int self_pp  = op->sac_outlet_self_pump_power, self_pt = op->sac_outlet_self_pump_toughness;
+    const int self_pp  = op->sac_outlet_self_pump_power
+                       + (pump_from_victim ? victim_lki_power : 0),
+              self_pt  = op->sac_outlet_self_pump_toughness;
     const int ndraw = op->sac_outlet_draw;   // Psychotrope Thallid
     const std::vector<std::string> tsub = op->sac_outlet_token_subtypes;
     // History visibility (seed-6 play-test): without this the viewer showed only the persist
@@ -10501,8 +10737,11 @@ inline void ApplySacCreatureOutlet(GameState& state, int controller, int source_
         }
         if (self_ctr > 0) { ev += " (+" + std::to_string(self_ctr) + "/+"
                                 + std::to_string(self_ctr) + " counter)"; }
+        if (pump_from_victim) { ev += " (" + src_name + " +" + std::to_string(victim_lki_power)
+                                      + "/+0)"; }
         EmitPlayEvent(state.turn_number, "sacrifice", "\xF0\x9F\x92\x80 " + ev);
     }
+    if (pump_from_victim) { PdStats::Count(PdStats::DinaPump); }
     if (!mana_color.empty()) { AddChosenColorFloat(state, mana_color, mana_amt); }
     if (dmg > 0) { state.players[1 - controller].life -= dmg; state.opponent_lost_life_this_turn = true; }
     CreateTokens(state, controller, ntok, tp, tt, tsub);   // bulk: one DoublerShift, not ntok
@@ -11067,6 +11306,95 @@ inline void ApplyChannel(GameState& state, int controller, int hand_index,
     ap.hand.erase(ap.hand.begin() + idx);
     state.players[1 - controller].life -= damage;
     state.opponent_lost_life_this_turn = true;
+}
+
+// TRANSMUTE (Dimir House Guard, CR 702.53): "{1}{B}{B}, Discard this card: Search your library for a
+// card with the same mana value as this card, reveal it, put it into your hand, then shuffle.
+// Transmute only as a sorcery." A from-HAND activation riding Action::Kind::Channel (the Twinshot
+// Sniper shape -- the mana is paid by the caller, the discard is the rest of the cost); the found
+// card is the action's tutor_target (one searched variant per distinct legal library name; empty =
+// the provider's pick, or the human's at resolution through the ordinary tutor chooser). The search
+// itself is PerformTutor over synthesized params (to hand, shuffle after, exact MV), so the reveal,
+// the ShuffleAfterSearch ordinal and the human frame are the shared ones.
+inline CardParams TransmuteSearchParams(const Card& src)
+{
+    CardParams tp;
+    tp.tutor_to_hand       = true;
+    tp.tutor_shuffle_after = true;
+    tp.tutor_exact_mv      = src.m_mana_cost.ManaValue();
+    return tp;
+}
+inline void ApplyTransmute(GameState& state, int controller, int hand_index,
+                           const std::string& card_name, const std::string& target)
+{
+    Player& ap = state.players[controller];
+    int idx = -1;
+    if (hand_index >= 0 && hand_index < static_cast<int>(ap.hand.size())
+        && ap.hand[hand_index].m_name == card_name) { idx = hand_index; }
+    else { for (int i = 0; i < static_cast<int>(ap.hand.size()); ++i)
+           { if (ap.hand[i].m_name == card_name) { idx = i; break; } } }
+    if (idx < 0) { return; }
+    const CardDefinition* d = CardDatabase::Instance().LookupCached(ap.hand[idx]);
+    const Card src = d ? d->card : ap.hand[idx];
+    ap.graveyard.push_back(ap.hand[idx]);
+    ap.hand.erase(ap.hand.begin() + idx);
+    if (g_play_event_sink && !g_tap_speculating)
+    { EmitPlayEvent(state.turn_number, "ability", card_name + ": transmute (discarded)"); }
+    PdStats::Count(PdStats::Transmute);
+    const CardParams tp = TransmuteSearchParams(src);
+    PerformTutor(state, controller, tp, target, card_name + " (transmute)", /*human_repick=*/true);
+}
+
+// ETERNALIZE (Timeless Witness, CR 702.129): "{5}{G}{G}, Exile this card from your graveyard: Create
+// a token that's a copy of it, except it's a 4/4 black Zombie Human Shaman with no mana cost.
+// Eternalize only as a sorcery." The mana is paid by the caller. The card is EXILED (never back to
+// the graveyard), then one token per token-doubler rep is created from the card's DEFINITION (a
+// graveyard entry may be a name-only placeholder), with the exceptions written onto the token's own
+// Card copy (colour black ONLY -- "instead of its other colors", Scryfall ruling; base P/T 4/4; no
+// mana cost -> MV 0; Zombie added to the subtypes). The name is kept, so LookupCached still resolves
+// the card's abilities and the token's own ETB fires through the shared cascade. Returns false when
+// the named card is not in the graveyard (a stale plan) -- nothing happens.
+inline bool ApplyEternalize(GameState& state, int controller, const std::string& card_name)
+{
+    Player& pl = state.players[controller];
+    int gi = -1;
+    for (int g = static_cast<int>(pl.graveyard.size()) - 1; g >= 0; --g)
+    { if (pl.graveyard[static_cast<std::size_t>(g)].m_name.str() == card_name) { gi = g; break; } }
+    if (gi < 0) { return false; }
+    const CardDefinition* d = CardDatabase::Instance().LookupCached(pl.graveyard[static_cast<std::size_t>(gi)]);
+    if (d == nullptr || !d->params.eternalize_cost.has_value()) { return false; }
+    state.exile.push_back(pl.graveyard[static_cast<std::size_t>(gi)]);
+    pl.graveyard.erase(pl.graveyard.begin() + gi);
+    PdStats::Count(PdStats::Eternalize);
+    Card proto = d->card;
+    proto.m_def         = nullptr;
+    proto.m_color_mask  = Card::Bit(Color::Black);
+    proto.m_mana_cost   = ManaCost{};
+    proto.m_power       = 4;
+    proto.m_toughness   = 4;
+    { bool z = false; for (const std::string& st : proto.m_subtypes) { if (st == "Zombie") { z = true; } }
+      if (!z) { proto.m_subtypes.push_back("Zombie"); } }
+    if (g_play_event_sink && !g_tap_speculating)
+    {
+        EmitPlayEvent(state.turn_number, "ability",
+                      card_name + ": eternalize -- a 4/4 black Zombie token copy");
+    }
+    const int reps = 1 << DoublerShift(state, controller, /*for_tokens=*/true);
+    for (int r = 0; r < reps; ++r)
+    {
+        Permanent token;
+        token.card              = proto;
+        token.card.m_number     = state.next_token_number++;
+        token.controller_index  = controller;
+        token.owner_index       = controller;
+        token.entered_this_turn = true;
+        token.is_token          = true;
+        state.battlefield.push_back(token);
+        const int idx = static_cast<int>(state.battlefield.size()) - 1;
+        FireEtbWatchers(state, controller, idx);
+        FireOwnEtbTriggers(state, controller, idx, std::string(), kEtbKxHeuristic);
+    }
+    return true;
 }
 
 // Utvara Hellkite: "Whenever a Dragon you control attacks, create a 6/6 Dragon token." Per
@@ -16692,6 +17020,15 @@ inline bool PermAbilitySourceLive(const GameState& state, int controller, int so
     for (const Permanent& p : state.battlefield)
     {
         if (p.card.m_number != source_id || p.controller_index != controller) { continue; }
+        // Bilbo: "Activate only if you have 111 or more life." An activation RESTRICTION, checked
+        // when the ability is activated (CR 602.5b) -- i.e. here, before any cost is paid (a
+        // painland's pain while paying cannot un-activate it).
+        if (mode == PermAbilityMode::LifeGatedPutCreatures)
+        {
+            const CardDefinition* ld = CardDatabase::Instance().LookupCached(p.card);
+            if (ld == nullptr || state.players[controller].life < ld->params.activate_min_life)
+            { return false; }
+        }
         // No {T} in the cost -> the source's tap state and summoning sickness are irrelevant. This
         // used to test SacDraw alone; the two Eldrazi mana sinks are the same shape, and requiring
         // an untappable source would have stopped a just-wished Essence Depleter from draining on
@@ -16737,6 +17074,8 @@ inline const char* PermAbilityLabel(PermAbilityMode mode)
         case PermAbilityMode::PayToken:       return "create a creature token";
         case PermAbilityMode::FadeSaproling:  return "remove a fade counter: create a Saproling";
         case PermAbilityMode::PingAll:        return "deal damage to each creature and each player";
+        case PermAbilityMode::LifeGatedPutCreatures:
+                                              return "exile it: put any number of creature cards from your library onto the battlefield";
         default:                              return "activate";
     }
 }
@@ -17144,6 +17483,62 @@ inline void ApplyPermAbility(GameState& state, int controller, int source_id, Pe
                               + std::to_string(left) + " left) -> Saproling "
                               + std::to_string(left) + "/" + std::to_string(left));
             }
+            break;
+        }
+        case PermAbilityMode::LifeGatedPutCreatures:
+        {
+            // Bilbo, Birthday Celebrant: "{2}{W}{B}{G}, {T}, Exile Bilbo: Search your library for any
+            // number of creature cards, put them onto the battlefield, then shuffle. Activate only if
+            // you have 111 or more life." The {T} and mana are paid by the caller, the life gate is
+            // PermAbilitySourceLive's; the exile is the rest of the COST, so it happens first (the
+            // +1 lifegain replacement leaves with it). WHICH creatures: the provider's pick
+            // (PutCreaturesFromLibraryPicks -- "any number" is a real choice here, see its note);
+            // the human picks from every library creature card, the provider's pick preselected.
+            {
+                Permanent& bq = state.battlefield[static_cast<std::size_t>(idx)];
+                const int bnum = bq.card.m_number;
+                if (!bq.is_token) { state.exile.push_back(bq.card); }
+                state.battlefield.erase(state.battlefield.begin() + idx);
+                for (Permanent& o : state.battlefield)
+                {
+                    if (o.equipped_to      == bnum) { o.equipped_to      = 0; }
+                    if (o.aura_attached_to == bnum) { o.aura_attached_to = 0; }
+                }
+            }
+            PdStats::Count(PdStats::Bilbo);
+            CardParams tp;
+            tp.tutor_to_battlefield = true;
+            tp.tutor_shuffle_after  = true;
+            tp.tutor_types          = { std::string("Creature") };
+            const std::vector<std::string> picks =
+                ResolveProvider(state).PutCreaturesFromLibraryPicks(state, controller);
+            if (g_play_event_sink && !g_tap_speculating)
+            {
+                EmitPlayEvent(state.turn_number, "ability",
+                              src_name + ": exiled -- search the library for any number of creature cards ("
+                              + std::to_string(picks.size()) + " picked by default)");
+            }
+            int lib_creatures = 0;
+            for (const Card& lc : state.players[controller].library)
+            {
+                const CardDefinition* ldf = CardDatabase::Instance().LookupCached(lc);
+                if ((ldf ? ldf->card : lc).IsCreature()) { ++lib_creatures; }
+            }
+            const auto searches_before = state.search_count;
+            if (g_play_dragon_chooser && lib_creatures > 0)
+            {
+                PerformTutorToBattlefield(state, controller, tp, lib_creatures, picks, src_name,
+                                          -1, -1, /*ask_human_despite_pin=*/true);
+            }
+            else if (!picks.empty())
+            {
+                PerformTutorToBattlefield(state, controller, tp, static_cast<int>(picks.size()), picks,
+                                          src_name);
+            }
+            // "...then shuffle" happens even when nothing was put (PerformTutorToBattlefield returns
+            // before its shuffle on an empty put list). Exactly once per activation, both worlds.
+            if (state.search_count == searches_before) { ShuffleAfterSearch(state, controller); }
+            EnforceLegendRule(state, controller);
             break;
         }
         case PermAbilityMode::PingAll:

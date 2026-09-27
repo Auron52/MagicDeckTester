@@ -87,6 +87,7 @@
   //   ooze=       Scavenging Ooze's exile (names the EXILED graveyard card)    (LineSpec::ooze_exiles)
   //   channel=    Twinshot Sniper's from-HAND channel ability (names the card) (LineSpec::channels)
   //   suspend=    Lotus Bloom's from-HAND Suspend (names the card)             (LineSpec::suspends)
+  //   eternalize= Timeless Witness's from-GRAVEYARD Eternalize (names the card) (LineSpec::eternalizes)
   //   adventure=  Brightcap Badger's adventure half (names the PARENT card)     (LineSpec::adventures)
   //   blink=      Emiel / Eldrazi Displacer, "<outlet>[@<target m_number>]"    (LineSpec::blinks)
   // The verbs whose value is a MODE INT rather than a card name. Kept as a set so encodeLine has one
@@ -100,6 +101,9 @@
     // ... and SUSPEND is the second: exiling the card from hand with time counters is an
     // alternative to casting it (CR 702.61a), and `cast=` cannot say which of the two was meant.
     if (p.kind === 'suspend') return 'suspend';
+    // ... and ETERNALIZE (Timeless Witness) is activated from the GRAVEYARD -- neither a cast nor a
+    // board activation, so it carries its own verb (names the graveyard card).
+    if (p.kind === 'eternalize') return 'eternalize';
     if (p.kind !== 'activate') return 'cast';
     return p.verb || (p.sacout ? 'sacout' : 'cast');
   }

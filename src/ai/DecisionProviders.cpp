@@ -8,6 +8,7 @@
 #include <cstdlib>
 #include <cctype>
 #include <utility>
+#include <functional>
 #include <atomic>
 #include <cstdint>
 #include <algorithm>   // std::stable_sort (OrderEntriesByEtbValue payoff-ordering primitive)
@@ -9864,6 +9865,84 @@ std::vector<int> PreventDamageProvider::XCandidates(const GameState& s, const Ca
     }
     if (!cast_trigger) { xs.erase(xs.begin()); }
     return xs;
+}
+
+bool PreventDamageProvider::FodderSacUseful(const GameState& s, const Permanent& src,
+                                            const CardDefinition& sd) const
+{
+    if (!sd.params.sac_outlet_self_pump_power_from_victim) { return true; }
+    // MTG_PD_DINA_LETHAL_GATE (DEFAULT ON; =0 = the attack-only gate, the A/B arm).
+    static const bool s_lethal_gate = EnvOn("MTG_PD_DINA_LETHAL_GATE", true);
+    const int me = s.active_player_index;
+    if (src.tapped || !CanAttackFull(src, s.battlefield, me)) { return false; }
+    if (!s_lethal_gate) { return true; }
+    // THE LETHAL EXCEPTION (the MeliraPod precedent for a self-payload outlet, USER 2026-09-05:
+    // "the only exception would be if the sacrifice gives us lethal"). Measured, phase I3 sanity
+    // (200 games d3/b20 s1000): with the attack-only gate the search sacrificed Tamanoa 28 times and
+    // Rhox Faithmender 8 times for a one-turn Dina pump, and the 35 games with a Dina sac were
+    // 8 turns SLOWER in total than the same games before Dina's ability existed -- the leaf prices
+    // the pump's damage now and not the gain engine's damage later. So: offer the sacrifice only
+    // when an OPTIMISTIC bound on this turn's damage reaches the opponent's life (over-emits; the
+    // search prices the real line). Bound: every ready attacker's power, plus the (mana-limited)
+    // largest victims' power as pump, times the drain multiplier if a Vito is out (lifelink combat
+    // damage x Faithmender doubling -> "loses that much"), plus Dina's 1 per lifelink attacker.
+    int atk = 0, attackers = 0;
+    std::vector<int> fodder;
+    int vitos = 0, dinas = 0, mult = 1;
+    for (const Permanent& p : s.battlefield)
+    {
+        if (p.controller_index != me) { continue; }
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+        if (d != nullptr)
+        {
+            if (d->params.lifegain_target_opp_loses_that_much) { ++vitos; }
+            if (d->params.lifegain_each_opp_loses > 0)         { ++dinas; }
+            if (d->params.lifegain_multiplier > 1)             { mult *= d->params.lifegain_multiplier; }
+        }
+        if (!p.card.IsCreature()) { continue; }
+        const bool ready = !p.tapped && CanAttackFull(p, s.battlefield, me);
+        if (ready) { atk += p.EffectivePower(); ++attackers; }
+        if (p.card.m_number != src.card.m_number) { fodder.push_back(std::max(0, p.EffectivePower())); }
+    }
+    std::sort(fodder.begin(), fodder.end(), std::greater<int>());
+    ManaPool pool = AvailableManaPool(s);
+    pool.AddPool(s.floating_mana);
+    const int per = std::max(1, sd.params.sac_creature_cost.has_value()
+                                    ? sd.params.sac_creature_cost->ManaValue() : 1);
+    const int n_sacs = std::min<int>(static_cast<int>(fodder.size()), pool.Total() / per);
+    int pump = 0;
+    for (int i = 0; i < n_sacs; ++i) { pump += fodder[static_cast<std::size_t>(i)]; }
+    const int combat = atk + pump;
+    const int bound = combat + (vitos > 0 ? combat * mult * vitos : 0) + dinas * attackers;
+    return bound >= s.players[1 - me].life;
+}
+
+int PreventDamageProvider::EtbDestroyTargetPick(const GameState& s, int controller,
+                                                const std::vector<int>& legal) const
+{
+    auto engine = [](const Permanent& q) -> bool
+    {
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(q.card);
+        if (d == nullptr) { return false; }
+        const CardParams& p = d->params;
+        return p.noncreature_damage_lifegain || p.lifegain_multiplier > 1 || p.lifegain_plus > 0
+            || p.prevent_noncombat_to_self_gain || p.lifegain_target_opp_loses_that_much
+            || p.lifegain_each_opp_loses > 0 || p.land_tap_damage_each_player > 0
+            || p.on_cast_trigger_damage > 0 || p.ping_all_cost.has_value();
+    };
+    int best = -1; long long best_key = 0;
+    for (int k = 0; k < static_cast<int>(legal.size()); ++k)
+    {
+        const Permanent& q = s.battlefield[static_cast<std::size_t>(legal[k])];
+        const bool own = q.controller_index == controller;
+        const long long key = (own ? 1LL << 44 : 0) + (own && engine(q) ? 1LL << 42 : 0)
+                            + (q.card.IsCreature() || q.card.IsLand() ? 0 : 1LL << 36)
+                            + (q.tapped ? 0 : 1LL << 32)
+                            + (static_cast<long long>(q.card.m_mana_cost.ManaValue()) << 24)
+                            + static_cast<long long>(q.card.m_number & 0xFFFFFF);
+        if (best < 0 || key < best_key) { best = k; best_key = key; }
+    }
+    return best < 0 ? 0 : best;
 }
 
 std::vector<std::string>

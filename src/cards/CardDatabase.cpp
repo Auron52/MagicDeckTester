@@ -416,6 +416,9 @@ static Keyword KeywordFromString(const std::string& s)
     if (s == "Evoke")         { return Keyword::Evoke; }      // inert tag; mechanic is param-modelled
     if (s == "Convoke")       { return Keyword::Convoke; }    // inert tag; mechanic is param-modelled
     if (s == "Ward")          { return Keyword::Ward; }       // inert tag; provably inert vs passive opp
+    if (s == "Fear")          { return Keyword::Fear; }       // inert tag; provably inert vs passive opp
+    if (s == "Transmute")     { return Keyword::Transmute; }  // inert tag; mechanic is param-modelled
+    if (s == "Eternalize")    { return Keyword::Eternalize; } // inert tag; mechanic is param-modelled
     throw std::runtime_error("Unknown keyword: " + s);
 }
 
@@ -1108,6 +1111,20 @@ CardParams CardDatabase::BuildParamsFromJson(const json& params) const
     p.tutor_max_mv_is_lands               = params.value("tutor_max_mv_is_lands", false);
     p.shuffles_self_into_library_on_resolve =
         params.value("shuffles_self_into_library_on_resolve", false);
+    // Prevent Damage phase I3 creatures + sideboard (see CardParams).
+    p.team_pump_grants_lifelink              = params.value("team_pump_grants_lifelink", false);
+    p.sac_outlet_self_pump_power_from_victim = params.value("sac_outlet_self_pump_power_from_victim", false);
+    p.etb_destroy_nonartifact_nonblack       = params.value("etb_destroy_nonartifact_nonblack", false);
+    p.etb_destroy_artifact_enchantment_land  = params.value("etb_destroy_artifact_enchantment_land", false);
+    p.etb_return_gy_to_hand                  = params.value("etb_return_gy_to_hand", false);
+    if (params.contains("eternalize_cost"))
+        p.eternalize_cost = ManaCostFromString(params["eternalize_cost"].get<std::string>());
+    if (params.contains("transmute_cost"))
+        p.transmute_cost = ManaCostFromString(params["transmute_cost"].get<std::string>());
+    if (params.contains("life_gated_put_creatures_cost"))
+        p.life_gated_put_creatures_cost =
+            ManaCostFromString(params["life_gated_put_creatures_cost"].get<std::string>());
+    p.activate_min_life                      = params.value("activate_min_life", 0);
     // Ocelot Pride's end-step token trigger + ascend (see CardParams for the model).
     p.endstep_lifegain_tokens             = params.value("endstep_lifegain_tokens", 0);
     p.endstep_token_power                 = params.value("endstep_token_power", 0);

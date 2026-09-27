@@ -308,6 +308,7 @@ add_executable(mtg-test
     test/unit/test_double_strike_grants.cpp
     test/unit/test_prevent_damage.cpp
     test/unit/test_prevent_damage_spells.cpp
+    test/unit/test_prevent_damage_creatures.cpp
 )
 target_link_libraries(mtg-test PRIVATE mtg-core doctest::doctest)
 # Run from the SOURCE dir: the tests load src/cards/data/cards.json, and ctest's default working

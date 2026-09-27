@@ -324,6 +324,24 @@ public:
     // costs a card, {R} and possibly pain: dominated by not casting it (or discarding it). A
     // provider narrowing, lossless for this list.
     std::vector<int> XCandidates(const GameState&, const CardDefinition&, int) const override;
+    // Dina, Soul Steeper ("{1}, Sacrifice another creature: Dina gets +X/+0"). The payload is a
+    // POWER pump on Dina only, so it is worth anything only if Dina still attacks this turn --
+    // with Dina tapped or summoning-sick the sacrifice just throws away a body (Purity's shuffle
+    // back into the library is the only other effect, and nothing in the list profits from it).
+    // And (MTG_PD_DINA_LETHAL_GATE, default ON) only when an optimistic bound says the pump can
+    // close the game THIS turn -- the MeliraPod "lethal exception" shape; measured reason at the
+    // definition. A provider JUDGEMENT on the autonomous search only (human play keeps every
+    // variant, the enumeration's own carve-out). PROVISIONAL -- Stage 5 measures it.
+    bool FodderSacUseful(const GameState& s, const Permanent& src,
+                         const CardDefinition& sd) const override;
+    // Shriekmaw / Acidic Slime own-side victim (see DecisionProvider::EtbDestroyTargetPick): an
+    // opponent permanent first; then, on our side, NEVER one of the deck's engines while anything
+    // else is legal -- a lifegain/prevention engine (Tamanoa, Faithmender, Purity, Bilbo), a drain
+    // (Vito, Dina) or a damage source (Manabarbs, Spellshock, Pyrohemia) ranks last; among the rest a
+    // TAPPED land first (its mana is already spent this turn), then the base order. PROVISIONAL
+    // (a reviewed ranking, not a measured one).
+    int EtbDestroyTargetPick(const GameState& s, int controller,
+                             const std::vector<int>& legal) const override;
 };
 
 // Angels (Giada / Lyra / Righteous Valkyrie lifegain-angels). Rode GenericProvider.

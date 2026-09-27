@@ -26,6 +26,7 @@
 #include <cstdint>
 #include <cstdlib>
 #include <functional>
+#include <tuple>
 #include <iterator>  // std::back_inserter (the plan-dominance census's set_difference sink)
 #include <climits>   // INT_MAX (the human pre-tap "flush the rest" sentinel)
 #include <limits>
@@ -3709,6 +3710,7 @@ static bool BpActivationAbilityUnambiguous(const CardParams& p)
     if (p.exile_opponent_top_cost)  { ++n; }
     if (p.ice_counter_cost)         { ++n; }
     if (p.lifelink_grant_cost)      { ++n; }
+    if (p.life_gated_put_creatures_cost) { ++n; }
     return n == 1;
 }
 
@@ -4034,12 +4036,16 @@ static std::uint32_t BpAvailablePermAbilityModes(const GameState& state, const P
         { PermAbilityMode::GrantLifelink,  &sd.params.lifelink_grant_cost     },
         { PermAbilityMode::PayToken,       &sd.params.pay_token_cost          },
         { PermAbilityMode::PingAll,        &sd.params.ping_all_cost           },
+        { PermAbilityMode::LifeGatedPutCreatures, &sd.params.life_gated_put_creatures_cost },
     };
     const int ctrl = state.active_player_index;
     for (const ModeSpec& m : modes)
     {
         if (!m.cost->has_value()) { continue; }
         if (PermAbilityTaps(m.mode) && (src.tapped || !src.CanTap())) { continue; }
+        // Bilbo's "Activate only if you have 111 or more life" (the shared gate).
+        if (m.mode == PermAbilityMode::LifeGatedPutCreatures
+            && !PermAbilitySourceLive(state, ctrl, src.card.m_number, m.mode)) { continue; }
         ManaCost cost = EffectiveActivationCost(state, ctrl, src.card, m.cost->value());
         if (m.mode == PermAbilityMode::TapDraw && sd.params.tap_draw_cost_less_per_rad)
         { cost.generic = std::max(0, cost.generic - state.players[ctrl].rad_counters); }
@@ -13162,6 +13168,7 @@ void CollectActivationKeys(const GameState& state, int ctrl, const Permanent& p,
         // Appended LAST: ActKey slots are kActModeBase + table INDEX, so a mid-table insert would
         // re-key every mode after it.
         { PermAbilityMode::PingAll,        &pp.ping_all_cost           },
+        { PermAbilityMode::LifeGatedPutCreatures, &pp.life_gated_put_creatures_cost },   // appended LAST
     };
     for (std::size_t i = 0; i < sizeof modes / sizeof modes[0]; ++i)
     {
@@ -17528,6 +17535,27 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
                 actions.push_back(std::move(a));
             }
         }
+        // EVOKE for a card whose value is its ETB (Shriekmaw, "Evoke {1}{B}"; Prevent Damage
+        // sideboard). The Reveillark gate above keys on the LTB return; here the evoked body's
+        // whole effect is the ETB it shares with the hard cast plus the CAST itself (a {1}{B} spell
+        // is a Spellshock trigger = a Tamanoa / Dina event in this list), so neither side dominates
+        // and the variant is always offered -- the search decides. Keyed on the ETB params so
+        // Reveillark (the only other evoke card) is untouched.
+        else if (def.params.evoke_cost.has_value()
+                 && (def.params.etb_destroy_nonartifact_nonblack
+                     || def.params.etb_destroy_artifact_enchantment_land))
+        {
+            Action a;
+            a.kind           = Action::Kind::CastFromHand;
+            a.card_name      = ap.hand[i].m_name;
+            a.hand_index     = i;
+            a.cost           = *def.params.evoke_cost;
+            a.eval           = EvalCard(def, state);
+            a.is_noncreature = false;
+            a.card_mv        = def.card.m_mana_cost.ManaValue();
+            a.evoke          = true;
+            actions.push_back(std::move(a));
+        }
 
         // Sakashima's Protege: WHICH this-turn entrant it copies is a SEARCH decision -- one
         // extra CastFromHand variant per legal battlefield entrant (sharing hand_index ->
@@ -20468,12 +20496,19 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
                     { Action::AbilityMode::GrantLifelink,  &sd->params.lifelink_grant_cost  },
                     { Action::AbilityMode::PayToken,       &sd->params.pay_token_cost       },
                     { Action::AbilityMode::PingAll,        &sd->params.ping_all_cost        },
+                    { Action::AbilityMode::LifeGatedPutCreatures,
+                                                           &sd->params.life_gated_put_creatures_cost },
                 };
                 for (const ModeSpec& m : modes)
                 {
                     if (!m.cost->has_value()) { continue; }
                     const bool taps = PermAbilityTaps(m.mode);
                     if (taps && (src.tapped || !src.CanTap())) { continue; }
+                    // Bilbo: "Activate only if you have 111 or more life" -- the SAME gate the apply
+                    // re-checks before paying (PermAbilitySourceLive), so enumeration and apply agree.
+                    if (m.mode == Action::AbilityMode::LifeGatedPutCreatures
+                        && !PermAbilitySourceLive(state, state.active_player_index,
+                                                  src.card.m_number, m.mode)) { continue; }
                     // CONDEMNING AN ACTIVATION (MTG_BP_CONDEMN_ACTIVATION; USER 2026-09-18:
                     // *"Activation should be able to be condemned."*).
                     //
@@ -21215,8 +21250,12 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
             //           Sethron, with team_pump_power 0. It is here for the same reason mode 1 and 3
             //           are: the combat converter's damage-per-mana ratio cannot price a MULTIPLIER
             //           on the team's eventual power.
+            //   mode 2 also covers Vito, Thorn of the Dusk Rose "{3}{B}{B}: Creatures you control
+            //           gain lifelink until end of turn" (Prevent Damage) -- the same idempotent
+            //           keyword-only team grant; the converter cannot price LIFE either.
             const bool team_pump_keyword = (sd->params.team_pump_grants_haste
-                                            || sd->params.team_pump_grants_double_strike)
+                                            || sd->params.team_pump_grants_double_strike
+                                            || sd->params.team_pump_grants_lifelink)
                                         && sd->params.team_pump_cost.has_value();
             if (self_pump_discard || self_pump_lifelink || team_pump_keyword)
             {
@@ -21252,7 +21291,20 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
                         bool m = sd->params.team_pump_subtypes.empty();
                         for (const std::string& sub : sd->params.team_pump_subtypes)
                         { if (q.AnimatedAllTypes() || CardHasSubtype(q.card, sub)) { m = true; break; } }
-                        if (m) { any_beneficiary = true; break; }
+                        if (!m) { continue; }
+                        // A LIFELINK-only grant (Vito) benefits only a creature that lacks lifelink
+                        // and can still deal combat damage this turn (nothing else in the engine
+                        // makes a creature the SOURCE of damage): with none, the activation changes
+                        // no reachable outcome -- lossless, and it keeps a no-op out of the human
+                        // plan menu (the Wirewood Lodge rule above). Other grants: unchanged.
+                        if (sd->params.team_pump_grants_lifelink
+                            && !sd->params.team_pump_grants_haste
+                            && !sd->params.team_pump_grants_double_strike
+                            && sd->params.team_pump_power <= 0
+                            && (CreatureHasLifelink(q, state) || q.tapped
+                                || !CanAttackFull(q, state.battlefield, state.active_player_index)))
+                        { continue; }
+                        any_beneficiary = true; break;
                     }
                 }
                 for (int k = 1; any_beneficiary && k <= kmax; ++k)
@@ -21609,6 +21661,41 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
                 // carve-out: a judgment prune must not hide a legal menu entry from a human).
                 emit_canonical = HumanPlayActive()
                               || ResolveProvider(state).FodderSacUseful(state, src, *sd);
+                // Dina, Soul Steeper ("{1}, Sacrifice another creature: Dina gets +X/+0, where X
+                // is the sacrificed creature's power"). The victims are NOT fungible here -- X IS
+                // the victim's power, and the victim is also the body we lose -- so the canonical
+                // "weakest body" pick (which minimises X) cannot stand in for the choice. One
+                // variant per DISTINCT victim (name, last-known power, token-ness), each baking its
+                // sac_victim_id; several may share a subset (the ability is repeatable -- {1} each).
+                // Bounded by our own creature count (a handful in the only deck carrying the
+                // param). Gated on the param -> byte-identical for every other outlet.
+                if (emit_canonical && sd->params.sac_outlet_self_pump_power_from_victim)
+                {
+                    const bool src_attacks = !src.tapped
+                        && CanAttackFull(src, state.battlefield, state.active_player_index);
+                    std::vector<std::tuple<std::uint64_t, int, bool>> seen;
+                    for (const Permanent& v : state.battlefield)
+                    {
+                        if (v.controller_index != state.active_player_index
+                            || !v.card.IsCreature()) { continue; }
+                        if (v.card.m_number == src.card.m_number) { continue; }   // "another"
+                        int pw = v.EffectivePower()
+                               + ComputeLordBonus(v.card, state, v.controller_index,
+                                                  v.AnimatedAllTypes(), &v).first;
+                        if (pw < 0) { pw = 0; }
+                        const auto key = std::make_tuple(
+                            static_cast<std::uint64_t>(v.card.m_name_hash), pw, v.is_token);
+                        if (std::find(seen.begin(), seen.end(), key) != seen.end()) { continue; }
+                        seen.push_back(key);
+                        Action va = a;
+                        va.sac_victim_id = v.card.m_number;
+                        // The pump only pays if the source still attacks this turn (the rollout
+                        // scores the real combat; this is ordering only).
+                        va.eval = src_attacks ? pw * DMG : 0;
+                        actions.push_back(std::move(va));
+                    }
+                    emit_canonical = false;
+                }
             }
             if (emit_canonical) { actions.push_back(std::move(a)); }
 
@@ -22178,6 +22265,63 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
             a.is_noncreature = true;
             actions.push_back(std::move(a));
         }
+        // Dimir House Guard TRANSMUTE ({1}{B}{B}, discard: search for a card with the same mana
+        // value -> hand, shuffle; sorcery speed -- every main-phase enumeration is). The Channel
+        // shape (from-hand activation, card discarded as part of the cost), with the FOUND CARD as
+        // a searched axis: one variant per distinct legal library name (the provider's
+        // TutorCandidates over the synthesized exact-MV params -- no width cut, every name is a
+        // variant; the provider is the only narrower). Human play: ONE action with no target -- the
+        // tutor chooser asks at resolution off the live library (the HumanPlayDefersTutorTarget
+        // convention). Gated on transmute_cost -> byte-identical elsewhere.
+        for (int i = 0; i < n; ++i)
+        {
+            if (ap.hand[i].m_is_staged) { continue; }
+            const CardDefinition* cd = CardDatabase::Instance().LookupCached(ap.hand[i]);
+            if (!cd || !cd->params.transmute_cost.has_value()) { continue; }
+            const CardParams tp = TransmuteSearchParams(cd->card);
+            std::vector<std::string> names;
+            for (const std::string& nm :
+                 ResolveProvider(state).TutorCandidates(state, state.active_player_index, tp))
+            { if (std::find(names.begin(), names.end(), nm) == names.end()) { names.push_back(nm); } }
+            if (names.empty()) { continue; }   // nothing to find: a discard for nothing
+            if (HumanPlayActive()) { names.assign(1, std::string()); }
+            for (const std::string& nm : names)
+            {
+                Action a;
+                a.kind           = Action::Kind::Channel;
+                a.card_name      = ap.hand[i].m_name;
+                a.hand_index     = i;
+                a.cost           = cd->params.transmute_cost.value();
+                a.tutor_target   = nm;
+                a.direct_damage  = 0;
+                a.eval           = 1;
+                a.is_noncreature = true;
+                actions.push_back(std::move(a));
+            }
+        }
+        // Timeless Witness ETERNALIZE ({5}{G}{G}, exile it from the graveyard: a 4/4 black Zombie
+        // token copy; sorcery speed -- every main-phase enumeration is). One action per DISTINCT
+        // graveyard name carrying eternalize_cost (copies are interchangeable). No battlefield
+        // source, so no {T}/sickness gate; the payment is the whole cost. Gated on the param.
+        {
+            std::vector<std::string> et_seen;
+            for (const Card& gc : ap.graveyard)
+            {
+                const CardDefinition* gd = CardDatabase::Instance().LookupCached(gc);
+                if (!gd || !gd->params.eternalize_cost.has_value()) { continue; }
+                const std::string nm = gc.m_name.str();
+                if (std::find(et_seen.begin(), et_seen.end(), nm) != et_seen.end()) { continue; }
+                et_seen.push_back(nm);
+                Action a;
+                a.kind           = Action::Kind::Eternalize;
+                a.card_name      = gc.m_name;
+                a.hand_index     = -1;
+                a.cost           = gd->params.eternalize_cost.value();
+                a.eval           = 4 * DMG;          // a 4/4 body (+ its ETB); the rollout scores it
+                a.is_noncreature = false;
+                actions.push_back(std::move(a));
+            }
+        }
     }
 
     // Maelstrom Archangel free-cast variants: with N banked free casts (post-combat main only --
@@ -22614,6 +22758,42 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
                 actions[i].cost            = c;
                 actions[i].twobrid_colored = k;
                 break;
+            }
+        }
+    }
+
+    // TIMELESS WITNESS post-pass ("When this creature enters, return target card from your
+    // graveyard to your hand"; Prevent Damage sideboard). WHICH card comes back is a real decision
+    // (a Living Wish is a whole sideboard; a Rolling Earthquake is a sweeper; a land is a drop), so in
+    // the DECISION space one cast variant per DISTINCT graveyard name is appended beside the base,
+    // each pinning tutor_target (FireOwnEtbTriggers reads it as the ETB's pick; #G in the plan
+    // signature keeps the dedup lossless). The base keeps an EMPTY pin = the provider's resolution
+    // pick on the LIVE graveyard, which is also the only way to return a card that reaches the
+    // graveyard earlier in the same plan. Human play: NO named variants -- the single unpinned cast
+    // asks the dig chooser at resolution off the live graveyard (the HumanPlayDefersTutorTarget
+    // convention; no CheckLine sub needed). Rollout leaves (estimating) keep only the base. Gated
+    // on the param.
+    {
+        const bool gw_decision_space = (g_search_candidate_enum || g_condemn_root_turn < 0)
+                                    && !HumanPlayActive();
+        const std::size_t gw_n = actions.size();
+        for (std::size_t i = 0; gw_decision_space && i < gw_n; ++i)
+        {
+            if (actions[i].kind != Action::Kind::CastFromHand || actions[i].def == nullptr
+                || !actions[i].def->params.etb_return_gy_to_hand) { continue; }
+            if (!actions[i].tutor_target.str().empty()) { continue; }
+            const Player& gp = state.players[state.active_player_index];
+            std::vector<std::string> names;
+            for (const Card& gc : gp.graveyard)
+            {
+                const std::string nm = gc.m_name.str();
+                if (std::find(names.begin(), names.end(), nm) == names.end()) { names.push_back(nm); }
+            }
+            for (const std::string& nm : names)
+            {
+                Action v = actions[i];               // copy BEFORE push_back (reallocation)
+                v.tutor_target = nm;
+                actions.push_back(std::move(v));
             }
         }
     }
@@ -28656,6 +28836,7 @@ bool TurnSolver::IsTrailingActivation(Action::Kind k)
         case Action::Kind::Equip:
         case Action::Kind::ActivateLoyalty:
         case Action::Kind::GarthActivate:
+        case Action::Kind::Eternalize:
             return true;
         default:
             return false;
@@ -32410,7 +32591,13 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
         else if (a.kind == Action::Kind::Channel)
         {
             if (TapForCostDirect(state, a.cost, /*for_creature=*/false))
-            { ApplyChannel(state, state.active_player_index, a.hand_index, a.card_name, a.direct_damage); }
+            {
+                const CardDefinition* chd = CardDatabase::Instance().Lookup(a.card_name);
+                if (chd && chd->params.transmute_cost.has_value())
+                { ApplyTransmute(state, state.active_player_index, a.hand_index, a.card_name, a.tutor_target.str()); }
+                else
+                { ApplyChannel(state, state.active_player_index, a.hand_index, a.card_name, a.direct_damage); }
+            }
         }
         else if (a.kind == Action::Kind::ActivateRevealTop)
         {
@@ -32485,6 +32672,17 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
                 ApplyGraveyardExileGrow(state, state.active_player_index, a.sac_source_id,
                                         a.tutor_target.str());
             }
+        }
+        else if (a.kind == Action::Kind::Eternalize)
+        {
+            // Timeless Witness: the card must still be in the graveyard (a stale plan is a no-op,
+            // not a payment for nothing), then pay {5}{G}{G} and make the token (lockstep with
+            // AIEngine's trailing pass).
+            bool present = false;
+            for (const Card& gc : state.players[state.active_player_index].graveyard)
+            { if (gc.m_name == a.card_name) { present = true; break; } }
+            if (present && TapForCostDirect(state, a.cost, /*for_creature=*/false))
+            { ApplyEternalize(state, state.active_player_index, a.card_name.str()); }
         }
         else if (a.kind == Action::Kind::ComboRoute)
         {
@@ -37482,6 +37680,11 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
                         // bestow lesson. Gated on the param, so no existing deck moves.
                         + ((act.def && act.def->params.evoke_cost.has_value())
                            ? (act.evoke ? "#E1" : "#E0") : "")
+                        // Timeless Witness: WHICH graveyard card the ETB returns is a real decision
+                        // (one cast variant per distinct graveyard name + the unpinned resolution
+                        // pick) -- distinct plans, the #T precedent. Gated on the param.
+                        + ((act.def && act.def->params.etb_return_gy_to_hand)
+                           ? ("#G" + act.tutor_target.str()) : "")
                         // LAND-AURA HOST (MTG_EDF_AURA_HOST_SIG, default ON; 2026-09-15): WHICH land
                         // carries a Wild Growth / Trace of Abundance is a real decision, not a
                         // sub-decision the host heuristic can be trusted with -- a karoo in the same
@@ -37530,8 +37733,15 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
                 case Action::Kind::GraveyardExileGrow:
                     msf.push_back("OOZE#" + std::to_string(act.sac_source_id)
                                   + ":" + act.tutor_target.str()); break;
+                case Action::Kind::Eternalize:
+                    u.push_back("ETERNALIZE#" + act.card_name.str()); break;
                 case Action::Kind::Channel:
-                    s.push_back("CHANNEL#" + act.card_name); break;
+                    // Transmute rides this kind with its FOUND card in tutor_target: distinct
+                    // finds are distinct plans (the Gamble lesson). Empty for a real Channel ->
+                    // byte-identical signature.
+                    s.push_back("CHANNEL#" + act.card_name
+                                + (act.tutor_target.str().empty()
+                                   ? std::string() : ">" + act.tutor_target.str())); break;
                 // Deathrite gy-exile outlet: which source AND which mode are distinct decisions.
                 case Action::Kind::GraveyardExileAbility:
                     msf.push_back("DRE#" + std::to_string(act.sac_source_id)
@@ -56099,7 +56309,8 @@ TurnSolver::LineCheck TurnSolver::CheckLine(const GameState& state_in, bool is_p
                       spec.gy_exiles.empty() && spec.gy_returns.empty() && spec.gy_plays.empty() && spec.channels.empty() &&
                       spec.suspends.empty() &&
                       spec.animates.empty() && spec.tap_tokens.empty() &&
-                      spec.pods.empty() && spec.ooze_exiles.empty() && spec.blinks.empty()))
+                      spec.pods.empty() && spec.ooze_exiles.empty() && spec.blinks.empty() &&
+                      spec.eternalizes.empty()))
     {
         out.verdict = V::Accept; out.plan_index = -1;
         out.matched_summary = "pass / cast nothing";
@@ -56176,6 +56387,9 @@ TurnSolver::LineCheck TurnSolver::CheckLine(const GameState& state_in, bool is_p
     const bool ooze_declared      = !spec.ooze_exiles.empty();
     std::vector<std::string> sortedOoze = spec.ooze_exiles;
     std::sort(sortedOoze.begin(), sortedOoze.end());
+    // eternalize= (Timeless Witness from the graveyard): its own verb, never in the cast multiset.
+    std::vector<std::string> sortedEternalize = spec.eternalizes;
+    std::sort(sortedEternalize.begin(), sortedEternalize.end());
     const bool blink_declared     = !spec.blinks.empty();
 
     // --- 1) Does the line match a plan (or several variants) the model would play? ----
@@ -56232,6 +56446,7 @@ TurnSolver::LineCheck TurnSolver::CheckLine(const GameState& state_in, bool is_p
         std::vector<int> jitteModes, gyExileModes;
         std::vector<TurnSolver::LineSpec::PodSpec> podActs;
         std::vector<std::string> oozeNames;
+        std::vector<std::string> eternalizeNames;
         // One entry per blink activation: (outlet name, blinked creature's m_number). Matched
         // against spec.blinks by BlinksMatch below, which honours the 0 wildcard.
         std::vector<LineSpec::BlinkSpec> blinkActs;
@@ -56285,6 +56500,8 @@ TurnSolver::LineCheck TurnSolver::CheckLine(const GameState& state_in, bool is_p
             { podActs.push_back({ a.tutor_target.str(), a.sac_victim_id }); continue; }
             if (ooze_declared && a.kind == Action::Kind::GraveyardExileGrow)
             { oozeNames.push_back(a.tutor_target); continue; }
+            if (a.kind == Action::Kind::Eternalize)
+            { eternalizeNames.push_back(a.card_name.str()); continue; }
             // Blink: matched against its own verb when declared (the target is the decision), else
             // by outlet name in the ordinary cast multiset -- the legacy behaviour every saved
             // reference was written under. sac_victim_id is the blinked creature's m_number.
@@ -56403,6 +56620,11 @@ TurnSolver::LineCheck TurnSolver::CheckLine(const GameState& state_in, bool is_p
             std::vector<std::string> v2 = oozeNames;
             std::sort(v2.begin(), v2.end());
             if (v2 != sortedOoze) { continue; }
+        }
+        {
+            std::vector<std::string> v2 = eternalizeNames;
+            std::sort(v2.begin(), v2.end());
+            if (v2 != sortedEternalize) { continue; }
         }
         std::vector<std::string> sortedNames = orderNames;
         std::sort(sortedNames.begin(), sortedNames.end());

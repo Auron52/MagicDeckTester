@@ -36,6 +36,7 @@ Usage:
   audit_viewer_decisions.py <deck> [profile] [base_seed] [n_games] [max_turns] [--no-sweep]
   audit_viewer_decisions.py <deck> <profile> [base_seed] [budget] [max_turns] --verify-card "<name>"
 
+  --sideboard     : also audit the .cod "side" zone (a Living Wish deck plays its sideboard).
   --no-sweep      : static analysis only (param expectations + oracle cross-check, no binary).
                     Fast pre-check usable at implementation time, before a profile exists.
   --verify-card N : seed-search up to `budget` deterministic games biased toward casting card
@@ -254,6 +255,22 @@ MANIFEST = {
     # no mode and no division ("Knights you control" is exhaustive). K is capped at 1 because the
     # grant is idempotent, so there is not even a count to choose.
     "team_pump_grants_double_strike": ("main_phase",  truthy),
+    # Vito, Thorn of the Dusk Rose (Prevent Damage, 2026-09-27): "{3}{B}{B}: Creatures you control
+    # gain lifelink until end of turn" -- the Valiant Knight shape (ActivatePump mode 2, K capped at
+    # 1, no target): whether to activate it before attacking is a main_phase plan variant.
+    "team_pump_grants_lifelink":     ("main_phase",  truthy),
+    # Dina, Soul Steeper: "{1}, Sacrifice another creature: +X/+0" -- WHICH creature is a searched
+    # plan variant per distinct victim AND the shared `sacrifice` board-pick at resolution (the
+    # source excluded -- sac_outlet_excludes_self now reaches the human chooser too).
+    "sac_outlet_self_pump_power_from_victim": ("sacrifice", truthy),
+    # Shriekmaw / Acidic Slime: MANDATORY "destroy target ..." ETBs whose legal set includes OUR OWN
+    # permanents -- the `target` board-click (g_play_loyalty_chooser shape, both sides) at
+    # ResolveEtbDestroyMandatory; a forced single target is not prompted.
+    "etb_destroy_nonartifact_nonblack":      ("target", truthy),
+    "etb_destroy_artifact_enchantment_land": ("target", truthy),
+    # Timeless Witness: "return target card from your graveyard to your hand" -- human play asks the
+    # shared `dig` chooser over the graveyard at resolution (no named plan variants under human play).
+    "etb_return_gy_to_hand":         ("dig",         truthy),
     # Slaughter-Priest's "Sacrifice another creature or an enchantment" widens the sac-outlet
     # victim filter; WHICH permanent dies is the existing `sacrifice` board-click decision.
     "sac_outlet_allows_enchantment": ("sacrifice",    truthy),
@@ -419,6 +436,13 @@ BOARD_ACTIVATIONS = {
     "can_animate":                               ("verb:animate",   truthy,   "animate_cost"),
     "tap_token_cost":                            ("verb:taptoken",  truthy,   "tap_token_cost"),
     "channel_cost":                              ("verb:channel",   truthy,   "channel_cost"),
+    # Dimir House Guard's Transmute rides the Channel kind and its verb (a from-HAND activation).
+    "transmute_cost":                            ("verb:channel",   truthy,   "transmute_cost"),
+    # NOT listed (deliberately): Timeless Witness's eternalize_cost (activated from the GRAVEYARD --
+    # "source reached play" is the wrong evidence for it, so this check would read every sweep where
+    # the Witness was cast but never died as a hard miss) and Bilbo's life_gated_put_creatures_cost
+    # (gated on 111 life, not on mana, so "affordable but never offered" is the NORMAL case). Both are
+    # pinned by scenario/unit tests instead; see MAINPHASE_PARAMS.
     # gy_exile_creature_lifegain is the DEFAULT-OFF goldfish cut (MTG_SKIP_INERT_LIFEGAIN): the
     # engine deliberately does not enumerate it, so requiring it to surface would fail by design.
 }
@@ -1026,6 +1050,8 @@ INERT_PARAMS = {
     "endstep_sac_if_no_creatures": "Pyrohemia: mandatory intervening-if end-step SACRIFICE of this enchantment -- no target, no may",
     "tutor_max_mv_is_lands": "Beseech the Queen: tutor MV cap = lands you control -- a legality FILTER read at resolution; the pick rides tutor_to_hand -> main_phase / the resolution re-ask",
     "shuffles_self_into_library_on_resolve": "Green Sun's Zenith: the resolved spell shuffles itself into the library -- automatic, no choice",
+    # ---- Prevent Damage (2026-09-27, phase I3) -- creatures + sideboard ----
+    "activate_min_life": "Bilbo: 'Activate only if you have 111 or more life' -- an activation RESTRICTION (legality gate), no choice; the activation rides life_gated_put_creatures_cost -> main_phase",
 }
 
 # Decisions the human makes by picking among main_phase PLAN VARIANTS or a board-click
@@ -1067,6 +1093,10 @@ MAINPHASE_PARAMS = {
     # ACTIVATION shape -- ActivatePermAbility/PingAll, no {T}, repeatable. K rides chosen_x in the
     # search (full range); the human reaches K by choosing it again after each re-prompt.
     "ping_all_cost":       "mana-only, no-{T} repeatable sweeper ping = a main_phase board activation (ActivatePermAbility/PingAll); K rides chosen_x",
+    "evoke_cost":          "EVOKE vs hard cast (Reveillark, Shriekmaw) = two main_phase CastFromHand variants of one hand slot (Action::evoke, #E1/#E0 in the plan signature, the CheckLine `evoke` sub in the choose-variant dialog) -- the choice is surfaced at queue/commit time, not at resolution",
+    "transmute_cost":      "Dimir House Guard Transmute = a from-HAND {1}{B}{B}-discard activation (Channel kind, channel= verb) = a main_phase plan action; the FOUND card is one searched variant per legal MV-4 library name autonomously, and the shared tutor chooser at resolution in human play",
+    "eternalize_cost":     "Timeless Witness Eternalize = a from-GRAVEYARD {5}{G}{G} activation = a main_phase plan action (Action::Kind::Eternalize, eternalize= verb, the viewer's graveyard click); the token's ETB return is the `dig` decision (etb_return_gy_to_hand)",
+    "life_gated_put_creatures_cost": "Bilbo's {2}{W}{B}{G},{T},exile activation at >= 111 life = a main_phase board activation (ActivatePermAbility/LifeGatedPutCreatures, `activate`); WHICH creatures is the multi-pick `dragon` chooser at resolution (provider pick preselected). Not in BOARD_ACTIVATIONS: the life gate makes never-offered the normal case",
     # Rolling Earthquake: X is a main_phase PLAN VARIANT (chosen_x), every X from 0..max offered
     # unpruned in human play -- the {X} catalogue row, no new decision type.
     "x_damage_each_creature_and_player": "Rolling Earthquake -- X = a main_phase plan variant (chosen_x, full 0..max range); an untargeted symmetric sweep, so nothing else to choose",
@@ -1156,14 +1186,16 @@ DEC_RE = re.compile(r"<<<CLAUDE_DECISION>>>\n(.*?)\n<<<END_DECISION>>>", re.S)
 RES_RE = re.compile(r"<<<CLAUDE_RESULT>>>")
 
 
-def load_deck_cards(deck_path, cards_json="src/cards/data/cards.json"):
+def load_deck_cards(deck_path, cards_json="src/cards/data/cards.json", include_side=False):
     names = set()
     if deck_path.lower().endswith(".cod"):
-        # Cockatrice XML: <card number="4" name="..."/> under the "main" zone.
+        # Cockatrice XML: <card number="4" name="..."/> under the "main" zone (plus the "side" zone
+        # with --sideboard: a wish deck -- Prevent Damage's four Living Wish -- plays its sideboard,
+        # so those cards' decisions are in scope too. Opt-in, so no other deck's result moves.)
         import xml.etree.ElementTree as ET
         root = ET.parse(deck_path).getroot()
         for zone in root.iter("zone"):
-            if zone.get("name") != "main":
+            if zone.get("name") != "main" and not (include_side and zone.get("name") == "side"):
                 continue
             for card in zone.iter("card"):
                 nm = card.get("name")
@@ -1251,6 +1283,16 @@ def modeled_tokens(card):
     # so both the 'target' and the 'choose up to' (modal) phrases are covered.
     if p.get("etb_treasurify_each_player"):
         t.update({"target", "modal"})
+    # A creature-sac outlet ("Sacrifice another creature", Dina) surfaces WHICH creature through the
+    # `sacrifice` board-pick at resolution (ChooseSacOutletVictimIndex) -- modeled.
+    if p.get("sac_creature_outlet") and not p.get("sac_outlet_self_only"):
+        t.add("sacrifice")
+    # Prevent Damage phase I3: Shriekmaw / Acidic Slime ETB targets (the `target` board-click);
+    # Transmute's and Bilbo's library searches (the tutor chooser / the multi-pick).
+    if p.get("etb_destroy_nonartifact_nonblack") or p.get("etb_destroy_artifact_enchantment_land"):
+        t.add("target")
+    if p.get("transmute_cost") or p.get("life_gated_put_creatures_cost"):
+        t.add("search")
     return t
 
 
@@ -1618,6 +1660,7 @@ def print_oracle_crosscheck(cards):
 def main():
     raw = sys.argv[1:]
     no_sweep = "--no-sweep" in raw
+    include_side = "--sideboard" in raw
     verify_name = None
     if "--verify-card" in raw:
         i = raw.index("--verify-card")
@@ -1638,7 +1681,7 @@ def main():
         if prof is None:
             print("ERROR: --verify-card needs a profile path.")
             return 2
-        cards, _ = load_deck_cards(deck)
+        cards, _ = load_deck_cards(deck, include_side=include_side)
         match = next((c for c in cards if c["name"].lower() == verify_name.lower()), None)
         if match is None:
             print(f"ERROR: '{verify_name}' not found in {deck}.")
@@ -1658,7 +1701,7 @@ def main():
               f"(cmake --build build --config Release), or pass --no-sweep for static-only.")
         return 2
 
-    cards, names = load_deck_cards(deck)
+    cards, names = load_deck_cards(deck, include_side=include_side)
     # Per-card expectations + self-guard.
     expected_types = set()
     per_card = {}

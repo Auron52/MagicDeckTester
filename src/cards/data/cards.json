@@ -9537,10 +9537,13 @@
    "keywords": [],
    "power": 1,
    "toughness": 3,
-   "oracle_text": "Whenever you gain life, target opponent loses that much life.\n{3}{B}{B}: Creatures you control gain lifelink until end of turn. [lifegain_target_opp_loses_that_much: fired from FireLifegainWatchers once per lifegain EVENT for the (replaced) amount gained. LIFE LOSS, not damage (so it never triggers Tamanoa); 'target opponent' = the one opponent (in 2HG, one head's worth off the shared pool). Legend rule: EnforceLegendRule keeps the oldest copy (no viewer decision -- disclosed). [PARTIAL -- TODO PHASE I3, PROVISIONAL: '{3}{B}{B}: Creatures you control gain lifelink until end of turn' is NOT implemented yet (needs a team-lifelink grant mode). Not claimed inert: it turns every attacking creature into a lifegain event that Vito then drains. Tracked in docs/design/analysis-Prevent Damage.md.]]",
+   "oracle_text": "Whenever you gain life, target opponent loses that much life.\n{3}{B}{B}: Creatures you control gain lifelink until end of turn. [lifegain_target_opp_loses_that_much: fired from FireLifegainWatchers once per lifegain EVENT for the (replaced) amount gained. LIFE LOSS, not damage (so it never triggers Tamanoa); 'target opponent' = the one opponent (in 2HG, one head's worth off the shared pool). Legend rule: EnforceLegendRule keeps the oldest copy (no viewer decision -- disclosed). TEAM LIFELINK (phase I3): team_pump_cost {3}{B}{B} + team_pump_power 0 + team_pump_grants_lifelink -- Action::Kind::ActivatePump mode 2, the Valiant Knight shape (a mana-costed, no-{T}, until-EOT team keyword grant). It sets temp_lifelink on EVERY creature we control AT RESOLUTION (CR 611.2c: a creature entering later this turn does not gain it; Vito itself included), cleared at both cleanup sites. Each lifelinking creature's combat damage is its OWN lifegain event (ResolveCombatDamage: one GainLife per attacker, Scryfall ruling) -> Faithmender/Bilbo replacement -> Vito drains that much, Dina drains 1 -- lifelink damage is COMBAT damage by a creature, so Tamanoa does not trigger on it. Idempotent, so K is capped at 1; offered only while an own attack-eligible creature lacks lifelink (otherwise no reachable outcome changes -- lossless, and keeps a no-op out of the human menu). Pre-combat (main 1) by the ActivatePump main-phase classification.]",
    "template": "custom",
    "parameters": {
-    "lifegain_target_opp_loses_that_much": true
+    "lifegain_target_opp_loses_that_much": true,
+    "team_pump_cost": "{3}{B}{B}",
+    "team_pump_power": 0,
+    "team_pump_grants_lifelink": true
    }
   },
   {
@@ -9559,10 +9562,14 @@
    "keywords": [],
    "power": 1,
    "toughness": 3,
-   "oracle_text": "Whenever you gain life, each opponent loses 1 life.\n{1}, Sacrifice another creature: Dina gets +X/+0 until end of turn, where X is the sacrificed creature's power. [lifegain_each_opp_loses 1: fired from FireLifegainWatchers once per lifegain EVENT whatever its size (so two Manabarbs taps under Tamanoa = two events = two drains), x each opposing head. Life loss, not damage. Legend rule: EnforceLegendRule keeps the oldest copy (no viewer decision -- disclosed). [PARTIAL -- TODO PHASE I3, PROVISIONAL: '{1}, Sacrifice another creature: Dina gets +X/+0' is NOT implemented yet (sac outlet with a power-of-victim self-pump). Not claimed inert. Tracked in docs/design/analysis-Prevent Damage.md.]]",
+   "oracle_text": "Whenever you gain life, each opponent loses 1 life.\n{1}, Sacrifice another creature: Dina gets +X/+0 until end of turn, where X is the sacrificed creature's power. [lifegain_each_opp_loses 1: fired from FireLifegainWatchers once per lifegain EVENT whatever its size (so two Manabarbs taps under Tamanoa = two events = two drains), x each opposing head. Life loss, not damage. Legend rule: EnforceLegendRule keeps the oldest copy (no viewer decision -- disclosed). SAC PUMP (phase I3): sac_creature_outlet + sac_creature_cost {1} + sac_outlet_excludes_self ('another') + sac_outlet_self_pump_power_from_victim -- X is the victim's LAST-KNOWN power (Scryfall ruling), read before the erase (effective power + lord bonus, floored at 0, the Surtland Flinger expression) and added to Dina's temp_power_bonus until end of turn. The victim dies through the ordinary cascade (OnCreatureDies), so a sacrificed Purity shuffles into the library. SEARCHED victim: one plan variant per DISTINCT victim (name, power, token-ness) -- the canonical 'weakest body' pick would minimise X -- several may share a turn (repeatable, {1} each). PreventDamageProvider::FodderSacUseful offers it to the autonomous search only while Dina can still attack this turn (the pump's only consumer; PROVISIONAL judgement). Human play: every variant + the shared `sacrifice` board-pick at resolution (the source excluded).]",
    "template": "custom",
    "parameters": {
-    "lifegain_each_opp_loses": 1
+    "lifegain_each_opp_loses": 1,
+    "sac_creature_outlet": true,
+    "sac_creature_cost": "{1}",
+    "sac_outlet_excludes_self": true,
+    "sac_outlet_self_pump_power_from_victim": true
    }
   },
   {
@@ -9581,10 +9588,12 @@
    "keywords": [],
    "power": 2,
    "toughness": 3,
-   "oracle_text": "If you would gain life, you gain that much life plus 1 instead.\n{2}{W}{B}{G}, {T}, Exile Bilbo: Search your library for any number of creature cards, put them onto the battlefield, then shuffle. Activate only if you have 111 or more life. [lifegain_plus 1: a REPLACEMENT inside GainLife, +1 per lifegain event, applied BEFORE any Faithmender doubling (CR 616.1: the affected player orders them, and (a+1)*2 > a*2+1). SIDEBOARD card, reachable via Living Wish / Green Sun's Zenith. [PARTIAL -- TODO PHASE I3, PROVISIONAL: the '{2}{W}{B}{G}, {T}, Exile Bilbo: search for any number of creature cards, put them onto the battlefield ... Activate only if you have 111 or more life' activation is NOT implemented yet. Reachable in principle (Purity + Faithmenders + Manabarbs); not claimed inert. Tracked in docs/design/analysis-Prevent Damage.md.]]",
+   "oracle_text": "If you would gain life, you gain that much life plus 1 instead.\n{2}{W}{B}{G}, {T}, Exile Bilbo: Search your library for any number of creature cards, put them onto the battlefield, then shuffle. Activate only if you have 111 or more life. [lifegain_plus 1: a REPLACEMENT inside GainLife, +1 per lifegain event, applied BEFORE any Faithmender doubling (CR 616.1: the affected player orders them, and (a+1)*2 > a*2+1). SIDEBOARD card, reachable via Living Wish (Green Sun's Zenith searches the library, not the sideboard). 111-LIFE ACTIVATION (phase I3, built per the user's decision): life_gated_put_creatures_cost {2}{W}{B}{G} + activate_min_life 111 -- PermAbilityMode::LifeGatedPutCreatures, a {T} mode (summoning sickness applies). The life restriction is checked when activating, before any cost is paid (PermAbilitySourceLive, shared by the enumeration and both apply sites, CR 602.5b). Bilbo is exiled as part of the cost (its +1 replacement leaves with it), then the library is searched and shuffled exactly once (even when nothing is put). WHICH creatures ('any number') is a DecisionProvider choice, NOT 'all': PutCreaturesFromLibraryPicks puts every creature card EXCEPT a second copy of a legend we control or already put (the legend rule would bin it at once) and a creature whose MANDATORY ETB would destroy one of our own permanents (Acidic Slime always; Shriekmaw unless the opponent has a legal creature) -- disclosed rule, not searched. Human play: the multi-pick (`dragon` chooser shape) over every library creature card, the provider's pick preselected. The legend rule runs once after the puts (keeps the oldest). Counted by MTG_PD_STATS (bilbo_activation). Reachable in principle (Purity + Faithmenders + Manabarbs), expected to be very rare.]",
    "template": "custom",
    "parameters": {
-    "lifegain_plus": 1
+    "lifegain_plus": 1,
+    "life_gated_put_creatures_cost": "{2}{W}{B}{G}",
+    "activate_min_life": 111
    }
   },
   {
@@ -9602,7 +9611,7 @@
    ],
    "power": 6,
    "toughness": 6,
-   "oracle_text": "Flying\nIf noncombat damage would be dealt to you, prevent that damage. You gain life equal to the damage prevented this way.\nWhen Purity is put into a graveyard from anywhere, shuffle it into its owner's library. [Flying: keyword (inert vs a goldfish that never blocks). prevent_noncombat_to_self_gain: every NONCOMBAT damage event to its controller is prevented and becomes a lifegain event of that size -- a replacement, applied at once (pain from a land tap is prevented at the tap; the gain resolves with the payment's other events). Prevented damage is not DEALT, so Tamanoa does not trigger on it. graveyard_replace_shuffle_library: the 'put into a graveyard from anywhere -> shuffle into library' clause, via the existing Progenitus / Worldspine path (dies, cleanup discard). [PARTIAL: modelled as a replacement where the card has a TRIGGER; the only observable difference is a window in which Purity sits in the graveyard, and nothing in this deck or the engine reads the graveyard in that window (no stack) -- disclosed.] SIDEBOARD card, reachable via Living Wish (it is white, so never a Green Sun's Zenith target -- and GSZ searches the library, not the sideboard).]",
+   "oracle_text": "Flying\nIf noncombat damage would be dealt to you, prevent that damage. You gain life equal to the damage prevented this way.\nWhen Purity is put into a graveyard from anywhere, shuffle it into its owner's library. [Flying: keyword (inert vs a goldfish that never blocks). prevent_noncombat_to_self_gain: every NONCOMBAT damage event to its controller is prevented and becomes a lifegain event of that size -- a replacement, applied at once (pain from a land tap is prevented at the tap; the gain resolves with the payment's other events). Prevented damage is not DEALT, so Tamanoa does not trigger on it. graveyard_replace_shuffle_library: the 'put into a graveyard from anywhere -> shuffle into library' clause, via the existing Progenitus / Worldspine path (dies, cleanup discard). [PARTIAL: modelled as a replacement where the card has a TRIGGER; the only observable difference is a window in which Purity sits in the graveyard, and nothing in this deck or the engine reads the graveyard in that window (no stack) -- disclosed.] SIDEBOARD card, reachable via Living Wish (it is white, so never a Green Sun's Zenith target -- and GSZ searches the library, not the sideboard). Routes verified in phase I3: sweeper deaths (Pyrohemia / Rolling Earthquake via PerformDamageAllCreatures), Dina's sacrifice (ApplySacCreatureOutlet), Shriekmaw's destroy (ResolveEtbDestroyMandatory) and the legend-rule-free creature deaths all go through OnCreatureDies, which applies the shuffle; a cleanup discard goes through MaybeReplaceGraveyardWithLibraryShuffle.]",
    "template": "custom",
    "parameters": {
     "prevent_noncombat_to_self_gain": true,
@@ -9690,6 +9699,92 @@
     "tutor_color": "G",
     "tutor_shuffle_after": true,
     "shuffles_self_into_library_on_resolve": true
+   }
+  },
+  {
+   "name": "Dimir House Guard",
+   "mana_cost": "{3}{B}",
+   "types": [
+    "Creature"
+   ],
+   "subtypes": [
+    "Skeleton"
+   ],
+   "keywords": [
+    "Regenerate",
+    "Fear",
+    "Transmute"
+   ],
+   "power": 2,
+   "toughness": 3,
+   "oracle_text": "Fear (This creature can't be blocked except by artifact creatures and/or black creatures.)\nSacrifice a creature: Regenerate this creature.\nTransmute {1}{B}{B} ({1}{B}{B}, Discard this card: Search your library for a card with the same mana value as this card, reveal it, put it into your hand, then shuffle. Transmute only as a sorcery.) [SIDEBOARD card (Prevent Damage), reached by Living Wish. TRANSMUTE: transmute_cost {1}{B}{B} -- a from-HAND activation riding Action::Kind::Channel (the Twinshot Sniper shape: the card is discarded as part of the cost, the mana paid first), resolved by ApplyTransmute -> PerformTutor over synthesized params (to hand, shuffle after, EXACT mana value 4 via the tutor_exact_mv conjunct in TutorNumericFilterOk). The found card is a SEARCHED axis: one plan variant per distinct legal library name (in this list Manabarbs, Rhox Faithmender, Pyrohemia), the name in the plan signature; human play offers ONE transmute and asks the tutor chooser at resolution off the live library (the viewer badges the hand card 'transmute', verb channel=). Sorcery speed = the main-phase enumeration. Like every trailing activation it resolves after the plan's casts, so the found card is castable from the next main (the searched second main when open). Fear: INERT (the goldfish opponent never blocks). [PARTIAL -- PROVISIONAL DEFERRAL, awaiting user sign-off: 'Sacrifice a creature: Regenerate this creature.' is NOT modelled. It is not inert here -- our OWN Pyrohemia, Rolling Earthquake and Shriekmaw can destroy this creature -- but a regeneration shield must be bought BEFORE the destruction (there is no stack window in this engine), at the price of sacrificing another creature, to keep a 2/3 whose only role in this list is a 4-mana transmute body; sacrificing Tamanoa or Rhox Faithmender to it would forfeit the very lifegain the sweep is cast for. A faithful model needs a regeneration-shield state + replacement at every destroy/lethal-damage site (both worlds), which no card in the engine has yet. Recorded as open question 2 in docs/design/analysis-Prevent Damage.md.]]",
+   "template": "custom",
+   "parameters": {
+    "transmute_cost": "{1}{B}{B}"
+   }
+  },
+  {
+   "name": "Shriekmaw",
+   "mana_cost": "{4}{B}",
+   "types": [
+    "Creature"
+   ],
+   "subtypes": [
+    "Elemental"
+   ],
+   "keywords": [
+    "Evoke",
+    "Fear"
+   ],
+   "power": 3,
+   "toughness": 2,
+   "oracle_text": "Fear (This creature can't be blocked except by artifact creatures and/or black creatures.)\nWhen this creature enters, destroy target nonartifact, nonblack creature.\nEvoke {1}{B} (You may cast this spell for its evoke cost. If you do, it's sacrificed when it enters.) [SIDEBOARD card (Prevent Damage), reached by Living Wish. ETB: etb_destroy_nonartifact_nonblack -- a MANDATORY targeted trigger over BOTH sides (CR 603.3d), fired from the shared FireOwnEtbTriggers on every entry path. The goldfish opponent's spawns are colourless non-artifact creatures (legal); with none, it MUST destroy one of OUR nonblack creatures (Tamanoa, Rhox Faithmender, Purity, Timeless Witness, Acidic Slime, Vexing Shusher -- Vito, Dina, Bilbo, Dimir House Guard and Shriekmaw itself are black); with no legal target the trigger is removed. Which target = DecisionProvider::EtbDestroyTargetPick (PreventDamageProvider: an opponent creature first, then never a lifegain/drain/damage engine while anything else is legal; PROVISIONAL reviewed ranking, not searched); human play picks from the full legal set, both sides (the `target` board-click, loyalty-chooser shape). Our own victim dies through OnCreatureDies (Purity shuffles into the library). EVOKE {1}{B}: evoke_cost, a second CastFromHand variant (Action::evoke, the Reveillark mechanism: ETB first, then the self-sacrifice) -- its enumeration gate is widened for an ETB-destroy card (Reveillark's LTB gate unchanged) and it is ALWAYS offered, since the cast itself is a Spellshock trigger in this list; the search decides. Fear: INERT (the goldfish opponent never blocks).]",
+   "template": "custom",
+   "parameters": {
+    "evoke_cost": "{1}{B}",
+    "etb_destroy_nonartifact_nonblack": true
+   }
+  },
+  {
+   "name": "Timeless Witness",
+   "mana_cost": "{2}{G}{G}",
+   "types": [
+    "Creature"
+   ],
+   "subtypes": [
+    "Human",
+    "Shaman"
+   ],
+   "keywords": [
+    "Eternalize"
+   ],
+   "power": 2,
+   "toughness": 1,
+   "oracle_text": "When this creature enters, return target card from your graveyard to your hand.\nEternalize {5}{G}{G} ({5}{G}{G}, Exile this card from your graveyard: Create a token that's a copy of it, except it's a 4/4 black Zombie Human Shaman with no mana cost. Eternalize only as a sorcery.) [SIDEBOARD card (Prevent Damage), reached by Living Wish. ETB: etb_return_gy_to_hand -- targeted, no 'up to', so MANDATORY whenever the graveyard is non-empty (removed when it is empty). WHICH card is SEARCHED on the cast path: one CastFromHand variant per distinct graveyard name (tutor_target, #G in the plan signature) plus the unpinned base, which takes DecisionProvider::GyReturnToHandPick on the LIVE graveyard at resolution (nonland first, then highest mana value -- also the only way to return a card that reached the graveyard earlier in the same plan). Rollout leaves keep only the base. Human play: no named variants -- the dig chooser asks at resolution over the whole graveyard (mandatory: a decline takes the default). ETERNALIZE: eternalize_cost {5}{G}{G} -- Action::Kind::Eternalize, a GRAVEYARD activation (sorcery speed = the main-phase enumeration; eternalize= verb, the viewer's graveyard click): the card is EXILED, then a token copy is made from its definition with the exceptions on the token's own Card -- black ONLY, base 4/4, no mana cost (MV 0), Zombie added (Human Shaman kept). Its ETB fires again (unpinned: the provider's pick / the human's dig chooser). Graveyard readers: GyR_AllNames + GyR_SelfCopyNames (the sideboard is scanned for these two params).]",
+   "template": "custom",
+   "parameters": {
+    "etb_return_gy_to_hand": true,
+    "eternalize_cost": "{5}{G}{G}"
+   }
+  },
+  {
+   "name": "Acidic Slime",
+   "mana_cost": "{3}{G}{G}",
+   "types": [
+    "Creature"
+   ],
+   "subtypes": [
+    "Ooze"
+   ],
+   "keywords": [
+    "Deathtouch"
+   ],
+   "power": 2,
+   "toughness": 2,
+   "oracle_text": "Deathtouch (Any amount of damage this deals to a creature is enough to destroy it.)\nWhen this creature enters, destroy target artifact, enchantment, or land. [SIDEBOARD card (Prevent Damage), reached by Living Wish (Green Sun's Zenith is not a route: it searches the library). ETB: etb_destroy_artifact_enchantment_land -- a MANDATORY targeted trigger over both sides (CR 603.3d). The goldfish opponent controls no artifact, enchantment or land, so it ALWAYS destroys one of OUR permanents (a land, or Manabarbs / Spellshock / Pyrohemia) -- a net-negative card in this list, kept faithful. Which one = DecisionProvider::EtbDestroyTargetPick (PreventDamageProvider: never an engine enchantment while a land is legal; a TAPPED land first, its mana already spent; then lowest mana value / oldest -- PROVISIONAL reviewed ranking, not searched); human play picks from the full legal set (the `target` board-click, loyalty-chooser shape). Deathtouch: INERT (the goldfish opponent never blocks or is dealt combat damage by a creature).]",
+   "template": "custom",
+   "parameters": {
+    "etb_destroy_artifact_enchantment_land": true
    }
   }
  ]

@@ -5373,6 +5373,19 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
                                         a.tutor_target.str());
             }
         }
+        else if (a.kind == Action::Kind::Eternalize)
+        {
+            // Timeless Witness eternalize (executor mirror of the rollout's trailing pass).
+            bool present = false;
+            for (const Card& gc : state.players[state.active_player_index].graveyard)
+            { if (gc.m_name == a.card_name) { present = true; break; } }
+            ManaPool avail = AvailableManaPool(state);
+            if (present && TapForCost(state, a.cost, avail, /*for_creature=*/false))
+            {
+                ApplyEternalize(state, state.active_player_index, a.card_name.str());
+                if (m_logger) { m_logger->LogAbility(0, a.card_name.str(), "eternalize (4/4 black Zombie token)"); }
+            }
+        }
         else if (a.kind == Action::Kind::ComboRoute)
         {
             // THE MECHANICAL COMBO OFF ROUTE (lockstep with ApplyPlanDirect): all-or-nothing.
@@ -5572,6 +5585,7 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
                         { if (!what.empty()) { what += " and "; } what += kw; };
                         if (ad && ad->params.team_pump_grants_haste)         { add("haste"); }
                         if (ad && ad->params.team_pump_grants_double_strike) { add("double strike"); }
+                        if (ad && ad->params.team_pump_grants_lifelink)      { add("lifelink"); }
                         if (what.empty()) { what = "team pump"; }
                     }
                     m_logger->LogAbility(a.sac_source_id, bf_name(a.sac_source_id), what);
@@ -5724,7 +5738,13 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
         {
             ManaPool avail = AvailableManaPool(state);
             if (TapForCost(state, a.cost, avail, /*for_creature=*/false))
-            { ApplyChannel(state, state.active_player_index, a.hand_index, a.card_name, a.direct_damage); }
+            {
+                const CardDefinition* chd = CardDatabase::Instance().Lookup(a.card_name);
+                if (chd && chd->params.transmute_cost.has_value())
+                { ApplyTransmute(state, state.active_player_index, a.hand_index, a.card_name, a.tutor_target.str()); }
+                else
+                { ApplyChannel(state, state.active_player_index, a.hand_index, a.card_name, a.direct_damage); }
+            }
         }
     }
     };

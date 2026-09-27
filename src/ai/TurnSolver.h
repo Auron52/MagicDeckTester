@@ -188,6 +188,13 @@ struct Action
                              // cost = gy_exile_grow_cost per activation.
         ComboRoute,          // THE MECHANICAL COMBO OFF ROUTE (EdfComboRouteApply): one standalone action,
                              // emitted only when its trial on this board kills; the apply is all-or-nothing.
+        Eternalize,          // Timeless Witness "Eternalize {5}{G}{G} ({5}{G}{G}, Exile this card from
+                             // your graveyard: Create a token that's a copy of it, except it's a 4/4
+                             // black Zombie Human Shaman with no mana cost. Eternalize only as a
+                             // sorcery.)" A GRAVEYARD activation with no battlefield source: card_name
+                             // = the graveyard card, hand_index = -1, cost = eternalize_cost. The
+                             // token's own ETB fires (FireOwnEtbTriggers, unpinned -> the provider's
+                             // graveyard pick / the human's dig chooser). Appended LAST.
     };
 
     // ActivatePermAbility sub-mode. Defined in the CORE layer (core/Permanent.h) because the shared
@@ -1744,6 +1751,9 @@ public:
         // (repeatable -- no {T}). Names the EXILED graveyard card, the real choice (exiling own
         // creatures strips Reveillark targets). EMPTY => legacy matching by source card name.
         std::vector<std::string> ooze_exiles;
+        // "eternalize=<graveyard card name>": Timeless Witness's Eternalize, activated from the
+        // GRAVEYARD (no battlefield source, not a cast) -- its own verb, the GUI's graveyard click.
+        std::vector<std::string> eternalizes;
         // "blink=<outlet name>[@<target m_number>]": Emiel the Blessed's "{3}:" / Eldrazi
         // Displacer's "{2}{C}:" exile-and-return, one entry per activation.
         //

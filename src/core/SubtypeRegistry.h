@@ -61,6 +61,7 @@ public:
             "Kavu",      // Kavu token
             "Treasure",  // treasure tokens (also in cards.json today; listed so it stays covered)
             "Aura",      // synthesised aura back-faces
+            "Zombie",    // Eternalize token copies (Timeless Witness: "a 4/4 black Zombie ...")
         };
         return kRuntimeSubtypeLiterals;
     }

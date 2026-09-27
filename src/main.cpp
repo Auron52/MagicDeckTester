@@ -600,6 +600,9 @@ static std::string SummarizePlan(const TurnSolver::Plan& plan, const GameState& 
             case Action::Kind::GraveyardExileGrow:
                 tag = a.card_name + ": exile " + a.tutor_target.str();
                 break;
+            case Action::Kind::Eternalize:
+                tag = a.card_name + ": eternalize from graveyard (4/4 black Zombie token copy)";
+                break;
             case Action::Kind::ActivatePump:
             {
                 const int k = std::max(1, a.chosen_x);
@@ -637,6 +640,7 @@ static std::string SummarizePlan(const TurnSolver::Plan& plan, const GameState& 
                     const int  tp = pd ? pd->params.team_pump_power : 0;
                     const bool th = pd && pd->params.team_pump_grants_haste;
                     const bool td = pd && pd->params.team_pump_grants_double_strike;
+                    const bool tl = pd && pd->params.team_pump_grants_lifelink;
                     const std::string who =
                         (pd && !pd->params.team_pump_subtypes.empty())
                             ? pd->params.team_pump_subtypes.front() + "s"
@@ -647,6 +651,7 @@ static std::string SummarizePlan(const TurnSolver::Plan& plan, const GameState& 
                     { if (!what.empty()) { what += " and "; } what += kw; };
                     if (th) { add("haste"); }
                     if (td) { add("double strike"); }
+                    if (tl) { add("lifelink"); }
                     if (what.empty()) { what = "(no effect)"; }   // should be unreachable
                     tag = a.card_name + ": " + who + " " + what
                         + (k > 1 ? " \xC3\x97" + std::to_string(k) : std::string());
@@ -663,7 +668,18 @@ static std::string SummarizePlan(const TurnSolver::Plan& plan, const GameState& 
             // Channel is a from-HAND ability, so "(other)" was indistinguishable from casting the
             // creature -- the exact ambiguity the `channel=` verb exists to remove.
             case Action::Kind::Channel:
-                tag = a.card_name + ": channel (discard)"; break;
+            {
+                // Transmute (Dimir House Guard) rides the Channel kind; say what it does, and which
+                // card it fetches when the variant names one.
+                const CardDefinition* chd = CardDatabase::Instance().Lookup(a.card_name);
+                if (chd && chd->params.transmute_cost.has_value())
+                {
+                    tag = a.card_name + ": transmute (discard)";
+                    if (!a.tutor_target.str().empty()) { tag += " \xE2\x86\x92 " + a.tutor_target.str(); }
+                }
+                else { tag = a.card_name + ": channel (discard)"; }
+                break;
+            }
             case Action::Kind::ComboRoute:
                 // The mechanical route is emitted only when its trial on this board won, and the
                 // human gate stamps that verify onto the plan; say so in the words the blink macro
@@ -860,6 +876,18 @@ static void WriteBoardContext(std::ostream& os, const GameState& s, int reveal_c
             if (d && d->params.retrace) { rt.push_back(c.m_name); }
         }
         if (!rt.empty()) { std::sort(rt.begin(), rt.end()); os << ", \"retrace_gy\": "; JsonNameArray(os, rt); }
+    }
+    // Eternalize (Timeless Witness): graveyard cards with an eternalize cost -- the GUI makes them
+    // clickable in the graveyard zone (the `eternalize=` verb). Absent when there are none, so every
+    // other deck's state JSON is byte-identical.
+    {
+        std::vector<std::string> et;
+        for (const Card& c : me.graveyard)
+        {
+            const CardDefinition* d = CardDatabase::Instance().LookupCached(c);
+            if (d && d->params.eternalize_cost.has_value()) { et.push_back(c.m_name); }
+        }
+        if (!et.empty()) { std::sort(et.begin(), et.end()); os << ", \"eternalize_gy\": "; JsonNameArray(os, et); }
     }
     os << ", \"library_size\": " << me.library.size();
     // Land drops still available this turn (1 normally; more after a Scale the Heights / Explore
@@ -1601,7 +1629,8 @@ static void WriteDecisionJson(std::ostream& os, const GameState& s,
                 || k == Action::Kind::Equip         || k == Action::Kind::GraveyardExileAbility
                 || k == Action::Kind::GraveyardReturnAbility
                 || k == Action::Kind::GraveyardPlayAbility
-                || k == Action::Kind::AnimateLand   || k == Action::Kind::TapForTokenPay;
+                || k == Action::Kind::AnimateLand   || k == Action::Kind::TapForTokenPay
+                || k == Action::Kind::Eternalize;
         };
         {
             bool first = true;
@@ -1899,12 +1928,23 @@ static void WriteDecisionJson(std::ostream& os, const GameState& s,
             //    already splits from the creature cast by its `enchant` sub, so it needs no verb --
             //    but without this key nothing in the plan JSON says WHICH mode the variant is, so the
             //    choose dialog offered "Gnarled Scarhide" twice with no way to tell them apart.
-            if (ac.kind == Action::Kind::Channel) { os << ", \"channel\": true, \"verb\": \"channel\""; }
+            if (ac.kind == Action::Kind::Channel)
+            {
+                os << ", \"channel\": true, \"verb\": \"channel\"";
+                // Transmute rides the channel verb (CheckLine matches it by name); the flag only
+                // relabels the GUI badge.
+                const CardDefinition* chd = CardDatabase::Instance().Lookup(ac.card_name);
+                if (chd && chd->params.transmute_cost.has_value()) { os << ", \"transmute\": true"; }
+            }
             //  * SUSPEND (Lotus Bloom) is the third shape: a from-hand ALTERNATIVE to casting, which
             //    serialises as a bare {"card": "Lotus Bloom"} exactly like the cast would. Its own
             //    `suspend=` verb removes that ambiguity before a suspend card with a real mana cost
             //    makes it bite.
             if (ac.kind == Action::Kind::Suspend) { os << ", \"verb\": \"suspend\""; }
+            // ETERNALIZE (Timeless Witness) is activated from the GRAVEYARD: no board source to click
+            // (so no `activate` flag) and not a cast -- its own verb, reached from the GUI's
+            // graveyard zone (the `eternalize_gy` list in the state JSON).
+            if (ac.kind == Action::Kind::Eternalize) { os << ", \"verb\": \"eternalize\""; }
             if (ac.bestow)                        { os << ", \"bestow\": true"; }
             // Phyrexian variant ({G/P}): the life paid in place of pips -- the key is what lets
             // the choose dialog tell the pay-mana and pay-2-life variants of one cast/activation
@@ -3315,6 +3355,7 @@ static TurnSolver::LineSpec ParseLineSpec(const std::string& spec)
             ls.pods.push_back(std::move(ps));
         }
         else if (key == "ooze")      { ls.ooze_exiles.push_back(val); }   // Scavenging Ooze exile
+        else if (key == "eternalize") { ls.eternalizes.push_back(val); }  // Timeless Witness (graveyard)
         // "tap=<name>#<m_number>:<W|U|B|R|G|C>": the MANUAL TAP/PAY fallback -- tap this source for
         // this face into the float before the line's payments run. Parsed by the SHARED reader
         // (ManaPayment.h), which is the same one AIEngine's --cast-order full-order walk uses, so

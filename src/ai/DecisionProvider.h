@@ -2029,6 +2029,98 @@ public:
         return duplicates.empty() ? -1 : duplicates.front();
     }
 
+    // PutCreaturesFromLibraryPicks -- Bilbo, Birthday Celebrant's "Search your library for ANY NUMBER
+    // of creature cards, put them onto the battlefield" (PermAbilityMode::LifeGatedPutCreatures).
+    // Returns the names to put, one entry per copy. "Any number" is a real choice, not "all": the
+    // list can hold cards whose put is a LOSS -- a second copy of a legend we control (the legend
+    // rule bins one at once, CR 704.5j), and a creature whose MANDATORY ETB would destroy one of our
+    // own permanents (Acidic Slime always, vs this opponent; Shriekmaw when the opponent has no
+    // nonartifact nonblack creature). DEFAULT (a deliberate, disclosed rule): put every other
+    // creature card -- in a goldfish more bodies are weakly better (each attacks; Tamanoa /
+    // Faithmender multiply every gain), and nothing in the engine prices a thinner library. One copy
+    // of each legendary name we do not already control. Human play picks freely (this preselected).
+    virtual std::vector<std::string> PutCreaturesFromLibraryPicks(const GameState& s, int controller) const
+    {
+        std::vector<std::string> legends;
+        bool opp_victim = false;
+        for (const Permanent& q : s.battlefield)
+        {
+            if (q.controller_index == controller)
+            {
+                if (q.card.HasSupertype(Supertype::Legendary)) { legends.push_back(q.card.m_name.str()); }
+            }
+            else if (q.card.IsCreature() && !q.card.HasType(CardType::Artifact)
+                     && !q.card.HasColor(Color::Black)) { opp_victim = true; }
+        }
+        std::vector<std::string> out;
+        for (const Card& lc : s.players[static_cast<std::size_t>(controller)].library)
+        {
+            const CardDefinition* d = CardDatabase::Instance().LookupCached(lc);
+            if (d == nullptr || !d->card.IsCreature()) { continue; }
+            if (d->params.etb_destroy_artifact_enchantment_land) { continue; }
+            if (d->params.etb_destroy_nonartifact_nonblack && !opp_victim) { continue; }
+            const std::string nm = lc.m_name.str();
+            if (d->card.HasSupertype(Supertype::Legendary))
+            {
+                if (std::find(legends.begin(), legends.end(), nm) != legends.end()) { continue; }
+                legends.push_back(nm);
+            }
+            out.push_back(nm);
+        }
+        return out;
+    }
+
+    // GyReturnToHandPick -- Timeless Witness's "return target card from your graveyard to your hand"
+    // when the cast carried no searched pick (a put path, the unpinned cast variant, a pin whose card
+    // has left the graveyard). Returns a graveyard INDEX (the graveyard is non-empty). DEFAULT (a
+    // deliberate ranking): a NONLAND card before a land (a land in hand is at most one drop per
+    // turn), then the highest mana value (the Garth's-Regrowth precedent), then the most recent.
+    virtual int GyReturnToHandPick(const GameState& s, int controller) const
+    {
+        const std::vector<Card>& gy = s.players[static_cast<std::size_t>(controller)].graveyard;
+        int best = -1; long long best_key = 0;
+        for (int g = 0; g < static_cast<int>(gy.size()); ++g)
+        {
+            const CardDefinition* d = CardDatabase::Instance().LookupCached(gy[static_cast<std::size_t>(g)]);
+            const Card& c = d ? d->card : gy[static_cast<std::size_t>(g)];
+            const long long key = (c.IsLand() ? 0 : 1LL << 40)
+                                + (static_cast<long long>(c.m_mana_cost.ManaValue()) << 20) + g;
+            if (best < 0 || key > best_key) { best = g; best_key = key; }
+        }
+        return best;
+    }
+
+    // EtbDestroyTargetPick -- a MANDATORY "When this enters, destroy target <X>" trigger whose legal
+    // set (BOTH sides, CR 603.3d: a trigger with a legal target must take one) can be only OUR OWN
+    // permanents against the goldfish: Shriekmaw (nonartifact, nonblack creature) and Acidic Slime
+    // (artifact, enchantment, or land -- the passive opponent controls none, so it ALWAYS hits ours).
+    // `legal` = battlefield indices, never empty. Returns an index INTO `legal`. A RESOLUTION pick
+    // (the trigger fires on every entry path, cast and put alike); human play overrides it through
+    // the loyalty/`target` board-click decision over the full legal set.
+    //
+    // DEFAULT (a deliberate ranking, not an enumeration-order pick): an OPPONENT permanent if there
+    // is one (removing a passive opponent's inert body costs us nothing), else our own least costly
+    // one: a creature/land before a noncreature nonland permanent, tapped before untapped, then the
+    // lowest mana value, then the lowest m_number. PreventDamageProvider refines the own-side order
+    // (never a lifegain engine / Manabarbs while anything else is legal).
+    virtual int EtbDestroyTargetPick(const GameState& s, int controller,
+                                     const std::vector<int>& legal) const
+    {
+        int best = -1; long long best_key = 0;
+        for (int k = 0; k < static_cast<int>(legal.size()); ++k)
+        {
+            const Permanent& q = s.battlefield[static_cast<std::size_t>(legal[k])];
+            const bool own = q.controller_index == controller;
+            const bool plain = q.card.IsCreature() || q.card.IsLand();
+            const long long key = (own ? 1LL << 40 : 0) + (plain ? 0 : 1LL << 36)
+                                + (q.tapped ? 0 : 1LL << 32)
+                                + (static_cast<long long>(q.card.m_mana_cost.ManaValue()) << 24)
+                                + static_cast<long long>(q.card.m_number & 0xFFFFFF);
+            if (best < 0 || key < best_key) { best = k; best_key = key; }
+        }
+        return best < 0 ? 0 : best;
+    }
+
     // StorageLandHold -- a storage land (Mercadian Bazaar: "{T}: put a storage counter") offers a
     // real either/or every main phase: tap it for MANA NOW, or hold it untapped so it CHARGES for a
     // bigger burst later. `counters` is what it already holds.

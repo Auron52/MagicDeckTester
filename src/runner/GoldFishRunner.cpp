@@ -543,6 +543,20 @@ std::uint32_t GoldFishRunner::DeckGraveyardReaders(const Decklist& deck)
             || p.impulse_exile > 0)
         { m |= GyR_ColorDemand; }
     }
+    // Timeless Witness (Prevent Damage, 2026-09-27): its ETB returns ANY card from the graveyard and
+    // Eternalize reads its own copy there. It is a SIDEBOARD card (reached by Living Wish), and the
+    // mainboard loop above never sees the sideboard -- so these two params are scanned there too.
+    // Only these two: widening the whole scan to every deck's sideboard would move other decks.
+    for (const std::vector<Card>* zone : { &deck.mainboard, &deck.sideboard })
+    {
+        for (const Card& c : *zone)
+        {
+            const CardDefinition* def = CardDatabase::Instance().LookupCached(c);
+            if (!def) { continue; }
+            if (def->params.etb_return_gy_to_hand)        { m |= GyR_AllNames; }
+            if (def->params.eternalize_cost.has_value())  { m |= GyR_SelfCopyNames; }
+        }
+    }
     // MISSED CLASS 4 (a learned model branching on graveyard_size) is NOT here: it is a per-GAME
     // property of the attached model rather than of the decklist, and it observes only the SIZE, so
     // dominance checks it directly (ai/Dominance.h).

@@ -1,0 +1,24 @@
+{
+  "_comment": [
+    "Prevent Damage (2026-09-27, phase I3). Dina's '{1}, Sacrifice another creature: Dina gets +X/+0,",
+    "where X is the sacrificed creature's power'. Board: Dina (can attack), a summoning-sick Purity (6/6,",
+    "cannot attack this turn), one Overgrown Tomb, empty hand, opponent at 7. The victim is a SEARCHED",
+    "variant (one per distinct creature), offered because the pump can close the game this turn",
+    "(PreventDamageProvider's lethal gate), so the search sacs the Purity and Dina attacks as a 7/3:",
+    "the opponent goes 7 -> 0 on turn 4. Purity's 'put into a graveyard from anywhere -> shuffle it",
+    "into its owner's library' fires through the dies cascade (unit-tested). Without the sac: 6 left;",
+    "a victim-power read AFTER the erase would also leave 6."
+  ],
+  "deck": "decks/Prevent Damage/Prevent Damage.cod",
+  "turn": 4, "on_the_play": true, "active_life": 20, "opponent_life": 7,
+  "resume_at": "main1",
+  "battlefield": [
+    { "name": "Dina, Soul Steeper" },
+    { "name": "Purity", "sick": true },
+    { "name": "Overgrown Tomb" }
+  ],
+  "hand": [],
+  "library_filler": "Forest", "library_size": 30,
+  "depth": 1, "budget_ms": 50, "max_turns": 4,
+  "expect_win_turn": 4
+}

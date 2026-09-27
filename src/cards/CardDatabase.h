@@ -1715,6 +1715,55 @@ struct CardParams
     bool x_damage_each_creature_and_player      = false;
     bool tutor_max_mv_is_lands                  = false;
     bool shuffles_self_into_library_on_resolve  = false;
+    // ---- Prevent Damage phase I3 (2026-09-27): the deck's creatures + sideboard -----------------
+    //   team_pump_grants_lifelink          -- Vito: "{3}{B}{B}: Creatures you control gain lifelink
+    //                                         until end of turn." Rides team_pump_cost (power 0) and
+    //                                         Action::Kind::ActivatePump mode 2, exactly like Valiant
+    //                                         Knight's double strike (see team_pump_grants_double_
+    //                                         strike for why not a PermAbilityMode): temp_lifelink on
+    //                                         every creature we control AT RESOLUTION (CR 611.2c);
+    //                                         keyword-only, so K is capped at 1 (idempotent).
+    //   sac_outlet_self_pump_power_from_victim -- Dina: "{1}, Sacrifice another creature: Dina gets
+    //                                         +X/+0 until end of turn, where X is the sacrificed
+    //                                         creature's power." Rides the sac_creature_outlet
+    //                                         machinery; X = the victim's LAST-KNOWN power (Scryfall
+    //                                         ruling), read before the erase.
+    //   etb_destroy_nonartifact_nonblack   -- Shriekmaw: "When this creature enters, destroy target
+    //                                         nonartifact, nonblack creature." MANDATORY target
+    //                                         (CR 603.3d) on EITHER side; removed if none is legal.
+    //   etb_destroy_artifact_enchantment_land -- Acidic Slime: "destroy target artifact,
+    //                                         enchantment, or land." MANDATORY, either side (the
+    //                                         goldfish opponent controls none, so it hits OURS).
+    //   etb_return_gy_to_hand              -- Timeless Witness: "return target card from your
+    //                                         graveyard to your hand." MANDATORY when the graveyard
+    //                                         is non-empty; the pick is a searched plan variant on
+    //                                         the cast path (Action::tutor_target).
+    //   eternalize_cost                    -- Timeless Witness: "{5}{G}{G}, Exile this card from
+    //                                         your graveyard: Create a token that's a copy of it,
+    //                                         except it's a 4/4 black Zombie ... with no mana cost.
+    //                                         Eternalize only as a sorcery." (Action::Eternalize)
+    //   transmute_cost                     -- Dimir House Guard: "{1}{B}{B}, Discard this card:
+    //                                         Search your library for a card with the same mana
+    //                                         value as this card, reveal it, put it into your hand,
+    //                                         then shuffle. Transmute only as a sorcery."
+    //                                         (Action::Transmute; the found card = tutor_target)
+    //   life_gated_put_creatures_cost / activate_min_life -- Bilbo: "{2}{W}{B}{G}, {T}, Exile
+    //                                         Bilbo: Search your library for any number of creature
+    //                                         cards, put them onto the battlefield, then shuffle.
+    //                                         Activate only if you have 111 or more life."
+    //                                         (PermAbilityMode::LifeGatedPutCreatures)
+    bool team_pump_grants_lifelink              = false;
+    bool sac_outlet_self_pump_power_from_victim = false;
+    bool etb_destroy_nonartifact_nonblack       = false;
+    bool etb_destroy_artifact_enchantment_land  = false;
+    bool etb_return_gy_to_hand                  = false;
+    std::optional<ManaCost> eternalize_cost;
+    std::optional<ManaCost> transmute_cost;
+    std::optional<ManaCost> life_gated_put_creatures_cost;
+    int  activate_min_life                      = 0;
+    // NOT a cards.json field: set only on the SYNTHESIZED search params ApplyTransmute builds
+    // ("a card with the same mana value as this card"), read by TutorNumericFilterOk. -1 = none.
+    int  tutor_exact_mv                         = -1;
     // ---- Ocelot Pride: end-step token trigger + ASCEND (the city's blessing) ----------------
     // "At the beginning of your end step, if you gained life this turn, create a 1/1 white Cat
     //  creature token. Then if you have the city's blessing, for each token you control that
