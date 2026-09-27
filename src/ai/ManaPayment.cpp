@@ -3694,6 +3694,11 @@ void ActivateTapTokensShared(GameState& state, ManaPool* available)
                     def->params.tap_token_power,
                     def->params.tap_token_toughness,
                     def->params.tap_token_subtypes);
+        // EXERT (CR 701.38): the cost also exerts the source, so it does not untap during its
+        // controller's NEXT untap step. Set here rather than at the ~19 call sites because this is
+        // the one shared activation path, which keeps the two worlds in lockstep by construction.
+        // Index access, not a stale ref: CreateToken just appended to the battlefield.
+        if (def->params.tap_token_exerts) { state.battlefield[i].skip_next_untap = true; }
     }
 }
 

@@ -248,7 +248,13 @@ void GameEngine::UntapStep(GameState& state)
         {
             // The ice lock stops the UNTAP only; summoning sickness and per-turn flags still
             // clear (the permanent is not phased out, it just stays tapped).
-            if (!(ice_locks && p.ice_counters > 0 && p.card.IsCreature()))
+            // EXERT (CR 701.38) consumes exactly one untap step, so the flag is CLEARED whether
+            // or not it actually held anything tapped -- an exerted permanent that somehow untapped
+            // by other means must not stay flagged. Checked alongside the Rimescale ice lock: both
+            // are per-permanent reasons not to untap. Lockstep pair; see Permanent::skip_next_untap.
+            const bool exert_holds = p.skip_next_untap;
+            p.skip_next_untap = false;
+            if (!exert_holds && !(ice_locks && p.ice_counters > 0 && p.card.IsCreature()))
             { p.tapped = false; }
             p.entered_this_turn = false;
             p.fresh_hold_exempt = false;   // meaningful only with entered_this_turn (Permanent.h)

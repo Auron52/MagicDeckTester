@@ -1,6 +1,35 @@
 {
  "cards": [
   {
+   "name": "Basri, Tomorrow's Champion",
+   "mana_cost": "{W}",
+   "types": [
+    "Creature"
+   ],
+   "supertypes": [
+    "Legendary"
+   ],
+   "subtypes": [
+    "Human",
+    "Knight"
+   ],
+   "keywords": [],
+   "power": 2,
+   "toughness": 1,
+   "oracle_text": "{W}, {T}, Exert this creature: Create a 1/1 white Cat creature token with lifelink. (An exerted creature won't untap during your next untap step.)\nCycling {2}{W} ({2}{W}, Discard this card: Draw a card.)\nWhen you cycle this card, Cats you control gain hexproof and indestructible until end of turn. [PARTIAL, two remaining gaps, both inert. EXERT IS MODELLED (tap_token_exerts -> Permanent::skip_next_untap, consumed by the next untap step in GameEngine::UntapStep and its TurnSolver lockstep twin, alongside the Rimescale ice lock). It was ADDED FOR THIS CARD after measurement refused the shortcut: shipped without exert, the ability is repeatable EVERY turn instead of every other, and a 600-game probe found Cat tokens in 54% of games and up to FOUR at once -- roughly twice the printed card, so the omission was load-bearing rather than inert. NOTE the activation itself is a GREEDY spare-mana pass (ActivateTapTokensShared), not a searched choice, so if the heuristic over-activates now that each use costs an untap, this card's measured value is a FLOOR. (1) Lifelink on the Cat is not modelled -- no tap_token_keywords param exists. INERT: the passive opponent deals no damage, so life gain never matters. (3) The cycling trigger granting Cats hexproof and indestructible is not modelled. INERT for the same reason Knight Exemplar's indestructible grant is -- nothing targets us and nothing destroys us -- and doubly so because it requires Cats, which only exist if gap (1)'s ability was used. Legendary IS modelled (supertypes below; EnforceLegendRule, CR 704.5j), which is load-bearing here: a second copy in hand while the first is out is dead, the same shape as Adeline.]",
+   "template": "vanilla_creature",
+   "parameters": {
+    "tap_token_cost": "{W}",
+    "tap_token_power": 1,
+    "tap_token_toughness": 1,
+    "tap_token_subtypes": [
+     "Cat"
+    ],
+    "tap_token_exerts": true,
+    "cycling_cost": "{2}{W}"
+   }
+  },
+  {
    "name": "Mountain",
    "mana_cost": "",
    "types": [

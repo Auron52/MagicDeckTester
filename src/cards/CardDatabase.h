@@ -344,6 +344,13 @@ struct CardParams
     int                      tap_token_toughness = 0;
     std::vector<std::string> tap_token_subtypes;
     std::vector<std::string> tap_token_requires_subtypes;
+    // The ability's cost ALSO exerts the source (CR 701.38): "{W}, {T}, Exert Basri: create a 1/1
+    // Cat". Without this the {T} alone is paid back at the very next untap, making the ability
+    // repeatable EVERY turn instead of every other one -- which measured 54% of games producing Cats
+    // and up to four at once, i.e. roughly twice the printed card. Sets
+    // Permanent::skip_next_untap at the single shared activation site (ActivateTapTokensShared), so
+    // both worlds get it by construction. Default false keeps Sliver Hive byte-identical.
+    bool                     tap_token_exerts    = false;
 
     // Slimefoot, the Stowaway: "{4}: Create a 1/1 green Saproling creature token." A mana-only
     // activated token maker with NO {T} and NO sacrifice -- deliberately NOT tap_token_cost above,

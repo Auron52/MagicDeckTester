@@ -752,6 +752,7 @@ CardParams CardDatabase::BuildParamsFromJson(const json& params) const
         p.tap_token_subtypes.push_back(s);
     for (const std::string& s : params.value("tap_token_requires_subtypes", json::array()))
         p.tap_token_requires_subtypes.push_back(s);
+    p.tap_token_exerts             = params.value("tap_token_exerts", false);
 
     // Slimefoot: mana-only, no-{T}, repeatable token maker (PermAbilityMode::PayToken).
     if (params.contains("pay_token_cost"))

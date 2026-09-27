@@ -270,6 +270,16 @@ struct Permanent
                                             // elsewhere. Placed beside temp_lifelink in the 2026-09-25
                                             // cache layout (a bool in the cold bool run), not in the
                                             // scan-hot first 192 bytes.
+    // EXERT (CR 701.38, Amonkhet): "it doesn't untap during your next untap step". Set when an
+    // ability whose cost includes exerting this permanent is activated (CardParams::tap_token_exerts
+    // -- Basri, Tomorrow's Champion), and CONSUMED by the next untap step of its controller, which
+    // leaves it tapped and clears the flag. Modelled as a one-shot flag rather than a counter
+    // because "your NEXT untap step" is exactly one skip, however many times it is set in a turn.
+    // Honoured in BOTH worlds and they are a lockstep pair: GameEngine::UntapStep and
+    // TurnSolver::SimulateEndAndStartNextTurn, alongside the Rimescale Dragon ice lock, which is the
+    // same shape (a per-permanent reason not to untap). Read only at untap steps, so it lives in
+    // the cold bool run of the 2026-09-25 cache layout, not beside `tapped` in the hot block.
+    bool      skip_next_untap      = false;
     bool      exile_at_end         = false; // Twinflame token: "exile those tokens at the beginning
                                             // of the next end step." Swept (battlefield -> exile) at
                                             // BOTH end-of-turn sites in lockstep; folded into the
