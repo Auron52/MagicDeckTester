@@ -852,10 +852,10 @@ int DecisionProvider::SoulbondPartner(
         // she is routinely this deck's largest creature and therefore its best pair.
         const CardDefinition* cd = CardDatabase::Instance().LookupCached(c.card);
         int pw = c.EffectivePower()
-               + ComputeLordBonus(c.card, s, controller, c.is_animated, &c).first;
+               + ComputeLordBonus(c.card, s, controller, c.AnimatedAllTypes(), &c).first;
         if (cd != nullptr)
         {
-            if (c.is_animated) { pw += cd->params.animate_power; }
+            if (c.is_animated) { pw += cd->params.animate_power; }   // P/T add: ANY animation, typed or not
             pw += DynamicBasePower(*cd, s, controller);
         }
         if (pw > best_pw || (pw == best_pw && best_num != 0 && c.card.m_number < best_num))
@@ -3441,7 +3441,7 @@ static int AttackPowerOf(const GameState& s, const Permanent& p)
 {
     const int active = s.active_player_index;
     const bool animated = p.is_animated;
-    const std::pair<int,int> lb = ComputeLordBonus(p.card, s, active, animated, &p);
+    const std::pair<int,int> lb = ComputeLordBonus(p.card, s, active, p.AnimatedAllTypes(), &p);
     int base = p.EffectivePower() + lb.first;
     const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
     if (d)
@@ -3467,7 +3467,7 @@ static bool AttackHasNonPowerValue(const GameState& s, const Permanent& p)
         if (!sd || sd->params.attack_trigger_life_loss <= 0) { continue; }
         for (const std::string& sub : sd->params.subtypes_affected)
         {
-            if (p.is_animated) { return true; }
+            if (p.AnimatedAllTypes()) { return true; }
             for (const std::string& cs : p.card.m_subtypes) { if (cs == sub) { return true; } }
         }
     }
@@ -6977,7 +6977,7 @@ GoblinsProvider::TutorCandidates(const GameState& s, int controller, const CardP
     auto board_power = [&](const Permanent& p, const Card& pc) -> int
     {
         if (!s_board_lord_power) { return std::max(0, pc.m_power.value_or(0)); }
-        const int lp = ComputeLordBonus(pc, s, controller, p.is_animated, &p).first;
+        const int lp = ComputeLordBonus(pc, s, controller, p.AnimatedAllTypes(), &p).first;
         return std::max(0, p.EffectivePower() + lp);
     };
     // ... and the ATTACK-PUMP term of the same read (MTG_GOBLIN_BOARD_PUMP_POWER=0 restores):
@@ -14801,7 +14801,7 @@ void FiveColourProvider::ModalSplitCandidates(const GameState& s, const CardDefi
     for (const Permanent& p : s.battlefield)
     {
         if (p.controller_index != me || !p.card.IsCreature()) { continue; }
-        const int lp = ComputeLordBonus(p.card, s, me, p.is_animated, &p).first;
+        const int lp = ComputeLordBonus(p.card, s, me, p.AnimatedAllTypes(), &p).first;
         board_power += std::max(0, p.EffectivePower() + lp);
         colors_desc.push_back(p.card.ColorCount());
     }

@@ -1940,6 +1940,174 @@ asserts both user rulings as invariants (Exemplar 4, Adeline 3) so a later edit 
 **Prediction on record:** one copy neutral-to-slightly-better (the legend rule cannot bite and cycling is a
 free option), degrading with copies as duplicates strand.
 
+### USER RULING 2026-09-27 — THE CAT ABILITY IS DISABLED BY HEURISTIC, not removed from the card
+
+The user, on being shown that Basri's `{W}, {T}, Exert` was being activated in 54% of games: *"Yeah, cats
+are definitely not worth considering."* Then, on how to act on it: *"For the cats I recommend you just
+disable that ability in a heuristic"*, and immediately clarifying the boundary: *"We shouldn't disable it
+entirely, since that doesn't make sense, but heuristically it does make sense."*
+
+**That boundary is the whole ruling, and it maps onto an existing precedent exactly.** The ability stays
+fully implemented and fully legal — a VALUE gate, not a legality one, which is the Ajani-0 / Serra-(−6)
+class already in this engine. The gate sits in `ActivateTapTokensShared` (`src/ai/ManaPayment.cpp`), which
+**already stands down under `HumanPlayActive()`** because human play reaches the ability by a different
+route (`Action::Kind::TapForTokenPay`). So a person playing the deck is still offered it whenever the rules
+allow; only the autonomous greedy spare-mana pass declines. Nothing about the card is narrowed.
+
+**Predicate: the cost EXERTS the source** (`tap_token_exerts`), not "the source is a creature that could
+attack". Exert costs the body its *next* untap, so the attack is forgone on a future turn regardless of
+which phase the greedy pass runs in — no combat or phase reasoning needed, which is what makes the gate
+impossible to get subtly wrong. The two predicates select the **same card today**: the whole database holds
+exactly two tap-token cards, Basri (a Creature that exerts) and Sliver Hive (an exert-free Land), so
+**Sliver Hive is provably untouched and `slivers_vial` stays byte-identical**. The broader attacker-aware
+heuristic is deliberately left unwritten until a second such card exists. `MTG_GREEDY_EXERT_TOKEN=1`
+restores the old always-activate behaviour for an A/B (default OFF, per the `EnvOn` convention).
+
+**Two real gaps in the ORIGINAL exert implementation, both found while wiring this and both now fixed.**
+Worth recording because each was invisible in the direction that mattered:
+
+1. **`skip_next_untap` was folded into NO state key** — not `FungibilityKey`, not `BuildSimKey`, not
+   `dominance::Build()`, not the two-world mismatch checker in `ManaPayment.cpp`. Execution was correct
+   (both untap sites honoured the flag, so games really did miss the untap), but the transposition table
+   could merge an exerted state with an un-exerted one, leaving **the search blind to the cost of the very
+   ability it was choosing to activate**. Now folded in all four, each nonzero-gated so every deck without
+   an exert source is byte-identical. Classified off the `paired_with` precedent: it survives cleanup
+   deliberately (it is consumed at the *next* untap step), so it must be COMPARED, not refused at
+   `AtCleanBoundary`.
+2. **The human-play route never set it at all.** `TurnSolver.cpp`'s `TapForTokenPay` branch created the
+   token and stopped. The original comment claimed `ActivateTapTokensShared` was "the one shared activation
+   path" — it is not; it is one of **two** routes, and it is the one that stands down for humans. Harmless
+   while the greedy pass was doing the activating; **now the only route the ability is normally reached
+   by**, i.e. precisely where an unmodelled exert would have been a free untap. Fixed there too.
+
+**Consequence for round N: it is SUPERSEDED, not merely floored.** It measured the old greedy policy — and
+measured it while the search could not see the exert cost. Basri under the ruling reduces to *a {W} 2/1
+Human Knight with cycling {2}{W} that is Legendary*, i.e. a Venerable Knight (provably blank in this
+engine) plus a cycling option minus the legend rule. That is a clean, cheap test and it is the honest one;
+the Cat ability is out of scope by ruling, not by approximation.
+
+### Round O — GIDEON, ALLY OF ZENDIKAR (user request: "double check")
+
+**The card-data check paid off on the first line.** From Scryfall, not recall: **{2}{W}{W}**, loyalty 4 —
+not the `{3}{W}` first assumed. That is *exactly* Hero of Bladehold's cost, which is what makes the
+head-to-head below the natural test rather than an arbitrary one. Modern/Legacy/Vintage/Pioneer legal, so
+it clears the standing legality gate.
+
+**Strategic read, stated before the run.** Gideon costs 4 and this deck's modal win is turn 4. He enters
+summoning-sick, so on the turn he lands the `+1` cannot attack and the `0`'s token cannot either — **`−4`
+is the only ability that does anything immediately**. So the prior is that Gideon is an *emblem card* here,
+not a token engine: a 4-mana Glorious Anthem on the board we already have, which then dies. Against the
+marginal Hero of Bladehold — whose attacking turns were **lethal 79% of the time** (round L) — the prior is
+that he loses.
+
+| ability | status | note |
+|---|---|---|
+| `0`: 2/2 white Knight Ally token | **implemented** | the **Knight** subtype is the payload, not the body |
+| `−4`: emblem, creatures you control +1/+1 | **implemented** | new `Player::emblem_team_pump` |
+| `+1`: becomes a 5/5 until EOT | **implemented** | `animated_printed_types` + a ~34-site refactor |
+
+**The emblem needed new state, and it landed cleanly.** `ComputeLordBonus` already takes
+`const GameState&` and has **29 call sites** — real combat damage, every attack projection, the SBA
+toughness recheck, both worlds — so one term inside that function is picked up everywhere in lockstep,
+with no caller-side plumbing and no fake battlefield permanent. It deliberately mirrors an
+`affects_all_creatures` lord (Benalish Marshal) *including* being unconditional within the function, so it
+inherits the callers' existing creature filtering rather than introducing a second, divergent copy of it:
+"the emblem behaves like an anthem" is then true by construction rather than by inspection. Held on
+`Player` because CR 114 makes an emblem **not a permanent** — a fake anthem permanent would be miscounted
+by every "permanents you control" reader and would render in the viewer as a card that does not exist. It
+takes `has_city_blessing`'s classification verbatim (monotone, never reset, never removable) and is folded
+gated-on-nonzero into the sim key and dominance, so every deck with no emblem source is byte-identical.
+**Unlike Serra the Benevolent's emblem it is NOT inert and could not be a no-op** — it is an anthem on a
+board we are racing with.
+
+### USER DIRECTIVE 2026-09-27 — "Gideon's +1 needs to be done to evaluate him"
+
+It was first built without the `+1`, as a disclosed floor. The user overruled that, correctly: the `+1` is
+the button a *race* wants, so a Gideon without it is not the card being evaluated. Implemented in full.
+
+**The engine had conflated two different questions, and that is the whole difficulty.**
+`Permanent::is_animated` answered *both* "is this non-creature currently a creature?" and "does it have
+EVERY creature type?" — because the only animation in the pool was Mutavault, whose own wording is "with
+all creature types" (CR 205.3b). Gideon's +1 breaks the equivalence: he becomes a Human Soldier **Ally**,
+so a Knight lord must not reach him. Animating him through the old machinery would have handed him **+4/+4
+from four Knight Exemplars he is not entitled to** — every point of it flattering the arm that plays him,
+which is the [[bracket-notes-are-the-judgement-call]] failure mode twice caught in this campaign already.
+
+The split is `Permanent::animated_printed_types` (default **false**, set only by a typed animation) behind
+one predicate, **`Permanent::AnimatedAllTypes()`**, now passed as the `all_creature_types` argument at every
+lord / haste / subtype-count site. `is_animated` alone still answers the first question. So Benalish
+Marshal's `affects_all_creatures` anthem **does** reach an animated Gideon while Knight Exemplar's
+Knight-only anthem **does not**. Chosen with that polarity deliberately: the two pre-existing animation
+sites needed no change, so Mutavault and every deck that animates nothing are byte-identical by
+construction rather than by audit.
+
+**Scope: 34 sites, classified one at a time rather than sed-ed.** Three classes had to be told apart, and
+two of them look identical on the page:
+* **A — "is it a creature?"** (`IsCreature() || is_animated`): unchanged, ~60 sites. Gideon belongs here.
+* **B — "does it have all creature types?"** (the `all_creature_types` argument; direct reads pairing
+  `is_animated` with `subtypes_affected` or `CardHasSubtype`): switched to `AnimatedAllTypes()`, 34 sites.
+* **C — the P/T add** (`if (animated) pw += animate_power`): unchanged. Gideon must keep this or he is a 0/0.
+
+**Five sites used ONE local for both B and C**, which is the trap: `const bool animated = p.is_animated;`
+feeding both `ComputeLordBonus(...)` and `+= animate_power`. Using the wrong one either makes Gideon a 0/0
+that dies, or hands him the Knight anthem. An automated pass also produced exactly one **false positive** —
+`DecisionProviders.cpp:853`, a P/T add caught because a `ComputeLordBonus(` sat three lines above it in the
+lookback window — which is why every change was printed and reviewed rather than trusted.
+
+**NOT a haste concern**, worth recording because it was the first suspicion and it was wrong:
+`CanAttackFull` already applies summoning sickness to animated permanents correctly (CR 302.6 tracks
+control duration), so a Gideon animated the turn he lands cannot attack — which is why `+1` is deliberately
+absent from the cast-turn activation table and priced at zero there. `Permanent::CanAttack`'s
+unconditional-haste shortcut is **unreachable** for animated permanents: its only two callers are a
+keep-model feature counter and a site already guarded by `card.IsCreature()`. There is no Mutavault haste
+bug to write up.
+
+**His animated TOUGHNESS is unmodelled, and that is inert AND safe** — nothing in the engine reads
+`animate_toughness`. It cannot kill him because the zero-toughness state-based action gates on
+`p.card.IsCreature()`, the PRINTED type, so an animated Planeswalker is exempt exactly as an animated Land
+is. Nothing in this game can damage him either way, so the indestructible and damage-prevention riders are
+inert by construction too (the Knight Exemplar argument).
+
+### Round O — the VERIFICATION, because byte-identity alone would have proved nothing
+
+Smoke came back **97 passed / 0 failed / 0 play-changed** — every existing deck, including `slivers_vial`
+(the only Mutavault deck) and WhiteKnights itself, provably untouched by the 34-site refactor, the emblem,
+the exert folds and the exert heuristic. That is the [[digest-equality-beats-a-sign-test]] gate, and it also
+keeps round J′'s `j2_ad3_sp4` keep table valid for round O.
+
+But identical digests are exactly what [[digest-equality-can-mean-broken]] warns about: they would look the
+same if Gideon's new paths never fired at all. Each ability was therefore proved to FIRE, separately:
+
+| ability | evidence |
+|---|---|
+| `0` token | `--log-dir` board census: **2/2 Knight Token on turn 4**, the turn he lands |
+| `+1` animation | a Gideon-only deck (24 Plains + 36 Gideon, **no other creature in the deck**) wins at avg turn **8.13**, and every ATTACK reads **damage: 7** = 2 (token) + 5 (animated Gideon). Nothing else in that deck can produce 7 |
+| `+1` is NOT a Knight | add Knight Exemplar: over 20 games, **23 attacks match the correct model and 0 match the buggy one** (`ex=1, tok=1, dmg=10` = 3 pumped token + 2 Exemplar + **5 unpumped Gideon**; the buggy model predicts 11). The token IS pumped, the planeswalker is not — the refactor's whole purpose, measured |
+| `−4` emblem | committed fixture `test/scenarios/whiteknights_gideon_emblem_anthem.json`: six blank 2/1s attack for exactly **18** instead of 12 |
+
+The emblem fixture was then checked for DISCRIMINATING POWER rather than assumed to have it — opponent at
+18 wins turn 6 at life 0, at **19** the win slips to turn 7 (so the damage is exactly 18, not 19+), and at
+13 it wins turn 6 with −5 overkill. Without the emblem the six Knights deal 12 and the 18-life case fails.
+Full scenario suite: **104 passed, 0 failed**.
+
+**So round O is NOT a floor.** All three abilities are live and measured, and the number it returns is the
+card.
+
+**Round O arms** (`mkspec_o.py`, seeds 12.4M / 12.8M): reference `j2_ad3_sp4`, then Gideon at 1 and 2
+copies against **two payers** — `_hob` cuts Hero of Bladehold (a 4-drop for a 4-drop, so **the curve is
+held fixed** and the number is a clean "Gideon vs the marginal Hero"), and `_vk` cuts Venerable Knight (the
+cheapest payer the campaign has measured, since round J′'s DBG-vs-VK null came back **−0.0014** pooled —
+but it is a 1-drop, so this arm also shifts the curve). Round J′'s method applies: three payers agreeing
+within 0.0014 is what licensed "the payer is irrelevant and the gain belongs to the card". If the two
+payers agree here, the curve shift is not what is being measured. Both user rulings are asserted as
+invariants in the generator.
+
+**Struct-size tripwires did NOT fire, and that is logged rather than relied on.** `sizeof(Player)` stayed
+200 and `sizeof(Permanent)` stayed 328 — both new ints landed in existing padding. `Dominance.h`'s own
+maintenance log documents this exact blind spot ("size is a proxy, not a proof; a same-slot addition is
+exactly the case it cannot catch"), so both entries were written into the log anyway. **Measured** from a
+scratch TU, not reasoned about.
+
 ## RESUME HERE — the road to a FINAL Knights list
 
 **State at 2026-09-26 21:15Z.** WhiteKnights is finished (above). Knights' round H is **in flight**:

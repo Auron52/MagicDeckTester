@@ -16,7 +16,7 @@
 static int AttackerDamageLowerBound(const GameState& state, const Permanent& p, int active)
 {
     const bool animated = p.is_animated;
-    auto [lord_pb, lord_tb] = ComputeLordBonus(p.card, state, active, animated, &p);
+    auto [lord_pb, lord_tb] = ComputeLordBonus(p.card, state, active, p.AnimatedAllTypes(), &p);
     (void)lord_tb;
     int base_pw = p.EffectivePower() + lord_pb;
     if (const CardDefinition* adef = CardDatabase::Instance().LookupCached(p.card))
@@ -144,7 +144,7 @@ CombatDamageResult ResolveCombatDamage(GameState& state, const std::vector<int>&
     {
         Permanent& p = state.battlefield[idx];
         const bool animated = p.is_animated;
-        auto [lord_pb, lord_tb] = ComputeLordBonus(p.card, state, active, animated, &p, &lord_idx,
+        auto [lord_pb, lord_tb] = ComputeLordBonus(p.card, state, active, p.AnimatedAllTypes(), &p, &lord_idx,
                                                    &bs.anthems);
         (void)lord_tb;
         // The single shared oracle (SpellEffects.h) -- printed keyword, subtype lords, Equipment

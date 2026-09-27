@@ -192,8 +192,16 @@ static void VerifyPaySnapRestore(const std::vector<Permanent>& now,
         if (a.exile_at_end != b.exile_at_end)         { fail(i, "exile_at_end"); }
         if (a.chosen_subtype_id != b.chosen_subtype_id) { fail(i, "chosen_subtype_id"); }
         if (a.is_animated != b.is_animated)           { fail(i, "is_animated"); }
+        // Typed vs all-types animation (Gideon's +1 vs Mutavault): same is_animated bit, but a
+        // divergence here silently changes which subtype lords reach the body.
+        if (a.animated_printed_types != b.animated_printed_types)
+        { fail(i, "animated_printed_types"); }
         if (a.is_token != b.is_token)                 { fail(i, "is_token"); }
         if (a.echo_resolved != b.echo_resolved)       { fail(i, "echo_resolved"); }
+        // EXERT (CR 701.38): the tap-token activation path this file owns is exactly what SETS this
+        // flag, so a divergence here is the most likely of any field in the list -- one world exerting
+        // and the other not is a whole attack of difference next turn.
+        if (a.skip_next_untap != b.skip_next_untap)   { fail(i, "skip_next_untap"); }
     }
 }
 
@@ -1423,7 +1431,7 @@ ManaCost EffectiveSpellCost(const CardDefinition& def, const GameState& state, i
             if (p.controller_index != state.active_player_index) { continue; }
             for (const std::string& sub : def.params.subtypes_affected)
             {
-                bool matches = p.is_animated;
+                bool matches = p.AnimatedAllTypes();
                 if (!matches)
                 {
                     for (const std::string& cs : p.card.m_subtypes)
@@ -3655,6 +3663,34 @@ void ActivateTapTokensShared(GameState& state, ManaPool* available)
         const CardDefinition* def =
             CardDatabase::Instance().LookupCached(state.battlefield[i].card);
         if (!def || !def->params.tap_token_cost.has_value()) { continue; }
+
+        // HEURISTIC GATE: this greedy pass does not pay a cost that EXERTS the source (CR 701.38 --
+        // Basri, Tomorrow's Champion). USER DIRECTIVE (2026-09-27): "for the cats I recommend you
+        // just disable that ability in a heuristic ... We shouldn't disable it entirely, since that
+        // doesn't make sense, but heuristically it does make sense."
+        //
+        // A VALUE GATE, NOT A LEGALITY ONE -- the Ajani-0 / Serra-(-6) precedent. The ability stays
+        // fully implemented and fully legal: this function already stands down under
+        // HumanPlayActive() (human play reaches it as Action::Kind::TapForTokenPay), so a person
+        // playing the deck is still offered it whenever the rules allow, and the card is not
+        // narrowed. Only the AUTONOMOUS greedy spare-mana pass declines.
+        //
+        // WHY the trade is never worth taking here, and why exert is the right predicate rather than
+        // some evaluation of the token: exerting costs the source its NEXT untap, so the body misses
+        // an attack on a FUTURE turn no matter which phase this pass runs in -- a 1/1 token does not
+        // pay for that, and Basri is a Knight, so Knight Exemplar and Benalish Marshal are both
+        // pumping the body being tapped away. Measured before the gate existed: Cats appeared in 54%
+        // of 600 games, up to four at once, because Basri is a one-drop whose {T} was being repaid at
+        // every untap step. Gating on exert rather than on "the source is a creature that could
+        // attack" keeps this phase-independent and needs no combat reasoning; the two predicates
+        // select the SAME card today (Basri is the only tap-token creature, Sliver Hive the only
+        // other tap-token card and it is an exert-free Land), so Sliver Hive is provably untouched
+        // and slivers_vial stays byte-identical. The broader attacker-aware version is the more
+        // general heuristic and is deliberately left unwritten until a second such card exists.
+        //
+        // MTG_GREEDY_EXERT_TOKEN=1 restores the old always-activate behaviour for an A/B.
+        static const bool s_greedy_exert = EnvOn("MTG_GREEDY_EXERT_TOKEN");   // DEFAULT OFF
+        if (def->params.tap_token_exerts && !s_greedy_exert) { continue; }
 
         if (!def->params.tap_token_requires_subtypes.empty())
         {

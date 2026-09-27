@@ -1,6 +1,42 @@
 {
  "cards": [
   {
+   "name": "Gideon, Ally of Zendikar",
+   "mana_cost": "{2}{W}{W}",
+   "types": [
+    "Planeswalker"
+   ],
+   "supertypes": [
+    "Legendary"
+   ],
+   "subtypes": [
+    "Gideon"
+   ],
+   "keywords": [],
+   "oracle_text": "+1: Until end of turn, Gideon, Ally of Zendikar becomes a 5/5 Human Soldier Ally creature with indestructible that's still a planeswalker. Prevent all damage that would be dealt to him this turn.\n0: Create a 2/2 white Knight Ally creature token.\n−4: You get an emblem with \"Creatures you control get +1/+1.\" [Enters L4; one loyalty ability per turn, activatable the turn he lands (SearchesWalkerCastActivation for the cast-carried variant, plus breakpoint site 9 post-entry activation), dies at loyalty <= 0. Vs the passive opponent the walker is NEVER ATTACKED, so loyalty only ever RISES or is spent by choice. Card data taken from Scryfall, not recall -- the cost is {2}{W}{W} (four mana, the SAME cost as Hero of Bladehold, which is the slot he competes for), not the {3}{W} an agent first assumed. Modern/Legacy/Vintage/Pioneer legal. 0 = knight_ally_token_22: a 2/2 white Knight Ally via the SHARED CreateToken (the angel_token_44 precedent -- the local make_token lambda has no white-only colour path), ending in the universal FireEtbWatchers cascade. The KNIGHT SUBTYPE is the payload and is worth more than the body here: Knight Exemplar's Knight-only anthem and Benalish Marshal's all-creature anthem both reach the token, and Worthy Knight / Adeline read the board it widens. ALLY is stamped for faithfulness and is INERT in the current pool (no card in cards.json is an Ally lord or counts Allies; Zada, Hedron Grinder is the only other Ally and reads nothing) -- carried rather than dropped because the angel_token_44 lesson is that a subtype left off a token becomes load-bearing for a card added later. A 0 cost is NOT free in context: it spends the one loyalty activation for the turn, so every token competes with the -4. -4 = emblem_team_pump: held as Player::emblem_team_pump, a per-PLAYER count, because CR 114 makes an emblem not a permanent -- a fake battlefield anthem would be miscounted by every \"permanents you control\" reader and would render in the viewer as a card that does not exist. Read in exactly ONE place, ComputeLordBonus, which all 29 combat/eval/SBA call sites in both worlds already route through, so the two worlds stay in lockstep by construction rather than by an audit of readers; it mirrors an affects_all_creatures lord exactly, so \"the emblem behaves like an anthem\" is true by construction. It STACKS (two Gideons ultimating give +2/+2) and is never lost -- never reset at untap, and CR 114 gives neither player a way to remove it -- which is why it is classified with has_city_blessing in dominance and folded into the sim key gated on nonzero (byte-identical for every deck with no emblem). UNLIKE Serra the Benevolent's -6 emblem this one is NOT inert and could not be a no-op: it is an anthem on a board we are racing with, so it converts directly into damage every attack step. The -4 from exactly 4 KILLS Gideon, forfeiting every future token, and that cost is charged by the rollout (loyalty paid in ApplyLoyaltyAbility, loyalty-death check bins him) rather than by the enumeration estimate. It is also the ONLY one of his three abilities that does anything on the turn he lands, since he enters summoning-sick -- which in a deck whose modal win is turn 4 is most of his case. [+1 = animate_self_typed: he becomes a 5/5 creature until end of turn via animate_power/animate_toughness (the Mutavault params) plus Permanent::animated_printed_types, which is the flag that makes this a TYPED animation. THAT FLAG IS THE WHOLE POINT: the engine had encoded \"animated\" to MEAN \"has every creature type\" (CR 205.3b, Mutavault's own wording) at ~34 sites, so animating a planeswalker through the old machinery would have let all four Knight Exemplars pump a body that is a Human Soldier ALLY and not a Knight -- +4/+4 he is not entitled to, every point of it flattering the arm that plays him. Separating the two questions (\"is it a creature?\" vs \"does it have all creature types?\") is Permanent::AnimatedAllTypes(), now the ONE predicate every lord/haste/subtype-count site passes as its all_creature_types argument; is_animated alone still answers the first question, so Benalish Marshal's affects_all_creatures anthem DOES reach an animated Gideon while Knight Exemplar's Knight-only anthem does not. Default false and set only by a typed animation, so Mutavault and every deck that animates nothing are byte-identical. SUMMONING SICKNESS is handled by CanAttackFull, which already applied it to animated permanents correctly (CR 302.6 tracks control duration, not creature duration), so a Gideon animated the turn he lands cannot attack -- which is why +1 is deliberately ABSENT from the cast-turn activation table and is priced at zero there. \"Still a planeswalker\" is free: is_animated is orthogonal to printed types, so he keeps loyalty, legend-rule identity and his other abilities. Expires at both cleanup sites in lockstep (CR 514.2). [PARTIAL, both inert BY CONSTRUCTION rather than by omission: INDESTRUCTIBLE and \"prevent all damage dealt to him\" are in the unmodellable-protection class -- they need something that destroys or damages us, and the single passive opponent never attacks, blocks, casts or deals damage, so neither has a reachable application (the same argument Knight Exemplar's indestructible grant carries). His animated TOUGHNESS is also unmodelled -- nothing in the engine reads animate_toughness -- and that is inert AND safe: the zero-toughness state-based action gates on p.card.IsCreature(), the PRINTED type, so an animated Planeswalker (like an animated Land) is exempt from it and cannot die to having no toughness. Nothing can damage him either way.]]",
+   "template": "custom",
+   "parameters": {
+    "loyalty_start": 4,
+    "loyalty_abilities": [
+     {
+      "delta": 1,
+      "effect": "animate_self_typed"
+     },
+     {
+      "delta": 0,
+      "effect": "knight_ally_token_22"
+     },
+     {
+      "delta": -4,
+      "effect": "emblem_team_pump",
+      "amount": 1
+     }
+    ],
+    "animate_power": 5,
+    "animate_toughness": 5
+   }
+  },
+  {
    "name": "Basri, Tomorrow's Champion",
    "mana_cost": "{W}",
    "types": [

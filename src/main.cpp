@@ -5467,7 +5467,7 @@ void ClaudePlayHarness::InstallSideChannelChoosers(AIEngine& ai)
                         pw += DynamicBasePower(*pd, s, p.controller_index);
                         tf += DynamicBaseToughness(*pd, s, p.controller_index);
                     }
-                    const auto lb = ComputeLordBonus(p.card, s, p.controller_index, p.is_animated, &p);
+                    const auto lb = ComputeLordBonus(p.card, s, p.controller_index, p.AnimatedAllTypes(), &p);
                     pw += lb.first; tf += lb.second;
                     lbl += " (" + std::to_string(pw) + "/" + std::to_string(tf) + ")";
                 }

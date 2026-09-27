@@ -2972,7 +2972,7 @@ inline bool CreatureHasLifelink(const Permanent& creature, const GameState& stat
             if (d->params.affects_all_creatures) { return true; }
             // An animated land has every creature type (Mutavault), so any subtype lord
             // reaches it -- the same rule the P/T lord scans and HasHasteFromLords apply.
-            if (creature.is_animated && !d->params.subtypes_affected.empty()) { return true; }
+            if (creature.AnimatedAllTypes() && !d->params.subtypes_affected.empty()) { return true; }
             for (const std::string& sub : d->params.subtypes_affected)
             {
                 for (const std::string& cs : creature.card.m_subtypes)
@@ -3453,7 +3453,7 @@ inline std::pair<int,int> ComputeLordBonus(
             {
                 if (other.controller_index != controller_index) { continue; }
                 if (self != nullptr && &other == self) { continue; }   // "OTHER", by address
-                bool m = other.is_animated;                            // animated land = all types
+                bool m = other.AnimatedAllTypes();                            // animated land = all types
                 if (!m)
                 {
                     for (const std::string& cs : other.card.m_subtypes)
@@ -3530,7 +3530,7 @@ inline std::pair<int,int> ComputeLordBonus(
             {
                 if (other.controller_index != controller_index) { continue; }
                 bool other_matches = false;
-                if (other.is_animated && !ldef->params.subtypes_affected.empty())
+                if (other.AnimatedAllTypes() && !ldef->params.subtypes_affected.empty())
                 {
                     other_matches = true;
                 }
@@ -3565,6 +3565,24 @@ inline std::pair<int,int> ComputeLordBonus(
     {
         for (const Permanent& lord : battlefield) { process_lord(lord); }
     }
+
+    // EMBLEM anthem: "You get an emblem with 'Creatures you control get +1/+1'" (Gideon, Ally of
+    // Zendikar -4). Added here, in the ONE function every combat / eval / SBA path already routes
+    // through, for the same reason the conditional anthem below is: there is no permanent to find
+    // on the battlefield, so no amount of walking it can discover this bonus. An emblem is a PLAYER
+    // object (CR 114), which is why the count lives on Player.
+    //
+    // It deliberately mirrors an `affects_all_creatures` lord (Benalish Marshal) EXACTLY, including
+    // being unconditional within this function: like that branch, it does not itself re-check that
+    // the evaluated card is a creature, and so it inherits the callers' existing creature filtering
+    // rather than introducing a second, possibly-divergent copy of it. Keeping the emblem and the
+    // Marshal on one code path is what makes "the emblem behaves like an anthem" true by
+    // construction instead of by inspection.
+    //
+    // Self-inclusive and stacking, per CR 114.3 and the card: two emblems give +2/+2, and no player
+    // can remove either. Gated on nonzero, so every deck with no emblem source is byte-identical.
+    const int emblems = state.players[controller_index].emblem_team_pump;
+    if (emblems > 0) { pb += emblems; tb += emblems; }
 
     // CONDITIONAL anthem (Neheb, the Worthy: "As long as you have one or fewer cards in hand,
     // Minotaurs you control get +2/+0"). Deliberately NOT folded into process_lord above: the
@@ -3813,7 +3831,7 @@ inline bool CreatureHasDoubleStrike(const Permanent& creature, const GameState& 
     // exactly as correct as it was, and an empty one is still a proof about the lord scan alone.
     if (creature.temp_double_strike) { return true; }
     if (HasDoubleStrikeFromLords(creature.card, state.battlefield, creature.controller_index,
-                                 creature.is_animated, ds_idx))
+                                 creature.AnimatedAllTypes(), ds_idx))
     { return true; }
     if (HasDoubleStrikeFromEquipment(creature, state)) { return true; }   // Kor Duelist / Balan
 
@@ -4098,7 +4116,7 @@ inline bool CanTapNow(const Permanent& p, const std::vector<Permanent>& battlefi
     if (p.temp_haste) { return true; }
     // Goblin Tomb Raider's conditional haste (artifact controlled) lifts the {T} restriction too.
     if (HasConditionalSelfHaste(p.card, battlefield, p.controller_index)) { return true; }
-    if (HasHasteFromLords(p.card, battlefield, p.controller_index, p.is_animated,
+    if (HasHasteFromLords(p.card, battlefield, p.controller_index, p.AnimatedAllTypes(),
                           hs ? &hs->lords : nullptr))
     {
         // MTG_HASTE_TAP_STATS: how often a summoning-sick permanent is rescued by each haste
@@ -4132,7 +4150,7 @@ inline bool CanAttackFull(
     if (p.card.HasKeyword(Keyword::Haste))      { return true; }
     if (p.temp_haste)                           { return true; }
     if (HasConditionalSelfHaste(p.card, battlefield, controller_index)) { return true; }   // Tomb Raider
-    if (HasHasteFromLords(p.card, battlefield, controller_index, p.is_animated,
+    if (HasHasteFromLords(p.card, battlefield, controller_index, p.AnimatedAllTypes(),
                           hs ? &hs->lords : nullptr)) { return true; }
     return HasHasteFromEquip(p, battlefield, controller_index, hs ? &hs->equips : nullptr);
 }
@@ -4156,7 +4174,7 @@ inline bool CanAttackFull(
     // Goblin Tomb Raider: "as long as you control an artifact, ... has haste" -- evaluated AT
     // declare-attackers against the live board, in both worlds (this is the one legality gate).
     if (HasConditionalSelfHaste(p.card, battlefield, controller_index)) { return true; }
-    if (HasHasteFromLords(p.card, battlefield, controller_index, p.is_animated)) { return true; }
+    if (HasHasteFromLords(p.card, battlefield, controller_index, p.AnimatedAllTypes())) { return true; }
     return HasHasteFromEquip(p, battlefield, controller_index);
 }
 
@@ -4183,7 +4201,7 @@ inline int CountAttackTriggerLifeLoss(
         {
             for (const std::string& sub : def->params.subtypes_affected)
             {
-                bool matches = atk->is_animated;  // animated = all creature types
+                bool matches = atk->AnimatedAllTypes();  // animated = all creature types
                 if (!matches)
                 {
                     for (const std::string& cs : atk->card.m_subtypes)
@@ -4378,7 +4396,7 @@ inline void FireCreatureEnterWatchers(GameState& state, int entered_controller, 
             const Permanent& e = state.battlefield[entered_index];
             entered_power = e.EffectivePower()
                 + ComputeLordBonus(e.card, state, e.controller_index,
-                                   e.is_animated, &e).first;
+                                   e.AnimatedAllTypes(), &e).first;
         }
         return entered_power;
     };
@@ -4395,7 +4413,7 @@ inline void FireCreatureEnterWatchers(GameState& state, int entered_controller, 
     {
         const Permanent& e = state.battlefield[entered_index];
         return e.EffectiveToughness()
-            + ComputeLordBonus(e.card, state, e.controller_index, e.is_animated, &e).second;
+            + ComputeLordBonus(e.card, state, e.controller_index, e.AnimatedAllTypes(), &e).second;
     };
     // Tribal filter on the ENTERING creature (Angels: Bishop of Wings / Seraph Sanctuary
     // ["Angel"], Righteous Valkyrie ["Angel","Cleric"], Youthful Valkyrie ["Angel"]). Empty =
@@ -7678,6 +7696,11 @@ inline std::string LoyaltyAbilityText(const CardParams::LoyaltyAbilityParam& ab)
                                                   + std::to_string(ab.amount) + "/+"
                                                   + std::to_string(ab.amount)) :
         ab.effect == "angel_token_44"          ? "create a 4/4 Angel with flying and vigilance" :
+        ab.effect == "animate_self_typed"      ? "becomes a creature until end of turn" :
+        ab.effect == "knight_ally_token_22"    ? "create a 2/2 Knight Ally" :
+        ab.effect == "emblem_team_pump"        ? ("emblem: creatures you control get +"
+                                                  + std::to_string(ab.amount) + "/+"
+                                                  + std::to_string(ab.amount)) :
         ab.effect == "emblem_damage_floor"     ? "emblem: damage can't reduce your life below 1" :
         ab.effect == "exile_all_opponent_artifacts_creatures"
                                                ? ("at " + std::to_string(ab.amount)
@@ -7911,6 +7934,94 @@ inline void ApplyLoyaltyAbility(GameState& state, int controller, int walker_id,
         // is never a reason to hold a blocker back); FLYING is populated and NOT inert -- Serra's
         // own +2 reads it.
         CreateToken(state, controller, 4, 4, {"Angel"}, "W", {"Flying", "Vigilance"});
+    }
+    else if (ab.effect == "animate_self_typed")
+    {
+        // Gideon, Ally of Zendikar +1: "Until end of turn, Gideon becomes a 5/5 Human Soldier Ally
+        // creature with indestructible that's still a planeswalker. Prevent all damage that would be
+        // dealt to him this turn."
+        //
+        // The BODY is the whole modelled content, and it is a real one: a 5/5 attacker, which on a
+        // lethal turn is the last five-to-seven damage. Both riders are in the unmodellable-protection
+        // class against a passive opponent -- indestructible and damage prevention need something that
+        // destroys or damages us, and nothing here does -- so they are inert by construction rather
+        // than by omission (the same argument Knight Exemplar's grant carries).
+        //
+        // P/T comes from animate_power / animate_toughness, the Mutavault params, added at the
+        // existing `if (animated)` sites. `animated_printed_types` is what makes this a TYPED
+        // animation: he is a Human Soldier Ally, NOT every creature type, so Knight Exemplar's
+        // Knight-only anthem must not reach him while Benalish Marshal's affects_all_creatures anthem
+        // still does. Without that flag four Exemplars would hand him +4/+4 he is not entitled to --
+        // see Permanent::animated_printed_types.
+        //
+        // "STILL A PLANESWALKER" is free here: is_animated is orthogonal to the card's printed types,
+        // so he keeps his loyalty, his legend-rule identity and his other abilities. It also means the
+        // zero-toughness state-based action cannot touch him -- that check gates on
+        // `p.card.IsCreature()`, the PRINTED type -- which is why nothing reads animate_toughness and
+        // why his toughness being unmodelled is inert rather than fatal (the Mutavault property).
+        //
+        // SUMMONING SICKNESS is handled by CanAttackFull, which applies it to animated permanents
+        // correctly, so a Gideon animated the turn he lands cannot attack (CR 302.6 -- control
+        // duration, not creature duration). Expires at both cleanup sites in lockstep.
+        // By INDEX (`wi`, resolved at the top of this function), which is the walker's own battlefield
+        // slot -- not by a name or definition match, since per-copy identity rides the PERMANENT's
+        // card.m_number and two Gideons must animate independently.
+        state.battlefield[wi].is_animated            = true;
+        state.battlefield[wi].animated_printed_types = true;
+        if (g_play_event_sink && !g_tap_speculating)
+        {
+            EmitPlayEvent(state.turn_number, "ability",
+                          d->card.m_name.str() + " +" + std::to_string(ab.delta)
+                          + ": becomes a "
+                          + std::to_string(d->params.animate_power) + "/"
+                          + std::to_string(d->params.animate_toughness)
+                          + " creature until end of turn");
+        }
+    }
+    else if (ab.effect == "knight_ally_token_22")
+    {
+        // Gideon, Ally of Zendikar 0: "Create a 2/2 white Knight Ally creature token." Routed
+        // through the SHARED CreateToken for the reason angel_token_44 documents above (the local
+        // make_token lambda has no white-only colour path), and it ends in FireEtbWatchers, the
+        // universal enter cascade.
+        //
+        // THE KNIGHT SUBTYPE IS THE PAYLOAD, and in a Knight deck it is worth more than the body:
+        // Knight Exemplar's "other Knight creatures you control get +1/+1" and its indestructible
+        // grant both reach this token, so with Exemplars out a 2/2 arrives as a 3/3 or bigger, and
+        // Benalish Marshal's all-creatures anthem stacks on top. ALLY is carried for faithfulness
+        // and is INERT in the current card pool -- no card in cards.json is an Ally lord or counts
+        // Allies (Zada, Hedron Grinder is the pool's only other Ally and reads nothing) -- but it
+        // is stamped rather than dropped because the angel_token_44 lesson is precisely that a
+        // subtype left off a token goes on to be load-bearing for a card added later.
+        //
+        // A 0 COST is not free in context: it is the loyalty ability for the turn (one per walker
+        // per turn), so every token competes with the -4 emblem, and the search prices that.
+        CreateToken(state, controller, 2, 2, {"Knight", "Ally"}, "W", {});
+    }
+    else if (ab.effect == "emblem_team_pump")
+    {
+        // Gideon, Ally of Zendikar -4: "You get an emblem with 'Creatures you control get +1/+1'."
+        //
+        // UNLIKE Serra the Benevolent's emblem below, this one is NOT inert and could not be
+        // implemented as a no-op: it is an anthem on our own board against an opponent that we are
+        // racing, so it converts directly into damage every attack step for the rest of the game.
+        // It is also the only one of Gideon's three abilities that does anything on the turn he
+        // lands (he enters summoning-sick, so +1 cannot attack and 0's token cannot either), which
+        // in a deck whose modal win is turn 4 is most of his case.
+        //
+        // Held on Player, not as a battlefield anthem permanent -- see Player::emblem_team_pump for
+        // why (CR 114: an emblem is not a permanent) -- and read by ComputeLordBonus, so it needs no
+        // per-reader plumbing here. The loyalty COST is paid above this branch and the loyalty-death
+        // check at the tail bins Gideon, which is correct and is the trade the card offers: -4 from
+        // exactly 4 kills him, so the emblem costs the walker and every future token.
+        state.players[controller].emblem_team_pump += ab.amount;
+        if (g_play_event_sink && !g_tap_speculating)
+        {
+            EmitPlayEvent(state.turn_number, "ability",
+                          d->card.m_name.str() + " " + std::to_string(ab.delta)
+                          + ": emblem -- creatures you control get +"
+                          + std::to_string(ab.amount) + "/+" + std::to_string(ab.amount));
+        }
     }
     else if (ab.effect == "emblem_damage_floor")
     {
@@ -8281,7 +8392,7 @@ inline int EquipGatePowerOf(const Permanent& host, const GameState& state)
 {
     int pw = host.EffectivePower()
            + ComputeLordBonus(host.card, state, host.controller_index,
-                              host.is_animated, &host).first
+                              host.AnimatedAllTypes(), &host).first
            + AuraBonusFor(host, state).first
            + EquipBonusFor(host, state).first;
     return pw;
@@ -9008,7 +9119,7 @@ inline std::vector<int> FlingVictimCandidates(const GameState& state, int contro
         if (v.controller_index != controller || !v.card.IsCreature()) { continue; }
         if (v.card.m_number == source_id) { continue; }          // "ANOTHER creature"
         int pw = v.EffectivePower()
-               + ComputeLordBonus(v.card, state, v.controller_index, v.is_animated, &v).first;
+               + ComputeLordBonus(v.card, state, v.controller_index, v.AnimatedAllTypes(), &v).first;
         if (pw < 0) { pw = 0; }
         int dmg = pw;
         if (!double_sub.empty() && CardHasSubtype(v.card, double_sub)) { dmg *= 2; }
@@ -9115,7 +9226,7 @@ inline void FireAttackSacFling(GameState& state, int controller,
 
         // LAST-KNOWN INFORMATION: read power BEFORE the erase (CR 608.2 + the card's past tense).
         int pw = v.EffectivePower()
-               + ComputeLordBonus(v.card, state, v.controller_index, v.is_animated, &v).first;
+               + ComputeLordBonus(v.card, state, v.controller_index, v.AnimatedAllTypes(), &v).first;
         if (pw < 0) { pw = 0; }
         int dmg = pw;
         const bool doubled = !double_sub.empty() && CardHasSubtype(v.card, double_sub);
@@ -9757,7 +9868,7 @@ inline int ApplyActivatePump(GameState& state, int controller, int source_id, in
                 if (!q.card.IsCreature() && !q.is_animated) { continue; }
                 bool m = sd->params.team_pump_subtypes.empty();
                 for (const std::string& sub : sd->params.team_pump_subtypes)
-                { if (q.is_animated || CardHasSubtype(q.card, sub)) { m = true; break; } }
+                { if (q.AnimatedAllTypes() || CardHasSubtype(q.card, sub)) { m = true; break; } }
                 if (!m) { continue; }
                 q.temp_power_bonus += sd->params.team_pump_power;
                 if (sd->params.team_pump_grants_haste) { q.temp_haste = true; }
@@ -9879,7 +9990,7 @@ inline void SweepDeadFadeTokens(GameState& state, int source_number)
         if (q.created_by_number != source_number) { continue; }
         const BoardSources* qs = srcs(q.controller_index);
         const int tough = q.EffectiveToughness()
-                        + ComputeLordBonus(q.card, state, q.controller_index, q.is_animated, &q,
+                        + ComputeLordBonus(q.card, state, q.controller_index, q.AnimatedAllTypes(), &q,
                                            qs ? &qs->lords   : nullptr,
                                            qs ? &qs->anthems : nullptr).second
                         + AuraBonusFor(q, state,  qs ? &qs->attached : nullptr).second
@@ -10055,7 +10166,7 @@ inline void ShrinkCreatureUntilEot(GameState& state, int target_id, int dp, int 
     t.temp_tough_bonus += dt;
 
     const int tough = t.EffectiveToughness()
-                    + ComputeLordBonus(t.card, state, t.controller_index, t.is_animated, &t).second
+                    + ComputeLordBonus(t.card, state, t.controller_index, t.AnimatedAllTypes(), &t).second
                     + AuraBonusFor(t, state).second
                     + EquipBonusFor(t, state).second;
     if (tough > 0) { return; }
@@ -10295,7 +10406,7 @@ inline void ApplySacCreatureOutlet(GameState& state, int controller, int source_
                 // The SOURCE is pushed behind its own tier: killing the outlet ends the engine.
                 const int tough = q.EffectiveToughness()
                                 + ComputeLordBonus(q.card, state, q.controller_index,
-                                                   q.is_animated, &q,
+                                                   q.AnimatedAllTypes(), &q,
                                                    qs ? &qs->lords    : nullptr,
                                                    qs ? &qs->anthems  : nullptr).second
                                 + AuraBonusFor(q, state,  qs ? &qs->attached : nullptr).second
@@ -10791,7 +10902,7 @@ inline void FireUtvaraAttackTokens(GameState& state, int controller,
         for (const Permanent* atk : attackers)
         {
             if (sdef->params.attack_token_requires_subtypes.empty()) { ++matching; continue; }
-            bool m = atk->is_animated;   // animated land = every creature type
+            bool m = atk->AnimatedAllTypes();   // animated land = every creature type
             for (const std::string& req : sdef->params.attack_token_requires_subtypes)
             {
                 if (m) { break; }
@@ -10862,7 +10973,7 @@ inline void FireCombatDamageTokens(GameState& state, int controller,
             if (idx < 0 || idx >= bf_size) { continue; }
             const Permanent& atk = state.battlefield[static_cast<std::size_t>(idx)];
             bool m = sdef->params.combat_damage_watch_subtypes.empty()
-                  || atk.is_animated;   // animated land = every creature type
+                  || atk.AnimatedAllTypes();   // animated land = every creature type
             for (const std::string& req : sdef->params.combat_damage_watch_subtypes)
             {
                 if (m) { break; }
@@ -10963,7 +11074,7 @@ inline void ApplyAttackSelfPumps(GameState& state, int controller,
             {
                 if (oidx == idx || oidx < 0 || oidx >= bf_size) { continue; }   // "each OTHER"
                 const Permanent& other = state.battlefield[oidx];
-                bool m = other.is_animated;   // animated land = every creature type
+                bool m = other.AnimatedAllTypes();   // animated land = every creature type
                 for (const std::string& sub : p.subtypes_affected)
                 {
                     if (m) { break; }
@@ -10986,7 +11097,7 @@ inline void ApplyAttackSelfPumps(GameState& state, int controller,
                 if (j == idx) { continue; }                            // "each OTHER"
                 const Permanent& q = state.battlefield[j];
                 if (q.controller_index != controller) { continue; }
-                if (q.is_animated
+                if (q.AnimatedAllTypes()
                     || CardHasSubtype(q.card, p.attack_self_pump_per_other_subtype))
                 { ++others; }
             }
@@ -11016,7 +11127,7 @@ inline void ApplyAttackSelfPumps(GameState& state, int controller,
                 if (a.controller_index != controller) { continue; }
                 bool m = sd->params.subtypes_affected.empty();   // empty = every attacker
                 for (const std::string& sub : sd->params.subtypes_affected)
-                { if (a.is_animated || CardHasSubtype(a.card, sub)) { m = true; break; } }
+                { if (a.AnimatedAllTypes() || CardHasSubtype(a.card, sub)) { m = true; break; } }
                 if (m) { a.temp_power_bonus += sd->params.attack_pump_matching_power; }
             }
         }
@@ -11880,7 +11991,7 @@ inline int ApplyFirebreathing(GameState& state, int controller,
                 if (a.controller_index != controller) { continue; }
                 bool m = d->params.team_pump_subtypes.empty();
                 for (const std::string& sub : d->params.team_pump_subtypes)
-                { if (a.is_animated || CardHasSubtype(a.card, sub)) { m = true; break; } }
+                { if (a.AnimatedAllTypes() || CardHasSubtype(a.card, sub)) { m = true; break; } }
                 if (m) { ++matching; }
             }
             if (matching <= 0) { continue; }
@@ -11985,7 +12096,7 @@ inline int ApplyFirebreathing(GameState& state, int controller,
                 if (a.controller_index != controller) { continue; }
                 bool m = d->params.team_pump_subtypes.empty();
                 for (const std::string& sub : d->params.team_pump_subtypes)
-                { if (a.is_animated || CardHasSubtype(a.card, sub)) { m = true; break; } }
+                { if (a.AnimatedAllTypes() || CardHasSubtype(a.card, sub)) { m = true; break; } }
                 if (m) { a.temp_power_bonus += d->params.team_pump_power; }
             }
         }
@@ -12842,7 +12953,7 @@ inline int DynamicBaseToughness(const CardDefinition& def, const GameState& stat
 inline int LethalToughness(const Permanent& p, const GameState& state)
 {
     int t = p.EffectiveToughness();
-    t += ComputeLordBonus(p.card, state, p.controller_index, p.is_animated, &p).second;
+    t += ComputeLordBonus(p.card, state, p.controller_index, p.AnimatedAllTypes(), &p).second;
     const CardDefinition* cd = CardDatabase::Instance().LookupCached(p.card);
     if (cd) { t += DynamicBaseToughness(*cd, state, p.controller_index); }
     t += EquipBonusFor(p, state).second;

@@ -803,6 +803,7 @@ void GameEngine::CleanupStep(GameState& state)
         p.temp_lifelink         = false;   // Heliod's "gains lifelink until end of turn" expires
         p.temp_double_strike    = false;   // Valiant Knight's team "gain double strike until EOT"
         p.is_animated           = false;
+        p.animated_printed_types = false;   // qualifies the animation, so it expires with it
     }
 
     // Storage-counter lands (Dwarven Hold, Mercadian Bazaar): a storage land left UNTAPPED this turn

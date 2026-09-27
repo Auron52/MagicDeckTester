@@ -244,6 +244,25 @@ struct Permanent
     bool      gained_control_this_turn = false;
     bool      marked_for_destruction = false;
     bool      is_animated          = false; // land animated as a creature (e.g. Mutavault); reset each cleanup
+    // Does this animation confer the types its EFFECT NAMED, rather than every creature type?
+    //
+    // Mutavault's ability reads "becomes a 2/2 creature with all creature types" (CR 205.3b), and the
+    // engine encoded that meaning INTO `is_animated` itself: ~30 sites treat an animated permanent as
+    // matching every subtype lord. Gideon, Ally of Zendikar's +1 breaks that equivalence -- he becomes
+    // a 5/5 Human Soldier ALLY, so a Knight lord must NOT reach him. In a Knight deck that difference
+    // is worth +4/+4 he is not entitled to (four Knight Exemplars), all of it flattering the arm that
+    // plays him, which is exactly the measurement bias a disclosure is supposed to prevent.
+    //
+    // DEFAULT FALSE, and set ONLY by a typed animation, so every all-types read becomes
+    // `is_animated && !animated_printed_types` and is byte-identical for Mutavault and for every deck
+    // that animates nothing. The two existing animation sites (ManaPayment's greedy pass and
+    // TurnSolver's human-play AnimateLand) therefore need no change at all -- which is the point of
+    // choosing this polarity over a default-true "all types" flag.
+    //
+    // Read ONLY through AnimatedAllTypes() below; never test it directly at a lord site. Reset at both
+    // cleanup sites in lockstep with is_animated (CR 514.2), since it qualifies an until-EOT state.
+    // Beside is_animated in the 2026-09-25 cache layout.
+    bool      animated_printed_types = false;
     bool      temp_haste           = false; // "gains haste until end of turn" (Expedite, incl. its
                                             // Zada/Mirrorwing copies). Read by CanAttackFull AND
                                             // CanTapNow (haste lifts the {T} restriction too, CR
@@ -459,6 +478,18 @@ struct Permanent
 
     int  EffectivePower()     const;
     int  EffectiveToughness() const;
+
+    // Does this permanent currently have EVERY creature type? True only for a Mutavault-style land
+    // animation (CR 205.3b, "with all creature types"), which is what lets ANY subtype lord reach it.
+    // False for a typed animation (Gideon, Ally of Zendikar's +1 -> a Human Soldier Ally): that is a
+    // creature, and an affects_all_creatures anthem like Benalish Marshal still pumps it, but a
+    // Knight-only or Sliver-only lord must not.
+    //
+    // THE ONE PREDICATE for that question -- every lord/haste/count site passes this as its
+    // `all_creature_types` argument. Do not re-derive it from is_animated inline: `is_animated` alone
+    // is the older, conflated meaning, and the whole point of animated_printed_types is that the two
+    // questions ("is it a creature?" and "does it have all creature types?") are no longer the same.
+    bool AnimatedAllTypes() const { return is_animated && !animated_printed_types; }
 
     // A permanent can attack if it is an untapped creature (or animated land) without
     // Defender that is not summoning sick (CR 302.6, CR 508.1).

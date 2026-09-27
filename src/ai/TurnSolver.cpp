@@ -496,7 +496,9 @@ inline uint64_t FungibilityKey(const Permanent& p)
          | (p.is_animated ? 1024ull : 0ull)
          | (p.is_token ? 2048ull : 0ull)
          | (p.echo_resolved ? 4096ull : 0ull)
-         | (p.temp_double_strike ? 8192ull : 0ull));   // Valiant Knight until-EOT team grant
+         | (p.temp_double_strike ? 8192ull : 0ull)     // Valiant Knight until-EOT team grant
+         | (p.skip_next_untap ? 16384ull : 0ull)       // EXERT (CR 701.38): will miss its next untap
+         | (p.animated_printed_types ? 32768ull : 0ull));  // typed animation, NOT all creature types
     // Fresh-hold exemption (MTG_ETB_TREASURE_SPEND): an exempt fresh Treasure pays this turn, a
     // held one does not, so they are not fungible. Mixed only when set -> every other key unchanged.
     if (p.fresh_hold_exempt) { Mix(h, 0xF4E5F4E5ull); }
@@ -6925,7 +6927,7 @@ static std::vector<AttackingManaSource> CollectAttackingManaSources(const GameSt
         if (!ResolveProvider(state).AttackWith(state, p)) { continue; }
 
         const bool animated = p.is_animated;
-        auto [lord_pb, lord_tb] = ComputeLordBonus(p.card, state, active, animated, &p);
+        auto [lord_pb, lord_tb] = ComputeLordBonus(p.card, state, active, p.AnimatedAllTypes(), &p);
         (void)lord_tb;
         // The single shared oracle (SpellEffects.h); mirrors ResolveCombatDamage exactly. No
         // prefilter here -- this function has no GatherBoardSources call of its own.
@@ -7006,7 +7008,7 @@ static int PendingAttackDamage(const GameState& state)
         if (!ResolveProvider(state).AttackWith(state, p)) { continue; }
         bool animated = p.is_animated;
         auto [lord_pb, lord_tb] = ComputeLordBonus(
-            p.card, state, active, animated, &p, &bs.lords, &bs.anthems);
+            p.card, state, active, p.AnimatedAllTypes(), &p, &bs.lords, &bs.anthems);
         // The single shared oracle (SpellEffects.h); mirrors ResolveCombatDamage exactly.
         const bool ds = CreatureHasDoubleStrike(p, state, &bs.ds);
         int base_pw = p.EffectivePower() + lord_pb;
@@ -18254,6 +18256,28 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
                     else if (ab.effect == "face_damage")                    { extra = ab.amount * DMG; }
                     else if (ab.effect == "lifegain_creatures_plus_walkers") { extra = DMG; }
                     else if (ab.effect == "pridemate_token")                { extra = 2 * DMG; }
+                    else if (ab.effect == "knight_ally_token_22")           { extra = 2 * DMG; }
+                    // animate_self_typed is deliberately ABSENT from this cast-turn table: the walker
+                    // entered this turn, so CanAttackFull correctly refuses the attack (CR 302.6) and
+                    // animating him on the cast turn is worth exactly nothing. Falling through to the
+                    // `continue` below is the right answer, not an omission.
+                    else if (ab.effect == "emblem_team_pump")
+                    {
+                        // Gideon, Ally of Zendikar -4. The only entry in this table that is NOT a
+                        // constant, and it cannot be one: an anthem is worth nothing on an empty
+                        // board and a great deal on a wide one, so a fixed number would misprice the
+                        // ability in both directions and, under a budget, could prune the right line
+                        // before the search ever rolls it out. Counted directly instead -- +amount
+                        // power on each creature we control is that much more damage per attack step,
+                        // every step from here on, since the emblem is never lost.
+                        int bodies = 0;
+                        for (const Permanent& q : state.battlefield)
+                        {
+                            if (q.controller_index != state.active_player_index) { continue; }
+                            if (q.card.IsCreature() || q.is_animated)           { ++bodies; }
+                        }
+                        extra = ab.amount * DMG * bodies;
+                    }
                     else { continue; }   // targeted / value-gated abilities: not a cast variant
                     Action v = base;
                     v.loyalty_ability = li;
@@ -19418,6 +19442,72 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
                     }
                     ev = 4 * DMG * std::max(0, ExpectedAttacks(state) - 1) + wardens * recip * DMG;
                     if (ev <= 0) { ev = 1; }
+                }
+                else if (ab.effect == "animate_self_typed")
+                {
+                    // Gideon, Ally of Zendikar +1: he becomes a 5/5 and can attack THIS turn -- but
+                    // only if he has been under our control since the turn began. Priced as the body's
+                    // damage for one attack step, because the animation expires at cleanup, which is
+                    // what distinguishes it from the token (a permanent body) and the emblem (a
+                    // permanent anthem). Worth ZERO on the turn he lands, and the summoning-sickness
+                    // test is the same shared predicate combat uses, so the estimate cannot disagree
+                    // with what declare-attackers will actually allow.
+                    //
+                    // The lord bonus IS counted here, unlike the token branch, because the body
+                    // already exists as a permanent and ComputeLordBonus can price it directly -- and
+                    // it matters: Benalish Marshal's all-creatures anthem reaches an animated Gideon
+                    // even though Knight Exemplar's Knight-only anthem does not (AnimatedAllTypes()).
+                    ev = 0;
+                    if (!p.entered_this_turn && !p.gained_control_this_turn && !p.tapped)
+                    {
+                        const int pw = pd->params.animate_power
+                                     + ComputeLordBonus(p.card, state, state.active_player_index,
+                                                        /*all_creature_types=*/false, &p).first;
+                        ev = std::max(0, pw) * DMG;
+                    }
+                    if (ev <= 0) { ev = 1; }   // legal, but worth nothing the turn he lands
+                }
+                else if (ab.effect == "knight_ally_token_22")
+                {
+                    // Gideon, Ally of Zendikar 0: a 2/2 white Knight Ally. Scored with exactly the
+                    // shape angel_token_44 above uses -- its damage over the remaining attack steps,
+                    // less the one it cannot make (it enters summoning-sick) -- so the two token
+                    // makers are priced on one scale.
+                    //
+                    // CONSERVATIVE BY CONSTRUCTION, and deliberately so: the token is priced as a
+                    // bare 2/2 even though in the deck this card is for it arrives as a 3/3 or bigger
+                    // (Knight Exemplar's Knight-only anthem and Benalish Marshal's all-creature one
+                    // both reach it). Pricing the lord bonus would mean building the token's Card here
+                    // to hand to ComputeLordBonus, which is real machinery for what is only an
+                    // ORDERING score -- the rollout computes the true value either way. So this
+                    // under-ranks the ability slightly and never over-ranks it.
+                    ev = 2 * DMG * std::max(0, ExpectedAttacks(state) - 1);
+                    if (ev <= 0) { ev = 1; }   // still legal, still leaves the walker at full loyalty
+                }
+                else if (ab.effect == "emblem_team_pump")
+                {
+                    // Gideon, Ally of Zendikar -4: "Creatures you control get +1/+1", permanently.
+                    // NOT the value-gated no-op its emblem_damage_floor neighbour below is -- this one
+                    // is an anthem on a board we are racing with, so it converts straight into damage.
+                    //
+                    // Scored on the same damage scale as the token branch above so the two compete
+                    // honestly: +amount power on each body we control, for every remaining attack
+                    // step, and never lost once gained. Also conservative, in two ways worth naming --
+                    // it counts only the creatures already out (the emblem pumps every future one too,
+                    // including the tokens Worthy Knight and Adeline go on to make), and it does not
+                    // try to price the walker's own death here, which the -4 causes from a starting
+                    // loyalty of exactly 4. That cost is real and the rollout charges it: the loyalty
+                    // is paid in ApplyLoyaltyAbility and the loyalty-death check bins Gideon, so every
+                    // token he would have made later is forgone in the simulated line rather than in
+                    // this estimate.
+                    int bodies = 0;
+                    for (const Permanent& q : state.battlefield)
+                    {
+                        if (q.controller_index != state.active_player_index) { continue; }
+                        if (q.card.IsCreature() || q.is_animated)           { ++bodies; }
+                    }
+                    ev = ab.amount * DMG * bodies * std::max(0, ExpectedAttacks(state));
+                    if (ev <= 0) { ev = 1; }   // legal on an empty board, just worth nothing yet
                 }
                 else if (ab.effect == "emblem_damage_floor")
                 {
@@ -20965,7 +21055,7 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
                         if (!q.card.IsCreature() && !q.is_animated) { continue; }
                         bool m = sd->params.team_pump_subtypes.empty();
                         for (const std::string& sub : sd->params.team_pump_subtypes)
-                        { if (q.is_animated || CardHasSubtype(q.card, sub)) { m = true; break; } }
+                        { if (q.AnimatedAllTypes() || CardHasSubtype(q.card, sub)) { m = true; break; } }
                         if (m) { any_beneficiary = true; break; }
                     }
                 }
@@ -32298,6 +32388,16 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
                 CreateToken(state, state.active_player_index,
                             td->params.tap_token_power, td->params.tap_token_toughness,
                             td->params.tap_token_subtypes);
+                // EXERT (CR 701.38, Basri, Tomorrow's Champion): the cost exerts the source, so it
+                // does not untap during its controller's next untap step. Set here as well as in
+                // ActivateTapTokensShared because these are two DIFFERENT routes to the same
+                // ability, not one shared path -- that function stands down under HumanPlayActive()
+                // and this branch is the human/viewer route. Missing it here was a real gap: the
+                // autonomous greedy pass now declines an exert cost by heuristic
+                // (MTG_GREEDY_EXERT_TOKEN), which makes THIS the only route the ability is normally
+                // reached by, i.e. exactly where an unmodelled exert would be a free untap.
+                // Index access, not `p`: CreateToken just appended to the battlefield.
+                if (td->params.tap_token_exerts) { state.battlefield[pi].skip_next_untap = true; }
                 break;
             }
         }
@@ -33238,6 +33338,7 @@ static bool SimulateEndAndStartNextTurn(GameState& state)
         p.temp_lifelink         = false;   // Heliod's until-EOT lifelink grant expires (same lockstep)
         p.temp_double_strike    = false;   // Valiant Knight's until-EOT team grant expires (CR 514.2)
         p.is_animated           = false;
+        p.animated_printed_types = false;   // qualifies the animation, so it expires with it (lockstep)
     }
 
     // Storage-counter lands (Dwarven Hold, Mercadian Bazaar): bank +1 on any storage land left UNTAPPED
@@ -42305,6 +42406,12 @@ static TranspositionTable::Key BuildSimKey(const GameState& state, int depth, in
         // that differ in it have genuinely different futures (one doubles its tokens every end step,
         // the other does not). Folded only when TRUE -> byte-identical for every non-ascend deck.
         if (p.has_city_blessing) { Fold(k, 0x0CB1E); }
+        // Emblem anthem count (Gideon, Ally of Zendikar -4). Same shape as the city's blessing above
+        // and load-bearing rather than cosmetic: it raises the power of every creature we control for
+        // the rest of the game, so two states differing only in it reach lethal on different turns.
+        // Tagged and gated on nonzero -> byte-identical for every deck with no emblem source.
+        if (p.emblem_team_pump > 0)
+        { Fold(k, 0xE3B1E); Fold(k, static_cast<uint64_t>(p.emblem_team_pump)); }
         // Hollow One cycle/discard-count: identical shape and reasoning again -- future-determining
         // only for a SAME-TURN cast that reads it, gated on the hand actually holding a
         // cost_less_per_cycle_or_discard card AND the count being nonzero, so every deck without
@@ -42499,6 +42606,19 @@ static TranspositionTable::Key BuildSimKey(const GameState& state, int depth, in
         // (a rollout's later upkeeps gift age x tokens), so two states differing only in age must
         // not share a TT entry. Folded ONLY when nonzero, so every deck without a cumulative-upkeep
         // permanent keeps the EXACT prior key (byte-identical).
+        // EXERT (CR 701.38, Basri, Tomorrow's Champion): "it doesn't untap during your next untap
+        // step". FUTURE-DETERMINING in exactly the way this section's other gated folds are -- an
+        // exerted creature is one attack poorer NEXT turn, so a state holding the flag and one
+        // without it play out differently and must not share a TT entry. It was MISSING when exert
+        // was first implemented (the executor and rollout both honoured the flag, so play was
+        // right, but the memo could merge the two) -- which meant the search could not see the cost
+        // of the very ability it was choosing to activate. Folded ONLY when set, so every deck with
+        // no exert source keeps the EXACT prior key (byte-identical).
+        if (perm.skip_next_untap) { Fold(tk, 0xE7E27); }
+        // A TYPED animation (Gideon's +1) is a materially different board from a Mutavault-style one:
+        // the same is_animated bit, but no subtype lord reaches it. Folded only when set, so every
+        // deck whose only animation is all-types keeps the EXACT prior key (byte-identical).
+        if (perm.animated_printed_types) { Fold(tk, 0xA71ED); }
         if (perm.age_counters > 0)
         { Fold(tk, 0xA6E0); Fold(tk, static_cast<uint64_t>(perm.age_counters)); }
         // §2a fresh-hold exemption (MTG_ETB_TREASURE_SPEND): a fresh Treasure that PAYS this turn

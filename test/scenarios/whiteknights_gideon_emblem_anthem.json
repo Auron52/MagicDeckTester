@@ -1,0 +1,29 @@
+{
+  "deck": "decks/WhiteKnights/WhiteKnights.cod",
+  "turn": 6,
+  "on_the_play": true,
+  "active_life": 20,
+  "opponent_life": 18,
+  "library_filler": "Plains",
+  "library_size": 30,
+  "depth": 3,
+  "budget_ms": 50,
+  "max_turns": 10,
+  "_comment": "WhiteKnights (2026-09-27). GIDEON, ALLY OF ZENDIKAR -4: 'You get an emblem with \"Creatures you control get +1/+1.\"' This fixture exists because the emblem is the ONLY one of his three abilities that needs new engine state -- Player::emblem_team_pump, read in ComputeLordBonus -- and because it is the only one that does anything on the turn he lands. Board: 4 untapped Plains and 6 Venerable Knight (a blank 2/1 in this engine: vanilla_creature, no keywords, no parameters), none summoning sick. Hand: Gideon alone. WHY THIS BOARD IS THE DISCRIMINATOR: Gideon costs {2}{W}{W} and enters summoning-sick, so on the turn he is cast +1 is worth zero (CanAttackFull refuses the attack, CR 302.6) and 0's token cannot attack either -- the emblem is the only ability that adds damage this turn. With the emblem the 6 Knights are 3/2 and attack for exactly 18, which is lethal from 18; without it they attack for 12, leaving the opponent on 6 and the win one turn later. So expect_win_turn 6 vs 7 separates 'the emblem applies to every creature I control' from 'it does nothing', and it also pins the COUNT -- a bonus applied to only the creatures present at some other moment, or to one creature, would not reach 18. The -4 from exactly 4 loyalty also kills Gideon, which is correct and is the trade the card offers; nothing else on this board can kill him, since the opponent is passive. Reachable two ways, so this is not a test of one code path only: the cast-carried variant (SearchesWalkerCastActivation, which prices emblem_team_pump by creature count) and breakpoint site 9's post-entry activation.",
+  "battlefield": [
+    { "name": "Plains" },
+    { "name": "Plains" },
+    { "name": "Plains" },
+    { "name": "Plains" },
+    { "name": "Venerable Knight" },
+    { "name": "Venerable Knight" },
+    { "name": "Venerable Knight" },
+    { "name": "Venerable Knight" },
+    { "name": "Venerable Knight" },
+    { "name": "Venerable Knight" }
+  ],
+  "hand": [
+    "Gideon, Ally of Zendikar"
+  ],
+  "expect_win_turn": 6
+}

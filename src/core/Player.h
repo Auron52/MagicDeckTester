@@ -62,6 +62,23 @@ struct Player
     // into the state keys only when true, so it is false forever -- and byte-identical -- for every
     // deck with no ascend card.
     bool has_city_blessing         = false;
+    // EMBLEMS granting "Creatures you control get +1/+1" (CR 114; Gideon, Ally of Zendikar -4).
+    // Held as a COUNT of stacked emblems rather than a bool: two Gideons each ultimating give
+    // +2/+2, and CR 114.3 makes an emblem a permanent-for-the-rest-of-the-game object with no
+    // legend rule and no way for either player to remove it.
+    //
+    // A PLAYER resource, not a permanent, and that is the whole reason it lives here: an emblem is
+    // NOT on the battlefield, so it cannot be modelled as an anthem permanent (a fake battlefield
+    // entry would be miscounted by every "permanents you control" reader and would render in the
+    // viewer as a card that does not exist). It follows has_city_blessing above exactly: gained
+    // once, NEVER reset at untap and NEVER lost -- unlike Benalish Marshal, whose anthem dies with
+    // the body, and unlike temp_power_bonus, which cleanup clears.
+    //
+    // Read in ONE place -- ComputeLordBonus -- which every combat, eval and SBA path already routes
+    // through (29 call sites, both worlds), so the two worlds stay in lockstep by construction
+    // instead of by an audit of the readers. Folded into the state keys only when nonzero, so it is
+    // 0 forever -- and byte-identical -- for every deck with no emblem source.
+    int emblem_team_pump           = 0;
     int poison_counters            = 0;
     // Rad counters (Mariposa Military Base: "You may have this land enter tapped. If you do, you
     // get two rad counters"). A PLAYER resource, not a permanent's. At the beginning of this

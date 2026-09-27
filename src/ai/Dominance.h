@@ -177,6 +177,18 @@ static_assert(std::is_trivially_copyable_v<Permanent>,
 // untap and never lost. Monotone does NOT make it droppable: the direction is "having it is at
 // least as good", but dominance here is an EQUALITY key, not an ordering, so two states differing
 // in it must not be merged. Gating the fold on true keeps every non-ascend deck byte-identical.
+// 200 -> 200 (2026-09-27): Player gained `emblem_team_pump` (int, the count of "Creatures you
+// control get +1/+1" emblems -- Gideon, Ally of Zendikar -4) and THE SIZE DID NOT MOVE: the int
+// landed in the 3+ bytes of padding that already followed has_city_blessing, so this tripwire did
+// NOT fire. That is the same blind spot the scripted_tectonic_mode entry below records -- size is a
+// proxy, not a proof, and a same-slot addition is exactly what it cannot catch. Logged here anyway,
+// because the log is the real record and the assert is only its alarm. MEASURED, not guessed
+// (sizeof printed from a scratch TU, both before and after).
+// Classification: an EXACT-MATCH field, folded in Build() gated on nonzero, taking its
+// classification verbatim from has_city_blessing above -- future-determining and MONOTONE (an emblem
+// is held for the rest of the game, never reset at untap, and CR 114 gives neither player any way to
+// remove it), which again does not make it droppable, because this is an equality key and not an
+// ordering.
 static_assert(sizeof(Player) == 200,
               "Player changed size -- fold any new field into dominance::Build() (see the "
               "MAINTENANCE HAZARD note at the top of Dominance.h) before updating this number.");
@@ -242,6 +254,11 @@ static_assert(sizeof(Player) == 200,
 // This time the tripwire DID fire, because the 824 slot was already full -- which is the point of
 // the note above: whether it fires is a property of struct padding, not of whether the field
 // matters. Measured, not guessed.
+// 832 -> 832 (2026-09-27): the two embedded Players each gained `emblem_team_pump`, and since that
+// field cost Player no bytes at all (see its entry above), GameState did not move either -- this
+// tripwire did not fire for the same padding reason. GameState itself gained no field of its own: an
+// emblem is a PLAYER object (CR 114), not game-wide state, which is what lets two Gideons under
+// different controllers hold independent counts.
 static_assert(sizeof(GameState) == 832,
               "GameState changed size -- fold any new field into dominance::Build() (see the "
               "MAINTENANCE HAZARD note at the top of Dominance.h) before updating this number.");
@@ -664,6 +681,13 @@ inline DomSnap Build(const GameState& s, const DecisionProvider& prov,
         // never dominate one another. Folded only when TRUE -> byte-identical for every non-ascend
         // deck, which is the same guard the gated folds below use.
         if (p.has_city_blessing) { fold(0xCB1Eull); }
+        // Emblem anthem count (Gideon, Ally of Zendikar -4). Same classification as the city's
+        // blessing directly above, for the same reasons: a monotone designation held for the rest of
+        // the game, future-determining (every creature we ever play is bigger), and NOT droppable
+        // despite being monotone, because dominance here is an EQUALITY key rather than an ordering.
+        // Folded only when nonzero -> byte-identical for every deck with no emblem source.
+        if (p.emblem_team_pump > 0)
+        { fold(0xE3B1Eull); fold(static_cast<std::uint64_t>(p.emblem_team_pump)); }
         fold(static_cast<std::uint64_t>(p.poison_counters));
         // Hollow One cycle/discard-count. NOT folded unconditionally like the counters above: every
         // dig deck (treasure_hunt / auras / dragons) drives this counter nonzero, so an
@@ -851,6 +875,14 @@ inline DomSnap Build(const GameState& s, const DecisionProvider& prov,
         // cleanup and must be COMPARED rather than refused. Nonzero-gated: every deck without
         // soulbond keeps its exact prior key.
         if (p.paired_with != 0) { mfold(0x50B0Dull); mfold(static_cast<std::uint64_t>(p.paired_with)); }
+        // EXERT (CR 701.38, Basri, Tomorrow's Champion): "it doesn't untap during your next untap
+        // step". Takes the soulbond classification directly above, for the same reason -- it is an
+        // EXACT-MATCH field and NOT until-EOT state, so like paired_with it is deliberately absent
+        // from AtCleanBoundary (it legitimately survives cleanup, being consumed by the NEXT untap
+        // step) and must be COMPARED rather than refused. Not an axis either: "is exerted" is a
+        // liability, but an exerted creature has already bought something with the tap, so no
+        // direction can be declared. Nonzero-gated -> every deck with no exert source is unchanged.
+        if (p.skip_next_untap) { mfold(0xE7E27ull); }
         if (wired)
         {
             mfold(0xA77Aull);
