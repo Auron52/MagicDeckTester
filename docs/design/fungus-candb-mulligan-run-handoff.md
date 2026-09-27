@@ -147,20 +147,32 @@ by singleton-heavy composition:
 | best clean 10 min | 74.7 | 43 h | 53 h (2.2 d) |
 
 **Do not project from a single short window.** Hourly marginal rate on this run has ranged 25.7–141.5
-rollouts/s, and the *lowest* hour was overnight — so the swing is dominated by cell difficulty, not
-CPU. An earlier estimate in this session quoted 80 h by using the single most pessimistic hour as
-though it were the steady state; the cumulative rate (64.2/s) is already within 10% of the reference
-run's 58.6/s, which is the cleanest evidence that CPU share is not the main term.
+rollouts/s. An earlier estimate in this session quoted 80 h by using the single most pessimistic hour
+as though it were the steady state, which is how the budget question got framed as tighter than it is.
+The cumulative rate (64.2/s) is within 10% of the reference run's 58.6/s.
+
+**That 25.7 h⁻¹ hour is UNATTRIBUTED, and do not let anyone tell you otherwise.** It is tempting to
+call the whole swing cell difficulty because the slowest hour was overnight — an earlier draft of this
+very document did — but **no core-share data exists for those hours**, so the claim is unsupported.
+The competing container's load is *bursty*: sometimes low-CPU work like development or card analysis,
+sometimes a regression suite, and the latter takes a large bite. Either explanation fits the dip and
+nothing on disk separates them. `ratewatch.log` (started 11:57Z) is what resolves this going forward:
+a difficulty trough shows the rate falling while our core share stays near 24, whereas a contention
+trough shows the core share itself dropping. Read that file before attributing anything.
 
 **Contention, and why it is hard to see from in here.** Other agents run in *separate containers* and
 are therefore **invisible to this container's `ps`/`top` process list** — "nothing else is running" is
 not a conclusion you can reach that way. Two signals do work: host `/proc/loadavg` (it is the HOST's,
 not ours) against `nproc`, and the generation's own core allocation sampled from `/proc/<pid>/stat`
 (`ps` `%CPU` is a **lifetime average** and useless for this). At 12:00Z: loadavg 25.08/31.10/30.84 on
-24 cores with **no cgroup quota** (`cpu.max` = `max`), and the generation holding **23.7 of 24 cores**
-— i.e. real outside demand, but we were still getting essentially the whole box.
-`ratewatch.log` samples cores + load + counters every 60 s so Monday's decision can attribute rate to
-difficulty vs starvation instead of guessing.
+24 cores with **no cgroup quota** (`cpu.max` = `max`), and the generation holding **23.7 of 24 cores**.
+
+**Do not generalise that 23.7 figure — it was sampled during a benign window.** The other container
+was running *audits* at the time, which are low-CPU; that is precisely why we had essentially the whole
+box despite a second container being active. The same reading during a regression suite next door would
+be materially lower. So "we measured 23.7 of 24 cores" answers *what was happening at 12:00Z*, not
+*what this run generally gets*. `ratewatch.log` samples cores + load + counters every 60 s, which is
+what turns this from one anecdote into an attributable series.
 
 **The dominant uncertainty is not CPU — it is the escalation multiplier.** 9.06 rollouts/cell-side is
 transferred from a list 13.8x smaller. If candidate B's singleton-heavy hands make keep calls more
