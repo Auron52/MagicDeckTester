@@ -1,0 +1,105 @@
+# `card_costs` audit: Adventure cards misread + a rate-limited run passes falsely (DEFERRED)
+
+**Status:** deferred 2026-09-27, evidence only, no fix applied. Found while analyzing Pirates, whose
+`verify_deck` run hit the Fungus `card_costs` failure; another agent reported it as not reproducible.
+This note shows it is, and why it can look otherwise.
+
+Checked at `phase-1-2-deck-analyzer` @ `42210a4f` (2026-09-27). The two repro scripts are in the
+appendix and need NO network. Save them and run them from the repo root:
+
+```
+python3 repro_offline.py       # -> 2 MISMATCHES, exit code 1
+python3 repro_ratelimited.py   # -> "All mana costs match", exit code 0
+```
+
+Each script imports `scripts/audit_card_costs.py` and calls its own `main()`. Only `fetch()` is
+replaced: the first script uses the committed Scryfall snapshot, the second uses the response a
+rate-limited run gets. Nothing else in the audit is reimplemented.
+
+## Why it looked "not reproducible": two bugs
+
+### Bug 1 (the reported failure): the audit misreads Adventure cards
+
+What Scryfall returns:
+- For the combined card Brightcap Badger // Fungus Frolic, Scryfall's top-level `mana_cost` is
+  `"{3}{G} // {2}{G}"`.
+- The committed snapshot `src/cards/data/scryfall_reference.json` stores that string for both names.
+- Its builder takes the top-level value first (`scripts/audit_card_fields.py:163`), so the snapshot
+  holds exactly what the API returns.
+
+What the audit does with it:
+- `scripts/audit_card_costs.py:78-87` only picks the card half whose name matches when the top-level
+  `mana_cost` is EMPTY (`if not sf_cost and "card_faces" in sf`).
+- For an Adventure card the top-level field is not empty, so each half is compared against the joined
+  string:
+  - `Brightcap Badger   local={3}{G}   scryfall={3}{G} // {2}{G}` -> MISMATCH
+  - `Fungus Frolic      local={2}{G}   scryfall={3}{G} // {2}{G}` -> MISMATCH
+- It then exits 1 (`:111`), and `verify_deck.py` `gate_card_costs` reports a blocking FAIL with 2
+  findings.
+
+**The card data is correct.** Brightcap Badger is {3}{G} (the 3/4 creature) and Fungus Frolic is
+{2}{G} (the Adventure instant).
+
+Why `card_fields` passes on the same data:
+- The snapshot check also compares against the joined string, but it has an allowlist.
+- `src/cards/data/scryfall_divergences.json:33-38` explicitly lists this mismatch ("Scryfall reports
+  the COMBINED card, so its mana_cost is the pair '{3}{G} // {2}{G}'").
+- `card_costs` has no allowlist.
+
+### Bug 2 (why a live run can pass): a rate-limited run reports a false green
+
+Scryfall has been returning HTTP 429 `rate_limited` repeatedly today, probably because several
+agents are querying it at once. When `fetch()` runs out of retries:
+- The card goes into "NOT RESOLVED", which does not change the exit code (`verify_deck.py` says so
+  itself: "an unresolved card does not move its rc").
+- With every card unresolved, the audit prints **"All mana costs match Scryfall."** and exits 0.
+  `repro_ratelimited.py` shows this.
+- `verify_deck` therefore reports `card_costs` PASS while having compared nothing.
+
+A live run made under rate limiting CANNOT reproduce Bug 1. Check its output for a
+`NOT RESOLVED ... HTTP 429` block.
+
+Other ways the failure disappears:
+- `verify_deck --no-network` skips `card_costs` entirely (SKIP).
+- Running `audit_card_fields.py`, the snapshot check, passes because of the allowlist above.
+
+## Suggested fixes (not applied)
+
+1. **Adventure cards:** whenever `card_faces` is present, compare against the half whose `name`
+   equals the cards.json entry, whether or not the top-level cost is filled. Keep face 0 as the
+   fallback for a split card named "A // B". This clears Fungus without any sign-off and covers
+   future Adventure cards.
+2. **False green:** a card that could not be resolved because of HTTP 429 or a network error must not
+   let the audit report "All mana costs match". Either exit non-zero (did-not-run, like the gate's
+   existing rc 124 branch), or have `gate_card_costs` treat any `HTTP 429`/network NOT RESOLVED line
+   as a did-not-run FAIL. Genuinely custom cards (Scryfall 404) can stay non-fatal.
+
+## Appendix: repro scripts
+
+`repro_offline.py`:
+
+```python
+#!/usr/bin/env python3
+"""Offline repro: run audit_card_costs.py's OWN per-card logic with fetch() replaced by the committed
+Scryfall snapshot (src/cards/data/scryfall_reference.json, whose builder stores Scryfall's TOP-LEVEL
+mana_cost first -- audit_card_fields.py:163). No network, so no rate limit. Run from the repo root."""
+import json, sys
+sys.path.insert(0, "scripts")
+import audit_card_costs as a
+snap = json.load(open("src/cards/data/scryfall_reference.json"))
+cards = json.load(open("src/cards/data/cards.json")); cards = cards["cards"] if isinstance(cards, dict) else cards
+a.fetch = lambda name: snap.get(name, {"_error": "not in snapshot"})
+a.time.sleep = lambda s: None
+sys.argv = ["audit_card_costs.py"]
+wanted = {"Brightcap Badger", "Fungus Frolic"}
+a.json.load = (lambda orig: (lambda fh: [c for c in (lambda d: d["cards"] if isinstance(d, dict) else d)(orig(fh)) if c["name"] in wanted]))(json.load)
+rc = a.main()
+print("exit code:", rc)
+```
+
+`repro_ratelimited.py` is the same script with one line changed: `fetch()` returns what a
+rate-limited live run gets.
+
+```python
+a.fetch = lambda name: {"_error": "HTTP 429 (exhausted retries)"}   # what a rate-limited live run gets
+```
