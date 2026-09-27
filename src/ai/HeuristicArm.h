@@ -262,6 +262,7 @@ enum Slot : int
     FADE_K_WINDOW,            // MTG_FADE_K_WINDOW        the fade-outlet activation-COUNT ladder (Saproling Burst) is replaced by a PROJECTED LANDMARK MENU: the power peak (with the bodies already out folded in), plus a Beastmaster-Ascension attacker threshold, plus the leave-2/leave-1/leave-0 lines ONLY when they reach a kill this turn or next that the peak does not. Up to 112 candidates become ~3. ADOPTED 2026-09-26, default ON (-0.004t at both depths, 2.04x/1.50x). See docs/design/fade-k-axis-landmarks.md (a HEURISTIC narrowing, not lossless)
     BP_ETB_DIG,               // MTG_BP_ETB_DIG            an ETB dig (Staunch Crewmate) opens site 10 so the dug card is castable this turn (default ON since 2026-09-26)
     ETB_TREASURE_SPEND,       // MTG_ETB_TREASURE_SPEND    a FREE enter-trigger Treasure (Corsair Captain) / a Larcenist-converted Treasure is spendable the turn it appears, and the enumerator credits the ETB Treasure to later casts of the same plan (default ON; =0 restores the fresh-hold for it)
+    PIRATES_CAST_ORDER,       // MTG_PIRATES_CAST_ORDER    the USER-reviewed Pirates cast order: Mimic 7, Buccaneer (reveal live) 8, Forerunner 9 (default OFF, measuring)
     COUNT
 };
 
@@ -490,6 +491,7 @@ inline const char* Name(int slot)
         "MTG_FADE_K_WINDOW",
         "MTG_BP_ETB_DIG",
         "MTG_ETB_TREASURE_SPEND",
+        "MTG_PIRATES_CAST_ORDER",
     };
     // The enum and this table are ONE mapping split across two lists: a slot added to one and not
     // the other silently shifts every lever after it (a manifest asking for lever X would set Y).

@@ -12840,6 +12840,60 @@ std::vector<int> PiratesProvider::EtbDigCandidates(const GameState& /*s*/, int /
     return out;
 }
 
+// ---- PiratesProvider::CastOrderRank (USER order, 2026-09-27; see the header note) ----------------
+int PiratesProvider::CastOrderRank(const GameState& s, const CardDefinition& def) const
+{
+    static const bool env_on = EnvOn("MTG_PIRATES_CAST_ORDER");   // default OFF (measuring)
+    if (!heurarm::Flag(heurarm::PIRATES_CAST_ORDER, env_on)) { return DeckProvider::CastOrderRank(s, def); }
+    const CardParams& p = def.params;
+    // 1: counters engine (Metallic Mimic) -- its counter lands on every Pirate entering after it.
+    if (p.other_chosen_subtype_enters_counters > 0) { return 1; }
+    // 2: nth-spell investigator (Malcolm) -- after the Mimic: the counter on a hasty flier is worth
+    //    the Clue it forfeits (Malcolm must be the turn's FIRST spell to see the second one).
+    if (p.nth_spell_investigate > 0) { return 2; }
+    // 3 / 5: ETB Treasure (Corsair Captain) -- before every later creature so the Treasure can fund
+    //    them; ahead of a reveal-or-pay creature (Daring Buccaneer) only when Buccaneer keeps a reveal
+    //    once this Corsair has left hand (ANOTHER reveal-subtype card besides it and the Buccaneer).
+    if (p.etb_creates_treasures > 0)
+    {
+        for (const Card& c : s.ActivePlayer().hand)
+        {
+            const CardDefinition* rd = CardDatabase::Instance().LookupCached(c);
+            if (rd == nullptr || rd->params.reveal_or_pay_subtype.empty()) { continue; }
+            const std::string& want = rd->params.reveal_or_pay_subtype;
+            int others = 0;
+            bool self_skipped = false, rev_skipped = false;
+            for (const Card& h : s.ActivePlayer().hand)
+            {
+                if (h.m_is_staged) { continue; }
+                if (!self_skipped && h.m_name == def.card.m_name) { self_skipped = true; continue; }
+                if (!rev_skipped && h.m_name == rd->card.m_name)  { rev_skipped = true; continue; }
+                const CardDefinition* hd = CardDatabase::Instance().LookupCached(h);
+                if (hd && CardHasSubtype(hd->card, want)) { ++others; }
+            }
+            return others > 0 ? 3 : 5;
+        }
+        return 3;   // no reveal-or-pay card in hand: nothing to protect
+    }
+    // 4: reveal-or-pay (Daring Buccaneer) while a reveal is available (else it falls to 12).
+    const bool reveal_cost = !p.reveal_or_pay_subtype.empty() && p.reveal_or_pay_cost.has_value();
+    if (reveal_cost && CanRevealForAdditionalCost(s, def)) { return 4; }
+    // 6: enter-drain (Forerunner of the Coalition) -- drains only for Pirates entering after it.
+    if (p.own_creature_enters_opp_life_loss > 0) { return 6; }
+    // 7: ETB dig (Staunch Crewmate) -- after every card whose position matters.
+    if (p.etb_dig_count > 0) { return 7; }
+    // The rest are order-insensitive; a full order for determinism.
+    if (def.card.IsCreature() && p.power_bonus > 0)             { return 8; }    // lord (Adaptive Automaton)
+    if (p.attack_pump_power_per_other_matching > 0)             { return 9; }    // Dire Fleet Captain
+    if (p.etb_treasurify_each_player)                           { return 10; }   // Kitesail Larcenist
+    if (p.upkeep_adds_charge)                                   { return 11; }   // Aether Vial: the artifact...
+    if (p.static_artifact_threshold > 0)                        { return 13; }   // ...Goblin Tomb Raider's haste wants
+    if (reveal_cost)                                            { return 12; }   // Buccaneer, no reveal
+    if (def.card.IsCreature())                                  { return 14; }   // Siren Stormtamer / any other body
+    if (p.damage > 0)                                           { return 20; }   // Lightning Bolt: last
+    return DeckProvider::CastOrderRank(s, def);
+}
+
 // ---- PiratesProvider::CleanupDiscardCandidates ------------------------------
 //
 // AI-AUTHORED role-bucket policy, PENDING USER REVIEW (authored 2026-09-26; rationale, the card-by-

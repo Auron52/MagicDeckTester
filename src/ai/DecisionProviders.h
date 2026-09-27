@@ -1875,6 +1875,25 @@ public:
                                       const std::vector<int>& legal) const override;
     int EtbDigSearchWidth() const override { return 4; }
 
+    // CastOrderRank -- the USER's reviewed Pirates order (2026-09-27), MTG_PIRATES_CAST_ORDER
+    // (default OFF until measured; per-job heurarm so both arms pool into one batch). A FULL order,
+    // param-keyed (no names):
+    //   1  Metallic Mimic -- "Mimic should be before Buccaneer"; its counter hits every later Pirate.
+    //   2  Malcolm -- "I would put malcolm after the mimic. The +1/+1 counter with haste is worth the
+    //      cost" (the cost: Malcolm is then not the turn's first spell, so no Clue that turn).
+    //   3  Corsair Captain if ANOTHER Pirate card (besides it and the Buccaneer) is in hand -- "arguably
+    //      it could even be best before Buccaneer if there is another pirate in hand"; else 5, still
+    //      "before the rest as the treasure needs to be usable".
+    //   4  Daring Buccaneer while a reveal is available (12 when not).
+    //   6  Forerunner of the Coalition -- drains only for Pirates entering after it.
+    //   7  Staunch Crewmate -- "can go after all of those that care about the order".
+    //   8  Adaptive Automaton, 9 Dire Fleet Captain, 10 Kitesail Larcenist, 11 Aether Vial,
+    //   13 Goblin Tomb Raider (after the Vial so it enters hasty), 14 Siren Stormtamer / other bodies,
+    //   20 Lightning Bolt. ("we should make a full order for the sake of it.")
+    //  Which creature a Vial puts is NOT here -- every matching creature is its own searched
+    //  ActivateVial action (proposal 2d had nothing to change).
+    int CastOrderRank(const GameState&, const CardDefinition&) const override;
+
     // The authored BUCKET policy (two buckets -- MANA with a Vial sub-role, THREATS catch-all).
     // The generic fallback's tier B is DESCENDING MANA VALUE, which on this deck pitches the lords
     // (Corsair Captain, Adaptive Automaton -- the 3-drops) first and keeps Siren Stormtamer.
