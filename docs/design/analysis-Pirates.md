@@ -322,6 +322,11 @@ floor (only unplayable cards go first); the Vial is a turn-1 keep unless mana-st
   2026-09-27: "the deck should have some references before the value-leaf anyway"): references/Pirates/
   is EMPTY -- the user hand-plays reference games in the viewer first (user-owned; commit-only). Then: (`bash scripts/valueleaf.sh run decks/Pirates`, ~2-4 h,
   nothing else on the box), then mulligan (K=17, 172,666 hands; size only after the value leaf).
+* MONDAY QUEUE (USER 2026-09-27: not before Monday; box is shared until then), one batch at a time:
+  (1) Giants value-leaf re-audit -- a MEASUREMENT, not a regeneration: H4/H5 cells per game, broken
+  single-pass lazy probe vs the fixed ladder (docs/design/cold-fslinewin-horizon-exit-audit.md).
+  Regenerate ONLY if games differ, and then check the Giants mulligan (it reads value_play).
+  (2) Pirates value leaf, once the user's Pirates references exist.
 * Open: Giants value-leaf re-audit (docs/design/cold-fslinewin-horizon-exit-audit.md), d0 scorer gaps
   (docs/design/d0-greedy-scorer-lord-and-drain-credit.md), viewer INERT_PARAMS question, Fungus
   card_costs sign-off.
