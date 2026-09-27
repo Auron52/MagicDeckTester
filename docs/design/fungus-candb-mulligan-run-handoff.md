@@ -27,7 +27,7 @@ reliable handle either. Kill it by PID or not at all.
 | deck + inputs (tracked in git) | `Fungus.cod`, `Fungus.profile.json`, `Fungus.value.json` in the same folder |
 | progress log | `logs/Fungus_candidate-b-2026-09_mullgen/gen.log` — **APPENDED across runs**, so `head` shows an OLDER run's settings. Isolate the last block by line number. |
 | core-allocation samples | `logs/Fungus_candidate-b-2026-09_mullgen/ratewatch.log` (see *Reading the rate honestly*) |
-| **frozen binary** | `logs/Fungus_candidate-b-2026-09_mullgen/mtg-analyze.frozen` — **resume with this** |
+| **the resume kit** | `logs/Fungus_candidate-b-2026-09_mullgen/` — `mtg-analyze.frozen`, `cards.json.frozen`, and copies of `Fungus.cod` / `.profile.json` / `.value.json`. **Resume with these.** Self-contained, so no future pull can move them. |
 
 ## Fingerprints (authoritative — from the journal's own `meta` block)
 
@@ -103,10 +103,19 @@ as it commits; startup replays the journal and skips those cells. A kill loses o
 in-flight cells.
 
 ```bash
-logs/Fungus_candidate-b-2026-09_mullgen/mtg-analyze.frozen \
-    decks/Fungus/candidate-b-2026-09/Fungus.cod \
-    --cards-json src/cards/data/cards.json --gen-mulligan fast
+G=logs/Fungus_candidate-b-2026-09_mullgen
+$G/mtg-analyze.frozen decks/Fungus/candidate-b-2026-09/Fungus.cod \
+    --cards-json $G/cards.json.frozen --gen-mulligan fast
 ```
+
+**Use the pinned `cards.json.frozen`, not `src/cards/data/cards.json`.** That is the whole point of the
+kit: the two are already different (496,604 vs 510,688 bytes, different md5, as of 12:07Z) because
+upstream added six cards while this run was live. The digest happens to be unchanged, so either would
+work *today* — but the pinned pair is verified and cannot drift, whereas the working tree moves every
+time anyone rebases. Do not make Monday's resume depend on a re-derivation nobody ran.
+
+Note the journal path stays pointed at the **live** deck folder — that is the state you are resuming.
+Only the *inputs* come from the kit.
 
 > ### THE ONE TRAP THAT DESTROYS THE RUN: the recipe is a POSITIONAL argument
 >
@@ -121,6 +130,28 @@ logs/Fungus_candidate-b-2026-09_mullgen/mtg-analyze.frozen \
 > process is named `mtg-analyze`, a `pkill -x mtg` "cleanup" silently misses it and you get two
 > generators writing one journal. Check with `pgrep -x mtg-analyze` and kill by PID.
 
+## Version discipline: exactly what this run needs, and what is allowed to drift
+
+The run's identity is **three** things, not one, and freezing the binary only covers the first:
+
+| input | pinned as | drifts if you… |
+|---|---|---|
+| engine code | `mtg-analyze.frozen` + branch `gen/…-2026-09-27` (`57c36b5c`) | rebuild `build/Release/` |
+| card data (**runtime**, not baked in) | `cards.json.frozen` | pull anything touching `src/cards/data/cards.json` |
+| deck + models | `Fungus.cod`, `.profile.json`, `.value.json` in the kit (also tracked in git) | revise the decklist or regenerate a sidecar |
+
+**The rule: resume from the kit, and treat `play_digest 36a65944fd138cd0` as the acceptance test.** With
+the kit, pulls on `phase-1-2-deck-analyzer` are harmless to this run — which matters, because pushing
+any commit requires a rebase, so the working tree *will* keep moving. If you ever resume from the
+working tree instead of the kit, re-run the digest probe first and confirm the hash.
+
+What already happened, as the concrete warning: between this run's start and 12:07Z the same day,
+upstream landed changes to `src/ai/TurnSolver.cpp`, `src/ai/AIEngine.cpp`, `src/core/SpellEffects.h`
+and `cards.json` (433 → 439 entries). The digest survived all of it — but that was *checked*, not
+lucky, and the next landing might not. A silent `play_digest` change does not corrupt anything: resume
+is **refused** (`PlayIdentityAllows`). The cost is the run's remaining resumability, which is exactly
+what the kit buys back.
+
 ## Route B — transfer to another machine
 
 Two genuinely different things are called "handoff", and only one of them *finishes this table*:
@@ -133,13 +164,21 @@ gitignored and ~54 MB and growing, so move it out of band — do not force-add i
 tar czf fungus-candb-gen.tgz \
     decks/Fungus/candidate-b-2026-09/Fungus.keepmodel.exhaustive.raw.json.journal \
     decks/Fungus/candidate-b-2026-09/Fungus.keepmodel.gencache.json \
-    logs/Fungus_candidate-b-2026-09_mullgen/mtg-analyze.frozen
+    logs/Fungus_candidate-b-2026-09_mullgen/mtg-analyze.frozen \
+    logs/Fungus_candidate-b-2026-09_mullgen/cards.json.frozen \
+    logs/Fungus_candidate-b-2026-09_mullgen/Fungus.cod \
+    logs/Fungus_candidate-b-2026-09_mullgen/Fungus.profile.json \
+    logs/Fungus_candidate-b-2026-09_mullgen/Fungus.value.json
 ```
 
-On the target: `git checkout gen/fungus-candb-mulligan-2026-09-27`, untar into the same relative
-paths, resume per Route A. Using the frozen binary means the target does not even need to build, as
-long as it is Linux/x86-64. If it must build instead, build **at this branch's commit** so `commit`
-matches as well as `play_digest`.
+Take the journal **after stopping the run** (or accept losing the in-flight cells), since it is being
+appended to continuously.
+
+On the target: `git checkout gen/fungus-candb-mulligan-2026-09-27`, untar into the same relative paths,
+resume per Route A. Because the tarball carries the binary *and* the card data, the target needs no
+build at all as long as it is Linux/x86-64 — and the branch checkout then matters only for having the
+source present. If the target must build instead (different arch), build **at this branch's commit** so
+`commit` matches as well as `play_digest`, and verify the digest with the probe before resuming.
 
 **B2 — pool a second machine (adds R, does NOT finish the cells).** This is the protocol the skill's
 "Multi-machine handoff" section describes: both machines run the same deck/buckets/commit with
