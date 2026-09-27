@@ -109,6 +109,18 @@ bool GoldFishRunner::DeckUsesSecondMain(const Decklist& deck)
         // (MTG_AL_PHASE). The measured reason this trigger exists is the header comment above
         // (post-combat payload lethals; single-main measured d5 4.77 -> 4.92 when added), so this
         // arm's bar is per-game NO-REGRESSION on the re-measure, not aggregate.
+        //   * PREVENT DAMAGE SWEEPERS (2026-09-27, 2c-bis). Pyrohemia (ping_all_cost) and Rolling
+        //     Earthquake (x_damage_each_creature_and_player) hit EVERY creature, ours included, so
+        //     casting them pre-combat throws away the attack of every body they kill (Vito and Dina
+        //     are 1/3s: X = 3 or three pings kills both). "Attack, THEN sweep" is the real line --
+        //     the Hinata/Crackle shape above -- and only a searched second main can express it.
+        //     Behind a lever because the searched m2 is not free (MTG_FORCE_USES_M2 measured 4.25x
+        //     at d1/b3 on Fungus): MTG_PD_SECOND_MAIN, DEFAULT ON, PROVISIONAL until the Stage 5
+        //     A/B prices it. heurarm slot so both arms pool into ONE batch.
+        static const bool s_pd_m2 = EnvOn("MTG_PD_SECOND_MAIN", true);
+        if ((def->params.ping_all_cost.has_value() || def->params.x_damage_each_creature_and_player)
+            && heurarm::Flag(heurarm::PD_SECOND_MAIN, s_pd_m2))
+        { return true; }
         static const bool s_al_single_main = EnvOn("MTG_AL_SINGLE_MAIN");   // DEFAULT OFF
         if (def->params.lifegain_to_loss && !s_al_single_main) { return true; }
 

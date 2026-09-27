@@ -746,6 +746,11 @@ void GameEngine::EndStep(GameState& state)
     // the exile sweep above, which is the other beginning-of-end-step effect. Param-gated ->
     // no-op for every deck without such a card.
     PerformEndStepLifegainTokens(state);
+    // Pyrohemia's "if no creatures are on the battlefield, sacrifice this" (lockstep twin in
+    // TurnSolver::SimulateEndAndStartNextTurn). After the token trigger: a token it makes is a
+    // creature on the battlefield by the time this checks (both are beginning-of-end-step triggers
+    // we control; making the token first is the order that keeps the enchantment).
+    PerformEndStepNoCreatureSacrifice(state);
     // TODO: other "end of turn" triggered abilities (Phase 1.2)
     ResolveStack(state);
 }

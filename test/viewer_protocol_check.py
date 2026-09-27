@@ -409,14 +409,15 @@ def plan_key_sans_pay_sac(p):
 
 def action_sig(a):
     """Stable identity of ONE plan action: every variant-deciding field the emission records
-    (X, tutor target, phyrexian payment, pod victim, activation verb, ...). Missing keys read
+    (X, tutor target, phyrexian / twobrid payment, pod victim, activation verb, ...). Missing keys read
     as defaults so an older recording with fewer fields still matches a newer emission.
     Serialised to a string so signatures sort/compare safely across None/str/int."""
     return "|".join(str(a.get(k, d)) for k, d in (
         ("card", ""), ("x", 0), ("tutor_target", ""), ("phyrexian_life", 0),
         ("pod_victim", 0), ("activate", False), ("verb", ""), ("sacout", False),
         ("enchant_target", ""), ("bestow", False), ("evoke", False),
-        ("landsedge", 0), ("dig", False), ("blink_target_name", "")))
+        ("landsedge", 0), ("dig", False), ("blink_target_name", ""),
+        ("twobrid_colored", 0)))
 
 
 def actions_key(p):

@@ -354,7 +354,14 @@ struct Action
                                        // CollectActions' phyrexian post-pass emits one extra
                                        // variant per life-paid pip count, sharing the base's
                                        // group key (mutually exclusive). 0 = pay full mana.
-    int         convoke_green = 0;     // Chord of Calling (CastFromHand + params.convoke): how many
+    int         twobrid_colored = 0;   // TWOBRID pips ({2/B} -- Beseech the Queen): how many of the
+                                       // cast's twobrid pips this variant pays with their COLOURED
+                                       // side ({B}) instead of {2}. `cost` is emitted already
+                                       // converted (ManaCost::PayTwobridWithColor), and every
+                                       // recompute site re-applies the same conversion (the
+                                       // phyrexian_life sites, lockstep). CollectActions' twobrid
+                                       // post-pass emits one variant per k. 0 = all generic.
+    int         convoke_green = 0;    // Chord of Calling (CastFromHand + params.convoke): how many
     int         convoke_other = 0;     // GREEN / non-green creatures this cast taps for convoke.
                                        // The action's `cost` is emitted ALREADY REDUCED by their
                                        // contribution (green body -> a {G} pip or {1}; other -> {1}

@@ -140,6 +140,10 @@ void EffectHandler::MoveToGraveyard(GameState& state, const StackEntry& entry)
     // "Exile Living Wish": a self-exiling spell goes to EXILE instead.
     if (d != nullptr && d->params.exiles_self_on_resolve)
     { state.exile.push_back(entry.source); return; }
+    // Green Sun's Zenith: "Shuffle Green Sun's Zenith into its owner's library." LOCKSTEP with the
+    // rollout's instant/sorcery line in TurnSolver's apply_one.
+    if (d != nullptr && d->params.shuffles_self_into_library_on_resolve)
+    { ShuffleSelfIntoLibrary(state, entry.controller_index, entry.source); return; }
     state.players[entry.controller_index].graveyard.push_back(entry.source);
 }
 
@@ -504,6 +508,13 @@ bool EffectHandler::ResolveImpl(GameState& state, const StackEntry& entry, const
                 {
                     PerformDamageAllCreatures(state, entry.controller_index, def,
                                               def.params.damage_all_creatures);
+                }
+                // Rolling Earthquake: X to each creature AND each player -- one damage event
+                // (shared helper; rollout twin in apply_one's sorcery dispatch, lockstep).
+                if (def.params.x_damage_each_creature_and_player)
+                {
+                    PerformDamageEachCreatureAndPlayer(state, entry.controller_index, def,
+                                                       entry.chosen_x.value_or(0));
                 }
                 // Reality Spasm / Irencrag Feat -- mana RITUAL. On resolution, add its floating
                 // mana to the turn-scoped reserve so a later same-turn cast (Crackle) can spend

@@ -174,6 +174,14 @@ enum class PermAbilityMode
     // so the turn yields K bodies of (C-K)/(C-K) -- total power K*(C-K), maximised near C/2 --
     // and popping everything mints a pile of 0/0s that die to the toughness SBA on the spot.
     FadeSaproling,
+    // {cost}: This deals N damage to each creature and each player  (Pyrohemia, "{R}: ... 1 damage";
+    // CardParams::ping_all_cost / ping_all_amount). NO {T} and NO sacrifice -> the Drain/PayToken
+    // shape: REPEATABLE within a turn and bounded only by mana, and the cost is mana, so it routes
+    // through SpendRepeatActivations. EACH activation is its own damage EVENT (one Tamanoa trigger,
+    // one Dina drain per activation) via PerformDamageEachCreatureAndPlayer. K decides which of our
+    // own creatures die, so it is a genuinely searched axis (ManaSinkActivationCounts' full range).
+    // Appended LAST so every existing mode's numeric value (plan signatures, ActKey slots) is kept.
+    PingAll,
 };
 
 // Does this mode's cost include {T}? THE single source of truth, because three separate sites used
@@ -190,7 +198,8 @@ inline bool PermAbilityTaps(PermAbilityMode m)
         && m != PermAbilityMode::GrantLifelink
         && m != PermAbilityMode::SporeSaproling
         && m != PermAbilityMode::PayToken
-        && m != PermAbilityMode::FadeSaproling;
+        && m != PermAbilityMode::FadeSaproling
+        && m != PermAbilityMode::PingAll;
 }
 
 struct Permanent

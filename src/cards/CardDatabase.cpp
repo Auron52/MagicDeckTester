@@ -475,6 +475,21 @@ static ManaCost ManaCostFromString(const std::string& cost_str)
             // colour side.
             std::string first  = sym.substr(0, sym.find('/'));
             std::string second = sym.substr(sym.find('/') + 1);
+            // TWOBRID pip ({2/B}: any two mana OR one {B} -- CR 107.4e; Beseech the Queen). Bake
+            // the {2} side into `generic` (so the MV is the printed one, CR 202.3f, and the
+            // all-generic payment is always legal) and record the colour so CollectActions'
+            // twobrid post-pass can emit the pay-with-colour variants (ManaCost::twobrid_count).
+            // Before this branch a {2/B} fell to the hybrid fallback below and parsed as a bare
+            // {B} (Beseech read as {B}{B}{B}, MV 3). No other card in cards.json has a {2/X} pip.
+            if (first == "2")
+            {
+                const Color tc = ColorFromString(second);
+                cost.generic += 2;
+                if (cost.twobrid_count < 3)
+                { cost.twobrid_color[cost.twobrid_count++] = static_cast<uint8_t>(tc); }
+                s = s.substr(end + 1);
+                continue;
+            }
             // PHYREXIAN pip ({G/P}: pay {G} OR 2 life -- CR 107.4f; Birthing Pod, user-directed
             // 2026-09-05, replacing the green-only PROVISIONAL collapse). Bake the colour into
             // the flat pips (byte-identical MV + every flat reader) and record the metadata so
@@ -593,6 +608,12 @@ Card CardDatabase::BuildCardFromJson(const json& entry) const
             card.AddColor(static_cast<Color>(card.m_mana_cost.hybrid_pair[i] >> 4));
             card.AddColor(static_cast<Color>(card.m_mana_cost.hybrid_pair[i] & 0xF));
         }
+        // A twobrid pip's coloured side colours the card (CR 105.2 / 202.2: Beseech is black).
+        for (int i = 0; i < card.m_mana_cost.twobrid_count; ++i)
+        {
+            const Color tc = static_cast<Color>(card.m_mana_cost.twobrid_color[i]);
+            if (tc != Color::Colorless) { card.AddColor(tc); }
+        }
     }
 
     for (const std::string& t : entry.value("types", json::array()))
@@ -673,6 +694,11 @@ CardParams CardDatabase::BuildParamsFromJson(const json& params) const
 
     p.on_cast_trigger_max_mv = params.value("on_cast_trigger_max_mv", 0);
     p.on_cast_trigger_damage = params.value("on_cast_trigger_damage", 0);
+    // Spellshock: the Eidolon trigger with no mana-value cap. Widened HERE, once, so every reader of
+    // the Eidolon pair (FireOnCastTriggers, the subset self-damage bill) sees it without a second
+    // branch. Absent for every other card -> byte-identical.
+    p.on_cast_trigger_any_mv = params.value("on_cast_trigger_any_mv", false);
+    if (p.on_cast_trigger_any_mv) { p.on_cast_trigger_max_mv = CardParams::kOnCastAnyMv; }
     p.multicolor_cast_damage_per_color = params.value("multicolor_cast_damage_per_color", false);
     p.colored_cast_lifegain = params.value("colored_cast_lifegain", false);
     p.attack_draw_cards = params.value("attack_draw_cards", 0);
@@ -1073,6 +1099,15 @@ CardParams CardDatabase::BuildParamsFromJson(const json& params) const
     p.lifegain_plus                       = params.value("lifegain_plus", 0);
     p.lifegain_target_opp_loses_that_much = params.value("lifegain_target_opp_loses_that_much", false);
     p.lifegain_each_opp_loses             = params.value("lifegain_each_opp_loses", 0);
+    // Prevent Damage phase I2 spells (see CardParams).
+    if (params.contains("ping_all_cost"))
+        p.ping_all_cost = ManaCostFromString(params["ping_all_cost"].get<std::string>());
+    p.ping_all_amount                     = params.value("ping_all_amount", 0);
+    p.endstep_sac_if_no_creatures         = params.value("endstep_sac_if_no_creatures", false);
+    p.x_damage_each_creature_and_player   = params.value("x_damage_each_creature_and_player", false);
+    p.tutor_max_mv_is_lands               = params.value("tutor_max_mv_is_lands", false);
+    p.shuffles_self_into_library_on_resolve =
+        params.value("shuffles_self_into_library_on_resolve", false);
     // Ocelot Pride's end-step token trigger + ascend (see CardParams for the model).
     p.endstep_lifegain_tokens             = params.value("endstep_lifegain_tokens", 0);
     p.endstep_token_power                 = params.value("endstep_token_power", 0);

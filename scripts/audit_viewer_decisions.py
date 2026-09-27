@@ -1020,6 +1020,12 @@ INERT_PARAMS = {
     "lifegain_plus": "Bilbo, Birthday Celebrant: lifegain REPLACEMENT (+1), no choice (ordering vs Faithmender: see lifegain_multiplier)",
     "lifegain_target_opp_loses_that_much": "Vito: 'target opponent loses that much life' -- the only legal target is the one opponent (2HG: one head's worth off the shared pool), so the target is a forced non-choice",
     "lifegain_each_opp_loses": "Dina: automatic 'each opponent loses 1 life' lifegain trigger -- no target, no may",
+    # ---- Prevent Damage (2026-09-27, phase I2) -- the deck's spells ----
+    "on_cast_trigger_any_mv": "Spellshock: widens the Eidolon cast trigger to every mana value -- a trigger THRESHOLD, no choice (the damage is automatic, to the caster)",
+    "ping_all_amount": "Pyrohemia: damage per activation (1) -- a printed constant; the activation itself (and its count) rides ping_all_cost -> main_phase",
+    "endstep_sac_if_no_creatures": "Pyrohemia: mandatory intervening-if end-step SACRIFICE of this enchantment -- no target, no may",
+    "tutor_max_mv_is_lands": "Beseech the Queen: tutor MV cap = lands you control -- a legality FILTER read at resolution; the pick rides tutor_to_hand -> main_phase / the resolution re-ask",
+    "shuffles_self_into_library_on_resolve": "Green Sun's Zenith: the resolved spell shuffles itself into the library -- automatic, no choice",
 }
 
 # Decisions the human makes by picking among main_phase PLAN VARIANTS or a board-click
@@ -1057,6 +1063,13 @@ MAINPHASE_PARAMS = {
     # It is NOT pooled the way the spore outlets are: two Bursts on different counter totals mint
     # different-sized tokens, so each keeps its own axis and the human sees both sources.
     "fade_saproling_cost": "fade outlet = a main_phase board activation (ActivatePermAbility/FadeSaproling); K rides chosen_x",
+    # Pyrohemia ("{R}: 1 damage to each creature and each player"): the Drain / PayToken BOARD
+    # ACTIVATION shape -- ActivatePermAbility/PingAll, no {T}, repeatable. K rides chosen_x in the
+    # search (full range); the human reaches K by choosing it again after each re-prompt.
+    "ping_all_cost":       "mana-only, no-{T} repeatable sweeper ping = a main_phase board activation (ActivatePermAbility/PingAll); K rides chosen_x",
+    # Rolling Earthquake: X is a main_phase PLAN VARIANT (chosen_x), every X from 0..max offered
+    # unpruned in human play -- the {X} catalogue row, no new decision type.
+    "x_damage_each_creature_and_player": "Rolling Earthquake -- X = a main_phase plan variant (chosen_x, full 0..max range); an untargeted symmetric sweep, so nothing else to choose",
     "sacrifice_draw_cost": "Fiery Islet sac-to-draw activation (main_phase play)",
     "stages_cards":        "Light Up the Stage: staged cards become castable (main_phase plays)",
     "tap_token_cost":      "Sliver Hive activated token ability (main_phase play)",

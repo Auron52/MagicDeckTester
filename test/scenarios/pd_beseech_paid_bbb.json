@@ -1,0 +1,24 @@
+{
+  "_comment": [
+    "Prevent Damage (2026-09-27, phase I2). Beseech the Queen is {2/B}{2/B}{2/B} -- mana value 6, but",
+    "castable for {B}{B}{B} (the twobrid variant the enumeration emits). Board: Spellshock, Tamanoa +",
+    "Vito (both sick; resumed at main 1), three Overgrown Tombs (B/G) -- exactly three mana, so ONLY",
+    "the three-coloured-pip variant is payable (before the twobrid parse the card read as {B}{B}{B}",
+    "MV 3; a parse that kept only the all-generic side could not be cast here at all). Casting it",
+    "fires Spellshock: 2 to us (one event) -> Tamanoa +2 -> Vito drains 2. Us 20, opponent 18."
+  ],
+  "deck": "decks/Prevent Damage/Prevent Damage.cod",
+  "turn": 4, "on_the_play": true, "active_life": 20, "opponent_life": 20,
+  "resume_at": "main1",
+  "battlefield": [
+    { "name": "Spellshock" },
+    { "name": "Tamanoa", "sick": true },
+    { "name": "Vito, Thorn of the Dusk Rose", "sick": true },
+    { "name": "Overgrown Tomb" }, { "name": "Overgrown Tomb" }, { "name": "Overgrown Tomb" }
+  ],
+  "hand": [ "Beseech the Queen" ],
+  "library_filler": "Mountain", "library_size": 30,
+  "depth": 1, "budget_ms": 50, "max_turns": 4,
+  "expect_active_life": 20,
+  "expect_opponent_life": 18
+}

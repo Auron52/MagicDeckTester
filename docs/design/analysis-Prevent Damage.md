@@ -49,13 +49,14 @@ Living Wish, Vexing Shusher.
   worktree): `core_design.md` (THE blueprint), `lands_manabarbs.md`, `spells.md`,
   `creatures_sideboard.md`. Scryfall JSON in `logs/prevent_damage/scryfall/`.
 - Integration is SERIAL, three phases, one Opus integrator agent each (shared files):
-  * **I1 (RUNNING at compaction time):** core damage-event/own-death/lifegain engine (gated on
+  * **I1 DONE, committed locally 6a36b5d4 (smoke byte-identical, 268/268 unit, 111/111 scenarios):** core damage-event/own-death/lifegain engine (gated on
     `dmg_events_armed`), Faithmender/Bilbo replacements, Vito/Dina watchers, Purity prevention,
     Tamanoa, Manabarbs, 5 lands (Ancient Tomb `tap_self_damage_any_mode`), `SelfDamageUseful` +
     pain sweep, `PreventDamageProvider` + routing, scenario tests, smoke byte-identity. It writes
     its results into the Stage 2 section below. If it is not reported there, check `git status` /
     `git diff --stat` in /tmp/pd-wt to see how far it got before re-launching.
-  * **I2 (next):** Spellshock, Pyrohemia (PingAll mode; PermAbilityTaps trap; end-step sac; K
+  * **I2 DONE, committed locally (see Phase I2 below; smoke byte-identical, 281/281 unit, 114/114
+    scenarios, sanity 194/200 avg 5.87, 0 self-deaths):** Spellshock, Pyrohemia (PingAll mode; PermAbilityTaps trap; end-step sac; K
     widening), Rolling Earthquake (X 0..max, not {max}), Beseech the Queen (twobrid, phyrexian-style;
     `{2/B}` is MISPARSED as `{B}` today), Green Sun's Zenith (Chord + colour filter + self-shuffle),
     `DeckUsesSecondMain` for Pyrohemia/Earthquake (m2 cost 4.25x on record -> give it an A/B lever).
@@ -68,7 +69,7 @@ Living Wish, Vexing Shusher.
   harnesses, depth sweep, 5c2 leaf tie-break, 5d claude-play fan-out (Opus), 5h viewer, 5i BUCKET
   discard policy — gate `discard_policy` is in the MAIN tree's uncommitted WIP, not upstream) ->
   add to all three regression tiers with GT -> Stage 6 report.
-- Nothing committed yet. Branch `prevent-damage-analysis` is local only. I1 is DONE (see Stage 2).
+- Branch `prevent-damage-analysis` is local only (nothing pushed). I1 committed 6a36b5d4; I2 committed on top of it. Next: I3.
 
 ## Stage 2 — implementation
 
@@ -255,6 +256,147 @@ never chooses those lines in a playout.
 - The deck runs today with its I2/I3 cards unimplemented (the loader keeps them as dead cards; no
   temporary list was needed).
 
+### Phase I2 — the deck's spells (DONE 2026-09-27, committed locally in /tmp/pd-wt)
+
+**Scope.** Spellshock, Pyrohemia, Rolling Earthquake, Beseech the Queen, Green Sun's Zenith, the
+second-main lever, viewer manifest rows, cards.json entries. Blueprint `spells.md`.
+
+**Files.** `Card.h` (twobrid metadata in ManaCost PADDING -- `sizeof` Card/Permanent/GameState
+unchanged, Dominance.h pins held; `PayTwobridWithColor`), `CardDatabase.{h,cpp}` (7 params, `{2/X}`
+parse, twobrid colour), `Permanent.h` (`PermAbilityMode::PingAll`, appended last; in the
+`PermAbilityTaps` non-tapping list), `SpellEffects.h` (Spellshock armed route in
+`FireOnCastTriggers`; `PerformDamageEachCreatureAndPlayer`; `PerformEndStepNoCreatureSacrifice`;
+`PingAllSelfSafe`; PingAll in `ApplyPermAbility` / `PermAbilityLabel` / `SpendRepeatActivations` cost
+chain + life cap + per-activation guard; `TutorLandCapOk`/`TutorLandCapSlack`;
+`ShuffleSelfIntoLibrary`), `SpellEffects.cpp` (`LiveTutorCandidates` -- the resolution-time land cap
+for `PerformTutor` and the human chooser), `DamageEvents.h` (`CastTriggerBill`; header note),
+`EffectHandler.cpp` (Earthquake resolution; GSZ self-shuffle), `GameEngine.cpp` (end-step sac),
+`TurnSolver.{h,cpp}` (`Action::twobrid_colored` + threading via `cast_twobrid_colored`; twobrid
+post-pass; Earthquake X branch; GSZ colour conjunct in the Chord branch; PingAll in the three ModeSpec
+tables + eval/direct_damage + self-lethal skip; plan-signature `#W`/`#Q`; cost/action FoldMix
+(folded only when present); armed subset cast-trigger bill at both sites; rollout Earthquake/GSZ
+twins; end-step sac twin; SamePlan verify field), `AIEngine.{h,cpp}` (`m_pending_twobrid`,
+consume-once), `DecisionProvider.h` (PingAll K = full 1..max), `DecisionProviders.{h,cpp}` (Generic
+X range for the sweeper; `PreventDamageProvider::XCandidates` / `TutorCandidates`, width 20),
+`HeuristicArm.h` (`PD_SECOND_MAIN` slot), `GoldFishRunner.cpp` (`DeckUsesSecondMain`), `main.cpp`
+(twobrid label / collapse key / JSON), `test/viewer_protocol_check.py` (`twobrid_colored` in
+`action_sig`, defaulted), `scripts/audit_viewer_decisions.py` (7 rows), cards.json (5 new; Tamanoa
+and Purity notes corrected), `scryfall_reference.json` (+5 snapshot entries), `test/unit/test_prevent_damage_spells.cpp` (new, in CMake), three
+`test/scenarios/pd_*.json`.
+
+**Params (all new).** `on_cast_trigger_any_mv` (loader widens `on_cast_trigger_max_mv` to
+`CardParams::kOnCastAnyMv`, so every Eidolon reader sees Spellshock), `ping_all_cost`,
+`ping_all_amount`, `endstep_sac_if_no_creatures`, `x_damage_each_creature_and_player`,
+`tutor_max_mv_is_lands`, `shuffles_self_into_library_on_resolve`.
+
+**Flags.** `MTG_PD_SECOND_MAIN` (DEFAULT ON, heurarm slot `PD_SECOND_MAIN`, `EnvOn(...,true)`):
+Pyrohemia / Rolling Earthquake open the searched second main. **PROVISIONAL** -- see the probe below.
+
+**The model, per card.**
+- *Spellshock*: on an armed board each trigger is `dmgev::DealDamageEvent` from a noncreature source
+  we control (Purity prevents; Tamanoa gains; SBA before the gain). One event per Spellshock per cast.
+  The subset enumerators' "a plan that kills us via its own cast triggers" bill was the plain SUM --
+  on an armed board it is now exact per event (`CastTriggerBill`: largest single hit with Tamanoa out,
+  0 with Purity, the sum otherwise; unarmed = the sum, byte-identical).
+- *Pyrohemia / Rolling Earthquake*: `PerformDamageEachCreatureAndPlayer` = Tamanoa count read
+  BEFORE the damage (lki) -> shared `PerformDamageAllCreatures` (deaths, detach, OnCreatureDies) ->
+  `DealDamageEvent(to_self=amt, to_opp=amt*heads, to_creatures_total=amt*creatures, lki)`. So a
+  Vito/Dina/Faithmender killed by the event neither drains nor doubles, a Tamanoa killed by it still
+  triggers for the total, our death is checked before the gain, both-to-0 is a DRAW. Pyrohemia K:
+  generic `ManaSinkActivationCounts` returns 1..max for PingAll (the cap of 3 no longer applies to
+  it); human play folds K to 1 and re-prompts (the mana-sink convention). A self-lethal ping is never
+  offered and never applied (`PingAllSelfSafe`: the single hit vs our life; Purity = always safe).
+  Earthquake X: a dedicated enumeration branch; GenericProvider returns 0..max for the param (its
+  {max} rule was wrong here); `PreventDamageProvider::XCandidates` drops X = 0 unless a damaging cast
+  trigger (Spellshock) is out -- found in the first 20-game probe, where the search cast X = 0 on T1
+  for nothing (a card + {R} + Citadel pain). Human play / unpruned keep X = 0.
+- *End-step sacrifice*: `PerformEndStepNoCreatureSacrifice` from both end-step sites after the
+  token trigger; ANY creature (opponent spawns included) keeps it. Early-outs at the first creature.
+- *Beseech*: `{2/B}` parsed as generic 2 + twobrid metadata (was `{B}`, MV 3); no other card in
+  cards.json has a `{2/X}` pip (checked). Decision space: base (6 generic) + k = 1..3 coloured variants
+  (`#W<k>` in the signature). Rollout leaf: the base is REPLACED by the cheapest variant the pool can
+  pay. Tutor: `tutor_types []` = any card (GenericProvider already read empty as "no restriction";
+  the AntiLifegain heuristic path in `SpellEffects.h::TutorCandidates` still reads empty as "no
+  match" but is not on this deck's route -- left untouched, byte-identity). Land cap exact at
+  resolution (`LiveTutorCandidates`, and `PerformTutor` clears an illegal baked target and re-picks);
+  enumeration gives +1 slack when the land drop is open and a land is in hand. Provider orders
+  nonlands first and `TutorSearchWidth` 16 -> 20 so all 19 distinct names are reachable.
+- *GSZ*: the Chord X branch now applies `tutor_color` (empty for Chord -> byte-identical);
+  `ShuffleSelfIntoLibrary` from `EffectHandler::MoveToGraveyard` and apply_one (second shuffle, keyed
+  on the next search ordinal in both worlds).
+
+**Tests.** `test_prevent_damage_spells.cpp` -- 13 cases: Spellshock + Tamanoa (+Vito) gain, two
+Spellshocks = two events, lethal at 2 life, `CastTriggerBill`; Pyrohemia one event per activation
+(Dina drains per activation; the 3rd ping kills Dina before its gain -> no drain), self-lethal ping
+never applied, K = full range, `SpendRepeatActivations` pays {R} each, end-step sac (fires on an
+empty board, an opponent creature keeps it); Earthquake X=3 kills Vito before the gain (no drain),
+X=4 kills Tamanoa which still triggers (x Faithmender), lethal to both = DRAW, X range + X=0 rule +
+enumerator emits X 1..3 on four lands; Beseech MV 6 / black / all generic, payable {B}{B}{B},
+{2}{B}{B}, six generic, the enumerator emits k = 0..3, land cap (+1 slack, resolution re-pick);
+GSZ offers Dina at X=2, never Vito, and goes back into the library. Scenarios:
+`pd_pyrohemia_dina_per_activation` (26/16), `pd_earthquake_x_is_searched` (26/10 -- the search picks
+X=2 over the max X=3 that would kill Vito before the drain), `pd_beseech_paid_bbb` (20/18 on exactly
+three B sources).
+
+**Verification (final binary).**
+- `./build.sh` clean (no warnings). `mtg-test` 281/281 cases, 2,638,713 assertions. `scenarios.sh`
+  114/114.
+- Smoke: 101 passed, 0 failed, 0 new, play-changed = 0 (searched and d0), run twice (the second on
+  the final binary). Nothing accepted.
+- Deck sanity (real `.cod`, I3 cards still partial), 200 games d3/b20 seed 1000,
+  `MTG_DMG_EVENT_VERIFY=1`: **194/200 won, avg win turn 5.87** (T4 5, T5 67, T6 82, T7 29, T8 11;
+  loss-penalised 5.96) vs I1's 141/200 / 6.56. **0 self-deaths** (min life > 0 in every game), no
+  aborts. Casts: Earthquake 186 (X: 0x8 -- all with Spellshock out -- 1x78, 2x76, 3x12, 4-6x12),
+  Living Wish 147, Vito 136, GSZ 134, Tamanoa 131, Beseech 81, Dina 76, Spellshock 76, Pyrohemia 20
+  (54 pings). Logs read: s1036 Beseech {B}{B}{B} -> GSZ, GSZ X=3 Tamanoa, then T7 two pings with Vito
+  out (K=2, not 3 -- the third would kill Vito first) take the opponent 18 -> 2; s1013 Beseech for
+  Living Wish, Earthquake X=1 with Tamanoa + Dina; s1002 GSZ X=2 Dina under Spellshock + Vito
+  (16 -> 3 in one main). 20 SLOW-GAMEs (30-101 s) -- see the m2 probe.
+- **m2 probe (my own experiment, one pooled `--batch`, 200 games each, d3/b20, s3000):**
+  ON avg 5.760 / 2,299 s CPU; OFF avg 5.735 / 1,317 s CPU -> the searched second main costs **1.75x**
+  for **no measurable gain** (+0.025, inside the noise at n=200). Default left ON (the 2c-bis
+  mandate + the task's documented default); **PROVISIONAL -- Stage 5 must A/B it paired on held-out
+  seeds and decide** (heurarm slot, so both arms pool into one batch).
+- Costs: targeted `audit_card_costs.py` on the five new cards: all 5 compared, all match. Full run:
+  248 compared all match, 96 NOT COMPARED (Scryfall 429), rc=2 -- none of the five among them.
+  Hand-checked against `logs/prevent_damage/scryfall/*.json` too (cost, type, oracle verbatim).
+- `audit_viewer_decisions.py --no-sweep`: no unmapped param; the only oracle flag is Dina's sacrifice
+  (I3).
+- `test/viewer_protocol_check.py --strict --threads 20` (the regression-mode reference gate, run
+  because `main.cpp`'s plan labels / collapse key and the checker's `action_sig` changed): 345 refs,
+  0 play-drift, 0 enum-gap, 0 contract-fail (30 ok, 304 repaired, 10 mull-drift). The ONE
+  board-diverged ref (`Snow/claude_s4_gi3`, not gating) reproduces identically on the I1 commit's
+  binary -- pre-existing, not ours.
+- `audit_card_fields.py --update` (full: 120 cards 429'd and kept their entries; Spellshock /
+  Pyrohemia / Rolling Earthquake among them, so re-fetched with `--update --cards <the five>` after a
+  pause -- all five now in the snapshot, additions only) then offline diff: 452 checked, rc=1 on the
+  ONE pre-existing hard mismatch (Basri, Tomorrow's Champion `exert`, not ours), nothing unfetched;
+  the five new cards' oracle advisories are their bracket notes.
+
+**Deviations from `spells.md`.**
+- No `twobrid_colored` positional parameter on `apply_one` / `CastSpellFromHand`: threaded as a
+  consume-once side channel (`cast_twobrid_colored` / `m_pending_twobrid`, the devour idiom), set at
+  every call site that sets the devour count (7 rollout, 12 executor), so no 20-argument call changed.
+- Twobrid fields live in ManaCost padding (a straight append grew Card and tripped the Dominance.h
+  `sizeof(Permanent)` pin).
+- `PingAllSelfSafe` also guards the FIRST activation inside `ApplyPermAbility` (both worlds), not just
+  the enumeration and the repeat loop.
+- Pyrohemia's K has NO provider narrowing yet (the generic full range is live) and Earthquake's X
+  only the X=0 rule -- both are Stage 5f candidates if the cost matters.
+
+**PROVISIONAL / flagged for Stage 5 and 6a.**
+- `MTG_PD_SECOND_MAIN` default ON (1.75x for +0.025 in the probe).
+- `TutorSearchWidth` 20 and the nonland-first Beseech/Living Wish ordering (a coverage bound; a
+  real ranking is a 5e/5f question). Living Wish's base target changes with it (nonlands first).
+- Activations trail casts within one main (`apply_trailing_activations`), so "ping, THEN cast the
+  creature" is only expressible across the two mains -- one more reason the m2 lever matters.
+- The search casts Rolling Earthquake as plain burn with no Tamanoa out (45 of 186 casts) -- a hold
+  vs burn judgement for the cast-order/provider review, not a rules issue.
+- Disclosed: horsemanship inert; Pyrohemia's instant-speed / end-step window collapsed to our mains;
+  a hand Beseech read by keep-model / land-play heuristics is priced at MV 6 (pessimistic only).
+- The Basri, Tomorrow's Champion `exert` keyword mismatch in `audit_card_fields.py` is pre-existing
+  and not ours.
+
 ## Open questions / provisional decisions (surfaced to user, not blocking)
 
 1. Own-death mid-turn as a GLOBAL rules fix? Default taken: GATED to armed decks; measure with
@@ -265,3 +407,9 @@ never chooses those lines in a playout.
 4. End-of-main voluntary pain sweep (`TapPainSourcesIfUseful`) is a greedy mana policy — within
    the greedy-scope ruling, flagged for the user.
 5. Inert goldfish keywords (Fear, Flying, Deathtouch) — disclose; opponent never blocks.
+6. Pyrohemia / Rolling Earthquake open the searched second main (`MTG_PD_SECOND_MAIN`, default ON).
+   The I2 probe measured 1.75x CPU for +0.025 avg (noise) at n=200 -- default kept ON per 2c-bis;
+   Stage 5 decides on a paired held-out A/B. PROVISIONAL.
+7. Beseech / Living Wish tutor axis width 20 + nonland-first ordering. PROVISIONAL (coverage, not a
+   measured ranking).
+

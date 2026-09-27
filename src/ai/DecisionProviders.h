@@ -309,7 +309,21 @@ public:
                "reach, and our own death, before it can be sound." }; }
     const char* Name() const override { return "PreventDamage"; }
     bool SelfDamageUseful(const GameState& s, int controller) const override;
-    int  TutorSearchWidth() const override { return 16; }
+    // 20 (was 16 in phase I1, sized for Living Wish's 13-name sideboard): Beseech the Queen ("a card
+    // with mana value <= lands you control") reaches EVERY distinct name in the library -- 19 in
+    // this list once four lands are out -- so any smaller width would leave names unsearchable. A
+    // COVERAGE bound, not a narrowing; PROVISIONAL on cost (Stage 5f may narrow it with a ranking).
+    int  TutorSearchWidth() const override { return 20; }
+    // The generic list, NONLANDS FIRST (library order within each half). The axis's base target is
+    // the list's front, and library order is shuffle order -- so without this a Beseech's default
+    // pick was whichever card happened to sit highest, frequently a land. A provider ORDERING only:
+    // with the width above every legal name is still a searched variant.
+    std::vector<std::string> TutorCandidates(const GameState&, int, const CardParams&) const override;
+    // Rolling Earthquake: the generic 0..max range, minus X = 0 unless a cast trigger that DEALS
+    // DAMAGE (Spellshock) is out -- without one an X = 0 cast deals nothing, triggers nothing, and
+    // costs a card, {R} and possibly pain: dominated by not casting it (or discarding it). A
+    // provider narrowing, lossless for this list.
+    std::vector<int> XCandidates(const GameState&, const CardDefinition&, int) const override;
 };
 
 // Angels (Giada / Lyra / Righteous Valkyrie lifegain-angels). Rode GenericProvider.

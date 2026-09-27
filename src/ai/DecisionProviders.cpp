@@ -241,6 +241,8 @@ GenericProvider::TutorCandidates(const GameState& s, int controller, const CardP
     const std::vector<Card>* wish_pool = pp.wish_from_sideboard ? &ap.sideboard : nullptr;
     std::vector<std::string>        all;
     std::unordered_set<std::string> seen;
+    // Beseech the Queen's land-count cap (0 slack = no param, and no hand walk).
+    const int land_slack = pp.tutor_max_mv_is_lands ? TutorLandCapSlack(s, controller) : 0;
     for (const Card& lc : TutorZoneView(ap, wish_pool))
     {
         const CardDefinition* def = CardDatabase::Instance().LookupCached(lc);
@@ -252,6 +254,7 @@ GenericProvider::TutorCandidates(const GameState& s, int controller, const CardP
         { if (CardMatchesTypeName(card, t)) { type_ok = true; break; } }
         if (!CardHasColorNamed(card, pp.tutor_color)) { type_ok = false; }   // Natural Order: green only
         if (!TutorNumericFilterOk(card, pp)) { type_ok = false; }   // Ranger/Recruiter MV/toughness
+        if (!TutorLandCapOk(s, controller, card, pp, land_slack)) { type_ok = false; }   // Beseech
         if (type_ok && seen.insert(lc.m_name).second) { all.push_back(lc.m_name); }
     }
     // RANKED DEFAULT for put-onto-battlefield tutors (MTG_TUTOR_RANKED_DEFAULT, default off --
@@ -1921,6 +1924,18 @@ std::vector<int> GenericProvider::XCandidates(const GameState& s, const CardDefi
             return all;
         }
         return { 0 };
+    }
+    // Symmetric X sweeper (Rolling Earthquake: X to each creature AND each player). The max-X rule
+    // below is WRONG for it: a larger X kills more of OUR creatures and can kill US, and every X
+    // spends a different amount of the turn's mana -- so no X dominates another in general. Return
+    // the whole legal range 0..max (X = 0 included: under Spellshock the cast itself is a damage
+    // event). A deck provider may narrow it; the generic default must not.
+    if (def.params.x_damage_each_creature_and_player)
+    {
+        std::vector<int> all;
+        all.reserve(static_cast<std::size_t>(std::max(0, max_affordable)) + 1);
+        for (int x = 0; x <= max_affordable; ++x) { all.push_back(x); }
+        return all;
     }
     // See DecisionProvider::XCandidates. In a goldfish, an {X} spell (X burn, X draw, X pump)
     // wants all available mana: a larger X is never worse for closing the game. So the prune
@@ -9832,6 +9847,35 @@ namespace
 bool PreventDamageProvider::SelfDamageUseful(const GameState& s, int controller) const
 {
     return dmgev::SelfDamageGainEngine(s, controller);
+}
+
+std::vector<int> PreventDamageProvider::XCandidates(const GameState& s, const CardDefinition& def,
+                                                   int max_affordable) const
+{
+    std::vector<int> xs = GenericProvider::XCandidates(s, def, max_affordable);
+    if (!def.params.x_damage_each_creature_and_player || xs.empty() || xs.front() != 0) { return xs; }
+    // Human play / unpruned: the human decides, the provider does not narrow (core invariant).
+    if (HumanPlayActive() || DecisionUnpruned(UnprunedGate::XSpell)) { return xs; }
+    bool cast_trigger = false;
+    for (const Permanent& p : s.battlefield)
+    {
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+        if (d != nullptr && d->params.on_cast_trigger_damage > 0) { cast_trigger = true; break; }
+    }
+    if (!cast_trigger) { xs.erase(xs.begin()); }
+    return xs;
+}
+
+std::vector<std::string>
+PreventDamageProvider::TutorCandidates(const GameState& s, int controller, const CardParams& pp) const
+{
+    std::vector<std::string> all = GenericProvider::TutorCandidates(s, controller, pp);
+    std::stable_partition(all.begin(), all.end(), [](const std::string& nm)
+    {
+        const CardDefinition* d = CardDatabase::Instance().Lookup(nm);
+        return d == nullptr || !d->card.IsLand();
+    });
+    return all;
 }
 
 const DecisionProvider& DefaultProvider()

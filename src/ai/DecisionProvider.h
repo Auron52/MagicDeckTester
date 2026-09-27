@@ -984,11 +984,21 @@ public:
     // Generic returns 1..min(3, max_affordable), the same hard bound every other K-count activation
     // carries. `max_affordable` is what the CURRENT pool could pay for outright, ignoring any
     // refund, so it is a floor on a self-funding loop and never a ceiling.
+    //
+    // EXCEPT PingAll (Pyrohemia, "{R}: 1 damage to each creature and each player"): there K is not
+    // "how much value" but WHICH OF OUR OWN CREATURES DIE and whether we do, so the cap of 3 would
+    // steal a real decision (the core invariant). The generic answer is the whole range
+    // 1..max_affordable; a deck provider may narrow it.
     virtual std::vector<int> ManaSinkActivationCounts(const GameState& s, const Permanent& source,
                                                      PermAbilityMode mode, int max_affordable) const
     {
-        (void)s; (void)source; (void)mode;
+        (void)s; (void)source;
         std::vector<int> out;
+        if (mode == PermAbilityMode::PingAll)
+        {
+            for (int k = 1; k <= max_affordable; ++k) { out.push_back(k); }
+            return out;
+        }
         const int kmax = std::min(3, max_affordable);
         for (int k = 1; k <= kmax; ++k) { out.push_back(k); }
         return out;

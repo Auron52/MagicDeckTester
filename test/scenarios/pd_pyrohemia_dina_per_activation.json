@@ -1,0 +1,25 @@
+{
+  "_comment": [
+    "Prevent Damage (2026-09-27, phase I2). EACH Pyrohemia activation is its own damage event, so",
+    "Dina drains once PER ACTIVATION. Board: Pyrohemia, Tamanoa + Dina (both sick; resumed at main 1),",
+    "two Mountains, empty hand. The search activates {R} twice (K is a searched axis, the full",
+    "1..affordable range). Each activation: 1 to Tamanoa, Dina, us and the opponent = 4 dealt ->",
+    "Tamanoa gains 4 -> Dina drains 1. Two activations: us 20 - 2 + 8 = 26, opponent 20 - 2 - 2 = 16.",
+    "An implementation that summed the pings into one event would read opponent 17; one that dropped",
+    "the gain (or took the generic K cap wrongly) would read otherwise."
+  ],
+  "deck": "decks/Prevent Damage/Prevent Damage.cod",
+  "turn": 4, "on_the_play": true, "active_life": 20, "opponent_life": 20,
+  "resume_at": "main1",
+  "battlefield": [
+    { "name": "Pyrohemia" },
+    { "name": "Tamanoa", "sick": true },
+    { "name": "Dina, Soul Steeper", "sick": true },
+    { "name": "Mountain" }, { "name": "Mountain" }
+  ],
+  "hand": [],
+  "library_filler": "Mountain", "library_size": 30,
+  "depth": 1, "budget_ms": 50, "max_turns": 4,
+  "expect_active_life": 26,
+  "expect_opponent_life": 16
+}

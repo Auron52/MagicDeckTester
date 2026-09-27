@@ -9494,7 +9494,7 @@
    "keywords": [],
    "power": 2,
    "toughness": 4,
-   "oracle_text": "Whenever a noncreature source you control deals damage, you gain that much life. [noncreature_damage_lifegain. ONE trigger per damage EVENT from a noncreature source we control, for the event's TOTAL damage to every recipient (a Pyrohemia activation hitting both players and every creature is one trigger), one trigger PER Tamanoa (each is its own lifegain event). Sources here: painland / City of Brass / Tarnished Citadel / Grand Coliseum / Ancient Tomb taps, Manabarbs, Spellshock, Pyrohemia, Rolling Earthquake. Prevented damage (Purity) is not dealt, so it does not trigger. Rulings honoured: a Tamanoa killed by the same event still triggers (the caller passes the pre-damage count); and if the damage takes US to 0 or less we lose to the state-based action BEFORE the trigger resolves -- the flush checks own death first (core/DamageEvents.h, SbaCheckpoint). NOT routed yet: generic noncreature burn through EffectHandler::ResolveDirectDamage and the Crackle / Soulfire self-hits -- no card in this deck deals damage that way.]",
+   "oracle_text": "Whenever a noncreature source you control deals damage, you gain that much life. [noncreature_damage_lifegain. ONE trigger per damage EVENT from a noncreature source we control, for the event's TOTAL damage to every recipient (a Pyrohemia activation hitting both players and every creature is one trigger), one trigger PER Tamanoa (each is its own lifegain event). Sources here: painland / City of Brass / Tarnished Citadel / Grand Coliseum / Ancient Tomb taps, Manabarbs, Spellshock, Pyrohemia, Rolling Earthquake. Spellshock's cast trigger, each Pyrohemia activation and each Rolling Earthquake route through dmgev::DealDamageEvent (the sweepers via PerformDamageEachCreatureAndPlayer). Prevented damage (Purity) is not dealt, so it does not trigger. Rulings honoured: a Tamanoa killed by the same event still triggers (the caller passes the pre-damage count); and if the damage takes US to 0 or less we lose to the state-based action BEFORE the trigger resolves -- the flush checks own death first (core/DamageEvents.h, SbaCheckpoint). NOT routed yet: generic noncreature burn through EffectHandler::ResolveDirectDamage and the Crackle / Soulfire self-hits -- no card in this deck deals damage that way.]",
    "template": "custom",
    "parameters": {
     "noncreature_damage_lifegain": true
@@ -9602,11 +9602,94 @@
    ],
    "power": 6,
    "toughness": 6,
-   "oracle_text": "Flying\nIf noncombat damage would be dealt to you, prevent that damage. You gain life equal to the damage prevented this way.\nWhen Purity is put into a graveyard from anywhere, shuffle it into its owner's library. [Flying: keyword (inert vs a goldfish that never blocks). prevent_noncombat_to_self_gain: every NONCOMBAT damage event to its controller is prevented and becomes a lifegain event of that size -- a replacement, applied at once (pain from a land tap is prevented at the tap; the gain resolves with the payment's other events). Prevented damage is not DEALT, so Tamanoa does not trigger on it. graveyard_replace_shuffle_library: the 'put into a graveyard from anywhere -> shuffle into library' clause, via the existing Progenitus / Worldspine path (dies, cleanup discard). [PARTIAL: modelled as a replacement where the card has a TRIGGER; the only observable difference is a window in which Purity sits in the graveyard, and nothing in this deck or the engine reads the graveyard in that window (no stack) -- disclosed.] SIDEBOARD card, reachable via Living Wish / Green Sun's Zenith.]",
+   "oracle_text": "Flying\nIf noncombat damage would be dealt to you, prevent that damage. You gain life equal to the damage prevented this way.\nWhen Purity is put into a graveyard from anywhere, shuffle it into its owner's library. [Flying: keyword (inert vs a goldfish that never blocks). prevent_noncombat_to_self_gain: every NONCOMBAT damage event to its controller is prevented and becomes a lifegain event of that size -- a replacement, applied at once (pain from a land tap is prevented at the tap; the gain resolves with the payment's other events). Prevented damage is not DEALT, so Tamanoa does not trigger on it. graveyard_replace_shuffle_library: the 'put into a graveyard from anywhere -> shuffle into library' clause, via the existing Progenitus / Worldspine path (dies, cleanup discard). [PARTIAL: modelled as a replacement where the card has a TRIGGER; the only observable difference is a window in which Purity sits in the graveyard, and nothing in this deck or the engine reads the graveyard in that window (no stack) -- disclosed.] SIDEBOARD card, reachable via Living Wish (it is white, so never a Green Sun's Zenith target -- and GSZ searches the library, not the sideboard).]",
    "template": "custom",
    "parameters": {
     "prevent_noncombat_to_self_gain": true,
     "graveyard_replace_shuffle_library": true
+   }
+  },
+  {
+   "name": "Spellshock",
+   "mana_cost": "{2}{R}",
+   "types": [
+    "Enchantment"
+   ],
+   "subtypes": [],
+   "keywords": [],
+   "oracle_text": "Whenever a player casts a spell, this enchantment deals 2 damage to that player. [on_cast_trigger_damage 2 + on_cast_trigger_any_mv: the Eidolon of the Great Revel cast trigger with NO mana-value cap (the loader widens on_cast_trigger_max_mv, so the shared FireOnCastTriggers -- every cast site, executor and rollout -- and the subset self-damage bill both see it). Fires once per Spellshock per CAST (a copy is not cast, CR 707.10); Spellshock is on the stack, not the battlefield, during its own cast, so it never triggers off itself. On this deck's armed board each trigger is its OWN damage event from a noncreature source we control (dmgev::DealDamageEvent): Purity prevents it and gains that much, Tamanoa gains it back and Vito / Dina drain off that gain -- and our own death is checked BEFORE the gain resolves (the Tamanoa ruling), so casting at 2 life with Tamanoa out still loses. The subset enumerators' 'this plan kills us with its own cast triggers' bill is exact per event on an armed board (dmgev::CastTriggerBill: with Tamanoa out only the largest single hit must fit under our life; with Purity, nothing lands). [PARTIAL: 'a player' -- only OUR casts are modelled; the goldfish opponent casts nothing (mtg-ai.md), so its half is provably inert.] [PARTIAL: the trigger resolves at cast time, ahead of the spell (the engine's standard cast-trigger collapse) -- equivalent here, nothing can respond.]]",
+   "template": "custom",
+   "parameters": {
+    "on_cast_trigger_damage": 2,
+    "on_cast_trigger_any_mv": true
+   }
+  },
+  {
+   "name": "Pyrohemia",
+   "mana_cost": "{2}{R}{R}",
+   "types": [
+    "Enchantment"
+   ],
+   "subtypes": [],
+   "keywords": [],
+   "oracle_text": "At the beginning of the end step, if no creatures are on the battlefield, sacrifice this enchantment.\n{R}: This enchantment deals 1 damage to each creature and each player. [ping_all_cost {R} + ping_all_amount 1 -> PermAbilityMode::PingAll: NO {T} and no sacrifice, so it is REPEATABLE within a turn and bounded only by mana (the Essence Depleter / Slimefoot shape: PermAbilityTaps lists it as non-tapping, SpendRepeatActivations pays the extra activations in blocks, shared by the executor and the rollout). EACH ACTIVATION IS ITS OWN DAMAGE EVENT (the Scryfall ruling), through the shared PerformDamageEachCreatureAndPlayer: 1 to every creature on both sides (the Pyroclasm two-pass: simultaneous damage, then one lethality check, detach, OnCreatureDies), then 1 to each player -- so one Tamanoa trigger for the event's TOTAL (1 x (creatures + players)), counted BEFORE the damage so a Tamanoa the ping kills still triggers (CR 603.10a), and the gain resolves AFTER the creature deaths, so a Vito / Dina / Faithmender the ping kills neither drains nor doubles. Our own death is checked before the gain; an activation whose own hit would kill us is never offered (lossless -- a suicide is never a win, and both players to 0 is a DRAW, CR 104.4a) and never applied. THE ACTIVATION COUNT K IS A SEARCHED AXIS over its whole range 1..affordable (DecisionProvider::ManaSinkActivationCounts' PingAll branch -- the generic cap of 3 would steal a real decision, since K decides which of OUR creatures die: three pings kill Vito and Dina, four Tamanoa); the provider is the only permitted narrower. Human play folds K to 1 and re-prompts after each activation (the mana-sink convention), so every count is reachable. END-STEP SACRIFICE: endstep_sac_if_no_creatures, PerformEndStepNoCreatureSacrifice from both end-step sites (lockstep) -- ANY creature on either side keeps it, so the opponent's passive spawns count; our end step is the only one (the opponent takes no turns). Ordered after the end-step token trigger (both ours; making the token first keeps the enchantment). A second main is opened for this deck (DeckUsesSecondMain, MTG_PD_SECOND_MAIN, PROVISIONAL) because 'attack, then ping' keeps the attackers' damage. [PARTIAL: the ability is instant-speed on the real card but is enumerated only in our main phases -- inert vs the passive opponent, nothing to respond to; the end-step window before the sacrifice check is not offered either, and a ping there is identical to one in main 2.]]",
+   "template": "custom",
+   "parameters": {
+    "ping_all_cost": "{R}",
+    "ping_all_amount": 1,
+    "endstep_sac_if_no_creatures": true
+   }
+  },
+  {
+   "name": "Rolling Earthquake",
+   "mana_cost": "{X}{R}",
+   "types": [
+    "Sorcery"
+   ],
+   "subtypes": [],
+   "keywords": [],
+   "oracle_text": "Rolling Earthquake deals X damage to each creature without horsemanship and each player. [x_damage_each_creature_and_player: ONE damage event from a noncreature source we control, resolved by the shared PerformDamageEachCreatureAndPlayer (EffectHandler + apply_one, lockstep) -- X to every creature on both sides (the Pyroclasm two-pass), then X to each player; Tamanoa triggers once for the TOTAL, X x (creatures + players), counted before the damage so a Tamanoa the quake kills still triggers; the gain resolves after the deaths, so a Vito / Dina / Faithmender killed by the same quake does not drain or double; our own death (X >= our life, Purity aside) is checked BEFORE the gain, and a quake that takes both players to 0 is a DRAW (CR 104.4a), not a win. X IS A SEARCHED AXIS over the whole legal range 0..max (a dedicated enumeration branch; GenericProvider::XCandidates returns every X for this param -- its usual 'max X' rule is wrong here, since X decides which of OUR creatures survive, whether we do, and what mana is left). X = 0 is kept: under Spellshock the cast alone is a damage event. Human play sees every X as a plan variant. A second main is opened for this deck (MTG_PD_SECOND_MAIN, PROVISIONAL): attack, then quake. [PARTIAL: 'without horsemanship' -- no creature in the engine has horsemanship, so 'each creature' is exact; provably inert.]]",
+   "template": "custom",
+   "parameters": {
+    "x_damage_each_creature_and_player": true
+   }
+  },
+  {
+   "name": "Beseech the Queen",
+   "mana_cost": "{2/B}{2/B}{2/B}",
+   "types": [
+    "Sorcery"
+   ],
+   "subtypes": [],
+   "keywords": [],
+   "oracle_text": "({2/B} can be paid with any two mana or with {B}. This card's mana value is 6.)\nSearch your library for a card with mana value less than or equal to the number of lands you control, reveal it, put it into your hand, then shuffle. [TWOBRID PIPS MODELLED (new, 2026-09-27): the parser reads each {2/B} as generic 2 plus ManaCost::twobrid metadata (before this it MISPARSED {2/B} as {B} -- MV 3), so the mana value is 6 for every reader (CR 202.3f) and the all-generic payment is always legal; the card is black (CR 105.2). Which pips to pay with {B} is a SEARCHED branch (CollectActions' twobrid post-pass: one variant per coloured-pip count k = 0..3, cost converted by PayTwobridWithColor, Action::twobrid_colored threaded through every recompute site and the plan signature '#W'); no dominance prune, since an Ancient Tomb's {C}{C} pays a {2} pip exactly. A rollout leaf takes the single cheapest variant its pool can pay, so it never prices Beseech as a 6-drop it would cast for {B}{B}{B}. The human plan menu shows each payment as its own variant. TUTOR: tutor_to_hand, tutor_types [] = ANY card (GenericProvider::TutorCandidates reads empty as 'no restriction'), tutor_shuffle_after, and tutor_max_mv_is_lands: MV <= lands you control, read AT RESOLUTION (PerformTutor re-checks and re-picks from the live legal list); enumeration offers the cap one land higher while the land drop is open and a land is in hand, so the plan that plays its land first can aim at the extra mana value. The target is a searched axis (the provider orders nonlands first and widens TutorSearchWidth to 20 so every distinct library name is reachable); human play re-asks the target at resolution. [PARTIAL: 'reveal' -- the information half is inert vs the passive opponent; the viewer shows the searched card.] [PARTIAL: heuristics that read a HAND card's printed cost (keep model, land-play colour demand) price it at MV 6 / six generic -- pessimistic only, disclosed.]]",
+   "template": "custom",
+   "parameters": {
+    "tutor_to_hand": true,
+    "tutor_types": [],
+    "tutor_shuffle_after": true,
+    "tutor_max_mv_is_lands": true
+   }
+  },
+  {
+   "name": "Green Sun's Zenith",
+   "mana_cost": "{X}{G}",
+   "types": [
+    "Sorcery"
+   ],
+   "subtypes": [],
+   "keywords": [],
+   "oracle_text": "Search your library for a green creature card with mana value X or less, put it onto the battlefield, then shuffle. Shuffle Green Sun's Zenith into its owner's library. [Chord of Calling without convoke: tutor_to_battlefield_single + tutor_mv_max_is_x + tutor_types [Creature] + tutor_color G + tutor_shuffle_after. X AXIS = the Chord branch: one variant per (distinct green library creature, X = its MV) -- X > MV(target) is strictly dominated (same fetch, more mana) -- with X and the target in the plan signature; the Chord branch now applies the tutor_color conjunct (empty for Chord -> byte-identical), the same filter the resolution (PerformTutorToBattlefield) always applied. In this list: Dina at X=2, Tamanoa at X=3 (Rhox Faithmender and Vito are not green; Purity is white and in the sideboard). The put creature takes the full ETB cascade. SELF-SHUFFLE: shuffles_self_into_library_on_resolve -- the resolved spell goes into the library and the library is shuffled a SECOND time (ShuffleSelfIntoLibrary, from EffectHandler::MoveToGraveyard and apply_one, lockstep), faithful to the oracle's two shuffles. Deliberately NOT graveyard_replace_shuffle_library, which is a replacement from ANY zone and would also catch a cleanup discard (a discarded Zenith goes to the graveyard). Human play re-asks the fetch at resolution (the Chord convention).]",
+   "template": "custom",
+   "parameters": {
+    "tutor_to_battlefield_single": true,
+    "tutor_mv_max_is_x": true,
+    "tutor_types": [
+     "Creature"
+    ],
+    "tutor_color": "G",
+    "tutor_shuffle_after": true,
+    "shuffles_self_into_library_on_resolve": true
    }
   }
  ]

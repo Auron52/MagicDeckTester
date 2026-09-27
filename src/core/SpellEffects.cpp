@@ -42,6 +42,23 @@
 // keyboard sees the real, already-shrunken pool instead of a stale plan-time grid.
 enum class TutorAskResult { NoCandidates, Declined, Chosen };
 
+// The provider's tutor candidates, restricted to what is legal AT RESOLUTION. Only Beseech the
+// Queen's land-count cap differs between the two moments (enumeration lets it run one land ahead
+// when the land drop is open -- see TutorLandCapOk), so this is the provider list verbatim for every
+// other tutor (no copy, no walk).
+static std::vector<std::string> LiveTutorCandidates(const GameState& state, int controller_index,
+                                                    const CardParams& pp)
+{
+    std::vector<std::string> cands = ResolveProvider(state).TutorCandidates(state, controller_index, pp);
+    if (!pp.tutor_max_mv_is_lands) { return cands; }
+    cands.erase(std::remove_if(cands.begin(), cands.end(), [&](const std::string& nm)
+    {
+        const CardDefinition* d = CardDatabase::Instance().Lookup(nm);
+        return d == nullptr || !TutorLandCapOk(state, controller_index, d->card, pp);
+    }), cands.end());
+    return cands;
+}
+
 static TutorAskResult AskHumanTutorPick(GameState& state, int controller_index,
                                         const CardParams& pp, const std::string& source_name,
                                         const std::string& baked, std::string& out)
@@ -50,7 +67,7 @@ static TutorAskResult AskHumanTutorPick(GameState& state, int controller_index,
     // would otherwise show it three times, and picking any of them fetches the same first matching
     // card anyway. Dedup preserves first-occurrence order.
     const std::vector<std::string> cands =
-        ResolveProvider(state).TutorCandidates(state, controller_index, pp);
+        LiveTutorCandidates(state, controller_index, pp);
     std::vector<std::string> uniq;
     for (const std::string& c : cands)
     { if (std::find(uniq.begin(), uniq.end(), c) == uniq.end()) { uniq.push_back(c); } }
@@ -99,7 +116,7 @@ static TutorAskResult AskHumanTutorPick(GameState& state, int controller_index,
         def = 0;
         HumanPlaySuppress pruned;   // ranked (pruned) view; restores on scope exit
         const std::vector<std::string> ranked =
-            ResolveProvider(state).TutorCandidates(state, controller_index, pp);
+            LiveTutorCandidates(state, controller_index, pp);
         if (!ranked.empty())
         {
             auto it = std::find(uniq.begin(), uniq.end(), ranked.front());
@@ -141,9 +158,18 @@ void PerformTutor(GameState& state, int controller_index, const CardParams& pp,
     // scripted pin is still consumed exactly once. Gated on tutor_optional like the index decline.
     if (pp.tutor_optional && target_name == kTutorDeclineTarget) { return; }
     std::string want = target_name;
+    // Beseech the Queen (tutor_max_mv_is_lands): the land-count cap is read HERE, at resolution.
+    // A plan-baked target the board cannot reach now (enumeration offered it one land higher, for
+    // the plan that plays a land first) is re-picked from the LIVE legal list below -- the real
+    // player chooses on resolution, so a whiff would be the less faithful disposition.
+    if (pp.tutor_max_mv_is_lands && !want.empty())
+    {
+        const CardDefinition* wd = CardDatabase::Instance().Lookup(want);
+        if (wd == nullptr || !TutorLandCapOk(state, controller_index, wd->card, pp)) { want.clear(); }
+    }
     if (want.empty())
     {
-        std::vector<std::string> cands = ResolveProvider(state).TutorCandidates(state, controller_index, pp);
+        std::vector<std::string> cands = LiveTutorCandidates(state, controller_index, pp);
         if (cands.empty()) { return; }
         want = cands.front();
         // "You MAY search" declined by the SEARCH (kTutorDeclineChoice). Checked BEFORE the clamp
@@ -241,7 +267,7 @@ void PerformTutor(GameState& state, int controller_index, const CardParams& pp,
         static const bool s_chosen_rank = EnvOn("MTG_TUTOR_CHOSEN_RANK");
         if (s_chosen_rank)
         {
-            std::vector<std::string> cands = ResolveProvider(state).TutorCandidates(state, controller_index, pp);
+            std::vector<std::string> cands = LiveTutorCandidates(state, controller_index, pp);
             std::vector<std::string> uniq;
             for (const std::string& c : cands)
             { if (std::find(uniq.begin(), uniq.end(), c) == uniq.end()) { uniq.push_back(c); } }

@@ -1432,6 +1432,34 @@ inline bool TutorNumericFilterOk(const Card& card, const CardParams& pp)
     return true;
 }
 
+// Beseech the Queen: "a card with mana value less than or equal to the number of lands you
+// control" (tutor_max_mv_is_lands). STATEFUL, unlike TutorNumericFilterOk, so it is its own
+// conjunct: the cap is the land count AT RESOLUTION (PerformTutor re-checks it and re-picks), while
+// ENUMERATION (GenericProvider::TutorCandidates) passes `enum_slack` = 1 when the land drop is still
+// open and a land is in hand -- the plan that plays a land first resolves Beseech one land higher,
+// and a target it cannot reach without that land is re-picked at resolution rather than lost.
+// Inert (true) for every tutor without the param.
+inline int TutorLandCapSlack(const GameState& state, int controller)
+{
+    const Player& ap = state.players[controller];
+    if (ap.lands_played_this_turn >= ap.LandDropsAvailable()) { return 0; }
+    for (const Card& c : ap.hand)
+    {
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(c);
+        if ((d ? d->card : c).IsLand()) { return 1; }
+    }
+    return 0;
+}
+inline bool TutorLandCapOk(const GameState& state, int controller, const Card& card,
+                           const CardParams& pp, int enum_slack = 0)
+{
+    if (!pp.tutor_max_mv_is_lands) { return true; }
+    int lands = 0;
+    for (const Permanent& p : state.battlefield)
+    { if (p.controller_index == controller && p.card.IsLand()) { ++lands; } }
+    return card.m_mana_cost.ManaValue() <= lands + enum_slack;
+}
+
 inline std::vector<std::string> TutorCandidates(const GameState& state, int controller_index,
                                                 const CardParams& pp)
 {
@@ -1614,6 +1642,23 @@ inline bool MaybeReplaceGraveyardWithLibraryShuffle(GameState& state, int contro
     state.players[controller_index].library.push_back(c);
     ShuffleAfterSearch(state, controller_index);
     return true;
+}
+
+// Green Sun's Zenith (shuffles_self_into_library_on_resolve): "Shuffle Green Sun's Zenith into its
+// owner's library." The RESOLVED spell goes into the library, then a shuffle -- a SECOND shuffle
+// after the search's own (faithful: the oracle orders them "...then shuffle. Shuffle Green Sun's
+// Zenith into its owner's library."), keyed on the next search ordinal like every reshuffle, so
+// both worlds draw the same order. Deliberately NOT graveyard_replace_shuffle_library (Progenitus),
+// which is a replacement from ANY zone and would also catch a cleanup discard.
+inline void ShuffleSelfIntoLibrary(GameState& state, int controller_index, const Card& self)
+{
+    state.players[controller_index].library.push_back(self);
+    ShuffleAfterSearch(state, controller_index);
+    if (g_play_event_sink != nullptr)
+    {
+        EmitPlayEvent(state.turn_number, "ability",
+                      self.m_name.str() + " is shuffled into your library");
+    }
 }
 
 // PerformTutor -- body in SpellEffects.cpp (see the header note above).
@@ -3174,7 +3219,24 @@ inline void FireOnCastTriggers(GameState& state, const CardDefinition& cast_def)
 
         if (def->params.on_cast_trigger_max_mv > 0 && mv <= def->params.on_cast_trigger_max_mv)
         {
-            state.players[active].life -= def->params.on_cast_trigger_damage;
+            if (state.dmg_events_armed)
+            {
+                // ARMED (Prevent Damage): the trigger is a DAMAGE EVENT from its source -- Spellshock
+                // is a noncreature source we control, so Purity prevents it and Tamanoa gains it back,
+                // and the SBA checks our own death before any gain resolves (DealDamageEvent). One
+                // event per trigger source per cast. "That player" is the caster (the active player);
+                // the opponent casts nothing, so the to_opp half is never reached in a goldfish.
+                const bool to_me = p.controller_index == active;
+                dmgev::DealDamageEvent(state, p.controller_index, p.card.IsCreature(),
+                                       /*combat=*/false,
+                                       to_me ? def->params.on_cast_trigger_damage : 0,
+                                       to_me ? 0 : def->params.on_cast_trigger_damage,
+                                       /*to_creatures_total=*/0, def->card.m_name.str().c_str());
+            }
+            else
+            {
+                state.players[active].life -= def->params.on_cast_trigger_damage;
+            }
         }
 
         // Mana Cannons: casting a multicolored spell deals (its color count) damage to any
@@ -5398,6 +5460,43 @@ inline void PerformEndStepLifegainTokens(GameState& state)
         // A copy of a NAMED token (the Ajani Pridemate token) re-resolves the real definition, so
         // its own "whenever you gain life" trigger stays live on the copy.
         for (const Card& c : sources) { CreateTokenCopyOfCard(state, active, c); }
+    }
+}
+
+// Pyrohemia: "At the beginning of the end step, if no creatures are on the battlefield, sacrifice
+// this enchantment." ANY creature on EITHER side satisfies it -- the opponent's passive spawns count
+// (GoldFishRunner::PopulateOpponentSpawns), so on most spawn patterns Pyrohemia stays even with our
+// own board empty. Intervening-if (CR 603.4): one check at the end step, equivalent here (nothing
+// can create a creature between the trigger and its resolution). "The end step" is EVERY end step;
+// the passive opponent takes no turns, so ours is the only one there is. Lockstep: called from
+// GameEngine::EndStep (executor) and TurnSolver::SimulateEndAndStartNextTurn (rollout), beside
+// PerformEndStepLifegainTokens. Cost for every other deck: one IsCreature bitmask walk that returns
+// at the first creature, and a param scan only on a creature-less board.
+inline void PerformEndStepNoCreatureSacrifice(GameState& state)
+{
+    for (const Permanent& q : state.battlefield) { if (q.card.IsCreature()) { return; } }
+    for (int i = static_cast<int>(state.battlefield.size()) - 1; i >= 0; --i)
+    {
+        const Permanent& q = state.battlefield[i];
+        if (q.def_absent) { continue; }
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(q.card);
+        if (d == nullptr || !d->params.endstep_sac_if_no_creatures) { continue; }
+        const Card dead  = q.card;
+        const int  owner = q.owner_index;
+        const int  num   = dead.m_number;
+        for (Permanent& r : state.battlefield)
+        {
+            if (r.equipped_to      == num) { r.equipped_to      = 0; }
+            if (r.aura_attached_to == num) { r.aura_attached_to = 0; }
+        }
+        state.battlefield.erase(state.battlefield.begin() + i);
+        state.players[owner].graveyard.push_back(dead);
+        if (g_play_event_sink != nullptr)
+        {
+            EmitPlayEvent(state.turn_number, "ability",
+                          dead.m_name.str() + ": no creatures on the battlefield at the end step"
+                          " -- sacrificed");
+        }
     }
 }
 
@@ -9136,6 +9235,54 @@ inline void PerformDamageAllCreatures(GameState& state, int controller,
                       + " to each creature (" + std::to_string(hit) + " hit, "
                       + std::to_string(died.size()) + " died)");
     }
+}
+
+// Rolling Earthquake ("deals X damage to each creature without horsemanship and each player") and
+// one Pyrohemia activation ("deals 1 damage to each creature and each player"): ONE damage EVENT
+// from a noncreature source, hitting every creature on both sides and every player. Shared by the
+// executor and the rollout (Earthquake: EffectHandler + apply_one; Pyrohemia: ApplyPermAbility,
+// which both worlds call).
+//
+// ORDER, and it is the whole point of the helper (the Tamanoa / Vito / Dina rulings):
+//   1. The damage is simultaneous (CR 120.3/608.2), so the Tamanoa count is read BEFORE anything is
+//      dealt -- a Tamanoa this very event kills still triggers (leaves-the-battlefield look-back,
+//      CR 603.10a), for the event's TOTAL: amount x (creatures hit + players hit).
+//   2. Creature damage + deaths: the shared PerformDamageAllCreatures (lethality, detach,
+//      OnCreatureDies -- identical in both worlds). A Vito / Dina / Faithmender killed here is gone
+//      BEFORE the lifegain resolves, so it neither doubles nor drains (their abilities are not
+//      look-back triggers on the gain).
+//   3. Player damage + the SBA for OUR life + Tamanoa's gain: dmgev::DealDamageEvent, which checks
+//      our own death BEFORE the gain resolves (the Tamanoa ruling) and makes "both players at 0 in
+//      one event" a DRAW (CR 104.4a) via OpponentHasLost's `our life > 0` conjunct.
+// Horsemanship is inert: no creature in the engine has it, so "each creature" is exact.
+// UNARMED (a deck with a sweeper but none of the damage-event cards): the legacy raw `life -=` to
+// both players, no own-death model -- nothing else carries these params today.
+inline void PerformDamageEachCreatureAndPlayer(GameState& state, int controller,
+                                               const CardDefinition& def, int amt)
+{
+    if (amt <= 0) { return; }
+    const int tamanoa_lki = state.dmg_events_armed ? dmgev::CountTamanoa(state, controller) : 0;
+    int creatures = 0;
+    for (const Permanent& q : state.battlefield) { if (q.card.IsCreature()) { ++creatures; } }
+    PerformDamageAllCreatures(state, controller, def, amt);
+    const int opp_hit = amt * gamesetup::OpponentHeads();
+    if (g_play_event_sink != nullptr)
+    {
+        EmitPlayEvent(state.turn_number, "damage",
+                      "\xF0\x9F\x94\xA5 " + def.card.m_name.str() + ": " + std::to_string(amt)
+                      + " to each player");
+    }
+    if (state.dmg_events_armed)
+    {
+        dmgev::DealDamageEvent(state, controller, def.card.IsCreature(), /*combat=*/false,
+                               /*to_self=*/amt, /*to_opp=*/opp_hit,
+                               /*to_creatures_total=*/amt * creatures,
+                               def.card.m_name.str().c_str(), tamanoa_lki);
+        return;
+    }
+    state.players[controller].life     -= amt;
+    state.players[1 - controller].life -= opp_hit;
+    state.opponent_lost_life_this_turn  = true;
 }
 
 // ---- Surtland Flinger: attack-trigger fling -----------------------------------------------------
@@ -16589,6 +16736,7 @@ inline const char* PermAbilityLabel(PermAbilityMode mode)
         case PermAbilityMode::SporeSaproling: return "remove three spore counters: create a Saproling";
         case PermAbilityMode::PayToken:       return "create a creature token";
         case PermAbilityMode::FadeSaproling:  return "remove a fade counter: create a Saproling";
+        case PermAbilityMode::PingAll:        return "deal damage to each creature and each player";
         default:                              return "activate";
     }
 }
@@ -16597,6 +16745,7 @@ inline const char* PermAbilityLabel(PermAbilityMode mode)
 // only, shared by the rollout and the executor. `source_id` is the activating permanent's
 // m_number.
 bool TapForCostDirect(GameState& state, const ManaCost& cost_in, bool for_creature);   // TurnSolver
+inline bool PingAllSelfSafe(const GameState& state, int controller, const CardDefinition& def);   // below
 inline void ApplyPermAbility(GameState& state, int controller, int source_id, PermAbilityMode mode)
 {
     int idx = -1;
@@ -16997,6 +17146,18 @@ inline void ApplyPermAbility(GameState& state, int controller, int source_id, Pe
             }
             break;
         }
+        case PermAbilityMode::PingAll:
+        {
+            // Pyrohemia: "{R}: This enchantment deals 1 damage to each creature and each player."
+            // ONE activation = ONE damage event (its own Tamanoa trigger and Dina drain), through
+            // the shared sweeper helper -- creatures first, then players + our SBA + the gain.
+            // Backstop for both worlds: the enumeration never offers a self-lethal activation, but
+            // the state can move between plan and apply (a pain tap, a gain engine that died).
+            if (!PingAllSelfSafe(state, controller, *d)) { break; }
+            PerformDamageEachCreatureAndPlayer(state, controller, *d,
+                                               std::max(1, d->params.ping_all_amount));
+            break;
+        }
         case PermAbilityMode::PayToken:
         {
             // Slimefoot, the Stowaway: "{4}: Create a 1/1 green Saproling creature token."
@@ -17157,6 +17318,17 @@ inline int SpendSporeActivations(GameState& state, int controller, int source_id
 //     well-formed cost (the pips are independently assignable). No such card exists today.
 bool TapForCostDirect(GameState& state, const ManaCost& cost_in, bool for_creature);   // TurnSolver
 
+// Pyrohemia: can we take ONE more activation's hit without dying? Our own death is a state-based
+// action checked BEFORE the activation's Tamanoa gain resolves, so the test is the single hit
+// against our current life, whatever gain engine is out; Purity prevents the hit outright. Shared
+// by the enumeration (an activation that kills us is never offered -- a suicide line, never a
+// win, CR 104.4a), SpendRepeatActivations' per-activation guard, and the apply sites.
+inline bool PingAllSelfSafe(const GameState& state, int controller, const CardDefinition& def)
+{
+    if (state.dmg_events_armed && dmgev::PurityProtects(state, controller)) { return true; }
+    return state.players[controller].life > std::max(1, def.params.ping_all_amount);
+}
+
 inline int SpendRepeatActivations(GameState& state, int controller, int source_id,
                                   PermAbilityMode mode, const CardDefinition& def, int want)
 {
@@ -17174,6 +17346,10 @@ inline int SpendRepeatActivations(GameState& state, int controller, int source_i
                                       // the class of bug the per-mode tables keep producing.
                                       : (mode == PermAbilityMode::PayToken)
                                       ? &def.params.pay_token_cost
+                                      // Pyrohemia's "{R}: 1 damage to each creature and each
+                                      // player" -- the same silent-zero trap as the note above.
+                                      : (mode == PermAbilityMode::PingAll)
+                                      ? &def.params.ping_all_cost
                                       : &def.params.exile_opponent_top_cost;
     if (!rc->has_value()) { return 0; }
 
@@ -17214,6 +17390,23 @@ inline int SpendRepeatActivations(GameState& state, int controller, int source_i
             }
             useful = std::min(useful, targets);
         }
+        else if (mode == PermAbilityMode::PingAll)
+        {
+            // Pyrohemia: each activation deals `amt` to US too, and our own death is checked
+            // BEFORE any Tamanoa gain resolves -- so never buy an activation whose own hit is
+            // lethal (Purity prevents it outright). Without a gain engine the hits also
+            // ACCUMULATE, so the block is capped by what our life can absorb; with one, every hit
+            // is paid back before the next, and the per-activation guard in the apply loop below
+            // catches a gain engine the sweep itself kills.
+            const int amt = std::max(1, def.params.ping_all_amount);
+            if (!(state.dmg_events_armed && dmgev::PurityProtects(state, controller)))
+            {
+                const int life = state.players[controller].life;
+                const bool gains = state.dmg_events_armed && dmgev::CountTamanoa(state, controller) > 0;
+                const int cap = gains ? (life > amt ? useful : 0) : std::max(0, (life - 1) / amt);
+                useful = std::min(useful, cap);
+            }
+        }
         else if (mode == PermAbilityMode::GrantLifelink)
         {
             // Only an OWN attack-eligible creature without lifelink gains anything (see the
@@ -17249,9 +17442,19 @@ inline int SpendRepeatActivations(GameState& state, int controller, int source_i
         }
         if (!paid) { break; }
 
+        int done = 0;
         for (int i = 0; i < k; ++i)
-        { ApplyPermAbility(state, controller, source_id, mode); }
-        fired += k;
+        {
+            // PingAll: stop before an activation whose own hit would kill us (a gain engine this
+            // block's earlier activations killed; see the cap above). The block's remaining mana
+            // is already spent -- a rare, conservative loss, never a suicide.
+            if (mode == PermAbilityMode::PingAll && !PingAllSelfSafe(state, controller, def)) { break; }
+            ApplyPermAbility(state, controller, source_id, mode);
+            ++done;
+            if (mode == PermAbilityMode::PingAll && OpponentHasLost(state)) { break; }
+        }
+        fired += done;
+        if (done < k) { break; }
         want  -= k;
     }
     return fired;

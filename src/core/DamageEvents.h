@@ -49,8 +49,10 @@
 // NOT ROUTED HERE YET (bracket-noted on the cards, ledger `docs/design/analysis-Prevent Damage.md`):
 // generic noncreature burn (EffectHandler::ResolveDirectDamage + the rollout twins) and the
 // Crackle / Soulfire self-hits -- no card in this deck deals damage that way, and each is a
-// separate executor/rollout pair to convert when a deck needs it. Phase I2 routes Spellshock,
-// Pyrohemia and Rolling Earthquake through DealDamageEvent.
+// separate executor/rollout pair to convert when a deck needs it. ROUTED (phase I2): Spellshock's
+// cast trigger (FireOnCastTriggers) and each Pyrohemia activation / Rolling Earthquake
+// (PerformDamageEachCreatureAndPlayer, SpellEffects.h -- creature pass first, then DealDamageEvent
+// with the pre-damage Tamanoa count as `tamanoa_lki`).
 #include "EnvFlags.h"
 #include "GameSetup.h"
 #include "GameState.h"
@@ -360,6 +362,20 @@ inline bool SelfDamageGainEngine(const GameState& s, int ctrl)
 {
     if (!s.dmg_events_armed) { return false; }
     return PurityProtects(s, ctrl) || CountTamanoa(s, ctrl) > 0;
+}
+
+// The subset enumerators' "a plan that kills us via its own cast triggers cannot win" bill
+// (Eidolon / Spellshock). Unarmed: the plain SUM (byte-identical to the historical test). Armed, it
+// is exact per EVENT: each trigger is its own damage event with an SBA check before its gain, so
+// with Purity out nothing lands at all, and with a Tamanoa out every hit is paid back before the
+// next one -- only the largest SINGLE hit has to fit under our life. (Optimistic only if the plan
+// itself kills the Tamanoa mid-line; the own-death machinery still scores that line correctly.)
+inline int CastTriggerBill(const GameState& s, int sum, int max_single)
+{
+    if (!s.dmg_events_armed) { return sum; }
+    const int ctrl = s.active_player_index;
+    if (PurityProtects(s, ctrl)) { return 0; }
+    return CountTamanoa(s, ctrl) > 0 ? max_single : sum;
 }
 
 // RULES SAFETY of paying with pain, for a whole payment: even if EVERY pain land we can still tap in

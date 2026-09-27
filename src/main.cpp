@@ -682,6 +682,11 @@ static std::string SummarizePlan(const TurnSolver::Plan& plan, const GameState& 
         // the pay-mana and pay-life variants of one action render identically (the blink lesson).
         if (a.phyrexian_life > 0)
         { tag += " (pay " + std::to_string(a.phyrexian_life) + " life)"; }
+        // Twobrid variant ({2/B} -- Beseech the Queen): same lesson -- the {2}-paid and {B}-paid
+        // casts of one card render identically without it.
+        if (a.twobrid_colored > 0)
+        { tag += " (pay " + std::to_string(a.twobrid_colored) + " twobrid pip"
+                 + (a.twobrid_colored > 1 ? "s" : "") + " with colour)"; }
         // Evoke variant (Reveillark): same lesson -- the evoke and hard casts share a name.
         if (a.evoke) { tag += " (evoke)"; }
         // DEVOUR count (Mycoloth, CR 702.81). Same lesson again, and it had actually GONE WRONG:
@@ -1280,6 +1285,7 @@ static void WriteDecisionJson(std::ostream& os, const GameState& s,
                      + "|" + std::to_string(a.sac_victim_id)
                      + "|" + std::to_string(a.sac_count)
                      + "|" + std::to_string(a.phyrexian_life)
+                     + "|" + std::to_string(a.twobrid_colored)
                      + (a.evoke ? "|e" : "") + (a.free_cast ? "|f" : "") + ";";
             }
             if (has_collapse && !pod_reps.insert(key).second) { hide_bundle[i] = 1; }
@@ -1904,6 +1910,8 @@ static void WriteDecisionJson(std::ostream& os, const GameState& s,
             // the choose dialog tell the pay-mana and pay-2-life variants of one cast/activation
             // apart (the bestow lesson above).
             if (ac.phyrexian_life > 0)            { os << ", \"phyrexian_life\": " << ac.phyrexian_life; }
+            // Twobrid variant ({2/B}): how many pips this cast pays with their coloured side.
+            if (ac.twobrid_colored > 0)           { os << ", \"twobrid_colored\": " << ac.twobrid_colored; }
             // Evoke variant (Reveillark): same bestow lesson -- the two casts share a name.
             if (ac.evoke)                         { os << ", \"evoke\": true"; }
             //  * ADVENTURE (Brightcap Badger // Fungus Frolic) is the bestow lesson again, and the

@@ -1,0 +1,23 @@
+{
+  "_comment": [
+    "Prevent Damage (2026-09-27, phase I2). Rolling Earthquake's X is a SEARCHED axis, not 'all the",
+    "mana'. Board: Tamanoa (2/4) + Vito (1/3), both sick; four Mountains; hand: Rolling Earthquake.",
+    "X = 3 (the max) kills Vito in the creature pass BEFORE the Tamanoa gain resolves, so nothing is",
+    "drained: opponent 17. X = 2 keeps Vito: one event of 2 x (2 creatures + 2 players) = 8 ->",
+    "Tamanoa gains 8 -> Vito drains 8: opponent 20 - 2 - 8 = 10, us 20 - 2 + 8 = 26. The search",
+    "must find X = 2; GenericProvider's historical {max} rule would have cast X = 3."
+  ],
+  "deck": "decks/Prevent Damage/Prevent Damage.cod",
+  "turn": 4, "on_the_play": true, "active_life": 20, "opponent_life": 20,
+  "resume_at": "main1",
+  "battlefield": [
+    { "name": "Tamanoa", "sick": true },
+    { "name": "Vito, Thorn of the Dusk Rose", "sick": true },
+    { "name": "Mountain" }, { "name": "Mountain" }, { "name": "Mountain" }, { "name": "Mountain" }
+  ],
+  "hand": [ "Rolling Earthquake" ],
+  "library_filler": "Mountain", "library_size": 30,
+  "depth": 1, "budget_ms": 50, "max_turns": 4,
+  "expect_active_life": 26,
+  "expect_opponent_life": 10
+}

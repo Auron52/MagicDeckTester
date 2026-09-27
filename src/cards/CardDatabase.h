@@ -54,6 +54,8 @@ struct CardParams
     // deal on_cast_trigger_damage to that player. Used for Eidolon of the Great Revel.
     int on_cast_trigger_max_mv  = 0;
     int on_cast_trigger_damage  = 0;
+    // The widened cap for on_cast_trigger_any_mv (Spellshock) -- above any reachable mana value.
+    static constexpr int kOnCastAnyMv = 1 << 20;
 
     // Mana Cannons: whenever the controller casts a multicolored spell, this permanent deals
     // (that spell's color count) damage "to any target" -- collapsed to the opponent's face,
@@ -1680,6 +1682,39 @@ struct CardParams
     int  lifegain_plus                       = 0;
     bool lifegain_target_opp_loses_that_much = false;
     int  lifegain_each_opp_loses             = 0;
+    // ---- Prevent Damage phase I2 (2026-09-27): the deck's spells ------------------------------
+    //   on_cast_trigger_any_mv             -- Spellshock: "Whenever a player casts a spell, this
+    //                                         enchantment deals 2 damage to that player." The
+    //                                         Eidolon trigger with NO mana-value cap: the loader
+    //                                         widens on_cast_trigger_max_mv to CardParams::kOnCastAnyMv, so
+    //                                         every existing reader of the Eidolon pair (the cast
+    //                                         trigger, the subset self-damage bill) sees it.
+    //   ping_all_cost / ping_all_amount    -- Pyrohemia: "{R}: This enchantment deals 1 damage to
+    //                                         each creature and each player." A repeatable, {T}-less
+    //                                         permanent ability (PermAbilityMode::PingAll); EACH
+    //                                         activation is its own damage event.
+    //   endstep_sac_if_no_creatures        -- Pyrohemia: "At the beginning of the end step, if no
+    //                                         creatures are on the battlefield, sacrifice this
+    //                                         enchantment." Any creature -- the opponent's spawns
+    //                                         count (PerformEndStepNoCreatureSacrifice).
+    //   x_damage_each_creature_and_player  -- Rolling Earthquake: "deals X damage to each creature
+    //                                         without horsemanship and each player." ONE damage
+    //                                         event; X is a searched axis (XCandidates).
+    //   tutor_max_mv_is_lands              -- Beseech the Queen: "a card with mana value less than
+    //                                         or equal to the number of lands you control." Read
+    //                                         at RESOLUTION (TutorLandCapOk); enumeration offers
+    //                                         the cap one land higher when the land drop is open.
+    //   shuffles_self_into_library_on_resolve -- Green Sun's Zenith: "Shuffle Green Sun's Zenith
+    //                                         into its owner's library." Only the RESOLVED spell --
+    //                                         deliberately NOT graveyard_replace_shuffle_library,
+    //                                         which is a replacement from ANY zone (a discard too).
+    bool on_cast_trigger_any_mv                 = false;
+    std::optional<ManaCost> ping_all_cost;
+    int  ping_all_amount                        = 0;
+    bool endstep_sac_if_no_creatures            = false;
+    bool x_damage_each_creature_and_player      = false;
+    bool tutor_max_mv_is_lands                  = false;
+    bool shuffles_self_into_library_on_resolve  = false;
     // ---- Ocelot Pride: end-step token trigger + ASCEND (the city's blessing) ----------------
     // "At the beginning of your end step, if you gained life this turn, create a 1/1 white Cat
     //  creature token. Then if you have the city's blessing, for each token you control that

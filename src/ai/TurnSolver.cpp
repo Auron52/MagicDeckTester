@@ -4033,6 +4033,7 @@ static std::uint32_t BpAvailablePermAbilityModes(const GameState& state, const P
         { PermAbilityMode::IceCounter,     &sd.params.ice_counter_cost        },
         { PermAbilityMode::GrantLifelink,  &sd.params.lifelink_grant_cost     },
         { PermAbilityMode::PayToken,       &sd.params.pay_token_cost          },
+        { PermAbilityMode::PingAll,        &sd.params.ping_all_cost           },
     };
     const int ctrl = state.active_player_index;
     for (const ModeSpec& m : modes)
@@ -6627,6 +6628,7 @@ static bool SubsetPayableSequential(const GameState& state, const std::vector<Ac
             // enumeration/apply/executor); the sim copy's life is not tracked here -- the apply
             // gates the life half itself, and this function only answers mana sequencing.
             if (a.phyrexian_life > 0) { ec.StripPhyrexianForLife(a.phyrexian_life / 2); }
+            if (a.twobrid_colored > 0) { ec.PayTwobridWithColor(a.twobrid_colored); }
             if (def.params.damage_divided && a.crackle_targets >= 0)
             {
                 for (const ScaledCastVariant& v : prov.ScaledCastVariants(cp, def))
@@ -9145,6 +9147,12 @@ static void FoldMixCost(std::uint64_t& h, const ManaCost& c)
     FoldMix(h, static_cast<std::uint64_t>(c.phyrexian_count));
     for (int i = 0; i < 2; ++i) { FoldMix(h, static_cast<std::uint64_t>(c.phyrexian_color[i])); }
     FoldMix(h, static_cast<std::uint64_t>(c.snow_pips));
+    // Twobrid metadata, folded only when present so every other cost's hash is byte-identical.
+    if (c.twobrid_count > 0)
+    {
+        FoldMix(h, 0x7B2Bu + static_cast<std::uint64_t>(c.twobrid_count));
+        for (int i = 0; i < 3; ++i) { FoldMix(h, static_cast<std::uint64_t>(c.twobrid_color[i])); }
+    }
 }
 
 static void FoldMixPool(std::uint64_t& h, const ManaPool& p)
@@ -9202,6 +9210,7 @@ static std::uint64_t ActionFoldSig(const Action& a)
     FoldMix(h, static_cast<std::uint64_t>(a.loyalty_ability));
     FoldMix(h, a.free_cast ? 1u : 0u);
     FoldMix(h, static_cast<std::uint64_t>(a.phyrexian_life));
+    if (a.twobrid_colored > 0) { FoldMix(h, 0x7B2Cu + static_cast<std::uint64_t>(a.twobrid_colored)); }
     FoldMix(h, static_cast<std::uint64_t>(a.convoke_green));
     FoldMix(h, static_cast<std::uint64_t>(a.convoke_other));
     FoldMix(h, static_cast<std::uint64_t>(a.soulfire_own_targets));
@@ -12516,6 +12525,8 @@ static std::string ExactFalseActionDiff(const Action& x, const Action& y)
     if (static_cast<long long>(x.free_cast) != static_cast<long long>(y.free_cast))
     { add("free_cast", std::to_string(static_cast<long long>(x.free_cast)),
            std::to_string(static_cast<long long>(y.free_cast))); }
+    if (x.twobrid_colored != y.twobrid_colored)
+    { add("twobrid_colored", std::to_string(x.twobrid_colored), std::to_string(y.twobrid_colored)); }
     if (static_cast<long long>(x.phyrexian_life) != static_cast<long long>(y.phyrexian_life))
     { add("phyrexian_life", std::to_string(static_cast<long long>(x.phyrexian_life)),
            std::to_string(static_cast<long long>(y.phyrexian_life))); }
@@ -13148,6 +13159,9 @@ void CollectActivationKeys(const GameState& state, int ctrl, const Permanent& p,
         { PermAbilityMode::IceCounter,     &pp.ice_counter_cost        },
         { PermAbilityMode::GrantLifelink,  &pp.lifelink_grant_cost     },
         { PermAbilityMode::PayToken,       &pp.pay_token_cost          },
+        // Appended LAST: ActKey slots are kActModeBase + table INDEX, so a mid-table insert would
+        // re-key every mode after it.
+        { PermAbilityMode::PingAll,        &pp.ping_all_cost           },
     };
     for (std::size_t i = 0; i < sizeof modes / sizeof modes[0]; ++i)
     {
@@ -14115,7 +14129,8 @@ static bool CantripOrderBans(const CardDefinition& site, const CardDefinition& c
     // Phyrexian pips join the hybrid guard: the pip's payment flexibility (mana OR 2 life)
     // breaks the flat MV-compare premise the canonical order rests on -- stand down (lossless).
     if (a.has_x || b.has_x || a.hybrid_count > 0 || b.hybrid_count > 0
-        || a.phyrexian_count > 0 || b.phyrexian_count > 0) { return false; }
+        || a.phyrexian_count > 0 || b.phyrexian_count > 0
+        || a.twobrid_count > 0 || b.twobrid_count > 0) { return false; }
     const int mva = a.ManaValue();
     const int mvb = b.ManaValue();
     // Canonical strictly-before test on (mana value, tier, name).
@@ -14748,6 +14763,8 @@ void TurnSolver::StampM1Hand(GameState& state, const std::vector<Action>* m1_cas
                         // Phyrexian: a life-paid pip is not part of the plan's MANA bill.
                         if (pa.phyrexian_life > 0)
                         { ec.StripPhyrexianForLife(pa.phyrexian_life / 2); }
+                        // Twobrid: the coloured pips replace {2} each (the variant's own bill).
+                        if (pa.twobrid_colored > 0) { ec.PayTwobridWithColor(pa.twobrid_colored); }
                     }
                     planned.generic += ec.generic; planned.white += ec.white;
                     planned.blue += ec.blue; planned.black += ec.black;
@@ -16572,6 +16589,10 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
                     const CardDefinition* ld = CardDatabase::Instance().LookupCached(lc);
                     const Card& lcard = ld ? ld->card : lc;
                     if (!lcard.IsCreature()) { continue; }
+                    // Green Sun's Zenith: "a GREEN creature card" -- the same colour conjunct the
+                    // resolution applies (PerformTutorToBattlefield). Empty tutor_color (Chord of
+                    // Calling) passes everything -> byte-identical.
+                    if (!CardHasColorNamed(lcard, def.params.tutor_color)) { continue; }
                     if (chord_pol.narrow && (!ld || !chord_prov.PutTargetOk(chord_pol, *ld)))
                     { continue; }
                     if (!chord_seen.insert(lc.m_name.str()).second) { continue; }
@@ -16643,6 +16664,44 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
                     a.chosen_x       = x;
                     a.eval           = 1;   // removing a passive spawn: near-zero clock payoff
                     a.direct_damage  = 0;
+                    a.is_noncreature = !def.card.IsCreature();
+                    a.card_mv        = def.card.m_mana_cost.ManaValue();
+                    actions.push_back(std::move(a));
+                }
+                continue;
+            }
+            // Rolling Earthquake ({X}{R}: X damage to each creature and each player -- ONE damage
+            // event, PerformDamageEachCreatureAndPlayer). X is a REAL decision here, not "all the
+            // mana": it decides which of OUR creatures survive (Vito / Dina at 3 toughness, Tamanoa
+            // at 4), whether we survive at all, and how much mana is left for the rest of the turn
+            // -- so GenericProvider's max-X rule is wrong for it, and the provider's XCandidates
+            // returns the whole 0..max range (X = 0 is legal and is a real line under Spellshock:
+            // a {R} cast trigger = one more Tamanoa / Dina event). Any narrowing is the provider's.
+            // The subset bill carries one cast; the X part is paid as generic. Without this branch
+            // the terminal `continue` below dropped the card from enumeration entirely.
+            if (def.params.x_damage_each_creature_and_player)
+            {
+                const ManaCost qbase = EffectiveCost(def, state);
+                ManaPool qpool = AvailableManaPool(state);
+                qpool.AddPool(state.floating_mana);
+                int qpips = def.card.m_mana_cost.x_pips; if (qpips < 1) { qpips = 1; }
+                const int qmax = (qpool.Total() - qbase.ManaValue()) / qpips;
+                if (qmax < 0) { continue; }   // cannot pay even the base -> uncastable now
+                const int heads = gamesetup::OpponentHeads();
+                for (int x : ResolveProvider(state).XCandidates(state, def, qmax))
+                {
+                    if (x < 0 || x > qmax) { continue; }
+                    Action a;
+                    a.kind           = Action::Kind::CastFromHand;
+                    a.card_name      = ap.hand[i].m_name;
+                    a.hand_index     = i;
+                    ManaCost c = qbase; c.generic += x * qpips;
+                    a.cost           = c;
+                    a.chosen_x       = x;
+                    a.eval           = x * heads;
+                    // Face damage only: the Tamanoa / Vito / Dina payoff is realised by the apply
+                    // (an under-estimate here is the safe direction for the win projection).
+                    a.direct_damage  = x * heads;
                     a.is_noncreature = !def.card.IsCreature();
                     a.card_mv        = def.card.m_mana_cost.ManaValue();
                     actions.push_back(std::move(a));
@@ -20408,6 +20467,7 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
                     { Action::AbilityMode::IceCounter,     &sd->params.ice_counter_cost     },
                     { Action::AbilityMode::GrantLifelink,  &sd->params.lifelink_grant_cost  },
                     { Action::AbilityMode::PayToken,       &sd->params.pay_token_cost       },
+                    { Action::AbilityMode::PingAll,        &sd->params.ping_all_cost        },
                 };
                 for (const ModeSpec& m : modes)
                 {
@@ -20579,6 +20639,10 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
                         if (useful <= 0) { continue; }
                         for (int& k : counts) { k = std::min(k, useful); }
                     }
+                    // PingAll (Pyrohemia): an activation whose own hit kills us is never a win (our
+                    // death is checked before its Tamanoa gain; both-dead is a DRAW) -- lossless.
+                    if (m.mode == Action::AbilityMode::PingAll
+                        && !PingAllSelfSafe(state, state.active_player_index, *sd)) { continue; }
                     for (int k : counts)
                     {
                         if (k <= 0) { continue; }
@@ -20612,7 +20676,13 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
                                          ? sd->params.tap_damage_each_opponent
                                            * gamesetup::OpponentHeads()
                                          : (m.mode == Action::AbilityMode::Drain)
-                                         ? sd->params.drain_amount * k : 0;
+                                         ? sd->params.drain_amount * k
+                                         // Pyrohemia: K pings to each opposing head (face only --
+                                         // the Tamanoa / drain payoff is realised by the apply).
+                                         : (m.mode == Action::AbilityMode::PingAll)
+                                         ? sd->params.ping_all_amount * k
+                                           * gamesetup::OpponentHeads() : 0;
+                        if (m.mode == Action::AbilityMode::PingAll) { a.eval = a.direct_damage; }
                         a.is_noncreature = true;
                         actions.push_back(std::move(a));
                     }
@@ -22490,6 +22560,60 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
                 v.cost.StripPhyrexianForLife(k);
                 v.phyrexian_life = 2 * k;
                 actions.push_back(std::move(v));
+            }
+        }
+    }
+
+    // TWOBRID post-pass ({2/B}: pay {2} OR one {B} -- CR 107.4e; Beseech the Queen, the Prevent
+    // Damage deck). The base action's cost is ALL GENERIC (the parser bakes the {2} side -- MV 6,
+    // always legal); this emits the coloured assignments. Which pips to pay with {B} is a REAL
+    // search branch, not a payment preference: {B} spends ONE black source where {2} spends TWO of
+    // anything, and an Ancient Tomb's {C}{C} pays a {2} pip exactly -- so neither side dominates
+    // (no dominance prune, deliberately). In the DECISION space (searched collect, executor, human
+    // play) one variant per coloured-pip count k = 1..n is appended beside the base (they share its
+    // group keys -> mutually exclusive; plan_signature's #W keeps the dedup from folding them).
+    //
+    // In a ROLLOUT leaf (estimating, not deciding -- the phyrexian precedent) the fan is not
+    // emitted: instead the base is REPLACED by the single cheapest variant the current pool can pay
+    // (the most {B} pips it covers), so a leaf never prices Beseech as a 6-drop it would in fact
+    // cast for {B}{B}{B}. The full-cost base survives only when no coloured variant is payable.
+    // Gated on twobrid_count -> byte-identical for every deck without a twobrid card.
+    {
+        const bool tb_decision_space = g_search_candidate_enum || g_condemn_root_turn < 0;
+        bool     tb_pool_ready = false;
+        ManaPool tb_pool;
+        const std::size_t tb_n = actions.size();
+        for (std::size_t i = 0; i < tb_n; ++i)
+        {
+            if (actions[i].cost.twobrid_count == 0
+                || actions[i].free_cast || actions[i].alt_cost) { continue; }
+            if (actions[i].kind != Action::Kind::CastFromHand) { continue; }
+            const int pips = actions[i].cost.twobrid_count;
+            if (tb_decision_space)
+            {
+                for (int k = 1; k <= pips; ++k)
+                {
+                    Action v = actions[i];           // copy BEFORE push_back (reallocation)
+                    v.cost.PayTwobridWithColor(k);
+                    v.twobrid_colored = k;
+                    actions.push_back(std::move(v));
+                }
+                continue;
+            }
+            if (!tb_pool_ready)
+            {
+                tb_pool = AvailableManaPool(state);
+                tb_pool.AddPool(state.floating_mana);
+                tb_pool_ready = true;
+            }
+            for (int k = pips; k >= 1; --k)
+            {
+                ManaCost c = actions[i].cost;
+                c.PayTwobridWithColor(k);
+                if (!tb_pool.CanPay(c)) { continue; }
+                actions[i].cost            = c;
+                actions[i].twobrid_colored = k;
+                break;
             }
         }
     }
@@ -24920,7 +25044,7 @@ namespace solvememo
                 || x.chosen_x != y.chosen_x || x.splice_count != y.splice_count
                 || x.replicate_count != y.replicate_count || x.devour_count != y.devour_count
                 || !(x.tutor_target == y.tutor_target) || x.sacrifice_land != y.sacrifice_land
-                || x.discard_lands != y.discard_lands)
+                || x.discard_lands != y.discard_lands || x.twobrid_colored != y.twobrid_colored)
             { return false; }
         }
         return true;
@@ -25393,6 +25517,7 @@ TurnSolver::Plan TurnSolver::SolveUncached(const GameState& state, bool is_pre_c
         if (BfCensusOn()) { bfcensus::g_subsets_scored[0].fetch_add(1, std::memory_order_relaxed); }
         int total_eval         = 0;
         int self_damage        = 0;
+        int self_damage_max    = 0;   // the largest SINGLE cast-trigger hit (armed bill, see below)
         int vial_haste_atk     = 0;
         int haste_cast_atk     = 0;   // hard-cast haste creatures attacking this turn
         int haste_cast_prowess = 0;   // ... of which have prowess (pumped by this plan's casts)
@@ -25436,7 +25561,11 @@ TurnSolver::Plan TurnSolver::SolveUncached(const GameState& state, bool is_pre_c
 
             for (const TriggerSource& src : trigger_sources)
             {
-                if (c.card_mv <= src.max_mv) { self_damage += src.damage; }
+                if (c.card_mv <= src.max_mv)
+                {
+                    self_damage += src.damage;
+                    self_damage_max = std::max(self_damage_max, src.damage);
+                }
             }
         }
         // Goblin Tomb Raider: a same-subset DURABLE artifact (Mimic / Automaton / Vial) hastes it by
@@ -25917,7 +26046,7 @@ TurnSolver::Plan TurnSolver::SolveUncached(const GameState& state, bool is_pre_c
 
         // Eidolon-style on-cast triggers go on top of the spell being cast (CR 603), so they
         // resolve BEFORE the spell. A plan that kills us via self-damage cannot win.
-        if (self_damage >= ap.life)                          { return; }
+        if (dmgev::CastTriggerBill(state, self_damage, self_damage_max) >= ap.life) { return; }
 
         // FILL a scaled Magma cast UP from this plan's LEFTOVER mana (spend-all; the searched Crackle {X}
         // already took its 3-mana chunks, so the surplus is Magma's sub-chunk remainder). At most one Magma
@@ -27645,6 +27774,8 @@ bool TurnSolver::BatchPrepayMainCasts(GameState& state, const std::vector<Action
         // is paid at the cast, not here). Without this the prepay overpays the {G} the variant
         // exists to free.
         if (a.phyrexian_life > 0) { ec.StripPhyrexianForLife(a.phyrexian_life / 2); }
+        // Twobrid variant (Beseech): the coloured pips replace {2} each, as enumerated.
+        if (a.twobrid_colored > 0) { ec.PayTwobridWithColor(a.twobrid_colored); }
         combined.generic += ec.generic; combined.white += ec.white; combined.blue += ec.blue;
         combined.black += ec.black; combined.red += ec.red; combined.green += ec.green;
         combined.colorless += ec.colorless;
@@ -28862,6 +28993,7 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
     // positional parameter on a std::function that ten call sites already pass by position.
     // -1 = not a devour cast.
     int cast_devour_count = -1;
+    int cast_twobrid_colored = 0;   // Beseech twobrid variant (Action::twobrid_colored), consume-once like cast_devour_count
 
     // Karoo bounce-land play-at-end timing. A Karoo (Izzet Boilerworks: etb_bounce_land,
     // enters tapped) returns one of our lands to hand on ETB. Played land-FIRST it bounces a
@@ -29607,6 +29739,8 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
         cast_loyalty_ability = -1;
         const int cast_devour = cast_devour_count;       // ditto, for Mycoloth's devour count
         cast_devour_count = -1;
+        const int cast_twobrid = cast_twobrid_colored;   // ditto, Beseech's coloured twobrid pips
+        cast_twobrid_colored = 0;
         // Find the card in its zone first, then resolve its definition via the card's cached
         // pointer -- avoids a by-name Lookup (string hash) on every cast (apply_one is per-cast,
         // ~200k/game). Byte-identical: it->m_name == name so LookupCached(*it) == Lookup(name),
@@ -29749,6 +29883,9 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
         // recomputed cost, the SAME strip the enumeration emitted (the convoke idiom above);
         // the life itself is deducted after the payment succeeds, below.
         if (phyrexian_life > 0) { ec.StripPhyrexianForLife(phyrexian_life / 2); }
+        // Twobrid ({2/B} -- Beseech): the variant's coloured pips, the SAME conversion the
+        // enumeration emitted (lockstep with CastSpellFromHand).
+        if (cast_twobrid > 0) { ec.PayTwobridWithColor(cast_twobrid); }
         // Scaled divided-damage spell (Magma Opus): the committed face (carried on crackle_targets)
         // fixes the cost via the archetype's model, recomputed on the CURRENT board so the rollout, the
         // executor (CastSpellFromHand), and CanPay price the same committed face identically -> lockstep
@@ -30923,6 +31060,12 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
             PerformDamageAllCreatures(state, state.active_player_index, def,
                                       def.params.damage_all_creatures);
         }
+        else if (def.params.x_damage_each_creature_and_player)
+        {
+            // Rolling Earthquake (shared helper -- executor twin in EffectHandler's Custom-spell
+            // resolution, lockstep): X to each creature and each player, ONE damage event.
+            PerformDamageEachCreatureAndPlayer(state, state.active_player_index, def, chosen_x);
+        }
         else if (def.tmpl == CardTemplate::Removal && def.params.tuck_to_library)
         {
             // Unexpectedly Absent (tuck removal). Autonomous target = the LARGEST opponent
@@ -31565,6 +31708,10 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
             // more specific rule. Falls through to the graveyard if the link is broken.
             if (StageAdventureParent(state, state.active_player_index, def, cast_number)) { }
             else if (def.params.exiles_self_on_resolve) { state.exile.push_back(def.card); }
+            // Green Sun's Zenith: "Shuffle Green Sun's Zenith into its owner's library." LOCKSTEP
+            // with EffectHandler::MoveToGraveyard (the shared ShuffleSelfIntoLibrary).
+            else if (def.params.shuffles_self_into_library_on_resolve)
+            { ShuffleSelfIntoLibrary(state, state.active_player_index, def.card); }
             else                                       { ap.graveyard.push_back(def.card); }
         }
 
@@ -31688,7 +31835,7 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
                     if (inline_taps) { flush_pre_taps(pre_tap_slot++); }
                     line_order_trace("cast", a);
                     prep_free(a);
-                    cast_loyalty_ability = a.loyalty_ability; cast_devour_count = a.devour_count; apply_one(a.card_name, false, false, 0, a.alt_cost, a.alt_lifegain, a.tutor_target, a.chosen_x, a.soulfire_own_targets, a.ponder_keep, a.crackle_targets, a.splice_count, a.chosen_float_color, a.enchant_target, a.bestow, a.replicate_count, a.convoke_green, a.convoke_other, a.phyrexian_life, a.evoke, a.adventure);
+                    cast_loyalty_ability = a.loyalty_ability; cast_devour_count = a.devour_count; cast_twobrid_colored = a.twobrid_colored; apply_one(a.card_name, false, false, 0, a.alt_cost, a.alt_lifegain, a.tutor_target, a.chosen_x, a.soulfire_own_targets, a.ponder_keep, a.crackle_targets, a.splice_count, a.chosen_float_color, a.enchant_target, a.bestow, a.replicate_count, a.convoke_green, a.convoke_other, a.phyrexian_life, a.evoke, a.adventure);
                     fire_unlock();
                 }
                 // ...and the board activation the human put HERE fires here, not in the trailing
@@ -31838,7 +31985,7 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
                                  now.Total(), now.red, now.green, now.wild);
                 }
                 for (int i : ena)
-                { const Action& a = acts[i]; const int dbg_before = dbg_count(a); prep_free(a); cast_loyalty_ability = a.loyalty_ability; cast_devour_count = a.devour_count; apply_one(a.card_name, false, false, 0, a.alt_cost, a.alt_lifegain, a.tutor_target, a.chosen_x, a.soulfire_own_targets, a.ponder_keep, a.crackle_targets, a.splice_count, a.chosen_float_color, a.enchant_target, a.bestow, a.replicate_count, a.convoke_green, a.convoke_other, a.phyrexian_life, a.evoke, a.adventure); fire_unlock(); dbg_cast("ena", a, dbg_before); }
+                { const Action& a = acts[i]; const int dbg_before = dbg_count(a); prep_free(a); cast_loyalty_ability = a.loyalty_ability; cast_devour_count = a.devour_count; cast_twobrid_colored = a.twobrid_colored; apply_one(a.card_name, false, false, 0, a.alt_cost, a.alt_lifegain, a.tutor_target, a.chosen_x, a.soulfire_own_targets, a.ponder_keep, a.crackle_targets, a.splice_count, a.chosen_float_color, a.enchant_target, a.bestow, a.replicate_count, a.convoke_green, a.convoke_other, a.phyrexian_life, a.evoke, a.adventure); fire_unlock(); dbg_cast("ena", a, dbg_before); }
                 // Spectacle hoist: a sac-land damage source (Shard Volley) is otherwise cast in the
                 // trailing sac loop -- AFTER the non-sac Spectacle spell (Light Up), leaving
                 // Spectacle un-triggered and Light Up paying full cost. When the set holds a
@@ -31862,7 +32009,7 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
                     if (a.kind == Action::Kind::CastFromHand && a.sacrifice_land && a.direct_damage > 0)
                     {
                         prep_free(a);
-                        cast_loyalty_ability = a.loyalty_ability; cast_devour_count = a.devour_count; apply_one(a.card_name, true, false, 0, a.alt_cost, a.alt_lifegain, a.tutor_target, a.chosen_x, a.soulfire_own_targets, a.ponder_keep, a.crackle_targets, a.splice_count, a.chosen_float_color, a.enchant_target, a.bestow, a.replicate_count, a.convoke_green, a.convoke_other, a.phyrexian_life, a.evoke, a.adventure);
+                        cast_loyalty_ability = a.loyalty_ability; cast_devour_count = a.devour_count; cast_twobrid_colored = a.twobrid_colored; apply_one(a.card_name, true, false, 0, a.alt_cost, a.alt_lifegain, a.tutor_target, a.chosen_x, a.soulfire_own_targets, a.ponder_keep, a.crackle_targets, a.splice_count, a.chosen_float_color, a.enchant_target, a.bestow, a.replicate_count, a.convoke_green, a.convoke_other, a.phyrexian_life, a.evoke, a.adventure);
                         spec_hoisted_sac.insert(ai);
                     }
                 }
@@ -31895,7 +32042,7 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
                     const Action& a = acts[i];
                     if (is_ordered_garth(a)) { apply_garth(a); continue; }
                     const int dbg_before = dbg_count(a);
-                    prep_free(a); cast_loyalty_ability = a.loyalty_ability; cast_devour_count = a.devour_count; apply_one(a.card_name, false, false, 0, a.alt_cost, a.alt_lifegain, a.tutor_target, a.chosen_x, a.soulfire_own_targets, a.ponder_keep, a.crackle_targets, a.splice_count, a.chosen_float_color, a.enchant_target, a.bestow, a.replicate_count, a.convoke_green, a.convoke_other, a.phyrexian_life, a.evoke, a.adventure); fire_unlock();
+                    prep_free(a); cast_loyalty_ability = a.loyalty_ability; cast_devour_count = a.devour_count; cast_twobrid_colored = a.twobrid_colored; apply_one(a.card_name, false, false, 0, a.alt_cost, a.alt_lifegain, a.tutor_target, a.chosen_x, a.soulfire_own_targets, a.ponder_keep, a.crackle_targets, a.splice_count, a.chosen_float_color, a.enchant_target, a.bestow, a.replicate_count, a.convoke_green, a.convoke_other, a.phyrexian_life, a.evoke, a.adventure); fire_unlock();
                     dbg_cast("ord", a, dbg_before);
                 }
             }
@@ -31928,7 +32075,7 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
                     const Action& a = acts[i];
                     if (is_ordered_garth(a)) { apply_garth(a); continue; }
                     prep_free(a);
-                    cast_loyalty_ability = a.loyalty_ability; cast_devour_count = a.devour_count; apply_one(a.card_name, false, false, 0, a.alt_cost, a.alt_lifegain, a.tutor_target, a.chosen_x, a.soulfire_own_targets, a.ponder_keep, a.crackle_targets, a.splice_count, a.chosen_float_color, a.enchant_target, a.bestow, a.replicate_count, a.convoke_green, a.convoke_other, a.phyrexian_life, a.evoke, a.adventure);
+                    cast_loyalty_ability = a.loyalty_ability; cast_devour_count = a.devour_count; cast_twobrid_colored = a.twobrid_colored; apply_one(a.card_name, false, false, 0, a.alt_cost, a.alt_lifegain, a.tutor_target, a.chosen_x, a.soulfire_own_targets, a.ponder_keep, a.crackle_targets, a.splice_count, a.chosen_float_color, a.enchant_target, a.bestow, a.replicate_count, a.convoke_green, a.convoke_other, a.phyrexian_life, a.evoke, a.adventure);
                     fire_unlock();
                 }
             }
@@ -31940,14 +32087,14 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
             if (a.kind == Action::Kind::CastFromHand && a.sacrifice_land)
             {
                 prep_free(a);
-                cast_loyalty_ability = a.loyalty_ability; cast_devour_count = a.devour_count; apply_one(a.card_name, true, false, 0, a.alt_cost, a.alt_lifegain, a.tutor_target, a.chosen_x, a.soulfire_own_targets, a.ponder_keep, a.crackle_targets, a.splice_count, a.chosen_float_color, a.enchant_target, a.bestow, a.replicate_count, a.convoke_green, a.convoke_other, a.phyrexian_life, a.evoke, a.adventure);
+                cast_loyalty_ability = a.loyalty_ability; cast_devour_count = a.devour_count; cast_twobrid_colored = a.twobrid_colored; apply_one(a.card_name, true, false, 0, a.alt_cost, a.alt_lifegain, a.tutor_target, a.chosen_x, a.soulfire_own_targets, a.ponder_keep, a.crackle_targets, a.splice_count, a.chosen_float_color, a.enchant_target, a.bestow, a.replicate_count, a.convoke_green, a.convoke_other, a.phyrexian_life, a.evoke, a.adventure);
             }
         }
         for (const Action& a : acts)
         {
             if (a.kind == Action::Kind::CastFromGraveyard)
             {
-                cast_loyalty_ability = a.loyalty_ability; cast_devour_count = a.devour_count; apply_one(a.card_name, false, true, a.discard_lands, false, 0, std::string{}, a.chosen_x, a.soulfire_own_targets, a.ponder_keep, a.crackle_targets, a.splice_count, a.chosen_float_color, a.enchant_target, a.bestow, a.replicate_count, a.convoke_green, a.convoke_other, a.phyrexian_life, a.evoke, a.adventure);
+                cast_loyalty_ability = a.loyalty_ability; cast_devour_count = a.devour_count; cast_twobrid_colored = a.twobrid_colored; apply_one(a.card_name, false, true, a.discard_lands, false, 0, std::string{}, a.chosen_x, a.soulfire_own_targets, a.ponder_keep, a.crackle_targets, a.splice_count, a.chosen_float_color, a.enchant_target, a.bestow, a.replicate_count, a.convoke_green, a.convoke_other, a.phyrexian_life, a.evoke, a.adventure);
             }
         }
         // Plan::vial_after_casts: the Vial puts this plan deferred, right after its last cast --
@@ -33493,6 +33640,8 @@ static bool SimulateEndAndStartNextTurn(GameState& state)
     // actually grows every turn, i.e. a systematic fd-diverge. Param-gated -> byte-identical for
     // every deck without such a card.
     PerformEndStepLifegainTokens(state);
+    // Pyrohemia's no-creatures end-step sacrifice (lockstep twin of GameEngine::EndStep).
+    PerformEndStepNoCreatureSacrifice(state);
 
     // Check for "no maximum hand size" permanent (e.g. Reliquary Tower) — if present,
     // skip the discard-to-7 step so the lookahead correctly models turns after RT is played.
@@ -35676,6 +35825,7 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
         int direct_dmg         = 0;
         int total_eval         = 0;
         int self_damage        = 0;
+        int self_damage_max    = 0;   // the largest SINGLE cast-trigger hit (armed bill, see below)
         int vial_haste_atk     = 0;
         int haste_cast_atk     = 0;   // hard-cast haste creatures attacking this turn
         int haste_cast_prowess = 0;   // ... of which have prowess (pumped by this plan's casts)
@@ -35711,7 +35861,11 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
             if (c.haste_prowess) { ++haste_cast_prowess; }
             for (const TriggerSource& src : trigger_sources)
             {
-                if (c.card_mv <= src.max_mv) { self_damage += src.damage; }
+                if (c.card_mv <= src.max_mv)
+                {
+                    self_damage += src.damage;
+                    self_damage_max = std::max(self_damage_max, src.damage);
+                }
             }
         }
         // Goblin Tomb Raider: a same-subset DURABLE artifact (Mimic / Automaton / Vial) hastes it by
@@ -36516,7 +36670,8 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
             { iren_waste = true; }   // scope: rank-ordered decks only -- see the twin's note
         }
 
-        if (self_damage >= ap.life) { _ct.label = "self-damage"; return; }
+        if (dmgev::CastTriggerBill(state, self_damage, self_damage_max) >= ap.life)
+        { _ct.label = "self-damage"; return; }
 
         // FILL a scaled Magma cast UP from this plan's LEFTOVER mana (spend-all; the searched Crackle {X}
         // already took its 3-mana chunks, so the surplus is Magma's sub-chunk remainder). At most one Magma
@@ -37313,6 +37468,15 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
                         // Gated on the field, so no existing deck's signature moves.
                         + (act.phyrexian_life > 0
                            ? ("#P" + std::to_string(act.phyrexian_life)) : "")
+                        // Twobrid ({2/B} -- Beseech the Queen): paying a pip with {B} vs {2} are
+                        // DISTINCT plans (different sources spent; core invariant). Gated on the
+                        // field, so no existing deck's signature moves.
+                        + (act.twobrid_colored > 0
+                           ? ("#W" + std::to_string(act.twobrid_colored)) : "")
+                        // Rolling Earthquake: X decides which of OUR creatures die and how much
+                        // every player takes -- distinct X are DISTINCT plans (the #X precedent).
+                        + ((act.def && act.def->params.x_damage_each_creature_and_player)
+                           ? ("#Q" + std::to_string(act.chosen_x)) : "")
                         // Evoke (Reveillark): the evoke cast and the hard cast are two different
                         // spells sharing a name (different cost, the body self-sacs) -- the
                         // bestow lesson. Gated on the param, so no existing deck moves.

@@ -153,6 +153,7 @@ struct ManaCost
     int green     = 0;
     int colorless = 0;  // {C} symbols
     bool has_x    = false;
+    uint8_t twobrid_count = 0;   // TWOBRID pip count -- see twobrid_color below (padding slot)
     int  x_pips   = 0;  // number of {X} symbols (Crackle with Power = {X}{X}{X} -> 3). The chosen
                         // X is paid x_pips times as generic; max affordable X divides by x_pips.
 
@@ -166,7 +167,7 @@ struct ManaCost
     // PayFromPool) try assignments in bits order -- bits==0 IS the old flat cost, so behaviour
     // changes only where the old collapse could not pay at all. Each entry packs the two colours
     // as (first << 4) | second in printed order; > 4 hybrid pips unsupported (no such card).
-    // {2/W} remains unsupported.
+    // A number/colour pip ({2/B}) is NOT a hybrid -- see twobrid_count below.
     uint8_t hybrid_count   = 0;
     uint8_t hybrid_pair[4] = {0, 0, 0, 0};
 
@@ -183,6 +184,22 @@ struct ManaCost
     // payment machinery never sees a phyrexian pip. 2 slots: no card carries more than 2.
     uint8_t phyrexian_count    = 0;
     uint8_t phyrexian_color[2] = {0, 0};   // Color of each pip's mana side, printed order
+
+    // TWOBRID pips ({2/B}: pay ANY TWO mana, or one {B} -- CR 107.4e; Beseech the Queen, the
+    // Prevent Damage deck, 2026-09-27). REPRESENTATION is the phyrexian one turned round: the
+    // pip's ALL-GENERIC side ({2}) is baked into `generic`, so ManaValue() is the printed MV
+    // (Beseech = 6, CR 202.3f) for every flat reader, and the all-generic payment is always legal.
+    // The metadata below only ADDS the cheaper coloured assignments, and -- like phyrexian, unlike
+    // hybrid -- the choice is a SEARCH branch at ACTION ENUMERATION, not a payment preference
+    // (paying {B} spends one black source where {2} spends two of anything, and which is right
+    // depends on the rest of the turn). CollectActions' twobrid post-pass emits one variant per
+    // coloured-pip count k (PayTwobridWithColor(k), Action::twobrid_colored = k); the payment
+    // machinery never sees a twobrid pip. Before this existed the parser read {2/B} as {B} (MV 3).
+    // 3 slots: no card carries more than 3.
+    // LAYOUT: twobrid_count sits in the padding after has_x (below) and twobrid_color in the tail
+    // padding here, so sizeof(ManaCost) -- and with it Card and Permanent, which Dominance.h pins --
+    // is unchanged.
+    uint8_t twobrid_color[3] = {0, 0, 0};  // Color of each pip's coloured side, printed order
 
     // SNOW pips ({S}: pay with one mana from a snow SOURCE, any type -- CR 106.4b; Arcum's
     // Astrolabe / Frost Augur / Scrying Sheets / Rimefeather Owl, user-directed 2026-09-06
@@ -251,6 +268,30 @@ struct ManaCost
                 case Color::Red:       if (red       > 0) { --red;       } break;
                 case Color::Green:     if (green     > 0) { --green;     } break;
                 case Color::Colorless: if (colorless > 0) { --colorless; } break;
+            }
+        }
+    }
+
+    // Pay `pips` of the twobrid pips with their COLOURED side (one coloured mana instead of {2}):
+    // each converted pip takes 2 off `generic` and adds one to its colour, and its metadata slot
+    // retires (highest slot first -- the same deterministic order as StripPhyrexianForLife).
+    // Enumeration stamps Action::twobrid_colored = pips; every site that re-prices a committed
+    // cast from the printed cost re-applies it (the phyrexian recompute sites, lockstep).
+    void PayTwobridWithColor(int pips)
+    {
+        for (int k = 0; k < pips && twobrid_count > 0; ++k)
+        {
+            const uint8_t col = twobrid_color[--twobrid_count];
+            twobrid_color[twobrid_count] = 0;
+            generic = generic >= 2 ? generic - 2 : 0;
+            switch (static_cast<Color>(col))
+            {
+                case Color::White:     ++white;     break;
+                case Color::Blue:      ++blue;      break;
+                case Color::Black:     ++black;     break;
+                case Color::Red:       ++red;       break;
+                case Color::Green:     ++green;     break;
+                case Color::Colorless: ++colorless; break;
             }
         }
     }

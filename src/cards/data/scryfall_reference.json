@@ -353,6 +353,15 @@
     "toughness": "3",
     "type_line": "Creature — Human Knight"
   },
+  "Beseech the Queen": {
+    "cmc": 6.0,
+    "keywords": [],
+    "mana_cost": "{2/B}{2/B}{2/B}",
+    "oracle_text": "({2/B} can be paid with any two mana or with {B}. This card's mana value is 6.)\nSearch your library for a card with mana value less than or equal to the number of lands you control, reveal it, put it into your hand, then shuffle.",
+    "power": null,
+    "toughness": null,
+    "type_line": "Sorcery"
+  },
   "Bilbo, Birthday Celebrant": {
     "cmc": 3.0,
     "keywords": [],
@@ -1676,6 +1685,15 @@
     "toughness": null,
     "type_line": "Land"
   },
+  "Green Sun's Zenith": {
+    "cmc": 1.0,
+    "keywords": [],
+    "mana_cost": "{X}{G}",
+    "oracle_text": "Search your library for a green creature card with mana value X or less, put it onto the battlefield, then shuffle. Shuffle Green Sun's Zenith into its owner's library.",
+    "power": null,
+    "toughness": null,
+    "type_line": "Sorcery"
+  },
   "Grove of the Burnwillows": {
     "cmc": 0.0,
     "keywords": [],
@@ -2927,6 +2945,15 @@
     "toughness": null,
     "type_line": "Sorcery"
   },
+  "Pyrohemia": {
+    "cmc": 4.0,
+    "keywords": [],
+    "mana_cost": "{2}{R}{R}",
+    "oracle_text": "At the beginning of the end step, if no creatures are on the battlefield, sacrifice this enchantment.\n{R}: This enchantment deals 1 damage to each creature and each player.",
+    "power": null,
+    "toughness": null,
+    "type_line": "Enchantment"
+  },
   "Rageblood Shaman": {
     "cmc": 3.0,
     "keywords": [
@@ -3176,6 +3203,15 @@
     "keywords": [],
     "mana_cost": "{R}",
     "oracle_text": "Add {R}{R}, then add {R} for each card named Rite of Flame in each graveyard.",
+    "power": null,
+    "toughness": null,
+    "type_line": "Sorcery"
+  },
+  "Rolling Earthquake": {
+    "cmc": 1.0,
+    "keywords": [],
+    "mana_cost": "{X}{R}",
+    "oracle_text": "Rolling Earthquake deals X damage to each creature without horsemanship and each player.",
     "power": null,
     "toughness": null,
     "type_line": "Sorcery"
@@ -3651,6 +3687,15 @@
     "power": null,
     "toughness": null,
     "type_line": "Sorcery"
+  },
+  "Spellshock": {
+    "cmc": 3.0,
+    "keywords": [],
+    "mana_cost": "{2}{R}",
+    "oracle_text": "Whenever a player casts a spell, this enchantment deals 2 damage to that player.",
+    "power": null,
+    "toughness": null,
+    "type_line": "Enchantment"
   },
   "Spider Umbra": {
     "cmc": 1.0,

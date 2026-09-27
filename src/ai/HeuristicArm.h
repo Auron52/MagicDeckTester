@@ -264,6 +264,7 @@ enum Slot : int
     ETB_TREASURE_SPEND,       // MTG_ETB_TREASURE_SPEND    a FREE enter-trigger Treasure (Corsair Captain) / a Larcenist-converted Treasure is spendable the turn it appears, and the enumerator credits the ETB Treasure to later casts of the same plan (default ON; =0 restores the fresh-hold for it)
     PIRATES_CAST_ORDER,       // MTG_PIRATES_CAST_ORDER    the USER-reviewed full Pirates cast order (see PiratesProvider::CastOrderRank; ADOPTED default ON 2026-09-27)
     PAYABLE_ORDER,            // MTG_PAYABLE_ORDER         the cast order is kept unless it projects UNPAYABLE (reveal-aware: a Daring Buccaneer's reveal leaves with the cards cast before it); then the maker hoist, then the nearest payable permutation of the same casts (ADOPTED default ON 2026-09-27)
+    PD_SECOND_MAIN,           // MTG_PD_SECOND_MAIN        Prevent Damage: a symmetric sweeper (Pyrohemia / Rolling Earthquake) opens the searched SECOND main -- attack first, then sweep (PROVISIONAL default ON 2026-09-27; Stage 5 A/B prices it, m2 measured 4.25x elsewhere)
     COUNT
 };
 
@@ -494,6 +495,7 @@ inline const char* Name(int slot)
         "MTG_ETB_TREASURE_SPEND",
         "MTG_PIRATES_CAST_ORDER",
         "MTG_PAYABLE_ORDER",
+        "MTG_PD_SECOND_MAIN",
     };
     // The enum and this table are ONE mapping split across two lists: a slot added to one and not
     // the other silently shifts every lever after it (a manifest asking for lever X would set Y).
