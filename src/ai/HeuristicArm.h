@@ -254,6 +254,10 @@ enum Slot : int
     SAC_DRAIN_LETHAL,         // MTG_SAC_DRAIN_LETHAL        the multi-sac LETHAL burst is sized by outlet damage PLUS the per-death drain of our death watchers (Slimefoot / Pashalik Mons). Adds an action, so it moves GT (default OFF)
     FS_PRE_STATE_SKIP,        // MTG_FS_PRE_STATE_SKIP   an ORDINARY plan on FSLineWin's frontier is SKIPPED when an earlier sibling already scored its post-apply state (default OFF; an IDENTITY collapse, not a dominance ordering)
     DIG_MANA_LAST,            // MTG_DIG_MANA_LAST        a tap-draw activation is NOT OFFERED while the mana it wants could deploy a PERMANENT from hand instead (default OFF; a HEURISTIC narrowing, not lossless)
+    SPORE_POP_ALL,            // MTG_SPORE_POP_ALL       the SPORE activation-count ladder collapses to "pop them all", EXCEPT while a token doubler sits in hand payable now or within MTG_SPORE_HOLD_TURNS turns (default 1), where it narrows to {1, all} and the search decides. USER 2026-09-26: "there is no benefit to waiting unless we are likely to play a doubling season next turn" -- exact here because a spore counter's only sink is the 1/1 Saproling, counters do not decay, and the token never gets bigger. ADOPTED 2026-09-27, default ON: quality FLAT (-0.00036t labelling, 0.00000t play over 4,550 held-out games) at 1.095x / 1.036x, every labelling seed faster
+    SPORE_HOLD_WIDE,          // MTG_SPORE_HOLD_WIDE     ...and the hold window is TWO turns, not one ("arguably the turn after could make sense to consider as well if that doesn't work well") -- sub-mode of the above (default OFF)
+    SPORE_HOLD_NONE,          // MTG_SPORE_HOLD_NONE     ...or ZERO: pop always, even with a Season projected. Prices the searched exception itself -- sub-mode of the above (default OFF)
+    SPORE_HOLD_SECOND,        // MTG_SPORE_HOLD_SECOND   ...and a doubler ALREADY RESOLVED also opens the searched branch when a SECOND one is in hand and reachable. USER 2026-09-26: "it is not clear to me that it is ever worth waiting for the second season to drop... that is something we can test" -- the default (pop) is the user's expectation, this arm tests the alternative (default OFF)
     M2_FREE_ACTIVATION,       // MTG_M2_FREE_ACTIVATION  the post-combat PRODUCTIVITY gate also opens the phase for a FREE counter-paid activation on a permanent that entered this turn (Saproling Burst cast in main 1). Without it 69% of Bursts sat idle the turn they landed -- but it adds m2 solves, which the 2026-09-08 "no extra mains to search" doctrine is about, ADOPTED 2026-09-26, default ON: -0.126t labelling / -0.139t play on seven held-out seeds, and still 2.01x/1.37x faster
     FADE_K_WINDOW,            // MTG_FADE_K_WINDOW        the fade-outlet activation-COUNT ladder (Saproling Burst) is replaced by a PROJECTED LANDMARK MENU: the power peak (with the bodies already out folded in), plus a Beastmaster-Ascension attacker threshold, plus the leave-2/leave-1/leave-0 lines ONLY when they reach a kill this turn or next that the peak does not. Up to 112 candidates become ~3. ADOPTED 2026-09-26, default ON (-0.004t at both depths, 2.04x/1.50x). See docs/design/fade-k-axis-landmarks.md (a HEURISTIC narrowing, not lossless)
     BP_ETB_DIG,               // MTG_BP_ETB_DIG            an ETB dig (Staunch Crewmate) opens site 10 so the dug card is castable this turn (default ON since 2026-09-26)
@@ -478,6 +482,10 @@ inline const char* Name(int slot)
         "MTG_SAC_DRAIN_LETHAL",
         "MTG_FS_PRE_STATE_SKIP",
         "MTG_DIG_MANA_LAST",
+        "MTG_SPORE_POP_ALL",
+        "MTG_SPORE_HOLD_WIDE",
+        "MTG_SPORE_HOLD_NONE",
+        "MTG_SPORE_HOLD_SECOND",
         "MTG_M2_FREE_ACTIVATION",
         "MTG_FADE_K_WINDOW",
         "MTG_BP_ETB_DIG",

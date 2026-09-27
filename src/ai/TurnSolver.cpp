@@ -20305,14 +20305,17 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
             // K-block is emitted up front and each iteration re-checks the counter supply in
             // ApplyPermAbility instead.
             //
-            // K IS A REAL SEARCHED AXIS, not a greedy max. For this card in isolation popping at the
-            // first opportunity looks weakly dominant -- spore counters have one sink and no upkeep
-            // cost -- but it stops being dominant with the rest of the deck on the table: holding
-            // three counters until a Doubling Season resolves turns one Saproling into two, and
-            // Mycoloth's devour wants the bodies on the battlefield BEFORE it enters. So the search
-            // owns both K and the activation's position in the main-phase ordering. Folded to {1}
-            // under human play / unpruned for the same reason the mana sinks are: the main phase
-            // re-prompts after each activation, so "pop twice" is reached by choosing it twice.
+            // K WAS A FULLY SEARCHED AXIS, and is now a narrowed one -- see the MTG_SPORE_POP_ALL
+            // block below, which collapses it to "pop them all" unless a token doubler is genuinely
+            // on the way. Popping at the first opportunity IS weakly dominant for this card in
+            // isolation (spore counters have one sink, do not decay, and the token is a flat 1/1),
+            // and the one thing that breaks the dominance -- holding three counters until a Doubling
+            // Season resolves turns one Saproling into two -- is exactly what that block projects.
+            // Mycoloth's devour is NOT a reason to hold: devour wants bodies on the battlefield
+            // before it enters, which popping serves. The search still owns the activation's POSITION
+            // in the main-phase ordering (cast the Season, then pop). Folded to {1} under human play /
+            // unpruned for the same reason the mana sinks are: the main phase re-prompts after each
+            // activation, so "pop twice" is reached by choosing it twice.
             if (sd->params.spore_saproling_cost > 0
                 && src.spore_counters >= sd->params.spore_saproling_cost)
             {
@@ -20357,13 +20360,248 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
                     }
                 }
                 std::vector<int> counts{ 1 };
+                // Which branch decided, for MTG_SPORE_K_DUMP: 0 lever off / no decision to make,
+                // 1 pop (doubler already resolved), 2 SEARCHED (the doubler is payable ONLY by selling
+                // a Saproling, so a pre-Season pop is a funding decision), 3 SEARCHED (doubler
+                // reachable next turn -- the summoning-sickness / chip-damage question), 4 pop (a
+                // doubler in hand but out of reach), 5 pop (no doubler at all), 6 pop (the LANDS pay
+                // for the doubler, so there is no funding question and the pop belongs AFTER it).
+                // Worth a tally because the FIRST version of this rule never took its searched branch
+                // in 4,550 games and that was invisible without one.
+                int why = 0;
                 if (max_k > 1 && !HumanPlayActive()
                     && !DecisionUnpruned(UnprunedGate::BlinkTarget))
                 {
                     counts.clear();
-                    for (int k = 1; k <= max_k; ++k) { counts.push_back(k); }
+                    // POP THEM ALL (MTG_SPORE_POP_ALL). USER 2026-09-26:
+                    //   *"To be clear with the fungus counters there is no benefit to waiting unless
+                    //    we are likely to play a doubling season next turn. Arguably the turn after
+                    //    could make sense to consider as well if that doesn't work well."*
+                    //   *"You always pop them this turn if a season is out." / "(all of them)" /
+                    //    "we order the popping to occur after Doubling Season to avoid losing free
+                    //    benefit." / "we do not wait until next turn to pop them."*
+                    //
+                    // THE CARD POOL MAKES THAT EXACT RATHER THAN MERELY PLAUSIBLE. In this archetype a
+                    // spore counter has exactly ONE sink -- *"Remove three spore counters from this
+                    // creature: Create a 1/1 green Saproling creature token"* -- and it is the same
+                    // sink on every member (Thallid / Vitaspore / Deathspore / Psychotrope / Utopia
+                    // Mycon / Sporesower). Their OTHER abilities all cost a Saproling SACRIFICE, not a
+                    // counter, so popping forecloses nothing. And unlike the fade axis popping spends
+                    // nothing: spore counters do not decay at upkeep, the token is a flat 1/1 whatever
+                    // the count, and a body already out does not shrink (contrast RefreshFadeTokens).
+                    // Earlier is therefore weakly better -- more turns of the body, and more fodder for
+                    // devour / Mycon's mana / Psychotrope's draw / Vitaspore's haste / Slimefoot's
+                    // drain -- which leaves exactly ONE reason to hold: a token doubler that has not
+                    // landed yet turns each Saproling into two.
+                    //
+                    // So the rule is HOLD ONLY FOR A SEASON WE CAN REALLY EXPECT, projected the way the
+                    // user sanctioned (*"projections like in the Goblin Matron heuristic"* --
+                    // GoblinsProvider's `mana_next` = lands + one drop per future turn):
+                    //   * a doubler already RESOLVED -> POP, forced. The reason to wait is spent, and
+                    //     with the Season out every k is dominated by the maximum (the same 2 bodies
+                    //     per 3 counters, a turn sooner). A SECOND Season in hand does not re-arm the
+                    //     hold: *"we do not wait until next turn to pop them."*
+                    //   * a doubler in hand and REACHABLE -- payable now, or within
+                    //     MTG_SPORE_HOLD_TURNS turns of land drops -> SEARCH THE WHOLE LADDER. USER:
+                    //     *"this is the one case where we probably need to search or have some smarter
+                    //     heuristic logic. When it looks like the season can drop next turn."* /
+                    //     *"I think pop them all is okay most of the time, but you do have a point that
+                    //     popping one for say extra mana can be important to consider sometimes."*
+                    //     The option that matters here is the MIDDLE of the ladder, which "pop them
+                    //     all" deletes: pop ONE now -- to shed summoning sickness, or to sacrifice for
+                    //     mana/a card -- and hold the rest for the doubler. *"If we are just doing chip
+                    //     damage to the opponent at this point (they have most of their life remaining)
+                    //     holding for the season is probably better."* That is a trade this block
+                    //     cannot adjudicate, so it declines to narrow and lets the search price it.
+                    //     NOTE "payable now" is in here deliberately: pop one, sacrifice it to Utopia
+                    //     Mycon for the mana that CASTS the Season, then pop the rest is a real line,
+                    //     and forcing the maximum deleted it.
+                    //   * otherwise -> POP, forced. With nothing to wait for, popping everything
+                    //     dominates for every payoff including the mana one -- more bodies is more
+                    //     fodder -- so the middle of the ladder has no case to make.
+                    //
+                    // WHY THE SEARCHED CASE DOES NOT GIVE THE COST BACK: it is the RESOLVED Season that
+                    // makes the ladder wide, because it doubles the upkeep counters as well as the
+                    // tokens, and that is the forced-pop case. While the Season is still in hand the
+                    // pool holds few enough counters that the ladder is 1-3 rungs.
+                    //
+                    // WHY IT MATTERS MORE THAN ITS LADDER WIDTH SUGGESTS. Measured on a 12-game d1/b3
+                    // block: any ONE spore ladder is 1-8 wide, but the axis is emitted per canonical
+                    // pool and the spore family accounts for 83,494 of the 144,133 chosen-X candidate
+                    // actions -- 58%, more than Saproling Burst's 57,778 -- because the width multiplies
+                    // through the subset walk. (MTG_FUNGUS_SPORE_POOL has been ADOPTED default ON since
+                    // 2026-09-22, so the six interchangeable outlets are already ONE axis carried by the
+                    // oldest payer; that pooling is also WHY max_k gets large enough to matter, since it
+                    // sums the pool's capacity.)
+                    static const bool s_pop_all    = EnvOn("MTG_SPORE_POP_ALL", true);
+                    static const int  s_hold_turns = EnvInt("MTG_SPORE_HOLD_TURNS", 1);
+                    bool pop_all = false;
+                    if (heurarm::Flag(heurarm::SPORE_POP_ALL, s_pop_all))
+                    {
+                        pop_all = true;
+                        why     = 1;
+                        static const bool s_wide = EnvOn("MTG_SPORE_HOLD_WIDE");
+                        static const bool s_none = EnvOn("MTG_SPORE_HOLD_NONE");
+                        int hold_turns = s_hold_turns;
+                        if (heurarm::Flag(heurarm::SPORE_HOLD_WIDE, s_wide)) { hold_turns = 2; }
+                        if (heurarm::Flag(heurarm::SPORE_HOLD_NONE, s_none)) { hold_turns = 0; }
+                        // A doubler ALREADY RESOLVED forces the pop, so a SECOND Season in hand is not
+                        // waited for. USER 2026-09-26: *"if you have a season on board and one in hand,
+                        // it is not clear to me that it is ever worth waiting for the second season to
+                        // drop. That is something we can test. But realistically deploying the
+                        // saprolings is probably almost always the better option there."* So the
+                        // expectation is the DEFAULT and MTG_SPORE_HOLD_SECOND is the arm that tests it:
+                        // with it on, a resolved doubler ALSO opens the searched branch when another is
+                        // in hand and reachable. Note the second Season is the expensive direction --
+                        // counters are already doubled, so this is where the ladder is widest.
+                        static const bool s_second = EnvOn("MTG_SPORE_HOLD_SECOND");
+                        const bool resolved = DoublerShift(state, state.active_player_index,
+                                                           /*for_tokens=*/true) > 0;
+                        if (hold_turns > 0
+                            && (!resolved
+                                || heurarm::Flag(heurarm::SPORE_HOLD_SECOND, s_second)))
+                        {
+                            const Player& sp = state.players[state.active_player_index];
+                            int want_mv = 0;   // the CHEAPEST doubler in hand, 0 = none
+                            for (const Card& hc : sp.hand)
+                            {
+                                const CardDefinition* hd = CardDatabase::Instance().LookupCached(hc);
+                                if (hd == nullptr || !hd->params.doubles_tokens) { continue; }
+                                const int mv = hd->card.m_mana_cost.ManaValue();
+                                if (want_mv == 0 || mv < want_mv) { want_mv = mv; }
+                            }
+                            // TWO affordability reads, because they mean different things here.
+                            // `savail` is the engine's accounting pool, which INCLUDES bodies a
+                            // sac-for-mana outlet could eat (AddSacPayFodderToPool). `mana_only` is
+                            // what the board pays WITHOUT selling a Saproling. USER 2026-09-27, on
+                            // seeing the search offered {1,2} on a turn whose Season was paid from
+                            // lands alone: *"That makes no sense. The search shouldn't even offer
+                            // both... it should offer before only for the purposes of sacrificing them
+                            // for mana."* So a pre-Season pop is a FUNDING decision, and where the
+                            // lands already pay there is nothing to decide.
+                            ManaPool smp = AvailableManaPool(state);
+                            smp.AddPool(state.floating_mana);
+                            const int savail = static_cast<int>(smp.Total());
+                            int mana_only = static_cast<int>(state.floating_mana.Total());
+                            for (const Permanent& q : state.battlefield)
+                            {
+                                if (q.controller_index != state.active_player_index) { continue; }
+                                if (q.tapped)                                        { continue; }
+                                const CardDefinition* qd =
+                                    CardDatabase::Instance().LookupCached(q.card);
+                                if (qd == nullptr) { continue; }
+                                const bool land = qd->tmpl == CardTemplate::BasicLand;
+                                const bool dork = (qd->tmpl == CardTemplate::ManaDork
+                                                   && CanTapNow(q, state.battlefield))
+                                               || qd->params.mana_rock;
+                                if (!land && !dork) { continue; }
+                                mana_only += std::max(0, PermanentManaYield(state, q, *qd));
+                            }
+                            if (want_mv == 0)
+                            {
+                                why = 5;           // no doubler in hand: nothing to wait for
+                            }
+                            else if (mana_only >= want_mv)
+                            {
+                                why = 6;           // the LANDS pay for it: no funding question, POP
+                            }
+                            else if (savail >= want_mv)
+                            {
+                                // Payable only by SELLING a Saproling: pop one to fund the Season.
+                                pop_all = false;
+                                why     = 2;
+                            }
+                            else
+                            {
+                                why = 4;
+                                // Every source UNTAPS, so the projection ignores `tapped` and sums the
+                                // board's full yield, then adds one land drop per future turn while
+                                // lands remain in hand (this turn's unspent drop counts as well, since
+                                // it is still available to the turn we are projecting to). A drop is
+                                // credited 1 rather than the land's own yield because Hickory Woodlot
+                                // and Peat Bog tap for 2 but enter TAPPED -- crediting 2 would fund a
+                                // Season a turn early and hold counters that should have been popped.
+                                // Summoning-sick dorks ARE credited for the same untap reason.
+                                // (Granted mana bodies -- Brightcap Badger's target -- are not: that
+                                // needs ManaPayment's private ManaDefOf, and under-crediting here only
+                                // makes the projection stingier, i.e. pops rather than holds.)
+                                int board = 0, lands_in_hand = 0;
+                                for (const Permanent& q : state.battlefield)
+                                {
+                                    if (q.controller_index != state.active_player_index) { continue; }
+                                    const CardDefinition* qd =
+                                        CardDatabase::Instance().LookupCached(q.card);
+                                    if (qd == nullptr) { continue; }
+                                    if (qd->tmpl != CardTemplate::BasicLand
+                                        && qd->tmpl != CardTemplate::ManaDork
+                                        && !qd->params.mana_rock)                   { continue; }
+                                    board += std::max(0, PermanentManaYield(state, q, *qd));
+                                }
+                                for (const Card& hc : sp.hand)
+                                {
+                                    const CardDefinition* hd =
+                                        CardDatabase::Instance().LookupCached(hc);
+                                    if (hd != nullptr && hd->tmpl == CardTemplate::BasicLand)
+                                    { ++lands_in_hand; }
+                                }
+                                const int open  = sp.lands_played_this_turn < sp.LandDropsAvailable()
+                                                ? 1 : 0;
+                                const int drops = std::min(lands_in_hand, hold_turns + open);
+                                // It is coming: leave the ladder SEARCHED (not "hold" -- the search
+                                // still gets every rung, including popping the lot).
+                                if (board + drops >= want_mv) { pop_all = false; why = 3; }
+                            }
+                        }
+                    }
+                    if (pop_all) { counts.push_back(max_k); }
+                    else if (why != 0)
+                    {
+                        // The SEARCHED case is still narrowed, to the two options the user named and
+                        // no others: *"popping one for say extra mana can be important to consider
+                        // sometimes"* and *"pop them all is okay most of the time"*. One body funds the
+                        // Season (sacrifice it to Utopia Mycon) or sheds summoning sickness; the
+                        // maximum is the deploy-now line. The rungs BETWEEN them have no story --
+                        // nothing in this pool cares about "three of the five" -- and the held-out run
+                        // found the search never preferred a strict middle anyway.
+                        counts.push_back(1);
+                        if (max_k > 1) { counts.push_back(max_k); }
+                    }
+                    else { for (int k = 1; k <= max_k; ++k) { counts.push_back(k); } }
                 }
                 if (!emit) { counts.clear(); }
+                // MTG_SPORE_K_DUMP=1 -- DIAGNOSTIC ONLY. Ladder-width histogram for the SPORE axis,
+                // split by whether a token doubler is on the battlefield, printed at exit. The fade
+                // axis got the same treatment and the histogram is what located the real cost.
+                if (!counts.empty() && EnvOn("MTG_SPORE_K_DUMP"))
+                {
+                    struct SHist {
+                        std::atomic<long long> n[2][257]{};
+                        std::atomic<long long> why[7]{};
+                        ~SHist() {
+                            for (int d = 0; d < 2; ++d)
+                            { std::fprintf(stderr, "[spore-k] width histogram (%s doubler):\n",
+                                           d ? "WITH" : "no");
+                              for (int i = 0; i <= 256; ++i)
+                              { if (n[d][i].load())
+                                { std::fprintf(stderr, "    width %3d : %lld\n", i, n[d][i].load()); } } }
+                            static const char* const kWhy[7] = {
+                                "lever OFF (ladder)", "POP: doubler already resolved",
+                                "SEARCHED: doubler needs a SACRIFICE to fund",
+                                "SEARCHED: doubler reachable next turn",
+                                "POP: doubler in hand but out of reach", "POP: no doubler in hand",
+                                "POP: the lands pay for the doubler" };
+                            std::fprintf(stderr, "[spore-k] decision branch:\n");
+                            for (int i = 0; i < 7; ++i)
+                            { if (why[i].load())
+                              { std::fprintf(stderr, "    %-40s : %lld\n", kWhy[i], why[i].load()); } }
+                        }
+                    };
+                    static SHist s_sh;
+                    const int dbl = DoublerShift(state, state.active_player_index, true) > 0 ? 1 : 0;
+                    s_sh.n[dbl][std::min<int>(static_cast<int>(counts.size()), 256)]
+                        .fetch_add(1, std::memory_order_relaxed);
+                    s_sh.why[why].fetch_add(1, std::memory_order_relaxed);
+                }
                 for (int k : counts)
                 {
                     Action a;

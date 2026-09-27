@@ -170,6 +170,192 @@ Bucket count is unchanged at K=22, so none of this came from a coarser table. Th
 to `36a65944fd138cd0`, which discards the banked journal — already accepted by the user when
 `MTG_FUNGUS_SHRINK_SAC_M2` was adopted, and re-discovery was forced regardless.
 
+## The sibling axis: spore counters
+
+**Status:** built, behind `MTG_SPORE_POP_ALL` / `heurarm::SPORE_POP_ALL` (default OFF pending the
+held-out measurement), with three sub-mode arms. **Code:** the `spore_saproling_cost` emission block
+in `CollectActions`. **Instrument:** `MTG_SPORE_K_DUMP=1` — width histogram split by doubler, **plus
+a decision-branch tally**.
+
+The same question — how many bodies to make — on the deck's other counter. It gets the opposite
+answer, and for a reason that is a property of the card rather than a judgement call.
+
+### Why this one is exact and the fade one is not
+
+Saproling Burst's counter is *contested*: spending it shrinks every body already out and the
+counters evaporate at upkeep anyway. A spore counter has none of that.
+
+1. **Exactly ONE sink, and it is the same sink on every member.** *"Remove three spore counters from
+   this creature: Create a 1/1 green Saproling creature token"* — on Thallid, Thallid Shell-Dweller,
+   Sporesower, Psychotrope, Vitaspore, Deathspore and Utopia Mycon alike. Every *other* ability on
+   those cards costs a Saproling **sacrifice**, not a counter, so popping forecloses nothing.
+2. **Nothing is spent by popping.** Spore counters do not decay, the token is a flat 1/1 whatever the
+   count, and a body already on the battlefield does not shrink (contrast `RefreshFadeTokens`).
+3. So earlier is **weakly better**: more turns of the body, and more fodder for devour, Utopia
+   Mycon's mana, Psychotrope's draw, Vitaspore's haste and Slimefoot's drain.
+
+That leaves exactly one reason to wait, and the user named it:
+
+> *"To be clear with the fungus counters there is no benefit to waiting unless we are likely to play
+> a doubling season next turn. Arguably the turn after could make sense to consider as well if that
+> doesn't work well."*
+
+### The rule, and the one case that stays searched
+
+| board / hand | decision | why |
+|---|---|---|
+| a doubler already **resolved** | **POP**, forced | every `k` is dominated by the maximum: the same 2 bodies per 3 counters, a turn sooner |
+| a doubler **in hand and reachable** — payable now, or within `MTG_SPORE_HOLD_TURNS` turns of land drops | **SEARCH, narrowed to `{1, all}`** | the two options the user named are real questions, and "pop them all" deletes one of them |
+| a doubler in hand but **out of reach**, or none at all | **POP**, forced | nothing to wait for, and popping everything dominates *including* for mana — more bodies is more fodder |
+
+The searched row is the user's correction to a first version that made it a rule:
+
+> *"I guess 'hold for a season' would not be a hard-fast rule, but perhaps would need to be searched.
+> If it looks like we can play one next turn there is a real question about whether we need that
+> saproling early, either because it loses summoning sickness or because we need to sacrifice it for
+> something. If we are just doing chip damage to the opponent at this point (they have most of their
+> life remaining) holding for the season is probably better."*
+>
+> *"I think pop them all is okay most of the time, but you do have a point that popping one for say
+> extra mana can be important to consider sometimes."*
+
+Note **"payable now" is deliberately in the searched row.** An earlier version forced the maximum
+there, on the reasoning that the line is cast-then-pop and ordering belongs to the plan search. That
+deleted a real line: pop **one**, sacrifice it to Utopia Mycon for the mana that **casts** the
+Season, then pop the rest. The projection is the Goblin Matron one the user sanctioned
+(`GoblinsProvider`'s `mana_next`): board yield with `tapped` ignored because everything untaps, plus
+one land drop per future turn while lands remain in hand. A drop is credited **1**, not the land's
+own yield, because Hickory Woodlot and Peat Bog tap for 2 but enter *tapped*.
+
+**The searched case does not give the cost back.** It is the *resolved* Season that makes the ladder
+wide — it doubles the upkeep counters as well as the tokens — and that is the forced-pop row. While
+the Season is still in hand the pool holds few enough counters that the ladder is 1–3 rungs.
+
+### The lesson: tally the branch, or a rule can be dead and look adopted
+
+The first version of this rule fired its searched branch **zero times in 4,550 held-out games** —
+`hold=0`, `hold=1` and `hold=2` produced byte-identical digests on every seed, which is only visible
+if you compare digests and not averages. There is now a branch tally in `MTG_SPORE_K_DUMP`. On 40
+games at d1/b3 the restructured rule reads:
+
+| branch | count |
+|---|---|
+| no decision to make (`max_k <= 1`) | 77,986 |
+| **POP** — doubler already resolved | 15,982 |
+| **SEARCHED** — doubler payable now | 1,300 |
+| **SEARCHED** — doubler reachable in the window | 522 |
+| **POP** — doubler in hand, out of reach | 272 |
+| **POP** — no doubler in hand | 3,788 |
+
+So of the 21,864 real decisions, 90% are forced pops and 8.3% stay searched.
+
+### Arms, including one that tests a user question
+
+* `MTG_SPORE_HOLD_WIDE` — the window is two turns, the user's *"arguably the turn after"*.
+* `MTG_SPORE_HOLD_NONE` — never search; prices the searched exception itself.
+* `MTG_SPORE_HOLD_SECOND` — a **resolved** doubler also opens the searched branch when a *second* one
+  is in hand. The user: *"if you have a season on board and one in hand, it is not clear to me that
+  it is ever worth waiting for the second season to drop. That is something we can test. But
+  realistically deploying the saprolings is probably almost always the better option there."* The
+  expectation is therefore the **default** (pop), and this arm measures the alternative. It is also
+  the expensive direction, since with a Season out the counters are already doubled.
+
+### Measurement
+
+100 games, seed 90000, d1/b3, serial, alone on the box:
+
+| arm | wall | avg turns |
+|---|---|---|
+| ladder | 34.67 s | 5.3400 |
+| pop-all | 30.08 s (**1.15x**) | **5.3300** |
+
+Held out over the same 7 seeds and both depths as the fade work, five arms in ONE pooled batch
+(`logs/fadek2/ab_spore3.json`, 70 jobs):
+
+| regime | Δ avg turns | wall |
+|---|---|---|
+| labelling d1/b3, 2,800 games | **−0.00036** (t = −1.00) | **1.10x**, all 7 seeds faster (1.05–1.25) |
+| play d5/b20, 1,750 games | **0.00000** (t = 0.00) | 1.04x over 70 jobs; 1.13x over 28, per-seed 0.91–1.54 |
+
+Quality flat, cost real, so **ADOPTED default ON** — a cost-only adoption, unlike the two fade levers
+which also moved the objective. Both the pre- and post-correction rules measure the same, which the
+tuning block predicted.
+
+**Do not quote the play wall figure precisely.** Its per-seed spread is 0.91x–1.54x and the pooled
+number moves with job count (1.036x over 70 jobs, 1.131x over 28) — one slow seed carries it. The
+labelling number is the trustworthy one: every seed faster, in both runs, and that is the regime
+generation cost lives in.
+
+**Every sub-mode arm was byte-identical to the default on 7/7 seeds at both depths.** That is a
+result, not a null: it says that whenever the search is *free* to take the middle of the ladder or to
+wait, it deploys anyway.
+
+* `HOLD_WIDE` (two-turn window) — identical. The extra window buys nothing.
+* `HOLD_NONE` (never search) — identical in outcome, and ~2.4% faster at labelling than keeping the
+  searched branch. So the searched branch costs about 2.4% of the labelling gain and buys nothing
+  measurable *here*. It is kept because the user asked for the option explicitly, and because the
+  case it protects is by nature a longer game than these.
+* `HOLD_SECOND` (wait for a second Season) — identical, which answers the user's question
+  (*"it is not clear to me that it is ever worth waiting for the second season"*) in the direction
+  they expected.
+
+**Scope that honestly.** `max_turns` is 8 and the opponent does nothing, so the *"just doing chip
+damage, they have most of their life remaining"* board that motivates holding barely occurs. These
+results say the middle of the ladder is never preferred **in ≤8-turn goldfish games**; they do not
+say it never is.
+
+A prior, narrower version of the lever (collapse only when a doubler is already out or payable now)
+measured **completely inert** on those seeds: byte-identical digests on 7/7 labelling seeds and 5/7
+play seeds, 0.0000 turns. Its apparent "1.14x" on the tuning block was noise. That is why the rule
+now covers the no-doubler case, which is where the 90% of forced pops actually live.
+
+### A pre-Season pop is a FUNDING decision, and nothing else
+
+The rule above shipped one branch too wide, and the user caught it on the invariant output:
+
+> *"That makes no sense. The search shouldn't even offer both... it should offer before only for the
+> purposes of sacrificing them for mana. Because if you need the extra mana to cast doubling season,
+> then we may need to do this. Otherwise you always should take them after."*
+
+The offending turn cast Doubling Season **off lands alone**, so nothing was gained by holding a body
+back — yet the menu still offered `{1, 2}` because the doubler was "payable this turn". The fix needs
+**two** affordability reads, which mean different things:
+
+* `savail` — the engine's accounting pool, which **includes** bodies a sac-for-mana outlet could eat
+  (`AddSacPayFodderToPool`).
+* `mana_only` — what the untapped board pays **without selling a Saproling**.
+
+If `mana_only` covers the doubler there is no funding question and the pop belongs *after* it (forced
+maximum). Only when `savail` covers it and `mana_only` does not is a pre-Season pop a real decision,
+and then it is a *funding* decision. That moved **1,218 of 1,300** cases from searched to forced; only
+**82** genuinely need a sacrifice. Searched cases fell from 8.3% to 2.8% of real decisions, and
+emitted ladder widths are now 1 or 2 only.
+
+### The "defect" this turned up was a misread, and the retraction is the lesson
+
+Narrowing that branch made game 11 stop popping on T6 entirely, which looked like the search refusing
+a free option — the same shape as the Saproling Burst idle. It was not. The full line:
+
+```
+ladder     T6 Season + pop Vitaspore              saps=2
+           T7 Season + pop Deathspore             saps=6   win T7
+corrected  T6 Season, no pop                      saps=0
+           T7 Season + pop, pop (pool rollover)   saps=8   win T7
+```
+
+The search **held one turn on purpose** and popped twice under *two* Seasons, ending with 8 bodies
+instead of 6 at the same win turn. Two claims had to be withdrawn: that the pooled two-payer
+activation fails to apply (it works — those are the two `ABILITY` entries, `SpendSporeActivations`
+rolling over to the next canonical payer), and that a free upside was declined (it was a real trade —
+2 bodies plus 2 damage now against 4 bodies next turn). Across the 25 games the arms have identical
+activation counts (15) and the corrected rule ends with slightly **more** bodies (192 vs 190).
+
+**The checker was what misled me**, and it was wrong in a specific way: it treated "a Season is
+already out" as making a hold indefensible. Doubling Season **doubles again**, so a second copy in
+hand is a live reason to wait. `logs/fadek2/spore_invariant.py` now classifies on *"is there another
+Season to come"*, not on whether one has landed. This is also a mild counterexample to the
+`HOLD_SECOND` result: waiting for a second Season did pay here in bodies, if not in win turn.
+
 ## Deferred
 
 * **The Mycotyrant** (user, 2026-09-26): not in `cards.json` today. Its power/toughness equals the
