@@ -600,6 +600,37 @@ inline bool AcqDigEnabled()
     return v;
 }
 
+// MTG_BP_ETB_DIG -- DEFAULT ON (USER ruling 2026-09-26, the Pirates D6 review: "my understanding is
+// that a breakpoint should open which would allow us to cast the new spell ... If that doesn't
+// happen, I agree it is a bug."). =0 restores the pre-fix world for the A/B.
+//
+// THE DEFECT. An ETB library dig (etb_dig_count: Staunch Crewmate, Acclaimed Contender) puts a card
+// in hand at resolution, and the general put-in-hand rule (site 10, MTG_BP_PUT_IN_HAND) is exactly
+// the breakpoint that should let the rest of the turn cast it. But TurnSolver::ParamKeyedDrawClass
+// listed etb_dig_count -- "some param-keyed site already owns this cast" -- so site 10 stood down in
+// BOTH worlds, while the only param-keyed dig site (ApplyPlanDirect's PerformEtbDig call) had its
+// arming deliberately removed (the 2026-08-19 MTG_ACQ_DIG measurement). Claimed, never armed: the
+// dug card could not be cast in the phase that dug it at any searched budget. Pirates s777011 gi11:
+// T3 Crewmate -> dig Daring Buccaneer -> cast it off the leftover {R} wins T4; the search could only
+// win T5, at --budget-ms 200 and 20000 alike.
+//
+// WHY THE 2026-08-19 REJECTION DOES NOT STAND. It measured a re-arm feeding the then-GREEDY
+// continuation (6/8 held-out searched keys red, attributed to that greedy misplaying). The
+// continuation is a SEARCHED node now, and the USER's general rule (2026-09-18, see
+// BpPutInHandEnabled) is that opening the breakpoint is a correctness requirement, not a lever.
+//
+// THE FIX IS A DELETION FROM THE CLAIM LIST, not a new arming site: with etb_dig_count out of
+// ParamKeyedDrawClass, site 10's existing outcome-keyed arming (rollout: end of apply_one; executor:
+// put_in_hand_armed) fires after the dig in lockstep -- both read the same function and the same
+// deterministic dig -- and PlanOpensBreakpoint's site-10 route list names etb_dig_count so the
+// continuation is fanned, not the unchallengeable canon default. CAST path only: a VIAL-put digger
+// is outside any cast window, which is the MTG_BP_HAND_ENTRY hole (default OFF, measuring).
+inline bool BpEtbDigEnabled()
+{
+    static const bool v = EnvOn("MTG_BP_ETB_DIG", true);   // DEFAULT ON; =0 reverts
+    return heurarm::Flag(heurarm::BP_ETB_DIG, v);
+}
+
 // MTG_TOP_RESOLVE=1 -- measurement lever (DEFAULT OFF until the adoption A/B is accepted): the
 // USER's tutor-to-TOP reset (StompySurprise cast-order review, 2026-08-21: "We need to build the
 // reset for my combo to be workable ... Cast worldly tutor -> now activations and Turntimber can

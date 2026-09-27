@@ -14116,7 +14116,8 @@ bool TurnSolver::ParamKeyedDrawClass(const GameState& state, const CardDefinitio
         || p.damage_equals_top_mv
         || p.tutor_to_hand
         || p.tutor_to_top
-        || p.etb_dig_count > 0
+        // etb_dig_count is claimed only in the pre-fix world: MTG_BP_ETB_DIG hands it to site 10.
+        || (p.etb_dig_count > 0 && !BpEtbDigEnabled())
         // The Zada/Mirrorwing trick class (site 5), whichever payload armed it.
         || (p.solo_target_trick && (p.cast_draw > 0 || p.creates_treasures > 0))
         // Site 6 -- state-keyed, because the draw belongs to the WATCHER (Puresteel Paladin), not
@@ -29828,6 +29829,10 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
             {
                 PerformEtbDig(state, state.active_player_index, def.params,
                               &state.battlefield.back());
+                // SUPERSEDED by MTG_BP_ETB_DIG (default ON, 2026-09-26): the breakpoint after
+                // this dig is now armed by site 10's generic outcome test at the end of
+                // apply_one (ParamKeyedDrawClass no longer claims etb_dig_count), with a SEARCHED
+                // continuation. The note below records the pre-fix world (=0).
                 // MTG_ACQ_DIG is deliberately NOT armed here (rollout side): the first
                 // measurement (2026-08-19, train + held-out) had this arm and it turned 6/8
                 // held-out searched keys red (+0.002..+0.006) while d0 went 4/4 green -- the
@@ -37353,7 +37358,10 @@ static int PlanOpensBreakpoint(const GameState& state, const TurnSolver::Plan& p
         if (BpPutInHandEnabled() && !TurnSolver::ParamKeyedDrawClass(state, *d)
             && ((aura_watcher && d->params.is_aura)
                 || d->params.etb_self_draw > 0
-                || d->params.cast_draw > 0))
+                || d->params.cast_draw > 0
+                // MTG_BP_ETB_DIG: the ETB dig (Staunch Crewmate) -- unclaimed by ParamKeyedDrawClass
+                // once the lever is on, so it is a site-10 route and must be FANNED here.
+                || d->params.etb_dig_count > 0))
         { mask |= 1 << 10; }
         // ...AND THE ROUTES THE AUDIT NAMED (MTG_BP_CANON_AUDIT, 2026-09-22). Each of these really
         // does arm site 10 -- the arming is OUTCOME-keyed ("did the hand gain a card?"), so it fires
@@ -39021,6 +39029,9 @@ static void AppendSubdecisionAxes(const GameState& state, bool is_pre_combat,
     // the five breakpoint sites, so no re-solve follows and the card cannot be cast this turn. The
     // pick therefore cannot interact with the rest of this turn's subset -- the condition that makes
     // a second axis equivalent to the cross product rather than an approximation of it.
+    // (Pre-MTG_BP_ETB_DIG world. With the lever on, a CAST dig opens site 10 and each pick variant's
+    // continuation is re-solved on its own post-dig state, so the pick DOES interact with the rest of
+    // the turn -- which is exactly why it must stay a searched axis rather than a ranked default.)
     if (EtbDigAxisEnabled() && EtbDigAxisWidth(state) > 1 && !HumanPlayActive())
     {
         std::vector<TurnSolver::Plan> extra;

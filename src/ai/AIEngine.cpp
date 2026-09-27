@@ -4077,6 +4077,8 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
                      // re-solve (TurnSolver twin), so full-depth replay must classify it the
                      // same way or the committed continuation replays at the wrong breakpoint.
                      || (TopResolveEnabled() && d->params.tutor_to_top)
+                     // (MTG_BP_ETB_DIG, default ON: the full-depth dig breakpoint arrives through
+                     // put_in_hand_armed -- site 10 -- not through this list; see EngineFlags.h.)
                      // MTG_ACQ_DIG is deliberately ABSENT here: the lever is depth-0-only
                      // (note_draw_engine above) -- the rollout never arms a dig breakpoint,
                      // so classifying one here would desync full-depth replay. See the
