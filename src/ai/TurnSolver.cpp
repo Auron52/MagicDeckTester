@@ -12075,7 +12075,7 @@ static bool BpNodeEnabled()
 // design, not this flag. Nested breakpoints (a variant at a breakpoint it is not targeting;
 // mirrorwing site 0 at 70.3% of its fallback) are a third, harder piece: hosting cannot help a
 // continuation that must still reach its own bp_at.
-static int BpNodeSites()
+static int BpNodeSitesBase()
 {
     static const bool d56 = EnvOn("MTG_BP_NODE_D56");
     return heurarm::Flag(heurarm::BP_NODE_D56, d56) ? ((1 << 3) | (1 << 5) | (1 << 6))
@@ -12098,11 +12098,30 @@ static int BpNodeSites()
 // already recorded for it. This flag exists to ANSWER ONE QUESTION -- was D56's measured quality
 // loss the removed rank coverage, or the partition itself? -- and the two answers need different
 // follow-ups.
+// WHICH sites the node may HOST -- deliberately SEPARATE from BpNodeSitesBase(), which drives the
+// wave STAND-DOWN (BpNodeWaveDrop). Adding a site there would host it AND strip its wave
+// coverage in one move, and BpNodeWaveDrop's own header warns that leaves a site with "no variants,
+// no waves AND no node at every other depth -- a reachability LOSS bought for a node at one depth".
+// Hosting-only is the conservative direction: at worst duplicate coverage (a wasted node), never a
+// lost alternative.
+//
+// MTG_BP_NODE_S10 -- host SITE 10 (the general put-in-hand class). MEASURED NEED, 2026-09-27: with
+// MTG_BP_HAND_ENTRY=1 the Contender fixture reports 7 canon defaults, 7 UNCHALLENGEABLE, 100%
+// [NOHOST] -- and the audit named the caller `apply@FSLineWin`, which IS a hosting call site. It
+// passes nullptr because node_host_here tests PlanOpensBreakpoint & the host set, and site 10 was
+// never in that set. So the plan opens the site (unmarked=0), the caller can host, and the capture is
+// declined purely by the site mask. Default OFF for the A/B.
+static int BpNodeHostSites()
+{
+    static const bool s10 = EnvOn("MTG_BP_NODE_S10");
+    return BpNodeSitesBase() | (s10 ? (1 << 10) : 0);
+}
+
 static int BpNodeWaveDrop()
 {
     static const bool kw  = EnvOn("MTG_BP_NODE_KEEPWAVE");
     static const bool kw3 = EnvOn("MTG_BP_NODE_KEEPWAVE3");
-    int drop = BpNodeSites();
+    int drop = BpNodeSitesBase();
     if (heurarm::Flag(heurarm::BP_NODE_KEEPWAVE,  kw))  { drop &= (1 << 3); }
     // MTG_BP_NODE_KEEPWAVE3 -- the SITE-3 twin, and the one that matters, because site 3 is the
     // shipped candidate's own site and it has stood down unconditionally since the node was built.
@@ -14146,7 +14165,7 @@ bool TurnSolver::EquipmentDrawBreakpointEnabled()
 
 bool TurnSolver::PartitionCantrip() { return BpPartitionCantripEnabled(); }
 bool TurnSolver::BpNodeSearch()     { return BpNodeEnabled(); }
-int  TurnSolver::BpNodeHostedSites(){ return BpNodeSites(); }
+int  TurnSolver::BpNodeHostedSites(){ return BpNodeHostSites(); }
 
 bool TurnSolver::EquipmentDrawBreakpointInline()
 {
@@ -28633,7 +28652,7 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
     // they cannot drift apart -- the same reason deferred_site_index above is a single lambda.
     auto node_owns_site = [&](int site) -> bool
     {
-        return BpNodeEnabled() && ((BpNodeSites() >> site) & 1) != 0
+        return BpNodeEnabled() && ((BpNodeHostSites() >> site) & 1) != 0
             && (bp_capture != nullptr || plan.bp_choice >= 0);
     };
 
@@ -29036,7 +29055,7 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
             // assignment below stays under exactly the condition, and with exactly the value, it
             // had before.
             const bool node_hosted = plan.bp_choice == 0
-                                  && BpNodeEnabled() && ((BpNodeSites() >> site) & 1) != 0;
+                                  && BpNodeEnabled() && ((BpNodeHostSites() >> site) & 1) != 0;
             if (node_hosted || (plan.bp_choice == 0 && BpEmptyCensusOn()))
             {
                 bool has_empty = false;
@@ -32745,7 +32764,7 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
         // MTG_BP_NODE_D56 -- they reach this same point with the same snapshot, and the resume
         // restores trick_armed/equip_armed so deferred_site_index lands back on the right one.
         if (BpNodeEnabled() && bp_capture != nullptr && plan.bp_choice < 0
-            && ((BpNodeSites() >> deferred_site_index()) & 1) != 0)
+            && ((BpNodeHostSites() >> deferred_site_index()) & 1) != 0)
         {
             bp_capture->valid        = true;
             bp_capture->pending      = true;
@@ -37971,6 +37990,21 @@ static int PlanOpensBreakpoint(const GameState& state, const TurnSolver::Plan& p
                 // MTG_BP_ETB_DIG: the ETB dig (Staunch Crewmate) -- unclaimed by ParamKeyedDrawClass
                 // once the lever is on, so it is a site-10 route and must be FANNED here.
                 || d->params.etb_dig_count > 0))
+        { mask |= 1 << 10; }
+        // THE ROUTE MTG_BP_HAND_ENTRY ADDED, AND THE CLAUSE IT DID NOT (2026-09-27). The guard above
+        // carves out every ParamKeyedDrawClass cast -- correctly, because site 10's CAST-window arming
+        // must not collide with a class another site claims (the -0.1266 Mirrorwing lesson). But
+        // MTG_BP_HAND_ENTRY arms site 10 from a DIFFERENT route, the section-level hand-entry check,
+        // which fires for those casts too. A route without a clause is exactly what the note above
+        // demands ("If a route is ever added, ADD IT HERE TOO ... nothing enforces it"), and the cost
+        // is measured: Contender at d5 gave 7 canon defaults, 7 of 7 UNCHALLENGEABLE [NOHOST], because
+        // node_host_here tests this mask and never saw bit 10.
+        //
+        // SCOPED TO THE FLAG, so the shipped config stays byte-identical: the clause exists exactly
+        // when the arming route that needs it exists. etb_dig is the only ParamKeyedDrawClass member
+        // that puts a CASTABLE card in hand mid-phase (Acclaimed Contender is the sole holder today).
+        // Pairs with MTG_BP_NODE_S10 -- marking alone cannot host, and hosting alone is never selected.
+        if (BpPutInHandEnabled() && BpHandEntryEnabled() && d->params.etb_dig_count > 0)
         { mask |= 1 << 10; }
         // ...AND THE ROUTES THE AUDIT NAMED (MTG_BP_CANON_AUDIT, 2026-09-22). Each of these really
         // does arm site 10 -- the arming is OUTCOME-keyed ("did the hand gain a card?"), so it fires
@@ -45564,7 +45598,7 @@ static TurnSolver::SearchLine FSLineTail(const GameState& state, int depth, int 
                  && !(BpNodeHost2() && state.turn_number == g_condemn_root_turn + 1)))
         {
             for (const TurnSolver::Plan& q : post)
-            { if ((PlanOpensBreakpoint(state, q) & BpNodeSites()) != 0) { node_host_here = true; break; } }
+            { if ((PlanOpensBreakpoint(state, q) & BpNodeHostSites()) != 0) { node_host_here = true; break; } }
         }
         // Node dedup, two levels. PREFIX: every base plan sharing one truncated prefix reaches the
         // same partition state, so only the first hosts a node (this is where the old apply-time
@@ -46936,7 +46970,7 @@ static TurnSolver::SearchLine FSLineWin(const GameState& state, int depth, int m
              && !(BpNodeHost2() && state.turn_number == g_condemn_root_turn + 1)))
     {
         for (const TurnSolver::Plan& p : pre)
-        { if ((PlanOpensBreakpoint(state, p) & BpNodeSites()) != 0) { node_host_here = true; break; } }
+        { if ((PlanOpensBreakpoint(state, p) & BpNodeHostSites()) != 0) { node_host_here = true; break; } }
     }
     std::unordered_set<TranspositionTable::Key, TranspositionTable::KeyHash> node_prefix_seen;
 
