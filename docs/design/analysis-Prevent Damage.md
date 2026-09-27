@@ -800,3 +800,13 @@ regression_tiers / suite FAIL (expected, not added); card_costs / clause_ledger 
     pending the user's review.
 12. (Stage 5) 3x cost rule: FAIL (~14.0 s/game at d5/b20 vs the 3.1 s budget). Deck not added to the
     suite; optimisation is the next goal (user call on how far to push before VL / mulligan).
+
+## Orchestrator log (post-Stage 5)
+
+- 2026-09-27: `MTG_PD_SECOND_MAIN` flipped to DEFAULT OFF (ef26b03b) on the Stage 5 paired A/B
+  (neutral quality, 1.6x CPU). PROVISIONAL for user review.
+- **5j cost gate FAILS (~4.5x at d5/b20; ~2.9x over even with m2 off).** Per the skill: the deck
+  is NOT added to any regression tier yet; getting it inside 3x of the reference is the FIRST
+  GOAL, before any value leaf / mulligan work. Perf work queued after the claude-play sweep.
+- 5d claude-play sweep LAUNCHED on ef26b03b: 16 Opus players, base seed 31001, gi 0..15
+  (disjoint from suite and Stage 5 seeds). Results aggregate into `logs/prevent_damage/sweep/`.
