@@ -277,6 +277,29 @@ The practical note for next time: `nproc` (or the denominator of a utilisation r
 box fingerprint than a PID, because PIDs are only comparable within one namespace — and a PID from a
 box that has since restarted looks exactly like a PID from somewhere else.
 
+## 5b. 2026-09-27 — the value leaf against a 33 h window: it does not fit, and the data are unambiguous
+
+The user asked (2026-09-27) for the value-leaf run + adoption in a ~33 h window, then whether the
+data can say if it will finish. They can:
+
+| source | what it says |
+|---|---|
+| `valueleaf.sh status` today | phase A done (14,771 rows); matrix **2,367 / 20,800 games banked (11%)**; **~2,286 core-h remaining → ~71 h wall at 32 cores, fully packed** |
+| tracker shape, last run (`logs/snowopt/vl_track.tsv`) | the remaining estimate sat between **2,100 and 2,450 core-h for the final 6 h** of the 09-23 run while progress went 8% → 11%. It had swung 487 → 2,160 in the first 2.5 h and then converged, so 71 h is not a small-sample artefact |
+| where the cost is (status per row) | H5 856 + H4 630 = **1,486 core-h (65%)**; H3 200; V4–V8 557; H1/H2/V1–V3 ~43 |
+| the window | 33 h × 32 cores = 1,056 core-h = **46% of what remains**. The queue runs expensive cells first, so Monday morning would show H4/H5 ~70% done, everything else untouched, ~38 h still owed, and no phase D/E |
+| did today's `MTG_BP_HAND_ENTRY` adoption move Snow's cost? | no: same tier cases pre/post flip read smoke d3 +2.1%, d5 +4.2%, regression −16%…+2% — and the −16% case is byte-identical (a PASS), so ±15% is the timing noise floor |
+| would the artifact be adopted? | phase E (09-22) measured the staged model at −0.0051 t for 1.25x core-s, a trade; what the full matrix adds is the crossover / trust depth that could make the leaf a *cost* lever. That prize is ~70 h away |
+
+The 1.52x budget-currency repair measured in §4c is a LABELLER result (d2/b1 rollouts); the matrix's
+H4/H5 cells run unbounded and their wall is games pinned at the unit/wall caps
+(`matrix-cost-is-abandonment-rate`), so it does not transfer. What would fit: nothing to run (leaf:none
+is already the live `Snow.value.json`, so "adoption" is the secondary box's mulligan profile), a matrix
+without H4/H5 (~800 core-h ≈ 25 h — but the ladder is fixed at H1–5 by design because trust is defined
+against H5, so that is an estimand change and a script edit, the user's call), or an optimization pass
+aimed at the H4/H5 workload first. Launching as-is is not waste (chunk-atomic, resumable, the box is
+otherwise idle with WhiteKnights parked) but it delivers nothing inside the window.
+
 ## 6. If `MTG_FOLD_SEARCH_ODO` is armed later
 
 If the user arms it, the honest sequence is: prove digest-identity at d2/b1 first, and only then
