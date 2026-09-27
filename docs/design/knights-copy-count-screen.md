@@ -1849,6 +1849,97 @@ Exemplar, one Inspiring Veteran, one Marshal of Zhalfir and one Haytham, all aga
 See [[sink-price-is-not-a-refutation]]. The `L` parameter should be dropped entirely — its slot ledger only
 balances at `L=22`, which is a coincidence of the one-land-per-cut design rather than a choice.
 
+### Round M RESULT — BENALISH MARSHAL 4 IS WRONG; 3 is the count
+
+Pooled 10.2M + 10.6M, reference `j2_ad3_sp4` (the settled list, Marshal 4). Every arm also takes the 24th
+Plains; `m_sp3_p20` exists only to price that land, paying with a 4th Silverblade.
+
+| arm | long | 2hg | std | **pooled** | step vs ref | meas. | conf. |
+|---|---|---|---|---|---|---|---|
+| `m_bm2_p20_hob4` Marshal **2**, +Hero 4 | −0.2547 | −0.3470 | −0.2232 | −0.2761 | **−0.0093** | −0.0065 | −0.0122 |
+| `m_bm3_p20` Marshal **3** | −0.2519 | −0.3435 | −0.2291 | −0.2748 | **−0.0081** | −0.0065 | −0.0097 |
+| `j2_ad3_sp4` Marshal 4 | −0.2425 | −0.3359 | −0.2234 | −0.2667 | — ref | | |
+| `m_sp3_p20` Silverblade 4→3 (land control) | −0.2390 | −0.3362 | −0.2225 | −0.2648 | +0.0019 | +0.0033 | +0.0005 |
+
+**The assumption-free read is the matched pair, where the 24th land cancels exactly:**
+
+> `m_bm3_p20 − m_sp3_p20 = −0.0100` — the 4th Marshal is worth **0.0100 less than the 4th Silverblade.**
+
+Round J′ put the 4th Silverblade at ≈ −0.007, so **the 4th Marshal is ≈ +0.003 — slightly harmful.** Cutting
+it for the 24th land is **−0.0081 and it GREW on held-out** (−0.0065 → −0.0097). Marshal 2 adds only
+−0.0012 more, so **3 is the count and 2 is inside noise of it.**
+
+**So the user's hypothesis does not survive the test they asked for**, and asking was right: the −0.0208
+previously quoted for Marshal was a *Contender + Marshal bundle*, and the only isolated figure on record
+was the 3rd copy at −0.0037 — a **dead null in 2HG**.
+
+**The honest counterweight, stated as a price not a verdict.** An anthem's `+1/+1` is in the class this
+apparatus **under**-values: the power half is fully modelled and dominates a race, but the toughness half
+pays only against blockers and damage-based removal, neither of which exists here. So the 4th Marshal costs
+≈ 0.008 in goldfish speed and buys resilience the engine cannot see — the same shape as Knight Exemplar's
+indestructible. User's call. See [[bracket-notes-are-the-judgement-call]].
+
+### Round N — BASRI, TOMORROW'S CHAMPION, and the exert mechanic it forced
+
+User request: *"Please add Basri, Tomorrow's Champion (a new 2/1) to your tests."* Card data from **Scryfall,
+not recall**: `{W}` Legendary Creature — Human Knight **2/1** (Aetherdrift), Modern/Legacy/Vintage legal, so
+it clears the standing legality gate (*"a card can only be used in a way that it is legal in some format"*
+— which also puts a 2nd Sol Ring permanently out of scope).
+
+    {W}, {T}, Exert Basri: Create a 1/1 white Cat creature token with lifelink.
+    Cycling {2}{W}
+    When you cycle this card, Cats you control gain hexproof and indestructible until end of turn.
+
+**Why it is a clean test:** Basri is a `{W}` 2/1 **Human Knight** — the same printed body *and subtypes* as
+Venerable Knight and Dauntless Bodyguard, both provably blank in this engine. Swapping one for Basri holds
+every modelled interaction fixed (Exemplar's Knight-only anthem still pumps it, Worthy Knight still
+triggers, Adeline still counts it) and isolates three things: the token ability, cycling, and being legendary.
+
+**EXERT WAS NOT MODELLED, AND MEASUREMENT REFUSED THE SHORTCUT.** I predicted the ability would never be
+worth using — tapping a 2/1 to make a 1/1 in a deck whose modal win is turn 4 — and committed in advance to
+stopping if a probe disagreed. It disagreed, decisively: shipped without exert, **Cat tokens appeared in 54%
+of 600 games, up to FOUR at once.** The reason my reasoning failed is that Basri is a **one-drop** that lands
+turn 1 and sits idle, and with the `{T}` repaid at every untap the ability is repeatable **every** turn —
+a Cat engine for `{W}`, not a one-off trade, i.e. roughly twice the printed card. Nothing else in the deck
+makes Cats, so the Cat count is an exact activation count (`logs/wk_screen/basri_probe.py`).
+
+**Implemented, following the Rimescale Dragon ice lock** — the same shape, a per-permanent reason not to
+untap:
+
+| piece | where |
+|---|---|
+| `Permanent::skip_next_untap` | one-shot flag; *"your NEXT untap step"* is exactly one skip |
+| `CardParams::tap_token_exerts` | default **false**, so Sliver Hive is untouched |
+| set on activation | `ActivateTapTokensShared` — the **single shared path**, so both worlds get it by construction instead of at ~19 call sites |
+| honoured + consumed | `GameEngine::UntapStep` **and** `TurnSolver::SimulateEndAndStartNextTurn`, the documented lockstep pair |
+
+**Verified in both directions, because equality alone can mean a dead feature**
+([[digest-equality-can-mean-broken]]):
+
+* **Neutrality** — six blocks (WhiteKnights and Knights × 3 seeds) **byte-identical** before and after, so
+  every keep table generated tonight remains valid and `HEAD:src` drift costs nothing.
+* **Liveness** — the multi-Cat signature collapsed exactly as *"every other turn"* predicts: 4-at-once
+  **9 → 0 games**, 3-at-once **18 → 6**, while single-Cat games held at **231 → 233**.
+
+**A MEASURED CAVEAT THAT MAKES ROUND N A FLOOR.** `ActivateTapTokensShared` is a **greedy spare-mana pass**,
+not a searched choice: it activates whenever mana allows, and now pays a real attack for each Cat. Basri
+*with* the ability measures **worse** than Basri with the ability stripped — **+0.0190 / +0.0095 / +0.0150**
+over three 2,000-game seeds (mean ≈ **+0.0145**). So round N measures a Basri the engine **misplays**, and
+its value is a floor ~0.015 below correct play. Fixing that is `heuristic-optimization.md` work (gate the
+greedy activation on whether the body would rather attack) and it would also touch Sliver Hive — recorded,
+not bundled.
+
+**Two remaining gaps, both inert:** lifelink on the Cat (no `tap_token_keywords` param; the passive opponent
+deals no damage so life gain never matters) and the cycling trigger granting Cats hexproof + indestructible
+(unmodellable protection, and it needs Cats at all).
+
+**Round N arms** (`mkspec_n.py`, seeds 11.4M / 11.8M, 3 arm tables + one R=10 **pool** table because the
+shipped table cannot bucket Basri — that affects only the *shared* column, never the `own` column that is
+the result): reference `j2_ad3_sp4`, then Venerable Knight → Basri at **1 / 2 / 3** copies. The generator
+asserts both user rulings as invariants (Exemplar 4, Adeline 3) so a later edit cannot reopen them.
+**Prediction on record:** one copy neutral-to-slightly-better (the legend rule cannot bite and cycling is a
+free option), degrading with copies as duplicates strand.
+
 ## RESUME HERE — the road to a FINAL Knights list
 
 **State at 2026-09-26 21:15Z.** WhiteKnights is finished (above). Knights' round H is **in flight**:
