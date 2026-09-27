@@ -1399,7 +1399,26 @@ the dominant fact about her measured value.
 **+4.2pp** of games where a copy rots in hand under the legend rule. Both reasons for Adeline 3 are
 quantitatively supported, and she is absent entirely in **60%** of wins either way.
 
-### Round L — the CONTENDER dig claim: stale, not false, and 1.8% in impact
+### Round L — the CONTENDER dig claim
+> **CORRECTION 2026-09-27 — THIS SECTION'S CAUSE IS WRONG, AND THE OTHER AGENT WAS RIGHT.**
+> The section below concludes the report was *"stale, not false"* because site 10 is default-ON and
+> card-agnostic. Site 10 is card-agnostic only **within the set of casts no param-keyed class claims**, and
+> `TurnSolver::ParamKeyedDrawClass` claims any `etb_dig_count > 0` cast — which is Acclaimed Contender, in
+> both worlds. The class that *does* claim it, `MTG_ACQ_DIG`, is **depth-0-only by construction**, so at the
+> d3/d5 depths every measurement here was taken at, the same-turn deploy never happens. The
+> "SCOPE = d0 ONLY" note dismissed below as *"dated 2026-08-19 and superseded"* is **not superseded**; it is
+> stated twice in current code and the measured depth ladder matches it exactly (d0 deploys, d1/d3/d5/d7/d9
+> do not, at every budget to 5000 ms). A control with the same card placed in HAND instead of behind the dig
+> casts it the same turn, which isolates mid-phase acquisition as the sole cause.
+> **Consequence: the Acclaimed Contender cut (−0.0095) was measured against a handicapped Contender and
+> should be re-opened once this is fixed** — an under-modelled card flatters the arm that cuts it
+> ([[bracket-notes-are-the-judgement-call]]). The `dug_probe.py` 0-of-3,000 result below was not a thin
+> sample either; it was structural.
+> Full diagnosis, deterministic repro and fix directions: `docs/design/contender-same-turn-deploy-searched.md`.
+> Green guard on the one working depth: `test/scenarios/whiteknights_contender_same_turn_deploy.json`.
+> Everything below is kept as written, since the dig-target ranking findings still stand.
+
+**Original section (cause superseded above):** stale, not false, and 1.8% in impact
 
 Another agent reported *"a bug with Acclaimed Contender where the search cannot deploy creatures received
 the same turn."* Verified against the tree rather than accepted ([[verify-done-claims-in-tree]]):

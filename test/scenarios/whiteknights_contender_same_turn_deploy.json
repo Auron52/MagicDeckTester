@@ -1,0 +1,27 @@
+{
+  "deck": "decks/WhiteKnights/WhiteKnights.cod",
+  "turn": 4,
+  "on_the_play": true,
+  "active_life": 20,
+  "opponent_life": 20,
+  "library_top": ["Plains", "Venerable Knight", "Plains", "Plains", "Plains", "Plains"],
+  "library_filler": "Plains",
+  "library_size": 30,
+  "depth": 0,
+  "budget_ms": 50,
+  "max_turns": 9,
+  "log_out": "logs/play/contender_same_turn_deploy.json",
+  "_comment": "WhiteKnights (2026-09-27). PINS THE ONE DEPTH AT WHICH ACCLAIMED CONTENDER'S DIG CONVERTS. Contender's ETB digs 5 and may put a Knight in hand; MTG_ACQ_DIG (default ON) is what lets the second pass spend the turn's leftover mana on the card just acquired. That lever is DEPTH-0-ONLY by construction (AIEngine.cpp: 'MTG_ACQ_DIG is deliberately ABSENT here: the lever is depth-0-only'; EngineFlags: 'searched byte-identical by construction'), and site 10's general 'the hand gained a card' rule does NOT cover this card either -- ParamKeyedDrawClass claims any etb_dig_count > 0 cast, in BOTH worlds, so the general rule explicitly carves Contender out. This fixture is therefore a guard on the d0 mechanism, the only path that works, and depth 0 is load-bearing rather than incidental: measured at this exact board, d0 deploys the dug Knight on turn 4 and d1/d3/d5 all decline it (deterministic, budget-independent up to d9/5000ms). Board: 4 untapped Plains and one Venerable Knight, which is required -- etb_dig_requires_subtypes means the dig does not happen at all without ANOTHER Knight. Hand: Contender alone. Library stacked so index 0 is a Plains that absorbs the draw step and the Knight sits at index 1, inside the top-5 window rather than being drawn. Correct line: cast Contender for {2}{W}, dig, take the Knight, cast it with the fourth Plains the same main phase. ASSERT ON OPPONENT LIFE, not the win turn: both behaviours win on turn 7, so the win turn does not discriminate -- the same-turn deploy is worth exactly the 2 extra damage the 2/1 gets from its one extra attack, which is -3 here versus -1 when the deploy is declined. The searched-depth gap is an OPEN DEFECT recorded in docs/design/contender-same-turn-deploy-searched.md, not something this fixture blesses.",
+  "battlefield": [
+    { "name": "Plains" },
+    { "name": "Plains" },
+    { "name": "Plains" },
+    { "name": "Plains" },
+    { "name": "Venerable Knight" }
+  ],
+  "hand": [
+    "Acclaimed Contender"
+  ],
+  "expect_win_turn": 7,
+  "expect_opponent_life": -3
+}
