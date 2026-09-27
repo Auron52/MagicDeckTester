@@ -356,6 +356,39 @@ hand is a live reason to wait. `logs/fadek2/spore_invariant.py` now classifies o
 Season to come"*, not on whether one has landed. This is also a mild counterexample to the
 `HOLD_SECOND` result: waiting for a second Season did pay here in bodies, if not in win turn.
 
+## Where the cost is now — the activation-axis campaign is DONE, measured
+
+Cumulative on the 100-game d1/b3 tuning block, both arms on the SAME binary (so this also confirms
+the three levers still compose after the rebase onto 26 upstream commits):
+
+| arm | wall | avg turns |
+|---|---|---|
+| `FADE_K_WINDOW=0 M2_FREE_ACTIVATION=0 SPORE_POP_ALL=0` | 77.96 s | 5.5100 |
+| shipped defaults | **31.10 s (2.51x)** | **5.3300** |
+
+A fresh census (12 games, d1/b3) then says the *shape* of the cost has changed, and four candidate
+next levers are all closed by measurement rather than by argument:
+
+| block | share | verdict |
+|---|---|---|
+| `cast_from_hand` | 76.6% | now the largest block; `chosen_x` has fallen 82% → 44% |
+| `chosen_x` | 44.2% | **narrowed out** — fade widths are 1–2 (`{3} of 1..7`), spore 1–2 |
+| copy axis (`copyaxis_share`) | **1.9%** | folding fungible copies would buy ~2%. The fold's documented CONDITION 2 defect (a source emitting >1 action kills its class — Utopia Mycon always does) is therefore **not worth fixing on this deck** |
+| exact repeats (`repeat_share`) | 11.7% | **NOT a lossless win.** `g_w_exact` counts distinct ordered ACTION SEQUENCES only; it excludes the plan-level axes (`bp_choice`, `bp_at`, land drop, tap mode, scry/ponder/discard pins). Those "repeats" are breakpoint variants sharing an action list, i.e. genuinely distinct plans |
+| odometer shape | — | `MTG_ENUM_STATS_MIN=500` prints **nothing** on the three slowest games. The 4.92e+04 powerset the ledger recorded is gone; `MTG_SAC_OUTLET_POOL` closed it |
+
+**The tail is 71% of the block** (63 of 400 games over 1.5 s), and in those games the top action is
+`Utopia Mycon|7` (sac-for-mana) at up to 802,589 candidates. But its count axis is **already
+demand-driven** — `kb` comes from the largest reachable mana value in hand — and a supply-side cap at
+`V` was measured and refuted (smoke put fungus gi120/gi177 at 8 = LOSS), so there is no easy prize
+there either. With fade at width 1, its 318,772 candidates in gi=381 are ~318K *emissions* of a
+width-1 action, not a wide ladder.
+
+**So the remaining cost is intrinsic breadth** — many distinct width-1 actions times the plan-level
+breakpoint axes times the subset walk (2.9M greedy subsets per 12 games) — not any one axis. `perf`
+agrees and has all session: the profile is flat, top frame 6.13%. The next real prize is structural
+(fewer subsets, or a cheaper per-subset score), not another candidate-list narrowing.
+
 ## Deferred
 
 * **The Mycotyrant** (user, 2026-09-26): not in `cards.json` today. Its power/toughness equals the
