@@ -1934,6 +1934,99 @@ pump sources in 60 cards, and since nearly every creature is a Knight, Exemplar'
 most of what Marshal's does. It fits, but it was arrived at after the numbers and is not evidence for any
 further cut.
 
+### USER RULING 2026-09-27 — MARSHAL 4 STAYS; the 4th SILVERBLADE PALADIN pays instead
+
+> *"I think I would use the marshal instead of the 4th Silverblade. Silverblade is much better in your
+> simulations than in real games. In particular it relies too much on heavy double-strike damage and the
+> survival of the 2/2 Silverblade."*
+
+**AND THIS CORRECTS MY OWN FRAMING FROM THE SAME SESSION.** I had told the user the matched pair (−0.0100,
+Marshal's 4th vs Silverblade's 4th) was *"the one to quote"* because the land cancels and no constant is
+imported. That is right about **apparatus** bias and **wrong about MODELLING bias** — and the matched pair
+is the *worst* row in the round M table on that axis, because it differences two cards whose biases point
+in OPPOSITE directions:
+
+| card | direction of the goldfish bias | why |
+|---|---|---|
+| **Silverblade Paladin** | **OVER**-stated, three ways at once | the 2/2 body never dies (no removal, no blockers), so the pairing never breaks, and the double strike is never absorbed by a blocker |
+| **Benalish Marshal** | **UNDER**-stated | the `+1/+1` toughness half has nothing here to pay off against |
+
+So the −0.0100 gap is inflated at **both ends**, and stacking the two into one number hid that. Note this is
+**not a modelling bug** — `Permanent::paired_with` tracks soulbond correctly and is folded into the keys;
+it is that a goldfish never presents the conditions that break the pairing. [[bracket-notes-are-the-judgement-call]]
+says an under-modelled card flatters the arm that cuts it; the symmetric case is that an OVER-modelled card
+flatters the arm that keeps it, and here both were live in one comparison.
+
+**THE USER'S SHARPER FORM — SOULBOND IS A 2-FOR-1 LIABILITY, AND IT IS RULES-CORRECT.** *"In a real game,
+the opponent can remove the silverblade or soulbonded creature and then block and kill the other. This makes
+it a liability against removal. Whereas a lord is a much smaller risk in that situation."*
+
+CR 702.94 grants double strike only *"as long as this creature is paired"*, so **the pair breaks when EITHER
+half leaves the battlefield** — one removal spell strips double strike from **two** creatures, and the
+survivor, now unpumped, loses the block it would otherwise have won. The difference from a lord is one of
+SHAPE, not magnitude:
+
+| event | Silverblade pair | Benalish Marshal |
+|---|---|---|
+| the pump source is removed | both halves lose double strike; survivor is a vanilla body that now dies to a block | others lose `+1/+1` but keep their bodies and keep attacking |
+| a partner creature is removed | pairing breaks — same cliff, either direction | Marshal keeps pumping everything else |
+| cost to the opponent | answers TWO creatures with one card, and the target is a **2/2** | one card for a **3/3** body, and the rest of the board survives |
+
+**Marshal degrades gracefully; Silverblade falls off a cliff.** And this apparatus can represent **none** of
+it: with a passive opponent the pairing never breaks, so **100% of Silverblade's modelled value is its best
+case**, and no measurement available here can ever price the liability. That is the quarantine class in its
+purest form — a price, never a verdict — so the user's judgement is the terminal authority rather than a
+tiebreak against a number.
+
+**It also makes the decision WELL-FORMED rather than a coin flip.** +0.0019 (held-out +0.0005) *is* a
+measured null, and [[a-null-must-not-break-a-tie]] requires a null to be broken by a card-level dominance
+argument rather than a t-statistic. The removal-liability asymmetry is exactly such an argument.
+
+**THE RULING COSTS NOTHING EVEN AT FACE VALUE, and its arm is already on disk.** Marshal 4 / Silverblade 3 /
+24 lands is exactly round M's control arm **`m_sp3_p20`**: measured **+0.0019**, held-out **+0.0005** — dead
+inside the ~0.0020 noise floor. Its keep table already exists at `logs/deckcmp/WhiteKnights/m_sp3_p20/`, so
+adopting this list owes **no new measurement**. The settled 60 under all rulings:
+
+```
+4 Dauntless Bodyguard   4 Knight Exemplar     3 Silverblade Paladin   1 Sol Ring
+4 Venerable Knight      4 Accorder Paladin    3 Hero of Bladehold     1 Swords to Plowshares
+4 Worthy Knight         4 Benalish Marshal    3 Adeline               1 Unexpectedly Absent
+20 Plains   4 Remote Farm                                             = 60
+```
+
+#### TWO CONSEQUENCES THE RULING IMPLIES BUT DOES NOT ITSELF DECIDE
+
+1. **The objection is about the CARD, so it extends down the whole ladder — and the shipped list ran
+   Silverblade 1.** The campaign walked it **1 → 4** entirely on measured value (2nd copy −0.0255, 3rd
+   −0.0071, 4th ≈ −0.007). If the card is systematically over-valued, that whole walk is suspect, not just
+   the top copy. It is the MIRROR of the Marshal story: Marshal drifted up as an **unmeasured sink**,
+   Silverblade drifted up on **measurements sharing one common bias**. How far down to go is the user's
+   call; nothing below the 4th copy has been ruled.
+
+   **WHICH COPIES ARE ACTUALLY FRAGILE — the argument most plausibly lands on Silverblade 2, not 3.** Set
+   each measured margin against the ~0.0020 noise floor and ask which could be erased by a
+   removal-liability correction:
+
+   | copy | measured | vs floor | robust to the user's objection? |
+   |---|---|---|---|
+   | 2nd | **−0.0255** | 12x | **yes** — would need a huge haircut to flip |
+   | 3rd | −0.0071 | 3.5x | **no** — exactly the magnitude at risk |
+   | 4th | ≈ −0.007 | 3.5x | **no** — and this one is now cut by ruling |
+
+   So the 2nd copy is safe on almost any view, while the 3rd and 4th sit precisely in the band a
+   liability correction could erase or reverse. **Silverblade 2 is the natural extension of this ruling**
+   and is un-measured; it needs no new measurement to be *chosen* (it is a judgement on unmodellable
+   text), but it does change the list and therefore the keep table.
+2. **THE LAND LADDER WAS PAID FOR IN SILVERBLADE COPIES, so it is contaminated in the direction that hurt
+   lands.** Round G traded lands against Silverblades — `g_l22` carried Silverblade **4**, `g_l25` carried
+   Silverblade **1** — so the LOW-land arms were flattered by the inflated card. The round G section already
+   read the 22/23 rungs honestly on that basis, but the same logic bites hardest at the top: **`g_l25` was
+   rejected at +0.0144 having given up THREE Silverblade copies.** At ~0.005 of inflation per copy that is
+   ~0.015 — the entire penalty. **So 25 lands may have been rejected on the Silverblade bias alone.** This
+   is a hypothesis with arithmetic, not a finding; it is cheap to settle and it should be settled BEFORE
+   adoption freezes a land count. Re-test the land ladder against a payer the user trusts (Haytham-style
+   measured null, or a straight Plains-for-spell swap), not against Silverblade copies.
+
 ### Round N — BASRI, TOMORROW'S CHAMPION, and the exert mechanic it forced
 
 User request: *"Please add Basri, Tomorrow's Champion (a new 2/1) to your tests."* Card data from **Scryfall,
