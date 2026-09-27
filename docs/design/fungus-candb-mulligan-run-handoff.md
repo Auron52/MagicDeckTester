@@ -230,15 +230,46 @@ journal  1,661,216  = 1,522,096 + 139,120  (it counts cell-side completions acro
 
 Net effect: the two errors largely cancel. Progress is **3.32 M of 23.86 M = 13.9%** in 15.6 h.
 
+### REVISED 21:55Z, and it is worse — measure core-SECONDS, not wall clock
+
+The table that stood here projected 62 h (2.6 d) by assuming this run could hit the reference's
+122 rollouts/s. **It cannot, and the reason only shows up once you divide by core share.**
+
+```
+ours       60.2 roll/s at a MEASURED mean 18.4 of 24 cores  =  3.27 rollouts / core-second
+reference 122.1 roll/s at 24 cores, uncontended             =  5.09 rollouts / core-second
+                                    -> our rollouts are 1.56x MORE EXPENSIVE
+```
+
+That factor is a property of the *list*, not the box: candidate B is singleton-heavy, so it holds far
+more degenerate Doubling-Season hands, and the log's slow-rollout table shows a single size-7 rollout
+with `Doubling Season x3` taking **151.8 seconds**. Scaling the reference's *wall clock* can never
+reveal this — it needs this run's own core-seconds, which is why `ratewatch.log` mattered.
+
+Work accounting to the reference's final depth (both phases have completed their R=2 floor only):
+
+| | ours now | reference FINAL | remaining |
+|---|---|---|---|
+| size-7 rollouts/cell-side | 2.00 | 9.06 | 10.74 M |
+| sub rollouts/cell-side | 2.00 | 17.98 | 8.95 M |
+| | | | **19.69 M (17.5% done in 19.2 h)** |
+
 | scenario | roll/s | remaining | total |
 |---|---|---|---|
-| stays contended at 11.7 cores | 84 | 68 h | 83 h (3.5 d) |
-| reference throughput, 24 cores | 122 | 47 h | **62 h (2.6 d)** |
-| linear scale-up of the current rate to 24 cores | 173 | 33 h | 49 h (2.0 d) |
+| current starved level (11.6 cores) | 38 | 144 h | 163 h (6.8 d) |
+| historical mean core share (18.4) | 60 | 91 h | **110 h (4.6 d)** |
+| completely free box (24 cores) | 79 | 70 h | 89 h (3.7 d) |
 
-**So the 3-day budget now turns entirely on CPU availability, not on the recipe.** At reference
-throughput it fits with ~10 h to spare; under sustained heavy contention it does not. No cap-R change is
-needed to make it fit — free cores are.
+**The 3-day budget is now out of reach under every scenario, including a perfectly free box.** That is a
+change from the previous two estimates in this document and it is the number to plan against. Measured
+contention, for the record: mean **18.4 of 24 cores** over 595 samples, with **42% of samples below 18
+cores** — the neighbouring container's load is bursty and heavy (loadavg 46–49 while we held 11.6 cores).
+
+**Remaining uncertainty is now one thing only: whether the reference's final depths (9.06 and 17.98
+rollouts/cell-side) transfer to a harder list.** Escalation had only just begun at 21:49Z (`roll7`
++768), so within a few clean hours it becomes directly measurable. Harder cells could plausibly escalate
+*further*, which would push these numbers up again; adaptive escalation could equally settle many cells
+early, which would pull them down. Do not treat 4.6 d as firm until that multiplier is observed.
 
 **Contention is real, bursty, and was observed.** At 18:14Z the generation held **11.7 of 24 cores at
 loadavg 48.8** (≈2x oversubscription) while a neighbouring container ran heavy work; by 18:16Z it had
