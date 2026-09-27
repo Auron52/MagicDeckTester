@@ -1,8 +1,10 @@
 # Acquired-card same-turn deploy is DEPTH-0-ONLY (Acclaimed Contender)
 
-**Status:** open defect, reproduced deterministically. Found 2026-09-27 while verifying a report from
-another agent. **It affects a settled deckbuilding decision** (see "Why this matters" below), which is
-why it is written up rather than filed as a curiosity.
+**Status (updated 2026-09-27):** defect reproduced deterministically, **and the fix is already in the tree,
+switched off** — `MTG_BP_HAND_ENTRY=1` closes it at every depth tested (d1/d3/d5/d7) with 105/105 scenarios
+passing. What remains is an **adoption decision plus a multi-deck GT rebaseline**, not engine work. See
+"THE FIX ALREADY EXISTS" below; the fix directions this doc originally proposed were wrong and are marked
+superseded. It affects a settled deckbuilding decision (see "Why this matters").
 
 ## The claim, and the verdict
 
@@ -83,17 +85,77 @@ Magnitude is bounded but not tiny-by-proof. The round L probe counted **16 of 87
 on the frequency, not a ceiling: it counted only **1-mana** Knights, while a 2- or 3-mana Knight is equally
 deployable when more mana is spare, and it says nothing about the value of each conversion.
 
-## Fix directions (not attempted)
+## THE FIX ALREADY EXISTS IN THE TREE AND IS SWITCHED OFF (2026-09-27)
 
-* **Preferred:** extend the `MTG_ACQ_DIG` deferred post-cast re-solve to searched depths, which means the
-  rollout must arm the etb-dig class's own breakpoint the way site 10 arms its own. The plumbing already
-  exists (`deferred_put_armed` / `deferred_site_index`); the work is giving the etb-dig class a site number
-  of its own so both worlds agree on the site INDEX, which is the invariant the site-10 comments warn about
-  ("a class one world counts and the other does not shifts every later `bp_at` index and silently changes
-  play").
-* **Do NOT** just remove `etb_dig_count` from `ParamKeyedDrawClass`. That hands the cast to site 10 and is
-  precisely the collision whose cost is already recorded at −0.1266 on Mirrorwing d3.
-* Either way this moves GT for any deck with an `etb_dig` card (WhiteKnights, Knights) and needs the
-  regression accept flow, not a rebaseline over the top.
-* `whiteknights_contender_same_turn_deploy.json` is pinned at d0 and guards the working path; a fix should
-  make a d5 copy of it pass with `expect_opponent_life: -3` as well, and that copy should then be committed.
+**`MTG_BP_HAND_ENTRY=1` fixes this completely, and needs no new code.** Verified on this document's own
+depth ladder — the table above inverts at **every** rung:
+
+| depth | flag `0` (current default) | flag `1` |
+|---|---|---|
+| 1 | Knight never cast, opp life −1 | **cast on turn 4**, opp life **−3** |
+| 3 | Knight never cast, opp life −1 | **cast on turn 4**, opp life **−3** |
+| 5 | Knight never cast, opp life −1 | **cast on turn 4**, opp life **−3** |
+| 7 | Knight never cast, opp life −1 | **cast on turn 4**, opp life **−3** |
+
+−3 is exactly what the d0 fixture asserts as correct, so searched play now matches d0 at every depth
+tested. **All 105 scenarios pass with the flag on**, including this fixture and Gideon's.
+
+**Why no new plumbing is needed — and why my own "preferred direction" below was WRONG.** I proposed giving
+the etb-dig class *its own site number*. That would have re-created the exact renumbering hazard the tree
+calls *"the single largest hazard in this change"*. `MTG_BP_HAND_ENTRY` (EngineFlags.h, default OFF) is
+already **"THE REST OF THE GENERAL RULE"**: it takes one section-level hand snapshot in `ApplyPlanDirect`,
+asks `HandGainedACard` immediately before the deferred re-solve loop, and — gated on
+`!deferred_cantrip_resolve`, i.e. **only when no class armed at all** — arms the **EXISTING site 10**. So it
+catches precisely the hole `ParamKeyedDrawClass` carves out and **renumbers nothing**. Both worlds already
+have twins (`TurnSolver.cpp:26890`/`30909`, `AIEngine.cpp:2205`/`5762`), so the `bp_at` lockstep holds by
+construction. Its own census already counted this deck's class: **`knights dig 4,096 of 21,566 = 19%`**.
+
+**The superseded directions, kept for the record:**
+
+* ~~Preferred: give the etb-dig class a site number of its own.~~ **Unnecessary and harmful** — see above.
+* **Do NOT** remove `etb_dig_count` from `ParamKeyedDrawClass`. Still true: that hands the cast to site 10's
+  cast window and is the collision already measured at −0.1266 on Mirrorwing d3.
+
+## What adoption actually costs — the honest picture
+
+The flag is off for **measured** reasons, not because it is wrong. From
+`breakpoints-should-key-on-hand-entry.md` (verdict 2026-09-22, **NOT ADOPTED**):
+
+* Train A/B looked mildly positive (fungus −0.0150, melira −0.0034) but **the held-out confirm did not
+  confirm**: fungus shrank an order of magnitude to −0.0017, and **melira flipped sign** to +0.0063. Not a
+  budget artifact — re-running at 4x budget reproduced the flatness.
+* **Cost ~2–6% wall.**
+* The mechanism fires hard (Fungus site 10: **0 → 37,682** armings) but **95% of the new continuations are
+  resolved GREEDILY** (`empty-default` 35,834, of which `untarget` 25,890 and `overrun` 9,944), because the
+  node hosts site 3 (or 3|5|6 under `MTG_BP_NODE_D56`) and **never site 10**. `BpNodeSites()` is hardcoded
+  with no env knob. Site 10 *is* in `BpSiteMask` (bit 10, via `BpPutInHandEnabled`) and does get wave-0
+  fan-out, so "nothing waves it" overstates it — what it lacks is **node hosting**.
+
+**THE USER'S STANDING RULING ALREADY COVERS THIS CLASS, and it is why site 10's cast-window half is default
+ON:** *"same-turn playability of the found card is a correctness requirement (USER 2026-09-06, 'we need to
+be able to play it'), not a search lever"* and *"We do need to open the breakpoints regardless"* (USER
+2026-09-18), with the codebase's own gloss: **"THE COST IS NOT AN ARGUMENT AGAINST OPENING THEM"**, because
+*"leaving the class shut because it is cheaper is the 'narrow the rule until it is free' move this arc has
+already had to undo twice."* A line the engine cannot express at any depth or budget is a correctness gap,
+and the asymmetry is stated in the design doc itself: *a missing arm is unreachable at any budget and
+silent; an unhelpful arm is only cost.*
+
+**One of the design doc's three owed items is now STALE.** It recorded *"Fungus is not in the regression
+suite, so neither smoke nor regression covers its play."* **Fungus IS in the suite now** — `[fungus]` in
+both `DECK_FILE` and `DECK_PROF`, with live cases at d0/d3/d5 in smoke plus the regression tier, and it is
+noted there as *"the suite's heaviest"* case. So the deck with the largest measured hole (100%) now has GT
+coverage, which removes the blind spot that owed item named.
+
+## Adoption plan (blocked only on the box)
+
+1. **A/B with the env var, NO rebuild** — `MTG_BP_HAND_ENTRY=1` against current GT on smoke, then
+   regression. This is measurable without touching `build/Release`, which matters because a rebuild
+   mid-screen makes later jobs run a different binary than earlier ones.
+2. **Then flip the default** in `EngineFlags.h` and rebuild.
+3. **GT moves broadly** — every digest moved on all five decks the design doc tested, so this is a
+   multi-deck rebaseline through the **accept flow**, never a rebaseline over the top.
+4. **Commit a d5 twin of this fixture** asserting `expect_opponent_life: -3`. It must land *with* the
+   default flip, not before — under the current default it would fail.
+5. **Follow-up, separable:** give site 10 **node hosting**. The design doc calls it *"the one change with a
+   reason to expect a different answer; everything else is re-rolling the same dice."* That is an
+   optimisation of the fix, not the fix, and should not gate the correctness change.
