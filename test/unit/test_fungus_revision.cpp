@@ -1211,43 +1211,60 @@ TEST_CASE("Fungus Frolic: the resolution payload creates two Saprolings, and Sea
     }
 }
 
-TEST_CASE("Adventure: the resolved spell EXILES to staged_cards, not to the graveyard")
+// The assertions here were rewritten 2026-09-27 to test the BEHAVIOUR rather than the container.
+// They required `staged_cards.size() == 1`, which pinned the card to the vector that is only merged
+// into hand at a PHASE BOUNDARY -- and that was the defect the USER reported: *"if I Fungus Frolic
+// and commit line, I get the saprolings, but the badger is gone until the next phase."* The creature
+// now enters hand-as-staged immediately (the impulse-primitive representation), so it is visible and
+// castable at once, per CR 715.3. What must hold either way is that it is NOT in the graveyard, it IS
+// the creature face, it carries the same physical number, and it never expires.
+static const Card* StagedInHand(const GameState& s, int player)
+{
+    for (const Card& c : s.players[player].hand) { if (c.m_is_staged) { return &c; } }
+    return nullptr;
+}
+
+TEST_CASE("Adventure: the resolved spell is castable from exile AT ONCE, not in the graveyard")
 {
     EnsureCardsLoaded();
     const CardDefinition& frolic = Def("Fungus Frolic");
 
-    SUBCASE("the parent creature is staged, under the SAME per-copy number")
+    SUBCASE("the parent creature is staged IN HAND, under the SAME per-copy number")
     {
         GameState s = Fresh();
         const bool staged = StageAdventureParent(s, 0, frolic, /*number=*/77);
         CHECK(staged);
         CHECK(s.players[0].graveyard.empty());
-        REQUIRE(s.players[0].staged_cards.size() == 1);
-        const StagedCard& sc = s.players[0].staged_cards[0];
+        // Immediately visible/castable: in hand with the staged flag, NOT parked in staged_cards
+        // waiting for a phase boundary.
+        CHECK(s.players[0].staged_cards.empty());
+        const Card* sc = StagedInHand(s, 0);
+        REQUIRE(sc != nullptr);
         // It is the CREATURE that is staged -- casting the adventure again must be impossible,
         // and what you may cast later is the Badger.
-        CHECK(sc.card.m_name.str() == "Brightcap Badger");
-        CHECK(sc.card.IsCreature());
+        CHECK(sc->m_name.str() == "Brightcap Badger");
+        CHECK(sc->IsCreature());
         // An adventure is ONE physical card: the number travels.
-        CHECK(sc.card.m_number == 77);
+        CHECK(sc->m_number == 77);
     }
 
     SUBCASE("it NEVER expires -- unlike Light Up the Stage's window")
     {
         GameState s = Fresh();
         StageAdventureParent(s, 0, frolic, 77);
-        REQUIRE(s.players[0].staged_cards.size() == 1);
-        CHECK(s.players[0].staged_cards[0].expiry_turn == std::numeric_limits<int>::max());
-        // The merge test is `expiry_turn < turn_number`; INT_MAX can never satisfy it.
-        CHECK_FALSE(s.players[0].staged_cards[0].expiry_turn < 100000);
+        const Card* sc = StagedInHand(s, 0);
+        REQUIRE(sc != nullptr);
+        CHECK(sc->m_staged_expiry == std::numeric_limits<int>::max());
+        // The expiry test is `expiry < turn_number`; INT_MAX can never satisfy it.
+        CHECK_FALSE(sc->m_staged_expiry < 100000);
     }
 
     SUBCASE("it is controller-scoped")
     {
         GameState s = Fresh();
         StageAdventureParent(s, 1, frolic, 77);
-        CHECK(s.players[0].staged_cards.empty());
-        CHECK(s.players[1].staged_cards.size() == 1);
+        CHECK(StagedInHand(s, 0) == nullptr);
+        REQUIRE(StagedInHand(s, 1) != nullptr);
     }
 
     SUBCASE("a NON-adventure card declines, so its caller falls through to the graveyard")
@@ -1255,6 +1272,7 @@ TEST_CASE("Adventure: the resolved spell EXILES to staged_cards, not to the grav
         GameState s = Fresh();
         CHECK_FALSE(StageAdventureParent(s, 0, Def("Doubling Season"), 77));
         CHECK(s.players[0].staged_cards.empty());
+        CHECK(StagedInHand(s, 0) == nullptr);
     }
 }
 

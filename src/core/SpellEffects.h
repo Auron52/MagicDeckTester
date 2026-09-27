@@ -1966,6 +1966,22 @@ inline void ApplyCastCreatesTokens(GameState& state, int controller, const CardD
 // creature because an adventure is ONE card, not two. Expiry is INT_MAX: Light Up the Stage's
 // window expires, an adventure never does. Returns false when the card is not an adventure, so the
 // caller falls through to its ordinary graveyard placement.
+//
+// IT GOES STRAIGHT INTO HAND-AS-STAGED, exactly like the impulse primitives (StageTopLibraryCard,
+// the rollout's DrawTopAsImpulseStaged), NOT onto Player::staged_cards. USER-REPORTED 2026-09-27:
+// *"if I Fungus Frolic and commit line, I get the saprolings, but the badger is gone until the next
+// phase."* `staged_cards` is only merged into hand at a PHASE BOUNDARY
+// (HandEntryReason::StagedMerge), so for the rest of the current phase the creature existed in
+// neither representation the enumerator or the viewer reads -- it was invisible AND uncastable.
+// That is a rules gap as well as a display one: CR 715.3 lets the creature be cast from exile
+// whenever its controller could cast it, which includes later in the same main phase (Fungus Frolic
+// {2}{G} then Brightcap Badger {3}{G} is 7 mana, reachable in this deck off Utopia Mycon).
+//
+// The two representations are the same availability -- HandEntry.h's own StagedMerge note says so
+// ("moving it between two representations of the same availability is not a new option") -- but only
+// the in-hand one is read mid-phase, so the merge is not a no-op when it is the ONLY route. Using
+// EnterHand here also gets the staged card its HandEntryReason bookkeeping, so the draw-breakpoint
+// census sees a `Stage`, matching the impulse path.
 inline bool StageAdventureParent(GameState& state, int controller,
                                  const CardDefinition& def, int number)
 {
@@ -1973,12 +1989,12 @@ inline bool StageAdventureParent(GameState& state, int controller,
     const CardDefinition* pdef =
         CardDatabase::Instance().Lookup(def.params.adventure_parent_name);
     if (pdef == nullptr) { return false; }   // broken link: fall back to the graveyard, never drop it
-    StagedCard sc;
-    sc.card             = pdef->card;
-    sc.card.m_number    = number;
-    sc.card.RehashName();
-    sc.expiry_turn      = std::numeric_limits<int>::max();
-    state.players[controller].staged_cards.push_back(std::move(sc));
+    Card c            = pdef->card;
+    c.m_number        = number;
+    c.RehashName();
+    c.m_is_staged     = true;
+    c.m_staged_expiry = std::numeric_limits<int>::max();   // an adventure never expires
+    EnterHand(state, controller, std::move(c), HandEntryReason::Stage);
     return true;
 }
 
