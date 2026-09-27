@@ -318,7 +318,9 @@ floor (only unplayable cards go first); the Vial is a turn-1 keep unless mana-st
   leaf first, re-measure the Pirates overnight rows, optimise only if still unusual vs modelled decks
   (slow-game repros are in that run's batch.err). Overnight rows stay as added regardless.
 * NEXT -- USER 2026-09-27: "we'll wait until I free up on the box on Monday. This isn't that urgent."
-  So the value leaf starts no earlier than Monday 2026-09-28, alone on the box: (`bash scripts/valueleaf.sh run decks/Pirates`, ~2-4 h,
+  So the value leaf starts no earlier than Monday 2026-09-28, alone on the box. PREREQUISITE (USER
+  2026-09-27: "the deck should have some references before the value-leaf anyway"): references/Pirates/
+  is EMPTY -- the user hand-plays reference games in the viewer first (user-owned; commit-only). Then: (`bash scripts/valueleaf.sh run decks/Pirates`, ~2-4 h,
   nothing else on the box), then mulligan (K=17, 172,666 hands; size only after the value leaf).
 * Open: Giants value-leaf re-audit (docs/design/cold-fslinewin-horizon-exit-audit.md), d0 scorer gaps
   (docs/design/d0-greedy-scorer-lord-and-drain-credit.md), viewer INERT_PARAMS question, Fungus
