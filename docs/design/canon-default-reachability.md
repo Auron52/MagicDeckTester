@@ -403,3 +403,23 @@ flags-off run overlapped the tail of a live screen (155s vs 54s is contention, n
 **Next:** host site 10 beyond the root turn (`MTG_BP_NODE_ROOTTURN=0` now becomes meaningful *because* site
 10 is in the host set — it was inert before), and/or widen the window for newly-opened sites; then re-measure
 on the regression tier with held-out seeds before any adoption call.
+
+**AND HOSTING BEYOND THE ROOT TURN DOES NOT RECOVER IT** (`+ MTG_BP_NODE_ROOTTURN=0`, same smoke): 53
+passed / 44 failed, **9 faster / 8 slower** against 8/7 — it buys hinata d3 (−0.0134) and gives back
+creature_giving d5 and hinata2hg d3. **The same losers persist unchanged in BOTH configs** — th d3 +0.0067,
+knights d3 +0.0120, knights d5 +0.0133, melira d3 +0.0200, knights2hg d3 +0.0134, melira2hg d3 +0.0400.
+Reproducing across two different configurations makes those a real effect rather than cell noise.
+
+So the dilution is not "the node isn't hosting enough turns". It is that **`BpSearchWidth()` = 2 is now
+spread over more opened breakpoints**, so each gets less of the same budget.
+
+**THAT POINTS INDEPENDENTLY AT THE USER'S OWN ARMING RULE AS THE REMEDY**, which is the useful outcome here.
+*"We should open breakpoints exactly when they add a new option, which could be a new spell to cast or an
+ability we can activate."* Today's trigger is `HandGainedACard`, a proxy that **over-arms** — a gained card
+that cannot be cast this phase still opens a breakpoint and still consumes width. Arming on *"a new option
+exists"* opens strictly fewer breakpoints, each one load-bearing, which attacks the dilution at its source
+instead of trying to buy more search for breakpoints that never needed opening. It also subsumes the
+stillborn-fan-out follow-up already recorded above.
+
+**Status: correctness fix BUILT and byte-identical with flags off; not adoptable as configured.** The
+indicated next step is the arming rule, not more hosting.
