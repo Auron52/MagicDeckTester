@@ -328,6 +328,10 @@ floor (only unplayable cards go first); the Vial is a turn-1 keep unless mana-st
   re-run the H arm at freeze ac4b8965 with the lazy leaf OFF, recompute phase D, A/B the revised sidecar
   vs shipped; also check which matrix produced Fungus's crossover.
   (2) Pirates value leaf, once the user's Pirates references exist.
+  (3) d0 scorer lord/drain credit -- QUEUED, not top priority (USER 2026-09-27);
+  docs/design/d0-greedy-scorer-lord-and-drain-credit.md.
+* card_costs audit: FIXED by another agent (5cd3e0c1 + ff561bff), from the evidence in
+  docs/design/card-costs-audit-adventure-and-false-green.md.
 * Open: Giants value-leaf re-audit (docs/design/cold-fslinewin-horizon-exit-audit.md), d0 scorer gaps
   (docs/design/d0-greedy-scorer-lord-and-drain-credit.md), viewer INERT_PARAMS question, Fungus
   card_costs sign-off.

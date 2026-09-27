@@ -1,6 +1,7 @@
 # d0 greedy scorer: no same-turn lord credit, no enter-drain credit (DEFERRED)
 
-**Status:** deferred 2026-09-27. Found while adopting `MTG_PAYABLE_ORDER` on Pirates; the lever is correct
+**Status:** QUEUED 2026-09-27 (USER: "The d0 scorer can be queued, but is not top priority quite
+yet") -- behind the Giants value-leaf follow-up and the Pirates value leaf. Originally deferred 2026-09-27. Found while adopting `MTG_PAYABLE_ORDER` on Pirates; the lever is correct
 and exposed these PRE-EXISTING gaps in `TurnSolver::Solve` (the depth-0 greedy scorer, also the rollout
 policy). Searched play is unaffected (it chooses by rollout); only d0 and rollout policy move.
 
