@@ -220,6 +220,34 @@ behind `MTG_PIRATES_BUCKET_DISCARD` (default ON, `=0` restores the generic max-M
 * Evidence: `--discard-analysis` ran after Stage 4 -> **DISCARD_INERT** (no cleanup shed reached in 400 d3
   games, real or rollout; see Stage 4). Non-inferiority vs `=0` is therefore vacuous (no game can differ).
 
+## Cast order (USER review 2026-09-27) -- built, measured, adoption pending
+
+The user reviewed proposals 2a-2d and dictated a full order (quotes in the `PiratesProvider::CastOrderRank`
+header note): Mimic 1 ("Mimic should be before Buccaneer"), Malcolm 2 ("after the mimic ... the +1/+1
+counter with haste is worth the cost"), Corsair 3 when Buccaneer keeps a reveal else 5 ("before the
+rest as the treasure needs to be usable ... even before Buccaneer if there is another pirate in hand"),
+Buccaneer (reveal live) 4, Forerunner 6, Staunch Crewmate 7 ("after all of those that care about the
+order"), then a full order "for the sake of it": Automaton 8, Dire Fleet Captain 9, Larcenist 10, Aether
+Vial 11, Buccaneer without reveal 12, Goblin Tomb Raider 13 (after the Vial, so it enters hasty),
+Stormtamer 14, Bolt 20. **2d dropped**: every creature a Vial can put is its own searched ActivateVial
+action, so there was no heuristic to change. Lever `MTG_PIRATES_CAST_ORDER` (default OFF), `1d353030`.
+Train (smoke + regression, Pirates cases): searched 0 slower / 1 faster, d0 0 / 11. Held-out s60000:
+d0 4.8325 -> 4.8305 (2000 g), d3 4.4517 -> 4.4500 (600), d5 4.4467 -> 4.4450 (600). Non-inferior at every
+depth. Recommendation: adopt (flip default ON) BEFORE the value leaf freezes a commit.
+
+## Generation sizing (2026-09-27)
+
+* **Value leaf.** The matrix = 13 unbounded cells (H1-5, V1-8) x 4 seeds x 400 games. H-arm probe (40
+  games/cell, seed 8008, lazy leaf armed as phase C does, box shared with a sibling container so wall is
+  inflated): core-s/game H1 0.15, H2 1.3, H3 8.3, H4 17.9, H5 20.5 (after the lazy fix below) -> ~48
+  core-s per game-row -> ~21 core-h for the H arm. V cells cannot be timed before a model exists.
+* **Found on the way: the lazy-leaf probe was unsound** (committed a later in-window win): H5 read 4.775
+  vs the true 4.425. Fixed (`MTG_LAZY_LEAF_LADDER`, `50cb00c1`); fleet follow-ups in
+  `docs/design/cold-fslinewin-horizon-exit-audit.md`.
+* **Mulligan.** Discovery merged only Courtyard+Territory and Islet+Canal: K = 17 -> 172,666 distinct
+  7-card hands (252,769 incl. mulligan sizes). Its wall-clock needs the value leaf first (the generator
+  reads its depth/budget from `value_play`; a projection without it is invalid by repo rule).
+
 ## Open questions for the user
 
 (collected here; never blocking — defaults taken are stated)
