@@ -12841,6 +12841,39 @@ std::vector<int> PiratesProvider::EtbDigCandidates(const GameState& /*s*/, int /
 }
 
 // ---- PiratesProvider::CastOrderRank (USER order, 2026-09-27; see the header note) ----------------
+// Reveal fodder for a reveal-or-pay creature (Daring Buccaneer): the reveal-subtype CARDS in hand besides
+// ONE copy of the reveal-or-pay card itself, split into the two EARLY candidates (an nth-spell
+// investigator -- Malcolm -- and an ETB Treasure maker -- Corsair Captain) and everything else.
+// `has_rop` false = no reveal-or-pay card in hand, so nothing needs protecting.
+namespace
+{
+struct PiratesRevealFodder { bool has_rop = false; int base = 0; int investigator = 0; int treasure = 0; };
+PiratesRevealFodder CountPiratesRevealFodder(const GameState& s)
+{
+    PiratesRevealFodder f;
+    std::string want, rop_name;
+    for (const Card& c : s.ActivePlayer().hand)
+    {
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(c);
+        if (d && !d->params.reveal_or_pay_subtype.empty() && d->params.reveal_or_pay_cost.has_value())
+        { want = d->params.reveal_or_pay_subtype; rop_name = d->card.m_name.str(); f.has_rop = true; break; }
+    }
+    if (!f.has_rop) { return f; }
+    bool rop_skipped = false;
+    for (const Card& c : s.ActivePlayer().hand)
+    {
+        if (c.m_is_staged) { continue; }
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(c);
+        if (d == nullptr || !CardHasSubtype(d->card, want)) { continue; }
+        if (!rop_skipped && d->card.m_name.str() == rop_name) { rop_skipped = true; continue; }
+        if (d->params.nth_spell_investigate > 0)      { ++f.investigator; }
+        else if (d->params.etb_creates_treasures > 0) { ++f.treasure; }
+        else                                          { ++f.base; }
+    }
+    return f;
+}
+}   // namespace
+
 int PiratesProvider::CastOrderRank(const GameState& s, const CardDefinition& def) const
 {
     static const bool env_on = EnvOn("MTG_PIRATES_CAST_ORDER");   // default OFF (measuring)
@@ -12848,32 +12881,22 @@ int PiratesProvider::CastOrderRank(const GameState& s, const CardDefinition& def
     const CardParams& p = def.params;
     // 1: counters engine (Metallic Mimic) -- its counter lands on every Pirate entering after it.
     if (p.other_chosen_subtype_enters_counters > 0) { return 1; }
-    // 2: nth-spell investigator (Malcolm) -- after the Mimic: the counter on a hasty flier is worth
-    //    the Clue it forfeits (Malcolm must be the turn's FIRST spell to see the second one).
-    if (p.nth_spell_investigate > 0) { return 2; }
-    // 3 / 5: ETB Treasure (Corsair Captain) -- before every later creature so the Treasure can fund
-    //    them; ahead of a reveal-or-pay creature (Daring Buccaneer) only when Buccaneer keeps a reveal
-    //    once this Corsair has left hand (ANOTHER reveal-subtype card besides it and the Buccaneer).
-    if (p.etb_creates_treasures > 0)
+    // The two EARLY candidates, walked IN RANK ORDER (Malcolm 2, then Corsair Captain 3): each goes ahead
+    // of a reveal-or-pay creature (Daring Buccaneer) only if the Buccaneer still has a reveal once it
+    // AND every earlier early candidate have left hand; otherwise it drops to 5, right after the
+    // Buccaneer and still ahead of the rest. USER: "malcolm, the eyes should also do the same things as
+    // Corsair Captain. We should give up on the extra clue if the Daring Buccaneer needs to reveal
+    // Malcolm." Hand {Malcolm, Corsair, Buccaneer}: Malcolm goes (Corsair is left to reveal), then the
+    // Corsair waits -- the Buccaneer reveals it -- the order read front to back.
+    if (p.nth_spell_investigate > 0 || p.etb_creates_treasures > 0)
     {
-        for (const Card& c : s.ActivePlayer().hand)
-        {
-            const CardDefinition* rd = CardDatabase::Instance().LookupCached(c);
-            if (rd == nullptr || rd->params.reveal_or_pay_subtype.empty()) { continue; }
-            const std::string& want = rd->params.reveal_or_pay_subtype;
-            int others = 0;
-            bool self_skipped = false, rev_skipped = false;
-            for (const Card& h : s.ActivePlayer().hand)
-            {
-                if (h.m_is_staged) { continue; }
-                if (!self_skipped && h.m_name == def.card.m_name) { self_skipped = true; continue; }
-                if (!rev_skipped && h.m_name == rd->card.m_name)  { rev_skipped = true; continue; }
-                const CardDefinition* hd = CardDatabase::Instance().LookupCached(h);
-                if (hd && CardHasSubtype(hd->card, want)) { ++others; }
-            }
-            return others > 0 ? 3 : 5;
-        }
-        return 3;   // no reveal-or-pay card in hand: nothing to protect
+        const PiratesRevealFodder f = CountPiratesRevealFodder(s);
+        if (!f.has_rop) { return p.nth_spell_investigate > 0 ? 2 : 3; }
+        const int others_after_malcolm = f.base + f.treasure;              // Malcolm leaves
+        const bool malcolm_early = f.investigator > 0 && others_after_malcolm > 0;
+        if (p.nth_spell_investigate > 0) { return malcolm_early ? 2 : 5; }
+        const int others_after_corsair = f.base + (malcolm_early ? 0 : f.investigator);
+        return others_after_corsair > 0 ? 3 : 5;
     }
     // 4: reveal-or-pay (Daring Buccaneer) while a reveal is available (else it falls to 12).
     const bool reveal_cost = !p.reveal_or_pay_subtype.empty() && p.reveal_or_pay_cost.has_value();

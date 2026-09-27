@@ -1880,10 +1880,13 @@ public:
     // param-keyed (no names):
     //   1  Metallic Mimic -- "Mimic should be before Buccaneer"; its counter hits every later Pirate.
     //   2  Malcolm -- "I would put malcolm after the mimic. The +1/+1 counter with haste is worth the
-    //      cost" (the cost: Malcolm is then not the turn's first spell, so no Clue that turn).
-    //   3  Corsair Captain if ANOTHER Pirate card (besides it and the Buccaneer) is in hand -- "arguably
-    //      it could even be best before Buccaneer if there is another pirate in hand"; else 5, still
-    //      "before the rest as the treasure needs to be usable".
+    //      cost" -- while the Buccaneer keeps a reveal without him ("malcolm, the eyes should also do
+    //      the same things as Corsair Captain. We should give up on the extra clue if the Daring
+    //      Buccaneer needs to reveal Malcolm."); else 5, right after the Buccaneer.
+    //   3  Corsair Captain while the Buccaneer keeps a reveal once it (and an early Malcolm) have left
+    //      hand -- "arguably it could even be best before Buccaneer if there is another pirate in
+    //      hand"; else 5, still "before the rest as the treasure needs to be usable". Walked in rank
+    //      order: with {Malcolm, Corsair, Buccaneer} Malcolm goes early and the Corsair waits.
     //   4  Daring Buccaneer while a reveal is available (12 when not).
     //   6  Forerunner of the Coalition -- drains only for Pirates entering after it.
     //   7  Staunch Crewmate -- "can go after all of those that care about the order".
