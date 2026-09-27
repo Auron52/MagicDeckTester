@@ -2179,17 +2179,75 @@ screen — [[card-scores-invert-against-play]] holds.
 **WhiteKnights remains the settled 60 of round M.** Gideon joins Valiant Knight, Aether Vial, Acclaimed
 Contender and Lightning Greaves as measured-out.
 
+### Round N2 — BASRI RE-LAUNCHED UNDER THE RULING, and there is still NO prior Basri number
+
+**Round N was killed with the user's approval and produced nothing** — one 0-byte log. It was stopped
+because the cat ruling had superseded what it was measuring (the old greedy always-activate policy, and
+measured while the search could not see the exert cost at all), and because the heuristic could not be
+built while it ran: formats 2–6 would have executed on a different binary than format 1, making the pooled
+late-weighted ranking a chimera across two engines. **So no Basri measurement exists yet. N2 is the
+first.** Fresh tags (`n2_*`) and fresh seeds (13.4M / 13.8M) so nothing from round N can be reached by the
+`(counts, R)` table cache.
+
+**What N2 measures is a much smaller card than round N intended.** Under the ruling Basri reduces to *a
+`{W}` 2/1 Human Knight with cycling `{2}{W}` that is Legendary* — a Venerable Knight (provably blank here)
+plus a cycling option, minus the legend rule. So the estimand is **cycling's option value against the
+legend rule**, and those two partly **cancel**: cycling `{2}{W}` is precisely the out for a stranded
+second copy, which Adeline never had. **The copy ladder is therefore the informative axis, not the
+one-copy number** — and if the ladder comes back FLAT, that cancellation is the finding rather than a null.
+
+**Arms** (`mkspec_n2.py`; reference `j2_ad3_sp4`, then Venerable Knight → Basri at 1 / 2 / 3), all three
+formats, `bracket: generate` + `floor_R: 40`, 20,000 games per block. The generator asserts both user
+rulings (Exemplar 4, Adeline 3) as invariants so a later edit cannot silently reopen them. One R=10 pool
+table over the union is needed because the shipped table cannot bucket Basri — that affects only the
+*shared* column, never the `own` column that is the result.
+
+**Prediction on record** (carried from round N, narrowed to what the ruling leaves measurable): one copy
+neutral-to-slightly-better; degrading with copies as duplicates strand, but on a **shallower slope than
+Adeline's**, because cycling is the out Adeline lacked. If `n2_basri1` comes back clearly better, the only
+modelled thing it can be is cycling — so confirm the Cat count really is zero (`basri_probe.py`) before
+crediting it, since a nonzero count means the heuristic gate is not firing.
+
+**Launched 05:28:14Z** (`run_n2.sh`, pid 295271); round O's comparable shape took **2h16m**. Read with
+`python3 logs/wk_screen/pool_h.py n2_wk n2c_wk j2_ad3_sp4`.
+
 ## RESUME HERE — the road to a FINAL Knights list
 
-**State at 2026-09-26 21:15Z.** WhiteKnights is finished (above). Knights' round H is **in flight**:
-`logs/wk_screen/run_h.sh` (pid 91714) started its Knights measurement at 20:19Z — three R=40 tables at
-~33 min each, then three batches, then the held-out confirmation at seed 7.6M. Expect ~22:50Z. Logs land
-at `logs/wk_screen/out/h_kn_{long,2hg,std}.log` and `hc_kn_*.log`; read with
-`python3 logs/wk_screen/pool_h.py h_kn hc_kn g_kn_ac2_ad3`.
+**State at 2026-09-27 05:50Z.** *(This block supersedes an earlier one dated 2026-09-26 21:15Z that
+described Knights' round H as in flight — it landed; its result is the "Round H on Knights" section
+above.)*
 
-**What round H answers:** the one combination the slot arithmetic allows (`h_kn_ad4_l21` — Contender 0,
-Adeline 4, 21 lands), and whether the land ladder turns over at 23, paid for two independent ways
-(`h_kn_ad2_l23` with Adeline copies, `h_kn_moz3_l23` with a Marshal of Zhalfir).
+**WhiteKnights' copy-count SEARCH is essentially done** — five cards are measured out (Valiant Knight,
+Aether Vial, Acclaimed Contender, Lightning Greaves, Gideon) and every remaining ladder is flat or
+adverse. The list is **not** signed off, though: the reference arm every round is measured against is still
+`j2_ad3_sp4` (**Marshal 4**), because round M's Marshal 3 is a *price*, not a verdict. **One measurement is
+still open:**
+
+* **Round N2 (Basri) is IN FLIGHT** — `logs/wk_screen/run_n2.sh` pid 295271, started 05:28:14Z, seeds
+  13.4M / 13.8M. One R=10 pool table over the union, then three R=40 arm tables, then the batches and the
+  held-out block; round O's comparable shape took **2h16m**. Read with
+  `python3 logs/wk_screen/pool_h.py n2_wk n2c_wk j2_ad3_sp4`. **It is the first and only Basri number** —
+  round N was killed and produced nothing.
+
+**Two things block calling WhiteKnights DONE, and neither is a copy count:**
+
+1. **The Acclaimed Contender cut must be RE-OPENED once the engine is fixed.** The same-turn deploy of a
+   card acquired mid-phase is **depth-0-only by construction**, so every Contender measurement in this
+   campaign (d3 in the suite, d5 in the screens) ran with the card handicapped — and it was cut on
+   **−0.0095**. Full diagnosis, deterministic repro, depth ladder and fix directions are in
+   `docs/design/contender-same-turn-deploy-searched.md`. The fix moves GT for every `etb_dig` deck and
+   needs the regression accept flow, so it is real work, not a rebaseline.
+2. **Two cuts are PRICED BUT UNRULED, both in the quarantine class** — a modelled benefit against
+   protection this passive-opponent engine cannot see. Each is the user's call, not a measurement's:
+   * **Benalish Marshal 4→3** (round M, −0.0081, grew on held-out). The `+1/+1` power half dominates the
+     race and is fully modelled; the toughness half pays only against blockers and damage-based removal,
+     neither of which exists here.
+   * **Lightning Greaves 1→0** (−0.0131). That figure prices only the haste; shroud is unmodelled removal
+     protection.
+
+**Then adoption**, which is unstarted and is the expensive part — see the ADOPTION RUNBOOK section above.
+Note it throws away the shipped keep table (worth −0.1985 on its own) and the value leaf, so the list it
+adopts must be the final one.
 
 **What is STILL MISSING for a final Knights list, in priority order:**
 
@@ -2199,27 +2257,28 @@ Adeline 4, 21 lands), and whether the land ladder turns over at 23, paid for two
    round H makes this urgent: that deck's Exemplar ladder is still sloping at 3→2, and Knights runs the
    same four copies with the same passive-opponent inertness. **This is almost certainly the largest
    remaining gain in Knights and it should be round I.**
-2. **Extend whichever ladder round H leaves sloping** (lands, or Adeline, or both).
+2. **Extend whichever ladder round H left sloping.** Round H landed: Adeline 4 / 21 lands is endorsed and
+   **the 23rd land is negative**, which is what mis-specified round I (below).
 3. **Knights' Exemplar and land axes compete for the same slots**, exactly as Contender and Adeline did,
    so round I has to be a combination round rather than a set of independent rungs.
 4. **Not blocking, but unresolved:** the land ladder's payer confound (Acclaimed Contender) is only
    partly broken by `h_kn_moz3_l23`; and Knights' sideboard promotions remain out of scope by the user's
    *"optimize on the set we have for now"*.
 
-**Round I is already written**, parameterised on round H's endorsed land count:
+**Round I is written but MUST NOT BE RUN AS WRITTEN** — see *"Round I as written is now MIS-SPECIFIED"*
+above. `mkspec_i.py` predates round H and every one of its arms pays for an Exemplar cut **with a land**,
+walking the count to 22/23/24; round H then showed the 23rd land is negative, so two arms would buy a good
+cut with a bad sink and report the sum. **Rebuild it on the round J structure first:** drop the `L`
+parameter entirely and fix the cheapest sink — **Haytham Kenway 3→4, a measured null from round G** — on
+every arm, cutting one card per arm so the sink price is common and cancels in every pair. That is also the
+only shape that can rank four lord types at once (one arm each cutting Exemplar, Inspiring Veteran, Marshal
+of Zhalfir, Haytham). The generator's existing **slot-ledger assertion** (frees = uses) is worth keeping —
+it is the check that would have caught round F's 57-card arm.
 
 ```
-python3 logs/wk_screen/mkspec_i.py <L>        # prints the arms + the tag list
+python3 logs/wk_screen/mkspec_i.py <L>        # DO NOT USE until rebuilt: bakes in the land sink
 python3 scripts/deck_compare.py logs/wk_screen/i_knights_long.json --floor <tags> --dry-run
 ```
-
-Its five arms hold Contender 0 and Adeline 4 (both settled) and vary **Knight Exemplar** 4 / 3 / 2 / 0
-against the remaining sinks, reading the Exemplar axis off **matched pairs** rather than a moving base.
-Two arms pay the second Exemplar slot differently — one with a land, one with Haytham's 4th copy (a
-measured null) — which is what separates *"Exemplar is bad"* from *"lands are good"*. The generator
-**asserts the slot ledger balances** for every arm (frees = uses); that assertion is the check that would
-have caught round F's 57-card arm. At L=22 the reference arm is deliberately named `h_kn_ad4_l21` because
-it is byte-identical to round H's, which makes it free.
 
 **Do not re-run anything already on disk.** Thirteen keep tables exist under `logs/deckcmp/{WhiteKnights,
 Knights}/<tag>/` and `gen_table` reuses them on (counts, R) — reference arms and held-out blocks are free.
