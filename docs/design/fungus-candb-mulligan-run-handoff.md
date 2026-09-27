@@ -207,7 +207,61 @@ unshippable. This run's floor is R=2 and escalation had not started as of this w
 today yields a diagnostic, not a shippable profile. Getting a shippable one needs the escalation work
 or merged chunks reaching R ≥ 10.
 
-## Progress, and reading the rate honestly
+## Progress at 18:16Z (15.6 h in) — floor sweep DONE, and a corrected cost model
+
+```
+roll7    3,044,192  = 2 x 761,048  -> size-7 R=2 floor sweep COMPLETE
+sub        139,120 / 560,212 (24.8%)   rollsub 278,672     ~2.8 h left at current rate
+frozen           0 / 1,522,096         -> freezing has not begun
+journal  1,661,216  = 1,522,096 + 139,120  (it counts cell-side completions across both phases)
+```
+
+**Two corrections to the projections given earlier in this session, in opposite directions.**
+
+1. **I under-counted the work by 42%.** Earlier estimates scaled only `roll7` (13.79 M rollouts) and
+   omitted the sub-table phase's rollout cost entirely. The reference run spent `rollsub` 1,122,548
+   over 62,444 sub cell-sides — **17.98 rollouts per sub cell-side**, *more* per cell-side than size-7's
+   9.06. Scaled to this run's 560,212 sub cell-sides that is **10.07 M** more rollouts. Real total
+   ≈ **23.86 M**, not 13.79 M.
+2. **I under-credited the rate by the same kind of mistake in reverse.** I quoted the reference run at
+   58.6 rollouts/s, computed as `roll7 / total wall time` — a partial numerator over a full denominator,
+   while `rollsub` work was consuming that same wall time. The reference's *total* throughput was
+   `(roll7 + rollsub) / t` = **122.1 rollouts/s**.
+
+Net effect: the two errors largely cancel. Progress is **3.32 M of 23.86 M = 13.9%** in 15.6 h.
+
+| scenario | roll/s | remaining | total |
+|---|---|---|---|
+| stays contended at 11.7 cores | 84 | 68 h | 83 h (3.5 d) |
+| reference throughput, 24 cores | 122 | 47 h | **62 h (2.6 d)** |
+| linear scale-up of the current rate to 24 cores | 173 | 33 h | 49 h (2.0 d) |
+
+**So the 3-day budget now turns entirely on CPU availability, not on the recipe.** At reference
+throughput it fits with ~10 h to spare; under sustained heavy contention it does not. No cap-R change is
+needed to make it fit — free cores are.
+
+**Contention is real, bursty, and was observed.** At 18:14Z the generation held **11.7 of 24 cores at
+loadavg 48.8** (≈2x oversubscription) while a neighbouring container ran heavy work; by 18:16Z it had
+recovered to 23.2. Neither number is "the" rate — which is exactly why `ratewatch.log` samples core
+share every 60 s. Quote a rate only with its core share attached.
+
+### Watch out for this when monitoring: floor completion LOOKS like a stall
+
+`roll7` stops advancing permanently when the R=2 sweep finishes — it sits at exactly `2 x cell_sides`
+with `(0/s)` while the sub-table phase advances `rollsub`/`sub`/`journal` instead. A monitor keyed on
+`roll7` alone reports a stall at the moment of success; the first one here did. Two further traps in the
+same area:
+
+- **`phase=` stays `floor` across that transition.** The sub-table batches run *inside* `phase=floor`
+  (the startup line says so: `continuous size-7: … (+ 560212 fused sub-table batches + adaptive
+  sub-refine)`), so a phase-change trigger never fires for it.
+- **`frozen=` stays `0/…` for a very long time** and is not a progress indicator early on. Freezing had
+  not begun 15.6 h in.
+
+Judge liveness on the **tuple** `(roll7, rollsub, sub, journal)` — a genuine stall is all four frozen.
+`phasewatch2.sh` does this; `phasewatch.sh` (v1) is kept only as the illustration of the bug.
+
+## Reading the rate honestly
 
 As of 12:00Z (9.3 h in): floor pass **70.2%** (1,068,127 of 1,522,096 cell-sides), 2.14 M rollouts.
 
