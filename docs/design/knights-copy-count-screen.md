@@ -2358,6 +2358,45 @@ the measurement actually uses, so N2's estimand really is the cycling-vs-legend-
 **Launched 05:28:14Z** (`run_n2.sh`, pid 295271); round O's comparable shape took **2h16m**. Read with
 `python3 logs/wk_screen/pool_h.py n2_wk n2c_wk j2_ad3_sp4`.
 
+### Round N2 RESULT — BASRI IS A NULL AT ONE COPY, and NOTHING REPLICATES
+
+Completed **07:28:11Z** (2h00m), all six format-blocks rc=0. Positive = WORSE.
+
+| arm | long (.5) | 2hg (.3) | std (.2) | **pooled** | step vs ref | meas (13.4M) | conf (13.8M) |
+|---|---|---|---|---|---|---|---|
+| `j2_ad3_sp4` (ref) | −0.2437 | −0.3493 | −0.2264 | **−0.2719** | — ref | | |
+| `n2_basri1` | −0.2455 | −0.3447 | −0.2265 | **−0.2715** | **+0.0004** | +0.0031 | **−0.0022** |
+| `n2_basri2` | −0.2443 | −0.3427 | −0.2235 | **−0.2697** | **+0.0022** | +0.0059 | **−0.0014** |
+| `n2_basri3` | −0.2407 | −0.3425 | −0.2215 | **−0.2674** | **+0.0045** | +0.0096 | **−0.0006** |
+
+**THE PREDICTION ON RECORD WAS RIGHT ON BOTH COUNTS.** It said *"one copy neutral-to-slightly-better …
+degrading with copies as duplicates strand, but on a SHALLOWER slope than Adeline's, because cycling is the
+out Adeline lacked. If the ladder is FLAT, that cancellation is the finding, not a null."*
+
+* **One copy is a dead null: +0.0004 pooled**, a fifth of the measured ~0.0020 noise floor.
+* **The slope is real but shallow** — +0.0004 → +0.0022 → +0.0045 across three copies. Compare Adeline,
+  whose legend-rule stranding showed up as **+4.2pp of games with a dead duplicate** (round L) on a single
+  extra copy. Three Basri strand less than one extra Adeline did, which is exactly what a `{2}{W}` cycling
+  outlet predicts. **The cancellation is the finding.**
+
+**BUT THE HEADLINE IS A REPLICATION FAILURE, AND IT MUST NOT BE BURIED.** The measurement and held-out
+blocks **disagree in sign on ALL THREE ARMS** — meas +0.0031 / +0.0059 / +0.0096 against conf −0.0022 /
+−0.0014 / −0.0006. The pooled step is the mean of two contradictory blocks, so by
+[[replicate-trades-before-ruling]] **none of these three numbers is an established effect**, including the
+ladder's slope. What IS established is the bound: every arm sits at or under **|0.0096| on its worst
+block**, so Basri is not a meaningful gain *or* loss at any count from 1 to 3.
+
+**VERDICT: Basri does not earn a slot, and this is the campaign's cleanest "no effect" rather than a
+measured loss.** The settled 60 is unchanged. Note this is a *weaker* rejection than Gideon's (round O:
+monotone, all four arms replicating in sign) and should not be quoted as if it were the same thing — the
+honest statement is *"indistinguishable from the blank 2/1 it replaces."*
+
+**And note WHAT was measured, because the ruling shrank the card:** under the cat ruling Basri is a `{W}`
+2/1 Human Knight with cycling `{2}{W}` that is Legendary, with the Cat ability gated out of autonomous play
+(verified 0 Cats in 300 games). So this round priced **cycling's option value against the legend rule**, and
+the answer is that they cancel to within noise. The Cat ability — the half that measured 54% activation
+before the ruling — is out of scope by the user's decision, not by approximation.
+
 ## RESUME HERE — the road to a FINAL Knights list
 
 **State at 2026-09-27 05:50Z.** *(This block supersedes an earlier one dated 2026-09-26 21:15Z that
@@ -2370,11 +2409,11 @@ adverse. The list is **not** signed off, though: the reference arm every round i
 `j2_ad3_sp4` (**Marshal 4**), because round M's Marshal 3 is a *price*, not a verdict. **One measurement is
 still open:**
 
-* **Round N2 (Basri) is IN FLIGHT** — `logs/wk_screen/run_n2.sh` pid 295271, started 05:28:14Z, seeds
-  13.4M / 13.8M. One R=10 pool table over the union, then three R=40 arm tables, then the batches and the
-  held-out block; round O's comparable shape took **2h16m**. Read with
-  `python3 logs/wk_screen/pool_h.py n2_wk n2c_wk j2_ad3_sp4`. **It is the first and only Basri number** —
-  round N was killed and produced nothing.
+* **Round N2 (Basri) LANDED 07:28:11Z — a NULL, and nothing replicates.** One copy +0.0004 pooled (a fifth
+  of the noise floor); the ladder is +0.0004 / +0.0022 / +0.0045 across 1/2/3 copies, but the measurement
+  and held-out blocks **disagree in sign on all three arms**, so no effect is established — only the bound
+  that Basri is within |0.0096| of the blank 2/1 it replaces at every count. **Basri does not earn a slot**,
+  as the campaign's cleanest no-effect rather than a measured loss. Full table in the round N2 section.
 
 **Two things block calling WhiteKnights DONE, and neither is a copy count:**
 
