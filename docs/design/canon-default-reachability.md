@@ -267,3 +267,91 @@ pending its own measurement, now that the clauses have changed what it would be 
 *Note the trap in re-measuring it:* the audit's raw counts are **not** a cross-arm comparator.
 Restoring a site to the walker creates more applies, so the absolute count of canon defaults rises
 mechanically. Compare per-site reachability (a boolean), or measure play directly.
+
+## 2026-09-27 — `MTG_BP_HAND_ENTRY=1` RE-OPENS THE HOLE THIS DOC CLOSED, and no built lever shuts it
+
+**Found while fixing the Acclaimed Contender same-turn-deploy defect** (see
+`contender-same-turn-deploy-searched.md`). `MTG_BP_HAND_ENTRY=1` is the only thing that fixes that
+defect — it closes the deploy hole at every depth d1/d3/d5/d7, 105/105 scenarios pass — **but it
+re-introduces unchallengeable canon defaults, which is why it must stay OFF.**
+
+### The measurement, on `test/scenarios/whiteknights_contender_same_turn_deploy.json` at d5
+
+| config | canon defaults | unchallengeable | site-unmarked |
+|---|---|---|---|
+| **shipped (flag off)** | **0** | — | — |
+| `MTG_BP_HAND_ENTRY=1` | **7** | **7 (100%)** | 0 |
+
+```
+[canon-audit]   site 10  total=7  UNCHALLENGEABLE=7  unmarked=0  <-- NO ROUTE INTO THE VARIANT MACHINERY
+[canon-armed-by] UNCHALLENGEABLE site 10 [NOHOST]  (inline cast) 7
+```
+
+So the correct play this flag produces (the Knight cast on turn 4) is an **unchallengeable one-option
+heuristic**: `cands.front()` with nothing scored against it. It is right here and was wrong on auras gi428
+(T4 -> T5). This is the shape this document's own precondition forbids: *"A class in `BpSiteMask` MUST have
+a route into the variant machinery."*
+
+### `unmarked=0` IS THE KEY DETAIL — the clause is not the problem
+
+Site 10 **is** marked by `PlanOpensBreakpoint` for these plans. The failure is entirely **`[NOHOST]`**: an
+apply with **no capture and no carried choice**, so there is no fan-out to be selected by. That matches this
+doc's own earlier negative result — extra marking *"buys intent, not reachability"*. **Do not reach for a
+`PlanOpensBreakpoint` clause here; it is already marked.**
+
+### NEGATIVE RESULT — all four built levers were tried and NONE moves it
+
+Measured this session, same fixture, `MTG_BP_HAND_ENTRY=1` throughout:
+
+| lever | unchallengeable site-10 defaults |
+|---|---|
+| baseline | 7 (100%) |
+| `MTG_BP_NODE_ROOTTURN=0` (host every searched turn) | **7 (100%)** |
+| `MTG_BP_WAVEDROP_HOSTED=1` | **7 (100%)** |
+| `MTG_BP_EMPTY_ARM=1` | **7 (100%)** |
+| all three together | **7 (100%)** |
+
+**Why `ROOTTURN=0` cannot help, and this is the generalisable point.** It only decides whether
+`node_host_here` is set at the **two** hosting call sites (`TurnSolver.cpp` ~43676 / ~45127). An apply that
+passes **no capture pointer at all** is unaffected by every hosting *gate*, because the gate is downstream of
+a capture that was never offered. Counted: **53 `ApplyPlanDirect` call sites, 7 pass a capture, 2 are
+hosting entry points.** The hand-entry arming fires at applies outside that set.
+
+So hosting is not one axis with a knob — it is **which callers offer a capture**, and that is code.
+
+### THE DESIGN TO BUILD (USER, 2026-09-27, in their words)
+
+* *"Fully searched within the search window."*
+* *"We should open breakpoints exactly when they add a new option, which could be a new spell to cast or an
+  ability we can activate."*
+* *"Obviously just deleting greedy is not the solution. We need something to pick up the slack and that
+  should be search (but bounded just to new lines that are possible because we stopped at the breakpoint)."*
+* *"Only Heuristics can narrow the search to reduce branching."*
+
+Read together: a heuristic may **order or narrow** candidates; it may never **be** the decision. Every
+breakpoint opened inside the window must have its alternatives scored, with EMPTY among them.
+
+**The arming rule is a tightening, not a widening, and that matters for cost.** Today site 10 arms on
+`HandGainedACard` — a proxy that over-arms (a card gained that cannot be cast this phase still opens a
+breakpoint) and under-arms (an ability that becomes activatable without any hand change opens nothing).
+Arming on *"a new option exists"* is strictly more precise, and it subsumes this doc's own follow-up #1
+(*"more than half of stompy's site-10 fan-out work is already stillborn"*) — a stillborn fan-out IS a
+breakpoint opened where no new option existed. So precision here pays for the reachability work rather than
+adding to its bill.
+
+### Work programme, in dependency order
+
+1. **Arming precision** — replace/weaken `HandGainedACard` as the site-10 trigger with "a new OPTION is
+   available": a spell in hand now castable with the mana actually left, or an ability now activatable.
+   Reduces arming volume and kills stillborn fan-out. Must be computed identically in both worlds.
+2. **Caller hosting** — offer a capture at the applies inside the search window that can arm site 10, so
+   the continuation is enumerated and scored rather than canon-picked. This is the `[NOHOST]` fix and the
+   only one that moves the audit.
+3. **`MTG_BP_EMPTY_ARM`** for len-1 slots — the user's 2026-09-16 rule (*"Empty needs to be a valid option
+   ... for every segment"*), and the standing qualification on this document's "ZERO".
+4. **Then** `MTG_BP_HAND_ENTRY=1`, gated on the audit reporting **zero** unchallengeable defaults. GT moves
+   broadly; accept flow.
+
+*Re-measurement trap (restated):* the audit's raw counts are not a cross-arm comparator — restoring a site
+to the walker creates more applies, so absolute counts rise mechanically. Compare **per-site reachability as
+a boolean**, or measure play directly.
