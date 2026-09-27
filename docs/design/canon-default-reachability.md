@@ -355,3 +355,51 @@ adding to its bill.
 *Re-measurement trap (restated):* the audit's raw counts are not a cross-arm comparator — restoring a site
 to the walker creates more applies, so absolute counts rise mechanically. Compare **per-site reachability as
 a boolean**, or measure play directly.
+
+### 2026-09-27 — THE FIX IS BUILT AND MEASURED. Correctness closed; searched-depth quality is a BUDGET problem.
+
+**Built** on branch `bp-canon-caller-audit` (`1b3be5b9`), two pieces, both required:
+
+1. `PlanOpensBreakpoint` marks site 10 for an `etb_dig_count > 0` cast, **gated on `BpHandEntryEnabled()`**
+   (clause exists exactly when the arming route needing it exists ⇒ shipped config byte-identical).
+   The site-10 clause carried `!ParamKeyedDrawClass`, correct for the CAST-window arming but **not** for the
+   hand-entry route that fires anyway. The comment above it already demanded this pairing
+   (*"If a route is ever added, ADD IT HERE TOO … nothing enforces it"*). The route was added; the clause was not.
+2. **`BpNodeHostSites()`** (`MTG_BP_NODE_S10`, default OFF), kept **separate** from the renamed
+   `BpNodeSitesBase()` so hosting a site does not also strip its wave coverage.
+
+**MY EARLIER CALL IN THIS DOC WAS WRONG:** I read `unmarked=0` as proof the site was marked. `site-unmarked`
+is a separate SOFT tier; 0 there proves nothing. Both a clause AND a host were missing — *marking alone
+cannot host, hosting alone is never selected.*
+
+**Correctness result** (Contender fixture d5, play correct at `opponent_life=-3` throughout):
+
+| config | canon defaults | UNCHALLENGEABLE |
+|---|---|---|
+| `HAND_ENTRY=1` | 7 | **7 (100%)** |
+| `+ clause` | 7 | **0 (0.00%)** |
+| `+ clause + NODE_S10=1` | **none at all** | — |
+
+**SMOKE A/B — and the depth pattern is the finding.** Shipped defaults: **97 passed / 0 failed / 0 new,
+ALL PASS** (byte-identity gate ⇒ the change is inert with its flags off). With both flags on: **56 passed /
+41 failed**, of which **26 are digest-only** (play changed, average identical), **8 faster, 7 slower**:
+
+| direction | cases |
+|---|---|
+| **faster** | fungus **d0**, hinata **d0**, auras **d0**, goblins **d0**, stompy **d0**, melira **d0**, melira d5, snow **d0** (−0.0680) |
+| **slower** | th d3, knights d3 (+0.0120), knights d5 (+0.0133), melira d3 (+0.0200), hinata2hg d3, knights2hg d3, melira2hg d3 (+0.0400) |
+
+**Almost every gain is at d0 and almost every loss is at d3/d5** — i.e. it helps exactly where the node
+already hosts (at d0 the root turn IS the only turn) and hurts where hosting is root-turn-only, so the newly
+opened breakpoints compete for a fixed `BpSearchWidth()`=2 window on non-root turns. **Opening more
+breakpoints without more reachability dilutes the search.** That is a reachability/budget problem, and by the
+user's standing rule (2026-09-05 / 09-17) *"a red measurement here is a BUDGET problem to remedy, never
+authorization to keep an unchallengeable default."*
+
+**Do NOT read these deltas as settled.** Smoke cells are 500–1,000 games, and this very flag's history is a
+train table that held-out refused to confirm. The wall-clock comparison is also **not** usable here: the
+flags-off run overlapped the tail of a live screen (155s vs 54s is contention, not a speedup).
+
+**Next:** host site 10 beyond the root turn (`MTG_BP_NODE_ROOTTURN=0` now becomes meaningful *because* site
+10 is in the host set — it was inert before), and/or widen the window for newly-opened sites; then re-measure
+on the regression tier with held-out seeds before any adoption call.
