@@ -48524,21 +48524,35 @@ TurnSolver::SearchLine TurnSolver::FullSearchLine(const GameState& state, int de
     if (LazyLeafOn() && !emul_done && depth >= 1 && (budget == nullptr || budget->Unlimited()))
     {
         const long long probe_before = budget ? budget->Used() : 0;
-        SearchLine probe;
+        // A LEAFLESS LADDER, 1..depth, not one cold pass at `depth` (MTG_LAZY_LEAF_LADDER, default
+        // ON; =0 restores the single probe for the A/B). FSLineWin's first-verified-win exit
+        // (FsHorizonExitOn: return on the first tail winning at or before the horizon edge) is sound
+        // ONLY when every shallower pass has already been refuted -- then any in-window win sits at
+        // the edge and IS the minimum. One cold pass at `depth` has no refutations beneath it, so
+        // every node took its FIRST in-window win in move order: Pirates H5 unbounded, seed 8008,
+        // 14/40 games committed a T5 line at T1 while a T4 win existed (the probe spent 6 units),
+        // H5 avg 4.775 vs the ladder's 4.425. Laddering restores the premise; leafless_cache is
+        // keyed by remaining depth, so pass p+1 reuses pass p exactly as the leafed ladder does.
+        const bool lazy_ladder = EnvOn("MTG_LAZY_LEAF_LADDER", true);
+        for (int p = lazy_ladder ? 1 : depth; p <= depth && !lazy_done; ++p)
         {
-            ForceConstantLeafGuard _c(true);
-            ConstantLeafPassGuard  _clp(true);   // leafless: stop at exhaustion (inert when unbounded)
-            probe = FSLineWin(state, depth, max_turns, max_turns + 1, second_main, tt,
-                              &leafless_cache, budget);
-        }
-        // A TRUNCATED probe proved nothing -- its no-wins are unmemoisable past the first
-        // truncation, so the tree it walked is not the tree it claims. Fall through to the ladder
-        // and let the existing machinery judge it; never commit a partial probe.
-        if (!probe.truncated && probe.win_turn <= max_turns)
-        {
-            line = probe;
-            committed_depth = depth;   // a leafless win is proven in-window, so this IS verified
-            lazy_done = true;
+            SearchLine probe;
+            {
+                ForceConstantLeafGuard _c(true);
+                ConstantLeafPassGuard  _clp(true);   // leafless: stop at exhaustion (inert when unbounded)
+                probe = FSLineWin(state, p, max_turns, max_turns + 1, second_main, tt,
+                                  &leafless_cache, budget);
+            }
+            // A TRUNCATED probe proved nothing -- its no-wins are unmemoisable past the first
+            // truncation, so the tree it walked is not the tree it claims. Fall through to the
+            // ladder and let the existing machinery judge it; never commit a partial probe.
+            if (probe.truncated) { break; }
+            if (probe.win_turn <= max_turns)
+            {
+                line = probe;
+                committed_depth = p;   // a leafless win is proven in-window, so this IS verified
+                lazy_done = true;
+            }
         }
         if (s_rollout_stats)
         {
