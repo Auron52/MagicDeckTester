@@ -81,7 +81,9 @@ def build_manifest(decks, games, path, seeds, cells, force=False):
 
 
 def parse(out_path):
-    pat = re.compile(r"\[win\] job=(\S+) gi=(\d+) wt=(-?\d+)")
+    # `.+?`, not `\S+`: a deck stem may contain SPACES ("Prevent Damage"), and `\S+` then matched
+    # nothing at all -- every game silently dropped, reported as "0 changed of 0 paired" = NO SIGN.
+    pat = re.compile(r"\[win\] job=(.+?) gi=(\d+) wt=(-?\d+)")
     res = collections.defaultdict(dict)
     for line in open(out_path, errors="replace"):
         m = pat.search(line)
@@ -166,6 +168,12 @@ def main():
 
 
 def report(res, stem, seeds, games, blocks, cells):
+    # A comparison over ZERO paired games is a did-not-measure, never a verdict (the digest-test
+    # no-power lesson): say so loudly instead of printing "NO SIGN".
+    if compare(res, stem, seeds, cells)[3] == 0:
+        print(f"\n=== {stem} ===\nERROR: 0 paired games parsed for this deck -- nothing was compared "
+              "(job-name parse failure?). This is NOT a NO SIGN verdict.")
+        return
     half = len(seeds) // 2 or 1
     splits = [("half A", seeds[:half]), ("half B", seeds[half:])]
     print(f"\n=== {stem} ===")
