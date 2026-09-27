@@ -542,12 +542,22 @@ REGRESSION_CASES=(
 # See .claude/skills/regression-testing.md rule 7 and
 # docs/design/searched-design-audit-blind-spots.md ("Method trap: overlapping seed bases").
 OVERNIGHT_CASES=(
-  # fungus: the OVERNIGHT block is deliberately NOT here yet. Its sizing is ready
-  # (scripts/fungus_regression_add.sh: d0 x4 @2000, d3 x4 @400 b10, d5 x4 @300 b20, ~1.8 CPU-hours
-  # at this deck's measured rates), but adding cases without baselining them in the same change is
-  # the exact gap d41561a0 was written to close -- it strands NEW keys for whoever runs that mode
-  # next. It goes in with its baseline once the Fungus cost work settles, since that work moves
-  # every digest anyway.
+  # fungus: Hinata's overnight sizing (scripts/fungus_regression_add.sh: d0 x4 @2000, d3 x4 @400 b10,
+  # d5 x4 @300 b20, ~1.8 CPU-hours at this deck's measured rates). Added WITH its baseline 2026-09-27
+  # (USER: "Let's add Fungus there as well. I never wanted to have things partly added.") -- it had
+  # been parked pending the Fungus cost work, which left the deck in two of three tiers.
+  "fungus  0  4004 2000 0"
+  "fungus  0  6006 2000 0"
+  "fungus  0  8008 2000 0"
+  "fungus  0 10010 2000 0"
+  "fungus  3  4004  400 10"
+  "fungus  3  5005  400 10"
+  "fungus  3  6006  400 10"
+  "fungus  3  7007  400 10"
+  "fungus  5  4004  300 20"
+  "fungus  5  5005  300 20"
+  "fungus  5  6006  300 20"
+  "fungus  5  7007  300 20"
   "slivers 0 4004 2000 0"
   "slivers 0  6006 2000 0"
   "slivers 0  8008 2000 0"
@@ -837,6 +847,37 @@ OVERNIGHT_CASES=(
   "angels 5 5005  500 40"
   "angels 5 6006  500 40"
   "angels 5 7007  500 40"
+  # pirates (added 2026-09-27, USER: "Pirates should be added at all regression test tiers ... As
+  # long as it is fast enough"): the angels/minotaur shape -- d0 2000 on the 2002-spaced bases, d3 1000
+  # at b20, d5 500 at b40. Measured ~0.7 s/game d3b10 and ~1.3 s/game d5b20 in the gate tiers; this
+  # block is a few core-hours, well inside the shared 8 h makespan.
+  "pirates 0  4004 2000 0"
+  "pirates 0  6006 2000 0"
+  "pirates 0  8008 2000 0"
+  "pirates 0 10010 2000 0"
+  "pirates 3 4004 1000 20"
+  "pirates 3 5005 1000 20"
+  "pirates 3 6006 1000 20"
+  "pirates 3 7007 1000 20"
+  "pirates 5 4004  500 40"
+  "pirates 5 5005  500 40"
+  "pirates 5 6006  500 40"
+  "pirates 5 7007  500 40"
+  # giants (added 2026-09-27 with its baseline, USER: "Giants too." -- it was in smoke + regression
+  # only): the angels/pirates shape. Gate-tier rates 0.4-0.5 s/game d3 b10 and 0.7-1.1 s/game d5 b20
+  # with no game over 30 s (pre value leaf; the adopted leaf runs at 0.14x), so ~2 core-h at most.
+  "giants 0  4004 2000 0"
+  "giants 0  6006 2000 0"
+  "giants 0  8008 2000 0"
+  "giants 0 10010 2000 0"
+  "giants 3 4004 1000 20"
+  "giants 3 5005 1000 20"
+  "giants 3 6006 1000 20"
+  "giants 3 7007 1000 20"
+  "giants 5 4004  500 40"
+  "giants 5 5005  500 40"
+  "giants 5 6006  500 40"
+  "giants 5 7007  500 40"
   # 2HG gate, deep tier (user request 2026-09-04): the six 2HG-relevant decks at DEFAULT
   # SETTINGS -- depth-5 rows drop the depth key so each deck's value_play block owns the play
   # depth (fivecolour runs d6), at the SAME per-deck overnight d5 budget as the deck's own rows.
@@ -878,6 +919,11 @@ OVERNIGHT_CASES=(
   "angels2hg     5 5005 150 40"
   "angels2hg     5 6006 150 40"
   "angels2hg     5 7007 150 40"
+  # pirates2hg: angels2hg's shape (150 against the deck's own 500-game d5 rows, b40).
+  "pirates2hg    5 4004 150 40"
+  "pirates2hg    5 5005 150 40"
+  "pirates2hg    5 6006 150 40"
+  "pirates2hg    5 7007 150 40"
   # fluctuator: breaching-shaped 4-seed sweep at 2x gate budgets. Probed at the ACTUAL overnight
   # budgets 2026-09-05: d3 b20 ~2.78 s/game, d5 b40 ~4.29 s/game, NO game over 30 s at either
   # => ~2.7 core-hours added, breaching's bracket. Counts obey the seed-spacing rule
@@ -897,9 +943,9 @@ OVERNIGHT_CASES=(
   # snow: see the SMOKE block. This is the tier with room -- the whole Snow block is ~5,400 core-s
   # (1.5 core-h, doubling the bare-probe figure for --lookahead-bottoming as the smoke block
   # explains), i.e. ~170 s of makespan on 32 cores against an 8 h budget, so the deck gets its real
-  # coverage here rather than in the two fast gates. NOTE these keys have NO GROUND TRUTH YET: they
-  # are deliberately left to be created by the next overnight run, because a value leaf for this
-  # deck would move every searched Snow row and re-accepting three tiers is cheaper once than twice.
+  # coverage here rather than in the two fast gates. These keys were left WITHOUT ground truth
+  # (pending a Snow value leaf that was later stopped); baselined 2026-09-27 alongside fungus/giants,
+  # per the user's "I never wanted to have things partly added."
   # Measured at these exact counts and seeds (bare probe, so ~2x in the tier):
   # d3 b10 1.756-2.445 s/game, d5 b20 2.786-4.376, worst single game 98.4 s (ovn_d5_s4004). Budgets
   # stay at the GATE levels (10/20) rather than the tier's usual 20/40 -- Snow's tail is

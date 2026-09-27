@@ -21,6 +21,10 @@ Gates (blocking unless noted):
                    divergences stripped in-code; intentional per-card ones allowlisted
                    (scryfall_divergences.json). Blocking FAIL on any un-allowlisted mismatch.
   clause_ledger -- workstream 2 (every oracle clause accounted): NOT BUILT -> disclosed skip
+  regression_tiers -- ALL OR NONE: the deck has rows in ALL THREE suite tiers (SMOKE / REGRESSION /
+                   OVERNIGHT in test/regression_cases.sh) with accepted GT for each. Static. A PARTIAL
+                   addition is a blocking FAIL that cannot be signed off; absent from ALL tiers is a
+                   FAIL keyed `regression_tiers:too_slow`, sign-off-able while it does not fit.
   viewer        -- scripts/audit_viewer_decisions.py (self-guard + surface sweep)
   viewer_wiring -- every decision type the deck uses has an emitter (main.cpp) AND a GUI
                    branch (index.html), per the DECISIONS.md registry (sites 3 & 4, static)
@@ -403,6 +407,58 @@ def _ledger_section(deck_path, heading):
     return out if in_sec else None
 
 
+TIERS = ("smoke", "regression", "overnight")
+
+
+def gate_regression_tiers(deck_path):
+    """ALL OR NONE (USER 2026-09-27): "we should add to the regression test in all modes or none. None
+    is only until we can optimize enough that it fits. Once it fits we add it and leave them as-is."
+    Pirates' first analysis shipped with no overnight rows; Fungus (parked), Giants (never added) and
+    Snow (rows, no GT) were half-in too -- a mandated step with no gate. So:
+      * in every tier with accepted GT                      -> PASS
+      * in SOME tiers, or rows without GT                   -> FAIL `regression_tiers:partial`, which
+        must NEVER be signed off (it is always a bug)
+      * in NO tier                                          -> FAIL `regression_tiers:too_slow`; the
+        user may sign that off while the deck does not fit, with its measured cost in the ledger.
+    Rows are found via DECK_FILE, so 2HG variants ride along. GT is required because rows added
+    without a baseline strand NEW keys for whoever runs that tier next (d41561a0)."""
+    cases = ROOT / "test/regression_cases.sh"
+    gt = ROOT / "test/regression_gt.txt"
+    if not cases.exists():
+        return Gate("regression_tiers", ERROR, True, "test/regression_cases.sh not found")
+    text = cases.read_text()
+    want = Path(deck_path).resolve()
+    keys = set()
+    m = re.search(r"^declare -A DECK_FILE=\((.*?)^\)", text, re.M | re.S)
+    for km in re.finditer(r"^\s*\[([^\]]+)\]=(\"[^\"]*\"|\S+)", m.group(1) if m else "", re.M):
+        if (ROOT / km.group(2).strip('"')).resolve() == want:
+            keys.add(km.group(1))
+    gt_text = gt.read_text() if gt.exists() else ""
+    state = {}   # tier -> "ok" | "no rows" | "no GT"
+    for tier in TIERS:
+        am = re.search(rf"^{tier.upper()}_CASES=\((.*?)^\)", text, re.M | re.S)
+        rows = [ln.strip().strip('"').split() for ln in (am.group(1) if am else "").splitlines()
+                if ln.strip().startswith('"')]
+        if not any(r and r[0] in keys for r in rows):
+            state[tier] = "no rows"
+        elif not any(re.search(rf"^{re.escape(k)}_{tier}_d", gt_text, re.M) for k in keys):
+            state[tier] = "no GT"
+        else:
+            state[tier] = "ok"
+    if all(v == "ok" for v in state.values()):
+        return Gate("regression_tiers", PASS, True, f"in all 3 suite tiers with GT ({', '.join(sorted(keys))})")
+    if all(v == "no rows" for v in state.values()):
+        return Gate("regression_tiers", FAIL, True, "not in the regression suite (no tier)",
+                    [("regression_tiers:too_slow", "absent from all three tiers -- add it to ALL of them "
+                      "(analyze-deck 4-bis), or record the measured cost and get the user's sign-off "
+                      "while it does not fit")])
+    detail = ", ".join(f"{t}: {v}" for t, v in state.items() if v != "ok")
+    return Gate("regression_tiers", FAIL, True, f"PARTIAL suite addition ({detail})",
+                [("regression_tiers:partial", f"{detail} -- all tiers or none; never sign this off. "
+                  "Add the missing rows and accept each tier's GT "
+                  "(`bash test/regression.sh --<tier> --deck=<key>`, inspect, `--<tier> --accept --deck=<key>`)")])
+
+
 def _git_head():
     rc, out, _ = run(["git", "-C", str(ROOT), "rev-parse", "HEAD"])
     return out.strip() if rc == 0 else ""
@@ -573,6 +629,7 @@ def main():
         gate_card_costs(args.no_network),
         gate_card_fields(),
         gate_clause_ledger(),
+        gate_regression_tiers(deck),
         gate_viewer(deck, profile, args.no_sweep),
         gate_viewer_wiring(deck),
         gate_mismatch(deck, profile, seeds, args.games, args.no_sweep),

@@ -298,11 +298,31 @@ floor (only unplayable cards go first); the Vial is a turn-1 keep unless mana-st
 3. OK to classify the new params in `audit_viewer_decisions.py` INERT_PARAMS (script self-guard)?
 4. Corsair's same-turn Treasure: lift the fresh-hold for non-trick Treasures (A/B-measured)? Default: measure.
 
-## RESUME STATE (2026-09-26, final)
+## RESUME STATE (2026-09-27, third compaction)
 
-* Stages 1–5 done; deferrals reviewed (D1/D2/D4/D5 approved, D3/D6 fixed + GT re-accepted); pushed to
-  `phase-1-2-deck-analyzer`. Remaining USER reviews: the discard policy (§8 doubts) and cast-order
-  proposals 2a–2d. Overnight tier does not carry Pirates yet.
+* Worktree `/tmp/pirates-wt`, branch `pirates-analysis`; pushed through `6c34573b` (CI green incl.
+  Windows). Main tree holds another session's WIP -- never touch it.
+* DONE + pushed: deferral review (D1/D2/D4/D5 approved; D3, D6 fixed + MTG_BP_RECORD_VIAL), lazy-leaf
+  fix, cast order + MTG_PAYABLE_ORDER ADOPTED, discard USER-revised, GT (smoke+regression) accepted.
+* DONE: every suite deck is now in ALL THREE tiers with GT (USER: "add to the regression test in all
+  modes or none"). One pooled overnight run added Pirates (+pirates2hg), Fungus, Giants and baselined
+  Snow's rows: 49 new keys, makespan 31m under another container's load, 24/24 workers busy. Core-s:
+  pirates 26,251 (d5 5.97 s/game), pirates2hg 5,305, snow 8,191 (d5 11.04), giants 3,106, fungus
+  1,290. Enforced by `verify_deck.py` `regression_tiers` (partial = never sign-off-able); the fleet
+  passes it.
+* PIRATES d5 TAIL: in the pooled overnight run, Pirates d5 b40 cost ~6 s/game (under ~2x load from
+  another container) with 100+ games over 30 s (worst ~82 s, ~1.9M units) -- vs the 2026-09-11 fleet
+  overnight, where only fivecolour (57) and melira (9) had slow games. BUT Pirates and Snow are the
+  only suite decks with NO value leaf, so this compares the unmodelled path to modelled decks. USER:
+  "there is the question of how much they just need a value-leaf or mulligan profile." PLAN: value
+  leaf first, re-measure the Pirates overnight rows, optimise only if still unusual vs modelled decks
+  (slow-game repros are in that run's batch.err). Overnight rows stay as added regardless.
+* NEXT -- USER 2026-09-27: "we'll wait until I free up on the box on Monday. This isn't that urgent."
+  So the value leaf starts no earlier than Monday 2026-09-28, alone on the box: (`bash scripts/valueleaf.sh run decks/Pirates`, ~2-4 h,
+  nothing else on the box), then mulligan (K=17, 172,666 hands; size only after the value leaf).
+* Open: Giants value-leaf re-audit (docs/design/cold-fslinewin-horizon-exit-audit.md), d0 scorer gaps
+  (docs/design/d0-greedy-scorer-lord-and-drain-credit.md), viewer INERT_PARAMS question, Fungus
+  card_costs sign-off.
 
 ## Chunk 3 landed (2026-09-26) — provider, routing, certificate, tutor width, discard policy
 

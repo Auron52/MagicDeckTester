@@ -353,6 +353,33 @@ Parse the JSON output:
 For win% / average win turn, run the deck through the regression suite after the
 profile is written.
 
+### 4-bis. Add the deck to ALL THREE regression tiers (MANDATORY, gated)
+
+**Every analyzed deck gets rows in `SMOKE_CASES`, `REGRESSION_CASES` AND `OVERNIGHT_CASES`**
+(`test/regression_cases.sh`), plus its `DECK_FILE`/`DECK_PROF` entries, and each tier's GT is
+accepted in the same change (USER 2026-09-27: *"Pirates should be added at all regression test
+tiers"* — *"As long as it is fast enough"*). Follow the regression-testing skill's "Adding a deck
+to the suite": copy the shape of a comparable deck (e.g. angels/minotaur — overnight d0 ×4 @2000,
+d3 ×4 @1000 b20, d5 ×4 @500 b40 on the 4004–10010 bases), time a probe, keep each tier inside its
+wall budget, and add `<deck>2hg` rows where the deck cares about opponents/heads. Run each tier
+for the deck alone (`bash test/regression.sh --<tier> --deck=<key>`), inspect, then
+`--<tier> --accept --deck=<key>` (the SAME filter — without it the accept treats the run as a
+full-mode accept and drops that tier's earlier `accepted-with-regressions` notes) and
+`python3 test/check_gt_logs.py`.
+* **Overnight is NOT optional and NOT "later".** Pirates' first analysis shipped with smoke +
+  regression rows only, because this skill named the overnight tier in passing; nothing caught it
+  until the user asked. Rows without accepted GT are just as bad — they strand NEW keys for whoever
+  runs that tier next.
+* **ALL TIERS OR NONE (USER 2026-09-27).** *"We should add to the regression test in all modes or
+  none. None is only until we can optimize enough that it fits. Once it fits we add it and leave
+  them as-is."* So a deck too slow for one tier is in NO tier until the engine work makes it fit —
+  never trimmed into a subset of tiers — and once it is in, its rows stay as added (no later
+  shrinking or parking a tier).
+* **Gate:** `verify_deck.py`'s **`regression_tiers`** (blocking). A partial addition — some tiers
+  but not all, or rows without accepted GT — fails as `regression_tiers:partial`, which is **never**
+  signed off. Absent from every tier fails as `regression_tiers:too_slow`, which the user may sign
+  off (ledger "Approved deferrals", with the measured cost recorded) while the deck does not fit.
+
 ### 4a. Provider routing check (MANDATORY — run it before anything is measured)
 
 ```
@@ -789,6 +816,9 @@ Loop Stage 2 → 2d → 2d-bis → Stage 4 → Stage 5 until ALL hold:
 4. The (~15-20 game) claude-play sweep (5d) ran, and **every legality/invariant flag is resolved** — fixed (engine/card/data bug) or dismissed with a reason (verified false positive). Win-turn deltas are noted but do not block.
 5. Any narrowing heuristic introduced/relied on for this deck (cast ordering, dig, targeting, tutor/fetch) passed the **5e oracle diff + with/without A/B** — its proposals match the full search where it matters, with every per-game regression explained.
 6. **Play-viewer decision surface (5h) is clean**: `scripts/audit_viewer_decisions.py` reports no HARD MISS, no SELF-GUARD FAILURE, and no DRIVER FAILURE, and every UNVERIFIED row was confirmed by a targeted repro — every interactive choice the deck's cards create is surfaced in the human-play path, with no card's choice silently heuristic-resolved except a Stage 6a-disclosed, provably-inert known gap the user signed off on.
+7. **The deck is in all three regression tiers with accepted GT** (4-bis; `verify_deck.py`'s
+   `regression_tiers` gate), and every searched-depth slower game in each tier's suite run is
+   explained.
 
 Only a deck that satisfies all of these is "analyzed." Report (Stage 6) must state which checks were run and their outcomes.
 
@@ -885,9 +915,9 @@ default-on `MTG_<DECK>_BUCKET_DISCARD` flag (=0 restores the generic ranking). V
   per-game decision rate. Dragons' 97.79%/0.0238 sounds like a miss until the surface is
   0.029 sheds/game and the perfect-oracle prize is 0.0007 turns/game — unmeasurable.
   See `docs/design/per-deck-discard-analysis-phase.md`.
-* **Suite gates:** smoke + regression through the accept flow (slower searched games
-  classified — `test/classify_turn_later.sh`; draws-diverge = variance), overnight tier
-  to finish. The bar is NON-INFERIORITY: sheds are rare at shipped play on most decks and
+* **Suite gates:** all three tiers — smoke, regression AND overnight — through the accept flow
+  (slower searched games classified — `test/classify_turn_later.sh`; draws-diverge = variance).
+  Overnight is a required tier, not a nice-to-have (see 4-bis). The bar is NON-INFERIORITY: sheds are rare at shipped play on most decks and
   the searched executor already catches gross misses, so the value is doctrine quality
   plus rollout/gen fidelity (the rollout always sheds heuristically).
 

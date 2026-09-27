@@ -518,12 +518,18 @@ arms by construction.
 
 1. Add the deck + profile and get it implemented/analyzed (see `analyze-deck.md`).
 2. Add `[<name>]=...` to `DECK_FILE` and `DECK_PROF` in `regression_cases.sh`.
-3. Add cases to `SMOKE_CASES` / `REGRESSION_CASES` / `OVERNIGHT_CASES`. Size game
-   counts from a quick timing probe (mirror `TIMINGS.md`); keep each **mode**
-   within its total budget across **all** decks.
-4. If a mode now exceeds budget, **trim the cheaper decks first** (drop a high-
-   depth seed) rather than letting the mode overrun.
-5. Run each mode, inspect, `--accept`, and commit the new ground truth.
+3. Add cases to `SMOKE_CASES` / `REGRESSION_CASES` / `OVERNIGHT_CASES` — **ALL THREE, or
+   none** (USER 2026-09-27: *"we should add to the regression test in all modes or none. None is
+   only until we can optimize enough that it fits. Once it fits we add it and leave them
+   as-is."*). Size game counts from a quick timing probe (mirror `TIMINGS.md`); keep each
+   **mode** within its total budget across **all** decks.
+4. If the deck does not fit a mode's budget, it goes in **no** tier until optimization makes
+   it fit — never a subset of tiers, never rows parked "for later". Once added, the rows stay
+   as added: do not shrink an existing deck's rows to make room. `verify_deck.py`'s
+   `regression_tiers` gate fails any partial addition.
+5. Run each mode, inspect, `--accept`, and commit the new ground truth **in the same change**
+   as the rows. For a per-deck run, pass the SAME `--deck=` to `--accept` — without it the accept
+   treats the run as full-mode and drops that tier's earlier `accepted-with-regressions` notes (rows without GT strand NEW keys for whoever runs that tier next).
 
 The smoke matrix is also where to pin a few **known-troublesome specific games**
 (by seed) as decks reveal them, so the fast gate catches the bugs that bite.
