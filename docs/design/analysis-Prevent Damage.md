@@ -67,7 +67,10 @@ Living Wish, Vexing Shusher.
     Slime, Timeless Witness (searched gy return + eternalize), Dimir House Guard (transmute;
     regeneration PROVISIONAL deferral), Bilbo 111-life activation, viewer rows. Blueprint:
     `creatures_sideboard.md`.
-- NEXT: Stage 3 coverage loop (already clean at I3 -- re-run to confirm) -> Stage 4 profile -> 4a provider audit -> Stage 5 (verify_deck,
+- **STAGE 5 DONE (see "Stage 5 — verification" below; fixes `6d3f212c`, script fix `09a12ad2`).**
+  The deck FAILS the 5j 3x cost rule (~4.5x over) -> performance is the first goal before VL /
+  mulligan. Remaining: 5d claude-play fan-out, §5i discard buckets, suite rows + GT (after cost).
+- (historical) NEXT: Stage 3 coverage loop (already clean at I3 -- re-run to confirm) -> Stage 4 profile -> 4a provider audit -> Stage 5 (verify_deck,
   harnesses, depth sweep, 5c2 leaf tie-break, 5d claude-play fan-out (Opus), 5h viewer, 5i BUCKET
   discard policy — gate `discard_policy` is in the MAIN tree's uncommitted WIP, not upstream) ->
   add to all three regression tiers with GT -> Stage 6 report.
@@ -556,6 +559,217 @@ sac Purity, 7/3 Dina wins T4).
 - `audit_viewer_decisions.py` gained `--sideboard` (opt-in so no other deck moves); `verify_deck`'s
   viewer gate still audits the main zone only -- Stage 5 should run it with `--sideboard` for this deck.
 
+## Stage 5 — verification (2026-09-27, Opus verifier; worktree `/tmp/pd-wt`)
+
+Commits: **`6d3f212c`** (the Stage 5 fixes below). Every run pooled into ONE `mtg --batch` per
+process-wide env setting, seeds disjoint from the suite (suite uses 1001 / 2002,3003 / 4004-7007 x
+<=1000 games; Stage 5 used 12001, 13001, 14001, 20001, 21001, 1,000,000+). Scratch under
+`logs/prevent_damage/stage5/` (gitignored).
+
+### 1. `verify_deck.py` (before the fixes, HEAD ece1abbe)
+| gate | result |
+|---|---|
+| coverage | PASS — 26 cards full (main + side) |
+| card_costs | FAIL (did-not-run, not a mismatch) — 95 costs unverified, Scryfall 429. **None of the 26 Prevent Damage cards is among them** (all compared, all match). Re-run when the rate limit clears. |
+| card_fields | FAIL — the ONE pre-existing `Basri, Tomorrow's Champion` `exert` keyword mismatch (not ours, recorded since I1) |
+| clause_ledger | SKIP (by design) |
+| regression_tiers / suite | FAIL — expected: the deck is not in the suite yet (a later step adds it; not added here) |
+| viewer | PASS; viewer_wiring PASS (`sacrifice`) |
+| mismatch | PASS — 0 nonconv / fd-diverge, seeds 7001/7002 x 60 |
+| play_invariants | **FAIL, 8 violations -> FIXED (harness gaps, not engine bugs)** — see Fixes (c). Re-run: 8 games / 176 decisions, all hard invariants hold. |
+| claude_sweep | SKIP — 5d not run by this verifier (it is a separate fan-out step) |
+| discard_policy | **gate does not exist in this tree** (it lives in the main checkout's uncommitted WIP); the §5i bucket policy is a later step |
+
+`audit_viewer_decisions.py ... --sideboard` (5h): **PASS**. Expected types dig / sacrifice / target;
+Acidic Slime + Shriekmaw `target`, Timeless Witness `dig`, Dimir House Guard transmute all VERIFIED by
+targeted seed-search. One advisory: House Guard's regeneration "Sacrifice a creature" (its disclosed
+PROVISIONAL deferral). Bilbo's put multi-pick was not exercised (0 real activations anywhere).
+
+### 2. 5a mismatch harnesses — PASS (zero lines, before AND after the fixes)
+- `MTG_FLAG_NONCONV`, d3 b20, 2 x 250 games (s12001, s13001): **0 `[nonconv]`** (ece1abbe) and 0 again
+  on `6d3f212c`. avg 5.664 / 5.684 -> 5.668 / 5.680; 487/500 won.
+- `MTG_FULL_DEPTH + MTG_FD_ORACLE`, d5 b20, same seeds: **0 `[fd-diverge]`** before and after.
+- `MTG_PD_STATS` on the post-fix runs: **0 real own deaths in 1,000 games.**
+- Oddity recorded (not a defect): at s12001 the d3/b20 run and the d5/b20 full-depth run are
+  DIGEST-IDENTICAL (same per-game units on the slow games too) — the extra depth changes nothing on
+  that block; d3/b10 vs d5/b20 differ on only 7/300 games at s14001 (5b).
+
+### 3. 5b depth sweep (s14001, one pooled batch, suite-like budgets)
+| cell | games | won | loss-pen. avg | per-game (batch ms) |
+|---|---|---|---|---|
+| d0 | 1000 | 317 (31.7%) | 8.300 | 0.4 ms |
+| d3 b10 | 300 | 290 | 5.867 | 8,929 ms |
+| d5 b20 | 300 | 291 | 5.847 | 14,031 ms |
+
+Monotonic (d0 << d3 <= d5). Clock plausible: d5 T4 7, T5 116, T6 120, T7 39, T8 9, unwon 9 — the
+intended kill (engine online T3-4, drain T5-6) is the mode. Per game d3->d5: 6 faster, 1 slower
+(gi142 T5->T6, a budget line-shift: identical at b200/b1000). **d0 is very weak (68% unwon)**: the
+greedy rollout plays this deck badly (see Open items: 5i rollout-quality digest is warranted).
+
+Every d5 unwon game read (logs `stage5/unwon/g*`), **no own deaths** (life > 0 in all nine):
+- g3, g266 — kept two Reflecting Pools (a lone/only-Pool hand makes NO mana); g283 — Pool + Ancient
+  Tomb (no coloured source). Keep-quality with the baseline profile; the mulligan stage's job.
+- g11 — Tomb x2 + Forge, no G/B source: Earthquake the only castable card.
+- g185, g262 — two-land stall T2-T6; the search chips with Rolling Earthquake X=1 while Tamanoa sits
+  uncastable (the damage-race tie-break prefers burn now; see 5c2).
+- g252, g289 — flood / no drain piece; symmetric self-burn (Earthquake, a second Manabarbs with no
+  gain engine) to 1-3 life, then locked. Hopeless draws.
+- **g196 — a MISPLAY, fixed:** T5 cast a SECOND Vito ({2}{B} + Spellshock 2 + Citadel 3 + Tomb 2 =
+  7 life) into the legend rule, 8 -> 1 life, then could never cast again. Traced: pass and the
+  duplicate tied on the graded no-win leaf (tb 15,000,000 both) and `plan.value` preferred casting;
+  the greedy rollout itself casts the duplicate, so pricing our life at the leaf could not see it
+  either (MTG_PD_LEAF_OWN_LIFE made no difference). Fix (b) below.
+
+### 4. 5c budget starvation (19 slow/unwon d5 games x b20 / b200 / b1000, one batch)
+b20 reproduces every original result. Of the nine T8 wins, four speed up with 10-50x budget (g167
+8->7, g202 8->7, g234 8->7->6, g149 8->7 at b200 but back to 8 at b1000 — non-monotone churn); the
+other five are unchanged. **All ten unwon games stay unwon at b1000** — they are mana screw / stall,
+not starvation. Threshold: mild starvation on ~4/300 games, recovered by ~b200. Not a logic bug.
+
+### 5. The PROVISIONAL levers — one pooled paired A/B (d5 b20 = play settings, s20001 + s21001 x 300)
+arm minus base, per game, loss-penalised (negative = the arm is faster):
+
+| lever (arm) | delta | t | arm slower / faster | CPU vs base | decision |
+|---|---|---|---|---|---|
+| `MTG_PD_DINA_LETHAL_GATE=0` | **+0.0400** | +2.85 | 41 / 17 | 1.06x | **KEEP ON** — the gate is confirmed on held-out seeds |
+| `MTG_PD_SECOND_MAIN=0` | -0.0033 | -0.23 | 35 / 34 | **0.63x** | quality-neutral (as I2's n=200 probe); m2 costs **1.6x for nothing measurable**. Default left ON per 2c-bis — **PROVISIONAL, recommend OFF (user call)**; it is the first cost lever for the 3x gate |
+| `MTG_PD_LEAF_OWN_LIFE=1` (new) | -0.0033 | -0.58 | 4 / 5 | 1.01x | neutral -> stays OFF (no sign; the rollout, not the leaf, was the problem) |
+| `MTG_PD_DUP_LEGEND=0` (new, 2nd batch) | +0.0017 | +0.45 | 3 / 2 | 1.00x | keep ON (dominated-cast prune; fixes the g196 class) |
+| `MTG_PD_SELF_LETHAL_GUARD=0` (new, 2nd batch) | +0.0050 | +0.83 | 4 / 3 | 1.00x | keep ON — **real own deaths 2 -> 0** |
+
+Base after the fixes: 579/600 won, loss-penalised 5.810. The second batch's guard-OFF arm reproduced
+the first batch's base digests exactly (the control that must match: nothing else moved).
+
+### 6. Fixes (commit `6d3f212c`; rules skill consulted for the SBA-before-trigger ordering)
+(a) **Suicide guard** (`MTG_PD_SELF_LETHAL_GUARD`, default ON, heurarm slot). s20001 gi72 (found as a
+    regression of the dup-legend arm): T4 Manabarbs at 8 life -> 1, then at 1 life under Manabarbs
+    EVERY cast is a suicide (the first barb resolves, SBA, before Tamanoa's gain — the card's own
+    ruling). The greedy rollout took one each turn, so every leaf including `<pass>` read
+    `kOwnDeath`, the tie-break went blind, and `plan.value` committed a REAL suicide (Rolling
+    Earthquake X=5 at 1 life, T5). New `dmgev::FirstLandTapKills` (lower bound: 1-point first barb
+    with a Tamanoa, all barbs without; Purity prevents; any untapped non-land mana source voids it;
+    floating mana netted by the caller) drops such CAST plans at both subset enumerators through the
+    new `DecisionProvider::GuardsSelfLethalPayment` hook (default false: every other deck
+    byte-identical). `PreventDamageProvider::XCandidates` drops an Earthquake X >= our life unless
+    Purity (the `PingAllSelfSafe` twin: X >= life is a loss, or a DRAW when it also kills the
+    opponent — never a win). Not covered (disclosed): a Pyrohemia activation whose {R} land tap
+    barbs us to death at life 2+ (the ping guard checks only the ping); pain from the tapped land
+    itself; gains earlier in the same plan (not credited to the X cap).
+(b) **Duplicate legend** (`MTG_PD_DUP_LEGEND`, default ON). Vito and Dina are `custom`, so the generic
+    enter-inert whitelist never pruned a second copy. `PreventDamageProvider::OfferDuplicateLegendCast`
+    offers it only when the CAST can pay — a damaging cast trigger (Spellshock) AND a gain engine
+    (Tamanoa/Purity), on board or in hand and affordable together with the duplicate — or when the
+    base entry/death-upside helper says so. (First draft counted an unaffordable Tamanoa in hand and
+    re-opened the same misplay on T6; tightened by a mana bound.)
+(c) **play_invariants false positives.** `tutor_etb` (every tutor cast since 2026-09-10) was not a
+    known type; and the viewer's display collapse (`hide_bundle`: tutor/wish cast fan, pod fan,
+    sac loops) legitimately leaves GAPS in real engine indices, which the checker read as
+    "non-contiguous". `main.cpp` now emits `"plans_hidden": N` (capped mode only, only when N > 0;
+    the uncapped reference checker never sees it) and the checker requires strictly increasing
+    indices bounded by emitted + hidden. Any deck with Living Wish / pod / Chord would have tripped it.
+(d) Levers/diagnostics: `PD_DINA_LETHAL_GATE` is now a heurarm slot (was a static env read, so it
+    could not pool); `MTG_PD_LEAF_OWN_LIFE` (default OFF); `MTG_PD_STATS` prints `[pd-own-death]` per
+    REAL own death (bottoming trial playouts also run through GameEngine — excluded via
+    `g_real_resolution`) with the job's PD lever overrides; the solve trace prints the graded leaf
+    `tb=`.
+Tests: 4 new unit cases (X cap + Purity, FirstLandTapKills incl. an OPPONENT's Manabarbs and an
+unarmed board, the enumerator offers no cast at 1 life under Manabarbs, the duplicate-Vito rule).
+mtg-test 296/296; scenarios 117/117; **smoke 101/101 byte-identical, play-changed 0**;
+`viewer_protocol_check --strict` unchanged (30 ok / 304 repaired / 0 play-drift / 0 enum-gap /
+0 contract-fail; the one board-diverged ref is the pre-existing Snow one).
+
+### 7. 5c2 horizon-honest tie-break — KEEP THE DEFAULT (ON)
+`leaf_tiebreak_check.py --blocks 4 --games 500` at PLAY settings (d5/b20, the built-in default; no
+value_play yet), on `6d3f212c`: **123 changed of 2,000 paired (6.15% binding), net -16 turns
+(-0.008/game), 55 worse / 68 better** — half A -17, half B +1 (the halves disagree in size, not in a
+way that would flip the verdict). The script first printed "0 changed of 0 paired — NO SIGN": its
+`[win]` parser (`job=(\S+)`) could not match a deck stem containing a SPACE, so it compared nothing.
+Fixed in **`09a12ad2`** (parse `job=(.+?) gi=`; a zero-paired comparison is now an ERROR, never NO
+SIGN) and the same output re-parsed — no re-run needed. **Consequence for other decks:** every stem
+with a space was exposed (Creature Giving, Melira Pod, Mirrorwing Dragon, Unpredictable Cyclone);
+Melira Pod's ledger records "NO SIGN at 1,200 paired (0 changed)", which is almost certainly this bug
+— its 5c2 is void and should be re-run. The stored-value failure mode the task warned about is
+visible in individual games (g185/g262 chip with Earthquake X=1 before Tamanoa; g252/g289 burn their
+own life) but the aggregate still favours the tie-break at this sample.
+
+### 8. 5j suite cost — **FAIL the 3x rule by ~4.5x** (report only; no rows added)
+`suite_gate.py --cost` has nothing to read (no suite cases), so the number is measured directly with
+the same metric (`batch ms / games`, max over searched cells) from the 5b pooled batch (s14001):
+**d3 b10 = 8,929 ms/game, d5 b20 = 14,031 ms/game.** Reference = fivecolour 1,033.46 ms/game ->
+budget 3,100 ms/game. Prevent Damage is **13.6x the reference, ~4.5x over the budget.**
+`MTG_PD_SECOND_MAIN=0` alone is 0.63x (-> ~8.9 s, still ~2.9x over). Per the 3x rule the deck must
+NOT be added as-is and **performance becomes the first goal, before the value leaf and mulligan
+profile** (both generators are blocked by `--require` anyway). User's call.
+
+### 9. 5f perf — where the time goes (report only; no pruners added)
+One slow d5/b20 game (s14013 gi12, 123 s, 2 mulligans) under `perf` (Profile build) and
+`MTG_ROLLOUT_STATS`: units_total 2.43M over 141 searched decisions (~17k/decision — the b20 budget of
+18k units IS respected), so the cost is **per-unit expense x decision count**, not a blow-up:
+~50 µs per unit. The iterative-deepening ladder commits at **depth 1 on 95/141 decisions** (d2 36,
+d3 7) — at b20 this deck's "d5" is effectively d1-d2, i.e. starved (consistent with 5c). Units split:
+root candidates 35%, rollout steps 32%, greedy fallback 32%. Self-time is flat — BuildSimKey 4.5%,
+CollectActions 4.3%, SolveUncached 4.1%, operator new 3.1%, EnumeratePlans 2.4%, then a long tail
+(TT hashing, ApplyPlanDirect, ReflectedColors 1.3%, ColorFeasibility, FlushDamageEvents 1.1%,
+GenericProvider::TutorCandidates 0.8%). The searched second main is ~15% inclusive. **No single
+decision point explodes**: root candidate lists at T3 run 19-47 (Beseech twobrid x tutor width 20,
+Living Wish's 13 names), T6 mostly 1-11. The width candidates for a future (A/B-gated) narrowing:
+the tutor axis (width 20 x twobrid k=0..3 for Beseech), Rolling Earthquake X 1..max, Pyrohemia K
+1..max. The cheapest measured lever is `PD_SECOND_MAIN=0` (0.63x, quality-neutral).
+Bottoming: mulliganed games pay clairvoyant bottoming playouts at depth (Fluctuator's lesson) — not
+separately quantified here.
+
+### 10. 5e/5g heuristic mining (`mine_heuristics.sh`, d5 / b3000, all turns) — CANDIDATES ONLY
+Cost is extreme for this deck (~50 CPU-s per mined decision; a 24-game probe was still grinding
+after 13 min). Ran `GAMES=80 SEEDS="30001 31001"` and stopped it (my own run) at ~55 min with seed
+30001 partly done: **374 decisions, ONE seed** — below the >=2-seed overfit guard, so every rule
+below is LOW-CONFIDENCE. Nothing encoded (cast order is user-reviewed per deck).
+- **ORDER (0-conflict):** Living Wish before Rolling Earthquake (16/0), GSZ before Earthquake (7/0,
+  10 ties), Vito before Earthquake (6/0), Beseech before Earthquake (4/0), Beseech / Living Wish
+  before Manabarbs (3/0 each). One shape: **tutor/assemble the engine, THEN sweep** (the sweeper is
+  the payoff). Mixed: GSZ vs Living Wish (4/1), Manabarbs vs Earthquake (2/1) — leave to the search.
+- **INCLUSION** (every card + = "not this turn" on average; read the split): Vito +0.02 (neutral),
+  Living Wish +0.13 (11 help / 23 hurt), Beseech +0.26 (9/21), Tamanoa +0.28, GSZ +0.35, Faithmender
+  +0.50, **Rolling Earthquake +0.59 (1 help / 73 hurt)**, Spellshock +0.69 (0 help), **Manabarbs
+  +0.85 (1/49)**, Pyrohemia +0.89 (n=9). All "setup / leave to the search" per the table — but the
+  Earthquake/Manabarbs/Spellshock rows are the stored-value signature (self-damage enablers and the
+  sweeper are worth little before the gain engine is out), matching g185/g262/g252/g289. A candidate
+  for a per-deck cast-order / hold review, not a gate.
+- **LAND:** Reflecting Pool 1215, Ancient Tomb 1023, City of Brass 650, Battlefield Forge 551,
+  Tarnished Citadel 505, Brushland 369, Grand Coliseum 223, Karplusan Forest 85 (earliest-win lines).
+Artifacts: `logs/prevent_damage/stage5/mine_s30001_partial.ewins.jsonl`, `mine_report.txt`.
+
+### 11. Outlier re-check on the fixed binary
+s14001 gi142 (d3 T5 vs d5 T6 at every budget on ece1abbe — the one depth non-monotone game) now
+wins **T5 at both d3/b10 and d5/b20** on `6d3f212c` (hand holds a second Vito, so the duplicate-legend prune is the likely mover; the
+old T6 line was not re-traced). g196 is still unwon (it no longer burns 7 life on the duplicate; the hand is short of a
+gain engine until T6 and the game is lost to the clock).
+
+### 12. Open items / PROVISIONAL (surfaced, not blocking; defaults taken)
+1. **3x cost gate FAILS (~4.5x over).** Performance is the first goal before VL / mulligan. First
+   lever: `MTG_PD_SECOND_MAIN=0` (0.63x, quality-neutral at n=600) — **PROVISIONAL default left ON**
+   per 2c-bis; recommend OFF (user call). Then the tutor width x twobrid axis, X/K ranges (A/B-gated).
+2. d0 greedy is weak (31.7% won, LP 8.30 vs 5.85 searched) and the rollout IS the leaf: a 5i
+   rollout-quality digest (`MTG_DIVERGENCE_LOG`) is warranted — the suicide/duplicate-legend fixes
+   were both rollout-policy failures surfacing as root misplays.
+3. Stored-value valuation: Earthquake as early burn and a second Manabarbs with no gain engine
+   (g185/g262/g252/g289; miner INCLUSION rows). 5c2 still favours the tie-break in aggregate;
+   `MTG_PD_LEAF_OWN_LIFE` measured neutral. A hold rule belongs in the user-reviewed cast-order pass.
+4. Suicide guard gaps (disclosed in 6(a)): Pyrohemia's {R} tap barb at life 2+, own-land pain, gains
+   earlier in the same plan.
+5. Keep quality with the baseline profile: Reflecting-Pool-only / no-coloured-source keeps are the
+   single largest unwon class (g3, g266, g283) — the mulligan stage (after the cost gate).
+6. **Melira Pod's 5c2 NO SIGN is void** (the space-in-stem parser bug, fixed `09a12ad2`); re-run it.
+   Mirrorwing Dragon / Creature Giving / Unpredictable Cyclone likewise if they ever ran the script.
+7. Card-cost audit incomplete (95 cards 429'd, none of ours) — re-run `audit_card_costs.py` later.
+8. 5d claude-play sweep and the §5i discard bucket policy: not run here (separate steps; the
+   `discard_policy` gate is not in this tree). Regression-tier rows + GT: not added (separate step,
+   and blocked by item 1).
+9. mine_heuristics: one partial seed only — re-mine with a second seed before any cast-order work.
+
+**Post-fix `verify_deck --no-network` (on `09a12ad2`):** coverage, viewer, viewer_wiring, mismatch,
+**play_invariants PASS** (8 games / 176 decisions); card_fields FAIL (Basri, pre-existing);
+regression_tiers / suite FAIL (expected, not added); card_costs / clause_ledger / claude_sweep SKIP.
+
 ## Open questions / provisional decisions (surfaced to user, not blocking)
 
 1. Own-death mid-turn as a GLOBAL rules fix? Default taken: GATED to armed decks; measure with
@@ -578,3 +792,11 @@ sac Purity, 7/3 Dina wins T4).
 9. Shriekmaw / Acidic Slime own-side victim, Timeless Witness unpinned return, Bilbo's "any number"
    put: provider rankings (not searched), reviewed not measured -- none fires in real play at n=200.
    PROVISIONAL.
+10. (Stage 5) `MTG_PD_SECOND_MAIN` measured again: quality-neutral (-0.0033, t -0.23, n=600) at 0.63x
+    CPU when OFF. Default kept ON (2c-bis); recommend OFF — especially since the deck fails the 3x cost
+    gate. PROVISIONAL.
+11. (Stage 5) New default-ON levers `MTG_PD_SELF_LETHAL_GUARD` and `MTG_PD_DUP_LEGEND` (rules-derived
+    dominance prunes; own deaths 2 -> 0 per 600; both neutral-or-better on the metric). PROVISIONAL
+    pending the user's review.
+12. (Stage 5) 3x cost rule: FAIL (~14.0 s/game at d5/b20 vs the 3.1 s budget). Deck not added to the
+    suite; optimisation is the next goal (user call on how far to push before VL / mulligan).
