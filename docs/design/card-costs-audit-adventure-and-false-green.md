@@ -14,6 +14,26 @@ here at the top.
 confirmed against live Scryfall (`layout: adventure`, faces carrying the correct per-half costs).
 The Fungus `card_costs` gate now passes on its own merits rather than because nothing was compared.
 
+**Live confirmation, and it exercises both fixes in one run.** A full sweep over `cards.json` after
+the fix:
+
+```
+Checked 326 costed cards against Scryfall; 238 actually compared.
+All 238 compared mana costs match Scryfall.
+NOT COMPARED (88) -- Scryfall unreachable/rate-limited ...        rc=2
+```
+
+Brightcap Badger and Fungus Frolic are in the 238 that **compared and matched** — Bug 1 gone on the
+live path. The same run shows Bug 2's fix earning its keep: 88 cards were 429'd, and the old code
+would have printed "All mana costs match Scryfall" and exited **0** over those 88. One Fungus card
+(Mycoloth) was among them, and a targeted re-run cleared it at `rc=0`, so every costed Fungus card
+is now verified against live Scryfall. Basic lands carry no printed cost and are skipped by design.
+
+**Expect rc 2 to be common, and do not "fix" it by reverting.** The audit covers all of `cards.json`,
+not just the deck under test, so any 429 anywhere makes the gate report INCOMPLETE. That is the
+point: it is the difference between "verified" and "never asked". Space the networked audits out and
+re-run.
+
 **One correction to the note below, and it strengthens its case.** The offline repro cannot be
 cleared by the Bug 1 fix, because the committed snapshot `scryfall_reference.json` stores only the
 joined string and **no `card_faces`** for either name — there is no face to select. That is exactly
