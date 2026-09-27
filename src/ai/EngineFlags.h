@@ -631,6 +631,20 @@ inline bool BpEtbDigEnabled()
     return heurarm::Flag(heurarm::BP_ETB_DIG, v);
 }
 
+// MTG_BP_RECORD_VIAL -- DEFAULT ON (2026-09-26); =0 restores the unrecorded put for the A/B.
+// A LOCKSTEP fix, not a heuristic: an Aether Vial put applied inside a breakpoint CONTINUATION was
+// never written to the committed breakpoint script (apply_vial had no sink_stack record, unlike the
+// cast / SacForMana / Suspend branches), so the executor's replay_recorded never deployed it -- the
+// rollout scored a creature the real turn never had. Latent until MTG_BP_ETB_DIG opened a breakpoint
+// after Acclaimed Contender's dig, whose continuation typically has no mana left and so can only
+// Vial the dug card in; the phantom then biased Knights toward Vial / Contender lines (smoke gi114,
+// gi215, gi88, knights2hg gi29, every one an MTG_FD_ORACLE fd-diverge, predicted T4 realised T5).
+inline bool BpRecordVialEnabled()
+{
+    static const bool v = EnvOn("MTG_BP_RECORD_VIAL", true);   // DEFAULT ON; =0 reverts
+    return v;
+}
+
 // MTG_TOP_RESOLVE=1 -- measurement lever (DEFAULT OFF until the adoption A/B is accepted): the
 // USER's tutor-to-TOP reset (StompySurprise cast-order review, 2026-08-21: "We need to build the
 // reset for my combo to be workable ... Cast worldly tutor -> now activations and Turntimber can

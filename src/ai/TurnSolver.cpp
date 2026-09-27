@@ -28346,6 +28346,21 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
             {
                 EnforceLegendRule(state, state.active_player_index);
             }
+            // RECORD A CONTINUATION'S VIAL PUT (MTG_BP_RECORD_VIAL, default ON; see EngineFlags.h).
+            // Inside a breakpoint continuation (sink_stack non-empty) every applied action must land
+            // in the committed breakpoint script the executor replays -- casts, SacForMana and
+            // Suspend already do; this put did not, so the rollout credited a creature the real turn
+            // never deployed (Knights gi114: Contender digs Venerable Knight, the continuation Vials
+            // it in, the executor's replay is EMPTY -> predicted T4, realised T5). replay_recorded
+            // already deploys a recorded ActivateVial via deploy_via_vial. Recorded in APPLY order,
+            // which is the order the replay loop walks.
+            if (BpRecordVialEnabled() && out_breakpoint && !sink_stack.empty())
+            {
+                Action rec;
+                rec.kind      = Action::Kind::ActivateVial;
+                rec.card_name = name;
+                sink_stack.back()->push_back(rec);
+            }
             return;
         }
     };
