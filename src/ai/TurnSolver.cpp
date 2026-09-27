@@ -4719,12 +4719,16 @@ inline std::map<std::string, uint64_t> g_who;      // "<tier> site N <arming car
 //                strictly better evidence than re-deriving PlanOpensBreakpoint here: the audit
 //                sits MID-apply and the fan-out asked PRE-apply. Writing a clause for this tier
 //                would be buying intent, not reachability. See the `selected` test.
-inline void RecordWho(int site, const char* name, bool hard, const char* host_tag)
+inline void RecordWho(int site, const char* name, bool hard, const char* host_tag,
+                      int caller_line)
 {
-    char key[128];
-    std::snprintf(key, sizeof(key), "%s site %-2d %-9s %s",
+    // `caller_line` = the ApplyPlanDirect CALL SITE. A [NOHOST] default cannot be closed by any
+    // predicate -- it needs a caller to offer a capture -- so the audit is useless for that tier
+    // without naming which caller. Printed as `apply@<line>`.
+    char key[160];
+    std::snprintf(key, sizeof(key), "%s site %-2d %-9s apply@%-6d %s",
                   hard ? "UNCHALLENGEABLE" : "site-unmarked  ", site,
-                  host_tag, (name && *name) ? name : "(inline cast)");
+                  host_tag, caller_line, (name && *name) ? name : "(inline cast)");
     std::lock_guard<std::mutex> lk(g_who_mtx);
     ++g_who[key];
 }
@@ -11310,10 +11314,20 @@ static inline bool EquipPieceDepViolated(const EquipPieceDeps& d, const std::vec
 // breakpoint prefix-resume cache hooks (see BpPrefixSnap at the definition) -- only the wave loops
 // pass them.
 struct BpPrefixSnap;
+// DIAGNOSTIC ONLY: the line number of the ApplyPlanDirect call site currently executing on this
+// thread. Written at entry, read by the canon audit. Not part of any key, digest, or decision --
+// see the caller_line note on the declaration below.
+static thread_local int g_apply_caller_line = 0;
 static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool is_pre_combat,
                             std::vector<Action>* out_breakpoint = nullptr,
                             BpPrefixSnap* bp_capture = nullptr,
-                            const BpPrefixSnap* bp_resume = nullptr);
+                            const BpPrefixSnap* bp_resume = nullptr,
+                            // DIAGNOSTIC ONLY (MTG_BP_CANON_AUDIT): which CALL SITE this apply came
+                            // from. __builtin_LINE() as a DEFAULT ARGUMENT is evaluated at the call
+                            // site, so every one of the 53 callers is named with no edit at any of
+                            // them. The canon audit needs this because a [NOHOST] default "needs a
+                            // caller, not a predicate" (canonaudit::RecordWho's host_tag note).
+                            int caller_line = __builtin_LINE());
 
 // ORDER-CONDEMNATION root-turn authority. A condemnation is the record of a FULL-BUDGET searched
 // decline, and only ONE decision per search has that authority: the root turn the outermost solve
@@ -28359,8 +28373,10 @@ void TurnSolver::OrderTrailingActivations(const GameState& state, std::vector<Ac
 
 static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool is_pre_combat,
                             std::vector<Action>* out_breakpoint,   // default args on the fwd decl
-                            BpPrefixSnap* bp_capture, const BpPrefixSnap* bp_resume)
+                            BpPrefixSnap* bp_capture, const BpPrefixSnap* bp_resume,
+                            int caller_line)
 {
+    g_apply_caller_line = caller_line;
     PROF_INC(applyplan_calls);
     {
         static const bool s_lp = EnvOn("MTG_WINLESS_STATS");
@@ -29204,12 +29220,12 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
             if (!selected)
             {
                 canonaudit::g_unreachable[site].fetch_add(1, std::memory_order_relaxed);
-                canonaudit::RecordWho(site, who, /*hard=*/true, host_tag);
+                canonaudit::RecordWho(site, who, /*hard=*/true, host_tag, g_apply_caller_line);
             }
             else if (((opens >> site) & 1) == 0 && !dig_ok && !node_ok)
             {
                 canonaudit::g_unmarked[site].fetch_add(1, std::memory_order_relaxed);
-                canonaudit::RecordWho(site, who, /*hard=*/false, host_tag);
+                canonaudit::RecordWho(site, who, /*hard=*/false, host_tag, g_apply_caller_line);
             }
         }
         if (!resolved)
