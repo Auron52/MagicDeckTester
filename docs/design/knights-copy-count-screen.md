@@ -2396,11 +2396,19 @@ still open:**
    to equip it. Shroud (unmodelled removal protection) was the only half the sign-off was waiting on.
    **Operationally this changes nothing: Greaves has been 0 in the candidate base since round C/D**, so
    every round since ran on a Greaves-0 list. No re-measurement is owed.
-3. **Benalish Marshal 4→3 is PRICED BUT UNRULED** (round M, −0.0081, grew on held-out −0.0065 → −0.0097).
-   The `+1/+1` power half dominates the race and is fully modelled; the toughness half pays only against
-   blockers and damage-based removal, neither of which exists here — the quarantine class, so it gets a
-   price and never a verdict. User's call. **See the framing section below before reading the number as
-   "cutting a good card".**
+3. **BENALISH MARSHAL 4 STAYS — RULED (user, 2026-09-27). The 4th SILVERBLADE PALADIN pays for the 24th
+   land instead.** Round M priced the Marshal cut at −0.0081, but the user overrode it on an unmodellable
+   structural argument: soulbond breaks when **either** half leaves (CR 702.94), so one removal spell
+   strips double strike from two creatures and the survivor loses the block it would have won, whereas a
+   lord degrades gracefully. The passive opponent cannot represent any of that, so 100% of Silverblade's
+   modelled value is its best case. **The resulting list is round M's own control arm `m_sp3_p20`
+   (+0.0019, held-out +0.0005 — a null), whose keep table is already on disk, so it owes NO new
+   measurement.** Full reasoning and the two consequences it implies are in the round M section above.
+4. **Still open from that ruling, neither decided:** how far down the Silverblade ladder to go (the
+   margin-vs-floor table puts the 2nd copy out of reach of the objection and the 3rd squarely inside it,
+   so **Silverblade 2** is the natural extension), and a **land-ladder re-test against a trusted payer** —
+   round G paid for lands in Silverblade copies, and `g_l25`'s +0.0144 rejection is roughly exactly the
+   inflation on the three copies it shed. Settle the land count before adoption freezes it.
 
 **Then adoption**, which is unstarted and is the expensive part — see the ADOPTION RUNBOOK section above.
 Note it throws away the shipped keep table (worth −0.1985 on its own) and the value leaf, so the list it
