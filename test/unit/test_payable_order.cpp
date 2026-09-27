@@ -238,7 +238,11 @@ TEST_CASE("Payable order ON, five lands: the executor's own cast path pays the r
     // resolution), Buccaneer revealing Malcolm at {R}, Malcolm off the last land + the Treasure.
     PoArms arms(true, true);
     GameState s = MalcolmTurn(5);
-    const TurnSolver::Plan* all3 = FindAllThree(TurnSolver::EnumerateMainPlans(s, true));
+    // Keep the enumeration ALIVE: FindAllThree returns a pointer INTO it. Passing the temporary
+    // straight in left a dangling pointer -- it happened to survive locally and read an empty plan on
+    // both CI runners.
+    const std::vector<TurnSolver::Plan> plans = TurnSolver::EnumerateMainPlans(s, true);
+    const TurnSolver::Plan* all3 = FindAllThree(plans);
     REQUIRE(all3 != nullptr);
     const std::vector<std::string> ord = RealisedNames(s, *all3, true);
     REQUIRE(ord == kIdeal);
