@@ -973,25 +973,25 @@ INERT_PARAMS = {
     "reduces_cycling_activation": "Fluctuator: STATIC cycling-cost reduction, no choice of its own -- it only makes the existing cycling activations cheaper (often FREE), and those already surface as cycling_cost main_phase plays. Nothing is decided when it applies.",
     "cost_less_per_cycle_or_discard": "Hollow One: STATIC cost reduction scaled by a per-turn counter (cards cycled or discarded this turn). Like any cost reducer it creates no decision -- it only changes what the existing main_phase cast plans cost, and the cycling that drives the counter is itself already surfaced as cycling_cost main_phase plays.",
     "cycle_trigger_damage_each_opponent": "Drannith Stinger: MANDATORY triggered ability on every cycle ('deals 1 damage to each opponent'). Not a may-ability and it takes no target -- 'each opponent' is the whole set, which in a goldfish is one player. No choice.",
-    # --- Pirates (2026-09-26). PROVISIONAL CLASSIFICATIONS -- added by the Pirates integrator and
-    # NOT YET SIGNED OFF by the user (this script's self-guard requires the user's OK for every
-    # INERT_PARAMS row). Each is a mandatory/untargeted effect or a payload detail; the one real
-    # choice among them (the chosen creature type) is resolved from the deck exactly like
-    # chooses_creature_type above and is disclosed as a known inert gap.
-    "chosen_type_added_to_self": "PROVISIONAL (Pirates): Metallic Mimic / Adaptive Automaton 'as this enters, choose a creature type ... is the chosen type in addition' -- resolved deterministically from the deck (DominantCreatureSubtypeId), the chooses_creature_type precedent; the deck's tribe weakly dominates every alternative for these cards. No player choice surfaced (disclosed inert gap)",
-    "other_chosen_subtype_enters_counters": "PROVISIONAL (Pirates): Metallic Mimic's mandatory as-enters +1/+1 counter replacement (CR 614) on other creatures of the chosen type, no choice",
-    "lord_affects_chosen_subtype": "PROVISIONAL (Pirates): Adaptive Automaton's static lord scope (the chosen type), no choice",
-    "etb_creates_treasures": "PROVISIONAL (Pirates): Corsair Captain's mandatory ETB Treasure (sac-for-mana is a searched plan action / payment choice)",
-    "attack_pump_tough_per_other_matching": "PROVISIONAL (Pirates): automatic attack trigger toughness half (Dire Fleet Captain +1/+1 per other attacking Pirate), no choice",
-    "static_artifact_threshold": "PROVISIONAL (Pirates): conditional static self-buff threshold (Goblin Tomb Raider: control an artifact) -- no choice",
-    "static_artifact_power": "PROVISIONAL (Pirates): conditional static self-buff magnitude (Goblin Tomb Raider +1/+0) -- no choice",
-    "static_artifact_tough": "PROVISIONAL (Pirates): conditional static self-buff magnitude -- no choice",
-    "static_artifact_haste": "PROVISIONAL (Pirates): conditional static haste (Goblin Tomb Raider, artifact controlled) -- no choice",
-    "own_creature_enters_opp_life_loss": "PROVISIONAL (Pirates): automatic enter trigger (Forerunner of the Coalition) -- mandatory, untargeted ('each opponent loses 1'), nothing to pick",
-    "nth_spell_trigger_n": "PROVISIONAL (Pirates): automatic on-cast trigger count (Malcolm, the Eyes: second spell), no choice",
-    "nth_spell_investigate": "PROVISIONAL (Pirates): mandatory investigate on the Nth spell (Malcolm); the Clue crack surfaces as a main_phase SacDraw plan action via the Clue Token def",
-    "reveal_or_pay_subtype": "PROVISIONAL (Pirates): Daring Buccaneer 'reveal a Pirate card from your hand or pay {2}' -- auto-REVEAL whenever possible because paying is STRICTLY DOMINATED (revealing is free; the passive opponent gains nothing from the information; nothing in the engine reads revealed cards or mana spent). WHICH Pirate is revealed is inert (it stays in hand). A human who wants the {2} line can still reach it by casting the last other Pirate first (every cast is priced live). DISCLOSED in 6a",
-    "reveal_or_pay_cost": "PROVISIONAL (Pirates): Daring Buccaneer's pay-instead amount ({2}) -- a printed constant of the additional cost, charged automatically only when no reveal is possible; no choice",
+    # --- Pirates (2026-09-26; USER-APPROVED 2026-09-27: "3 is approved"). Each is a mandatory/
+    # untargeted effect or a payload detail. Two hide a real choice resolved automatically, both
+    # disclosed as known inert gaps: the chosen creature type (from the deck, exactly like
+    # chooses_creature_type above) and Daring Buccaneer's reveal-or-pay (auto-reveal; paying is
+    # strictly dominated -- consistent with the user's D5 ruling "okay if there is something to reveal").
+    "chosen_type_added_to_self": "Pirates: Metallic Mimic / Adaptive Automaton 'as this enters, choose a creature type ... is the chosen type in addition' -- resolved deterministically from the deck (DominantCreatureSubtypeId), the chooses_creature_type precedent; the deck's tribe weakly dominates every alternative for these cards. No player choice surfaced (disclosed inert gap)",
+    "other_chosen_subtype_enters_counters": "Pirates: Metallic Mimic's mandatory as-enters +1/+1 counter replacement (CR 614) on other creatures of the chosen type, no choice",
+    "lord_affects_chosen_subtype": "Pirates: Adaptive Automaton's static lord scope (the chosen type), no choice",
+    "etb_creates_treasures": "Pirates: Corsair Captain's mandatory ETB Treasure (sac-for-mana is a searched plan action / payment choice)",
+    "attack_pump_tough_per_other_matching": "Pirates: automatic attack trigger toughness half (Dire Fleet Captain +1/+1 per other attacking Pirate), no choice",
+    "static_artifact_threshold": "Pirates: conditional static self-buff threshold (Goblin Tomb Raider: control an artifact) -- no choice",
+    "static_artifact_power": "Pirates: conditional static self-buff magnitude (Goblin Tomb Raider +1/+0) -- no choice",
+    "static_artifact_tough": "Pirates: conditional static self-buff magnitude -- no choice",
+    "static_artifact_haste": "Pirates: conditional static haste (Goblin Tomb Raider, artifact controlled) -- no choice",
+    "own_creature_enters_opp_life_loss": "Pirates: automatic enter trigger (Forerunner of the Coalition) -- mandatory, untargeted ('each opponent loses 1'), nothing to pick",
+    "nth_spell_trigger_n": "Pirates: automatic on-cast trigger count (Malcolm, the Eyes: second spell), no choice",
+    "nth_spell_investigate": "Pirates: mandatory investigate on the Nth spell (Malcolm); the Clue crack surfaces as a main_phase SacDraw plan action via the Clue Token def",
+    "reveal_or_pay_subtype": "Pirates: Daring Buccaneer 'reveal a Pirate card from your hand or pay {2}' -- auto-REVEAL whenever possible because paying is STRICTLY DOMINATED (revealing is free; the passive opponent gains nothing from the information; nothing in the engine reads revealed cards or mana spent). WHICH Pirate is revealed is inert (it stays in hand). A human who wants the {2} line can still reach it by casting the last other Pirate first (every cast is priced live). DISCLOSED in 6a",
+    "reveal_or_pay_cost": "Pirates: Daring Buccaneer's pay-instead amount ({2}) -- a printed constant of the additional cost, charged automatically only when no reveal is possible; no choice",
 }
 
 # Decisions the human makes by picking among main_phase PLAN VARIANTS or a board-click

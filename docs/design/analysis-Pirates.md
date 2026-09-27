@@ -295,7 +295,7 @@ floor (only unplayable cards go first); the Vial is a turn-1 keep unless mana-st
      at N=2 over Crewmate/Malcolm/Dire Fleet Captain (same reasoning as 2a/2c). This is a *put-order*
      heuristic, not a charge policy — the charge policy (`WantVialCharge`) stays root.
    Default taken: root order, pending review.
-3. OK to classify the new params in `audit_viewer_decisions.py` INERT_PARAMS (script self-guard)?
+3. OK to classify the new params in `audit_viewer_decisions.py` INERT_PARAMS (script self-guard)? **APPROVED 2026-09-27** (USER: "3 is approved") -- all 14 rows un-tagged PROVISIONAL.
 4. Corsair's same-turn Treasure: lift the fresh-hold for non-trick Treasures (A/B-measured)? Default: measure.
 
 ## RESUME STATE (2026-09-27, third compaction)
