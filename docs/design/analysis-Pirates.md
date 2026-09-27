@@ -129,21 +129,71 @@ and for off-curve hands. Provider routing: Pirates -> `PiratesProvider` (chunk 3
 
 ## Approved deferrals
 
-(none yet — every deferral below is PROVISIONAL until the user signs it off)
+USER review 2026-09-26 ("D5 is okay if there is something to reveal. D3 is definitely wrong and should
+be fixed. D6 is also wrong ... The other deferrals are okay."):
 
-PROVISIONAL:
-- **Siren Stormtamer** — "{U}, Sacrifice: counter target spell or ability that targets you or a creature
-  you control" unmodelled: never legally activatable (the passive opponent never targets), and nothing
-  in the 60 has a death payoff.
-- **Kitesail Larcenist** — the "for as long as it remains" revert (it cannot leave the battlefield in
+APPROVED:
+- **D1 Siren Stormtamer** -- "{U}, Sacrifice: counter target spell or ability that targets you or a
+  creature you control" unmodelled: never legally activatable (the passive opponent never targets), and
+  nothing in the 60 has a death payoff.
+- **D2 Kitesail Larcenist** -- the "for as long as it remains" revert (it cannot leave the battlefield in
   this list); opponent-side target auto-declined in autonomous play (spawns never block, nothing reads
   them; human can still pick); rename to "Treasure Token" (rules keep the name; inert here); flying/ward inert.
-- **Corsair Captain** — the global `MTG_PAYSAC_FRESH_HOLD` doctrine banks a Treasure made this turn;
-  real Magic can spend it at once (e.g. T3 Captain -> crack for a 1-drop). A NARROWING — under review.
-- **Chosen creature type** (Mimic / Automaton) not surfaced in the viewer: deck-constant Pirate weakly
+- **D4 Chosen creature type** (Mimic / Automaton) not surfaced in the viewer: deck-constant Pirate weakly
   dominates every alternative (every other creature is a Pirate).
-- **Daring Buccaneer** reveal-vs-pay auto-resolves to reveal (paying {2} when a reveal is possible is
-  strictly dominated).
+- **D5 Daring Buccaneer** reveal-vs-pay auto-resolves to reveal **only when a reveal is possible**
+  (the user's condition) -- verified in code: `CanRevealForAdditionalCost` (SpellEffects.h) requires
+  another Pirate CARD in hand (Mimic/Automaton in hand do not count), otherwise `{2}` joins the raw
+  cost (ManaPayment.cpp) at every cast site.
+
+REJECTED -> FIXED:
+- **D3 Corsair Captain's same-turn Treasure** -- the global `MTG_PAYSAC_FRESH_HOLD` doctrine (a USER
+  ruling about mana-negative Gold Rush) banked Corsair's free ETB Treasure, and the enumerator never
+  credited an ETB Treasure to later casts in the same plan. Being fixed: see "D3 / D6 fixes" below.
+- **D6 (gi11) ETB-dug card cast the same turn** -- the user's understanding was right: the put-in-hand
+  breakpoint should open. It did not, because `ParamKeyedDrawClass` claimed `etb_dig_count` (site 10
+  stood down) while no param-keyed site armed. Fixed by `MTG_BP_ETB_DIG` (default ON); see below.
+
+## D3 / D6 fixes (2026-09-26, after the user's deferral review)
+
+* **D6 -- `MTG_BP_ETB_DIG` (default ON), `d4ef1f81`.** `TurnSolver::ParamKeyedDrawClass` claimed
+  `etb_dig_count`, so the general put-in-hand rule (site 10) stood down after an ETB dig in both worlds,
+  while the only param-keyed dig site had its arming removed on 2026-08-19 -- claimed, never armed.
+  Removed from the claim list (site 10's outcome-keyed arming now fires, rollout + executor in lockstep)
+  and named in site 10's `PlanOpensBreakpoint` routes so the continuation is fanned. gi11 (s777011): T5
+  -> T4 on Claude's line. Canon audit, 40 Pirates games d3 b10: 428 site-10 canon defaults, 0
+  unchallengeable. Unit: `test_etb_dig_breakpoint.cpp` (fails with `=0`). Open edge: a Vial-put digger
+  (the `MTG_BP_HAND_ENTRY` hole, default OFF). Affects Knights (Acclaimed Contender) and Pirates only.
+* **D3 -- `MTG_ETB_TREASURE_SPEND` (default ON), `3d9508c5`.** Two halves: (a) `Permanent::
+  fresh_hold_exempt`, set only on an `etb_creates_treasures` Treasure and a Larcenist-converted
+  permanent, honoured by `PaySacSpendableNow`; folded into memo/fungibility/dominance/mana-cache keys
+  only when set; cleared at both untap sites. The Gold Rush doctrine (`FreshMintSpendableNow`) is
+  untouched -- Mirrorwing byte-identical (20 games d3, flag on/off/parent). (b) the ETB Treasure is
+  stamped as `Action::rock_mana.wild` on the Corsair cast (and a Vial put), so every rock-credit
+  consumer (Solve/EnumeratePlans twins, odometer gates, `FirstUnpayablePos`, the real-payment
+  simulations with an exempt scratch Treasure) credits it to LATER casts, never its own cost; a new
+  `ApplyEtbTreasureFundingOrder` hoists the Corsair only when the sorted order cannot pay, at every
+  cast-order sort site in both worlds. Unit: `test_etb_treasure_spend.cpp` (6 cases; ablation-checked).
+  Probe: 200 games s5000 4.52 -> 4.48 (8 faster / 0 slower), `MTG_FD_ORACLE` 0 divergences. Open:
+  viewer summary order may list the 1-drop before the Corsair; puts-last Vial variants in searched-order
+  plans are not mana-pruned (only labelled); the puts-last total-mana check is colour-blind.
+
+* **Exposed by D6 -- `MTG_BP_RECORD_VIAL` (default ON), `7ef0734b`.** The first D6 suite run moved Knights
+  WORSE (smoke d3 +0.012, d5 +0.013, 2hg +0.013; regression +0.007..+0.012), every slower game persisting
+  at 16x. Root cause (subagent trace, `MTG_FD_ORACLE`): `apply_vial` never recorded a Vial put applied
+  inside a breakpoint CONTINUATION into the committed script, so the rollout credited a creature the
+  executor's replay never deployed. Contender's continuation usually has only the Vial left to deploy
+  the dug Knight, so opening its breakpoint made the phantom common (gi114/gi215/gi88/2hg gi29, each
+  predicted T4 realised T5). Fixed by recording it; `MTG_FD_ORACLE` on 150 Knights games d3: 2
+  divergences -> 0; all four games recover.
+* **Suite, final binary (`7ef0734b`), vs the `bdf1df5e` GT:** smoke searched 1 slower (pirates2hg gi21,
+  churn: recovers at 4x) / 12 faster; regression searched **0 slower / 35 faster**. Pirates better at
+  every key (regression d3 4.547->4.480 / 4.540->4.487, d5 4.547->4.480 / 4.560->4.453, d0
+  4.907->4.872); Knights equal or better (knights2hg regression 5.010->4.980); Goblins d3/d5
+  play-changed at identical aggregates (the Vial record; no slower game). d0 (lighter bar): smoke 4
+  slower / 52 faster, regression 5 / 40 -- the sampled slower d0 games are variance (draws diverge) and a
+  d0 mispricing of spending Corsair's Treasure while Goblin Tomb Raider needs an artifact (gi87) -- a
+  legal line the greedy d0 undervalues, not a rules defect. GT accepted on this binary.
 
 ## Discard policy
 
@@ -205,9 +255,9 @@ behind `MTG_PIRATES_BUCKET_DISCARD` (default ON, `=0` restores the generic max-M
 
 ## RESUME STATE (2026-09-26, final)
 
-* Stages 1–5 done; GT accepted; branch pushed to `phase-1-2-deck-analyzer` (see git log). Remaining
-  items are USER reviews only: PROVISIONAL deferrals (incl. gi11), the discard policy (§8 doubts), and
-  cast-order proposals 2a–2d. Overnight tier does not carry Pirates yet.
+* Stages 1–5 done; deferrals reviewed (D1/D2/D4/D5 approved, D3/D6 fixed + GT re-accepted); pushed to
+  `phase-1-2-deck-analyzer`. Remaining USER reviews: the discard policy (§8 doubts) and cast-order
+  proposals 2a–2d. Overnight tier does not carry Pirates yet.
 
 ## Chunk 3 landed (2026-09-26) — provider, routing, certificate, tutor width, discard policy
 
@@ -317,7 +367,7 @@ integrator (the orchestrator runs the suite).
 - commit: `62f8f5ac` (confirmation pass at `6576822c`; the B follow-up only adds plan variants, re-verified by the gi7 repro)
 - seeds: 777000 games: 24 (gi 0-23; 20 first pass + 12 confirmation replays incl. 4 fresh)
 - flags: 0 unresolved
-- gi11 (Claude T4 vs search T5) is a ROOT-CAUSED DEFERRAL, not an unresolved flag: an ETB-dug card cannot be cast the same turn at search depth; engine-wide (Knights), previously rejected in the rollout 2026-08-19; see docs/design/etb-dig-same-turn-cast.md. PROVISIONAL until the user signs it off.
+- gi11 (Claude T4 vs search T5): FIXED after user review (D6) -- the put-in-hand breakpoint never armed after an ETB dig (`ParamKeyedDrawClass` claimed `etb_dig_count`); `MTG_BP_ETB_DIG` (`d4ef1f81`) makes the search play Claude's line and win T4.
 - gi20 (search unwon vs Claude T5): baseline static keep kept an uncastable hand — mulligan-stage evidence, not a play defect.
 
 ### Sweep detail

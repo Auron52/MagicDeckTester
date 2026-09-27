@@ -1,8 +1,14 @@
 # ETB-dig -> same-turn cast is inexpressible at searched depths (DEFERRED)
 
-**Status:** deferred 2026-09-26 (found by the Pirates claude-play sweep, finding F/gi11). Not fixed:
-the fix is engine-wide, moves Knights' play, and reverses a recorded rejection, so it needs its own
-measured A/B and a user decision.
+**Status: FIXED 2026-09-26** (`MTG_BP_ETB_DIG`, default ON) after the user rejected the deferral:
+*"my understanding is that a breakpoint should open which would allow us to cast the new spell ... If
+that doesn't happen, I agree it is a bug."* The fix is not a new arming site: `etb_dig_count` was
+removed from `TurnSolver::ParamKeyedDrawClass`, so the general site-10 put-in-hand arming (outcome-
+keyed, rollout + executor in lockstep) now fires after the dig, and site 10's `PlanOpensBreakpoint`
+route list names `etb_dig_count` so the continuation is fanned (canon audit: 0 unchallengeable).
+gi11 now wins T4 on the Crewmate -> dig Buccaneer -> cast Buccaneer line. Still open: a VIAL-put
+digger (outside any cast window) -- the `MTG_BP_HAND_ENTRY` hole. The text below is the original
+diagnosis, kept for the record.
 
 ## The defect
 
