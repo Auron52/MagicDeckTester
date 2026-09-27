@@ -197,7 +197,7 @@ REJECTED -> FIXED:
 
 ## Discard policy
 
-**Status: AUTHORED, implemented default-on, PENDING USER REVIEW** (adoption is a user review — the same
+**Status: USER-REVIEWED and revised 2026-09-27 (see "Discard policy -- USER-REVISED" below)** (adoption is a user review — the same
 gate as cast order; nothing here records a confirmation). Full proposal:
 `docs/design/pirates-discard-policy-proposal.md`. Code: `PiratesProvider::CleanupDiscardCandidates`
 behind `MTG_PIRATES_BUCKET_DISCARD` (default ON, `=0` restores the generic max-MV ranking).
@@ -220,7 +220,7 @@ behind `MTG_PIRATES_BUCKET_DISCARD` (default ON, `=0` restores the generic max-M
 * Evidence: `--discard-analysis` ran after Stage 4 -> **DISCARD_INERT** (no cleanup shed reached in 400 d3
   games, real or rollout; see Stage 4). Non-inferiority vs `=0` is therefore vacuous (no game can differ).
 
-## Cast order (USER review 2026-09-27) -- built, measured, adoption pending
+## Cast order (USER review 2026-09-27) -- ADOPTED (default ON), with the payable-order fallback
 
 The user reviewed proposals 2a-2d and dictated a full order (quotes in the `PiratesProvider::CastOrderRank`
 header note): Mimic 1 ("Mimic should be before Buccaneer"), Malcolm 2 ("after the mimic ... the +1/+1
@@ -234,6 +234,23 @@ action, so there was no heuristic to change. Lever `MTG_PIRATES_CAST_ORDER` (def
 Train (smoke + regression, Pirates cases): searched 0 slower / 1 faster, d0 0 / 11. Held-out s60000:
 d0 4.8325 -> 4.8305 (2000 g), d3 4.4517 -> 4.4500 (600), d5 4.4467 -> 4.4450 (600). Non-inferior at every
 depth. Recommendation: adopt (flip default ON) BEFORE the value leaf freezes a commit.
+
+**Revision + adoption (2026-09-27).** Malcolm follows Corsair's reveal rule, walked in rank order (USER:
+"malcolm, the eyes should also do the same things as Corsair Captain ..."; with {Malcolm, Corsair,
+Buccaneer} Malcolm goes early and the Corsair waits). `MTG_PAYABLE_ORDER` (USER: "it really is just for the
+'fail to pay' case"; "If we have mana for all of them, then there is no need to change the order"): the
+default order is kept unless it projects unpayable (reveal-aware), then the Corsair hoist, then the nearest
+payable permutation; it also removed an over-pricing in `SameSubsetRevealSurcharge`. Held-out s60000+s80000:
+no-order >= order >= order+fallback in all 12 cells. Both levers default ON. Suite vs the previous GT: only
+Pirates moved; searched 0 slower / 1 faster; d0 2 slower / 16 faster -- the 2 d0 games are PRE-EXISTING d0
+scorer gaps the (correct) fallback exposes (no same-turn lord credit, no Forerunner drain credit):
+`docs/design/d0-greedy-scorer-lord-and-drain-credit.md`. GT accepted.
+
+## Discard policy -- USER-REVISED 2026-09-27 (adopted)
+
+Lands to 3 total; Mimic below Dire Fleet Captain except turn 1; a 3-turn CURVE-OUT plan replaces the threat
+floor (only unplayable cards go first); the Vial is a turn-1 keep unless mana-starved. Full text:
+`docs/design/pirates-discard-policy-proposal.md` ("USER revision"). Unit cases = the user's own examples.
 
 ## Generation sizing (2026-09-27)
 

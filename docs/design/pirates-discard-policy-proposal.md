@@ -1,7 +1,7 @@
 # Pirates — cleanup-discard BUCKET policy (PROPOSAL, 2026-09-26)
 
 Authored from `docs/design/discard-bucket-authoring-brief.md` during the Pirates onboarding (chunk 3).
-**Status: implemented default-on, PENDING USER REVIEW.** Unlike the 2026-09-23 fleet sweep (proposal
+**Status: USER-REVIEWED 2026-09-27 and revised (see "USER revision" below); implemented default-on.** Unlike the 2026-09-23 fleet sweep (proposal
 first, integration later), this deck is being onboarded fresh, so the policy was implemented in the
 same change to give `verify_deck.py`'s blocking `discard_policy` gate something real to check and to
 keep the rollout off max-MV from the first measurement. Adoption is still a user review — the same
@@ -154,6 +154,41 @@ Pirates will follow it) — that is a CAST-ORDER question, and cast order is a s
    small to earn a rule; flag if the viewer shows otherwise.
 7. **Treasures are not counted as sources** (one-shot). Corsair Captain / Larcenist Treasures can
    make a surplus land look needed; the effect is at most one land slot.
+
+## USER revision (2026-09-27) -- supersedes sections 3-5 and doubts 1, 2, 5 where they differ
+
+The user's words, then what changed in `PiratesProvider::CleanupDiscardCandidates`:
+
+* *"I recommend keeping enough for 3 lands total."* -> land quota = 3 lands in total, battlefield first
+  (was 4 sources). Colour-coverage keep order unchanged. Every kept land is shed LAST.
+* *"Metallic Mimic should be dropped below Dire Fleet captain unless we are turn 1."* -> Mimic 85 (Dire
+  Fleet Captain 86), 92 on turn 1.
+* *"if we have too few lands out to reliably play card x next turn I would only keep enough other
+  threats to curve out. The only case we want to drop the cards entirely is if we think they cannot be
+  played. So, if we had 1 land total and no Aether Vial out you would drop 3-drops for sure. On the other
+  hand, if you had a land out and lands 2 and 3 in hand you would want to keep a 2 and 3 drop of
+  sufficient value according to the chart."* -> the fixed threat floor of 3 is REPLACED by a curve-out
+  plan: mana on our next turn k = board lands + min(k, kept hand lands) for k = 1..3, a board Vial at c
+  counters puts one creature of MV c+k free on turn k; the value-maximising assignment of threats to those
+  turns is the PLAN. A threat that cannot be cast even with every hand land (and no Vial can put it), or
+  whose colour has no source on board or in hand, is UNPLAYABLE and goes first.
+* *"I would probably discard Vial if it was end of turn 2. It's too slow to play at that point. Unless we
+  are in bad shape on the land front? (if we are mana-starved otherwise keeping it would be an
+  option)"* -> one Vial is kept only on turn 1, or when mana-starved (board + hand lands < 3), and never
+  with a Vial already on the battlefield.
+* Context the user gave for all of it: *"these situations should only happen in less ideal branches ...
+  The main reason for the discard heuristic is for cases where we are mana screwed or to correctly act in
+  suboptimal branches."*
+
+Doubts 3 (1-drop order), 4 (Bolt at 56), 6 (fastlands) and 7 (Treasures) had no comment and keep their
+authored defaults.
+
+**Shed order now:** dead legend -> threats that cannot be played -> surplus lands (narrowest first, Fiery
+Islet last) -> surplus Vials -> off-plan threats, lowest value first -> the kept cards backwards (plan
+threats worst-first, then the kept Vial, then the kept lands).
+
+Unit cover: `test/unit/test_pirates_provider.cpp` -- the four "USER review" cases are the user's own
+examples.
 
 ## Evidence still owed (not blocking the review, but required before calling it adopted)
 
