@@ -676,6 +676,18 @@ async function post(path, body) {
 const LB = window.LineBuild;
 function planLand()        { return LB.planLand(S.plan); }
 function handCounts()      { return LB.handCounts(S.decision); }
+// A staged card's expiry turn is an IMPLEMENTATION DETAIL when it is a sentinel. An adventure's
+// exile never expires (SpellEffects.h sets INT_MAX deliberately, unlike Light Up the Stage's real
+// window), so the badge read "▸T2147483647". USER 2026-09-27, on the exiled playable Badger: *"we
+// shouldn't show T2147483647. That is an implementation detail... If number is greater than 100 we
+// can just not put a turn there."* A threshold rather than an INT_MAX test on purpose: it catches
+// any future sentinel, and no real game reaches turn 100 (max_turns is 8-ish in every harness here).
+const STAGED_NO_EXPIRY = 100;
+function stagedExpiryLabel(t) { return (t > STAGED_NO_EXPIRY) ? '' : `T${t}`; }
+function stagedExpiryTitle(t) {
+  return (t > STAGED_NO_EXPIRY) ? 'exiled — playable, no turn limit'
+                                : `exiled — playable through turn ${t}`;
+}
 function stagedCounts()    { return LB.stagedCounts(S.decision); }
 function plannedCount(name){ return LB.plannedCount(S.plan, name); }
 function leCount()         { return LB.leCount(S.plan); }
@@ -2175,7 +2187,7 @@ function renderBoard() {
         const satt = (soi===undefined) ? '' : ` data-hpick="${soi}"`;
         stg += `<span${satt} class="thumb staged${scls} ${c.kind==='land'?'land':'spell'}" data-name="${esc(c.name)}">`+
           `<img loading="lazy" src="${scryImg(c.name,'small')}" onerror="this.style.opacity=.15"/>`+
-          `<span class="stagedbadge" title="exiled — playable through turn ${c.staged_until}">▸T${c.staged_until}</span>`+
+          `<span class="stagedbadge" title="${stagedExpiryTitle(c.staged_until)}">▸${stagedExpiryLabel(c.staged_until)}</span>`+
           (n>1?`<span class="pip">×${n}</span>`:'')+`<em>${esc(c.name)}</em></span>`;
       }
       hrow += `<span class="stagedsep">⟂ exiled<br>playable</span>`+stg;
@@ -2403,7 +2415,7 @@ function renderHand() {
       const total = scounts[key]||1;   // how many staged copies of this name/expiry
       html += `<span class="thumb staged ${land?'land':'spell'} ${q?'queued':''}" data-name="${esc(c.name)}" draggable="true" data-card="${esc(c.name)}" data-kind="${c.kind}">`+
         `<img loading="lazy" src="${scryImg(c.name,'small')}" alt="${esc(c.name)}" onerror="this.style.opacity=.15"/>`+
-        `<span class="stagedbadge" title="exiled — playable through turn ${c.staged_until}">▸T${c.staged_until}</span>`+
+        `<span class="stagedbadge" title="${stagedExpiryTitle(c.staged_until)}">▸${stagedExpiryLabel(c.staged_until)}</span>`+
         (total>1?`<span class="pip">×${total}</span>`:'')+(q?`<span class="qct">${q}</span>`:'')+
         `<em>${esc(c.name)}${c.cost?` <span style="color:var(--muted)">${esc(c.cost)}</span>`:''}</em></span>`;
     }
