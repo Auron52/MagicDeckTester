@@ -817,6 +817,11 @@ inline DomSnap Build(const GameState& s, const DecisionProvider& prov,
         // BuildSimKey note), folded so a future searched choice cannot merge them. Nonzero only for
         // a type-choosing permanent -> every other deck's key is unchanged.
         if (p.chosen_subtype_id != 0) { mfold(0xC7BEull); mfold(static_cast<std::uint64_t>(p.chosen_subtype_id)); }
+        // Fresh-hold exemption (MTG_ETB_TREASURE_SPEND): an exempt fresh Treasure pays THIS turn and
+        // a held one does not, while both read "sick" on the axis below -- so they must MATCH
+        // exactly rather than compare. Set only on the ETB / Larcenist Treasures and cleared at the
+        // untap, so every other deck's key is unchanged.
+        if (p.fresh_hold_exempt) { mfold(0xF4E5ull); }
         if (wired)
         {
             mfold(0xA77Aull);

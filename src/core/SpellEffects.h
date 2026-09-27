@@ -857,7 +857,9 @@ inline void TapLargestOppCreature(GameState&, int controller);
 inline int LethalToughness(const Permanent& p, const GameState& state);
 inline void FireOwnEtbTriggers(GameState&, int controller, int entered_index,
                            const std::string& chosen_tutor, int etb_kx);
-inline void CreateTreasureTokens(GameState& state, int controller, int n);   // defined below
+inline bool EtbTreasureSpendOn();   // defined below (MTG_ETB_TREASURE_SPEND, beside PaySacFreshHoldEnabled)
+inline void CreateTreasureTokens(GameState& state, int controller, int n,
+                                 bool fresh_hold_exempt = false);   // defined below
 inline void CreateClueTokens(GameState& state, int controller, int n);       // defined below
 // etb_kx sentinel: "PUT entry with no searched destroy-K axis -- pick heuristically at
 // resolution" (full rationale at kEtbKxHeuristic's consumers near HeuristicEtbDestroyK).
@@ -6187,6 +6189,10 @@ inline void TreasurifyPermanent(GameState& state, int bi)
     q.card.m_toughness.reset();
     q.is_animated       = false;
     q.chosen_subtype_id = 0;   // the chosen creature type went with the subtypes
+    // A permanent converted THIS turn keeps entered_this_turn, which the §2a fresh-hold would read as
+    // "a fresh mint" and bank. It is not one: nothing was paid for it, and a noncreature artifact's
+    // "{T}, Sacrifice" works at once. Exempt it (MTG_ETB_TREASURE_SPEND; =0 restores the hold).
+    if (EtbTreasureSpendOn()) { q.fresh_hold_exempt = true; }
     const int num = q.card.m_number;
     const int ctl = q.controller_index;
     for (Permanent& e : state.battlefield)
@@ -6446,12 +6452,13 @@ inline void FireOwnEtbTriggers(GameState& state, int controller, int entered_ind
     }
     // (1-t) ETB Treasure mint (Corsair Captain: "When this creature enters, create a Treasure
     //     token"). The existing "Treasure Token" def via the Gold Rush helper; a live pay-sac source
-    //     subject to the §2a fresh-hold (banked this turn unless a copy-magnet / Heroism is live --
-    //     see PaySacSpendableNow). This one site covers every entry route (cast, Vial put, both
-    //     worlds). Param-gated -> byte-identical for every other deck.
+    //     spendable AT ONCE -- it is marked fresh_hold_exempt, so the §2a fresh-hold (a doctrine for
+    //     the mana-negative Gold Rush SPELL) does not bank it (MTG_ETB_TREASURE_SPEND, USER
+    //     2026-09-26; =0 restores the hold). This one site covers every entry route (cast, Vial put,
+    //     both worlds). Param-gated -> byte-identical for every other deck.
     if (p.etb_creates_treasures > 0)
     {
-        CreateTreasureTokens(state, controller, p.etb_creates_treasures);
+        CreateTreasureTokens(state, controller, p.etb_creates_treasures, EtbTreasureSpendOn());
         if (g_play_event_sink && !g_tap_speculating)
         {
             EmitPlayEvent(state.turn_number, "ability",
@@ -12782,7 +12789,10 @@ inline int CountTreasuresControlled(const GameState& state, int controller)
 
 // Create n "Treasure Token" artifact permanents (the existing cards.json token def -- its
 // sac_for_mana_amount:1 makes each a live, searched SacForMana source; the Jared precedent).
-inline void CreateTreasureTokens(GameState& state, int controller, int n)
+// `fresh_hold_exempt` (MTG_ETB_TREASURE_SPEND): the caller passes true ONLY for a FREE enter-trigger
+// Treasure (Corsair Captain); the Gold Rush call site keeps the default, so a spell-minted Treasure
+// stays under the §2a fresh-hold doctrine and Mirrorwing is byte-identical.
+inline void CreateTreasureTokens(GameState& state, int controller, int n, bool fresh_hold_exempt)
 {
     for (int k = 0; k < n; ++k)
     {
@@ -12796,6 +12806,7 @@ inline void CreateTreasureTokens(GameState& state, int controller, int n)
         token.owner_index       = controller;
         token.entered_this_turn = true;   // artifacts have no summoning sickness; sac works now
         token.is_token          = true;
+        token.fresh_hold_exempt = fresh_hold_exempt;
         state.battlefield.push_back(token);
     }
 }
@@ -20509,6 +20520,35 @@ inline bool PaySacFreshHoldEnabled()
     return v;
 }
 
+// ETB-TREASURE SPEND (MTG_ETB_TREASURE_SPEND, DEFAULT ON; =0 restores the old behaviour exactly).
+// USER RULING 2026-09-26 on the Pirates onboarding's deferral D3 (the Corsair Captain Treasure held
+// by the fresh-hold): "D3 is definitely wrong and should be fixed".
+//
+// WHY THE DOCTRINE ABOVE STAYS FOR GOLD RUSH AND NOT FOR THIS. The fresh-hold is a ruling about a
+// SPELL that PAYS for its Treasure ({1}{G} for one -- mana-NEGATIVE): "a magnetless Gold Rush is
+// never a this-turn mana play", and letting the search treat it as ramp made it prefer net-minus-one
+// lines (mw22/mw68). An enter-trigger Treasure is FREE on top of a creature the plan casts anyway,
+// and a Kitesail Larcenist conversion turns an existing permanent into a Treasure at no mana cost;
+// neither has a negative-ramp shape to guard against, and in real Magic both are a noncreature
+// artifact with "{T}, Sacrifice: add one mana" usable at once (no summoning sickness). Holding them
+// was a NARROWING the executor and rollout shared, not a rule.
+//
+// Two halves, one lever (both off at =0):
+//   1. Permanent::fresh_hold_exempt is set on exactly those Treasures (CreateTreasureTokens' flag
+//      from the etb_creates_treasures site; TreasurifyPermanent), and PaySacSpendableNow honours it.
+//   2. The enumerator credits the ETB Treasure to LATER casts of the same plan (Action::rock_mana
+//      stamped wild on the cast / Vial put of an etb_creates_treasures card -- "a rock never funds its
+//      own cost" is the rock branch's own guard), and both apply worlds hoist the maker ahead of the
+//      casts it funds when the plan order cannot otherwise pay (ApplyEtbTreasureFundingOrder).
+// Inert when MTG_TREASURE_PAY_SOURCE is off (a Treasure is then no payment source at all). A heurarm
+// slot, so one pooled batch carries both arms. Mirrorwing is byte-identical by construction: it holds
+// no etb_creates_treasures / etb_treasurify card, so nothing ever sets the field or the stamp.
+inline bool EtbTreasureSpendOn()
+{
+    static const bool env_on = EnvOn("MTG_ETB_TREASURE_SPEND", true);
+    return TreasurePaySourceEnabled() && heurarm::Flag(heurarm::ETB_TREASURE_SPEND, env_on);
+}
+
 inline bool CopyMagnetLive(const GameState& state, int controller)
 {
     for (const Permanent& q : state.battlefield)
@@ -20693,6 +20733,9 @@ inline bool PaySacSpendableNow(const GameState& state, const Permanent& p, const
 {
     if (!IsPaySacSource(def)) { return false; }
     if (!FreshHoldActive() || !p.entered_this_turn) { return true; }
+    // A FREE enter-trigger / Larcenist-converted Treasure is outside the doctrine (see
+    // EtbTreasureSpendOn). The field is only ever set with that lever on.
+    if (p.fresh_hold_exempt) { return true; }
     if (CopyMagnetLive(state, p.controller_index)) { return true; }
     return HeroismFreshHoldOn() && HeroismCopiesLive(state, p.controller_index) > 0;
 }
@@ -20805,6 +20848,11 @@ inline int SamePlanHeroismMint(const CardDefinition& def, int target_number, int
 // reader of exactly PaySacSpendableNow's entered_this_turn branch (one rule, two readers): the
 // fresh-hold is off (or released by the freshmode pin), a copy magnet is live, or a Heroism is
 // live under MTG_HEROISM_FRESH_HOLD.
+// NOT touched by MTG_ETB_TREASURE_SPEND, deliberately: this is a CONTROLLER-level question about a
+// Treasure a SPELL will mint (creates_treasures -- Gold Rush), read by the spell-mint credit twins.
+// The exempt Treasures are per-PERMANENT facts (Permanent::fresh_hold_exempt), which the payer reads
+// through PaySacSpendableNow, and their same-plan credit rides Action::rock_mana, which never
+// consults this function. Keeping it spell-only is what keeps Gold Rush under the doctrine.
 inline bool FreshMintSpendableNow(const GameState& state, int controller)
 {
     if (!FreshHoldActive()) { return true; }

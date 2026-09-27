@@ -2240,7 +2240,8 @@ struct CardParams
     // in the universal FireOwnEtbTriggers cascade via CreateTreasureTokens (cast AND Aether Vial put,
     // executor and rollout alike). Deliberately NOT creates_treasures: that param is the Mirrorwing
     // solo-target-trick mint and ~a dozen trick-specific pricing/provider sites key on it.
-    // The Treasure is subject to the global §2a fresh-hold (PaySacSpendableNow) like any mint.
+    // The Treasure is fresh-hold EXEMPT (Permanent::fresh_hold_exempt; MTG_ETB_TREASURE_SPEND, default
+    // ON): spendable the turn it enters, and credited to later casts of the same plan.
     int  etb_creates_treasures = 0;
     // Expedite: "target creature gains haste until end of turn" -> Permanent::temp_haste (read by
     // CanAttackFull / CanTapNow -- a hasted fresh dork may tap for mana; reset each cleanup).

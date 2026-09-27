@@ -251,8 +251,9 @@ void GameEngine::UntapStep(GameState& state)
             if (!(ice_locks && p.ice_counters > 0 && p.card.IsCreature()))
             { p.tapped = false; }
             p.entered_this_turn = false;
+            p.fresh_hold_exempt = false;   // meaningful only with entered_this_turn (Permanent.h)
             p.gained_control_this_turn = false;   // control-change sickness clears on YOUR untap (CR 302.6)
-            p.storage_hold_this_turn = false;   // #6: the tap-vs-charge hold is a per-turn human choice
+            p.storage_hold_this_turn = false;  // #6: the tap-vs-charge hold is a per-turn human choice
             p.colored_cast_lifegain_used_this_turn = false;   // Ancient Cornucopia once-each-turn
             p.loyalty_activated_this_turn = false;   // planeswalkers: one loyalty ability per turn
         }

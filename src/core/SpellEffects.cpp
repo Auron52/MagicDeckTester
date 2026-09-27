@@ -3270,6 +3270,10 @@ inline bool ManaCacheKey(const GameState& state, const ManaCost& cost, bool for_
         if (!canon) { mix(h1, static_cast<std::uint64_t>(i)); mix(h2, static_cast<std::uint64_t>(i) * 0x9E3779B97F4A7C15ull); }
         smix(di, di ^ 0xD1B54A32D192ED03ull);
         smix(p.tapped ? 1ull : 2ull, p.tapped ? 3ull : 5ull);
+        // A fresh-hold-EXEMPT Treasure (MTG_ETB_TREASURE_SPEND) pays where a held fresh one does not
+        // (PaySacSpendableNow), so the two must key apart. Mixed only when set -> byte-identical
+        // keys for every deck that never makes an enter-trigger / Larcenist Treasure.
+        if (p.fresh_hold_exempt) { smix(0xF4E5'01ull, 0xF4E5'02ull); }
         // Attached land Auras change this host's yield/colours (see the s_aura_fold pass above).
         if (!s_aura_fold.empty() && p.card.IsLand())
         {

@@ -496,6 +496,9 @@ inline uint64_t FungibilityKey(const Permanent& p)
          | (p.is_animated ? 1024ull : 0ull)
          | (p.is_token ? 2048ull : 0ull)
          | (p.echo_resolved ? 4096ull : 0ull));
+    // Fresh-hold exemption (MTG_ETB_TREASURE_SPEND): an exempt fresh Treasure pays this turn, a
+    // held one does not, so they are not fungible. Mixed only when set -> every other key unchanged.
+    if (p.fresh_hold_exempt) { Mix(h, 0xF4E5F4E5ull); }
     Mix(h, static_cast<uint64_t>(p.damage) << 32 | static_cast<uint64_t>(p.pending_death_trigger));
     Mix(h, static_cast<uint64_t>(p.temp_power_bonus) << 32 | static_cast<uint64_t>(p.temp_tough_bonus));
     Mix(h, static_cast<uint64_t>(p.charge_counters) << 32 | static_cast<uint64_t>(p.verse_counters));
@@ -6041,13 +6044,32 @@ static bool SubsetPayableWithFiltersImpl(const GameState& state, const std::vect
         for (int j : sel)
         {
             const Action& a = cands[j];
-            if (a.kind == Action::Kind::ActivateVial) { continue; }   // Vial deploys cost no mana
+            // Vial deploys cost no mana. A Vial-PUT ETB Treasure maker (Corsair Captain;
+            // MTG_ETB_TREASURE_SPEND) still makes its Treasure, and in the default puts-FIRST order
+            // it is on the board before any cast -- so the producer pass lays it down (the
+            // g_reveal_vials_last puts-last pricing gets no such Treasure, matching the rock branch).
+            if (a.kind == Action::Kind::ActivateVial)
+            {
+                if (want_rock && a.rock_mana.Total() > 0 && g_reveal_vials_last == 0 && a.def
+                    && a.def->params.etb_creates_treasures > 0)
+                {
+                    CreateTreasureTokens(cp, cp.active_player_index,
+                                         a.def->params.etb_creates_treasures, /*fresh_hold_exempt=*/true);
+                }
+                continue;
+            }
             const CardDefinition* def = a.def;
             // A rock that ENTERS TAPPED (Fire Diamond) produces nothing the turn it is cast, so it
             // is not part of this same-turn ramp pass -- crediting it would let the enumerator fund
             // a cast off mana the executor cannot actually make. Mirrors the a.rock_mana gate.
-            const bool is_rock = def && def->params.mana_rock && !def->card.IsCreature()
-                              && !def->params.enters_tapped;
+            // An ETB Treasure maker (Corsair Captain) is a producer too: stamped rock_mana at
+            // enumeration (MTG_ETB_TREASURE_SPEND), it pays first and its Treasure joins the board,
+            // EXEMPT from the fresh-hold exactly as FireOwnEtbTriggers makes it.
+            const bool is_etb_treasure = a.kind == Action::Kind::CastFromHand && a.rock_mana.Total() > 0
+                                      && def && def->params.etb_creates_treasures > 0;
+            const bool is_rock = (def && def->params.mana_rock && !def->card.IsCreature()
+                                  && !def->params.enters_tapped)
+                              || is_etb_treasure;
             // A land AURA ("enchanted land taps for an additional {G}") is a same-turn mana PRODUCER
             // as well: it resolves before the casts it funds, so its bonus is genuine supply for the
             // rest of the subset -- but ONLY if a land survives the Aura's own cost still untapped to
@@ -6091,7 +6113,12 @@ static bool SubsetPayableWithFiltersImpl(const GameState& state, const std::vect
                 if (!cost_ok) { cost_ok = TapForCostDirect(cp, bill, for_creature); reserved_host = -1; }
             }
             if (!cost_ok) { return false; }
-            if (is_rock && def)   // freshly-cast rock joins the board so its mana funds later casts
+            if (is_etb_treasure)   // the maker's ETB Treasure (not the body) funds later casts
+            {
+                CreateTreasureTokens(cp, cp.active_player_index, def->params.etb_creates_treasures,
+                                     /*fresh_hold_exempt=*/true);
+            }
+            else if (is_rock && def)   // freshly-cast rock joins the board so its mana funds later casts
             {
                 Permanent perm;
                 perm.card             = def->card;
@@ -6451,6 +6478,20 @@ static bool SubsetPayableSequential(const GameState& state, const std::vector<Ac
         if (!a.free_cast && !a.alt_cost) { AddManaCost(_walk_total, a.cost); }
     }
     LineUnpaidCostScope _luc(_walk_total);
+    // A Vial-PUT ETB Treasure maker (MTG_ETB_TREASURE_SPEND): the put resolves before every cast in
+    // the default puts-first order, so its exempt Treasure is on the board for the whole walk. Not
+    // under the puts-last pricing (g_reveal_vials_last), matching the rock branch.
+    if (g_reveal_vials_last == 0)
+    {
+        for (int j : sel)
+        {
+            const Action& va = cands[j];
+            if (va.kind != Action::Kind::ActivateVial || va.rock_mana.Total() <= 0 || va.def == nullptr
+                || va.def->params.etb_creates_treasures <= 0) { continue; }
+            CreateTreasureTokens(cp, cp.active_player_index, va.def->params.etb_creates_treasures,
+                                 /*fresh_hold_exempt=*/true);
+        }
+    }
     for (int j : ord)
     {
         const Action& a   = cands[j];
@@ -6638,10 +6679,28 @@ static bool SubsetPayableSequential(const GameState& state, const std::vector<Ac
             { perm.chosen_subtype_id = DominantCreatureSubtypeId(cp, cp.active_player_index); }
             cp.battlefield.push_back(perm);
         }
+        // ETB TREASURE (Corsair Captain; MTG_ETB_TREASURE_SPEND): the enter trigger's Treasure --
+        // fresh-hold EXEMPT, as FireOwnEtbTriggers makes it -- joins AFTER this cast's own payment,
+        // so it funds a later cast and never the maker. Keyed on the enumeration stamp, so the lever
+        // off leaves this walk exactly as it was.
+        if (a.rock_mana.Total() > 0 && def.params.etb_creates_treasures > 0)
+        {
+            CreateTreasureTokens(cp, cp.active_player_index, def.params.etb_creates_treasures,
+                                 /*fresh_hold_exempt=*/true);
+        }
     }
     return true;
     };
     if (run_walk(order)) { return true; }
+    // ETB-TREASURE-HOISTED RETRY (MTG_ETB_TREASURE_SPEND): the order both apply worlds realise when
+    // the rank order cannot pay (ApplyEtbTreasureFundingOrder -- the maker first, so its Treasure
+    // funds the rest). Rescue-only; with no stamped maker in the subset the reorder is a no-op and
+    // the retry is skipped.
+    {
+        std::vector<int> etb_ord = order;
+        ApplyEtbTreasureFundingOrder(state, cands, etb_ord);
+        if (etb_ord != order && run_walk(etb_ord)) { return true; }
+    }
     // UNTAPPER-HOISTED RETRY (USER, EDF seed 12 gi=11 T4, 2026-09-10): the line
     // [Brushland; Peregrine Drake; Eldrazi Displacer; Training Grounds] is rules-legal ONLY with
     // the Drake paid first -- pre-untap supply is 5 mana against 6 of cost, and the Drake's ETB
@@ -17743,6 +17802,18 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
         if (RockRampEnumEnabled() && def.params.mana_rock && !def.card.IsCreature()
             && !def.params.enters_tapped)
         { AddSourceToPool(a.rock_mana, state, def); }
+        // ETB TREASURE (Corsair Captain; MTG_ETB_TREASURE_SPEND -- see EtbTreasureSpendOn): the
+        // Treasure its enter trigger makes is fresh-hold EXEMPT, so it is same-turn mana exactly like
+        // a cast rock's first tap -- one WILD per Treasure, arriving only once the maker resolves.
+        // Riding rock_mana puts it under every consumer that already agrees on that shape: the rock
+        // branch of both pricing twins ("a rock never funds its own cost" -- credited only once the
+        // board pays the makers themselves), the odometer gain terms, FirstUnpayablePos, the colour
+        // presence widening (wild = every colour), the producer flags. The two real-payment walks put
+        // the Treasure itself on their scratch board (SubsetPayableWithFilters / -Sequential), and both
+        // apply worlds hoist the maker ahead of what it funds (ApplyEtbTreasureFundingOrder). A
+        // creature's summoning sickness is irrelevant: it is the TREASURE that taps, not the body.
+        if (def.params.etb_creates_treasures > 0 && EtbTreasureSpendOn())
+        { a.rock_mana.wild += def.params.etb_creates_treasures; }
         // Terastodon: the ETB destroy-K rides chosen_x on the cast. The v1 engine wired K through
         // the apply/executor path but never EMITTED K > 0, so no Elephant was ever made. The
         // autonomous search emits ONE variant carrying the kEtbKxHeuristic sentinel: K is decided
@@ -18133,6 +18204,14 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
                 a.card_mv           = target_mv;
                 a.vial_bf_index     = vi;
                 a.vial_attack_power = haste ? power : 0;
+                // A Vial-PUT Corsair Captain's ETB Treasure funds the plan's hand casts exactly like a
+                // cast one's (MTG_ETB_TREASURE_SPEND; the stamp twin of the CastFromHand site). The
+                // put costs no mana, so the rock branch's "board pays the makers" guard is trivially
+                // met. Sound ONLY in the default puts-FIRST order: the puts-last pricing retry skips
+                // this credit (g_reveal_vials_last) and AppendVialOrderVariants refuses a puts-last
+                // clone whose casts the board cannot pay without it.
+                if (copt->params.etb_creates_treasures > 0 && EtbTreasureSpendOn())
+                { a.rock_mana.wild += copt->params.etb_creates_treasures; }
                 actions.push_back(std::move(a));
             }
         }
@@ -24846,6 +24925,9 @@ TurnSolver::Plan TurnSolver::SolveUncached(const GameState& state, bool is_pre_c
             for (int j : sel)
             {
                 if (cands[j].rock_mana.Total() <= 0) { continue; }
+                // A Vial-put ETB Treasure maker (MTG_ETB_TREASURE_SPEND) funds casts only when the
+                // put resolves FIRST; the puts-last pricing retry must not credit it.
+                if (g_reveal_vials_last != 0 && cands[j].kind == Action::Kind::ActivateVial) { continue; }
                 rock_prod.AddPool(cands[j].rock_mana);
                 const ManaCost& rc = cands[j].cost;
                 rock_costs.white += rc.white; rock_costs.blue += rc.blue; rock_costs.black += rc.black;
@@ -26894,7 +26976,16 @@ bool TurnSolver::BatchPrepayMainCasts(GameState& state, const std::vector<Action
         // gets the anti-stranding joint payment. Output accounting stays exact: a ritual's float
         // lands ON TOP of the pre-loaded pool at resolution (spendable leftover, same as the
         // greedy's), and a rock simply enters untapped with its taps unneeded.
-        if (a.ritual_float > 0 || a.rock_mana.Total() > 0)
+        // An ETB-TREASURE maker (Corsair Captain; its rock_mana is the enter trigger's Treasure,
+        // MTG_ETB_TREASURE_SPEND) always takes the MTG_PREPAY_PRODUCER route: cost folded, output not
+        // credited. That is exactly the pre-lever behaviour on every turn the line is payable from the
+        // board alone (the stamp did not exist, so the joint prepay ran), and a line that NEEDS the
+        // Treasure reads combined-unpayable and declines to the per-cast payer, which the funding
+        // order (ApplyEtbTreasureFundingOrder) then feeds Corsair-first.
+        const bool etb_treasure_only = a.ritual_float == 0 && a.def != nullptr
+                                    && a.def->params.etb_creates_treasures > 0
+                                    && !a.def->params.mana_rock;
+        if ((a.ritual_float > 0 || a.rock_mana.Total() > 0) && !etb_treasure_only)
         {
             if (!g_prepay_producer_on) { return Pp(PP_PRODUCER); }   // producer breaks fungibility
         }
@@ -31066,6 +31157,9 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
                     ApplyCastOrderRangeLadder(state, acts, ord);
                     ApplyEnablerWipeRecheck(state, acts, ord);
                 }
+                // ETB-Treasure maker first when (and only when) the line needs its Treasure
+                // (MTG_ETB_TREASURE_SPEND; no-op without a stamped maker). Mirrored in TakeTurn.
+                ApplyEtbTreasureFundingOrder(state, acts, ord);
                 for (int i : ord)
                 {
                     const Action& a = acts[i];
@@ -31095,6 +31189,9 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
                 // lever off / no ranged spell in the set. Mirrored in AIEngine::TakeTurn (lockstep).
                 ApplyCastOrderRangeLadder(state, acts, order);
                 ApplyEnablerWipeRecheck(state, acts, order);
+                // ETB-Treasure maker first when the line needs its Treasure (MTG_ETB_TREASURE_SPEND;
+                // no-op without a stamped maker). Mirrored in AIEngine::TakeTurn (lockstep).
+                ApplyEtbTreasureFundingOrder(state, acts, order);
                 for (int i : order)
                 {
                     const Action& a = acts[i];
@@ -32831,6 +32928,7 @@ static bool SimulateEndAndStartNextTurn(GameState& state)
             if (!(ice_locks && p.ice_counters > 0 && p.card.IsCreature()))
             { p.tapped = false; }
             p.entered_this_turn = false;
+            p.fresh_hold_exempt = false;   // lockstep with GameEngine::UntapStep (Permanent.h)
             p.gained_control_this_turn = false;   // control-change sickness clears on YOUR untap (CR 302.6)
             p.colored_cast_lifegain_used_this_turn = false;   // Ancient Cornucopia once-each-turn
             p.loyalty_activated_this_turn = false;   // planeswalkers: one loyalty ability per turn
@@ -34910,6 +35008,9 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
             for (int j : sel)
             {
                 if (cands[j].rock_mana.Total() <= 0) { continue; }
+                // A Vial-put ETB Treasure maker (MTG_ETB_TREASURE_SPEND) funds casts only when the
+                // put resolves FIRST; the puts-last pricing retry must not credit it.
+                if (g_reveal_vials_last != 0 && cands[j].kind == Action::Kind::ActivateVial) { continue; }
                 rock_prod.AddPool(cands[j].rock_mana);
                 const ManaCost& rc = cands[j].cost;
                 rock_costs.white += rc.white; rock_costs.blue += rc.blue; rock_costs.black += rc.black;
@@ -39970,6 +40071,28 @@ static void AppendVialOrderVariants(const GameState& state, std::vector<TurnSolv
         { continue; }
         if (!TurnSolver::VialOrderMatters(p)) { continue; }
         if (PlanOpensBreakpoint(state, p) != 0) { continue; }
+        // A Vial-PUT ETB Treasure maker (MTG_ETB_TREASURE_SPEND) breaks the "the clone never costs
+        // more" argument above: its Treasure was credited to the casts, and puts-last makes it
+        // AFTER them. Keep the clone only when the casts' total still fits without that Treasure --
+        // the board's mana, +1 for a plan land drop (not yet on the board here), plus any hand-cast
+        // maker's own Treasure. Total-mana only (colour is left to the apply, which drops an
+        // unpayable cast and scores what resolves). No stamped Vial put -> untouched.
+        {
+            int vial_credit = 0, cast_mv = 0, cast_credit = 0;
+            for (const Action& a : p.actions)
+            {
+                if (a.kind == Action::Kind::ActivateVial) { vial_credit += a.rock_mana.Total(); continue; }
+                if (a.kind != Action::Kind::CastFromHand || a.alt_cost || a.free_cast) { continue; }
+                cast_mv     += a.cost.ManaValue();
+                cast_credit += a.rock_mana.Total() + a.ritual_float;
+            }
+            if (vial_credit > 0)
+            {
+                const int supply = static_cast<int>(AvailableManaPool(state).Total())
+                                 + (p.land_decided && !p.land_to_play.empty() ? 1 : 0) + cast_credit;
+                if (cast_mv > supply) { continue; }
+            }
+        }
         TurnSolver::Plan v = p;
         v.vial_after_casts = true;
         v.bp_wave0 = false;   // a clone does not inherit wave 0's fan-out (MTG_BP_AXIS_W0_CLEAR)
@@ -41987,6 +42110,12 @@ static TranspositionTable::Key BuildSimKey(const GameState& state, int depth, in
         // permanent keeps the EXACT prior key (byte-identical).
         if (perm.age_counters > 0)
         { Fold(tk, 0xA6E0); Fold(tk, static_cast<uint64_t>(perm.age_counters)); }
+        // §2a fresh-hold exemption (MTG_ETB_TREASURE_SPEND): a fresh Treasure that PAYS this turn
+        // and one the hold banks solve differently, so they must not share a TT entry. Folded ONLY
+        // when set (cleared at the untap with entered_this_turn), so every deck that never makes an
+        // enter-trigger / Larcenist Treasure -- Mirrorwing's Gold Rush included -- keeps the EXACT
+        // prior key.
+        if (perm.fresh_hold_exempt) { Fold(tk, 0xF4E5); }
         // SAGA lore counters: future-determining in exactly the same way (a later draw step fires
         // the NEXT chapter, and the last one sacrifices the Saga), so two states differing only in
         // which chapter a Saga has reached must not share a TT entry. Folded ONLY when nonzero, so

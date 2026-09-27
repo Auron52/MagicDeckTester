@@ -1995,6 +1995,32 @@ void ApplyEnablerWipeRecheck(const GameState& state, const std::vector<Action>& 
     }
 }
 
+static bool IsEtbTreasureMakerCast(const Action& a)
+{
+    if (a.kind != Action::Kind::CastFromHand || a.alt_cost || a.rock_mana.Total() <= 0) { return false; }
+    const CardDefinition* d = a.def ? a.def : CardDatabase::Instance().Lookup(a.card_name);
+    return d != nullptr && d->params.etb_creates_treasures > 0;
+}
+
+void ApplyEtbTreasureFundingOrder(const GameState& state, const std::vector<Action>& acts,
+                                  std::vector<int>& order)
+{
+    if (order.size() < 2) { return; }
+    // Hot-path exit: the stamp exists only with the lever on and only on an etb_creates_treasures
+    // card, so every other deck (Mirrorwing's Gold Rush included) leaves after this one pass.
+    bool any = false;
+    for (int i : order) { if (IsEtbTreasureMakerCast(acts[i])) { any = true; break; } }
+    if (!any) { return; }
+    std::vector<int> hoisted, rest;
+    for (int i : order) { (IsEtbTreasureMakerCast(acts[i]) ? hoisted : rest).push_back(i); }
+    if (rest.empty()) { return; }
+    hoisted.insert(hoisted.end(), rest.begin(), rest.end());
+    if (hoisted == order) { return; }
+    if (FirstUnpayablePos(state, acts, order) < 0) { return; }     // the reviewed order pays: keep it
+    if (FirstUnpayablePos(state, acts, hoisted) >= 0) { return; }  // hoisting does not rescue it either
+    order.swap(hoisted);
+}
+
 void ApplyCastOrderRangeLadder(const GameState& state, const std::vector<Action>& acts,
                                std::vector<int>& order)
 {

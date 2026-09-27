@@ -195,6 +195,20 @@ bool MintLineCanCrack(const GameState& state, const std::vector<Action>& actions
 void ApplyEnablerWipeRecheck(const GameState& state, const std::vector<Action>& actions,
                              std::vector<int>& order);
 
+// ETB-TREASURE FUNDING ORDER (MTG_ETB_TREASURE_SPEND). A cast of an enter-trigger Treasure maker
+// (Corsair Captain -- Action::rock_mana stamped at enumeration) funds the casts AFTER it with a
+// fresh-hold-exempt Treasure, and the enumerator credits exactly that. The generic rank puts the
+// maker in the creature tier with no preference, so a plan priced "Corsair, then the 1-drop off its
+// Treasure" could apply the 1-drop first and strand the Corsair. When -- and ONLY when -- the given
+// order does not project payable (FirstUnpayablePos) while the order with every maker hoisted to
+// the front (stable within each group) does, `order` becomes that order; otherwise it is untouched.
+// Need-gated so the reviewed order survives every turn the Treasure is not needed (a Forerunner of
+// the Coalition before a Pirate still drains). Called by BOTH apply worlds at every site that sorts a
+// cast order (ApplyPlanDirect / AIEngine::TakeTurn, main plan and breakpoint continuation), and by
+// the enumeration's sequential-payability rescue, so all three agree. No stamped maker -> a no-op.
+void ApplyEtbTreasureFundingOrder(const GameState& state, const std::vector<Action>& actions,
+                                  std::vector<int>& order);
+
 // MTG_ORDER_RECHECK. Shared with the ENUMERATION guard (SubsetHasUnbackedAltPayload), which may
 // only admit a replacement-enabler subset when this ordering pass is there to alternate it.
 bool OrderRecheckEnabled();

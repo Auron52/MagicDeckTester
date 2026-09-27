@@ -224,6 +224,16 @@ struct Permanent
                                             // token re-pings Scourge but never re-triggers Lathliss
                                             // (loop-safe). Set true in every CreateToken path.
     bool      entered_this_turn    = false;  // summoning sickness tracker
+    // §2a FRESH-HOLD EXEMPTION (MTG_ETB_TREASURE_SPEND; USER 2026-09-26: "D3 is definitely wrong
+    // and should be fixed"). The global fresh-hold (PaySacSpendableNow) banks a pay-sac source that
+    // entered THIS turn -- a doctrine written for GOLD RUSH, a mana-NEGATIVE Treasure-minting SPELL.
+    // A Treasure made for FREE by an enter trigger (Corsair Captain) or a permanent converted in
+    // place by Kitesail Larcenist (TreasurifyPermanent) is not that shape, and real Magic lets it be
+    // cracked at once. Set ONLY on those two routes and ONLY with the lever on, so every deck that
+    // never makes such a Treasure (Mirrorwing's Gold Rush Treasures included) never carries it.
+    // Only meaningful alongside entered_this_turn, and cleared with it at the untap step, so a key
+    // that folds it (only when set) splits nothing past the turn it was made.
+    bool      fresh_hold_exempt    = false;
     // Summoning sickness tracks how long you have CONTROLLED a permanent, not how long it has been
     // on the battlefield (CR 302.6), so gaining control resets it independently of entered_this_turn.
     // Needed because the two can disagree: a scheduled opponent spawn is created with
