@@ -2208,6 +2208,24 @@ Adeline's**, because cycling is the out Adeline lacked. If `n2_basri1` comes bac
 modelled thing it can be is cycling — so confirm the Cat count really is zero (`basri_probe.py`) before
 crediting it, since a nonzero count means the heuristic gate is not firing.
 
+**THE GATE IS VERIFIED LIVE, and it needed its own check because smoke could not provide one.** The
+Gideon commit's smoke was 97 passed / 0 play-changed — but **no shipped deck contains Basri**, so that
+result says nothing at all about whether the cat gate fires. Checked directly instead: 300 games of the
+3-copy arm (`n2_basri3`, the arm with the most chances to activate) at the screens' searched `depth=5`,
+**0 Cat tokens in 300 games**, with Basri cast in 52% of them. The gate is firing on the searched path
+the measurement actually uses, so N2's estimand really is the cycling-vs-legend-rule card described above.
+
+> **A reading artifact nearly condemned this run, and the trap is worth keeping.** `basri_probe.py`
+> counted Cats with `"Cat" in cardName`, which also matches **Adeline, Resplendent CAThar** — three
+> copies in every arm. The clean run first read as *"Cat tokens in 117/300 games (39%)"* and looked like
+> a failed gate. The tell was in the same output: *"max Cats at once: 1"* is the **legend rule**, not a
+> repeatable token engine. Probe now requires the literal token form and `Cat` as a whole word. Tokens
+> are genuinely visible in a `--log-dir` battlefield (`1/1 Human Token`, `1/1 Soldier Token`), so the
+> zero is informative rather than blind. See [[recorded-events-are-not-a-control-signal]].
+>
+> Same census incidentally confirms **Worthy Knight creates HUMAN tokens, not Knight** (`cards.json`,
+> not recall) — so the absence of Knight tokens is correct, not a missing trigger.
+
 **Launched 05:28:14Z** (`run_n2.sh`, pid 295271); round O's comparable shape took **2h16m**. Read with
 `python3 logs/wk_screen/pool_h.py n2_wk n2c_wk j2_ad3_sp4`.
 
