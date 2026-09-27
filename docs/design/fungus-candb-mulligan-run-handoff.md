@@ -54,6 +54,48 @@ day — `/proc/<pid>/exe` read `.../mtg-analyze (deleted)`, and the running imag
 refuse. The current build would *probably* also be accepted (same `play_digest`), but a refusal costs
 the run's remaining resumability, so do not spend that on "probably".
 
+### The frozen binary does NOT pin `cards.json` — check that separately
+
+`cards.json` is **runtime data, not baked into the binary**: an old binary loads new card data. So
+freezing `mtg-analyze` pins the engine and nothing else, and a `cards.json` change can still move play
+identity under a frozen binary. This is not hypothetical — upstream commits landed on
+2026-09-27 touching `src/ai/TurnSolver.cpp`, `src/core/SpellEffects.h` *and* `cards.json` (433 → 439
+entries) while this run was live.
+
+Two checks, in this order, and the second is the one that actually settles it:
+
+1. **Did any of THIS deck's cards change?** For that landing, no: 0 of the deck's 23 cards had a
+   changed `cards.json` entry (8 entries changed, 6 of them newly added cards).
+2. **Did the digest move anyway?** Necessary because some `Has*()` gates in this engine are **DB-wide**
+   rather than deck-scoped, so merely *adding* card definitions can in principle flip one. Run the real
+   configuration — frozen binary against the working tree's `cards.json` — on an isolated copy of the
+   deck folder and read the startup digest:
+
+```bash
+mkdir -p logs/digestprobe/candidate-b-2026-09
+cp decks/Fungus/candidate-b-2026-09/{Fungus.cod,Fungus.profile.json,Fungus.value.json,Fungus.keepmodel.gencache.json} \
+   logs/digestprobe/candidate-b-2026-09/
+logs/Fungus_candidate-b-2026-09_mullgen/mtg-analyze.frozen \
+   logs/digestprobe/candidate-b-2026-09/Fungus.cod \
+   --cards-json src/cards/data/cards.json --gen-mulligan fast
+#  -> "rollout-config play digest (d1/b3, 64-game battery): 36a65944fd138cd0"   then KILL IT
+```
+
+**Verified 2026-09-27T12:03Z: `36a65944fd138cd0`, unchanged.** Route A is therefore safe against that
+landing. Re-run this check after any future upstream pull before resuming.
+
+Three traps in that probe, all of which bit during this session:
+
+- **Copy the deck folder.** Pointed at the live folder it fights the running generation for its own
+  artifacts. Copy the `gencache.json` too or equivalence discovery re-derives from scratch.
+- **Kill it the moment the digest prints.** It does not stop there — it proceeds into
+  `continuous size-7: 761048 cells ... on 24 threads` and competes with the real run. `ratewatch.log`
+  recorded the real run dropping from 23.8 to 17.1 cores during the ~40 s the probe overlapped.
+- **Do not find the pid with `pgrep -f <path>`** — the pattern matches the invoking shell too, and
+  killing that leaves the probe orphaned and running. (`pgrep -x` is no help either here: process names
+  are truncated at 15 chars, so `mtg-analyze.frozen` never matches.) Use
+  `ps -eo pid,args | grep '[d]igestprobe'` and kill that pid.
+
 ## Route A — resume on this machine
 
 **Run the identical command again. That is the whole procedure.** Every completed cell is journalled
