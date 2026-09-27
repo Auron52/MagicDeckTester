@@ -1,0 +1,84 @@
+{
+  "card_scores": {
+    "Ancient Tomb": [
+      0.27976358007317703,
+      -0.26164284302746843
+    ],
+    "Battlefield Forge": [
+      -0.07923893304010221
+    ],
+    "Beseech the Queen": [
+      -0.05195811939997963,
+      -0.10511258767072729
+    ],
+    "Brushland": [
+      0.004872994652406426
+    ],
+    "City of Brass": [
+      0.24183232497839224,
+      0.011444028297961317
+    ],
+    "Dina, Soul Steeper": [
+      0.07393643574241437
+    ],
+    "Grand Coliseum": [
+      0.20124888751306003,
+      -0.2994186046511631
+    ],
+    "Green Sun's Zenith": [
+      0.16922062942824212,
+      -0.12548144257703076
+    ],
+    "Karplusan Forest": [
+      -0.10643939755243803
+    ],
+    "Living Wish": [
+      0.24128099597763875,
+      -0.2476168332945825
+    ],
+    "Manabarbs": [
+      -0.21178496555855109,
+      -0.44662698412698365
+    ],
+    "Pyrohemia": [
+      -0.4523971491664138
+    ],
+    "Reflecting Pool": [
+      0.010958210779632438,
+      -0.4494680851063828
+    ],
+    "Rhox Faithmender": [
+      -0.25646356103416945
+    ],
+    "Rolling Earthquake": [
+      -0.13262615533691058,
+      -0.09635416666666696
+    ],
+    "Spellshock": [
+      -0.22860977395239512
+    ],
+    "Tamanoa": [
+      0.3694555392053811
+    ],
+    "Tarnished Citadel": [
+      0.2087678293179911,
+      -0.13866843033509735
+    ],
+    "Vito, Thorn of the Dusk Rose": [
+      0.29950937950937995,
+      -0.18704545454545496
+    ]
+  },
+  "hand_score_threshold": -1e+18,
+  "mulligan": {
+    "bottom_order": "count_first",
+    "curve_check": "two_drop",
+    "max_lands": 5,
+    "min_color_sources": {},
+    "min_lands": 1,
+    "min_playable": 0,
+    "required_pieces": [],
+    "stop_at": 4
+  },
+  "version": 1
+}
