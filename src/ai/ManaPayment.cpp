@@ -10,6 +10,7 @@
 #include "../core/GameLogger.h"   // g_real_resolution (TEMP MTG_TAPDBG diagnostic)
 
 #include <algorithm>
+#include <atomic>
 #include <cstdio>
 #include <cstring>   // std::strchr -- the pre-tap colour alphabet lookup
 #include <deque>     // PaySnapScratch's stable-address pool
@@ -1718,55 +1719,133 @@ static bool MintedTreasureSpendable(const GameState& state, const std::vector<Ac
 // have been willing to execute anyway.
 // `hold` (MTG_MINT_CREDIT_EXACT): project as if this source were already tapped -- the pump
 // target the payment layer is holding (see the hold-aware pass in ApplyCastOrderRangeLadder).
-static int FirstUnpayablePos(const GameState& state, const std::vector<Action>& acts,
-                             const std::vector<int>& order, const Permanent* hold = nullptr)
+// MTG_PAYABLE_ORDER's simulated hand: the reveal-relevant cards still in hand as the walk proceeds
+// (name + printed definition; hand placeholders carry no types, so the subtype test reads the def,
+// exactly as CanRevealForAdditionalCost does). nullptr = the reveal-blind walk FirstUnpayablePos has
+// always been.
+struct PoHandCard { InternedName name; const CardDefinition* def; };
+
+static bool PoIsRevealCostCast(const Action& a)
 {
-    ManaPool pool = AvailableManaPool(state, hold);   // already includes the turn-scoped float
+    if (a.kind != Action::Kind::CastFromHand || a.alt_cost || a.free_cast) { return false; }
+    const CardDefinition* d = a.def ? a.def : CardDatabase::Instance().Lookup(a.card_name);
+    return d != nullptr && d->params.reveal_or_pay_cost.has_value()
+        && !d->params.reveal_or_pay_subtype.empty();
+}
+
+// The reveal-or-pay cast's price AT ITS POSITION: a.cost with the reveal surcharge normalised out
+// (clamped -- a.cost was priced on the plan-start hand, which may or may not have had a reveal),
+// then re-added iff no OTHER card of the subtype remains in the simulated hand (one copy of its own
+// name is skipped as self, as CanRevealForAdditionalCost does).
+static ManaCost PoRevealAwareCost(const Action& a, const std::vector<PoHandCard>& hand)
+{
+    const CardDefinition* d = a.def ? a.def : CardDatabase::Instance().Lookup(a.card_name);
+    const ManaCost& rc = *d->params.reveal_or_pay_cost;
+    ManaCost c = a.cost;
+    c.generic   = std::max(0, c.generic   - rc.generic);
+    c.white     = std::max(0, c.white     - rc.white);
+    c.blue      = std::max(0, c.blue      - rc.blue);
+    c.black     = std::max(0, c.black     - rc.black);
+    c.red       = std::max(0, c.red       - rc.red);
+    c.green     = std::max(0, c.green     - rc.green);
+    c.colorless = std::max(0, c.colorless - rc.colorless);
+    const std::string& want = d->params.reveal_or_pay_subtype;
+    bool self_skipped = false;
+    for (const PoHandCard& h : hand)
+    {
+        if (!self_skipped && h.name == d->card.m_name) { self_skipped = true; continue; }
+        if (h.def && CardHasSubtype(h.def->card, want)) { return c; }
+    }
+    AddManaCost(c, rc);
+    return c;
+}
+
+static void PoRemoveFromHand(std::vector<PoHandCard>& hand, const InternedName& n)
+{
+    for (std::size_t i = 0; i < hand.size(); ++i)
+    { if (hand[i].name == n) { hand.erase(hand.begin() + static_cast<long>(i)); return; } }
+}
+
+// What a cast PRODUCES for the casts after it -- the credit half of FirstUnpayablePos's walk,
+// factored out so MTG_PAYABLE_ORDER's aggregate bound credits exactly the same terms.
+static void CreditCastOutput(const GameState& state, const std::vector<Action>& acts, const Action& a,
+                             ManaPool& pool)
+{
+    // Credit what this cast PRODUCES, so the rest of the line is projected against the mana it
+    // will actually have. Same two terms the enumeration's subset math credits (Action carries
+    // both precisely so no per-node card lookup is needed), and the same colour semantics the
+    // real float uses -- a ritual's own colour when it has one (the Dragonstorm rituals float
+    // {R}, which cannot pay an off-colour pip), the searched colour for the chosen-colour
+    // dimension, wild otherwise. Both terms are zero for every non-producer -> no cost.
+    if (a.ritual_float > 0)
+    {
+        const CardDefinition* d = a.def ? a.def : CardDatabase::Instance().Lookup(a.card_name);
+        const std::string& col = !a.chosen_float_color.str().empty()
+                               ? a.chosen_float_color.str()
+                               : (d ? d->params.ritual_float_color : std::string());
+        AddColorToPool(pool, col, a.ritual_float);
+    }
+    if (a.rock_mana.Total() > 0) { pool.AddPool(a.rock_mana); }
+    // Treasures minted by the cast (Gold Rush) are same-turn mana through the deferred
+    // breakpoint re-solve (real SacForMana candidates), so the projection credits them as
+    // wild -- BASE count only (a magnet fan-out mints one per copy, but the fan width is a
+    // board fact this projection does not model). The under-credit is the safe direction:
+    // it can only walk a funding spell one rung earlier than strictly needed, never project
+    // an unpayable line as payable.
+    {
+        const CardDefinition* d = a.def ? a.def : CardDatabase::Instance().Lookup(a.card_name);
+        if (d && d->params.creates_treasures > 0 && MintedTreasureSpendable(state, acts))
+        {
+            // MTG_MINT_CREDIT_EXACT: the exact width, re-read off the LIVE board (the ladder
+            // runs after the enabler pass, so a Heroism this plan cast ahead of the minter is
+            // on the battlefield here and its copy's Treasure counts -- SamePlanHeroismMint's
+            // apply-side twin). The stamp (mint_gain, pre-plan board) is only the lever test.
+            // 0 with the lever off -> the base count as before.
+            const int n = a.mint_gain > 0
+                        ? MintedTreasuresForCast(state, state.active_player_index, *d,
+                                                 a.enchant_target, a.soulfire_own_targets)
+                        : d->params.creates_treasures;
+            AddColorToPool(pool, std::string(), n);
+        }
+    }
+}
+
+// The walk behind FirstUnpayablePos, over an explicit starting pool and an optional simulated hand.
+// With `hand` == nullptr it is FirstUnpayablePos exactly (a.cost, no hand tracking).
+static int FirstUnpayablePosImpl(const GameState& state, const std::vector<Action>& acts,
+                                 const std::vector<int>& order, ManaPool pool,
+                                 std::vector<PoHandCard>* hand)
+{
     for (int pos = 0; pos < static_cast<int>(order.size()); ++pos)
     {
         const Action& a = acts[order[pos]];
-        if (a.alt_cost) { continue; }
-        if (!pool.CanPay(a.cost)) { return pos; }
-        PayFromPool(pool, a.cost);
-        // Credit what this cast PRODUCES, so the rest of the line is projected against the mana it
-        // will actually have. Same two terms the enumeration's subset math credits (Action carries
-        // both precisely so no per-node card lookup is needed), and the same colour semantics the
-        // real float uses -- a ritual's own colour when it has one (the Dragonstorm rituals float
-        // {R}, which cannot pay an off-colour pip), the searched colour for the chosen-colour
-        // dimension, wild otherwise. Both terms are zero for every non-producer -> no cost.
-        if (a.ritual_float > 0)
+        if (hand != nullptr)
         {
-            const CardDefinition* d = a.def ? a.def : CardDatabase::Instance().Lookup(a.card_name);
-            const std::string& col = !a.chosen_float_color.str().empty()
-                                   ? a.chosen_float_color.str()
-                                   : (d ? d->params.ritual_float_color : std::string());
-            AddColorToPool(pool, col, a.ritual_float);
+            // Reveal-aware (MTG_PAYABLE_ORDER): price at this position, then the card leaves hand
+            // whether it paid mana or not (an alt-cost cast still leaves the hand).
+            const bool rop = PoIsRevealCostCast(a);
+            const ManaCost cost = rop ? PoRevealAwareCost(a, *hand) : a.cost;
+            PoRemoveFromHand(*hand, a.card_name);
+            if (a.alt_cost) { continue; }
+            if (!pool.CanPay(cost)) { return pos; }
+            PayFromPool(pool, cost);
         }
-        if (a.rock_mana.Total() > 0) { pool.AddPool(a.rock_mana); }
-        // Treasures minted by the cast (Gold Rush) are same-turn mana through the deferred
-        // breakpoint re-solve (real SacForMana candidates), so the projection credits them as
-        // wild -- BASE count only (a magnet fan-out mints one per copy, but the fan width is a
-        // board fact this projection does not model). The under-credit is the safe direction:
-        // it can only walk a funding spell one rung earlier than strictly needed, never project
-        // an unpayable line as payable.
+        else
         {
-            const CardDefinition* d = a.def ? a.def : CardDatabase::Instance().Lookup(a.card_name);
-            if (d && d->params.creates_treasures > 0 && MintedTreasureSpendable(state, acts))
-            {
-                // MTG_MINT_CREDIT_EXACT: the exact width, re-read off the LIVE board (the ladder
-                // runs after the enabler pass, so a Heroism this plan cast ahead of the minter is
-                // on the battlefield here and its copy's Treasure counts -- SamePlanHeroismMint's
-                // apply-side twin). The stamp (mint_gain, pre-plan board) is only the lever test.
-                // 0 with the lever off -> the base count as before.
-                const int n = a.mint_gain > 0
-                            ? MintedTreasuresForCast(state, state.active_player_index, *d,
-                                                     a.enchant_target, a.soulfire_own_targets)
-                            : d->params.creates_treasures;
-                AddColorToPool(pool, std::string(), n);
-            }
+            if (a.alt_cost) { continue; }
+            if (!pool.CanPay(a.cost)) { return pos; }
+            PayFromPool(pool, a.cost);
         }
+        CreditCastOutput(state, acts, a, pool);
     }
     return -1;
+}
+
+static int FirstUnpayablePos(const GameState& state, const std::vector<Action>& acts,
+                             const std::vector<int>& order, const Permanent* hold = nullptr)
+{
+    // AvailableManaPool already includes the turn-scoped float.
+    return FirstUnpayablePosImpl(state, acts, order, AvailableManaPool(state, hold), nullptr);
 }
 
 bool MintHoistAfterMagnets(const GameState& state, const std::vector<Action>& acts)
@@ -2019,6 +2098,221 @@ void ApplyEtbTreasureFundingOrder(const GameState& state, const std::vector<Acti
     if (FirstUnpayablePos(state, acts, order) < 0) { return; }     // the reviewed order pays: keep it
     if (FirstUnpayablePos(state, acts, hoisted) >= 0) { return; }  // hoisting does not rescue it either
     order.swap(hoisted);
+}
+
+// ---- PAYABLE-ORDER FALLBACK (MTG_PAYABLE_ORDER) ---------------------------------------------------
+//
+// USER 2026-09-27 (Pirates): hand Malcolm {U}{R}, Corsair Captain {2}{U}, Daring Buccaneer {R} ("reveal
+// a Pirate card or pay {2}"), five lands. Six mana of cost; the Corsair's Treasure is the sixth. The
+// reviewed order (Malcolm, Buccaneer revealing the Corsair, Corsair) brings the Treasure in LAST, so
+// one cast is stranded; the maker hoist (Corsair, Malcolm, Buccaneer) leaves the Buccaneer nothing to
+// reveal -> {2}{R}, still unpayable. Corsair, Buccaneer (revealing Malcolm), Malcolm casts all three
+// and gives up only Malcolm's Clue. The USER's scope: "it really is just for the 'fail to pay' case,
+// that this is worth doing" and "If we have mana for all of them, then there is no need to change the
+// order." So: the given order stands whenever it projects payable; only when it does not is a
+// permutation of the SAME casts taken, and only one that projects payable.
+//
+// The projection is FirstUnpayablePos's walk plus a simulated hand: a reveal-or-pay cast is charged
+// its surcharge iff no other card of the subtype is left in hand at its position (the cards cast
+// before it have gone). Same aggregate-pool colour semantics and producer credits, so it is exactly as
+// colour-exact as FirstUnpayablePos -- a wrong answer picks a DIFFERENT legal order, never an illegal
+// one.
+//
+// Search order when the given order fails: (1) the maker hoist ApplyEtbTreasureFundingOrder already
+// performs (so every line it rescued today it still rescues, now judged reveal-aware); (2) the
+// permutations of the order's casts, NEAREST first -- fewest pairwise inversions against the ANCHOR
+// (the maker-hoisted order when a maker is present -- the reviewed doctrine that the Treasure maker
+// goes first when its Treasure is needed -- else the given order), then fewest inversions against the
+// given order, then lexicographic by position. Exhaustive for n <= 7 casts, single-element moves
+// beyond that. None pays -> the given order, untouched.
+//
+// DOMAIN: an order holding a stamped ETB-Treasure maker (Action::rock_mana on an etb_creates_treasures
+// cast) or a reveal-or-pay cast. Everything else returns after one pass over the order (a pure
+// reorder of non-producing, reveal-free casts cannot change the aggregate verdict anyway).
+bool PayableOrderOn()
+{
+    static const bool env_on = EnvOn("MTG_PAYABLE_ORDER");   // DEFAULT OFF (measuring)
+    return heurarm::Flag(heurarm::PAYABLE_ORDER, env_on);
+}
+
+namespace
+{
+// MTG_PAYABLE_ORDER_STATS: fire counts, printed at exit. [0] = apply sites, [1] = enumeration.
+struct PayableOrderStats
+{
+    std::atomic<long long> domain[2]{}, default_pays[2]{}, bound_fail[2]{}, hoist[2]{}, perm[2]{},
+                           none[2]{};
+    ~PayableOrderStats()
+    {
+        if (!EnvOn("MTG_PAYABLE_ORDER_STATS")) { return; }
+        static const char* const kSite[2] = { "apply", "enum" };
+        for (int k = 0; k < 2; ++k)
+        {
+            std::fprintf(stderr,
+                         "[payable-order] site=%s in_domain=%lld default_pays=%lld bound_fail=%lld "
+                         "hoist_rescue=%lld perm_rescue=%lld none_pays=%lld\n",
+                         kSite[k], domain[k].load(), default_pays[k].load(), bound_fail[k].load(),
+                         hoist[k].load(), perm[k].load(), none[k].load());
+        }
+    }
+};
+PayableOrderStats g_po_stats;
+
+int Inversions(const std::vector<int>& perm, const std::vector<int>& rank_of)
+{
+    int inv = 0;
+    for (std::size_t i = 0; i < perm.size(); ++i)
+    { for (std::size_t j = i + 1; j < perm.size(); ++j) { if (rank_of[perm[i]] > rank_of[perm[j]]) { ++inv; } } }
+    return inv;
+}
+}   // namespace
+
+static void PayableCastOrderCore(const GameState& state, const std::vector<Action>& acts,
+                                 std::vector<int>& order, const std::vector<InternedName>* hand_exits,
+                                 int extra_wild, int site)
+{
+    if (order.size() < 2) { return; }
+    bool any = false;
+    for (int i : order)
+    { if (IsEtbTreasureMakerCast(acts[i]) || PoIsRevealCostCast(acts[i])) { any = true; break; } }
+    if (!any) { return; }
+    g_po_stats.domain[site].fetch_add(1, std::memory_order_relaxed);
+
+    ManaPool pool0 = AvailableManaPool(state);   // already includes the turn-scoped float
+    if (extra_wild > 0) { pool0.wild += extra_wild; }
+    thread_local std::vector<PoHandCard> hand0, hand;
+    hand0.clear();
+    for (const Card& c : state.ActivePlayer().hand)
+    {
+        if (c.m_is_staged) { continue; }
+        hand0.push_back({ c.m_name, CardDatabase::Instance().LookupCached(c) });
+    }
+    if (hand_exits) { for (const InternedName& n : *hand_exits) { PoRemoveFromHand(hand0, n); } }
+    auto pays = [&](const std::vector<int>& ord) -> bool
+    {
+        hand = hand0;
+        return FirstUnpayablePosImpl(state, acts, ord, pool0, &hand) < 0;
+    };
+    if (pays(order)) { g_po_stats.default_pays[site].fetch_add(1, std::memory_order_relaxed); return; }
+
+    // Order-free necessary condition: every cast at its cheapest (reveal granted) against the pool
+    // plus EVERY producer's output. A sequential payment implies this aggregate one, so failing it
+    // means no permutation pays -- the common case for a subset simply beyond the board.
+    {
+        ManaPool bound = pool0;
+        ManaCost total{};
+        for (int i : order)
+        {
+            const Action& a = acts[i];
+            CreditCastOutput(state, acts, a, bound);
+            if (a.alt_cost) { continue; }
+            if (PoIsRevealCostCast(a))
+            {
+                // reveal granted: price against a hand holding one extra subtype card (never self)
+                const CardDefinition* d = a.def ? a.def : CardDatabase::Instance().Lookup(a.card_name);
+                ManaCost c = a.cost;
+                const ManaCost& rc = *d->params.reveal_or_pay_cost;
+                c.generic   = std::max(0, c.generic   - rc.generic);
+                c.white     = std::max(0, c.white     - rc.white);
+                c.blue      = std::max(0, c.blue      - rc.blue);
+                c.black     = std::max(0, c.black     - rc.black);
+                c.red       = std::max(0, c.red       - rc.red);
+                c.green     = std::max(0, c.green     - rc.green);
+                c.colorless = std::max(0, c.colorless - rc.colorless);
+                AddManaCost(total, c);
+            }
+            else { AddManaCost(total, a.cost); }
+        }
+        if (!bound.CanPay(total))
+        { g_po_stats.bound_fail[site].fetch_add(1, std::memory_order_relaxed); return; }
+    }
+
+    // (1) The maker hoist (ApplyEtbTreasureFundingOrder's order), judged reveal-aware.
+    std::vector<int> hoisted, rest;
+    for (int i : order) { (IsEtbTreasureMakerCast(acts[i]) ? hoisted : rest).push_back(i); }
+    const bool has_maker = !hoisted.empty() && !rest.empty();
+    hoisted.insert(hoisted.end(), rest.begin(), rest.end());
+    if (has_maker && hoisted != order && pays(hoisted))
+    {
+        order.swap(hoisted);
+        g_po_stats.hoist[site].fetch_add(1, std::memory_order_relaxed);
+        return;
+    }
+
+    // (2) Nearest payable permutation. Work in POSITIONS of the given order (0..n-1).
+    const int n = static_cast<int>(order.size());
+    std::vector<int> def_rank(n), anc_rank(n);
+    for (int p = 0; p < n; ++p) { def_rank[p] = p; }
+    {
+        // anchor = the hoisted order when a maker is present, else the given order
+        std::vector<int> anc_pos;
+        if (has_maker)
+        {
+            for (int p = 0; p < n; ++p) { if (IsEtbTreasureMakerCast(acts[order[p]])) { anc_pos.push_back(p); } }
+            for (int p = 0; p < n; ++p) { if (!IsEtbTreasureMakerCast(acts[order[p]])) { anc_pos.push_back(p); } }
+        }
+        else { for (int p = 0; p < n; ++p) { anc_pos.push_back(p); } }
+        for (int r = 0; r < n; ++r) { anc_rank[anc_pos[r]] = r; }
+    }
+    struct Cand { int k1, k2; std::vector<int> perm; };
+    std::vector<Cand> cands;
+    auto add = [&](const std::vector<int>& perm)
+    { cands.push_back({ Inversions(perm, anc_rank), Inversions(perm, def_rank), perm }); };
+    std::vector<int> perm(n);
+    for (int p = 0; p < n; ++p) { perm[p] = p; }
+    if (n <= 7)
+    {
+        // next_permutation from the identity walks every permutation in lexicographic order.
+        while (std::next_permutation(perm.begin(), perm.end())) { add(perm); }
+    }
+    else
+    {
+        for (int from = 0; from < n; ++from)
+        {
+            for (int to = 0; to < n; ++to)
+            {
+                if (to == from) { continue; }
+                std::vector<int> m(perm);
+                const int x = m[from];
+                m.erase(m.begin() + from);
+                m.insert(m.begin() + to, x);
+                add(m);
+            }
+        }
+    }
+    std::stable_sort(cands.begin(), cands.end(), [](const Cand& a, const Cand& b)
+    {
+        if (a.k1 != b.k1) { return a.k1 < b.k1; }
+        if (a.k2 != b.k2) { return a.k2 < b.k2; }
+        return a.perm < b.perm;
+    });
+    std::vector<int> trial(n);
+    for (const Cand& c : cands)
+    {
+        for (int p = 0; p < n; ++p) { trial[p] = order[c.perm[p]]; }
+        if (trial == hoisted && has_maker) { continue; }   // already judged above
+        if (pays(trial))
+        {
+            order = trial;
+            g_po_stats.perm[site].fetch_add(1, std::memory_order_relaxed);
+            return;
+        }
+    }
+    g_po_stats.none[site].fetch_add(1, std::memory_order_relaxed);
+}
+
+void ApplyPayableCastOrder(const GameState& state, const std::vector<Action>& acts, std::vector<int>& order)
+{
+    if (!PayableOrderOn()) { ApplyEtbTreasureFundingOrder(state, acts, order); return; }
+    PayableCastOrderCore(state, acts, order, nullptr, 0, /*site=*/0);
+}
+
+void ApplyPayableCastOrderAt(const GameState& state, const std::vector<Action>& acts,
+                             std::vector<int>& order, const std::vector<InternedName>& hand_exits,
+                             int extra_wild)
+{
+    if (!PayableOrderOn()) { ApplyEtbTreasureFundingOrder(state, acts, order); return; }
+    PayableCastOrderCore(state, acts, order, &hand_exits, extra_wild, /*site=*/1);
 }
 
 void ApplyCastOrderRangeLadder(const GameState& state, const std::vector<Action>& acts,

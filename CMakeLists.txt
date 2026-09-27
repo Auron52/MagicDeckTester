@@ -301,6 +301,7 @@ add_executable(mtg-test
     test/unit/test_pirates_provider.cpp
     test/unit/test_etb_dig_breakpoint.cpp
     test/unit/test_etb_treasure_spend.cpp
+    test/unit/test_payable_order.cpp
     test/unit/test_etb_target_carriage.cpp
     test/unit/test_in_place_rename.cpp
 )

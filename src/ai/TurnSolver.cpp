@@ -5906,6 +5906,31 @@ static RevealSurcharge SameSubsetRevealSurcharge(const GameState& state,
         { remove_one(base, a.card_name); }
         else if (a.kind == Action::Kind::CastFromHand) { casts.push_back(j); }
     }
+    // MTG_PAYABLE_ORDER: both apply worlds finish their order with ApplyPayableCastOrder (the given
+    // order unless it projects unpayable, then the nearest payable one), so price THAT order -- else
+    // the ideal subset {Malcolm, Corsair, Buccaneer} on five lands reads as {R}+{2}{R}+... in the
+    // rank order and is never offered. The same decider, fed the node's view: the cards puts-first
+    // Vial puts / suspend / channel remove before any cast, and a Vial-put ETB Treasure (on the board
+    // at the apply's sort site). Lever off -> not called: byte-identical.
+    const bool po_on = PayableOrderOn();
+    thread_local std::vector<InternedName> po_exits;
+    int po_wild = 0;
+    if (po_on)
+    {
+        po_exits.clear();
+        for (int j : sel)
+        {
+            const Action& a = cands[j];
+            if ((a.kind == Action::Kind::ActivateVial && g_reveal_vials_last == 0)
+                || a.kind == Action::Kind::Suspend || a.kind == Action::Kind::Channel)
+            { po_exits.push_back(a.card_name); }
+            if (a.kind == Action::Kind::ActivateVial && g_reveal_vials_last == 0 && a.rock_mana.Total() > 0
+                && a.def != nullptr && a.def->params.etb_creates_treasures > 0)
+            { po_wild += a.def->params.etb_creates_treasures; }
+        }
+    }
+    auto realise = [&](std::vector<int>& ord)
+    { if (po_on) { ApplyPayableCastOrderAt(state, cands, ord, po_exits, po_wild); } };
     thread_local std::vector<int> ch1, ch2;
     auto walk = [&](const std::vector<int>& ord, std::vector<int>& ch) -> RevealSurcharge
     {
@@ -5936,11 +5961,15 @@ static RevealSurcharge SameSubsetRevealSurcharge(const GameState& state,
         }
         return r;
     };
-    const RevealSurcharge plan_order = walk(casts, ch1);
+    thread_local std::vector<int> plan_ord;
+    plan_ord = casts;
+    realise(plan_ord);
+    const RevealSurcharge plan_order = walk(plan_ord, ch1);
     sorted = casts;
     std::stable_sort(sorted.begin(), sorted.end(), [&](int x, int y)
     { return CastOrderLess(state, cands[x], cands[y]); });
-    if (sorted == casts)
+    realise(sorted);
+    if (sorted == plan_ord)
     {
         if (charged) { *charged = ch1; }
         return plan_order;
@@ -6697,8 +6726,26 @@ static bool SubsetPayableSequential(const GameState& state, const std::vector<Ac
     // funds the rest). Rescue-only; with no stamped maker in the subset the reorder is a no-op and
     // the retry is skipped.
     {
+        // MTG_PAYABLE_ORDER: the generalised decider (reveal-aware nearest payable order), fed the
+        // node's view like SameSubsetRevealSurcharge; lever off -> exactly the maker hoist.
         std::vector<int> etb_ord = order;
-        ApplyEtbTreasureFundingOrder(state, cands, etb_ord);
+        thread_local std::vector<InternedName> seq_exits;
+        seq_exits.clear();
+        int seq_wild = 0;
+        if (PayableOrderOn())
+        {
+            for (int j : sel)
+            {
+                const Action& a = cands[j];
+                if ((a.kind == Action::Kind::ActivateVial && g_reveal_vials_last == 0)
+                    || a.kind == Action::Kind::Suspend || a.kind == Action::Kind::Channel)
+                { seq_exits.push_back(a.card_name); }
+                if (a.kind == Action::Kind::ActivateVial && g_reveal_vials_last == 0 && a.rock_mana.Total() > 0
+                    && a.def != nullptr && a.def->params.etb_creates_treasures > 0)
+                { seq_wild += a.def->params.etb_creates_treasures; }
+            }
+        }
+        ApplyPayableCastOrderAt(state, cands, etb_ord, seq_exits, seq_wild);
         if (etb_ord != order && run_walk(etb_ord)) { return true; }
     }
     // UNTAPPER-HOISTED RETRY (USER, EDF seed 12 gi=11 T4, 2026-09-10): the line
@@ -31411,8 +31458,9 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
                     ApplyEnablerWipeRecheck(state, acts, ord);
                 }
                 // ETB-Treasure maker first when (and only when) the line needs its Treasure
-                // (MTG_ETB_TREASURE_SPEND; no-op without a stamped maker). Mirrored in TakeTurn.
-                ApplyEtbTreasureFundingOrder(state, acts, ord);
+                // (MTG_ETB_TREASURE_SPEND; no-op without a stamped maker; MTG_PAYABLE_ORDER generalises it to
+                // the nearest payable, reveal-aware order). Mirrored in TakeTurn.
+                ApplyPayableCastOrder(state, acts, ord);
                 for (int i : ord)
                 {
                     const Action& a = acts[i];
@@ -31443,8 +31491,9 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
                 ApplyCastOrderRangeLadder(state, acts, order);
                 ApplyEnablerWipeRecheck(state, acts, order);
                 // ETB-Treasure maker first when the line needs its Treasure (MTG_ETB_TREASURE_SPEND;
-                // no-op without a stamped maker). Mirrored in AIEngine::TakeTurn (lockstep).
-                ApplyEtbTreasureFundingOrder(state, acts, order);
+                // no-op without a stamped maker; MTG_PAYABLE_ORDER generalises it). Mirrored in
+                // AIEngine::TakeTurn (lockstep).
+                ApplyPayableCastOrder(state, acts, order);
                 for (int i : order)
                 {
                     const Action& a = acts[i];
@@ -57353,6 +57402,10 @@ std::vector<std::string> TurnSolver::CanonicalNonSacCastOrder(const GameState& s
     }
     std::stable_sort(order.begin(), order.end(), [&](int x, int y)
     { return CastOrderLess(state, plan.actions[x], plan.actions[y]); });
+    // MTG_PAYABLE_ORDER: the apply finishes the clean-set order with the payable-order fallback, so
+    // report that order (viewer: a human's queued order equal to it needs no --cast-order). Lever
+    // off -> not applied, byte-identical output (this display never applied the maker hoist).
+    if (PayableOrderOn()) { ApplyPayableCastOrder(state, plan.actions, order); }
     std::vector<std::string> names;
     names.reserve(order.size());
     for (int i : order) { names.push_back(plan.actions[i].card_name); }

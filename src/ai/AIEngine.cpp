@@ -4438,7 +4438,7 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
                     ApplyCastOrderRangeLadder(state, extra.actions, rest);
                     ApplyEnablerWipeRecheck(state, extra.actions, rest);
                 }
-                ApplyEtbTreasureFundingOrder(state, extra.actions, rest);   // MTG_ETB_TREASURE_SPEND
+                ApplyPayableCastOrder(state, extra.actions, rest);   // MTG_ETB_TREASURE_SPEND / MTG_PAYABLE_ORDER
                 cont_order = std::move(ena);
                 cont_order.insert(cont_order.end(), rest.begin(), rest.end());
             }
@@ -4446,7 +4446,7 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
             {
                 std::stable_sort(cont_order.begin(), cont_order.end(), [&](int x, int y)
                 { return CastOrderLess(state, extra.actions[x], extra.actions[y]); });
-                ApplyEtbTreasureFundingOrder(state, extra.actions, cont_order);   // MTG_ETB_TREASURE_SPEND
+                ApplyPayableCastOrder(state, extra.actions, cont_order);   // MTG_ETB_TREASURE_SPEND / MTG_PAYABLE_ORDER
             }
         }
         for (int ci : cont_order)
@@ -4838,8 +4838,8 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
         ApplyEnablerWipeRecheck(state, plan.actions, ord);
     }
     // ETB-Treasure maker first when the line needs its Treasure (MTG_ETB_TREASURE_SPEND; no-op
-    // without a stamped maker). Mirrors ApplyPlanDirect's opaque branch (lockstep).
-    ApplyEtbTreasureFundingOrder(state, plan.actions, ord);
+    // without a stamped maker; MTG_PAYABLE_ORDER generalises it). Mirrors ApplyPlanDirect's opaque branch (lockstep).
+    ApplyPayableCastOrder(state, plan.actions, ord);
     for (int oi : ord)
     {
         const Action& a = plan.actions[oi];
@@ -4921,8 +4921,8 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
     ApplyCastOrderRangeLadder(state, plan.actions, order);
     ApplyEnablerWipeRecheck(state, plan.actions, order);
     // ETB-Treasure maker first when the line needs its Treasure (MTG_ETB_TREASURE_SPEND; no-op
-    // without a stamped maker). Mirrors ApplyPlanDirect's clean branch (lockstep).
-    ApplyEtbTreasureFundingOrder(state, plan.actions, order);
+    // without a stamped maker; MTG_PAYABLE_ORDER generalises it). Mirrors ApplyPlanDirect's clean branch (lockstep).
+    ApplyPayableCastOrder(state, plan.actions, order);
     for (int oi : order)
     {
         const Action& a = plan.actions[oi];
@@ -5311,7 +5311,7 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
                         std::stable_sort(pod_cont_order.begin(), pod_cont_order.end(),
                             [&](int x, int y)
                             { return CastOrderLess(state, extra.actions[x], extra.actions[y]); });
-                        ApplyEtbTreasureFundingOrder(state, extra.actions, pod_cont_order);   // MTG_ETB_TREASURE_SPEND (lockstep with ApplyPlanDirect)
+                        ApplyPayableCastOrder(state, extra.actions, pod_cont_order);   // MTG_ETB_TREASURE_SPEND / MTG_PAYABLE_ORDER (lockstep with ApplyPlanDirect)
                     }
                     for (int ci : pod_cont_order)
                     {
@@ -5753,7 +5753,7 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
                 std::stable_sort(pe_cont_order.begin(), pe_cont_order.end(),
                     [&](int x, int y)
                     { return CastOrderLess(state, extra.actions[x], extra.actions[y]); });
-                ApplyEtbTreasureFundingOrder(state, extra.actions, pe_cont_order);   // MTG_ETB_TREASURE_SPEND (lockstep with ApplyPlanDirect)
+                ApplyPayableCastOrder(state, extra.actions, pe_cont_order);   // MTG_ETB_TREASURE_SPEND / MTG_PAYABLE_ORDER (lockstep with ApplyPlanDirect)
             }
             auto pe_cast = [&](const Action& ca)
             {

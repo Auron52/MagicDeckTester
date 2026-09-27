@@ -209,6 +209,24 @@ void ApplyEnablerWipeRecheck(const GameState& state, const std::vector<Action>& 
 void ApplyEtbTreasureFundingOrder(const GameState& state, const std::vector<Action>& actions,
                                   std::vector<int>& order);
 
+// PAYABLE-ORDER FALLBACK (MTG_PAYABLE_ORDER, per-job heurarm; DEFAULT OFF). Generalises the maker
+// hoist above to a reveal-aware projection (a "reveal a <subtype> card or pay" cast -- Daring
+// Buccaneer -- is charged its surcharge once no other subtype card is left in hand at its position):
+// the given order stands whenever it projects payable; otherwise the maker hoist, then the nearest
+// permutation of the same casts that projects payable; none -> untouched. Lever OFF -> exactly
+// ApplyEtbTreasureFundingOrder. The ONE decider for the realised hand-cast order: both apply worlds
+// call ApplyPayableCastOrder at every cast-order sort site; the enumerator calls the ...At form
+// (its node state still holds the cards Vial puts / suspend / channel remove first: `hand_exits`;
+// a Vial-put ETB Treasure maker's Treasure: `extra_wild`) from SameSubsetRevealSurcharge and the
+// sequential-payability retry, so the subset it prices is the order the apply realises.
+// See ManaPayment.cpp for the search order. MTG_PAYABLE_ORDER_STATS prints fire counts at exit.
+bool PayableOrderOn();
+void ApplyPayableCastOrder(const GameState& state, const std::vector<Action>& actions,
+                           std::vector<int>& order);
+void ApplyPayableCastOrderAt(const GameState& state, const std::vector<Action>& actions,
+                             std::vector<int>& order, const std::vector<InternedName>& hand_exits,
+                             int extra_wild);
+
 // MTG_ORDER_RECHECK. Shared with the ENUMERATION guard (SubsetHasUnbackedAltPayload), which may
 // only admit a replacement-enabler subset when this ordering pass is there to alternate it.
 bool OrderRecheckEnabled();

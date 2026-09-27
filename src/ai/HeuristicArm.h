@@ -263,6 +263,7 @@ enum Slot : int
     BP_ETB_DIG,               // MTG_BP_ETB_DIG            an ETB dig (Staunch Crewmate) opens site 10 so the dug card is castable this turn (default ON since 2026-09-26)
     ETB_TREASURE_SPEND,       // MTG_ETB_TREASURE_SPEND    a FREE enter-trigger Treasure (Corsair Captain) / a Larcenist-converted Treasure is spendable the turn it appears, and the enumerator credits the ETB Treasure to later casts of the same plan (default ON; =0 restores the fresh-hold for it)
     PIRATES_CAST_ORDER,       // MTG_PIRATES_CAST_ORDER    the USER-reviewed Pirates cast order: Mimic 7, Buccaneer (reveal live) 8, Forerunner 9 (default OFF, measuring)
+    PAYABLE_ORDER,            // MTG_PAYABLE_ORDER         the cast order is kept unless it projects UNPAYABLE (reveal-aware: a Daring Buccaneer's reveal leaves with the cards cast before it); then the maker hoist, then the nearest payable permutation of the same casts (default OFF, measuring)
     COUNT
 };
 
@@ -492,6 +493,7 @@ inline const char* Name(int slot)
         "MTG_BP_ETB_DIG",
         "MTG_ETB_TREASURE_SPEND",
         "MTG_PIRATES_CAST_ORDER",
+        "MTG_PAYABLE_ORDER",
     };
     // The enum and this table are ONE mapping split across two lists: a slot added to one and not
     // the other silently shifts every lever after it (a manifest asking for lever X would set Y).
