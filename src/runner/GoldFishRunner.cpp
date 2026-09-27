@@ -115,9 +115,11 @@ bool GoldFishRunner::DeckUsesSecondMain(const Decklist& deck)
         //     are 1/3s: X = 3 or three pings kills both). "Attack, THEN sweep" is the real line --
         //     the Hinata/Crackle shape above -- and only a searched second main can express it.
         //     Behind a lever because the searched m2 is not free (MTG_FORCE_USES_M2 measured 4.25x
-        //     at d1/b3 on Fungus): MTG_PD_SECOND_MAIN, DEFAULT ON, PROVISIONAL until the Stage 5
-        //     A/B prices it. heurarm slot so both arms pool into ONE batch.
-        static const bool s_pd_m2 = EnvOn("MTG_PD_SECOND_MAIN", true);
+        //     at d1/b3 on Fungus): MTG_PD_SECOND_MAIN. heurarm slot so both arms pool into ONE batch.
+        //     DEFAULT OFF since the Stage 5 paired A/B (2026-09-27, 600 games d5/b20): the searched
+        //     m2 bought -0.003 turns/game (t -0.23, i.e. nothing) at 1/0.63 = 1.6x the CPU, on a
+        //     deck already over the 3x suite-cost gate. PROVISIONAL, for user review.
+        static const bool s_pd_m2 = EnvOn("MTG_PD_SECOND_MAIN", false);
         if ((def->params.ping_all_cost.has_value() || def->params.x_damage_each_creature_and_player)
             && heurarm::Flag(heurarm::PD_SECOND_MAIN, s_pd_m2))
         { return true; }
