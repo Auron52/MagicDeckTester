@@ -1341,6 +1341,146 @@ Magic. Against a real opponent the game lasts longer, so late arrivals matter mo
 compresses — which is another way of saying this engine systematically prefers cheap cards. That is worth
 holding next to the fact that the campaign's recommendations are overwhelmingly *"more cheap threats"*.
 
+### Round J′ RESULT — held-out confirmed, and the campaign's first exact null control
+
+Pooled over 9.4M + 9.8M, reference `g_l23` (Exemplar 4, Adeline 4, Silverblade 3, 23 lands). Every arm
+also carries the common sink Silverblade 3→4.
+
+| arm | long | 2hg | std | **pooled** | step vs ref | meas. | conf. |
+|---|---|---|---|---|---|---|---|
+| `j2_dbg3_sp4` Bodyguard 4→3 | −0.2682 | −0.4083 | −0.2331 | −0.3032 | −0.0075 | −0.0043 | −0.0107 |
+| `j2_wor3_sp4` Worthy Knight 4→3 | −0.2650 | −0.4103 | −0.2382 | −0.3032 | −0.0075 | −0.0063 | −0.0086 |
+| `j2_vk3_sp4` Venerable Knight 4→3 | −0.2671 | −0.4068 | −0.2314 | −0.3018 | −0.0061 | −0.0021 | −0.0101 |
+| `g_l23` | −0.2583 | −0.3987 | −0.2349 | −0.2958 | — ref | | |
+| `j2_acc3_sp4` Accorder Paladin 4→3 | −0.2450 | −0.3833 | −0.2205 | −0.2816 | **+0.0142** | +0.0143 | +0.0141 |
+| `j2_ad3_sp4` Adeline 4→3 | −0.2501 | −0.3462 | −0.2314 | −0.2752 | **+0.0205** | +0.0201 | +0.0210 |
+
+* **THE NULL CONTROL WORKS, and it is the campaign's first experimentally-measured zero.** Bodyguard minus
+  Venerable Knight — provably the same card, so expectation *exactly* zero — is **−0.0014** pooled (−0.0022
+  on the measurement block alone). So the noise floor on a step of this shape is ~0.002 *as measured*,
+  not as asserted by a formula. Every other step in this table should be read against that number.
+* **Accorder Paladin 4→3 is +0.0142 and reproduced to within 0.0002** (+0.0143 / +0.0141) — the most
+  stable number in the campaign. The last never-varied card is now measured, and 4 is correct. Read it as
+  the WEAK direction though: the user flagged Accorder as *"notably better in goldfishing than in real
+  play"*, and "don't cut it" is exactly what an inflated card produces.
+* **Adeline 4→3 is +0.0205**, also reproduced (+0.0201 / +0.0210), and almost all of it is 2HG (+0.0525
+  vs +0.0072 long / +0.0038 std) — i.e. concentrated where she makes **two** tokens per attack.
+* **The payer does not matter; the gain is the Silverblade.** Three different cards paying for the 4th
+  Silverblade land at −0.0075, −0.0075 and −0.0061 — a spread of 0.0014, which is exactly the null
+  control's own noise. So this round found no adoptable cut: it found that the 4th Silverblade is worth
+  ~−0.007 in this chassis (against −0.0013 in round H's), and the settled list already holds it.
+
+**WhiteKnights is now sink-exhausted in the strict sense** of [[sink-price-is-not-a-refutation]]:
+`min(sink price) > best cut`. The cheapest sink is Hero's 4th at +0.0037, everything good is at 4, and no
+cut measures better than ~0 net. Further gains need a *new card*, or the user's ruling on Lightning
+Greaves — not another round.
+
+### Round L — both Adeline objections, measured
+
+3,000 unselected games per list, each on its own generated table (`adeline_probe.py`).
+
+| | Adeline 4 (`g_l23`) | Adeline 3 (settled) |
+|---|---|---|
+| reaches the battlefield | 48.1% | 39.6% |
+| arrival turn 2 / 3 / 4 | 61 / 944 / 392 | 51 / 780 / 332 |
+| **won before she ever landed** | **51.9%** | **60.4%** |
+| ≥2 copies in hand+play at once | 10.8% | 6.2% |
+| **stranded duplicate (copy in hand, one already out)** | **9.5%** | **5.3%** |
+
+**CHUMP-BLOCK EXPOSURE, the user's objection, quantified.** At the lethal attack the mean creature count —
+which *is* Adeline's power — is **6.95**, against mean lethal damage **18.45**. So her body is **37.7% of
+the killing blow at 1×, and 75.4% at 2×** with soulbond double strike. Silverblade is at 4 and pairs by
+highest effective power, so **2× is the common case: roughly three-quarters of the lethal attack is one
+creature that a single 1/1 chump blocker would stop.** This engine has no blockers, so all of it lands,
+every game. The user's *"she is overstated in goldfish … cannot be chump blocked"* is not a caveat, it is
+the dominant fact about her measured value.
+
+**And the stranding half holds too:** the 4th copy buys **+8.5pp** chance she appears at all and costs
+**+4.2pp** of games where a copy rots in hand under the legend rule. Both reasons for Adeline 3 are
+quantitatively supported, and she is absent entirely in **60%** of wins either way.
+
+### Round L — the CONTENDER dig claim: stale, not false, and 1.8% in impact
+
+Another agent reported *"a bug with Acclaimed Contender where the search cannot deploy creatures received
+the same turn."* Verified against the tree rather than accepted ([[verify-done-claims-in-tree]]):
+
+* **`MTG_BP_PUT_IN_HAND` — "THE GENERAL RULE" — is DEFAULT ON and armed in the ROLLOUT**, i.e. at searched
+  depths: `TurnSolver.cpp:29510` sets `deferred_put_armed` whenever `HandGainedACard(hand_at_cast, state)`,
+  card-agnostically, and `BpSiteMask()` returns `base | 0x400` (site 10) by default. This is exactly the
+  user's framing — *"a breakpoint should open when we add the card"* — and it is what the code does.
+* **The `MTG_ACQ_DIG` note that says "SCOPE = d0 ONLY" is dated 2026-08-19 and is superseded.** Its own
+  successor closes with *"=0 is the hatch, and it is what every pre-2026-09-18 measurement in this file was
+  taken under."* The code justifies opening it with the user's earlier correctness ruling:
+  *"same-turn playability of the found card is a correctness requirement (USER 2026-09-06, 'we need to be
+  able to play it'), not a search lever."*
+* **WHICH card the dig takes is also searched**, not a heuristic: `MTG_ETBDIG_AXIS` default ON,
+  `MTG_ETBDIG_WIDTH` default **3** at a measured knee (W3−W2 = −0.0099; W5−W3 = +0.0000 on every seed),
+  against a measured spread of legal matches (5.9% one, 60.0% two, 6.9% three, 23.4% four, 3.7% five,
+  mean 2.6).
+
+**The measured residual, from 3,000 games of the shipped list:**
+
+| | count |
+|---|---|
+| Acclaimed Contender casts | 876 |
+| …where the dig landed a card in hand | 821 |
+| …where that card was a 1-mana Knight | 186 |
+| …and ≥1 untapped Plains remained (definitely castable) | 48 |
+| …**but that turn was the LETHAL turn** (declining is harmless) | **32** |
+| …**genuine missed same-turn deploys** | **16** |
+
+**So the real impact is 16 of 876 Contender casts — 1.8% of casts, 0.5% of games.** Directionally the
+report was onto something; on cause it was stale, and on magnitude it was off by a wide margin. Nothing
+here moves the ~−0.0095 Contender result. *(`dug_probe.py` separately found 0 of 3,000 games casting a
+card acquired mid-phase, so 0 of those 16 opportunities converted — a thin sample, but the honest reading
+is that the class is armed and something downstream is not converting it.)*
+
+**Where the user's proposed ranking WOULD pay.** Per-copy dig picks over 821 landed digs: Adeline **40**
+and Lightning Greaves **39** (both 1-ofs, taken ~1.5× their share), Hero 29, Marshal 28, Accorder 27,
+**Knight Exemplar 27**, Venerable 24, Worthy 24, Bodyguard 22, and a redundant Contender **16** — least of
+all. So the outcome axis genuinely is choosing. But **Knight Exemplar is taken as often per copy as
+Accorder Paladin despite 73% of its casts never attacking**, which is the width-3 window over *library
+order* failing to reach the better candidate. The user's rule — *"take a 1-drop we can play immediately or
+a lord that would be effective next turn"* — belongs in `DecisionProvider::EtbDigCandidates`, whose base
+returns library order and whose own comment concedes *"the base rule cannot rank them."* Direct precedent:
+`AttackDigPutCandidates` ranks Armored Skyhunter's dig by power granted. That is
+`heuristic-optimization.md` work (propose, sweep, validate held-out, adopt in the archetype provider).
+
+### Round L — the curve, on 3,000 unselected games of the settled list
+
+Replaces the indicative table above. `never` = share of games the card is never cast; `dead` = share of
+casts that never attack (`win_turn − cast_turn = 0`).
+
+| card | never cast | **dead** | mean attacks |
+|---|---|---|---|
+| Accorder Paladin | 43% | **10%** | 1.64 |
+| Worthy Knight | 61% | 28% | 1.26 |
+| Hero of Bladehold | 81% | 28% | 0.91 |
+| Adeline | 60% | 26% | 0.81 |
+| Benalish Marshal | 58% | 48% | 0.72 |
+| Silverblade Paladin | 65% | 47% | 0.69 |
+| **Knight Exemplar** | **78%** | **73%** | **0.34** |
+
+**Hero is far better than the biased sample suggested (28% dead, not 53%), and Knight Exemplar is the worst
+card in the deck on this metric by a wide margin.** Which is consistent with every screen — and is exactly
+the half of Exemplar the apparatus can see.
+
+**Hero's acceleration, the user's hypothesis, split cleanly:**
+
+| accelerant | present at a Hero cast | base rate at turns 2–4 | verdict |
+|---|---|---|---|
+| **Sol Ring** | **41.5%** | ~16–18% | **~2.5× enriched — confirmed** |
+| Remote Farm | 28.6% | ~37.5% (weighted) | **below base — anti-correlated, refuted** |
+
+And the clincher for Sol Ring: **89 of 598 Hero casts happen on turn 2**, which is arithmetically
+impossible without it (T1 Sol Ring → T2 two lands = `{W}{W}{C}{C}`). Remote Farm fails for the reason that
+makes it good elsewhere — it **enters tapped**, so having one in play means a turn of mana already spent;
+it pays for `{W}{W}` costs, not for deploying the top of the curve early.
+
+**"It usually wins on the turn it attacks" — confirmed at scale:** **425 of 538** turns where Hero could
+attack were the lethal turn (**79%**, against 78% on the small sample). Mean damage 18.62 when he can
+attack vs 8.66 when he cannot.
+
 ### BENALISH MARSHAL 2→4 WAS NEVER MEASURED — nine rounds of assumption, and round M
 
 The user asked whether Marshal 2→4 was established empirically, noting their own agreement was *"just a
