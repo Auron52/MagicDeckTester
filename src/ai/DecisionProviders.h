@@ -1876,7 +1876,7 @@ public:
     int EtbDigSearchWidth() const override { return 4; }
 
     // CastOrderRank -- the USER's reviewed Pirates order (2026-09-27), MTG_PIRATES_CAST_ORDER
-    // (default OFF until measured; per-job heurarm so both arms pool into one batch). A FULL order,
+    // (ADOPTED default ON 2026-09-27 -- train 0 slower, held-out non-inferior at d0/d3/d5; =0 reverts). A FULL order,
     // param-keyed (no names):
     //   1  Metallic Mimic -- "Mimic should be before Buccaneer"; its counter hits every later Pirate.
     //   2  Malcolm -- "I would put malcolm after the mimic. The +1/+1 counter with haste is worth the

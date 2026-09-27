@@ -12876,7 +12876,7 @@ PiratesRevealFodder CountPiratesRevealFodder(const GameState& s)
 
 int PiratesProvider::CastOrderRank(const GameState& s, const CardDefinition& def) const
 {
-    static const bool env_on = EnvOn("MTG_PIRATES_CAST_ORDER");   // default OFF (measuring)
+    static const bool env_on = EnvOn("MTG_PIRATES_CAST_ORDER", true);   // DEFAULT ON (adopted 2026-09-27, USER; =0 reverts)
     if (!heurarm::Flag(heurarm::PIRATES_CAST_ORDER, env_on)) { return DeckProvider::CastOrderRank(s, def); }
     const CardParams& p = def.params;
     // 1: counters engine (Metallic Mimic) -- its counter lands on every Pirate entering after it.
@@ -13062,8 +13062,6 @@ std::vector<int> PiratesProvider::CleanupDiscardCandidates(
         const CardDefinition* d = def_at(i);
         artifact_available = d && d->card.HasType(CardType::Artifact);
     }
-    const unsigned all_any = board_any | hand_any;
-    const unsigned all_cre = all_any | board_cre | hand_cre;
 
     // ---- threat value + distance ----------------------------------------------------------------
     auto threat_value = [&](int i) -> int
@@ -13075,7 +13073,10 @@ std::vector<int> PiratesProvider::CleanupDiscardCandidates(
         if (!c.IsCreature()) { return p.damage > 0 ? 56 : 20; }
         if (p.power_bonus > 0 && (!p.subtypes_affected.empty() || p.lord_affects_chosen_subtype))
         { return 100 + (p.etb_creates_treasures > 0 ? 4 : 0); }
-        if (p.other_chosen_subtype_enters_counters > 0)  { return 92; }
+        // Metallic Mimic: below Dire Fleet Captain (USER 2026-09-27: "Metallic Mimic should be dropped
+        // below Dire Fleet captain unless we are turn 1") -- its counter only pays off across the
+        // Pirates cast AFTER it, which is most of the game only when it lands on turn 2.
+        if (p.other_chosen_subtype_enters_counters > 0)  { return s.turn_number <= 1 ? 92 : 85; }
         if (p.attack_pump_power_per_other_matching > 0)  { return 86; }
         if (p.own_creature_enters_opp_life_loss > 0 || p.tutor_to_top) { return 82; }
         if (c.HasKeyword(Keyword::Flying)
@@ -13088,13 +13089,14 @@ std::vector<int> PiratesProvider::CleanupDiscardCandidates(
         { v += 4 * p.static_artifact_power + (p.static_artifact_haste ? 4 : 0); }
         return v;
     };
-    auto distance = [&](int i) -> int
+    // Effective cost: Daring Buccaneer's reveal-or-pay -- 1 with another reveal-subtype CARD in hand,
+    // 1 + reveal_or_pay_cost otherwise.
+    auto eff_cost = [&](int i) -> int
     {
         const CardDefinition* d = def_at(i);
-        if (d == nullptr) { return 0; }
-        const Card& c = d->card;
-        const CardParams& p = d->params;
         int cost = mv_of(i);
+        if (d == nullptr) { return cost; }
+        const CardParams& p = d->params;
         if (!p.reveal_or_pay_subtype.empty() && p.reveal_or_pay_cost.has_value())
         {
             bool reveal = false;
@@ -13106,26 +13108,25 @@ std::vector<int> PiratesProvider::CleanupDiscardCandidates(
             }
             if (!reveal) { cost += p.reveal_or_pay_cost->ManaValue(); }
         }
-        // A board Vial deploys a creature of MV == counters, colour-blind; the next tick is +1.
-        if (c.IsCreature() && board_vials > 0 && mv_of(i) <= vial_counters + 1) { return 0; }
-        const ManaCost& mc = c.m_mana_cost;
+        return cost;
+    };
+    auto need_bits = [&](int i) -> unsigned
+    {
+        const CardDefinition* d = def_at(i);
+        if (d == nullptr) { return 0u; }
+        const ManaCost& mc = d->card.m_mana_cost;
         unsigned need = 0;
         if (mc.white > 0) { need |= 1u << 0; }
         if (mc.blue  > 0) { need |= 1u << 1; }
         if (mc.black > 0) { need |= 1u << 2; }
         if (mc.red   > 0) { need |= 1u << 3; }
         if (mc.green > 0) { need |= 1u << 4; }
-        const unsigned have = c.IsCreature() ? all_cre : all_any;
-        return std::max(0, cost - reach) + ((need & ~have) != 0 ? 1 : 0);
+        return need;
     };
-    std::vector<int> tval(static_cast<std::size_t>(n), 0), far(static_cast<std::size_t>(n), 0);
-    for (int i : threats) { tval[i] = threat_value(i); far[i] = distance(i) >= 2 ? 1 : 0; }
-    // Best first: near before far, then value, then hand order (stable).
-    std::stable_sort(threats.begin(), threats.end(), [&](int a, int b)
-    {
-        if (far[a] != far[b]) { return far[a] < far[b]; }
-        return tval[a] > tval[b];
-    });
+    std::vector<int> tval(static_cast<std::size_t>(n), 0);
+    for (int i : threats) { tval[i] = threat_value(i); }
+    // Best first by value, then hand order (stable).
+    std::stable_sort(threats.begin(), threats.end(), [&](int a, int b) { return tval[a] > tval[b]; });
 
     // ---- land keep order: colour coverage first, then breadth, a Fiery Islet ahead on ties -----
     // What the hand needs: coloured pips of its non-land cards (creature pips vs non-creature pips
@@ -13178,21 +13179,102 @@ std::vector<int> PiratesProvider::CleanupDiscardCandidates(
         }
     }
 
-    // ---- quotas, in acquisition (= priority) order ----------------------------------------------
-    const int kSourceTarget = 4;
-    const int kEarlyLands   = 2;
-    const int kThreatFloor  = 3;
-    int land_need = std::max(0, kSourceTarget - board_sources);
+    // ---- quotas ------------------------------------------------------------------------------------
+    // LANDS: enough for THREE lands in total, board counted first (USER 2026-09-27: "keeping enough for
+    // 3 lands total"). Kept in colour-coverage order; every kept land is shed LAST.
+    const int kLandTarget = 3;
+    const int land_need   = std::max(0, kLandTarget - board_lands);
+    std::vector<int> kept_lands;
+    for (std::size_t li = 0; li < land_order.size() && static_cast<int>(kept_lands.size()) < land_need; ++li)
+    { kept_lands.push_back(land_order[li]); }
+    unsigned kept_any = board_any, kept_cre = board_any | board_cre;
+    for (int i : kept_lands) { unsigned a2 = 0, c2 = 0; land_bits(def_at(i), a2, c2); kept_any |= a2; kept_cre |= a2 | c2; }
+    unsigned hand_all_any = board_any | hand_any, hand_all_cre = hand_all_any | board_cre | hand_cre;
+
+    // THREATS: a CURVE-OUT plan, not a fixed floor (USER 2026-09-27): "if we have too few lands out to
+    // reliably play card x next turn I would only keep enough other threats to curve out. The only case
+    // we want to drop the cards entirely is if we think they cannot be played. So, if we had 1 land
+    // total and no Aether Vial out you would drop 3-drops for sure. On the other hand, if you had a land
+    // out and lands 2 and 3 in hand you would want to keep a 2 and 3 drop of sufficient value according
+    // to the chart."
+    //   * Mana on our next turn k (k = 1..kHorizon): board lands + min(k, kept hand lands) -- one land
+    //     drop a turn. Treasures are not counted (one-shot).
+    //   * A board Aether Vial at c counters puts ONE creature of MV == c + k onto the battlefield free on
+    //     turn k (one tick per upkeep), colour-blind.
+    //   * UNPLAYABLE = cannot be cast even with every land in hand and no Vial can put it: its cost
+    //     exceeds board + all hand lands, or a colour it needs has no source on the board or in hand.
+    //     These go FIRST.
+    //   * PLAN = the value-maximising assignment of threats to turns 1..kHorizon within each turn's
+    //     mana (colours from board + KEPT lands), Vial puts free. Exhaustive (<= 4^7 for a 7-card hand).
+    //     Threats outside the plan are shed next, lowest value first; plan threats are shed after them.
+    const int kHorizon = 3;
+    const int kept_n   = static_cast<int>(kept_lands.size());
+    auto mana_on = [&](int k) { return board_lands + std::min(k, kept_n); };
+    auto vial_puts = [&](int i, int k) -> bool
+    {
+        const CardDefinition* d = def_at(i);
+        return d && d->card.IsCreature() && board_vials > 0 && mv_of(i) == vial_counters + k;
+    };
+    std::vector<char> unplayable(static_cast<std::size_t>(n), 0);
+    std::vector<int>  plannable;
+    for (int i : threats)
+    {
+        const CardDefinition* d = def_at(i);
+        const bool creature = d && d->card.IsCreature();
+        bool by_vial = false;
+        for (int k = 1; k <= kHorizon && !by_vial; ++k) { by_vial = vial_puts(i, k); }
+        const unsigned have_all = creature ? hand_all_cre : hand_all_any;
+        const bool castable_ever = eff_cost(i) <= board_lands + static_cast<int>(lands.size())
+                                && (need_bits(i) & ~have_all) == 0;
+        if (!castable_ever && !by_vial) { unplayable[static_cast<std::size_t>(i)] = 1; continue; }
+        plannable.push_back(i);
+    }
+    std::vector<char> in_plan(static_cast<std::size_t>(n), 0);
+    {
+        const int m = static_cast<int>(plannable.size());
+        std::vector<int> assign(static_cast<std::size_t>(m), 0), best_assign(static_cast<std::size_t>(m), 0);
+        int best_val = -1;
+        // assign[j] in 0..kHorizon: 0 = not planned, k = cast (or Vial-put) on turn k.
+        std::function<void(int)> rec = [&](int j)
+        {
+            if (j == m)
+            {
+                int spend[kHorizon + 1] = {0}; int vput[kHorizon + 1] = {0}; int val = 0;
+                for (int t = 0; t < m; ++t)
+                {
+                    const int k = assign[static_cast<std::size_t>(t)];
+                    if (k == 0) { continue; }
+                    const int i = plannable[static_cast<std::size_t>(t)];
+                    val += tval[i];
+                    if (vial_puts(i, k) && vput[k] < board_vials) { ++vput[k]; continue; }
+                    const CardDefinition* d = def_at(i);
+                    const bool creature = d && d->card.IsCreature();
+                    const unsigned have = creature ? kept_cre : kept_any;
+                    if ((need_bits(i) & ~have) != 0) { return; }
+                    spend[k] += eff_cost(i);
+                    if (spend[k] > mana_on(k)) { return; }
+                }
+                if (val > best_val) { best_val = val; best_assign = assign; }
+                return;
+            }
+            for (int k = 0; k <= kHorizon; ++k) { assign[static_cast<std::size_t>(j)] = k; rec(j + 1); }
+        };
+        if (m > 0) { rec(0); }
+        for (int t = 0; t < m; ++t)
+        { if (best_assign[static_cast<std::size_t>(t)] > 0) { in_plan[static_cast<std::size_t>(plannable[static_cast<std::size_t>(t)])] = 1; } }
+    }
+
     std::vector<char> keep(static_cast<std::size_t>(n), 0);
-    std::vector<int>  taken;
+    std::vector<int>  taken;   // acquisition order; the tail sheds it BACKWARDS
     auto take = [&](int i) { keep[static_cast<std::size_t>(i)] = 1; taken.push_back(i); };
-    std::size_t li = 0;
-    for (int k = 0; k < kEarlyLands && land_need > 0 && li < land_order.size(); ++k, --land_need)
-    { take(land_order[li++]); }
-    for (int k = 0; k < kThreatFloor && k < static_cast<int>(threats.size()); ++k)
-    { take(threats[static_cast<std::size_t>(k)]); }
-    for (; land_need > 0 && li < land_order.size(); --land_need) { take(land_order[li++]); }
-    if (board_vials == 0 && board_lands <= 2 && !vials.empty()) { take(vials.front()); }
+    for (int i : kept_lands) { take(i); }                                            // shed last
+    // VIAL: ONE, only while none is on the battlefield, and only as a TURN-1 play -- USER 2026-09-27: "I
+    // would probably discard Vial if it was end of turn 2. It's too slow to play at that point. Unless we
+    // are in bad shape on the land front? (if we are mana-starved otherwise keeping it would be an
+    // option)". Mana-starved = the board plus every land in hand cannot reach the land target.
+    const bool mana_starved = board_lands + static_cast<int>(lands.size()) < kLandTarget;
+    if (board_vials == 0 && (s.turn_number <= 1 || mana_starved) && !vials.empty()) { take(vials.front()); }
+    for (int i : threats) { if (in_plan[static_cast<std::size_t>(i)]) { take(i); } }  // best first
 
     // ---- shed order ----------------------------------------------------------------------------
     std::vector<int>  shed;
@@ -13205,9 +13287,10 @@ std::vector<int> PiratesProvider::CleanupDiscardCandidates(
     auto put_unkept = [&](int i) { if (!keep[static_cast<std::size_t>(i)]) { put(i); } };
 
     for (int i : dead) { put(i); }                                                        // S0
-    for (auto it = land_order.rbegin(); it != land_order.rend(); ++it) { put_unkept(*it); } // S1
-    for (int i : vials) { put_unkept(i); }                                                // S2
-    for (auto it = threats.rbegin(); it != threats.rend(); ++it) { put_unkept(*it); }     // S3
+    for (int i : threats) { if (unplayable[static_cast<std::size_t>(i)]) { put(i); } }    // S1 cannot be played
+    for (auto it = land_order.rbegin(); it != land_order.rend(); ++it) { put_unkept(*it); } // S2
+    for (int i : vials) { put_unkept(i); }                                                // S3
+    for (auto it = threats.rbegin(); it != threats.rend(); ++it) { put_unkept(*it); }     // S4 off-plan
     for (auto it = taken.rbegin(); it != taken.rend(); ++it) { put(*it); }                // tail
 
     return CleanupDiscardRankingWithOrder(s, required_pieces, shed);

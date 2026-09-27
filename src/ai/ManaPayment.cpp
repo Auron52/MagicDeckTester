@@ -2131,7 +2131,7 @@ void ApplyEtbTreasureFundingOrder(const GameState& state, const std::vector<Acti
 // reorder of non-producing, reveal-free casts cannot change the aggregate verdict anyway).
 bool PayableOrderOn()
 {
-    static const bool env_on = EnvOn("MTG_PAYABLE_ORDER");   // DEFAULT OFF (measuring)
+    static const bool env_on = EnvOn("MTG_PAYABLE_ORDER", true);   // DEFAULT ON (adopted 2026-09-27, USER; =0 reverts)
     return heurarm::Flag(heurarm::PAYABLE_ORDER, env_on);
 }
 

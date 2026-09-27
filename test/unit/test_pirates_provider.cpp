@@ -199,7 +199,7 @@ TEST_CASE("Pirates discard: a Vial on board makes a second Vial the first thing 
     CHECK(First(s, Rank(s)) == "Aether Vial");
 }
 
-TEST_CASE("Pirates discard: early (<= 2 lands, no Vial on board) the Vial is KEPT over a weak threat")
+TEST_CASE("Pirates discard: mana-starved (2 lands reachable, no Vial on board) the Vial is KEPT over a weak threat")
 {
     const GameState s = MakeState(
         {"Aether Vial", "Siren Stormtamer", "Daring Buccaneer", "Goblin Tomb Raider",
@@ -266,4 +266,75 @@ TEST_CASE("Pirates ETB dig: same-name copies fold onto the first; index 0 is the
     // The base provider is untouched (other decks: Acclaimed Contender keeps look order + copies).
     CHECK(GenericProvider().EtbDigCandidates(s, 0, examined, legal) == legal);
     CHECK(GenericProvider().EtbDigSearchWidth() == 0);
+}
+
+// ---- USER review of the discard policy (2026-09-27) ----------------------------------------------
+
+TEST_CASE("Pirates discard: with 1 land total and no Vial out, the 3-drops go first (cannot be played)")
+{
+    GameState s = MakeState({"Corsair Captain", "Adaptive Automaton", "Goblin Tomb Raider", "Siren Stormtamer",
+                             "Daring Buccaneer", "Staunch Crewmate", "Metallic Mimic", "Forerunner of the Coalition"},
+                            {"Spirebluff Canal"});
+    const std::vector<int> r = Rank(s);
+    const int corsair = ShedPos(s, r, "Corsair Captain"), autom = ShedPos(s, r, "Adaptive Automaton"),
+              fore = ShedPos(s, r, "Forerunner of the Coalition");
+    for (const char* cheap : {"Goblin Tomb Raider", "Siren Stormtamer", "Daring Buccaneer"})
+    {
+        CAPTURE(cheap);
+        CHECK(corsair < ShedPos(s, r, cheap));
+        CHECK(autom   < ShedPos(s, r, cheap));
+        CHECK(fore    < ShedPos(s, r, cheap));
+    }
+}
+
+TEST_CASE("Pirates discard: 1 land out with lands 2 and 3 in hand keeps a 2-drop and a 3-drop by value")
+{
+    GameState s = MakeState({"Island", "Mountain", "Corsair Captain", "Metallic Mimic", "Siren Stormtamer",
+                             "Goblin Tomb Raider", "Staunch Crewmate", "Adaptive Automaton"},
+                            {"Spirebluff Canal"});
+    const std::vector<int> r = Rank(s);
+    // The curve (2 mana next turn, then 3, 3) is Mimic -> Corsair -> Automaton; the off-plan cards go
+    // first, the kept lands last.
+    CHECK(First(s, r) == "Siren Stormtamer");
+    for (const char* off : {"Siren Stormtamer", "Goblin Tomb Raider", "Staunch Crewmate"})
+    {
+        CAPTURE(off);
+        CHECK(ShedPos(s, r, off) < ShedPos(s, r, "Metallic Mimic"));
+        CHECK(ShedPos(s, r, off) < ShedPos(s, r, "Corsair Captain"));
+    }
+    CHECK(ShedPos(s, r, "Corsair Captain") < ShedPos(s, r, "Island"));
+    CHECK(ShedPos(s, r, "Corsair Captain") < ShedPos(s, r, "Mountain"));
+}
+
+TEST_CASE("Pirates discard: Metallic Mimic ranks below Dire Fleet Captain except on turn 1")
+{
+    for (int turn : {1, 5})
+    {
+        CAPTURE(turn);
+        GameState s = MakeState({"Metallic Mimic", "Dire Fleet Captain", "Mountain", "Mountain", "Spirebluff Canal",
+                                 "Fiery Islet", "Mountain", "Mountain"},
+                                {"Blackcleave Cliffs"});
+        s.turn_number = turn;
+        const std::vector<int> r = Rank(s);
+        const bool mimic_first = ShedPos(s, r, "Metallic Mimic") < ShedPos(s, r, "Dire Fleet Captain");
+        CHECK(mimic_first == (turn != 1));
+    }
+}
+
+TEST_CASE("Pirates discard: the Vial is a turn-1 keep -- shed at end of turn 2 unless mana-starved")
+{
+    // Turn 2, 2 lands out + 1 in hand = 3 reachable: the Vial is surplus and goes before any threat.
+    GameState s = MakeState({"Aether Vial", "Mountain", "Siren Stormtamer", "Goblin Tomb Raider", "Daring Buccaneer",
+                             "Staunch Crewmate", "Metallic Mimic", "Corsair Captain"},
+                            {"Spirebluff Canal", "Unclaimed Territory"});
+    s.turn_number = 2;
+    std::vector<int> r = Rank(s);
+    CHECK(First(s, r) == "Aether Vial");
+    // Mana-starved (1 land out, none in hand): the Vial is kept over a weak threat.
+    GameState t = MakeState({"Aether Vial", "Siren Stormtamer", "Goblin Tomb Raider", "Daring Buccaneer",
+                             "Staunch Crewmate", "Metallic Mimic", "Corsair Captain", "Adaptive Automaton"},
+                            {"Spirebluff Canal"});
+    t.turn_number = 2;
+    r = Rank(t);
+    CHECK(ShedPos(t, r, "Siren Stormtamer") < ShedPos(t, r, "Aether Vial"));
 }
