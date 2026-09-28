@@ -452,23 +452,51 @@ TEST_CASE("Prevent Damage pain-aware payment: the damage floor is EXACT on a sim
     GameState s = Board();
     Put(s, "Battlefield Forge");
     Put(s, "City of Brass");
-    std::pair<int, bool> f = PaymentDamageFloor(s, Cost(1, 1), ManaPool{}, false, 0);
-    CHECK(f.second);
-    CHECK(f.first == 1);
+    dmgev::PayFloor f = PaymentDamageFloor(s, Cost(1, 1), ManaPool{}, false, 0);
+    CHECK(f.exact);
+    CHECK(f.floor == 1);
     // + Ancient Tomb and a Reflecting Pool, {3}{W}: Tomb {C}{C} (2) + Pool {W} (0) + Forge {C} (0) = 2.
     Put(s, "Ancient Tomb");
     Put(s, "Reflecting Pool");
     f = PaymentDamageFloor(s, Cost(3, 1), ManaPool{}, false, 0);
-    CHECK(f.second);
-    CHECK(f.first == 2);
+    CHECK(f.exact);
+    CHECK(f.floor == 2);
     // The same board under an opponent's Manabarbs with no Tamanoa (barbs counted, 1 per land tap):
     // 3 land taps (Tomb makes 2) + 2 pain = 5.
     f = PaymentDamageFloor(s, Cost(3, 1), ManaPool{}, true, 1);
-    CHECK(f.second);
-    CHECK(f.first == 5);
+    CHECK(f.exact);
+    CHECK(f.floor == 5);
     // And the payer realises it.
     GameState t = s;
     Put(t, "Manabarbs", 1);
     REQUIRE(Pay(t, Cost(3, 1)));
     CHECK(Me(t) == 15);
+}
+
+TEST_CASE("Prevent Damage pain-aware payment: among equal damage, the WIDEST sources stay up (gi15)")
+{
+    // s31016 gi15 T5: {3}{G} (Green Sun's Zenith X=3) off Ancient Tomb x2, City of Brass, Grand
+    // Coliseum, Tarnished Citadel, no gain engine. Minimum damage 3 two ways: Citadel {C} +
+    // Coliseum {C} + City {G} + a Tomb (strands everything but a Tomb), or a Tomb + City {G} +
+    // Citadel {C} (keeps Coliseum -- any colour -- for the line's Rolling Earthquake {R}).
+    GameState s = Board();
+    s.players[0].life = 10;
+    Put(s, "Ancient Tomb");
+    Put(s, "Ancient Tomb");
+    Put(s, "City of Brass");
+    Put(s, "Grand Coliseum");
+    Put(s, "Tarnished Citadel");
+    const dmgev::PayFloor f = PaymentDamageFloor(s, Cost(3, 0, 0, 0, /*g=*/1), ManaPool{}, false, 0);
+    CHECK(f.exact);
+    CHECK(f.floor == 3);
+    REQUIRE(Pay(s, Cost(3, 0, 0, 0, 1)));
+    CHECK(Me(s) == 7);
+    int untapped_rainbow = 0;
+    for (const Permanent& p : s.battlefield)
+    {
+        const std::string n = p.card.m_name.str();
+        if (!p.tapped && (n == "Grand Coliseum" || n == "Tarnished Citadel" || n == "City of Brass"))
+        { ++untapped_rainbow; }
+    }
+    CHECK(untapped_rainbow >= 1);   // a {R} is still there for the Quake
 }

@@ -383,9 +383,71 @@ void TapSourceIntoFloat(GameState& state, int active, Permanent& p, const CardDe
     }
 }
 
+static bool TapForCostSharedOnceImpl(GameState& state, const ManaCost& cost_in, bool for_creature,
+                                     std::uint64_t reserved_mask, ManaPool* available,
+                                     bool honor_legacy_cco);
+
+// PREVENT DAMAGE: the pain-aware payment policy (dmgev::PainAwarePay) wraps each payment ATTEMPT --
+// the reservation ladder's held attempts and the unrestricted one alike -- so the damage floor and
+// the cap are computed over the sources THIS attempt may tap. Wrapping the whole ladder instead
+// computed the floor over every source, so a held attempt failed its cap and the unrestricted
+// fallback paid the minimum with the very source the hold was keeping for a later cast of the same
+// line (Prevent Damage s31016 gi15 T5: Green Sun's Zenith paid painlessly with City / Coliseum /
+// Citadel, stranding the {R} the line's Rolling Earthquake needed). Only the unrestricted attempt
+// may fall back to a lethal assignment (allow_lethal). A nested payment (the hybrid wrapper) sees
+// the policy live and only enforces it; unarmed boards pass straight through.
 bool TapForCostSharedOnce(GameState& state, const ManaCost& cost_in, bool for_creature,
                           std::uint64_t reserved_mask, ManaPool* available,
                           bool honor_legacy_cco)
+{
+    return dmgev::PainAwarePay(state, available, /*allow_lethal=*/reserved_mask == 0, [&]() -> bool
+    { return TapForCostSharedOnceImpl(state, cost_in, for_creature, reserved_mask | dmgev::t_pay_hold,
+                                      available, honor_legacy_cco); },
+    [&](bool barbs, int barb_total) -> dmgev::PayFloor
+    { return PaymentDamageFloor(state, cost_in, state.floating_mana, barbs, barb_total, reserved_mask); },
+    [&](bool probe) -> int
+    {
+        // The line being applied: the plan's other mana casts, approximated exactly as
+        // ScarceColorHoldMask does (the plan's coloured pips and mana value, minus this cost's --
+        // an OVER-estimate of what is still owed once earlier casts have paid, so the check can
+        // only err toward the historical payment).
+        const PlanTraits* pt = CurrentPlanTraits();
+        if (pt == nullptr || pt->mana_casts < 2) { return -1; }
+        if (probe) { return 1; }
+        const int cur[5] = { cost_in.white, cost_in.blue, cost_in.black, cost_in.red, cost_in.green };
+        int need[5], need_tot = std::max(0, pt->cast_mv_total - cost_in.ManaValue());
+        for (int c = 0; c < 5; ++c) { need[c] = std::max(0, pt->cast_pips[c] - cur[c]); }
+        const int a = state.active_player_index;
+        const ManaPool& fl = state.floating_mana;
+        int have_tot = fl.Total();
+        int have[5] = { fl.white + fl.wild, fl.blue + fl.wild, fl.black + fl.wild,
+                        fl.red + fl.wild, fl.green + fl.wild };
+        for (const Permanent& p : state.battlefield)
+        {
+            if (p.controller_index != a || p.tapped) { continue; }
+            const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+            if (d == nullptr) { continue; }
+            const int y = SourceMaxNetLive(state, p, *d);
+            if (y <= 0) { continue; }
+            have_tot += y;
+            int seen = 0;
+            for (Color c : EffectiveProducesFor(state, a, *d, &p))
+            {
+                const int ci = static_cast<int>(c);
+                if (ci >= 5 || (seen & (1 << ci))) { continue; }
+                seen |= (1 << ci);
+                have[ci] += y;
+            }
+        }
+        if (have_tot < need_tot) { return 0; }
+        for (int c = 0; c < 5; ++c) { if (have[c] < need[c]) { return 0; } }
+        return 1;
+    });
+}
+
+static bool TapForCostSharedOnceImpl(GameState& state, const ManaCost& cost_in, bool for_creature,
+                                     std::uint64_t reserved_mask, ManaPool* available,
+                                     bool honor_legacy_cco)
 {
     if (tapstats::Enabled()) { tapstats::g_pay_once.fetch_add(1, std::memory_order_relaxed); }
     int      active = state.active_player_index;
@@ -3395,12 +3457,8 @@ bool TapForCostShared(GameState& state, const ManaCost& cost_in, bool for_creatu
     // go on the stack above the spell being cast). A failed payment restored every mark.
     ++t_pay_nest;
     struct NestGuard { ~NestGuard() { --t_pay_nest; } } nest_guard;
-    // PAIN-AWARE PAYMENT (dmgev::PainAwarePay): the outermost payment runs under the damage cap;
-    // a nested one (the hybrid wrapper) sees the policy live and only enforces it.
-    const bool ok = dmgev::PainAwarePay(state, available, /*batch=*/false, [&]() -> bool
-    { return TapForCostSharedDiag(state, cost_in, for_creature, available, honor_legacy_cco); },
-    [&](bool barbs, int barb_total) -> std::pair<int, bool>
-    { return PaymentDamageFloor(state, cost_in, state.floating_mana, barbs, barb_total); });
+    // (The pain-aware payment policy runs per ATTEMPT, inside TapForCostSharedOnce -- see there.)
+    const bool ok = TapForCostSharedDiag(state, cost_in, for_creature, available, honor_legacy_cco);
     if (ok && t_pay_nest == 1) { dmgev::FlushDamageEvents(state); }
     return ok;
 }

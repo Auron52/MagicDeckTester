@@ -25746,22 +25746,31 @@ inline int PaymentDamageLowerBound(const GameState& state, const ManaCost& cost,
 // sources with the remaining demand (W, U, B, R, G, {C}-pips, generic) as its state is exact: a
 // mode's mana pays its own colour's pips first, then generic (never worse, by exchange). Returns
 // {floor, exact}; not simple -> {PaymentDamageLowerBound, false}.
-inline std::pair<int, bool> PaymentDamageFloor(const GameState& state, const ManaCost& cost,
-                                               const ManaPool& floating, bool barbs, int barb_total,
-                                               std::uint64_t reserved_mask = 0)
+inline dmgev::PayFloor PaymentDamageFloor(const GameState& state, const ManaCost& cost,
+                                         const ManaPool& floating, bool barbs, int barb_total,
+                                         std::uint64_t reserved_mask = 0)
 {
     // The scan-based bound, only on the paths that fall back to it (an exact DP answer dominates it).
-    auto lbf = [&]() -> std::pair<int, bool>
-    { return { PaymentDamageLowerBound(state, cost, floating, barbs, barb_total), false }; };
+    auto lbf = [&]() -> dmgev::PayFloor
+    { return { PaymentDamageLowerBound(state, cost, floating, barbs, barb_total), false, 0 }; };
     // (An {X} cost arrives with X already added to `generic`; has_x is only the printed flag.)
     if (floating.Total() > 0 || cost.hybrid_count > 0) { return lbf(); }
     const int ctrl = state.active_player_index;
     if (LiveManaGrant(state, ctrl).valid()) { return lbf(); }
-    struct Mode { int col, y, dmg; };
+    struct Mode { int col, y, cost; };
     static thread_local std::vector<std::vector<Mode>> s_srcs;   // warm buffers: hot per payment
+    static thread_local std::vector<int> s_src_bf;               // each modelled source's slot
     std::vector<std::vector<Mode>>& srcs = s_srcs;
     for (std::vector<Mode>& m : srcs) { m.clear(); }
+    s_src_bf.clear();
     std::size_t nsrc = 0;
+    // The DP minimises damage FIRST and, among equal damage, the FLEXIBILITY it spends: a tapped
+    // source costs the number of colours it could have made. So the assignment it names keeps the
+    // widest sources up for the rest of the turn -- a rainbow land over an Ancient Tomb -- which is
+    // what the rank-ordered greedy always tried to do and what a bare minimum-damage search does not
+    // (claude-play s31016 gi15: Green Sun's Zenith paid with Citadel {C} + Coliseum {C} at the same
+    // pain as Ancient Tomb, stranding the {R} the line's Rolling Earthquake needed).
+    constexpr int kDmgW = 1024;
     const int nbf = static_cast<int>(state.battlefield.size());
     for (int bi = 0; bi < nbf; ++bi)
     {
@@ -25791,15 +25800,21 @@ inline std::pair<int, bool> PaymentDamageFloor(const GameState& state, const Man
         const int y = ManaProducedPerTap(*d);
         if (y > 1 && prod.size() > 1) { return lbf(); }   // bundle (Karoo)
         bool has_c = false;
-        for (Color c : prod) { if (c == Color::Colorless) { has_c = true; break; } }
+        int flex = 0;
+        for (Color c : prod)
+        {
+            if (c == Color::Colorless) { has_c = true; }
+            else                       { ++flex; }
+        }
         if (nsrc >= 24) { return lbf(); }
         if (srcs.size() <= nsrc) { srcs.emplace_back(); }
         std::vector<Mode>& modes = srcs[nsrc++];
+        s_src_bf.push_back(bi);
         for (Color c : prod)
         {
             int dmg = dmgev::PainForTap(*d, c, has_c);
             if (barbs && land) { dmg += barb_total; }
-            modes.push_back({ static_cast<int>(c), y, dmg });
+            modes.push_back({ static_cast<int>(c), y, dmg * kDmgW + flex });
         }
     }
     // Demand: W U B R G, {C} pips, generic. Mixed-radix index over (d_k + 1).
@@ -25810,27 +25825,33 @@ inline std::pair<int, bool> PaymentDamageFloor(const GameState& state, const Man
     {
         if (dem[k] < 0) { return lbf(); }
         rad[k] = dem[k] + 1; stride[k] = n_states; n_states *= rad[k];
-        if (n_states > 20000) { return lbf(); }
+        if (n_states > 4096) { return lbf(); }
     }
     constexpr int kInf = 1 << 29;
     static thread_local std::vector<int> s_cur, s_nxt;
+    static thread_local std::vector<int> s_pred;   // per (source, state): (prev_state << 5) | (mode+1), -1 = unset
     std::vector<int>& cur = s_cur;
     std::vector<int>& nxt = s_nxt;
     cur.assign(static_cast<std::size_t>(n_states), kInf);
+    s_pred.assign(nsrc * static_cast<std::size_t>(n_states), -1);
     int full = 0;
     for (int k = 0; k < 7; ++k) { full += dem[k] * stride[k]; }
     cur[static_cast<std::size_t>(full)] = 0;   // index = REMAINING demand
     for (std::size_t si = 0; si < nsrc; ++si)
     {
         const std::vector<Mode>& modes = srcs[si];
+        int* pred = s_pred.data() + si * static_cast<std::size_t>(n_states);
         nxt = cur;   // skip this source
+        for (int st = 0; st < n_states; ++st)
+        { if (cur[static_cast<std::size_t>(st)] < kInf) { pred[st] = (st << 5); } }
         for (int st = 0; st < n_states; ++st)
         {
             if (cur[static_cast<std::size_t>(st)] >= kInf) { continue; }
             int rem[7];
             for (int k = 0; k < 7; ++k) { rem[k] = (st / stride[k]) % rad[k]; }
-            for (const Mode& m : modes)
+            for (std::size_t mi = 0; mi < modes.size() && mi < 30; ++mi)
             {
+                const Mode& m = modes[mi];
                 int r[7];
                 for (int k = 0; k < 7; ++k) { r[k] = rem[k]; }
                 int y = m.y;
@@ -25841,14 +25862,33 @@ inline std::pair<int, bool> PaymentDamageFloor(const GameState& state, const Man
                 r[6] -= g;
                 int idx = 0;
                 for (int k = 0; k < 7; ++k) { idx += r[k] * stride[k]; }
-                const int v = cur[static_cast<std::size_t>(st)] + m.dmg;
-                if (v < nxt[static_cast<std::size_t>(idx)]) { nxt[static_cast<std::size_t>(idx)] = v; }
+                if (idx == st) { continue; }   // pays nothing this line still owes
+                const int v = cur[static_cast<std::size_t>(st)] + m.cost;
+                if (v < nxt[static_cast<std::size_t>(idx)])
+                {
+                    nxt[static_cast<std::size_t>(idx)] = v;
+                    pred[idx] = (st << 5) | static_cast<int>(mi + 1);
+                }
             }
         }
         cur.swap(nxt);
     }
     if (cur[0] >= kInf) { return lbf(); }   // the model finds no payment: not trusted
-    return { cur[0], true };
+    // Reconstruct which sources the chosen assignment taps; every other modelled source is HELD
+    // for the payer's first attempt (dmgev::t_pay_hold), so it realises exactly this assignment.
+    std::uint64_t used = 0;
+    int st = 0;
+    for (std::size_t si = nsrc; si-- > 0; )
+    {
+        const int pv = s_pred[si * static_cast<std::size_t>(n_states) + static_cast<std::size_t>(st)];
+        if (pv < 0) { return { cur[0] / kDmgW, true, 0 }; }   // defensive: no trace, no hold
+        if ((pv & 31) != 0 && s_src_bf[si] < 64) { used |= (1ull << s_src_bf[si]); }
+        st = pv >> 5;
+    }
+    std::uint64_t hold = 0;
+    for (std::size_t si = 0; si < nsrc; ++si)
+    { if (s_src_bf[si] < 64 && !(used & (1ull << s_src_bf[si]))) { hold |= (1ull << s_src_bf[si]); } }
+    return { cur[0] / kDmgW, true, hold };
 }
 
 inline int UntappedManaUpperBound(const GameState& state, bool for_creature,

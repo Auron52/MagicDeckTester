@@ -3666,10 +3666,12 @@ bool TapForCostBacktrack(GameState& state, const ManaCost& cost,
                                       out_full_pool, src_cands);
     }
     ManaPool leftover_best, full_best;
-    const bool ok = dmgev::PainAwarePay(state, nullptr, /*batch=*/out_full_pool != nullptr, [&]() -> bool
+    // The whole-turn prepay (out_full_pool) must decline rather than commit a lethal batch.
+    const bool ok = dmgev::PainAwarePay(state, nullptr, /*allow_lethal=*/out_full_pool == nullptr, [&]() -> bool
     {
         const bool r = TapForCostBacktrackTop(state, cost, for_creature, floating, rp_colors, fail_memo,
-                                              out_leftover, tapped_mask, untapped_max, reserved_mask,
+                                              out_leftover, tapped_mask, untapped_max,
+                                              reserved_mask | dmgev::t_pay_hold,
                                               out_full_pool, src_cands);
         // The policy keeps the LAST successful attempt's state; keep its outputs in step.
         if (r)
@@ -3679,8 +3681,10 @@ bool TapForCostBacktrack(GameState& state, const ManaCost& cost,
         }
         return r;
     },
-    [&](bool barbs, int barb_total) -> std::pair<int, bool>
-    { return PaymentDamageFloor(state, cost, floating, barbs, barb_total, reserved_mask); });
+    [&](bool barbs, int barb_total) -> dmgev::PayFloor
+    { return PaymentDamageFloor(state, cost, floating, barbs, barb_total, reserved_mask); },
+    // The whole-turn prepay already pays the whole line in one assignment.
+    [](bool) -> int { return -1; });
     if (ok)
     {
         if (out_leftover)  { *out_leftover = leftover_best; }

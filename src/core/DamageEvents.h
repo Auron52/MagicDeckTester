@@ -482,6 +482,12 @@ struct PayDmgCap
 };
 constexpr int kNoCap = 1 << 30;
 inline thread_local PayDmgCap t_pay_cap;
+// A proven damage FLOOR for a payment (SpellEffects.h PaymentDamageFloor): `exact` on a simple
+// board, where `hold` also names every modelled source OUTSIDE the chosen minimum assignment.
+struct PayFloor { int floor = 0; bool exact = false; std::uint64_t hold = 0; };
+// The sources the payer's CURRENT attempt must leave untapped (OR'ed into its reservation mask by
+// the attempt callbacks) -- how the policy realises the floor's chosen assignment. 0 otherwise.
+inline thread_local std::uint64_t t_pay_hold = 0;
 // The backtracker's RUNNING PaymentDamage while a cap is live: seeded once per top-level solve and
 // moved by each tap's mark delta (TapDamageDelta), so the per-node cap test and the fail-memo key
 // are O(1) instead of a board scan per DFS node (measured: the scan was 15% of a payment-bound
@@ -577,7 +583,10 @@ struct PayAttemptSnap
 };
 
 // Run `attempt` (a whole payment: returns payable, leaves the paid state) under the policy above.
-// `batch`: the whole-turn prepay (declines rather than returning a lethal assignment). Pass-through
+// `allow_lethal`: may the policy fall back to a LETHAL assignment when no survivable one exists?
+// Only the LAST resort may -- the per-cast payer's unrestricted attempt. The whole-turn prepay and a
+// per-cast HELD attempt (a reservation mask) decline instead, so the caller's next rung (per-cast
+// payment / the unrestricted attempt) can still find a survivable one. Pass-through
 // -- byte-identical, one branch -- when unarmed, lever off, already inside a policy, won-locked, or
 // under Purity (no damage can land, so every assignment is equally safe and the order is kept).
 // `lower_bound` (harmful mode only): a proven floor on any assignment's damage for this cost
@@ -613,9 +622,17 @@ inline std::atomic<std::uint64_t>* C()
 inline void Inc(int k) { if (On()) { C()[k].fetch_add(1, std::memory_order_relaxed); } }
 }   // namespace paystats
 
-template <class Attempt, class LowerBound>
-inline bool PainAwarePay(GameState& s, ManaPool* available, bool batch, Attempt&& attempt,
-                         LowerBound&& lower_bound)
+// `line_ok` (harmful mode, per-cast only): after a minimum-damage payment, can the REST of the
+// line being applied still be paid? nullopt-style contract: returns 1 = yes, 0 = no, -1 = no line
+// is being applied (never asked twice). A minimum-damage assignment is chosen per cast, blind to the
+// casts after it, and can tap exactly the source a later cast of the same line needs -- measured on
+// the claude-play replay of s31016 gi15 (Green Sun's Zenith paid with Citadel {C} + Coliseum {C},
+// leaving only Ancient Tomb for the Rolling Earthquake's {R}). When it does, the historical
+// assignment is taken instead if IT keeps the line payable and survives; otherwise the minimum
+// stands. So the line-aware check can only move a payment back toward the old payer's choice.
+template <class Attempt, class LowerBound, class LineOk>
+inline bool PainAwarePay(GameState& s, ManaPool* available, bool allow_lethal, Attempt&& attempt,
+                         LowerBound&& lower_bound, LineOk&& line_ok)
 {
     if (!s.dmg_events_armed || t_pay_cap.live || !PainPayEnabled()) { return attempt(); }
     const int ctrl = s.active_player_index;
@@ -654,8 +671,8 @@ inline bool PainAwarePay(GameState& s, ManaPool* available, bool batch, Attempt&
         const int room = s.players[ctrl].life - 1;
         // An EXACT floor above the room proves every assignment lethal: skip the bounded attempt,
         // whose failure would otherwise be an exhaustive search of the whole tap space.
-        const std::pair<int, bool> fl = lower_bound(barbs, barb_total);
-        if (!(fl.first > room))
+        const PayFloor fl = lower_bound(barbs, barb_total);
+        if (!(fl.floor > room))
         {
             t_pay_cap = { true, base + room, barbs, /*pain_first=*/true, barb_total };
             if (attempt()) { return true; }
@@ -663,7 +680,7 @@ inline bool PainAwarePay(GameState& s, ManaPool* available, bool batch, Attempt&
             if (available) { *available = av0; }
         }
         else { paystats::Inc(paystats::kUsefulSkip); }
-        if (batch) { return false; }
+        if (!allow_lethal) { return false; }
         // Every assignment is lethal (or none exists): the historical payment, unbounded.
         t_pay_cap = { true, kNoCap, barbs, PaymentPainSafe(s, ctrl), barb_total };
         return attempt();
@@ -674,17 +691,56 @@ inline bool PainAwarePay(GameState& s, ManaPool* available, bool batch, Attempt&
     // six-colour board (Citadel / Coliseum / Pool: no colour collapse for a per-cast payment) is an
     // explosive proof. Measured 3.1x CPU for the deck before this, on the descending search alone.
     paystats::Inc(paystats::kHarm);
-    const std::pair<int, bool> fl = lower_bound(barbs, barb_total);
-    const int floor_lb = fl.first;
-    if (fl.second)
+    const PayFloor fl = lower_bound(barbs, barb_total);
+    const int floor_lb = fl.floor;
+    if (fl.exact)
     {
         // EXACT floor (a simple board): ONE attempt capped at it -- the greedy's pick survives when
         // it already sits there, else the backtracker finds one that does. No snapshot, no second
         // payment. A failure means the model and the payer disagree (a gap): the plain attempt.
         const ManaPool av0 = available ? *available : ManaPool{};
+        const int life0 = s.players[ctrl].life;
+        PayAttemptSnap pre_line;   // taken only when a line is being applied (see line_ok)
+        int line_state = -2;       // -2 = not asked yet
+        auto line_active = [&]() -> bool
+        {
+            if (line_state == -2) { line_state = line_ok(/*probe=*/true); }
+            return line_state != -1;
+        };
+        if (line_active()) { pre_line.Take(s, available); }
         t_pay_cap = { true, base + floor_lb, barbs, /*pain_first=*/false, barb_total };
         paystats::Inc(paystats::kExactRetry);
-        if (attempt()) { paystats::Inc(paystats::kHarmAtFloor); return true; }
+        // First the floor's OWN assignment (everything else held): the widest sources stay up.
+        // A miss (a model gap) retries the cap without the hold.
+        struct HoldScope
+        {
+            std::uint64_t prev;
+            explicit HoldScope(std::uint64_t h) : prev(t_pay_hold) { t_pay_hold = h; }
+            ~HoldScope() { t_pay_hold = prev; }
+        };
+        bool ok = false;
+        if (fl.hold != 0)
+        {
+            HoldScope hs(fl.hold);
+            ok = attempt();
+            if (!ok && available) { *available = av0; }
+        }
+        if (!ok) { ok = attempt(); }
+        if (ok)
+        {
+            paystats::Inc(paystats::kHarmAtFloor);
+            if (line_state == -1 || line_ok(false) == 1) { return true; }
+            // The minimum strands the rest of the line: try the historical assignment.
+            PayAttemptSnap capped_post;
+            capped_post.Take(s, available);
+            pre_line.Restore(s, available);
+            t_pay_cap = { true, kNoCap, barbs, /*pain_first=*/false, barb_total };
+            if (attempt() && line_ok(false) == 1
+                && life0 - (PaymentDamage(s, ctrl, barbs) - base) > 0)
+            { return true; }
+            capped_post.Restore(s, available);
+            return true;
+        }
         paystats::Inc(paystats::kExactRetryFail);
         if (available) { *available = av0; }
         t_pay_cap = { true, kNoCap, barbs, /*pain_first=*/false, barb_total };
