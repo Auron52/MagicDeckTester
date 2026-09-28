@@ -1452,3 +1452,10 @@ the inert PARTIALs above (D10).
 | D14 | Viewer follow-ups: a legend-rule keep decision (V1); surface the pain sweep (V3) | [auto-resolved] | Low priority: both are dominant/automatic |
 | D15 | Basri, Tomorrow's Champion `exert` card_fields mismatch (another deck's) | [untouched] | Fix in that deck's pass |
 | D16 | Push `prevent-damage-analysis` (local only; smoke byte-identical on every engine commit)? | [not pushed] | Push (the cost audit is now clean). Watch Windows CI |
+
+## Approved deferrals
+
+- `regression_tiers:too_slow` and `suite:not_a_case` -- USER, 2026-09-28: *"Naturally it should not have
+  the new deck in the regression test until it is optimized, but we can continue that when I get to it."*
+  The deck stays OUT of all three tiers until the performance work (D1) brings it inside the 3x cost
+  rule; the route for that optimisation (D1 options) is still open for the user's review.
