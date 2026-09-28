@@ -1896,6 +1896,21 @@ def floor(spec, tags, dry_run):
     if uncovered or worst > spec.raw.get("max_fallback", 0.01):
         why = (f"the shipped table does not bucket {', '.join(uncovered)}" if uncovered
                else f"{pct(worst)} composition fall-through")
+        # RULE 0a: "pool_table": false disables the automatic union path. The SCREEN path honours it
+        # (see the `is not False` test above); this one did not, so a spec that set it still had a
+        # union table built underneath it the moment an arm introduced a card -- silently, because
+        # the bracket runs after the screen has already printed its apparatus. Refuse instead of
+        # falling back: the alternative apparatus (drop the table) is a different measurement, not a
+        # smaller one, and choosing it silently is how the 74-card / 1,167,340-cell waste happened.
+        if spec.raw.get("pool_table") is False:
+            raise SystemExit(
+                f"--floor wants a POOL table ({why}), but this spec sets \"pool_table\": false.\n"
+                "A union decklist is banned (deck-screening Rule 0a), so the bracket cannot build\n"
+                "one. Give the shared apparatus coverage instead -- alias the introduced card into\n"
+                "an existing bucket:\n"
+                "    python3 scripts/alias_card_into_bucket.py <table.gz> <new card> <host card> <dir>\n"
+                "then point the spec's \"profile\"/\"value_profile\" at that directory. Or drop\n"
+                "\"pool_table\": false if a union table really is wanted for this spec.")
         print(f"  the screen's apparatus is a POOL table ({why})\n")
         shared, shared_gen = pool_table(spec, why, dry=dry_run), union_counts(spec)
         if not dry_run:

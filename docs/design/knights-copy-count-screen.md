@@ -2586,6 +2586,108 @@ specs and readers are on disk only — this document is the committed record. Th
 `dist.py` (per-game win-turn distribution), `snap_floor.sh` and `snap_out.sh` (preserve each batch's
 per-game data and per-job cost, both of which the driver otherwise overwrites per invocation).
 
+### Round Q (2026-09-28) — KINSBAILE CAVALIER, an introduced card
+
+User: *"Let's try out Kinsbaile Cavalier."* This is the screen-5 class that open question 3 below files
+under `Knights`; the user asked for it on **WhiteKnights**, so the base is round P's settled
+`m_sp3_p20`. Generator `logs/wk_screen/mkspec_q.py`, runner `run_q.sh`, seeds **15.2M / 15.6M**,
+`floor_R: 40`, `max_fallback: 0.30`, six arms, five new tables, read with
+`pool_h.py q_wk qc_wk m_sp3_p20`.
+
+**The card, and why it needed no engine work.** `{3}{W}` 2/2 Kithkin Knight, *"Knight creatures you
+control have double strike."* Added to `cards.json` as a pure data entry: the engine already had the
+static subtype double-strike lord (`grants_double_strike` + `subtypes_affected`, Thrumming Hivepool's
+shape), resolved inside `CreatureHasDoubleStrike` — the one oracle `ResolveCombatDamage` and both of
+TurnSolver's attack projections consult — so executor, rollout and search are lockstep for free.
+`vanilla_creature`, deliberately NOT `lord_effect`: with 0/0 P/T bonuses it is not an
+`IsLordPermanent`, so it enters `BoardSources::ds` only and `ComputeLordBonus` is untouched. The grant
+says "Knight creatures", **not** "Other", and `HasDoubleStrikeFromLords` has no self-exclusion, so it
+doubles its own power too — the same self-inclusive shape Cloudshredder Sliver's haste grant has.
+Validation on the adding commit: **unit 318/318** (2,640,057 assertions), **scenarios 118/118**,
+**smoke byte-identical** (0 changed / 101 unchanged). New fixture
+`test/scenarios/whiteknights_kinsbaile_double_strike.json` casts it off exactly four Plains and swings
+three Venerable Knights plus the Cavalier doubled: **win T5 / opponent −8**, against **T7 / −4** on the
+identical board without it, so it guards the cast decision and the grant in one assertion.
+
+| arm | edit vs `m_sp3_p20` | what it asks |
+|---|---|---|
+| `q_kc1_vk3` | Cavalier 1, Venerable Knight 4→3 | the card at one copy, isolated |
+| `q_kc2_vk2` | Cavalier 2, Venerable Knight 4→2 | two copies |
+| `q_kc3_vk1` | Cavalier 3, Venerable Knight 4→1 | three copies |
+| `q_kc2_hob1` | Cavalier 2, Hero of Bladehold 3→1 | the curve-top trade against the deck's best card |
+| `q_kc2_vk1_p21` | Cavalier 2, Venerable Knight 4→1, Plains 21 | = `q_kc2_vk2` + exactly (VK −1, Plains +1) |
+
+Venerable Knight is the payer on the ladder for round P's reason: a vanilla 2/1 for `{W}` whose only
+printed text is a death trigger that is provably inert here, so the trade is body-for-body. The last
+arm differs from `q_kc2_vk2` by one land and one blank 2/1, so the **pair difference** reads the 25th
+land conditioned on two Cavaliers rather than confounding a third axis.
+
+**THE APPARATUS MISTAKE THIS ROUND CAUGHT, and it is a driver defect, not a spec one.** The shipped
+table does not bucket Kinsbaile Cavalier, and `deck_compare.py --floor` answered that by generating a
+**pool table over a 73-card union decklist** — the object Rule 0a bans outright — because that code
+path never consulted `"pool_table": false`. The screen path honours the setting; the bracket path did
+not. It was killed by captured PID at 4 minutes. **`scripts/deck_compare.py` now REFUSES there** and
+prints the alias recipe instead of silently choosing a different apparatus.
+*Lesson worth keeping: load average was 32.29 on 32 cores while it built the banned thing.* CLAUDE.md's
+first-ten-minutes utilisation check proves the box is BUSY, not that it is doing the right work — the
+tell was a `pooltable/` directory appearing when the spec said none should exist.
+
+**The fix, which is the approved route.** Kinsbaile Cavalier is **aliased into the ACCLAIMED CONTENDER
+bucket** of the round-P table (`logs/wk_screen/alias_q_WhiteKnights/`, K unchanged at 14, with
+`profile.json` and `value.json` copied in beside it because the engine resolves sibling models
+directory-relative). Contender is the right host **mechanically**: it is 0 in every arm of this round,
+so the bucket holds nothing but Cavaliers, and its shipped cap of 3 covers the whole 1..3 ladder with
+no composition overflow. Hero of Bladehold's bucket would overflow at `q_kc3_vk1` (3 + 3 > 3) and
+Valiant Knight's (cap 1) at two copies. Post-alias fall-through is **7.03% on every arm including the
+base** — perfectly symmetric, driven by the base's own raises (Adeline 1→3, Marshal 2→4, Silverblade
+1→3) against the shipped table, not by the introduced card. The alias's standing assumption applies:
+the shared table treats a Cavalier **as** a Contender for the keep decision, which holds the keep
+policy fixed across arms by construction, but cannot see that the Cavalier might want a different keep
+policy. The per-arm R=40 **own** tables, which is what `pool_h.py` reports, are unaffected and give the
+card a real bucket.
+
+**What the number will not say.** Nothing in the card is unmodelled — double strike is the one combat
+keyword that is not blocker-dependent, so unlike Knight Exemplar's first strike or Cloudshredder's
+flying it is fully live in goldfishing. But goldfishing **flatters** it: a 2/2 for four that does
+nothing on its own is never killed, never removed, never a bad topdeck, and its doubled damage is never
+traded against a blocker. Its ceiling is also capped in this shell because **tokens are not Knights** —
+Worthy Knight's Soldiers, Adeline's Humans and Hero of Bladehold's Soldiers all stay single strike.
+State both with the result. [[goldfish-bias-has-two-readouts]], [[bracket-notes-are-the-judgement-call]].
+
+### DEFERRED — re-measure the close cases on the finalized list's OWN regenerated table
+
+**User, 2026-09-28**, across one exchange: *"if we have cases where it is extremely close we might want
+to measure those with regeneration"*; *"Maybe even 1 Basri is worth consideration this way"*; *"But
+let's wait until we have a finalized list first. Then we can regenerate that and work from it."*
+
+**The sequence is therefore fixed: land round Q → finalize the list → regenerate THAT list's mulligan
+table as a real artifact → re-measure the close cases on it.** Not before, because every one of these
+re-measurements is only worth doing against an apparatus fit to the list being shipped.
+
+**Why regeneration is the right instrument here and was not before.** The shipped WhiteKnights table
+has **exactly one version** (`a4b01fb8`, built at commit `083c4108`, `effective_R` 40, 42,271 entries,
+14 buckets) and is fit to the **shipped** 60, not the settled one. Across the other decks a second
+table is usually a *new list* rather than a regeneration of the same one; `Knights` is the one clear
+same-list regeneration, at `max_mull=6`. Meanwhile the screening loop has been generating per-arm
+tables since round G, at `floor_R: 40` — the **same** `effective_R` as the shipped artifact. So the
+2026-09-02 *"we don't need to regenerate any mulligan profiles"* directive no longer describes what
+this campaign does, and the remaining gap on a close case is games and chassis fit, not R.
+
+| case | what is on record | why it is unresolved |
+|---|---|---|
+| **1 Basri, Tomorrow's Champion** | round N2: `+0.0004` pooled at one copy, ladder `+0.0004 / +0.0022 / +0.0045` | the measurement and held-out blocks **disagree in sign on all three arms**, so nothing is established beyond the bound `|0.0096|`. And the reference was `j2_ad3_sp4` — **Silverblade 4, 23 lands** — not today's Silverblade 3 / 24 lands |
+| **1 Aether Vial** | **never measured at 1.** Only 3→2 (`−0.0154`, two payers agreeing) and 3→0 (`−0.0423`); the gradient is ~0.014/copy, so 0→1 interpolates to about `+0.014` | an interpolation across a chassis change, not a measurement. Every arm in rounds G–J holds Vial 0, so no snapshot isolates it |
+
+**The Vial case has a second argument that was never made, and it points the other way from the cut.**
+Vial charges toward the most common creature mana value in hand (`vial_target_mv` = 3 on this deck).
+The shipped list held **eleven** three-drop creatures; the settled list holds **fourteen** (Silverblade
+1→3, Adeline 1→3, Marshal 2→4, Contender out). Vial's deploy pool therefore grew by about a quarter on
+exactly the axis Vial keys on, *after* the −0.0423 was measured. Add the standing caveat that a Vial
+cut is **flattered** here — the engine models the charge/deploy heuristic but not flashing a creature
+in to dodge sorcery-speed removal or countermagic, and the user's three stated reasons (uncounterable,
+instant-speed deploy, dodging removal) are all structurally invisible to a goldfish, since there is
+nothing to be countered by, nothing to dodge, and no opponent turn to act during.
+
 ## Open questions for the user (surfaced, not blocking)
 
 1. **Ranking weights.** The Angels campaign ranked arms late-weighted — `long` 0.5 / `2hg` 0.3 /

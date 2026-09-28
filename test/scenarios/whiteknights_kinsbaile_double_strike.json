@@ -1,0 +1,49 @@
+{
+  "deck": "decks/WhiteKnights/WhiteKnights.cod",
+  "turn": 4,
+  "on_the_play": true,
+  "active_life": 20,
+  "opponent_life": 20,
+  "library_top": [
+    "Plains",
+    "Plains",
+    "Plains",
+    "Plains",
+    "Plains",
+    "Plains"
+  ],
+  "library_filler": "Plains",
+  "library_size": 30,
+  "depth": 5,
+  "budget_ms": 20,
+  "max_turns": 9,
+  "_comment": "Kinsbaile Cavalier (2026-09-28), the STATIC subtype double-strike lord. Guards both halves of the card in one fixture: the search must CAST it off exactly four Plains, and the grant must then double the whole Knight board. Four Plains pay {3}{W} exactly, the library is all Plains so no other line exists, and the three Venerable Knights are vanilla 2/1 Knights with no lord on board, so the arithmetic is unambiguous. WITH the grant: the Cavalier is summoning-sick on turn 4, so the three Knights swing 3 x (2 x 2) = 12 and the opponent falls 20 -> 8; on turn 5 the Cavalier joins for 2 x 2 = 4 more, so 16 lands and the opponent ends at -8. WITHOUT the grant (or if the Cavalier is never cast) the same board deals 6 a turn and does not kill until turn 7, so the assertion discriminates on BOTH win turn and final life. Note the grant reads 'Knight creatures you control', NOT 'Other' -- the Cavalier's own 2 power is doubled too, which is the -8 rather than -6. It also proves the grant is not Valiant Knight's activated team_pump: no mana is left to activate anything after the cast.",
+  "battlefield": [
+    {
+      "name": "Plains"
+    },
+    {
+      "name": "Plains"
+    },
+    {
+      "name": "Plains"
+    },
+    {
+      "name": "Plains"
+    },
+    {
+      "name": "Venerable Knight"
+    },
+    {
+      "name": "Venerable Knight"
+    },
+    {
+      "name": "Venerable Knight"
+    }
+  ],
+  "hand": [
+    "Kinsbaile Cavalier"
+  ],
+  "expect_win_turn": 5,
+  "expect_opponent_life": -8
+}

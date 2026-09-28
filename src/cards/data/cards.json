@@ -1174,6 +1174,28 @@
    }
   },
   {
+   "name": "Kinsbaile Cavalier",
+   "mana_cost": "{3}{W}",
+   "types": [
+    "Creature"
+   ],
+   "subtypes": [
+    "Kithkin",
+    "Knight"
+   ],
+   "keywords": [],
+   "power": 2,
+   "toughness": 2,
+   "oracle_text": "Knight creatures you control have double strike. [Fully modelled, no simplification: the STATIC subtype double-strike lord is Thrumming Hivepool's shape exactly (grants_double_strike + subtypes_affected Knight), resolved inside CreatureHasDoubleStrike -- the single shared oracle that ResolveCombatDamage and both of TurnSolver's attack projections consult -- so executor, rollout and search are lockstep for free. It is NOT Valiant Knight's shape: that card's grant is an ACTIVATED until-EOT team_pump costing {3}{W}{W}, this one is a permanent static that costs nothing once resolved. The grant reads 'Knight creatures you control', NOT 'Other', so it INCLUDES this creature -- which is what HasDoubleStrikeFromLords already does (it has no self-exclusion and this card is itself a Knight), the same self-inclusive shape Cloudshredder Sliver's haste grant has. Deliberately NOT template lord_effect and NOT lord_excludes_self: with power_bonus/tough_bonus 0 the card is not an IsLordPermanent, so it never enters BoardSources::lords and ComputeLordBonus stays untouched; it enters BoardSources::ds only. Goldfish reach: double strike is the ONE combat keyword that is not blocker-dependent -- ResolveCombatDamage multiplies the fully-assembled power (printed + lord + anthem + Adeline's characteristic-defining power + auras/equipment) by 2, so the card doubles the WHOLE team's damage, unlike the first strike on Knight Exemplar which is correctly noted inert. Tokens are not Knights (Worthy Knight's Soldiers, Adeline's Humans, Hero of Bladehold's Soldiers), so the grant covers the nontoken board only.]",
+   "template": "vanilla_creature",
+   "parameters": {
+    "grants_double_strike": true,
+    "subtypes_affected": [
+     "Knight"
+    ]
+   }
+  },
+  {
    "name": "Inspiring Veteran",
    "mana_cost": "{R}{W}",
    "types": [
