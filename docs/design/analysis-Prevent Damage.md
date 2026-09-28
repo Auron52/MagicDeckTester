@@ -1092,8 +1092,13 @@ player") and Vito ("target opponent") all read opponents / life. Probe costs at 
 7.8 s, 2HG d5 8.5 s per game (2HG probes n=40-60).
 | tier | rows | est. core-min now | est. after artifacts |
 |---|---|---|---|
-| smoke | `pd 0 1001 1000 0` · `pd 3 1001 25 10` · `pd 5 1001 15 20` · `pd2hg 3 1001 15 10` | ~7 | ~2 |
-| regression | `pd 0 2002 1000 0` · `pd 3 2002 40 10` · `pd 3 3003 40 10` · `pd 5 2002 25 20` · `pd 5 3003 25 20` · `pd2hg 3 2002 25 10` | ~22 | ~6 |
-| overnight | `pd 0 {4004,6006,8008,10010} 2000 0` · `pd 3 {4004..7007} 100 10` · `pd 5 {4004..7007} 75 20` · `pd2hg 5 {4004..7007} 50 20` | ~155 | ~40 |
+| smoke | `pd 0 1001 1000 0` · `pd 3 1001 25 10` · `pd 5 1001 15 20` · `pd2hg 3 1001 15 10` | ~8 | ~2.5 |
+| regression | `pd 0 2002 1000 0` · `pd 3 2002 40 10` · `pd 3 3003 40 10` · `pd 5 2002 25 20` · `pd 5 3003 25 20` · `pd2hg 3 2002 25 10` | ~23 | ~7 |
+| overnight | `pd 0 {4004,6006,8008,10010} 2000 0` · `pd 3 {4004..7007} 100 10` · `pd 5 {4004..7007} 75 20` · `pd2hg 5 {4004..7007} 50 20` | ~135 | ~42 |
 Smoke's per-game tail (a 30-90 s SLOW-GAME is common at d5) matters more than its total: keep the d5
 count low. "After artifacts" assumes the bottoming share disappears and play stays ~1.0x budget.
+
+- 2026-09-28 (perf agent): 5j **NOT met** — see P8. 68% of cost is pre-table clairvoyant bottoming;
+  play-only ~1.0x budget. Lossless P5 adopted (`6a8f09ba`, -3.4% play CPU). Open USER question: lift
+  the gate for PD's mulligan table + value leaf (`MTG_ALLOW_UNTESTED_DECK=1`), or rule that 5j
+  measures post-artifact cost. Rows proposed in P9, not added.
