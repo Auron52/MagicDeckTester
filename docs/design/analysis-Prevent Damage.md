@@ -993,3 +993,30 @@ rollouts outright (`AIEngine::BottomCards`' table path runs first) — every ref
 gate's table is measured WITH its table. The `bottom_eval_depth 0` arm is a near-upper bound on
 what removing the bottoming rollouts saves: **PD's play-only cost is ~3.2-3.5 s/game at d5 b20**
 (≈1.05-1.15x the 3,100 budget), not 11-12 s.
+
+### P3. Where the non-bottoming (play) cost goes
+- **Play-only cost** (`MTG_BOTTOM_ROLLOUTS=0`, the suite-shaped rows of P1; heuristic bottoms, so the
+  games differ from the shipped ones — a cost probe, not a quality arm): d5 b20 **3,224 / 3,095
+  ms/game** (s2002 / s3003), d3 b10 2,360 / 2,367. So the play search alone sits at **~1.04x** the
+  3,100 budget; the clairvoyant bottoming rollouts take it to 3.9x.
+- The budget BINDS: ~15.5k units per searched decision at d5 b20 (id-depth mean 1.4-1.8), ~5.5
+  searched decisions per game. Under a binding budget a **provider narrowing cannot lower cost** — it
+  only redistributes the same units (deeper, narrower). The Stage 5 narrowing candidates (Beseech
+  twobrid x tutor width, Earthquake X, Pyrohemia K, Wish width) are therefore QUALITY levers here, not
+  cost levers, and were not pursued for the gate. The only cost levers are wall-per-unit and the
+  number of searched decisions/rollouts.
+- `perf` (Profile build, 12 play-only games, s40001): flat. Inclusive: SimulateToEnd (horizon leaf)
+  84%, ApplyPlanDirect 51%, mana payment (TapForCostShared) 19%, PerformTutor 8% (of which the tutor
+  CANDIDATE LIST 5.7% — rebuilt on every greedy tutor resolution in the rollouts), the pain-payer's
+  floor DP (`PaymentDamageFloor`) 5.1% (4.2% self, the per-state div/mod decode), PainAwarePay
+  wrapper 4.0%, CollectActions 10%, ShuffleByKey 2.3%.
+
+### P4. Lossless BOTTOMING CUTOFF — built, verified byte-identical, NOT adopted (no measurable win)
+Idea: every consumer of a bottoming candidate's score reads it only as "== the best", so a
+candidate's rollout need only be played through the running-best turn (then reported max+1). Built
+as `MTG_BOTTOM_CUTOFF` (heurarm slot; off under refine / blind-K / external chooser / trace). One
+pooled batch, cut vs nocut, 1,800 paired games (d5 b20 s40001/s41001 x300, d3 b10 s2002/s3003 x150):
+**per-game outcomes AND digests identical on all 1,800; the cutoff fired on 1,072 of 2,467 armed
+rollouts** (so the equality had power). Cost: -1.4% / -0.4% (d5), -2.2% / +5.6% (d3) — inside run
+noise. The cut turns are the cheap tail; nearly all bottoming cost is in candidates that TIE the best
+and must be played in full. **Reverted** (no measurable benefit for the added surface).
