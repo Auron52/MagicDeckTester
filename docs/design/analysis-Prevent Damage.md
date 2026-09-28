@@ -949,3 +949,9 @@ cast-order pass's, and is surfaced there).
    painful source for a COLOURED pip, nor schedule lands "after Manabarbs" (gi6's weak note).
 4. gi15's cast order (tutor-put engine piece before the sweeper): for the user-reviewed cast-order pass.
 5. The drip sweep's human-play defect (fix 2) -- same shape, other decks; fix on sign-off.
+- 2026-09-28: 5d sweep DONE (16 games, 0 unresolved after fixes d4c38ed4 + 817df444). NEXT, in order:
+  (1) performance agent LAUNCHED on b36941f5 to pass the 5j 3x cost gate (sound certificate first,
+  provider narrowings A/B'd; proposes suite rows but does not add them); (2) §5i bucket discard
+  policy (analyzer verdict NO_RULE_CONSIDER_SEARCH, 14% label regret); (3) if the gate passes: all
+  three tiers + GT accept (`bash test/regression.sh --<tier> --deck=<key>` then `--accept` with the
+  SAME filter; `python3 test/check_gt_logs.py`); (4) final verify_deck + Stage 6 report + push decision.
