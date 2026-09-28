@@ -291,9 +291,12 @@ public:
 //     (Tamanoa pays it back, Purity turns it into lifegain). The engine separately bounds it by
 //     RULES safety (dmgev::PaymentPainSafe / the sweep's per-tap check), so this hook never has to
 //     reason about dying. PROVISIONAL until Stage 5 measures the coloured-mode preference.
-//   * TutorSearchWidth 16 -- a COVERAGE fix, not a heuristic: Living Wish reaches a 13-card,
-//     13-name sideboard, and the base width 6 would leave seven names (which seven decided by
-//     decklist order) unreachable at every budget. Same argument as Pirates' 9 / EDF's 8.
+//   * TutorSearchWidth 20 -- a COVERAGE fix, not a heuristic: Living Wish reaches a 13-card,
+//     13-name sideboard and Beseech the Queen every distinct library name, and the base width 6
+//     would leave names (which ones decided by zone order) unreachable at every budget. Same
+//     argument as Pirates' 9. (Phase I1 set 16 for the sideboard alone; see the override.)
+//   * CleanupDiscardCandidates -- the authored analyze-deck 5i BUCKET shed policy
+//     (MTG_PD_BUCKET_DISCARD, default ON, PROVISIONAL pending user review).
 class PreventDamageProvider : public DeckProvider
 {
 public:
@@ -368,6 +371,12 @@ public:
     // (a reviewed ranking, not a measured one).
     int EtbDestroyTargetPick(const GameState& s, int controller,
                              const std::vector<int>& legal) const override;
+    // Authored bucket cleanup-shed policy (analyze-deck 5i; docs/design/prevent-damage-discard-policy-
+    // proposal.md): GAIN / DRAIN / AMP / FUEL / DIG / MANA quotas net of board, interleaved keep
+    // ladder, every hand card named. MTG_PD_BUCKET_DISCARD (default ON; =0 ->
+    // GenericProvider::CleanupDiscardCandidates, the max-MV fallback). PROVISIONAL (user review).
+    std::vector<int> CleanupDiscardCandidates(
+        const GameState& s, const std::vector<std::string>* required_pieces) const override;
 };
 
 // Angels (Giada / Lyra / Righteous Valkyrie lifegain-angels). Rode GenericProvider.

@@ -10073,6 +10073,581 @@ PreventDamageProvider::TutorCandidates(const GameState& s, int controller, const
     return GenericTutorList(s, controller, pp, /*nonlands_first=*/true);
 }
 
+// ---- PreventDamageProvider::CleanupDiscardCandidates ------------------------
+//
+// AUTHORED role-bucket policy (analyze-deck 5i), implementing
+// docs/design/prevent-damage-discard-policy-proposal.md faithfully. PROVISIONAL: the proposal's
+// section 8 "Doubts" (fuel placement, land target 5/6, colour cover before Ancient Tomb, the
+// overflow precedence, the tutor order) await the user's review.
+//
+// WHY THIS DECK NEEDS ONE. The shared fallback's tier B is descending mana value, which here is
+// backwards three ways: Beseech the Queen is MV 6 ({2/B}x3, CR 202.3f) so it sheds FIRST although it
+// casts for {B}{B}{B} and is the only unrestricted tutor; lands are MV 0 so a seventh land is kept
+// over a Tamanoa; and the three MV-4 cards (Manabarbs fuel, Pyrohemia burn, Rhox Faithmender
+// amplifier) are decided by hand order. The rollout takes index 0 of this ranking with no search
+// above it, so real play's rare sheds (14 in 400 Stage 4 games) do not make the rule inert.
+//
+// THE DECK'S SHAPE -> THE BUCKETS. Damage is fuel and lifegain is converted into the kill: a GAIN
+// engine (Tamanoa / Purity) turns each damage event into a lifegain event, a DRAIN payoff (Vito:
+// "that much"; Dina: 1 per event) turns it into opponent life loss, an AMP (Faithmender x2, Bilbo +1)
+// scales it, and FUEL (Manabarbs, Spellshock, Pyrohemia, Rolling Earthquake) plus the painlands make
+// the events. DIG = the tutors (Wish > GSZ > Beseech), MANA = lands only (no dorks or rocks). OTHER =
+// the wishable sideboard bodies, never protected; NEG = a body whose mandatory ETB must hit OUR side.
+//
+// QUOTAS, NET OF BOARD (brief rule 2): lands to 5 in total (6 with a scalable sink: a ping_all_cost
+// permanent on board, or an Earthquake / Pyrohemia in hand); GAIN 1 hard + 1 soft; DRAIN 1 + 1 for
+// the OTHER name (a second copy of the same legend is not a drainer); AMP 1, and only beside a
+// Vito-type drainer; FUEL 1 + 1 while no fuel permanent is out; DIG 1, plus tutors drafted as
+// WILDCARDS into an empty GAIN1 / DRAIN1 slot when a held tutor can reach that role.
+//
+// THE KEEP LADDER (interleaved; read backwards it is the tail of the shed order):
+//   LAND > GAIN1 > LAND > DRAIN1 > LAND > DRAIN2 > LAND > DIG1 > FUEL1 > GAIN2 > AMP1 > LAND > FUEL2 > LAND
+// SHED ORDER: S0 dead (a legend already on our battlefield, a tutor with no legal target, a Reflecting
+// Pool with no non-reflecting land anywhere) > S1 NEG > S2 surplus lands > S3 OTHER > S4 bucket
+// overflow (FUEL > DRAIN > AMP > DIG > GAIN; far before near) > S5 the kept cards, last-kept first.
+// Every non-staged hand card is named, so nothing falls through to max-MV.
+//
+// DISTANCE-TO-PLAYABLE only orders INSIDE a bucket: distance = max(0, eff_cost - reach) + (a needed
+// colour missing from board + hand lands ? 1 : 0), far = distance >= 2. eff_cost is the MV except
+// Beseech (twobrid: 2 per pip, 1 per pip up to the black sources) and GSZ (1 + the cheapest engine
+// piece it reaches).
+//
+// Classification is by PARAMS, never card names; every read goes through the definition because a
+// hand card is a name-only placeholder. The return routes through CleanupDiscardRankingWithOrder so
+// the staged-card and required-piece protections stay engine-enforced.
+std::vector<int> PreventDamageProvider::CleanupDiscardCandidates(
+    const GameState& s, const std::vector<std::string>* required_pieces) const
+{
+    static const bool s_env = EnvOn("MTG_PD_BUCKET_DISCARD", true);   // DEFAULT ON; =0 -> generic
+    if (!heurarm::Flag(heurarm::PD_BUCKET_DISCARD, s_env))
+    { return GenericProvider::CleanupDiscardCandidates(s, required_pieces); }
+    const int me = s.active_player_index;
+    const Player& ap = s.players[me];
+    const int n = static_cast<int>(ap.hand.size());
+    if (n <= 0) { return GenericProvider::CleanupDiscardCandidates(s, required_pieces); }
+
+    auto def_of = [](const Card& c) { return CardDatabase::Instance().LookupCached(c); };
+    auto colour_bit = [](Color c) -> unsigned
+    { return c == Color::Colorless ? 0u : (1u << static_cast<int>(c)); };
+    auto land_bits = [&](const CardDefinition* d) -> unsigned
+    {
+        if (d == nullptr || d->params.reflecting) { return 0u; }
+        unsigned b = 0;
+        for (Color c : d->params.produces) { b |= colour_bit(c); }
+        return b;
+    };
+    auto land_mana = [](const CardDefinition* d)
+    { return d == nullptr ? 1 : std::max(1, d->params.produces_amount); };
+
+    // Colour requirements of a cost, as a SET of acceptable-colour masks (bit m set = some pip
+    // accepts exactly the colours in mask m). A flat pip is a one-colour mask; a hybrid pip ({R/G})
+    // accepts either colour; twobrid pips live in `generic` and demand no colour.
+    auto cost_reqs = [&](const CardDefinition* d) -> std::uint32_t
+    {
+        if (d == nullptr) { return 0u; }
+        const ManaCost& mc = d->card.m_mana_cost;
+        int flat[5] = { mc.white, mc.blue, mc.black, mc.red, mc.green };
+        std::uint32_t req = 0;
+        for (int k = 0; k < mc.hybrid_count && k < 4; ++k)
+        {
+            const int a = mc.hybrid_pair[k] >> 4, b = mc.hybrid_pair[k] & 0xF;
+            if (a >= 0 && a < 5) { --flat[a]; }   // the first colour is baked into the flat ints
+            unsigned m = 0;
+            if (a >= 0 && a < 5) { m |= 1u << a; }
+            if (b >= 0 && b < 5) { m |= 1u << b; }
+            if (m) { req |= 1u << m; }
+        }
+        for (int c = 0; c < 5; ++c) { if (flat[c] > 0) { req |= 1u << (1u << c); } }
+        return req;
+    };
+    // Requirements (from a req set) that `bits` does NOT satisfy.
+    auto unmet = [](std::uint32_t req, unsigned bits) -> std::uint32_t
+    {
+        std::uint32_t out = 0;
+        for (unsigned m = 1; m < 32; ++m)
+        { if ((req >> m) & 1u) { if ((m & bits) == 0) { out |= 1u << m; } } }
+        return out;
+    };
+    auto popcount32 = [](std::uint32_t v) { int k = 0; while (v) { v &= v - 1; ++k; } return k; };
+
+    auto is_gain  = [](const CardParams& p)
+    { return p.noncreature_damage_lifegain || p.prevent_noncombat_to_self_gain; };
+    auto is_drain = [](const CardParams& p)
+    { return p.lifegain_target_opp_loses_that_much || p.lifegain_each_opp_loses > 0; };
+    auto is_amp   = [](const CardParams& p)
+    { return p.lifegain_multiplier > 1 || p.lifegain_plus > 0; };
+    auto is_fuel  = [](const CardParams& p)
+    {
+        return p.x_damage_each_creature_and_player || p.land_tap_damage_each_player > 0
+            || p.on_cast_trigger_damage > 0 || p.ping_all_cost.has_value();
+    };
+    auto is_fuel_perm = [](const CardParams& p)
+    {
+        return p.land_tap_damage_each_player > 0 || p.on_cast_trigger_damage > 0
+            || p.ping_all_cost.has_value();
+    };
+    auto is_sink = [](const CardParams& p)
+    { return p.x_damage_each_creature_and_player || p.ping_all_cost.has_value(); };
+    auto is_dig  = [](const CardParams& p) { return p.tutor_to_hand || p.tutor_to_battlefield_single; };
+
+    // ---- 1. board census (own permanents; the opponent only for "has a creature") ---------------
+    int board_lands = 0, board_reach = 0, board_gain = 0, board_amp = 0, board_fuel_perm = 0;
+    int board_b_sources = 0, board_live_refl_pending = 0;
+    unsigned board_bits = 0;
+    bool board_has_nonrefl = false, board_vito = false, board_sink = false, opp_has_creature = false;
+    std::vector<std::string> board_drain_names;
+    for (const Permanent& p : s.battlefield)
+    {
+        if (p.controller_index != me)
+        {
+            if (p.card.IsCreature()) { opp_has_creature = true; }
+            continue;
+        }
+        const CardDefinition* d = def_of(p.card);
+        if (p.card.IsLand())
+        {
+            ++board_lands;
+            if (d != nullptr && d->params.reflecting) { ++board_live_refl_pending; }
+            else
+            {
+                board_has_nonrefl = true;
+                const unsigned b = land_bits(d);
+                board_bits |= b;
+                board_reach += land_mana(d);
+                if (b & colour_bit(Color::Black)) { ++board_b_sources; }
+            }
+        }
+        if (d == nullptr) { continue; }
+        const CardParams& pp = d->params;
+        if (is_gain(pp)) { ++board_gain; }
+        if (is_drain(pp))
+        {
+            const std::string nm = p.card.m_name.str();
+            if (std::find(board_drain_names.begin(), board_drain_names.end(), nm)
+                == board_drain_names.end()) { board_drain_names.push_back(nm); }
+            if (pp.lifegain_target_opp_loses_that_much) { board_vito = true; }
+        }
+        if (is_amp(pp)) { ++board_amp; }
+        if (is_fuel_perm(pp)) { ++board_fuel_perm; }
+        if (pp.ping_all_cost.has_value()) { board_sink = true; }
+    }
+    auto legend_on_board = [&](const Card& hc)
+    {
+        for (const Permanent& p : s.battlefield)
+        { if (p.controller_index == me && p.card.m_name == hc.m_name) { return true; } }
+        return false;
+    };
+
+    // ---- 2. partition the hand (precedence LAND > GAIN > DRAIN > AMP > FUEL > DIG > NEG/OTHER) --
+    enum Cls : char { C_NONE, C_LAND, C_GAIN, C_DRAIN, C_AMP, C_FUEL, C_DIG, C_NEG, C_OTHER };
+    std::vector<char> cls(static_cast<std::size_t>(n), C_NONE);
+    std::vector<char> dead(static_cast<std::size_t>(n), 0);
+    std::vector<const CardDefinition*> defs(static_cast<std::size_t>(n), nullptr);
+    bool hand_has_land = false, hand_has_nonrefl = false, hand_gain = false, hand_sink = false;
+    std::uint32_t needed_reqs = 0;
+    for (int i = 0; i < n; ++i)
+    {
+        const Card& hc = ap.hand[static_cast<std::size_t>(i)];
+        if (hc.m_is_staged) { continue; }
+        const CardDefinition* d = def_of(hc);
+        defs[static_cast<std::size_t>(i)] = d;
+        char& c = cls[static_cast<std::size_t>(i)];
+        if (CleanupDiscardIsLand(hc))
+        {
+            c = C_LAND; hand_has_land = true;
+            if (d == nullptr || !d->params.reflecting) { hand_has_nonrefl = true; }
+            continue;
+        }
+        needed_reqs |= cost_reqs(d);
+        if (d == nullptr) { c = C_OTHER; continue; }
+        const CardParams& pp = d->params;
+        if (is_gain(pp))       { c = C_GAIN; hand_gain = true; }
+        else if (is_drain(pp)) { c = C_DRAIN; }
+        else if (is_amp(pp))   { c = C_AMP; }
+        else if (is_fuel(pp))  { c = C_FUEL; }
+        else if (is_dig(pp))   { c = C_DIG; }
+        else if (pp.etb_destroy_artifact_enchantment_land
+                 || (pp.etb_destroy_nonartifact_nonblack && !opp_has_creature)) { c = C_NEG; }
+        else                   { c = C_OTHER; }
+        if (is_sink(pp)) { hand_sink = true; }
+        // S0 (a): a second copy of a legend we control dies to the legend rule on resolution.
+        if (d->card.HasSupertype(Supertype::Legendary) && legend_on_board(hc))
+        { dead[static_cast<std::size_t>(i)] = 1; }
+    }
+
+    // ---- 3. hand-land facts: live reflecting, reach, available colours, black sources ----------
+    const bool refl_live = board_has_nonrefl || hand_has_nonrefl;
+    int reach = board_reach + (refl_live ? board_live_refl_pending : 0);
+    unsigned avail = board_bits;
+    int b_sources = board_b_sources;
+    int refl_count_live = refl_live ? board_live_refl_pending : 0;
+    for (int i = 0; i < n; ++i)
+    {
+        if (cls[static_cast<std::size_t>(i)] != C_LAND) { continue; }
+        const CardDefinition* d = defs[static_cast<std::size_t>(i)];
+        if (d != nullptr && d->params.reflecting)
+        {
+            if (!refl_live) { dead[static_cast<std::size_t>(i)] = 1; continue; }   // S0 (c)
+            ++reach; ++refl_count_live;
+            continue;
+        }
+        const unsigned b = land_bits(d);
+        avail |= b;
+        reach += land_mana(d);
+        if (b & colour_bit(Color::Black)) { ++b_sources; }
+    }
+    // A live reflecting land adds nothing new to the colour union, but it is a black source when
+    // the union has black.
+    if (avail & colour_bit(Color::Black)) { b_sources += refl_count_live; }
+
+    // ---- 4. tutor reach: one zone pass per distinct held tutor NAME -----------------------------
+    struct Reach { bool gain = false, drain = false, amp = false, any = false; int min_engine = 99, min_any = 99; };
+    std::vector<Reach> reach_of(static_cast<std::size_t>(n));
+    std::vector<int> tutor_src(static_cast<std::size_t>(n), -1);   // index whose reach this copies
+    const int beseech_cap = board_lands + (hand_has_land ? 1 : 0);
+    for (int i = 0; i < n; ++i)
+    {
+        if (cls[static_cast<std::size_t>(i)] != C_DIG) { continue; }
+        for (int j = 0; j < i; ++j)
+        {
+            if (cls[static_cast<std::size_t>(j)] == C_DIG && tutor_src[static_cast<std::size_t>(j)] == j
+                && ap.hand[static_cast<std::size_t>(j)].m_name == ap.hand[static_cast<std::size_t>(i)].m_name)
+            { tutor_src[static_cast<std::size_t>(i)] = j; break; }
+        }
+        if (tutor_src[static_cast<std::size_t>(i)] >= 0)
+        { reach_of[static_cast<std::size_t>(i)] = reach_of[static_cast<std::size_t>(tutor_src[static_cast<std::size_t>(i)])]; continue; }
+        tutor_src[static_cast<std::size_t>(i)] = i;
+        const CardParams& pp = defs[static_cast<std::size_t>(i)]->params;
+        Reach r;
+        auto visit = [&](const Card& lc)
+        {
+            const CardDefinition* ld = def_of(lc);
+            const Card& card = ld ? ld->card : lc;
+            if (!pp.tutor_types.empty())
+            {
+                bool type_ok = false;
+                for (const std::string& t : pp.tutor_types)
+                { if (CardMatchesTypeName(card, t)) { type_ok = true; break; } }
+                if (!type_ok) { return; }
+            }
+            if (!CardHasColorNamed(card, pp.tutor_color)) { return; }
+            if (!TutorNumericFilterOk(card, pp)) { return; }
+            const int mv = card.m_mana_cost.ManaValue();
+            // Beseech: next turn's land count is the cap that matters at cleanup (see the proposal:
+            // TutorLandCapSlack reads THIS turn's drop and is 0 once it is spent).
+            if (pp.tutor_max_mv_is_lands && mv > beseech_cap) { return; }
+            r.any = true;
+            r.min_any = std::min(r.min_any, mv);
+            if (ld == nullptr) { return; }
+            const CardParams& lp = ld->params;
+            if (is_gain(lp))  { r.gain = true;  r.min_engine = std::min(r.min_engine, mv); }
+            if (is_drain(lp)) { r.drain = true; r.min_engine = std::min(r.min_engine, mv); }
+            if (is_amp(lp))   { r.amp = true; }
+        };
+        if (pp.wish_from_sideboard) { for (const Card& lc : ap.sideboard) { visit(lc); } }
+        else                        { for (const Card& lc : ap.library)   { visit(lc); } }
+        reach_of[static_cast<std::size_t>(i)] = r;
+    }
+    for (int i = 0; i < n; ++i)
+    {
+        if (cls[static_cast<std::size_t>(i)] != C_DIG) { continue; }
+        const Reach& r = reach_of[static_cast<std::size_t>(i)];
+        if (!r.any) { dead[static_cast<std::size_t>(i)] = 1; }                       // S0 (b)
+        if (r.gain) { hand_gain = true; }   // gain_available: a held tutor reaches a gain engine
+    }
+    const bool gain_available = board_gain > 0 || hand_gain;
+
+    // ---- effective cost + distance ------------------------------------------------------------
+    auto eff_cost = [&](int i)
+    {
+        const CardDefinition* d = defs[static_cast<std::size_t>(i)];
+        const int mv = CleanupDiscardManaValue(ap.hand[static_cast<std::size_t>(i)]);
+        if (d == nullptr) { return mv; }
+        const ManaCost& mc = d->card.m_mana_cost;
+        if (mc.twobrid_count > 0) { return mv - std::min<int>(mc.twobrid_count, b_sources); }
+        if (d->params.tutor_to_battlefield_single && d->params.tutor_mv_max_is_x)
+        {
+            const Reach& r = reach_of[static_cast<std::size_t>(i)];
+            const int x = r.min_engine < 99 ? r.min_engine : (r.min_any < 99 ? r.min_any : 0);
+            return mv + x;
+        }
+        return mv;
+    };
+    auto distance = [&](int i)
+    {
+        const int dist = std::max(0, eff_cost(i) - reach);
+        return dist + (unmet(cost_reqs(defs[static_cast<std::size_t>(i)]), avail) != 0 ? 1 : 0);
+    };
+    std::vector<int> dist(static_cast<std::size_t>(n), 0);
+    for (int i = 0; i < n; ++i)
+    {
+        const char c = cls[static_cast<std::size_t>(i)];
+        if (c != C_NONE && c != C_LAND) { dist[static_cast<std::size_t>(i)] = distance(i); }
+    }
+    auto far = [&](int i) { return dist[static_cast<std::size_t>(i)] >= 2; };
+
+    // ---- within-bucket value order (best kept FIRST) ------------------------------------------
+    auto value_rank = [&](int i) -> int
+    {
+        const CardDefinition* d = defs[static_cast<std::size_t>(i)];
+        if (d == nullptr) { return 9; }
+        const CardParams& p = d->params;
+        switch (cls[static_cast<std::size_t>(i)])
+        {
+            case C_GAIN:  return p.noncreature_damage_lifegain ? 0 : 1;
+            case C_DRAIN: return p.lifegain_target_opp_loses_that_much ? 0 : 1;
+            case C_AMP:   return p.lifegain_multiplier > 1 ? 0 : 1;
+            case C_FUEL:
+            {
+                int r = p.x_damage_each_creature_and_player ? 0
+                      : p.land_tap_damage_each_player > 0   ? 1
+                      : p.on_cast_trigger_damage > 0        ? 2 : 3;
+                if ((r == 1 || r == 2) && !gain_available) { r += 3; }   // R2: passive fuel is dead
+                return r;
+            }
+            case C_DIG:   return p.wish_from_sideboard ? 0 : (p.tutor_to_battlefield_single ? 1 : 2);
+            case C_OTHER: case C_NEG:
+                return p.etb_return_gy_to_hand ? 0 : (p.transmute_cost.has_value() ? 1 : 2);
+            default:      return 9;
+        }
+    };
+    auto value_less = [&](int a, int b)   // a is kept before b
+    {
+        const int ra = value_rank(a), rb = value_rank(b);
+        if (ra != rb) { return ra < rb; }
+        const char c = cls[static_cast<std::size_t>(a)];
+        if (c == C_GAIN || c == C_DRAIN)
+        { const int ea = eff_cost(a), eb = eff_cost(b); if (ea != eb) { return ea < eb; } }
+        return a < b;
+    };
+    auto slot_less = [&](int a, int b)    // non-far first, then value
+    {
+        if (far(a) != far(b)) { return !far(a); }
+        return value_less(a, b);
+    };
+
+    // Per-bucket candidate lists (non-dead, non-staged), in slot order.
+    std::vector<int> lands, gains, drains, amps, fuels, digs, negs, others;
+    for (int i = 0; i < n; ++i)
+    {
+        if (dead[static_cast<std::size_t>(i)]) { continue; }
+        switch (cls[static_cast<std::size_t>(i)])
+        {
+            case C_LAND:  lands.push_back(i);  break;
+            case C_GAIN:  gains.push_back(i);  break;
+            case C_DRAIN: drains.push_back(i); break;
+            case C_AMP:   amps.push_back(i);   break;
+            case C_FUEL:  fuels.push_back(i);  break;
+            case C_DIG:   digs.push_back(i);   break;
+            case C_NEG:   negs.push_back(i);   break;
+            case C_OTHER: others.push_back(i); break;
+            default: break;
+        }
+    }
+    for (std::vector<int>* v : { &gains, &drains, &amps, &fuels, &digs })
+    { std::stable_sort(v->begin(), v->end(), slot_less); }
+
+    // ---- 5. land keep order: greedy colour cover, then the section-4 keys -----------------------
+    {
+        auto land_key_less = [&](int a, int b)
+        {
+            const CardDefinition* da = defs[static_cast<std::size_t>(a)];
+            const CardDefinition* db = defs[static_cast<std::size_t>(b)];
+            const bool ra = da && da->params.reflecting, rb = db && db->params.reflecting;
+            if (ra != rb) { return !ra; }
+            const int ma = land_mana(da), mb = land_mana(db);
+            if (ma != mb) { return ma > mb; }
+            const bool ta = da && da->params.enters_tapped, tb = db && db->params.enters_tapped;
+            if (ta != tb) { return !ta; }
+            const int ca = popcount32(land_bits(da)), cb = popcount32(land_bits(db));
+            if (ca != cb) { return ca > cb; }
+            return a < b;
+        };
+        std::vector<int> rest = lands, ordered;
+        std::uint32_t missing = unmet(needed_reqs, board_bits);
+        unsigned have = board_bits;
+        while (missing != 0 && !rest.empty())
+        {
+            int best = -1, best_gain = 0;
+            for (int i : rest)
+            {
+                const int g = popcount32(missing & ~unmet(missing, land_bits(defs[static_cast<std::size_t>(i)])));
+                if (g > best_gain || (g == best_gain && g > 0 && best >= 0 && land_key_less(i, best)))
+                { best = i; best_gain = g; }
+            }
+            if (best < 0) { break; }
+            ordered.push_back(best);
+            have |= land_bits(defs[static_cast<std::size_t>(best)]);
+            missing = unmet(needed_reqs, have);
+            rest.erase(std::find(rest.begin(), rest.end(), best));
+        }
+        std::stable_sort(rest.begin(), rest.end(), land_key_less);
+        ordered.insert(ordered.end(), rest.begin(), rest.end());
+        lands.swap(ordered);
+    }
+
+    // ---- 6. the interleaved keep ladder ------------------------------------------------------
+    const int land_target = 5 + ((board_sink || hand_sink) ? 1 : 0);
+    int land_need = std::max(0, land_target - board_lands);
+    std::vector<char> keep(static_cast<std::size_t>(n), 0);
+    std::vector<int>  taken_order;
+    std::vector<std::string> kept_drain_names;
+    bool kept_vito = false;
+    auto take = [&](int i) { keep[static_cast<std::size_t>(i)] = 1; taken_order.push_back(i); };
+    auto first_free = [&](const std::vector<int>& v) -> int
+    { for (int i : v) { if (!keep[static_cast<std::size_t>(i)]) { return i; } } return -1; };
+    auto name_used = [&](int i)
+    {
+        const std::string nm = ap.hand[static_cast<std::size_t>(i)].m_name.str();
+        return std::find(board_drain_names.begin(), board_drain_names.end(), nm) != board_drain_names.end()
+            || std::find(kept_drain_names.begin(), kept_drain_names.end(), nm) != kept_drain_names.end();
+    };
+    auto take_drain = [&](int i)
+    {
+        take(i);
+        kept_drain_names.push_back(ap.hand[static_cast<std::size_t>(i)].m_name.str());
+        const CardDefinition* d = defs[static_cast<std::size_t>(i)];
+        if (d && d->params.lifegain_target_opp_loses_that_much) { kept_vito = true; }
+    };
+    // GAIN1 / DRAIN1: non-far real card > non-far reaching tutor > far real card > far tutor.
+    auto fill_engine_slot = [&](bool gain_slot)
+    {
+        int real_near = -1, real_far = -1, tut_near = -1, tut_far = -1;
+        for (int i : (gain_slot ? gains : drains))
+        {
+            if (keep[static_cast<std::size_t>(i)] || (!gain_slot && name_used(i))) { continue; }
+            if (!far(i)) { if (real_near < 0) { real_near = i; } }
+            else if (real_far < 0) { real_far = i; }
+        }
+        for (int i : digs)
+        {
+            if (keep[static_cast<std::size_t>(i)]) { continue; }
+            const Reach& r = reach_of[static_cast<std::size_t>(i)];
+            if (!(gain_slot ? r.gain : r.drain)) { continue; }
+            if (!far(i)) { if (tut_near < 0) { tut_near = i; } }
+            else if (tut_far < 0) { tut_far = i; }
+        }
+        const int pick = real_near >= 0 ? real_near : tut_near >= 0 ? tut_near
+                       : real_far >= 0 ? real_far : tut_far;
+        if (pick < 0) { return; }
+        if (cls[static_cast<std::size_t>(pick)] == C_DRAIN) { take_drain(pick); } else { take(pick); }
+    };
+
+    enum Slot { L, GAIN1, DRAIN1, DRAIN2, DIG1, FUEL1, GAIN2, AMP1, FUEL2 };
+    static const Slot kFill[] = { L, GAIN1, L, DRAIN1, L, DRAIN2, L, DIG1, FUEL1, GAIN2, AMP1, L, FUEL2, L };
+    for (Slot slot : kFill)
+    {
+        switch (slot)
+        {
+            case L:
+                if (land_need > 0) { const int i = first_free(lands); if (i >= 0) { take(i); --land_need; } }
+                break;
+            case GAIN1:
+                if (board_gain == 0) { fill_engine_slot(true); }
+                break;
+            case DRAIN1:
+                if (board_drain_names.empty()) { fill_engine_slot(false); }
+                break;
+            case DRAIN2:
+                if (board_drain_names.size() < 2)
+                {
+                    for (int i : drains)
+                    { if (!keep[static_cast<std::size_t>(i)] && !name_used(i)) { take_drain(i); break; } }
+                }
+                break;
+            case DIG1:
+            { const int i = first_free(digs); if (i >= 0) { take(i); } break; }
+            case FUEL1:
+            { const int i = first_free(fuels); if (i >= 0) { take(i); } break; }
+            case GAIN2:
+                if (board_gain <= 1) { const int i = first_free(gains); if (i >= 0) { take(i); } }
+                break;
+            case AMP1:
+                if (board_amp == 0 && (board_vito || kept_vito))
+                { const int i = first_free(amps); if (i >= 0) { take(i); } }
+                break;
+            case FUEL2:
+                if (board_fuel_perm == 0) { const int i = first_free(fuels); if (i >= 0) { take(i); } }
+                break;
+        }
+    }
+
+    // ---- 7. emit the shed order ---------------------------------------------------------------
+    std::vector<int> shed;
+    shed.reserve(static_cast<std::size_t>(n));
+    std::vector<char> listed(static_cast<std::size_t>(n), 0);
+    auto put = [&](int i)
+    {
+        if (i < 0 || i >= n || listed[static_cast<std::size_t>(i)]) { return; }
+        if (ap.hand[static_cast<std::size_t>(i)].m_is_staged) { return; }
+        listed[static_cast<std::size_t>(i)] = 1; shed.push_back(i);
+    };
+    auto put_unkept = [&](int i) { if (!keep[static_cast<std::size_t>(i)]) { put(i); } };
+
+    // S0 dead: (a) duplicate legend, (b) target-less tutor, (c) dead Reflecting Pool; then hand order.
+    for (int pass = 0; pass < 3; ++pass)
+    {
+        for (int i = 0; i < n; ++i)
+        {
+            if (!dead[static_cast<std::size_t>(i)]) { continue; }
+            const char c = cls[static_cast<std::size_t>(i)];
+            const int kind = c == C_LAND ? 2 : (c == C_DIG ? 1 : 0);
+            if (kind == pass) { put(i); }
+        }
+    }
+    // S1 NEG: the land/enchantment/artifact destroyer first (it always hits our side), then the rest.
+    std::stable_sort(negs.begin(), negs.end(), [&](int a, int b)
+    {
+        const bool sa = defs[static_cast<std::size_t>(a)]->params.etb_destroy_artifact_enchantment_land;
+        const bool sb = defs[static_cast<std::size_t>(b)]->params.etb_destroy_artifact_enchantment_land;
+        if (sa != sb) { return sa; }
+        return a < b;
+    });
+    for (int i : negs) { put(i); }
+    // S2 surplus lands, the land keep order reversed.
+    for (auto it = lands.rbegin(); it != lands.rend(); ++it) { put_unkept(*it); }
+    // S3 OTHER, worst first (vanilla / other > transmute > graveyard-return).
+    std::stable_sort(others.begin(), others.end(), [&](int a, int b)
+    {
+        const int ra = value_rank(a), rb = value_rank(b);
+        if (ra != rb) { return ra > rb; }
+        return a < b;
+    });
+    for (int i : others) { put(i); }
+    // S4 overflow: FUEL > DRAIN > AMP > DIG > GAIN; inside a bucket, larger distance first, then the
+    // value order reversed.
+    auto overflow_less = [&](int a, int b)
+    {
+        const int da = dist[static_cast<std::size_t>(a)], db = dist[static_cast<std::size_t>(b)];
+        const bool fa = da >= 2, fb = db >= 2;
+        if (fa != fb) { return fa; }
+        if (fa && da != db) { return da > db; }
+        return value_less(b, a);
+    };
+    for (std::vector<int>* v : { &fuels, &drains, &amps, &digs, &gains })
+    {
+        std::vector<int> over;
+        for (int i : *v) { if (!keep[static_cast<std::size_t>(i)]) { over.push_back(i); } }
+        std::stable_sort(over.begin(), over.end(), overflow_less);
+        for (int i : over) { put(i); }
+    }
+    // S5 the kept cards, last-kept first.
+    for (auto it = taken_order.rbegin(); it != taken_order.rend(); ++it) { put(*it); }
+    // Defensive: anything not yet named (cannot happen -- every non-staged card has a class).
+    for (int i = 0; i < n; ++i) { put(i); }
+
+    // MTG_SHED_STATS firing counter: how often this policy's index 0 differs from the generic
+    // fallback's (the ranking the =0 hatch restores). Off by default = zero cost.
+    if (ShedStats::Enabled())
+    {
+        const std::vector<int> out = CleanupDiscardRankingWithOrder(s, required_pieces, shed);
+        const std::vector<int> gen = GenericProvider::CleanupDiscardCandidates(s, required_pieces);
+        ShedStats::CountPolicy(!out.empty() && !gen.empty() && out.front() != gen.front());
+        return out;
+    }
+    return CleanupDiscardRankingWithOrder(s, required_pieces, shed);
+}
+
 const DecisionProvider& DefaultProvider()
 {
     return g_generic;

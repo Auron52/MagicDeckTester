@@ -229,6 +229,20 @@ namespace ShedStats
     inline void CountHand(std::size_t n)
     { if (Enabled()) { g_hand_hist[n < 24 ? n : 23].fetch_add(1, std::memory_order_relaxed); } }
 
+    // A DECK POLICY's firing census (2026-09-28, Prevent Damage 5i): calls to an authored
+    // CleanupDiscardCandidates, and how many of them put a DIFFERENT card at index 0 than the
+    // generic max-MV fallback would. A byte-identical A/B on a policy is only believable next to a
+    // non-zero `moved` -- this is that control. Counted by the provider itself, only under
+    // MTG_SHED_STATS, so zero cost on every shipped path.
+    inline std::atomic<std::uint64_t> g_policy_calls{0};
+    inline std::atomic<std::uint64_t> g_policy_moved{0};
+    inline void CountPolicy(bool moved)
+    {
+        if (!Enabled()) { return; }
+        g_policy_calls.fetch_add(1, std::memory_order_relaxed);
+        if (moved) { g_policy_moved.fetch_add(1, std::memory_order_relaxed); }
+    }
+
     // RAII so the early `count <= 0` return cannot escape the clock.
     struct CostScope
     {
@@ -282,6 +296,14 @@ namespace ShedStats
                 if (v) { std::fprintf(stderr, " %d:%llu", i, v); }
             }
             std::fprintf(stderr, " ===\n");
+            if (g_policy_calls.load())
+            {
+                std::fprintf(stderr,
+                             "=== SHED POLICY: calls=%llu  idx0-differs-from-generic=%llu (%.1f%%) ===\n",
+                             (unsigned long long)g_policy_calls.load(),
+                             (unsigned long long)g_policy_moved.load(),
+                             100.0 * (double)g_policy_moved.load() / (double)g_policy_calls.load());
+            }
         }
     };
     inline Dumper g_dumper;

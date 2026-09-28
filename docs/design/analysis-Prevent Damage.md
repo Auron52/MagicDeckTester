@@ -1102,3 +1102,100 @@ count low. "After artifacts" assumes the bottoming share disappears and play sta
   play-only ~1.0x budget. Lossless P5 adopted (`6a8f09ba`, -3.4% play CPU). Open USER question: lift
   the gate for PD's mulligan table + value leaf (`MTG_ALLOW_UNTESTED_DECK=1`), or rule that 5j
   measures post-artifact cost. Rows proposed in P9, not added.
+
+## §5i discard policy (2026-09-28, implementation agent; worktree `/tmp/pd-wt`) — PROVISIONAL, awaiting USER REVIEW
+
+**Implemented** `PreventDamageProvider::CleanupDiscardCandidates` from
+`docs/design/prevent-damage-discard-policy-proposal.md`, section for section: GAIN / DRAIN / AMP / FUEL /
+DIG / MANA buckets net of board, the interleaved ladder
+`LAND > GAIN1 > LAND > DRAIN1 > LAND > DRAIN2 > LAND > DIG1 > FUEL1 > GAIN2 > AMP1 > LAND > FUEL2 > LAND`,
+S0 dead (duplicate legend / target-less tutor / dead Reflecting Pool) > S1 NEG > S2 surplus lands >
+S3 OTHER > S4 overflow (FUEL > DRAIN > AMP > DIG > GAIN, far first) > S5 kept tail. Params only, every
+read via `LookupCached`, routed through `CleanupDiscardRankingWithOrder`. Gate `MTG_PD_BUCKET_DISCARD`
+(`EnvOn(...,true)`, heurarm slot `PD_BUCKET_DISCARD`); `=0` = `GenericProvider::CleanupDiscardCandidates`.
+No deviation from the proposal's rules; implementation choices where it was silent: a GSZ whose
+reach has no GAIN/DRAIN piece prices X at the cheapest reachable card; an unknown/unclassified card
+goes to OTHER; S0 order is legend, tutor, Pool (the proposal's a, b, c).
+
+Also fixed the three stale notes the proposal flagged: Living Wish's and Vexing Shusher's cards.json
+bracket notes were CORRECT for EldraziDisplacerFlicker (which runs both, with Essence Depleter /
+Dimensional Infiltrator and two {C} sinks in its sideboard), so they were made deck-neutral (per-deck
+statements) rather than deleted; `PreventDamageProvider`'s class comment now says width 20.
+`oracle_text` is cosmetic (stripped from the card digest), so no play change.
+
+### Verification
+- **Unit tests** `test/unit/test_prevent_damage_discard.cpp`: the proposal's T1-T11 verbatim (full
+  vectors for T1/T3/T4/T6/T8, idx0 + permutation for the rest) plus a Shriekmaw opp-creature case; every
+  board also pins the generic idx0 (the control that must differ). T10: heurarm `PD_BUCKET_DISCARD=0`
+  returns exactly `GenericProvider`'s ranking (idx0 Beseech) while ON returns Pyrohemia. 12/12 pass on
+  the first build; full `mtg-test` green; `test/scenarios.sh` 117/117.
+- **Firing census** (`MTG_SHED_STATS=1`, new `SHED POLICY` line — a provider-counted census of calls and
+  of calls whose idx0 differs from the generic fallback), over the A/B batch below: **real sheds 49,
+  rollout sheds 1,800,083** (1,605,284 at < 4 lands; every one at hand size 8, 1.00 shed/cleanup);
+  policy calls **1,844,030, idx0 differs from generic on 1,580,150 (85.7%)**. The rule fires, and
+  almost entirely inside the search (~37,000x real play). Shed cost 12.7 us/call. `MTG_DISCARD_SHED_VERIFY=1`
+  on the same batch: 0 mismatches (but no multi-card cleanup occurred, so prefix stability — which the
+  sink-conditional land target can in principle break — is untested; see review item 6).
+- **Paired A/B at play settings** (d5 b20, profile attached, ONE pooled batch, 20 threads, heurarm flag
+  per job; seeds **50001 / 51001 x 300**, disjoint from the suite and Stage 4/5/5j):
+
+  | arm | s50001 | s51001 | CPU |
+  |---|---|---|---|
+  | ON (policy) | 5.7800 | 5.7600 | 6,517 s |
+  | OFF (`=0`, generic) | 5.7767 | 5.7567 | 6,387 s (ON 1.02x) |
+
+  Paired (loss scored 9): **delta +0.0033 turns/game (ON worse), t = +0.82, n = 600; 4 worse / 2
+  better; 28 games changed play** (22 with the same result: 12 same win turn, 10 unwon in both). Non-inferior within
+  noise — but the losses are NOT noise, see below.
+- **Every changed game root-caused** (all 28 re-run with `--log-dir`, both arms; mulligans identical in
+  all 28, so no keep-side cause):
+  * **3 of the 4 worse games (s50001 gi283 5->6, s51001 gi160 8->unwon, gi290 5->6) are one mechanism:
+    ON declines the TURN-1 LAND DROP** with lands in hand, goes to 8 cards and sheds Manabarbs at
+    cleanup. The policy makes that line look free to the search: with no gain engine available (R2)
+    Manabarbs is the worst card in the hand, and the greedy rollout that misplays Manabarbs scores the
+    hand better without it — whereas under the generic fallback the same line would shed Beseech /
+    a 4-drop, so the search plays the land. ON skipped a T1 land drop in **6** changed games (gi283,
+    gi287, gi25, gi94, gi160, gi290) vs **1** for OFF (gi108, which both arms skip). This is a
+    search/rollout interaction the policy AMPLIFIES, not a policy mis-ranking at a real cleanup.
+  * The 4th worse game (s50001 gi0, 7->8) is a real T4 cleanup at two lands: OFF shed Beseech (MV 6),
+    ON kept Beseech (DIG1 protects the only tutor even though it is FAR at 2 lands / 1 black source)
+    and shed a second Manabarbs; ON then spent T7 on Beseech. A doctrine outcome (distance orders only
+    inside a bucket), not a bug.
+  * Better: gi108 (both skip T1; ON sheds Spellshock not Manabarbs, 7->6), gi156 (7->6).
+- **Smoke** (`bash test/regression.sh --smoke`): **101/101 PASS, every case byte-identical
+  (exp == got digest), 0 play-changed**; `check_gt_logs.py` consistent. (Prevent Damage is not in the
+  suite yet, so the smoke is purely the "other decks unchanged" check.)
+- **`discard_policy` gate** (`verify_deck.py gate_discard_policy`, read-only from the main checkout with
+  `ROOT` pointed at this worktree; provider resolved by the engine): **PASS** — "PreventDamageProvider
+  carries an authored bucket policy" (not MISSING / PATCH-ONLY / INHERITED); `discard_policy_audit`
+  classifies it OK (control: Angels still MISSING). Its one disclosure is correct and deliberate: there
+  is no `## Discard policy` section yet, because that section records the USER's confirmation, which
+  has not happened. Write it on approval.
+
+### Status: default ON, PROVISIONAL (user adopts)
+Non-inferiority holds statistically (t = +0.82) and the doctrine is the reviewed proposal, so it ships
+default ON per the 5i mandate — but the three T1-land-skip losses are a systematic mechanism, not
+noise, so this is explicitly **not** an adoption claim. `MTG_PD_BUCKET_DISCARD=0` restores the old
+behaviour exactly.
+
+### Review items for the USER (proposal section 8, plus what the measurement added)
+1. **NEW — the T1 land-skip interaction.** Options: (a) accept (net effect within noise); (b) make an
+   unused land drop with a land in hand turn the held land into the first shed at cleanup (a policy-side
+   deterrent: the decline-and-shed line then loses a land, so the search stops choosing it — a
+   heuristic, it would need its own A/B); (c) treat it as a search issue (declining the land drop is a
+   searched axis; the rollout's weakness with Manabarbs is what makes it look free — the Stage 5 "d0
+   plays this deck badly" finding). Recommendation: (b) as a measured lever, since it is local to this
+   deck and cheap to A/B.
+2. FUEL placement (proposal Doubt 1): FUEL1 protected above GAIN2/AMP1; FUEL2 kept a second Manabarbs
+   over Pyrohemia in gi0.
+3. Pyrohemia last among fuel (Doubt 2) — gi0's OFF arm won with it.
+4. Land target 5 / 6 with a sink (Doubt 3).
+5. Colour cover before Ancient Tomb (Doubt 4); Reflecting Pool as the worst live land (Doubt 5).
+6. Overflow precedence DRAIN backup below AMP (Doubt 6); tutor order Wish > GSZ > Beseech (Doubt 7) —
+   and gi0 shows DIG1 protecting a FAR Beseech; a far-tutor exception is a candidate refinement.
+7. Painful-land preference with a gain engine (Doubt 8) — not implemented, as proposed.
+8. Prefix stability: the rule is declared stable (the default) but its land target depends on whether
+   a sink is still in hand, so a multi-card cleanup that sheds the sink first could differ from
+   re-asking. Unobserved so far (every measured cleanup shed exactly one card).
+9. Timing (Doubt 10): adopt/reject BEFORE the value leaf and keep table are generated — both fit to the
+   rollout policy this changes.
