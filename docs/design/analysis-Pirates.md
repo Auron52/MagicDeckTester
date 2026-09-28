@@ -353,6 +353,50 @@ This is also the measurement the 2026-09-27 note asked for on the **Pirates d5 t
 ~6 s/game, 100+ games over 30 s, "compares the unmodelled path to modelled decks"): the overnight tier
 under the adopted leaf re-measures those rows directly.
 
+## Mulligan profile — GENERATED, VALIDATED, LIVE (2026-09-28)
+
+Run **after** the value leaf and phase F (the generator reads `mull_gen_depth 1 / mull_gen_budget_ms 3`
+and `expected_buckets 17` from the live sidecar), alone on the box.
+
+* **Scout** (`--gen-mulligan recommend`, 17 min): K = 17 confirmed against the contract, 172,666 size-7
+  hands (252,769 with mulligan sizes), floor pass 1,042 s at 484 rollouts/s over 505,538 cells.
+  Projection: `complete` (R40, full bottoming) **~11.6 h** vs the ~8 h window, `fast` (R30, adaptive
+  bottoming) **~5.8 h** → `fast`, the tool's own recommendation (a second `fast` chunk on another seed
+  pools to R=60 later, above `complete`'s R40, if more is wanted).
+* **Generation** (`bash scripts/mullgen.sh run decks/Pirates fast`, 12:22 → ~16:14 UTC, **~3.9 h**, 32
+  threads at ~3,100% throughout): size-7 floor + sub-table floor by 15 min, sub-refine converged after 4
+  waves (3.52M sub rollouts at up to 1,200/s), size-7 refine 3.77M rollouts at ~400/s, 96.6% frozen at
+  the last monitor and the rest capped at R30. The scout's R=1 probe chunk was reused as r=0.
+* **Validation (both hard gates, 16 seeds each, PASSED):**
+
+  | check | A | B | delta | seeds B<A | se | mean/se |
+  |---|---|---|---|---|---|---|
+  | keep: exhaustive vs static (bottoming held identical) | 4.4439 | **4.3034** | **−0.1405 t** | 16/16 | 0.0054 | −25.95 |
+  | bottoming: blind exhaustive vs lookahead, CONFOUNDED | 4.4032 | **4.3741** | **−0.0291 t** | 16/16 | 0.0026 | −11.22 |
+
+  The keep table is worth **−0.14 t** on its own — the largest single gain on this deck, as it was on
+  WhiteKnights (−0.1985) — and bottoming clears the confounded gate by 11 se. The driver's filtered
+  regression (visibility only) read net FASTER (61 faster / 34 slower searched). **Artifacts:**
+  `decks/Pirates/Pirates.keepmodel.exhaustive.profile.json.gz` + `.raw.json.gz` (gzipped for commit; the
+  engine resolves either) + `Pirates.keepmodel.gencache.json`; the `.raw.json.probe` is scratch.
+* **The standing gate, run once each and accepted (17:09 UTC):** every Pirates key moved and nothing
+  else did; kept hands differ, so per-game diffs are different physical games and the NET is the reading.
+
+  | tier | keys moved | searched slower / faster | d0 slower / faster | pirates avg moves |
+  |---|---|---|---|---|
+  | smoke | 4 | 17 / 45 (net −31 turns / 225 games) | 61 / 134 | d0 −0.086, d3 −0.127, d5 −0.160; 2HG d3 0.000 |
+  | regression | 5 | 34 / 61 (net −31 / 450) | 63 / 153 | d0 −0.104, d3 −0.107 / −0.040, d5 −0.080 / −0.040 |
+  | overnight | 16 | 538 / 1009 (net −511 / 6000; 5 unwon → won) | 499 / 1186 | d0 −0.094…−0.119, d3 −0.055…−0.116, d5 −0.054…−0.142 |
+
+  **Single-opponent Pirates is 0.04–0.16 t faster on every case at every depth.** The one qualification
+  is the **2HG twin** (30 life, two heads): overnight `pirates2hg_d5` reads +0.087 / −0.047 / +0.060 /
+  −0.047 across its four seeds — **56 slower / 49 faster, net +12 turns over 600 games (≈ +0.02 t)**, i.e.
+  a small net loss where the single-opponent gain is −0.09. The keep table is fitted to the 20-life
+  goldfish (the recipe's fixed reference), and 2HG's slower kill rewards different keeps; this is the
+  first deck where the 2HG twin's sign differs from the main deck's, so it is recorded for the user
+  rather than acted on (the driver's bar is the single-opponent A/B, and both gates passed by 11–26 se).
+  Committed with the GT in the commit below.
+
 ## RESUME STATE (2026-09-27, third compaction) — SUPERSEDED for the value leaf by the section above
 
 * Worktree `/tmp/pirates-wt`, branch `pirates-analysis`; pushed through `6c34573b` (CI green incl.
