@@ -1289,9 +1289,21 @@ bool TapForCostSharedOnce(GameState& state, const ManaCost& cost_in, bool for_cr
     };
     // §2a: a Treasure that paid is SACRIFICED, not left tapped. Deferred to here because erasing
     // mid-payment invalidates the source loops' references (see CommitPaySacSacrifices). Inert when off.
+    // PREVENT DAMAGE: a greedy payment over the pain-aware policy's damage cap is treated as a
+    // greedy that stranded -- the backtracker below (which honours the cap tap by tap) takes over.
+    // PaymentOverCap is a constant false unless a policy is live (armed boards only).
+    // The executor's `available` accounting pool is put back in that case: the greedy's taps are
+    // being undone, and the backtracker (like the rollout's nullptr pool) never charges it, so a
+    // double charge would make the executor refuse a later cast the rollout still pays.
+    const bool cap_live = dmgev::t_pay_cap.live && state.dmg_events_armed;
+    const ManaPool av_pre_greedy = (cap_live && available) ? *available : ManaPool{};
     if (greedy())
-    { if (tapstats::Enabled()) { tapstats::g_pay_greedy_ok.fetch_add(1, std::memory_order_relaxed); }
-      commit_leftover(floating); CommitPaySacSacrifices(state, active); return true; }
+    {
+        if (!dmgev::PaymentOverCap(state, active))
+        { if (tapstats::Enabled()) { tapstats::g_pay_greedy_ok.fetch_add(1, std::memory_order_relaxed); }
+          commit_leftover(floating); CommitPaySacSacrifices(state, active); return true; }
+        if (cap_live && available) { *available = av_pre_greedy; }
+    }
     // Greedy failed: try the backtracking solver from a clean board.
     // OPPONENT life is part of the rollback (2026-08-21): a Grove-class drip land tapped by the
     // failed greedy arrangement has already paid the opponent's gain/loss, and without restoring
@@ -3383,7 +3395,12 @@ bool TapForCostShared(GameState& state, const ManaCost& cost_in, bool for_creatu
     // go on the stack above the spell being cast). A failed payment restored every mark.
     ++t_pay_nest;
     struct NestGuard { ~NestGuard() { --t_pay_nest; } } nest_guard;
-    const bool ok = TapForCostSharedDiag(state, cost_in, for_creature, available, honor_legacy_cco);
+    // PAIN-AWARE PAYMENT (dmgev::PainAwarePay): the outermost payment runs under the damage cap;
+    // a nested one (the hybrid wrapper) sees the policy live and only enforces it.
+    const bool ok = dmgev::PainAwarePay(state, available, /*batch=*/false, [&]() -> bool
+    { return TapForCostSharedDiag(state, cost_in, for_creature, available, honor_legacy_cco); },
+    [&](bool barbs, int barb_total) -> std::pair<int, bool>
+    { return PaymentDamageFloor(state, cost_in, state.floating_mana, barbs, barb_total); });
     if (ok && t_pay_nest == 1) { dmgev::FlushDamageEvents(state); }
     return ok;
 }

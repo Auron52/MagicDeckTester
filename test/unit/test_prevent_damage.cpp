@@ -294,3 +294,181 @@ TEST_CASE("Prevent Damage routing: PreventDamageProvider, and the signature surv
         CHECK_MESSAGE(std::string(DetectDecisionProvider(d).Name()) == "PreventDamage", "cutting ", cut);
     }
 }
+
+// ---- PAIN-AWARE PAYMENT (dmgev::PainAwarePay, MTG_PD_PAIN_PAY; claude-play sweep 2026-09-27) ----
+namespace
+{
+struct PainPayArm
+{
+    std::int8_t prev;
+    explicit PainPayArm(bool on) : prev(heurarm::t_arm[heurarm::PD_PAIN_PAY])
+    { heurarm::t_arm[heurarm::PD_PAIN_PAY] = on ? 1 : 0; }
+    ~PainPayArm() { heurarm::t_arm[heurarm::PD_PAIN_PAY] = prev; }
+};
+
+// Sweep gi9's board: 5 life, Tamanoa + Vito out, the Citadels first in battlefield order.
+GameState Gi9Board()
+{
+    GameState s = Board();
+    s.players[0].life = 5;
+    Put(s, "Tarnished Citadel");
+    Put(s, "Tarnished Citadel");
+    Put(s, "Reflecting Pool");
+    Put(s, "Tamanoa");
+    Put(s, "Grand Coliseum");
+    Put(s, "Vito, Thorn of the Dusk Rose");
+    Put(s, "Battlefield Forge");
+    return s;
+}
+}   // namespace
+
+TEST_CASE("Prevent Damage pain-aware payment: a COLOURED payment never pays itself dead (sweep gi9)")
+{
+    // CONTROL ARM (the lever off = the pain-blind payer): Dina's {B}{G} goes on both Citadels in
+    // their coloured mode, 3 + 3 = 6 >= 5 -- the SBA kills us before either Tamanoa gain resolves.
+    // This arm MUST lose, or the test below has no power.
+    {
+        PainPayArm off(false);
+        GameState s = Gi9Board();
+        REQUIRE(Pay(s, Cost(0, 0, /*b=*/1, 0, /*g=*/1)));
+        CHECK(SelfHasLost(s));
+    }
+    // The fix: the same payment survives (a Citadel + the painless Pool, or Coliseum + a Citadel),
+    // and -- a gain engine being out -- it still takes pain, which Tamanoa pays back and Vito drains.
+    PainPayArm on(true);
+    GameState s = Gi9Board();
+    REQUIRE(Pay(s, Cost(0, 0, 1, 0, 1)));
+    CHECK_FALSE(SelfHasLost(s));
+    CHECK(Me(s) >= 5);            // pain p then +p from Tamanoa
+    CHECK(Opp(s) < 20);           // the pain was USED: Vito drained the gain
+    for (const Permanent& p : s.battlefield) { CHECK(p.mana_tap_mark == 0); }   // flushed
+}
+
+TEST_CASE("Prevent Damage pain-aware payment: with NO gain engine the minimum-pain assignment (sweep gi2)")
+{
+    // {1}{W} off Battlefield Forge + City of Brass. Pain-blind: {W} on the Forge (1) and the generic
+    // on City (its tap always hurts, 1) = 2. Minimal: City pays the {W} (1), the Forge its painless
+    // {C} (0) = 1.
+    auto board = []()
+    {
+        GameState s = Board();
+        Put(s, "Battlefield Forge");
+        Put(s, "City of Brass");
+        return s;
+    };
+    {
+        PainPayArm off(false);
+        GameState s = board();
+        REQUIRE(Pay(s, Cost(1, /*w=*/1)));
+        CHECK(Me(s) == 18);   // the control arm reproduces the sweep's extra life
+    }
+    PainPayArm on(true);
+    GameState s = board();
+    REQUIRE(Pay(s, Cost(1, 1)));
+    CHECK(Me(s) == 19);
+}
+
+TEST_CASE("Prevent Damage pain-aware payment: Manabarbs hits count when nothing pays them back")
+{
+    // No Tamanoa, Manabarbs out, a painless land and a painland: {G} from Forest costs the barb (1);
+    // the painland's coloured mode would cost barb + pain. Either way the minimum is ONE land tap.
+    PainPayArm on(true);
+    GameState s = Board();
+    Put(s, "Manabarbs", /*controller=*/1);
+    Put(s, "Karplusan Forest");
+    Put(s, "Forest");
+    REQUIRE(Pay(s, Cost(0, 0, 0, 0, /*g=*/1)));
+    CHECK(Me(s) == 19);   // Forest: 0 pain + 1 barb (Karplusan {G} would be 1 + 1)
+}
+
+TEST_CASE("Prevent Damage pain-aware payment: when EVERY assignment is lethal the payment is still made")
+{
+    // The plan is a suicide: the self-lethal guard / kOwnDeath own that, not the payer (which must
+    // not report a payable cost unpayable).
+    PainPayArm on(true);
+    GameState s = Board();
+    s.players[0].life = 2;
+    Put(s, "Tamanoa");
+    Put(s, "Tarnished Citadel");
+    REQUIRE(Pay(s, Cost(0, 0, 1)));
+    CHECK(SelfHasLost(s));
+}
+
+// ---- The pain sweep runs ONCE, at the true end of main 1 (claude-play sweep gi0 / gi7) ----
+#include "ai/TurnSolver.h"
+TEST_CASE("Prevent Damage: the pain sweep is deferred while human play is still applying the phase")
+{
+    auto board = []()
+    {
+        GameState s = Board();
+        Put(s, "Tamanoa");
+        Put(s, "Battlefield Forge");
+        return s;
+    };
+    auto forge_tapped = [](const GameState& s)
+    {
+        for (const Permanent& p : s.battlefield)
+        { if (p.card.m_name.str() == "Battlefield Forge") { return p.tapped; } }
+        return false;
+    };
+    // An applied plan that ends main 1 sweeps (the rollout / search / breakpoint-resume contract)...
+    {
+        GameState s = board();
+        TurnSolver::ApplyPlan(s, TurnSolver::Plan{}, /*is_pre_combat=*/true);
+        CHECK(forge_tapped(s));
+    }
+    // ...but the human-play loop applies the phase plan by plan and holds the scope: a plan applied
+    // under it leaves the lands for the human's next pick (gi7: Karplusan, the only red source).
+    GameState s = board();
+    {
+        PainSweepDeferScope defer;
+        TurnSolver::ApplyPlan(s, TurnSolver::Plan{}, true);
+        CHECK_FALSE(forge_tapped(s));
+    }
+    TapPainSourcesIfUseful(s, 0);   // the loop's one explicit sweep when the phase ends
+    CHECK(forge_tapped(s));
+}
+
+// ---- The viewer valve bounds PAYABLE positions, not the raw odometer (claude-play sweep gi4) ----
+#include "ai/EngineFlags.h"
+TEST_CASE("Viewer plan-cap estimate: an unpayable tutor fan does not count against the bound")
+{
+    // gi4's T6 shape: two Beseech the Queen digits of 68 variants (MV 3..6), Faithmender / Dina /
+    // Spellshock singletons, Green Sun's Zenith (2 variants), 4 lands up (bound 4).
+    std::vector<int> beseech;
+    for (int k = 0; k < 68; ++k) { beseech.push_back(3 + (k % 4)); }
+    const std::vector<std::vector<int>> g = { {4}, beseech, {2}, {3}, beseech, {3, 4} };
+    const std::pair<double, double> e = viewerplancap::Estimate(g, 0, 4);
+    CHECK(e.first == doctest::Approx(114264.0));          // the raw product the old valve read
+    CHECK(e.second < viewerplancap::Positions());         // what the walk can actually materialise
+    CHECK(e.second < 200.0);
+    // A usable bound is required; without one the estimate is the raw product (conservative).
+    CHECK(viewerplancap::Estimate(g, 0, -1).second == doctest::Approx(e.first));
+}
+
+TEST_CASE("Prevent Damage pain-aware payment: the damage floor is EXACT on a simple board")
+{
+    // The floor the payer's one-retry path trusts (PaymentDamageFloor's DP). gi2's {1}{W}: 1.
+    GameState s = Board();
+    Put(s, "Battlefield Forge");
+    Put(s, "City of Brass");
+    std::pair<int, bool> f = PaymentDamageFloor(s, Cost(1, 1), ManaPool{}, false, 0);
+    CHECK(f.second);
+    CHECK(f.first == 1);
+    // + Ancient Tomb and a Reflecting Pool, {3}{W}: Tomb {C}{C} (2) + Pool {W} (0) + Forge {C} (0) = 2.
+    Put(s, "Ancient Tomb");
+    Put(s, "Reflecting Pool");
+    f = PaymentDamageFloor(s, Cost(3, 1), ManaPool{}, false, 0);
+    CHECK(f.second);
+    CHECK(f.first == 2);
+    // The same board under an opponent's Manabarbs with no Tamanoa (barbs counted, 1 per land tap):
+    // 3 land taps (Tomb makes 2) + 2 pain = 5.
+    f = PaymentDamageFloor(s, Cost(3, 1), ManaPool{}, true, 1);
+    CHECK(f.second);
+    CHECK(f.first == 5);
+    // And the payer realises it.
+    GameState t = s;
+    Put(t, "Manabarbs", 1);
+    REQUIRE(Pay(t, Cost(3, 1)));
+    CHECK(Me(t) == 15);
+}

@@ -10,7 +10,10 @@
 #include <chrono>
 #include <cstdio>
 #include <cstdlib>
+#include <cmath>
 #include <string>
+#include <utility>
+#include <vector>
 
 // MTG_MAIN2_DROP=1 -- measurement lever (DEFAULT OFF until the adoption A/B is accepted): offer
 // the turn's still-unused land drop in the POST-combat main for the autonomous search/executor,
@@ -1418,6 +1421,39 @@ inline Trunc& Acc()
 {
     static Trunc t;
     return t;
+}
+
+// THE VALVE'S SIZE ESTIMATE (claude-play sweep gi4, 2026-09-27; the full rationale is beside the
+// valve in TurnSolver.cpp's CapGroupsBySituationalRank). `group_costs[g]` = the mana values of digit
+// g's members. Returns {raw odometer positions, PAYABLE positions}: the knapsack count of selections
+// (at most one member per digit) whose summed mana value fits `mana_bound` -- an upper bound on the
+// plans the walk materialises, since the enumerator prunes every position over the same all-ramp-
+// credited bound. Independents count x2 unconditionally. A bound < 0 or > 256 (a bailed prune, a
+// ritual storm) is not usable: payable = raw.
+constexpr double kWalkFactor = 64.0;   // the raw walk's own bound = Positions() x this
+inline std::pair<double, double> Estimate(const std::vector<std::vector<int>>& group_costs,
+                                          int num_independent, int mana_bound)
+{
+    const double ind = std::ldexp(1.0, std::min(num_independent, 60));
+    double raw = ind;
+    for (const std::vector<int>& g : group_costs) { raw *= 1.0 + static_cast<double>(g.size()); }
+    constexpr int kMaxM = 256;
+    if (mana_bound < 0 || mana_bound > kMaxM) { return { raw, raw }; }
+    std::vector<double> dp(static_cast<std::size_t>(mana_bound) + 1, 0.0), nx;
+    dp[0] = 1.0;
+    for (const std::vector<int>& g : group_costs)
+    {
+        nx = dp;   // the digit's "none" option
+        for (int c0 : g)
+        {
+            const int c = std::max(0, c0);
+            for (int m = mana_bound; m >= c; --m) { nx[m] += dp[m - c]; }
+        }
+        dp.swap(nx);
+    }
+    double pay = 0.0;
+    for (double v : dp) { pay += v; }
+    return { raw, pay * ind };
 }
 
 // The record for the frame currently being offered: EnumerateMainPlans clears Acc() before the

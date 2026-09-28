@@ -2064,6 +2064,28 @@ static bool TapForCostBacktrackWorker(GameState& state, const ManaCost& cost,
                 });
         }
     }
+    // PREVENT DAMAGE, pain-aware payment in its HARMFUL mode (a live cap, damage to be minimised):
+    // try the sources in ascending PAIN order -- a source with a painless mode (a pain-0 land, a
+    // painland's {C}) first -- so the first assignment the DFS finds under the cap is found early,
+    // instead of after exhausting the painful branches the cap then prunes. Stable (the orders
+    // above survive within a class) and, like them, placed before the dup-collapse chain is built
+    // over this list. A live cap exists only on an armed board: every other deck is untouched.
+    if (top_level && dmgev::t_pay_cap.live && !dmgev::t_pay_cap.pain_first
+        && dmgev::t_pay_cap.cap < dmgev::kNoCap && s_src_cands_buf.size() > 1)
+    {
+        auto pain_class = [](const CardDefinition* d) -> int
+        {
+            const int p = d->params.tap_self_damage;
+            if (p <= 0) { return 0; }
+            bool has_c = false;
+            for (Color c : d->params.produces) { if (c == Color::Colorless) { has_c = true; break; } }
+            return (has_c && !d->params.tap_self_damage_any_mode) ? 1 : 1 + p;
+        };
+        std::stable_sort(s_src_cands_buf.begin(), s_src_cands_buf.end(),
+            [&](const std::pair<int, const CardDefinition*>& a,
+                const std::pair<int, const CardDefinition*>& b)
+            { return pain_class(a.second) < pain_class(b.second); });
+    }
     const std::vector<std::pair<int, const CardDefinition*>>& cands = *src_cands;
 
     // Identical-source sibling collapse. On a fanned-out board (a dozen Treasures from copied Gold
@@ -2090,6 +2112,37 @@ static bool TapForCostBacktrackWorker(GameState& state, const ManaCost& cost,
     // invariant during a payment (haste grants never read `tapped`, no permanent enters or leaves),
     // and a source tapped at entry stays tapped throughout. MTG_NO_TAP_DUP_COLLAPSE=1 disables it
     // (standing A/B lever on one binary; output must be byte-identical either way).
+    // PREVENT DAMAGE: per-candidate data for the harmful-mode DAMAGE B&B below (built at the top
+    // level over the final candidate order, like the chain; only while a damage cap is live).
+    struct PdCand { int painless_y = 0; std::uint8_t painless_cols = 0; int y = 0; bool land = false; };
+    static thread_local std::vector<PdCand> s_pd_cand_buf;
+    static thread_local double s_pd_min_ratio = 1e9;
+    const bool pd_bnb = dmgev::t_pay_cap.live && !dmgev::t_pay_cap.pain_first
+                        && dmgev::t_pay_cap.cap < dmgev::kNoCap;
+    if (top_level && pd_bnb)
+    {
+        s_pd_cand_buf.assign(cands.size(), PdCand{});
+        s_pd_min_ratio = 1e9;
+        for (std::size_t cq = 0; cq < cands.size(); ++cq)
+        {
+            const Permanent& pq = state.battlefield[cands[cq].first];
+            const CardDefinition& dq = *cands[cq].second;
+            PdCand& pc = s_pd_cand_buf[cq];
+            pc.y    = source_max_net(pq, dq);
+            pc.land = pq.card.IsLand();
+            const std::vector<Color>& prod = EffectiveProducesFor(state, active, dq, &pq);
+            bool has_c = false;
+            for (Color c : prod) { if (c == Color::Colorless) { has_c = true; break; } }
+            const int pain = dq.params.tap_self_damage;
+            if (pain <= 0 || (has_c && !dq.params.tap_self_damage_any_mode)) { pc.painless_y = pc.y; }
+            if (pain <= 0)
+            {
+                for (Color c : prod)
+                { const int ci = static_cast<int>(c); if (ci >= 0 && ci < 5) { pc.painless_cols |= (1u << ci); } }
+            }
+            else if (pc.y > 0) { s_pd_min_ratio = std::min(s_pd_min_ratio, static_cast<double>(pain) / pc.y); }
+        }
+    }
     static thread_local std::vector<int> s_dup_of_buf;
     if (top_level)
     {
@@ -2210,7 +2263,57 @@ static bool TapForCostBacktrackWorker(GameState& state, const ManaCost& cost,
         key.second = cl(floating.white) | (cl(floating.blue) << 8) | (cl(floating.black) << 16)
                    | (cl(floating.red) << 24) | (cl(floating.green) << 32)
                    | (cl(floating.colorless) << 40) | (cl(floating.wild) << 48);
+        // PREVENT DAMAGE: under a damage cap the same (tapped set, float) can be reached with
+        // different pain spent (a painland's coloured vs {C} mode), and only the one with less
+        // pain spent may still have room -- so the damage room is part of the state. Bits 56-63
+        // are free; 0 whenever no cap is live (every unarmed board), so those keys are unchanged.
+        if (dmgev::t_pay_cap.live && dmgev::t_pay_cap.cap < dmgev::kNoCap)
+        { key.second |= (dmgev::PaymentCapKey(state, active, &dmgev::t_bt_dmg) & 0xFFull) << 56; }
         if (fail_memo->count(key)) { return false; }
+    }
+
+    // PREVENT DAMAGE harmful-mode DAMAGE B&B (lossless): the damage still to come is at least what
+    // the untapped PAINLESS capacity cannot cover -- total, and per coloured pip -- times the least
+    // pain per damaging mana, plus a Manabarbs hit per land still to be tapped. Over the cap from
+    // here -> no assignment below this node fits: prune (and memo it, like the gates above). The
+    // same floor PaymentDamageLowerBound applies to a whole payment, re-read per node.
+    if (pd_bnb && !s_pd_cand_buf.empty())
+    {
+        const int need = cost.ManaValue() - floating.Total();
+        if (need > 0)
+        {
+            int pl = 0, nl_y = 0, max_land_y = 0, pcol[5] = { 0, 0, 0, 0, 0 };
+            for (std::size_t cq = 0; cq < cands.size() && cq < s_pd_cand_buf.size(); ++cq)
+            {
+                const int bi = cands[cq].first;
+                if (state.battlefield[bi].tapped || (reserved_mask & (1ull << (bi & 63)))) { continue; }
+                const PdCand& pc = s_pd_cand_buf[cq];
+                pl += pc.painless_y;
+                for (int c = 0; c < 5; ++c) { if (pc.painless_cols & (1u << c)) { pcol[c] += pc.y; } }
+                if (pc.land) { max_land_y = std::max(max_land_y, pc.y); } else { nl_y += pc.y; }
+            }
+            int forced = need - pl;
+            if (cost.hybrid_count == 0)
+            {
+                const int dem[5] = { cost.white, cost.blue, cost.black, cost.red, cost.green };
+                const int fl[5]  = { floating.white, floating.blue, floating.black, floating.red, floating.green };
+                for (int c = 0; c < 5; ++c) { forced = std::max(forced, dem[c] - fl[c] - floating.wild - pcol[c]); }
+            }
+            int more = 0;
+            if (forced > 0 && s_pd_min_ratio < 1e8)
+            { more += static_cast<int>(std::ceil(forced * s_pd_min_ratio - 1e-9)); }
+            if (dmgev::t_pay_cap.barbs && dmgev::t_pay_cap.barb_total > 0 && max_land_y > 0)
+            {
+                const int land_need = need - nl_y;
+                if (land_need > 0)
+                { more += ((land_need + max_land_y - 1) / max_land_y) * dmgev::t_pay_cap.barb_total; }
+            }
+            if (more > 0 && dmgev::t_bt_dmg + more > dmgev::t_pay_cap.cap)
+            {
+                if (fail_memo) { fail_memo->insert(key); }
+                return false;
+            }
+        }
     }
 
     // Branch-and-bound TOTAL-mana gate (lossless). `untapped_max` is an UPPER bound on the total
@@ -2569,7 +2672,21 @@ static bool TapForCostBacktrackWorker(GameState& state, const ManaCost& cost,
                 { nextcap[c] = colcap[c] - ((m & (1u << c)) ? a : 0); }
                 child_cap = nextcap;
             }
-            if (TapForCostBacktrackWorker(state, cost, for_creature, next_with_aura, rp_colors, fail_memo, out_leftover,
+            // PREVENT DAMAGE: a tap that takes this payment past the pain-aware policy's damage
+            // cap (dmgev::PainAwarePay) is a dead branch -- undone below like any failed subtree.
+            // A constant false unless a policy is live (armed boards only).
+            const int dmg_delta = dmgev::t_pay_cap.live
+                ? dmgev::TapDamageDelta(mark_snap, state.battlefield[i].mana_tap_mark) : 0;
+            struct DmgRestore
+            {
+                int v;
+                DmgRestore() : v(dmgev::t_bt_dmg) {}
+                ~DmgRestore() { dmgev::t_bt_dmg = v; }
+            } dmg_restore;
+            dmgev::t_bt_dmg += dmg_delta;
+            if (!(dmgev::t_pay_cap.live && dmgev::t_pay_cap.cap < dmgev::kNoCap
+                  && dmgev::t_bt_dmg > dmgev::t_pay_cap.cap)
+                && TapForCostBacktrackWorker(state, cost, for_creature, next_with_aura, rp_colors, fail_memo, out_leftover,
                                     // memo bit = this source's POSITION in `cands` (see key.first
                                     // above). The `& 63` keeps the shift defined when the mask is
                                     // unused anyway (memo not installed); wherever the memo IS live
@@ -3220,6 +3337,10 @@ inline bool ManaCacheKey(const GameState& state, const ManaCost& cost, bool for_
         mix(h1, 0xDA3A6E0000ull
                 | (dmgev::PurityProtects(state, state.active_player_index) ? 1ull : 0ull)
                 | (g_bt_pay_with_pain ? 2ull : 0ull));
+        // ...and the pain-aware policy's damage room (dmgev::PainAwarePay): the solve prunes on it.
+        // 0 when no policy is live (the lever off), so those keys are exactly the historical ones.
+        if (dmgev::t_pay_cap.live)
+        { mix(h2, 0xCA9ull ^ (dmgev::PaymentCapKey(state, state.active_player_index) << 12)); }
     }
     // Canonical mode collects one descriptor per source and hashes the SORTED multiset; indexed mode
     // hashes the sequence as it stands. `canon` holds (descriptor, index) so the sort is stable on
@@ -3514,7 +3635,61 @@ inline bool ManaCacheKey(const GameState& state, const ManaCost& cost, bool for_
 // payable/unpayable OUTCOME of each top-level call and the nodes it consumed (the recursion calls the
 // worker directly, so every call here is exactly one top-level entry). Diagnostic only -- when the flag
 // is off it is a straight forward, so zero cost.
+// PREVENT DAMAGE: the pain-aware payment policy (dmgev::PainAwarePay) for a top-level solve that is
+// not already inside one -- i.e. the whole-turn batch prepay (the per-cast payer's backtracker runs
+// under TapForCostShared's policy and only enforces the cap). Unarmed / lever off: a straight call.
+static bool TapForCostBacktrackTop(GameState& state, const ManaCost& cost,
+                         bool for_creature, ManaPool floating,
+                         const std::vector<Color>* rp_colors,
+                         TapBacktrackMemo* fail_memo,
+                         ManaPool* out_leftover,
+                         std::uint64_t tapped_mask,
+                         int untapped_max,
+                         std::uint64_t reserved_mask,
+                         ManaPool* out_full_pool,
+                         const std::vector<std::pair<int, const CardDefinition*>>* src_cands);
 bool TapForCostBacktrack(GameState& state, const ManaCost& cost,
+                         bool for_creature, ManaPool floating,
+                         const std::vector<Color>* rp_colors,
+                         TapBacktrackMemo* fail_memo,
+                         ManaPool* out_leftover,
+                         std::uint64_t tapped_mask,
+                         int untapped_max,
+                         std::uint64_t reserved_mask,
+                         ManaPool* out_full_pool,
+                         const std::vector<std::pair<int, const CardDefinition*>>* src_cands)
+{
+    if (!state.dmg_events_armed || dmgev::t_pay_cap.live)
+    {
+        return TapForCostBacktrackTop(state, cost, for_creature, floating, rp_colors, fail_memo,
+                                      out_leftover, tapped_mask, untapped_max, reserved_mask,
+                                      out_full_pool, src_cands);
+    }
+    ManaPool leftover_best, full_best;
+    const bool ok = dmgev::PainAwarePay(state, nullptr, /*batch=*/out_full_pool != nullptr, [&]() -> bool
+    {
+        const bool r = TapForCostBacktrackTop(state, cost, for_creature, floating, rp_colors, fail_memo,
+                                              out_leftover, tapped_mask, untapped_max, reserved_mask,
+                                              out_full_pool, src_cands);
+        // The policy keeps the LAST successful attempt's state; keep its outputs in step.
+        if (r)
+        {
+            if (out_leftover)  { leftover_best = *out_leftover; }
+            if (out_full_pool) { full_best = *out_full_pool; }
+        }
+        return r;
+    },
+    [&](bool barbs, int barb_total) -> std::pair<int, bool>
+    { return PaymentDamageFloor(state, cost, floating, barbs, barb_total, reserved_mask); });
+    if (ok)
+    {
+        if (out_leftover)  { *out_leftover = leftover_best; }
+        if (out_full_pool) { *out_full_pool = full_best; }
+    }
+    return ok;
+}
+
+static bool TapForCostBacktrackTop(GameState& state, const ManaCost& cost,
                          bool for_creature, ManaPool floating,
                          const std::vector<Color>* rp_colors,
                          TapBacktrackMemo* fail_memo,
@@ -3533,6 +3708,17 @@ bool TapForCostBacktrack(GameState& state, const ManaCost& cost,
         explicit PainLatch(bool v) : prev(g_bt_pay_with_pain) { g_bt_pay_with_pain = v; }
         ~PainLatch() { g_bt_pay_with_pain = prev; }
     } pain_latch(state.dmg_events_armed && dmgev::PayWithPain(state, state.active_player_index));
+    // Seed the running damage the DFS tracks under a live cap (dmgev::t_bt_dmg); restored on exit.
+    struct BtDmgSeed
+    {
+        int prev;
+        BtDmgSeed(const GameState& s) : prev(dmgev::t_bt_dmg)
+        {
+            if (dmgev::t_pay_cap.live)
+            { dmgev::t_bt_dmg = dmgev::PaymentDamage(s, s.active_player_index, dmgev::t_pay_cap.barbs); }
+        }
+        ~BtDmgSeed() { dmgev::t_bt_dmg = prev; }
+    } bt_dmg_seed(state);
 
     // ---- PAYABLE MANA CACHE lookup (canonical batch-prepay shape only; see the block above) ----
     // SHAPE: rp_colors must be null (externally-supplied colours are not in the key) and the board must

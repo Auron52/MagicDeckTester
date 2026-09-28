@@ -16649,6 +16649,46 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
                         actions.push_back(std::move(a));
                     }
                 }
+                // FAIL-TO-FIND variants (claude-play sweep gi12, 2026-09-27). The axis above is the
+                // (target, X = its MV) pairs, so a cast that finds nothing was never offered -- but
+                // "search ... may fail to find" (CR 701.19b) is legal at every X, and it is a real
+                // line when the CAST is a payoff of its own (Prevent Damage: Spellshock's trigger ->
+                // Tamanoa -> Vito / Dina). Autonomous: the provider decides (OfferFailToFindPut),
+                // X = 0 only -- a larger X buys the same nothing for more mana. Human play: every
+                // affordable X, always (the human, not a heuristic, owns the decision). The fetch
+                // rides kTutorDeclineTarget, which PerformTutorToBattlefield honours as "put
+                // nothing" in both worlds; free-convoke bodies only (arm 0 above).
+                {
+                    const bool human = HumanPlayActive();
+                    if (human || chord_prov.OfferFailToFindPut(state, def))
+                    {
+                        for (int x = 0; x <= 20; ++x)
+                        {
+                            const int g1 = std::min(fg, chord_base.green);
+                            const int o1 = std::min(fo, x * cpips);
+                            const int g2 = std::min(fg - g1, x * cpips - o1);
+                            ManaCost c  = chord_base;
+                            c.generic  += x * cpips;
+                            ApplyConvokeReduction(c, g1 + g2, o1);
+                            if (c.ManaValue() > pool_total) { break; }   // nondecreasing in X
+                            Action a;
+                            a.kind           = Action::Kind::CastFromHand;
+                            a.card_name      = ap.hand[i].m_name;
+                            a.hand_index     = i;
+                            a.cost           = c;
+                            a.chosen_x       = x;
+                            a.tutor_target   = InternedName(kTutorDeclineTarget);
+                            a.convoke_green  = g1 + g2;
+                            a.convoke_other  = o1;
+                            a.eval           = 0;
+                            a.direct_damage  = 0;
+                            a.is_noncreature = true;
+                            a.card_mv        = def.card.m_mana_cost.ManaValue();
+                            actions.push_back(std::move(a));
+                            if (!human) { break; }
+                        }
+                    }
+                }
                 continue;
             }
             // Tuck removal (Unexpectedly Absent, Removal + {X}): X buries the target deeper --
@@ -23227,11 +23267,43 @@ static double SolveSpaceCap()
     return v > 0.0 ? v : PlanSpaceCap();
 }
 
+// VIEWER VALVE ESTIMATE (claude-play sweep gi4, 2026-09-27). The raw odometer product counts every
+// POSITION the walk visits, but a position costs one integer sum; what made the EDF blink frame hang
+// was the positions that PASS the mana test and are materialised as plans (330k of them). A wide
+// digit whose members mostly cannot be paid -- a tutor fan (Beseech the Queen: 20 targets x the
+// twobrid payment variants = 68 members, twice) -- inflates the product without adding a single
+// plan: gi4's T6 read 114,264 positions for a real menu of 27 plans, and the valve dropped Green
+// Sun's Zenith, the search's winning play. So the valve now bounds the PAYABLE positions: a knapsack
+// count over the digits of the selections whose summed mana value fits ManaPruneBound (the same
+// all-ramp-credited upper bound the enumerator's own scalar prune uses, so it can only OVER-count
+// what the walk materialises; independents count x2 unconditionally). The raw walk keeps its own,
+// much looser bound (kWalkFactor x) so a truly enormous odometer still cannot hang a click.
+// Group -> member mana values, for viewerplancap::Estimate (EngineFlags.h).
+static std::vector<std::vector<int>> ViewerGroupCosts(const std::vector<Action>& cands,
+                                                      const std::vector<std::vector<int>>& groups,
+                                                      const std::vector<int>& gsel)
+{
+    std::vector<std::vector<int>> out;
+    out.reserve(gsel.size());
+    for (int g : gsel)
+    {
+        std::vector<int> c;
+        c.reserve(groups[g].size());
+        for (int j : groups[g]) { c.push_back(std::max(0, cands[j].cost.ManaValue())); }
+        out.push_back(std::move(c));
+    }
+    return out;
+}
+
+static int ManaPruneBound(const ManaPool& pool, const std::vector<Action>& cands,
+                          int extra_credit = 0, const GameState* etb_state = nullptr);
+
 static void CapGroupsBySituationalRank(const GameState& state, const std::vector<Action>& cands,
                                        std::vector<std::vector<int>>& groups,
                                        std::vector<int>& group_hand_index,
                                        int num_independent,
-                                       bool greedy = false)
+                                       bool greedy = false,
+                                       const ManaPool* pool = nullptr)
 {
     groupwave::g_state.call_active = false;   // set true below iff this call has a rank-R group
     const int  R        = groupwave::g_state.tranche_rank;   // -1 = normal (capped) mode
@@ -23245,6 +23317,69 @@ static void CapGroupsBySituationalRank(const GameState& state, const std::vector
     // bound, and records what it dropped so the menu can say it was truncated.
     const bool valve = gate_off && R < 0 && HumanPlayActive() && viewerplancap::On();
     if (gate_off && !valve) { return; }
+    if (valve)
+    {
+        // The viewer's own bound (see viewerplancap::Estimate above): payable positions against
+        // Positions(), raw walk positions against Positions() x kWalkFactor. Below both, the menu
+        // is enumerated in full -- every reference replay and ordinary frame is unchanged unless it
+        // had been truncated by the old raw-product test.
+        const double pcap = viewerplancap::Positions();
+        if (pcap <= 0.0 || groups.empty()) { return; }
+        const double wcap = pcap * viewerplancap::kWalkFactor;
+        ManaPool pl;
+        if (pool) { pl = *pool; }
+        else      { pl = AvailableManaPool(state); pl.AddPool(state.floating_mana); }
+        const int mb = ManaPruneBound(pl, cands, 0, &state);
+        std::vector<int> all(groups.size());
+        for (int g = 0; g < static_cast<int>(groups.size()); ++g) { all[g] = g; }
+        const std::pair<double, double> full =
+            viewerplancap::Estimate(ViewerGroupCosts(cands, groups, all), num_independent, mb);
+        if (full.second <= pcap && full.first <= wcap) { return; }
+        const DecisionProvider& vprov = ResolveProvider(state);
+        std::vector<std::pair<int, int>> vranked;
+        for (int g = 0; g < static_cast<int>(groups.size()); ++g)
+        {
+            int best_r = -1;
+            for (int idx : groups[g])
+            {
+                const CardDefinition* d = cands[idx].def;
+                if (!d) { continue; }
+                best_r = std::max(best_r, vprov.SituationalCardRank(state, d->card));
+            }
+            vranked.push_back({ best_r, g });
+        }
+        std::stable_sort(vranked.begin(), vranked.end(),
+            [](const std::pair<int, int>& a, const std::pair<int, int>& b) { return a.first > b.first; });
+        // Keep ranked groups while both estimates fit -- always at least one, like the base cap.
+        std::vector<int> kept;
+        std::pair<double, double> kept_est{ 0.0, 0.0 };
+        for (const std::pair<int, int>& r : vranked)
+        {
+            kept.push_back(r.second);
+            const std::pair<double, double> e =
+                viewerplancap::Estimate(ViewerGroupCosts(cands, groups, kept), num_independent, mb);
+            if (kept.size() > 1 && (e.second > pcap || e.first > wcap)) { kept.pop_back(); break; }
+            kept_est = e;
+        }
+        viewerplancap::Trunc& acc = viewerplancap::Acc();
+        acc.full_positions = std::max(acc.full_positions, full.second);
+        acc.kept_positions = std::max(acc.kept_positions, kept_est.second);
+        acc.dropped_groups = std::max(acc.dropped_groups,
+                                      static_cast<int>(groups.size() - kept.size()));
+        std::vector<char> keep(groups.size(), 0);
+        for (int g : kept) { keep[g] = 1; }
+        std::vector<std::vector<int>> kg;
+        std::vector<int>              kh;
+        for (int g = 0; g < static_cast<int>(groups.size()); ++g)
+        {
+            if (!keep[g]) { continue; }
+            kg.push_back(std::move(groups[g]));
+            kh.push_back(group_hand_index[g]);
+        }
+        groups.swap(kg);
+        group_hand_index.swap(kh);
+        return;
+    }
     // Nothing to cap. Without this, a call with NO groups but 2^num_independent alone above the
     // plan-space cap fell through the product check, keep_n was floored to 1 ("always keep the top
     // group"), and `ranked[0]` was read from an empty vector: SIGSEGV at address 4 in a Melira
@@ -23846,7 +23981,7 @@ static int MintHeroismBonus(const Action& a, int heroism_copies, int heroism_bod
 // it); Solve passes 0, so its bound is byte-identical. This is an UPPER bound on the turn's mana, so
 // adding to it can only LOOSEN the prune -- it can never drop a payable plan.
 static int ManaPruneBound(const ManaPool& pool, const std::vector<Action>& cands,
-                          int extra_credit = 0, const GameState* etb_state = nullptr)
+                          int extra_credit, const GameState* etb_state)
 {
     static const bool on = EnvOn("MTG_MANA_PRUNE", true);   // DEFAULT ON; =0 disables
     if (!on) { return std::numeric_limits<int>::max(); }
@@ -33676,7 +33811,10 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
     if (is_pre_combat) { TapDripLandsIfUseful(state, state.active_player_index); }
     // PREVENT DAMAGE pain sweep (armed only; see TapPainSourcesIfUseful) -- the same end-of-main-1
     // point as the drip sweep above, and lockstep with the executor's two call sites.
-    if (is_pre_combat) { TapPainSourcesIfUseful(state, state.active_player_index); }
+    // Deferred while the human-play loop is still applying this phase plan by plan (the loop
+    // sweeps once when the phase ends -- see PainSweepDeferScope).
+    if (is_pre_combat && g_pain_sweep_defer == 0)
+    { TapPainSourcesIfUseful(state, state.active_player_index); }
 
     // SAME-MAIN GO-OFF (MTG_EDF_AUTOGOFF; see EdfAutoGoOffAfterCasts): the casts above may have
     // just assembled the flicker loop, and abilities of a creature cast THIS plan were never in
@@ -35692,7 +35830,7 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
     if (any_metalcraft && mcstats::Enabled())
     { mcstats::CapSurvival(cands, groups, independent, /*before=*/true); }
     CapGroupsBySituationalRank(state, cands, groups, group_hand_index,
-                               static_cast<int>(independent.size()));
+                               static_cast<int>(independent.size()), /*greedy=*/false, &pool);
     if (any_metalcraft && mcstats::Enabled())
     { mcstats::CapSurvival(cands, groups, independent, /*before=*/false); }
     if (groupwave::g_state.tranche_rank >= 0 && !groupwave::g_state.call_active)

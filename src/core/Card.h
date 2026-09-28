@@ -337,14 +337,19 @@ struct ManaCost
     // not get wrong. Identical to ToString() for every cost with no hybrid pip.
     std::string ToDisplayString() const
     {
-        if (hybrid_count == 0) { return ToString(); }
+        if (hybrid_count == 0 && twobrid_count == 0) { return ToString(); }
         int rem[6] = { white, blue, black, red, green, colorless };
         static const char* kSym[6] = { "W", "U", "B", "R", "G", "C" };
         auto sym = [&](int col) -> const char*
         { return (col >= 0 && col < 6) ? kSym[col] : "?"; };
         std::string s;
         if (has_x)       { s += "{X}"; }
-        if (generic > 0) { s += "{" + std::to_string(generic) + "}"; }
+        // TWOBRID pips ({2/B}) are baked into `generic` as {2} each (see twobrid_color); un-bake
+        // them for display, or Beseech the Queen reads "{6}" (claude-play sweep gi7).
+        const int gen = generic - 2 * static_cast<int>(twobrid_count);
+        if (gen > 0) { s += "{" + std::to_string(gen) + "}"; }
+        for (int i = 0; i < static_cast<int>(twobrid_count) && i < 3; ++i)
+        { s += "{2/"; s += sym(static_cast<int>(twobrid_color[i])); s += "}"; }
         // Hybrids first (printed order), each un-baked from the first colour's flat count.
         for (int i = 0; i < hybrid_count; ++i)
         {

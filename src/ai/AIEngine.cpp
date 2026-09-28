@@ -2417,6 +2417,9 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
     // sweep). Combat and cleanup discard stay on the engine heuristics.
     if (use_external && play_this_phase)
     {
+        // The Prevent Damage pain sweep runs ONCE, when this phase really ends (the explicit call
+        // after the loop) -- never at the end of each applied plan (see PainSweepDeferScope).
+        PainSweepDeferScope _pain_sweep_defer;
         // Segment loop for DRAW BREAKPOINTS (human play): execute one committed plan, and if it
         // DREW cards (a Treasure Hunt / dig / cantrip resolved -> library shrank), re-enumerate
         // from the post-draw state and ask the chooser again so the human plays the revealed
@@ -2815,6 +2818,11 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
             // human-play ergonomics, not a scoring fix -- and it is the same shape as the empty-plan
             // break above. Autonomous play never reaches this branch, so it is GT-neutral.
             if (state.players[1 - state.active_player_index].life <= 0) { break; }
+            // ...and WE are dead (Prevent Damage: a payment / a Manabarbs hit / a sweeper killed us
+            // mid-main -- own_death_live boards only). The game is over; re-prompting would show the
+            // player a frame of a lost game (sweep gi9: one extra main_phase frame at the parked
+            // life before CLAUDE_RESULT). GameEngine ends the game on the way out of this phase.
+            if (state.own_death_live && SelfHasLost(state)) { break; }
             drew_last = state.ActivePlayer().library.size() < lib_before;
             prev_inplay = std::move(cur_inplay);
         }

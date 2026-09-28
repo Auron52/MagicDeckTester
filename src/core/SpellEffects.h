@@ -2150,6 +2150,10 @@ inline void PerformTutorToBattlefield(GameState& state, int controller, const Ca
     // threaded off the SAME chosen_x the enumeration used (diverging would desync the human
     // --choices index pin). Defaults -1 = no filter -> Dragonstorm / Natural Order byte-identical.
     if (max_puts <= 0 || pp.tutor_types.empty()) { return; }
+    // A FAIL-TO-FIND cast (the enumerator's kTutorDeclineTarget variant of an X-capped put: "may
+    // fail to find", CR 701.19b) puts nothing -- no provider fill, no resolution re-ask. Returns
+    // where an empty search already returns (put_names empty below), so the two agree.
+    if (preferred.size() == 1 && preferred.front() == kTutorDeclineTarget) { return; }
     struct ResolveScope
     {
         bool prev;
@@ -25668,6 +25672,185 @@ inline void MonoColorDemand(const ManaCost& cost, int out[6])
 // `stop_at >= 0` short-circuits the walk the moment the running total reaches it: the fail-fast only
 // ever asks "does the board cover this cost", never "by how much", and most costs are covered by the
 // first two or three sources. -1 (the backtracker's B&B gate) walks the whole board for the exact sum.
+// PREVENT DAMAGE: a PROVEN FLOOR on the damage any payment of `cost` (after `floating`) can deal us
+// -- the pain-aware payer's early stop (dmgev::PainAwarePay, harmful mode). Two independent parts,
+// each a lower bound, so their sum is one:
+//   * PAIN. Mana from a painless mode (a pain-0 source, or a painland's separate {C} ability) is at
+//     most `painless_cap`, so at least need - painless_cap mana comes from damaging modes; and a
+//     coloured pip no painless mode can make (a {W} with only Battlefield Forge / City of Brass up)
+//     must too. Each damaging mana costs at least min(pain / yield) over the damaging sources.
+//   * MANABARBS (only when counted, i.e. no Tamanoa): every land tap is one hit per Manabarbs, and
+//     the payment taps at least the fewest lands whose best yields (plus every non-land source)
+//     cover `need`.
+// Every approximation OVER-credits supply (all untapped permanents that yield anything, the
+// SourceMaxNetLive bound, floating counted against every colour), which only lowers the floor.
+inline int PaymentDamageLowerBound(const GameState& state, const ManaCost& cost,
+                                   const ManaPool& floating, bool barbs, int barb_total)
+{
+    const int need = cost.ManaValue() - floating.Total();
+    if (need <= 0) { return 0; }
+    const int ctrl = state.active_player_index;
+    int painless_cap = 0, nonland_yield = 0;
+    int pc[5] = { 0, 0, 0, 0, 0 };        // painless supply per colour
+    double min_ratio = 1e9;               // least pain per mana over the damaging modes
+    int land_y[64]; int nl = 0;
+    for (const Permanent& p : state.battlefield)
+    {
+        if (p.controller_index != ctrl || p.tapped || p.def_absent) { continue; }
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+        if (d == nullptr) { continue; }
+        const int y = SourceMaxNetLive(state, p, *d);
+        if (y <= 0) { continue; }
+        const std::vector<Color>& prod = EffectiveProducesFor(state, ctrl, *d, &p);
+        bool has_c = false;
+        for (Color c : prod) { if (c == Color::Colorless) { has_c = true; break; } }
+        const int pain = d->params.tap_self_damage;
+        if (pain <= 0 || (!d->params.tap_self_damage_any_mode && has_c)) { painless_cap += y; }
+        if (pain > 0) { min_ratio = std::min(min_ratio, static_cast<double>(pain) / y); }
+        if (pain <= 0)
+        {
+            for (Color c : prod)
+            { const int ci = static_cast<int>(c); if (ci >= 0 && ci < 5) { pc[ci] += y; } }
+        }
+        if (p.card.IsLand()) { if (nl < 64) { land_y[nl++] = y; } }
+        else                 { nonland_yield += y; }
+    }
+    int lb = 0;
+    if (min_ratio < 1e8)
+    {
+        int forced = std::max(0, need - painless_cap);
+        if (cost.hybrid_count == 0)
+        {
+            const int dem[5] = { cost.white, cost.blue, cost.black, cost.red, cost.green };
+            const int fl[5]  = { floating.white, floating.blue, floating.black, floating.red, floating.green };
+            for (int c = 0; c < 5; ++c)
+            { forced = std::max(forced, dem[c] - fl[c] - floating.wild - pc[c]); }
+        }
+        if (forced > 0) { lb += static_cast<int>(std::ceil(forced * min_ratio - 1e-9)); }
+    }
+    if (barbs && barb_total > 0)
+    {
+        std::sort(land_y, land_y + nl, [](int a, int b) { return a > b; });
+        int rem = need - nonland_yield, k = 0;
+        while (rem > 0 && k < nl) { rem -= land_y[k++]; }
+        lb += k * barb_total;
+    }
+    return lb;
+}
+
+// ...and, on a SIMPLE board, the EXACT minimum (the pain-aware payer's one-retry path). A board is
+// simple when every untapped mana source we control is a plain land or dork whose tap is "one
+// colour of `produces`, ManaProducedPerTap of it" -- no filter / storage / domain / scaled /
+// energy / drip / restricted / bundle / aura-boosted / pay-sac / grant shape, no hybrid pip, no
+// floating mana. There the payment is an assignment of source MODES to pips, and a DP over the
+// sources with the remaining demand (W, U, B, R, G, {C}-pips, generic) as its state is exact: a
+// mode's mana pays its own colour's pips first, then generic (never worse, by exchange). Returns
+// {floor, exact}; not simple -> {PaymentDamageLowerBound, false}.
+inline std::pair<int, bool> PaymentDamageFloor(const GameState& state, const ManaCost& cost,
+                                               const ManaPool& floating, bool barbs, int barb_total,
+                                               std::uint64_t reserved_mask = 0)
+{
+    // The scan-based bound, only on the paths that fall back to it (an exact DP answer dominates it).
+    auto lbf = [&]() -> std::pair<int, bool>
+    { return { PaymentDamageLowerBound(state, cost, floating, barbs, barb_total), false }; };
+    // (An {X} cost arrives with X already added to `generic`; has_x is only the printed flag.)
+    if (floating.Total() > 0 || cost.hybrid_count > 0) { return lbf(); }
+    const int ctrl = state.active_player_index;
+    if (LiveManaGrant(state, ctrl).valid()) { return lbf(); }
+    struct Mode { int col, y, dmg; };
+    static thread_local std::vector<std::vector<Mode>> s_srcs;   // warm buffers: hot per payment
+    std::vector<std::vector<Mode>>& srcs = s_srcs;
+    for (std::vector<Mode>& m : srcs) { m.clear(); }
+    std::size_t nsrc = 0;
+    const int nbf = static_cast<int>(state.battlefield.size());
+    for (int bi = 0; bi < nbf; ++bi)
+    {
+        const Permanent& p = state.battlefield[static_cast<std::size_t>(bi)];
+        if (p.controller_index != ctrl || p.tapped || p.def_absent) { continue; }
+        // A source the caller's hold keeps out of THIS payment (the batch prepay's reserve rungs):
+        // the floor is over what the payment may actually tap.
+        if (bi < 64 && (reserved_mask & (1ull << bi))) { continue; }
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+        if (d == nullptr) { continue; }
+        const CardParams& pp = d->params;
+        const bool land = p.card.IsLand();
+        const bool dork = d->tmpl == CardTemplate::ManaDork;
+        if (!land && !dork && !pp.mana_rock && !IsPaySacSource(*d)) { continue; }   // not a source
+        if (dork && !CanTapNow(p, state.battlefield)) { continue; }
+        if (land && d->tmpl != CardTemplate::BasicLand) { continue; }   // not a DFS source either
+        if (pp.mana_rock || IsPaySacSource(*d) || pp.is_filter || pp.ramp_filter
+            || pp.any_color_filter || pp.storage_land || pp.domain_mana || IsScaledManaDork(*d)
+            || IsScaledManaLand(*d) || pp.untap_creature_cost.has_value()
+            || pp.energy_per_colored_tap > 0 || pp.colored_creature_only || pp.creature_mana_only
+            || pp.tap_opponent_lifegain > 0 || pp.gy_land_exile_mana
+            || pp.enters_tapped_with_depletion > 0 || pp.etb_choose_color
+            || LandAuraBonus(state, p) > 0)
+        { return lbf(); }
+        const std::vector<Color>& prod = EffectiveProducesFor(state, ctrl, *d, &p);
+        if (prod.empty()) { continue; }   // a solo Reflecting Pool: no mana
+        const int y = ManaProducedPerTap(*d);
+        if (y > 1 && prod.size() > 1) { return lbf(); }   // bundle (Karoo)
+        bool has_c = false;
+        for (Color c : prod) { if (c == Color::Colorless) { has_c = true; break; } }
+        if (nsrc >= 24) { return lbf(); }
+        if (srcs.size() <= nsrc) { srcs.emplace_back(); }
+        std::vector<Mode>& modes = srcs[nsrc++];
+        for (Color c : prod)
+        {
+            int dmg = dmgev::PainForTap(*d, c, has_c);
+            if (barbs && land) { dmg += barb_total; }
+            modes.push_back({ static_cast<int>(c), y, dmg });
+        }
+    }
+    // Demand: W U B R G, {C} pips, generic. Mixed-radix index over (d_k + 1).
+    const int dem[7] = { cost.white, cost.blue, cost.black, cost.red, cost.green,
+                         cost.colorless, cost.generic };
+    int rad[7], stride[7], n_states = 1;
+    for (int k = 0; k < 7; ++k)
+    {
+        if (dem[k] < 0) { return lbf(); }
+        rad[k] = dem[k] + 1; stride[k] = n_states; n_states *= rad[k];
+        if (n_states > 20000) { return lbf(); }
+    }
+    constexpr int kInf = 1 << 29;
+    static thread_local std::vector<int> s_cur, s_nxt;
+    std::vector<int>& cur = s_cur;
+    std::vector<int>& nxt = s_nxt;
+    cur.assign(static_cast<std::size_t>(n_states), kInf);
+    int full = 0;
+    for (int k = 0; k < 7; ++k) { full += dem[k] * stride[k]; }
+    cur[static_cast<std::size_t>(full)] = 0;   // index = REMAINING demand
+    for (std::size_t si = 0; si < nsrc; ++si)
+    {
+        const std::vector<Mode>& modes = srcs[si];
+        nxt = cur;   // skip this source
+        for (int st = 0; st < n_states; ++st)
+        {
+            if (cur[static_cast<std::size_t>(st)] >= kInf) { continue; }
+            int rem[7];
+            for (int k = 0; k < 7; ++k) { rem[k] = (st / stride[k]) % rad[k]; }
+            for (const Mode& m : modes)
+            {
+                int r[7];
+                for (int k = 0; k < 7; ++k) { r[k] = rem[k]; }
+                int y = m.y;
+                const int own = (m.col >= 0 && m.col < 5) ? m.col : 5;   // Colorless -> the {C}-pip slot
+                const int take = std::min(y, r[own]);
+                r[own] -= take; y -= take;
+                const int g = std::min(y, r[6]);
+                r[6] -= g;
+                int idx = 0;
+                for (int k = 0; k < 7; ++k) { idx += r[k] * stride[k]; }
+                const int v = cur[static_cast<std::size_t>(st)] + m.dmg;
+                if (v < nxt[static_cast<std::size_t>(idx)]) { nxt[static_cast<std::size_t>(idx)] = v; }
+            }
+        }
+        cur.swap(nxt);
+    }
+    if (cur[0] >= kInf) { return lbf(); }   // the model finds no payment: not trusted
+    return { cur[0], true };
+}
+
 inline int UntappedManaUpperBound(const GameState& state, bool for_creature,
                                   std::uint64_t reserved_mask, int stop_at = -1,
                                   const std::vector<std::pair<int, int>>* aura_fold = nullptr)
@@ -25943,6 +26126,20 @@ inline void TryPumpThenSwordsRedirect(GameState& state, int active, int target_b
 // SECOND MAIN: the lands are kept when a castable card in hand could want them after combat (the
 // DripManaWantedLaterThisTurn test, generalised to every land).
 // Inert unless dmg_events_armed.
+//
+// ONCE, AT THE TRUE END OF MAIN 1 (claude-play sweep gi0 / gi7, 2026-09-27). ApplyPlanDirect ends
+// with this sweep, which is right for every caller that applies a whole main phase in one call (the
+// rollout, the search's candidate applies, a breakpoint node's RESUME -- the node's prefix apply
+// returns at the pend, before the sweep). The human-play external-chooser loop is the exception: it
+// applies the phase as a SEQUENCE of plans, re-prompting after each, so the sweep tapped lands the
+// human still meant to spend (gi7: Karplusan, the only red source, before the tutored Quake). That
+// loop now holds a PainSweepDeferScope over its applies and sweeps once when the phase ends.
+inline thread_local int g_pain_sweep_defer = 0;
+struct PainSweepDeferScope
+{
+    PainSweepDeferScope()  { ++g_pain_sweep_defer; }
+    ~PainSweepDeferScope() { --g_pain_sweep_defer; }
+};
 inline void TapPainSourcesIfUseful(GameState& state, int ctrl)
 {
     if (!state.dmg_events_armed) { return; }

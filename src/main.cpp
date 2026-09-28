@@ -379,6 +379,15 @@ static std::string SummarizePlan(const TurnSolver::Plan& plan, const GameState& 
         {
             case Action::Kind::CastFromHand:
                 tag = a.card_name;
+                // An {X} spell's X is the whole difference between its variants (claude-play sweep
+                // gi5: every Rolling Earthquake X read "Rolling Earthquake"). X=0 is a real line
+                // (the Spellshock trigger), so it prints too. A tutor-put cast prints its X beside
+                // the fetch below instead.
+                if (a.tutor_target.empty() && a.chosen_x >= 0)
+                {
+                    const CardDefinition* xd = a.def ? a.def : CardDatabase::Instance().Lookup(a.card_name);
+                    if (xd && xd->card.m_mana_cost.has_x) { tag += " (X=" + std::to_string(a.chosen_x) + ")"; }
+                }
                 // AuraHostLabel, not EnchantTargetName: two same-named candidate hosts (one in play,
                 // one being played this turn) otherwise render this plan and its sibling identically.
                 if (a.enchant_target > 0) { tag += " \xE2\x86\x92 " + AuraHostLabel(s, a.enchant_target); }
@@ -389,6 +398,8 @@ static std::string SummarizePlan(const TurnSolver::Plan& plan, const GameState& 
                 // difference between variants, and without them the menu held identical twins
                 // and the fetch was invisible (seed-7 play-test: the picked plan silently
                 // grabbed a 1-drop). Same lesson as the Pod/blink labels below.
+                else if (a.tutor_target.str() == kTutorDeclineTarget)
+                { tag += " \xE2\x86\x92 fail to find (X=" + std::to_string(a.chosen_x) + ")"; }
                 else if (!a.tutor_target.empty())
                 {
                     tag += " \xE2\x86\x92 " + a.tutor_target.str();
@@ -1305,7 +1316,11 @@ static void WriteDecisionJson(std::ostream& os, const GameState& s,
                 {
                     const CardDefinition* cd = a.def ? a.def
                                              : CardDatabase::Instance().Lookup(a.card_name);
-                    if (cd && (cd->params.tutor_mv_max_is_x || HumanPlayDefersTutorTarget(*cd)))
+                    // ...except a FAIL-TO-FIND variant (kTutorDeclineTarget): it asks nothing at
+                    // resolution, so folding it under a fetch entry would hide it (and folding a
+                    // fetch under IT would skip the picker) -- it keeps its own menu entry.
+                    if (cd && (cd->params.tutor_mv_max_is_x || HumanPlayDefersTutorTarget(*cd))
+                        && tgt != kTutorDeclineTarget)
                     { has_collapse = true; tgt.clear(); }
                 }
                 key += a.card_name.str() + "|" + std::to_string(static_cast<int>(a.kind))

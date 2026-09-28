@@ -9929,6 +9929,28 @@ std::vector<int> PreventDamageProvider::XCandidates(const GameState& s, const Ca
     return xs;
 }
 
+int PreventDamageProvider::ManaSourceRank(const GameState& s, const CardDefinition& def) const
+{
+    const int r = GenericProvider::ManaSourceRank(s, def);
+    if (!s.dmg_events_armed || def.params.tap_self_damage <= 0 || !dmgev::PainPayEnabled()
+        || SelfDamageUseful(s, s.active_player_index))
+    { return r; }
+    return r + 5 * def.params.tap_self_damage;
+}
+
+bool PreventDamageProvider::OfferFailToFindPut(const GameState& s, const CardDefinition& /*def*/) const
+{
+    // Spellshock (any on_cast_trigger_damage permanent -- the Earthquake X = 0 test) AND a gain
+    // engine to turn its hit into lifegain (Tamanoa / Purity): without one the cast only hurts us.
+    bool cast_trigger = false;
+    for (const Permanent& p : s.battlefield)
+    {
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+        if (d != nullptr && d->params.on_cast_trigger_damage > 0) { cast_trigger = true; break; }
+    }
+    return cast_trigger && dmgev::SelfDamageGainEngine(s, s.active_player_index);
+}
+
 bool PreventDamageProvider::FodderSacUseful(const GameState& s, const Permanent& src,
                                             const CardDefinition& sd) const
 {

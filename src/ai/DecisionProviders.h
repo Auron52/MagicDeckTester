@@ -340,6 +340,16 @@ public:
     // costs a card, {R} and possibly pain: dominated by not casting it (or discarding it). A
     // provider narrowing, lossless for this list.
     std::vector<int> XCandidates(const GameState&, const CardDefinition&, int) const override;
+    // A fail-to-find Green Sun's Zenith at X = 0 is a real line under Spellshock + a gain engine
+    // (the cast trigger is the payoff) -- the twin of the Rolling Earthquake X = 0 rule above.
+    bool OfferFailToFindPut(const GameState&, const CardDefinition&) const override;
+    // Tap order with NO gain engine out: the Generic rank, pushed back by the source's pain (x5 per
+    // point), so the greedy payer reaches a painless source (Reflecting Pool, a basic) before a
+    // Tarnished Citadel / City of Brass / painland for a coloured pip. A COST lever for the
+    // pain-aware payment policy (dmgev::PainAwarePay), which enforces the minimum either way: the
+    // greedy's pick is only kept when it already sits at the proven floor, so a better first pick
+    // saves the backtracker retry. With a gain engine out, the Generic rank unchanged.
+    int ManaSourceRank(const GameState& s, const CardDefinition& def) const override;
     // Dina, Soul Steeper ("{1}, Sacrifice another creature: Dina gets +X/+0"). The payload is a
     // POWER pump on Dina only, so it is worth anything only if Dina still attacks this turn --
     // with Dina tapped or summoning-sick the sacrifice just throws away a body (Purity's shuffle

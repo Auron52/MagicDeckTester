@@ -939,6 +939,17 @@ public:
     virtual std::vector<int> XCandidates(const GameState& s, const CardDefinition& def,
                                          int max_affordable) const = 0;
 
+    // OfferFailToFindPut -- should the autonomous search also be offered a FAIL-TO-FIND cast of an
+    // X-capped put-tutor (Chord of Calling / Green Sun's Zenith: "search ... may fail to find", CR
+    // 701.19b), at X = 0? The enumerator's X axis is otherwise the (target, X = its MV) pairs, so a
+    // cast that finds nothing is never offered -- dominated on any board where the cast itself
+    // does nothing. It is NOT dominated when casting a spell is a payoff of its own (Prevent Damage:
+    // Spellshock's cast trigger is a damage event -> Tamanoa -> Vito / Dina), the same argument that
+    // keeps a Rolling Earthquake X = 0 in its XCandidates. Human play always offers every legal X
+    // (engine-side, not asked here). Default false: every other deck byte-identical.
+    virtual bool OfferFailToFindPut(const GameState& /*s*/, const CardDefinition& /*def*/) const
+    { return false; }
+
     // BlinkActivationCounts -- how many times to activate a blink outlet ("{cost}: Exile another
     // target creature, then return it") on `source`, blinking `target`, this turn. Returns the
     // candidate K values the search branches over; one entry is a decided heuristic, several is
