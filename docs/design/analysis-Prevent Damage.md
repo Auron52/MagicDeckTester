@@ -955,3 +955,23 @@ cast-order pass's, and is surfaced there).
   policy (analyzer verdict NO_RULE_CONSIDER_SEARCH, 14% label regret); (3) if the gate passes: all
   three tiers + GT accept (`bash test/regression.sh --<tier> --deck=<key>` then `--accept` with the
   SAME filter; `python3 test/check_gt_logs.py`); (4) final verify_deck + Stage 6 report + push decision.
+
+## Performance (Stage 5j) — IN PROGRESS (perf agent, 2026-09-28, worktree `/tmp/pd-wt`)
+
+Scratch: `logs/prevent_damage/perf/` (gitignored). Reference re-checked with `suite_gate.py --report`:
+still **fivecolour 1,033.46 ms/game -> budget 3,100 ms/game** (snow 4,179 has no mulligan profile, so
+it is not a reference).
+
+### P1. Baseline at HEAD `87a8526e` (suite-shaped rows, suite seeds, 150 games each, one batch)
+| row | avg (loss-pen.) | ms/game |
+|---|---|---|
+| d3 b10 s2002 | 5.8733 | 7,529 |
+| d3 b10 s3003 | 5.6933 | 6,209 |
+| d5 b20 s2002 | 5.8533 | **12,174** (worst) |
+| d5 b20 s3003 | 5.6800 | 10,412 |
+
+**3.9x over the budget.** `MTG_ROLLOUT_STATS` on that batch: **`[bottom-cost]` 3,728 CPU-s of 5,449
+(68%) is London BOTTOMING** — 156 bottom decisions at **23.9 s each**: with no exhaustive bottom table
+every legal removal subset plays a full clairvoyant game at play settings (FiveColour 90.4% and
+Fluctuator ~92% before their tables — the same class). The remaining search: units_total 153.5M,
+id-depth mean 1.83 (starved), units split rollout_step 36% / greedy_fallback 34% / la_cand 28%.
