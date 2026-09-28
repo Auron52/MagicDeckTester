@@ -43,39 +43,18 @@ Living Wish, Vexing Shusher.
 - Faithmender: multiplicative (two = x4). Bilbo: +1 per event, once per event.
 - Dina: 1 life per lifegain EVENT regardless of amount. Vito: that much.
 
-## RESUME STATE (2026-09-27, before compaction)
+## RESUME STATE (2026-09-28, after Stage 6)
 
-- Stage 2 research DONE: four Opus notes in `logs/prevent_damage/research/` (gitignored, in the
-  worktree): `core_design.md` (THE blueprint), `lands_manabarbs.md`, `spells.md`,
-  `creatures_sideboard.md`. Scryfall JSON in `logs/prevent_damage/scryfall/`.
-- Integration is SERIAL, three phases, one Opus integrator agent each (shared files):
-  * **I1 DONE, committed locally 6a36b5d4 (smoke byte-identical, 268/268 unit, 111/111 scenarios):** core damage-event/own-death/lifegain engine (gated on
-    `dmg_events_armed`), Faithmender/Bilbo replacements, Vito/Dina watchers, Purity prevention,
-    Tamanoa, Manabarbs, 5 lands (Ancient Tomb `tap_self_damage_any_mode`), `SelfDamageUseful` +
-    pain sweep, `PreventDamageProvider` + routing, scenario tests, smoke byte-identity. It writes
-    its results into the Stage 2 section below. If it is not reported there, check `git status` /
-    `git diff --stat` in /tmp/pd-wt to see how far it got before re-launching.
-  * **I2 DONE, committed locally (see Phase I2 below; smoke byte-identical, 281/281 unit, 114/114
-    scenarios, sanity 194/200 avg 5.87, 0 self-deaths):** Spellshock, Pyrohemia (PingAll mode; PermAbilityTaps trap; end-step sac; K
-    widening), Rolling Earthquake (X 0..max, not {max}), Beseech the Queen (twobrid, phyrexian-style;
-    `{2/B}` is MISPARSED as `{B}` today), Green Sun's Zenith (Chord + colour filter + self-shuffle),
-    `DeckUsesSecondMain` for Pyrohemia/Earthquake (m2 cost 4.25x on record -> give it an A/B lever).
-    Blueprint: `spells.md`.
-  * **I3 DONE, committed locally (see Phase I3 below; smoke byte-identical, 292/292 unit, 116/116
-    scenarios, coverage 0 missing / 0 partial main+side, sanity 194/200 avg-win 5.856):** Vito team
-    lifelink, Dina sac-pump (+ lethal-gated provider judgement), Shriekmaw (ETB + evoke), Acidic
-    Slime, Timeless Witness (searched gy return + eternalize), Dimir House Guard (transmute;
-    regeneration PROVISIONAL deferral), Bilbo 111-life activation, viewer rows. Blueprint:
-    `creatures_sideboard.md`.
-- **STAGE 5 DONE (see "Stage 5 — verification" below; fixes `6d3f212c`, script fix `09a12ad2`).**
-  The deck FAILS the 5j 3x cost rule (~4.5x over) -> performance is the first goal before VL /
-  mulligan. Remaining: 5d claude-play fan-out, §5i discard buckets, suite rows + GT (after cost).
-- (historical) NEXT: Stage 3 coverage loop (already clean at I3 -- re-run to confirm) -> Stage 4 profile -> 4a provider audit -> Stage 5 (verify_deck,
-  harnesses, depth sweep, 5c2 leaf tie-break, 5d claude-play fan-out (Opus), 5h viewer, 5i BUCKET
-  discard policy — gate `discard_policy` is in the MAIN tree's uncommitted WIP, not upstream) ->
-  add to all three regression tiers with GT -> Stage 6 report.
-- Branch `prevent-damage-analysis` is local only (nothing pushed). I1 6a36b5d4, I2 0e62da55, I3 = the commit directly on top of 0e62da55
-  on top. Next: Stage 3/4/5 (the Stage 2 implementation is complete).
+- **All stages through Stage 6 are DONE on branch `prevent-damage-analysis` (local only, nothing pushed).**
+  Read **"## Stage 6 — Report (2026-09-28)"** at the END of this ledger first: it has the results,
+  the 6a disclosure and the consolidated **Decisions awaiting the user (D1-D16)**.
+- Implementation: I1 `5bead6b1`, I2 `9c9186cd`, I3 `cdec4a37`. Stage 4 `ece1abbe`. Stage 5 fixes
+  `6d3f212c`. m2 OFF `ef26b03b`. Sweep fixes `d4c38ed4` / `817df444`. Lossless perf `6a8f09ba`.
+  §5i `e4524d71` + `dfa5a12e`.
+- The blocker is **5j (3.98x the cost budget; 68% of it is pre-table clairvoyant bottoming)**. The
+  deck is in no regression tier, and the keep-table / value-leaf generators refuse it until the user
+  settles D1. Then run, serially: D7 (§5i adopt), then the mulligan table, then the value leaf, then
+  the P9 tier rows + GT, then a claude-play re-sweep on HEAD (the recorded sweep is stale).
 
 ## Stage 2 — implementation
 
@@ -1279,3 +1258,197 @@ default ON is the user's call.
 changes what the tie costs. A development-aware no-win tie-break that prices an unused land drop
 (the Karoo-class idea behind `MTG_LEAF_TB_PERMS`, which alone did not fix gi108) is the real fix;
 it needs its own investigation of why the tie survives TB_PERMS.
+
+## Stage 6 — Report (2026-09-28)
+
+Compiled on `dfa5a12e` (branch `prevent-damage-analysis`, local only, nothing pushed) from this ledger,
+the final gate log `logs/prevent_damage/final/verify.log`, and the CODE: `PreventDamageProvider` in
+`src/ai/DecisionProviders.{h,cpp}`, `GoldFishRunner::DeckUsesSecondMain`, `core/DamageEvents.h`,
+the deck's `cards.json` entries (main + side) and `scripts/audit_viewer_decisions.py`. No build and
+no runs were made for this report.
+
+### 1. Cards implemented this run (21 new, 5 notes updated; 0 missing / 0 partial, main + side)
+
+| tier | cards |
+|---|---|
+| Tier 1 (existing painland shape) | Battlefield Forge, Karplusan Forest, Tarnished Citadel, Grand Coliseum |
+| Tier 2 (new params on existing templates) | Ancient Tomb (`tap_self_damage_any_mode`), Spellshock (`on_cast_trigger_any_mv`), Green Sun's Zenith (Chord + colour filter + self-shuffle, fail-to-find), Shriekmaw (ETB destroy + evoke), Acidic Slime (ETB destroy) |
+| Tier 3 (new engine behaviour) | **Damage-event core** (own death as an SBA, lifegain replacement chain, per-event triggers; gated on `dmg_events_armed`): Manabarbs, Tamanoa, Purity, Rhox Faithmender, Bilbo (incl. the 111-life activation), Vito (drain + team lifelink), Dina (drain + sac-pump). Pyrohemia (new `PingAll` mode), Rolling Earthquake (X-each-creature-and-player), Beseech the Queen (**twobrid `{2/B}` parse**; it was misparsed as `{B}`), Timeless Witness (graveyard return + Eternalize), Dimir House Guard (Transmute) |
+| Notes updated | City of Brass, Brushland (pain now matters), Living Wish and Vexing Shusher (made deck-neutral), Reflecting Pool (unchanged model) |
+| Tier 4 accepted | **none yet.** Every deferral is PROVISIONAL until you sign it off (decision D10) |
+
+### 2. Mulligan profile: the Stage 4 baseline ONLY
+`decks/Prevent Damage/Prevent Damage.profile.json` (`ece1abbe`): `min_lands 1`, `max_lands 5`,
+`stop_at 4`, `curve_check two_drop`, `bottom_order count_first`, **`hand_score_threshold -1e18`** (the
+hand score never mulligans), **`min_color_sources {}`**, no `required_pieces`, no `value_play`. Card
+scores (first copy): Tamanoa +0.37, Vito +0.30, Ancient Tomb +0.28, City of Brass +0.24, Living Wish
++0.24, Tarnished Citadel +0.21, Grand Coliseum +0.20, GSZ +0.17 ... Faithmender -0.26, Spellshock
+-0.23, Manabarbs -0.21 / -0.45, Reflecting Pool (2nd) -0.45, Pyrohemia -0.45. **No keep table and no
+value leaf**: both generators refuse a deck that is not in the suite, and 5j keeps it out (item 3).
+Bad keeps are the largest unwon class: a lone Reflecting Pool or Pool + Tomb with no coloured source
+(g3, g266, g283; sweep gi11).
+
+### 3. Win rate / average win turn: a STANDALONE substitute (disclosed deviation)
+The deck is in NO regression tier, so there is no suite run. It fails the 5j 3x cost rule; see P8.
+Standalone numbers in its place ("LP" = loss-penalised average, loss scored 9):
+
+| run | commit | games | won | avg win turn | LP |
+|---|---|---|---|---|---|
+| 5b depth sweep d0, s14001 | `ece1abbe` | 1000 | 317 (31.7%) | — | 8.300 |
+| 5b d3 b10, s14001 | `ece1abbe` | 300 | 290 (96.7%) | — | 5.867 |
+| 5b d5 b20, s14001 | `ece1abbe` | 300 | 291 (97.0%) | **5.75** (T4 7, T5 116, T6 120, T7 39, T8 9) | 5.847 |
+| sweep-fix sanity d5 b20, s14001 | `817df444` | 300 | 291 (97.0%) | — | 5.817 |
+| suite-shaped rows d5 b20, s2002 / s3003 | `87a8526e` | 150 + 150 | — | — | 5.853 / 5.680 |
+| **latest paired A/B, `fix` arm (= HEAD behaviour)**, d5 b20, profile attached, s50001-53001 | `dfa5a12e` | 1200 | not recorded | — | **5.748** (held-out 5.723) |
+
+Depth is monotonic (d0 << d3 <= d5). d0 is very weak because the greedy rollout plays this deck badly.
+Cost at d5/b20 is ~12.3 s/game against a 3.1 s budget (3.98x): 68% of that is clairvoyant London
+bottoming, and play alone is ~1.0x.
+
+### 4. Verification (Stage 5)
+- **Final `verify_deck`** (main-tree WIP gate script, `logs/prevent_damage/final/verify.log`):
+  PASS for coverage (26 full), viewer, viewer_wiring (`sacrifice`), mismatch (7001/7002 x 60),
+  play_invariants (8 games / 176 decisions), claude_sweep (0 unresolved) and **discard_policy**
+  (authored buckets; its one disclosure is that `## Discard policy` gets written on your approval).
+  **card_costs**: FAILED in the gate run only because it did not run (rc=2, Scryfall 429 on 96 fleet
+  cards). **cost audit re-run: PASS**: `audit_card_costs.py --throttle 0.6` rc=0, "348 actually
+  compared. All 348 compared mana costs match Scryfall"
+  (`logs/prevent_damage/final/costaudit.log`). FAIL:
+  **card_fields**: the pre-existing `Basri, Tomorrow's Champion` `exert` keyword, not in this deck.
+  **regression_tiers**: the deck is in no tier. The WIP script has no such gate, but the branch's
+  `verify_deck.py` fails it (Stage 5 record), which is blocked by 5j. Overall **GATE FAIL** until
+  these are fixed or signed off in `## Approved deferrals`.
+- **5a mismatch harnesses:** 0 `[nonconv]`, 0 `[fd-diverge]` (2 x 250 games, before and after the
+  fixes). **0 real own deaths in 1,000 games.**
+- **5b depth sweep:** monotonic (table above). All 9 unwon d5 games were read. One misplay (g196, a
+  second Vito cast into the legend rule for 7 life) was **fixed** (`MTG_PD_DUP_LEGEND`). The rest are
+  keep quality, mana screw or flood.
+- **5c budget starvation:** mild. About 4 of 300 games speed up by b200, and all unwon games stay
+  unwon at b1000. The iterative-deepening ladder commits at **depth 1 on 95 of 141 decisions**, so
+  "d5 b20" is effectively d1-d2 for this deck.
+- **5c2 horizon-honest tie-break:** keep ON (-0.008 turns/game, 55 worse / 68 better of 2,000). This
+  run found and fixed a parser bug (`09a12ad2`) that makes **Melira Pod's recorded "NO SIGN" void**.
+- **Stage 5 fixes (`6d3f212c`):** suicide guard (`MTG_PD_SELF_LETHAL_GUARD`: own deaths 2 -> 0 per
+  600), duplicate-legend prune, and play_invariants harness gaps (`plans_hidden`), which any
+  Wish/pod/Chord deck would also have tripped.
+- **5d claude-play sweep:** 16 Opus players, s31001 gi 0-15, run on `ef26b03b`. 15 result lines
+  (gi0 recorded frames only). **Every CONFIRMED flag was fixed** (`d4c38ed4`, `817df444`):
+  - payment ignored pain when choosing sources, including one lethal Dina payment (gi9);
+  - the pain sweep ran after every plan in human play;
+  - the viewer plan cap dropped GSZ;
+  - there was an extra frame after own death;
+  - GSZ offered no fail-to-find;
+  - labels were wrong: Beseech showed `{6}` and Earthquake had no X.
+
+  gi13 is b20 starvation and gi15 is cast order (D9). Win turns on the 14 games both sides won:
+  search 5.50, Claude 5.36. Claude was faster on 3 games (gi13, gi15, and gi11 where the AI never
+  won) and slower on 2 (gi3, gi7), which was before the gi7 fix. **The record is STALE:** the sweep
+  ran on `ef26b03b`, before the fixes and the §5i policy, and nothing tracks PD play by digest.
+- **5h viewer surface:** `audit_viewer_decisions.py --sideboard` PASS. dig / sacrifice / target /
+  transmute were verified by targeted seed search. Bilbo's put multi-pick was never exercised (0 real
+  activations). Auto-resolved items are listed in 6a (V-rows).
+- **§5i discard policy:** authored and default ON, PROVISIONAL. The policy alone vs OFF is +0.0025
+  (t=+1.00, n=1200), i.e. neutral with every point estimate leaning slightly worse.
+  `MTG_PD_SHED_UNPLAYED_LAND` cuts T1 skip-then-shed from 6 to 1.
+- **Smoke:** 101/101 byte-identical, play-changed 0, after every engine commit. PD is not in the suite,
+  so this only shows that other decks are unchanged.
+
+### 5. Stage 6a — encoded heuristics & assumptions disclosure
+
+**Routing:** `DetectDecisionProvider` returns `g_prevent_damage` FIRST, above every other branch. It
+fires on Tamanoa ∨ Manabarbs ∨ Vito ∨ Dina params (not Faithmender/Bilbo). Without it the list would
+ride AntiLifegain (Wish/Beseech `tutor_to_hand`) and trip `goblin` via Dina's outlet. It derives from
+`DeckProvider`, and **every hook below is an override**. ⚠ The class comment in `DecisionProviders.h`
+lists only 4 "hooks held"; the code overrides **13** (it has gone stale).
+
+| # | assumption / heuristic | source | classification | cost / why safe (⚠ = worth your attention) |
+|---|---|---|---|---|
+| G1 | Passive goldfish opponent: never blocks, casts, taps lands, gains or prevents life | engine | global | Makes Fear/Flying/Deathtouch, the "reveal" halves and Manabarbs' opponent half inert |
+| G2 | Clairvoyant search over a known (deterministically shuffled) library; London bottoming plays every legal removal to the end clairvoyantly | engine | global | ⚠ Bottoming is 68% of CPU, and it is an oracle on the true draws (P2: every cheaper bottomer is strictly worse) |
+| G3 | **First main only.** `MTG_PD_SECOND_MAIN` defaults **OFF** (`ef26b03b`) and nothing else in the list sets `DeckUsesSecondMain` | `GoldFishRunner.cpp:122` | pruning (phase) | Measured neutral: -0.0033, t -0.23, n=600, at 0.63x CPU. ⚠ **Cannot express "attack, then ping/quake".** Vito is a 1/1, so a pre-combat Pyrohemia ping kills the lifelink attacker. Pyrohemia's bracket note justifies dropping the end-step window as "identical to a ping in main 2", **which no longer exists** |
+| G4 | Activations trail casts within a main (`apply_trailing_activations`) | engine | pruning (order) | ⚠ With m2 OFF, "ping, then cast a creature" is inexpressible within the turn |
+| G5 | Depth/budget: no `value_play`, so the built-in d5/b20 | profile | global | Starved: commits at depth 1 on 95 of 141 decisions. Mild starvation on ~4/300 games (5c, gi13) |
+| G6 | Damage-event model + own death **gated to armed decks**. Every other deck still has no mid-turn own-death check | `StampDeckTraits` | global scope | Byte-identical elsewhere. Un-gating is D5 |
+| G7 | Trigger order auto-taken: all gains, then each Manabarbs hit; Bilbo +1 before Faithmender x2 | `DamageEvents.h` | correctness shortcut | Weakly dominant (CR 603.3b / 616.1) |
+| G8 | City of Brass and Purity TRIGGERS modelled as immediate damage / replacement | cards.json | card simplification | No observable window (no stack) |
+| G9 | Baseline keep: `hand_score_threshold -1e18`, `min_color_sources {}`, `min_lands 1` | profile | heuristic (keep) | ⚠ It keeps colourless and Pool-only hands, the single largest unwon class. It is waiting on the mulligan stage, which 5j blocks |
+| G10 | A hand Beseech is read at MV 6 by keep-model / land-play heuristics | cards.json | card simplification | Pessimistic only |
+| P1 | `Certificate` NotAssessed | provider | none | No effect (P7: a certificate cannot move the budgeted 5j number) |
+| P2 | `SelfDamageUseful` = a gain engine (Tamanoa/Purity) is out. It drives damaging-mode taps for generic pips and the end-of-main **pain sweep** (`TapPainSourcesIfUseful`) | provider + engine | correctness shortcut (**greedy mana policy**) | Allowed by the greedy-scope ruling. The engine bounds it by rules safety. Not A/B'd on its own (D12) |
+| P3 | `ManaSourceRank`: with no gain engine, pain pushes a source back 5 per point | provider | ordering (cost lever) | `PainAwarePay` enforces the exact minimum anyway, so this only saves retries |
+| P4 | `MTG_PD_PAIN_PAY` (ON): pain-aware source assignment per payment attempt. It is never lethal if a survivable assignment exists. With no gain engine it takes the exact minimum damage (DP); with one, damaging mode first | `DamageEvents.h` | correctness shortcut | +12% CPU, quality ON slightly better, 0 own deaths either way. Does not prefer a painful source for a COLOURED pip or schedule taps "after Manabarbs" (gi6, D3) |
+| P5 | `GuardsSelfLethalPayment` (`MTG_PD_SELF_LETHAL_GUARD`, ON): drops CAST plans whose first land tap under Manabarbs kills us, and Earthquake X >= our life | provider | pruning (rules-derived) | Own deaths 2 -> 0. ⚠ **Life is read at ENUMERATION**, so a gain earlier in the same plan is not credited: a Tamanoa-then-big-quake line can be pruned. It also misses Pyrohemia's `{R}` barb at life >= 2 and a land's own pain (both unguarded, so a line is over-offered, never lost) |
+| P6 | `OfferDuplicateLegendCast` (`MTG_PD_DUP_LEGEND`, ON): a 2nd Vito/Dina only when Spellshock + a gain engine are on board or affordable in hand, or the base upside helper says so | provider | pruning | Neutral (+0.0017, t 0.45). It misses nothing measurable: the duplicate dies to the legend rule |
+| P7 | `TutorSearchWidth 20` | provider | coverage (not a narrowing) | All 19 library names + 13 sideboard names are reachable |
+| P8 | `TutorCandidates`: nonlands first | provider | ordering | Every name is still a searched variant. ⚠ It sets the **rollout's / unpinned** Beseech/Wish pick, which shapes leaf values |
+| P9 | `XCandidates` (Earthquake): drops X=0 unless Spellshock is out (plus P5's X cap) | provider | pruning | X=0 without Spellshock deals nothing, triggers nothing and costs a card: dominated, lossless. Human play is unpruned |
+| P10 | `OfferFailToFindPut` (GSZ X=0 fail-to-find): only under Spellshock + a gain engine | provider | pruning (of an added option) | Without both, the cast only hurts us. Human play gets every X |
+| P11 | `FodderSacUseful` (`MTG_PD_DINA_LETHAL_GATE`, ON): Dina sacrifices only when she can attack and an optimistic bound says THIS turn is lethal | provider | pruning (judgement) | Measured +0.040, t 2.85 (41 worse / 17 better with it off). ⚠ It misses a non-lethal set-up sac and a Purity-shuffle sac. Without it the search fed Tamanoa to Dina 28 times |
+| P12 | `EtbDestroyTargetPick` (Shriekmaw/Slime): opponent creature first; never an engine piece or Manabarbs while anything else is legal; then tapped land, lowest MV | provider | correctness shortcut (resolution pick, not searched) | 0 real firings at n=200. ⚠ **It never lets Slime kill our own Manabarbs while a land is legal**, which could be right at low life with no gain engine |
+| P13 | `CleanupDiscardCandidates`: the §5i bucket ladder (`MTG_PD_BUCKET_DISCARD`, ON) + `MTG_PD_SHED_UNPLAYED_LAND` (ON) | provider | correctness shortcut (index 0 = the shed; no searched discard width) | ⚠ It fires ~37,000x more in rollouts than in real play (idx0 differs from generic on 85.7% of 1.84M calls), so it shapes leaf values. Policy vs OFF: neutral, leaning worse (D7) |
+| P14 | `NoWinLeafPricesOwnLife` (`MTG_PD_LEAF_OWN_LIFE`) | provider | default **OFF** | Measured neutral; inert |
+| B1 | Inherited base rankings, **not searched**: `GyReturnToHandPick` (Witness unpinned: nonland, highest MV), `PutCreaturesFromLibraryPicks` (Bilbo: all creatures except a 2nd legend and self-destroying ETBs) | `DecisionProvider.h` | correctness shortcut | Reviewed, not measured. 0 real firings |
+| E1 | Pyrohemia K = full 1..max; Earthquake X = 0..max (minus P9); `PingAllSelfSafe` never offers a self-lethal ping | engine | full search (+ rules prune) | Stage 5f narrowings were NOT pursued: under a binding budget they are quality levers, not cost levers |
+
+**Card-modelling simplifications (bracket notes, verbatim gist; each is PROVISIONAL until D10):**
+- **Inert:**
+  - Manabarbs: `[PARTIAL: 'a player' -- only OUR taps are modelled ...]` and `[PARTIAL: ... tap-ahead helper ... flushed only at the next decision-boundary backstop ... none of those paths is reachable in this deck.]`
+  - Beseech / Living Wish: `'reveal'`.
+  - Spellshock: `[PARTIAL: the trigger resolves at cast time, ahead of the spell]`.
+  - Purity: `[PARTIAL: modelled as a replacement where the card has a TRIGGER]`.
+  - Rolling Earthquake: `'without horsemanship'`.
+  - Pyrohemia: `[PARTIAL: ... instant-speed ... enumerated only in our main phases ... a ping there is identical to one in main 2.]`. ⚠ See G3.
+  - Vexing Shusher: D1/D2, pre-existing.
+  - Fear (House Guard, Shriekmaw), Flying (Purity), Deathtouch (Slime).
+- **NOT inert:** **Dimir House Guard** `[PARTIAL -- PROVISIONAL DEFERRAL ... 'Sacrifice a creature: Regenerate this creature.' is NOT modelled. It is not inert here -- our OWN Pyrohemia, Rolling Earthquake and Shriekmaw can destroy this creature ...]`.
+
+**Play-viewer auto-resolved decisions:**
+- **Surfaced:** Earthquake X; Pyrohemia K (folded to 1, then re-prompt); GSZ every X incl. fail-to-find; Beseech twobrid k; Wish/Beseech names; Dina victim (`sacrifice`); Shriekmaw/Slime `target`; Witness `dig`; transmute chooser; Bilbo multi-pick (preselected, never exercised).
+- **Auto-resolved:**
+  - (V1) legend rule keeps the OLDEST, with no keep decision. This is weakly dominant: the older copy is not summoning-sick.
+  - (V2) trigger/replacement order (G7), dominant.
+  - (V3) the **end-of-main pain sweep** runs automatically in human play. This is a viewer-surfacing follow-up.
+  - (V4) mana source assignment follows the pain-aware payer, as every deck's payment is automatic.
+  - (V5) forced single targets are not prompted.
+  - (V6) the Pyrohemia end-step window is not offered.
+- **Gate coverage:** `verify_deck`'s viewer gate audits the MAIN zone only. The `--sideboard` pass was run by hand in Stage 5 (PASS).
+
+### 6. Accepted deferrals
+**None accepted yet.** Awaiting sign-off: the Dimir House Guard regeneration deferral (not inert), plus
+the inert PARTIALs above (D10).
+
+### 7. Suggested next steps
+1. Settle D1 (the 5j route). Then run the mulligan (keep/bottom) table followed by the value leaf,
+   strictly serially, AFTER D7 (both fit to the rollout policy §5i changes). Then add the three tiers +
+   GT from P9 (`pd`, `pd2hg`).
+2. Re-run the claude-play sweep on HEAD: the record predates every sweep fix and §5i. Then
+   `verify_deck` again (card_costs now passes on the throttled re-run).
+3. User-reviewed cast-order pass: tutor/assemble the engine before the sweeper (gi15; miner 16/0,
+   7/0); hold Rolling Earthquake / a second Manabarbs without a gain engine. Re-mine with a second
+   seed first: only one partial seed exists.
+4. Investigate the T1 land-skip tie (no plan wins inside the horizon, so land and no-land plans tie;
+   `MTG_LEAF_TB_PERMS` alone does not break it).
+5. Re-run Melira Pod's 5c2 (void) and any other space-in-stem deck's.
+6. A 5i rollout-quality digest (`MTG_DIVERGENCE_LOG`): d0 wins 31.7%, and both Stage 5 misplays
+   were rollout-policy failures.
+
+### Decisions awaiting the user (merged from Open questions, §12, the sweep, P8 and §5i; default taken in brackets)
+
+| # | question | default taken | recommendation |
+|---|---|---|---|
+| D1 | **5j route (P8 options):** (1) lift the gate for PD (`MTG_ALLOW_UNTESTED_DECK=1`, user-only) to build the keep table + value leaf; (2) rule that 5j measures POST-artifact cost, as every reference deck is measured; (3) ship `bottom_eval_depth 0, topk 5` (0.67x, +0.013 t/game, still 2.6x over) | [nothing adopted; deck in no tier] | **(2), using (1) as its mechanism.** Not (3): it costs quality and still fails |
+| D2 | `MTG_PD_SECOND_MAIN` default OFF | [OFF, PROVISIONAL] | Confirm OFF (neutral at 0.63x CPU). Note G3/G4: the post-combat lines it removes |
+| D3 | `MTG_PD_PAIN_PAY` default ON (+12% CPU). Also: prefer painful sources for coloured pips / tap "after Manabarbs"? | [ON; not extended] | Adopt ON. The coloured-pip refinement is a low-priority follow-up |
+| D4 | Extend pain-aware payment to other painland decks (EDF, Angels, ...)? | [armed decks only] | Measure first; it would move their GT |
+| D5 | Make own death mid-turn a GLOBAL rule (`MTG_OWN_DEATH_ALL`)? | [gated to armed decks] | Measure over all tiers before deciding |
+| D6 | Adopt the measured default-ON levers `MTG_PD_DINA_LETHAL_GATE`, `MTG_PD_SELF_LETHAL_GUARD`, `MTG_PD_DUP_LEGEND` | [ON, PROVISIONAL] | Adopt. Note P5's enumeration-time life read and P11's lethal-only scope |
+| D7 | **§5i discard policy** default ON (neutral, leaning worse), plus `MTG_PD_SHED_UNPLAYED_LAND` ON. Review items: FUEL placement; Pyrohemia last among fuel; land target 5/6 with a sink; colour cover before Ancient Tomb; Pool as the worst live land; DRAIN backup below AMP; tutor order Wish > GSZ > Beseech, plus a far-Beseech exception (gi0); no painful-land preference; prefix stability untested; decide BEFORE the keep table / value leaf | [both ON, PROVISIONAL] | Your review (the doctrine is user-owned). On approval, write `## Discard policy` here (the gate asks for it) |
+| D8 | T1 land-skip search tie: schedule the development-aware no-win tie-break investigation (option c)? | [not started] | Yes, after D1 |
+| D9 | Cast order (user-owned): engine-before-sweeper (gi15), hold rules for Earthquake / a 2nd Manabarbs | [not encoded] | Review after a second mining seed |
+| D10 | Sign off deferrals: **Dimir House Guard regeneration (NOT inert)**; the inert PARTIALs (Manabarbs opponent half and tap-ahead flush, reveal halves, Spellshock/Purity/City of Brass trigger collapse, horsemanship, Pyrohemia instant speed, Fear/Flying/Deathtouch) | [PROVISIONAL] | Approve. The House Guard shield is never worth a Tamanoa/Faithmender, and the card is never wished for |
+| D11 | Unsearched rankings: `EtbDestroyTargetPick` (never kills our Manabarbs while a land is legal), `GyReturnToHandPick`, `PutCreaturesFromLibraryPicks`, nonland-first tutor order + width 20: keep, or full-search? | [keep] | Keep (0 real firings). Revisit if Slime/Shriekmaw ever fire |
+| D12 | Self-damage greedy mana policy (`SelfDamageUseful` + end-of-main pain sweep): acceptable under the greedy-scope ruling? | [kept] | Accept. A/B the sweep if you want it measured on its own |
+| D13 | Anti-Lifegain's drip sweep has the same human-play defect (fires after every plan). Fix it? | [not changed] | Fix: viewer-only, no autonomous play change |
+| D14 | Viewer follow-ups: a legend-rule keep decision (V1); surface the pain sweep (V3) | [auto-resolved] | Low priority: both are dominant/automatic |
+| D15 | Basri, Tomorrow's Champion `exert` card_fields mismatch (another deck's) | [untouched] | Fix in that deck's pass |
+| D16 | Push `prevent-damage-analysis` (local only; smoke byte-identical on every engine commit)? | [not pushed] | Push (the cost audit is now clean). Watch Windows CI |
