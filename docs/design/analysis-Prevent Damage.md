@@ -810,3 +810,142 @@ regression_tiers / suite FAIL (expected, not added); card_costs / clause_ledger 
   GOAL, before any value leaf / mulligan work. Perf work queued after the claude-play sweep.
 - 5d claude-play sweep LAUNCHED on ef26b03b: 16 Opus players, base seed 31001, gi 0..15
   (disjoint from suite and Stage 5 seeds). Results aggregate into `logs/prevent_damage/sweep/`.
+- 2026-09-28: 5d sweep DONE and every confirmed flag fixed (`d4c38ed4`, `817df444`) -- see
+  "## Claude-play sweep" below (pain-aware payment, one end-of-main sweep, viewer valve, own-death
+  protocol, GSZ fail-to-find, labels; gi13 = b20 starvation, gi15 = cast order). CPU +15% at d5/b20
+  (`MTG_PD_PAIN_PAY=0` hatch). Next: perf (the 5j gate), §5i discard buckets, suite rows + GT.
+
+## Claude-play sweep
+- commit: `ef26b03b`
+- seeds: 31001 games: 16
+- flags: 0 unresolved
+
+16 Opus players (claude-play, `--reveal 6`), one per game index 0..15 of base seed 31001, run on
+`ef26b03b` (m2 OFF). Results: `logs/prevent_damage/sweep/results.jsonl` (gitignored; gi0 has no result
+line -- its player recorded only T5/T6 frames, and the orchestrator cited it under findings 1 and 2).
+**The sweep ran BEFORE the fixes below, and they change play** (pain-aware payment in both worlds,
+GSZ fail-to-find in autonomous play, one sweep per main in human play): the `claude_sweep` gate will
+report the record as stale against HEAD. That is expected; a re-sweep on the fixed binary is the
+natural next check, not a blocker.
+
+Fixes: **`d4c38ed4`** (findings 1-6) and **`817df444`** (finding 1, per-attempt policy + line-aware /
+flexibility-aware assignment, found by the gi15 investigation below).
+
+| gi | ai_win | claude_win | flags -> resolution |
+|---|---|---|---|
+| 0 | -- | -- | (no result line) pain-blind payment + mid-main pain sweep -> **fixed** `d4c38ed4`/`817df444` |
+| 1 | 6 | 6 | combat logged after opp dead (cosmetic); plans_hidden by design -> dismissed (display only) |
+| 2 | 5 | 5 | **CONFIRMED** pain-blind payment, no gain engine (T3 Faithmender 17->13, min 17->14) -> **fixed** `d4c38ed4`: claude-play and autonomous now 17->14 (and T4 11 not 9); Dina sac labels identical (victim asked later) -> dismissed (by design) |
+| 3 | 4 | 5 | combat after opp dead (cosmetic); sweep stops at won-lock -> dismissed (correct) |
+| 4 | 6 | 6 | **CONFIRMED** viewer plan-cap valve dropped GSZ (114,264 raw positions / 27-plan menu) -> **fixed** `d4c38ed4`: 0 groups dropped, GSZ -> Tamanoa (X=3) offered, menu identical to `MTG_VIEWER_PLAN_CAP=0`; pain-blind payment -> fixed |
+| 5 | 5 | 5 | Rolling Earthquake X missing from labels; collapsed Wish label -> X **fixed** `d4c38ed4` ("(X=n)"); collapse by design |
+| 6 | 5 | 5 | combat after opp at 0 (cosmetic); payment-order (weak, Manabarbs timing) -> covered by the useful-mode policy (damaging mode first, cap-bounded); the per-land-tap "after Manabarbs" ordering is not modelled (the sweep taps leftovers after the casts) -- **PROVISIONAL**, surfaced below |
+| 7 | 6 | 7 | **CONFIRMED** pain sweep fired after every applied plan in human play (Karplusan tapped before the tutored Quake) -> **fixed** `d4c38ed4`: the same line now wins T6 (= search); Beseech cost "{6}" -> **fixed** (`{2/B}{2/B}{2/B}`); pain-blind payment -> fixed |
+| 8 | 5 | 5 | dup-legend prune by design; combat cosmetic; AI mulled a 7 Claude won with -> dismissed (mulligan stage, baseline profile) |
+| 9 | 6 | 6 | **CONFIRMED x3**: (a) SEVERE Dina {B}{G} on two Citadels (3+3 at 5 life) -> own death -> **fixed** `d4c38ed4` (unit test pins the exact board with a control arm that MUST die); (b) pain-blind T3/T5 payments -> fixed; (c) extra frame after own death + Tamanoa gain logged before LOSE -> **fixed** `d4c38ed4` (0 extra frames; event log shows only the LOSE line) |
+| 10 | 5 | 5 | dup-legend prune by design (PROVISIONAL) -> dismissed |
+| 11 | -- | 6 | AI kept a colourless-only 6 and never won; Claude (clairvoyant) mulled to 5 -> dismissed (mulligan stage) |
+| 12 | 5 | 5 | GSZ axis offered only find-X -> **fixed** `d4c38ed4` (fail-to-find: autonomous X=0 under Spellshock + gain engine, human every X) |
+| 13 | 7 | 5 | search-misplay candidate -> **investigated: BUDGET STARVATION at b20** (below) |
+| 14 | 5 | 5 | all correct; 31.6 s SLOW-GAME -> perf (the known 5j cost failure) |
+| 15 | 7 | 5 | search-misplay candidate -> **investigated: CAST ORDER + budget** (below); the replay also exposed a stranding defect in the first cut of the payment fix -> **fixed** `817df444` |
+
+N = 0: every CONFIRMED flag is fixed. gi13/gi15 were CANDIDATES; their classifications are
+recorded below and neither is a play-correctness bug (gi15's cast-order item is the user-reviewed
+cast-order pass's, and is surfaced there).
+
+### Fixes (rules skill consulted: CR 601.2g-h / 605 / 704.3 / 704.5a / 701.19b)
+
+1. **Pain-aware payment** (`dmgev::PainAwarePay`, `MTG_PD_PAIN_PAY` heurarm slot, default ON,
+   PROVISIONAL). Root cause: both payers chose which source pays which pip pain-blind; the old
+   `PayWithPain` only chose the MODE of a painland on a generic pip. Mana abilities resolve during
+   casting and SBAs are not checked until priority (CR 601.2g-h, 704.3), so a payment's whole pain
+   lands before any Tamanoa trigger -- the payment's total must stay under our life. Policy, per
+   payment ATTEMPT (each rung of the reservation ladder): (a) never lethal when a survivable
+   assignment exists (all-lethal -> the historical payment, which the self-lethal guard /
+   `kOwnDeath` already own; the batch prepay and held rungs decline instead); (b) no gain engine ->
+   the MINIMUM damage (pain + Manabarbs hits), exact via a DP over source modes
+   (`PaymentDamageFloor`), which also picks, among equal damage, the assignment that keeps the WIDEST
+   sources up and realises it with a hold; if that strands the rest of the line being applied
+   (PlanTraits colour/total check) the historical assignment is taken when it survives; (c) gain
+   engine -> damaging mode first, bounded by (a). Manabarbs timing needs nothing: the marks flush when
+   the payment commits, before Manabarbs is on the battlefield. City of Brass's damage (a trigger, CR
+   603) is counted as pre-SBA pain -- conservative for the bound. Unit tests: gi9 board (control arm
+   dies), gi2 min-pain, Manabarbs counted, all-lethal still pays, exact floor, gi15 widest-kept.
+2. **One pain sweep, at the true end of main 1** (`PainSweepDeferScope`). The human-play loop applies
+   a phase plan by plan; `ApplyPlanDirect` swept after each. **Autonomous search checked: clean** --
+   a breakpoint node's prefix apply returns at the pend (before the sweep) and inline continuations
+   run inside the same `ApplyPlanDirect`. **The drip sweep (`TapDripLandsIfUseful`, Anti-Lifegain)
+   has the same human-play defect** (it fires after every applied plan; `DripManaWantedLaterThisTurn`
+   only sees the current hand) -- reported, NOT changed (other decks' references/GT). Unit test.
+3. **Viewer valve bounds PAYABLE positions** (`viewerplancap::Estimate`: knapsack count over the
+   enumerator's own all-ramp-credited mana bound; raw walk only at 64x). `--strict` unchanged. Unit test.
+4. **Own death mid-main**: the human loop stops at once; the flush checks the SBA before logging a
+   trigger (no "Tamanoa" line for a gain that never resolved).
+5. **Labels**: "(X=n)" on X spells (summary only -- the structured `casts` list is unchanged, so
+   reference matching is unaffected); twobrid renders `{2/B}` in hand JSON (tools/play shows the raw
+   string and extracts only single-symbol pips, so it renders fine).
+6. **GSZ fail-to-find** (`kTutorDeclineTarget`, CR 701.19b): `OfferFailToFindPut` (PD: Spellshock + a
+   gain engine) offers X=0 to the search; human play every affordable X, own menu entry (never folded
+   under a fetch). The engine skips the "then shuffle" on any empty search (pre-existing); GSZ's
+   self-shuffle still shuffles.
+
+### Verification (final binary = `817df444`)
+- `./build.sh` clean; mtg-test 304/304; scenarios 117/117.
+- **Smoke: 101/101 byte-identical, play-changed 0 (searched and d0)** -- run on `d4c38ed4` and again
+  on `817df444`. Every change is gated to `dmg_events_armed` or human play.
+- `viewer_protocol_check.py --strict`: 30 ok / 304 repaired / 0 play-drift / 0 enum-gap / 1
+  board-diverged (the pre-existing Snow s4_gi3) / 10 mull-drift / 0 contract-fail -- identical to the
+  Stage 5 record.
+- Repros on the fixed binary: gi2 T3 17->14 (claude-play AND autonomous). gi4 / gi7 / gi9 replay
+  the recorded lines with `MTG_PD_PAIN_PAY=0` (the fixed payer changes the life totals, so the
+  recorded choice indices no longer reach the same frames with it on; the fixes under test are
+  independent of it): gi4's T6 frame offers GSZ -> Tamanoa (X=3), nothing truncated, menu ==
+  `MTG_VIEWER_PLAN_CAP=0`; gi7's line (choices remapped by summary for the new X labels / GSZ
+  variants) keeps Karplusan untapped after the tutor and wins T6 (= the search); gi9's line dies at
+  T6 and goes straight to CLAUDE_RESULT (0 extra frames, event log = the LOSE line only). With the
+  payer ON, gi9's line reaches T6 at 11 life, not 5; the 5-life Citadel board is pinned by the unit
+  test instead.
+- **Deck sanity, 300 games d5/b20 s14001, paired per game (`MTG_DUMP_WINS`)**: baseline
+  (`ef26b03b`, m2 OFF) avg 5.8200, 291/300 won; fixed 5.8167, 291/300 won; 13 changed: 7 faster,
+  **6 slower (gi 32, 50, 88, 109, 202, 214)** -- every one reverts to the baseline win turn with
+  `MTG_PD_PAIN_PAY=0` (the payer is the mover) and every one plays the baseline win turn at b200
+  (32:5, 50:5, 88:5, 109:6, 202:7, 214:5): b20 budget churn from the changed rollout life accounting,
+  not a line the payer cannot express. **Own deaths (`MTG_PD_STATS`): 0 before, 0 after.**
+- **Cost**: batch CPU 3.12M ms vs 2.72M (**1.15x**) at d5/b20 -- the policy's extra attempts. The
+  first cut was 5.3x; the DP floor (one capped attempt instead of a descending search whose failing
+  proofs were exhaustive on six-colour boards), a lossless damage B&B in the DFS, and per-attempt
+  holds brought it down (digests unchanged across the lossless steps). The 5j cost gate was already
+  failing (~4.5x); this is +15% on top -- `MTG_PD_PAIN_PAY=0` is the one-binary hatch.
+
+### gi13 / gi15 investigation (d5, budgets 20 / 200 / 1000 / 5000; handoffs via `--choices-then-auto`)
+| game | baseline b20/b200/b1000 | fixed b20/b200/b1000/b5000 | Claude |
+|---|---|---|---|
+| gi13 (s31014) | 7 / 5 / 5 | 7 / 5 / 5 / 5 | 5 |
+| gi15 (s31016) | 7 / 6 / 6 | **6** / 6 / 6 / 6 | 5 |
+
+- **gi13 = BUDGET STARVATION at b20** (fixes did not change it). Claude's board handed to the search:
+  from T2 (after T1 Reflecting Pool) b20 -> T7, b200 -> T5; from T3 (after Claude's T2 Living Wish ->
+  Vito) T5 at both. The b20 search's T2 decision (Dina + Wish -> Faithmender) is the costly one; ten
+  times the budget finds Claude's line. Same class as Stage 5c's mild starvation.
+- **gi15 = CAST ORDER (+ budget)**; the fixes moved b20 from T7 to T6. From Claude's exact T5 board
+  (lands for 7, Dina + Vito out, GSZ + Rolling Earthquake in hand) the search plays T6 at b20 AND b200:
+  its line is GSZ + Spellshock, not the lethal GSZ -> Tamanoa then Rolling Earthquake X=2. With
+  `MTG_SEARCH_ORDER=1` (cast-ORDER search) the same handoff finds T5, and the full game at b200 is T5
+  (b20 still T7). GSZ and Rolling Earthquake tie at CastOrderRank 20, so the canonical order can
+  resolve the sweeper BEFORE the tutored Tamanoa arrives -- no gain, no kill. This is the Stage 5
+  miner's "GSZ before Earthquake (7/0)" row: a **user-reviewed cast-order item** (not encoded here).
+  The replay also exposed that the FIRST cut of fix 1 stranded the Quake's {R} (GSZ paid by Citadel
+  {C} + Coliseum {C} at equal pain to a Tomb): fixed in `817df444` (per-attempt floor over the rung's
+  sources, widest-kept tie-break, line-aware fallback); a hand-played "GSZ alone" now leaves the {R}
+  and the search then finds the T5 Quake.
+
+### Open questions (surfaced, not blocking; defaults taken)
+1. **Pain-aware payment for other painland decks?** The same cap would stop pain-blind payments in
+   EDF / Angels / any painland list. Deliberately NOT extended (armed decks only). User call.
+2. `MTG_PD_PAIN_PAY` default ON is **PROVISIONAL** (quality -1 turn / 300, 0 own deaths either way,
+   +15% CPU). Adopt / reject on review.
+3. Useful mode keeps the old generic-pip preference (damaging mode first); it does NOT yet prefer a
+   painful source for a COLOURED pip, nor schedule lands "after Manabarbs" (gi6's weak note).
+4. gi15's cast order (tutor-put engine piece before the sweeper): for the user-reviewed cast-order pass.
+5. The drip sweep's human-play defect (fix 2) -- same shape, other decks; fix on sign-off.
