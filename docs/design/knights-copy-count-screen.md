@@ -2654,6 +2654,88 @@ traded against a blocker. Its ceiling is also capped in this shell because **tok
 Worthy Knight's Soldiers, Adeline's Humans and Hero of Bladehold's Soldiers all stay single strike.
 State both with the result. [[goldfish-bias-has-two-readouts]], [[bracket-notes-are-the-judgement-call]].
 
+### Round Q RESULT (landed 23:42:28Z, 1h27m for 5 tables + 6 blocks) — the Cavalier EARNS A SLOT, but only over Hero of Bladehold
+
+Pooled, late-weighted, each arm on its OWN R=40 table, step vs the ruled base `m_sp3_p20`.
+Negative = FASTER. `meas` = screen block (15.2M), `conf` = held-out (15.6M):
+
+| arm | long (.5) | 2hg (.3) | std (.2) | pooled | step vs ref | meas | conf |
+|---|---|---|---|---|---|---|---|
+| `q_kc3_vk1` (Cavalier 3) | −0.2603 | −0.3739 | −0.1962 | −0.2816 | **−0.0196** | −0.0160 | −0.0232 |
+| `q_kc2_hob1` (Cavalier 2, **Hero 1**) | −0.2448 | −0.3723 | −0.2329 | −0.2807 | **−0.0187** | −0.0165 | −0.0208 |
+| `q_kc2_vk2` (Cavalier 2) | −0.2571 | −0.3654 | −0.2114 | −0.2804 | **−0.0184** | −0.0184 | −0.0185 |
+| `q_kc2_vk1_p21` (Cavalier 2, 25 lands) | −0.2554 | −0.3698 | −0.2004 | −0.2787 | **−0.0167** | −0.0113 | −0.0221 |
+| `q_kc1_vk3` (Cavalier 1) | −0.2501 | −0.3539 | −0.2198 | −0.2752 | **−0.0132** | −0.0124 | −0.0140 |
+| **`m_sp3_p20`** (ref) | −0.2347 | −0.3322 | −0.2249 | −0.2620 | — ref | | |
+
+**Every arm gains and every arm REPLICATES in sign and magnitude** — the direct opposite of round N2,
+where all three arms disagreed in sign. `q_kc2_vk2` reproduces to the fourth decimal (−0.0184 / −0.0185).
+So sampling noise is not the issue here. The apparatus is.
+
+**1. THE FLOOR SPLITS THE ARMS IN TWO, and it inverts the naive ranking.** The bracket's bias for a STEP
+is `null(arm) − null(ref)`, not the arm-vs-shipped figure the per-arm blocks print:
+
+| arm | step | bias vs ref | margin | reading |
+|---|---|---|---|---|
+| `q_kc2_hob1` | −0.0187 | **−0.0027** | **6.8x** | **ESTABLISHED** |
+| `q_kc1_vk3` | −0.0132 | −0.0094 | 1.4x | unresolved |
+| `q_kc2_vk2` | −0.0184 | −0.0181 | 1.0x | unresolved |
+| `q_kc2_vk1_p21` | −0.0167 | −0.0177 | 0.9x | unresolved |
+| `q_kc3_vk1` | −0.0196 | −0.0284 | 0.7x | unresolved |
+
+Read the nulls, not just the bias, as the skill instructs: every null is large and negative (each arm's
+own table plays it FASTER than the shared one, −0.051 to −0.080). The ref's is −0.0511 and
+`q_kc2_hob1`'s is −0.0539 — **near-equal, so they cancel**, which is exactly the "two large equal nulls
+are a level difference" case. The Venerable-Knight-paid arms sit at −0.060 to −0.080 and do NOT cancel.
+Per the skill this is **unresolved, not refuted**, and re-running the bracket bigger will not settle it;
+only a high-R regeneration will. No mechanism is offered for why the ladder arms' tables flatter them
+more ([[dont-rationalize-a-measured-cut]]).
+
+**2. THE PER-FORMAT SPLIT SAYS WHERE THE CARD BELONGS, and it agrees with the floor independently.**
+
+| arm | long step | 2hg step | std step |
+|---|---|---|---|
+| `q_kc1_vk3` | −0.0154 | −0.0217 | **+0.0050** |
+| `q_kc2_vk2` | −0.0224 | −0.0331 | **+0.0134** |
+| `q_kc3_vk1` | −0.0256 | −0.0417 | **+0.0287** |
+| `q_kc2_hob1` | −0.0101 | −0.0401 | **−0.0080** |
+| `q_kc2_vk1_p21` | −0.0207 | −0.0376 | **+0.0245** |
+
+Paying with Venerable Knight **loses at 20 life, monotonically worse with copies**; paying with Hero of
+Bladehold **gains in all three formats**. The mechanism is the curve, and it is in the counts rather
+than invented: the ladder arms keep Hero at 3 and so run **3 + N four-drops** (five of them at
+`q_kc2_vk2`) while cutting one-drops to pay, in a deck whose modal kill is turn 4. `q_kc2_hob1` swaps
+**four-drop for four-drop** and holds the count at three. So the two independent readings — the only arm
+whose floor clears is also the only arm that respects the curve — point the same way.
+
+The gain is largest in **2hg every time**, which is the expected shape for a damage multiplier: 30 life
+× 2 heads is 60 total life, so doubling damage scales with how much of it you need.
+
+**3. 24 LANDS STILL STANDS.** `q_kc2_vk1_p21` − `q_kc2_vk2` isolates the 25th land conditioned on two
+Cavaliers: **+0.0017**, inside the ~0.0020 noise floor, and the two blocks disagree in sign
+(meas +0.0071, conf −0.0036). Adding a fourth four-drop slot does **not** flip round P's land verdict.
+That sub-question is answered.
+
+**4. WHAT THE NUMBER WILL NOT SAY, and here it runs AGAINST the card.** The established arm says a
+Cavalier is a better four-drop than **Hero of Bladehold**, and that is precisely where this model is
+least trustworthy. Hero makes two Soldier tokens per attack and carries battle cry; the Cavalier is a
+2/2 whose entire contribution is a multiplier. In a goldfish there are no blockers for Hero's tokens to
+absorb and no removal for them to survive, so extra bodies buy almost nothing while a multiplier on an
+unopposed board buys everything. Against a real opponent that asymmetry reverses: Hero's tokens and
+battle cry survive any single removal spell, whereas killing the Cavalier erases its whole value.
+Note also that the model already prices two REAL disadvantages of the Cavalier and still prefers it —
+**tokens are not Knights** (Worthy Knight's Soldiers, Adeline's Humans, Hero's Soldiers all stay single
+strike) and fewer Hero tokens means a smaller Adeline, whose power is the creature count. So the
+in-model signal is honest; it is the out-of-model comparison that is unfavourable.
+[[goldfish-bias-has-two-readouts]], [[bracket-notes-are-the-judgement-call]].
+
+**VERDICT: Kinsbaile Cavalier earns a slot on this evidence, in place of Hero of Bladehold rather than
+the one-drops, at a count that is NOT yet settled.** `q_kc2_hob1` (Cavalier 2 / Hero 1) is the one
+established arm. It is NOT a recommendation to adopt: the copy count and the Cavalier-vs-Hero mix within
+a three-slot four-drop budget are unmeasured, and the two obvious follow-up arms (Cavalier 3 / Hero 0,
+Cavalier 1 / Hero 2) were not in this round. **Adoption is the user's call** and, as with round P's list,
+would discard the shipped keep table and value leaf.
+
 ### DEFERRED — re-measure the close cases on the finalized list's OWN regenerated table
 
 **User, 2026-09-28**, across one exchange: *"if we have cases where it is extremely close we might want
@@ -2675,6 +2757,7 @@ this campaign does, and the remaining gap on a close case is games and chassis f
 
 | case | what is on record | why it is unresolved |
 |---|---|---|
+| **The Kinsbaile Cavalier COPY COUNT** (round Q) | 1 / 2 / 3 copies at `−0.0132 / −0.0184 / −0.0196`, all replicating | the Venerable-Knight-paid arms' apparatus bias (−0.0094 to −0.0284) is the same size as the effect, so margins are 0.7–1.4x. This is now the MOST urgent of the three: the card is established as good, only the count is open. Add the two arms round Q lacked — **Cavalier 3 / Hero 0** and **Cavalier 1 / Hero 2** — so the four-drop budget is held at three and the payer stops being a confound |
 | **1 Basri, Tomorrow's Champion** | round N2: `+0.0004` pooled at one copy, ladder `+0.0004 / +0.0022 / +0.0045` | the measurement and held-out blocks **disagree in sign on all three arms**, so nothing is established beyond the bound `|0.0096|`. And the reference was `j2_ad3_sp4` — **Silverblade 4, 23 lands** — not today's Silverblade 3 / 24 lands |
 | **1 Aether Vial** | **never measured at 1.** Only 3→2 (`−0.0154`, two payers agreeing) and 3→0 (`−0.0423`); the gradient is ~0.014/copy, so 0→1 interpolates to about `+0.014` | an interpolation across a chassis change, not a measurement. Every arm in rounds G–J holds Vial 0, so no snapshot isolates it |
 
