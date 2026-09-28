@@ -975,3 +975,21 @@ it is not a reference).
 every legal removal subset plays a full clairvoyant game at play settings (FiveColour 90.4% and
 Fluctuator ~92% before their tables — the same class). The remaining search: units_total 153.5M,
 id-depth mean 1.83 (starved), units split rollout_step 36% / greedy_fallback 34% / la_cand 28%.
+
+### P2. Bottoming-eval + leaf-depth levers (one pooled batch `ab1`, d5 b20 = play settings, held-out s40001 + s41001 x 300, per-arm profile copies; `base` reproduces the shipped profile's digest exactly)
+| arm (profile key) | ms/game | x base | paired delta (loss-pen.) | t | worse / better |
+|---|---|---|---|---|---|
+| base | 11,334 | 1.00 | — | — | — |
+| `bottom_eval_depth 0` (all-greedy bottoming rollouts) | 3,240 | **0.29** | **+0.1350** | +7.04 | 55 / 0 |
+| `bottom_eval_depth 0, topk 3` | 5,818 | 0.51 | +0.0417 | +4.56 | 24 / 1 |
+| `bottom_eval_depth 0, topk 5` (the Melira shape) | 7,572 | 0.67 | +0.0133 | +2.32 | 8 / 1 |
+| `search_leaf_depth 0` (greedy horizon leaf; Melira ships it) | 7,197 | 0.64 | +0.0367 | +2.14 | 49 / 31 |
+
+**All four REJECTED** (none is quality-neutral). The bottoming arms lose in ONE direction only
+(55/0): the base bottomer plays every legal removal to the end CLAIRVOYANTLY at full play settings, so
+it is an oracle on the true draws and any cheaper rollout can only match or lose to it. That is also
+why this cost is TRANSITIONAL: the exhaustive keep/bottom table (mulligan stage) replaces these
+rollouts outright (`AIEngine::BottomCards`' table path runs first) — every reference deck in the
+gate's table is measured WITH its table. The `bottom_eval_depth 0` arm is a near-upper bound on
+what removing the bottoming rollouts saves: **PD's play-only cost is ~3.2-3.5 s/game at d5 b20**
+(≈1.05-1.15x the 3,100 budget), not 11-12 s.
