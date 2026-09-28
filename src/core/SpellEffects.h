@@ -25837,6 +25837,16 @@ inline dmgev::PayFloor PaymentDamageFloor(const GameState& state, const ManaCost
     int full = 0;
     for (int k = 0; k < 7; ++k) { full += dem[k] * stride[k]; }
     cur[static_cast<std::size_t>(full)] = 0;   // index = REMAINING demand
+    // Each state's mixed-radix digits, decoded ONCE per call rather than once per (source, state):
+    // the per-state div/mod chain was the DP's hottest instructions (Prevent Damage perf,
+    // 2026-09-28). Pure strength reduction -- identical digits, identical DP.
+    static thread_local std::vector<int> s_dec;
+    s_dec.resize(static_cast<std::size_t>(n_states) * 7);
+    for (int st = 0; st < n_states; ++st)
+    {
+        int* d = s_dec.data() + static_cast<std::size_t>(st) * 7;
+        for (int k = 0; k < 7; ++k) { d[k] = (st / stride[k]) % rad[k]; }
+    }
     for (std::size_t si = 0; si < nsrc; ++si)
     {
         const std::vector<Mode>& modes = srcs[si];
@@ -25847,21 +25857,17 @@ inline dmgev::PayFloor PaymentDamageFloor(const GameState& state, const ManaCost
         for (int st = 0; st < n_states; ++st)
         {
             if (cur[static_cast<std::size_t>(st)] >= kInf) { continue; }
-            int rem[7];
-            for (int k = 0; k < 7; ++k) { rem[k] = (st / stride[k]) % rad[k]; }
+            const int* rem = s_dec.data() + static_cast<std::size_t>(st) * 7;
             for (std::size_t mi = 0; mi < modes.size() && mi < 30; ++mi)
             {
                 const Mode& m = modes[mi];
-                int r[7];
-                for (int k = 0; k < 7; ++k) { r[k] = rem[k]; }
                 int y = m.y;
                 const int own = (m.col >= 0 && m.col < 5) ? m.col : 5;   // Colorless -> the {C}-pip slot
-                const int take = std::min(y, r[own]);
-                r[own] -= take; y -= take;
-                const int g = std::min(y, r[6]);
-                r[6] -= g;
-                int idx = 0;
-                for (int k = 0; k < 7; ++k) { idx += r[k] * stride[k]; }
+                const int take = std::min(y, rem[own]);
+                y -= take;
+                const int g = std::min(y, rem[6]);
+                // The successor's index, by difference (own is slot 0-5, generic is slot 6).
+                const int idx = st - take * stride[own] - g * stride[6];
                 if (idx == st) { continue; }   // pays nothing this line still owes
                 const int v = cur[static_cast<std::size_t>(st)] + m.cost;
                 if (v < nxt[static_cast<std::size_t>(idx)])

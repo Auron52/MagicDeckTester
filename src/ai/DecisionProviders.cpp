@@ -226,22 +226,23 @@ bool UseValueModel()
 
 // ---- GenericProvider: deck-agnostic baseline --------------------------------
 
-std::vector<std::string>
-GenericProvider::TutorCandidates(const GameState& s, int controller, const CardParams& pp) const
+// The generic tutor list (see GenericProvider::TutorCandidates below), optionally NONLANDS FIRST
+// (library order within each half) -- the Prevent Damage ordering, built in the same walk rather than
+// by a second pass that re-looked-up every name by string. Distinct names are tracked by their
+// INTERNED pointer (canonical: pointer equality == string equality), a linear scan over <= ~25
+// entries instead of a std::unordered_set<std::string> that hashed and heap-allocated every card of
+// the zone -- this list is rebuilt on every greedy tutor resolution inside the search's rollouts
+// (Prevent Damage perf, 2026-09-28: 5.7% of a d5 game). Same names, same order: byte-identical.
+static std::vector<std::string> GenericTutorList(const GameState& s, int controller,
+                                                 const CardParams& pp, bool nonlands_first)
 {
-    // Search-primary default: return EVERY legal tutor target (distinct library card names
-    // matching the tutor's type filter) and let the search pick the best. There is no
-    // deck-agnostic tutor heuristic worth encoding (the only narrowing logic -- enabler vs.
-    // wincon -- is antilife-specific, so it lives in AntiLifegainProvider). A deck that needs
-    // its tutor narrowed for perf adds a provider override via the analyze-deck workflow;
-    // until then the general search decides, never whiffs. (Previously returned {} -> a
-    // generic tutor silently fetched nothing.)
     const Player& ap = s.players[controller];
     // A WISH searches OUTSIDE THE GAME (the sideboard); every other tutor searches the library.
     // Only the zone differs -- type filter, colour filter and ranking are shared.
     const std::vector<Card>* wish_pool = pp.wish_from_sideboard ? &ap.sideboard : nullptr;
     std::vector<std::string>        all;
-    std::unordered_set<std::string> seen;
+    std::vector<std::string>        lands;   // nonlands_first only: the second half
+    std::vector<const std::string*> seen;
     // Beseech the Queen's land-count cap (0 slack = no param, and no hand walk).
     const int land_slack = pp.tutor_max_mv_is_lands ? TutorLandCapSlack(s, controller) : 0;
     for (const Card& lc : TutorZoneView(ap, wish_pool))
@@ -256,8 +257,29 @@ GenericProvider::TutorCandidates(const GameState& s, int controller, const CardP
         if (!CardHasColorNamed(card, pp.tutor_color)) { type_ok = false; }   // Natural Order: green only
         if (!TutorNumericFilterOk(card, pp)) { type_ok = false; }   // Ranger/Recruiter MV/toughness
         if (!TutorLandCapOk(s, controller, card, pp, land_slack)) { type_ok = false; }   // Beseech
-        if (type_ok && seen.insert(lc.m_name).second) { all.push_back(lc.m_name); }
+        if (!type_ok) { continue; }
+        const std::string* key = &lc.m_name.str();
+        if (std::find(seen.begin(), seen.end(), key) != seen.end()) { continue; }
+        seen.push_back(key);
+        // The Prevent Damage partition's own predicate: its name's definition is a land.
+        const bool to_lands = nonlands_first && def != nullptr && def->card.IsLand();
+        (to_lands ? lands : all).push_back(lc.m_name);
     }
+    if (nonlands_first) { all.insert(all.end(), lands.begin(), lands.end()); }
+    return all;
+}
+
+std::vector<std::string>
+GenericProvider::TutorCandidates(const GameState& s, int controller, const CardParams& pp) const
+{
+    // Search-primary default: return EVERY legal tutor target (distinct library card names
+    // matching the tutor's type filter) and let the search pick the best. There is no
+    // deck-agnostic tutor heuristic worth encoding (the only narrowing logic -- enabler vs.
+    // wincon -- is antilife-specific, so it lives in AntiLifegainProvider). A deck that needs
+    // its tutor narrowed for perf adds a provider override via the analyze-deck workflow;
+    // until then the general search decides, never whiffs. (Previously returned {} -> a
+    // generic tutor silently fetched nothing.)
+    std::vector<std::string> all = GenericTutorList(s, controller, pp, /*nonlands_first=*/false);
     // RANKED DEFAULT for put-onto-battlefield tutors (MTG_TUTOR_RANKED_DEFAULT, default off --
     // A/B lever, st993): the tutor-axis width prune and the tc=-1 base pick both assume this
     // list is BEST-FIRST ("the provider orders candidates best-first" -- TutorAxisWidth), but
@@ -10033,13 +10055,22 @@ int PreventDamageProvider::EtbDestroyTargetPick(const GameState& s, int controll
 std::vector<std::string>
 PreventDamageProvider::TutorCandidates(const GameState& s, int controller, const CardParams& pp) const
 {
-    std::vector<std::string> all = GenericProvider::TutorCandidates(s, controller, pp);
-    std::stable_partition(all.begin(), all.end(), [](const std::string& nm)
+    // == GenericProvider::TutorCandidates + a stable nonland/land partition, in one walk (see
+    // GenericTutorList). The generic list's MTG_TUTOR_RANKED_DEFAULT re-sort applies only to a
+    // put-onto-battlefield single tutor, and it would have been undone by the partition's stable
+    // regrouping only in its land/nonland grouping -- keep it exact by falling back when it is live.
+    static const bool s_ranked = EnvOn("MTG_TUTOR_RANKED_DEFAULT");
+    if (s_ranked && pp.tutor_to_battlefield_single)
     {
-        const CardDefinition* d = CardDatabase::Instance().Lookup(nm);
-        return d == nullptr || !d->card.IsLand();
-    });
-    return all;
+        std::vector<std::string> all = GenericProvider::TutorCandidates(s, controller, pp);
+        std::stable_partition(all.begin(), all.end(), [](const std::string& nm)
+        {
+            const CardDefinition* d = CardDatabase::Instance().Lookup(nm);
+            return d == nullptr || !d->card.IsLand();
+        });
+        return all;
+    }
+    return GenericTutorList(s, controller, pp, /*nonlands_first=*/true);
 }
 
 const DecisionProvider& DefaultProvider()
