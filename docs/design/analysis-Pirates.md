@@ -298,7 +298,62 @@ floor (only unplayable cards go first); the Vial is a turn-1 keep unless mana-st
 3. OK to classify the new params in `audit_viewer_decisions.py` INERT_PARAMS (script self-guard)? **APPROVED 2026-09-27** (USER: "3 is approved") -- all 14 rows un-tagged PROVISIONAL.
 4. Corsair's same-turn Treasure: lift the fresh-hold for non-trick Treasures (A/B-measured)? Default: measure.
 
-## RESUME STATE (2026-09-27, third compaction)
+## Value leaf — GENERATED AND ADOPTED (2026-09-28)
+
+**Authorisation and one caveat, stated first.** USER 2026-09-28 (after cancelling the Snow value leaf and
+closing WhiteKnights' round P): *"If you finish all of that before morning you can feel free to generate
+artifacts for Pirates, since those are missing."* That supersedes the 2026-09-27 sequencing note below
+("no earlier than Monday, alone on the box") — but the same note recorded a PREREQUISITE the user set:
+*"the deck should have some references before the value-leaf anyway"*, and `references/Pirates/` is
+**still empty**. I proceeded on the newer instruction and say so here: the leaf is fitted to the engine's
+own play (K=3 searched labels at shipped play), not to any hand-played line, and the analyze-deck 6a
+reference bench has not been run for this deck. If the user's references later show a systematic
+misplay, the leaf is regenerated with `valueleaf.sh run` (incremental; the rows are the cost).
+
+**Run:** `bash scripts/valueleaf.sh run decks/Pirates` at 10:12 UTC on `5bb340e1` (the hand-entry
+adoption), alone on the box. Phase A 3.5 min (10 jobs, **11,141 rows**, held-out RMSE **0.4008**); phase C
+**49 min** (52 cells × 400 games, 32/32 workers, 14 degenerate games abandoned at the unit ceiling and
+backfilled, 0 games over 30 s); C.5 CLEAN; D; phase E 17 min (48 jobs). Total A→E **71 min** — the
+2026-09-27 sizing (~2–4 h) was pessimistic by 2–3x.
+
+**Depth matrix** (unbounded, 4 seeds × ~394 paired games, loss-penalised avg win turn / ms per game):
+
+| rung | 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 |
+|---|---|---|---|---|---|---|---|---|
+| H (heuristic) | 4.4590 / 219 | 4.4445 / 2,186 | **4.4439** / 11,513 | 4.4439 / 25,949 | 4.4439 / 7,800 | | | |
+| V (value leaf) | 4.6772 / 4 | 4.5612 / 48 | 4.4723 / 295 | 4.4445 / 1,059 | 4.4445 / 1,562 | **4.4439** / 1,863 | 4.4439 / 2,178 | 4.4439 / 2,116 |
+
+`h_conv` = 4.4439 at **H3** (the search saturates early — H4/H5 buy nothing); the leaf matches it within
+tol 0.002 from **V4** and exactly from V6. Crossover (per committed depth c → take the heuristic at
+h ≥): 1→1, 2→1, 3→1, 4→3, 5→3, 6→6, 7→6, 8→6. Trust candidate d4.
+
+**Phase E, the adoption gate (8 held-out seeds × 1,000 games, the live arm = NO sidecar, this deck's
+first model):**
+
+| arm | avg | delta | paired t | better/worse/tied seeds | core-s | vs base |
+|---|---|---|---|---|---|---|
+| live (no sidecar) | 4.46675 | — | — | — | 12,344 | — |
+| **staged** | **4.46125** | **−0.00550** | **−4.92** | **8/0/0** | 5,332 | **0.43x** |
+
+Trust acceptance (ON vs OFF at d4, 8 seeds × 1,000): **+0.00000** (one-sided 95% upper +0.00062 ≤ the
+halved tol 0.0010), 7/8 seeds byte-identical, **0.82x** core-s → **ACCEPTED, `value_trust_depth = 4`**.
+Target-depth sweep (d4/d5/d6/dflt, 4 seeds × 500): every arm the same average on every seed (the
+committed play is identical; only cost moves, d6 cheapest) → no play-policy override written.
+
+**Verdict: a CLEAN WIN on both axes** — better on 8/8 seeds and 0.43x the per-game cost, plus a trust
+depth that skips escalation at 0.82x for zero quality — so it is adopted without a stage-and-ask, per the
+standing rule that no-drawback wins are pre-approved. Installed by copying
+`logs/eval/Pirates.value.STAGED.json` → `decks/Pirates/Pirates.value.json` (the WhiteKnights precedent,
+`721fe1b6`), then `valueleaf.sh run` again for **phase F** (the mulligan contract: `mull_gen_depth` /
+`mull_gen_budget_ms` by measurement, and the discovered K recorded as `expected_buckets` — a record of
+discovered K, listed for the user's sign-off as it was on WhiteKnights). Then the standing gate: smoke +
+regression + overnight (trust depth moved), accept, commit.
+
+This is also the measurement the 2026-09-27 note asked for on the **Pirates d5 tail** (the overnight's
+~6 s/game, 100+ games over 30 s, "compares the unmodelled path to modelled decks"): the overnight tier
+under the adopted leaf re-measures those rows directly.
+
+## RESUME STATE (2026-09-27, third compaction) — SUPERSEDED for the value leaf by the section above
 
 * Worktree `/tmp/pirates-wt`, branch `pirates-analysis`; pushed through `6c34573b` (CI green incl.
   Windows). Main tree holds another session's WIP -- never touch it.
