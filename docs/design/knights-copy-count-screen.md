@@ -2397,6 +2397,96 @@ honest statement is *"indistinguishable from the blank 2/1 it replaces."*
 the answer is that they cancel to within noise. The Cat ability — the half that measured 54% activation
 before the ruling — is out of scope by the user's decision, not by approximation.
 
+### Round P (2026-09-28) — the three open items, on the ruled base, under the hand-entry adoption
+
+**Launched 2026-09-28 ~08:20 UTC** after the user cancelled the Snow value leaf (*"go back to analysis of
+WhiteKnights"*). Spec generator `logs/wk_screen/mkspec_p.py`, runner `run_p.sh`, logs `out/p_wk_*.log`
+(screen, seed 14.4M) and `out/pc_wk_*.log` (held-out, 14.8M), pooled by `pool_h.py p_wk pc_wk m_sp3_p20`.
+Base = **`m_sp3_p20`** (every ruling: Exemplar 4, Marshal 4, Adeline 3, Valiant 0, Greaves 0, Vial 0,
+Silverblade 3, 24 lands), R=40 per-arm tables, `--floor` on every tag, three formats late-weighted.
+
+| arm | edit vs base | what it answers |
+|---|---|---|
+| `p_ct2_vk2` | Acclaimed Contender 2, Venerable Knight 2 | **the Contender re-open** — first measurement with the same-turn deploy SEARCHED (ETB_DIG + hand-entry, fixture at d5); payer = the measured null |
+| `p_ct3_vk1` | Contender 3, Venerable 1 | the shipped count, same payer |
+| `p_sp2_hob4` | Silverblade 2, Hero of Bladehold 4 | **Silverblade 2** (the soulbond-liability extension), paid by the cheapest measured sink (+0.0037) |
+| `p_sp2_p21` | Silverblade 2, Plains 21 (25 lands) | Silverblade 2 paid by a land — the payer's bias runs AGAINST the land here |
+| `p_l25_hob2` | Plains 21, Hero 2 (25 lands) | **land ladder up**, trusted payer (Hero 3→2 measured null) |
+| `p_l23_hob4` | Plains 19, Hero 4 (23 lands) | **land ladder down**, same payer |
+
+Engine caveat, stated before the numbers: the base's and the reference tables predate the adoption
+(`6b9f0cb2` moved WhiteKnights' play: overnight 0 slower / 2 faster, 2HG 0 / 1); every new arm's table is
+generated at HEAD. The per-arm `--floor` nulls bracket that asymmetry. Predictions on record: Contender
+does not earn its slot back (user: *"I somewhat doubt it will save the card"*; the affected frequency is
+1.8% of casts); Silverblade 2 costs ≈ +0.007 at face value and is then a judgement call; the land count
+stays 24 unless `p_l25_*` clears the floor with both payers agreeing.
+
+### Round P RESULT (landed 09:45 UTC, 1h47m for 6 tables + 6 blocks) — all three questions answered, none in the candidate's favour
+
+Pooled, late-weighted, each arm on its OWN R=40 table, step vs the ruled base `m_sp3_p20`; `meas` = the
+screen block (seed 14.4M), `conf` = the held-out block (14.8M):
+
+| arm | long | 2hg | std | step vs ref | meas | conf | reading |
+|---|---|---|---|---|---|---|---|
+| `p_l23_hob4` (23 lands, Hero 4) | −0.2363 | −0.3223 | −0.2127 | **−0.0011** | −0.0002 | −0.0020 | null — 23 = 24 |
+| **`m_sp3_p20`** (ref) | −0.2291 | −0.3269 | −0.2185 | — | | | |
+| `p_l25_hob2` (25 lands, Hero 2) | −0.2200 | −0.3279 | −0.2240 | **+0.0031** | +0.0025 | +0.0037 | 25 lands slightly worse, replicated |
+| `p_sp2_hob4` (Silverblade 2, Hero 4) | −0.2281 | −0.3212 | −0.2091 | **+0.0041** | +0.0046 | +0.0036 | the 3rd Silverblade is worth ~0.004 at face value |
+| `p_sp2_p21` (Silverblade 2, 25 lands) | −0.2175 | −0.3199 | −0.2153 | **+0.0085** | +0.0073 | +0.0098 | = Silverblade cut + the 25th land, additive |
+| `p_ct2_vk2` (Contender 2) | −0.2244 | −0.3180 | −0.1884 | **+0.0110** | +0.0122 | +0.0099 | worse in every format; std +0.030 |
+| `p_ct3_vk1` (Contender 3) | −0.2202 | −0.3125 | −0.1714 | **+0.0182** | +0.0192 | +0.0171 | monotone worse |
+
+Every step replicates in sign and magnitude across the two seed blocks (the largest disagreement is
+0.0025 on `p_sp2_p21`), and every per-arm `--floor` bracket clears 3x except `p_ct3_vk1` (2.42x, an
+arm-vs-shipped figure that is not the round's question).
+
+**1. The Acclaimed Contender re-open is CLOSED — the card does not earn its slot back with the deploy
+searched.** The precondition was verified from play, not assumed: `logs/wk_screen/dug_probe.py` on 300
+logged games of `p_ct3_vk1` at the screen's own settings (d5/20 ms, own table, own sidecar) finds **9
+casts of a card acquired mid-phase, 8 of them immediately after Acclaimed Contender** — the line that was
+0 of 3,000 before `MTG_BP_ETB_DIG` + the hand-entry adoption. With that line live, two Contenders for two
+Venerable Knights cost **+0.0110** (std +0.030, 2hg +0.009, long +0.005) and three cost +0.0182. The
+deploy fires at about the frequency round L bounded (a few percent of games) and it is not enough: a
+{2}{W} 3/1 that digs is still a worse turn than a {W} 2/1 in a deck whose modal kill is turn 4, and the
+penalty is largest at 20 life, where speed matters most. The user's prediction (*"I somewhat doubt it
+will save the card"*) held. The Contender is out on a fair hearing.
+
+**2. Silverblade: the 3rd copy is worth ~+0.004 at face value** (Hero's 4th as payer; +0.0085 when a
+land pays, i.e. the two costs add). That is the measured price of the soulbond-liability extension — twice
+the noise floor, replicated — and it is a *price*, since a goldfish never breaks the pair. Whether to pay
+0.004 t of modelled speed for removal-resilience is the user's judgement, exactly as the 4th copy was.
+Recommendation: **stay at Silverblade 3**; the ruling's own argument (the 2nd copy at −0.0255 is robust,
+the 3rd/4th at ≈−0.007 are the fragile band) already priced the 4th and this measurement puts the 3rd
+at only 0.004, inside what the ruling accepted for the 4th.
+
+**3. The land count is settled at 24 with a trusted payer.** 23 lands is a null (−0.0011, the two blocks
+straddle zero) and 25 is slightly worse (+0.0031, replicated) with Hero of Bladehold as the payer in both
+directions — so round G's rejection of 25 was NOT the Silverblade bias alone; with a null payer the 25th
+land still costs ~0.003. 23 = 24 means the 24th land is free rather than valuable; keep 24 (the ruling
+paid for it, and a null does not overturn a ruling).
+
+**THE FINAL WhiteKnights LIST IS THEREFORE `m_sp3_p20`, unchanged** — every remaining axis is measured
+flat or adverse, under the adopted engine, on the ruled base:
+
+```
+4 Dauntless Bodyguard   4 Knight Exemplar     3 Silverblade Paladin   1 Sol Ring
+4 Venerable Knight      4 Accorder Paladin    3 Hero of Bladehold     1 Swords to Plowshares
+4 Worthy Knight         4 Benalish Marshal    3 Adeline               1 Unexpectedly Absent
+20 Plains   4 Remote Farm                                             = 60
+```
+
+**Table-era control (10:11 UTC):** the reference's round-M table (pre-adoption) was moved aside
+(`m_sp3_p20.preadopt`), regenerated at HEAD (R=40, 18 min), and the three screen blocks re-run
+(`run_p2.sh` → `out/p2_wk_*.log`). **Every cell of the pooled table reproduces to the digit** — the
+adoption did not move this deck's keep table, so the engine caveat stated before the round is void and
+the steps above are table-symmetric.
+
+Its keep table is on disk (`logs/deckcmp/WhiteKnights/m_sp3_p20/`, regenerated at HEAD by that
+control). What it still owes at adoption is the runbook: archive the shipped list as
+`decks/WhiteKnights/v1-…/` with its references moved, then profile → value leaf → mulligan → suite/GT.
+**Adoption is the user's call** (it discards the shipped keep table, −0.1985 t on its own, and the fitted
+leaf); nothing has been created under `decks/`.
+
 ## RESUME HERE — the road to a FINAL Knights list
 
 **State at 2026-09-27 05:50Z.** *(This block supersedes an earlier one dated 2026-09-26 21:15Z that

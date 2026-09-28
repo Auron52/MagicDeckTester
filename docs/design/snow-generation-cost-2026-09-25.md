@@ -300,6 +300,25 @@ against H5, so that is an estimand change and a script edit, the user's call), o
 aimed at the H4/H5 workload first. Launching as-is is not waste (chunk-atomic, resumable, the box is
 otherwise idle with WhiteKnights parked) but it delivers nothing inside the window.
 
+### 5c. CANCELLED 2026-09-28 07:50 UTC by the user — "a waste of the box as this is too slow to be acceptable"
+
+The run went 19.5 h without a pool death at 32/32 workers (3187% CPU): 2,367 → 4,444 matrix games
+(11% → 21%, ~106 games/h, the expensive H4/H5/V8 cells first), while the driver's remaining estimate
+went 2,286 → 2,391 core-h — it did not fall in 624 core-h of work, because the heavy cells' means kept
+revising upward (H4 630 → 687, V8 137 → 150; slowest game at the 3.5 h hard cap). Honest projection at
+cancel time: ≥ 75 h more, total well above the 71 h of §5b. RSS held at 18.8–19.4 GB under the 21 GB
+cap. Stopped in order: supervisor (pid 561273), tracker, driver (561459), pool (564230) — by PID. The
+pool exited with "incremental generation INCOMPLETE ... re-run to resume"; **nothing was deleted**, the
+banked chunks and `Snow.keepmodel.exhaustive.raw.json.journal` are intact.
+
+**Plan (user, 2026-09-28):** *"we'll try value-leaf for snow again once we have the mulligan profile,
+since another machine is working on that."* So the order for Snow is now mulligan profile (secondary
+box, in flight) → value leaf here, resumed from these chunks (subject to the play digest at that time;
+the keep table's PRESENCE changes play, so expect "PLAY CHANGED — keeping full sets" once it is
+installed). The cost problem itself is unchanged: the levers are §4c's stack (budget-currency repair,
+`MTG_FOLD_SEARCH_ODO`, K 17→16) for the labeller, and for the matrix the H4/H5 workload — a wall-cap
+or ceiling change there alters the estimand and is the user's call.
+
 ## 6. If `MTG_FOLD_SEARCH_ODO` is armed later
 
 If the user arms it, the honest sequence is: prove digest-identity at d2/b1 first, and only then

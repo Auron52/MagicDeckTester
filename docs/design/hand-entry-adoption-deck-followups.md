@@ -82,6 +82,42 @@ A T3 kill lost to a different physical game after the T2/T3 line changed (Stings
 draw). Goblins is net faster (5 faster, 5 in 2HG); this one game is a variance-class persist. Monday:
 b0 both arms; if the flag-off arm also fails to find T3 unbudgeted, it is not a flag regression.
 
+## 2026-09-27 evening — the persisting losses are ONE defect, flag-owned, budget-independent
+
+`logs/hecost/persist_probe.sh` (same binary, the pair ON vs `MTG_BP_HAND_ENTRY=0 MTG_BP_NODE_S10=0`)
+at the case budget, 16x and **unbudgeted**: every persisting game is owned by the flag at every budget —
+hinata gi286 d3/d5 ON=6/OFF=5, gi307 6/5, d5 gi52 5/4, goblins gi525 4/3, snow d3 gi52 ON=unwon/OFF=T8
+(at 10 ms and 160 ms). Isolation on hinata gi286 b0: `MTG_BP_HAND_ENTRY=1 MTG_BP_NODE_S10=0` → T6,
+`MTG_BP_HAND_ENTRY=0 MTG_BP_NODE_S10=1` → T5. **Hand-entry alone owns it; the node host is inert here.**
+
+**Mechanism (hinata gi286, `logs/hecost/hin286_{on,off}.fd`, `hin286_on_census.fd`):** the T3 search
+commits a 5-phase line whose T5 pre-combat phase is `Forbidden Orchard + Expressive Iteration + Reality
+Spasm(x5) | bp[k0:Preordain k0:Ponder] bp_choice=2@2` with `win=5 verified=1`. The commit-time
+replay-on-copy of that phase already predicts **opp 9, not a kill** (`[fd-pred] turn=5 pre opp_life=9`):
+it opens only two breakpoints (`[bp-apply] site=0 idx=0`, `site=3 idx=1`) and never reaches the
+targeted idx 2, because at idx 0 the nested-canon default (`ncands.front()`) resolves to
+[Preordain, Reality Spasm] where the search's own apply of the same plan resolved to [Preordain, Ponder].
+The executor then replays the RECORDED chain — four nested records, `[Preordain Ponder]`, `[Reality
+Spasm Preordain]`, `[Ornithopter, Reality Spasm, Soulfire Eruption]`, `[Irencrag Feat, Crackle with
+Power]` — and **Irencrag Feat fails to pay (`untapped=[]`)**, as do Crackle and the last Reality Spasm.
+So the rollout that produced the line had mana at record 4 that the executor does not have, and the
+same plan re-applied fresh does not even produce the same chain. Two lockstep facts: (1) a plan whose
+un-targeted nested slots take a value-ranked default is not reproducible by re-applying it (the rank
+is not a pure function of state); (2) the recorded chain itself is unrealisable — a rollout/executor
+PAYMENT mismatch inside a nested continuation, still to be located (the fd-pred replay re-derives
+rather than replaying the records, so `[bp-pay] apply` never shows the rollout's payment for the chain).
+
+Hatch (ON arm, b0): `MTG_NO_BP_PREFIX_CACHE=1` T6, `MTG_NO_BP_ENUM_CACHE=1` T6, `MTG_NO_M2_SEARCH_MEMO=1`
+T6, `MTG_BP_BASE_CANON=0` T6, **`MTG_BP_NESTED_CANON=0` T5**. So the nested-canon default (adopted
+2026-09-17 with the greedy deletion) is what turns the extra hand-entry breakpoints into an
+unreproducible chain; with EMPTY at un-targeted nested slots the chain is short and realisable.
+`logs/hecost/persist_nc.sh` re-runs the six games with `MTG_BP_NESTED_CANON=0`; `logs/hecost/nc_tiers.sh`
+runs the three tiers under it (no accept) for the fleet picture. **Not flipped**: reverting a measured
+adoption fleet-wide is the user's call (Monday), and the underlying payment mismatch is the real bug —
+the nested canon only lengthens the chain that exposes it. Also worth checking Monday: the fd-pred
+replay should replay the RECORDS (as the executor does) so the oracle reports the executor's outcome,
+not a re-derivation's.
+
 ## How to run the per-deck check (the same for each)
 
 ```

@@ -246,7 +246,20 @@ Open question for the cast-order hook: `VialProvider::CastOrderRank` under `MTG_
 was reviewed and adopted for the *Knights* list. Whether it transfers to this list is a
 measurement (5e), not an assumption — recorded below once run.
 
-## RESUME HERE — latest state (2026-09-26, after the value-leaf run)
+## RESUME HERE — latest state (2026-09-28: the copy-count campaign is CLOSED; the list is settled)
+
+**2026-09-28, round P** (`knights-copy-count-screen.md` → "Round P RESULT") closed the three items the
+2026-09-27 rulings had left open, on the ruled base and under the hand-entry adoption (`6b9f0cb2`):
+Acclaimed Contender re-opened with the same-turn deploy verified live at searched depth and **still
+loses** (+0.0110 at 2 copies, +0.0182 at 3, replicated); the 3rd Silverblade prices at +0.0041 (a price,
+stay at 3); the land ladder with Hero of Bladehold as payer reads 23 = 24 (null) and 25 = +0.0031, so **24
+stands**. **The final list is `m_sp3_p20`** (the 2026-09-27 ruling's list, unchanged) and **adoption is the
+user's call** — it discards the shipped keep table (−0.1985 t) and fitted leaf, and owes the runbook
+(archive v1 + move references → profile → value leaf → mulligan → suite/GT). Everything below this
+paragraph describes the SHIPPED list's pipeline, which is complete and pushed (the 19 commits went out
+in the 2026-09-27 push).
+
+### Earlier resume block (2026-09-26, after the value-leaf run)
 
 **THE WHOLE PIPELINE IS COMPLETE — profile → value leaf → mulligan, all three stages generated,
 validated and shipping.** The deck carries a fitted value leaf *and* an exhaustive keep+bottoming table.
