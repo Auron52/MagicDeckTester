@@ -375,6 +375,8 @@ public:
     // proposal.md): GAIN / DRAIN / AMP / FUEL / DIG / MANA quotas net of board, interleaved keep
     // ladder, every hand card named. MTG_PD_BUCKET_DISCARD (default ON; =0 ->
     // GenericProvider::CleanupDiscardCandidates, the max-MV fallback). PROVISIONAL (user review).
+    // MTG_PD_SHED_UNPLAYED_LAND (default ON, PROVISIONAL): at a cleanup with the land drop unused and
+    // a live land in hand, that land sheds FIRST -- a deterrent against declining the drop.
     std::vector<int> CleanupDiscardCandidates(
         const GameState& s, const std::vector<std::string>* required_pieces) const override;
 };

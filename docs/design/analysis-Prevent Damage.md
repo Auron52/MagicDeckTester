@@ -1199,3 +1199,83 @@ behaviour exactly.
    re-asking. Unobserved so far (every measured cleanup shed exactly one card).
 9. Timing (Doubt 10): adopt/reject BEFORE the value leaf and keep table are generated — both fit to the
    rollout policy this changes.
+
+### Review item 1, option (b): `MTG_PD_SHED_UNPLAYED_LAND` (2026-09-28, worktree `/tmp/pd-wt`) — ADOPTED default ON, PROVISIONAL
+**Rule.** Inside the 5i policy: at a cleanup (unstaged hand > 7) whose land drop went UNUSED
+(`lands_played_this_turn < LandDropsAvailable()`) with a LIVE land in hand, the worst live land (land keep
+order reversed) is shed FIRST, ahead of S0. A dead Reflecting Pool is not a live land (playing it gains
+nothing; S0 sheds it anyway). Heurarm slot `PD_SHED_UNPLAYED_LAND`; `EnvOn(..., true)`; inert when
+`MTG_PD_BUCKET_DISCARD=0`.
+**Doctrine.** CR 514.1 cleanup discards to hand size; the rule only chooses WHICH card. This deck has
+no landfall, no Karoo, and Manabarbs punishes TAPPING lands, not playing them, so "skip the drop, pitch
+a spell" is weakly dominated by "play the land, keep the spell"; shedding the land makes the decline
+cost exactly that land. **Visibility:** both cleanups read `lands_played_this_turn` BEFORE the
+turn-start reset (GameEngine::CleanupStep precedes UntapStep; TurnSolver::SimulateEndAndStartNextTurn
+sheds before its reset), through the one provider function, so executor and rollout agree. PD has no
+searched-discard width (index 0 is the rollout's shed).
+**Unit tests** (`test_prevent_damage_discard.cpp`): the proposal boards now set `lands_played_this_turn
+= 1` (they are cleanups at which the drop was spent; T1-T11 unchanged). New: a T1 8-card board, drop
+unused — fix OFF sheds a spell (control), fix ON sheds a land, remainder identical; inert when the drop
+is spent, at 7 cards, and with the policy OFF (== generic); dead-Pool-only hand inert. 14/14.
+
+**Paired A/B, ONE pooled batch** (d5 b20, profile attached, 20 threads, 12 jobs = 3 arms x 4 seed
+sets x 300; heartbeat 20/20). The `nofix` and `off` digests on 50001/51001 are byte-identical to the
+e4524d71 run (determinism check). Loss scored 9.
+
+| arm | s50001 | s51001 | s52001 | s53001 | train | held-out | all 1200 |
+|---|---|---|---|---|---|---|---|
+| fix (policy ON + fix ON) | 5.7833 | 5.7600 | 5.7833 | 5.6633 | 5.7717 | **5.7233** | 5.7475 |
+| nofix (policy ON, fix OFF) | 5.7800 | 5.7600 | 5.7833 | 5.6700 | 5.7700 | 5.7267 | 5.7483 |
+| off (policy OFF) | 5.7767 | 5.7567 | 5.7767 | 5.6733 | 5.7667 | 5.7250 | 5.7458 |
+
+| pair (+ = first worse) | train | held-out | all (n=1200) |
+|---|---|---|---|
+| fix - nofix | +0.0017 t=+0.33, 3w/3b | -0.0033 t=-1.42, 0w/2b | **-0.0008 t=-0.30, 3w/5b**, 41 play-changed |
+| fix - off | +0.0050 t=+1.34, 4w/1b | -0.0017 t=-0.45, 2w/3b | **+0.0017 t=+0.63, 6w/4b**, 63 play-changed |
+| nofix - off (the policy alone) | +0.0033 t=+0.82, 4w/2b | +0.0017 t=+0.58, 2w/1b | **+0.0025 t=+1.00, 6w/3b** |
+
+**Land-drop skips** (a turn with a land in hand and no PLAY_LAND; from full per-game traces):
+
+| arm | T1 skips (train+held-out) | ...of which ended in a cleanup shed | skips, any turn |
+|---|---|---|---|
+| fix | 9 + 4 = 13 | **1** | 42 |
+| nofix | 11 + 6 = 17 | 6 | 43 |
+| off | 5 + 8 = 13 | 4 | 37 |
+
+**Target games.** s51001 gi160 (unwon -> 8) and gi290 (6 -> 5) RECOVER: with the fix the search plays
+the T1 land. s50001 gi283 does NOT (6 in both ON arms, 5 OFF) — and the e4524d71 attribution of it was
+WRONG: gi283 is ON THE PLAY, 7 cards at T1, **no cleanup at all**; its T1 skip cannot be reached by a
+cleanup rule. s50001 gi0 (7 -> 8) is the known DIG1-protects-far-Beseech doctrine case (unchanged).
+
+**Every worse game root-caused** (mulligans identical in ALL changed games, both pairs):
+* fix vs nofix worse: **gi108 s50001 (6->7)** and **gi156 s51001 (6->8)** — the search skipped the drop
+  ANYWAY and the fix then shed a real land (gi108: Coliseum T1 AND Brushland T2). The deterrent failed
+  to deter. Root cause, from `MTG_TRACE=search,plans` on gi108 T1: `EnumeratePlansWithLand -> 5 plans`
+  (4 lands + no-land), `pass=1 done win=9` — **no plan wins inside the horizon**, so every plan is a
+  no-win leaf and the land plans TIE with the no-land plan; losing a land only matters if it moves the
+  (non-existent) projected win. Neither `MTG_PD_LEAF_OWN_LIFE=0` nor `MTG_LEAF_TB_PERMS=1` changes the
+  gi108 choice (both repro'd: still skips, 7), so it is not the own-life leaf term and not simply the
+  permanent-count tie-break. gi243 s51001 (5->6): the fix arm casts a T2 Rolling Earthquake off a
+  different rollout valuation — a search tie flip.
+* fix vs off worse, additionally: gi283 (above), gi86 s52001 (T1 land CHOICE differs: Reflecting Pool
+  vs Citadel), gi289 s52001 (T2 skip, no shed). All search tie flips driven by rollout-cleanup
+  valuations, not a mis-ranked real cleanup.
+
+**Decision: ADOPT default ON (PROVISIONAL, user review).** The bar was "non-inferior to policy-OFF and
+>= policy-ON-without-fix": fix vs nofix -0.0008 (t=-0.30; held-out -0.0033, 0 worse / 2 better), fix vs
+off +0.0017 (t=+0.63, inside noise — and smaller than the policy-alone's +0.0025). It cuts T1
+skip-and-shed from 6 to 1. Its downside is real and bounded: when the search skips anyway (the
+no-win-horizon tie), it costs a real land (gi108, gi156). `MTG_PD_SHED_UNPLAYED_LAND=0` hatch.
+
+**The policy itself (for the USER; default NOT flipped).** Combined 1200 paired games, policy (nofix)
+vs OFF: +0.0025 t=+1.00; held-out alone +0.0017 t=+0.58. **Not worse beyond noise — but there is no
+evidence it is better either;** every point estimate leans slightly against it, and the adopted
+combination (fix) vs OFF is +0.0017 t=+0.63. Whether a policy that is at best neutral should ship
+default ON is the user's call.
+
+**NEW follow-up (option (c), not done): the T1 land skip is a SEARCH behaviour present in every arm**
+(13 of 1200 games even with the policy OFF). Mechanism: at T1 no plan wins inside the d5 horizon
+(win=9), so the land/no-land plans tie and the no-land plan can be committed. The discard rule only
+changes what the tie costs. A development-aware no-win tie-break that prices an unused land drop
+(the Karoo-class idea behind `MTG_LEAF_TB_PERMS`, which alone did not fix gi108) is the real fix;
+it needs its own investigation of why the tie survives TB_PERMS.

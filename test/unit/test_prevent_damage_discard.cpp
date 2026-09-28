@@ -84,6 +84,9 @@ GameState MakePd(const std::vector<std::string>& hand, const std::vector<std::st
     };
     for (const std::string& n : board)     { put(n, 0); }
     for (const std::string& n : opp_board) { put(n, 1); }
+    // The proposal's boards are cleanups at which the turn's land drop was SPENT; the unplayed-land
+    // deterrent (MTG_PD_SHED_UNPLAYED_LAND) has its own cases below that reset this to 0.
+    s.players[0].lands_played_this_turn = 1;
     return s;
 }
 
@@ -255,4 +258,68 @@ TEST_CASE("PD discard: Shriekmaw is NEG only while the opponent has no creature"
     const std::vector<int> o = Pd(with_opp);
     CheckPermutation(with_opp, o);
     CHECK(o.front() == 0);
+}
+
+// MTG_PD_SHED_UNPLAYED_LAND: the A/B's worse-game shape (s50001 gi283) -- a turn-1 cleanup at 8 cards
+// with no land on board, the drop UNUSED, no gain engine anywhere, Manabarbs in hand. The 5i policy
+// alone sheds Manabarbs (R2: passive fuel is dead without a gain engine), which made declining the
+// drop look free to the search; with the deterrent a land goes first. (On this exact board the
+// policy's own first shed is the drainer-less Faithmender; what matters is that it is a spell.)
+TEST_CASE("PD discard: an unused land drop sheds a held land FIRST (control arm must differ)")
+{
+    GameState s = MakePd(
+        { "Manabarbs", "Beseech the Queen", "City of Brass", "Tarnished Citadel", kDina,
+          "Spellshock", "Rhox Faithmender", "Grand Coliseum" },
+        {});
+    s.turn_number = 1;
+    s.players[0].lands_played_this_turn = 0;
+    auto is_land_idx = [&](int i) { return CleanupDiscardIsLand(s.players[0].hand[static_cast<std::size_t>(i)]); };
+
+    heurarm::t_arm[heurarm::PD_SHED_UNPLAYED_LAND] = 0;
+    const std::vector<int> off = Pd(s);
+    heurarm::t_arm[heurarm::PD_SHED_UNPLAYED_LAND] = 1;
+    const std::vector<int> on = Pd(s);
+    CheckPermutation(s, on);
+    CHECK(!is_land_idx(off.front()));    // control: the policy alone pitches a SPELL (Faithmender:
+                                         // an AMP with no Vito-type drainer is unprotected)
+    CHECK(is_land_idx(on.front()));      // the deterrent: a land
+    CHECK(on != off);                    // the control that MUST differ
+    // The rest of the order is the policy's, minus the land that moved to the front.
+    std::vector<int> rest(on.begin() + 1, on.end());
+    std::vector<int> off_minus = off;
+    off_minus.erase(std::find(off_minus.begin(), off_minus.end(), on.front()));
+    CHECK(rest == off_minus);
+
+    // Drop SPENT: inert.
+    GameState spent = s;
+    spent.players[0].lands_played_this_turn = 1;
+    CHECK(Pd(spent) == off);
+    // Not over the hand limit (a non-cleanup discard, where the land could still be played): inert.
+    GameState seven = s;
+    seven.players[0].hand.pop_back();
+    heurarm::t_arm[heurarm::PD_SHED_UNPLAYED_LAND] = 0;
+    const std::vector<int> seven_off = Pd(seven);
+    heurarm::t_arm[heurarm::PD_SHED_UNPLAYED_LAND] = 1;
+    CHECK(Pd(seven) == seven_off);
+    // Policy OFF: the deterrent lives inside the policy, so the generic ranking is untouched.
+    heurarm::t_arm[heurarm::PD_BUCKET_DISCARD] = 0;
+    CHECK(Pd(s) == Gen(s));
+    heurarm::t_arm[heurarm::PD_BUCKET_DISCARD] = -1;
+    heurarm::t_arm[heurarm::PD_SHED_UNPLAYED_LAND] = -1;
+}
+
+TEST_CASE("PD discard: an unused drop with only a DEAD Reflecting Pool in hand is not a skipped land")
+{
+    GameState s = MakePd(
+        { "Manabarbs", "Beseech the Queen", "Reflecting Pool", kDina, "Spellshock", "Rhox Faithmender",
+          "Tamanoa", "Pyrohemia" },
+        {});
+    s.turn_number = 1;
+    s.players[0].lands_played_this_turn = 0;
+    heurarm::t_arm[heurarm::PD_SHED_UNPLAYED_LAND] = 0;
+    const std::vector<int> off = Pd(s);
+    heurarm::t_arm[heurarm::PD_SHED_UNPLAYED_LAND] = 1;
+    CHECK(Pd(s) == off);
+    CHECK(off.front() == 2);   // S0 (c) sheds the dead Pool anyway
+    heurarm::t_arm[heurarm::PD_SHED_UNPLAYED_LAND] = -1;
 }

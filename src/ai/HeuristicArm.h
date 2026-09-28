@@ -271,6 +271,7 @@ enum Slot : int
     PD_LEAF_OWN_LIFE,         // MTG_PD_LEAF_OWN_LIFE      Prevent Damage: the no-win leaf tie-break also prices OUR life, strictly under the opponent-life term (life is this deck's fuel: pain, Spellshock and Manabarbs spend it). Stage 5 lever; see PreventDamageProvider::NoWinLeafPricesOwnLife
     PD_PAIN_PAY,              // MTG_PD_PAIN_PAY           Prevent Damage: PAIN-AWARE mana payment (dmgev::PainAwarePay) -- a payment never pays itself dead when a survivable assignment exists; with no gain engine it takes the MINIMUM-damage assignment (pain + Manabarbs); with one it prefers pain inside the safety bound. Default ON (claude-play sweep gi9/gi2, 2026-09-27); =0 = the pain-blind payer
     PD_BUCKET_DISCARD,        // MTG_PD_BUCKET_DISCARD     Prevent Damage: the authored 5i bucketed cleanup-shed policy (PreventDamageProvider::CleanupDiscardCandidates). Default ON (PROVISIONAL, user review); =0 = the generic max-MV fallback
+    PD_SHED_UNPLAYED_LAND,    // MTG_PD_SHED_UNPLAYED_LAND Prevent Damage (inside the 5i policy): at a cleanup whose land drop went UNUSED with a live land in hand, that land is shed FIRST -- so declining the drop to pitch a spell is strictly dominated by playing the land. Only when MTG_PD_BUCKET_DISCARD is on
     COUNT
 };
 
@@ -508,6 +509,7 @@ inline const char* Name(int slot)
         "MTG_PD_LEAF_OWN_LIFE",
         "MTG_PD_PAIN_PAY",
         "MTG_PD_BUCKET_DISCARD",
+        "MTG_PD_SHED_UNPLAYED_LAND",
     };
     // The enum and this table are ONE mapping split across two lists: a slot added to one and not
     // the other silently shifts every lever after it (a manifest asking for lever X would set Y).

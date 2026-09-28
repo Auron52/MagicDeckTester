@@ -10584,6 +10584,30 @@ std::vector<int> PreventDamageProvider::CleanupDiscardCandidates(
     };
     auto put_unkept = [&](int i) { if (!keep[static_cast<std::size_t>(i)]) { put(i); } };
 
+    // UNPLAYED-LAND DETERRENT (MTG_PD_SHED_UNPLAYED_LAND). At a cleanup (hand over the limit of 7)
+    // whose land drop went UNUSED while a live land sits in hand, that land is shed FIRST -- ahead
+    // of S0. Doctrine: this deck has no landfall, no Karoo and no reason to sandbag a land (Manabarbs
+    // punishes TAPPING lands, not playing them), so "skip the drop, then pitch a spell at cleanup" is
+    // weakly dominated by "play the land, keep the spell" -- a battlefield land is worth at least a
+    // held one. Without this the search found that line looking FREE: with no gain engine the bucket
+    // order makes a Manabarbs the most expendable card and the rollout misplays Manabarbs, so shedding
+    // it scored better than holding it, and the search declined T1 land drops to reach an 8-card
+    // cleanup (A/B e4524d71, s50001 gi283 / s51001 gi160, gi290). Shedding the land instead makes the
+    // decline cost exactly the land, which the search then prices. The worst live land goes (the
+    // land keep order reversed); a DEAD Reflecting Pool is not a live land -- playing it gains
+    // nothing, so skipping it is no misplay, and S0 already sheds it. Reads lands_played_this_turn,
+    // which both cleanups see before the turn-start reset (GameEngine::CleanupStep precedes
+    // UntapStep; TurnSolver::SimulateEndAndStartNextTurn sheds before its reset) -- one reader here,
+    // so executor and rollout cannot disagree. The hand-size gate keeps a non-cleanup discard (a
+    // mid-turn outlet, where the land could still be played) out of it; this deck has none.
+    {
+        static const bool s_unplayed = EnvOn("MTG_PD_SHED_UNPLAYED_LAND", true);   // DEFAULT ON; =0 disables
+        int unstaged = 0;   // the limit counts unstaged cards, as both cleanups do
+        for (const Card& hc : ap.hand) { if (!hc.m_is_staged) { ++unstaged; } }
+        if (heurarm::Flag(heurarm::PD_SHED_UNPLAYED_LAND, s_unplayed)
+            && unstaged > 7 && ap.lands_played_this_turn < ap.LandDropsAvailable() && !lands.empty())
+        { put(lands.back()); }
+    }
     // S0 dead: (a) duplicate legend, (b) target-less tutor, (c) dead Reflecting Pool; then hand order.
     for (int pass = 0; pass < 3; ++pass)
     {
