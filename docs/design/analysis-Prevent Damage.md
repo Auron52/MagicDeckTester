@@ -1020,3 +1020,80 @@ pooled batch, cut vs nocut, 1,800 paired games (d5 b20 s40001/s41001 x300, d3 b1
 rollouts** (so the equality had power). Cost: -1.4% / -0.4% (d5), -2.2% / +5.6% (d3) — inside run
 noise. The cut turns are the cheap tail; nearly all bottoming cost is in candidates that TIE the best
 and must be played in full. **Reverted** (no measurable benefit for the added surface).
+
+### P5. Lossless per-unit work — ADOPTED (`6a8f09ba`)
+Two byte-identical strength reductions from the P3 profile: (1) the tutor candidate list is built in
+ONE walk — `GenericProvider::TutorCandidates` tracks distinct names by interned pointer instead of an
+`unordered_set<string>`, and `PreventDamageProvider`'s nonlands-first order comes out of the same walk
+(no per-name string `Lookup`); (2) `PaymentDamageFloor`'s DP decodes each state's mixed-radix digits
+once per call instead of once per (source, state), and computes the successor index by difference.
+Verification: PD 600 games at the P1 suite rows **per-game identical** (all four `.wins` files and
+digests); smoke **101/101, play-changed 0**; mtg-test 304/304; scenarios 117/117. Cost: **-3.4% CPU on
+PD play** (play-only, 3/3 interleaved reps vs a worktree build of the committed tree, 30.16 -> 29.14
+CPU-s). Invisible in the with-bottoming totals (inside run noise).
+
+### P6. `MTG_PD_PAIN_PAY` re-priced (play-only probe, s40001 + s41001 x 200, one batch)
+ON 1,206,809 ms vs OFF 1,074,972 ms = **1.12x** (was 1.15x before P5's DP fix). Quality OFF-minus-ON
++0.025 / +0.015 (ON better, as recorded). `MTG_PD_PAY_STATS`: 30.1M policy calls, 17.6M harmful-mode
+(14.65M on the exact DP path, 0 exact-retry failures), 12.5M useful-mode. What remains is the DP plus
+the per-payment board scans (`PaymentPainSafe`, `CountTamanoa`, `SelfDamageUseful`, `PaymentDamage`),
+i.e. ~12% of play — not a lever that moves the gate either way. Default stays ON (PROVISIONAL, as
+recorded).
+
+### P7. Certificate (`ProvenWinlessThisTurn`) — NOT BUILT, and why it cannot move the 5j gate
+`WinlessCertificateActive` (TurnSolver) consults the hook only inside `LabelSearchScopeActive()` —
+the value-leaf LABEL ladder and the unbounded depth-matrix cells — because pruning consumes no work
+units and would change play under a budget. **The suite rows are budgeted play, so a certificate
+cannot change `cost_per_game_ms` at all.** Its payoff is the VALUE-LEAF GENERATION (Fungus: 1.9x
+label speedup), which is itself blocked by this gate. Deferred; `Certificate()` stays `NotAssessed`.
+The sound shape when it is built (for the VL stage):
+- **Tier 1 (cheap, likely the common fire):** no drain engine (Vito / Dina) on the battlefield AND
+  none REACHABLE this turn — not in hand, and no tutor in hand that could fetch one (Beseech ->
+  library MV <= lands, GSZ -> green creature MV <= X puts Dina onto the battlefield, Living Wish ->
+  sideboard) — then the opponent's loss is bounded by combat (power of creatures that can attack NOW;
+  nothing in the 75 grants haste — verify by NAME whitelist, the Fungus rule) + direct damage
+  (Earthquake X and each Pyrohemia ping deal <= 1 opponent damage per mana, so <= this turn's total
+  mana: untapped sources at their max yield, + floating, + one land drop at max yield).
+- **Tier 2 (drain present):** additionally bound lifegain EVENTS (land taps x Manabarbs copies, casts
+  x Spellshock copies, pain taps, Pyrohemia activations, Earthquake casts, combat with Vito's
+  lifelink) x per-event gain (damage x 2^Faithmenders + Bilbos, counting ones fetchable this turn)
+  x Vitos, + events x Dinas. Only worth it if Tier 1's fire rate is too low.
+- Name whitelist over hand / battlefield / graveyard / sideboard; decline on any unknown card; audit
+  with `MTG_WINLESS_AUDIT` before adoption.
+
+### P8. VERDICT — the 5j gate is NOT met with sound, adopted levers
+| state | worst suite row (d5 b20 s2002) | vs 3,100 budget |
+|---|---|---|
+| BEFORE (HEAD `87a8526e`) | 12,174 ms/game | 3.93x |
+| AFTER (`6a8f09ba`, P5 adopted) | 12,331 ms/game (same games; run noise) | 3.98x |
+| play-only (no bottoming rollouts; probe) | ~3,100-3,224 ms/game (P3; -3.4% after P5) | ~1.0x |
+
+- **68% of the cost is clairvoyant London bottoming** (24 s per bottom decision: every legal removal
+  played to the end at full play settings). No lossless reduction exists (P4: the cut-able tail is
+  cheap; the cost is in candidates that tie the best). Every cheaper bottomer loses quality in ONE
+  direction (P2: 55/0, 24/1, 8/1 worse/better) — it is an oracle on the true draws.
+- **Every reference deck in the gate's table is measured WITH its exhaustive keep/bottom table**
+  (`AIEngine::BottomCards`' table path runs before, and replaces, these rollouts) **and with its
+  value leaf.** PD has neither, and both generators refuse a deck outside the suite — the gate as
+  applied here compares PD's pre-artifact cost with peers' post-artifact cost. The play search alone
+  is ~1.0x the budget, before the value leaf (which cut Giants to 0.14x).
+- **What would be needed:** the mulligan (exhaustive keep/bottom) table removes the 68% outright;
+  then ~1.0x remains, which the value leaf is expected to clear. Both require the USER to lift the
+  gate for this deck (`MTG_ALLOW_UNTESTED_DECK=1` is user-only) or to rule that the gate measures
+  post-artifact cost. **Default taken: nothing adopted that costs quality; deck NOT added to any
+  tier.** (Alternative the user could choose instead: ship `bottom_eval_depth 0, topk 5` — 0.67x,
+  +0.013 turns/game, t=2.3 — which still leaves ~8 s/game, 2.6x over; not recommended.)
+
+### P9. PROPOSED suite rows (NOT added — for the step that adds them once the gate passes)
+Key `pd` (`[pd]="decks/Prevent Damage/Prevent Damage.cod"` + `.profile.json`), shaped on melira (the
+costliest peer family); `pd2hg` because Dina ("each opponent"), Rolling Earthquake / Pyrohemia ("each
+player") and Vito ("target opponent") all read opponents / life. Probe costs at the CURRENT state
+(with bottoming rollouts; 20 threads): d0 0.26 ms, d3 b10 5.8-7.5 s, d5 b20 8.3-12.2 s, 2HG d3
+7.8 s, 2HG d5 8.5 s per game (2HG probes n=40-60).
+| tier | rows | est. core-min now | est. after artifacts |
+|---|---|---|---|
+| smoke | `pd 0 1001 1000 0` · `pd 3 1001 25 10` · `pd 5 1001 15 20` · `pd2hg 3 1001 15 10` | ~7 | ~2 |
+| regression | `pd 0 2002 1000 0` · `pd 3 2002 40 10` · `pd 3 3003 40 10` · `pd 5 2002 25 20` · `pd 5 3003 25 20` · `pd2hg 3 2002 25 10` | ~22 | ~6 |
+| overnight | `pd 0 {4004,6006,8008,10010} 2000 0` · `pd 3 {4004..7007} 100 10` · `pd 5 {4004..7007} 75 20` · `pd2hg 5 {4004..7007} 50 20` | ~155 | ~40 |
+Smoke's per-game tail (a 30-90 s SLOW-GAME is common at d5) matters more than its total: keep the d5
+count low. "After artifacts" assumes the bottoming share disappears and play stays ~1.0x budget.
