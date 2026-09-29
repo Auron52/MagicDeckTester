@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <cockatrice_deck version="1">
-    <lastLoadedTimestamp>Mon Sep 29 01:45:00 2026</lastLoadedTimestamp>
+    <lastLoadedTimestamp>Fri Sep 25 13:55:05 2026</lastLoadedTimestamp>
     <deckname></deckname>
     <format></format>
     <bannerCard providerId=""></bannerCard>
@@ -10,17 +10,19 @@
         <card number="4" name="Dauntless Bodyguard"/>
         <card number="4" name="Venerable Knight"/>
         <card number="4" name="Worthy Knight"/>
-        <card number="4" name="Accorder Paladin"/>
+        <card number="3" name="Acclaimed Contender"/>
+        <card number="1" name="Valiant Knight"/>
         <card number="4" name="Knight Exemplar"/>
-        <card number="4" name="Benalish Marshal"/>
-        <card number="3" name="Silverblade Paladin"/>
-        <card number="3" name="Adeline, Resplendent Cathar"/>
-        <card number="2" name="Hero of Bladehold"/>
-        <card number="1" name="Kinsbaile Cavalier"/>
+        <card number="3" name="Hero of Bladehold"/>
+        <card number="22" name="Plains"/>
         <card number="1" name="Sol Ring"/>
         <card number="1" name="Swords to Plowshares"/>
         <card number="1" name="Unexpectedly Absent"/>
-        <card number="20" name="Plains"/>
-        <card number="4" name="Remote Farm"/>
+        <card number="4" name="Accorder Paladin"/>
+        <card number="1" name="Silverblade Paladin"/>
+        <card number="1" name="Adeline, Resplendent Cathar"/>
+        <card number="3" name="Aether Vial"/>
+        <card number="1" name="Lightning Greaves"/>
+        <card number="2" name="Benalish Marshal"/>
     </zone>
 </cockatrice_deck>
