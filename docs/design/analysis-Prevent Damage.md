@@ -1705,3 +1705,56 @@ PROPOSED search-only cuts (not built; A/B pending, USER doctrine for 4): (1) Bes
 (which? it mostly fetches Ancient Tomb) ~-15% candidates; (2) drop GSZ X=0 (a clairvoyant reshuffle
 in goldfish); (3) Earthquake X in {1, 2, lethal X, max} ~-5%; (4) optionally a Beseech doctrine list
 like the Wish's. Also: re-measure the gate on a QUIET box (suite_gate --measure-all style).
+
+### O8. Rolling Earthquake X doctrine (USER 2026-09-29) -- no-overkill + top-X ADOPTED default ON, PROVISIONAL
+
+The user's rule, verbatim: *"for Rolling Earthquake X it makes no sense to do less than the toughness of
+your creatures assuming you have remaining mana ... Killing them is usually bad ... if Vito dies, then he
+cannot make the opponent lose life ... Naturally, if they have X life remaining, that might make sense."*
+The **survival ceiling** is the largest X all of OUR creatures survive: lethal toughness minus the damage
+already marked, minus 1. Indestructible creatures are ignored. Three levers:
+
+| Lever | What it does | Status |
+|---|---|---|
+| `MTG_PD_QUAKE_NO_OVERKILL` (provider `XCandidates`) | No X above the ceiling, except the smallest X that is lethal to the opponent by itself (X x heads >= their life) | **ADOPTED default ON**, PROVISIONAL |
+| `MTG_PD_QUAKE_TOP_X` (`EnumeratePlans` post-dedupe) | Among plans IDENTICAL except for the quake's X, keep only the largest X at or below the ceiling. The ceiling also counts the creatures this plan casts | **ADOPTED default ON**, PROVISIONAL |
+| `MTG_PD_QUAKE_NO_UNDERSHOOT` (provider `XCandidates`) | No X below the ceiling, per card | **REFUTED**, default OFF |
+
+**Round 1** (seeds 80001 + 81001 x300, 2HG 82001 x150; d5 b20; one pooled batch, so contention hits
+every arm equally):
+
+| Arm | Δ turns/game | t | worse / better | CPU |
+|---|---|---|---|---|
+| U (no undershoot) | +0.045 | +4.78 | 40 / 6 | 1.00x |
+| O (no overkill) | -0.011 | -2.32 | 2 / 10 | 0.93x |
+| UO (both) | +0.029 | +3.19 | 34 / 11 | 0.85x |
+
+- **Why U is refuted.** In U's worse games the base cast **Vito + a quake in the same turn** (Vito +
+  X=1 on 5 mana). X is fixed before the rest of the plan exists, so a per-card floor deletes the smaller X
+  that PAYS for the other cast. That is the user's "assuming you have remaining mana" caveat. TOP_X is the
+  plan-level form: a smaller X that funds another cast belongs to a different plan and survives.
+- **O's 2 worse games** involve no overkill in the base, so they are search-path churn.
+
+**Round 2** (held-out seeds 83001 + 84001 x300, 2HG 85001 x150):
+
+| Arm | vs | Δ turns/game | t | worse / better | CPU |
+|---|---|---|---|---|---|
+| O | base | +0.005 | +0.85 | 13 / 9 | 0.98x |
+| O + TOP_X | base | 0.000 | 0.00 | 12 / 12 | **0.94x** (2HG 0.90x) |
+| O + TOP_X | O | -0.005 | -2.00 | 0 / 4 | 0.96x |
+
+- **Chosen X** (quakes per 750 games): base 555, X>=3 in 33 of them. O+TOP_X 549, X>=3 in 13.
+  Own-creature losses to our quake: 46 -> 33.
+- **Four of O's 13 worse games are real counterexamples** to "never kill our creatures":
+  - s83001 gi67 and s84001 gi255: the base cast Vito and quaked X=2, killing **Dina (2/2)** to keep Vito
+    alive on a bigger drain.
+  - s83001 gi169 and s84001 gi197: a turn-7 X=6 killed **Tamanoa**. Tamanoa still triggers for the event's
+    TOTAL (look-back), so the big X paid off.
+- **Net:** the doctrine is right on balance. The O + TOP_X pair is quality-neutral at 0.94x CPU, which
+  meets the adoption bar (neutral with upside) and is the user's rule.
+- Both levers are gated on `x_damage_each_creature_and_player`, which only Rolling Earthquake carries, so
+  no other deck moves (smoke). Unit tests: `test_prevent_damage_spells.cpp` "survival ceiling" and "TOP-X".
+
+**USER QUESTION (non-blocking, default taken = strict ceiling over ALL our creatures):** should the
+ceiling exempt Dina when Vito survives, and Tamanoa at a big X? The counterexamples say yes sometimes,
+but there are only 4 games. The refinement is one more arm to measure.

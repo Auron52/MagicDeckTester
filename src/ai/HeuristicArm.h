@@ -279,6 +279,9 @@ enum Slot : int
     PD_WISH_VITO_OVER_DINA,   // MTG_PD_WISH_VITO_OVER_DINA Prevent Damage (inside MTG_PD_WISH_TRIM): in 1v1, while Vito is fetchable and not held, Dina is not a Wish target (Vito's drain is the amount gained, Dina's 1 per event; 2HG keeps Dina). USER 2026-09-29, measurement lever, default OFF
     PD_ZENITH_SKIP_DINA,      // MTG_PD_ZENITH_SKIP_DINA   Prevent Damage: Green Sun's Zenith does not fetch Dina (search only) while a Dina is ours on the battlefield, or in hand and castable ({B}+{G} from distinct lands incl. one land drop) -- legend rule. USER 2026-09-29. =0 = every target
     BOTTOM_NAME_DEDUPE,       // MTG_BOTTOM_NAME_DEDUPE    clairvoyant London bottoming rolls out ONE game per distinct removal by NAME (a second copy of a name, or a subset differing only in which copy, reuses the first's win turn). Cost lever, default ON (PD A/B byte-identical, -14% CPU); =0 = one rollout per physical card / mask
+    PD_QUAKE_NO_UNDERSHOOT,   // MTG_PD_QUAKE_NO_UNDERSHOOT Prevent Damage: Rolling Earthquake X is never BELOW the survival ceiling (one less than the smallest lethal-toughness margin among OUR creatures -- board, plus the castable creatures in hand as a second ceiling), capped at max. USER 2026-09-29: "it makes no sense to do less than the toughness of your creatures". X = 0 under Spellshock kept. REFUTED 2026-09-29 (+0.045t, t=+4.8: it deleted the smaller X that PAYS for a same-turn Vito) -- superseded by MTG_PD_QUAKE_TOP_X, default OFF
+    PD_QUAKE_NO_OVERKILL,     // MTG_PD_QUAKE_NO_OVERKILL  Prevent Damage: Rolling Earthquake X never kills one of OUR creatures (above the ceiling) unless X alone is lethal to the opponent -- USER 2026-09-29: "killing them is usually bad ... if Vito dies he cannot make the opponent lose life ... if they have X life remaining, that might make sense". ADOPTED default ON 2026-09-29, PROVISIONAL (with TOP_X: 0.000t on held-out seeds, 0.94x CPU; counterexamples = a Dina killed to feed Vito a bigger X, a Tamanoa killed by a late X=6)
+    PD_QUAKE_TOP_X,           // MTG_PD_QUAKE_TOP_X        Prevent Damage: among plans IDENTICAL except for Rolling Earthquake's X, keep only the LARGEST X at or below the survival ceiling (our board creatures AND the creatures this plan casts) -- the USER's "no sense to do less than the toughness ... assuming you have remaining mana", at PLAN level: a smaller X that pays for another cast is a different plan and survives. X above the ceiling untouched. ADOPTED default ON 2026-09-29, PROVISIONAL (vs no-overkill alone: -0.005t, 0 worse / 4 better, 0.96x)
     COUNT
 };
 
@@ -524,6 +527,9 @@ inline const char* Name(int slot)
         "MTG_PD_WISH_VITO_OVER_DINA",
         "MTG_PD_ZENITH_SKIP_DINA",
         "MTG_BOTTOM_NAME_DEDUPE",
+        "MTG_PD_QUAKE_NO_UNDERSHOOT",
+        "MTG_PD_QUAKE_NO_OVERKILL",
+        "MTG_PD_QUAKE_TOP_X",
     };
     // The enum and this table are ONE mapping split across two lists: a slot added to one and not
     // the other silently shifts every lever after it (a manifest asking for lever X would set Y).

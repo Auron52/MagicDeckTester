@@ -38083,6 +38083,62 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
         }
     }
 
+    // ROLLING EARTHQUAKE TOP-X (MTG_PD_QUAKE_TOP_X, ADOPTED default ON 2026-09-29, PROVISIONAL; USER doctrine 2026-09-29: "it makes
+    // no sense to do less than the toughness of your creatures, assuming you have remaining mana").
+    // Among plans that differ ONLY in the quake's X, keep the largest X at or below this plan's
+    // survival ceiling -- our board creatures' lethal margin less 1, and the toughness less 1 of every
+    // creature THIS plan casts (conservative: a creature cast after the quake is not hit). A smaller
+    // X that pays for another cast is a DIFFERENT plan (its other casts differ) and survives -- which
+    // is exactly what the per-X provider rule could not see (its A/B: +0.045t, the Vito + X=1 turn).
+    // X above the ceiling is untouched (MTG_PD_QUAKE_NO_OVERKILL's business). Search only.
+    {
+        static const bool s_topx_env = EnvOn("MTG_PD_QUAKE_TOP_X", true);
+        if (heurarm::Flag(heurarm::PD_QUAKE_TOP_X, s_topx_env) && !s_human_play_sig
+            && !DecisionUnpruned(UnprunedGate::XSpell))
+        {
+            const int me = state.active_player_index;
+            int board_ceil = 1 << 20;
+            for (const Permanent& q : state.battlefield)
+            {
+                if (q.controller_index != me || !q.card.IsCreature()) { continue; }
+                if (q.card.HasKeyword(Keyword::Indestructible)) { continue; }
+                board_ceil = std::min(board_ceil, std::max(0, LethalToughness(q, state) - q.damage - 1));
+            }
+            // key (plan without the quake's X) -> (index of the best kept plan, its X)
+            std::unordered_map<std::string, std::pair<std::size_t, int>> best;
+            std::vector<char> drop(deduped.size(), 0);
+            for (std::size_t i = 0; i < deduped.size(); ++i)
+            {
+                const TurnSolver::Plan& p = deduped[i];
+                int qi = -1, ceil = board_ceil;
+                for (std::size_t k = 0; k < p.actions.size(); ++k)
+                {
+                    const Action& a = p.actions[k];
+                    if (a.kind != Action::Kind::CastFromHand || a.def == nullptr) { continue; }
+                    if (a.def->params.x_damage_each_creature_and_player)
+                    { if (qi >= 0) { qi = -2; break; } qi = static_cast<int>(k); continue; }
+                    if (a.def->card.IsCreature() && a.def->card.m_toughness.has_value()
+                        && !a.def->card.HasKeyword(Keyword::Indestructible))
+                    { ceil = std::min(ceil, std::max(0, *a.def->card.m_toughness - 1)); }
+                }
+                if (qi < 0) { continue; }                  // no quake, or two (left alone)
+                const int x = p.actions[static_cast<std::size_t>(qi)].chosen_x;
+                if (x <= 0 || x > ceil) { continue; }      // X = 0 (Spellshock) and overkill untouched
+                TurnSolver::Plan k = p;
+                k.actions[static_cast<std::size_t>(qi)].chosen_x = -99;
+                const std::string key = plan_signature(k);
+                auto it = best.find(key);
+                if (it == best.end()) { best.emplace(key, std::make_pair(i, x)); continue; }
+                if (x > it->second.second) { drop[it->second.first] = 1; it->second = { i, x }; }
+                else                       { drop[i] = 1; }
+            }
+            std::size_t w = 0;
+            for (std::size_t i = 0; i < deduped.size(); ++i)
+            { if (!drop[i]) { if (w != i) { deduped[w] = std::move(deduped[i]); } ++w; } }
+            deduped.resize(w);
+        }
+    }
+
     // Branching diagnostics (off by default): attribute this call's odometer size + plan count to
     // the card driving the biggest option-group and to a coarse situation label.
     if (branchstats::Enabled())

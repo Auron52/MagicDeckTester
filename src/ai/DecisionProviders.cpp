@@ -10077,6 +10077,63 @@ std::vector<int> PreventDamageProvider::XCandidates(const GameState& s, const Ca
         const int life = s.players[s.active_player_index].life;
         xs.erase(std::remove_if(xs.begin(), xs.end(), [life](int x) { return x >= life; }), xs.end());
     }
+    // SURVIVAL-CEILING X (USER doctrine 2026-09-29; NO_OVERKILL ADOPTED default ON, NO_UNDERSHOOT
+    // refuted and OFF -- see HeuristicArm.h and the analysis ledger's O8): "it makes no
+    // sense to do less than the toughness of your creatures ... killing them is usually bad [if Vito
+    // dies he cannot make the opponent lose life] ... if they have X life remaining, that might make
+    // sense". The ceiling is the largest X every one of OUR creatures survives (LethalToughness less
+    // damage already marked, minus 1; indestructible ignored). A creature this plan casts BEFORE the
+    // quake is not on the board at enumeration, so the castable creatures in hand give a SECOND
+    // ceiling (a total-mana bound, over-offers only) -- at most two ceilings, never a guess between.
+    //   NO_UNDERSHOOT: drop every X below the lowest ceiling (X = 0 kept under Spellshock).
+    //   NO_OVERKILL:   drop every X above the highest ceiling unless X alone kills the opponent
+    //                  (X x heads >= their life -- the smallest such X is kept).
+    static const bool s_under_env = EnvOn("MTG_PD_QUAKE_NO_UNDERSHOOT", false);
+    static const bool s_over_env  = EnvOn("MTG_PD_QUAKE_NO_OVERKILL", true);
+    const bool under = heurarm::Flag(heurarm::PD_QUAKE_NO_UNDERSHOOT, s_under_env);
+    const bool over  = heurarm::Flag(heurarm::PD_QUAKE_NO_OVERKILL, s_over_env);
+    if ((under || over) && !xs.empty())
+    {
+        const int me = s.active_player_index;
+        const int kNone = 1 << 20;
+        int board_ceil = kNone;
+        for (const Permanent& p : s.battlefield)
+        {
+            if (p.controller_index != me || !p.card.IsCreature()) { continue; }
+            if (p.card.HasKeyword(Keyword::Indestructible)) { continue; }
+            board_ceil = std::min(board_ceil, std::max(0, LethalToughness(p, s) - p.damage - 1));
+        }
+        ManaPool pool = AvailableManaPool(s);
+        pool.AddPool(s.floating_mana);
+        const int spare = pool.Total() - def.card.m_mana_cost.ManaValue();
+        int hand_ceil = board_ceil;
+        for (const auto& c : s.players[me].hand)
+        {
+            if (!c.IsCreature() || !c.m_toughness.has_value()) { continue; }
+            if (c.m_mana_cost.ManaValue() > spare) { continue; }
+            if (c.HasKeyword(Keyword::Indestructible)) { continue; }
+            hand_ceil = std::min(hand_ceil, std::max(0, *c.m_toughness - 1));
+        }
+        const int lo = std::min(board_ceil, hand_ceil);   // hand_ceil <= board_ceil by construction
+        const int hi = board_ceil;
+        const int heads = std::max(1, gamesetup::OpponentHeads());
+        const int opp_life = s.players[1 - me].life;
+        const int lethal_x = (opp_life + heads - 1) / heads;
+        const int top = xs.back();                        // the largest surviving legal X
+        const int floor_x = std::min(lo, top);            // ceiling out of reach -> all-in
+        const int ceil_x  = std::min(hi, top);
+        int kill_x = -1;                                  // smallest legal X past the ceiling that is lethal
+        for (int x : xs) { if (x > ceil_x && x >= lethal_x) { kill_x = x; break; } }
+        std::vector<int> out;
+        for (int x : xs)
+        {
+            if (x == 0 && cast_trigger)          { out.push_back(x); continue; }
+            if (under && x < floor_x)            { continue; }
+            if (over && x > ceil_x && x != kill_x) { continue; }
+            out.push_back(x);
+        }
+        if (!out.empty()) { xs.swap(out); }
+    }
     return xs;
 }
 

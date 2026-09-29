@@ -20,6 +20,7 @@
 #include <doctest/doctest.h>
 
 #include "ai/DecisionProviders.h"
+#include "ai/HeuristicArm.h"
 #include "ai/ManaPayment.h"
 #include "ai/TurnSolver.h"
 #include "cards/CardDatabase.h"
@@ -288,13 +289,20 @@ TEST_CASE("Rolling Earthquake: X is the whole range; X = 0 only under Spellshock
     for (int k = 0; k < 4; ++k) { Put2(e, "Mountain"); }
     Hand2(e, "Rolling Earthquake");
     for (int k = 0; k < 10; ++k) { Lib2(e, "Mountain"); }
-    std::set<int> xs;
-    for (const TurnSolver::Plan& p : TurnSolver::EnumerateMainPlans(e, /*is_pre_combat=*/true))
+    auto xs_of = [](const GameState& g)
     {
-        for (const Action& a : p.actions)
-        { if (a.card_name.str() == "Rolling Earthquake") { xs.insert(a.chosen_x); } }
-    }
-    CHECK(xs == std::set<int>{1, 2, 3});
+        std::set<int> xs;
+        for (const TurnSolver::Plan& p : TurnSolver::EnumerateMainPlans(g, /*is_pre_combat=*/true))
+        {
+            for (const Action& a : p.actions)
+            { if (a.card_name.str() == "Rolling Earthquake") { xs.insert(a.chosen_x); } }
+        }
+        return xs;
+    };
+    heurarm::t_arm[heurarm::PD_QUAKE_TOP_X] = 0;
+    CHECK(xs_of(e) == std::set<int>{1, 2, 3});
+    heurarm::t_arm[heurarm::PD_QUAKE_TOP_X] = -1;
+    CHECK(xs_of(e) == std::set<int>{3});            // shipped TOP_X: no creature of ours -> all-in
 }
 
 TEST_CASE("Beseech the Queen: {2/B} x3 is MV 6, black, all generic -- and each coloured payment")
@@ -434,6 +442,54 @@ TEST_CASE("Stage 5: Rolling Earthquake's X never reaches our own life; Purity li
     CHECK(Prov2().XCandidates(s, D("Rolling Earthquake"), 5) == std::vector<int>{1, 2});
     Put2(s, "Purity");
     CHECK(Prov2().XCandidates(s, D("Rolling Earthquake"), 5) == std::vector<int>{1, 2, 3, 4, 5});
+}
+
+TEST_CASE("Rolling Earthquake survival ceiling: no X below it, none above it unless lethal (USER doctrine)")
+{
+    GameState s = Board2();
+    Put2(s, "Vito, Thorn of the Dusk Rose");         // 1/3 -> ceiling 2
+    Put2(s, "Rhox Faithmender");                     // 1/5
+    const CardDefinition& q = D("Rolling Earthquake");
+    heurarm::t_arm[heurarm::PD_QUAKE_NO_OVERKILL] = 0;
+    CHECK(Prov2().XCandidates(s, q, 6) == std::vector<int>{1, 2, 3, 4, 5, 6});   // levers off
+    heurarm::t_arm[heurarm::PD_QUAKE_NO_UNDERSHOOT] = 1;
+    CHECK(Prov2().XCandidates(s, q, 6) == std::vector<int>{2, 3, 4, 5, 6});
+    CHECK(Prov2().XCandidates(s, q, 1) == std::vector<int>{1});                  // ceiling out of reach: all-in
+    heurarm::t_arm[heurarm::PD_QUAKE_NO_OVERKILL] = 1;
+    CHECK(Prov2().XCandidates(s, q, 6) == std::vector<int>{2});
+    s.players[1].life = 5;                                                       // X = 5 kills them
+    CHECK(Prov2().XCandidates(s, q, 6) == std::vector<int>{2, 5});
+    heurarm::t_arm[heurarm::PD_QUAKE_NO_UNDERSHOOT] = 0;
+    CHECK(Prov2().XCandidates(s, q, 6) == std::vector<int>{1, 2, 5});
+    heurarm::t_arm[heurarm::PD_QUAKE_NO_UNDERSHOOT] = -1;
+    heurarm::t_arm[heurarm::PD_QUAKE_NO_OVERKILL] = -1;
+}
+
+TEST_CASE("Rolling Earthquake TOP-X: among plans differing only in X, the largest X under the ceiling")
+{
+    auto xs_of = [](const GameState& e)
+    {
+        std::set<int> xs;
+        for (const TurnSolver::Plan& p : TurnSolver::EnumerateMainPlans(e, /*is_pre_combat=*/true))
+        {
+            for (const Action& a : p.actions)
+            { if (a.card_name.str() == "Rolling Earthquake") { xs.insert(a.chosen_x); } }
+        }
+        return xs;
+    };
+    GameState e = Board2();
+    for (int k = 0; k < 5; ++k) { Put2(e, "Mountain"); }
+    Put2(e, "Vito, Thorn of the Dusk Rose");         // 1/3 -> ceiling 2
+    Hand2(e, "Rolling Earthquake");
+    for (int k = 0; k < 10; ++k) { Lib2(e, "Mountain"); }
+    heurarm::t_arm[heurarm::PD_QUAKE_NO_OVERKILL] = 0;
+    heurarm::t_arm[heurarm::PD_QUAKE_TOP_X] = 0;
+    CHECK(xs_of(e) == std::set<int>{1, 2, 3, 4});
+    heurarm::t_arm[heurarm::PD_QUAKE_TOP_X] = 1;
+    CHECK(xs_of(e) == std::set<int>{2, 3, 4});     // X = 1 collapses into X = 2; overkill untouched
+    heurarm::t_arm[heurarm::PD_QUAKE_TOP_X] = -1;
+    heurarm::t_arm[heurarm::PD_QUAKE_NO_OVERKILL] = -1;
+    CHECK(xs_of(e) == std::set<int>{2});            // shipped defaults: ceiling only (opponent at 20)
 }
 
 TEST_CASE("Stage 5: the first land tap under Manabarbs kills -- per event with Tamanoa, summed without")
