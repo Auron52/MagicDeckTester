@@ -3250,6 +3250,101 @@ but with two things worth keeping: **a 9th one-drop is affordable (~+0.003) if a
 pays**, and **Remote Farm is not the land to cut** — a finding that will apply to any future land-count
 question on this deck.
 
+## Round V (2026-09-29) — price the slot against the deck's OWN blank, not against a land
+
+**The question.** User, on Aether Vial after round U: *"it seems kind of nice to have, but the
+measurements don't look too good for it. How does the number compare vs a dead card in goldfish like
+Unexpectedly Absent?"*
+
+**The honest answer is that it has never been measured, and the number that looks like an answer is
+the wrong KIND of number.** The repo carries `card_scores["Unexpectedly Absent"] = −0.2814` on v2's
+own profile — the worst card in the deck, with Swords second at −0.1981 and the fifteen-card spread
+running −0.28 to +0.21. That is not comparable to Vial's +0.0193 for two independent reasons, and
+both are recorded elsewhere in this document:
+
+* **Different estimand.** A card score is fitted to the *keep decision* — how much worse an opening
+  hand is for holding the card — not to the race. The screen numbers are pooled, late-weighted
+  win-turn steps over 40,000 games in three formats.
+* **Different reliability.** See "THE CARD SCORES INVERTED THREE TIMES OUT OF THREE" above. They are
+  hypothesis generators on this deck, never findings.
+
+**Why Unexpectedly Absent is the right yardstick, which is the whole design.** Rounds T and U priced
+Vial against cards the deck *wants* — a Venerable Knight (+0.0209) and a Plains (+0.0193) — so it was
+always going to look expensive. But the deck already ships a card the goldfish cannot use **at all**:
+Unexpectedly Absent needs an opponent permanent to target and the passive opponent presents none. We
+keep it anyway, for value the simulation cannot see. So if Vial costs *less* than the blank we already
+accept, "too expensive in-model" stops being an argument against it, and the slot becomes a choice
+between two kinds of unmodelled value — a judgement, not a measurement.
+
+| tag | added | paid by | asks |
+|---|---|---|---|
+| `m_v2` | — | — | reference: the shipped v2 60 |
+| `v_av1_ua0` | Aether Vial 1 | Unexpectedly Absent | **the question** |
+| `v_ua0_pl21` | Plains 21 | Unexpectedly Absent | what the blank costs, against a land |
+| `v_b1_ua0` | Basri 1 | Unexpectedly Absent | the 9th one-drop, paid by the blank |
+
+**Every arm pays with the same card**, so the payer cannot confound the comparison *between* arms —
+and that buys three independent paths to one quantity. Writing `c(X)` for a card's cost in the slot:
+
+```
+step(v_av1_ua0)  = c(Vial)   − c(UA)        step(v_ua0_pl21) = c(Plains) − c(UA)
+step(v_b1_ua0)   = c(Basri)  − c(UA)
+round U, same apparatus:  u_av1_pl19 = +0.0193 = c(Vial) − c(Plains)
+                          u_b1_pl19  = +0.0072 = c(Basri) − c(Plains)
+```
+
+So `step(v_av1_ua0) − step(v_ua0_pl21)` must reproduce **+0.0193**, and
+`step(v_b1_ua0) − step(v_ua0_pl21)` must reproduce **+0.0072**. If they do, `c(UA)` is established
+three ways and the answer is not resting on one arm. If they do not, the apparatus is lying somewhere
+and the round says so before anything is adopted.
+
+**`v_b1_ua0` is also a real deckbuilding question, not only a control.** Round U found no free payer
+for a 9th one-drop among the cards it was allowed to cut (Plains +0.0072, Remote Farm +0.0169,
+Accorder Paladin +0.0189). It never tried the deck's *worst* card, because cutting interaction was
+out of scope. If the blank is the payer, the 9th one-drop may be free or better than free.
+
+**Artifact correction — it applies to two arms and not the third.** Both `v_av1_ua0` and `v_b1_ua0`
+overflow the alias host bucket 8 → 9, so each own table discovers a 14th bucket and inherits round T's
+**+0.0038** (measured on provably identical play, hence a pure reading of that artifact). Subtract it
+before comparing either card to UA. It **cancels** in any Vial-vs-Vial comparison, because round T's
++0.0209 and round U's +0.0193 carry it too.
+
+**Out-of-model, and here it cuts BOTH ways — which is why this round cannot settle the slot alone.**
+Vial's stated value (uncounterable, instant-speed deploy, dodging sorcery-speed removal) is invisible
+to a goldfish, so its measured cost is a floor. But Unexpectedly Absent's value is invisible for the
+*same reason* — no opponent permanent to target — so its cost is a floor too. The round compares two
+floors, which is fair, and it still cannot say whose real-game upside is larger. That is the user's
+judgement. The one thing that *is* modelled and runs against Vial: a creature put onto the battlefield
+by Vial is not **cast**, so it triggers none of the deck's four Worthy Knights.
+
+**Engine note.** This is the first WhiteKnights round on the generic dig gate
+(`docs/design/generic-dig-gate.md`). WhiteKnights is byte-identical under it — the shipped 60 holds no
+dig source — and **Basri stays a clean null even though his cycling is now reachable**, because the
+generic heuristic digs only when the hand holds nothing castable and a {W} 2/1 Knight is always
+castable. User: *"A 2/1 Knight is always useful in goldfishing… It would be most helpful for stuck
+boards in real games. In those situations the 2/1 may not be useful, but something else in the deck
+could be."* A goldfish has no stuck boards, so round T's 100.0%-identical-play finding survives the
+capability change and Basri's cycling joins Vial's instant-speed deploy in the out-of-model column.
+
+### The merge ruling and the list change are ONE decision
+
+User, 2026-09-29: *"We can merge Basri."* Writing `decks/WhiteKnights/WhiteKnights.buckets.json`
+immediately failed: `mtg-analyze` refuses a policy naming a card the deck does not contain — *"a ruling
+that matches nothing is silently no ruling at all."* The shipped 60 has Dauntless Bodyguard and
+Venerable Knight but no Basri, so the file made **every** analyzer run on this deck fail, which would
+have broken `analyze_deck.py`, `valueleaf.sh` and `mullgen.sh`. Round V's first block caught it in 90
+seconds. The guard is right and the ordering error was mine: **a merge ruling presupposes its cards
+are in the deck.** The ruling is parked untracked at
+`logs/wk_screen/WhiteKnights.buckets.json.PENDING-ADOPTION` and installs the moment Basri is adopted;
+adoption also owes the serial pipeline (profile → value leaf → mulligan), which the merge makes cheap
+(bucket stays at 8 cards, K stays 13) but not free.
+
+Kept, and independently correct: `deck_compare.py` now copies `<stem>.buckets.json` into each arm's
+scratch directory beside the profile and value sidecar. `mtg-analyze` resolves the ruling off the
+**decklist** it is handed, and an arm's own bracket table is generated from a scratch decklist — so
+without it every generated table is fit to a bucketing we do not ship, exactly the defect the profile
+copy already guards against.
+
 ## Open questions for the user (surfaced, not blocking)
 
 1. **Ranking weights.** The Angels campaign ranked arms late-weighted — `long` 0.5 / `2hg` 0.3 /
