@@ -8,8 +8,7 @@
     <tags/>
     <zone name="main">
         <card number="4" name="Dauntless Bodyguard"/>
-        <card number="1" name="Basri, Tomorrow's Champion"/>
-        <card number="2" name="Venerable Knight"/>
+        <card number="4" name="Venerable Knight"/>
         <card number="4" name="Worthy Knight"/>
         <card number="4" name="Accorder Paladin"/>
         <card number="4" name="Knight Exemplar"/>
@@ -18,7 +17,6 @@
         <card number="3" name="Adeline, Resplendent Cathar"/>
         <card number="2" name="Hero of Bladehold"/>
         <card number="1" name="Kinsbaile Cavalier"/>
-        <card number="1" name="Aether Vial"/>
         <card number="1" name="Sol Ring"/>
         <card number="1" name="Swords to Plowshares"/>
         <card number="1" name="Unexpectedly Absent"/>
