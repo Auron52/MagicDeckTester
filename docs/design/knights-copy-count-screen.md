@@ -2885,6 +2885,86 @@ is the option the measurement and the out-of-model reasoning both support.**
 
 **ADOPTION IS THE USER'S CALL** and still discards the shipped keep table and value leaf.
 
+### Round T RESULT (landed 04:41:09Z) — the two deferred cases, on v2's OWN apparatus. BASRI IS LITERALLY VENERABLE KNIGHT; VIAL COSTS
+
+Run on **v2's own regenerated profile + value leaf + R=40 keep table** — the thing waiting for the
+finalised list bought. Basri and Aether Vial aliased into the Dauntless/Venerable bucket (cap 8), every
+arm paying 1:1 from Venerable Knight so the bucket total stays at exactly 8: **zero composition
+fall-through on every arm**, against 3.74–7.03% in rounds Q and S. Seeds 17.6M / 18.0M. Positive = WORSE.
+
+| arm | long | 2hg | std | pooled | step | meas | conf | own-table floor |
+|---|---|---|---|---|---|---|---|---|
+| `m_v2` (ref) | 0 | 0 | 0 | 0 | — | | | |
+| `t_basri1_vk3` | +0.0042 | +0.0051 | +0.0010 | +0.0038 | **+0.0038** | +0.0040 | +0.0036 | 0.99x |
+| `t_av1_vk3` | +0.0219 | +0.0189 | +0.0216 | +0.0209 | **+0.0209** | +0.0190 | +0.0228 | 1.10x |
+| `t_av2_vk2` | +0.0445 | +0.0349 | +0.0449 | +0.0417 | **+0.0417** | +0.0401 | +0.0434 | 0.96x |
+
+#### 1. BASRI IS THE SAME CARD AS VENERABLE KNIGHT IN THIS DECK — 100.0% IDENTICAL over 120,000 games
+
+Under the shared table, which holds the keep policy fixed, `t_basri1_vk3` vs the reference is
+**100.0% identical play in all SIX blocks** (3 formats × 2 seed blocks × 20,000 games), delta ±0.0001
+(rounding). Swapping a Venerable Knight for a Basri changes *nothing whatsoever*. Three reasons, and
+together they are exhaustive:
+
+* **The cycling is STRUCTURALLY UNREACHABLE.** `GenericProvider::HasAnyDigSource` returns **false**, and
+  **none** of `DeckProvider` → `VialProvider` → `KnightsProvider` → `WhiteKnightsProvider` overrides it.
+  `DecisionProviders.h` states the consequence outright: a deck routed this way *"would never cycle a
+  single card, i.e. would never play its own game. That is a capability-narrowing DEFAULT."* Only
+  Fluctuator, Auras and TreasureHunt switch it back on. The two cycling sites in `TurnSolver.cpp` are
+  both labelled human-play (`P3`/`P6`), and `FluctuatorProvider::SelectDigSource` is the only
+  deck-aware cycler. So the autonomous search never even offers the ability.
+* **At ONE copy the legend rule cannot bite** — there is never a second instance to kill.
+* **The printed body is identical**: `{W}` 2/1 Human Knight, exactly Venerable Knight, whose own death
+  trigger is inert here (creatures never die).
+
+So the **+0.0038 is not the card. It is a keep-table artifact**: only the arm's OWN table gives Basri a
+14th bucket, and that re-partition costs 0.0038. The bracket says so precisely — shared −0.0001 at
+100.0% ident, own +0.0037 at 93.6%, bias +0.0038 flagged *"the shared table flatters the VARIANT --
+unexpected"*.
+
+> **THIS CORRECTS THE ROUND N2 RECORD.** That section concludes *"this round priced cycling's option
+> value against the legend rule, and the answer is that they cancel to within noise."* **That is wrong:
+> neither quantity was in the measurement.** Cycling was unreachable and one copy cannot trip the legend
+> rule, so N2's +0.0004 was a null because Basri *is* the card it replaced — and its notorious
+> sign-disagreement across blocks was pure noise around a true zero, exactly what you get measuring an
+> identity. The N2 verdict ("does not earn a slot") stands; its *mechanism* did not.
+> This is the [[flag-default-is-not-the-arming-condition]] class: the param is set, the code exists, and
+> a gate predicate makes it unreachable for this deck.
+
+**Basri is therefore a strictly WORSE Venerable Knight in this list** — same body, plus a legend-rule
+liability at 2+ copies, minus an ability the engine will never use. **CLOSED.** The only thing that
+could reopen it is a CAPABILITY change (giving the Knights provider chain a dig source), which is a
+reserved decision for the user, not a copy count. Round N2's premise only becomes testable after that.
+
+#### 2. AETHER VIAL COSTS, and the apparatus is MASKING the effect rather than creating it
+
+`t_av1_vk3` = **+0.0209**, replicating in sign AND magnitude (+0.0190 / +0.0228), and the ladder is
+linear: two copies cost **+0.0417**, almost exactly twice. Consistent across all three formats.
+
+The floor ratio is ~1.1x, which the tool calls unresolved — **but read the direction, because it
+inverts the usual worry.** For `t_av1_vk3`: shared table **+0.0393**, own table **+0.0190**, bias
+−0.0203. *Both apparatuses agree Vial costs*, and the arm's OWN better-fitted table gives the SMALLER
+cost. The floor test exists to catch a shared apparatus MANUFACTURING an effect; here it is masking half
+of one. The alias is why, and it was predicted: the shared table treats an Aether Vial as a vanilla 2/1
+for keep purposes, which is simply wrong, so the Vial arms play worse under it. **The sign is settled;
+only the magnitude is loose, bracketed +0.019 (conservative) to +0.039.**
+
+**The chassis argument I raised for Vial did NOT survive contact.** I noted that `vial_target_mv` is 3
+and the three-drop creature count grew 11 → 14 from v1 to v2, so Vial's deploy pool widened by a quarter
+on its own axis, and predicted that would help it. It did not: 1 Vial costs **+0.021**, *worse* than the
+~+0.014/copy interpolated from the old 3→2 (−0.0154) and 3→0 (−0.0423) measurements. Recorded because a
+mechanism invented before the numbers is still only a hypothesis ([[dont-rationalize-a-measured-cut]]).
+
+**THE USER'S QUESTION WAS WHETHER IT IS "TOO TERRIBLE", AND THIS IS THE HONEST ANSWER.** In-model, one
+Vial costs +0.021 — about 10x the ~0.0020 noise floor, and not marginal. Against that stands the
+standing caveat, which is the whole reason the question was asked: the engine models Vial's charge and
+deploy heuristic but **not** flashing a creature in to dodge sorcery-speed removal or countermagic. All
+three stated reasons — *uncounterable, instant-speed deploy, dodging removal* — are structurally
+invisible to a goldfish that has nothing to be countered by, nothing to dodge, and no opponent turn to
+act during. So **+0.021 is a floor on the cost and the real value is higher by an unmeasured amount**;
+whether an unmodellable instant-speed deploy is worth 0.021 turns of measured speed is a judgement the
+simulator cannot make. **Not adopted; surfaced with both halves.**
+
 ### DEFERRED — re-measure the close cases on the finalized list's OWN regenerated table
 
 **User, 2026-09-28**, across one exchange: *"if we have cases where it is extremely close we might want
