@@ -1745,16 +1745,22 @@ every arm equally):
 
 - **Chosen X** (quakes per 750 games): base 555, X>=3 in 33 of them. O+TOP_X 549, X>=3 in 13.
   Own-creature losses to our quake: 46 -> 33.
-- **Four of O's 13 worse games are real counterexamples** to "never kill our creatures":
-  - s83001 gi67 and s84001 gi255: the base cast Vito and quaked X=2, killing **Dina (2/2)** to keep Vito
-    alive on a bigger drain.
-  - s83001 gi169 and s84001 gi197: a turn-7 X=6 killed **Tamanoa**. Tamanoa still triggers for the event's
-    TOTAL (look-back), so the big X paid off.
+- **Two of O's 13 worse games are real counterexamples** to "never kill our creatures".
+  - *Correction, 2026-09-29:* an earlier version of this section said four, counting two games where Dina
+    "died". Dina is a **1/3** (as is Vito), so X=2 kills neither. The tally script used a hand-typed
+    toughness table instead of `cards.json`. In those games (s83001 gi67, s84001 gi255) the arms had
+    already diverged on turns 2-4, which is search churn.
+  - The two real ones, s83001 gi169 and s84001 gi197, share a board: Tamanoa + Manabarbs + Spellshock
+    (+ Rhox), and **no Vito or Dina**. The base quaked X=6 on T7 (killing Tamanoa), then X=8 on T8, and
+    won. The O arm held X=3 twice to keep Tamanoa alive and **lost** (scored 9). X=6 is not lethal alone,
+    so the lethal exception does not cover a two-quake kill.
+  - Reading: without a drainer, Tamanoa only gains US life, so in a race trading it for a big X can be
+    right. The user's reason ("if Vito dies he cannot make the opponent lose life") is about drainers.
 - **Net:** the doctrine is right on balance. The O + TOP_X pair is quality-neutral at 0.94x CPU, which
   meets the adoption bar (neutral with upside) and is the user's rule.
 - Both levers are gated on `x_damage_each_creature_and_player`, which only Rolling Earthquake carries, so
   no other deck moves (smoke). Unit tests: `test_prevent_damage_spells.cpp` "survival ceiling" and "TOP-X".
 
-**USER QUESTION (non-blocking, default taken = strict ceiling over ALL our creatures):** should the
-ceiling exempt Dina when Vito survives, and Tamanoa at a big X? The counterexamples say yes sometimes,
-but there are only 4 games. The refinement is one more arm to measure.
+**USER QUESTION (non-blocking, default taken = strict ceiling over ALL our creatures):** should
+Tamanoa count toward the ceiling only while a Vito or Dina is out (on the board or cast this plan)?
+Both real counterexamples are drainer-less boards. The refinement is one more arm to measure.
