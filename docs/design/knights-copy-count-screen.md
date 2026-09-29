@@ -3471,11 +3471,41 @@ The spread of deployed mana values is worth noting on its own — the Vial reach
 the deck's dominant MV toward a bigger creature actually in hand, which is the behaviour the policy
 was written for and which had never once executed on this deck.
 
-A caution the probe also produced, and it is a real limit rather than a bug: at 20 life with an
-8-turn horizon the same 250 games yielded **no** deploys at all. A Vial cast on turn 2 reaches three
-counters on turn 5, and this deck's mean kill is turn 4.1 — so in the fast format the card runs out
-of clock before it can act. Expect the corrected cost to be format-dependent, and expect the `std`
-column to remain the worst of the three.
+A caution the probe also produced: the card is **much weaker in the fast format**, though not dead.
+At 20 life over 8 turns the same 250 games gave **12 free deploys** against 20 at 40 life, and the
+Vial was inert in 21 of the 29 games it resolved in (vs 18 of 31 at 40 life). Expect the corrected
+cost to be format-dependent, and the `std` column to be the worst of the three — which round W then
+confirmed on every rung (+0.0191 / +0.0407 / +0.0651).
+
+> **CORRECTION (same session).** This paragraph first claimed **zero** deploys at 20 life. That was
+> wrong, and the cause is worth recording because it is the *same class of mistake* as the defect
+> this section documents: the 20-life pass was scored with an earlier detector that looked for
+> battlefield entries carrying **no cast action**. A Vial deploy is not logged that way — it is a
+> `CAST_SPELL` with `manaPaid: "Vial"` (`AIEngine`'s put path calls `LogCastSpell(..., "Vial")`).
+> The detector therefore reported a clean zero while the card was working, exactly as the absent
+> `vial_target_mv` reported clean games while the card was blank. **A negative result from a
+> detector that has never been shown to fire on a positive is not evidence.** The 40-life pass was
+> re-scored with the corrected detector and the 20-life one was not, so the error survived into a
+> commit message and into this document before being caught.
+
+**The summoning-sickness question, and why this deck answers it better than most.** A Vial-deployed
+creature cannot attack the turn it arrives, so the obvious reading is that a turn-4 deploy adds
+nothing to a turn-4 kill. That is wrong *here*, because the deck's three- and four-drops are almost
+all static or attack-triggered rather than attackers:
+
+| card | contributes the turn it is deployed, while summoning sick |
+|---|---|
+| Benalish Marshal | static anthem — "Other creatures you control get +1/+1" |
+| Knight Exemplar | also a lord — "Other Knight creatures get +1/+1 and indestructible" |
+| Kinsbaile Cavalier | static — "Knight creatures you control have **double strike**" |
+| Silverblade Paladin | soulbond pairs "**when either enters**" → both get double strike |
+| Adeline | trigger is "whenever **you** attack", not whenever *she* attacks |
+
+What does **not** contribute is the vanilla bodies (Dauntless, Venerable, Accorder) and **Worthy
+Knight**, which is doubly poor: a Vial deploy is not a **cast**, so it neither triggers its own
+token nor any other Worthy Knight already in play. Worthy Knight was nonetheless the most-deployed
+card at both life totals, which is a live heuristic question rather than a bug — the charge policy
+ranks by mana value and hand contents, not by whether the deploy wastes a cast trigger.
 
 **The generalisable lesson.** A field that is a *function of the decklist* must be derived from the
 decklist at the point of use, never carried alongside it in a file that can describe a different
