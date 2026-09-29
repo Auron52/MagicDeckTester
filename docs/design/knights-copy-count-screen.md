@@ -3582,6 +3582,47 @@ exactly the arm's chassis, because Basri **is** Venerable Knight in play (round 
 over 120,000 games in six blocks). The Basri half of the change is a measured null; the whole
 measured cost of the edit is the Vial's.
 
+### RANKING RULE CHANGED 2026-09-29 -- rank on the PLAYED formats, read 40 life for longevity
+
+Every pooled number above this line was computed `long .5 / 2hg .3 / std .2` (the 2026-09-19
+directive). **That is superseded.** USER, closing this campaign:
+
+> *"Realistically, we should only weigh 20 (1v1) and 30 (2HG). 40 is interesting sometimes and may
+> occasionally point to something that matters, but should not be weighed against the actual formats
+> we play."* — and *"40 life may give us an idea of longevity which is not useless. It just isn't as
+> important as the other two."*
+
+So the composite is **std + 2hg only** (50/50 as a default, not a ruling); `long` stays measured and
+reported as a **longevity signal** and a tiebreaker, never weighted. The old weighting put **half the
+total on a format the deck's owner does not play.**
+
+**Restated under the new rule** (negative = faster; `(long)` shown but not weighted):
+
+| arm | std | 2hg | **ranked** | (long) | was, old weighting |
+|---|---|---|---|---|---|
+| `w_av1_pl19` 1 Vial ← Plains **(SHIPPED)** | +0.0139 | +0.0132 | **+0.0135** | +0.0099 | +0.0117 |
+| `w_av1_vk3` 1 Vial ← Venerable Knight | +0.0191 | +0.0093 | +0.0142 | +0.0099 | +0.0115 |
+| `w_av2_vk2` 2 Vials | +0.0407 | +0.0201 | +0.0304 | +0.0165 | +0.0224 |
+| `w_av3_vk1` 3 Vials | +0.0651 | +0.0312 | +0.0481 | +0.0302 | +0.0375 |
+| `v_ua0_pl21` cut UA → 21st Plains | −0.0174 | −0.0201 | **−0.0187** | −0.0237 | −0.0214 |
+| `v_b1_ua0` Basri ← UA | −0.0195 | −0.0134 | −0.0164 | −0.0187 | −0.0173 |
+
+**No decision in this campaign flips** — checked across rounds Q/R/S/T/U/V/W. Two things do change:
+the Vial's cost is **~0.002 higher** than reported (std is its worst format), and the two payers
+**swap nominal order** (Plains +0.0135 now beats Venerable Knight +0.0142, where the old weighting had
+them 0.0002 apart the other way) — which independently confirms the payer the user chose on mechanism.
+
+**The longevity column immediately earned its keep.** One Aether Vial costs +0.0135 on the played
+formats but only **+0.0099 at 40 life**: the card gets better the longer the game runs. That is
+precisely the user's reason for keeping it — *"much better in real games where we are slowed down by
+the opponent playing creatures and such"* — now visible in the data instead of resting on judgement
+alone, and visible **without** distorting the ranking. The 2-and-3-copy rungs show the same gradient
+(+0.0304 → +0.0165, +0.0481 → +0.0302), so the effect is the card, not noise.
+
+Implemented in `logs/wk_screen/gread.py` (`W` = played formats, `DIAG` = long); `pool_h.py` prints the
+ranked composite with `(long)` alongside. See the `rank-decklists-late-weighted` note for the standing
+rule and for the fact that the 50/50 split is a default awaiting the user's real format mix.
+
 ### The merge ruling and the list change are ONE decision
 
 User, 2026-09-29: *"We can merge Basri."* Writing `decks/WhiteKnights/WhiteKnights.buckets.json`
