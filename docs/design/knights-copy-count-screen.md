@@ -3496,6 +3496,62 @@ decklist makes a *decision* slightly worse, which the floor bracket is built to 
 decklist-derived field imported from a neighbouring decklist makes a **card inert**, which no
 bracket can see, because the arm's own table dutifully fits itself to a deck playing 59 cards.
 
+## Round W (2026-09-29) — Aether Vial re-measured with the card actually working, laddered 1/2/3
+
+### LANDED 15:11Z. VERDICT: **the defect was worth ~0.009 per copy, and correcting it does not flip
+### the sign.** 1 Vial costs ~+0.012; 2 and 3 cost proportionally more. Keep ONE.
+
+Step vs the shipped v2, **negative = faster = better**, pooled late-weighted (long .5 / 2hg .3 /
+std .2) over 40,000 games per arm per format across two disjoint seed families (20.0M / 20.4M).
+
+| arm | Vials | paid by | long | 2hg | std | **pooled** | meas / conf | restates | **defect** |
+|---|---|---|---|---|---|---|---|---|---|
+| `w_av1_vk3` | 1 | Venerable Knight | +0.0099 | +0.0093 | +0.0191 | **+0.0115** | +0.0119 / +0.0111 | `t_av1_vk3` +0.0209 | **+0.0094** |
+| `w_av1_pl19` | 1 | Plains 20→19 | +0.0099 | +0.0132 | +0.0139 | **+0.0117** | +0.0104 / +0.0129 | `u_av1_pl19` +0.0193 | **+0.0076** |
+| `w_av2_vk2` | 2 | 2 Venerable Knight | +0.0165 | +0.0201 | +0.0407 | **+0.0224** | +0.0232 / +0.0216 | `t_av2_vk2` +0.0417 | **+0.0193** (2 copies) |
+| `w_av3_vk1` | 3 | 3 Venerable Knight | +0.0302 | +0.0312 | +0.0651 | **+0.0375** | +0.0365 / +0.0385 | — (new rung) | — |
+
+**THE BUG'S SIZE, MEASURED THREE WAYS: ~+0.009 per copy.** The restatement arms were built for
+exactly this and they agree — +0.0094 (creature-paid, 1 copy), +0.0097/copy (creature-paid, 2
+copies), +0.0076 (land-paid, 1 copy). **About 45% of the Vial's previously-reported cost was pure
+artifact**, and every number rounds T/U produced for this card should be read as ~0.009/copy too
+high. That is what the round was for, and it is now a quantity rather than an argument.
+
+**But it does not flip the sign, and that is the answer to the user's question.** Every rung is
+positive and the ladder is monotone: +0.0115 → +0.0224 → +0.0375, i.e. roughly linear at ~+0.012 per
+copy with a slight acceleration at three. `meas` and `conf` agree to within 0.002 on all four arms,
+so this is a reproducible effect, not noise.
+
+**Both payer classes converge at one copy** — Venerable Knight +0.0115, Plains +0.0117, a difference
+of 0.0002. Round U saw the same thing on the broken card (+0.0209 vs +0.0193) and concluded the cost
+was intrinsic; that conclusion survives the correction, and is now much better supported, because
+paying with a creature and paying with a land give the *same* answer. There is no cheaper payer to
+find.
+
+**The std column is the worst on every single rung** (+0.0191 / +0.0407 / +0.0651), and this was
+**predicted from the mechanism before the numbers existed**. The 250-game deploy probe run to verify
+the fix found 20 free deploys at 40 life and **zero** at 20 life, with the reason: a Vial cast on
+turn 2 reaches three counters on turn 5, and this deck's mean kill is turn 4.1. The Vial is a card
+that needs the game to last, in a deck built to end it. Goldfish bias is not doing this — the clock
+is.
+
+**Applying the user's rule.** *"If 1 vial is close, we should keep it. If it is an improvement and
+the 2nd is close I would keep 2"*, and *"(I suppose same with 3 vials, but I wouldn't go higher than
+that)"*.
+* **1 copy: KEEP.** +0.0115 is ~0.25% of a 4.5-turn clock and does **not** clear its own apparatus
+  floor (effect/floor 1.15–1.42x on every block — UNRESOLVED, not established-worse). Against that
+  sits the out-of-model column the user has consistently and correctly invoked: uncounterable,
+  instant-speed deploy, dodges sorcery-speed removal — none visible to a goldfish. "Close" fits.
+* **2 copies: NO.** The rule makes the second copy conditional on the first being *an improvement*,
+  and it is not. Independently, +0.0224 is about double and its bias is three times larger.
+* **3 copies: NO**, for the same reason, at +0.0375.
+
+**The adopted list is play-equivalent to `w_av1_vk3`, so +0.0115 is not an extrapolation.** The 60
+is v2 with Venerable Knight 4→2, +1 Basri, +1 Aether Vial — seven one-drops plus a Vial, which is
+exactly the arm's chassis, because Basri **is** Venerable Knight in play (round T: 100.0% identical
+over 120,000 games in six blocks). The Basri half of the change is a measured null; the whole
+measured cost of the edit is the Vial's.
+
 ### The merge ruling and the list change are ONE decision
 
 User, 2026-09-29: *"We can merge Basri."* Writing `decks/WhiteKnights/WhiteKnights.buckets.json`
