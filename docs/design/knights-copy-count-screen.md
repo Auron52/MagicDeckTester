@@ -3131,6 +3131,125 @@ coverage hole, and it lands only on the bracket's shared column — i.e. on the 
 Scripts: `logs/wk_screen/mkspec_u.py`, `logs/wk_screen/run_u.sh`, `logs/wk_screen/catprobe.sh`
 (gitignored). Launched 05:48Z; 6 new R=40 tables, so ~1h45m by round P's precedent.
 
+### Round U RESULT (landed 08:05:41Z, 2h17m for 6 tables + 6 blocks) — NOTHING BEATS THE SHIPPED 60; but the 9th one-drop is nearly free and the LAND TO CUT IS A PLAINS
+
+**Every one of the six arms is positive (= slower than shipped v2), and every one replicates across the
+two disjoint seed sets.** Pooled late-weighted, long .5 / 2hg .3 / std .2:
+
+| arm | long | 2hg | std | **pooled** | meas | conf | own-table effect / floor |
+|---|---|---|---|---|---|---|---|
+| `m_v2` (shipped) | — | — | — | **0** | ref | ref | clears 3x+ |
+| `u_b1_pl19` 9th one-drop, −1 Plains | +0.0089 | +0.0095 | **−0.0009** | **+0.0072** | +0.0069 | +0.0075 | 0.83x |
+| `u_b1_rf3` 9th one-drop, −1 Remote Farm | +0.0136 | +0.0260 | +0.0117 | **+0.0169** | +0.0173 | +0.0165 | 1.49x |
+| `u_b1_ap3` 9th one-drop, −1 Accorder | +0.0215 | +0.0209 | +0.0097 | **+0.0189** | +0.0181 | +0.0198 | 2.46x |
+| `u_av1_pl19` Vial 1, −1 Plains | +0.0200 | +0.0208 | +0.0155 | **+0.0193** | +0.0194 | +0.0193 | 1.39x |
+| `u_av1_rf3` Vial 1, −1 Remote Farm | +0.0441 | +0.0498 | +0.0348 | **+0.0439** | +0.0439 | +0.0440 | 2.30x |
+| `u_av2_pl18` Vial 2, −2 Plains | +0.0533 | +0.0499 | +0.0384 | **+0.0493** | +0.0515 | +0.0471 | 2.03x |
+
+**The replication is unusually tight** — `u_av1_pl19` at +0.0194 / +0.0193 and `u_av1_rf3` at +0.0439 /
++0.0440 are essentially exact across 240,000 independent games. No arm clears the driver's 3x floor
+rule, but for the Basri arms that is because **the effects are genuinely small**, not because the
+apparatus is suspect: `u_b1_pl19`'s bias is `+0.0018` at `t = +0.67`, i.e. no measurable bias at all.
+
+**THE FLOOR CONFIRMS THE DESIGN'S PREDICTION, QUANTITATIVELY.** The design said the alias is "fine for
+Basri and a real stretch for Vial — read the Vial arm's FLOOR with extra suspicion, not its point
+estimate." The per-arm nulls sort exactly that way, and the base null is `+0.0005`, so all of it is the
+arm's own table rather than the reference:
+
+| arm | null (own vs shared) | why |
+|---|---|---|
+| `u_b1_pl19` / `u_b1_ap3` / `u_b1_rf3` | +0.0023 / −0.0043 / −0.0098 | the alias is nearly **literal** — Basri *is* a {W} 2/1 Knight |
+| `u_av1_pl19` / `u_av1_rf3` / `u_av2_pl18` | −0.0273 / −0.0221 / −0.0387 | aliasing a **Vial** as a 2/1 Knight is a bad model of the keep; the own table, which gives Vial a real bucket, plays 6–17x better |
+
+So the Vial arms' large floors are the **shared** column being wrong, not evidence the effect is
+apparatus-driven. The OWN column — what `pool_h.py` reports — is the read.
+
+#### Q1 — "is there no spot remaining for a 9th one-drop?" NO FREE SPOT, BUT A PLAINS IS NEARLY FREE
+
+The payer ordering is the finding, and it is clean: **Plains (+0.0072) < Remote Farm (+0.0169) <
+Accorder Paladin (+0.0189)**. Subtracting round T's `+0.0038` bucket artifact (measured on provably
+identical play, so it is the same artifact these arms carry) puts the true cost of a 9th one-drop at
+roughly **+0.003 paid by a Plains**, against ~+0.013 paid by a Remote Farm and ~+0.015 paid by a body.
+
+**And at 20 life it is a wash or better: `−0.0009`.** That is the only negative cell anywhere in round
+U, and it is the mechanism in one number — a 9th one-drop buys a marginally faster clock, and pays for
+it in long games where the 24th land is what keeps you hitting drops. Under the user's late-weighted
+ranking (long .5) that nets out positive; under a 20-life-first weighting it would not.
+
+**A 9th one-drop is therefore affordable but not free, and it is affordable only out of the mana base.**
+Taking the slot from a two-drop body costs 2.6x as much.
+
+#### THE INCIDENTAL FINDING, which is useful independently of Basri: IF YOU EVER CUT A LAND, CUT A PLAINS
+
+Cutting a **Remote Farm** costs more than cutting a **Plains** in both pairs, with the direction
+consistent and the magnitude large: `+0.0169` vs `+0.0072` on the Basri arms (+0.0097) and `+0.0439` vs
+`+0.0193` on the Vial arms (+0.0246). This is counter-intuitive — Remote Farm enters **tapped**, which
+is the worst property a land can have in a turn-4 aggro deck, and the Plains-cut arm keeps *fewer*
+untapped sources.
+
+**Mechanism, and it is a mana-units argument rather than a tempo one:** Remote Farm taps for `{W}{W}`
+and does it twice before sacrificing, so cutting one removes **two** mana-units per activation where
+cutting a Plains removes one — and this deck needs `{W}{W}{W}` for 4 Benalish Marshal, which is its
+only triple-pip card. Remote Farm is the double-white engine, and that outweighs entering tapped. The
+super-additivity on the Vial pair (0.0246 vs 0.0097) says Vial and a Farm-cut compound: Vial costs a
+card that produces no mana at all, so it is worst exactly when the double-white is already thinnest.
+
+#### Q2 — "how does a vial look when replacing a land?" IT LOOKS ALMOST EXACTLY LIKE VIAL REPLACING A CREATURE
+
+**+0.0193 paid by a Plains, against +0.0209 paid by a Venerable Knight in round T. Cutting a land
+instead of a body saves 0.0016 — the cost is intrinsic to the card, not to what it displaces.**
+
+The control decomposition the design was built for (both terms measured on own tables, so the bucket
+artifact cancels in each difference):
+
+```
+u_av1_pl19 − u_b1_pl19  =  0.0193 − 0.0072  =  +0.0121   Vial vs a 2/1 one-drop, at 23 lands
+t_av1_vk3  − t_basri1_vk3 = 0.0209 − 0.0038 =  +0.0171   Vial vs a 2/1 one-drop, at 24 lands
+```
+
+**The gap narrows by 29%, and it narrows in all three formats independently** (long 0.0177→0.0111, 2hg
+0.0138→0.0113, std 0.0206→0.0164). So Vial *is* genuinely substituting for part of the land it
+replaced — the effect is real and replicates — but it recovers only about a third of its cost, and the
+remaining +0.0121 is what Vial gives up against simply playing another body.
+
+**The second copy refutes the "a lone Vial is rarely drawn" hypothesis for the third time in this
+campaign, and does so harder when lands pay.** Creature-paid the gradient is linear (+0.0209 → +0.0417,
+i.e. +0.0208 per copy); land-paid it *accelerates* (+0.0193 → +0.0493, so the second copy costs
++0.0300). At 24→23 lands Vial partially substitutes; at 23→22 the mana base breaks. More Vials is
+worse, not better, on every chassis this campaign has measured.
+
+**Ranking every Vial configuration ever measured on this deck**, best to worst: 1 Vial for a Plains
+(+0.0193) < 1 Vial for a one-drop (+0.0209) < 2 Vial for 2 Plains (+0.0493) < 1 Vial for a Remote Farm
+(+0.0439, and 2-for-2 is worse still). **The best available Vial configuration costs 2.7x what the best
+9th-one-drop configuration costs, and both cost more than doing nothing.**
+
+#### WHAT THE MEASUREMENT CANNOT SEE, stated for both cards, because they differ
+
+* **Vial — the unmodelled effects point in OPPOSITE directions, so the magnitude is bracketed, not
+  floored.** *Understating the cost:* Vial deploys do not **cast**, so they trigger none of the deck's 4
+  Worthy Knights, and a goldfish only values those Human tokens as attackers — in a real game they also
+  block and trade, so the ~13-tokens-per-game engine is worth more than the sim credits and Vial's
+  skipping of it costs more. *Overstating the cost:* the user's three stated reasons — uncounterable,
+  instant-speed deploy, dodging sorcery-speed removal — are all structurally invisible to a goldfish
+  that has nothing to be countered by, nothing to dodge and no opponent turn to act during. **The sign
+  is settled (six independent blocks, +0.0193 replicating to four decimal places); the magnitude is
+  bracketed by two unmodelled effects pulling opposite ways.** Whether an instant-speed deploy is worth
+  ~0.019 turns of measured speed is a judgement the simulator cannot make.
+* **Basri — the unmodelled effect points ONE way, and it is the favourable one.** Cycling `{2}{W}` is a
+  perfectly real ability that a human player *would* use to turn a dead late one-drop into a card; the
+  engine never offers it only because `GenericProvider::HasAnyDigSource` returns false for this provider
+  chain (round T). That is an engine limitation, not a rules one. So **+0.0072 is an upper bound on the
+  cost of 1 Basri**, and the true figure is lower by an unmeasured amount — plausibly enough to make it
+  free in real play. Adopting on that basis would be a judgement call, not a measurement, and list
+  adoption is the user's call.
+
+#### VERDICT — NO CHANGE. The shipped v2 60 wins on every arm tested.
+
+Nothing is adopted and nothing is staged. Both of the user's questions are answered in the negative,
+but with two things worth keeping: **a 9th one-drop is affordable (~+0.003) if and only if a Plains
+pays**, and **Remote Farm is not the land to cut** — a finding that will apply to any future land-count
+question on this deck.
+
 ## Open questions for the user (surfaced, not blocking)
 
 1. **Ranking weights.** The Angels campaign ranked arms late-weighted — `long` 0.5 / `2hg` 0.3 /
