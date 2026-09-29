@@ -468,20 +468,38 @@ At that multiplier candidate B's total `roll7` is `9.06 x 1,522,096 = 13.79 M`, 
 escalation ≈ 10.74 M rollouts** — now the overwhelming majority of what is left, with the sub phase
 converged and freezing cheap per cell.
 
-| | remaining roll7 | at | remaining | elapsed + | total |
-|---|---|---|---|---|---|
-| escalation costs like the size-7 floor | 10.74 M | 69 roll/s | 43 h | 51 h | **94 h (3.9 d)** |
-| escalation 1.25x (hard cells first) | 10.74 M | 55 roll/s | 54 h | 51 h | 105 h (4.4 d) |
-| escalation 1.5x | 10.74 M | 46 roll/s | 65 h | 51 h | 116 h (4.8 d) |
+**MEASURED at 06:05Z on the clean converged state** (the first honest escalation sample this run has
+allowed): 900 s window, `roll7` +75,837 = **84.3 rollouts/s at 23.78 of 24 cores = 3.54
+rollouts/core-second.** That is **20% better** than the 2.95 rollouts/core-second the floor sweep
+gave, not worse — most likely warm state and precompute hits on cell-sides the floor already visited.
+**Do not reuse 2.95 for escalation.**
 
-69 roll/s is 23.5 cores x 2.95 rollouts/core-second, the measured size-7 productivity of this list;
-sub-table work runs at 4.68, which is why the last 36 h looked faster. **Finish: Thursday 2026-10-01
-early, to Friday 2026-10-02 early.** That is half a day to a day later than the 87–109 h quoted on
-2026-09-28, and the slip is the retraction in §2 plus pricing the whole speculation sweep.
+Remaining splits into two kinds of work that must NOT be priced alike:
 
-The 1.25x/1.5x rows are not padding: escalation targets the cells whose keep call is most marginal,
-so it should cost *more* per rollout than the floor average. The multiplier becomes directly
-measurable within an hour of `roll7` moving, which is now.
+| | rollouts | rate | hours |
+|---|---|---|---|
+| speculation to `r=6` (in progress; 101,663 done) | 5.99 M | 84.3/s **measured** | 19.7 |
+| refine escalation to the final mean r | 4.66 M | unknown | 15.3–30.7 |
+
+| if refine costs | refine | total | finish |
+|---|---|---|---|
+| like speculation (84.3/s) | 15.3 h | **86.5 h (3.60 d)** | Wed 09-30 17:09Z |
+| 1.25x dearer | 19.2 h | 90.3 h (3.76 d) | Wed 09-30 20:59Z |
+| 1.5x dearer | 23.0 h | 94.2 h (3.92 d) | Thu 10-01 00:49Z |
+| 2x dearer | 30.7 h | 101.8 h (4.24 d) | Thu 10-01 08:29Z |
+
+**Finish: Wednesday 2026-09-30 afternoon through Thursday 2026-10-01 morning**, plus freezing and the
+148 MB+ journal write-out (the reference's post-escalation tail was ~1.2 h on 13.8x less data). Run
+start, for the record: **2026-09-27 02:39Z**.
+
+**The measured 84.3/s does NOT narrow the bracket, and it would be a mistake to quote the 3.60 d row
+alone.** Speculation is *uniform shallow* work — every live cell-side from r=3 to r=6 — while refine
+escalation goes *deep on the hardest cells only*, toward `cap=30`. The measurement is therefore from
+the easy half, and the dearer rows are live possibilities rather than padding. Two further cautions:
+per-monitor-period rates across this same span ranged **49–145/s**, so one 15-minute window is not a
+steady state (`one-run-t-stat-is-not-evidence` applies to rates too); and the whole projection still
+rests on the reference's 9.06 rollouts/cell-side transferring — the assumption that has already been
+wrong once on this run (§2).
 
 ## The branch
 
