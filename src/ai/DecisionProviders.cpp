@@ -10052,6 +10052,187 @@ int PreventDamageProvider::EtbDestroyTargetPick(const GameState& s, int controll
     return best < 0 ? 0 : best;
 }
 
+// ---- The ENGINE-ROLE tutor ranking (USER doctrine, 2026-09-29) ------------------------------
+//
+// USER, 2026-09-29: "our heuristics for Living Wish were particularly poor. Typically Tamanoa or
+// Vito are the best bet. In less common cases Dina or Rhox Faithmender are the backups. In goldfish
+// nothing else is relevant. Note that multiple Tamanoa is similar, but better than Tamanoa + Rhox
+// because it works better with Dina (two instances of lifegain). The only case Rhox is better is
+// when the right types of coloured mana are tight."
+//
+// The old order was the sideboard's zone order with lands last, so Rhox Faithmender (listed first)
+// was the Wish's pick everywhere the SEARCH did not choose explicitly: the axis base target (the
+// plan every other variant is a deviation from), the SECOND tutor of a plan (only one tutor per
+// variant is varied -- the other keeps the list front), every rollout / greedy resolution below the
+// root, and the human-play label, badge and chooser grid. So every leaf priced a Wish as a Rhox.
+//
+// ROLES are read off PARAMS, never names (the repo rule):
+//   GAIN   noncreature_damage_lifegain (Tamanoa) -- Purity (prevent_noncombat_to_self_gain) also
+//          COUNTS as a gain engine already in reach, but is never ranked up: 6 mana.
+//   VITO   lifegain_target_opp_loses_that_much     DINA  lifegain_each_opp_loses > 0
+//   AMP    lifegain_multiplier > 1 (Rhox Faithmender)
+// "Have" = on our battlefield OR in hand (a to-hand tutor's card is cast next turn at the earliest,
+// so a copy in hand fills the role as soon as it could; the EDF / Melira precedent). A GSZ in hand is
+// NOT counted -- it is a flexible slot the search resolves on its own.
+//   no GAIN                 -> Tamanoa, Vito, Dina, Rhox          (the drain without a gain is idle)
+//   GAIN, no drain          -> Vito, Dina, Tamanoa, Rhox          (Dina first when next turn's mana
+//                                                                   cannot reach Vito's 3 but reaches 2)
+//   GAIN and a drain        -> Tamanoa, Rhox, Dina, Vito          (a 2nd gain INSTANCE: Dina drains per
+//                                                                   event, so it beats Rhox's doubling)
+//     ...but Rhox first when {R}{G}{W} is TIGHT: no three DISTINCT lands (board + hand) cover R, G and
+//     W, while {3}{W} is coverable (a W source and >= 4 mana). The doctrine's one Rhox exception.
+// A legendary role already had (Vito / Dina on board or in hand) sinks to the end of the engine group:
+// on board the copy dies to the legend rule, in hand it is a redundant second copy.
+// Then LANDS (the user wished for Battlefield Forge twice for fixing): a land producing a colour the
+// engine cards in hand + the top engine pick need and no land of ours makes first, else zone order.
+// Then everything else, zone order ("in goldfish nothing else is relevant").
+//
+// An ORDERING only: TutorSearchWidth 20 keeps every legal name a searched variant at the root.
+namespace
+{
+enum PdRole : int { kPdGain = 0, kPdVito = 1, kPdDina = 2, kPdAmp = 3, kPdNoRole = -1 };
+
+int PdEngineRole(const CardDefinition* d)
+{
+    if (d == nullptr || !d->card.IsCreature()) { return kPdNoRole; }
+    const CardParams& p = d->params;
+    if (p.noncreature_damage_lifegain)          { return kPdGain; }
+    if (p.lifegain_target_opp_loses_that_much)  { return kPdVito; }
+    if (p.lifegain_each_opp_loses > 0)          { return kPdDina; }
+    if (p.lifegain_multiplier > 1)              { return kPdAmp; }
+    return kPdNoRole;
+}
+
+unsigned PdColourBit(Color c)
+{
+    switch (c)
+    {
+        case Color::White: return 1u;  case Color::Blue:  return 2u;  case Color::Black: return 4u;
+        case Color::Red:   return 8u;  case Color::Green: return 16u; default:           return 0u;
+    }
+}
+
+unsigned PdCostColours(const ManaCost& c)
+{
+    return (c.white > 0 ? 1u : 0u) | (c.blue > 0 ? 2u : 0u) | (c.black > 0 ? 4u : 0u)
+         | (c.red > 0 ? 8u : 0u) | (c.green > 0 ? 16u : 0u);
+}
+
+// Can three DISTINCT sources cover the three colour bits of `want` (a 3-colour cost, one pip each)?
+// Hall's condition by brute force over <= ~12 lands: a triple of distinct sources, one per colour.
+bool PdDistinctCover(const std::vector<unsigned>& srcs, const std::array<unsigned, 3>& want)
+{
+    const int n = static_cast<int>(srcs.size());
+    for (int a = 0; a < n; ++a)
+    {
+        if (!(srcs[a] & want[0])) { continue; }
+        for (int b = 0; b < n; ++b)
+        {
+            if (b == a || !(srcs[b] & want[1])) { continue; }
+            for (int c = 0; c < n; ++c)
+            { if (c != a && c != b && (srcs[c] & want[2])) { return true; } }
+        }
+    }
+    return false;
+}
+
+std::vector<std::string> PdRankEngineTutor(const GameState& s, int controller,
+                                           std::vector<std::string> names)
+{
+    const Player& ap = s.players[controller];
+    int gain = 0, drain = 0;
+    bool have_role[4] = { false, false, false, false };
+    unsigned hand_need = 0;            // colours of the engine creatures in hand
+    unsigned producible = 0;           // colours our lands (board + hand) can make
+    std::vector<unsigned> land_srcs;   // one colour mask per land, board + hand
+    int board_mana = 0, hand_land_mana = 0, hand_land_best = 0;
+    auto land_yield = [](const CardDefinition& d)
+    { return std::max(1, d.params.produces_amount); };
+    auto note = [&](const CardDefinition* d, bool in_hand)
+    {
+        if (d == nullptr) { return; }
+        if (d->card.IsLand())
+        {
+            unsigned m = 0;
+            for (Color c : EffectiveProduces(s, controller, *d, in_hand)) { m |= PdColourBit(c); }
+            land_srcs.push_back(m);
+            producible |= m;
+            if (in_hand)
+            { hand_land_mana += land_yield(*d); hand_land_best = std::max(hand_land_best, land_yield(*d)); }
+            else         { board_mana += land_yield(*d); }
+            return;
+        }
+        if (d->params.noncreature_damage_lifegain || d->params.prevent_noncombat_to_self_gain) { ++gain; }
+        if (d->params.lifegain_target_opp_loses_that_much || d->params.lifegain_each_opp_loses > 0)
+        { ++drain; }
+        const int role = PdEngineRole(d);
+        if (role >= 0)
+        {
+            have_role[role] = true;
+            if (in_hand) { hand_need |= PdCostColours(d->card.m_mana_cost); }
+        }
+    };
+    for (const Permanent& p : s.battlefield)
+    {
+        if (p.controller_index == controller) { note(CardDatabase::Instance().LookupCached(p.card), false); }
+    }
+    for (const Card& c : ap.hand)
+    {
+        if (c.m_is_staged) { continue; }
+        note(CardDatabase::Instance().LookupCached(c), true);
+    }
+    // Next turn's mana: the board plus ONE land drop (the best-yielding land in hand).
+    const int next_mana = board_mana + hand_land_best;
+    const int total_mana = board_mana + hand_land_mana;   // every land we hold, eventually
+
+    std::array<int, 4> order{};   // order[k] = the role ranked k-th
+    if (gain == 0)       { order = { kPdGain, kPdVito, kPdDina, kPdAmp }; }
+    else if (drain == 0) { order = next_mana == 2 ? std::array<int, 4>{ kPdDina, kPdVito, kPdGain, kPdAmp }
+                                                  : std::array<int, 4>{ kPdVito, kPdDina, kPdGain, kPdAmp }; }
+    else
+    {
+        const bool rgw_ok = PdDistinctCover(land_srcs, { 8u, 16u, 1u });
+        const bool rhox_ok = (producible & 1u) != 0 && total_mana >= 4;
+        order = (!rgw_ok && rhox_ok) ? std::array<int, 4>{ kPdAmp, kPdGain, kPdDina, kPdVito }
+                                     : std::array<int, 4>{ kPdGain, kPdAmp, kPdDina, kPdVito };
+    }
+    int role_rank[4] = { 0, 0, 0, 0 };
+    for (int k = 0; k < 4; ++k)
+    {
+        const int r = order[static_cast<std::size_t>(k)];
+        // A legendary role already had: its fetch is a legend-rule casualty or a redundant copy.
+        const bool dup = (r == kPdVito || r == kPdDina) && have_role[r];
+        role_rank[r] = k + (dup ? 4 : 0);
+    }
+    // Colours the lands must still supply: the engine cards in hand, plus the top engine pick.
+    unsigned need = hand_need;
+    for (const std::string& nm : names)
+    {
+        const CardDefinition* d = CardDatabase::Instance().Lookup(nm);
+        if (PdEngineRole(d) == order[0]) { need |= PdCostColours(d->card.m_mana_cost); break; }
+    }
+    const unsigned missing = need & ~producible;
+    auto key = [&](const std::string& nm) -> int
+    {
+        const CardDefinition* d = CardDatabase::Instance().Lookup(nm);
+        const int role = PdEngineRole(d);
+        if (role >= 0) { return role_rank[role]; }                                    // 0..7
+        if (d != nullptr && d->card.IsLand())
+        {
+            unsigned m = 0;
+            for (Color c : EffectiveProduces(s, controller, *d, /*in_hand=*/true)) { m |= PdColourBit(c); }
+            int fix = 0;
+            for (unsigned b = m & missing; b != 0; b &= b - 1) { ++fix; }
+            return 20 - fix;                                                          // 15..20
+        }
+        return 100;
+    };
+    std::stable_sort(names.begin(), names.end(),
+                     [&](const std::string& a, const std::string& b) { return key(a) < key(b); });
+    return names;
+}
+}   // namespace
+
 std::vector<std::string>
 PreventDamageProvider::TutorCandidates(const GameState& s, int controller, const CardParams& pp) const
 {
@@ -10060,17 +10241,35 @@ PreventDamageProvider::TutorCandidates(const GameState& s, int controller, const
     // put-onto-battlefield single tutor, and it would have been undone by the partition's stable
     // regrouping only in its land/nonland grouping -- keep it exact by falling back when it is live.
     static const bool s_ranked = EnvOn("MTG_TUTOR_RANKED_DEFAULT");
+    std::vector<std::string> all;
     if (s_ranked && pp.tutor_to_battlefield_single)
     {
-        std::vector<std::string> all = GenericProvider::TutorCandidates(s, controller, pp);
+        all = GenericProvider::TutorCandidates(s, controller, pp);
         std::stable_partition(all.begin(), all.end(), [](const std::string& nm)
         {
             const CardDefinition* d = CardDatabase::Instance().Lookup(nm);
             return d == nullptr || !d->card.IsLand();
         });
-        return all;
     }
-    return GenericTutorList(s, controller, pp, /*nonlands_first=*/true);
+    else
+    {
+        all = GenericTutorList(s, controller, pp, /*nonlands_first=*/true);
+    }
+    // THE ENGINE-ROLE RANKING (see PdRankEngineTutor), Living Wish only: MTG_PD_WISH_RANK, DEFAULT
+    // ON (=0 = the nonlands-first sideboard order above, exactly). Applies in human play too, so the
+    // plan labels, the badge and the chooser grid lead with the doctrine's pick
+    // (test/viewer_protocol_check.py re-anchors a recorded tutor pick by NAME).
+    // NOT applied to:
+    //   * Green Sun's Zenith -- this list has NO consumer for it. The Chord-class enumerator walks the
+    //     library and bakes EVERY green target into its own cast variant (TurnSolver's
+    //     tutor_mv_max_is_x branch), so resolution always has a pin; a trial MTG_PD_GSZ_RANK lever
+    //     (2026-09-29) was byte-identical to OFF on 600 held-out games and was deleted.
+    //   * Beseech the Queen -- it reaches the whole library (Manabarbs, Spellshock, Earthquake, the
+    //     other tutors) and the doctrine says nothing about it; it keeps the nonlands-first order.
+    static const bool s_wish_env = EnvOn("MTG_PD_WISH_RANK", true);
+    if (pp.wish_from_sideboard && all.size() > 1 && heurarm::Flag(heurarm::PD_WISH_RANK, s_wish_env))
+    { all = PdRankEngineTutor(s, controller, std::move(all)); }
+    return all;
 }
 
 // ---- PreventDamageProvider::CleanupDiscardCandidates ------------------------

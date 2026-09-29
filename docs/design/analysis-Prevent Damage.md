@@ -51,6 +51,8 @@ Living Wish, Vexing Shusher.
 - Implementation: I1 `5bead6b1`, I2 `9c9186cd`, I3 `cdec4a37`. Stage 4 `ece1abbe`. Stage 5 fixes
   `6d3f212c`. m2 OFF `ef26b03b`. Sweep fixes `d4c38ed4` / `817df444`. Lossless perf `6a8f09ba`.
   §5i `e4524d71` + `dfa5a12e`.
+- **2026-09-29: Living Wish ranking adopted** (`MTG_PD_WISH_RANK`, default ON, user doctrine). See
+  "## Living Wish ranking" at the end (-0.0217 t/game, t -2.51).
 - The blocker is **5j (3.98x the cost budget; 68% of it is pre-table clairvoyant bottoming)**. The
   deck is in no regression tier, and the keep-table / value-leaf generators refuse it until the user
   settles D1. Then run, serially: D7 (§5i adopt), then the mulligan table, then the value leaf, then
@@ -1380,7 +1382,7 @@ lists only 4 "hooks held"; the code overrides **13** (it has gone stale).
 | P5 | `GuardsSelfLethalPayment` (`MTG_PD_SELF_LETHAL_GUARD`, ON): drops CAST plans whose first land tap under Manabarbs kills us, and Earthquake X >= our life | provider | pruning (rules-derived) | Own deaths 2 -> 0. ⚠ **Life is read at ENUMERATION**, so a gain earlier in the same plan is not credited: a Tamanoa-then-big-quake line can be pruned. It also misses Pyrohemia's `{R}` barb at life >= 2 and a land's own pain (both unguarded, so a line is over-offered, never lost) |
 | P6 | `OfferDuplicateLegendCast` (`MTG_PD_DUP_LEGEND`, ON): a 2nd Vito/Dina only when Spellshock + a gain engine are on board or affordable in hand, or the base upside helper says so | provider | pruning | Neutral (+0.0017, t 0.45). It misses nothing measurable: the duplicate dies to the legend rule |
 | P7 | `TutorSearchWidth 20` | provider | coverage (not a narrowing) | All 19 library names + 13 sideboard names are reachable |
-| P8 | `TutorCandidates`: nonlands first | provider | ordering | Every name is still a searched variant. ⚠ It sets the **rollout's / unpinned** Beseech/Wish pick, which shapes leaf values |
+| P8 | `TutorCandidates`: nonlands first; **Living Wish re-ranked by the user's engine-role doctrine** (`MTG_PD_WISH_RANK`, ON since 2026-09-29: Tamanoa / Vito first by board state, Dina / Rhox backups, 2nd Tamanoa over Rhox unless {R}{G}{W} is tight, lands (colour-fixer first), the rest). Beseech keeps nonlands-first; GSZ has no consumer of this list | provider | ordering | Every name is still a searched variant. It sets the **rollout's / unpinned** Wish/Beseech pick, the 2nd tutor of a plan, and the human-play label/badge/grid. Wish ranking measured -0.0217 t/game (t -2.51, n=600). See "## Living Wish ranking" |
 | P9 | `XCandidates` (Earthquake): drops X=0 unless Spellshock is out (plus P5's X cap) | provider | pruning | X=0 without Spellshock deals nothing, triggers nothing and costs a card: dominated, lossless. Human play is unpruned |
 | P10 | `OfferFailToFindPut` (GSZ X=0 fail-to-find): only under Spellshock + a gain engine | provider | pruning (of an added option) | Without both, the cast only hurts us. Human play gets every X |
 | P11 | `FodderSacUseful` (`MTG_PD_DINA_LETHAL_GATE`, ON): Dina sacrifices only when she can attack and an optimistic bound says THIS turn is lethal | provider | pruning (judgement) | Measured +0.040, t 2.85 (41 worse / 17 better with it off). ⚠ It misses a non-lethal set-up sac and a Purity-shuffle sac. Without it the search fed Tamanoa to Dina 28 times |
@@ -1459,3 +1461,113 @@ the inert PARTIALs above (D10).
   the new deck in the regression test until it is optimized, but we can continue that when I get to it."*
   The deck stays OUT of all three tiers until the performance work (D1) brings it inside the 3x cost
   rule; the route for that optimisation (D1 options) is still open for the user's review.
+
+## Living Wish ranking (user doctrine 2026-09-29)
+
+**USER, 2026-09-29:** *"our heuristics for Living Wish were particularly poor. Typically Tamanoa or
+Vito are the best bet. In less common cases Dina or Rhox Faithmender are the backups. In goldfish
+nothing else is relevant. Note that multiple Tamanoa is similar, but better than Tamanoa + Rhox
+because it works better with Dina (two instances of lifegain). The only case Rhox is better is when
+the right types of coloured mana are tight."*
+
+**The defect.** `PreventDamageProvider::TutorCandidates` returned the sideboard in zone order, nonlands
+first, so **Rhox Faithmender was always first**. The list's order is read by:
+- the tutor axis's **base target**. `TurnSolver`'s post-dedup axis puts `cands[0]` on the base plan
+  and adds one variant per other name (width 20).
+- the **second tutor of a plan**. Only one tutor per variant is varied, so the other keeps the front.
+- **every rollout / greedy resolution** below the root. `PerformTutor` falls back to
+  `LiveTutorCandidates().front()` when no target is baked.
+- **human play**: the plan label, the tutor chooser's grid order, and its badge. The badge is
+  re-asked under `HumanPlaySuppress`.
+
+Green Sun's Zenith does **not** consume this list. The Chord-class enumerator walks the library and
+bakes every green target into its own variant. A trial `MTG_PD_GSZ_RANK` lever was **byte-identical
+to OFF** on all 600 games of both seeds (digests equal), so it was deleted. Beseech the Queen is left
+nonlands-first, because the doctrine says nothing about it.
+
+**The ranking** (`PdRankEngineTutor`). Roles are read from params: GAIN `noncreature_damage_lifegain`
+(Purity also counts as a gain already in reach), VITO `lifegain_target_opp_loses_that_much`, DINA
+`lifegain_each_opp_loses`, AMP `lifegain_multiplier`. "Have" means on our battlefield OR in hand.
+- **No gain engine:** Tamanoa, Vito, Dina, Rhox.
+- **Gain engine but no drain:** Vito, Dina, Tamanoa, Rhox. Dina goes first when next turn's mana
+  (board plus the best land in hand) is exactly 2.
+- **Gain engine and a drain:** Tamanoa, Rhox, Dina, Vito. **Rhox goes first** only when no three
+  DISTINCT lands (board + hand) cover {R}{G}{W} but {3}{W} is coverable. That is the doctrine's
+  exception.
+- **Legends already held:** a Vito or Dina already had sinks to the end of the engine group.
+- **After the engine group:** lands, with a land that makes a colour the hand's engine cards (plus the
+  top pick) need and no land of ours makes placed first. The user wished for Battlefield Forge twice
+  for fixing. Then everything else, in zone order.
+
+Names are used only to lay out the fixed sideboard in the tests. The ranking is `MTG_PD_WISH_RANK`
+(`EnvOn(..., true)`) plus heurarm slot `PD_WISH_RANK`, and `=0` restores the old order exactly.
+
+**Unit tests** (`test/unit/test_prevent_damage_wish.cpp`, 8 cases):
+- one board per branch: W1 no-gain, W2 gain/no-drain, W2b 2-mana Dina, W3 second Tamanoa, W4 tight
+  RGW gives Rhox, W5 legend duplicate sinks, W6 land fixer order;
+- every board pins the OFF order, which is the control that must differ;
+- a hatch case checks that `=0` gives the exact old list;
+- Beseech and GSZ are lever-invariant.
+
+Also run: full `mtg-test` green and `test/scenarios.sh` 117/117.
+
+**Human-play replay.** Reordering the Wish grid would re-point every recorded `tutor_etb` index,
+because the checker replayed them verbatim. `test/viewer_protocol_check.py` now **re-anchors a
+recorded tutor pick by candidate NAME** when the name at the recorded index differs. That mirrors the
+existing `options` re-anchor; fetching is by name, so this is the faithful replay. Checked on the
+base binary: every non-PD reference classifies identically to the pre-change sweep.
+
+**Paired A/B.** Play settings (d5 b20, profile attached; the profile has no `value_play`). ONE pooled
+batch, 20 threads, heurarm flags per job. Held-out seeds **60001 / 61001 x 300**, disjoint from every
+prior PD base. Heartbeat 20/20.
+
+| arm | s60001 | s61001 | LP (n=600) | won | CPU |
+|---|---|---|---|---|---|
+| OFF (both levers 0) | 5.8200 | 5.7933 | 5.8067 | 582 | 6,305 s |
+| **Wish ranking ON** | 5.7967 | 5.7733 | **5.7850** | 581 | 6,469 s (1.03x; the `both` arm, identical play, 1.00x) |
+| GSZ ranking only | = OFF digests | = OFF digests | 5.8067 | 582 | inert, deleted |
+
+- **Paired result, Wish ON minus OFF: delta -0.0217 turns/game, t = -2.51, 5 worse / 19 better.**
+- **Real Living Wish fetches.** The Wish was cast 449 / 450 times per arm.
+  - OFF fetched **Rhox 154**, Tamanoa 122, Vito 89, Brushland 60, Forge 8, Purity 6, Dina 5, other 5.
+  - ON fetched **Tamanoa 217, Vito 109**, Brushland 63, Rhox 37, Forge 9, Dina 9, Purity 4, other 2.
+  - So the root search was itself being pulled to Rhox by the Rhox-valued continuation.
+- **Better games are the doctrine at work.** In s60001 gi8, OFF wished Rhox, Vito, Rhox, while ON
+  wished Tamanoa and then Vito in one turn (the plan's 2nd Wish now gets the right front) and won a
+  turn earlier. In s61001 gi1, OFF wished Rhox twice with Vito out and no gain engine, while ON wished
+  Tamanoa and won a turn earlier.
+- **All 5 worse games were root-caused.** Mulligans are identical in all 5. None of them loses at a
+  Wish pick; each diverges before any Wish resolves:
+  - s60001 gi104 and s61001 gi59 are the known **T1 land-skip tie** (D8). The perturbed rollout
+    values tip a no-win tie toward skipping the T1 drop. T1 skip-then-shed happened in 3 ON games and
+    2 OFF games.
+  - s60001 gi119 and gi229 diverge on the T1 land choice (Forge vs Pool, Citadel vs Coliseum). Pain
+    and sequencing drift follows.
+  - s61001 gi10 diverges on the T2 choice (Earthquake X=2 vs GSZ).
+
+  All five are early-turn rollout-valuation perturbations, not a mis-ranked fetch.
+
+**Adopted default ON**: non-inferior (in fact better, t = -2.51) and doctrine-aligned.
+- **Final binary:** `final_s60001` x 100 reproduces the ON arm's per-game digests exactly.
+- **Smoke:** 101/101 PASS, configs changed 0, play-changed 0 (searched and d0). `check_gt_logs`
+  consistent (590). PD is in no tier, so smoke only shows that other decks are unchanged.
+- **Tests:** `mtg-test` green, scenarios 117/117.
+- **`viewer_protocol_check.py --strict --only Prevent_Damage`** (new binary): 5 ok, 5 repaired, 0
+  drift. All 10 references reproduce their recorded win turn. s3_gi2's Wish pick is re-anchored by
+  name 12->4, the others are content-anchored plan indices.
+- **`ref_bench --deck prevent_damage`:** the search column is **per-game identical before and after**
+  (5.400; s2_gi1 still +1). The human column moved 5.800 -> 5.600 only because the user re-saved
+  s10_gi9 (T7->T6) and s6_gi5 (T5->T4) mid-session (`b1538895`, `f93efa66`). It is now 1/10 short
+  and 3 faster.
+
+**s2_gi1 shortfall (ref_bench +1): NOT the Wish order; b20 starvation.** The reference hand-off
+(`scripts/ref_handoff.py ... --turn 5`) starts from Tamanoa + Rhox + 4 lands, with GSZ, Wish,
+Manabarbs and Pyrohemia in hand.
+- At **b20 both arms** cast Pyrohemia on T5 and win on **T7**.
+- At **b25 / 30 / 35 / 40 / 50 / 100 / 200 both arms** play GSZ X=3, then on T6 Wish into Vito and
+  cast Vito, winning on **T6**.
+- From `--turn 3`, b20 gives T7 in both arms.
+
+So the Wish order is invariant here. The root sees Vito at every budget. The flip sits between b20
+and b25 in both arms: the T5 decision commits before the GSZ-then-Wish line is priced (the 5c
+starvation class, "commits at depth 1 on 95 of 141 decisions").

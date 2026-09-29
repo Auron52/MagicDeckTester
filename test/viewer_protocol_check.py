@@ -1252,6 +1252,27 @@ def check_reference(path, collect=None):
                     if q != x:
                         shifted.append(f"{frame_ident(dec)} {x}->{q}")
                     resolved.append(q)
+            elif (isinstance(dec.get("candidates"), list) and isinstance(rd.get("candidates"), list)
+                  and dec.get("candidates") and rd.get("candidates")):
+                # A TUTOR frame (tutor_etb): `candidates` is a list of {index, name}, and its ORDER
+                # is the provider's ranking -- not part of the contract either (Prevent Damage's
+                # Living Wish ranking, 2026-09-29, moved Rhox Faithmender off index 0). Fetching is
+                # BY NAME, so re-anchor the recorded pick by its name; the verbatim index is kept
+                # when the name still sits there (or the frame has no names), and -1 (decline)
+                # stays a sentinel. A recorded name that is no longer offered falls back to the
+                # verbatim index, i.e. exactly the old behaviour, and the drift test decides.
+                cur_names = [c.get("name") for c in dec["candidates"]]
+                ref_by_idx = {c.get("index"): c.get("name") for c in rd["candidates"]}
+                for x in rec_list:
+                    x = int(x)
+                    nm = ref_by_idx.get(x)
+                    if x < 0 or nm is None or (0 <= x < len(cur_names) and cur_names[x] == nm) \
+                            or nm not in cur_names:
+                        resolved.append(x)
+                        continue
+                    q = cur_names.index(nm)
+                    shifted.append(f"{frame_ident(dec)} {x}->{q}")
+                    resolved.append(q)
             else:
                 resolved += [int(x) for x in rec_list]
         ri += 1

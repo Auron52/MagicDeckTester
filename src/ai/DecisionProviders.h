@@ -337,6 +337,9 @@ public:
     // the list's front, and library order is shuffle order -- so without this a Beseech's default
     // pick was whichever card happened to sit highest, frequently a land. A provider ORDERING only:
     // with the width above every legal name is still a searched variant.
+    // Living Wish is then re-ranked (MTG_PD_WISH_RANK, DEFAULT ON) by the board-aware ENGINE ROLE of
+    // the user's 2026-09-29 doctrine (Tamanoa / Vito first, Dina / Rhox backups, lands, the rest) --
+    // see PdRankEngineTutor in the .cpp.
     std::vector<std::string> TutorCandidates(const GameState&, int, const CardParams&) const override;
     // Rolling Earthquake: the generic 0..max range, minus X = 0 unless a cast trigger that DEALS
     // DAMAGE (Spellshock) is out -- without one an X = 0 cast deals nothing, triggers nothing, and
