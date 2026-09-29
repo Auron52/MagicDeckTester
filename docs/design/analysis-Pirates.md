@@ -310,6 +310,28 @@ own play (K=3 searched labels at shipped play), not to any hand-played line, and
 reference bench has not been run for this deck. If the user's references later show a systematic
 misplay, the leaf is regenerated with `valueleaf.sh run` (incremental; the rows are the cost).
 
+> **PREREQUISITE NOW MET, AND IT PASSED PERFECTLY — 2026-09-29.** The user hand-played **10 Pirates
+> reference games** (00:35–00:56 UTC, `references/Pirates/claude_s{1..10}_gi{0..9}.json`, committed on
+> sight per the commit-only rule). `scripts/ref_bench.py --deck pirates` replays each one's exact
+> recorded opening hand via `--force-mulligan` under the **committed `value_play` policy**, so it
+> isolates PLAY from mulligan:
+>
+> | n | human | search | shortfalls | faster than human | hand mismatches |
+> |---|---|---|---|---|---|
+> | 10 | **4.300** | **4.300** | **0/10** | 0 | 0 |
+>
+> **Every one of the ten games matches exactly** — the search reproduces the user's win turn on all 10
+> (4,5,5,4,5,4,4,4,4,4), with no game where it falls short and none where it is faster. So the caveat
+> above is discharged rather than merely aged out: the value leaf and the mulligan profile were fitted
+> to play that the deck's own human ground truth now independently confirms. **No regeneration is
+> owed.** The bench entry is stamped `src 7327531a`, the current `HEAD:src`.
+>
+> Two things this does NOT establish, stated so the green is not over-read. Ten games is a small bench
+> and an exact match on all ten is evidence the search is not systematically *worse* than the human on
+> this deck, not that either is optimal — the human and the search could share a blind spot. And the
+> bench forces the reference's recorded mulligan, so it says nothing about the keep table, which has
+> its own validation (keep −0.1405 t, 16/16 seeds).
+
 **Run:** `bash scripts/valueleaf.sh run decks/Pirates` at 10:12 UTC on `5bb340e1` (the hand-entry
 adoption), alone on the box. Phase A 3.5 min (10 jobs, **11,141 rows**, held-out RMSE **0.4008**); phase C
 **49 min** (52 cells × 400 games, 32/32 workers, 14 degenerate games abandoned at the unit ceiling and

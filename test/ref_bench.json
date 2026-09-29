@@ -257,6 +257,18 @@
    "shortfalls": [],
    "src": "7327531a2a80a92195f85fa269369d7f54e3d5c8"
   },
+  "pirates": {
+   "hand_mismatch": 0,
+   "hand_mismatch_games": [],
+   "human": 4.3,
+   "max_turns": 8,
+   "n": 10,
+   "policy": "committed value_play",
+   "search": 4.3,
+   "short": 0,
+   "shortfalls": [],
+   "src": "7327531a2a80a92195f85fa269369d7f54e3d5c8"
+  },
   "slivers_vial": {
    "hand_mismatch": 0,
    "hand_mismatch_games": [],
