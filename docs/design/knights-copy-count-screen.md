@@ -3252,6 +3252,42 @@ question on this deck.
 
 ## Round V (2026-09-29) — price the slot against the deck's OWN blank, not against a land
 
+### LANDED 12:33Z. VERDICT: **Unexpectedly Absent is a real cost, and cutting it is the deck's
+### cheapest available gain.** Two of three arms established; the Vial arm is void (see the defect below).
+
+Step vs the shipped v2, **negative = faster = better**; pooled late-weighted (long .5 / 2hg .3 /
+std .2) over 40,000 games per arm per format, across two disjoint seed families (19.2M / 19.6M).
+
+| arm | edit | long | 2hg | std | **pooled** | meas / conf | bias | margin |
+|---|---|---|---|---|---|---|---|---|
+| `v_ua0_pl21` | UA → 21st Plains | −0.0237 | −0.0201 | −0.0174 | **−0.0214** | −0.0204 / −0.0223 | −0.0002 | **4.38x** ESTABLISHED |
+| `v_b1_ua0` | UA → 1 Basri | −0.0187 | −0.0134 | −0.0195 | **−0.0173** | −0.0182 / −0.0164 | −0.0014 | **3.12x** ESTABLISHED |
+| `v_av1_ua0` | UA → 1 Aether Vial | +0.0016 | +0.0016 | +0.0005 | +0.0014 | −0.0000 / +0.0029 | −0.0192 | 0.81x **VOID** |
+
+**Every sign replicates in all three formats and across both seed families**, and the two established
+arms have near-zero apparatus bias (their own tables and the shared one agree to 0.0002 and 0.0014),
+which is the cleanest bracket this campaign has produced.
+
+**The finding: the blank costs about 0.02, and what replaces it barely matters — as long as it does
+something.** A 21st Plains buys −0.0214 and a Basri buys −0.0173, a gap of 0.0041 that sits at the
+edge of the floor. This is the answer to the user's actual question. It also **retrospectively
+justifies the whole round**: round U hunted for a free payer among cards it was allowed to cut and
+found none (Plains +0.0072 was the best), because cutting interaction had been ruled out of scope.
+The deck's worst card was never on the table.
+
+**The third arm is the one that broke the case open.** Replacing a dead card with a Vial measured
++0.0014 — *worse than replacing it with a land by 0.0228*. A card that cannot beat a Plains in the
+slot vacated by the deck's acknowledged blank is not a card that is merely overpriced; it is a card
+doing nothing at all. That is exactly what it turned out to be — see the defect section below. Its
+0.81x floor margin and its −0.0192 bias (by far the round's largest) were the apparatus reporting
+the same thing in its own language: the arm's own table could not find anything to fit.
+
+**Consequence for the final list.** Unexpectedly Absent is the payer for whatever the deck adds next.
+Note the out-of-model caveat cuts the *normal* way here, not both ways: UA's value (answering a
+resolved permanent) is invisible to a goldfish, so −0.0214 is an **upper bound on the gain** from
+cutting it, and a real opponent is the reason to keep it. That is the user's judgement, not the
+model's. The model's contribution is narrow and solid: *within the goldfish, the slot is free.*
+
 **The question.** User, on Aether Vial after round U: *"it seems kind of nice to have, but the
 measurements don't look too good for it. How does the number compare vs a dead card in goldfish like
 Unexpectedly Absent?"*
@@ -3319,13 +3355,18 @@ shrinks that one; and what the added card does depends on whether discovery will
 
 Two things follow, and the first is a result in its own right.
 
-**Equivalence discovery cannot distinguish Aether Vial from Swords to Plowshares for the keep
-decision.** It clusters on mean |Δ win-turn| per probe, and on that metric a 1-mana artifact that
-deploys creatures a turn early and a 1-mana exile spell with nothing to exile are the same card. That
-is an independent, mechanical corroboration of the user's premise — arrived at by a different route
-than the screen, and available before a single game was played. It does *not* by itself say Vial is
-worthless: it says this apparatus prices it in the same class as the deck's acknowledged blank, which
-is precisely the comparison the round was built to make.
+**~~Equivalence discovery cannot distinguish Aether Vial from Swords to Plowshares for the keep
+decision.~~ RETRACTED — it was a symptom of the defect below, not a finding.** The claim as
+committed was that discovery clusters on mean |Δ win-turn| per probe, and that on that metric a
+1-mana artifact deploying creatures a turn early and a 1-mana exile spell with nothing to exile come
+out as the same card — offered as independent mechanical corroboration of the user's premise,
+reached before a game was played.
+
+It corroborated nothing. **The Vial in `v_av1_ua0` never gained a charge counter**, so it could
+deploy only mana-value-0 creatures, of which this deck has none. Discovery clustered two cards that
+both did literally *nothing*, and that is the only sense in which they were indistinguishable. The
+right reading is the opposite of the one committed: the co-bucketing is a **detector** for the
+defect, not evidence about the card. See the next section.
 
 **And the merge ruling is demonstrably needed rather than merely tidy.** `v_b1_ua0` is the second
 independent run to give a lone Basri his own bucket (round T was the first). Discovery's metric is
@@ -3349,6 +3390,75 @@ castable. User: *"A 2/1 Knight is always useful in goldfishing… It would be mo
 boards in real games. In those situations the 2/1 may not be useful, but something else in the deck
 could be."* A goldfish has no stuck boards, so round T's 100.0%-identical-play finding survives the
 capability change and Basri's cycling joins Vial's instant-speed deploy in the out-of-model column.
+
+### THE AETHER VIAL MEASUREMENTS WERE ALL PRICING A BLANK (found 2026-09-29, fixed `c4da77cd`)
+
+The user asked a question that looked like paperwork: *"On Aether Vial what heuristic are we using?
+We should be using the same rule as other decks. (if we aren't using a rule at all that would pollute
+the results somewhat)"*. The answer was worse than the question feared.
+
+**The rule was never the problem, and it is shared.** `GenericProvider::WantVialCharge` delegates to
+`::WantVialCharge` in `SpellEffects.h` — the hand-aware root policy every Vial deck uses, and
+WhiteKnights reaches it through `VialProvider → KnightsProvider → WhiteKnightsProvider`. Nor is it
+searched into oblivion: `MTG_VIAL_AXIS` has been default-OFF since the user's own 2026-08-30 ruling
+(*"in general we don't want to fully search vial decisions, because that is a waste of effort"*) and
+`MTG_SEARCHED_VIAL` defaults false. No bespoke heuristic, none missing, no branching tax.
+
+**The INPUT was the problem.** `WantVialCharge` opened with `if (target <= 0) return false;` where
+`target = state.vial_target_mv`. That field is not a tuning constant — it is a pure **function of the
+decklist** (the deck's dominant creature mana value, 0 for a deck holding no Vial). But it was carried
+on `MulliganProfile`, and `deck_compare.py` hands every arm the **base deck's** profile. The base is
+v2, which holds no Vial, so the field was absent → 0 → the charge policy declined on line one,
+forever. A Vial on zero counters can only deploy creatures of mana value zero, and this deck has none.
+**The card was a blank that cost a card**, and nothing errored or warned — a Vial at zero counters is
+a legal permanent that simply never does anything.
+
+Measured, not inferred — the same 300 games at d5, same seeds, one field changed:
+
+| `vial_target_mv` | avg win turn | play digest |
+|---|---|---|
+| absent (what every arm ran) | 4.2500 | `42020a6059026bfd` |
+| `= 3` (what the decklist says) | **4.2400** | `8e66ec98908e5e3f` |
+
+**What it invalidates, and what it does not.** Invalid: every arm that ADDED Vial to a base without
+one — `t_av1_vk3` +0.0209, `t_av2_vk2` +0.0417, `u_av1_pl19` +0.0193, `u_av1_rf3` +0.0439,
+`u_av2_pl18` +0.0493, `v_av1_ua0` +0.0014. All are upper bounds on a card never allowed to act. Still
+valid: the v1-era **cut** ladders (3→2 −0.0154, 3→0 −0.0423, 4th copy −0.364), because those base
+decks *contained* the Vial and so their profiles carried the field. Also demoted: the round V
+"discovery buckets Vial with Swords" finding, retracted above.
+
+**Fixed as a class, because this was the third instance.** The same shape had already cost
+`slivers_vial` a 2.6x error in 2026-08 (a screen on a default profile read the cut of two Vials as
+−0.0953 instead of −0.0246) and left Pirates with a Vial that *"never charges, because there is no
+`.profile.json` yet"*. So the fix is not a default change:
+
+* `GoldFishRunner::DeckVialTargetMv` derives the ceiling from the decklist (keyed on the
+  `upkeep_adds_charge` param, not the card's name), and `StampDeckTraits` stamps it beside every
+  other deck trait. **One writer.**
+* The field is **deleted from `MulliganProfile`**, its JSON is no longer written, and the read is
+  replaced by a comment saying not to restore it. Nothing is left to omit, to copy from the wrong
+  deck, or to keep in sync.
+* All **sixteen** `state.vial_target_mv = profile.vial_target_mv` overwrites are gone — including
+  `BatchRunner`'s per-job scalar, which is the path every screen and every regression run uses.
+* The duplicate derivations in `AnalyzerEngine::ComputeVialTargetMv` and `analyze_deck.py` are
+  deleted. There were **three** copies of one function; now there is one.
+* `WantVialCharge`'s early return is gone. The hand-driven half needs no target at all; only the
+  speculative pre-charge does, and it is guarded there.
+* `test/unit/test_vial_target_from_decklist.cpp` pins the derivation (including the higher-MV
+  tie-break Goblins relies on), the stamp through `SetupGame` with no profile present, and that a
+  0-counter Vial still charges toward a creature in hand.
+
+**Suite byte-identical** — 0 configs changed / 101 unchanged, 0 searched slower / 0 faster / 0
+play-changed — with slivers, knights, goblins, minotaur and pirates all in that suite. That is the
+proof the fix reaches only decks whose Vial was already broken: all six shipped profiles already
+agreed with what their decklists derive.
+
+**The generalisable lesson.** A field that is a *function of the decklist* must be derived from the
+decklist at the point of use, never carried alongside it in a file that can describe a different
+decklist. Everything else in `StampDeckTraits` already worked this way; this one field did not, and
+it took three separate mismeasurements before anyone looked at it. The user's reaction sets the bar:
+*"If it never increments the counter by default that is a disaster. (and should NOT be our default).
+I would rather search it than do that."*
 
 ### The merge ruling and the list change are ONE decision
 
