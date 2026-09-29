@@ -340,9 +340,116 @@ bool GenericProvider::CanAutoFireAltPayload(const GameState&, int, const CardDef
     return false;   // no free alt-cost payloads in a generic deck.
 }
 
-bool GenericProvider::HasAnyDigSource (const GameState&) const { return false; }
-bool GenericProvider::ShouldConsiderDig(const GameState&) const { return false; }
-std::string GenericProvider::SelectDigSource(const GameState&, const ManaPool&, bool&) const { return {}; }
+// ---- The GENERIC dig gate (cycling / sacrifice-to-draw) --------------------------------------
+//
+// USER 2026-09-29: *"Cycling shouldn't be unreachable should it? ... It shouldn't be unreachable,
+// but could perhaps be dropped heuristically most of the time."* and *"That should not be
+// inaccessible."*
+//
+// WHAT WAS WRONG. These three hooks used to `return false` unconditionally, and
+// AIEngine::UseSurplusLandAbilities / the rollout dig loop / the searched dig axis all bail on the
+// first of them. So a deck whose provider did not opt in was NEVER OFFERED a cycle or a
+// sacrifice-to-draw by the autonomous engine -- not rejected by a heuristic, never enumerated at
+// all. `cycling_cost` is parsed, priced (EffectiveCyclingCost) and fully implemented; the two
+// TurnSolver cycling sites are human-play P3/P6, so a person playing through the viewer WAS offered
+// the cycle and only the engine was not. The sharpest form: Auras can crack its Horizon Canopy and
+// Pirates cannot crack its Fiery Islet, identical `sacrifice_draw_cost: "{1}"` lands, differing
+// only in which provider happened to override this. See docs/design/generic-dig-gate.md.
+//
+// The failure mode was invisible and it corrupts MEASUREMENT, not just play: the card is
+// implemented, the parameter parses, the tests pass, and a screen of the card silently prices it
+// AS IF THE ABILITY DID NOT EXIST (WhiteKnights round N2 recorded "cycling's option value ...
+// cancels to within noise" for a measurement in which cycling never fired once).
+//
+// `::HasAnyDigSource` is already deck-agnostic and already scans both zones, so there is no new
+// detection logic here -- the generic provider simply stops declining to ask. Every deck with no
+// cycler and no untapped sac-draw permanent is byte-identical BY CONSTRUCTION (the detector returns
+// exactly what the stub returned), which is what makes this safe to validate rather than argue.
+//
+// MTG_GENERIC_DIG=0 restores the old stubs as a byte-identical A/B escape hatch.
+bool GenericProvider::HasAnyDigSource (const GameState& s) const
+{
+    static const bool on = EnvOn("MTG_GENERIC_DIG", true);
+    return on && ::HasAnyDigSource(s);
+}
+
+// The DEFAULT/HORIZON heuristic. THE RULE IS THE USER'S, 2026-09-29, in two sentences:
+// *"We shouldn't cycle when we have a lot of useful things in hand"* and *"It's mostly to find
+// something useful when you have none."* So the generic default is exactly the EMPTY-OF-GAS case
+// and nothing else -- not a flood-value dig, not a "spend a surplus land for a card" dig. Digging
+// is the line of last resort, taken when there is no line.
+//
+// This is deliberately NARROWER than AurasProvider's measured gate, which also fires on surplus
+// lands alone (>= 4 lands, gas or no gas). That is fine and is the point of a per-deck override:
+// Auras' dig source is a land ALREADY IN PLAY whose only other use is mana, so spending it while
+// flooded is near-free there. Generalising that to every deck would cycle away a card we could be
+// casting, which is what the user just ruled out.
+//
+// The shared `::ShouldConsiderDig` is NOT reused either: it is Treasure Hunt's gate (Land's Edge
+// ammo, retrace engines, cast-the-draw-engine-instead) and reduces, for a deck holding none of
+// those, to "dig whenever you control 2 lands" -- which would cycle a creature away on sight.
+bool GenericProvider::ShouldConsiderDig(const GameState& s) const
+{
+    if (!HasAnyDigSource(s)) { return false; }
+    // Unpruned audit: consider a dig whenever a dig source exists, instead of this judgement.
+    if (DecisionUnpruned(UnprunedGate::Dig)) { return true; }
+
+    const Player& ap = s.ActivePlayer();
+
+    int lands = 0;
+    bool sac_land_in_play = false;
+    for (const Permanent& p : s.battlefield)
+    {
+        if (p.controller_index != s.active_player_index) { continue; }
+        if (p.card.IsLand()) { ++lands; }
+        if (p.tapped) { continue; }
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+        if (d && d->params.sacrifice_draw_cost.has_value()) { sac_land_in_play = true; }
+    }
+    if (lands < 2) { return false; }          // never strand ourselves on mana
+
+    // "A lot of useful things in hand" == anything castable. One castable nonland is enough to
+    // prefer casting it: the mana a dig would spend is the mana that card needs, and the card the
+    // dig would throw away may BE that card. Deliberately MV-only (no colour check), matching the
+    // rest of the provider's cheap castability probes -- erring toward NOT digging is the safe
+    // direction for a gate whose whole job is to stay out of the way.
+    for (const Card& c : ap.hand)
+    {
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(c);
+        if (!d || d->card.IsLand()) { continue; }
+        if (d->card.m_mana_cost.ManaValue() <= lands) { return false; }
+    }
+
+    // Nothing castable. Last carve-out: do not CYCLE A LAND OUT OF HAND while the land drop is
+    // still open -- playing it is the better way to turn it into action (it may make the hand's
+    // uncastable spells castable, which is the same goal the dig has). A sac-draw land already in
+    // play does not compete with the drop, so it is exempt.
+    if (!sac_land_in_play && ap.lands_played_this_turn < ap.LandDropsAvailable())
+    {
+        bool cycling_nonland = false;
+        for (const Card& c : ap.hand)
+        {
+            const CardDefinition* d = CardDatabase::Instance().LookupCached(c);
+            if (d && !d->card.IsLand() && d->params.cycling_cost.has_value())
+            { cycling_nonland = true; break; }
+        }
+        if (!cycling_nonland) { return false; }
+    }
+    return true;
+}
+
+std::string GenericProvider::SelectDigSource(const GameState& s, const ManaPool& pool,
+                                             bool& out_is_sac) const
+{
+    out_is_sac = false;
+    if (!HasAnyDigSource(s)) { return {}; }
+    // The shared helper, exactly as AurasProvider and TreasureHuntProvider use it: cheapest-first
+    // is NOT what it does -- it takes the first AFFORDABLE source in zone order, hand cycling
+    // before battlefield sac-draw, which is deterministic and keeps the executor, the rollout and
+    // the human-play offer probe reading one ranking. A deck that wants a real ranking overrides
+    // this the way FluctuatorProvider does.
+    return ::SelectDigSource(s, pool, out_is_sac);
+}
 
 int GenericProvider::LandsEdgeFireCount(const GameState&, int) const
 {

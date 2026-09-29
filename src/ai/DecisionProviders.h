@@ -165,6 +165,26 @@ public:
     bool        HasAnyDigSource (const GameState&) const override;
     bool        ShouldConsiderDig(const GameState&) const override;
     std::string SelectDigSource (const GameState&, const ManaPool&, bool&) const override;
+    // DigDecisionSearched is DELIBERATELY LEFT AT THE BASE'S `false` for the generic provider, and
+    // that is a reversal worth recording because the obvious reading of the standing directive
+    // (USER 2026-08-28: "we can certainly have a heuristic to help make the decision... but it
+    // should be searched otherwise") points the other way. It was implemented as `true` first.
+    //
+    // USER 2026-09-29, on cycling a Basri to find a better threat: *"that would be mostly just when
+    // using clairvoyance. I believe a non-clairvoyant engine would not want to do so (or only very
+    // rarely)."* That is the objection, and it is specific to THIS axis rather than a general
+    // suspicion of search. The rollout knows the draw order. A dig is the one decision whose entire
+    // payoff IS the next card, so a clairvoyant rollout will cycle exactly when it can see the
+    // top card is better -- manufacturing a gain no real game can reproduce. It is the same effect
+    // treasure_hunt's flood-engine adoption measured and discounted: non-clairvoyant play better by
+    // -0.034/-0.123, clairvoyant "better" by +0.11..+0.125 of FAKE known-draw speed.
+    //
+    // The 2026-08-28 directive stands where it was given -- Auras, Fluctuator and Dragons opt in on
+    // their own measured evidence, and none of them is affected by this line. What generalises to
+    // every OTHER deck is the heuristic, which is why ShouldConsiderDig carries the judgement and
+    // the searched fan-out is left to providers that have shown it pays. It also happens to cost
+    // nothing: no dig axis means no per-plan fan-out and no budget churn (USER, same day: "If there
+    // are losses due to budget churn you can feel free to restrict the usage").
     int         LandsEdgeFireCount(const GameState&, int) const override;
     bool        WantVialCharge(const GameState&, const Permanent&) const override;
     bool        ScryKeepOnTop(const GameState&, const Card&) const override;

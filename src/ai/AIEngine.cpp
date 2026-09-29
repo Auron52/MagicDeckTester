@@ -6213,6 +6213,12 @@ bool AIEngine::PerformDig(GameState& state, const std::string& source, bool is_s
     }
 
     if (ap.library.empty()) { return false; }
+    // MTG_TRACE=dig -- the REALISED dig, in the real game (the rollout has its own inline loop).
+    // This is the census instrument for the generic dig gate: a capability whose only symptom is
+    // "an ability is never offered" cannot be verified by a digest diff, because zero-variants-
+    // emitted and no-change-wanted look identical ([[digest-equality-can-mean-broken]]). Counting
+    // lines here on both arms of MTG_GENERIC_DIG is the direct evidence.
+    TRACE("dig", "T%d %s %s", state.turn_number, is_sacrifice ? "sac" : "cycle", source.c_str());
     Card drawn = ap.library.DrawTop();
     ap.cards_drawn_this_turn += 1;   // a cycle/sac dig is a real draw (Fists of Flame counts it)
     const CardDefinition* ddef = CardDatabase::Instance().LookupCached(drawn);
