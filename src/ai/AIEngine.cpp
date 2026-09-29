@@ -1,4 +1,5 @@
 #include "ValueArm.h"
+#include "HeuristicArm.h"
 #include "../core/EnvFlags.h"
 #include "AIEngine.h"
 #include "DecisionProviders.h"
@@ -66,6 +67,8 @@ static const bool s_decision_progress = EnvOn("MTG_DECISION_PROGRESS");
 static std::atomic<unsigned long long> g_bottom_calls{0};
 static std::atomic<unsigned long long> g_bottom_cards{0};
 static std::atomic<unsigned long long> g_bottom_ns{0};
+static std::atomic<unsigned long long> g_bottom_rolls{0};   // clairvoyant bottoming rollouts actually played
+static std::atomic<unsigned long long> g_bottom_dedup{0};   // ...and ones MTG_BOTTOM_NAME_DEDUPE reused instead
 
 static bool BottomCostStatsOn()
 {
@@ -111,6 +114,8 @@ struct BottomCostReport
                      "  -- compare against TOTAL USER cpu, this is summed over threads\n",
                      calls, g_bottom_cards.load(), secs,
                      calls ? 1000.0 * secs / static_cast<double>(calls) : 0.0);
+        std::fprintf(stderr, "[bottom-cost] rollouts=%llu name-dedupe-reused=%llu\n",
+                     g_bottom_rolls.load(), g_bottom_dedup.load());
     }
 };
 static BottomCostReport g_bottom_cost_report;
@@ -1719,6 +1724,8 @@ void AIEngine::BottomCards(GameState& state, int count, int max_turns)
     // steps reuse the table (no further rollouts) and the heuristic tiebreak among allowed
     // candidates is unchanged. Clairvoyant path only (the blind bottomer keeps its own model).
     static const bool s_legal_trials = EnvOn("MTG_BOTTOM_LEGAL", true);
+    static const bool s_name_dedupe_env = EnvOn("MTG_BOTTOM_NAME_DEDUPE", true);   // default ON: PD 1,200 games byte-identical, -12..-16% CPU (2026-09-29)
+    const bool s_name_dedupe = heurarm::Flag(heurarm::BOTTOM_NAME_DEDUPE, s_name_dedupe_env);
     std::vector<int>  subset_win;    // win turn per removal mask over the initial hand (0 = not a legal mask)
     std::vector<int>  nums0;         // initial hand card numbers, in mask-bit order
     std::uint32_t     done_mask = 0; // bottoms committed so far, as initial-hand bits
@@ -1748,10 +1755,45 @@ void AIEngine::BottomCards(GameState& state, int count, int max_turns)
             };
             {
                 BottomEvalScope _beval(*this, eff_beval_depth, eff_beval_budget);   // cheap-eval override, subset rollouts only
+                // NAME DEDUPE (MTG_BOTTOM_NAME_DEDUPE): two masks that bottom the same multiset of
+                // NAMES leave the same hand and the same library up to which physical copy sits where,
+                // so the second is scored from the first instead of playing another full game. The
+                // canonical mask takes the LOWEST-indexed copies of each name; moving a bit to a lower
+                // index only lowers the mask, so the canonical one is always scored before its twins.
+                std::vector<int> grp(static_cast<std::size_t>(h0));
+                for (int a = 0; a < h0; ++a)
+                {
+                    grp[a] = a;
+                    for (int b = 0; b < a; ++b)
+                    { if (ap.hand[b].m_name.str() == ap.hand[a].m_name.str()) { grp[a] = b; break; } }
+                }
+                auto canon = [&](std::uint32_t m)
+                {
+                    std::uint32_t c = 0;
+                    for (int g = 0; g < h0; ++g)
+                    {
+                        if (grp[g] != g) { continue; }
+                        int k = 0;
+                        for (int a = g; a < h0; ++a) { if (grp[a] == g && (m & (1u << a))) { ++k; } }
+                        for (int a = g; a < h0 && k > 0; ++a) { if (grp[a] == g) { c |= 1u << a; --k; } }
+                    }
+                    return c;
+                };
                 for (std::uint32_t m = 0; m < (1u << h0); ++m)
                 {
                     if (popcnt(m) != count) { continue; }
+                    if (s_name_dedupe)
+                    {
+                        const std::uint32_t c = canon(m);
+                        if (c != m && subset_win[c] != 0)
+                        {
+                            subset_win[m] = subset_win[c];
+                            if (BottomCostStatsOn()) { g_bottom_dedup.fetch_add(1, std::memory_order_relaxed); }
+                            continue;
+                        }
+                    }
                     subset_win[m] = roll_mask(m);
+                    if (BottomCostStatsOn()) { g_bottom_rolls.fetch_add(1, std::memory_order_relaxed); }
                 }
             }
             // TWO-STAGE REFINE (MTG_BOTTOM_EVAL_TOPK=K, default 0 = off). Only meaningful when
@@ -1877,11 +1919,26 @@ void AIEngine::BottomCards(GameState& state, int count, int max_turns)
                 }
                 else
                 {
-                    GameState trial = state;
-                    Player& trial_ap = trial.ActivePlayer();
-                    trial_ap.library.push_back(trial_ap.hand[j]);
-                    trial_ap.hand.erase(trial_ap.hand.begin() + j);
-                    win_turn[j] = RolloutWinTurn(std::move(trial), max_turns);
+                    int twin = -1;   // MTG_BOTTOM_NAME_DEDUPE: an earlier copy of this name was already rolled out
+                    if (s_name_dedupe)
+                    {
+                        for (int b = 0; b < j; ++b)
+                        { if (ap.hand[b].m_name.str() == ap.hand[j].m_name.str()) { twin = b; break; } }
+                    }
+                    if (twin >= 0)
+                    {
+                        win_turn[j] = win_turn[twin];
+                        if (BottomCostStatsOn()) { g_bottom_dedup.fetch_add(1, std::memory_order_relaxed); }
+                    }
+                    else
+                    {
+                        GameState trial = state;
+                        Player& trial_ap = trial.ActivePlayer();
+                        trial_ap.library.push_back(trial_ap.hand[j]);
+                        trial_ap.hand.erase(trial_ap.hand.begin() + j);
+                        win_turn[j] = RolloutWinTurn(std::move(trial), max_turns);
+                        if (BottomCostStatsOn()) { g_bottom_rolls.fetch_add(1, std::memory_order_relaxed); }
+                    }
                 }
                 if (win_turn[j] < best_win) { best_win = win_turn[j]; }
             }

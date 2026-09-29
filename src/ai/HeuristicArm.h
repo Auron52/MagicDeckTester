@@ -278,6 +278,7 @@ enum Slot : int
     PD_WISH_TRIM,             // MTG_PD_WISH_TRIM          Prevent Damage (inside MTG_PD_WISH_USEFUL): situational trim -- the lands go when our lands already make every needed colour and we hold a land for this turn and next; a Vito / Dina we already hold (hand or board) goes (legend rule). USER 2026-09-29. =0 = the six useful targets
     PD_WISH_VITO_OVER_DINA,   // MTG_PD_WISH_VITO_OVER_DINA Prevent Damage (inside MTG_PD_WISH_TRIM): in 1v1, while Vito is fetchable and not held, Dina is not a Wish target (Vito's drain is the amount gained, Dina's 1 per event; 2HG keeps Dina). USER 2026-09-29, measurement lever, default OFF
     PD_ZENITH_SKIP_DINA,      // MTG_PD_ZENITH_SKIP_DINA   Prevent Damage: Green Sun's Zenith does not fetch Dina (search only) while a Dina is ours on the battlefield, or in hand and castable ({B}+{G} from distinct lands incl. one land drop) -- legend rule. USER 2026-09-29. =0 = every target
+    BOTTOM_NAME_DEDUPE,       // MTG_BOTTOM_NAME_DEDUPE    clairvoyant London bottoming rolls out ONE game per distinct removal by NAME (a second copy of a name, or a subset differing only in which copy, reuses the first's win turn). Cost lever, default ON (PD A/B byte-identical, -14% CPU); =0 = one rollout per physical card / mask
     COUNT
 };
 
@@ -522,6 +523,7 @@ inline const char* Name(int slot)
         "MTG_PD_WISH_TRIM",
         "MTG_PD_WISH_VITO_OVER_DINA",
         "MTG_PD_ZENITH_SKIP_DINA",
+        "MTG_BOTTOM_NAME_DEDUPE",
     };
     // The enum and this table are ONE mapping split across two lists: a slot added to one and not
     // the other silently shifts every lever after it (a manifest asking for lever X would set Y).
