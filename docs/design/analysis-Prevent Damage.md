@@ -1680,3 +1680,28 @@ operator new 2.6%, BuildSimKey 2.5%, TapForCost lambda 2.1%, ReflectedColors 1.7
 a string-keyed hash map 1.6%, GenericTutorList 1.6%, FlushDamageEvents 1.3%. No site worth a
 strength reduction that could move a 1.54x gap; the horizon rollout (SimulateToEnd) is the play cost,
 which is what the value leaf replaces. Stopped here.
+
+### O7. Remaining cost + branching census (2026-09-29, shipped profile; units-based -- the box is CONTENDED, load ~32/24, so wall ms are pessimistic)
+`MTG_DECISION_PROGRESS` (100 x d5 + 60 x 2HG d5, b20): bottoming = **45% of search units** (3,409 bot
+decisions, mean 2,057 units vs the 900 cap -- the id ladder's depth-1 floor always completes); real
+play 55%, 918 decisions, mean 10,095 units, **only 16% reach the 18k cap** (P3's "the budget binds, so
+narrowing only redistributes" is WRONG for this deck now). Real units by turn: T1 19%, T2 19%, T3 26%,
+T4 27%, T5 8%. id-depth 1 on 82% of decisions; rollouts are short (1.53 turn-steps/call); units:
+rollout_step 37% + greedy_fallback (the horizon's per-turn greedy) 36% + la_cand 26%.
+=> WIDTH, not depth, is the cost, and a narrower root saves cost almost proportionally (play AND bottoming).
+
+`MTG_BF_CENSUS` (60 x d5): 62,113 decisions, 2.10M candidates, mean width 33.9, max 1,665. Mass:
+**Beseech the Queen in 41%** (tutor axis x every combination of the other casts / land drop),
+chosen X 23% (Rolling Earthquake 270k, GSZ 146k, Pyrohemia 67k), bp variants 17%.
+`MTG_DEDUP_CENSUS`: post-apply state dups only 14.6% (1.2% from dropped casts); plan-signature dedupe
+UNSOUND here (copy_FALSE 385,754). So no lossless dedupe lever.
+
+Engine's actual picks (1,200 traced games, logs/pd_wish/abzsd): Beseech -> Earthquake 93, Vito 73, GSZ
+69, Tamanoa 63, Ancient Tomb 41, Wish 25, Spellshock 22, Manabarbs 22, Citadel 16, Rhox 13, Pool 11,
+Dina 11, City 8, Pyrohemia 6, Beseech 5, Karplusan 3, Forge 2, Coliseum 2, Brushland 1 (lands 84/486).
+GSZ X: 3 -> 512, 2 -> 202, 0 -> 12. Earthquake X: 2 -> 522, 1 -> 429, 3..8 -> 68, 0 -> 6.
+
+PROPOSED search-only cuts (not built; A/B pending, USER doctrine for 4): (1) Beseech lands -> ONE land
+(which? it mostly fetches Ancient Tomb) ~-15% candidates; (2) drop GSZ X=0 (a clairvoyant reshuffle
+in goldfish); (3) Earthquake X in {1, 2, lethal X, max} ~-5%; (4) optionally a Beseech doctrine list
+like the Wish's. Also: re-measure the gate on a QUIET box (suite_gate --measure-all style).
