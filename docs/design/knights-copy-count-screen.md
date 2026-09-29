@@ -2814,6 +2814,77 @@ worst-*scoring* cards purely because the passive opponent presents nothing to ta
 Exemplar's first strike is inert alongside its indestructible. Hero is the most understated card
 *within the trade being measured*, which is the claim that matters for this decision.
 
+### Round S RESULT (landed 01:20:22Z, 1h09m) — FOUR arms clear their floors; the redundancy argument gets NO measured support, and the reason is the CURVE
+
+Pooled, late-weighted, own R=40 table per arm, step vs `m_sp3_p20`. Negative = FASTER.
+`meas` = 16.8M, `conf` = 17.2M. Bias = `null(arm) − null(ref)`:
+
+| arm | Cav | SP | Hero | pooled | step | meas | conf | bias | margin | verdict |
+|---|---|---|---|---|---|---|---|---|---|---|
+| `q_kc2_hob1` | 2 | 3 | 1 | −0.2751 | **−0.0161** | −0.0139 | −0.0182 | −0.0007 | **23.0x** | **ESTABLISHED** |
+| `s_kc2_sp2_hob2` | 2 | 2 | 2 | −0.2727 | **−0.0137** | −0.0162 | −0.0111 | −0.0037 | **3.66x** | **ESTABLISHED** |
+| `r_kc1_hob2` | 1 | 3 | 2 | −0.2724 | **−0.0134** | −0.0128 | −0.0141 | −0.0021 | **6.35x** | **ESTABLISHED** |
+| `s_kc2_sp1` | 2 | 1 | 3 | −0.2690 | −0.0100 | −0.0112 | −0.0088 | −0.0092 | 1.08x | unresolved |
+| `s_kc1_sp2` | 1 | 2 | 3 | −0.2645 | −0.0055 | −0.0110 | **−0.0001** | −0.0037 | 1.49x | unresolved |
+| **`m_sp3_p20`** (ref) | 0 | 3 | 3 | −0.2590 | — | | | | | |
+| `p_sp2_hob4` (CONTROL) | 0 | 2 | 4 | −0.2515 | **+0.0075** | +0.0026 | +0.0125 | −0.0021 | **3.58x** | **ESTABLISHED** |
+
+**1. `q_kc2_hob1` IS NOW THE BEST-ESTABLISHED EDIT IN THIS CAMPAIGN.** Its apparatus bias is −0.0007 —
+essentially zero, a 23x margin — and it has replicated across **three independent seed blocks**
+(round Q −0.0187, round S −0.0161; mean ≈ −0.017). Nothing else on this deck has that.
+
+**2. THE CONTROL IS THE KEY, AND IT REFUTES THE REDUNDANCY HYPOTHESIS.** `p_sp2_hob4` — cut one
+Silverblade, add a 4th Hero, **no Cavalier** — comes in at **+0.0075 WORSE**, clearing its floor at
+3.58x and replicating round P's +0.0041 on the same arm with fresh seeds. So the 3rd Silverblade is a
+**real card in this model, not a null**, and paying for the Cavalier with it costs something.
+The prediction that the user's −1/−1 shape would beat both pure payers was **WRONG**: the ordering is
+Hero-paid (−0.0161) > split (−0.0137) > Silverblade-paid (−0.0100). *The more you pay from Hero, the
+better* — the exact opposite of what the double-strike overlap predicted.
+
+**3. WHY, AND IT IS THE MANA CURVE RATHER THAN CARD QUALITY.** Silverblade Paladin is `{1}{W}{W}` = **3
+mana**; Kinsbaile Cavalier `{3}{W}` and Hero of Bladehold `{2}{W}{W}` are both **4**. The std column
+separates perfectly on that one fact:
+
+| arm | payer moves | long | 2hg | **std (20 life)** |
+|---|---|---|---|---|
+| `r_kc1_hob2` | 4-drop → 4-drop | −0.0122 | −0.0213 | **−0.0047** |
+| `q_kc2_hob1` | 4-drop → 4-drop | −0.0096 | −0.0353 | **−0.0036** |
+| `s_kc2_sp2_hob2` | one of each | −0.0109 | −0.0303 | **+0.0044** |
+| `s_kc1_sp2` | 3-drop → 4-drop | −0.0074 | −0.0106 | **+0.0066** |
+| `s_kc2_sp1` | 3-drop → 4-drop | −0.0114 | −0.0224 | **+0.0121** |
+| `p_sp2_hob4` | 3-drop → 4-drop (no Cav) | +0.0041 | +0.0095 | **+0.0129** |
+
+**Every arm that pays from the 3-drop tier is worse at 20 life; every arm that pays from the 4-drop tier
+is better.** So the model is not saying "Hero is a worse card than Silverblade" — it is saying *do not
+trade a 3-drop for a 4-drop in a deck whose modal kill is turn 4*. The double-strike overlap is real in
+the engine (see the round S design section) but it is **not the binding constraint**; the curve is.
+
+**4. THE 2nd COPY IS WORTH LITTLE, which is what double strike being BINARY predicts.** Marginal value
+of the second Cavalier: **−0.0027** paying from Hero (−0.0134 → −0.0161) and −0.0045 from Silverblade
+(−0.0055 → −0.0100). Both sit at or just above the ~0.0020 noise floor. A second Cavalier adds nothing
+to the first one's grant — it buys only the chance of *having* one — so this is the expected shape and it
+argues for the **low end** of the user's 1–2 cap.
+
+**5. THE TENSION IS NOW SHARP AND NO AMOUNT OF GAMES RESOLVES IT.** The model's three established arms
+all pay from Hero. The user's out-of-model argument (2026-09-29) is that Hero is *"the card most
+understated by our analysis"* — 3/4 survives Lightning Bolt where both 2/2s die, and its tokens and
+battle cry are already banked if it does die. **So the best-measured edit is the most out-of-model-biased
+trade.** That is not a defect in either argument; it is the goldfish boundary.
+
+**WHERE THEY CONVERGE, and this is the practical read.** Two established options give up only ONE Hero:
+
+* **`r_kc1_hob2`** — 1 Cavalier for 1 Hero: **−0.0134**, floor **6.35x**, better in all three formats.
+* **`s_kc2_sp2_hob2`** — 2 Cavaliers for 1 Silverblade + 1 Hero (**the user's own shape**): **−0.0137**,
+  floor **3.66x**, but +0.0044 worse at 20 life.
+
+They are **statistically identical** (−0.0134 vs −0.0137, well inside noise). So the 1-of is the more
+conservative of the two on every axis that matters: it is the smaller change, it clears a higher floor,
+it keeps all three Silverblades, it gives up only one copy of the card the user judges most understated,
+and it does not slow the deck at 20 life. If the Cavalier goes in, **1-of in place of 1 Hero of Bladehold
+is the option the measurement and the out-of-model reasoning both support.**
+
+**ADOPTION IS THE USER'S CALL** and still discards the shipped keep table and value leaf.
+
 ### DEFERRED — re-measure the close cases on the finalized list's OWN regenerated table
 
 **User, 2026-09-28**, across one exchange: *"if we have cases where it is extremely close we might want
