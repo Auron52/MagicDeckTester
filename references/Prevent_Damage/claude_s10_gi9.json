@@ -1,0 +1,469 @@
+{
+  "seed": 10, "game_index": 9, "win_turn": 7, "won": true,
+  "mulligan": { "count": 3, "bottom": [6, 8, 7] },
+  "decisions": [
+    { "chosen": 0, "decision": {
+  "decision_index": 0,
+  "type": "mulligan",
+  "turn": 0,
+  "me": { "life": 20, "battlefield": [] },
+  "opponent": { "life": 20, "battlefield": [] },
+  "mulligan_count": 0,
+  "on_the_play": true,
+  "to_bottom": 0,
+  "hand": [{ "num": 20, "name": "Grand Coliseum" }, { "num": 5, "name": "Battlefield Forge" }, { "num": 33, "name": "Manabarbs" }, { "num": 51, "name": "Tamanoa" }, { "num": 34, "name": "Manabarbs" }, { "num": 12, "name": "Brushland" }, { "num": 21, "name": "Grand Coliseum" }],
+  "ai_choice": 0,
+  "note": "reply 1 to KEEP this hand (then bottom 0 card(s)), or 0 to mulligan again"
+}
+},
+    { "chosen": 0, "decision": {
+  "decision_index": 1,
+  "type": "mulligan",
+  "turn": 0,
+  "me": { "life": 20, "battlefield": [] },
+  "opponent": { "life": 20, "battlefield": [] },
+  "mulligan_count": 1,
+  "on_the_play": true,
+  "to_bottom": 1,
+  "hand": [{ "num": 55, "name": "Tarnished Citadel" }, { "num": 1, "name": "Ancient Tomb" }, { "num": 44, "name": "Rolling Earthquake" }, { "num": 42, "name": "Rhox Faithmender" }, { "num": 45, "name": "Rolling Earthquake" }, { "num": 18, "name": "Dina, Soul Steeper" }, { "num": 3, "name": "Ancient Tomb" }],
+  "ai_choice": 1,
+  "note": "reply 1 to KEEP this hand (then bottom 1 card(s)), or 0 to mulligan again"
+}
+},
+    { "chosen": 0, "decision": {
+  "decision_index": 2,
+  "type": "mulligan",
+  "turn": 0,
+  "me": { "life": 20, "battlefield": [] },
+  "opponent": { "life": 20, "battlefield": [] },
+  "mulligan_count": 2,
+  "on_the_play": true,
+  "to_bottom": 2,
+  "hand": [{ "num": 6, "name": "Battlefield Forge" }, { "num": 57, "name": "Tarnished Citadel" }, { "num": 24, "name": "Green Sun's Zenith" }, { "num": 37, "name": "Pyrohemia" }, { "num": 45, "name": "Rolling Earthquake" }, { "num": 48, "name": "Spellshock" }, { "num": 28, "name": "Karplusan Forest" }],
+  "ai_choice": 1,
+  "note": "reply 1 to KEEP this hand (then bottom 2 card(s)), or 0 to mulligan again"
+}
+},
+    { "chosen": 1, "decision": {
+  "decision_index": 3,
+  "type": "mulligan",
+  "turn": 0,
+  "me": { "life": 20, "battlefield": [] },
+  "opponent": { "life": 20, "battlefield": [] },
+  "mulligan_count": 3,
+  "on_the_play": true,
+  "to_bottom": 3,
+  "hand": [{ "num": 7, "name": "Battlefield Forge" }, { "num": 8, "name": "Beseech the Queen" }, { "num": 29, "name": "Living Wish" }, { "num": 12, "name": "Brushland" }, { "num": 6, "name": "Battlefield Forge" }, { "num": 19, "name": "Dina, Soul Steeper" }, { "num": 55, "name": "Tarnished Citadel" }],
+  "ai_choice": 1,
+  "note": "reply 1 to KEEP this hand (then bottom 3 card(s)), or 0 to mulligan again"
+}
+},
+    { "chosen": 4, "decision": {
+  "decision_index": 4,
+  "type": "bottom",
+  "turn": 0,
+  "me": { "life": 20, "battlefield": [] },
+  "opponent": { "life": 20, "battlefield": [] },
+  "bottom_step": 0,
+  "bottom_total": 3,
+  "hand": [{ "num": 7, "name": "Battlefield Forge", "win_optimal": true }, { "num": 8, "name": "Beseech the Queen", "win_optimal": true }, { "num": 29, "name": "Living Wish", "win_optimal": true }, { "num": 12, "name": "Brushland", "win_optimal": true }, { "num": 6, "name": "Battlefield Forge", "win_optimal": true }, { "num": 19, "name": "Dina, Soul Steeper", "win_optimal": true }, { "num": 55, "name": "Tarnished Citadel", "win_optimal": true }],
+  "ai_choice": { "index": 0, "num": 7, "name": "Battlefield Forge" },
+  "ai_set": [],
+  "note": "reply the hand INDEX (0-based) of the card to put on the bottom (step 1 of 3)"
+}
+},
+    { "chosen": 1, "decision": {
+  "decision_index": 5,
+  "type": "bottom",
+  "turn": 0,
+  "me": { "life": 20, "battlefield": [] },
+  "opponent": { "life": 20, "battlefield": [] },
+  "bottom_step": 1,
+  "bottom_total": 3,
+  "hand": [{ "num": 7, "name": "Battlefield Forge", "win_optimal": true }, { "num": 8, "name": "Beseech the Queen", "win_optimal": true }, { "num": 29, "name": "Living Wish", "win_optimal": true }, { "num": 12, "name": "Brushland", "win_optimal": true }, { "num": 19, "name": "Dina, Soul Steeper", "win_optimal": true }, { "num": 55, "name": "Tarnished Citadel", "win_optimal": true }],
+  "ai_choice": { "index": 0, "num": 7, "name": "Battlefield Forge" },
+  "ai_set": [],
+  "note": "reply the hand INDEX (0-based) of the card to put on the bottom (step 2 of 3)"
+}
+},
+    { "chosen": 0, "decision": {
+  "decision_index": 6,
+  "type": "bottom",
+  "turn": 0,
+  "me": { "life": 20, "battlefield": [] },
+  "opponent": { "life": 20, "battlefield": [] },
+  "bottom_step": 2,
+  "bottom_total": 3,
+  "hand": [{ "num": 7, "name": "Battlefield Forge", "win_optimal": true }, { "num": 29, "name": "Living Wish", "win_optimal": true }, { "num": 12, "name": "Brushland", "win_optimal": true }, { "num": 19, "name": "Dina, Soul Steeper", "win_optimal": true }, { "num": 55, "name": "Tarnished Citadel", "win_optimal": true }],
+  "ai_choice": { "index": 0, "num": 7, "name": "Battlefield Forge" },
+  "ai_set": [],
+  "note": "reply the hand INDEX (0-based) of the card to put on the bottom (step 3 of 3)"
+}
+},
+    { "chosen": 0, "decision": {
+  "decision_index": 7,
+  "main_ordinal": 0,
+  "type": "main_phase",
+  "turn": 1,
+  "phase": "pre_main",
+  "on_the_play": true,
+  "mdfc_backs": ["Boulderloft Pathway", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [], "vial_counters": [], "hand": [{ "num": 12, "name": "Brushland", "cost": "", "mv": 0, "kind": "land" }, { "num": 19, "name": "Dina, Soul Steeper", "cost": "{B}{G}", "mv": 2, "kind": "permanent", "is_creature": true }, { "num": 29, "name": "Living Wish", "cost": "{1}{G}", "mv": 2, "kind": "nonpermanent" }, { "num": 55, "name": "Tarnished Citadel", "cost": "", "mv": 0, "kind": "land" }], "graveyard": [], "library_size": 56, "land_drops_left": 1 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "1/1 Creature", "idx": 0, "num": 500000, "is_land": false }] },
+  "plans": [
+    { "index": 0, "summary": "land=Brushland; cast: (nothing)", "land": "Brushland", "casts": [], "actions": [] },
+    { "index": 1, "summary": "land=Tarnished Citadel; cast: (nothing)", "land": "Tarnished Citadel", "casts": [], "actions": [] },
+    { "index": 2, "summary": "land=none; cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 8,
+  "type": "main_phase",
+  "turn": 1,
+  "phase": "pre_main",
+  "on_the_play": true,
+  "mdfc_backs": ["Boulderloft Pathway", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Brushland", "idx": 1, "num": 12, "is_land": true, "taps": "GWC" }], "vial_counters": [], "hand": [{ "num": 19, "name": "Dina, Soul Steeper", "cost": "{B}{G}", "mv": 2, "kind": "permanent", "is_creature": true }, { "num": 29, "name": "Living Wish", "cost": "{1}{G}", "mv": 2, "kind": "nonpermanent" }, { "num": 55, "name": "Tarnished Citadel", "cost": "", "mv": 0, "kind": "land" }], "graveyard": [], "library_size": 56, "land_drops_left": 0 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "1/1 Creature", "idx": 0, "num": 500000, "is_land": false }] },
+  "plans": [
+    { "index": 0, "summary": "cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 9,
+  "type": "main_phase",
+  "turn": 1,
+  "phase": "post_main",
+  "on_the_play": true,
+  "mdfc_backs": ["Boulderloft Pathway", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Brushland", "idx": 1, "num": 12, "is_land": true, "taps": "GWC" }], "vial_counters": [], "hand": [{ "num": 19, "name": "Dina, Soul Steeper", "cost": "{B}{G}", "mv": 2, "kind": "permanent", "is_creature": true }, { "num": 29, "name": "Living Wish", "cost": "{1}{G}", "mv": 2, "kind": "nonpermanent" }, { "num": 55, "name": "Tarnished Citadel", "cost": "", "mv": 0, "kind": "land" }], "graveyard": [], "library_size": 56, "land_drops_left": 0 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "1/1 Creature", "idx": 0, "num": 500000, "is_land": false }] },
+  "plans": [
+    { "index": 0, "summary": "cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
+}
+},
+    { "chosen": 1, "decision": {
+  "decision_index": 10,
+  "main_ordinal": 1,
+  "type": "main_phase",
+  "turn": 2,
+  "phase": "pre_main",
+  "on_the_play": true,
+  "drew": [{ "turn": 2, "card": "Green Sun's Zenith" }],
+  "mdfc_backs": ["Boulderloft Pathway", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Brushland", "idx": 1, "num": 12, "is_land": true, "taps": "GWC" }], "vial_counters": [], "hand": [{ "num": 19, "name": "Dina, Soul Steeper", "cost": "{B}{G}", "mv": 2, "kind": "permanent", "is_creature": true }, { "num": 26, "name": "Green Sun's Zenith", "cost": "{X}{G}", "mv": 1, "kind": "nonpermanent" }, { "num": 29, "name": "Living Wish", "cost": "{1}{G}", "mv": 2, "kind": "nonpermanent" }, { "num": 55, "name": "Tarnished Citadel", "cost": "", "mv": 0, "kind": "land" }], "graveyard": [], "library_size": 55, "land_drops_left": 1 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "1/1 Creature", "idx": 0, "num": 500000, "is_land": false }, { "name": "1/1 Creature", "idx": 2, "num": 500001, "is_land": false }] },
+  "plans": [
+    { "index": 0, "summary": "land=Tarnished Citadel; cast: Dina, Soul Steeper", "land": "Tarnished Citadel", "casts": ["Dina, Soul Steeper"], "actions": [{ "card": "Dina, Soul Steeper" }] },
+    { "index": 1, "summary": "land=Tarnished Citadel; cast: Living Wish → Rhox Faithmender", "land": "Tarnished Citadel", "casts": ["Living Wish"], "actions": [{ "card": "Living Wish", "tutor_target": "Rhox Faithmender" }] },
+    { "index": 14, "summary": "land=Tarnished Citadel; cast: (nothing)", "land": "Tarnished Citadel", "casts": [], "actions": [] },
+    { "index": 15, "summary": "land=Tarnished Citadel; cast: Green Sun's Zenith → fail to find (X=0)", "land": "Tarnished Citadel", "casts": ["Green Sun's Zenith"], "actions": [{ "card": "Green Sun's Zenith", "tutor_target": "(decline search)" }] },
+    { "index": 16, "summary": "land=Tarnished Citadel; cast: Green Sun's Zenith → fail to find (X=1)", "land": "Tarnished Citadel", "casts": ["Green Sun's Zenith"], "actions": [{ "card": "Green Sun's Zenith", "tutor_target": "(decline search)", "x": 1 }] },
+    { "index": 17, "summary": "land=none; cast: (nothing)", "land": null, "casts": [], "actions": [] },
+    { "index": 18, "summary": "land=none; cast: Green Sun's Zenith → fail to find (X=0)", "land": null, "casts": ["Green Sun's Zenith"], "actions": [{ "card": "Green Sun's Zenith", "tutor_target": "(decline search)" }] }
+  ],
+  "plans_hidden": 17,
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
+}
+},
+    { "chosen": 1, "decision": {
+  "decision_index": 11,
+  "type": "tutor_etb",
+  "source": "Living Wish",
+  "turn": 2,
+  "mdfc_backs": ["Boulderloft Pathway", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 19, "battlefield": [{ "name": "Brushland", "idx": 1, "num": 12, "tapped": true, "is_land": true }, { "name": "Tarnished Citadel", "idx": 3, "num": 55, "tapped": true, "is_land": true }], "vial_counters": [], "hand": [{ "num": 19, "name": "Dina, Soul Steeper", "cost": "{B}{G}", "mv": 2, "kind": "permanent", "is_creature": true }, { "num": 26, "name": "Green Sun's Zenith", "cost": "{X}{G}", "mv": 1, "kind": "nonpermanent" }], "graveyard": [], "library_size": 55, "land_drops_left": 0 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "1/1 Creature", "idx": 0, "num": 500000, "is_land": false }, { "name": "1/1 Creature", "idx": 2, "num": 500001, "is_land": false }] },
+  "heuristic_default": 0,
+  "candidates": [{ "index": 0, "name": "Rhox Faithmender" }, { "index": 1, "name": "Tamanoa" }, { "index": 2, "name": "Purity" }, { "index": 3, "name": "Dimir House Guard" }, { "index": 4, "name": "Shriekmaw" }, { "index": 5, "name": "Vexing Shusher" }, { "index": 6, "name": "Vito, Thorn of the Dusk Rose" }, { "index": 7, "name": "Timeless Witness" }, { "index": 8, "name": "Bilbo, Birthday Celebrant" }, { "index": 9, "name": "Dina, Soul Steeper" }, { "index": 10, "name": "Acidic Slime" }, { "index": 11, "name": "Brushland" }, { "index": 12, "name": "Battlefield Forge" }],
+  "note": "reply a candidate index to search that card up, or -1 to decline the optional search. Default = the AI's pick."
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 12,
+  "type": "main_phase",
+  "turn": 2,
+  "phase": "pre_main",
+  "on_the_play": true,
+  "reveals": [{ "turn": 2, "source": "Living Wish (searched)", "cards": [{ "name": "Tamanoa", "disposition": "to hand" }] }],
+  "mdfc_backs": ["Boulderloft Pathway", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 19, "battlefield": [{ "name": "Brushland", "idx": 1, "num": 12, "tapped": true, "is_land": true }, { "name": "Tarnished Citadel", "idx": 3, "num": 55, "tapped": true, "is_land": true }], "vial_counters": [], "hand": [{ "num": 19, "name": "Dina, Soul Steeper", "cost": "{B}{G}", "mv": 2, "kind": "permanent", "is_creature": true }, { "num": 26, "name": "Green Sun's Zenith", "cost": "{X}{G}", "mv": 1, "kind": "nonpermanent" }, { "num": 200002, "name": "Tamanoa", "cost": "{W}{R}{G}", "mv": 3, "kind": "permanent", "is_creature": true }], "graveyard": [], "library_size": 55, "land_drops_left": 0 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "1/1 Creature", "idx": 0, "num": 500000, "is_land": false }, { "name": "1/1 Creature", "idx": 2, "num": 500001, "is_land": false }] },
+  "plans": [
+    { "index": 0, "summary": "cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 13,
+  "type": "main_phase",
+  "turn": 2,
+  "phase": "post_main",
+  "on_the_play": true,
+  "mdfc_backs": ["Boulderloft Pathway", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 19, "battlefield": [{ "name": "Brushland", "idx": 1, "num": 12, "tapped": true, "is_land": true }, { "name": "Tarnished Citadel", "idx": 3, "num": 55, "tapped": true, "is_land": true }], "vial_counters": [], "hand": [{ "num": 19, "name": "Dina, Soul Steeper", "cost": "{B}{G}", "mv": 2, "kind": "permanent", "is_creature": true }, { "num": 26, "name": "Green Sun's Zenith", "cost": "{X}{G}", "mv": 1, "kind": "nonpermanent" }, { "num": 200002, "name": "Tamanoa", "cost": "{W}{R}{G}", "mv": 3, "kind": "permanent", "is_creature": true }], "graveyard": [], "library_size": 55, "land_drops_left": 0 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "1/1 Creature", "idx": 0, "num": 500000, "is_land": false }, { "name": "1/1 Creature", "idx": 2, "num": 500001, "is_land": false }] },
+  "plans": [
+    { "index": 0, "summary": "cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
+}
+},
+    { "chosen": 0, "decision": {
+  "decision_index": 14,
+  "main_ordinal": 2,
+  "type": "main_phase",
+  "turn": 3,
+  "phase": "pre_main",
+  "on_the_play": true,
+  "drew": [{ "turn": 3, "card": "Tarnished Citadel" }],
+  "mdfc_backs": ["Boulderloft Pathway", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 19, "battlefield": [{ "name": "Brushland", "idx": 1, "num": 12, "is_land": true, "taps": "GWC" }, { "name": "Tarnished Citadel", "idx": 3, "num": 55, "is_land": true, "taps": "WUBRGC" }], "vial_counters": [], "hand": [{ "num": 19, "name": "Dina, Soul Steeper", "cost": "{B}{G}", "mv": 2, "kind": "permanent", "is_creature": true }, { "num": 26, "name": "Green Sun's Zenith", "cost": "{X}{G}", "mv": 1, "kind": "nonpermanent" }, { "num": 200002, "name": "Tamanoa", "cost": "{W}{R}{G}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 57, "name": "Tarnished Citadel", "cost": "", "mv": 0, "kind": "land" }], "graveyard": [], "library_size": 54, "land_drops_left": 1 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "1/1 Creature", "idx": 0, "num": 500000, "is_land": false }, { "name": "1/1 Creature", "idx": 2, "num": 500001, "is_land": false }, { "name": "2/2 Creature", "idx": 4, "num": 500002, "is_land": false }] },
+  "plans": [
+    { "index": 0, "summary": "land=Tarnished Citadel; cast: Tamanoa", "land": "Tarnished Citadel", "casts": ["Tamanoa"], "actions": [{ "card": "Tamanoa" }] },
+    { "index": 1, "summary": "land=Tarnished Citadel; cast: Dina, Soul Steeper", "land": "Tarnished Citadel", "casts": ["Dina, Soul Steeper"], "actions": [{ "card": "Dina, Soul Steeper" }] },
+    { "index": 2, "summary": "land=Tarnished Citadel; cast: Dina, Soul Steeper, Green Sun's Zenith → fail to find (X=0)", "land": "Tarnished Citadel", "casts": ["Dina, Soul Steeper", "Green Sun's Zenith"], "cast_order_canonical": ["Dina, Soul Steeper", "Green Sun's Zenith"], "actions": [{ "card": "Dina, Soul Steeper" }, { "card": "Green Sun's Zenith", "tutor_target": "(decline search)" }] },
+    { "index": 3, "summary": "land=none; cast: Dina, Soul Steeper", "land": null, "casts": ["Dina, Soul Steeper"], "actions": [{ "card": "Dina, Soul Steeper" }] },
+    { "index": 4, "summary": "land=Tarnished Citadel; cast: Green Sun's Zenith → Dina, Soul Steeper (X=2)", "land": "Tarnished Citadel", "casts": ["Green Sun's Zenith"], "actions": [{ "card": "Green Sun's Zenith", "tutor_target": "Dina, Soul Steeper", "x": 2 }] },
+    { "index": 5, "summary": "land=Tarnished Citadel; cast: (nothing)", "land": "Tarnished Citadel", "casts": [], "actions": [] },
+    { "index": 6, "summary": "land=Tarnished Citadel; cast: Green Sun's Zenith → fail to find (X=0)", "land": "Tarnished Citadel", "casts": ["Green Sun's Zenith"], "actions": [{ "card": "Green Sun's Zenith", "tutor_target": "(decline search)" }] },
+    { "index": 7, "summary": "land=Tarnished Citadel; cast: Green Sun's Zenith → fail to find (X=1)", "land": "Tarnished Citadel", "casts": ["Green Sun's Zenith"], "actions": [{ "card": "Green Sun's Zenith", "tutor_target": "(decline search)", "x": 1 }] },
+    { "index": 8, "summary": "land=Tarnished Citadel; cast: Green Sun's Zenith → fail to find (X=2)", "land": "Tarnished Citadel", "casts": ["Green Sun's Zenith"], "actions": [{ "card": "Green Sun's Zenith", "tutor_target": "(decline search)", "x": 2 }] },
+    { "index": 9, "summary": "land=none; cast: (nothing)", "land": null, "casts": [], "actions": [] },
+    { "index": 10, "summary": "land=none; cast: Green Sun's Zenith → fail to find (X=0)", "land": null, "casts": ["Green Sun's Zenith"], "actions": [{ "card": "Green Sun's Zenith", "tutor_target": "(decline search)" }] },
+    { "index": 11, "summary": "land=none; cast: Green Sun's Zenith → fail to find (X=1)", "land": null, "casts": ["Green Sun's Zenith"], "actions": [{ "card": "Green Sun's Zenith", "tutor_target": "(decline search)", "x": 1 }] }
+  ],
+  "plans_hidden": 15,
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 15,
+  "type": "main_phase",
+  "turn": 3,
+  "phase": "pre_main",
+  "on_the_play": true,
+  "mdfc_backs": ["Boulderloft Pathway", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 12, "battlefield": [{ "name": "Brushland", "idx": 1, "num": 12, "tapped": true, "is_land": true }, { "name": "Tamanoa", "idx": 6, "num": 200002, "is_land": false }, { "name": "Tarnished Citadel", "idx": 3, "num": 55, "tapped": true, "is_land": true }, { "name": "Tarnished Citadel", "idx": 5, "num": 57, "tapped": true, "is_land": true }], "vial_counters": [], "hand": [{ "num": 19, "name": "Dina, Soul Steeper", "cost": "{B}{G}", "mv": 2, "kind": "permanent", "is_creature": true }, { "num": 26, "name": "Green Sun's Zenith", "cost": "{X}{G}", "mv": 1, "kind": "nonpermanent" }], "graveyard": [], "library_size": 54, "land_drops_left": 0 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "1/1 Creature", "idx": 0, "num": 500000, "is_land": false }, { "name": "1/1 Creature", "idx": 2, "num": 500001, "is_land": false }, { "name": "2/2 Creature", "idx": 4, "num": 500002, "is_land": false }] },
+  "plans": [
+    { "index": 0, "summary": "cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 16,
+  "type": "main_phase",
+  "turn": 3,
+  "phase": "post_main",
+  "on_the_play": true,
+  "mdfc_backs": ["Boulderloft Pathway", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 12, "battlefield": [{ "name": "Brushland", "idx": 1, "num": 12, "tapped": true, "is_land": true }, { "name": "Tamanoa", "idx": 6, "num": 200002, "is_land": false }, { "name": "Tarnished Citadel", "idx": 3, "num": 55, "tapped": true, "is_land": true }, { "name": "Tarnished Citadel", "idx": 5, "num": 57, "tapped": true, "is_land": true }], "vial_counters": [], "hand": [{ "num": 19, "name": "Dina, Soul Steeper", "cost": "{B}{G}", "mv": 2, "kind": "permanent", "is_creature": true }, { "num": 26, "name": "Green Sun's Zenith", "cost": "{X}{G}", "mv": 1, "kind": "nonpermanent" }], "graveyard": [], "library_size": 54, "land_drops_left": 0 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "1/1 Creature", "idx": 0, "num": 500000, "is_land": false }, { "name": "1/1 Creature", "idx": 2, "num": 500001, "is_land": false }, { "name": "2/2 Creature", "idx": 4, "num": 500002, "is_land": false }] },
+  "plans": [
+    { "index": 0, "summary": "cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
+}
+},
+    { "chosen": 0, "decision": {
+  "decision_index": 17,
+  "main_ordinal": 3,
+  "type": "main_phase",
+  "turn": 4,
+  "phase": "pre_main",
+  "on_the_play": true,
+  "drew": [{ "turn": 4, "card": "Manabarbs" }],
+  "mdfc_backs": ["Boulderloft Pathway", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 12, "battlefield": [{ "name": "Brushland", "idx": 1, "num": 12, "is_land": true, "taps": "GWC" }, { "name": "Tamanoa", "idx": 6, "num": 200002, "is_land": false }, { "name": "Tarnished Citadel", "idx": 3, "num": 55, "is_land": true, "taps": "WUBRGC" }, { "name": "Tarnished Citadel", "idx": 5, "num": 57, "is_land": true, "taps": "WUBRGC" }], "vial_counters": [], "hand": [{ "num": 19, "name": "Dina, Soul Steeper", "cost": "{B}{G}", "mv": 2, "kind": "permanent", "is_creature": true }, { "num": 26, "name": "Green Sun's Zenith", "cost": "{X}{G}", "mv": 1, "kind": "nonpermanent" }, { "num": 34, "name": "Manabarbs", "cost": "{3}{R}", "mv": 4, "kind": "permanent" }], "graveyard": [], "library_size": 53, "land_drops_left": 1 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "1/1 Creature", "idx": 0, "num": 500000, "is_land": false }, { "name": "1/1 Creature", "idx": 2, "num": 500001, "is_land": false }, { "name": "2/2 Creature", "idx": 4, "num": 500002, "is_land": false }] },
+  "plans": [
+    { "index": 0, "summary": "land=none; cast: Dina, Soul Steeper", "land": null, "casts": ["Dina, Soul Steeper"], "actions": [{ "card": "Dina, Soul Steeper" }] },
+    { "index": 1, "summary": "land=none; cast: Dina, Soul Steeper, Green Sun's Zenith → fail to find (X=0)", "land": null, "casts": ["Dina, Soul Steeper", "Green Sun's Zenith"], "cast_order_canonical": ["Dina, Soul Steeper", "Green Sun's Zenith"], "actions": [{ "card": "Dina, Soul Steeper" }, { "card": "Green Sun's Zenith", "tutor_target": "(decline search)" }] },
+    { "index": 2, "summary": "land=none; cast: Green Sun's Zenith → Dina, Soul Steeper (X=2)", "land": null, "casts": ["Green Sun's Zenith"], "actions": [{ "card": "Green Sun's Zenith", "tutor_target": "Dina, Soul Steeper", "x": 2 }] },
+    { "index": 3, "summary": "land=none; cast: (nothing)", "land": null, "casts": [], "actions": [] },
+    { "index": 4, "summary": "land=none; cast: Green Sun's Zenith → fail to find (X=0)", "land": null, "casts": ["Green Sun's Zenith"], "actions": [{ "card": "Green Sun's Zenith", "tutor_target": "(decline search)" }] },
+    { "index": 5, "summary": "land=none; cast: Green Sun's Zenith → fail to find (X=1)", "land": null, "casts": ["Green Sun's Zenith"], "actions": [{ "card": "Green Sun's Zenith", "tutor_target": "(decline search)", "x": 1 }] },
+    { "index": 6, "summary": "land=none; cast: Green Sun's Zenith → fail to find (X=2)", "land": null, "casts": ["Green Sun's Zenith"], "actions": [{ "card": "Green Sun's Zenith", "tutor_target": "(decline search)", "x": 2 }] }
+  ],
+  "plans_hidden": 10,
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 18,
+  "main_ordinal": 4,
+  "type": "main_phase",
+  "turn": 4,
+  "phase": "pre_main",
+  "on_the_play": true,
+  "events": [{ "turn": 4, "kind": "trigger", "text": "⚡ Tamanoa x1 on 2 pain tap(s)" }],
+  "mdfc_backs": ["Boulderloft Pathway", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 12, "battlefield": [{ "name": "Brushland", "idx": 1, "num": 12, "tapped": true, "is_land": true }, { "name": "Dina, Soul Steeper", "idx": 7, "num": 19, "is_land": false }, { "name": "Tamanoa", "idx": 6, "num": 200002, "is_land": false }, { "name": "Tarnished Citadel", "idx": 3, "num": 55, "tapped": true, "is_land": true }, { "name": "Tarnished Citadel", "idx": 5, "num": 57, "is_land": true, "taps": "WUBRGC" }], "vial_counters": [], "hand": [{ "num": 26, "name": "Green Sun's Zenith", "cost": "{X}{G}", "mv": 1, "kind": "nonpermanent" }, { "num": 34, "name": "Manabarbs", "cost": "{3}{R}", "mv": 4, "kind": "permanent" }], "graveyard": [], "library_size": 53, "land_drops_left": 1 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "1/1 Creature", "idx": 0, "num": 500000, "is_land": false }, { "name": "1/1 Creature", "idx": 2, "num": 500001, "is_land": false }, { "name": "2/2 Creature", "idx": 4, "num": 500002, "is_land": false }] },
+  "plans": [
+    { "index": 0, "summary": "land=none; cast: (nothing)", "land": null, "casts": [], "actions": [] },
+    { "index": 1, "summary": "land=none; cast: Dina, Soul Steeper: sac 1 creature", "land": null, "casts": ["Dina, Soul Steeper"], "actions": [{ "card": "Dina, Soul Steeper", "src_num": 19, "activate": true, "sacout": true, "sac_count": 1 }] },
+    { "index": 2, "summary": "land=none; cast: Green Sun's Zenith → fail to find (X=0)", "land": null, "casts": ["Green Sun's Zenith"], "actions": [{ "card": "Green Sun's Zenith", "tutor_target": "(decline search)" }] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 19,
+  "type": "main_phase",
+  "turn": 4,
+  "phase": "post_main",
+  "on_the_play": true,
+  "events": [{ "turn": 4, "kind": "trigger", "text": "⚡ Tamanoa x1 on 1 pain tap(s)" }, { "turn": 4, "kind": "trigger", "text": "❤️ life gained: Dina, Soul Steeper: each opponent loses 1" }, { "turn": 4, "kind": "combat", "text": "⚔ attacked: Tamanoa (2) — 2 to opponent (19→17)" }],
+  "mdfc_backs": ["Boulderloft Pathway", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 12, "battlefield": [{ "name": "Brushland", "idx": 1, "num": 12, "tapped": true, "is_land": true }, { "name": "Dina, Soul Steeper", "idx": 7, "num": 19, "is_land": false }, { "name": "Tamanoa", "idx": 6, "num": 200002, "tapped": true, "is_land": false }, { "name": "Tarnished Citadel", "idx": 3, "num": 55, "tapped": true, "is_land": true }, { "name": "Tarnished Citadel", "idx": 5, "num": 57, "tapped": true, "is_land": true }], "vial_counters": [], "hand": [{ "num": 26, "name": "Green Sun's Zenith", "cost": "{X}{G}", "mv": 1, "kind": "nonpermanent" }, { "num": 34, "name": "Manabarbs", "cost": "{3}{R}", "mv": 4, "kind": "permanent" }], "graveyard": [], "library_size": 53, "land_drops_left": 1 },
+  "opponent": { "life": 17, "battlefield": [{ "name": "1/1 Creature", "idx": 0, "num": 500000, "is_land": false }, { "name": "1/1 Creature", "idx": 2, "num": 500001, "is_land": false }, { "name": "2/2 Creature", "idx": 4, "num": 500002, "is_land": false }] },
+  "plans": [
+    { "index": 0, "summary": "land=none; cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 20,
+  "main_ordinal": 5,
+  "type": "main_phase",
+  "turn": 5,
+  "phase": "pre_main",
+  "on_the_play": true,
+  "drew": [{ "turn": 5, "card": "Beseech the Queen" }],
+  "mdfc_backs": ["Boulderloft Pathway", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 12, "battlefield": [{ "name": "Brushland", "idx": 1, "num": 12, "is_land": true, "taps": "GWC" }, { "name": "Dina, Soul Steeper", "idx": 7, "num": 19, "is_land": false }, { "name": "Tamanoa", "idx": 6, "num": 200002, "is_land": false }, { "name": "Tarnished Citadel", "idx": 3, "num": 55, "is_land": true, "taps": "WUBRGC" }, { "name": "Tarnished Citadel", "idx": 5, "num": 57, "is_land": true, "taps": "WUBRGC" }], "vial_counters": [], "hand": [{ "num": 11, "name": "Beseech the Queen", "cost": "{2/B}{2/B}{2/B}", "mv": 6, "kind": "nonpermanent" }, { "num": 26, "name": "Green Sun's Zenith", "cost": "{X}{G}", "mv": 1, "kind": "nonpermanent" }, { "num": 34, "name": "Manabarbs", "cost": "{3}{R}", "mv": 4, "kind": "permanent" }], "graveyard": [], "library_size": 52, "land_drops_left": 1 },
+  "opponent": { "life": 17, "battlefield": [{ "name": "1/1 Creature", "idx": 0, "num": 500000, "is_land": false }, { "name": "1/1 Creature", "idx": 2, "num": 500001, "is_land": false }, { "name": "2/2 Creature", "idx": 4, "num": 500002, "is_land": false }] },
+  "plans": [
+    { "index": 0, "summary": "land=none; cast: Dina, Soul Steeper: sac 1 creature", "land": null, "casts": ["Dina, Soul Steeper"], "actions": [{ "card": "Dina, Soul Steeper", "src_num": 19, "activate": true, "sacout": true, "sac_count": 1 }] },
+    { "index": 1, "summary": "land=none; cast: Green Sun's Zenith → fail to find (X=0), Dina, Soul Steeper: sac 1 creature", "land": null, "casts": ["Green Sun's Zenith", "Dina, Soul Steeper"], "actions": [{ "card": "Green Sun's Zenith", "tutor_target": "(decline search)" }, { "card": "Dina, Soul Steeper", "src_num": 19, "activate": true, "sacout": true, "sac_count": 1 }] },
+    { "index": 2, "summary": "land=none; cast: Green Sun's Zenith → fail to find (X=1), Dina, Soul Steeper: sac 1 creature", "land": null, "casts": ["Green Sun's Zenith", "Dina, Soul Steeper"], "actions": [{ "card": "Green Sun's Zenith", "tutor_target": "(decline search)", "x": 1 }, { "card": "Dina, Soul Steeper", "src_num": 19, "activate": true, "sacout": true, "sac_count": 1 }] },
+    { "index": 3, "summary": "land=none; cast: Green Sun's Zenith → Dina, Soul Steeper (X=2)", "land": null, "casts": ["Green Sun's Zenith"], "actions": [{ "card": "Green Sun's Zenith", "tutor_target": "Dina, Soul Steeper", "x": 2 }] },
+    { "index": 4, "summary": "land=none; cast: (nothing)", "land": null, "casts": [], "actions": [] },
+    { "index": 5, "summary": "land=none; cast: Green Sun's Zenith → fail to find (X=0)", "land": null, "casts": ["Green Sun's Zenith"], "actions": [{ "card": "Green Sun's Zenith", "tutor_target": "(decline search)" }] },
+    { "index": 6, "summary": "land=none; cast: Green Sun's Zenith → fail to find (X=1)", "land": null, "casts": ["Green Sun's Zenith"], "actions": [{ "card": "Green Sun's Zenith", "tutor_target": "(decline search)", "x": 1 }] },
+    { "index": 7, "summary": "land=none; cast: Green Sun's Zenith → fail to find (X=2)", "land": null, "casts": ["Green Sun's Zenith"], "actions": [{ "card": "Green Sun's Zenith", "tutor_target": "(decline search)", "x": 2 }] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 21,
+  "type": "main_phase",
+  "turn": 5,
+  "phase": "post_main",
+  "on_the_play": true,
+  "events": [{ "turn": 5, "kind": "trigger", "text": "⚡ Tamanoa x1 on 1 pain tap(s)" }, { "turn": 5, "kind": "trigger", "text": "❤️ life gained: Dina, Soul Steeper: each opponent loses 1" }, { "turn": 5, "kind": "trigger", "text": "⚡ Tamanoa x1 on 1 pain tap(s)" }, { "turn": 5, "kind": "trigger", "text": "❤️ life gained: Dina, Soul Steeper: each opponent loses 1" }, { "turn": 5, "kind": "trigger", "text": "⚡ Tamanoa x1 on 1 pain tap(s)" }, { "turn": 5, "kind": "trigger", "text": "❤️ life gained: Dina, Soul Steeper: each opponent loses 1" }, { "turn": 5, "kind": "combat", "text": "⚔ attacked: Tamanoa (2), Dina, Soul Steeper (1) — 3 to opponent (14→11)" }],
+  "mdfc_backs": ["Boulderloft Pathway", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 12, "battlefield": [{ "name": "Brushland", "idx": 1, "num": 12, "tapped": true, "is_land": true }, { "name": "Dina, Soul Steeper", "idx": 7, "num": 19, "tapped": true, "is_land": false }, { "name": "Tamanoa", "idx": 6, "num": 200002, "tapped": true, "is_land": false }, { "name": "Tarnished Citadel", "idx": 3, "num": 55, "tapped": true, "is_land": true }, { "name": "Tarnished Citadel", "idx": 5, "num": 57, "tapped": true, "is_land": true }], "vial_counters": [], "hand": [{ "num": 11, "name": "Beseech the Queen", "cost": "{2/B}{2/B}{2/B}", "mv": 6, "kind": "nonpermanent" }, { "num": 26, "name": "Green Sun's Zenith", "cost": "{X}{G}", "mv": 1, "kind": "nonpermanent" }, { "num": 34, "name": "Manabarbs", "cost": "{3}{R}", "mv": 4, "kind": "permanent" }], "graveyard": [], "library_size": 52, "land_drops_left": 1 },
+  "opponent": { "life": 11, "battlefield": [{ "name": "1/1 Creature", "idx": 0, "num": 500000, "is_land": false }, { "name": "1/1 Creature", "idx": 2, "num": 500001, "is_land": false }, { "name": "2/2 Creature", "idx": 4, "num": 500002, "is_land": false }] },
+  "plans": [
+    { "index": 0, "summary": "land=none; cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 22,
+  "main_ordinal": 6,
+  "type": "main_phase",
+  "turn": 6,
+  "phase": "pre_main",
+  "on_the_play": true,
+  "drew": [{ "turn": 6, "card": "Beseech the Queen" }],
+  "mdfc_backs": ["Boulderloft Pathway", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 12, "battlefield": [{ "name": "Brushland", "idx": 1, "num": 12, "is_land": true, "taps": "GWC" }, { "name": "Dina, Soul Steeper", "idx": 7, "num": 19, "is_land": false }, { "name": "Tamanoa", "idx": 6, "num": 200002, "is_land": false }, { "name": "Tarnished Citadel", "idx": 3, "num": 55, "is_land": true, "taps": "WUBRGC" }, { "name": "Tarnished Citadel", "idx": 5, "num": 57, "is_land": true, "taps": "WUBRGC" }], "vial_counters": [], "hand": [{ "num": 11, "name": "Beseech the Queen", "cost": "{2/B}{2/B}{2/B}", "mv": 6, "kind": "nonpermanent" }, { "num": 9, "name": "Beseech the Queen", "cost": "{2/B}{2/B}{2/B}", "mv": 6, "kind": "nonpermanent" }, { "num": 26, "name": "Green Sun's Zenith", "cost": "{X}{G}", "mv": 1, "kind": "nonpermanent" }, { "num": 34, "name": "Manabarbs", "cost": "{3}{R}", "mv": 4, "kind": "permanent" }], "graveyard": [], "library_size": 51, "land_drops_left": 1 },
+  "opponent": { "life": 11, "battlefield": [{ "name": "1/1 Creature", "idx": 0, "num": 500000, "is_land": false }, { "name": "1/1 Creature", "idx": 2, "num": 500001, "is_land": false }, { "name": "2/2 Creature", "idx": 4, "num": 500002, "is_land": false }] },
+  "plans": [
+    { "index": 0, "summary": "land=none; cast: Dina, Soul Steeper: sac 1 creature", "land": null, "casts": ["Dina, Soul Steeper"], "actions": [{ "card": "Dina, Soul Steeper", "src_num": 19, "activate": true, "sacout": true, "sac_count": 1 }] },
+    { "index": 1, "summary": "land=none; cast: Green Sun's Zenith → fail to find (X=0), Dina, Soul Steeper: sac 1 creature", "land": null, "casts": ["Green Sun's Zenith", "Dina, Soul Steeper"], "actions": [{ "card": "Green Sun's Zenith", "tutor_target": "(decline search)" }, { "card": "Dina, Soul Steeper", "src_num": 19, "activate": true, "sacout": true, "sac_count": 1 }] },
+    { "index": 2, "summary": "land=none; cast: Green Sun's Zenith → fail to find (X=1), Dina, Soul Steeper: sac 1 creature", "land": null, "casts": ["Green Sun's Zenith", "Dina, Soul Steeper"], "actions": [{ "card": "Green Sun's Zenith", "tutor_target": "(decline search)", "x": 1 }, { "card": "Dina, Soul Steeper", "src_num": 19, "activate": true, "sacout": true, "sac_count": 1 }] },
+    { "index": 3, "summary": "land=none; cast: Green Sun's Zenith → Dina, Soul Steeper (X=2)", "land": null, "casts": ["Green Sun's Zenith"], "actions": [{ "card": "Green Sun's Zenith", "tutor_target": "Dina, Soul Steeper", "x": 2 }] },
+    { "index": 4, "summary": "land=none; cast: (nothing)", "land": null, "casts": [], "actions": [] },
+    { "index": 5, "summary": "land=none; cast: Green Sun's Zenith → fail to find (X=0)", "land": null, "casts": ["Green Sun's Zenith"], "actions": [{ "card": "Green Sun's Zenith", "tutor_target": "(decline search)" }] },
+    { "index": 6, "summary": "land=none; cast: Green Sun's Zenith → fail to find (X=1)", "land": null, "casts": ["Green Sun's Zenith"], "actions": [{ "card": "Green Sun's Zenith", "tutor_target": "(decline search)", "x": 1 }] },
+    { "index": 7, "summary": "land=none; cast: Green Sun's Zenith → fail to find (X=2)", "land": null, "casts": ["Green Sun's Zenith"], "actions": [{ "card": "Green Sun's Zenith", "tutor_target": "(decline search)", "x": 2 }] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 23,
+  "type": "main_phase",
+  "turn": 6,
+  "phase": "post_main",
+  "on_the_play": true,
+  "events": [{ "turn": 6, "kind": "trigger", "text": "⚡ Tamanoa x1 on 1 pain tap(s)" }, { "turn": 6, "kind": "trigger", "text": "❤️ life gained: Dina, Soul Steeper: each opponent loses 1" }, { "turn": 6, "kind": "trigger", "text": "⚡ Tamanoa x1 on 1 pain tap(s)" }, { "turn": 6, "kind": "trigger", "text": "❤️ life gained: Dina, Soul Steeper: each opponent loses 1" }, { "turn": 6, "kind": "trigger", "text": "⚡ Tamanoa x1 on 1 pain tap(s)" }, { "turn": 6, "kind": "trigger", "text": "❤️ life gained: Dina, Soul Steeper: each opponent loses 1" }, { "turn": 6, "kind": "combat", "text": "⚔ attacked: Tamanoa (2), Dina, Soul Steeper (1) — 3 to opponent (8→5)" }],
+  "mdfc_backs": ["Boulderloft Pathway", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 12, "battlefield": [{ "name": "Brushland", "idx": 1, "num": 12, "tapped": true, "is_land": true }, { "name": "Dina, Soul Steeper", "idx": 7, "num": 19, "tapped": true, "is_land": false }, { "name": "Tamanoa", "idx": 6, "num": 200002, "tapped": true, "is_land": false }, { "name": "Tarnished Citadel", "idx": 3, "num": 55, "tapped": true, "is_land": true }, { "name": "Tarnished Citadel", "idx": 5, "num": 57, "tapped": true, "is_land": true }], "vial_counters": [], "hand": [{ "num": 11, "name": "Beseech the Queen", "cost": "{2/B}{2/B}{2/B}", "mv": 6, "kind": "nonpermanent" }, { "num": 9, "name": "Beseech the Queen", "cost": "{2/B}{2/B}{2/B}", "mv": 6, "kind": "nonpermanent" }, { "num": 26, "name": "Green Sun's Zenith", "cost": "{X}{G}", "mv": 1, "kind": "nonpermanent" }, { "num": 34, "name": "Manabarbs", "cost": "{3}{R}", "mv": 4, "kind": "permanent" }], "graveyard": [], "library_size": 51, "land_drops_left": 1 },
+  "opponent": { "life": 5, "battlefield": [{ "name": "1/1 Creature", "idx": 0, "num": 500000, "is_land": false }, { "name": "1/1 Creature", "idx": 2, "num": 500001, "is_land": false }, { "name": "2/2 Creature", "idx": 4, "num": 500002, "is_land": false }] },
+  "plans": [
+    { "index": 0, "summary": "land=none; cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 24,
+  "main_ordinal": 7,
+  "type": "main_phase",
+  "turn": 7,
+  "phase": "pre_main",
+  "on_the_play": true,
+  "drew": [{ "turn": 7, "card": "Spellshock" }],
+  "mdfc_backs": ["Boulderloft Pathway", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 12, "battlefield": [{ "name": "Brushland", "idx": 1, "num": 12, "is_land": true, "taps": "GWC" }, { "name": "Dina, Soul Steeper", "idx": 7, "num": 19, "is_land": false }, { "name": "Tamanoa", "idx": 6, "num": 200002, "is_land": false }, { "name": "Tarnished Citadel", "idx": 3, "num": 55, "is_land": true, "taps": "WUBRGC" }, { "name": "Tarnished Citadel", "idx": 5, "num": 57, "is_land": true, "taps": "WUBRGC" }], "vial_counters": [], "hand": [{ "num": 11, "name": "Beseech the Queen", "cost": "{2/B}{2/B}{2/B}", "mv": 6, "kind": "nonpermanent" }, { "num": 9, "name": "Beseech the Queen", "cost": "{2/B}{2/B}{2/B}", "mv": 6, "kind": "nonpermanent" }, { "num": 26, "name": "Green Sun's Zenith", "cost": "{X}{G}", "mv": 1, "kind": "nonpermanent" }, { "num": 34, "name": "Manabarbs", "cost": "{3}{R}", "mv": 4, "kind": "permanent" }, { "num": 50, "name": "Spellshock", "cost": "{2}{R}", "mv": 3, "kind": "permanent" }], "graveyard": [], "library_size": 50, "land_drops_left": 1 },
+  "opponent": { "life": 5, "battlefield": [{ "name": "1/1 Creature", "idx": 0, "num": 500000, "is_land": false }, { "name": "1/1 Creature", "idx": 2, "num": 500001, "is_land": false }, { "name": "2/2 Creature", "idx": 4, "num": 500002, "is_land": false }] },
+  "plans": [
+    { "index": 0, "summary": "land=none; cast: Dina, Soul Steeper: sac 1 creature", "land": null, "casts": ["Dina, Soul Steeper"], "actions": [{ "card": "Dina, Soul Steeper", "src_num": 19, "activate": true, "sacout": true, "sac_count": 1 }] },
+    { "index": 1, "summary": "land=none; cast: Green Sun's Zenith → fail to find (X=0), Dina, Soul Steeper: sac 1 creature", "land": null, "casts": ["Green Sun's Zenith", "Dina, Soul Steeper"], "actions": [{ "card": "Green Sun's Zenith", "tutor_target": "(decline search)" }, { "card": "Dina, Soul Steeper", "src_num": 19, "activate": true, "sacout": true, "sac_count": 1 }] },
+    { "index": 2, "summary": "land=none; cast: Green Sun's Zenith → fail to find (X=1), Dina, Soul Steeper: sac 1 creature", "land": null, "casts": ["Green Sun's Zenith", "Dina, Soul Steeper"], "actions": [{ "card": "Green Sun's Zenith", "tutor_target": "(decline search)", "x": 1 }, { "card": "Dina, Soul Steeper", "src_num": 19, "activate": true, "sacout": true, "sac_count": 1 }] },
+    { "index": 3, "summary": "land=none; cast: Spellshock", "land": null, "casts": ["Spellshock"], "actions": [{ "card": "Spellshock" }] },
+    { "index": 4, "summary": "land=none; cast: Green Sun's Zenith → Dina, Soul Steeper (X=2)", "land": null, "casts": ["Green Sun's Zenith"], "actions": [{ "card": "Green Sun's Zenith", "tutor_target": "Dina, Soul Steeper", "x": 2 }] },
+    { "index": 5, "summary": "land=none; cast: (nothing)", "land": null, "casts": [], "actions": [] },
+    { "index": 6, "summary": "land=none; cast: Green Sun's Zenith → fail to find (X=0)", "land": null, "casts": ["Green Sun's Zenith"], "actions": [{ "card": "Green Sun's Zenith", "tutor_target": "(decline search)" }] },
+    { "index": 7, "summary": "land=none; cast: Green Sun's Zenith → fail to find (X=1)", "land": null, "casts": ["Green Sun's Zenith"], "actions": [{ "card": "Green Sun's Zenith", "tutor_target": "(decline search)", "x": 1 }] },
+    { "index": 8, "summary": "land=none; cast: Green Sun's Zenith → fail to find (X=2)", "land": null, "casts": ["Green Sun's Zenith"], "actions": [{ "card": "Green Sun's Zenith", "tutor_target": "(decline search)", "x": 2 }] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
+}
+}
+  ],
+  "final_events": [
+    { "turn": 7, "kind": "trigger", "text": "⚡ Tamanoa x1 on 1 pain tap(s)" },
+    { "turn": 7, "kind": "trigger", "text": "❤️ life gained: Dina, Soul Steeper: each opponent loses 1" },
+    { "turn": 7, "kind": "trigger", "text": "⚡ Tamanoa x1 on 1 pain tap(s)" },
+    { "turn": 7, "kind": "trigger", "text": "❤️ life gained: Dina, Soul Steeper: each opponent loses 1" },
+    { "turn": 7, "kind": "trigger", "text": "⚡ Tamanoa x1 on 1 pain tap(s)" },
+    { "turn": 7, "kind": "trigger", "text": "❤️ life gained: Dina, Soul Steeper: each opponent loses 1" },
+    { "turn": 7, "kind": "combat", "text": "⚔ attacked: Tamanoa (2), Dina, Soul Steeper (1) — 3 to opponent (2→-1)" }
+  ]
+}
