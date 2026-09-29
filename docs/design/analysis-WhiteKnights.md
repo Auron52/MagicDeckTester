@@ -246,7 +246,61 @@ Open question for the cast-order hook: `VialProvider::CastOrderRank` under `MTG_
 was reviewed and adopted for the *Knights* list. Whether it transfers to this list is a
 measurement (5e), not an assumption — recorded below once run.
 
-## RESUME HERE — latest state (2026-09-28: the copy-count campaign is CLOSED; the list is settled)
+## RESUME HERE — latest state (2026-09-29: **v2 IS ADOPTED AND SHIPPING**; the whole pipeline is regenerated)
+
+**The deck now ships `v2`: round P's settled 60 plus 1 Kinsbaile Cavalier in place of 1 Hero of
+Bladehold.** The user's go, 2026-09-29: *"let's stick with that option. It is still a little risky when
+it comes to removal, but it does indeed have upside otherwise."* Predecessor archived as
+`decks/WhiteKnights/v1-contender-vial/` with its artifacts, and its 10 references moved to
+`references/WhiteKnights/v1-contender-vial/`.
+
+| the 60 | | |
+|---|---|---|
+| 4 Dauntless Bodyguard · 4 Venerable Knight | 4 Worthy Knight · 4 Accorder Paladin | 4 Knight Exemplar · 4 Benalish Marshal |
+| 3 Silverblade Paladin · 3 Adeline | **2 Hero of Bladehold · 1 Kinsbaile Cavalier** | 1 Sol Ring · 1 Swords · 1 Unexpectedly Absent |
+| 20 Plains · 4 Remote Farm | | |
+
+**Why the Cavalier, and at one copy paid by Hero** (`knights-copy-count-screen.md` → rounds Q and S).
+Round Q established the card on three arms; round S then fixed the four-drop budget and laddered the
+mix with Hero paying every rung. `r_kc1_hob2` measured **−0.0134** late-weighted vs the round P list at
+an apparatus floor margin of **6.35x**, and is the only established option that is better in ALL three
+formats (−0.0047 even at 20 life). It ties the user's own −1 Silverblade/−1 Hero shape (−0.0137) while
+being the smaller change and keeping all three Silverblades. Two user constraints shaped it: a **1–2
+cap** on the Cavalier (the 2nd copy is worth only −0.0027, at the noise floor — binary double strike
+means a 2nd copy adds nothing to the 1st one's grant), and **at most 4 squishy double-strike
+providers**, which rules out `q_kc2_hob1` — the campaign's best-measured arm at a 23x floor — knowingly.
+
+**Two model caveats that belong with the number, and they point opposite ways.** The user's: this
+measurement OVERSTATES the Cavalier against Hero, because Hero is 3/4 and survives Lightning Bolt while
+both 2/2s die and lose their whole contribution, and Hero's tokens and battle cry are already banked.
+Mine, found while checking the leaf: `MidGameFeature` has **no double-strike term** and `OurTotalPower`
+sums `EffectivePower`, which is pre-multiplier — so beyond the search horizon the value leaf prices a
+double-strike board at HALF its damage, biasing AGAINST the Cavalier. Every gain quoted is a floor.
+That is also why no comparison was re-run leaf-less: the bias points the safe way for this conclusion.
+
+**The regenerated pipeline** (each stage alone on the box, in the mandated order):
+
+| stage | result | commit |
+|---|---|---|
+| list + v1 archive + profile | 60 cards, coverage 15/15 `full`, 14 card scores (Cavalier 0.0303), `vial_target_mv` correctly gone | `13ea9773` |
+| value leaf | **CLEAN WIN**: quality tie (+0.00012 t, 7/8 seeds identical) at **0.08x** cost; trust d4 rejected by the tool's own gate (lever never engaged) | `16df8a11` |
+| mulligan profile | **VALIDATION PASSED**: keep **−0.1386 t** 16/16 (mean/se −42.74), confounded bottoming **−0.0334 t** 16/16 (−15.09); 13 buckets, 33,903 cells, R=40, ~12 min | `577b9386` |
+| suite GT, all 3 tiers | net strongly FASTER (searched 167/39, 405/80, 2913/859); only whiteknights keys moved; 590 keys consistent | `8d4adcf4` |
+
+**`expected_buckets` = 13** (was 14), discovered by phase F. A bucket count is a **user ruling** — the
+pipeline recorded what it found and it is **surfaced for confirmation, not settled**.
+
+**Magnitude cross-check worth keeping.** GT was still on the *shipped* list, so the rebaseline measures
+round P's rebuild plus the Cavalier: screens predicted −0.259 + −0.0134 = −0.27, the suite measured
+**−0.28** on different seeds under a different apparatus.
+
+**What is still open:** the two deferred re-measurements the user parked, now unblocked because v2 has
+its own table — **1 Basri** (round N2's +0.0004 is unresolved: blocks disagree in sign, and its
+reference was the pre-P chassis) and **1 Aether Vial** (never measured at 1; and `vial_target_mv` is 3
+while the three-drop count went 11 → 14, so its chassis moved in Vial's favour after the −0.0423 was
+measured). Both are filed under "DEFERRED" in `knights-copy-count-screen.md`.
+
+### Earlier resume block (2026-09-28: the copy-count campaign is CLOSED; the list is settled)
 
 **2026-09-28, round P** (`knights-copy-count-screen.md` → "Round P RESULT") closed the three items the
 2026-09-27 rulings had left open, on the ruled base and under the hand-entry adoption (`6b9f0cb2`):
