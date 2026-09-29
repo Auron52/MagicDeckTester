@@ -3453,6 +3453,30 @@ play-changed — with slivers, knights, goblins, minotaur and pirates all in tha
 proof the fix reaches only decks whose Vial was already broken: all six shipped profiles already
 agreed with what their decklists derive.
 
+**And verified POSITIVELY, on the real path, because byte-identity alone can mean the new code never
+fires** (`digest-equality-can-mean-broken`). Two checks on round V's own `v_av1_ua0` arm directory —
+the exact decklist and the exact profile that produced the void +0.0014:
+
+1. `MTG_BATCH_STATE_DUMP` through `mtg --batch` prints **`vial=3`**. That is the BatchRunner path
+   every screen and every regression run uses, reading a profile that does not contain the key.
+2. 250 traced games at 40 life: the Vial resolved in 31 of them and **deployed 20 creatures for
+   free** — Worthy Knight ×4, Dauntless Bodyguard ×4, Knight Exemplar ×2, Venerable Knight ×2,
+   Benalish Marshal ×2, Accorder Paladin ×2, Silverblade Paladin ×2, Adeline ×1, Kinsbaile
+   Cavalier ×1. Under the old binary this number was necessarily **zero**: with the target at 0 the
+   counter never advanced, and the deploy requires `charge_counters == mv` exactly, which no card in
+   the deck satisfies at 0.
+
+The spread of deployed mana values is worth noting on its own — the Vial reached **4** counters
+(Kinsbaile Cavalier) as well as 1, 2 and 3. That is the hand-aware `count_above` clause climbing past
+the deck's dominant MV toward a bigger creature actually in hand, which is the behaviour the policy
+was written for and which had never once executed on this deck.
+
+A caution the probe also produced, and it is a real limit rather than a bug: at 20 life with an
+8-turn horizon the same 250 games yielded **no** deploys at all. A Vial cast on turn 2 reaches three
+counters on turn 5, and this deck's mean kill is turn 4.1 — so in the fast format the card runs out
+of clock before it can act. Expect the corrected cost to be format-dependent, and expect the `std`
+column to remain the worst of the three.
+
 **The generalisable lesson.** A field that is a *function of the decklist* must be derived from the
 decklist at the point of use, never carried alongside it in a file that can describe a different
 decklist. Everything else in `StampDeckTraits` already worked this way; this one field did not, and
