@@ -266,10 +266,17 @@ contention, for the record: mean **18.4 of 24 cores** over 595 samples, with **4
 cores** — the neighbouring container's load is bursty and heavy (loadavg 46–49 while we held 11.6 cores).
 
 **Remaining uncertainty is now one thing only: whether the reference's final depths (9.06 and 17.98
-rollouts/cell-side) transfer to a harder list.** Escalation had only just begun at 21:49Z (`roll7`
-+768), so within a few clean hours it becomes directly measurable. Harder cells could plausibly escalate
-*further*, which would push these numbers up again; adaptive escalation could equally settle many cells
-early, which would pull them down. Do not treat 4.6 d as firm until that multiplier is observed.
+rollouts/cell-side) transfer to a harder list.** Harder cells could plausibly escalate *further*, which
+would push these numbers up again; adaptive escalation could equally settle many cells early, which
+would pull them down. Do not treat 4.6 d as firm until that multiplier is observed.
+
+> **CORRECTION (2026-09-29, see the 51.0 h section below).** This paragraph originally read
+> *"escalation had only just begun at 21:49Z (`roll7` +768)"*. It had not. That +768 was a
+> **sub-refine wave-boundary artefact**, and `roll7` then sat flat for another 36 h; escalation did
+> not start until the waves collapsed at 51.0 h. The sub-table multiplier has since come in at
+> **124%** of the reference, not the 97% reported on 2026-09-28 — that figure divided a live counter
+> by the reference's finished total. Read §2 of the 51.0 h section before quoting any multiplier
+> from this document.
 
 **Contention is real, bursty, and was observed.** At 18:14Z the generation held **11.7 of 24 cores at
 loadavg 48.8** (≈2x oversubscription) while a neighbouring container ran heavy work; by 18:16Z it had
@@ -345,6 +352,119 @@ transferred from a list 13.8x smaller. If candidate B's singleton-heavy hands ma
 marginal on average they escalate harder: 1.25x on that multiplier is ~4.2 days, 1.5x is ~5.1. The
 multiplier becomes directly measurable in the first hour after the floor completes, which is the
 number actually worth deciding on.
+
+## 2026-09-29 05:40Z (51.0 h in) — sub-refine CONVERGES, and escalation has not started
+
+Three things resolved at once, and one of them is a retraction.
+
+### 1. The sub-refine waves hit the reference's convergence cliff
+
+`subwave` history, with `rollsub` at each transition:
+
+| t | subwave | rollsub | this wave cost |
+|---|---|---|---|
+| 300 s | `0x0` | 0 | — |
+| 69,307 s (19.3 h) | `0x453873` | 1,138,488 | wave 0 = 7,272,588 |
+| 146,716 s (40.8 h) | `1x341752` | 8,411,076 | wave 1 = 4,098,028 |
+| 183,320 s (50.9 h) | `2x341752` ← stale size | 12,509,104 | |
+| 183,620 s (51.0 h) | **`2x4052`** | 12,534,836 | wave 2 ≈ 25 k |
+| 183,920 s (51.1 h) | **`4x103`** | 12,559,840 | waves 3–4 ≈ 25 k |
+
+**Wave 2 is 4,052 cell-sides — a 98.8% collapse from 341,752 — and waves 3 and 4 followed within one
+monitor period at 103.** The sub-table phase is finished at ~12.56 M rollouts; the last three waves
+cost ~50 k between them. The reference converged at wave 4 too.
+
+**The size field lags the index by up to one monitor period.** At 183,320 s it read `2x341752` —
+wave 2's index with wave *1's* size. Do not read a repeated size as "the set stopped shrinking";
+the reference log does the same thing (`1x40891` for 3,300 s before correcting itself to `1x27223`).
+Wait for the next monitor line before concluding anything from a size.
+
+**The decay ratio transferred almost exactly**, which is the useful transferable fact:
+wave 1 / wave 0 is **56.4%** here (4,098,028 / 7,272,588) against **55.7%** in the reference
+(340,296 / 611,104). Then both cliff-edge immediately after wave 1 — the reference's waves 2–4 cost
+3,108 rollouts between them and converged. Two waves of decay then a collapse looks to be the shape
+of this generator's sub-refine, not a property of one list.
+
+### 2. RETRACTION: "the sub phase is running at 97% of the reference" was a partial-numerator error
+
+On 2026-09-28 this document and my report to the user said the reference multiplier had transferred
+favourably — 17.37 rollouts/cell-side here against the reference's 17.98, i.e. 97%. **That compared
+our in-progress numerator to the reference's final one.** `rollsub / sub_batches` was 17.37 only
+because we were mid-wave-1; the reference's 17.98 was its *completed* total. The honest comparison
+now that our sub phase has converged:
+
+| | sub batches | final rollsub | rollouts/batch |
+|---|---|---|---|
+| reference (shipped Fungus) | 62,444 | 1,122,548 | 17.98 |
+| candidate B | 560,212 | ~12.6 M | **~22.4 (124%)** |
+
+So the sub phase cost **24% more per batch** than the reference, not 3% less. This is the same
+mistake as the 58.6-vs-122.1 rollouts/s error earlier in this run (a partial numerator over a full
+denominator) and it is what `projections-separate-exact-from-estimated` is about. **Rule for anyone
+reading a progress figure off this run: never divide a live counter by a finished run's total.** Wait
+for the phase to converge, or compare like-for-like fractions.
+
+It costs ~2.5 M rollouts against the estimate (~7 h), which is real but not decisive. The projection
+below absorbs it.
+
+### 3. Why `roll7` has been flat for 36 h — a producer interlock, not a stall
+
+`roll7` sat at 3,045,736 from 53,705 s to 183,320 s: the floor is exactly `2 x 1,522,096 =
+3,044,192` and the extra 1,544 arrived in two tiny bumps, at the wave 0→1 and 1→2 boundaries. That is
+not escalation. **No size-7 work beyond the bare floor has run.**
+
+The mechanism is in `src/analyzer/ExhaustiveKeep.cpp`. The floor-phase speculation filler
+(`ExhaustiveKeep.cpp:3968`) feeds already-floored cells up to `r0 + spec_budget`, and it sits
+*after* `sub_refine_step()` (`:3939`) in the producer loop. `sub_refine_step` pushes an entire wave
+inline, blocking on `q_nf.wait(… q.size() < QCAP)` for every task — so with a 341,752-task wave the
+producer is stuck inside it for most of the wave, and reaches the speculation filler only in the
+wave's drain tail. Hence bumps at the boundaries and nothing between.
+
+**This costs nothing and needs no action.** Speculation exists purely to fill *idle* cores, and there
+were none — the box ran at 23.4–23.8 of 24 cores on mandatory kind-2 sub-refine work the whole time.
+It is also work that `compute_refs` may truncate, so skipping it can only save. The consequence is
+scheduling, not loss: the size-7 escalation the reference did *interleaved* with its sub waves is, on
+this run, **all still ahead of us**.
+
+Note the asymmetry with the FiveColour bug recorded at `ExhaustiveKeep.cpp:3946` — there the
+speculation filler outran the sub-refine step and was fixed by bounding it to `spec_chunk`. The wave
+push on the other side is still unbounded, which is what produced this. Harmless here; worth knowing
+before anyone "fixes" a flat `roll7`.
+
+**What happens next, in order.** `spec_active` is a latch (`:3962`, deliberately — it is the
+interlock that stops `compute_refs` firing on a half-speculated state), so now that the waves have
+collapsed the speculation sweep will run to **saturation** before refine can start:
+
+1. speculation to `r=6` over every live cell-side — **6,088,384 rollouts** (4 per cell-side; 1,544 done)
+2. `compute_refs` publishes → `phase=refine`
+3. refine escalation to the final mean r, plus freezing (`frozen=` finally leaves `0/1522096`)
+4. write-out of the raw journal (148 MB and growing)
+
+Step 2 is what `phasewatch3.sh` is waiting for, so the watcher will fire on it. Expect **`roll7` to
+start climbing steadily now** — that is the escalation rate, and it is the only number left that
+matters.
+
+### The revised projection
+
+Reference mean final depth is **9.06 rollouts/cell-side** (floor 2 + speculation 4 + refine 3.06).
+At that multiplier candidate B's total `roll7` is `9.06 x 1,522,096 = 13.79 M`, so **remaining
+escalation ≈ 10.74 M rollouts** — now the overwhelming majority of what is left, with the sub phase
+converged and freezing cheap per cell.
+
+| | remaining roll7 | at | remaining | elapsed + | total |
+|---|---|---|---|---|---|
+| escalation costs like the size-7 floor | 10.74 M | 69 roll/s | 43 h | 51 h | **94 h (3.9 d)** |
+| escalation 1.25x (hard cells first) | 10.74 M | 55 roll/s | 54 h | 51 h | 105 h (4.4 d) |
+| escalation 1.5x | 10.74 M | 46 roll/s | 65 h | 51 h | 116 h (4.8 d) |
+
+69 roll/s is 23.5 cores x 2.95 rollouts/core-second, the measured size-7 productivity of this list;
+sub-table work runs at 4.68, which is why the last 36 h looked faster. **Finish: Thursday 2026-10-01
+early, to Friday 2026-10-02 early.** That is half a day to a day later than the 87–109 h quoted on
+2026-09-28, and the slip is the retraction in §2 plus pricing the whole speculation sweep.
+
+The 1.25x/1.5x rows are not padding: escalation targets the cells whose keep call is most marginal,
+so it should cost *more* per rollout than the floor average. The multiplier becomes directly
+measurable within an hour of `roll7` moving, which is now.
 
 ## The branch
 
