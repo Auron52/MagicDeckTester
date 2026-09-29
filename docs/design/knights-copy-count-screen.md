@@ -2736,6 +2736,84 @@ a three-slot four-drop budget are unmeasured, and the two obvious follow-up arms
 Cavalier 1 / Hero 2) were not in this round. **Adoption is the user's call** and, as with round P's list,
 would discard the shipped keep table and value leaf.
 
+### Round S (2026-09-29) — the Cavalier at the USER'S CAP, and WHICH card it replaces
+
+Round R was launched and **killed ~15 min in**: three of its five arms tested 3 Cavaliers or a four-drop
+count of four, both ruled out by the user mid-round. `r_kc1_hob2`'s partial table resumed from its
+journal into round S. Generator `mkspec_s.py`, runner `run_s.sh`, seeds **16.8M / 17.2M**, seven arms,
+four tables (one resumed, three cached), apparatus unchanged from round Q.
+
+**The user's specification, verbatim (2026-09-29):** *"Kinsbaile is potentially a 1 or 2 of. That would
+be the cap from my perspective."* / *"But it duplicates what Silverblade Paladin does to a degree."* /
+*"So a 2-of might look like -1 Silverblade and -1 Hero of Bladehold."* / *"1-of you would remove one or
+the other."*
+
+| tag | Cav | Silverblade | Hero | four-drops | role |
+|---|---|---|---|---|---|
+| `m_sp3_p20` | 0 | 3 | 3 | 3 | reference (cached) |
+| `r_kc1_hob2` | 1 | 3 | 2 | 3 | 1-of, remove the HERO (resumed) |
+| `s_kc1_sp2` | 1 | 2 | 3 | 4 | 1-of, remove the SILVERBLADE |
+| `s_kc2_sp2_hob2` | 2 | 2 | 2 | 4 | **the user's stated 2-of shape** |
+| `q_kc2_hob1` | 2 | 3 | 1 | 3 | 2-of from Hero — a THIRD block on round Q's one floor-clearing arm (cached) |
+| `s_kc2_sp1` | 2 | 1 | 3 | 5 | 2-of from Silverblade |
+| `p_sp2_hob4` | 0 | 2 | 4 | 4 | **CONTROL**: the Silverblade cut with NO Cavalier (cached, round P +0.0041) |
+
+The control is the piece every earlier round lacked: it separates *"the Cavalier is good"* from *"the
+3rd Silverblade is bad"*. **Prediction on record:** the user's −1/−1 shape beats both pure payers,
+because taking two from Silverblade alone leaves Hero at 3 and pushes the deck to **five** four-drops,
+the configuration round Q showed losing at 20 life. If `s_kc2_sp1` wins anyway, the four-drop count was
+not what drove that.
+
+Note the shared-table fall-through now **varies by arm** (3.74%–7.03%) rather than being uniform as in
+round Q: cutting Silverblade removes one of the three raises (Silverblade 1→3) that caused it, so the
+Silverblade arms get *better* coverage. That is an asymmetry in the SHARED column only; the reported OWN
+column is unaffected and the floor bracket quantifies it.
+
+#### THE REDUNDANCY IS REAL IN THIS ENGINE, not only on paper
+
+`CreatureHasDoubleStrike` returns true if ANY source grants it, so with a Cavalier on the battlefield
+every Knight already has double strike and Silverblade's soulbond payload adds **nothing** to a Knight
+partner. And the partner is essentially always a Knight: `DecisionProvider::SoulbondPartner` picks the
+highest effective power through `DynamicBasePower`, and its own comment notes Adeline — a Knight, power
+= creature count — is *"routinely this deck's largest creature and therefore its best pair"*. Tokens do
+escape the Cavalier's grant (Soldiers and Humans, not Knights) but are never the highest-power body, so
+they are never chosen. The overlap bites whenever a Cavalier is actually out.
+
+#### THE OUT-OF-MODEL RANKING — state this with any result from rounds Q, R or S
+
+**User, 2026-09-29:** *"The tests here may overstate Kinsbaile because there is no removal. Like
+Silverblade, it is quite weak to removal."* … *"Hero is also better than both in surviving Lightning
+Bolt which is important against a number of decks."* … *"So, overall, it will be the card most
+understated by our analysis."* **This is correct, and it is a design principle here rather than a
+footnote.**
+
+| card | cost | body | Lightning Bolt | value left behind if it dies |
+|---|---|---|---|---|
+| Hero of Bladehold | `{2}{W}{W}` | **3/4** | **survives** | Soldier tokens already made + battle cry already applied |
+| Silverblade Paladin | `{1}{W}{W}` | 2/2 | dies | none — the pair breaks (CR 702.94, either half leaving) |
+| Kinsbaile Cavalier | `{3}{W}` | 2/2 | dies | none — the grant is a static that evaporates |
+
+Two consequences, and the first is uncomfortable:
+
+1. **Every HERO-paid arm is an UPPER BOUND on the Cavalier** — including round Q's `q_kc2_hob1`
+   (−0.0187), which is the *only* arm in the campaign that cleared its floor. So the cleanest
+   measurement is also the most biased trade. Do not quote it as the adoption case on its own.
+2. **The SILVERBLADE-paid arms are the honest comparison.** Both cards are 2/2, both die to the
+   format's most common removal spell, and both lose their entire contribution when they do. The
+   no-removal bias therefore largely **cancels** in that swap, which is why round S exists.
+
+**One qualification that runs the other way, also unmodelled.** Knight Exemplar grants other Knights
+**+1/+1 and indestructible**, and cards.json declares that grant inert ("no blockers, no opponent
+removal"). Under an Exemplar all three cards are 3/3-or-better AND indestructible, so the Bolt gap
+closes completely, and the deck runs four Exemplars. But the Exemplar is itself a 2/2 that dies to Bolt,
+so the umbrella is what gets removed first. It narrows the point rather than overturning it.
+
+**And Hero is not the only understated card on this list** — the standing caveat at the top of this
+document already names Swords to Plowshares (−0.257) and Unexpectedly Absent (−0.229) as the
+worst-*scoring* cards purely because the passive opponent presents nothing to target, and Knight
+Exemplar's first strike is inert alongside its indestructible. Hero is the most understated card
+*within the trade being measured*, which is the claim that matters for this decision.
+
 ### DEFERRED — re-measure the close cases on the finalized list's OWN regenerated table
 
 **User, 2026-09-28**, across one exchange: *"if we have cases where it is extremely close we might want
