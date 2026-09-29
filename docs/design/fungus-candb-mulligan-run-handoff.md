@@ -299,6 +299,23 @@ same area:
 Judge liveness on the **tuple** `(roll7, rollsub, sub, journal)` — a genuine stall is all four frozen.
 `phasewatch2.sh` does this; `phasewatch.sh` (v1) is kept only as the illustration of the bug.
 
+Three more traps found on 2026-09-29, all of which produced a wrong number before I caught them:
+
+- **`ratewatch.log`'s timestamp has NO DATE** — it is bare `HH:MM:SS`, so on a multi-day run
+  `grep '^05:4'` silently matches *every* day at once. It already has **42 duplicate timestamp keys**.
+  Doing that mixed yesterday's contended samples (11.7 cores, loadavg 44) into today's free-box window
+  and made the box look half-starved. Select by **line position** (`tail -N`), never by timestamp, or
+  add a date column on the next run. The script is live, so it has not been edited — see
+  `never-edit-a-running-script`.
+- **`subwave=NxM`'s size field lags the index** by up to one monitor period; read a repeated size as
+  "not yet updated", not "the set stopped shrinking".
+- **A wave boundary is a real, visible idle trough.** At the final convergence the box fell to
+  **3.2 of 24 cores for ~3 minutes** while the producer ran the serial `recompute_sub()` /
+  `compute_sub_wave_tasks()` step with nothing else admissible. Short and unavoidable here, but it is
+  the "waves are a loop" signature, and it will corrupt any rate measurement whose window straddles
+  it: a 10-minute sample across this transition read **17.5 cores and 2.25 rollouts/core-second**
+  against 23.8 cores on either side. Take rate samples inside a single stable phase.
+
 ## Reading the rate honestly
 
 As of 12:00Z (9.3 h in): floor pass **70.2%** (1,068,127 of 1,522,096 cell-sides), 2.14 M rollouts.
