@@ -3000,6 +3000,137 @@ in to dodge sorcery-speed removal or countermagic, and the user's three stated r
 instant-speed deploy, dodging removal) are all structurally invisible to a goldfish, since there is
 nothing to be countered by, nothing to dodge, and no opponent turn to act during.
 
+### Round U (2026-09-29) — THE PAYMENT AXIS: a 9th one-drop, and Vial paid by a LAND
+
+**User, immediately after round T:** *"is there no spot remaining for a 9th one-drop? How does a vial
+look when replacing a land?"*
+
+**Why round T did not answer either question, despite measuring both cards.** Round T paid for Basri and
+for Vial 1:1 out of **Venerable Knight** — and then discovered that Basri *is* Venerable Knight, to
+100.0% identical play over 120,000 games. So `t_basri1_vk3` was a **null arm by construction**: it
+swapped a one-drop for the same one-drop and the deck held eight one-drops before and after. It never
+tested nine. And `t_av1_vk3` priced Vial against a *creature*, not against the land the user is
+proposing to cut.
+
+**The round T identity is now the instrument, not a disappointment.** Basri is the legal way to play a
+5th copy of a vanilla {W} 2/1 Knight, so every Basri arm below reads as *"what does a 9th one-drop cost,
+paid by X"*, and the answer generalises to any 2/1 Knight one-drop rather than being about Basri.
+
+**Better still, round T calibrated the apparatus bias for exactly this case.** `t_basri1_vk3` measured
+`+0.0038` on play that was *provably identical* — so `+0.0038` is a pure measurement of the "the arm's
+own table gains a 14th bucket" artifact for this card on this apparatus. Round U's Basri arms carry the
+same artifact, so their real effect is approximately **measured − 0.0038**, and Vial's round T cost
+restates as `0.0209 − 0.0038 ≈ +0.017` against a one-drop at 24 lands. A null arm is worth running.
+
+**The land-paid Vial arm cannot be read alone, and that dictates the design.** Cut a Plains and the mana
+base gets worse whatever fills the slot, so a positive number would be unattributable between *"Vial is
+bad"* and *"23 lands is bad"*. The Basri arm **at the same land count** is that control, because it
+fills the slot with a body of measured-null value:
+
+```
+u_av1_pl19 − u_b1_pl19  =  Vial vs a 2/1 one-drop, at 23 lands
+t_av1_vk3               =  Vial vs a 2/1 one-drop, at 24 lands   (+0.0209, round T)
+```
+
+If the gap **narrows** at 23 lands, Vial is genuinely substituting for the land it replaced. If it holds
+near 0.021, Vial is not paying for the mana it costs and the land-cut penalty is simply additive.
+
+| tag | added | paid by | lands | 1-drop creatures | asks |
+|---|---|---|---|---|---|
+| `m_v2` | — | — | 24 | 8 | reference = the shipped v2 60 |
+| `u_b1_pl19` | Basri 1 | Plains 20→19 | 23 | 9 | Q1, land pays |
+| `u_b1_rf3` | Basri 1 | Remote Farm 4→3 | 23 | 9 | Q1, the TAPPED land pays |
+| `u_b1_ap3` | Basri 1 | Accorder Paladin 4→3 | 24 | 9 | Q1, curve only, mana base untouched |
+| `u_av1_pl19` | Aether Vial 1 | Plains 20→19 | 23 | 8 | **Q2 — exactly the question** |
+| `u_av1_rf3` | Aether Vial 1 | Remote Farm 4→3 | 23 | 8 | Q2, the TAPPED land pays |
+| `u_av2_pl18` | Aether Vial 2 | Plains 20→18 | 22 | 8 | ladder — a lone Vial is rarely drawn |
+
+**Why these payers and not others.** The user's standing rulings pin Knight Exemplar 4, Benalish Marshal
+4, Adeline 3, and cap Silverblade + Kinsbaile at ≤ 4 squishy double-strike providers, so the genuinely
+free slots are the lands, Accorder Paladin, Worthy Knight, Hero of Bladehold and the three 1-ofs.
+
+* **Worthy Knight is deliberately EXCLUDED as a payer**, and this is a modelling fact rather than a
+  preference. Its trigger is fully modelled (`cast_trigger_subtype: "Knight"`,
+  `cast_trigger_creates_tokens: 1`), so cutting a Worthy Knight to add a Knight one-drop *fights
+  itself* — it removes a token maker in order to add a token trigger, confounding the question with the
+  deck's own synergy. The round U trace probe measured **6,693 Human tokens across 500 games (~13 per
+  game)**, so this is the deck's largest single source of board presence, not a rounding error.
+* **Accorder Paladin is the non-land payer** ({1}{W} 3/1 battle cry) — it answers Q1 with the mana base
+  untouched, which is the reading of "a 9th one-drop" that is about the *curve*. v2's curve is 8
+  one-drops / 8 two-drops / **14** three-drops / 3 four-drops, so the two-drop slot is the thinnest
+  place above one mana and the honest place to take a slot from.
+* **Hero of Bladehold is NOT a payer here.** It just went 3→2 for the Cavalier, and the user has said
+  plainly it is the card this analysis understates most (bolt-resilient where Silverblade and Kinsbaile
+  are not). Cutting it again inside a screen would produce a number we have already been told not to
+  trust in that direction.
+* **Both lands are tested separately** because they are not the same card. Remote Farm enters **tapped**
+  with two depletion counters and sacrifices itself after producing {W}{W} twice, so it is the worse
+  land for a deck that wants turn-1 and turn-2 plays — but it is also the deck's only double-white
+  source for 4 Benalish Marshal ({W}{W}{W}). Which one is the right cut is not obvious a priori.
+
+**PRE-CHECK RUN BEFORE LAUNCH — and it was a GATE-LIVENESS check, not an open risk.** I initially
+framed this as "round T's zero-Cat result might not transfer to nine one-drops, because
+`ActivateTapTokensShared` is a greedy spare-mana pass and `u_b1_ap3` reaches nine one-drops on a cheaper
+curve at the same 24 lands." **That framing was wrong, and the user caught it: the Cat ability is
+already gated off by their own 2026-09-27 ruling** (see the USER RULING section above — *"For the cats I
+recommend you just disable that ability in a heuristic"*). The gate is
+[`src/ai/ManaPayment.cpp:3818`](../../src/ai/ManaPayment.cpp): `if (def->params.tap_token_exerts &&
+!s_greedy_exert) { continue; }`, with `MTG_GREEDY_EXERT_TOKEN` defaulting OFF. It is **unconditional for
+autonomous play** — it does not consult mana, curve, board or life total — so no amount of spare {W}
+can reach the ability and zero Cats was **guaranteed** rather than discovered. Round T's zero was the
+same gate, not an empirical coincidence that might have failed to transfer.
+
+**What the probe was therefore actually worth, which is not nothing but is much less than advertised:**
+it verified the gate is live *in the binary round U is running on* — the [[verify-done-claims-in-tree]]
+check — and it produced the Worthy Knight token census below, which is load-bearing for two separate
+decisions in this round. **The lesson to carry: a user ruling that was implemented as a gate is a fact
+about the binary. Read this document's USER RULING sections before treating a gated behaviour as an
+open risk** — the answer was already written down, one section up, and re-deriving it empirically cost
+two minutes and produced two wrong intermediate answers.
+
+Probed with `--game-trace-dir` over 500 full decision logs (250 games each on `u_b1_ap3` and
+`u_b1_pl19`) at **40 life**, the most permissive case for late spare mana. Result: **zero Cat tokens**,
+as the gate requires. The only tokens created anywhere were 6,693 Human (Worthy Knight) and 674 Soldier
+(Hero of Bladehold). Two traps worth recording, both of which produced a wrong answer first:
+
+* **`--game-log-dir` is the wrong flag.** In `--batch` it writes per-game `<job>.wins` *outcome*
+  records, not decision logs, so grepping it for a token name matches nothing and looks like a clean
+  negative. `--game-trace-dir` is the one that writes a real `GameLogger` JSON per game
+  (`src/runner/BatchRunner.h:90`).
+* **Grepping for `Cat` matches `Adeline, Resplendent Cathar`** — 2,522 times, in 145 of 250 traces,
+  which reads exactly like a strong positive. Every hit was the Cathar. Match the token, not the
+  substring.
+
+**Apparatus.** v2's own profile + value leaf, with the **round T alias directory reused verbatim**
+(`logs/wk_screen/alias_t_WhiteKnights/`, K=13, Basri *and* Aether Vial both aliased into the Dauntless
+Bodyguard / Venerable Knight bucket) so round U's shared column stays directly comparable to round T's.
+`pool_table: false`, `max_fallback: 0.30`, `bracket: generate`, `floor_R: 40` (v2's **shipped**
+`effective_R`, not the default 10), three formats pooled late-weighted (long .5 / 2hg .3 / std .2), read
+on the OWN column. Seeds 18.4M / 18.8M, disjoint from P (14.4/14.8), Q (15.2/15.6), the abandoned R
+(16.0/16.4), S (16.8/17.2) and T (17.6/18.0).
+
+**The one place round U is weaker than round T, stated up front.** Round T could hold the alias host
+bucket at *exactly* 8 in every arm because every arm paid out of Venerable Knight — zero composition
+fall-through by construction. Round U pays out of lands and Accorder Paladin, so that bucket goes 8→9
+(10 for `u_av2_pl18`) and the **shared** table's cell probabilities no longer match those arms. The
+driver's own pre-flight reports **"all cards covered"**, so this is a probability mismatch rather than a
+coverage hole, and it lands only on the bracket's shared column — i.e. on the floor. The OWN tables that
+`pool_h.py` reports are per-arm and unaffected.
+
+**Two out-of-model caveats for Vial, and they point in opposite directions.**
+
+1. **Cutting the same way as always:** the goldfish cannot see *any* of the user's stated reasons for
+   wanting Vial — uncounterable, instant-speed deploy, dodging sorcery-speed removal. There is nothing
+   to be countered by, nothing to dodge, and no opponent turn to act during. Whatever round U measures
+   for Vial is a **floor** on its real value.
+2. **Cutting the other way, and this one IS modelled:** a creature put onto the battlefield by Vial is
+   not **cast**, so it triggers none of the deck's 4 Worthy Knights, and Vial itself is not a Knight
+   spell. At ~13 Human tokens per game that is a real cost round U *will* see — and a cost that gets
+   *bigger*, not smaller, in a real game where those tokens block.
+
+Scripts: `logs/wk_screen/mkspec_u.py`, `logs/wk_screen/run_u.sh`, `logs/wk_screen/catprobe.sh`
+(gitignored). Launched 05:48Z; 6 new R=40 tables, so ~1h45m by round P's precedent.
+
 ## Open questions for the user (surfaced, not blocking)
 
 1. **Ranking weights.** The Angels campaign ranked arms late-weighted — `long` 0.5 / `2hg` 0.3 /
