@@ -1,0 +1,285 @@
+{
+  "seed": 8, "game_index": 7, "win_turn": 4, "won": true,
+  "mulligan": { "count": 1, "bottom": [16] },
+  "decisions": [
+    { "chosen": 0, "decision": {
+  "decision_index": 0,
+  "type": "mulligan",
+  "turn": 0,
+  "me": { "life": 20, "battlefield": [] },
+  "opponent": { "life": 20, "battlefield": [] },
+  "mulligan_count": 0,
+  "on_the_play": true,
+  "to_bottom": 0,
+  "hand": [{ "num": 34, "name": "Metallic Mimic" }, { "num": 53, "name": "Staunch Crewmate" }, { "num": 54, "name": "Staunch Crewmate" }, { "num": 38, "name": "Mountain" }, { "num": 18, "name": "Dire Fleet Captain" }, { "num": 19, "name": "Dire Fleet Captain" }, { "num": 33, "name": "Malcolm, the Eyes" }],
+  "ai_choice": 0,
+  "note": "reply 1 to KEEP this hand (then bottom 0 card(s)), or 0 to mulligan again"
+}
+},
+    { "chosen": 1, "decision": {
+  "decision_index": 1,
+  "type": "mulligan",
+  "turn": 0,
+  "me": { "life": 20, "battlefield": [] },
+  "opponent": { "life": 20, "battlefield": [] },
+  "mulligan_count": 1,
+  "on_the_play": true,
+  "to_bottom": 1,
+  "hand": [{ "num": 16, "name": "Daring Buccaneer" }, { "num": 50, "name": "Spirebluff Canal" }, { "num": 40, "name": "Mountain" }, { "num": 41, "name": "Mountain" }, { "num": 17, "name": "Daring Buccaneer" }, { "num": 29, "name": "Goblin Tomb Raider" }, { "num": 55, "name": "Staunch Crewmate" }],
+  "ai_choice": 1,
+  "note": "reply 1 to KEEP this hand (then bottom 1 card(s)), or 0 to mulligan again"
+}
+},
+    { "chosen": 0, "decision": {
+  "decision_index": 2,
+  "type": "bottom",
+  "turn": 0,
+  "me": { "life": 20, "battlefield": [] },
+  "opponent": { "life": 20, "battlefield": [] },
+  "bottom_step": 0,
+  "bottom_total": 1,
+  "hand": [{ "num": 16, "name": "Daring Buccaneer", "win_optimal": true }, { "num": 50, "name": "Spirebluff Canal", "win_optimal": true }, { "num": 40, "name": "Mountain", "win_optimal": true }, { "num": 41, "name": "Mountain", "win_optimal": true }, { "num": 17, "name": "Daring Buccaneer", "win_optimal": true }, { "num": 29, "name": "Goblin Tomb Raider", "win_optimal": true }, { "num": 55, "name": "Staunch Crewmate", "win_optimal": true }],
+  "ai_choice": { "index": 2, "num": 40, "name": "Mountain" },
+  "ai_set": [],
+  "note": "reply the hand INDEX (0-based) of the card to put on the bottom (step 1 of 1)"
+}
+},
+    { "chosen": 1, "decision": {
+  "decision_index": 3,
+  "main_ordinal": 0,
+  "type": "main_phase",
+  "turn": 1,
+  "phase": "pre_main",
+  "on_the_play": true,
+  "mdfc_backs": ["Boulderloft Pathway", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [], "vial_counters": [], "hand": [{ "num": 17, "name": "Daring Buccaneer", "cost": "{R}", "mv": 1, "kind": "permanent", "is_creature": true }, { "num": 29, "name": "Goblin Tomb Raider", "cost": "{R}", "mv": 1, "kind": "permanent", "is_creature": true }, { "num": 40, "name": "Mountain", "cost": "", "mv": 0, "kind": "land" }, { "num": 41, "name": "Mountain", "cost": "", "mv": 0, "kind": "land" }, { "num": 50, "name": "Spirebluff Canal", "cost": "", "mv": 0, "kind": "land" }, { "num": 55, "name": "Staunch Crewmate", "cost": "{1}{U}", "mv": 2, "kind": "permanent", "is_creature": true }], "graveyard": [], "library_size": 54, "land_drops_left": 1 },
+  "opponent": { "life": 20, "battlefield": [] },
+  "plans": [
+    { "index": 0, "summary": "land=Spirebluff Canal; cast: Daring Buccaneer", "land": "Spirebluff Canal", "casts": ["Daring Buccaneer"], "actions": [{ "card": "Daring Buccaneer" }] },
+    { "index": 1, "summary": "land=Mountain; cast: Daring Buccaneer", "land": "Mountain", "casts": ["Daring Buccaneer"], "actions": [{ "card": "Daring Buccaneer" }] },
+    { "index": 2, "summary": "land=Spirebluff Canal; cast: Goblin Tomb Raider", "land": "Spirebluff Canal", "casts": ["Goblin Tomb Raider"], "actions": [{ "card": "Goblin Tomb Raider" }] },
+    { "index": 3, "summary": "land=Mountain; cast: Goblin Tomb Raider", "land": "Mountain", "casts": ["Goblin Tomb Raider"], "actions": [{ "card": "Goblin Tomb Raider" }] },
+    { "index": 4, "summary": "land=Spirebluff Canal; cast: (nothing)", "land": "Spirebluff Canal", "casts": [], "actions": [] },
+    { "index": 5, "summary": "land=Mountain; cast: (nothing)", "land": "Mountain", "casts": [], "actions": [] },
+    { "index": 6, "summary": "land=none; cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 4,
+  "type": "main_phase",
+  "turn": 1,
+  "phase": "pre_main",
+  "on_the_play": true,
+  "mdfc_backs": ["Boulderloft Pathway", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Daring Buccaneer", "idx": 1, "num": 17, "is_land": false }, { "name": "Mountain", "idx": 0, "num": 40, "tapped": true, "is_land": true }], "vial_counters": [], "hand": [{ "num": 29, "name": "Goblin Tomb Raider", "cost": "{R}", "mv": 1, "kind": "permanent", "is_creature": true }, { "num": 41, "name": "Mountain", "cost": "", "mv": 0, "kind": "land" }, { "num": 50, "name": "Spirebluff Canal", "cost": "", "mv": 0, "kind": "land" }, { "num": 55, "name": "Staunch Crewmate", "cost": "{1}{U}", "mv": 2, "kind": "permanent", "is_creature": true }], "graveyard": [], "library_size": 54, "land_drops_left": 0 },
+  "opponent": { "life": 20, "battlefield": [] },
+  "plans": [
+    { "index": 0, "summary": "cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 5,
+  "type": "main_phase",
+  "turn": 1,
+  "phase": "post_main",
+  "on_the_play": true,
+  "mdfc_backs": ["Boulderloft Pathway", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Daring Buccaneer", "idx": 1, "num": 17, "is_land": false }, { "name": "Mountain", "idx": 0, "num": 40, "tapped": true, "is_land": true }], "vial_counters": [], "hand": [{ "num": 29, "name": "Goblin Tomb Raider", "cost": "{R}", "mv": 1, "kind": "permanent", "is_creature": true }, { "num": 41, "name": "Mountain", "cost": "", "mv": 0, "kind": "land" }, { "num": 50, "name": "Spirebluff Canal", "cost": "", "mv": 0, "kind": "land" }, { "num": 55, "name": "Staunch Crewmate", "cost": "{1}{U}", "mv": 2, "kind": "permanent", "is_creature": true }], "graveyard": [], "library_size": 54, "land_drops_left": 0 },
+  "opponent": { "life": 20, "battlefield": [] },
+  "plans": [
+    { "index": 0, "summary": "cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
+}
+},
+    { "chosen": 0, "decision": {
+  "decision_index": 6,
+  "main_ordinal": 1,
+  "type": "main_phase",
+  "turn": 2,
+  "phase": "pre_main",
+  "on_the_play": true,
+  "drew": [{ "turn": 2, "card": "Corsair Captain" }],
+  "mdfc_backs": ["Boulderloft Pathway", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Daring Buccaneer", "idx": 1, "num": 17, "is_land": false }, { "name": "Mountain", "idx": 0, "num": 40, "is_land": true, "taps": "R" }], "vial_counters": [], "hand": [{ "num": 12, "name": "Corsair Captain", "cost": "{2}{U}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 29, "name": "Goblin Tomb Raider", "cost": "{R}", "mv": 1, "kind": "permanent", "is_creature": true }, { "num": 41, "name": "Mountain", "cost": "", "mv": 0, "kind": "land" }, { "num": 50, "name": "Spirebluff Canal", "cost": "", "mv": 0, "kind": "land" }, { "num": 55, "name": "Staunch Crewmate", "cost": "{1}{U}", "mv": 2, "kind": "permanent", "is_creature": true }], "graveyard": [], "library_size": 53, "land_drops_left": 1 },
+  "opponent": { "life": 20, "battlefield": [] },
+  "plans": [
+    { "index": 0, "summary": "land=Spirebluff Canal; cast: Staunch Crewmate", "land": "Spirebluff Canal", "casts": ["Staunch Crewmate"], "actions": [{ "card": "Staunch Crewmate" }] },
+    { "index": 1, "summary": "land=Spirebluff Canal; cast: Goblin Tomb Raider", "land": "Spirebluff Canal", "casts": ["Goblin Tomb Raider"], "actions": [{ "card": "Goblin Tomb Raider" }] },
+    { "index": 2, "summary": "land=Mountain; cast: Goblin Tomb Raider", "land": "Mountain", "casts": ["Goblin Tomb Raider"], "actions": [{ "card": "Goblin Tomb Raider" }] },
+    { "index": 3, "summary": "land=none; cast: Goblin Tomb Raider", "land": null, "casts": ["Goblin Tomb Raider"], "actions": [{ "card": "Goblin Tomb Raider" }] },
+    { "index": 4, "summary": "land=Spirebluff Canal; cast: (nothing)", "land": "Spirebluff Canal", "casts": [], "actions": [] },
+    { "index": 5, "summary": "land=Mountain; cast: (nothing)", "land": "Mountain", "casts": [], "actions": [] },
+    { "index": 6, "summary": "land=none; cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "plans_hidden": 5,
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
+}
+},
+    { "chosen": 2, "decision": {
+  "decision_index": 7,
+  "type": "dig",
+  "source": "Staunch Crewmate",
+  "turn": 2,
+  "mdfc_backs": ["Boulderloft Pathway", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Daring Buccaneer", "idx": 1, "num": 17, "is_land": false }, { "name": "Mountain", "idx": 0, "num": 40, "tapped": true, "is_land": true }, { "name": "Spirebluff Canal", "idx": 2, "num": 50, "tapped": true, "is_land": true }, { "name": "Staunch Crewmate", "idx": 3, "num": 55, "is_land": false }], "vial_counters": [], "hand": [{ "num": 12, "name": "Corsair Captain", "cost": "{2}{U}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 29, "name": "Goblin Tomb Raider", "cost": "{R}", "mv": 1, "kind": "permanent", "is_creature": true }, { "num": 41, "name": "Mountain", "cost": "", "mv": 0, "kind": "land" }], "graveyard": [], "library_size": 49, "land_drops_left": 0 },
+  "opponent": { "life": 20, "battlefield": [] },
+  "heuristic_default": 0,
+  "examined": [{ "index": 0, "legal": true, "name": "Adaptive Automaton" }, { "index": 1, "legal": false, "name": "Mountain" }, { "index": 2, "legal": true, "name": "Corsair Captain" }, { "index": 3, "legal": true, "name": "Staunch Crewmate" }],
+  "note": "reply an examined index to put that card into your hand, or -1 to take nothing. Default = the AI's pick."
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 8,
+  "type": "main_phase",
+  "turn": 2,
+  "phase": "pre_main",
+  "on_the_play": true,
+  "mdfc_backs": ["Boulderloft Pathway", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Daring Buccaneer", "idx": 1, "num": 17, "is_land": false }, { "name": "Mountain", "idx": 0, "num": 40, "tapped": true, "is_land": true }, { "name": "Spirebluff Canal", "idx": 2, "num": 50, "tapped": true, "is_land": true }, { "name": "Staunch Crewmate", "idx": 3, "num": 55, "is_land": false }], "vial_counters": [], "hand": [{ "num": 12, "name": "Corsair Captain", "cost": "{2}{U}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 10, "name": "Corsair Captain", "cost": "{2}{U}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 29, "name": "Goblin Tomb Raider", "cost": "{R}", "mv": 1, "kind": "permanent", "is_creature": true }, { "num": 41, "name": "Mountain", "cost": "", "mv": 0, "kind": "land" }], "graveyard": [], "library_size": 52, "land_drops_left": 0 },
+  "opponent": { "life": 20, "battlefield": [] },
+  "plans": [
+    { "index": 0, "summary": "cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 9,
+  "type": "main_phase",
+  "turn": 2,
+  "phase": "post_main",
+  "on_the_play": true,
+  "events": [{ "turn": 2, "kind": "combat", "text": "⚔ attacked: Daring Buccaneer (2) — 2 to opponent (20→18)" }],
+  "mdfc_backs": ["Boulderloft Pathway", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Daring Buccaneer", "idx": 1, "num": 17, "tapped": true, "is_land": false }, { "name": "Mountain", "idx": 0, "num": 40, "tapped": true, "is_land": true }, { "name": "Spirebluff Canal", "idx": 2, "num": 50, "tapped": true, "is_land": true }, { "name": "Staunch Crewmate", "idx": 3, "num": 55, "is_land": false }], "vial_counters": [], "hand": [{ "num": 12, "name": "Corsair Captain", "cost": "{2}{U}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 10, "name": "Corsair Captain", "cost": "{2}{U}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 29, "name": "Goblin Tomb Raider", "cost": "{R}", "mv": 1, "kind": "permanent", "is_creature": true }, { "num": 41, "name": "Mountain", "cost": "", "mv": 0, "kind": "land" }], "graveyard": [], "library_size": 52, "land_drops_left": 0 },
+  "opponent": { "life": 18, "battlefield": [] },
+  "plans": [
+    { "index": 0, "summary": "cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
+}
+},
+    { "chosen": 2, "decision": {
+  "decision_index": 10,
+  "main_ordinal": 2,
+  "type": "main_phase",
+  "turn": 3,
+  "phase": "pre_main",
+  "on_the_play": true,
+  "drew": [{ "turn": 3, "card": "Adaptive Automaton" }],
+  "mdfc_backs": ["Boulderloft Pathway", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Daring Buccaneer", "idx": 1, "num": 17, "is_land": false }, { "name": "Mountain", "idx": 0, "num": 40, "is_land": true, "taps": "R" }, { "name": "Spirebluff Canal", "idx": 2, "num": 50, "is_land": true, "taps": "UR" }, { "name": "Staunch Crewmate", "idx": 3, "num": 55, "is_land": false }], "vial_counters": [], "hand": [{ "num": 4, "name": "Adaptive Automaton", "cost": "{3}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 12, "name": "Corsair Captain", "cost": "{2}{U}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 10, "name": "Corsair Captain", "cost": "{2}{U}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 29, "name": "Goblin Tomb Raider", "cost": "{R}", "mv": 1, "kind": "permanent", "is_creature": true }, { "num": 41, "name": "Mountain", "cost": "", "mv": 0, "kind": "land" }], "graveyard": [], "library_size": 51, "land_drops_left": 1 },
+  "opponent": { "life": 18, "battlefield": [{ "name": "4/4 Creature", "idx": 4, "num": 500000, "is_land": false }] },
+  "plans": [
+    { "index": 0, "summary": "land=Mountain; cast: Corsair Captain, Goblin Tomb Raider", "land": "Mountain", "casts": ["Corsair Captain", "Goblin Tomb Raider"], "cast_order_canonical": ["Corsair Captain", "Goblin Tomb Raider"], "actions": [{ "card": "Corsair Captain" }, { "card": "Goblin Tomb Raider" }] },
+    { "index": 1, "summary": "land=Mountain; cast: Goblin Tomb Raider, Corsair Captain", "land": "Mountain", "drops": ["Corsair Captain"], "casts": ["Goblin Tomb Raider", "Corsair Captain"], "cast_order_canonical": ["Goblin Tomb Raider", "Corsair Captain"], "actions": [{ "card": "Goblin Tomb Raider" }, { "card": "Corsair Captain" }] },
+    { "index": 2, "summary": "land=Mountain; cast: Corsair Captain", "land": "Mountain", "casts": ["Corsair Captain"], "actions": [{ "card": "Corsair Captain" }] },
+    { "index": 3, "summary": "land=Mountain; cast: Adaptive Automaton", "land": "Mountain", "casts": ["Adaptive Automaton"], "actions": [{ "card": "Adaptive Automaton" }] },
+    { "index": 4, "summary": "land=Mountain; cast: Goblin Tomb Raider", "land": "Mountain", "casts": ["Goblin Tomb Raider"], "actions": [{ "card": "Goblin Tomb Raider" }] },
+    { "index": 5, "summary": "land=none; cast: Goblin Tomb Raider", "land": null, "casts": ["Goblin Tomb Raider"], "actions": [{ "card": "Goblin Tomb Raider" }] },
+    { "index": 6, "summary": "land=Mountain; cast: (nothing)", "land": "Mountain", "casts": [], "actions": [] },
+    { "index": 7, "summary": "land=none; cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 11,
+  "main_ordinal": 3,
+  "type": "main_phase",
+  "turn": 3,
+  "phase": "pre_main",
+  "on_the_play": true,
+  "events": [{ "turn": 3, "kind": "ability", "text": "Corsair Captain -- create 1 Treasure" }],
+  "mdfc_backs": ["Boulderloft Pathway", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Corsair Captain", "idx": 6, "num": 12, "is_land": false }, { "name": "Daring Buccaneer", "idx": 1, "num": 17, "is_land": false }, { "name": "Mountain", "idx": 0, "num": 40, "tapped": true, "is_land": true }, { "name": "Mountain", "idx": 5, "num": 41, "tapped": true, "is_land": true }, { "name": "Spirebluff Canal", "idx": 2, "num": 50, "tapped": true, "is_land": true }, { "name": "Staunch Crewmate", "idx": 3, "num": 55, "is_land": false }, { "name": "Treasure Token", "idx": 7, "num": 1000, "is_land": false }], "vial_counters": [], "hand": [{ "num": 4, "name": "Adaptive Automaton", "cost": "{3}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 10, "name": "Corsair Captain", "cost": "{2}{U}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 29, "name": "Goblin Tomb Raider", "cost": "{R}", "mv": 1, "kind": "permanent", "is_creature": true }], "graveyard": [], "library_size": 51, "land_drops_left": 0 },
+  "opponent": { "life": 18, "battlefield": [{ "name": "4/4 Creature", "idx": 4, "num": 500000, "is_land": false }] },
+  "plans": [
+    { "index": 0, "summary": "land=none; cast: Goblin Tomb Raider", "land": null, "casts": ["Goblin Tomb Raider"], "actions": [{ "card": "Goblin Tomb Raider" }] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 12,
+  "main_ordinal": 4,
+  "type": "main_phase",
+  "turn": 3,
+  "phase": "post_main",
+  "on_the_play": true,
+  "events": [{ "turn": 3, "kind": "combat", "text": "⚔ attacked: Daring Buccaneer (3), Staunch Crewmate (3) — 6 to opponent (18→12)" }],
+  "mdfc_backs": ["Boulderloft Pathway", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Corsair Captain", "idx": 6, "num": 12, "is_land": false }, { "name": "Daring Buccaneer", "idx": 1, "num": 17, "tapped": true, "is_land": false }, { "name": "Mountain", "idx": 0, "num": 40, "tapped": true, "is_land": true }, { "name": "Mountain", "idx": 5, "num": 41, "tapped": true, "is_land": true }, { "name": "Spirebluff Canal", "idx": 2, "num": 50, "tapped": true, "is_land": true }, { "name": "Staunch Crewmate", "idx": 3, "num": 55, "tapped": true, "is_land": false }, { "name": "Treasure Token", "idx": 7, "num": 1000, "is_land": false }], "vial_counters": [], "hand": [{ "num": 4, "name": "Adaptive Automaton", "cost": "{3}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 10, "name": "Corsair Captain", "cost": "{2}{U}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 29, "name": "Goblin Tomb Raider", "cost": "{R}", "mv": 1, "kind": "permanent", "is_creature": true }], "graveyard": [], "library_size": 51, "land_drops_left": 0 },
+  "opponent": { "life": 12, "battlefield": [{ "name": "4/4 Creature", "idx": 4, "num": 500000, "is_land": false }] },
+  "plans": [
+    { "index": 0, "summary": "land=none; cast: Goblin Tomb Raider", "land": null, "casts": ["Goblin Tomb Raider"], "actions": [{ "card": "Goblin Tomb Raider" }] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
+}
+},
+    { "chosen": 4, "cast_order": ["*", "Adaptive Automaton", "Goblin Tomb Raider"], "decision": {
+  "decision_index": 13,
+  "main_ordinal": 5,
+  "type": "main_phase",
+  "turn": 4,
+  "phase": "pre_main",
+  "on_the_play": true,
+  "drew": [{ "turn": 4, "card": "Staunch Crewmate" }],
+  "mdfc_backs": ["Boulderloft Pathway", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Corsair Captain", "idx": 6, "num": 12, "is_land": false }, { "name": "Daring Buccaneer", "idx": 1, "num": 17, "is_land": false }, { "name": "Mountain", "idx": 0, "num": 40, "is_land": true, "taps": "R" }, { "name": "Mountain", "idx": 5, "num": 41, "is_land": true, "taps": "R" }, { "name": "Spirebluff Canal", "idx": 2, "num": 50, "is_land": true, "taps": "UR" }, { "name": "Staunch Crewmate", "idx": 3, "num": 55, "is_land": false }, { "name": "Treasure Token", "idx": 7, "num": 1000, "is_land": false }], "vial_counters": [], "hand": [{ "num": 4, "name": "Adaptive Automaton", "cost": "{3}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 10, "name": "Corsair Captain", "cost": "{2}{U}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 29, "name": "Goblin Tomb Raider", "cost": "{R}", "mv": 1, "kind": "permanent", "is_creature": true }, { "num": 53, "name": "Staunch Crewmate", "cost": "{1}{U}", "mv": 2, "kind": "permanent", "is_creature": true }], "graveyard": [], "library_size": 50, "land_drops_left": 1 },
+  "opponent": { "life": 12, "battlefield": [{ "name": "4/4 Creature", "idx": 4, "num": 500000, "is_land": false }] },
+  "plans": [
+    { "index": 0, "summary": "land=none; cast: Corsair Captain, Goblin Tomb Raider", "land": null, "casts": ["Corsair Captain", "Goblin Tomb Raider"], "cast_order_canonical": ["Corsair Captain", "Goblin Tomb Raider"], "actions": [{ "card": "Corsair Captain" }, { "card": "Goblin Tomb Raider" }] },
+    { "index": 1, "summary": "land=none; cast: Goblin Tomb Raider, Corsair Captain", "land": null, "casts": ["Goblin Tomb Raider", "Corsair Captain"], "cast_order_canonical": ["Goblin Tomb Raider", "Corsair Captain"], "actions": [{ "card": "Goblin Tomb Raider" }, { "card": "Corsair Captain" }] },
+    { "index": 2, "summary": "land=none; cast: Goblin Tomb Raider, Staunch Crewmate", "land": null, "casts": ["Goblin Tomb Raider", "Staunch Crewmate"], "cast_order_canonical": ["Goblin Tomb Raider", "Staunch Crewmate"], "actions": [{ "card": "Goblin Tomb Raider" }, { "card": "Staunch Crewmate" }] },
+    { "index": 3, "summary": "land=none; cast: Staunch Crewmate, Goblin Tomb Raider", "land": null, "casts": ["Staunch Crewmate", "Goblin Tomb Raider"], "cast_order_canonical": ["Staunch Crewmate", "Goblin Tomb Raider"], "actions": [{ "card": "Staunch Crewmate" }, { "card": "Goblin Tomb Raider" }] },
+    { "index": 4, "summary": "land=none; cast: Adaptive Automaton, Goblin Tomb Raider", "land": null, "casts": ["Adaptive Automaton", "Goblin Tomb Raider"], "cast_order_canonical": ["Adaptive Automaton", "Goblin Tomb Raider"], "actions": [{ "card": "Adaptive Automaton" }, { "card": "Goblin Tomb Raider" }] },
+    { "index": 5, "summary": "land=none; cast: Goblin Tomb Raider, Adaptive Automaton", "land": null, "casts": ["Goblin Tomb Raider", "Adaptive Automaton"], "cast_order_canonical": ["Goblin Tomb Raider", "Adaptive Automaton"], "actions": [{ "card": "Goblin Tomb Raider" }, { "card": "Adaptive Automaton" }] },
+    { "index": 6, "summary": "land=none; cast: Corsair Captain, Staunch Crewmate", "land": null, "casts": ["Corsair Captain", "Staunch Crewmate"], "cast_order_canonical": ["Corsair Captain", "Staunch Crewmate"], "actions": [{ "card": "Corsair Captain" }, { "card": "Staunch Crewmate" }] },
+    { "index": 7, "summary": "land=none; cast: Staunch Crewmate, Corsair Captain", "land": null, "drops": ["Corsair Captain"], "casts": ["Staunch Crewmate", "Corsair Captain"], "cast_order_canonical": ["Staunch Crewmate", "Corsair Captain"], "actions": [{ "card": "Staunch Crewmate" }, { "card": "Corsair Captain" }] },
+    { "index": 8, "summary": "land=none; cast: Goblin Tomb Raider", "land": null, "casts": ["Goblin Tomb Raider"], "actions": [{ "card": "Goblin Tomb Raider" }] },
+    { "index": 9, "summary": "land=none; cast: Corsair Captain", "land": null, "casts": ["Corsair Captain"], "actions": [{ "card": "Corsair Captain" }] },
+    { "index": 10, "summary": "land=none; cast: Staunch Crewmate", "land": null, "casts": ["Staunch Crewmate"], "actions": [{ "card": "Staunch Crewmate" }] },
+    { "index": 11, "summary": "land=none; cast: Adaptive Automaton", "land": null, "casts": ["Adaptive Automaton"], "actions": [{ "card": "Adaptive Automaton" }] },
+    { "index": 12, "summary": "land=none; cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "plans_hidden": 25,
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 14,
+  "type": "main_phase",
+  "turn": 4,
+  "phase": "pre_main",
+  "on_the_play": true,
+  "mdfc_backs": ["Boulderloft Pathway", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Adaptive Automaton", "idx": 7, "num": 4, "is_land": false }, { "name": "Corsair Captain", "idx": 6, "num": 12, "is_land": false }, { "name": "Daring Buccaneer", "idx": 1, "num": 17, "is_land": false }, { "name": "Goblin Tomb Raider", "idx": 8, "num": 29, "is_land": false }, { "name": "Mountain", "idx": 0, "num": 40, "tapped": true, "is_land": true }, { "name": "Mountain", "idx": 5, "num": 41, "tapped": true, "is_land": true }, { "name": "Spirebluff Canal", "idx": 2, "num": 50, "tapped": true, "is_land": true }, { "name": "Staunch Crewmate", "idx": 3, "num": 55, "is_land": false }], "vial_counters": [], "hand": [{ "num": 10, "name": "Corsair Captain", "cost": "{2}{U}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 53, "name": "Staunch Crewmate", "cost": "{1}{U}", "mv": 2, "kind": "permanent", "is_creature": true }], "graveyard": [], "library_size": 50, "land_drops_left": 1 },
+  "opponent": { "life": 12, "battlefield": [{ "name": "4/4 Creature", "idx": 4, "num": 500000, "is_land": false }] },
+  "plans": [
+    { "index": 0, "summary": "land=none; cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
+}
+}
+  ],
+  "final_events": [
+    { "turn": 4, "kind": "combat", "text": "⚔ attacked: Daring Buccaneer (4), Staunch Crewmate (4), Corsair Captain (3), Goblin Tomb Raider (4) — 15 to opponent (12→-3)" }
+  ]
+}

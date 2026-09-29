@@ -1,0 +1,460 @@
+{
+  "seed": 4, "game_index": 3, "win_turn": 5, "won": true,
+  "mulligan": { "count": 1, "bottom": [17] },
+  "decisions": [
+    { "chosen": 0, "decision": {
+  "decision_index": 0,
+  "type": "mulligan",
+  "turn": 0,
+  "me": { "life": 20, "battlefield": [] },
+  "opponent": { "life": 20, "battlefield": [] },
+  "mulligan_count": 0,
+  "on_the_play": true,
+  "to_bottom": 0,
+  "hand": [{ "num": 22, "name": "Fiery Islet" }, { "num": 30, "name": "Kitesail Larcenist" }, { "num": 33, "name": "Malcolm, the Eyes" }, { "num": 43, "name": "Secluded Courtyard" }, { "num": 53, "name": "Staunch Crewmate" }, { "num": 49, "name": "Spirebluff Canal" }, { "num": 50, "name": "Spirebluff Canal" }],
+  "ai_choice": 1,
+  "note": "reply 1 to KEEP this hand (then bottom 0 card(s)), or 0 to mulligan again"
+}
+},
+    { "chosen": 1, "decision": {
+  "decision_index": 1,
+  "type": "mulligan",
+  "turn": 0,
+  "me": { "life": 20, "battlefield": [] },
+  "opponent": { "life": 20, "battlefield": [] },
+  "mulligan_count": 1,
+  "on_the_play": true,
+  "to_bottom": 1,
+  "hand": [{ "num": 17, "name": "Daring Buccaneer" }, { "num": 16, "name": "Daring Buccaneer" }, { "num": 7, "name": "Aether Vial" }, { "num": 45, "name": "Secluded Courtyard" }, { "num": 57, "name": "Unclaimed Territory" }, { "num": 13, "name": "Corsair Captain" }, { "num": 29, "name": "Goblin Tomb Raider" }],
+  "ai_choice": 1,
+  "note": "reply 1 to KEEP this hand (then bottom 1 card(s)), or 0 to mulligan again"
+}
+},
+    { "chosen": 0, "decision": {
+  "decision_index": 2,
+  "type": "bottom",
+  "turn": 0,
+  "me": { "life": 20, "battlefield": [] },
+  "opponent": { "life": 20, "battlefield": [] },
+  "bottom_step": 0,
+  "bottom_total": 1,
+  "hand": [{ "num": 17, "name": "Daring Buccaneer", "win_optimal": true }, { "num": 16, "name": "Daring Buccaneer", "win_optimal": true }, { "num": 7, "name": "Aether Vial", "win_optimal": true }, { "num": 45, "name": "Secluded Courtyard", "win_optimal": true }, { "num": 57, "name": "Unclaimed Territory", "win_optimal": true }, { "num": 13, "name": "Corsair Captain", "win_optimal": true }, { "num": 29, "name": "Goblin Tomb Raider", "win_optimal": true }],
+  "ai_choice": { "index": 5, "num": 13, "name": "Corsair Captain" },
+  "ai_set": [],
+  "note": "reply the hand INDEX (0-based) of the card to put on the bottom (step 1 of 1)"
+}
+},
+    { "chosen": 3, "decision": {
+  "decision_index": 3,
+  "main_ordinal": 0,
+  "type": "main_phase",
+  "turn": 1,
+  "phase": "pre_main",
+  "on_the_play": true,
+  "mdfc_backs": ["Boulderloft Pathway", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [], "vial_counters": [], "hand": [{ "num": 7, "name": "Aether Vial", "cost": "{1}", "mv": 1, "kind": "permanent" }, { "num": 13, "name": "Corsair Captain", "cost": "{2}{U}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 16, "name": "Daring Buccaneer", "cost": "{R}", "mv": 1, "kind": "permanent", "is_creature": true }, { "num": 29, "name": "Goblin Tomb Raider", "cost": "{R}", "mv": 1, "kind": "permanent", "is_creature": true }, { "num": 45, "name": "Secluded Courtyard", "cost": "", "mv": 0, "kind": "land" }, { "num": 57, "name": "Unclaimed Territory", "cost": "", "mv": 0, "kind": "land" }], "graveyard": [], "library_size": 54, "land_drops_left": 1 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "2/2 Creature", "idx": 0, "num": 500000, "is_land": false }] },
+  "plans": [
+    { "index": 0, "summary": "land=Secluded Courtyard; cast: Daring Buccaneer", "land": "Secluded Courtyard", "casts": ["Daring Buccaneer"], "actions": [{ "card": "Daring Buccaneer" }] },
+    { "index": 1, "summary": "land=Unclaimed Territory; cast: Daring Buccaneer", "land": "Unclaimed Territory", "casts": ["Daring Buccaneer"], "actions": [{ "card": "Daring Buccaneer" }] },
+    { "index": 2, "summary": "land=Secluded Courtyard; cast: Aether Vial", "land": "Secluded Courtyard", "casts": ["Aether Vial"], "actions": [{ "card": "Aether Vial" }] },
+    { "index": 3, "summary": "land=Unclaimed Territory; cast: Aether Vial", "land": "Unclaimed Territory", "casts": ["Aether Vial"], "actions": [{ "card": "Aether Vial" }] },
+    { "index": 4, "summary": "land=Secluded Courtyard; cast: Goblin Tomb Raider", "land": "Secluded Courtyard", "casts": ["Goblin Tomb Raider"], "actions": [{ "card": "Goblin Tomb Raider" }] },
+    { "index": 5, "summary": "land=Unclaimed Territory; cast: Goblin Tomb Raider", "land": "Unclaimed Territory", "casts": ["Goblin Tomb Raider"], "actions": [{ "card": "Goblin Tomb Raider" }] },
+    { "index": 6, "summary": "land=Secluded Courtyard; cast: (nothing)", "land": "Secluded Courtyard", "casts": [], "actions": [] },
+    { "index": 7, "summary": "land=Unclaimed Territory; cast: (nothing)", "land": "Unclaimed Territory", "casts": [], "actions": [] },
+    { "index": 8, "summary": "land=none; cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 4,
+  "type": "main_phase",
+  "turn": 1,
+  "phase": "pre_main",
+  "on_the_play": true,
+  "mdfc_backs": ["Boulderloft Pathway", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Aether Vial", "idx": 2, "num": 7, "is_land": false }, { "name": "Unclaimed Territory", "idx": 1, "num": 57, "tapped": true, "is_land": true }], "vial_counters": [0], "hand": [{ "num": 13, "name": "Corsair Captain", "cost": "{2}{U}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 16, "name": "Daring Buccaneer", "cost": "{R}", "mv": 1, "kind": "permanent", "is_creature": true }, { "num": 29, "name": "Goblin Tomb Raider", "cost": "{R}", "mv": 1, "kind": "permanent", "is_creature": true }, { "num": 45, "name": "Secluded Courtyard", "cost": "", "mv": 0, "kind": "land" }], "graveyard": [], "library_size": 54, "land_drops_left": 0 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "2/2 Creature", "idx": 0, "num": 500000, "is_land": false }] },
+  "plans": [
+    { "index": 0, "summary": "cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 5,
+  "type": "main_phase",
+  "turn": 1,
+  "phase": "post_main",
+  "on_the_play": true,
+  "mdfc_backs": ["Boulderloft Pathway", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Aether Vial", "idx": 2, "num": 7, "is_land": false }, { "name": "Unclaimed Territory", "idx": 1, "num": 57, "tapped": true, "is_land": true }], "vial_counters": [0], "hand": [{ "num": 13, "name": "Corsair Captain", "cost": "{2}{U}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 16, "name": "Daring Buccaneer", "cost": "{R}", "mv": 1, "kind": "permanent", "is_creature": true }, { "num": 29, "name": "Goblin Tomb Raider", "cost": "{R}", "mv": 1, "kind": "permanent", "is_creature": true }, { "num": 45, "name": "Secluded Courtyard", "cost": "", "mv": 0, "kind": "land" }], "graveyard": [], "library_size": 54, "land_drops_left": 0 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "2/2 Creature", "idx": 0, "num": 500000, "is_land": false }] },
+  "plans": [
+    { "index": 0, "summary": "cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
+}
+},
+    { "chosen": 1, "decision": {
+  "decision_index": 6,
+  "type": "vial_charge",
+  "turn": 2,
+  "vial": "Aether Vial", "current_counters": 0,
+  "perm_index": 2,
+  "heuristic_default": 1,
+  "mdfc_backs": ["Boulderloft Pathway", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Aether Vial", "idx": 2, "num": 7, "is_land": false }, { "name": "Unclaimed Territory", "idx": 1, "num": 57, "is_land": true, "taps": "C" }], "vial_counters": [0], "hand": [{ "num": 13, "name": "Corsair Captain", "cost": "{2}{U}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 16, "name": "Daring Buccaneer", "cost": "{R}", "mv": 1, "kind": "permanent", "is_creature": true }, { "num": 29, "name": "Goblin Tomb Raider", "cost": "{R}", "mv": 1, "kind": "permanent", "is_creature": true }, { "num": 45, "name": "Secluded Courtyard", "cost": "", "mv": 0, "kind": "land" }], "graveyard": [], "library_size": 54, "land_drops_left": 1 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "2/2 Creature", "idx": 0, "num": 500000, "is_land": false }, { "name": "2/2 Creature", "idx": 3, "num": 500001, "is_land": false }] },
+  "note": "reply 1 to add a charge counter this upkeep, 0 to hold. Aether Vial deploys a creature whose mana value EQUALS its counter count."
+}
+},
+    { "chosen": 16, "cast_order": ["*", "Daring Buccaneer", "Goblin Tomb Raider"], "decision": {
+  "decision_index": 7,
+  "main_ordinal": 1,
+  "type": "main_phase",
+  "turn": 2,
+  "phase": "pre_main",
+  "on_the_play": true,
+  "drew": [{ "turn": 2, "card": "Kitesail Larcenist" }],
+  "mdfc_backs": ["Boulderloft Pathway", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Aether Vial", "idx": 2, "num": 7, "is_land": false, "counters": [{ "kind": "charge", "label": "charge", "count": 1 }] }, { "name": "Unclaimed Territory", "idx": 1, "num": 57, "is_land": true, "taps": "C" }], "vial_counters": [1], "hand": [{ "num": 13, "name": "Corsair Captain", "cost": "{2}{U}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 16, "name": "Daring Buccaneer", "cost": "{R}", "mv": 1, "kind": "permanent", "is_creature": true }, { "num": 29, "name": "Goblin Tomb Raider", "cost": "{R}", "mv": 1, "kind": "permanent", "is_creature": true }, { "num": 31, "name": "Kitesail Larcenist", "cost": "{2}{U}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 45, "name": "Secluded Courtyard", "cost": "", "mv": 0, "kind": "land" }], "graveyard": [], "library_size": 53, "land_drops_left": 1 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "2/2 Creature", "idx": 0, "num": 500000, "is_land": false }, { "name": "2/2 Creature", "idx": 3, "num": 500001, "is_land": false }] },
+  "plans": [
+    { "index": 0, "summary": "land=Secluded Courtyard; cast: Daring Buccaneer, Goblin Tomb Raider", "land": "Secluded Courtyard", "casts": ["Daring Buccaneer", "Goblin Tomb Raider"], "cast_order_canonical": ["Daring Buccaneer", "Goblin Tomb Raider"], "actions": [{ "card": "Daring Buccaneer" }, { "card": "Goblin Tomb Raider" }] },
+    { "index": 1, "summary": "land=Secluded Courtyard; cast: Goblin Tomb Raider, Daring Buccaneer", "land": "Secluded Courtyard", "casts": ["Goblin Tomb Raider", "Daring Buccaneer"], "cast_order_canonical": ["Goblin Tomb Raider", "Daring Buccaneer"], "actions": [{ "card": "Goblin Tomb Raider" }, { "card": "Daring Buccaneer" }] },
+    { "index": 2, "summary": "land=Secluded Courtyard; cast: Daring Buccaneer (vial), Goblin Tomb Raider", "land": "Secluded Courtyard", "casts": ["Daring Buccaneer", "Goblin Tomb Raider"], "actions": [{ "card": "Daring Buccaneer" }, { "card": "Goblin Tomb Raider" }] },
+    { "index": 3, "summary": "land=Secluded Courtyard; cast: Goblin Tomb Raider (vial), Daring Buccaneer", "land": "Secluded Courtyard", "casts": ["Daring Buccaneer", "Goblin Tomb Raider"], "actions": [{ "card": "Daring Buccaneer" }, { "card": "Goblin Tomb Raider" }] },
+    { "index": 4, "summary": "land=none; cast: Daring Buccaneer (vial), Goblin Tomb Raider", "land": null, "casts": ["Daring Buccaneer", "Goblin Tomb Raider"], "actions": [{ "card": "Daring Buccaneer" }, { "card": "Goblin Tomb Raider" }] },
+    { "index": 5, "summary": "land=none; cast: Goblin Tomb Raider (vial), Daring Buccaneer", "land": null, "casts": ["Daring Buccaneer", "Goblin Tomb Raider"], "actions": [{ "card": "Daring Buccaneer" }, { "card": "Goblin Tomb Raider" }] },
+    { "index": 6, "summary": "land=Secluded Courtyard; cast: Goblin Tomb Raider", "land": "Secluded Courtyard", "casts": ["Goblin Tomb Raider"], "actions": [{ "card": "Goblin Tomb Raider" }] },
+    { "index": 7, "summary": "land=Secluded Courtyard; cast: Goblin Tomb Raider (vial)", "land": "Secluded Courtyard", "casts": ["Goblin Tomb Raider"], "actions": [{ "card": "Goblin Tomb Raider" }] },
+    { "index": 8, "summary": "land=none; cast: Goblin Tomb Raider", "land": null, "casts": ["Goblin Tomb Raider"], "actions": [{ "card": "Goblin Tomb Raider" }] },
+    { "index": 9, "summary": "land=none; cast: Goblin Tomb Raider (vial)", "land": null, "casts": ["Goblin Tomb Raider"], "actions": [{ "card": "Goblin Tomb Raider" }] },
+    { "index": 10, "summary": "land=Secluded Courtyard; cast: Daring Buccaneer", "land": "Secluded Courtyard", "casts": ["Daring Buccaneer"], "actions": [{ "card": "Daring Buccaneer" }] },
+    { "index": 11, "summary": "land=Secluded Courtyard; cast: Daring Buccaneer (vial)", "land": "Secluded Courtyard", "casts": ["Daring Buccaneer"], "actions": [{ "card": "Daring Buccaneer" }] },
+    { "index": 12, "summary": "land=none; cast: Daring Buccaneer", "land": null, "casts": ["Daring Buccaneer"], "actions": [{ "card": "Daring Buccaneer" }] },
+    { "index": 13, "summary": "land=none; cast: Daring Buccaneer (vial)", "land": null, "casts": ["Daring Buccaneer"], "actions": [{ "card": "Daring Buccaneer" }] },
+    { "index": 14, "summary": "land=Secluded Courtyard; cast: (nothing)", "land": "Secluded Courtyard", "casts": [], "actions": [] },
+    { "index": 15, "summary": "land=none; cast: (nothing)", "land": null, "casts": [], "actions": [] },
+    { "index": 16, "summary": "land=Secluded Courtyard; cast: Daring Buccaneer, Goblin Tomb Raider (vial)", "land": "Secluded Courtyard", "vial_after_casts": true, "casts": ["Daring Buccaneer", "Goblin Tomb Raider"], "actions": [{ "card": "Daring Buccaneer" }, { "card": "Goblin Tomb Raider" }] },
+    { "index": 17, "summary": "land=none; cast: Daring Buccaneer, Goblin Tomb Raider (vial)", "land": null, "vial_after_casts": true, "casts": ["Daring Buccaneer", "Goblin Tomb Raider"], "actions": [{ "card": "Daring Buccaneer" }, { "card": "Goblin Tomb Raider" }] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 8,
+  "type": "main_phase",
+  "turn": 2,
+  "phase": "pre_main",
+  "on_the_play": true,
+  "mdfc_backs": ["Boulderloft Pathway", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Aether Vial", "idx": 2, "num": 7, "tapped": true, "is_land": false, "counters": [{ "kind": "charge", "label": "charge", "count": 1 }] }, { "name": "Daring Buccaneer", "idx": 5, "num": 16, "is_land": false }, { "name": "Goblin Tomb Raider", "idx": 6, "num": 29, "is_land": false }, { "name": "Secluded Courtyard", "idx": 4, "num": 45, "is_land": true, "taps": "C" }, { "name": "Unclaimed Territory", "idx": 1, "num": 57, "tapped": true, "is_land": true }], "vial_counters": [1], "hand": [{ "num": 13, "name": "Corsair Captain", "cost": "{2}{U}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 31, "name": "Kitesail Larcenist", "cost": "{2}{U}", "mv": 3, "kind": "permanent", "is_creature": true }], "graveyard": [], "library_size": 53, "land_drops_left": 0 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "2/2 Creature", "idx": 0, "num": 500000, "is_land": false }, { "name": "2/2 Creature", "idx": 3, "num": 500001, "is_land": false }] },
+  "plans": [
+    { "index": 0, "summary": "cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 9,
+  "type": "main_phase",
+  "turn": 2,
+  "phase": "post_main",
+  "on_the_play": true,
+  "events": [{ "turn": 2, "kind": "combat", "text": "⚔ attacked: Goblin Tomb Raider (2) — 2 to opponent (20→18)" }],
+  "mdfc_backs": ["Boulderloft Pathway", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Aether Vial", "idx": 2, "num": 7, "tapped": true, "is_land": false, "counters": [{ "kind": "charge", "label": "charge", "count": 1 }] }, { "name": "Daring Buccaneer", "idx": 5, "num": 16, "is_land": false }, { "name": "Goblin Tomb Raider", "idx": 6, "num": 29, "tapped": true, "is_land": false }, { "name": "Secluded Courtyard", "idx": 4, "num": 45, "is_land": true, "taps": "C" }, { "name": "Unclaimed Territory", "idx": 1, "num": 57, "tapped": true, "is_land": true }], "vial_counters": [1], "hand": [{ "num": 13, "name": "Corsair Captain", "cost": "{2}{U}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 31, "name": "Kitesail Larcenist", "cost": "{2}{U}", "mv": 3, "kind": "permanent", "is_creature": true }], "graveyard": [], "library_size": 53, "land_drops_left": 0 },
+  "opponent": { "life": 18, "battlefield": [{ "name": "2/2 Creature", "idx": 0, "num": 500000, "is_land": false }, { "name": "2/2 Creature", "idx": 3, "num": 500001, "is_land": false }] },
+  "plans": [
+    { "index": 0, "summary": "cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
+}
+},
+    { "chosen": 1, "decision": {
+  "decision_index": 10,
+  "type": "vial_charge",
+  "turn": 3,
+  "vial": "Aether Vial", "current_counters": 1,
+  "perm_index": 2,
+  "heuristic_default": 1,
+  "mdfc_backs": ["Boulderloft Pathway", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Aether Vial", "idx": 2, "num": 7, "is_land": false, "counters": [{ "kind": "charge", "label": "charge", "count": 1 }] }, { "name": "Daring Buccaneer", "idx": 5, "num": 16, "is_land": false }, { "name": "Goblin Tomb Raider", "idx": 6, "num": 29, "is_land": false }, { "name": "Secluded Courtyard", "idx": 4, "num": 45, "is_land": true, "taps": "C" }, { "name": "Unclaimed Territory", "idx": 1, "num": 57, "is_land": true, "taps": "C" }], "vial_counters": [1], "hand": [{ "num": 13, "name": "Corsair Captain", "cost": "{2}{U}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 31, "name": "Kitesail Larcenist", "cost": "{2}{U}", "mv": 3, "kind": "permanent", "is_creature": true }], "graveyard": [], "library_size": 53, "land_drops_left": 1 },
+  "opponent": { "life": 18, "battlefield": [{ "name": "2/2 Creature", "idx": 0, "num": 500000, "is_land": false }, { "name": "2/2 Creature", "idx": 3, "num": 500001, "is_land": false }, { "name": "2/2 Creature", "idx": 7, "num": 500002, "is_land": false }] },
+  "note": "reply 1 to add a charge counter this upkeep, 0 to hold. Aether Vial deploys a creature whose mana value EQUALS its counter count."
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 11,
+  "main_ordinal": 2,
+  "type": "main_phase",
+  "turn": 3,
+  "phase": "pre_main",
+  "on_the_play": true,
+  "drew": [{ "turn": 3, "card": "Lightning Bolt" }],
+  "mdfc_backs": ["Boulderloft Pathway", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Aether Vial", "idx": 2, "num": 7, "is_land": false, "counters": [{ "kind": "charge", "label": "charge", "count": 2 }] }, { "name": "Daring Buccaneer", "idx": 5, "num": 16, "is_land": false }, { "name": "Goblin Tomb Raider", "idx": 6, "num": 29, "is_land": false }, { "name": "Secluded Courtyard", "idx": 4, "num": 45, "is_land": true, "taps": "C" }, { "name": "Unclaimed Territory", "idx": 1, "num": 57, "is_land": true, "taps": "C" }], "vial_counters": [2], "hand": [{ "num": 13, "name": "Corsair Captain", "cost": "{2}{U}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 31, "name": "Kitesail Larcenist", "cost": "{2}{U}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 32, "name": "Lightning Bolt", "cost": "{R}", "mv": 1, "kind": "nonpermanent" }], "graveyard": [], "library_size": 52, "land_drops_left": 1 },
+  "opponent": { "life": 18, "battlefield": [{ "name": "2/2 Creature", "idx": 0, "num": 500000, "is_land": false }, { "name": "2/2 Creature", "idx": 3, "num": 500001, "is_land": false }, { "name": "2/2 Creature", "idx": 7, "num": 500002, "is_land": false }] },
+  "plans": [
+    { "index": 0, "summary": "land=none; cast: Lightning Bolt", "land": null, "casts": ["Lightning Bolt"], "actions": [{ "card": "Lightning Bolt" }] },
+    { "index": 1, "summary": "land=none; cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 12,
+  "main_ordinal": 3,
+  "type": "main_phase",
+  "turn": 3,
+  "phase": "post_main",
+  "on_the_play": true,
+  "events": [{ "turn": 3, "kind": "combat", "text": "⚔ attacked: Daring Buccaneer (2), Goblin Tomb Raider (2) — 4 to opponent (18→14)" }],
+  "mdfc_backs": ["Boulderloft Pathway", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Aether Vial", "idx": 2, "num": 7, "is_land": false, "counters": [{ "kind": "charge", "label": "charge", "count": 2 }] }, { "name": "Daring Buccaneer", "idx": 5, "num": 16, "tapped": true, "is_land": false }, { "name": "Goblin Tomb Raider", "idx": 6, "num": 29, "tapped": true, "is_land": false }, { "name": "Secluded Courtyard", "idx": 4, "num": 45, "is_land": true, "taps": "C" }, { "name": "Unclaimed Territory", "idx": 1, "num": 57, "is_land": true, "taps": "C" }], "vial_counters": [2], "hand": [{ "num": 13, "name": "Corsair Captain", "cost": "{2}{U}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 31, "name": "Kitesail Larcenist", "cost": "{2}{U}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 32, "name": "Lightning Bolt", "cost": "{R}", "mv": 1, "kind": "nonpermanent" }], "graveyard": [], "library_size": 52, "land_drops_left": 1 },
+  "opponent": { "life": 14, "battlefield": [{ "name": "2/2 Creature", "idx": 0, "num": 500000, "is_land": false }, { "name": "2/2 Creature", "idx": 3, "num": 500001, "is_land": false }, { "name": "2/2 Creature", "idx": 7, "num": 500002, "is_land": false }] },
+  "plans": [
+    { "index": 0, "summary": "land=none; cast: Lightning Bolt", "land": null, "casts": ["Lightning Bolt"], "actions": [{ "card": "Lightning Bolt" }] },
+    { "index": 1, "summary": "land=none; cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
+}
+},
+    { "chosen": 1, "decision": {
+  "decision_index": 13,
+  "type": "vial_charge",
+  "turn": 4,
+  "vial": "Aether Vial", "current_counters": 2,
+  "perm_index": 2,
+  "heuristic_default": 1,
+  "mdfc_backs": ["Boulderloft Pathway", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Aether Vial", "idx": 2, "num": 7, "is_land": false, "counters": [{ "kind": "charge", "label": "charge", "count": 2 }] }, { "name": "Daring Buccaneer", "idx": 5, "num": 16, "is_land": false }, { "name": "Goblin Tomb Raider", "idx": 6, "num": 29, "is_land": false }, { "name": "Secluded Courtyard", "idx": 4, "num": 45, "is_land": true, "taps": "C" }, { "name": "Unclaimed Territory", "idx": 1, "num": 57, "is_land": true, "taps": "C" }], "vial_counters": [2], "hand": [{ "num": 13, "name": "Corsair Captain", "cost": "{2}{U}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 31, "name": "Kitesail Larcenist", "cost": "{2}{U}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 32, "name": "Lightning Bolt", "cost": "{R}", "mv": 1, "kind": "nonpermanent" }], "graveyard": [], "library_size": 52, "land_drops_left": 1 },
+  "opponent": { "life": 14, "battlefield": [{ "name": "2/2 Creature", "idx": 0, "num": 500000, "is_land": false }, { "name": "2/2 Creature", "idx": 3, "num": 500001, "is_land": false }, { "name": "2/2 Creature", "idx": 7, "num": 500002, "is_land": false }] },
+  "note": "reply 1 to add a charge counter this upkeep, 0 to hold. Aether Vial deploys a creature whose mana value EQUALS its counter count."
+}
+},
+    { "chosen": 13, "decision": {
+  "decision_index": 14,
+  "main_ordinal": 4,
+  "type": "main_phase",
+  "turn": 4,
+  "phase": "pre_main",
+  "on_the_play": true,
+  "drew": [{ "turn": 4, "card": "Staunch Crewmate" }],
+  "mdfc_backs": ["Boulderloft Pathway", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Aether Vial", "idx": 2, "num": 7, "is_land": false, "counters": [{ "kind": "charge", "label": "charge", "count": 3 }] }, { "name": "Daring Buccaneer", "idx": 5, "num": 16, "is_land": false }, { "name": "Goblin Tomb Raider", "idx": 6, "num": 29, "is_land": false }, { "name": "Secluded Courtyard", "idx": 4, "num": 45, "is_land": true, "taps": "C" }, { "name": "Unclaimed Territory", "idx": 1, "num": 57, "is_land": true, "taps": "C" }], "vial_counters": [3], "hand": [{ "num": 13, "name": "Corsair Captain", "cost": "{2}{U}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 31, "name": "Kitesail Larcenist", "cost": "{2}{U}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 32, "name": "Lightning Bolt", "cost": "{R}", "mv": 1, "kind": "nonpermanent" }, { "num": 56, "name": "Staunch Crewmate", "cost": "{1}{U}", "mv": 2, "kind": "permanent", "is_creature": true }], "graveyard": [], "library_size": 51, "land_drops_left": 1 },
+  "opponent": { "life": 14, "battlefield": [{ "name": "2/2 Creature", "idx": 0, "num": 500000, "is_land": false }, { "name": "2/2 Creature", "idx": 3, "num": 500001, "is_land": false }, { "name": "2/2 Creature", "idx": 7, "num": 500002, "is_land": false }] },
+  "plans": [
+    { "index": 0, "summary": "land=none; cast: Lightning Bolt, Staunch Crewmate, Corsair Captain (vial)", "land": null, "casts": ["Lightning Bolt", "Staunch Crewmate", "Corsair Captain"], "cast_order_canonical": ["Lightning Bolt", "Staunch Crewmate"], "actions": [{ "card": "Lightning Bolt" }, { "card": "Staunch Crewmate" }, { "card": "Corsair Captain" }] },
+    { "index": 1, "summary": "land=none; cast: Staunch Crewmate, Lightning Bolt, Corsair Captain (vial)", "land": null, "drops": ["Lightning Bolt"], "casts": ["Staunch Crewmate", "Lightning Bolt", "Corsair Captain"], "cast_order_canonical": ["Staunch Crewmate", "Lightning Bolt"], "actions": [{ "card": "Staunch Crewmate" }, { "card": "Lightning Bolt" }, { "card": "Corsair Captain" }] },
+    { "index": 2, "summary": "land=none; cast: Corsair Captain (vial), Kitesail Larcenist (no Treasure)", "land": null, "casts": ["Corsair Captain", "Kitesail Larcenist"], "actions": [{ "card": "Corsair Captain" }, { "card": "Kitesail Larcenist", "treasurify_target": 0 }] },
+    { "index": 3, "summary": "land=none; cast: Corsair Captain (vial), Kitesail Larcenist (Treasure: choose on resolution)", "land": null, "casts": ["Corsair Captain", "Kitesail Larcenist"], "actions": [{ "card": "Corsair Captain" }, { "card": "Kitesail Larcenist", "treasurify_target": -2 }] },
+    { "index": 4, "summary": "land=none; cast: Corsair Captain (vial), Staunch Crewmate", "land": null, "casts": ["Corsair Captain", "Staunch Crewmate"], "actions": [{ "card": "Corsair Captain" }, { "card": "Staunch Crewmate" }] },
+    { "index": 5, "summary": "land=none; cast: Kitesail Larcenist (vial), Staunch Crewmate", "land": null, "casts": ["Kitesail Larcenist", "Staunch Crewmate"], "actions": [{ "card": "Kitesail Larcenist" }, { "card": "Staunch Crewmate" }] },
+    { "index": 6, "summary": "land=none; cast: Corsair Captain (vial), Kitesail Larcenist → Treasure: Aether Vial", "land": null, "casts": ["Corsair Captain", "Kitesail Larcenist"], "actions": [{ "card": "Corsair Captain" }, { "card": "Kitesail Larcenist", "x": 7, "treasurify_target": 7, "treasurify_target_label": "Aether Vial" }] },
+    { "index": 7, "summary": "land=none; cast: Corsair Captain (vial), Kitesail Larcenist → Treasure: Daring Buccaneer", "land": null, "casts": ["Corsair Captain", "Kitesail Larcenist"], "actions": [{ "card": "Corsair Captain" }, { "card": "Kitesail Larcenist", "x": 16, "treasurify_target": 16, "treasurify_target_label": "Daring Buccaneer" }] },
+    { "index": 8, "summary": "land=none; cast: Corsair Captain (vial), Kitesail Larcenist → Treasure: Goblin Tomb Raider", "land": null, "casts": ["Corsair Captain", "Kitesail Larcenist"], "actions": [{ "card": "Corsair Captain" }, { "card": "Kitesail Larcenist", "x": 29, "treasurify_target": 29, "treasurify_target_label": "Goblin Tomb Raider" }] },
+    { "index": 9, "summary": "land=none; cast: Corsair Captain (vial), Lightning Bolt", "land": null, "casts": ["Corsair Captain", "Lightning Bolt"], "actions": [{ "card": "Corsair Captain" }, { "card": "Lightning Bolt" }] },
+    { "index": 10, "summary": "land=none; cast: Kitesail Larcenist (vial), Lightning Bolt", "land": null, "casts": ["Kitesail Larcenist", "Lightning Bolt"], "actions": [{ "card": "Kitesail Larcenist" }, { "card": "Lightning Bolt" }] },
+    { "index": 11, "summary": "land=none; cast: Corsair Captain (vial)", "land": null, "casts": ["Corsair Captain"], "actions": [{ "card": "Corsair Captain" }] },
+    { "index": 12, "summary": "land=none; cast: Kitesail Larcenist (vial)", "land": null, "casts": ["Kitesail Larcenist"], "actions": [{ "card": "Kitesail Larcenist" }] },
+    { "index": 13, "summary": "land=none; cast: Staunch Crewmate", "land": null, "casts": ["Staunch Crewmate"], "actions": [{ "card": "Staunch Crewmate" }] },
+    { "index": 14, "summary": "land=none; cast: Lightning Bolt", "land": null, "casts": ["Lightning Bolt"], "actions": [{ "card": "Lightning Bolt" }] },
+    { "index": 15, "summary": "land=none; cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "plans_hidden": 25,
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
+}
+},
+    { "chosen": 2, "decision": {
+  "decision_index": 15,
+  "type": "dig",
+  "source": "Staunch Crewmate",
+  "turn": 4,
+  "mdfc_backs": ["Boulderloft Pathway", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Aether Vial", "idx": 2, "num": 7, "is_land": false, "counters": [{ "kind": "charge", "label": "charge", "count": 3 }] }, { "name": "Daring Buccaneer", "idx": 5, "num": 16, "is_land": false }, { "name": "Goblin Tomb Raider", "idx": 6, "num": 29, "is_land": false }, { "name": "Secluded Courtyard", "idx": 4, "num": 45, "tapped": true, "is_land": true }, { "name": "Staunch Crewmate", "idx": 8, "num": 56, "is_land": false }, { "name": "Unclaimed Territory", "idx": 1, "num": 57, "tapped": true, "is_land": true }], "vial_counters": [3], "hand": [{ "num": 13, "name": "Corsair Captain", "cost": "{2}{U}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 31, "name": "Kitesail Larcenist", "cost": "{2}{U}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 32, "name": "Lightning Bolt", "cost": "{R}", "mv": 1, "kind": "nonpermanent" }], "graveyard": [], "library_size": 47, "land_drops_left": 1 },
+  "opponent": { "life": 14, "battlefield": [{ "name": "2/2 Creature", "idx": 0, "num": 500000, "is_land": false }, { "name": "2/2 Creature", "idx": 3, "num": 500001, "is_land": false }, { "name": "2/2 Creature", "idx": 7, "num": 500002, "is_land": false }] },
+  "heuristic_default": 1,
+  "examined": [{ "index": 0, "legal": false, "name": "Mountain" }, { "index": 1, "legal": true, "name": "Metallic Mimic" }, { "index": 2, "legal": true, "name": "Dire Fleet Captain" }, { "index": 3, "legal": true, "name": "Daring Buccaneer" }],
+  "note": "reply an examined index to put that card into your hand, or -1 to take nothing. Default = the AI's pick."
+}
+},
+    { "chosen": 1, "decision": {
+  "decision_index": 16,
+  "main_ordinal": 5,
+  "type": "main_phase",
+  "turn": 4,
+  "phase": "pre_main",
+  "on_the_play": true,
+  "mdfc_backs": ["Boulderloft Pathway", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Aether Vial", "idx": 2, "num": 7, "is_land": false, "counters": [{ "kind": "charge", "label": "charge", "count": 3 }] }, { "name": "Daring Buccaneer", "idx": 5, "num": 16, "is_land": false }, { "name": "Goblin Tomb Raider", "idx": 6, "num": 29, "is_land": false }, { "name": "Secluded Courtyard", "idx": 4, "num": 45, "tapped": true, "is_land": true }, { "name": "Staunch Crewmate", "idx": 8, "num": 56, "is_land": false }, { "name": "Unclaimed Territory", "idx": 1, "num": 57, "tapped": true, "is_land": true }], "vial_counters": [3], "hand": [{ "num": 13, "name": "Corsair Captain", "cost": "{2}{U}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 18, "name": "Dire Fleet Captain", "cost": "{B}{R}", "mv": 2, "kind": "permanent", "is_creature": true }, { "num": 31, "name": "Kitesail Larcenist", "cost": "{2}{U}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 32, "name": "Lightning Bolt", "cost": "{R}", "mv": 1, "kind": "nonpermanent" }], "graveyard": [], "library_size": 50, "land_drops_left": 1 },
+  "opponent": { "life": 14, "battlefield": [{ "name": "2/2 Creature", "idx": 0, "num": 500000, "is_land": false }, { "name": "2/2 Creature", "idx": 3, "num": 500001, "is_land": false }, { "name": "2/2 Creature", "idx": 7, "num": 500002, "is_land": false }] },
+  "plans": [
+    { "index": 0, "summary": "land=none; cast: Corsair Captain (vial), Lightning Bolt", "land": null, "casts": ["Corsair Captain", "Lightning Bolt"], "actions": [{ "card": "Corsair Captain" }, { "card": "Lightning Bolt" }] },
+    { "index": 1, "summary": "land=none; cast: Corsair Captain (vial)", "land": null, "casts": ["Corsair Captain"], "actions": [{ "card": "Corsair Captain" }] },
+    { "index": 2, "summary": "land=none; cast: Kitesail Larcenist (vial)", "land": null, "casts": ["Kitesail Larcenist"], "actions": [{ "card": "Kitesail Larcenist" }] },
+    { "index": 3, "summary": "land=none; cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 17,
+  "main_ordinal": 6,
+  "type": "main_phase",
+  "turn": 4,
+  "phase": "pre_main",
+  "on_the_play": true,
+  "events": [{ "turn": 4, "kind": "ability", "text": "Corsair Captain -- create 1 Treasure" }],
+  "mdfc_backs": ["Boulderloft Pathway", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Aether Vial", "idx": 2, "num": 7, "tapped": true, "is_land": false, "counters": [{ "kind": "charge", "label": "charge", "count": 3 }] }, { "name": "Corsair Captain", "idx": 9, "num": 13, "is_land": false }, { "name": "Daring Buccaneer", "idx": 5, "num": 16, "is_land": false }, { "name": "Goblin Tomb Raider", "idx": 6, "num": 29, "is_land": false }, { "name": "Secluded Courtyard", "idx": 4, "num": 45, "tapped": true, "is_land": true }, { "name": "Staunch Crewmate", "idx": 8, "num": 56, "is_land": false }, { "name": "Treasure Token", "idx": 10, "num": 1000, "is_land": false }, { "name": "Unclaimed Territory", "idx": 1, "num": 57, "tapped": true, "is_land": true }], "vial_counters": [3], "hand": [{ "num": 18, "name": "Dire Fleet Captain", "cost": "{B}{R}", "mv": 2, "kind": "permanent", "is_creature": true }, { "num": 31, "name": "Kitesail Larcenist", "cost": "{2}{U}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 32, "name": "Lightning Bolt", "cost": "{R}", "mv": 1, "kind": "nonpermanent" }], "graveyard": [], "library_size": 50, "land_drops_left": 1 },
+  "opponent": { "life": 14, "battlefield": [{ "name": "2/2 Creature", "idx": 0, "num": 500000, "is_land": false }, { "name": "2/2 Creature", "idx": 3, "num": 500001, "is_land": false }, { "name": "2/2 Creature", "idx": 7, "num": 500002, "is_land": false }] },
+  "plans": [
+    { "index": 0, "summary": "land=none; cast: Lightning Bolt", "land": null, "casts": ["Lightning Bolt"], "actions": [{ "card": "Lightning Bolt" }] },
+    { "index": 1, "summary": "land=none; cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 18,
+  "main_ordinal": 7,
+  "type": "main_phase",
+  "turn": 4,
+  "phase": "post_main",
+  "on_the_play": true,
+  "events": [{ "turn": 4, "kind": "combat", "text": "⚔ attacked: Daring Buccaneer (3), Goblin Tomb Raider (3) — 6 to opponent (14→8)" }],
+  "mdfc_backs": ["Boulderloft Pathway", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Aether Vial", "idx": 2, "num": 7, "tapped": true, "is_land": false, "counters": [{ "kind": "charge", "label": "charge", "count": 3 }] }, { "name": "Corsair Captain", "idx": 9, "num": 13, "is_land": false }, { "name": "Daring Buccaneer", "idx": 5, "num": 16, "tapped": true, "is_land": false }, { "name": "Goblin Tomb Raider", "idx": 6, "num": 29, "tapped": true, "is_land": false }, { "name": "Secluded Courtyard", "idx": 4, "num": 45, "tapped": true, "is_land": true }, { "name": "Staunch Crewmate", "idx": 8, "num": 56, "is_land": false }, { "name": "Treasure Token", "idx": 10, "num": 1000, "is_land": false }, { "name": "Unclaimed Territory", "idx": 1, "num": 57, "tapped": true, "is_land": true }], "vial_counters": [3], "hand": [{ "num": 18, "name": "Dire Fleet Captain", "cost": "{B}{R}", "mv": 2, "kind": "permanent", "is_creature": true }, { "num": 31, "name": "Kitesail Larcenist", "cost": "{2}{U}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 32, "name": "Lightning Bolt", "cost": "{R}", "mv": 1, "kind": "nonpermanent" }], "graveyard": [], "library_size": 50, "land_drops_left": 1 },
+  "opponent": { "life": 8, "battlefield": [{ "name": "2/2 Creature", "idx": 0, "num": 500000, "is_land": false }, { "name": "2/2 Creature", "idx": 3, "num": 500001, "is_land": false }, { "name": "2/2 Creature", "idx": 7, "num": 500002, "is_land": false }] },
+  "plans": [
+    { "index": 0, "summary": "land=none; cast: Lightning Bolt", "land": null, "casts": ["Lightning Bolt"], "actions": [{ "card": "Lightning Bolt" }] },
+    { "index": 1, "summary": "land=none; cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
+}
+},
+    { "chosen": 0, "decision": {
+  "decision_index": 19,
+  "type": "vial_charge",
+  "turn": 5,
+  "vial": "Aether Vial", "current_counters": 3,
+  "perm_index": 2,
+  "heuristic_default": 0,
+  "mdfc_backs": ["Boulderloft Pathway", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Aether Vial", "idx": 2, "num": 7, "is_land": false, "counters": [{ "kind": "charge", "label": "charge", "count": 3 }] }, { "name": "Corsair Captain", "idx": 9, "num": 13, "is_land": false }, { "name": "Daring Buccaneer", "idx": 5, "num": 16, "is_land": false }, { "name": "Goblin Tomb Raider", "idx": 6, "num": 29, "is_land": false }, { "name": "Secluded Courtyard", "idx": 4, "num": 45, "is_land": true, "taps": "C" }, { "name": "Staunch Crewmate", "idx": 8, "num": 56, "is_land": false }, { "name": "Treasure Token", "idx": 10, "num": 1000, "is_land": false }, { "name": "Unclaimed Territory", "idx": 1, "num": 57, "is_land": true, "taps": "C" }], "vial_counters": [3], "hand": [{ "num": 18, "name": "Dire Fleet Captain", "cost": "{B}{R}", "mv": 2, "kind": "permanent", "is_creature": true }, { "num": 31, "name": "Kitesail Larcenist", "cost": "{2}{U}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 32, "name": "Lightning Bolt", "cost": "{R}", "mv": 1, "kind": "nonpermanent" }], "graveyard": [], "library_size": 50, "land_drops_left": 1 },
+  "opponent": { "life": 8, "battlefield": [{ "name": "2/2 Creature", "idx": 0, "num": 500000, "is_land": false }, { "name": "2/2 Creature", "idx": 3, "num": 500001, "is_land": false }, { "name": "2/2 Creature", "idx": 7, "num": 500002, "is_land": false }] },
+  "note": "reply 1 to add a charge counter this upkeep, 0 to hold. Aether Vial deploys a creature whose mana value EQUALS its counter count."
+}
+},
+    { "chosen": 7, "cast_order": ["*", "Dire Fleet Captain", "Kitesail Larcenist"], "decision": {
+  "decision_index": 20,
+  "main_ordinal": 8,
+  "type": "main_phase",
+  "turn": 5,
+  "phase": "pre_main",
+  "on_the_play": true,
+  "drew": [{ "turn": 5, "card": "Metallic Mimic" }],
+  "mdfc_backs": ["Boulderloft Pathway", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Aether Vial", "idx": 2, "num": 7, "is_land": false, "counters": [{ "kind": "charge", "label": "charge", "count": 3 }] }, { "name": "Corsair Captain", "idx": 9, "num": 13, "is_land": false }, { "name": "Daring Buccaneer", "idx": 5, "num": 16, "is_land": false }, { "name": "Goblin Tomb Raider", "idx": 6, "num": 29, "is_land": false }, { "name": "Secluded Courtyard", "idx": 4, "num": 45, "is_land": true, "taps": "C" }, { "name": "Staunch Crewmate", "idx": 8, "num": 56, "is_land": false }, { "name": "Treasure Token", "idx": 10, "num": 1000, "is_land": false }, { "name": "Unclaimed Territory", "idx": 1, "num": 57, "is_land": true, "taps": "C" }], "vial_counters": [3], "hand": [{ "num": 18, "name": "Dire Fleet Captain", "cost": "{B}{R}", "mv": 2, "kind": "permanent", "is_creature": true }, { "num": 31, "name": "Kitesail Larcenist", "cost": "{2}{U}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 32, "name": "Lightning Bolt", "cost": "{R}", "mv": 1, "kind": "nonpermanent" }, { "num": 34, "name": "Metallic Mimic", "cost": "{2}", "mv": 2, "kind": "permanent", "is_creature": true }], "graveyard": [], "library_size": 49, "land_drops_left": 1 },
+  "opponent": { "life": 8, "battlefield": [{ "name": "2/2 Creature", "idx": 0, "num": 500000, "is_land": false }, { "name": "2/2 Creature", "idx": 3, "num": 500001, "is_land": false }, { "name": "2/2 Creature", "idx": 7, "num": 500002, "is_land": false }] },
+  "plans": [
+    { "index": 0, "summary": "land=none; cast: Dire Fleet Captain, Lightning Bolt, Kitesail Larcenist (vial)", "land": null, "drops": ["Lightning Bolt"], "casts": ["Dire Fleet Captain", "Lightning Bolt", "Kitesail Larcenist"], "cast_order_canonical": ["Dire Fleet Captain", "Lightning Bolt"], "actions": [{ "card": "Dire Fleet Captain" }, { "card": "Lightning Bolt" }, { "card": "Kitesail Larcenist" }] },
+    { "index": 1, "summary": "land=none; cast: Lightning Bolt, Dire Fleet Captain, Kitesail Larcenist (vial)", "land": null, "casts": ["Lightning Bolt", "Dire Fleet Captain", "Kitesail Larcenist"], "cast_order_canonical": ["Lightning Bolt", "Dire Fleet Captain"], "actions": [{ "card": "Lightning Bolt" }, { "card": "Dire Fleet Captain" }, { "card": "Kitesail Larcenist" }] },
+    { "index": 2, "summary": "land=none; cast: Kitesail Larcenist (vial), Lightning Bolt, Metallic Mimic", "land": null, "casts": ["Lightning Bolt", "Metallic Mimic", "Kitesail Larcenist"], "cast_order_canonical": ["Lightning Bolt", "Metallic Mimic"], "actions": [{ "card": "Lightning Bolt" }, { "card": "Metallic Mimic" }, { "card": "Kitesail Larcenist" }] },
+    { "index": 3, "summary": "land=none; cast: Lightning Bolt, Metallic Mimic, Kitesail Larcenist (vial)", "land": null, "vial_after_casts": true, "casts": ["Lightning Bolt", "Metallic Mimic", "Kitesail Larcenist"], "cast_order_canonical": ["Lightning Bolt", "Metallic Mimic"], "actions": [{ "card": "Lightning Bolt" }, { "card": "Metallic Mimic" }, { "card": "Kitesail Larcenist" }] },
+    { "index": 4, "summary": "land=none; cast: Kitesail Larcenist (vial), Metallic Mimic, Lightning Bolt", "land": null, "drops": ["Lightning Bolt"], "casts": ["Metallic Mimic", "Lightning Bolt", "Kitesail Larcenist"], "cast_order_canonical": ["Metallic Mimic", "Lightning Bolt"], "actions": [{ "card": "Metallic Mimic" }, { "card": "Lightning Bolt" }, { "card": "Kitesail Larcenist" }] },
+    { "index": 5, "summary": "land=none; cast: Metallic Mimic, Lightning Bolt, Kitesail Larcenist (vial)", "land": null, "drops": ["Lightning Bolt"], "vial_after_casts": true, "casts": ["Metallic Mimic", "Lightning Bolt", "Kitesail Larcenist"], "cast_order_canonical": ["Metallic Mimic", "Lightning Bolt"], "actions": [{ "card": "Metallic Mimic" }, { "card": "Lightning Bolt" }, { "card": "Kitesail Larcenist" }] },
+    { "index": 6, "summary": "land=none; cast: Kitesail Larcenist (vial), Lightning Bolt", "land": null, "casts": ["Kitesail Larcenist", "Lightning Bolt"], "actions": [{ "card": "Kitesail Larcenist" }, { "card": "Lightning Bolt" }] },
+    { "index": 7, "summary": "land=none; cast: Kitesail Larcenist (vial), Dire Fleet Captain", "land": null, "casts": ["Kitesail Larcenist", "Dire Fleet Captain"], "actions": [{ "card": "Kitesail Larcenist" }, { "card": "Dire Fleet Captain" }] },
+    { "index": 8, "summary": "land=none; cast: Dire Fleet Captain, Lightning Bolt", "land": null, "drops": ["Lightning Bolt"], "casts": ["Dire Fleet Captain", "Lightning Bolt"], "cast_order_canonical": ["Dire Fleet Captain", "Lightning Bolt"], "actions": [{ "card": "Dire Fleet Captain" }, { "card": "Lightning Bolt" }] },
+    { "index": 9, "summary": "land=none; cast: Lightning Bolt, Dire Fleet Captain", "land": null, "casts": ["Lightning Bolt", "Dire Fleet Captain"], "cast_order_canonical": ["Lightning Bolt", "Dire Fleet Captain"], "actions": [{ "card": "Lightning Bolt" }, { "card": "Dire Fleet Captain" }] },
+    { "index": 10, "summary": "land=none; cast: Kitesail Larcenist (vial), Metallic Mimic", "land": null, "casts": ["Kitesail Larcenist", "Metallic Mimic"], "actions": [{ "card": "Kitesail Larcenist" }, { "card": "Metallic Mimic" }] },
+    { "index": 11, "summary": "land=none; cast: Lightning Bolt, Metallic Mimic", "land": null, "casts": ["Lightning Bolt", "Metallic Mimic"], "cast_order_canonical": ["Lightning Bolt", "Metallic Mimic"], "actions": [{ "card": "Lightning Bolt" }, { "card": "Metallic Mimic" }] },
+    { "index": 12, "summary": "land=none; cast: Metallic Mimic, Lightning Bolt", "land": null, "drops": ["Lightning Bolt"], "casts": ["Metallic Mimic", "Lightning Bolt"], "cast_order_canonical": ["Metallic Mimic", "Lightning Bolt"], "actions": [{ "card": "Metallic Mimic" }, { "card": "Lightning Bolt" }] },
+    { "index": 13, "summary": "land=none; cast: Kitesail Larcenist (no Treasure)", "land": null, "casts": ["Kitesail Larcenist"], "actions": [{ "card": "Kitesail Larcenist", "treasurify_target": 0 }] },
+    { "index": 14, "summary": "land=none; cast: Kitesail Larcenist (Treasure: choose on resolution)", "land": null, "casts": ["Kitesail Larcenist"], "actions": [{ "card": "Kitesail Larcenist", "treasurify_target": -2 }] },
+    { "index": 15, "summary": "land=none; cast: Kitesail Larcenist (vial)", "land": null, "casts": ["Kitesail Larcenist"], "actions": [{ "card": "Kitesail Larcenist" }] },
+    { "index": 16, "summary": "land=none; cast: Lightning Bolt", "land": null, "casts": ["Lightning Bolt"], "actions": [{ "card": "Lightning Bolt" }] },
+    { "index": 17, "summary": "land=none; cast: Dire Fleet Captain", "land": null, "casts": ["Dire Fleet Captain"], "actions": [{ "card": "Dire Fleet Captain" }] },
+    { "index": 18, "summary": "land=none; cast: Kitesail Larcenist → Treasure: Aether Vial", "land": null, "casts": ["Kitesail Larcenist"], "actions": [{ "card": "Kitesail Larcenist", "x": 7, "treasurify_target": 7, "treasurify_target_label": "Aether Vial" }] },
+    { "index": 19, "summary": "land=none; cast: Kitesail Larcenist → Treasure: Daring Buccaneer", "land": null, "casts": ["Kitesail Larcenist"], "actions": [{ "card": "Kitesail Larcenist", "x": 16, "treasurify_target": 16, "treasurify_target_label": "Daring Buccaneer" }] },
+    { "index": 20, "summary": "land=none; cast: Kitesail Larcenist → Treasure: Goblin Tomb Raider", "land": null, "casts": ["Kitesail Larcenist"], "actions": [{ "card": "Kitesail Larcenist", "x": 29, "treasurify_target": 29, "treasurify_target_label": "Goblin Tomb Raider" }] },
+    { "index": 21, "summary": "land=none; cast: Kitesail Larcenist → Treasure: Staunch Crewmate", "land": null, "casts": ["Kitesail Larcenist"], "actions": [{ "card": "Kitesail Larcenist", "x": 56, "treasurify_target": 56, "treasurify_target_label": "Staunch Crewmate" }] },
+    { "index": 22, "summary": "land=none; cast: Kitesail Larcenist → Treasure: Corsair Captain", "land": null, "casts": ["Kitesail Larcenist"], "actions": [{ "card": "Kitesail Larcenist", "x": 13, "treasurify_target": 13, "treasurify_target_label": "Corsair Captain" }] },
+    { "index": 23, "summary": "land=none; cast: Metallic Mimic", "land": null, "casts": ["Metallic Mimic"], "actions": [{ "card": "Metallic Mimic" }] },
+    { "index": 24, "summary": "land=none; cast: (nothing)", "land": null, "casts": [], "actions": [] },
+    { "index": 25, "summary": "land=none; cast: Metallic Mimic, Kitesail Larcenist (vial)", "land": null, "vial_after_casts": true, "casts": ["Kitesail Larcenist", "Metallic Mimic"], "actions": [{ "card": "Kitesail Larcenist" }, { "card": "Metallic Mimic" }] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 21,
+  "type": "treasurify",
+  "source": "Kitesail Larcenist",
+  "turn": 5,
+  "mdfc_backs": ["Boulderloft Pathway", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Aether Vial", "idx": 2, "num": 7, "tapped": true, "is_land": false, "counters": [{ "kind": "charge", "label": "charge", "count": 3 }] }, { "name": "Corsair Captain", "idx": 9, "num": 13, "is_land": false }, { "name": "Daring Buccaneer", "idx": 5, "num": 16, "is_land": false }, { "name": "Goblin Tomb Raider", "idx": 6, "num": 29, "is_land": false }, { "name": "Kitesail Larcenist", "idx": 11, "num": 31, "is_land": false }, { "name": "Secluded Courtyard", "idx": 4, "num": 45, "is_land": true, "taps": "C" }, { "name": "Staunch Crewmate", "idx": 8, "num": 56, "is_land": false }, { "name": "Treasure Token", "idx": 10, "num": 1000, "is_land": false }, { "name": "Unclaimed Territory", "idx": 1, "num": 57, "is_land": true, "taps": "C" }], "vial_counters": [3], "hand": [{ "num": 18, "name": "Dire Fleet Captain", "cost": "{B}{R}", "mv": 2, "kind": "permanent", "is_creature": true }, { "num": 32, "name": "Lightning Bolt", "cost": "{R}", "mv": 1, "kind": "nonpermanent" }, { "num": 34, "name": "Metallic Mimic", "cost": "{2}", "mv": 2, "kind": "permanent", "is_creature": true }], "graveyard": [], "library_size": 49, "land_drops_left": 1 },
+  "opponent": { "life": 8, "battlefield": [{ "name": "2/2 Creature", "idx": 0, "num": 500000, "is_land": false }, { "name": "2/2 Creature", "idx": 3, "num": 500001, "is_land": false }, { "name": "2/2 Creature", "idx": 7, "num": 500002, "is_land": false }] },
+  "heuristic_default": -1,
+  "side": "yours",
+  "options": [{ "index": 0, "perm_index": 2, "tapped": true, "name": "Aether Vial", "label": "your Aether Vial" }, { "index": 1, "perm_index": 5, "tapped": false, "name": "Daring Buccaneer", "label": "your Daring Buccaneer" }, { "index": 2, "perm_index": 6, "tapped": false, "name": "Goblin Tomb Raider", "label": "your Goblin Tomb Raider" }, { "index": 3, "perm_index": 8, "tapped": false, "name": "Staunch Crewmate", "label": "your Staunch Crewmate" }, { "index": 4, "perm_index": 9, "tapped": false, "name": "Corsair Captain", "label": "your Corsair Captain" }, { "index": 5, "perm_index": 10, "tapped": false, "name": "Treasure Token", "label": "your Treasure Token" }],
+  "note": "reply an option index -- the permanent of YOURS that becomes a Treasure artifact ({T}, sacrifice: one mana of any colour; it loses every other card type and ability -- a converted Vial stops being a Vial, a converted Pirate stops being a creature), or -1 for none (\"up to one\"). Default = the AI's pick."
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 22,
+  "type": "treasurify",
+  "source": "Kitesail Larcenist",
+  "turn": 5,
+  "mdfc_backs": ["Boulderloft Pathway", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Aether Vial", "idx": 2, "num": 7, "tapped": true, "is_land": false, "counters": [{ "kind": "charge", "label": "charge", "count": 3 }] }, { "name": "Corsair Captain", "idx": 9, "num": 13, "is_land": false }, { "name": "Daring Buccaneer", "idx": 5, "num": 16, "is_land": false }, { "name": "Goblin Tomb Raider", "idx": 6, "num": 29, "is_land": false }, { "name": "Kitesail Larcenist", "idx": 11, "num": 31, "is_land": false }, { "name": "Secluded Courtyard", "idx": 4, "num": 45, "is_land": true, "taps": "C" }, { "name": "Staunch Crewmate", "idx": 8, "num": 56, "is_land": false }, { "name": "Treasure Token", "idx": 10, "num": 1000, "is_land": false }, { "name": "Unclaimed Territory", "idx": 1, "num": 57, "is_land": true, "taps": "C" }], "vial_counters": [3], "hand": [{ "num": 18, "name": "Dire Fleet Captain", "cost": "{B}{R}", "mv": 2, "kind": "permanent", "is_creature": true }, { "num": 32, "name": "Lightning Bolt", "cost": "{R}", "mv": 1, "kind": "nonpermanent" }, { "num": 34, "name": "Metallic Mimic", "cost": "{2}", "mv": 2, "kind": "permanent", "is_creature": true }], "graveyard": [], "library_size": 49, "land_drops_left": 1 },
+  "opponent": { "life": 8, "battlefield": [{ "name": "2/2 Creature", "idx": 0, "num": 500000, "is_land": false }, { "name": "2/2 Creature", "idx": 3, "num": 500001, "is_land": false }, { "name": "2/2 Creature", "idx": 7, "num": 500002, "is_land": false }] },
+  "heuristic_default": -1,
+  "side": "opponent",
+  "options": [{ "index": 0, "perm_index": 0, "tapped": false, "name": "2/2 Creature", "label": "opponent's 2/2 Creature" }, { "index": 1, "perm_index": 3, "tapped": false, "name": "2/2 Creature", "label": "opponent's 2/2 Creature" }, { "index": 2, "perm_index": 7, "tapped": false, "name": "2/2 Creature", "label": "opponent's 2/2 Creature" }],
+  "note": "reply an option index -- the OPPONENT's permanent that becomes a Treasure artifact ({T}, sacrifice: one mana of any colour; it loses every other card type and ability -- a converted Vial stops being a Vial, a converted Pirate stops being a creature), or -1 for none (\"up to one\"). Default = the AI's pick."
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 23,
+  "main_ordinal": 9,
+  "type": "main_phase",
+  "turn": 5,
+  "phase": "pre_main",
+  "on_the_play": true,
+  "mdfc_backs": ["Boulderloft Pathway", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Aether Vial", "idx": 2, "num": 7, "tapped": true, "is_land": false, "counters": [{ "kind": "charge", "label": "charge", "count": 3 }] }, { "name": "Corsair Captain", "idx": 9, "num": 13, "is_land": false }, { "name": "Daring Buccaneer", "idx": 5, "num": 16, "is_land": false }, { "name": "Dire Fleet Captain", "idx": 12, "num": 18, "is_land": false }, { "name": "Goblin Tomb Raider", "idx": 6, "num": 29, "is_land": false }, { "name": "Kitesail Larcenist", "idx": 11, "num": 31, "is_land": false }, { "name": "Secluded Courtyard", "idx": 4, "num": 45, "tapped": true, "is_land": true }, { "name": "Staunch Crewmate", "idx": 8, "num": 56, "is_land": false }, { "name": "Treasure Token", "idx": 10, "num": 1000, "is_land": false }, { "name": "Unclaimed Territory", "idx": 1, "num": 57, "tapped": true, "is_land": true }], "vial_counters": [3], "hand": [{ "num": 32, "name": "Lightning Bolt", "cost": "{R}", "mv": 1, "kind": "nonpermanent" }, { "num": 34, "name": "Metallic Mimic", "cost": "{2}", "mv": 2, "kind": "permanent", "is_creature": true }], "graveyard": [], "library_size": 49, "land_drops_left": 1 },
+  "opponent": { "life": 8, "battlefield": [{ "name": "2/2 Creature", "idx": 0, "num": 500000, "is_land": false }, { "name": "2/2 Creature", "idx": 3, "num": 500001, "is_land": false }, { "name": "2/2 Creature", "idx": 7, "num": 500002, "is_land": false }] },
+  "plans": [
+    { "index": 0, "summary": "land=none; cast: Lightning Bolt", "land": null, "casts": ["Lightning Bolt"], "actions": [{ "card": "Lightning Bolt" }] },
+    { "index": 1, "summary": "land=none; cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
+}
+}
+  ],
+  "final_events": [
+    { "turn": 5, "kind": "combat", "text": "⚔ attacked: Daring Buccaneer (3), Goblin Tomb Raider (3), Staunch Crewmate (3), Corsair Captain (2) — 11 to opponent (8→-3)" }
+  ]
+}

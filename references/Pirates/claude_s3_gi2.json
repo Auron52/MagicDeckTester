@@ -1,0 +1,359 @@
+{
+  "seed": 3, "game_index": 2, "win_turn": 4, "won": true,
+  "mulligan": { "count": 0, "bottom": [] },
+  "decisions": [
+    { "chosen": 1, "decision": {
+  "decision_index": 0,
+  "type": "mulligan",
+  "turn": 0,
+  "me": { "life": 20, "battlefield": [] },
+  "opponent": { "life": 20, "battlefield": [] },
+  "mulligan_count": 0,
+  "on_the_play": false,
+  "to_bottom": 0,
+  "hand": [{ "num": 53, "name": "Staunch Crewmate" }, { "num": 1, "name": "Adaptive Automaton" }, { "num": 38, "name": "Mountain" }, { "num": 49, "name": "Spirebluff Canal" }, { "num": 5, "name": "Aether Vial" }, { "num": 6, "name": "Aether Vial" }, { "num": 10, "name": "Corsair Captain" }],
+  "ai_choice": 1,
+  "note": "reply 1 to KEEP this hand (then bottom 0 card(s)), or 0 to mulligan again"
+}
+},
+    { "chosen": 1, "decision": {
+  "decision_index": 1,
+  "main_ordinal": 0,
+  "type": "main_phase",
+  "turn": 1,
+  "phase": "pre_main",
+  "on_the_play": false,
+  "drew": [{ "turn": 1, "card": "Aether Vial" }],
+  "mdfc_backs": ["Boulderloft Pathway", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [], "vial_counters": [], "hand": [{ "num": 1, "name": "Adaptive Automaton", "cost": "{3}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 5, "name": "Aether Vial", "cost": "{1}", "mv": 1, "kind": "permanent" }, { "num": 6, "name": "Aether Vial", "cost": "{1}", "mv": 1, "kind": "permanent" }, { "num": 7, "name": "Aether Vial", "cost": "{1}", "mv": 1, "kind": "permanent" }, { "num": 10, "name": "Corsair Captain", "cost": "{2}{U}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 38, "name": "Mountain", "cost": "", "mv": 0, "kind": "land" }, { "num": 49, "name": "Spirebluff Canal", "cost": "", "mv": 0, "kind": "land" }, { "num": 53, "name": "Staunch Crewmate", "cost": "{1}{U}", "mv": 2, "kind": "permanent", "is_creature": true }], "graveyard": [], "library_size": 52, "land_drops_left": 1 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "1/1 Creature", "idx": 0, "num": 500000, "is_land": false }, { "name": "1/1 Creature", "idx": 1, "num": 500001, "is_land": false }] },
+  "plans": [
+    { "index": 0, "summary": "land=Spirebluff Canal; cast: Aether Vial", "land": "Spirebluff Canal", "casts": ["Aether Vial"], "actions": [{ "card": "Aether Vial" }] },
+    { "index": 1, "summary": "land=Mountain; cast: Aether Vial", "land": "Mountain", "casts": ["Aether Vial"], "actions": [{ "card": "Aether Vial" }] },
+    { "index": 2, "summary": "land=Spirebluff Canal; cast: (nothing)", "land": "Spirebluff Canal", "casts": [], "actions": [] },
+    { "index": 3, "summary": "land=Mountain; cast: (nothing)", "land": "Mountain", "casts": [], "actions": [] },
+    { "index": 4, "summary": "land=none; cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 2,
+  "type": "main_phase",
+  "turn": 1,
+  "phase": "pre_main",
+  "on_the_play": false,
+  "mdfc_backs": ["Boulderloft Pathway", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Aether Vial", "idx": 3, "num": 5, "is_land": false }, { "name": "Mountain", "idx": 2, "num": 38, "tapped": true, "is_land": true }], "vial_counters": [0], "hand": [{ "num": 1, "name": "Adaptive Automaton", "cost": "{3}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 6, "name": "Aether Vial", "cost": "{1}", "mv": 1, "kind": "permanent" }, { "num": 7, "name": "Aether Vial", "cost": "{1}", "mv": 1, "kind": "permanent" }, { "num": 10, "name": "Corsair Captain", "cost": "{2}{U}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 49, "name": "Spirebluff Canal", "cost": "", "mv": 0, "kind": "land" }, { "num": 53, "name": "Staunch Crewmate", "cost": "{1}{U}", "mv": 2, "kind": "permanent", "is_creature": true }], "graveyard": [], "library_size": 52, "land_drops_left": 0 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "1/1 Creature", "idx": 0, "num": 500000, "is_land": false }, { "name": "1/1 Creature", "idx": 1, "num": 500001, "is_land": false }] },
+  "plans": [
+    { "index": 0, "summary": "cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 3,
+  "type": "main_phase",
+  "turn": 1,
+  "phase": "post_main",
+  "on_the_play": false,
+  "mdfc_backs": ["Boulderloft Pathway", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Aether Vial", "idx": 3, "num": 5, "is_land": false }, { "name": "Mountain", "idx": 2, "num": 38, "tapped": true, "is_land": true }], "vial_counters": [0], "hand": [{ "num": 1, "name": "Adaptive Automaton", "cost": "{3}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 6, "name": "Aether Vial", "cost": "{1}", "mv": 1, "kind": "permanent" }, { "num": 7, "name": "Aether Vial", "cost": "{1}", "mv": 1, "kind": "permanent" }, { "num": 10, "name": "Corsair Captain", "cost": "{2}{U}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 49, "name": "Spirebluff Canal", "cost": "", "mv": 0, "kind": "land" }, { "num": 53, "name": "Staunch Crewmate", "cost": "{1}{U}", "mv": 2, "kind": "permanent", "is_creature": true }], "graveyard": [], "library_size": 52, "land_drops_left": 0 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "1/1 Creature", "idx": 0, "num": 500000, "is_land": false }, { "name": "1/1 Creature", "idx": 1, "num": 500001, "is_land": false }] },
+  "plans": [
+    { "index": 0, "summary": "cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
+}
+},
+    { "chosen": 1, "decision": {
+  "decision_index": 4,
+  "type": "vial_charge",
+  "turn": 2,
+  "vial": "Aether Vial", "current_counters": 0,
+  "perm_index": 3,
+  "heuristic_default": 1,
+  "mdfc_backs": ["Boulderloft Pathway", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Aether Vial", "idx": 3, "num": 5, "is_land": false }, { "name": "Mountain", "idx": 2, "num": 38, "is_land": true, "taps": "R" }], "vial_counters": [0], "hand": [{ "num": 1, "name": "Adaptive Automaton", "cost": "{3}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 6, "name": "Aether Vial", "cost": "{1}", "mv": 1, "kind": "permanent" }, { "num": 7, "name": "Aether Vial", "cost": "{1}", "mv": 1, "kind": "permanent" }, { "num": 10, "name": "Corsair Captain", "cost": "{2}{U}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 49, "name": "Spirebluff Canal", "cost": "", "mv": 0, "kind": "land" }, { "num": 53, "name": "Staunch Crewmate", "cost": "{1}{U}", "mv": 2, "kind": "permanent", "is_creature": true }], "graveyard": [], "library_size": 52, "land_drops_left": 1 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "1/1 Creature", "idx": 0, "num": 500000, "is_land": false }, { "name": "1/1 Creature", "idx": 1, "num": 500001, "is_land": false }, { "name": "1/1 Creature", "idx": 4, "num": 500002, "is_land": false }, { "name": "1/1 Creature", "idx": 5, "num": 500003, "is_land": false }] },
+  "note": "reply 1 to add a charge counter this upkeep, 0 to hold. Aether Vial deploys a creature whose mana value EQUALS its counter count."
+}
+},
+    { "chosen": 7, "decision": {
+  "decision_index": 5,
+  "main_ordinal": 1,
+  "type": "main_phase",
+  "turn": 2,
+  "phase": "pre_main",
+  "on_the_play": false,
+  "drew": [{ "turn": 2, "card": "Siren Stormtamer" }],
+  "mdfc_backs": ["Boulderloft Pathway", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Aether Vial", "idx": 3, "num": 5, "is_land": false, "counters": [{ "kind": "charge", "label": "charge", "count": 1 }] }, { "name": "Mountain", "idx": 2, "num": 38, "is_land": true, "taps": "R" }], "vial_counters": [1], "hand": [{ "num": 1, "name": "Adaptive Automaton", "cost": "{3}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 6, "name": "Aether Vial", "cost": "{1}", "mv": 1, "kind": "permanent" }, { "num": 7, "name": "Aether Vial", "cost": "{1}", "mv": 1, "kind": "permanent" }, { "num": 10, "name": "Corsair Captain", "cost": "{2}{U}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 47, "name": "Siren Stormtamer", "cost": "{U}", "mv": 1, "kind": "permanent", "is_creature": true }, { "num": 49, "name": "Spirebluff Canal", "cost": "", "mv": 0, "kind": "land" }, { "num": 53, "name": "Staunch Crewmate", "cost": "{1}{U}", "mv": 2, "kind": "permanent", "is_creature": true }], "graveyard": [], "library_size": 51, "land_drops_left": 1 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "1/1 Creature", "idx": 0, "num": 500000, "is_land": false }, { "name": "1/1 Creature", "idx": 1, "num": 500001, "is_land": false }, { "name": "1/1 Creature", "idx": 4, "num": 500002, "is_land": false }, { "name": "1/1 Creature", "idx": 5, "num": 500003, "is_land": false }] },
+  "plans": [
+    { "index": 0, "summary": "land=Spirebluff Canal; cast: Aether Vial, Aether Vial, Siren Stormtamer (vial)", "land": "Spirebluff Canal", "casts": ["Aether Vial", "Aether Vial", "Siren Stormtamer"], "cast_order_canonical": ["Aether Vial", "Aether Vial"], "actions": [{ "card": "Aether Vial" }, { "card": "Aether Vial" }, { "card": "Siren Stormtamer" }] },
+    { "index": 1, "summary": "land=Spirebluff Canal; cast: Aether Vial, Aether Vial", "land": "Spirebluff Canal", "casts": ["Aether Vial", "Aether Vial"], "cast_order_canonical": ["Aether Vial", "Aether Vial"], "actions": [{ "card": "Aether Vial" }, { "card": "Aether Vial" }] },
+    { "index": 2, "summary": "land=Spirebluff Canal; cast: Staunch Crewmate, Siren Stormtamer (vial)", "land": "Spirebluff Canal", "casts": ["Staunch Crewmate", "Siren Stormtamer"], "actions": [{ "card": "Staunch Crewmate" }, { "card": "Siren Stormtamer" }] },
+    { "index": 3, "summary": "land=Spirebluff Canal; cast: Aether Vial, Siren Stormtamer", "land": "Spirebluff Canal", "casts": ["Aether Vial", "Siren Stormtamer"], "cast_order_canonical": ["Aether Vial", "Siren Stormtamer"], "actions": [{ "card": "Aether Vial" }, { "card": "Siren Stormtamer" }] },
+    { "index": 4, "summary": "land=Spirebluff Canal; cast: Siren Stormtamer, Aether Vial", "land": "Spirebluff Canal", "casts": ["Siren Stormtamer", "Aether Vial"], "cast_order_canonical": ["Siren Stormtamer", "Aether Vial"], "actions": [{ "card": "Siren Stormtamer" }, { "card": "Aether Vial" }] },
+    { "index": 5, "summary": "land=Spirebluff Canal; cast: Aether Vial, Siren Stormtamer (vial)", "land": "Spirebluff Canal", "casts": ["Aether Vial", "Siren Stormtamer"], "actions": [{ "card": "Aether Vial" }, { "card": "Siren Stormtamer" }] },
+    { "index": 6, "summary": "land=none; cast: Aether Vial, Siren Stormtamer (vial)", "land": null, "casts": ["Aether Vial", "Siren Stormtamer"], "actions": [{ "card": "Aether Vial" }, { "card": "Siren Stormtamer" }] },
+    { "index": 7, "summary": "land=Spirebluff Canal; cast: Staunch Crewmate", "land": "Spirebluff Canal", "casts": ["Staunch Crewmate"], "actions": [{ "card": "Staunch Crewmate" }] },
+    { "index": 8, "summary": "land=Spirebluff Canal; cast: Aether Vial", "land": "Spirebluff Canal", "casts": ["Aether Vial"], "actions": [{ "card": "Aether Vial" }] },
+    { "index": 9, "summary": "land=none; cast: Aether Vial", "land": null, "casts": ["Aether Vial"], "actions": [{ "card": "Aether Vial" }] },
+    { "index": 10, "summary": "land=Spirebluff Canal; cast: Siren Stormtamer", "land": "Spirebluff Canal", "casts": ["Siren Stormtamer"], "actions": [{ "card": "Siren Stormtamer" }] },
+    { "index": 11, "summary": "land=Spirebluff Canal; cast: Siren Stormtamer (vial)", "land": "Spirebluff Canal", "casts": ["Siren Stormtamer"], "actions": [{ "card": "Siren Stormtamer" }] },
+    { "index": 12, "summary": "land=none; cast: Siren Stormtamer (vial)", "land": null, "casts": ["Siren Stormtamer"], "actions": [{ "card": "Siren Stormtamer" }] },
+    { "index": 13, "summary": "land=Spirebluff Canal; cast: (nothing)", "land": "Spirebluff Canal", "casts": [], "actions": [] },
+    { "index": 14, "summary": "land=none; cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "plans_hidden": 10,
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
+}
+},
+    { "chosen": 2, "decision": {
+  "decision_index": 6,
+  "type": "dig",
+  "source": "Staunch Crewmate",
+  "turn": 2,
+  "mdfc_backs": ["Boulderloft Pathway", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Aether Vial", "idx": 3, "num": 5, "is_land": false, "counters": [{ "kind": "charge", "label": "charge", "count": 1 }] }, { "name": "Mountain", "idx": 2, "num": 38, "tapped": true, "is_land": true }, { "name": "Spirebluff Canal", "idx": 6, "num": 49, "tapped": true, "is_land": true }, { "name": "Staunch Crewmate", "idx": 7, "num": 53, "is_land": false }], "vial_counters": [1], "hand": [{ "num": 1, "name": "Adaptive Automaton", "cost": "{3}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 6, "name": "Aether Vial", "cost": "{1}", "mv": 1, "kind": "permanent" }, { "num": 7, "name": "Aether Vial", "cost": "{1}", "mv": 1, "kind": "permanent" }, { "num": 10, "name": "Corsair Captain", "cost": "{2}{U}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 47, "name": "Siren Stormtamer", "cost": "{U}", "mv": 1, "kind": "permanent", "is_creature": true }], "graveyard": [], "library_size": 47, "land_drops_left": 0 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "1/1 Creature", "idx": 0, "num": 500000, "is_land": false }, { "name": "1/1 Creature", "idx": 1, "num": 500001, "is_land": false }, { "name": "1/1 Creature", "idx": 4, "num": 500002, "is_land": false }, { "name": "1/1 Creature", "idx": 5, "num": 500003, "is_land": false }] },
+  "heuristic_default": 2,
+  "examined": [{ "index": 0, "legal": false, "name": "Mountain" }, { "index": 1, "legal": false, "name": "Secluded Courtyard" }, { "index": 2, "legal": true, "name": "Dire Fleet Captain" }, { "index": 3, "legal": false, "name": "Unclaimed Territory" }],
+  "note": "reply an examined index to put that card into your hand, or -1 to take nothing. Default = the AI's pick."
+}
+},
+    { "chosen": 0, "decision": {
+  "decision_index": 7,
+  "main_ordinal": 2,
+  "type": "main_phase",
+  "turn": 2,
+  "phase": "pre_main",
+  "on_the_play": false,
+  "mdfc_backs": ["Boulderloft Pathway", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Aether Vial", "idx": 3, "num": 5, "is_land": false, "counters": [{ "kind": "charge", "label": "charge", "count": 1 }] }, { "name": "Mountain", "idx": 2, "num": 38, "tapped": true, "is_land": true }, { "name": "Spirebluff Canal", "idx": 6, "num": 49, "tapped": true, "is_land": true }, { "name": "Staunch Crewmate", "idx": 7, "num": 53, "is_land": false }], "vial_counters": [1], "hand": [{ "num": 1, "name": "Adaptive Automaton", "cost": "{3}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 6, "name": "Aether Vial", "cost": "{1}", "mv": 1, "kind": "permanent" }, { "num": 7, "name": "Aether Vial", "cost": "{1}", "mv": 1, "kind": "permanent" }, { "num": 10, "name": "Corsair Captain", "cost": "{2}{U}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 18, "name": "Dire Fleet Captain", "cost": "{B}{R}", "mv": 2, "kind": "permanent", "is_creature": true }, { "num": 47, "name": "Siren Stormtamer", "cost": "{U}", "mv": 1, "kind": "permanent", "is_creature": true }], "graveyard": [], "library_size": 50, "land_drops_left": 0 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "1/1 Creature", "idx": 0, "num": 500000, "is_land": false }, { "name": "1/1 Creature", "idx": 1, "num": 500001, "is_land": false }, { "name": "1/1 Creature", "idx": 4, "num": 500002, "is_land": false }, { "name": "1/1 Creature", "idx": 5, "num": 500003, "is_land": false }] },
+  "plans": [
+    { "index": 0, "summary": "land=none; cast: Siren Stormtamer (vial)", "land": null, "casts": ["Siren Stormtamer"], "actions": [{ "card": "Siren Stormtamer" }] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 8,
+  "type": "main_phase",
+  "turn": 2,
+  "phase": "pre_main",
+  "on_the_play": false,
+  "mdfc_backs": ["Boulderloft Pathway", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Aether Vial", "idx": 3, "num": 5, "tapped": true, "is_land": false, "counters": [{ "kind": "charge", "label": "charge", "count": 1 }] }, { "name": "Mountain", "idx": 2, "num": 38, "tapped": true, "is_land": true }, { "name": "Siren Stormtamer", "idx": 8, "num": 47, "is_land": false }, { "name": "Spirebluff Canal", "idx": 6, "num": 49, "tapped": true, "is_land": true }, { "name": "Staunch Crewmate", "idx": 7, "num": 53, "is_land": false }], "vial_counters": [1], "hand": [{ "num": 1, "name": "Adaptive Automaton", "cost": "{3}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 6, "name": "Aether Vial", "cost": "{1}", "mv": 1, "kind": "permanent" }, { "num": 7, "name": "Aether Vial", "cost": "{1}", "mv": 1, "kind": "permanent" }, { "num": 10, "name": "Corsair Captain", "cost": "{2}{U}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 18, "name": "Dire Fleet Captain", "cost": "{B}{R}", "mv": 2, "kind": "permanent", "is_creature": true }], "graveyard": [], "library_size": 50, "land_drops_left": 0 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "1/1 Creature", "idx": 0, "num": 500000, "is_land": false }, { "name": "1/1 Creature", "idx": 1, "num": 500001, "is_land": false }, { "name": "1/1 Creature", "idx": 4, "num": 500002, "is_land": false }, { "name": "1/1 Creature", "idx": 5, "num": 500003, "is_land": false }] },
+  "plans": [
+    { "index": 0, "summary": "cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 9,
+  "type": "main_phase",
+  "turn": 2,
+  "phase": "post_main",
+  "on_the_play": false,
+  "mdfc_backs": ["Boulderloft Pathway", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Aether Vial", "idx": 3, "num": 5, "tapped": true, "is_land": false, "counters": [{ "kind": "charge", "label": "charge", "count": 1 }] }, { "name": "Mountain", "idx": 2, "num": 38, "tapped": true, "is_land": true }, { "name": "Siren Stormtamer", "idx": 8, "num": 47, "is_land": false }, { "name": "Spirebluff Canal", "idx": 6, "num": 49, "tapped": true, "is_land": true }, { "name": "Staunch Crewmate", "idx": 7, "num": 53, "is_land": false }], "vial_counters": [1], "hand": [{ "num": 1, "name": "Adaptive Automaton", "cost": "{3}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 6, "name": "Aether Vial", "cost": "{1}", "mv": 1, "kind": "permanent" }, { "num": 7, "name": "Aether Vial", "cost": "{1}", "mv": 1, "kind": "permanent" }, { "num": 10, "name": "Corsair Captain", "cost": "{2}{U}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 18, "name": "Dire Fleet Captain", "cost": "{B}{R}", "mv": 2, "kind": "permanent", "is_creature": true }], "graveyard": [], "library_size": 50, "land_drops_left": 0 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "1/1 Creature", "idx": 0, "num": 500000, "is_land": false }, { "name": "1/1 Creature", "idx": 1, "num": 500001, "is_land": false }, { "name": "1/1 Creature", "idx": 4, "num": 500002, "is_land": false }, { "name": "1/1 Creature", "idx": 5, "num": 500003, "is_land": false }] },
+  "plans": [
+    { "index": 0, "summary": "cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
+}
+},
+    { "chosen": 1, "decision": {
+  "decision_index": 10,
+  "type": "vial_charge",
+  "turn": 3,
+  "vial": "Aether Vial", "current_counters": 1,
+  "perm_index": 3,
+  "heuristic_default": 1,
+  "mdfc_backs": ["Boulderloft Pathway", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Aether Vial", "idx": 3, "num": 5, "is_land": false, "counters": [{ "kind": "charge", "label": "charge", "count": 1 }] }, { "name": "Mountain", "idx": 2, "num": 38, "is_land": true, "taps": "R" }, { "name": "Siren Stormtamer", "idx": 8, "num": 47, "is_land": false }, { "name": "Spirebluff Canal", "idx": 6, "num": 49, "is_land": true, "taps": "UR" }, { "name": "Staunch Crewmate", "idx": 7, "num": 53, "is_land": false }], "vial_counters": [1], "hand": [{ "num": 1, "name": "Adaptive Automaton", "cost": "{3}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 6, "name": "Aether Vial", "cost": "{1}", "mv": 1, "kind": "permanent" }, { "num": 7, "name": "Aether Vial", "cost": "{1}", "mv": 1, "kind": "permanent" }, { "num": 10, "name": "Corsair Captain", "cost": "{2}{U}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 18, "name": "Dire Fleet Captain", "cost": "{B}{R}", "mv": 2, "kind": "permanent", "is_creature": true }], "graveyard": [], "library_size": 50, "land_drops_left": 1 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "1/1 Creature", "idx": 0, "num": 500000, "is_land": false }, { "name": "1/1 Creature", "idx": 1, "num": 500001, "is_land": false }, { "name": "1/1 Creature", "idx": 4, "num": 500002, "is_land": false }, { "name": "1/1 Creature", "idx": 5, "num": 500003, "is_land": false }, { "name": "1/1 Creature", "idx": 9, "num": 500004, "is_land": false }, { "name": "1/1 Creature", "idx": 10, "num": 500005, "is_land": false }] },
+  "note": "reply 1 to add a charge counter this upkeep, 0 to hold. Aether Vial deploys a creature whose mana value EQUALS its counter count."
+}
+},
+    { "chosen": 5, "cast_order": ["*", "Corsair Captain", "Dire Fleet Captain"], "decision": {
+  "decision_index": 11,
+  "main_ordinal": 3,
+  "type": "main_phase",
+  "turn": 3,
+  "phase": "pre_main",
+  "on_the_play": false,
+  "drew": [{ "turn": 3, "card": "Unclaimed Territory" }],
+  "mdfc_backs": ["Boulderloft Pathway", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Aether Vial", "idx": 3, "num": 5, "is_land": false, "counters": [{ "kind": "charge", "label": "charge", "count": 2 }] }, { "name": "Mountain", "idx": 2, "num": 38, "is_land": true, "taps": "R" }, { "name": "Siren Stormtamer", "idx": 8, "num": 47, "is_land": false }, { "name": "Spirebluff Canal", "idx": 6, "num": 49, "is_land": true, "taps": "UR" }, { "name": "Staunch Crewmate", "idx": 7, "num": 53, "is_land": false }], "vial_counters": [2], "hand": [{ "num": 1, "name": "Adaptive Automaton", "cost": "{3}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 6, "name": "Aether Vial", "cost": "{1}", "mv": 1, "kind": "permanent" }, { "num": 7, "name": "Aether Vial", "cost": "{1}", "mv": 1, "kind": "permanent" }, { "num": 10, "name": "Corsair Captain", "cost": "{2}{U}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 18, "name": "Dire Fleet Captain", "cost": "{B}{R}", "mv": 2, "kind": "permanent", "is_creature": true }, { "num": 58, "name": "Unclaimed Territory", "cost": "", "mv": 0, "kind": "land" }], "graveyard": [], "library_size": 49, "land_drops_left": 1 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "1/1 Creature", "idx": 0, "num": 500000, "is_land": false }, { "name": "1/1 Creature", "idx": 1, "num": 500001, "is_land": false }, { "name": "1/1 Creature", "idx": 4, "num": 500002, "is_land": false }, { "name": "1/1 Creature", "idx": 5, "num": 500003, "is_land": false }, { "name": "1/1 Creature", "idx": 9, "num": 500004, "is_land": false }, { "name": "1/1 Creature", "idx": 10, "num": 500005, "is_land": false }] },
+  "plans": [
+    { "index": 0, "summary": "land=Unclaimed Territory; cast: Aether Vial, Corsair Captain, Dire Fleet Captain (vial)", "land": "Unclaimed Territory", "drops": ["Corsair Captain"], "casts": ["Aether Vial", "Corsair Captain", "Dire Fleet Captain"], "cast_order_canonical": ["Aether Vial", "Corsair Captain"], "actions": [{ "card": "Aether Vial" }, { "card": "Corsair Captain" }, { "card": "Dire Fleet Captain" }] },
+    { "index": 1, "summary": "land=Unclaimed Territory; cast: Corsair Captain, Aether Vial, Dire Fleet Captain (vial)", "land": "Unclaimed Territory", "casts": ["Corsair Captain", "Aether Vial", "Dire Fleet Captain"], "cast_order_canonical": ["Corsair Captain", "Aether Vial"], "actions": [{ "card": "Corsair Captain" }, { "card": "Aether Vial" }, { "card": "Dire Fleet Captain" }] },
+    { "index": 2, "summary": "land=Unclaimed Territory; cast: Aether Vial, Aether Vial, Dire Fleet Captain (vial)", "land": "Unclaimed Territory", "casts": ["Aether Vial", "Aether Vial", "Dire Fleet Captain"], "cast_order_canonical": ["Aether Vial", "Aether Vial"], "actions": [{ "card": "Aether Vial" }, { "card": "Aether Vial" }, { "card": "Dire Fleet Captain" }] },
+    { "index": 3, "summary": "land=none; cast: Aether Vial, Aether Vial, Dire Fleet Captain (vial)", "land": null, "casts": ["Aether Vial", "Aether Vial", "Dire Fleet Captain"], "cast_order_canonical": ["Aether Vial", "Aether Vial"], "actions": [{ "card": "Aether Vial" }, { "card": "Aether Vial" }, { "card": "Dire Fleet Captain" }] },
+    { "index": 4, "summary": "land=Unclaimed Territory; cast: Adaptive Automaton, Dire Fleet Captain (vial)", "land": "Unclaimed Territory", "casts": ["Adaptive Automaton", "Dire Fleet Captain"], "actions": [{ "card": "Adaptive Automaton" }, { "card": "Dire Fleet Captain" }] },
+    { "index": 5, "summary": "land=Unclaimed Territory; cast: Corsair Captain, Dire Fleet Captain (vial)", "land": "Unclaimed Territory", "casts": ["Corsair Captain", "Dire Fleet Captain"], "actions": [{ "card": "Corsair Captain" }, { "card": "Dire Fleet Captain" }] },
+    { "index": 6, "summary": "land=Unclaimed Territory; cast: Aether Vial, Corsair Captain", "land": "Unclaimed Territory", "drops": ["Corsair Captain"], "casts": ["Aether Vial", "Corsair Captain"], "cast_order_canonical": ["Aether Vial", "Corsair Captain"], "actions": [{ "card": "Aether Vial" }, { "card": "Corsair Captain" }] },
+    { "index": 7, "summary": "land=Unclaimed Territory; cast: Corsair Captain, Aether Vial", "land": "Unclaimed Territory", "casts": ["Corsair Captain", "Aether Vial"], "cast_order_canonical": ["Corsair Captain", "Aether Vial"], "actions": [{ "card": "Corsair Captain" }, { "card": "Aether Vial" }] },
+    { "index": 8, "summary": "land=Unclaimed Territory; cast: Aether Vial, Dire Fleet Captain", "land": "Unclaimed Territory", "casts": ["Aether Vial", "Dire Fleet Captain"], "cast_order_canonical": ["Aether Vial", "Dire Fleet Captain"], "actions": [{ "card": "Aether Vial" }, { "card": "Dire Fleet Captain" }] },
+    { "index": 9, "summary": "land=Unclaimed Territory; cast: Dire Fleet Captain, Aether Vial", "land": "Unclaimed Territory", "casts": ["Dire Fleet Captain", "Aether Vial"], "cast_order_canonical": ["Dire Fleet Captain", "Aether Vial"], "actions": [{ "card": "Dire Fleet Captain" }, { "card": "Aether Vial" }] },
+    { "index": 10, "summary": "land=Unclaimed Territory; cast: Aether Vial, Dire Fleet Captain (vial)", "land": "Unclaimed Territory", "casts": ["Aether Vial", "Dire Fleet Captain"], "actions": [{ "card": "Aether Vial" }, { "card": "Dire Fleet Captain" }] },
+    { "index": 11, "summary": "land=none; cast: Aether Vial, Dire Fleet Captain (vial)", "land": null, "casts": ["Aether Vial", "Dire Fleet Captain"], "actions": [{ "card": "Aether Vial" }, { "card": "Dire Fleet Captain" }] },
+    { "index": 12, "summary": "land=Unclaimed Territory; cast: Aether Vial, Aether Vial", "land": "Unclaimed Territory", "casts": ["Aether Vial", "Aether Vial"], "cast_order_canonical": ["Aether Vial", "Aether Vial"], "actions": [{ "card": "Aether Vial" }, { "card": "Aether Vial" }] },
+    { "index": 13, "summary": "land=none; cast: Aether Vial, Aether Vial", "land": null, "casts": ["Aether Vial", "Aether Vial"], "cast_order_canonical": ["Aether Vial", "Aether Vial"], "actions": [{ "card": "Aether Vial" }, { "card": "Aether Vial" }] },
+    { "index": 14, "summary": "land=Unclaimed Territory; cast: Adaptive Automaton", "land": "Unclaimed Territory", "casts": ["Adaptive Automaton"], "actions": [{ "card": "Adaptive Automaton" }] },
+    { "index": 15, "summary": "land=Unclaimed Territory; cast: Corsair Captain", "land": "Unclaimed Territory", "casts": ["Corsair Captain"], "actions": [{ "card": "Corsair Captain" }] },
+    { "index": 16, "summary": "land=Unclaimed Territory; cast: Dire Fleet Captain", "land": "Unclaimed Territory", "casts": ["Dire Fleet Captain"], "actions": [{ "card": "Dire Fleet Captain" }] },
+    { "index": 17, "summary": "land=Unclaimed Territory; cast: Dire Fleet Captain (vial)", "land": "Unclaimed Territory", "casts": ["Dire Fleet Captain"], "actions": [{ "card": "Dire Fleet Captain" }] },
+    { "index": 18, "summary": "land=none; cast: Dire Fleet Captain (vial)", "land": null, "casts": ["Dire Fleet Captain"], "actions": [{ "card": "Dire Fleet Captain" }] },
+    { "index": 19, "summary": "land=Unclaimed Territory; cast: Aether Vial", "land": "Unclaimed Territory", "casts": ["Aether Vial"], "actions": [{ "card": "Aether Vial" }] },
+    { "index": 20, "summary": "land=none; cast: Aether Vial", "land": null, "casts": ["Aether Vial"], "actions": [{ "card": "Aether Vial" }] },
+    { "index": 21, "summary": "land=Unclaimed Territory; cast: (nothing)", "land": "Unclaimed Territory", "casts": [], "actions": [] },
+    { "index": 22, "summary": "land=none; cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 12,
+  "main_ordinal": 4,
+  "type": "main_phase",
+  "turn": 3,
+  "phase": "pre_main",
+  "on_the_play": false,
+  "events": [{ "turn": 3, "kind": "ability", "text": "Corsair Captain -- create 1 Treasure" }],
+  "mdfc_backs": ["Boulderloft Pathway", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Aether Vial", "idx": 3, "num": 5, "tapped": true, "is_land": false, "counters": [{ "kind": "charge", "label": "charge", "count": 2 }] }, { "name": "Corsair Captain", "idx": 13, "num": 10, "is_land": false }, { "name": "Dire Fleet Captain", "idx": 12, "num": 18, "is_land": false }, { "name": "Mountain", "idx": 2, "num": 38, "tapped": true, "is_land": true }, { "name": "Siren Stormtamer", "idx": 8, "num": 47, "is_land": false }, { "name": "Spirebluff Canal", "idx": 6, "num": 49, "tapped": true, "is_land": true }, { "name": "Staunch Crewmate", "idx": 7, "num": 53, "is_land": false }, { "name": "Treasure Token", "idx": 14, "num": 1000, "is_land": false }, { "name": "Unclaimed Territory", "idx": 11, "num": 58, "tapped": true, "is_land": true }], "vial_counters": [2], "hand": [{ "num": 1, "name": "Adaptive Automaton", "cost": "{3}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 6, "name": "Aether Vial", "cost": "{1}", "mv": 1, "kind": "permanent" }, { "num": 7, "name": "Aether Vial", "cost": "{1}", "mv": 1, "kind": "permanent" }], "graveyard": [], "library_size": 49, "land_drops_left": 0 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "1/1 Creature", "idx": 0, "num": 500000, "is_land": false }, { "name": "1/1 Creature", "idx": 1, "num": 500001, "is_land": false }, { "name": "1/1 Creature", "idx": 4, "num": 500002, "is_land": false }, { "name": "1/1 Creature", "idx": 5, "num": 500003, "is_land": false }, { "name": "1/1 Creature", "idx": 9, "num": 500004, "is_land": false }, { "name": "1/1 Creature", "idx": 10, "num": 500005, "is_land": false }] },
+  "plans": [
+    { "index": 0, "summary": "land=none; cast: Aether Vial", "land": null, "casts": ["Aether Vial"], "actions": [{ "card": "Aether Vial" }] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 13,
+  "main_ordinal": 5,
+  "type": "main_phase",
+  "turn": 3,
+  "phase": "post_main",
+  "on_the_play": false,
+  "events": [{ "turn": 3, "kind": "combat", "text": "⚔ attacked: Staunch Crewmate (3), Siren Stormtamer (2) — 5 to opponent (20→15)" }],
+  "mdfc_backs": ["Boulderloft Pathway", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Aether Vial", "idx": 3, "num": 5, "tapped": true, "is_land": false, "counters": [{ "kind": "charge", "label": "charge", "count": 2 }] }, { "name": "Corsair Captain", "idx": 13, "num": 10, "is_land": false }, { "name": "Dire Fleet Captain", "idx": 12, "num": 18, "is_land": false }, { "name": "Mountain", "idx": 2, "num": 38, "tapped": true, "is_land": true }, { "name": "Siren Stormtamer", "idx": 8, "num": 47, "tapped": true, "is_land": false }, { "name": "Spirebluff Canal", "idx": 6, "num": 49, "tapped": true, "is_land": true }, { "name": "Staunch Crewmate", "idx": 7, "num": 53, "tapped": true, "is_land": false }, { "name": "Treasure Token", "idx": 14, "num": 1000, "is_land": false }, { "name": "Unclaimed Territory", "idx": 11, "num": 58, "tapped": true, "is_land": true }], "vial_counters": [2], "hand": [{ "num": 1, "name": "Adaptive Automaton", "cost": "{3}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 6, "name": "Aether Vial", "cost": "{1}", "mv": 1, "kind": "permanent" }, { "num": 7, "name": "Aether Vial", "cost": "{1}", "mv": 1, "kind": "permanent" }], "graveyard": [], "library_size": 49, "land_drops_left": 0 },
+  "opponent": { "life": 15, "battlefield": [{ "name": "1/1 Creature", "idx": 0, "num": 500000, "is_land": false }, { "name": "1/1 Creature", "idx": 1, "num": 500001, "is_land": false }, { "name": "1/1 Creature", "idx": 4, "num": 500002, "is_land": false }, { "name": "1/1 Creature", "idx": 5, "num": 500003, "is_land": false }, { "name": "1/1 Creature", "idx": 9, "num": 500004, "is_land": false }, { "name": "1/1 Creature", "idx": 10, "num": 500005, "is_land": false }] },
+  "plans": [
+    { "index": 0, "summary": "land=none; cast: Aether Vial", "land": null, "casts": ["Aether Vial"], "actions": [{ "card": "Aether Vial" }] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
+}
+},
+    { "chosen": 1, "decision": {
+  "decision_index": 14,
+  "type": "vial_charge",
+  "turn": 4,
+  "vial": "Aether Vial", "current_counters": 2,
+  "perm_index": 3,
+  "heuristic_default": 1,
+  "mdfc_backs": ["Boulderloft Pathway", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Aether Vial", "idx": 3, "num": 5, "is_land": false, "counters": [{ "kind": "charge", "label": "charge", "count": 2 }] }, { "name": "Corsair Captain", "idx": 13, "num": 10, "is_land": false }, { "name": "Dire Fleet Captain", "idx": 12, "num": 18, "is_land": false }, { "name": "Mountain", "idx": 2, "num": 38, "is_land": true, "taps": "R" }, { "name": "Siren Stormtamer", "idx": 8, "num": 47, "is_land": false }, { "name": "Spirebluff Canal", "idx": 6, "num": 49, "is_land": true, "taps": "UR" }, { "name": "Staunch Crewmate", "idx": 7, "num": 53, "is_land": false }, { "name": "Treasure Token", "idx": 14, "num": 1000, "is_land": false }, { "name": "Unclaimed Territory", "idx": 11, "num": 58, "is_land": true, "taps": "C" }], "vial_counters": [2], "hand": [{ "num": 1, "name": "Adaptive Automaton", "cost": "{3}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 6, "name": "Aether Vial", "cost": "{1}", "mv": 1, "kind": "permanent" }, { "num": 7, "name": "Aether Vial", "cost": "{1}", "mv": 1, "kind": "permanent" }], "graveyard": [], "library_size": 49, "land_drops_left": 1 },
+  "opponent": { "life": 15, "battlefield": [{ "name": "1/1 Creature", "idx": 0, "num": 500000, "is_land": false }, { "name": "1/1 Creature", "idx": 1, "num": 500001, "is_land": false }, { "name": "1/1 Creature", "idx": 4, "num": 500002, "is_land": false }, { "name": "1/1 Creature", "idx": 5, "num": 500003, "is_land": false }, { "name": "1/1 Creature", "idx": 9, "num": 500004, "is_land": false }, { "name": "1/1 Creature", "idx": 10, "num": 500005, "is_land": false }] },
+  "note": "reply 1 to add a charge counter this upkeep, 0 to hold. Aether Vial deploys a creature whose mana value EQUALS its counter count."
+}
+},
+    { "chosen": 12, "decision": {
+  "decision_index": 15,
+  "main_ordinal": 6,
+  "type": "main_phase",
+  "turn": 4,
+  "phase": "pre_main",
+  "on_the_play": false,
+  "drew": [{ "turn": 4, "card": "Unclaimed Territory" }],
+  "mdfc_backs": ["Boulderloft Pathway", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Aether Vial", "idx": 3, "num": 5, "is_land": false, "counters": [{ "kind": "charge", "label": "charge", "count": 3 }] }, { "name": "Corsair Captain", "idx": 13, "num": 10, "is_land": false }, { "name": "Dire Fleet Captain", "idx": 12, "num": 18, "is_land": false }, { "name": "Mountain", "idx": 2, "num": 38, "is_land": true, "taps": "R" }, { "name": "Siren Stormtamer", "idx": 8, "num": 47, "is_land": false }, { "name": "Spirebluff Canal", "idx": 6, "num": 49, "is_land": true, "taps": "UR" }, { "name": "Staunch Crewmate", "idx": 7, "num": 53, "is_land": false }, { "name": "Treasure Token", "idx": 14, "num": 1000, "is_land": false }, { "name": "Unclaimed Territory", "idx": 11, "num": 58, "is_land": true, "taps": "C" }], "vial_counters": [3], "hand": [{ "num": 1, "name": "Adaptive Automaton", "cost": "{3}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 6, "name": "Aether Vial", "cost": "{1}", "mv": 1, "kind": "permanent" }, { "num": 7, "name": "Aether Vial", "cost": "{1}", "mv": 1, "kind": "permanent" }, { "num": 59, "name": "Unclaimed Territory", "cost": "", "mv": 0, "kind": "land" }], "graveyard": [], "library_size": 48, "land_drops_left": 1 },
+  "opponent": { "life": 15, "battlefield": [{ "name": "1/1 Creature", "idx": 0, "num": 500000, "is_land": false }, { "name": "1/1 Creature", "idx": 1, "num": 500001, "is_land": false }, { "name": "1/1 Creature", "idx": 4, "num": 500002, "is_land": false }, { "name": "1/1 Creature", "idx": 5, "num": 500003, "is_land": false }, { "name": "1/1 Creature", "idx": 9, "num": 500004, "is_land": false }, { "name": "1/1 Creature", "idx": 10, "num": 500005, "is_land": false }] },
+  "plans": [
+    { "index": 0, "summary": "land=Unclaimed Territory; cast: Adaptive Automaton, Aether Vial, Aether Vial", "land": "Unclaimed Territory", "casts": ["Adaptive Automaton", "Aether Vial", "Aether Vial"], "cast_order_canonical": ["Adaptive Automaton", "Aether Vial", "Aether Vial"], "actions": [{ "card": "Adaptive Automaton" }, { "card": "Aether Vial" }, { "card": "Aether Vial" }] },
+    { "index": 1, "summary": "land=Unclaimed Territory; cast: Aether Vial, Adaptive Automaton, Aether Vial", "land": "Unclaimed Territory", "casts": ["Aether Vial", "Adaptive Automaton", "Aether Vial"], "cast_order_canonical": ["Aether Vial", "Adaptive Automaton", "Aether Vial"], "actions": [{ "card": "Aether Vial" }, { "card": "Adaptive Automaton" }, { "card": "Aether Vial" }] },
+    { "index": 2, "summary": "land=Unclaimed Territory; cast: Aether Vial, Aether Vial, Adaptive Automaton", "land": "Unclaimed Territory", "casts": ["Aether Vial", "Aether Vial", "Adaptive Automaton"], "cast_order_canonical": ["Aether Vial", "Aether Vial", "Adaptive Automaton"], "actions": [{ "card": "Aether Vial" }, { "card": "Aether Vial" }, { "card": "Adaptive Automaton" }] },
+    { "index": 3, "summary": "land=Unclaimed Territory; cast: Aether Vial, Aether Vial, Adaptive Automaton (vial)", "land": "Unclaimed Territory", "casts": ["Aether Vial", "Aether Vial", "Adaptive Automaton"], "cast_order_canonical": ["Aether Vial", "Aether Vial"], "actions": [{ "card": "Aether Vial" }, { "card": "Aether Vial" }, { "card": "Adaptive Automaton" }] },
+    { "index": 4, "summary": "land=none; cast: Aether Vial, Aether Vial, Adaptive Automaton (vial)", "land": null, "casts": ["Aether Vial", "Aether Vial", "Adaptive Automaton"], "cast_order_canonical": ["Aether Vial", "Aether Vial"], "actions": [{ "card": "Aether Vial" }, { "card": "Aether Vial" }, { "card": "Adaptive Automaton" }] },
+    { "index": 5, "summary": "land=Unclaimed Territory; cast: Adaptive Automaton, Aether Vial", "land": "Unclaimed Territory", "casts": ["Adaptive Automaton", "Aether Vial"], "cast_order_canonical": ["Adaptive Automaton", "Aether Vial"], "actions": [{ "card": "Adaptive Automaton" }, { "card": "Aether Vial" }] },
+    { "index": 6, "summary": "land=Unclaimed Territory; cast: Aether Vial, Adaptive Automaton", "land": "Unclaimed Territory", "casts": ["Aether Vial", "Adaptive Automaton"], "cast_order_canonical": ["Aether Vial", "Adaptive Automaton"], "actions": [{ "card": "Aether Vial" }, { "card": "Adaptive Automaton" }] },
+    { "index": 7, "summary": "land=Unclaimed Territory; cast: Adaptive Automaton (vial), Aether Vial", "land": "Unclaimed Territory", "casts": ["Adaptive Automaton", "Aether Vial"], "actions": [{ "card": "Adaptive Automaton" }, { "card": "Aether Vial" }] },
+    { "index": 8, "summary": "land=none; cast: Adaptive Automaton, Aether Vial", "land": null, "casts": ["Adaptive Automaton", "Aether Vial"], "cast_order_canonical": ["Adaptive Automaton", "Aether Vial"], "actions": [{ "card": "Adaptive Automaton" }, { "card": "Aether Vial" }] },
+    { "index": 9, "summary": "land=none; cast: Aether Vial, Adaptive Automaton", "land": null, "casts": ["Aether Vial", "Adaptive Automaton"], "cast_order_canonical": ["Aether Vial", "Adaptive Automaton"], "actions": [{ "card": "Aether Vial" }, { "card": "Adaptive Automaton" }] },
+    { "index": 10, "summary": "land=none; cast: Adaptive Automaton (vial), Aether Vial", "land": null, "casts": ["Adaptive Automaton", "Aether Vial"], "actions": [{ "card": "Adaptive Automaton" }, { "card": "Aether Vial" }] },
+    { "index": 11, "summary": "land=Unclaimed Territory; cast: Adaptive Automaton", "land": "Unclaimed Territory", "casts": ["Adaptive Automaton"], "actions": [{ "card": "Adaptive Automaton" }] },
+    { "index": 12, "summary": "land=Unclaimed Territory; cast: Adaptive Automaton (vial)", "land": "Unclaimed Territory", "casts": ["Adaptive Automaton"], "actions": [{ "card": "Adaptive Automaton" }] },
+    { "index": 13, "summary": "land=none; cast: Adaptive Automaton", "land": null, "casts": ["Adaptive Automaton"], "actions": [{ "card": "Adaptive Automaton" }] },
+    { "index": 14, "summary": "land=none; cast: Adaptive Automaton (vial)", "land": null, "casts": ["Adaptive Automaton"], "actions": [{ "card": "Adaptive Automaton" }] },
+    { "index": 15, "summary": "land=Unclaimed Territory; cast: Aether Vial, Aether Vial", "land": "Unclaimed Territory", "casts": ["Aether Vial", "Aether Vial"], "cast_order_canonical": ["Aether Vial", "Aether Vial"], "actions": [{ "card": "Aether Vial" }, { "card": "Aether Vial" }] },
+    { "index": 16, "summary": "land=none; cast: Aether Vial, Aether Vial", "land": null, "casts": ["Aether Vial", "Aether Vial"], "cast_order_canonical": ["Aether Vial", "Aether Vial"], "actions": [{ "card": "Aether Vial" }, { "card": "Aether Vial" }] },
+    { "index": 17, "summary": "land=Unclaimed Territory; cast: Aether Vial", "land": "Unclaimed Territory", "casts": ["Aether Vial"], "actions": [{ "card": "Aether Vial" }] },
+    { "index": 18, "summary": "land=none; cast: Aether Vial", "land": null, "casts": ["Aether Vial"], "actions": [{ "card": "Aether Vial" }] },
+    { "index": 19, "summary": "land=Unclaimed Territory; cast: (nothing)", "land": "Unclaimed Territory", "casts": [], "actions": [] },
+    { "index": 20, "summary": "land=none; cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
+}
+},
+    { "chosen": 0, "cast_order": ["*", "Aether Vial", "Aether Vial"], "decision": {
+  "decision_index": 16,
+  "main_ordinal": 7,
+  "type": "main_phase",
+  "turn": 4,
+  "phase": "pre_main",
+  "on_the_play": false,
+  "mdfc_backs": ["Boulderloft Pathway", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Adaptive Automaton", "idx": 16, "num": 1, "is_land": false }, { "name": "Aether Vial", "idx": 3, "num": 5, "tapped": true, "is_land": false, "counters": [{ "kind": "charge", "label": "charge", "count": 3 }] }, { "name": "Corsair Captain", "idx": 13, "num": 10, "is_land": false }, { "name": "Dire Fleet Captain", "idx": 12, "num": 18, "is_land": false }, { "name": "Mountain", "idx": 2, "num": 38, "is_land": true, "taps": "R" }, { "name": "Siren Stormtamer", "idx": 8, "num": 47, "is_land": false }, { "name": "Spirebluff Canal", "idx": 6, "num": 49, "is_land": true, "taps": "UR" }, { "name": "Staunch Crewmate", "idx": 7, "num": 53, "is_land": false }, { "name": "Treasure Token", "idx": 14, "num": 1000, "is_land": false }, { "name": "Unclaimed Territory", "idx": 11, "num": 58, "is_land": true, "taps": "C" }, { "name": "Unclaimed Territory", "idx": 15, "num": 59, "is_land": true, "taps": "C" }], "vial_counters": [3], "hand": [{ "num": 6, "name": "Aether Vial", "cost": "{1}", "mv": 1, "kind": "permanent" }, { "num": 7, "name": "Aether Vial", "cost": "{1}", "mv": 1, "kind": "permanent" }], "graveyard": [], "library_size": 48, "land_drops_left": 0 },
+  "opponent": { "life": 15, "battlefield": [{ "name": "1/1 Creature", "idx": 0, "num": 500000, "is_land": false }, { "name": "1/1 Creature", "idx": 1, "num": 500001, "is_land": false }, { "name": "1/1 Creature", "idx": 4, "num": 500002, "is_land": false }, { "name": "1/1 Creature", "idx": 5, "num": 500003, "is_land": false }, { "name": "1/1 Creature", "idx": 9, "num": 500004, "is_land": false }, { "name": "1/1 Creature", "idx": 10, "num": 500005, "is_land": false }] },
+  "plans": [
+    { "index": 0, "summary": "land=none; cast: Aether Vial, Aether Vial", "land": null, "casts": ["Aether Vial", "Aether Vial"], "cast_order_canonical": ["Aether Vial", "Aether Vial"], "actions": [{ "card": "Aether Vial" }, { "card": "Aether Vial" }] },
+    { "index": 1, "summary": "land=none; cast: Aether Vial", "land": null, "casts": ["Aether Vial"], "actions": [{ "card": "Aether Vial" }] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 17,
+  "type": "main_phase",
+  "turn": 4,
+  "phase": "pre_main",
+  "on_the_play": false,
+  "mdfc_backs": ["Boulderloft Pathway", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Adaptive Automaton", "idx": 16, "num": 1, "is_land": false }, { "name": "Aether Vial", "idx": 3, "num": 5, "tapped": true, "is_land": false, "counters": [{ "kind": "charge", "label": "charge", "count": 3 }] }, { "name": "Aether Vial", "idx": 17, "num": 6, "is_land": false }, { "name": "Aether Vial", "idx": 18, "num": 7, "is_land": false }, { "name": "Corsair Captain", "idx": 13, "num": 10, "is_land": false }, { "name": "Dire Fleet Captain", "idx": 12, "num": 18, "is_land": false }, { "name": "Mountain", "idx": 2, "num": 38, "tapped": true, "is_land": true }, { "name": "Siren Stormtamer", "idx": 8, "num": 47, "is_land": false }, { "name": "Spirebluff Canal", "idx": 6, "num": 49, "tapped": true, "is_land": true }, { "name": "Staunch Crewmate", "idx": 7, "num": 53, "is_land": false }, { "name": "Treasure Token", "idx": 14, "num": 1000, "is_land": false }, { "name": "Unclaimed Territory", "idx": 11, "num": 58, "is_land": true, "taps": "C" }, { "name": "Unclaimed Territory", "idx": 15, "num": 59, "is_land": true, "taps": "C" }], "vial_counters": [3, 0, 0], "hand": [], "graveyard": [], "library_size": 48, "land_drops_left": 0 },
+  "opponent": { "life": 15, "battlefield": [{ "name": "1/1 Creature", "idx": 0, "num": 500000, "is_land": false }, { "name": "1/1 Creature", "idx": 1, "num": 500001, "is_land": false }, { "name": "1/1 Creature", "idx": 4, "num": 500002, "is_land": false }, { "name": "1/1 Creature", "idx": 5, "num": 500003, "is_land": false }, { "name": "1/1 Creature", "idx": 9, "num": 500004, "is_land": false }, { "name": "1/1 Creature", "idx": 10, "num": 500005, "is_land": false }] },
+  "plans": [
+    { "index": 0, "summary": "cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
+}
+}
+  ],
+  "final_events": [
+    { "turn": 4, "kind": "combat", "text": "⚔ attacked: Staunch Crewmate (4), Siren Stormtamer (3), Dire Fleet Captain (7), Corsair Captain (3) — 17 to opponent (15→-2)" }
+  ]
+}

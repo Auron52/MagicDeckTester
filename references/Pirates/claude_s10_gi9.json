@@ -1,0 +1,262 @@
+{
+  "seed": 10, "game_index": 9, "win_turn": 4, "won": true,
+  "mulligan": { "count": 0, "bottom": [] },
+  "decisions": [
+    { "chosen": 1, "decision": {
+  "decision_index": 0,
+  "type": "mulligan",
+  "turn": 0,
+  "me": { "life": 20, "battlefield": [] },
+  "opponent": { "life": 20, "battlefield": [] },
+  "mulligan_count": 0,
+  "on_the_play": true,
+  "to_bottom": 0,
+  "hand": [{ "num": 38, "name": "Mountain" }, { "num": 10, "name": "Corsair Captain" }, { "num": 14, "name": "Daring Buccaneer" }, { "num": 53, "name": "Staunch Crewmate" }, { "num": 15, "name": "Daring Buccaneer" }, { "num": 57, "name": "Unclaimed Territory" }, { "num": 43, "name": "Secluded Courtyard" }],
+  "ai_choice": 1,
+  "note": "reply 1 to KEEP this hand (then bottom 0 card(s)), or 0 to mulligan again"
+}
+},
+    { "chosen": 1, "decision": {
+  "decision_index": 1,
+  "main_ordinal": 0,
+  "type": "main_phase",
+  "turn": 1,
+  "phase": "pre_main",
+  "on_the_play": true,
+  "mdfc_backs": ["Boulderloft Pathway", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [], "vial_counters": [], "hand": [{ "num": 10, "name": "Corsair Captain", "cost": "{2}{U}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 14, "name": "Daring Buccaneer", "cost": "{R}", "mv": 1, "kind": "permanent", "is_creature": true }, { "num": 15, "name": "Daring Buccaneer", "cost": "{R}", "mv": 1, "kind": "permanent", "is_creature": true }, { "num": 38, "name": "Mountain", "cost": "", "mv": 0, "kind": "land" }, { "num": 43, "name": "Secluded Courtyard", "cost": "", "mv": 0, "kind": "land" }, { "num": 53, "name": "Staunch Crewmate", "cost": "{1}{U}", "mv": 2, "kind": "permanent", "is_creature": true }, { "num": 57, "name": "Unclaimed Territory", "cost": "", "mv": 0, "kind": "land" }], "graveyard": [], "library_size": 53, "land_drops_left": 1 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "1/1 Creature", "idx": 0, "num": 500000, "is_land": false }] },
+  "plans": [
+    { "index": 0, "summary": "land=Unclaimed Territory; cast: Daring Buccaneer", "land": "Unclaimed Territory", "casts": ["Daring Buccaneer"], "actions": [{ "card": "Daring Buccaneer" }] },
+    { "index": 1, "summary": "land=Mountain; cast: Daring Buccaneer", "land": "Mountain", "casts": ["Daring Buccaneer"], "actions": [{ "card": "Daring Buccaneer" }] },
+    { "index": 2, "summary": "land=Secluded Courtyard; cast: Daring Buccaneer", "land": "Secluded Courtyard", "casts": ["Daring Buccaneer"], "actions": [{ "card": "Daring Buccaneer" }] },
+    { "index": 3, "summary": "land=Unclaimed Territory; cast: (nothing)", "land": "Unclaimed Territory", "casts": [], "actions": [] },
+    { "index": 4, "summary": "land=Mountain; cast: (nothing)", "land": "Mountain", "casts": [], "actions": [] },
+    { "index": 5, "summary": "land=Secluded Courtyard; cast: (nothing)", "land": "Secluded Courtyard", "casts": [], "actions": [] },
+    { "index": 6, "summary": "land=none; cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 2,
+  "type": "main_phase",
+  "turn": 1,
+  "phase": "pre_main",
+  "on_the_play": true,
+  "mdfc_backs": ["Boulderloft Pathway", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Daring Buccaneer", "idx": 2, "num": 14, "is_land": false }, { "name": "Mountain", "idx": 1, "num": 38, "tapped": true, "is_land": true }], "vial_counters": [], "hand": [{ "num": 10, "name": "Corsair Captain", "cost": "{2}{U}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 15, "name": "Daring Buccaneer", "cost": "{R}", "mv": 1, "kind": "permanent", "is_creature": true }, { "num": 43, "name": "Secluded Courtyard", "cost": "", "mv": 0, "kind": "land" }, { "num": 53, "name": "Staunch Crewmate", "cost": "{1}{U}", "mv": 2, "kind": "permanent", "is_creature": true }, { "num": 57, "name": "Unclaimed Territory", "cost": "", "mv": 0, "kind": "land" }], "graveyard": [], "library_size": 53, "land_drops_left": 0 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "1/1 Creature", "idx": 0, "num": 500000, "is_land": false }] },
+  "plans": [
+    { "index": 0, "summary": "cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 3,
+  "type": "main_phase",
+  "turn": 1,
+  "phase": "post_main",
+  "on_the_play": true,
+  "mdfc_backs": ["Boulderloft Pathway", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Daring Buccaneer", "idx": 2, "num": 14, "is_land": false }, { "name": "Mountain", "idx": 1, "num": 38, "tapped": true, "is_land": true }], "vial_counters": [], "hand": [{ "num": 10, "name": "Corsair Captain", "cost": "{2}{U}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 15, "name": "Daring Buccaneer", "cost": "{R}", "mv": 1, "kind": "permanent", "is_creature": true }, { "num": 43, "name": "Secluded Courtyard", "cost": "", "mv": 0, "kind": "land" }, { "num": 53, "name": "Staunch Crewmate", "cost": "{1}{U}", "mv": 2, "kind": "permanent", "is_creature": true }, { "num": 57, "name": "Unclaimed Territory", "cost": "", "mv": 0, "kind": "land" }], "graveyard": [], "library_size": 53, "land_drops_left": 0 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "1/1 Creature", "idx": 0, "num": 500000, "is_land": false }] },
+  "plans": [
+    { "index": 0, "summary": "cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
+}
+},
+    { "chosen": 1, "cast_order": ["*", "Goblin Tomb Raider", "Daring Buccaneer"], "decision": {
+  "decision_index": 4,
+  "main_ordinal": 1,
+  "type": "main_phase",
+  "turn": 2,
+  "phase": "pre_main",
+  "on_the_play": true,
+  "drew": [{ "turn": 2, "card": "Goblin Tomb Raider" }],
+  "mdfc_backs": ["Boulderloft Pathway", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Daring Buccaneer", "idx": 2, "num": 14, "is_land": false }, { "name": "Mountain", "idx": 1, "num": 38, "is_land": true, "taps": "R" }], "vial_counters": [], "hand": [{ "num": 10, "name": "Corsair Captain", "cost": "{2}{U}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 15, "name": "Daring Buccaneer", "cost": "{R}", "mv": 1, "kind": "permanent", "is_creature": true }, { "num": 26, "name": "Goblin Tomb Raider", "cost": "{R}", "mv": 1, "kind": "permanent", "is_creature": true }, { "num": 43, "name": "Secluded Courtyard", "cost": "", "mv": 0, "kind": "land" }, { "num": 53, "name": "Staunch Crewmate", "cost": "{1}{U}", "mv": 2, "kind": "permanent", "is_creature": true }, { "num": 57, "name": "Unclaimed Territory", "cost": "", "mv": 0, "kind": "land" }], "graveyard": [], "library_size": 52, "land_drops_left": 1 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "1/1 Creature", "idx": 0, "num": 500000, "is_land": false }, { "name": "1/1 Creature", "idx": 3, "num": 500001, "is_land": false }] },
+  "plans": [
+    { "index": 0, "summary": "land=Unclaimed Territory; cast: Daring Buccaneer, Goblin Tomb Raider", "land": "Unclaimed Territory", "casts": ["Daring Buccaneer", "Goblin Tomb Raider"], "cast_order_canonical": ["Daring Buccaneer", "Goblin Tomb Raider"], "actions": [{ "card": "Daring Buccaneer" }, { "card": "Goblin Tomb Raider" }] },
+    { "index": 1, "summary": "land=Unclaimed Territory; cast: Goblin Tomb Raider, Daring Buccaneer", "land": "Unclaimed Territory", "casts": ["Goblin Tomb Raider", "Daring Buccaneer"], "cast_order_canonical": ["Goblin Tomb Raider", "Daring Buccaneer"], "actions": [{ "card": "Goblin Tomb Raider" }, { "card": "Daring Buccaneer" }] },
+    { "index": 2, "summary": "land=Secluded Courtyard; cast: Daring Buccaneer, Goblin Tomb Raider", "land": "Secluded Courtyard", "casts": ["Daring Buccaneer", "Goblin Tomb Raider"], "cast_order_canonical": ["Daring Buccaneer", "Goblin Tomb Raider"], "actions": [{ "card": "Daring Buccaneer" }, { "card": "Goblin Tomb Raider" }] },
+    { "index": 3, "summary": "land=Secluded Courtyard; cast: Goblin Tomb Raider, Daring Buccaneer", "land": "Secluded Courtyard", "casts": ["Goblin Tomb Raider", "Daring Buccaneer"], "cast_order_canonical": ["Goblin Tomb Raider", "Daring Buccaneer"], "actions": [{ "card": "Goblin Tomb Raider" }, { "card": "Daring Buccaneer" }] },
+    { "index": 4, "summary": "land=Unclaimed Territory; cast: Staunch Crewmate", "land": "Unclaimed Territory", "casts": ["Staunch Crewmate"], "actions": [{ "card": "Staunch Crewmate" }] },
+    { "index": 5, "summary": "land=Unclaimed Territory; cast: Daring Buccaneer", "land": "Unclaimed Territory", "casts": ["Daring Buccaneer"], "actions": [{ "card": "Daring Buccaneer" }] },
+    { "index": 6, "summary": "land=Secluded Courtyard; cast: Staunch Crewmate", "land": "Secluded Courtyard", "casts": ["Staunch Crewmate"], "actions": [{ "card": "Staunch Crewmate" }] },
+    { "index": 7, "summary": "land=Secluded Courtyard; cast: Daring Buccaneer", "land": "Secluded Courtyard", "casts": ["Daring Buccaneer"], "actions": [{ "card": "Daring Buccaneer" }] },
+    { "index": 8, "summary": "land=none; cast: Daring Buccaneer", "land": null, "casts": ["Daring Buccaneer"], "actions": [{ "card": "Daring Buccaneer" }] },
+    { "index": 9, "summary": "land=Unclaimed Territory; cast: Goblin Tomb Raider", "land": "Unclaimed Territory", "casts": ["Goblin Tomb Raider"], "actions": [{ "card": "Goblin Tomb Raider" }] },
+    { "index": 10, "summary": "land=Secluded Courtyard; cast: Goblin Tomb Raider", "land": "Secluded Courtyard", "casts": ["Goblin Tomb Raider"], "actions": [{ "card": "Goblin Tomb Raider" }] },
+    { "index": 11, "summary": "land=none; cast: Goblin Tomb Raider", "land": null, "casts": ["Goblin Tomb Raider"], "actions": [{ "card": "Goblin Tomb Raider" }] },
+    { "index": 12, "summary": "land=Unclaimed Territory; cast: (nothing)", "land": "Unclaimed Territory", "casts": [], "actions": [] },
+    { "index": 13, "summary": "land=Secluded Courtyard; cast: (nothing)", "land": "Secluded Courtyard", "casts": [], "actions": [] },
+    { "index": 14, "summary": "land=none; cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "plans_hidden": 10,
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 5,
+  "type": "main_phase",
+  "turn": 2,
+  "phase": "pre_main",
+  "on_the_play": true,
+  "mdfc_backs": ["Boulderloft Pathway", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Daring Buccaneer", "idx": 2, "num": 14, "is_land": false }, { "name": "Daring Buccaneer", "idx": 6, "num": 15, "is_land": false }, { "name": "Goblin Tomb Raider", "idx": 5, "num": 26, "is_land": false }, { "name": "Mountain", "idx": 1, "num": 38, "tapped": true, "is_land": true }, { "name": "Unclaimed Territory", "idx": 4, "num": 57, "tapped": true, "is_land": true }], "vial_counters": [], "hand": [{ "num": 10, "name": "Corsair Captain", "cost": "{2}{U}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 43, "name": "Secluded Courtyard", "cost": "", "mv": 0, "kind": "land" }, { "num": 53, "name": "Staunch Crewmate", "cost": "{1}{U}", "mv": 2, "kind": "permanent", "is_creature": true }], "graveyard": [], "library_size": 52, "land_drops_left": 0 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "1/1 Creature", "idx": 0, "num": 500000, "is_land": false }, { "name": "1/1 Creature", "idx": 3, "num": 500001, "is_land": false }] },
+  "plans": [
+    { "index": 0, "summary": "cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 6,
+  "type": "main_phase",
+  "turn": 2,
+  "phase": "post_main",
+  "on_the_play": true,
+  "events": [{ "turn": 2, "kind": "combat", "text": "⚔ attacked: Daring Buccaneer (2) — 2 to opponent (20→18)" }],
+  "mdfc_backs": ["Boulderloft Pathway", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Daring Buccaneer", "idx": 2, "num": 14, "tapped": true, "is_land": false }, { "name": "Daring Buccaneer", "idx": 6, "num": 15, "is_land": false }, { "name": "Goblin Tomb Raider", "idx": 5, "num": 26, "is_land": false }, { "name": "Mountain", "idx": 1, "num": 38, "tapped": true, "is_land": true }, { "name": "Unclaimed Territory", "idx": 4, "num": 57, "tapped": true, "is_land": true }], "vial_counters": [], "hand": [{ "num": 10, "name": "Corsair Captain", "cost": "{2}{U}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 43, "name": "Secluded Courtyard", "cost": "", "mv": 0, "kind": "land" }, { "num": 53, "name": "Staunch Crewmate", "cost": "{1}{U}", "mv": 2, "kind": "permanent", "is_creature": true }], "graveyard": [], "library_size": 52, "land_drops_left": 0 },
+  "opponent": { "life": 18, "battlefield": [{ "name": "1/1 Creature", "idx": 0, "num": 500000, "is_land": false }, { "name": "1/1 Creature", "idx": 3, "num": 500001, "is_land": false }] },
+  "plans": [
+    { "index": 0, "summary": "cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
+}
+},
+    { "chosen": 0, "decision": {
+  "decision_index": 7,
+  "main_ordinal": 2,
+  "type": "main_phase",
+  "turn": 3,
+  "phase": "pre_main",
+  "on_the_play": true,
+  "drew": [{ "turn": 3, "card": "Spirebluff Canal" }],
+  "mdfc_backs": ["Boulderloft Pathway", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Daring Buccaneer", "idx": 2, "num": 14, "is_land": false }, { "name": "Daring Buccaneer", "idx": 6, "num": 15, "is_land": false }, { "name": "Goblin Tomb Raider", "idx": 5, "num": 26, "is_land": false }, { "name": "Mountain", "idx": 1, "num": 38, "is_land": true, "taps": "R" }, { "name": "Unclaimed Territory", "idx": 4, "num": 57, "is_land": true, "taps": "C" }], "vial_counters": [], "hand": [{ "num": 10, "name": "Corsair Captain", "cost": "{2}{U}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 43, "name": "Secluded Courtyard", "cost": "", "mv": 0, "kind": "land" }, { "num": 49, "name": "Spirebluff Canal", "cost": "", "mv": 0, "kind": "land" }, { "num": 53, "name": "Staunch Crewmate", "cost": "{1}{U}", "mv": 2, "kind": "permanent", "is_creature": true }], "graveyard": [], "library_size": 51, "land_drops_left": 1 },
+  "opponent": { "life": 18, "battlefield": [{ "name": "1/1 Creature", "idx": 0, "num": 500000, "is_land": false }, { "name": "1/1 Creature", "idx": 3, "num": 500001, "is_land": false }, { "name": "2/2 Creature", "idx": 7, "num": 500002, "is_land": false }] },
+  "plans": [
+    { "index": 0, "summary": "land=Spirebluff Canal; cast: Corsair Captain", "land": "Spirebluff Canal", "casts": ["Corsair Captain"], "actions": [{ "card": "Corsair Captain" }] },
+    { "index": 1, "summary": "land=Spirebluff Canal; cast: Staunch Crewmate", "land": "Spirebluff Canal", "casts": ["Staunch Crewmate"], "actions": [{ "card": "Staunch Crewmate" }] },
+    { "index": 2, "summary": "land=Secluded Courtyard; cast: Corsair Captain", "land": "Secluded Courtyard", "casts": ["Corsair Captain"], "actions": [{ "card": "Corsair Captain" }] },
+    { "index": 3, "summary": "land=Secluded Courtyard; cast: Staunch Crewmate", "land": "Secluded Courtyard", "casts": ["Staunch Crewmate"], "actions": [{ "card": "Staunch Crewmate" }] },
+    { "index": 4, "summary": "land=none; cast: Staunch Crewmate", "land": null, "casts": ["Staunch Crewmate"], "actions": [{ "card": "Staunch Crewmate" }] },
+    { "index": 5, "summary": "land=Spirebluff Canal; cast: (nothing)", "land": "Spirebluff Canal", "casts": [], "actions": [] },
+    { "index": 6, "summary": "land=Secluded Courtyard; cast: (nothing)", "land": "Secluded Courtyard", "casts": [], "actions": [] },
+    { "index": 7, "summary": "land=none; cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "plans_hidden": 15,
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 8,
+  "type": "main_phase",
+  "turn": 3,
+  "phase": "pre_main",
+  "on_the_play": true,
+  "events": [{ "turn": 3, "kind": "ability", "text": "Corsair Captain -- create 1 Treasure" }],
+  "mdfc_backs": ["Boulderloft Pathway", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Corsair Captain", "idx": 9, "num": 10, "is_land": false }, { "name": "Daring Buccaneer", "idx": 2, "num": 14, "is_land": false }, { "name": "Daring Buccaneer", "idx": 6, "num": 15, "is_land": false }, { "name": "Goblin Tomb Raider", "idx": 5, "num": 26, "is_land": false }, { "name": "Mountain", "idx": 1, "num": 38, "tapped": true, "is_land": true }, { "name": "Spirebluff Canal", "idx": 8, "num": 49, "tapped": true, "is_land": true }, { "name": "Treasure Token", "idx": 10, "num": 1000, "is_land": false }, { "name": "Unclaimed Territory", "idx": 4, "num": 57, "tapped": true, "is_land": true }], "vial_counters": [], "hand": [{ "num": 43, "name": "Secluded Courtyard", "cost": "", "mv": 0, "kind": "land" }, { "num": 53, "name": "Staunch Crewmate", "cost": "{1}{U}", "mv": 2, "kind": "permanent", "is_creature": true }], "graveyard": [], "library_size": 51, "land_drops_left": 0 },
+  "opponent": { "life": 18, "battlefield": [{ "name": "1/1 Creature", "idx": 0, "num": 500000, "is_land": false }, { "name": "1/1 Creature", "idx": 3, "num": 500001, "is_land": false }, { "name": "2/2 Creature", "idx": 7, "num": 500002, "is_land": false }] },
+  "plans": [
+    { "index": 0, "summary": "cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 9,
+  "type": "main_phase",
+  "turn": 3,
+  "phase": "post_main",
+  "on_the_play": true,
+  "events": [{ "turn": 3, "kind": "combat", "text": "⚔ attacked: Daring Buccaneer (3), Goblin Tomb Raider (3), Daring Buccaneer (3) — 9 to opponent (18→9)" }],
+  "mdfc_backs": ["Boulderloft Pathway", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Corsair Captain", "idx": 9, "num": 10, "is_land": false }, { "name": "Daring Buccaneer", "idx": 2, "num": 14, "tapped": true, "is_land": false }, { "name": "Daring Buccaneer", "idx": 6, "num": 15, "tapped": true, "is_land": false }, { "name": "Goblin Tomb Raider", "idx": 5, "num": 26, "tapped": true, "is_land": false }, { "name": "Mountain", "idx": 1, "num": 38, "tapped": true, "is_land": true }, { "name": "Spirebluff Canal", "idx": 8, "num": 49, "tapped": true, "is_land": true }, { "name": "Treasure Token", "idx": 10, "num": 1000, "is_land": false }, { "name": "Unclaimed Territory", "idx": 4, "num": 57, "tapped": true, "is_land": true }], "vial_counters": [], "hand": [{ "num": 43, "name": "Secluded Courtyard", "cost": "", "mv": 0, "kind": "land" }, { "num": 53, "name": "Staunch Crewmate", "cost": "{1}{U}", "mv": 2, "kind": "permanent", "is_creature": true }], "graveyard": [], "library_size": 51, "land_drops_left": 0 },
+  "opponent": { "life": 9, "battlefield": [{ "name": "1/1 Creature", "idx": 0, "num": 500000, "is_land": false }, { "name": "1/1 Creature", "idx": 3, "num": 500001, "is_land": false }, { "name": "2/2 Creature", "idx": 7, "num": 500002, "is_land": false }] },
+  "plans": [
+    { "index": 0, "summary": "cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
+}
+},
+    { "chosen": 0, "cast_order": ["*", "Dire Fleet Captain", "Staunch Crewmate"], "decision": {
+  "decision_index": 10,
+  "main_ordinal": 3,
+  "type": "main_phase",
+  "turn": 4,
+  "phase": "pre_main",
+  "on_the_play": true,
+  "drew": [{ "turn": 4, "card": "Dire Fleet Captain" }],
+  "mdfc_backs": ["Boulderloft Pathway", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Corsair Captain", "idx": 9, "num": 10, "is_land": false }, { "name": "Daring Buccaneer", "idx": 2, "num": 14, "is_land": false }, { "name": "Daring Buccaneer", "idx": 6, "num": 15, "is_land": false }, { "name": "Goblin Tomb Raider", "idx": 5, "num": 26, "is_land": false }, { "name": "Mountain", "idx": 1, "num": 38, "is_land": true, "taps": "R" }, { "name": "Spirebluff Canal", "idx": 8, "num": 49, "is_land": true, "taps": "UR" }, { "name": "Treasure Token", "idx": 10, "num": 1000, "is_land": false }, { "name": "Unclaimed Territory", "idx": 4, "num": 57, "is_land": true, "taps": "C" }], "vial_counters": [], "hand": [{ "num": 18, "name": "Dire Fleet Captain", "cost": "{B}{R}", "mv": 2, "kind": "permanent", "is_creature": true }, { "num": 43, "name": "Secluded Courtyard", "cost": "", "mv": 0, "kind": "land" }, { "num": 53, "name": "Staunch Crewmate", "cost": "{1}{U}", "mv": 2, "kind": "permanent", "is_creature": true }], "graveyard": [], "library_size": 50, "land_drops_left": 1 },
+  "opponent": { "life": 9, "battlefield": [{ "name": "1/1 Creature", "idx": 0, "num": 500000, "is_land": false }, { "name": "1/1 Creature", "idx": 3, "num": 500001, "is_land": false }, { "name": "2/2 Creature", "idx": 7, "num": 500002, "is_land": false }] },
+  "plans": [
+    { "index": 0, "summary": "land=Secluded Courtyard; cast: Dire Fleet Captain, Staunch Crewmate", "land": "Secluded Courtyard", "casts": ["Dire Fleet Captain", "Staunch Crewmate"], "cast_order_canonical": ["Dire Fleet Captain", "Staunch Crewmate"], "actions": [{ "card": "Dire Fleet Captain" }, { "card": "Staunch Crewmate" }] },
+    { "index": 1, "summary": "land=Secluded Courtyard; cast: Staunch Crewmate, Dire Fleet Captain", "land": "Secluded Courtyard", "casts": ["Staunch Crewmate", "Dire Fleet Captain"], "cast_order_canonical": ["Staunch Crewmate", "Dire Fleet Captain"], "actions": [{ "card": "Staunch Crewmate" }, { "card": "Dire Fleet Captain" }] },
+    { "index": 2, "summary": "land=none; cast: Dire Fleet Captain, Staunch Crewmate", "land": null, "casts": ["Dire Fleet Captain", "Staunch Crewmate"], "cast_order_canonical": ["Dire Fleet Captain", "Staunch Crewmate"], "actions": [{ "card": "Dire Fleet Captain" }, { "card": "Staunch Crewmate" }] },
+    { "index": 3, "summary": "land=none; cast: Staunch Crewmate, Dire Fleet Captain", "land": null, "casts": ["Staunch Crewmate", "Dire Fleet Captain"], "cast_order_canonical": ["Staunch Crewmate", "Dire Fleet Captain"], "actions": [{ "card": "Staunch Crewmate" }, { "card": "Dire Fleet Captain" }] },
+    { "index": 4, "summary": "land=Secluded Courtyard; cast: Staunch Crewmate", "land": "Secluded Courtyard", "casts": ["Staunch Crewmate"], "actions": [{ "card": "Staunch Crewmate" }] },
+    { "index": 5, "summary": "land=Secluded Courtyard; cast: Dire Fleet Captain", "land": "Secluded Courtyard", "casts": ["Dire Fleet Captain"], "actions": [{ "card": "Dire Fleet Captain" }] },
+    { "index": 6, "summary": "land=none; cast: Staunch Crewmate", "land": null, "casts": ["Staunch Crewmate"], "actions": [{ "card": "Staunch Crewmate" }] },
+    { "index": 7, "summary": "land=none; cast: Dire Fleet Captain", "land": null, "casts": ["Dire Fleet Captain"], "actions": [{ "card": "Dire Fleet Captain" }] },
+    { "index": 8, "summary": "land=Secluded Courtyard; cast: (nothing)", "land": "Secluded Courtyard", "casts": [], "actions": [] },
+    { "index": 9, "summary": "land=none; cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "plans_hidden": 30,
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
+}
+},
+    { "chosen": 2, "decision": {
+  "decision_index": 11,
+  "type": "dig",
+  "source": "Staunch Crewmate",
+  "turn": 4,
+  "mdfc_backs": ["Boulderloft Pathway", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Corsair Captain", "idx": 9, "num": 10, "is_land": false }, { "name": "Daring Buccaneer", "idx": 2, "num": 14, "is_land": false }, { "name": "Daring Buccaneer", "idx": 6, "num": 15, "is_land": false }, { "name": "Dire Fleet Captain", "idx": 12, "num": 18, "is_land": false }, { "name": "Goblin Tomb Raider", "idx": 5, "num": 26, "is_land": false }, { "name": "Mountain", "idx": 1, "num": 38, "tapped": true, "is_land": true }, { "name": "Secluded Courtyard", "idx": 11, "num": 43, "tapped": true, "is_land": true }, { "name": "Spirebluff Canal", "idx": 8, "num": 49, "tapped": true, "is_land": true }, { "name": "Staunch Crewmate", "idx": 13, "num": 53, "is_land": false }, { "name": "Treasure Token", "idx": 10, "num": 1000, "is_land": false }, { "name": "Unclaimed Territory", "idx": 4, "num": 57, "tapped": true, "is_land": true }], "vial_counters": [], "hand": [], "graveyard": [], "library_size": 46, "land_drops_left": 0 },
+  "opponent": { "life": 9, "battlefield": [{ "name": "1/1 Creature", "idx": 0, "num": 500000, "is_land": false }, { "name": "1/1 Creature", "idx": 3, "num": 500001, "is_land": false }, { "name": "2/2 Creature", "idx": 7, "num": 500002, "is_land": false }] },
+  "heuristic_default": 2,
+  "examined": [{ "index": 0, "legal": false, "name": "Unclaimed Territory" }, { "index": 1, "legal": false, "name": "Lightning Bolt" }, { "index": 2, "legal": true, "name": "Aether Vial" }, { "index": 3, "legal": false, "name": "Unclaimed Territory" }],
+  "note": "reply an examined index to put that card into your hand, or -1 to take nothing. Default = the AI's pick."
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 12,
+  "main_ordinal": 4,
+  "type": "main_phase",
+  "turn": 4,
+  "phase": "pre_main",
+  "on_the_play": true,
+  "mdfc_backs": ["Boulderloft Pathway", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Corsair Captain", "idx": 9, "num": 10, "is_land": false }, { "name": "Daring Buccaneer", "idx": 2, "num": 14, "is_land": false }, { "name": "Daring Buccaneer", "idx": 6, "num": 15, "is_land": false }, { "name": "Dire Fleet Captain", "idx": 12, "num": 18, "is_land": false }, { "name": "Goblin Tomb Raider", "idx": 5, "num": 26, "is_land": false }, { "name": "Mountain", "idx": 1, "num": 38, "tapped": true, "is_land": true }, { "name": "Secluded Courtyard", "idx": 11, "num": 43, "tapped": true, "is_land": true }, { "name": "Spirebluff Canal", "idx": 8, "num": 49, "tapped": true, "is_land": true }, { "name": "Staunch Crewmate", "idx": 13, "num": 53, "is_land": false }, { "name": "Treasure Token", "idx": 10, "num": 1000, "is_land": false }, { "name": "Unclaimed Territory", "idx": 4, "num": 57, "tapped": true, "is_land": true }], "vial_counters": [], "hand": [{ "num": 5, "name": "Aether Vial", "cost": "{1}", "mv": 1, "kind": "permanent" }], "graveyard": [], "library_size": 49, "land_drops_left": 0 },
+  "opponent": { "life": 9, "battlefield": [{ "name": "1/1 Creature", "idx": 0, "num": 500000, "is_land": false }, { "name": "1/1 Creature", "idx": 3, "num": 500001, "is_land": false }, { "name": "2/2 Creature", "idx": 7, "num": 500002, "is_land": false }] },
+  "plans": [
+    { "index": 0, "summary": "land=none; cast: Aether Vial", "land": null, "casts": ["Aether Vial"], "actions": [{ "card": "Aether Vial" }] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
+}
+}
+  ],
+  "final_events": [
+    { "turn": 4, "kind": "combat", "text": "⚔ attacked: Daring Buccaneer (3), Goblin Tomb Raider (3), Daring Buccaneer (3), Corsair Captain (2) — 11 to opponent (9→-2)" }
+  ]
+}

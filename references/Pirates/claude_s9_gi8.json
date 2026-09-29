@@ -1,0 +1,399 @@
+{
+  "seed": 9, "game_index": 8, "win_turn": 4, "won": true,
+  "mulligan": { "count": 0, "bottom": [] },
+  "decisions": [
+    { "chosen": 1, "decision": {
+  "decision_index": 0,
+  "type": "mulligan",
+  "turn": 0,
+  "me": { "life": 20, "battlefield": [] },
+  "opponent": { "life": 20, "battlefield": [] },
+  "mulligan_count": 0,
+  "on_the_play": false,
+  "to_bottom": 0,
+  "hand": [{ "num": 49, "name": "Spirebluff Canal" }, { "num": 22, "name": "Fiery Islet" }, { "num": 53, "name": "Staunch Crewmate" }, { "num": 14, "name": "Daring Buccaneer" }, { "num": 23, "name": "Fiery Islet" }, { "num": 26, "name": "Goblin Tomb Raider" }, { "num": 38, "name": "Mountain" }],
+  "ai_choice": 1,
+  "note": "reply 1 to KEEP this hand (then bottom 0 card(s)), or 0 to mulligan again"
+}
+},
+    { "chosen": 5, "decision": {
+  "decision_index": 1,
+  "main_ordinal": 0,
+  "type": "main_phase",
+  "turn": 1,
+  "phase": "pre_main",
+  "on_the_play": false,
+  "drew": [{ "turn": 1, "card": "Aether Vial" }],
+  "mdfc_backs": ["Boulderloft Pathway", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [], "vial_counters": [], "hand": [{ "num": 5, "name": "Aether Vial", "cost": "{1}", "mv": 1, "kind": "permanent" }, { "num": 14, "name": "Daring Buccaneer", "cost": "{R}", "mv": 1, "kind": "permanent", "is_creature": true }, { "num": 22, "name": "Fiery Islet", "cost": "", "mv": 0, "kind": "land" }, { "num": 23, "name": "Fiery Islet", "cost": "", "mv": 0, "kind": "land" }, { "num": 26, "name": "Goblin Tomb Raider", "cost": "{R}", "mv": 1, "kind": "permanent", "is_creature": true }, { "num": 38, "name": "Mountain", "cost": "", "mv": 0, "kind": "land" }, { "num": 49, "name": "Spirebluff Canal", "cost": "", "mv": 0, "kind": "land" }, { "num": 53, "name": "Staunch Crewmate", "cost": "{1}{U}", "mv": 2, "kind": "permanent", "is_creature": true }], "graveyard": [], "library_size": 52, "land_drops_left": 1 },
+  "opponent": { "life": 20, "battlefield": [] },
+  "plans": [
+    { "index": 0, "summary": "land=Spirebluff Canal; cast: Daring Buccaneer", "land": "Spirebluff Canal", "casts": ["Daring Buccaneer"], "actions": [{ "card": "Daring Buccaneer" }] },
+    { "index": 1, "summary": "land=Fiery Islet; cast: Daring Buccaneer", "land": "Fiery Islet", "casts": ["Daring Buccaneer"], "actions": [{ "card": "Daring Buccaneer" }] },
+    { "index": 2, "summary": "land=Mountain; cast: Daring Buccaneer", "land": "Mountain", "casts": ["Daring Buccaneer"], "actions": [{ "card": "Daring Buccaneer" }] },
+    { "index": 3, "summary": "land=Spirebluff Canal; cast: Aether Vial", "land": "Spirebluff Canal", "casts": ["Aether Vial"], "actions": [{ "card": "Aether Vial" }] },
+    { "index": 4, "summary": "land=Fiery Islet; cast: Aether Vial", "land": "Fiery Islet", "casts": ["Aether Vial"], "actions": [{ "card": "Aether Vial" }] },
+    { "index": 5, "summary": "land=Mountain; cast: Aether Vial", "land": "Mountain", "casts": ["Aether Vial"], "actions": [{ "card": "Aether Vial" }] },
+    { "index": 6, "summary": "land=Spirebluff Canal; cast: Goblin Tomb Raider", "land": "Spirebluff Canal", "casts": ["Goblin Tomb Raider"], "actions": [{ "card": "Goblin Tomb Raider" }] },
+    { "index": 7, "summary": "land=Fiery Islet; cast: Goblin Tomb Raider", "land": "Fiery Islet", "casts": ["Goblin Tomb Raider"], "actions": [{ "card": "Goblin Tomb Raider" }] },
+    { "index": 8, "summary": "land=Mountain; cast: Goblin Tomb Raider", "land": "Mountain", "casts": ["Goblin Tomb Raider"], "actions": [{ "card": "Goblin Tomb Raider" }] },
+    { "index": 9, "summary": "land=Spirebluff Canal; cast: (nothing)", "land": "Spirebluff Canal", "casts": [], "actions": [] },
+    { "index": 10, "summary": "land=Fiery Islet; cast: (nothing)", "land": "Fiery Islet", "casts": [], "actions": [] },
+    { "index": 11, "summary": "land=Mountain; cast: (nothing)", "land": "Mountain", "casts": [], "actions": [] },
+    { "index": 12, "summary": "land=none; cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "plans_hidden": 20,
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 2,
+  "type": "main_phase",
+  "turn": 1,
+  "phase": "pre_main",
+  "on_the_play": false,
+  "mdfc_backs": ["Boulderloft Pathway", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Aether Vial", "idx": 1, "num": 5, "is_land": false }, { "name": "Mountain", "idx": 0, "num": 38, "tapped": true, "is_land": true }], "vial_counters": [0], "hand": [{ "num": 14, "name": "Daring Buccaneer", "cost": "{R}", "mv": 1, "kind": "permanent", "is_creature": true }, { "num": 22, "name": "Fiery Islet", "cost": "", "mv": 0, "kind": "land" }, { "num": 23, "name": "Fiery Islet", "cost": "", "mv": 0, "kind": "land" }, { "num": 26, "name": "Goblin Tomb Raider", "cost": "{R}", "mv": 1, "kind": "permanent", "is_creature": true }, { "num": 49, "name": "Spirebluff Canal", "cost": "", "mv": 0, "kind": "land" }, { "num": 53, "name": "Staunch Crewmate", "cost": "{1}{U}", "mv": 2, "kind": "permanent", "is_creature": true }], "graveyard": [], "library_size": 52, "land_drops_left": 0 },
+  "opponent": { "life": 20, "battlefield": [] },
+  "plans": [
+    { "index": 0, "summary": "cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 3,
+  "type": "main_phase",
+  "turn": 1,
+  "phase": "post_main",
+  "on_the_play": false,
+  "mdfc_backs": ["Boulderloft Pathway", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Aether Vial", "idx": 1, "num": 5, "is_land": false }, { "name": "Mountain", "idx": 0, "num": 38, "tapped": true, "is_land": true }], "vial_counters": [0], "hand": [{ "num": 14, "name": "Daring Buccaneer", "cost": "{R}", "mv": 1, "kind": "permanent", "is_creature": true }, { "num": 22, "name": "Fiery Islet", "cost": "", "mv": 0, "kind": "land" }, { "num": 23, "name": "Fiery Islet", "cost": "", "mv": 0, "kind": "land" }, { "num": 26, "name": "Goblin Tomb Raider", "cost": "{R}", "mv": 1, "kind": "permanent", "is_creature": true }, { "num": 49, "name": "Spirebluff Canal", "cost": "", "mv": 0, "kind": "land" }, { "num": 53, "name": "Staunch Crewmate", "cost": "{1}{U}", "mv": 2, "kind": "permanent", "is_creature": true }], "graveyard": [], "library_size": 52, "land_drops_left": 0 },
+  "opponent": { "life": 20, "battlefield": [] },
+  "plans": [
+    { "index": 0, "summary": "cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
+}
+},
+    { "chosen": 1, "decision": {
+  "decision_index": 4,
+  "type": "vial_charge",
+  "turn": 2,
+  "vial": "Aether Vial", "current_counters": 0,
+  "perm_index": 1,
+  "heuristic_default": 1,
+  "mdfc_backs": ["Boulderloft Pathway", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Aether Vial", "idx": 1, "num": 5, "is_land": false }, { "name": "Mountain", "idx": 0, "num": 38, "is_land": true, "taps": "R" }], "vial_counters": [0], "hand": [{ "num": 14, "name": "Daring Buccaneer", "cost": "{R}", "mv": 1, "kind": "permanent", "is_creature": true }, { "num": 22, "name": "Fiery Islet", "cost": "", "mv": 0, "kind": "land" }, { "num": 23, "name": "Fiery Islet", "cost": "", "mv": 0, "kind": "land" }, { "num": 26, "name": "Goblin Tomb Raider", "cost": "{R}", "mv": 1, "kind": "permanent", "is_creature": true }, { "num": 49, "name": "Spirebluff Canal", "cost": "", "mv": 0, "kind": "land" }, { "num": 53, "name": "Staunch Crewmate", "cost": "{1}{U}", "mv": 2, "kind": "permanent", "is_creature": true }], "graveyard": [], "library_size": 52, "land_drops_left": 1 },
+  "opponent": { "life": 20, "battlefield": [] },
+  "note": "reply 1 to add a charge counter this upkeep, 0 to hold. Aether Vial deploys a creature whose mana value EQUALS its counter count."
+}
+},
+    { "chosen": 3, "cast_order": ["*", "Goblin Tomb Raider", "Staunch Crewmate"], "decision": {
+  "decision_index": 5,
+  "main_ordinal": 1,
+  "type": "main_phase",
+  "turn": 2,
+  "phase": "pre_main",
+  "on_the_play": false,
+  "drew": [{ "turn": 2, "card": "Mountain" }],
+  "mdfc_backs": ["Boulderloft Pathway", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Aether Vial", "idx": 1, "num": 5, "is_land": false, "counters": [{ "kind": "charge", "label": "charge", "count": 1 }] }, { "name": "Mountain", "idx": 0, "num": 38, "is_land": true, "taps": "R" }], "vial_counters": [1], "hand": [{ "num": 14, "name": "Daring Buccaneer", "cost": "{R}", "mv": 1, "kind": "permanent", "is_creature": true }, { "num": 22, "name": "Fiery Islet", "cost": "", "mv": 0, "kind": "land" }, { "num": 23, "name": "Fiery Islet", "cost": "", "mv": 0, "kind": "land" }, { "num": 26, "name": "Goblin Tomb Raider", "cost": "{R}", "mv": 1, "kind": "permanent", "is_creature": true }, { "num": 39, "name": "Mountain", "cost": "", "mv": 0, "kind": "land" }, { "num": 49, "name": "Spirebluff Canal", "cost": "", "mv": 0, "kind": "land" }, { "num": 53, "name": "Staunch Crewmate", "cost": "{1}{U}", "mv": 2, "kind": "permanent", "is_creature": true }], "graveyard": [], "library_size": 51, "land_drops_left": 1 },
+  "opponent": { "life": 20, "battlefield": [] },
+  "plans": [
+    { "index": 0, "summary": "land=Spirebluff Canal; cast: Daring Buccaneer, Goblin Tomb Raider", "land": "Spirebluff Canal", "casts": ["Daring Buccaneer", "Goblin Tomb Raider"], "cast_order_canonical": ["Daring Buccaneer", "Goblin Tomb Raider"], "actions": [{ "card": "Daring Buccaneer" }, { "card": "Goblin Tomb Raider" }] },
+    { "index": 1, "summary": "land=Spirebluff Canal; cast: Goblin Tomb Raider, Daring Buccaneer", "land": "Spirebluff Canal", "casts": ["Goblin Tomb Raider", "Daring Buccaneer"], "cast_order_canonical": ["Goblin Tomb Raider", "Daring Buccaneer"], "actions": [{ "card": "Goblin Tomb Raider" }, { "card": "Daring Buccaneer" }] },
+    { "index": 2, "summary": "land=Spirebluff Canal; cast: Daring Buccaneer (vial), Goblin Tomb Raider", "land": "Spirebluff Canal", "casts": ["Daring Buccaneer", "Goblin Tomb Raider"], "actions": [{ "card": "Daring Buccaneer" }, { "card": "Goblin Tomb Raider" }] },
+    { "index": 3, "summary": "land=Spirebluff Canal; cast: Staunch Crewmate, Goblin Tomb Raider (vial)", "land": "Spirebluff Canal", "casts": ["Staunch Crewmate", "Goblin Tomb Raider"], "actions": [{ "card": "Staunch Crewmate" }, { "card": "Goblin Tomb Raider" }] },
+    { "index": 4, "summary": "land=Spirebluff Canal; cast: Goblin Tomb Raider (vial), Daring Buccaneer", "land": "Spirebluff Canal", "casts": ["Daring Buccaneer", "Goblin Tomb Raider"], "actions": [{ "card": "Daring Buccaneer" }, { "card": "Goblin Tomb Raider" }] },
+    { "index": 5, "summary": "land=Fiery Islet; cast: Daring Buccaneer, Goblin Tomb Raider", "land": "Fiery Islet", "casts": ["Daring Buccaneer", "Goblin Tomb Raider"], "cast_order_canonical": ["Daring Buccaneer", "Goblin Tomb Raider"], "actions": [{ "card": "Daring Buccaneer" }, { "card": "Goblin Tomb Raider" }] },
+    { "index": 6, "summary": "land=Fiery Islet; cast: Goblin Tomb Raider, Daring Buccaneer", "land": "Fiery Islet", "casts": ["Goblin Tomb Raider", "Daring Buccaneer"], "cast_order_canonical": ["Goblin Tomb Raider", "Daring Buccaneer"], "actions": [{ "card": "Goblin Tomb Raider" }, { "card": "Daring Buccaneer" }] },
+    { "index": 7, "summary": "land=Fiery Islet; cast: Daring Buccaneer (vial), Goblin Tomb Raider", "land": "Fiery Islet", "casts": ["Daring Buccaneer", "Goblin Tomb Raider"], "actions": [{ "card": "Daring Buccaneer" }, { "card": "Goblin Tomb Raider" }] },
+    { "index": 8, "summary": "land=Fiery Islet; cast: Staunch Crewmate, Goblin Tomb Raider (vial)", "land": "Fiery Islet", "casts": ["Staunch Crewmate", "Goblin Tomb Raider"], "actions": [{ "card": "Staunch Crewmate" }, { "card": "Goblin Tomb Raider" }] },
+    { "index": 9, "summary": "land=Fiery Islet; cast: Goblin Tomb Raider (vial), Daring Buccaneer", "land": "Fiery Islet", "casts": ["Daring Buccaneer", "Goblin Tomb Raider"], "actions": [{ "card": "Daring Buccaneer" }, { "card": "Goblin Tomb Raider" }] },
+    { "index": 10, "summary": "land=Mountain; cast: Daring Buccaneer, Goblin Tomb Raider", "land": "Mountain", "casts": ["Daring Buccaneer", "Goblin Tomb Raider"], "cast_order_canonical": ["Daring Buccaneer", "Goblin Tomb Raider"], "actions": [{ "card": "Daring Buccaneer" }, { "card": "Goblin Tomb Raider" }] },
+    { "index": 11, "summary": "land=Mountain; cast: Goblin Tomb Raider, Daring Buccaneer", "land": "Mountain", "casts": ["Goblin Tomb Raider", "Daring Buccaneer"], "cast_order_canonical": ["Goblin Tomb Raider", "Daring Buccaneer"], "actions": [{ "card": "Goblin Tomb Raider" }, { "card": "Daring Buccaneer" }] },
+    { "index": 12, "summary": "land=Mountain; cast: Daring Buccaneer (vial), Goblin Tomb Raider", "land": "Mountain", "casts": ["Daring Buccaneer", "Goblin Tomb Raider"], "actions": [{ "card": "Daring Buccaneer" }, { "card": "Goblin Tomb Raider" }] },
+    { "index": 13, "summary": "land=Mountain; cast: Goblin Tomb Raider (vial), Daring Buccaneer", "land": "Mountain", "casts": ["Daring Buccaneer", "Goblin Tomb Raider"], "actions": [{ "card": "Daring Buccaneer" }, { "card": "Goblin Tomb Raider" }] },
+    { "index": 14, "summary": "land=none; cast: Daring Buccaneer (vial), Goblin Tomb Raider", "land": null, "casts": ["Daring Buccaneer", "Goblin Tomb Raider"], "actions": [{ "card": "Daring Buccaneer" }, { "card": "Goblin Tomb Raider" }] },
+    { "index": 15, "summary": "land=none; cast: Goblin Tomb Raider (vial), Daring Buccaneer", "land": null, "casts": ["Daring Buccaneer", "Goblin Tomb Raider"], "actions": [{ "card": "Daring Buccaneer" }, { "card": "Goblin Tomb Raider" }] },
+    { "index": 16, "summary": "land=Spirebluff Canal; cast: Staunch Crewmate, Daring Buccaneer (vial)", "land": "Spirebluff Canal", "casts": ["Staunch Crewmate", "Daring Buccaneer"], "actions": [{ "card": "Staunch Crewmate" }, { "card": "Daring Buccaneer" }] },
+    { "index": 17, "summary": "land=Fiery Islet; cast: Staunch Crewmate, Daring Buccaneer (vial)", "land": "Fiery Islet", "casts": ["Staunch Crewmate", "Daring Buccaneer"], "actions": [{ "card": "Staunch Crewmate" }, { "card": "Daring Buccaneer" }] },
+    { "index": 18, "summary": "land=Spirebluff Canal; cast: Goblin Tomb Raider", "land": "Spirebluff Canal", "casts": ["Goblin Tomb Raider"], "actions": [{ "card": "Goblin Tomb Raider" }] },
+    { "index": 19, "summary": "land=Spirebluff Canal; cast: Goblin Tomb Raider (vial)", "land": "Spirebluff Canal", "casts": ["Goblin Tomb Raider"], "actions": [{ "card": "Goblin Tomb Raider" }] },
+    { "index": 20, "summary": "land=Fiery Islet; cast: Goblin Tomb Raider", "land": "Fiery Islet", "casts": ["Goblin Tomb Raider"], "actions": [{ "card": "Goblin Tomb Raider" }] },
+    { "index": 21, "summary": "land=Fiery Islet; cast: Goblin Tomb Raider (vial)", "land": "Fiery Islet", "casts": ["Goblin Tomb Raider"], "actions": [{ "card": "Goblin Tomb Raider" }] },
+    { "index": 22, "summary": "land=Mountain; cast: Goblin Tomb Raider", "land": "Mountain", "casts": ["Goblin Tomb Raider"], "actions": [{ "card": "Goblin Tomb Raider" }] },
+    { "index": 23, "summary": "land=Mountain; cast: Goblin Tomb Raider (vial)", "land": "Mountain", "casts": ["Goblin Tomb Raider"], "actions": [{ "card": "Goblin Tomb Raider" }] },
+    { "index": 24, "summary": "land=none; cast: Goblin Tomb Raider", "land": null, "casts": ["Goblin Tomb Raider"], "actions": [{ "card": "Goblin Tomb Raider" }] },
+    { "index": 25, "summary": "land=none; cast: Goblin Tomb Raider (vial)", "land": null, "casts": ["Goblin Tomb Raider"], "actions": [{ "card": "Goblin Tomb Raider" }] },
+    { "index": 26, "summary": "land=Spirebluff Canal; cast: Staunch Crewmate", "land": "Spirebluff Canal", "casts": ["Staunch Crewmate"], "actions": [{ "card": "Staunch Crewmate" }] },
+    { "index": 27, "summary": "land=Spirebluff Canal; cast: Daring Buccaneer", "land": "Spirebluff Canal", "casts": ["Daring Buccaneer"], "actions": [{ "card": "Daring Buccaneer" }] },
+    { "index": 28, "summary": "land=Spirebluff Canal; cast: Daring Buccaneer (vial)", "land": "Spirebluff Canal", "casts": ["Daring Buccaneer"], "actions": [{ "card": "Daring Buccaneer" }] },
+    { "index": 29, "summary": "land=Fiery Islet; cast: Staunch Crewmate", "land": "Fiery Islet", "casts": ["Staunch Crewmate"], "actions": [{ "card": "Staunch Crewmate" }] },
+    { "index": 30, "summary": "land=Fiery Islet; cast: Daring Buccaneer", "land": "Fiery Islet", "casts": ["Daring Buccaneer"], "actions": [{ "card": "Daring Buccaneer" }] },
+    { "index": 31, "summary": "land=Fiery Islet; cast: Daring Buccaneer (vial)", "land": "Fiery Islet", "casts": ["Daring Buccaneer"], "actions": [{ "card": "Daring Buccaneer" }] },
+    { "index": 32, "summary": "land=Mountain; cast: Daring Buccaneer", "land": "Mountain", "casts": ["Daring Buccaneer"], "actions": [{ "card": "Daring Buccaneer" }] },
+    { "index": 33, "summary": "land=Mountain; cast: Daring Buccaneer (vial)", "land": "Mountain", "casts": ["Daring Buccaneer"], "actions": [{ "card": "Daring Buccaneer" }] },
+    { "index": 34, "summary": "land=none; cast: Daring Buccaneer", "land": null, "casts": ["Daring Buccaneer"], "actions": [{ "card": "Daring Buccaneer" }] },
+    { "index": 35, "summary": "land=none; cast: Daring Buccaneer (vial)", "land": null, "casts": ["Daring Buccaneer"], "actions": [{ "card": "Daring Buccaneer" }] },
+    { "index": 36, "summary": "land=Spirebluff Canal; cast: (nothing)", "land": "Spirebluff Canal", "casts": [], "actions": [] },
+    { "index": 37, "summary": "land=Fiery Islet; cast: (nothing)", "land": "Fiery Islet", "casts": [], "actions": [] },
+    { "index": 38, "summary": "land=Mountain; cast: (nothing)", "land": "Mountain", "casts": [], "actions": [] },
+    { "index": 39, "summary": "land=none; cast: (nothing)", "land": null, "casts": [], "actions": [] },
+    { "index": 115, "summary": "land=Spirebluff Canal; cast: Daring Buccaneer, Goblin Tomb Raider (vial)", "land": "Spirebluff Canal", "vial_after_casts": true, "casts": ["Daring Buccaneer", "Goblin Tomb Raider"], "actions": [{ "card": "Daring Buccaneer" }, { "card": "Goblin Tomb Raider" }] },
+    { "index": 116, "summary": "land=Fiery Islet; cast: Daring Buccaneer, Goblin Tomb Raider (vial)", "land": "Fiery Islet", "vial_after_casts": true, "casts": ["Daring Buccaneer", "Goblin Tomb Raider"], "actions": [{ "card": "Daring Buccaneer" }, { "card": "Goblin Tomb Raider" }] },
+    { "index": 117, "summary": "land=Mountain; cast: Daring Buccaneer, Goblin Tomb Raider (vial)", "land": "Mountain", "vial_after_casts": true, "casts": ["Daring Buccaneer", "Goblin Tomb Raider"], "actions": [{ "card": "Daring Buccaneer" }, { "card": "Goblin Tomb Raider" }] },
+    { "index": 118, "summary": "land=none; cast: Daring Buccaneer, Goblin Tomb Raider (vial)", "land": null, "vial_after_casts": true, "casts": ["Daring Buccaneer", "Goblin Tomb Raider"], "actions": [{ "card": "Daring Buccaneer" }, { "card": "Goblin Tomb Raider" }] }
+  ],
+  "plans_hidden": 75,
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
+}
+},
+    { "chosen": 3, "decision": {
+  "decision_index": 6,
+  "type": "dig",
+  "source": "Staunch Crewmate",
+  "turn": 2,
+  "mdfc_backs": ["Boulderloft Pathway", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Aether Vial", "idx": 1, "num": 5, "tapped": true, "is_land": false, "counters": [{ "kind": "charge", "label": "charge", "count": 1 }] }, { "name": "Goblin Tomb Raider", "idx": 3, "num": 26, "is_land": false }, { "name": "Mountain", "idx": 0, "num": 38, "tapped": true, "is_land": true }, { "name": "Spirebluff Canal", "idx": 2, "num": 49, "tapped": true, "is_land": true }, { "name": "Staunch Crewmate", "idx": 4, "num": 53, "is_land": false }], "vial_counters": [1], "hand": [{ "num": 14, "name": "Daring Buccaneer", "cost": "{R}", "mv": 1, "kind": "permanent", "is_creature": true }, { "num": 22, "name": "Fiery Islet", "cost": "", "mv": 0, "kind": "land" }, { "num": 23, "name": "Fiery Islet", "cost": "", "mv": 0, "kind": "land" }, { "num": 39, "name": "Mountain", "cost": "", "mv": 0, "kind": "land" }], "graveyard": [], "library_size": 47, "land_drops_left": 0 },
+  "opponent": { "life": 20, "battlefield": [] },
+  "heuristic_default": 0,
+  "examined": [{ "index": 0, "legal": true, "name": "Daring Buccaneer" }, { "index": 1, "legal": true, "name": "Aether Vial" }, { "index": 2, "legal": false, "name": "Lightning Bolt" }, { "index": 3, "legal": true, "name": "Adaptive Automaton" }],
+  "note": "reply an examined index to put that card into your hand, or -1 to take nothing. Default = the AI's pick."
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 7,
+  "type": "main_phase",
+  "turn": 2,
+  "phase": "pre_main",
+  "on_the_play": false,
+  "mdfc_backs": ["Boulderloft Pathway", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Aether Vial", "idx": 1, "num": 5, "tapped": true, "is_land": false, "counters": [{ "kind": "charge", "label": "charge", "count": 1 }] }, { "name": "Goblin Tomb Raider", "idx": 3, "num": 26, "is_land": false }, { "name": "Mountain", "idx": 0, "num": 38, "tapped": true, "is_land": true }, { "name": "Spirebluff Canal", "idx": 2, "num": 49, "tapped": true, "is_land": true }, { "name": "Staunch Crewmate", "idx": 4, "num": 53, "is_land": false }], "vial_counters": [1], "hand": [{ "num": 1, "name": "Adaptive Automaton", "cost": "{3}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 14, "name": "Daring Buccaneer", "cost": "{R}", "mv": 1, "kind": "permanent", "is_creature": true }, { "num": 22, "name": "Fiery Islet", "cost": "", "mv": 0, "kind": "land" }, { "num": 23, "name": "Fiery Islet", "cost": "", "mv": 0, "kind": "land" }, { "num": 39, "name": "Mountain", "cost": "", "mv": 0, "kind": "land" }], "graveyard": [], "library_size": 50, "land_drops_left": 0 },
+  "opponent": { "life": 20, "battlefield": [] },
+  "plans": [
+    { "index": 0, "summary": "cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 8,
+  "type": "main_phase",
+  "turn": 2,
+  "phase": "post_main",
+  "on_the_play": false,
+  "events": [{ "turn": 2, "kind": "combat", "text": "⚔ attacked: Goblin Tomb Raider (2) — 2 to opponent (20→18)" }],
+  "mdfc_backs": ["Boulderloft Pathway", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Aether Vial", "idx": 1, "num": 5, "tapped": true, "is_land": false, "counters": [{ "kind": "charge", "label": "charge", "count": 1 }] }, { "name": "Goblin Tomb Raider", "idx": 3, "num": 26, "tapped": true, "is_land": false }, { "name": "Mountain", "idx": 0, "num": 38, "tapped": true, "is_land": true }, { "name": "Spirebluff Canal", "idx": 2, "num": 49, "tapped": true, "is_land": true }, { "name": "Staunch Crewmate", "idx": 4, "num": 53, "is_land": false }], "vial_counters": [1], "hand": [{ "num": 1, "name": "Adaptive Automaton", "cost": "{3}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 14, "name": "Daring Buccaneer", "cost": "{R}", "mv": 1, "kind": "permanent", "is_creature": true }, { "num": 22, "name": "Fiery Islet", "cost": "", "mv": 0, "kind": "land" }, { "num": 23, "name": "Fiery Islet", "cost": "", "mv": 0, "kind": "land" }, { "num": 39, "name": "Mountain", "cost": "", "mv": 0, "kind": "land" }], "graveyard": [], "library_size": 50, "land_drops_left": 0 },
+  "opponent": { "life": 18, "battlefield": [] },
+  "plans": [
+    { "index": 0, "summary": "cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
+}
+},
+    { "chosen": 0, "decision": {
+  "decision_index": 9,
+  "type": "vial_charge",
+  "turn": 3,
+  "vial": "Aether Vial", "current_counters": 1,
+  "perm_index": 1,
+  "heuristic_default": 1,
+  "mdfc_backs": ["Boulderloft Pathway", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Aether Vial", "idx": 1, "num": 5, "is_land": false, "counters": [{ "kind": "charge", "label": "charge", "count": 1 }] }, { "name": "Goblin Tomb Raider", "idx": 3, "num": 26, "is_land": false }, { "name": "Mountain", "idx": 0, "num": 38, "is_land": true, "taps": "R" }, { "name": "Spirebluff Canal", "idx": 2, "num": 49, "is_land": true, "taps": "UR" }, { "name": "Staunch Crewmate", "idx": 4, "num": 53, "is_land": false }], "vial_counters": [1], "hand": [{ "num": 1, "name": "Adaptive Automaton", "cost": "{3}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 14, "name": "Daring Buccaneer", "cost": "{R}", "mv": 1, "kind": "permanent", "is_creature": true }, { "num": 22, "name": "Fiery Islet", "cost": "", "mv": 0, "kind": "land" }, { "num": 23, "name": "Fiery Islet", "cost": "", "mv": 0, "kind": "land" }, { "num": 39, "name": "Mountain", "cost": "", "mv": 0, "kind": "land" }], "graveyard": [], "library_size": 50, "land_drops_left": 1 },
+  "opponent": { "life": 18, "battlefield": [{ "name": "1/1 Creature", "idx": 6, "num": 500001, "is_land": false }, { "name": "6/6 Creature", "idx": 5, "num": 500000, "is_land": false }] },
+  "note": "reply 1 to add a charge counter this upkeep, 0 to hold. Aether Vial deploys a creature whose mana value EQUALS its counter count."
+}
+},
+    { "chosen": 3, "cast_order": ["*", "Adaptive Automaton", "Daring Buccaneer"], "decision": {
+  "decision_index": 10,
+  "main_ordinal": 2,
+  "type": "main_phase",
+  "turn": 3,
+  "phase": "pre_main",
+  "on_the_play": false,
+  "drew": [{ "turn": 3, "card": "Kitesail Larcenist" }],
+  "mdfc_backs": ["Boulderloft Pathway", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Aether Vial", "idx": 1, "num": 5, "is_land": false, "counters": [{ "kind": "charge", "label": "charge", "count": 1 }] }, { "name": "Goblin Tomb Raider", "idx": 3, "num": 26, "is_land": false }, { "name": "Mountain", "idx": 0, "num": 38, "is_land": true, "taps": "R" }, { "name": "Spirebluff Canal", "idx": 2, "num": 49, "is_land": true, "taps": "UR" }, { "name": "Staunch Crewmate", "idx": 4, "num": 53, "is_land": false }], "vial_counters": [1], "hand": [{ "num": 1, "name": "Adaptive Automaton", "cost": "{3}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 14, "name": "Daring Buccaneer", "cost": "{R}", "mv": 1, "kind": "permanent", "is_creature": true }, { "num": 22, "name": "Fiery Islet", "cost": "", "mv": 0, "kind": "land" }, { "num": 23, "name": "Fiery Islet", "cost": "", "mv": 0, "kind": "land" }, { "num": 30, "name": "Kitesail Larcenist", "cost": "{2}{U}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 39, "name": "Mountain", "cost": "", "mv": 0, "kind": "land" }], "graveyard": [], "library_size": 49, "land_drops_left": 1 },
+  "opponent": { "life": 18, "battlefield": [{ "name": "1/1 Creature", "idx": 6, "num": 500001, "is_land": false }, { "name": "6/6 Creature", "idx": 5, "num": 500000, "is_land": false }] },
+  "plans": [
+    { "index": 0, "summary": "land=Fiery Islet; cast: Daring Buccaneer (vial), Adaptive Automaton", "land": "Fiery Islet", "casts": ["Daring Buccaneer", "Adaptive Automaton"], "actions": [{ "card": "Daring Buccaneer" }, { "card": "Adaptive Automaton" }] },
+    { "index": 1, "summary": "land=Fiery Islet; cast: Daring Buccaneer (vial), Kitesail Larcenist (no Treasure)", "land": "Fiery Islet", "casts": ["Daring Buccaneer", "Kitesail Larcenist"], "actions": [{ "card": "Daring Buccaneer" }, { "card": "Kitesail Larcenist", "treasurify_target": 0 }] },
+    { "index": 2, "summary": "land=Fiery Islet; cast: Daring Buccaneer (vial), Kitesail Larcenist (Treasure: choose on resolution)", "land": "Fiery Islet", "casts": ["Daring Buccaneer", "Kitesail Larcenist"], "actions": [{ "card": "Daring Buccaneer" }, { "card": "Kitesail Larcenist", "treasurify_target": -2 }] },
+    { "index": 3, "summary": "land=Mountain; cast: Daring Buccaneer (vial), Adaptive Automaton", "land": "Mountain", "casts": ["Daring Buccaneer", "Adaptive Automaton"], "actions": [{ "card": "Daring Buccaneer" }, { "card": "Adaptive Automaton" }] },
+    { "index": 4, "summary": "land=Mountain; cast: Daring Buccaneer (vial), Kitesail Larcenist (no Treasure)", "land": "Mountain", "casts": ["Daring Buccaneer", "Kitesail Larcenist"], "actions": [{ "card": "Daring Buccaneer" }, { "card": "Kitesail Larcenist", "treasurify_target": 0 }] },
+    { "index": 5, "summary": "land=Mountain; cast: Daring Buccaneer (vial), Kitesail Larcenist (Treasure: choose on resolution)", "land": "Mountain", "casts": ["Daring Buccaneer", "Kitesail Larcenist"], "actions": [{ "card": "Daring Buccaneer" }, { "card": "Kitesail Larcenist", "treasurify_target": -2 }] },
+    { "index": 6, "summary": "land=Fiery Islet; cast: Daring Buccaneer (vial), Kitesail Larcenist → Treasure: Aether Vial", "land": "Fiery Islet", "casts": ["Daring Buccaneer", "Kitesail Larcenist"], "actions": [{ "card": "Daring Buccaneer" }, { "card": "Kitesail Larcenist", "x": 5, "treasurify_target": 5, "treasurify_target_label": "Aether Vial" }] },
+    { "index": 7, "summary": "land=Fiery Islet; cast: Daring Buccaneer (vial), Kitesail Larcenist → Treasure: Goblin Tomb Raider", "land": "Fiery Islet", "casts": ["Daring Buccaneer", "Kitesail Larcenist"], "actions": [{ "card": "Daring Buccaneer" }, { "card": "Kitesail Larcenist", "x": 26, "treasurify_target": 26, "treasurify_target_label": "Goblin Tomb Raider" }] },
+    { "index": 8, "summary": "land=Fiery Islet; cast: Daring Buccaneer (vial), Kitesail Larcenist → Treasure: Staunch Crewmate", "land": "Fiery Islet", "casts": ["Daring Buccaneer", "Kitesail Larcenist"], "actions": [{ "card": "Daring Buccaneer" }, { "card": "Kitesail Larcenist", "x": 53, "treasurify_target": 53, "treasurify_target_label": "Staunch Crewmate" }] },
+    { "index": 9, "summary": "land=Mountain; cast: Daring Buccaneer (vial), Kitesail Larcenist → Treasure: Aether Vial", "land": "Mountain", "casts": ["Daring Buccaneer", "Kitesail Larcenist"], "actions": [{ "card": "Daring Buccaneer" }, { "card": "Kitesail Larcenist", "x": 5, "treasurify_target": 5, "treasurify_target_label": "Aether Vial" }] },
+    { "index": 10, "summary": "land=Mountain; cast: Daring Buccaneer (vial), Kitesail Larcenist → Treasure: Goblin Tomb Raider", "land": "Mountain", "casts": ["Daring Buccaneer", "Kitesail Larcenist"], "actions": [{ "card": "Daring Buccaneer" }, { "card": "Kitesail Larcenist", "x": 26, "treasurify_target": 26, "treasurify_target_label": "Goblin Tomb Raider" }] },
+    { "index": 11, "summary": "land=Mountain; cast: Daring Buccaneer (vial), Kitesail Larcenist → Treasure: Staunch Crewmate", "land": "Mountain", "casts": ["Daring Buccaneer", "Kitesail Larcenist"], "actions": [{ "card": "Daring Buccaneer" }, { "card": "Kitesail Larcenist", "x": 53, "treasurify_target": 53, "treasurify_target_label": "Staunch Crewmate" }] },
+    { "index": 12, "summary": "land=Fiery Islet; cast: Daring Buccaneer", "land": "Fiery Islet", "casts": ["Daring Buccaneer"], "actions": [{ "card": "Daring Buccaneer" }] },
+    { "index": 13, "summary": "land=Fiery Islet; cast: Daring Buccaneer (vial)", "land": "Fiery Islet", "casts": ["Daring Buccaneer"], "actions": [{ "card": "Daring Buccaneer" }] },
+    { "index": 14, "summary": "land=Fiery Islet; cast: Adaptive Automaton", "land": "Fiery Islet", "casts": ["Adaptive Automaton"], "actions": [{ "card": "Adaptive Automaton" }] },
+    { "index": 15, "summary": "land=Fiery Islet; cast: Kitesail Larcenist (no Treasure)", "land": "Fiery Islet", "casts": ["Kitesail Larcenist"], "actions": [{ "card": "Kitesail Larcenist", "treasurify_target": 0 }] },
+    { "index": 16, "summary": "land=Fiery Islet; cast: Kitesail Larcenist (Treasure: choose on resolution)", "land": "Fiery Islet", "casts": ["Kitesail Larcenist"], "actions": [{ "card": "Kitesail Larcenist", "treasurify_target": -2 }] },
+    { "index": 17, "summary": "land=Mountain; cast: Daring Buccaneer", "land": "Mountain", "casts": ["Daring Buccaneer"], "actions": [{ "card": "Daring Buccaneer" }] },
+    { "index": 18, "summary": "land=Mountain; cast: Daring Buccaneer (vial)", "land": "Mountain", "casts": ["Daring Buccaneer"], "actions": [{ "card": "Daring Buccaneer" }] },
+    { "index": 19, "summary": "land=Mountain; cast: Adaptive Automaton", "land": "Mountain", "casts": ["Adaptive Automaton"], "actions": [{ "card": "Adaptive Automaton" }] },
+    { "index": 20, "summary": "land=Mountain; cast: Kitesail Larcenist (no Treasure)", "land": "Mountain", "casts": ["Kitesail Larcenist"], "actions": [{ "card": "Kitesail Larcenist", "treasurify_target": 0 }] },
+    { "index": 21, "summary": "land=Mountain; cast: Kitesail Larcenist (Treasure: choose on resolution)", "land": "Mountain", "casts": ["Kitesail Larcenist"], "actions": [{ "card": "Kitesail Larcenist", "treasurify_target": -2 }] },
+    { "index": 22, "summary": "land=none; cast: Daring Buccaneer", "land": null, "casts": ["Daring Buccaneer"], "actions": [{ "card": "Daring Buccaneer" }] },
+    { "index": 23, "summary": "land=none; cast: Daring Buccaneer (vial)", "land": null, "casts": ["Daring Buccaneer"], "actions": [{ "card": "Daring Buccaneer" }] },
+    { "index": 24, "summary": "land=Fiery Islet; cast: Kitesail Larcenist → Treasure: Aether Vial", "land": "Fiery Islet", "casts": ["Kitesail Larcenist"], "actions": [{ "card": "Kitesail Larcenist", "x": 5, "treasurify_target": 5, "treasurify_target_label": "Aether Vial" }] },
+    { "index": 25, "summary": "land=Fiery Islet; cast: Kitesail Larcenist → Treasure: Goblin Tomb Raider", "land": "Fiery Islet", "casts": ["Kitesail Larcenist"], "actions": [{ "card": "Kitesail Larcenist", "x": 26, "treasurify_target": 26, "treasurify_target_label": "Goblin Tomb Raider" }] },
+    { "index": 26, "summary": "land=Fiery Islet; cast: Kitesail Larcenist → Treasure: Staunch Crewmate", "land": "Fiery Islet", "casts": ["Kitesail Larcenist"], "actions": [{ "card": "Kitesail Larcenist", "x": 53, "treasurify_target": 53, "treasurify_target_label": "Staunch Crewmate" }] },
+    { "index": 27, "summary": "land=Mountain; cast: Kitesail Larcenist → Treasure: Aether Vial", "land": "Mountain", "casts": ["Kitesail Larcenist"], "actions": [{ "card": "Kitesail Larcenist", "x": 5, "treasurify_target": 5, "treasurify_target_label": "Aether Vial" }] },
+    { "index": 28, "summary": "land=Mountain; cast: Kitesail Larcenist → Treasure: Goblin Tomb Raider", "land": "Mountain", "casts": ["Kitesail Larcenist"], "actions": [{ "card": "Kitesail Larcenist", "x": 26, "treasurify_target": 26, "treasurify_target_label": "Goblin Tomb Raider" }] },
+    { "index": 29, "summary": "land=Mountain; cast: Kitesail Larcenist → Treasure: Staunch Crewmate", "land": "Mountain", "casts": ["Kitesail Larcenist"], "actions": [{ "card": "Kitesail Larcenist", "x": 53, "treasurify_target": 53, "treasurify_target_label": "Staunch Crewmate" }] },
+    { "index": 30, "summary": "land=Fiery Islet; cast: (nothing)", "land": "Fiery Islet", "casts": [], "actions": [] },
+    { "index": 31, "summary": "land=Mountain; cast: (nothing)", "land": "Mountain", "casts": [], "actions": [] },
+    { "index": 32, "summary": "land=none; cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "plans_hidden": 75,
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 11,
+  "type": "main_phase",
+  "turn": 3,
+  "phase": "pre_main",
+  "on_the_play": false,
+  "mdfc_backs": ["Boulderloft Pathway", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Adaptive Automaton", "idx": 9, "num": 1, "is_land": false }, { "name": "Aether Vial", "idx": 1, "num": 5, "tapped": true, "is_land": false, "counters": [{ "kind": "charge", "label": "charge", "count": 1 }] }, { "name": "Daring Buccaneer", "idx": 8, "num": 14, "is_land": false }, { "name": "Goblin Tomb Raider", "idx": 3, "num": 26, "is_land": false }, { "name": "Mountain", "idx": 0, "num": 38, "tapped": true, "is_land": true }, { "name": "Mountain", "idx": 7, "num": 39, "tapped": true, "is_land": true }, { "name": "Spirebluff Canal", "idx": 2, "num": 49, "tapped": true, "is_land": true }, { "name": "Staunch Crewmate", "idx": 4, "num": 53, "is_land": false }], "vial_counters": [1], "hand": [{ "num": 22, "name": "Fiery Islet", "cost": "", "mv": 0, "kind": "land" }, { "num": 23, "name": "Fiery Islet", "cost": "", "mv": 0, "kind": "land" }, { "num": 30, "name": "Kitesail Larcenist", "cost": "{2}{U}", "mv": 3, "kind": "permanent", "is_creature": true }], "graveyard": [], "library_size": 49, "land_drops_left": 0 },
+  "opponent": { "life": 18, "battlefield": [{ "name": "1/1 Creature", "idx": 6, "num": 500001, "is_land": false }, { "name": "6/6 Creature", "idx": 5, "num": 500000, "is_land": false }] },
+  "plans": [
+    { "index": 0, "summary": "cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 12,
+  "type": "main_phase",
+  "turn": 3,
+  "phase": "post_main",
+  "on_the_play": false,
+  "events": [{ "turn": 3, "kind": "combat", "text": "⚔ attacked: Goblin Tomb Raider (3), Staunch Crewmate (3) — 6 to opponent (18→12)" }],
+  "mdfc_backs": ["Boulderloft Pathway", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Adaptive Automaton", "idx": 9, "num": 1, "is_land": false }, { "name": "Aether Vial", "idx": 1, "num": 5, "tapped": true, "is_land": false, "counters": [{ "kind": "charge", "label": "charge", "count": 1 }] }, { "name": "Daring Buccaneer", "idx": 8, "num": 14, "is_land": false }, { "name": "Goblin Tomb Raider", "idx": 3, "num": 26, "tapped": true, "is_land": false }, { "name": "Mountain", "idx": 0, "num": 38, "tapped": true, "is_land": true }, { "name": "Mountain", "idx": 7, "num": 39, "tapped": true, "is_land": true }, { "name": "Spirebluff Canal", "idx": 2, "num": 49, "tapped": true, "is_land": true }, { "name": "Staunch Crewmate", "idx": 4, "num": 53, "tapped": true, "is_land": false }], "vial_counters": [1], "hand": [{ "num": 22, "name": "Fiery Islet", "cost": "", "mv": 0, "kind": "land" }, { "num": 23, "name": "Fiery Islet", "cost": "", "mv": 0, "kind": "land" }, { "num": 30, "name": "Kitesail Larcenist", "cost": "{2}{U}", "mv": 3, "kind": "permanent", "is_creature": true }], "graveyard": [], "library_size": 49, "land_drops_left": 0 },
+  "opponent": { "life": 12, "battlefield": [{ "name": "1/1 Creature", "idx": 6, "num": 500001, "is_land": false }, { "name": "6/6 Creature", "idx": 5, "num": 500000, "is_land": false }] },
+  "plans": [
+    { "index": 0, "summary": "cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
+}
+},
+    { "chosen": 1, "decision": {
+  "decision_index": 13,
+  "type": "vial_charge",
+  "turn": 4,
+  "vial": "Aether Vial", "current_counters": 1,
+  "perm_index": 1,
+  "heuristic_default": 1,
+  "mdfc_backs": ["Boulderloft Pathway", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Adaptive Automaton", "idx": 9, "num": 1, "is_land": false }, { "name": "Aether Vial", "idx": 1, "num": 5, "is_land": false, "counters": [{ "kind": "charge", "label": "charge", "count": 1 }] }, { "name": "Daring Buccaneer", "idx": 8, "num": 14, "is_land": false }, { "name": "Goblin Tomb Raider", "idx": 3, "num": 26, "is_land": false }, { "name": "Mountain", "idx": 0, "num": 38, "is_land": true, "taps": "R" }, { "name": "Mountain", "idx": 7, "num": 39, "is_land": true, "taps": "R" }, { "name": "Spirebluff Canal", "idx": 2, "num": 49, "is_land": true, "taps": "UR" }, { "name": "Staunch Crewmate", "idx": 4, "num": 53, "is_land": false }], "vial_counters": [1], "hand": [{ "num": 22, "name": "Fiery Islet", "cost": "", "mv": 0, "kind": "land" }, { "num": 23, "name": "Fiery Islet", "cost": "", "mv": 0, "kind": "land" }, { "num": 30, "name": "Kitesail Larcenist", "cost": "{2}{U}", "mv": 3, "kind": "permanent", "is_creature": true }], "graveyard": [], "library_size": 49, "land_drops_left": 1 },
+  "opponent": { "life": 12, "battlefield": [{ "name": "1/1 Creature", "idx": 6, "num": 500001, "is_land": false }, { "name": "6/6 Creature", "idx": 5, "num": 500000, "is_land": false }] },
+  "note": "reply 1 to add a charge counter this upkeep, 0 to hold. Aether Vial deploys a creature whose mana value EQUALS its counter count."
+}
+},
+    { "chosen": 0, "cast_order": ["*", "Malcolm, the Eyes", "Kitesail Larcenist"], "decision": {
+  "decision_index": 14,
+  "main_ordinal": 3,
+  "type": "main_phase",
+  "turn": 4,
+  "phase": "pre_main",
+  "on_the_play": false,
+  "drew": [{ "turn": 4, "card": "Malcolm, the Eyes" }],
+  "mdfc_backs": ["Boulderloft Pathway", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Adaptive Automaton", "idx": 9, "num": 1, "is_land": false }, { "name": "Aether Vial", "idx": 1, "num": 5, "is_land": false, "counters": [{ "kind": "charge", "label": "charge", "count": 2 }] }, { "name": "Daring Buccaneer", "idx": 8, "num": 14, "is_land": false }, { "name": "Goblin Tomb Raider", "idx": 3, "num": 26, "is_land": false }, { "name": "Mountain", "idx": 0, "num": 38, "is_land": true, "taps": "R" }, { "name": "Mountain", "idx": 7, "num": 39, "is_land": true, "taps": "R" }, { "name": "Spirebluff Canal", "idx": 2, "num": 49, "is_land": true, "taps": "UR" }, { "name": "Staunch Crewmate", "idx": 4, "num": 53, "is_land": false }], "vial_counters": [2], "hand": [{ "num": 22, "name": "Fiery Islet", "cost": "", "mv": 0, "kind": "land" }, { "num": 23, "name": "Fiery Islet", "cost": "", "mv": 0, "kind": "land" }, { "num": 30, "name": "Kitesail Larcenist", "cost": "{2}{U}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 33, "name": "Malcolm, the Eyes", "cost": "{U}{R}", "mv": 2, "kind": "permanent", "is_creature": true }], "graveyard": [], "library_size": 48, "land_drops_left": 1 },
+  "opponent": { "life": 12, "battlefield": [{ "name": "1/1 Creature", "idx": 6, "num": 500001, "is_land": false }, { "name": "6/6 Creature", "idx": 5, "num": 500000, "is_land": false }] },
+  "plans": [
+    { "index": 0, "summary": "land=Fiery Islet; cast: Kitesail Larcenist (no Treasure), Malcolm, the Eyes (vial)", "land": "Fiery Islet", "casts": ["Kitesail Larcenist", "Malcolm, the Eyes"], "actions": [{ "card": "Kitesail Larcenist", "treasurify_target": 0 }, { "card": "Malcolm, the Eyes" }] },
+    { "index": 1, "summary": "land=Fiery Islet; cast: Kitesail Larcenist (Treasure: choose on resolution), Malcolm, the Eyes (vial)", "land": "Fiery Islet", "casts": ["Kitesail Larcenist", "Malcolm, the Eyes"], "actions": [{ "card": "Kitesail Larcenist", "treasurify_target": -2 }, { "card": "Malcolm, the Eyes" }] },
+    { "index": 2, "summary": "land=none; cast: Kitesail Larcenist (no Treasure), Malcolm, the Eyes (vial)", "land": null, "casts": ["Kitesail Larcenist", "Malcolm, the Eyes"], "actions": [{ "card": "Kitesail Larcenist", "treasurify_target": 0 }, { "card": "Malcolm, the Eyes" }] },
+    { "index": 3, "summary": "land=none; cast: Kitesail Larcenist (Treasure: choose on resolution), Malcolm, the Eyes (vial)", "land": null, "casts": ["Kitesail Larcenist", "Malcolm, the Eyes"], "actions": [{ "card": "Kitesail Larcenist", "treasurify_target": -2 }, { "card": "Malcolm, the Eyes" }] },
+    { "index": 4, "summary": "land=Fiery Islet; cast: Kitesail Larcenist → Treasure: Aether Vial, Malcolm, the Eyes (vial)", "land": "Fiery Islet", "casts": ["Kitesail Larcenist", "Malcolm, the Eyes"], "actions": [{ "card": "Kitesail Larcenist", "x": 5, "treasurify_target": 5, "treasurify_target_label": "Aether Vial" }, { "card": "Malcolm, the Eyes" }] },
+    { "index": 5, "summary": "land=Fiery Islet; cast: Kitesail Larcenist → Treasure: Goblin Tomb Raider, Malcolm, the Eyes (vial)", "land": "Fiery Islet", "casts": ["Kitesail Larcenist", "Malcolm, the Eyes"], "actions": [{ "card": "Kitesail Larcenist", "x": 26, "treasurify_target": 26, "treasurify_target_label": "Goblin Tomb Raider" }, { "card": "Malcolm, the Eyes" }] },
+    { "index": 6, "summary": "land=Fiery Islet; cast: Kitesail Larcenist → Treasure: Staunch Crewmate, Malcolm, the Eyes (vial)", "land": "Fiery Islet", "casts": ["Kitesail Larcenist", "Malcolm, the Eyes"], "actions": [{ "card": "Kitesail Larcenist", "x": 53, "treasurify_target": 53, "treasurify_target_label": "Staunch Crewmate" }, { "card": "Malcolm, the Eyes" }] },
+    { "index": 7, "summary": "land=Fiery Islet; cast: Kitesail Larcenist → Treasure: Daring Buccaneer, Malcolm, the Eyes (vial)", "land": "Fiery Islet", "casts": ["Kitesail Larcenist", "Malcolm, the Eyes"], "actions": [{ "card": "Kitesail Larcenist", "x": 14, "treasurify_target": 14, "treasurify_target_label": "Daring Buccaneer" }, { "card": "Malcolm, the Eyes" }] },
+    { "index": 8, "summary": "land=Fiery Islet; cast: Kitesail Larcenist → Treasure: Adaptive Automaton, Malcolm, the Eyes (vial)", "land": "Fiery Islet", "casts": ["Kitesail Larcenist", "Malcolm, the Eyes"], "actions": [{ "card": "Kitesail Larcenist", "x": 1, "treasurify_target": 1, "treasurify_target_label": "Adaptive Automaton" }, { "card": "Malcolm, the Eyes" }] },
+    { "index": 9, "summary": "land=none; cast: Kitesail Larcenist → Treasure: Aether Vial, Malcolm, the Eyes (vial)", "land": null, "casts": ["Kitesail Larcenist", "Malcolm, the Eyes"], "actions": [{ "card": "Kitesail Larcenist", "x": 5, "treasurify_target": 5, "treasurify_target_label": "Aether Vial" }, { "card": "Malcolm, the Eyes" }] },
+    { "index": 10, "summary": "land=none; cast: Kitesail Larcenist → Treasure: Goblin Tomb Raider, Malcolm, the Eyes (vial)", "land": null, "casts": ["Kitesail Larcenist", "Malcolm, the Eyes"], "actions": [{ "card": "Kitesail Larcenist", "x": 26, "treasurify_target": 26, "treasurify_target_label": "Goblin Tomb Raider" }, { "card": "Malcolm, the Eyes" }] },
+    { "index": 11, "summary": "land=none; cast: Kitesail Larcenist → Treasure: Staunch Crewmate, Malcolm, the Eyes (vial)", "land": null, "casts": ["Kitesail Larcenist", "Malcolm, the Eyes"], "actions": [{ "card": "Kitesail Larcenist", "x": 53, "treasurify_target": 53, "treasurify_target_label": "Staunch Crewmate" }, { "card": "Malcolm, the Eyes" }] },
+    { "index": 12, "summary": "land=none; cast: Kitesail Larcenist → Treasure: Daring Buccaneer, Malcolm, the Eyes (vial)", "land": null, "casts": ["Kitesail Larcenist", "Malcolm, the Eyes"], "actions": [{ "card": "Kitesail Larcenist", "x": 14, "treasurify_target": 14, "treasurify_target_label": "Daring Buccaneer" }, { "card": "Malcolm, the Eyes" }] },
+    { "index": 13, "summary": "land=none; cast: Kitesail Larcenist → Treasure: Adaptive Automaton, Malcolm, the Eyes (vial)", "land": null, "casts": ["Kitesail Larcenist", "Malcolm, the Eyes"], "actions": [{ "card": "Kitesail Larcenist", "x": 1, "treasurify_target": 1, "treasurify_target_label": "Adaptive Automaton" }, { "card": "Malcolm, the Eyes" }] },
+    { "index": 14, "summary": "land=Fiery Islet; cast: Malcolm, the Eyes", "land": "Fiery Islet", "casts": ["Malcolm, the Eyes"], "actions": [{ "card": "Malcolm, the Eyes" }] },
+    { "index": 15, "summary": "land=Fiery Islet; cast: Malcolm, the Eyes (vial)", "land": "Fiery Islet", "casts": ["Malcolm, the Eyes"], "actions": [{ "card": "Malcolm, the Eyes" }] },
+    { "index": 16, "summary": "land=none; cast: Malcolm, the Eyes", "land": null, "casts": ["Malcolm, the Eyes"], "actions": [{ "card": "Malcolm, the Eyes" }] },
+    { "index": 17, "summary": "land=none; cast: Malcolm, the Eyes (vial)", "land": null, "casts": ["Malcolm, the Eyes"], "actions": [{ "card": "Malcolm, the Eyes" }] },
+    { "index": 18, "summary": "land=Fiery Islet; cast: Kitesail Larcenist (no Treasure)", "land": "Fiery Islet", "casts": ["Kitesail Larcenist"], "actions": [{ "card": "Kitesail Larcenist", "treasurify_target": 0 }] },
+    { "index": 19, "summary": "land=Fiery Islet; cast: Kitesail Larcenist (Treasure: choose on resolution)", "land": "Fiery Islet", "casts": ["Kitesail Larcenist"], "actions": [{ "card": "Kitesail Larcenist", "treasurify_target": -2 }] },
+    { "index": 20, "summary": "land=none; cast: Kitesail Larcenist (no Treasure)", "land": null, "casts": ["Kitesail Larcenist"], "actions": [{ "card": "Kitesail Larcenist", "treasurify_target": 0 }] },
+    { "index": 21, "summary": "land=none; cast: Kitesail Larcenist (Treasure: choose on resolution)", "land": null, "casts": ["Kitesail Larcenist"], "actions": [{ "card": "Kitesail Larcenist", "treasurify_target": -2 }] },
+    { "index": 22, "summary": "land=Fiery Islet; cast: Kitesail Larcenist → Treasure: Aether Vial", "land": "Fiery Islet", "casts": ["Kitesail Larcenist"], "actions": [{ "card": "Kitesail Larcenist", "x": 5, "treasurify_target": 5, "treasurify_target_label": "Aether Vial" }] },
+    { "index": 23, "summary": "land=Fiery Islet; cast: Kitesail Larcenist → Treasure: Goblin Tomb Raider", "land": "Fiery Islet", "casts": ["Kitesail Larcenist"], "actions": [{ "card": "Kitesail Larcenist", "x": 26, "treasurify_target": 26, "treasurify_target_label": "Goblin Tomb Raider" }] },
+    { "index": 24, "summary": "land=Fiery Islet; cast: Kitesail Larcenist → Treasure: Staunch Crewmate", "land": "Fiery Islet", "casts": ["Kitesail Larcenist"], "actions": [{ "card": "Kitesail Larcenist", "x": 53, "treasurify_target": 53, "treasurify_target_label": "Staunch Crewmate" }] },
+    { "index": 25, "summary": "land=Fiery Islet; cast: Kitesail Larcenist → Treasure: Daring Buccaneer", "land": "Fiery Islet", "casts": ["Kitesail Larcenist"], "actions": [{ "card": "Kitesail Larcenist", "x": 14, "treasurify_target": 14, "treasurify_target_label": "Daring Buccaneer" }] },
+    { "index": 26, "summary": "land=Fiery Islet; cast: Kitesail Larcenist → Treasure: Adaptive Automaton", "land": "Fiery Islet", "casts": ["Kitesail Larcenist"], "actions": [{ "card": "Kitesail Larcenist", "x": 1, "treasurify_target": 1, "treasurify_target_label": "Adaptive Automaton" }] },
+    { "index": 27, "summary": "land=none; cast: Kitesail Larcenist → Treasure: Aether Vial", "land": null, "casts": ["Kitesail Larcenist"], "actions": [{ "card": "Kitesail Larcenist", "x": 5, "treasurify_target": 5, "treasurify_target_label": "Aether Vial" }] },
+    { "index": 28, "summary": "land=none; cast: Kitesail Larcenist → Treasure: Goblin Tomb Raider", "land": null, "casts": ["Kitesail Larcenist"], "actions": [{ "card": "Kitesail Larcenist", "x": 26, "treasurify_target": 26, "treasurify_target_label": "Goblin Tomb Raider" }] },
+    { "index": 29, "summary": "land=none; cast: Kitesail Larcenist → Treasure: Staunch Crewmate", "land": null, "casts": ["Kitesail Larcenist"], "actions": [{ "card": "Kitesail Larcenist", "x": 53, "treasurify_target": 53, "treasurify_target_label": "Staunch Crewmate" }] },
+    { "index": 30, "summary": "land=none; cast: Kitesail Larcenist → Treasure: Daring Buccaneer", "land": null, "casts": ["Kitesail Larcenist"], "actions": [{ "card": "Kitesail Larcenist", "x": 14, "treasurify_target": 14, "treasurify_target_label": "Daring Buccaneer" }] },
+    { "index": 31, "summary": "land=none; cast: Kitesail Larcenist → Treasure: Adaptive Automaton", "land": null, "casts": ["Kitesail Larcenist"], "actions": [{ "card": "Kitesail Larcenist", "x": 1, "treasurify_target": 1, "treasurify_target_label": "Adaptive Automaton" }] },
+    { "index": 32, "summary": "land=Fiery Islet; cast: (nothing)", "land": "Fiery Islet", "casts": [], "actions": [] },
+    { "index": 33, "summary": "land=none; cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "plans_hidden": 80,
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 15,
+  "type": "treasurify",
+  "source": "Kitesail Larcenist",
+  "turn": 4,
+  "mdfc_backs": ["Boulderloft Pathway", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Adaptive Automaton", "idx": 9, "num": 1, "is_land": false }, { "name": "Aether Vial", "idx": 1, "num": 5, "tapped": true, "is_land": false, "counters": [{ "kind": "charge", "label": "charge", "count": 2 }] }, { "name": "Daring Buccaneer", "idx": 8, "num": 14, "is_land": false }, { "name": "Fiery Islet", "idx": 10, "num": 22, "is_land": true, "taps": "UR" }, { "name": "Goblin Tomb Raider", "idx": 3, "num": 26, "is_land": false }, { "name": "Kitesail Larcenist", "idx": 12, "num": 30, "is_land": false }, { "name": "Malcolm, the Eyes", "idx": 11, "num": 33, "is_land": false }, { "name": "Mountain", "idx": 0, "num": 38, "tapped": true, "is_land": true }, { "name": "Mountain", "idx": 7, "num": 39, "tapped": true, "is_land": true }, { "name": "Spirebluff Canal", "idx": 2, "num": 49, "tapped": true, "is_land": true }, { "name": "Staunch Crewmate", "idx": 4, "num": 53, "is_land": false }], "vial_counters": [2], "hand": [{ "num": 23, "name": "Fiery Islet", "cost": "", "mv": 0, "kind": "land" }], "graveyard": [], "library_size": 48, "land_drops_left": 0 },
+  "opponent": { "life": 12, "battlefield": [{ "name": "1/1 Creature", "idx": 6, "num": 500001, "is_land": false }, { "name": "6/6 Creature", "idx": 5, "num": 500000, "is_land": false }] },
+  "heuristic_default": -1,
+  "side": "opponent",
+  "options": [{ "index": 0, "perm_index": 5, "tapped": false, "name": "6/6 Creature", "label": "opponent's 6/6 Creature" }, { "index": 1, "perm_index": 6, "tapped": false, "name": "1/1 Creature", "label": "opponent's 1/1 Creature" }],
+  "note": "reply an option index -- the OPPONENT's permanent that becomes a Treasure artifact ({T}, sacrifice: one mana of any colour; it loses every other card type and ability -- a converted Vial stops being a Vial, a converted Pirate stops being a creature), or -1 for none (\"up to one\"). Default = the AI's pick."
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 16,
+  "type": "main_phase",
+  "turn": 4,
+  "phase": "pre_main",
+  "on_the_play": false,
+  "mdfc_backs": ["Boulderloft Pathway", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Adaptive Automaton", "idx": 9, "num": 1, "is_land": false }, { "name": "Aether Vial", "idx": 1, "num": 5, "tapped": true, "is_land": false, "counters": [{ "kind": "charge", "label": "charge", "count": 2 }] }, { "name": "Daring Buccaneer", "idx": 8, "num": 14, "is_land": false }, { "name": "Fiery Islet", "idx": 10, "num": 22, "is_land": true, "taps": "UR" }, { "name": "Goblin Tomb Raider", "idx": 3, "num": 26, "is_land": false }, { "name": "Kitesail Larcenist", "idx": 12, "num": 30, "is_land": false }, { "name": "Malcolm, the Eyes", "idx": 11, "num": 33, "is_land": false }, { "name": "Mountain", "idx": 0, "num": 38, "tapped": true, "is_land": true }, { "name": "Mountain", "idx": 7, "num": 39, "tapped": true, "is_land": true }, { "name": "Spirebluff Canal", "idx": 2, "num": 49, "tapped": true, "is_land": true }, { "name": "Staunch Crewmate", "idx": 4, "num": 53, "is_land": false }], "vial_counters": [2], "hand": [{ "num": 23, "name": "Fiery Islet", "cost": "", "mv": 0, "kind": "land" }], "graveyard": [], "library_size": 48, "land_drops_left": 0 },
+  "opponent": { "life": 12, "battlefield": [{ "name": "1/1 Creature", "idx": 6, "num": 500001, "is_land": false }, { "name": "6/6 Creature", "idx": 5, "num": 500000, "is_land": false }] },
+  "plans": [
+    { "index": 0, "summary": "cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
+}
+}
+  ],
+  "final_events": [
+    { "turn": 4, "kind": "combat", "text": "⚔ attacked: Goblin Tomb Raider (3), Staunch Crewmate (3), Daring Buccaneer (3), Adaptive Automaton (2), Malcolm, the Eyes (3) — 14 to opponent (12→-2)" }
+  ]
+}
