@@ -1673,3 +1673,10 @@ user CPU with the rollouts off instead.)
 is ~1/3 bottoming (which the exhaustive keep/bottom table replaces outright) and horizon-rollout play
 (which the value leaf replaces). No quality-neutral lever found closes the last 1.54x without those two
 artifacts, and both generators are behind `MTG_ALLOW_UNTESTED_DECK=1` -- USER decision (D1, unchanged).
+
+### O6. Play-side profile after O1-O2 (perf, Profile build, 40 x 2HG d5 b20, shipped profile)
+Flat, as in P3: top self-time SolveUncached 2.9%, CollectActions 2.9%, PaymentDamageFloor 2.7%,
+operator new 2.6%, BuildSimKey 2.5%, TapForCost lambda 2.1%, ReflectedColors 1.7%, ShuffleByKey 1.7%,
+a string-keyed hash map 1.6%, GenericTutorList 1.6%, FlushDamageEvents 1.3%. No site worth a
+strength reduction that could move a 1.54x gap; the horizon rollout (SimulateToEnd) is the play cost,
+which is what the value leaf replaces. Stopped here.
