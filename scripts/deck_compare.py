@@ -638,6 +638,17 @@ class Spec:
         # an omitted `profile` reads exactly like a deliberate one (it is not -- see the header).
         self.profile       = self.path("profile")       or self.sibling(".profile.json")
         self.value_profile = self.path("value_profile") or self.sibling(".value.json")
+        # The deck's BUCKET RULING travels with the apparatus for exactly the reason the profile
+        # does (see the copy sites below). `<stem>.buckets.json` is resolved by mtg-analyze off the
+        # DECKLIST it is handed, and an arm's own table is generated from a scratch decklist in the
+        # arm directory -- so without copying it in, every generated table is fit to a BUCKETING WE
+        # DO NOT SHIP. That is not hypothetical: WhiteKnights' ruling merges Basri into the
+        # Dauntless/Venerable bucket, and the table generated without it puts him in a bucket of his
+        # own (K 13 -> 14), which round T measured as a spurious +0.0038 on play that was 100.0%
+        # identical. Sibling of the DECKLIST, never the profile: a ruling belongs to the deck.
+        self.bucket_policy = self.path("bucket_policy") or self.sibling(".buckets.json")
+        if self.bucket_policy and not os.path.exists(self.bucket_policy):
+            self.bucket_policy = None
         # "ladder_rig": true restores the pre-2026-09-02 screening rig (model attached but NEVER
         # deciding). Default false = the model decides, exactly as shipped play does. See job().
         self.ladder_rig    = bool(s.get("ladder_rig", False))
@@ -1034,7 +1045,7 @@ def pool_table(spec, why, dry=False):
             os.remove(stale)
     # The play profile and value sidecar go in FIRST: RunExhaustiveKeepMode resolves both
     # directory-relative off the decklist and now REFUSES without the profile (85e09b5).
-    for src in (spec.profile, spec.value_profile):
+    for src in (spec.profile, spec.value_profile, spec.bucket_policy):
         if src and os.path.exists(src):
             subprocess.check_call(["cp", "-f", src, d])
     ordered  = [(counts[n], n) for _, n in spec.deck if counts.get(n)]
@@ -1640,7 +1651,7 @@ def reweight_table(spec, tag, deck_path, src_raw):
     d = os.path.dirname(deck_path)
     out = os.path.join(d, spec.name + ".keepmodel.exhaustive.profile.json")
     log = os.path.join(spec.out, f"reweight_{tag}.log")
-    for src in (spec.profile, spec.value_profile):
+    for src in (spec.profile, spec.value_profile, spec.bucket_policy):
         if src and os.path.exists(src):
             subprocess.check_call(["cp", "-f", src, d])
     print(f"  {tag}: reweighting {os.path.relpath(src_raw, ROOT)} onto this arm's counts "
@@ -1696,7 +1707,7 @@ def gen_table(spec, tag, deck_path, R, dry=False):
                   os.path.join(d, spec.name + ".keepmodel.gencache.json")):
         if os.path.exists(stale):
             os.remove(stale)
-    for src in (spec.profile, spec.value_profile):
+    for src in (spec.profile, spec.value_profile, spec.bucket_policy):
         if src and os.path.exists(src):
             subprocess.check_call(["cp", "-f", src, d])
     log = os.path.join(spec.out, f"keepgen_{tag}.log")

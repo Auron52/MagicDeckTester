@@ -1,0 +1,8 @@
+{
+  "merge": [
+    {
+      "cards": ["Dauntless Bodyguard", "Venerable Knight", "Basri, Tomorrow's Champion"],
+      "why": "USER RULING 2026-09-29: 'We can merge Basri.' All three are {W} 2/1 Human Knights and the deck's entire one-drop creature slot, so for the KEEP decision they are one card: the opening hand cares how many turn-one Knights it has, not which. Their printed differences are all inert or near-inert in this deck -- Venerable Knight's +1/+1 death counter needs a creature to die (nothing kills ours), Dauntless Bodyguard's sacrifice grants indestructible against removal that does not exist, and Basri's Cat activation is gated out of autonomous play by the user's 2026-09-27 exert ruling (ManaPayment.cpp: tap_token_exerts && !s_greedy_exert). MEASURED, not assumed: round T swapped 1 Basri for 1 Venerable Knight over 120,000 games in six blocks and got 100.0% IDENTICAL play. Basri's cycling became reachable on 2026-09-29 (the generic dig gate) and that does NOT reopen this -- the gate only digs when the hand holds nothing castable, and a {W} 2/1 Knight is always castable, which is the user's own point: 'A 2/1 Knight is always useful in goldfishing.' WHY THE RULING IS NEEDED AT ALL: discovery clusters on mean |delta win-turn| per probe at INTEGER granularity over an 8-turn horizon, so a 1-of simply does not generate enough whole-turn observations to be placed -- left alone it gave Basri his OWN bucket (K 13 -> 14), and round T measured that artifact directly as +0.0038 on provably identical play. The merge keeps the bucket at exactly 8 cards and K at 13, so the shipped keep table's cell space is unchanged."
+    }
+  ]
+}
