@@ -3303,11 +3303,35 @@ for a 9th one-drop among the cards it was allowed to cut (Plains +0.0072, Remote
 Accorder Paladin +0.0189). It never tried the deck's *worst* card, because cutting interaction was
 out of scope. If the blank is the payer, the 9th one-drop may be free or better than free.
 
-**Artifact correction — it applies to two arms and not the third.** Both `v_av1_ua0` and `v_b1_ua0`
-overflow the alias host bucket 8 → 9, so each own table discovers a 14th bucket and inherits round T's
-**+0.0038** (measured on provably identical play, hence a pure reading of that artifact). Subtract it
-before comparing either card to UA. It **cancels** in any Vial-vs-Vial comparison, because round T's
-+0.0209 and round U's +0.0193 carry it too.
+**Artifact correction — MEASURED at generation time, and it lands on ONE arm, not the two predicted.**
+The design above expected `v_av1_ua0` and `v_b1_ua0` both to inherit round T's +0.0038 (a 14th bucket
+from an added card). The generated tables say otherwise, and the reason is a fact about this deck that
+had not been noticed: **the shipped table's bucket 0 is `[Swords to Plowshares, Unexpectedly Absent]`
+— the two interaction spells already share a bucket.** So cutting UA does not free a bucket, it
+shrinks that one; and what the added card does depends on whether discovery will have it.
+
+| arm | K | what happened | correction |
+|---|---|---|---|
+| `m_v2` (ref) | 13 | bucket 0 = `[Swords, Unexpectedly Absent]` | — |
+| `v_av1_ua0` | **13** | bucket 0 = **`[Aether Vial, Swords to Plowshares]`** — Vial landed in the bucket UA vacated | **none** |
+| `v_ua0_pl21` | **13** | bucket 0 collapses to `[Swords]`; the 21st Plains adds nothing | **none** |
+| `v_b1_ua0` | **14** | Basri gets his OWN bucket, reproducing round T exactly | **subtract +0.0038** |
+
+Two things follow, and the first is a result in its own right.
+
+**Equivalence discovery cannot distinguish Aether Vial from Swords to Plowshares for the keep
+decision.** It clusters on mean |Δ win-turn| per probe, and on that metric a 1-mana artifact that
+deploys creatures a turn early and a 1-mana exile spell with nothing to exile are the same card. That
+is an independent, mechanical corroboration of the user's premise — arrived at by a different route
+than the screen, and available before a single game was played. It does *not* by itself say Vial is
+worthless: it says this apparatus prices it in the same class as the deck's acknowledged blank, which
+is precisely the comparison the round was built to make.
+
+**And the merge ruling is demonstrably needed rather than merely tidy.** `v_b1_ua0` is the second
+independent run to give a lone Basri his own bucket (round T was the first). Discovery's metric is
+integer win-turn granularity over an 8-turn horizon, so a 1-of simply cannot generate enough
+whole-turn observations to be placed — it is not a close call the threshold could fix. The
+`PENDING-ADOPTION` ruling is what removes it.
 
 **Out-of-model, and here it cuts BOTH ways — which is why this round cannot settle the slot alone.**
 Vial's stated value (uncounterable, instant-speed deploy, dodging sorcery-speed removal) is invisible
