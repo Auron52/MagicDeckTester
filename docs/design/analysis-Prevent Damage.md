@@ -1571,3 +1571,33 @@ Manabarbs and Pyrohemia in hand.
 So the Wish order is invariant here. The root sees Vito at every budget. The flip sits between b20
 and b25 in both arms: the T5 decision commits before the GSZ-then-Wish line is priced (the 5c
 starvation class, "commits at depth 1 on 95 of 141 decisions").
+
+## Deferred: a black painland in the sideboard (USER 2026-09-29)
+
+USER: "Realistically, I probably should have a black mana producing painland in the sideboard ... we can
+sort that out later." A cast Living Wish already proves a green source, so the colours a fetched land
+must add are W / R / B; Battlefield Forge covers R+W. Candidates: **Caves of Koilos** (W/B, implemented),
+Sulfurous Springs (B/R, NOT implemented -- the standard painland shape), Llanowar Wastes (B/G,
+implemented, but its G is redundant after the Wish). Likely swap: Brushland out. When adopted, the
+Wish's one-land rule (MTG_PD_WISH_TRIM: Battlefield Forge by default) should take the black land when B
+is the missing colour and R is not. Screen with `scripts/deck_compare.py` (shared apparatus).
+
+## Living Wish / Green Sun's Zenith target narrowing (USER doctrine, 2026-09-29)
+
+All paired at play settings (d5 b20, profile), held-out seeds 62001/63001/64001/65001 x 300, one pooled
+batch per step; every control arm reproduced the previous step's digests EXACTLY.
+
+| lever (default) | rule (USER's words in the code) | delta vs control | worse/better | CPU |
+|---|---|---|---|---|
+| `MTG_PD_WISH_ZENITH` (ON) | a held Zenith that can still find Tamanoa covers the gain role -> the Wish goes for Vito | -0.0025 (t -1.00) | 3 / 6 | ~1.00x |
+| `MTG_PD_WISH_USEFUL` (ON) | the SEARCH's Wish targets: Tamanoa / Vito / Dina / Rhox + lands only (human play keeps all) | -0.0033 (t -0.82) | 7 / 11 | 0.88x |
+| `MTG_PD_WISH_TRIM` (ON) | lands go when colours are covered + a land for this turn and next; ONE land at most, Battlefield Forge first (the Wish's own {G} proves green); a held Vito / Dina (hand OR battlefield) goes; Rhox goes when Tamanoa is fetchable and easy ({R}{G}{W} from distinct lands, no Ancient Tomb); Rhox ranks over a 2nd Tamanoa with an Ancient Tomb | -0.0008 vs the full list (t -0.16) | 14 / 16 | 0.84x |
+| `MTG_PD_WISH_VITO_OVER_DINA` (**OFF**, measurement) | 1v1: no Dina while Vito is fetchable and not held | +0.0033 vs trim (t +0.59) | 20 / 17 | 0.80x |
+| `MTG_PD_ZENITH_SKIP_DINA` (ON) | Zenith never fetches Dina while one is ours on the battlefield, or in hand and castable ({B}+{G} from distinct lands incl. one drop). New `PutPolicy::deck_bits` | -0.0025 (t -0.69) | 8 / 11 | 0.95x |
+
+Stack (defaults) vs the full-list search: quality-neutral-or-better at ~0.80x CPU. Wish fetches with the
+trim: Tamanoa 324, Vito 309, Rhox 159, Battlefield Forge 109, Dina 16, Brushland 3. NOTE for review:
+the Ancient Tomb ordering roughly DOUBLED Rhox fetches (87 -> 159) -- quality-neutral, but a larger swing
+than the doctrine may intend. VITO_OVER_DINA left OFF: slightly worse point estimate for 4% CPU -- USER call.
+Unit tests: test/unit/test_prevent_damage_wish.cpp W1-W15, Z1-Z2 (each with a control that must differ).
+Logs: logs/pd_wish/{abz,abu,abv,abzsd}.

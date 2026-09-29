@@ -273,6 +273,11 @@ enum Slot : int
     PD_BUCKET_DISCARD,        // MTG_PD_BUCKET_DISCARD     Prevent Damage: the authored 5i bucketed cleanup-shed policy (PreventDamageProvider::CleanupDiscardCandidates). Default ON (PROVISIONAL, user review); =0 = the generic max-MV fallback
     PD_SHED_UNPLAYED_LAND,    // MTG_PD_SHED_UNPLAYED_LAND Prevent Damage (inside the 5i policy): at a cleanup whose land drop went UNUSED with a live land in hand, that land is shed FIRST -- so declining the drop to pitch a spell is strictly dominated by playing the land. Only when MTG_PD_BUCKET_DISCARD is on
     PD_WISH_RANK,             // MTG_PD_WISH_RANK          Prevent Damage: Living Wish's candidate ORDER is the board-aware engine-role ranking of the USER's doctrine (2026-09-29: Tamanoa / Vito first, Dina / Rhox Faithmender backups, a 2nd Tamanoa over Rhox unless {R}{G}{W} is tight; lands next, colour-fixers first; the rest last). An ordering only -- every name is still a searched variant. =0 = the nonlands-first sideboard order
+    PD_WISH_ZENITH,           // MTG_PD_WISH_ZENITH        Prevent Damage (inside MTG_PD_WISH_RANK): a Green Sun's Zenith in hand that can still find a gain engine (Tamanoa) in the library counts as HAVING the gain role, so the Wish goes for the drain the Zenith cannot reach (Vito). USER doctrine 2026-09-29. =0 = the ranking without it
+    PD_WISH_USEFUL,           // MTG_PD_WISH_USEFUL        Prevent Damage: the AUTONOMOUS search offers Living Wish only the engine creatures (Tamanoa / Vito / Dina / Rhox Faithmender) and the lands -- USER 2026-09-29 ("restrict the search to just the useful wish targets"). A provider PRUNE; human play keeps every name. =0 = every legal name
+    PD_WISH_TRIM,             // MTG_PD_WISH_TRIM          Prevent Damage (inside MTG_PD_WISH_USEFUL): situational trim -- the lands go when our lands already make every needed colour and we hold a land for this turn and next; a Vito / Dina we already hold (hand or board) goes (legend rule). USER 2026-09-29. =0 = the six useful targets
+    PD_WISH_VITO_OVER_DINA,   // MTG_PD_WISH_VITO_OVER_DINA Prevent Damage (inside MTG_PD_WISH_TRIM): in 1v1, while Vito is fetchable and not held, Dina is not a Wish target (Vito's drain is the amount gained, Dina's 1 per event; 2HG keeps Dina). USER 2026-09-29, measurement lever, default OFF
+    PD_ZENITH_SKIP_DINA,      // MTG_PD_ZENITH_SKIP_DINA   Prevent Damage: Green Sun's Zenith does not fetch Dina (search only) while a Dina is ours on the battlefield, or in hand and castable ({B}+{G} from distinct lands incl. one land drop) -- legend rule. USER 2026-09-29. =0 = every target
     COUNT
 };
 
@@ -512,6 +517,11 @@ inline const char* Name(int slot)
         "MTG_PD_BUCKET_DISCARD",
         "MTG_PD_SHED_UNPLAYED_LAND",
         "MTG_PD_WISH_RANK",
+        "MTG_PD_WISH_ZENITH",
+        "MTG_PD_WISH_USEFUL",
+        "MTG_PD_WISH_TRIM",
+        "MTG_PD_WISH_VITO_OVER_DINA",
+        "MTG_PD_ZENITH_SKIP_DINA",
     };
     // The enum and this table are ONE mapping split across two lists: a slot added to one and not
     // the other silently shifts every lever after it (a manifest asking for lever X would set Y).

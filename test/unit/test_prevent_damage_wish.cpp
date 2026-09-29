@@ -78,8 +78,18 @@ GameState MakeW(const std::vector<std::string>& hand, const std::vector<std::str
 
 const CardParams& ParamsOf(const char* name) { return CardDatabase::Instance().Lookup(name)->params; }
 
-std::vector<std::string> Wish(const GameState& s)
+// The ORDER tests read the whole list, so they pin the useful-target restriction
+// (MTG_PD_WISH_USEFUL) off; WishUseful() reads the shipped default.
+std::vector<std::string> WishUseful(const GameState& s)
 { return PreventDamageProvider().TutorCandidates(s, 0, ParamsOf("Living Wish")); }
+
+std::vector<std::string> Wish(const GameState& s)
+{
+    heurarm::t_arm[heurarm::PD_WISH_USEFUL] = 0;
+    std::vector<std::string> v = WishUseful(s);
+    heurarm::t_arm[heurarm::PD_WISH_USEFUL] = -1;
+    return v;
+}
 
 std::vector<std::string> WishOff(const GameState& s)
 {
@@ -206,4 +216,174 @@ TEST_CASE("PD wish: Beseech the Queen and Green Sun's Zenith are NOT ranked (lev
         heurarm::t_arm[heurarm::PD_WISH_RANK] = -1;
         CHECK(on.front() == "Tamanoa");   // library order: the ranking would have led Vito / Dina
     }
+}
+
+TEST_CASE("PD wish W7: a held Green Sun's Zenith covers the gain role -> Vito first (USER 2026-09-29)")
+{
+    // Same board as W1 plus a Zenith in hand and a Tamanoa in the library: the Zenith gets Tamanoa,
+    // it cannot get Vito (black), so the Wish goes for Vito.
+    const GameState s = MakeW({ "Living Wish", "Green Sun's Zenith", "Manabarbs" },
+                              { "City of Brass", "Battlefield Forge", "Karplusan Forest" });
+    const std::vector<std::string> v = Wish(s);
+    CHECK(v[0] == kVitoW);
+    CHECK(v[1] == kDinaW);
+    // Control: the Zenith sub-lever off -> the plain no-gain order (Tamanoa first).
+    heurarm::t_arm[heurarm::PD_WISH_ZENITH] = 0;
+    const std::vector<std::string> off = Wish(s);
+    heurarm::t_arm[heurarm::PD_WISH_ZENITH] = -1;
+    CHECK(off[0] == "Tamanoa");
+}
+
+TEST_CASE("PD wish W7b: a Zenith with NO Tamanoa left in the library covers nothing -> Tamanoa first")
+{
+    const GameState s = MakeW({ "Living Wish", "Green Sun's Zenith" },
+                              { "City of Brass", "Battlefield Forge", "Karplusan Forest" },
+                              { kDinaW, kVitoW, kRhoxW, "City of Brass" });
+    CHECK(Wish(s)[0] == "Tamanoa");
+}
+
+TEST_CASE("PD wish W8: the search sees only the useful targets -- engine creatures + lands (USER 2026-09-29)")
+{
+    const GameState s = MakeW({ "Living Wish", "Manabarbs" }, { "City of Brass", "Battlefield Forge" });
+    const std::vector<std::string> v = WishUseful(s);
+    // (the one-land trim keeps Battlefield Forge only -- W15)
+    const std::vector<std::string> want = { "Tamanoa", kVitoW, kDinaW, kRhoxW, "Battlefield Forge" };
+    CHECK(v.size() == want.size());
+    for (const std::string& nm : want) { CHECK(Pos(v, nm) >= 0); }
+    for (const char* gone : { "Purity", "Bilbo, Birthday Celebrant", "Dimir House Guard", "Shriekmaw",
+                              "Vexing Shusher", "Timeless Witness", "Acidic Slime" })
+    { CHECK(Pos(v, gone) < 0); }
+    CHECK(v[0] == "Tamanoa");
+    // Control: the restriction off -> every legal name.
+    CHECK(Wish(s).size() == kOffOrder.size());
+}
+
+TEST_CASE("PD wish W9: colours covered + a land for this turn and next -> no land targets (USER 2026-09-29)")
+{
+    // City of Brass makes every colour; two lands in hand cover this turn's drop and next turn's.
+    const GameState s = MakeW({ "Living Wish", "Karplusan Forest", "Brushland" },
+                              { "City of Brass", "Battlefield Forge" });
+    const std::vector<std::string> v = WishUseful(s);
+    CHECK(Pos(v, "Brushland") < 0);
+    CHECK(Pos(v, "Battlefield Forge") < 0);
+    // {R}{G}{W} from three distinct lands and no Ancient Tomb -> Rhox goes too (W11).
+    CHECK(v.size() == 3);
+    // Control: only ONE land in hand for two drops -> the lands stay.
+    const GameState s1 = MakeW({ "Living Wish", "Karplusan Forest" }, { "City of Brass", "Battlefield Forge" });
+    CHECK(Pos(WishUseful(s1), "Battlefield Forge") >= 0);
+    // Control: the trim sub-lever off -> the six useful targets.
+    heurarm::t_arm[heurarm::PD_WISH_TRIM] = 0;
+    CHECK(WishUseful(s).size() == 6);
+    heurarm::t_arm[heurarm::PD_WISH_TRIM] = -1;
+}
+
+TEST_CASE("PD wish W10: a Vito already held (hand or board) is not a Wish target; Dina, Tamanoa, Rhox stay")
+{
+    const GameState s = MakeW({ "Living Wish", kVitoW }, { "City of Brass" });
+    const std::vector<std::string> v = WishUseful(s);
+    CHECK(Pos(v, kVitoW) < 0);
+    CHECK(Pos(v, kDinaW) >= 0);
+    CHECK(Pos(v, "Tamanoa") >= 0);
+    CHECK(Pos(v, kRhoxW) >= 0);
+    const GameState b = MakeW({ "Living Wish" }, { "City of Brass", kDinaW });
+    CHECK(Pos(WishUseful(b), kDinaW) < 0);
+    CHECK(Pos(WishUseful(b), kVitoW) >= 0);
+}
+
+TEST_CASE("PD wish W11: Tamanoa easy (R/G/W from distinct lands, no Ancient Tomb) -> Rhox trimmed; with a Tomb -> Rhox kept")
+{
+    const GameState easy = MakeW({ "Living Wish" }, { "Karplusan Forest", "Brushland", "City of Brass" });
+    CHECK(Pos(WishUseful(easy), kRhoxW) < 0);
+    CHECK(Pos(WishUseful(easy), "Tamanoa") >= 0);
+    // Same colours plus an Ancient Tomb in hand -> Rhox stays a target.
+    const GameState tomb = MakeW({ "Living Wish", "Ancient Tomb" }, { "Karplusan Forest", "Brushland", "City of Brass" });
+    CHECK(Pos(WishUseful(tomb), kRhoxW) >= 0);
+    // Tight colours (no green source) -> Rhox stays.
+    const GameState tight = MakeW({ "Living Wish" }, { "Battlefield Forge", "City of Brass" });
+    CHECK(Pos(WishUseful(tight), kRhoxW) >= 0);
+}
+
+TEST_CASE("PD wish W12: gain + drain held, an Ancient Tomb -> Rhox ranks above the 2nd Tamanoa")
+{
+    const GameState s = MakeW({ "Living Wish", "Ancient Tomb" },
+                              { "Tamanoa", kVitoW, "Karplusan Forest", "Brushland", "City of Brass" });
+    const std::vector<std::string> v = Wish(s);
+    CHECK(Pos(v, kRhoxW) < Pos(v, "Tamanoa"));
+    heurarm::t_arm[heurarm::PD_WISH_TRIM] = 0;           // control: the tight-colours rule only
+    const std::vector<std::string> off = Wish(s);
+    heurarm::t_arm[heurarm::PD_WISH_TRIM] = -1;
+    CHECK(Pos(off, "Tamanoa") < Pos(off, kRhoxW));
+}
+
+TEST_CASE("PD wish W13: MTG_PD_WISH_VITO_OVER_DINA (measurement lever) -- Dina is not a target while Vito is fetchable")
+{
+    const GameState s = MakeW({ "Living Wish" }, { "City of Brass", "Battlefield Forge" });
+    heurarm::t_arm[heurarm::PD_WISH_VITO_OVER_DINA] = 1;
+    const std::vector<std::string> on = WishUseful(s);
+    heurarm::t_arm[heurarm::PD_WISH_VITO_OVER_DINA] = -1;
+    CHECK(Pos(on, kDinaW) < 0);
+    CHECK(Pos(on, kVitoW) >= 0);
+    CHECK(Pos(WishUseful(s), kDinaW) >= 0);              // control: default OFF keeps Dina
+    // Vito already held -> Vito is trimmed (legend) and Dina stays even with the lever on.
+    const GameState held = MakeW({ "Living Wish", kVitoW }, { "City of Brass" });
+    heurarm::t_arm[heurarm::PD_WISH_VITO_OVER_DINA] = 1;
+    const std::vector<std::string> h = WishUseful(held);
+    heurarm::t_arm[heurarm::PD_WISH_VITO_OVER_DINA] = -1;
+    CHECK(Pos(h, kDinaW) >= 0);
+    CHECK(Pos(h, kVitoW) < 0);
+}
+
+TEST_CASE("PD wish W14: a Vito ON THE BATTLEFIELD counts as held -- legend trim + Vito-over-Dina both see it")
+{
+    const GameState s = MakeW({ "Living Wish" }, { "City of Brass", kVitoW });
+    heurarm::t_arm[heurarm::PD_WISH_VITO_OVER_DINA] = 1;
+    const std::vector<std::string> v = WishUseful(s);
+    heurarm::t_arm[heurarm::PD_WISH_VITO_OVER_DINA] = -1;
+    CHECK(Pos(v, kVitoW) < 0);    // legend rule: a second Vito would die
+    CHECK(Pos(v, kDinaW) >= 0);   // Vito is out, so Dina is the drain left to add
+}
+
+TEST_CASE("PD wish W15: at most ONE land target -- Battlefield Forge when available, else Brushland")
+{
+    const GameState s = MakeW({ "Living Wish", "Manabarbs" }, { "City of Brass", "Battlefield Forge" });
+    const std::vector<std::string> v = WishUseful(s);
+    CHECK(Pos(v, "Battlefield Forge") >= 0);
+    CHECK(Pos(v, "Brushland") < 0);
+    heurarm::t_arm[heurarm::PD_WISH_TRIM] = 0;             // control: both lands without the trim
+    const std::vector<std::string> off = WishUseful(s);
+    heurarm::t_arm[heurarm::PD_WISH_TRIM] = -1;
+    CHECK(Pos(off, "Brushland") >= 0);
+}
+
+namespace
+{
+bool ZenithMayFetchDina(const GameState& s)
+{
+    const PreventDamageProvider prov;
+    const DecisionProvider::PutPolicy pol = prov.PutTargetPolicy(s, 0);
+    return !pol.narrow || prov.PutTargetOk(pol, *CardDatabase::Instance().Lookup(kDinaW));
+}
+}
+
+TEST_CASE("PD zenith Z1: Dina on the battlefield -> Green Sun's Zenith does not fetch Dina; Tamanoa still")
+{
+    const GameState s = MakeW({ "Green Sun's Zenith" }, { "City of Brass", "Karplusan Forest", kDinaW });
+    CHECK_FALSE(ZenithMayFetchDina(s));
+    const PreventDamageProvider prov;
+    CHECK(prov.PutTargetOk(prov.PutTargetPolicy(s, 0), *CardDatabase::Instance().Lookup("Tamanoa")));
+    heurarm::t_arm[heurarm::PD_ZENITH_SKIP_DINA] = 0;     // control: lever off -> Dina allowed
+    CHECK(ZenithMayFetchDina(s));
+    heurarm::t_arm[heurarm::PD_ZENITH_SKIP_DINA] = -1;
+}
+
+TEST_CASE("PD zenith Z2: Dina in HAND -- skipped only when castable ({B} + {G} from distinct lands)")
+{
+    // City of Brass (B) + Karplusan Forest (G): castable -> skip.
+    CHECK_FALSE(ZenithMayFetchDina(MakeW({ "Green Sun's Zenith", kDinaW }, { "City of Brass", "Karplusan Forest" })));
+    // One land only -> not castable -> Zenith may still fetch Dina.
+    CHECK(ZenithMayFetchDina(MakeW({ "Green Sun's Zenith", kDinaW }, { "Karplusan Forest" })));
+    // One land on board + a black source in hand with the land drop open -> castable -> skip.
+    CHECK_FALSE(ZenithMayFetchDina(MakeW({ "Green Sun's Zenith", kDinaW, "City of Brass" }, { "Karplusan Forest" })));
+    // No Dina anywhere -> no narrowing.
+    CHECK(ZenithMayFetchDina(MakeW({ "Green Sun's Zenith" }, { "City of Brass", "Karplusan Forest" })));
 }

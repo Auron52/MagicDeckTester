@@ -178,6 +178,7 @@ public:
         bool have_prev   = false;   // counter-prevention enabler on battlefield or in hand
         bool any_missing = false;   // some combo role absent from battlefield+hand
         bool pod_active  = false;   // a Pod is on the battlefield (gates the fuel tier)
+        unsigned deck_bits = 0;     // provider-private state bits (Prevent Damage: bit 0 = skip Dina)
     };
     virtual PutPolicy PutTargetPolicy(const GameState& /*s*/, int /*controller*/) const
     { return {}; }

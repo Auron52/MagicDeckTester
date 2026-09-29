@@ -10081,6 +10081,8 @@ int PreventDamageProvider::EtbDestroyTargetPick(const GameState& s, int controll
 //                                                                   event, so it beats Rhox's doubling)
 //     ...but Rhox first when {R}{G}{W} is TIGHT: no three DISTINCT lands (board + hand) cover R, G and
 //     W, while {3}{W} is coverable (a W source and >= 4 mana). The doctrine's one Rhox exception.
+// A GREEN SUN'S ZENITH in hand that can still find a Tamanoa counts as having the gain role
+// (MTG_PD_WISH_ZENITH; USER 2026-09-29: the Zenith gets Tamanoa, it cannot get Vito).
 // A legendary role already had (Vito / Dina on board or in hand) sinks to the end of the engine group:
 // on board the copy dies to the legend rule, in hand it is a redundant second copy.
 // Then LANDS (the user wished for Battlefield Forge twice for fixing): a land producing a colour the
@@ -10136,6 +10138,39 @@ bool PdDistinctCover(const std::vector<unsigned>& srcs, const std::array<unsigne
     return false;
 }
 
+// Ancient Tomb's shape, by params: a land whose only mana is COLOURLESS, two at a time. Its {C}{C}
+// pays most of Rhox Faithmender's {3}{W} (USER 2026-09-29: "The Rhox is most useful in conjunction
+// with Ancient Tomb").
+bool PdIsBigColourlessLand(const GameState& s, int controller, const CardDefinition* d, bool in_hand)
+{
+    if (d == nullptr || !d->card.IsLand() || d->params.produces_amount < 2) { return false; }
+    for (Color c : EffectiveProduces(s, controller, *d, in_hand)) { if (PdColourBit(c) != 0) { return false; } }
+    return true;
+}
+
+// Can we cast Tamanoa EASILY: three DISTINCT lands (board + hand) cover {R}{G}{W}? And do we hold an
+// Ancient Tomb-shaped land? (The Tamanoa-vs-Rhox call, USER 2026-09-29.)
+struct PdTamanoaFacts { bool rgw_ok = false; bool tomb = false; };
+PdTamanoaFacts PdTamanoaMana(const GameState& s, int controller)
+{
+    PdTamanoaFacts f;
+    std::vector<unsigned> srcs;
+    auto see = [&](const CardDefinition* d, bool in_hand)
+    {
+        if (d == nullptr || !d->card.IsLand()) { return; }
+        unsigned m = 0;
+        for (Color c : EffectiveProduces(s, controller, *d, in_hand)) { m |= PdColourBit(c); }
+        srcs.push_back(m);
+        if (PdIsBigColourlessLand(s, controller, d, in_hand)) { f.tomb = true; }
+    };
+    for (const Permanent& p : s.battlefield)
+    { if (p.controller_index == controller) { see(CardDatabase::Instance().LookupCached(p.card), false); } }
+    for (const Card& c : s.players[controller].hand)
+    { if (!c.m_is_staged) { see(CardDatabase::Instance().LookupCached(c), true); } }
+    f.rgw_ok = PdDistinctCover(srcs, { 8u, 16u, 1u });
+    return f;
+}
+
 std::vector<std::string> PdRankEngineTutor(const GameState& s, int controller,
                                            std::vector<std::string> names)
 {
@@ -10176,10 +10211,32 @@ std::vector<std::string> PdRankEngineTutor(const GameState& s, int controller,
     {
         if (p.controller_index == controller) { note(CardDatabase::Instance().LookupCached(p.card), false); }
     }
+    bool zenith_in_hand = false;   // a Chord-class creature tutor (Green Sun's Zenith) we hold
+    std::string zenith_color;
     for (const Card& c : ap.hand)
     {
         if (c.m_is_staged) { continue; }
-        note(CardDatabase::Instance().LookupCached(c), true);
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(c);
+        note(d, true);
+        if (d != nullptr && d->params.tutor_to_battlefield_single && d->params.tutor_mv_max_is_x
+            && std::find(d->params.tutor_types.begin(), d->params.tutor_types.end(), "Creature")
+                   != d->params.tutor_types.end())
+        { zenith_in_hand = true; zenith_color = d->params.tutor_color; }
+    }
+    // USER (2026-09-29): "Vito is often a good call if you have Green Sun's Zenith, because that can
+    // get Tamanoa, but not Vito." A held Zenith that can still find a gain engine in the library
+    // COVERS the gain role -- so the Wish takes the role the Zenith cannot reach (Vito, black).
+    // MTG_PD_WISH_ZENITH, default ON; =0 = the ranking without it.
+    static const bool s_wish_zenith = EnvOn("MTG_PD_WISH_ZENITH", true);
+    if (gain == 0 && zenith_in_hand && heurarm::Flag(heurarm::PD_WISH_ZENITH, s_wish_zenith))
+    {
+        for (const Card& c : ap.library)
+        {
+            const CardDefinition* d = CardDatabase::Instance().LookupCached(c);
+            if (d != nullptr && d->card.IsCreature() && PdEngineRole(d) == kPdGain
+                && CardHasColorNamed(d->card, zenith_color))
+            { gain = 1; break; }
+        }
     }
     // Next turn's mana: the board plus ONE land drop (the best-yielding land in hand).
     const int next_mana = board_mana + hand_land_best;
@@ -10193,7 +10250,12 @@ std::vector<std::string> PdRankEngineTutor(const GameState& s, int controller,
     {
         const bool rgw_ok = PdDistinctCover(land_srcs, { 8u, 16u, 1u });
         const bool rhox_ok = (producible & 1u) != 0 && total_mana >= 4;
-        order = (!rgw_ok && rhox_ok) ? std::array<int, 4>{ kPdAmp, kPdGain, kPdDina, kPdVito }
+        // USER 2026-09-29: "Tamanoa > Rhox if we can play the Tamanoa easily ... the Rhox is most
+        // useful in conjunction with Ancient Tomb" -> Rhox first when {R}{G}{W} is tight OR we hold
+        // an Ancient Tomb (MTG_PD_WISH_TRIM gates the Tomb half; =0 = the tight-colours rule only).
+        static const bool s_tomb_env = EnvOn("MTG_PD_WISH_TRIM", true);
+        const bool tomb = heurarm::Flag(heurarm::PD_WISH_TRIM, s_tomb_env) && PdTamanoaMana(s, controller).tomb;
+        order = ((!rgw_ok || tomb) && rhox_ok) ? std::array<int, 4>{ kPdAmp, kPdGain, kPdDina, kPdVito }
                                      : std::array<int, 4>{ kPdGain, kPdAmp, kPdDina, kPdVito };
     }
     int role_rank[4] = { 0, 0, 0, 0 };
@@ -10269,7 +10331,201 @@ PreventDamageProvider::TutorCandidates(const GameState& s, int controller, const
     static const bool s_wish_env = EnvOn("MTG_PD_WISH_RANK", true);
     if (pp.wish_from_sideboard && all.size() > 1 && heurarm::Flag(heurarm::PD_WISH_RANK, s_wish_env))
     { all = PdRankEngineTutor(s, controller, std::move(all)); }
+    // THE USEFUL-TARGET RESTRICTION (USER 2026-09-29: "We should restrict the search to just the
+    // useful wish targets"; the doctrine: "In goldfish nothing else is relevant"). The AUTONOMOUS
+    // search offers Living Wish only the engine creatures (Tamanoa / Vito / Dina / Rhox Faithmender,
+    // by param role) and the lands (fixing -- the user wished for Battlefield Forge twice); Purity,
+    // Bilbo, Dimir House Guard, Shriekmaw, Vexing Shusher, Timeless Witness and Acidic Slime are
+    // dropped. A PROVIDER PRUNE: MTG_PD_WISH_USEFUL, default ON; =0 = every legal name. Human play
+    // (DecisionUnpruned Tutor) keeps the whole list. Nothing useful left -> the whole list (a Wish is
+    // never made unfetchable).
+    static const bool s_useful_env = EnvOn("MTG_PD_WISH_USEFUL", true);
+    if (pp.wish_from_sideboard && !DecisionUnpruned(UnprunedGate::Tutor)
+        && heurarm::Flag(heurarm::PD_WISH_USEFUL, s_useful_env))
+    {
+        std::vector<std::string> useful;
+        for (const std::string& nm : all)
+        {
+            const CardDefinition* d = CardDatabase::Instance().Lookup(nm);
+            if (PdEngineRole(d) != kPdNoRole || (d != nullptr && d->card.IsLand())) { useful.push_back(nm); }
+        }
+        // SITUATIONAL TRIM (USER 2026-09-29, "reduce unnecessary branching"): sub-lever
+        // MTG_PD_WISH_TRIM, default ON.
+        //   * LANDS go when our lands (board + hand) already make every colour we need -- the engine
+        //     creatures in hand plus every engine creature the Wish could still fetch -- AND we hold
+        //     a land for this turn's drop (if unused) and next turn's: "If you have the colours you
+        //     need and a land for this and next turn, you probably do not want either of the lands."
+        //   * A LEGEND we already hold (Vito / Dina, in hand or on board) goes: a second copy dies to
+        //     the legend rule ("trim the other options based on what we already have in hand").
+        //   Tamanoa and Rhox Faithmender stay (a 2nd Tamanoa is a 2nd lifegain instance; a 2nd Rhox
+        //   doubles again). Never trims to empty.
+        static const bool s_trim_env = EnvOn("MTG_PD_WISH_TRIM", true);
+        if (!useful.empty() && heurarm::Flag(heurarm::PD_WISH_TRIM, s_trim_env))
+        {
+            const Player& ap = s.players[controller];
+            unsigned producible = 0, need = 0;
+            int hand_lands = 0;
+            bool held_vito = false, held_dina = false;
+            auto see = [&](const CardDefinition* d, bool in_hand)
+            {
+                if (d == nullptr) { return; }
+                if (d->card.IsLand())
+                {
+                    for (Color c : EffectiveProduces(s, controller, *d, in_hand)) { producible |= PdColourBit(c); }
+                    if (in_hand) { ++hand_lands; }
+                    return;
+                }
+                const int role = PdEngineRole(d);
+                if (role == kPdVito) { held_vito = true; }
+                if (role == kPdDina) { held_dina = true; }
+                if (in_hand && role != kPdNoRole) { need |= PdCostColours(d->card.m_mana_cost); }
+            };
+            for (const Permanent& p : s.battlefield)
+            { if (p.controller_index == controller) { see(CardDatabase::Instance().LookupCached(p.card), false); } }
+            for (const Card& c : ap.hand)
+            { if (!c.m_is_staged) { see(CardDatabase::Instance().LookupCached(c), true); } }
+            for (const std::string& nm : useful)
+            {
+                const CardDefinition* d = CardDatabase::Instance().Lookup(nm);
+                const int role = PdEngineRole(d);
+                if (role == kPdNoRole) { continue; }
+                if ((role == kPdVito && held_vito) || (role == kPdDina && held_dina)) { continue; }
+                need |= PdCostColours(d->card.m_mana_cost);
+            }
+            // Rhox goes when Tamanoa is still fetchable and EASY: {R}{G}{W} from three distinct lands
+            // and no Ancient Tomb (USER 2026-09-29: "Tamanoa > Rhox if we can play the Tamanoa easily").
+            const PdTamanoaFacts tf = PdTamanoaMana(s, controller);
+            bool tamanoa_fetchable = false;
+            for (const std::string& nm : useful)
+            { if (PdEngineRole(CardDatabase::Instance().Lookup(nm)) == kPdGain) { tamanoa_fetchable = true; } }
+            const bool drop_rhox = tamanoa_fetchable && tf.rgw_ok && !tf.tomb;
+            // VITO OVER DINA (USER 2026-09-29, "maybe just testing it first"): in 1v1, while Vito is
+            // fetchable and not already held, Dina goes -- Vito's drain is the amount gained, Dina's is
+            // 1 per event. 2HG keeps Dina (she drains EACH opposing head). MTG_PD_WISH_VITO_OVER_DINA,
+            // default OFF (a measurement lever until the A/B says otherwise).
+            static const bool s_vod_env = EnvOn("MTG_PD_WISH_VITO_OVER_DINA", false);
+            bool vito_fetchable = false;
+            for (const std::string& nm : useful)
+            { if (PdEngineRole(CardDatabase::Instance().Lookup(nm)) == kPdVito) { vito_fetchable = true; } }
+            const bool drop_dina = vito_fetchable && !held_vito && gamesetup::OpponentHeads() == 1
+                                && heurarm::Flag(heurarm::PD_WISH_VITO_OVER_DINA, s_vod_env);
+            const int lands_wanted = (s.players[controller].lands_played_this_turn == 0 ? 1 : 0) + 1;
+            const bool lands_done = (need & ~producible) == 0 && hand_lands >= lands_wanted;
+            std::vector<std::string> trimmed;
+            for (const std::string& nm : useful)
+            {
+                const CardDefinition* d = CardDatabase::Instance().Lookup(nm);
+                const int role = PdEngineRole(d);
+                if (d != nullptr && d->card.IsLand() && lands_done) { continue; }
+                if ((role == kPdVito && held_vito) || (role == kPdDina && held_dina)) { continue; }
+                if (role == kPdAmp && drop_rhox) { continue; }
+                if (role == kPdDina && drop_dina) { continue; }
+                trimmed.push_back(nm);
+            }
+            // ONE land at most (USER 2026-09-29: "choose only one of them ... always take Battlefield
+            // Forge when available ... because you already have green if you cast Living Wish"): the
+            // Wish's own {G} proves a green source, so Brushland's G/W adds only W while Battlefield
+            // Forge adds R and W. Battlefield Forge if it is still in the sideboard, else the
+            // first-ranked land (the ranking puts the missing-colour fixer first).
+            {
+                std::string keep_land;
+                for (const std::string& nm : trimmed)
+                {
+                    const CardDefinition* d = CardDatabase::Instance().Lookup(nm);
+                    if (d == nullptr || !d->card.IsLand()) { continue; }
+                    if (nm == "Battlefield Forge") { keep_land = nm; break; }
+                    if (keep_land.empty()) { keep_land = nm; }
+                }
+                trimmed.erase(std::remove_if(trimmed.begin(), trimmed.end(), [&](const std::string& nm)
+                {
+                    const CardDefinition* d = CardDatabase::Instance().Lookup(nm);
+                    return d != nullptr && d->card.IsLand() && nm != keep_land;
+                }), trimmed.end());
+            }
+            if (!trimmed.empty()) { useful = std::move(trimmed); }
+        }
+        if (!useful.empty()) { all = std::move(useful); }
+    }
     return all;
+}
+
+// ---- PreventDamageProvider::PutTargetPolicy / PutTargetOk ------------------
+// Green Sun's Zenith (the Chord-class put-tutor enumerator, SEARCH ONLY -- human play un-narrows):
+// USER 2026-09-29, "we can also skip getting Dina with Green Sun's Zenith when one is out already
+// ... we shouldn't restrict it if we have one in hand, though, since we may not be able to play it.
+// Though, it is possible we could check the playability and then restrict it." Dina is legendary, so
+// a second one dies to the legend rule. Skipped when a Dina is ours on the battlefield, or in hand AND
+// castable -- {B} and {G} from two distinct lands among our untapped lands plus one land drop ("we
+// don't need to be fancy with the costs"). MTG_PD_ZENITH_SKIP_DINA, default ON; =0 = every target.
+DecisionProvider::PutPolicy
+PreventDamageProvider::PutTargetPolicy(const GameState& s, int controller) const
+{
+    PutPolicy pol;
+    static const bool s_env = EnvOn("MTG_PD_ZENITH_SKIP_DINA", true);
+    if (!heurarm::Flag(heurarm::PD_ZENITH_SKIP_DINA, s_env)) { return pol; }
+    bool dina_board = false, dina_hand = false;
+    std::vector<unsigned> untapped;      // colour masks of our untapped lands
+    std::vector<unsigned> hand_lands;    // colour masks of the lands in hand (one may be dropped)
+    for (const Permanent& p : s.battlefield)
+    {
+        if (p.controller_index != controller) { continue; }
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+        if (d == nullptr) { continue; }
+        if (PdEngineRole(d) == kPdDina) { dina_board = true; }
+        if (d->card.IsLand() && !p.tapped)
+        {
+            unsigned m = 0;
+            for (Color c : EffectiveProduces(s, controller, *d, false)) { m |= PdColourBit(c); }
+            untapped.push_back(m);
+        }
+    }
+    for (const Card& c : s.players[controller].hand)
+    {
+        if (c.m_is_staged) { continue; }
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(c);
+        if (d == nullptr) { continue; }
+        if (PdEngineRole(d) == kPdDina) { dina_hand = true; }
+        if (d->card.IsLand())
+        {
+            unsigned m = 0;
+            for (Color col : EffectiveProduces(s, controller, *d, true)) { m |= PdColourBit(col); }
+            hand_lands.push_back(m);
+        }
+    }
+    bool skip = dina_board;
+    if (!skip && dina_hand)
+    {
+        // {B}{G} from two DISTINCT sources: the untapped lands, plus at most one hand land when the
+        // land drop is still open.
+        auto covers = [](const std::vector<unsigned>& v)
+        {
+            for (std::size_t a = 0; a < v.size(); ++a)
+            {
+                if (!(v[a] & 4u)) { continue; }
+                for (std::size_t b = 0; b < v.size(); ++b)
+                { if (b != a && (v[b] & 16u)) { return true; } }
+            }
+            return false;
+        };
+        skip = covers(untapped);
+        if (!skip && s.players[controller].lands_played_this_turn == 0)
+        {
+            for (unsigned m : hand_lands)
+            {
+                std::vector<unsigned> v = untapped;
+                v.push_back(m);
+                if (covers(v)) { skip = true; break; }
+            }
+        }
+    }
+    if (skip) { pol.narrow = true; pol.deck_bits = 1u; }
+    return pol;
+}
+
+bool PreventDamageProvider::PutTargetOk(const PutPolicy& pol, const CardDefinition& d) const
+{
+    if ((pol.deck_bits & 1u) && PdEngineRole(&d) == kPdDina) { return false; }
+    return true;
 }
 
 // ---- PreventDamageProvider::CleanupDiscardCandidates ------------------------

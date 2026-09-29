@@ -341,6 +341,10 @@ public:
     // the user's 2026-09-29 doctrine (Tamanoa / Vito first, Dina / Rhox backups, lands, the rest) --
     // see PdRankEngineTutor in the .cpp.
     std::vector<std::string> TutorCandidates(const GameState&, int, const CardParams&) const override;
+    // Green Sun's Zenith fetch narrowing (USER 2026-09-29): no Dina while one is already ours --
+    // on the battlefield, or in hand and castable. MTG_PD_ZENITH_SKIP_DINA, default ON. Search only.
+    PutPolicy PutTargetPolicy(const GameState& s, int controller) const override;
+    bool      PutTargetOk(const PutPolicy& pol, const CardDefinition& d) const override;
     // Rolling Earthquake: the generic 0..max range, minus X = 0 unless a cast trigger that DEALS
     // DAMAGE (Spellshock) is out -- without one an X = 0 cast deals nothing, triggers nothing, and
     // costs a card, {R} and possibly pain: dominated by not casting it (or discarding it). A
