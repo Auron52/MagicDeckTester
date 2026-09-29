@@ -177,6 +177,11 @@ struct MulliganProfile
     int bottom_eval_depth     = -1;   // -1 = unset (rollouts at real play depth)
     int bottom_eval_budget_ms = -1;   // -1 = unset (rollouts at real play budget)
     int bottom_eval_topk      = 0;    //  0 = no refine stage
+    // Finer than bottom_eval_budget_ms: the bottoming rollouts' per-decision budget in raw WORK UNITS
+    // (a virtual ms is 900), for decks whose bottoming choice is flat all the way down to 1 ms
+    // (Prevent Damage: b10 / b5 / b2 / b1 played identical games). -1 = unset. Env twin
+    // MTG_BOTTOM_EVAL_UNITS overrides when explicitly set.
+    int bottom_eval_units     = -1;
 
     // Per-deck SEARCH-LEAF fidelity (top-level `search_leaf_depth` key): the lookahead depth of
     // the horizon rollout that scores every leaf of the commit-the-line search (FSLineWin ->

@@ -1453,6 +1453,7 @@ the inert PARTIALs above (D10).
 | D13 | Anti-Lifegain's drip sweep has the same human-play defect (fires after every plan). Fix it? | [not changed] | Fix: viewer-only, no autonomous play change |
 | D14 | Viewer follow-ups: a legend-rule keep decision (V1); surface the pain sweep (V3) | [auto-resolved] | Low priority: both are dominant/automatic |
 | D15 | Basri, Tomorrow's Champion `exert` card_fields mismatch (another deck's) | [untouched] | Fix in that deck's pass |
+| D17 | **Keep rule (2026-09-29 overnight, "Cost-gate work, round 2" O2):** `curve_check none`, `min_lands 2`, `{R:1,G:1}`, `required_pieces` [Tamanoa, Vito, Rhox, Wish, GSZ], bottoming rollouts at `bottom_eval_budget_ms 1`. Better on every suite row (-0.07..-0.16), cost 3.8x -> 1.54x | [ADOPTED in the profile, PROVISIONAL] | Keep. Stricter lists score better only with the clairvoyant bottomer (blind re-run); `max_lands 4` buys ~-0.05 more for +20% CPU -- your call |
 | D16 | Push `prevent-damage-analysis` (local only; smoke byte-identical on every engine commit)? | [not pushed] | Push (the cost audit is now clean). Watch Windows CI |
 
 ## Approved deferrals
@@ -1601,3 +1602,74 @@ the Ancient Tomb ordering roughly DOUBLED Rhox fetches (87 -> 159) -- quality-ne
 than the doctrine may intend. VITO_OVER_DINA left OFF: slightly worse point estimate for 4% CPU -- USER call.
 Unit tests: test/unit/test_prevent_damage_wish.cpp W1-W15, Z1-Z2 (each with a control that must differ).
 Logs: logs/pd_wish/{abz,abu,abv,abzsd}.
+
+## Cost-gate work, round 2 (2026-09-29 overnight, autonomous) -- 3.8x -> 1.54x, quality BETTER
+
+USER: "continue a bit overnight ... optimize more ... so that this deck can be added to the regression
+test." All A/Bs one pooled `mtg --batch` each at play settings (d5 b20 unless stated), fresh seeds per
+round, paired per game (loss = 9). Scratch: `logs/pd_perf2/` (gitignored; `pair.py` there).
+
+### O1. `MTG_BOTTOM_NAME_DEDUPE` -- ADOPTED default ON (`9ed41927`), lossless
+The clairvoyant bottomer rolled out one full game per PHYSICAL card (count 1) or per removal mask
+(count >= 2). Two copies of a name are the same removal, and this deck is mostly 4-ofs. Now one rollout
+per distinct NAME / name-multiset; twins reuse the score. s66001+s67001 x300: **all 1,200 per-game
+digests identical**, 249 rollouts reused (the equality has power), bottoming CPU -12% / -16%.
+Smoke 101/101 byte-identical, play-changed 0 (fleet-wide default; no other deck moved).
+
+### O2. The keep rule -- ADOPTED in the profile (PROVISIONAL, USER review: keep doctrine is yours)
+Stage 4's baseline `curve_check two_drop` mulligans any 7 with no spell of MV <= 2 (only Living Wish,
+Rolling Earthquake and GSZ qualify in the main), so Tamanoa + Manabarbs + lands went back -- and every
+mulligan pays a clairvoyant bottoming (the 68% share). Rounds (each vs the arm named):
+
+| round (seeds) | arm | delta | t | worse/better | CPU |
+|---|---|---|---|---|---|
+| 1 (68/69001) vs base | `curve_check none` | +0.162 | +4.65 | 72/31 | 0.43x |
+| | none + `{R:1}` | +0.077 | +2.28 | 62/46 | 0.69x |
+| | none + `{R:1}` + `min_lands 2` (ncR2) | -0.010 | -0.38 | 38/43 | 0.86x |
+| 2 (70/71001) vs base | ncR2 | -0.060 | -2.04 | 38/53 | 0.75x |
+| | ncR2 with `{R:1,G:1}` (ncRG2) | -0.085 | -2.72 | 38/61 | 0.84x |
+| | ncR2 + `stop_at 5` / `6` | = ncR2 / +0.025 | | | 0.95x / 0.87x of ncR2 |
+| | ncR2 + `bottom_eval_budget_ms` 10 / 5 | -0.002 vs ncR2 | | 2/3 | 0.74x / 0.65x of ncR2 |
+| 3 (72/73001) | ncRG2 + budget 5 / 2 / 1 / depth3-b5 | IDENTICAL games to each other | | | 1.00 / 0.93 / 0.86 / 0.99 |
+| 4 (80/81001) vs cand | + `required_pieces` [Tamanoa, Vito, Rhox, Wish, GSZ, Beseech] | -0.063 | -3.66 | 3/21 | 1.02x |
+| | + `max_lands 4` | -0.052 | -2.19 | 25/39 | 1.21x |
+| 5 (82/83001 + 2HG 84001) vs cand | required, **without Beseech** (rqNB) | -0.070 / 2HG -0.075 | -3.95 / -2.50 | 9/32, 2/11 | 1.11x / 1.01x |
+| 6 (85/86001 + 2HG 87001) vs cand | rqNB | -0.067 / 2HG -0.090 | -3.29 / -2.70 | 16/40, 2/12 | 1.01x / 1.04x |
+| | [Tamanoa, Vito, Wish, GSZ] | -0.092 / 2HG -0.130 | -3.81 / -3.39 | 24/53 | 1.12x / 1.04x |
+| | [Tamanoa, Vito, Wish] | -0.105 / 2HG -0.170 | -3.52 / -3.74 | 47/82 | 1.27x / 1.08x |
+| 6 again, **BLIND bottoming** (`MTG_NC_BLIND_BOTTOM=1`) | rqNB | **-0.048** | -2.47 | 15/35 | 1.15x |
+| | [Tamanoa, Vito, Wish, GSZ] | -0.058 | -2.32 | 25/47 | 1.26x |
+| | [Tamanoa, Vito, Wish] | -0.037 | -1.13 | 54/70 | 1.59x |
+
+The blind re-run matters: the clairvoyant bottomer credits every EXTRA mulligan with an oracle bottom,
+so stricter keep rules look better than they are. Without clairvoyance the stricter lists lose most of
+their edge (and cost more), while rqNB keeps a clear gain. **Shipped (`cand` + rqNB):**
+`curve_check none`, `min_lands 2`, `min_color_sources {R:1, G:1}`, `required_pieces` [Tamanoa, Vito,
+Rhox Faithmender, Living Wish, Green Sun's Zenith], `bottom_eval_budget_ms 1` (bottoming rollouts at
+900 units/decision -- b10..b1 played identical games; the bottom CHOICE is flat in budget).
+
+### O3. `bottom_eval_units` / `MTG_BOTTOM_EVAL_UNITS` -- built, NOT adopted (default unset = byte-identical)
+Below 1 virtual ms (s77001+s78001 x300, 2HG s79001 x150, vs 900 units): 600 +0.002 (1/0), 300 +0.005
+(3/0), 150 +0.003 (2/0) at 0.83x, 50 +0.020 (9/0) at 0.76x; 2HG similar. Losses ONE-directional (the
+oracle degrading). Even 50 units leaves 2HG d5 at ~3.4 s -- it cannot close the gate, so no quality was
+spent on it. Kept as a per-deck profile key for the value-leaf / keep-table era.
+
+### O4. Where the cost is now (probe, d5 b20 s2002 x150, shipped keep rule minus rqNB)
+Bottoming rollouts ON vs `MTG_BOTTOM_ROLLOUTS=0`: 322 vs 209 user CPU-s, 3,867 vs 2,500 ms/game -> the
+bottoming share is now **~35%** (was 68%); PLAY alone is ~2.5 s/game d5 (0.8x the budget), 2HG longer.
+(`[bottom-cost]` reports summed WALL across threads, inflated by SMT contention -- it read 77%; compare
+user CPU with the rollouts off instead.)
+
+### O5. Gate numbers, final (one batch, base = the old profile, same binary; s2002/s3003 x150, 2HG x100)
+| row | base ms/game | shipped ms/game | delta (loss-pen.) | t |
+|---|---|---|---|---|
+| d3 b10 | 5,208 | 3,691 | -0.067 | -1.43 |
+| d5 b20 | 8,875 | 4,399 | -0.073 | -1.55 |
+| 2HG d3 b10 | 5,250 | 3,947 | -0.160 | -2.03 |
+| 2HG d5 b20 | 11,843 | **4,764** (worst) | -0.150 | -1.91 |
+| d5 b20 held-out s88001 x300 | 8,870 | 4,693 | -0.130 | -2.81 |
+
+**Worst row 4,764 ms/game = 1.54x the 3,100 budget (was 3.8-3.9x).** Better on every row. What is left
+is ~1/3 bottoming (which the exhaustive keep/bottom table replaces outright) and horizon-rollout play
+(which the value leaf replaces). No quality-neutral lever found closes the last 1.54x without those two
+artifacts, and both generators are behind `MTG_ALLOW_UNTESTED_DECK=1` -- USER decision (D1, unchanged).

@@ -1689,16 +1689,19 @@ void AIEngine::BottomCards(GameState& state, int count, int max_turns)
     const int eff_beval_depth  = s_beval_depth_set  ? s_beval_depth    : m_profile.bottom_eval_depth;
     const int eff_beval_budget = s_beval_budget_set ? s_beval_budget   : m_profile.bottom_eval_budget_ms;
     const int eff_beval_topk   = s_beval_topk_set   ? s_beval_topk_env : m_profile.bottom_eval_topk;
+    static const int  s_beval_units_env  = EnvInt("MTG_BOTTOM_EVAL_UNITS", -1);
+    const int eff_beval_units  = EnvSet("MTG_BOTTOM_EVAL_UNITS") ? s_beval_units_env : m_profile.bottom_eval_units;
     struct BottomEvalScope
     {
-        AIEngine& eng; int save_d; int save_b;
-        BottomEvalScope(AIEngine& e, int d, int b)
-            : eng(e), save_d(e.m_lookahead_depth), save_b(e.m_budget_ms)
+        AIEngine& eng; int save_d; int save_b; long long save_u;
+        BottomEvalScope(AIEngine& e, int d, int b, int u = -1)
+            : eng(e), save_d(e.m_lookahead_depth), save_b(e.m_budget_ms), save_u(e.m_budget_units_override)
         {
             if (d >= 0) { e.m_lookahead_depth = d; }
             if (b >= 0) { e.m_budget_ms = b; }
+            if (u > 0)  { e.m_budget_units_override = u; if (e.m_budget_ms <= 0) { e.m_budget_ms = 1; } }
         }
-        ~BottomEvalScope() { eng.m_lookahead_depth = save_d; eng.m_budget_ms = save_b; }
+        ~BottomEvalScope() { eng.m_lookahead_depth = save_d; eng.m_budget_ms = save_b; eng.m_budget_units_override = save_u; }
     };
 
     // One transposition table shared across every candidate rollout of this whole
@@ -1754,7 +1757,7 @@ void AIEngine::BottomCards(GameState& state, int count, int max_turns)
                 return RolloutWinTurn(std::move(trial), max_turns);
             };
             {
-                BottomEvalScope _beval(*this, eff_beval_depth, eff_beval_budget);   // cheap-eval override, subset rollouts only
+                BottomEvalScope _beval(*this, eff_beval_depth, eff_beval_budget, eff_beval_units);   // cheap-eval override, subset rollouts only
                 // NAME DEDUPE (MTG_BOTTOM_NAME_DEDUPE): two masks that bottom the same multiset of
                 // NAMES leave the same hand and the same library up to which physical copy sits where,
                 // so the second is scored from the first instead of playing another full game. The
@@ -1873,7 +1876,7 @@ void AIEngine::BottomCards(GameState& state, int count, int max_turns)
             std::vector<int> win_turn(hand_size, 0);
             int best_win = std::numeric_limits<int>::max();
             {
-            BottomEvalScope _beval_pc(*this, eff_beval_depth, eff_beval_budget);   // covers the per-candidate and blind-K rollouts
+            BottomEvalScope _beval_pc(*this, eff_beval_depth, eff_beval_budget, eff_beval_units);   // covers the per-candidate and blind-K rollouts
             for (int j = 0; j < hand_size; ++j)
             {
                 if (subset_table)
@@ -2190,7 +2193,7 @@ bool AIEngine::TrySecondMainStrandedKill(GameState& state)
         }
         if (actionable)
         {
-            SearchBudget resolve_budget = SearchBudget::FromVirtualMs(m_budget_ms);
+            SearchBudget resolve_budget = DecisionBudget();
             TurnSolver::Plan p2 = TurnSolver::SolveWithLookahead(
                 state, /*is_pre_combat=*/false, m_lookahead_depth, m_max_turns,
                 &resolve_budget, true, m_search_post_combat, m_shared_tt);
@@ -3079,7 +3082,7 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
             // m_shared_tt is non-null only during the bottoming loop (BottomCards), so
             // every TakeTurn of that loop's rollouts shares one table; nullptr in normal
             // play, where SolveWithLookahead keeps its own per-decision table as before.
-            SearchBudget budget = SearchBudget::FromVirtualMs(m_budget_ms);
+            SearchBudget budget = DecisionBudget();
             // MTG_DECISION_PROGRESS: wall clock for THIS decision. Taken here, read beside
             // PROF_RECORD_DECISION below, so it brackets exactly the SolveWithLookahead call.
             const std::chrono::steady_clock::time_point dp_t0 =
@@ -3378,7 +3381,7 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
                     {
                     if (s_fd_trace)
                     { std::fprintf(stderr, "[fd] T%d pre=%d FALLBACK lookahead\n", state.turn_number, is_pre_combat_main ? 1 : 0); }
-                    SearchBudget fallback_budget = SearchBudget::FromVirtualMs(m_budget_ms);
+                    SearchBudget fallback_budget = DecisionBudget();
                     plan = TurnSolver::SolveWithLookahead(state, is_pre_combat_main,
                                                           m_lookahead_depth, m_max_turns,
                                                           &fallback_budget, true,
@@ -4423,7 +4426,7 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
             {
                 if (execgreedy::Enabled())
                 { execgreedy::g_bp_searched.fetch_add(1, std::memory_order_relaxed); }
-                SearchBudget bp_budget = SearchBudget::FromVirtualMs(m_budget_ms);
+                SearchBudget bp_budget = DecisionBudget();
                 extra = TurnSolver::SolveWithLookahead(state, is_pre_combat_main,
                                                        m_lookahead_depth, m_max_turns,
                                                        &bp_budget, true,
@@ -5354,7 +5357,7 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
                         {
                             if (execgreedy::Enabled())
                             { execgreedy::g_bp_searched.fetch_add(1, std::memory_order_relaxed); }
-                            SearchBudget bp_budget = SearchBudget::FromVirtualMs(m_budget_ms);
+                            SearchBudget bp_budget = DecisionBudget();
                             extra = TurnSolver::SolveWithLookahead(state, is_pre_combat_main,
                                                                    m_lookahead_depth, m_max_turns,
                                                                    &bp_budget, true,

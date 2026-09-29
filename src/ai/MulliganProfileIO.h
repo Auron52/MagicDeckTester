@@ -331,6 +331,7 @@ inline nlohmann::json MulliganProfileToJsonObj(const MulliganProfile& profile)
     if (profile.bottom_eval_depth     >= 0) { m["bottom_eval_depth"]     = profile.bottom_eval_depth; }
     if (profile.bottom_eval_budget_ms >= 0) { m["bottom_eval_budget_ms"] = profile.bottom_eval_budget_ms; }
     if (profile.bottom_eval_topk      >  0) { m["bottom_eval_topk"]      = profile.bottom_eval_topk; }
+    if (profile.bottom_eval_units     >  0) { m["bottom_eval_units"]     = profile.bottom_eval_units; }
 
     json pieces = json::array();
     for (const std::string& s : profile.required_pieces) { pieces.push_back(s); }
@@ -572,6 +573,7 @@ inline MulliganProfile ParseDeckProfileJson(const std::string& json_str, const E
     if (m.contains("bottom_eval_depth"))     { profile.bottom_eval_depth     = m["bottom_eval_depth"].get<int>(); }
     if (m.contains("bottom_eval_budget_ms")) { profile.bottom_eval_budget_ms = m["bottom_eval_budget_ms"].get<int>(); }
     if (m.contains("bottom_eval_topk"))      { profile.bottom_eval_topk      = m["bottom_eval_topk"].get<int>(); }
+    if (m.contains("bottom_eval_units"))     { profile.bottom_eval_units     = m["bottom_eval_units"].get<int>(); }
 
     if (m.contains("required_pieces"))
     {

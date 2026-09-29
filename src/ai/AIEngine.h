@@ -8,6 +8,7 @@
 #include "MulliganProfile.h"
 #include "TurnSolver.h"
 #include "TranspositionTable.h"
+#include "SearchBudget.h"
 #include <cstdlib>
 #include <deque>
 #include <functional>
@@ -271,6 +272,9 @@ private:
     MulliganProfile          m_profile;
     int                      m_lookahead_depth   = 0;
     int                      m_budget_ms         = 0;   // virtual-ms search budget (see SearchBudget)
+    long long                m_budget_units_override = -1;   // >0: per-decision budget in raw units (bottoming eval only; see BottomCards)
+    SearchBudget DecisionBudget() const
+    { return m_budget_units_override > 0 ? SearchBudget(m_budget_units_override) : SearchBudget::FromVirtualMs(m_budget_ms); }
     // Depth-0 "Sylvan Scrying before the land drop" defer (LandDropAfterHandLandTutor): set when
     // the pre-combat land block holds the drop for a hand-land tutor, consumed (and cleared) by
     // the post-cast play in the same TakeTurn -- never carried across turns.
