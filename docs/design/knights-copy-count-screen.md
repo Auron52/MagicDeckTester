@@ -3458,7 +3458,19 @@ decklist at the point of use, never carried alongside it in a file that can desc
 decklist. Everything else in `StampDeckTraits` already worked this way; this one field did not, and
 it took three separate mismeasurements before anyone looked at it. The user's reaction sets the bar:
 *"If it never increments the counter by default that is a disaster. (and should NOT be our default).
-I would rather search it than do that."*
+I would rather search it than do that."* — and, the next morning, *"We need to make what happened
+with vial here impossible."*
+
+**Swept the rest of the profile for the same shape; there was exactly one.** After the fix, the only
+things a `MulliganProfile` puts onto a `GameState` are `m_required_pieces` and `m_card_scores` —
+both pointers to *fitted* quantities used for discard ranking and hand scoring. Every other profile
+field (`min_color_sources`, `min_playable`, `curve_check`, `stop_at`, `bottom_eval_*`,
+`search_leaf_depth`, `card_scores`, the keep/eval/value models) is a **fitted or learned** parameter,
+not a decklist function. That distinction is the one that matters, and it is why sharing an
+apparatus across screen arms is still correct: a fitted parameter imported from a neighbouring
+decklist makes a *decision* slightly worse, which the floor bracket is built to measure. A
+decklist-derived field imported from a neighbouring decklist makes a **card inert**, which no
+bracket can see, because the arm's own table dutifully fits itself to a deck playing 59 cards.
 
 ### The merge ruling and the list change are ONE decision
 
