@@ -9,7 +9,7 @@
     <zone name="main">
         <card number="4" name="Dauntless Bodyguard"/>
         <card number="1" name="Basri, Tomorrow's Champion"/>
-        <card number="2" name="Venerable Knight"/>
+        <card number="3" name="Venerable Knight"/>
         <card number="4" name="Worthy Knight"/>
         <card number="4" name="Accorder Paladin"/>
         <card number="4" name="Knight Exemplar"/>
@@ -22,7 +22,7 @@
         <card number="1" name="Sol Ring"/>
         <card number="1" name="Swords to Plowshares"/>
         <card number="1" name="Unexpectedly Absent"/>
-        <card number="20" name="Plains"/>
+        <card number="19" name="Plains"/>
         <card number="4" name="Remote Farm"/>
     </zone>
 </cockatrice_deck>
