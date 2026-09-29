@@ -397,16 +397,24 @@ bool GenericProvider::ShouldConsiderDig(const GameState& s) const
     const Player& ap = s.ActivePlayer();
 
     int lands = 0;
-    bool sac_land_in_play = false;
+    bool sac_in_play      = false;   // any untapped sac-draw permanent we control
+    bool sac_src_is_land  = false;   // ...and it is a LAND, so digging with it costs us a land
     for (const Permanent& p : s.battlefield)
     {
         if (p.controller_index != s.active_player_index) { continue; }
         if (p.card.IsLand()) { ++lands; }
         if (p.tapped) { continue; }
         const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
-        if (d && d->params.sacrifice_draw_cost.has_value()) { sac_land_in_play = true; }
+        if (d && d->params.sacrifice_draw_cost.has_value())
+        {
+            sac_in_play = true;
+            if (d->card.IsLand()) { sac_src_is_land = true; }
+        }
     }
-    if (lands < 2) { return false; }          // never strand ourselves on mana
+    // Never strand ourselves on mana, measured AFTER the dig: a sac-draw LAND is one of the lands
+    // just counted, so digging with it leaves `lands - 1`. Checking the pre-dig count would let a
+    // two-land board sacrifice its way down to one -- the exact failure the floor exists to stop.
+    if (lands - (sac_src_is_land ? 1 : 0) < 2) { return false; }
 
     // "A lot of useful things in hand" == anything castable. One castable nonland is enough to
     // prefer casting it: the mana a dig would spend is the mana that card needs, and the card the
@@ -420,20 +428,34 @@ bool GenericProvider::ShouldConsiderDig(const GameState& s) const
         if (d->card.m_mana_cost.ManaValue() <= lands) { return false; }
     }
 
-    // Nothing castable. Last carve-out: do not CYCLE A LAND OUT OF HAND while the land drop is
-    // still open -- playing it is the better way to turn it into action (it may make the hand's
-    // uncastable spells castable, which is the same goal the dig has). A sac-draw land already in
-    // play does not compete with the drop, so it is exempt.
-    if (!sac_land_in_play && ap.lands_played_this_turn < ap.LandDropsAvailable())
+    // Nothing castable. Two carve-outs remain, BOTH about not cycling away a land we still need as
+    // a land -- because a land you have not made your drop with yet is one of the "useful things in
+    // hand" the rule is protecting, it just pays off a turn later than a spell does:
+    //
+    //   (a) the land drop is still OPEN this turn -- play it instead; a land in play may make the
+    //       hand's uncastable spells castable, which is the dig's own goal reached without paying;
+    //   (b) it is the LAST land in hand -- cycling it gives up NEXT turn's drop too. MEASURED, and
+    //       this is the clause the overnight tier bought: without it fivecolour ran +0.0094 (d3) /
+    //       +0.0092 (d5) on 8 of 8 searched cells, while IMPROVING at d0 (-0.0050) -- the shape of
+    //       a heuristic that is right about the card and wrong about the mana. All of that deck's
+    //       digs were hand-cycled Triomes at {3}, i.e. tapping out early in a five-colour manabase
+    //       to draw one card and skip a land drop. th and pirates gained at every depth throughout.
+    //
+    // A sac-draw permanent already in play competes with neither drop, so it is exempt from both.
+    if (!sac_in_play)
     {
         bool cycling_nonland = false;
+        int  lands_in_hand   = 0;
         for (const Card& c : ap.hand)
         {
             const CardDefinition* d = CardDatabase::Instance().LookupCached(c);
-            if (d && !d->card.IsLand() && d->params.cycling_cost.has_value())
-            { cycling_nonland = true; break; }
+            if (!d) { continue; }
+            if (d->card.IsLand()) { ++lands_in_hand; continue; }
+            if (d->params.cycling_cost.has_value()) { cycling_nonland = true; }
         }
-        if (!cycling_nonland) { return false; }
+        if (!cycling_nonland
+            && (ap.lands_played_this_turn < ap.LandDropsAvailable() || lands_in_hand <= 1))
+        { return false; }
     }
     return true;
 }

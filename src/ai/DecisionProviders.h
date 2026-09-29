@@ -1544,6 +1544,15 @@ public:
     bool        HasAnyDigSource(const GameState&) const override;
     std::string SelectDigSource(const GameState&, const ManaPool&, bool&) const override;
     bool        DigDecisionSearched() const override;
+    // PINNED FALSE 2026-09-29, and this pin is what the paragraph above ALREADY DECIDED -- it only
+    // needed writing down once the generic default stopped being "never". This deck's dig source is
+    // MIND STONE, a mana rock, and the whole point of the wiring above is that sacrificing it is
+    // priced by the search per game rather than taken as a default. The generic empty-of-gas
+    // heuristic gets that exactly backwards on a ramp deck: a hand of uncastable fatties IS the
+    // empty-of-gas state, and the response it prescribes -- sacrifice a mana source -- makes the
+    // fatties later still. Measured when this was briefly left inherited: dragons d0 6.0420 ->
+    // 6.0760, the largest single regression in that smoke run, and slower at d3/d5 too.
+    bool        ShouldConsiderDig(const GameState&) const override { return false; }
     // The generic fallback is DESCENDING MANA VALUE, which on this deck sheds Utvara Hellkite (8),
     // then Lathliss/Inferno (6), then Glorybringer/Scourge (5) -- the payoffs in almost exactly
     // descending order of importance -- while keeping Lightning Bolt and Sol Ring. That is not

@@ -38964,7 +38964,30 @@ static bool BpDigFanoutForPlan(const GameState& state, int sites, const TurnSolv
     // only fluctuator (13,977 -> 2,087) while auras and dragons kept theirs, because their
     // site-4 breakpoints fire on BASE plans (dig_choice == -1) whose mid-apply state considers the
     // dig even though the pre-apply state did not.
-    if (ResolveProvider(state).HasAnyDigSource(state)) { return true; }
+    //
+    // ...ALL OF WHICH IS ABOUT PROVIDERS THAT OPT INTO THE SEARCHED AXIS, and that scope became
+    // load-bearing on 2026-09-29 when GenericProvider stopped stubbing HasAnyDigSource to false.
+    // The paragraph above reasons entirely about keeping a SEARCHED dig challengeable. For a
+    // provider with DigDecisionSearched()==false there is no dig axis to challenge: every plan
+    // carries dig_choice == -1, so the rollout's loop runs only `ShouldConsiderDig(state)` and a
+    // turn the heuristic refuses cannot dig in ANY fanned variant. Fanning site 4 there buys no
+    // reachability at all -- it only spends budget, and under a fixed per-decision budget spending
+    // it is not free: it re-ranks which plan wins. MEASURED on the regression tier the day the
+    // generic gate landed -- fivecolour picked a different LAND DROP on a turn with no dig in
+    // either line and lost a turn by it (d3 s2002 gi128, T4 Island -> Wooded Foothills, 4->5),
+    // with identical kept hand and identical draws, so it was purely the wider plan set.
+    // USER 2026-09-29: *"If there are losses due to budget churn you can feel free to restrict
+    // the usage."* So: opt-in providers keep the source-only gate exactly as argued above;
+    // everyone else also has to want the dig. MTG_BP_DIG_HEUR_GATE=0 restores the old behaviour.
+    {
+        const DecisionProvider& prov = ResolveProvider(state);
+        if (prov.HasAnyDigSource(state))
+        {
+            static const bool heur_gate = EnvOn("MTG_BP_DIG_HEUR_GATE", true);
+            if (!heur_gate || prov.DigDecisionSearched() || prov.ShouldConsiderDig(state))
+            { return true; }
+        }
+    }
     // ...AND THE DIG SOURCE THIS PLAN BRINGS ITSELF (MTG_BP_CANON_AUDIT, 2026-09-22).
     //
     // `HasAnyDigSource` asks the BOARD: a cycler in hand, or an UNTAPPED SAC-DRAW LAND IN PLAY. The
