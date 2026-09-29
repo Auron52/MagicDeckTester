@@ -14246,8 +14246,15 @@ inline bool WantVialCharge(const GameState& state, const Permanent& vial)
 {
     const int c      = vial.charge_counters;
     const int target = state.vial_target_mv;     // deck's productive ("dominant MV") ceiling
-    if (target <= 0) { return false; }
     const Player& ap = state.players[state.active_player_index];
+
+    // NOTE: there is deliberately NO `if (target <= 0) return false;` here. It used to be the
+    // first line, and it made the whole policy collapse to "never charge" whenever the target was
+    // unset -- so a Vial sat at zero counters all game, able to deploy only mana-value-0 creatures,
+    // which no deck runs. The target is now stamped from the decklist (StampDeckTraits), so an
+    // unset target should be unreachable for a deck holding a Vial; but the HAND-DRIVEN half below
+    // needs no target at all, and making it depend on one was the bug, not a safeguard. Only the
+    // final speculative pre-charge genuinely needs a target, and it is guarded there.
 
     // Only creatures at or above the current counter matter: the counter never goes back
     // down, so a creature whose MV is BELOW c can no longer be deployed by this Vial and is
@@ -14291,8 +14298,9 @@ inline bool WantVialCharge(const GameState& state, const Permanent& vial)
     if (count_above >= 1) { return true; }
 
     // No creature at or above this level: pre-charge toward the deck's productive target
-    // (keeps the Vial climbing while creature-light so it is ready when one is drawn).
-    return c < target;
+    // (keeps the Vial climbing while creature-light so it is ready when one is drawn). This is
+    // the ONE clause that needs a target -- with none known, hold rather than climb blind.
+    return target > 0 && c < target;
 }
 
 // Returns true if the creature `def` gets replicate when cast this turn.

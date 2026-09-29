@@ -298,6 +298,7 @@ add_executable(mtg-test
     test/unit/test_game_work_meter.cpp
     test/unit/test_keyword_mask.cpp
     test/unit/test_pirates.cpp
+    test/unit/test_vial_target_from_decklist.cpp
     test/unit/test_pirates_provider.cpp
     test/unit/test_etb_dig_breakpoint.cpp
     test/unit/test_etb_treasure_spend.cpp

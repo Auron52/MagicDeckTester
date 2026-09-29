@@ -141,6 +141,11 @@ public:
     // real per-game zone at all. Mainboard only -- a wish in the sideboard could never be cast.
     static bool DeckWishesFromSideboard(const Decklist& deck);
 
+    // Aether Vial's charge ceiling: the deck's most common creature mana value, or 0 if the deck
+    // holds no Vial. THE DECKLIST IS THE ONLY SOURCE -- see the StampDeckTraits note for why this
+    // is no longer carried on MulliganProfile.
+    static int DeckVialTargetMv(const Decklist& deck);
+
     // Deal the OUTSIDE-THE-GAME pool (Player::sideboard) for a wish deck. SetupGame calls this;
     // every OTHER path that hand-builds a GameState (--scenario) MUST call it too, exactly as it
     // must call StampDeckTraits -- the same hole, and it bit for the same reason. Without it

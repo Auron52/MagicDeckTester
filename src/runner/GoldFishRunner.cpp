@@ -355,6 +355,51 @@ bool GoldFishRunner::DeckFeedsCombat(const Decklist& deck)
 // Mainboard only, deliberately, and the asymmetry with DeckTouchesOpponentZones below is the point:
 // the question here is "does the deck hold a wish", and a wish sitting in the sideboard could never
 // be cast. (A wish that fetches a wish is a real Magic line, but it needs a mainboard wish first.)
+// Aether Vial's charge ceiling: the most common creature mana value in the deck, ties broken
+// toward the HIGHER value, and 0 for a deck holding no Vial.
+//
+// THIS LIVES HERE, BESIDE THE OTHER DECK TRAITS, BECAUSE IT IS ONE -- and routing it through the
+// mulligan profile instead cost three separate measurements their meaning:
+//   * slivers_vial, 2026-08: a screen run on a DEFAULT profile zeroed the target, so cutting two
+//     Aether Vials measured -0.0953 instead of -0.0246. A 2.6x error, and the sign of the
+//     conclusion survived only by luck (docs/design/deck-combination-screening.md).
+//   * Pirates, 2026-09: "the Vial never charges, because there is no .profile.json yet"
+//     (docs/design/analysis-Pirates.md).
+//   * WhiteKnights, 2026-09-29: deck_compare.py hands every screen arm the BASE deck's profile.
+//     The base holds no Vial, so the field was absent, so a Vial ADDED by an arm never gained a
+//     counter and could deploy only mana-value-0 creatures -- of which the deck has none. Six
+//     arms across rounds T/U/V priced a card that was a literal blank.
+// Every one of those is the same shape: a field that is a pure FUNCTION OF THE DECKLIST, read
+// from a file that may describe a DIFFERENT decklist or omit it entirely. The profile is now
+// incapable of carrying it (MulliganProfile has no such field), so there is nothing to omit,
+// nothing to copy from the wrong deck, and nothing to keep in sync.
+int GoldFishRunner::DeckVialTargetMv(const Decklist& deck)
+{
+    bool has_vial = false;
+    for (const Card& c : deck.mainboard)
+    {
+        const CardDefinition* def = CardDatabase::Instance().LookupCached(c);
+        if (def && def->params.upkeep_adds_charge) { has_vial = true; break; }
+    }
+    if (!has_vial) { return 0; }
+
+    std::map<int, int> mv_count;
+    for (const Card& c : deck.mainboard)
+    {
+        const CardDefinition* def = CardDatabase::Instance().LookupCached(c);
+        if (!def || !def->card.IsCreature()) { continue; }
+        const int mv = def->card.m_mana_cost.ManaValue();
+        if (mv > 0) { ++mv_count[mv]; }
+    }
+    int best_mv = 0, best_cnt = 0;
+    for (const auto& kv : mv_count)
+    {
+        if (kv.second > best_cnt || (kv.second == best_cnt && kv.first > best_mv))
+        { best_cnt = kv.second; best_mv = kv.first; }
+    }
+    return best_mv;
+}
+
 bool GoldFishRunner::DeckWishesFromSideboard(const Decklist& deck)
 {
     if (deck.sideboard.empty()) { return false; }
@@ -771,7 +816,6 @@ RunResult GoldFishRunner::Run(const Decklist& deck, int num_games, uint64_t base
                 if (gi >= num_games) { break; }
 
                 GameState state = SetupGame(deck, base_seed + static_cast<uint64_t>(gi));
-                state.vial_target_mv = profile.vial_target_mv;
                 GoldFishRunner::PopulateOpponentSpawns(state, base_game_index + gi);
 
                 if (logging || forced) { AssignCardNumbers(state, numbering); }
@@ -980,6 +1024,13 @@ void GoldFishRunner::StampDeckTraits(GameState& state, const Decklist& deck)
     state.shuffle_salt_opening = s_shuffle_salt_opening;
     state.shuffle_salt_search  = gamesetup::SearchShuffleSalt();
     state.deck_feeds_combat    = DeckFeedsCombat(deck);   // main-phase classifier's deck-level input
+    // Aether Vial's charge ceiling (see DeckVialTargetMv). Stamped from the DECKLIST like every
+    // other trait here. It used to be copied onto the state from MulliganProfile by each of the
+    // fourteen callers of SetupGame, immediately after this function had run -- which meant a
+    // profile belonging to a different decklist, or simply missing the key, silently overwrote the
+    // truth with 0 and turned every Aether Vial in the deck into a blank. The profile no longer
+    // has the field, so those fourteen lines are gone and this is the only writer.
+    state.vial_target_mv       = DeckVialTargetMv(deck);
     // Structural gate for the classifier: a deck that never plays a second main must never have
     // casts deferred INTO one (defer == delete there). Stamped from the same detector the runner
     // uses to decide whether to play post-combat mains, so the two can never disagree.

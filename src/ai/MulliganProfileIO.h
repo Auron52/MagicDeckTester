@@ -442,8 +442,6 @@ inline std::string DeckProfileToJson(const MulliganProfile& profile)
     json root;
     root["version"]  = 1;
     root["mulligan"] = MulliganProfileToJsonObj(profile);
-    if (profile.vial_target_mv > 0)
-        root["vial_target_mv"] = profile.vial_target_mv;
     if (profile.search_leaf_depth >= 0)
         root["search_leaf_depth"] = profile.search_leaf_depth;
     if (profile.search_leaf_first_turn_depth >= 0)
@@ -600,8 +598,11 @@ inline MulliganProfile ParseDeckProfileJson(const std::string& json_str, const E
         }
     }
 
-    if (root.contains("vial_target_mv"))
-        profile.vial_target_mv = root["vial_target_mv"].get<int>();
+    // NOTE: a "vial_target_mv" key in an older profile is deliberately IGNORED (the field is gone
+    // from MulliganProfile). Aether Vial's charge ceiling is derived from the decklist by
+    // GoldFishRunner::DeckVialTargetMv and stamped in StampDeckTraits -- reading it back from a
+    // file is exactly what let a profile from a DIFFERENT decklist silence the card. Do not
+    // restore this read.
 
     if (root.contains("card_scores"))
     {
@@ -722,7 +723,6 @@ inline bool SaveDeckProfile(const std::filesystem::path& path, const MulliganPro
     json root;
     root["version"]  = 1;
     root["mulligan"] = MulliganProfileToJsonObj(profile);
-    if (profile.vial_target_mv > 0) { root["vial_target_mv"] = profile.vial_target_mv; }
     if (profile.search_leaf_depth >= 0) { root["search_leaf_depth"] = profile.search_leaf_depth; }
     if (profile.search_leaf_first_turn_depth >= 0) { root["search_leaf_first_turn_depth"] = profile.search_leaf_first_turn_depth; }
     if (!profile.card_scores.empty())

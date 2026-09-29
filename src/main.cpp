@@ -5825,7 +5825,6 @@ static int RunClaudePlay(const Decklist& deck, const MulliganProfile& profile,
                          bool then_auto = false)
 {
     GameState state = GoldFishRunner::SetupGame(deck, seed);
-    state.vial_target_mv = profile.vial_target_mv;
     GoldFishRunner::PopulateOpponentSpawns(state, game_index);
     // Stamp stable per-copy card numbers (goldfish only does this under --log-dir). Claude-play needs
     // them so the emitted hand/decision JSON carries real "num"s and --force-mulligan can bottom a
@@ -6015,14 +6014,12 @@ static void RunDepthDivergenceDiagnostic(const Decklist& deck, const MulliganPro
                 GameResult& gr = results[i];
 
                 GameState s3 = GoldFishRunner::SetupGame(deck, seed);
-                s3.vial_target_mv = profile.vial_target_mv;
                 GoldFishRunner::PopulateOpponentSpawns(s3, i);
                 AIEngine bot3(profile, 3, timeout_ms);
                 bot3.HandleMulligan(s3, max_turns);
                 gr.hand3 = SortedHandNames(s3);
 
                 GameState s4 = GoldFishRunner::SetupGame(deck, seed);
-                s4.vial_target_mv = profile.vial_target_mv;
                 GoldFishRunner::PopulateOpponentSpawns(s4, i);
                 AIEngine bot4(profile, 4, timeout_ms);
                 bot4.HandleMulligan(s4, max_turns);
@@ -6075,7 +6072,6 @@ static void RunDepthDivergenceDiagnostic(const Decklist& deck, const MulliganPro
             {
                 // Reconstruct the post-mulligan state for this seed (cheap + deterministic).
                 GameState s3 = GoldFishRunner::SetupGame(deck, seed);
-                s3.vial_target_mv = profile.vial_target_mv;
                 GoldFishRunner::PopulateOpponentSpawns(s3, i);
                 AIEngine bot3(profile, 3, timeout_ms);
                 bot3.HandleMulligan(s3, max_turns);
@@ -6114,7 +6110,6 @@ static void RunDepthDivergenceDiagnostic(const Decklist& deck, const MulliganPro
             {
                 // Reconstruct both post-mulligan states (cheap + deterministic).
                 GameState s3b = GoldFishRunner::SetupGame(deck, seed);
-                s3b.vial_target_mv = profile.vial_target_mv;
                 GoldFishRunner::PopulateOpponentSpawns(s3b, i);
                 AIEngine bot3b(profile, 3, timeout_ms);
                 if (trace_divergence)
@@ -6126,7 +6121,6 @@ static void RunDepthDivergenceDiagnostic(const Decklist& deck, const MulliganPro
                 TurnSolver::SetTraceSolve(false);
 
                 GameState s4b = GoldFishRunner::SetupGame(deck, seed);
-                s4b.vial_target_mv = profile.vial_target_mv;
                 GoldFishRunner::PopulateOpponentSpawns(s4b, i);
                 AIEngine bot4b(profile, 4, timeout_ms);
                 if (trace_divergence)

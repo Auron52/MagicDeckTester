@@ -639,7 +639,6 @@ KeepModel BuildKeepModel(const Decklist& deck,
                     s.m_required_pieces = &rollout_profile.required_pieces;
                     s.m_card_scores     = rollout_profile.card_scores.empty()
                                         ? nullptr : &rollout_profile.card_scores;
-                    s.vial_target_mv    = rollout_profile.vial_target_mv;
                     s.ActivePlayer().library.DrawN(7, s.ActivePlayer().hand);
                     s.on_the_play       = (p == 1);
                     // Reshuffle the post-draw library (the rest) with a per-(g,p,r) deterministic seed.

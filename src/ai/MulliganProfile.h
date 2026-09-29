@@ -209,9 +209,13 @@ struct MulliganProfile
     // Keep unconditionally once hand reaches this size (London mulligan stop point).
     int stop_at = 4;
 
-    // Aether Vial target: the charge-counter value at which the Vial should stop advancing.
-    // Computed by the deck analyzer from the deck's creature curve. 0 = not set.
-    int vial_target_mv = 0;
+    // THERE IS DELIBERATELY NO vial_target_mv HERE. Aether Vial's charge ceiling is a pure
+    // function of the DECKLIST, so it is derived by GoldFishRunner::DeckVialTargetMv and stamped
+    // onto the GameState by StampDeckTraits -- never carried on a profile. Removed 2026-09-29
+    // after the same defect landed three times: a profile that belongs to a different decklist,
+    // or simply omits the key, reads as 0, and 0 means the Vial never gains a counter and can
+    // deploy only mana-value-0 creatures. Read the DeckVialTargetMv comment before adding any
+    // other field here that the decklist already determines.
 
     // Per-card marginal win-turn improvement for the opening hand scorer.
     // card_scores[name][0] = improvement from having the first copy in hand,

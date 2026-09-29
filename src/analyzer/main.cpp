@@ -142,11 +142,13 @@ static int RunExhaustiveKeepMode(const AnalyzerArgs& a)
         a.deck_path.parent_path() / (a.deck_path.stem().string() + ".profile.json");
     // A keep table is an artifact of how the deck PLAYS, so generating one without the deck's play
     // profile silently fits it to a deck we do not ship -- and the failure is invisible in the output.
-    // Measured 2026-08-11: a scratch-directory gen ran with vial_target_mv=0, so the engine never cast
-    // Aether Vial, so bucket discovery MERGED Ancient Ziggurat (the one land that cannot pay for Vial)
-    // into the land bucket -- 9 buckets instead of 10, ~1.8x fewer cells, and a gen that looked cheap
-    // because it was wrong. With the profile present, R=10 discovery reproduces the committed R=60
-    // bucketing exactly. See docs/design/deck-combination-screening.md.
+    // Measured 2026-08-11: a scratch-directory gen ran with an unset Aether Vial charge target, so
+    // the engine never cast Aether Vial, so bucket discovery MERGED Ancient Ziggurat (the one land
+    // that cannot pay for Vial) into the land bucket -- 9 buckets instead of 10, ~1.8x fewer cells,
+    // and a gen that looked cheap because it was wrong. (That particular field now comes from the
+    // DECKLIST -- GoldFishRunner::DeckVialTargetMv -- so this exact instance can no longer happen;
+    // the rest of the profile, card_scores and the keep params, still matters just as much.)
+    // With the profile present, R=10 discovery reproduces the committed R=60 bucketing exactly.
     // Refuse rather than warn: this route runs for tens of minutes to hours, and a warning scrolled
     // past at minute 0 is not seen at minute 90. DEFAULT OFF; =1 permits a profile-less gen for a deck
     // that genuinely has no play profile yet.
@@ -450,7 +452,7 @@ static int RunScoreCompsMode(const AnalyzerArgs& a)
     // on discovery, bucketing, or a prior profile.
     const int nhands = EnvInt("MTG_SCORE_HANDS", 0);
 
-    // The deck's PLAY profile (required_pieces / vial_target_mv / card_scores for the rollouts --
+    // The deck's PLAY profile (required_pieces / card_scores for the rollouts --
     // what generation's rollout_profile is), with the shipped exhaustive sidecar attached through the
     // play-time loader for its BUCKET MAP. That loader resolves `.gz` first and serves the sidecar
     // from the on-disk keep table (ai/KeepTable.h), so a bucket list no longer costs the whole table
@@ -591,7 +593,6 @@ static int RunScoreCompsMode(const AnalyzerArgs& a)
                     GameState s = GoldFishRunner::SetupGame(a.deck, rs);
                     s.m_required_pieces = &rp.required_pieces;
                     s.m_card_scores     = rp.card_scores.empty() ? nullptr : &rp.card_scores;
-                    s.vial_target_mv    = rp.vial_target_mv;
                     s.on_the_play       = (pd == 1);
                     Player& ap = s.ActivePlayer(); ap.hand.clear();
                     // Branch on the MODE, not on whether `want` happens to be non-empty: an empty
@@ -688,7 +689,6 @@ static int RunMullEvMode(const AnalyzerArgs& a)
                 GameState base = GoldFishRunner::SetupGame(a.deck, rs);
                 base.m_required_pieces = &rp.required_pieces;
                 base.m_card_scores     = rp.card_scores.empty() ? nullptr : &rp.card_scores;
-                base.vial_target_mv    = rp.vial_target_mv;
                 base.on_the_play       = (pd == 1);
                 Player& ap = base.ActivePlayer();
                 ap.hand.clear();
@@ -771,7 +771,6 @@ static int RunLogHandMode(const AnalyzerArgs& a, const char* hand_spec)
         GameState s = GoldFishRunner::SetupGame(a.deck, seed);
         s.m_required_pieces = &rp.required_pieces;
         s.m_card_scores     = rp.card_scores.empty() ? nullptr : &rp.card_scores;
-        s.vial_target_mv    = rp.vial_target_mv;
         s.on_the_play       = on_play;
         GoldFishRunner::AssignCardNumbers(s, numbering);
         Player& ap = s.ActivePlayer(); ap.hand.clear();

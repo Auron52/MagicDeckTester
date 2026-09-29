@@ -155,7 +155,6 @@ std::vector<AnalyzerEngine::GameRecord> AnalyzerEngine::RunForRecords(
                 int gi = next_game.fetch_add(1, std::memory_order_relaxed);
                 if (gi >= num_games) { break; }
                 GameState state = GoldFishRunner::SetupGame(deck, seed + static_cast<uint64_t>(gi));
-                state.vial_target_mv     = profile.vial_target_mv;
                 records[gi].win_turn     = engine.RunGame(state, max_turns);
                 records[gi].opening_hand = ai.GetKeptOpeningHand();
             }
@@ -265,33 +264,8 @@ std::map<std::string, std::vector<double>> AnalyzerEngine::ComputeCardScores(
 // Mulligan optimiser
 // ============================================================
 
-int AnalyzerEngine::ComputeVialTargetMv(const Decklist& deck)
-{
-    bool has_vial = false;
-    for (const Card& c : deck.mainboard)
-        if (c.m_name == "Aether Vial") { has_vial = true; break; }
-    if (!has_vial) { return 0; }
-
-    std::map<int, int> mv_count;
-    for (const Card& c : deck.mainboard)
-    {
-        const CardDefinition* cdef = CardDatabase::Instance().LookupCached(c);
-        if (!cdef || !cdef->card.IsCreature()) { continue; }
-        int mv = cdef->card.m_mana_cost.ManaValue();
-        if (mv > 0) { ++mv_count[mv]; }
-    }
-    if (mv_count.empty()) { return 0; }
-    int best_mv = 0, best_cnt = 0;
-    for (const auto& kv : mv_count)
-    {
-        if (kv.second > best_cnt || (kv.second == best_cnt && kv.first > best_mv))
-        { best_cnt = kv.second; best_mv = kv.first; }
-    }
-    return best_mv;
-}
-
 AnalyzerEngine::OptResult AnalyzerEngine::OptimizeMulligan(
-    const Decklist& deck, uint64_t seed, int max_turns, int vial_target_mv)
+    const Decklist& deck, uint64_t seed, int max_turns)
 {
     // Use a seed far from the user's analysis seed to avoid overfitting
     // to the same shuffle sequences.
@@ -309,7 +283,6 @@ AnalyzerEngine::OptResult AnalyzerEngine::OptimizeMulligan(
     constexpr double NO_GATE = -1e18;   // ComputeHandScore is >= 0, so every hand clears it; serialises to JSON.
 
     MulliganProfile profile;
-    profile.vial_target_mv = vial_target_mv;
 
     std::cerr << "Computing card scores...\n";
     constexpr uint64_t SCORING_OFFSET = 3'000'000ULL;
@@ -344,15 +317,12 @@ AnalysisResult AnalyzerEngine::Run(const Decklist& deck, uint64_t base_seed, int
     AnalysisResult result;
     result.seed = base_seed;
 
-    int vial_target_mv = ComputeVialTargetMv(deck);
-
     // OptimizeMulligan now computes the per-card scores and chooses the hand-score
     // threshold JOINTLY with the land params (the threshold is a grid axis), so the
     // returned profile already carries card_scores + hand_score_threshold. There is no
     // separate bolt-on scoring pass -- that ordering (land grid first, gate derived and
     // attached afterward) is exactly what let the two over-mulligan in combination.
-    OptResult opt = OptimizeMulligan(deck, base_seed, max_turns, vial_target_mv);
-    opt.profile.vial_target_mv = vial_target_mv;
+    OptResult opt = OptimizeMulligan(deck, base_seed, max_turns);
     result.mulligan_profile     = opt.profile;
     result.mulligan_flags       = opt.flags;
     result.card_scores          = opt.profile.card_scores;

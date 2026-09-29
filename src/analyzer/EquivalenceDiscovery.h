@@ -31,7 +31,7 @@ struct EquivReport
     std::vector<EquivClass> classes;     // largest class first
 };
 
-// Discover equivalence classes for `deck`. `profile` supplies rollout fidelity (vial_target_mv /
+// Discover equivalence classes for `deck`. `profile` supplies rollout fidelity (
 // required_pieces / play style) exactly as the keep-model labels use it. probes = number of CRN
 // contexts; depth/budget_ms = rollout search strength (match the keep-model: depth 5, budget 20).
 //

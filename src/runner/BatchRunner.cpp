@@ -41,15 +41,13 @@ namespace
 // One fully-resolved job: deck loaded + run parameters resolved. The (potentially huge -- ~167 MB for a
 // big deck's exhaustive keep/bottom sidecar) MulliganProfile is NOT stored here: a manifest can list
 // hundreds of jobs, and holding every job's profile by value OOMs. Instead the job keeps the profile's
-// PATH and the two scalars the play loop needs off the profile directly (vial_target_mv); the profile
-// itself is loaded on demand through a small LRU ProfileCache (see below) and copied into each worker's
+// PATH; the profile itself is loaded on demand through a small LRU ProfileCache (see below) and copied into each worker's
 // AIEngine. Play settings are resolved once at parse (needs the profile transiently) and stored by value.
 struct Job
 {
     std::string     name;
     Decklist        deck;
     std::string     profile_path;               // key into ProfileCache; loaded lazily by the worker
-    int             vial_target_mv      = 0;     // pulled off the profile at parse (cheap scalar)
     int             games               = 0;
     uint64_t        seed                = 0;
     // GLOBAL index of this job's first game. A job is normally a whole run (base 0), but it can also
@@ -734,7 +732,7 @@ Job ParseJob(const json& jspec, ProfileCache& cache)
     // Profile: explicit "profile" path, else auto-detect deckname.profile.json
     // (mirrors the single-run mtg.exe behaviour exactly). The full profile is NOT stored on the job --
     // only its path (the worker loads it lazily via the shared LRU cache). We load it once here, through
-    // the same cache, to resolve play settings and pull the vial_target_mv scalar; that resident copy is
+    // the same cache, to resolve play settings; that resident copy is
     // released at the end of this function (or evicted later) rather than retained per job.
     std::filesystem::path profile_path;
     if (jspec.contains("profile"))
@@ -748,7 +746,6 @@ Job ParseJob(const json& jspec, ProfileCache& cache)
     }
     j.profile_path = profile_path.string();
     std::shared_ptr<const MulliganProfile> prof = cache.get(j.profile_path, j.arm.value_profile);
-    j.vial_target_mv = prof->vial_target_mv;
 
     // Resolve the effective play settings from the manifest's explicit depth/budget + the deck's value_play.
     // A case that OMITS depth falls to value_play, or -- with no enabled model -- the built-in default depth
@@ -808,7 +805,7 @@ std::vector<BatchJobResult> BatchRunner::RunManifest(
     }
 
     // Shared LRU cache of loaded profiles (see ProfileCache). Used both here at parse (to resolve each
-    // job's settings/vial without retaining the profile) and by the workers below (to build each AIEngine).
+    // job's play settings without retaining the profile) and by the workers below (to build each AIEngine).
     ProfileCache profile_cache(ProfileCacheCap());
 
     std::vector<Job> jobs;
@@ -1662,7 +1659,8 @@ std::vector<BatchJobResult> BatchRunner::RunManifest(
                                 mp.exhaustive_keep ? mp.exhaustive_keep->name_to_bucket.size() : 0,
                                 mp.exhaustive_keep ? (int)mp.exhaustive_keep->bottoming_enabled : -1,
                                 vsum, mp.value_model.trees.size(), esum, mp.eval_model.trees.size(),
-                                mp.value_trust_depth, (int)mp.value_no_fallback, mp.vial_target_mv,
+                                mp.value_trust_depth, (int)mp.value_no_fallback,
+                                GoldFishRunner::DeckVialTargetMv(job.deck),
                                 cn, csum, mp.min_lands, mp.max_lands, mp.hand_score_threshold,
                                 mp.value_play.target_depth, mp.value_play.budget_ms,
                                 (int)mp.value_play.enabled,
@@ -1691,7 +1689,6 @@ std::vector<BatchJobResult> BatchRunner::RunManifest(
                 const int global_gi = job.game_index + wi.game;
                 GameState state = GoldFishRunner::SetupGame(
                     job.deck, job.seed + static_cast<uint64_t>(wi.game));
-                state.vial_target_mv = job.vial_target_mv;
                 GoldFishRunner::PopulateOpponentSpawns(state, global_gi);
 
                 // Attach a logger for the play fingerprint. Default: DIGEST-ONLY (no structure

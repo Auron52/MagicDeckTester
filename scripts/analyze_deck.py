@@ -259,34 +259,6 @@ def _ManaValue(mana_cost: str) -> int:
             total += 1  # one generic mana per colored pip
     return total
 
-def ComputeVialTargetMv(deck_counts: dict[str, int], cards_json: Path) -> int:
-    """
-    Returns the most common creature MV (weighted by deck count) if the deck
-    contains Aether Vial, otherwise returns 0. Tie-breaks toward higher MV.
-    """
-    if "Aether Vial" not in deck_counts:
-        return 0
-    if not cards_json.exists():
-        return 0
-    with open(cards_json, encoding="utf-8") as f:
-        data = json.load(f)
-    card_map = {c["name"]: c for c in data.get("cards", []) if "name" in c}
-    mv_count: dict[int, int] = {}
-    for name, count in deck_counts.items():
-        entry = card_map.get(name)
-        if not entry or "Creature" not in entry.get("types", []):
-            continue
-        mv = _ManaValue(entry.get("mana_cost", ""))
-        if mv > 0:
-            mv_count[mv] = mv_count.get(mv, 0) + count
-    if not mv_count:
-        return 0
-    best_mv, best_cnt = 0, 0
-    for mv, cnt in mv_count.items():
-        if cnt > best_cnt or (cnt == best_cnt and mv > best_mv):
-            best_cnt, best_mv = cnt, mv
-    return best_mv
-
 def UpdateDeckProfile(deck_path: Path, updates: dict) -> None:
     """Merge `updates` into the deck's .profile.json, creating it if needed."""
     profile_path = deck_path.with_name(deck_path.stem + ".profile.json")
@@ -1046,10 +1018,10 @@ def Main():
         print(json.dumps(report, indent=2))
         sys.exit(1)
 
-    # 4. Update deck profile with computed AI parameters
-    vial_target_mv = ComputeVialTargetMv(deck_counts, cards_json)
-    if vial_target_mv > 0:
-        UpdateDeckProfile(deck_path, {"vial_target_mv": vial_target_mv})
+    # 4. (was: stamp vial_target_mv into the profile) -- REMOVED 2026-09-29. Aether Vial's charge
+    #    ceiling is a function of the DECKLIST, so the engine derives it per game in
+    #    GoldFishRunner::StampDeckTraits. Writing it into a profile gave three separate screens a
+    #    silently-inert Vial whenever the profile came from a different list (or predated the key).
 
     # 5. Rebuild
     if not args.no_rebuild:

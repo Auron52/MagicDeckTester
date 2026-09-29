@@ -76,12 +76,11 @@ private:
 
     // Full mulligan optimisation: card-importance analysis + land grid search.
     // Uses a seed offset separate from the user's analysis seed to avoid overfitting.
-    // vial_target_mv is injected into every profile used so Aether Vial ticks correctly.
+    // Aether Vial's charge ceiling needs no injection here: GoldFishRunner::SetupGame stamps it
+    // from the DECKLIST (see GoldFishRunner::DeckVialTargetMv), so every rollout this runs gets
+    // it automatically and no profile can carry a stale copy.
     static OptResult OptimizeMulligan(
-        const Decklist& deck, uint64_t seed, int max_turns, int vial_target_mv = 0);
-
-    // Returns the most common creature MV if the deck contains Aether Vial, else 0.
-    static int ComputeVialTargetMv(const Decklist& deck);
+        const Decklist& deck, uint64_t seed, int max_turns);
 };
 
 std::string AnalysisResultToJson(const AnalysisResult& result);

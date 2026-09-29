@@ -687,7 +687,6 @@ static std::string RolloutConfigDigest(const Decklist& deck, const MulliganProfi
                     [&]{ return "game gi=" + std::to_string(gi) + " seed=" + std::to_string(seed); },
                     [&]() -> uint64_t {
                         GameState state = GoldFishRunner::SetupGame(deck, seed);
-                        state.vial_target_mv = profile.vial_target_mv;
                         GoldFishRunner::PopulateOpponentSpawns(state, gi);
                         GameLogger dlog(/*digest_only=*/true);
                         dlog.StartGame(std::string(), gi, "d", seed, {});
@@ -2307,7 +2306,6 @@ void RunExhaustiveKeep(std::ostream& os, const Decklist& deck, const MulliganPro
             s.m_required_pieces = &rollout_profile.required_pieces;
             s.m_card_scores     = rollout_profile.card_scores.empty()
                                 ? nullptr : &rollout_profile.card_scores;
-            s.vial_target_mv    = rollout_profile.vial_target_mv;
             s.on_the_play       = (pd == 1);
             Player& ap = s.ActivePlayer();
             ap.hand.clear();
@@ -2383,7 +2381,6 @@ void RunExhaustiveKeep(std::ostream& os, const Decklist& deck, const MulliganPro
         s.m_required_pieces = &rollout_profile.required_pieces;
         s.m_card_scores     = rollout_profile.card_scores.empty()
                             ? nullptr : &rollout_profile.card_scores;
-        s.vial_target_mv    = rollout_profile.vial_target_mv;
         s.on_the_play       = (pd == 1);
         Player& ap = s.ActivePlayer();
         ap.hand.clear();

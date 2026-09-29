@@ -62,7 +62,6 @@ EquivReport DiscoverEquivalence(const Decklist& deck, const MulliganProfile& pro
         s.m_required_pieces = &rollout_profile.required_pieces;
         s.m_card_scores     = rollout_profile.card_scores.empty()
                             ? nullptr : &rollout_profile.card_scores;
-        s.vial_target_mv    = rollout_profile.vial_target_mv;
         s.on_the_play       = true;
         std::vector<Card> seven;
         s.ActivePlayer().library.DrawN(7, seven);          // library now holds the fixed remaining 53
