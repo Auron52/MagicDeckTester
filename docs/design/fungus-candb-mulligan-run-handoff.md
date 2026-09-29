@@ -501,6 +501,47 @@ steady state (`one-run-t-stat-is-not-evidence` applies to rates too); and the wh
 rests on the reference's 9.06 rollouts/cell-side transferring — the assumption that has already been
 wrong once on this run (§2).
 
+### 2026-09-29 19:56Z (65.3 h in) — the 84.3/s sample was over-read by 38%
+
+**Overall progress: 18,740,443 of 26,349,058 rollouts = 71.1%.** (`rollsub` is final at 12,559,852;
+`roll7` is 6,180,591 of a projected 13,789,206.) Speculation is **51.5%** done (3,136,399 of
+6,088,384). Refine escalation has not started; `frozen=` is still `0/1522096`; journal 207.6 MB.
+
+**The 14.1 h cumulative escalation rate is 61.3 rollouts/s, not the 84.3/s measured over 15 minutes.**
+The doc's own caution against projecting from a single short window was correct, and I still led with
+the short window — don't repeat that. `ratewatch.log` separates the two causes cleanly:
+
+| | 15-min sample | 14.1 h actual |
+|---|---|---|
+| rate | 84.3/s | **61.3/s** |
+| mean cores | 23.78 | **19.67** (min 11.55; **34.4% of samples below 18**) |
+| productivity | 3.54 roll/core-s | **3.12 roll/core-s** |
+
+So the shortfall is **roughly half contention, half genuine cost**: 17% of it is core share (the
+neighbouring container came back during the day, exactly the bursty pattern the user described), and
+12% is escalation genuinely costing more per rollout than the first clean window suggested. Neither
+alone explains it, which is why the core column has to be read before attributing a rate change to
+difficulty. Hourly marginal rates across the window ran **16–194/s**.
+
+Projection, holding productivity at the measured 3.12 roll/core-s and varying only CPU and the refine
+multiplier:
+
+| cores | refine cost | total | finish |
+|---|---|---|---|
+| free box (23.85) | same | 93.7 h (3.90 d) | Thu 10-01 00:21Z |
+| free box (23.85) | 1.5x | 102.4 h (4.27 d) | Thu 10-01 09:03Z |
+| as observed (19.67) | same | 99.7 h (4.16 d) | Thu 10-01 06:23Z |
+| as observed (19.67) | 1.5x | 110.3 h (4.60 d) | Thu 10-01 16:57Z |
+
+**Finish: Thursday 2026-10-01, somewhere between 00:20Z and 17:00Z**, plus freezing and the journal
+write-out. The box is free again as of 19:56Z (23.85 cores over the last hour), so the upper rows are
+the live ones if it stays that way.
+
+Note the total work estimate has grown from 23.86 M to **26.35 M rollouts** across this run's
+revisions, entirely because `rollsub` finished at 12.56 M against a reference-scaled 10.07 M (§2).
+`roll7`'s 13.79 M is still the *unverified* half of that total — it assumes the reference's 9.06
+rollouts/cell-side transfers, and nothing has tested it yet because refine has not begun.
+
 ## The branch
 
 `gen/fungus-candb-mulligan-2026-09-27` → `57c36b5c`, the commit the journal records. Its `src` tree
