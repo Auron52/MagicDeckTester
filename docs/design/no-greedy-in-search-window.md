@@ -206,6 +206,18 @@ is blocked on the same thing: the provider header (`DecisionProvider.h`) is deli
 * **`ResolveSoloTargetTrick`'s strive-extra order** (highest printed power, `SpellEffects.h`): a
   resolution pick in the shared resolver (lockstep by construction); hook candidate `StriveExtraOrder`.
 
+## Deferred: slivers d0 regression (USER 2026-09-30: "d0 is not crucial, but we should take a look at some point")
+
+Slivers d0 (the greedy RUNNER, no search) is +10 turns / 1000 games vs the committed tree (regression
+tier s2002; smoke s1001 +13). Root cause, measured: step 9 deleted the greedy post-cast mana sinks
+(AnimateLandsShared / ActivateTapTokensShared). The search now spends that mana through Mutavault /
+Sliver Hive / token-tap plan ACTIONS, but the greedy runner has no equivalent -- hiding those actions
+from it (step 16) changed nothing (-1t), so the loss is the runner no longer sinking spare mana at all,
+not how it weighs the new actions. Every searched depth is unaffected. Options when picked up:
+(a) Phase 2 (replace the d0 runner with a searched decision) removes the question; (b) a
+provider-owned post-cast sink for the greedy runner ONLY (outside every window -- GreedyPermit
+territory), measured against step 8's d0. Not a quality issue for any searched cell.
+
 ## Phase 2: greedy fully dropped
 
 The user's stated end state is that the horizon playout's greedy policy (site 90 and the playout's
@@ -252,6 +264,7 @@ Snapshots: `logs/snapshots/purge-step<N>` (gitignored); per-game diff `logs/purg
 | 17 | dead code: the Aether Vial out-of-band two-arm rollout probe (`MTG_SEARCHED_VIAL`, default off since 2026-08-30) and its `ChargeRemainingVialsHeuristic` helper DELETED. The charge stays the provider's `WantVialCharge`; `MTG_VIAL_AXIS` (the opt-in SEARCHED fan) is kept -- USER 2026-08-30 shipped the heuristic with the fan opt-in, and it is a search option, not a greedy substitute | smoke vs 15 byte-identical | -- |
 | 18 | relocations (resolution picks): `HeuristicTopDisposition` -- the autonomous scry / surveil / reorder pick, called DIRECTLY by the engine at 4 play-path sites (ChooseTopDisposition, TopDispositionCandidates' candidate 0, ReorderCandidatesNarrow, ReorderTopNoShuffle) plus the claude-play default -- now routes through new hook `TopDispositionPick` (default = the old body, `DefaultTopDisposition`); Terastodon victim ORDER through new hook `EtbDestroyVictimClass` (all 3 sites: resolution loop, emission K cap, K projection); the revive MV-desc fallback moved into `ReviveCandidates`' base default and DELETED from the engine. Unit tests `test_provider_relocations.cpp` (3 two-arm tests) | smoke vs 17 byte-identical | -- |
 | 19 | relocations (enumeration prunes): the USER-doctrine prunes that sat in CollectActions -- Unexpectedly Absent never cast autonomously (both the opponent-target and the self-target form) and Jitte's non-combat modes -- become provider hooks `OffersTuckRemovalCast` / `OffersJitteNonCombatModes` (default false = the doctrine). LOCKSTEP HOLE fixed: the executor's safe-alt auto-fire lacked the rollout's `MTG_UNPRUNE=altpayload` suppression (inert at default). Unit tests `test_provider_prunes.cpp` (default vs overriding provider on EnumerateMainPlans). The magnet strive K>0 prune is a measured DOMINANCE fold (strictly fewer tokens for strictly more mana vs the passive opponent) -- lossless, stays | smoke vs 18 byte-identical | -- |
+| **Regression checkpoint 3** (step 19 = commit cd2908d9 vs GT = committed tree 3753dcf3, full tier) | searched depths **100 faster / 66 slower, net -33 turns**; d0 5 faster / 13 slower, +10 (all slivers d0). Biggest gains: hinata d3 s2002 -17, hinata/hinata2hg d3 -6 each, fivecolour/burn -4 per cell, giants -2 per cell. Of the 66 slower: 62 churn (recover at 4x/16x, `classify_turn_later.sh`), 3 variance (hinata d3 s2002 gi57/77/143: draws diverge at T3-T6 vs the committed-tree binary), 1 OPEN (th s2002 gi276, the known non-monotone search case) | -- | -- |
 
 ### Audit items re-examined and found COMPLIANT (no code change) -- 2026-09-30
 
