@@ -4836,6 +4836,27 @@ static bool SecondMainUnproductive(const GameState& state)
     static const bool s_kill  = EnvOn("MTG_NO_M2_PRODUCTIVE");
     static const bool s_force = EnvOn("MTG_M2_PRODUCTIVE");
     if (s_kill || HumanPlayActive()) { return false; }
+    // AN UNUSED LAND DROP IS A MAIN-2 OPTION. Both rules below ask only whether combat or main 1
+    // left a CAST or a free ACTIVATION for main 2; they predate the searched main-2 land drop
+    // (M2DropLive, always on since 2026-09-30), so they read "nothing to cast" as "nothing to do"
+    // and skipped the phase with the turn's drop still open and a land in hand. The skip path
+    // then records a deliberate NO-LAND main 2, so a main 1 that held its land (the defer-drop
+    // tie order, or a plain value tie) lost the drop for the turn: Fungus overnight s4004 gi194
+    // passed T1-T3 holding Forest + Utopia Mycon and never won (GT: T6). Reopening only ever ADDS
+    // the legal land line back.
+    if (M2DropLive(state))
+    {
+        const Player& ap = state.ActivePlayer();
+        if (ap.lands_played_this_turn < ap.LandDropsAvailable())
+        {
+            for (const Card& c : ap.hand)
+            {
+                // Type from the database: a hand Card's own type fields may be unset.
+                const CardDefinition* d = CardDatabase::Instance().LookupCached(c);
+                if (d != nullptr && d->card.IsLand()) { return false; }
+            }
+        }
+    }
     // DEFERRED-CAST GATE (see DecisionProvider::SecondMainNeedsDeferredCast). Asked FIRST and
     // independently of the productivity rule below: the two answer different questions, and on a
     // deck with no attack triggers the productivity rule is true every turn -- which would delete
