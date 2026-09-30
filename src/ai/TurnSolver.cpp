@@ -421,6 +421,7 @@ static std::atomic<long long> g_axis_sweep_vars{0};
 // widening of the skip fires (a byte-identical A/B is not evidence on its own).
 static std::atomic<long long> g_axis_dup_skips{0};
 static std::atomic<long long> g_m2_variant_dup_skips{0};   // main-2 post-apply variant dedup (see m2_seen_states)
+static std::atomic<long long> g_m2_stillborn_skips{0};    // main-2 pre-apply overrun-rank skip (see m2_known_n)
 static std::atomic<long long> g_axis_le_vars{0};   // Land's Edge fire-count variants emitted
 // CHAIN-SLOT OUTCOME (see g_bp_chain_ci_last). The three cells want three different answers:
 //   covered = the scan landed INSIDE wave 0's own window (ci < W), so rank ci already scored that
@@ -1519,6 +1520,7 @@ namespace
                       << " sweep_variants=" << g_axis_sweep_vars.load()
                       << " axis_dup_skips=" << g_axis_dup_skips.load()
                       << " m2_variant_dup_skips=" << g_m2_variant_dup_skips.load()
+                      << " m2_stillborn_skips=" << g_m2_stillborn_skips.load()
                       << " le_variants=" << g_axis_le_vars.load() << "\n";
             std::cerr << "[rollout-stats] nodrop_axes m1: enums=" << g_nodrop_enum[1].load()
                       << " axis_variants=" << g_nodrop_axis_vars[1].load()
@@ -51702,10 +51704,35 @@ static TurnSolver::SearchLine FSLineTail(const GameState& state, int depth, int 
         // EOT and a leaf rollout. The exactness argument does not depend on the plan being a
         // variant -- identical state, identical future, and the first copy was scored first.
         std::unordered_set<TranspositionTable::Key, TranspositionTable::KeyHash> m2_seen_states;
+        // PRE-APPLY STILLBORN SKIP (step 27): main 1's MTG_BP_WAVE_NSKIP rule for main 2's wave-0
+        // rank variants. Every rank variant of one base plan at one bp_at walks the identical prefix,
+        // so the first one applied measures that breakpoint's continuation count n. A rank >= n
+        // OVERRUNS the list and resolves EMPTY; the first overrun (rank == n) can still be a line no
+        // in-list rank produces, but every later one (rank > n) is the same plan with a different
+        // out-of-range number -- identical apply, identical state. Skipped BEFORE the unit charge and
+        // the apply: melira's post-apply dedup was catching 120k of these per 20 games, each already
+        // billed. Keyed (bp_base << 8 | bp_at); bp_base is the variant's pre-sort base index, shared
+        // by all of one base's variants (main 2 does not remap it, and needs only equality).
+        std::unordered_map<std::uint64_t, int> m2_known_n;
         for (const TurnSolver::Plan& q : post)
         {
             // The beam leaves plans unexplored, so a no-win from this node is not a refutation.
             if (beam_here && _beam_i++ >= g_esc_beam_width) { ++g_fs_trunc_events; w0_trunc = true; break; }   // value-guided beam (near-leaf only)
+            const bool m2_plain_rank = q.bp_choice >= 0 && q.bp_choice < kBpEmptyChoice && !q.bp_all
+                                       && q.bp_base >= 0;
+            const std::uint64_t m2_nkey = m2_plain_rank
+                ? ((static_cast<std::uint64_t>(q.bp_base) << 8) | static_cast<std::uint64_t>(q.bp_at & 0xFF))
+                : 0;
+            if (m2_plain_rank)
+            {
+                const auto kn = m2_known_n.find(m2_nkey);
+                if (kn != m2_known_n.end() && q.bp_choice > kn->second)
+                {
+                    g_m2_stillborn_skips.fetch_add(1, std::memory_order_relaxed);
+                    if (beam_here) { --_beam_i; }   // beam refund: a duplicate is not a scored slot
+                    continue;
+                }
+            }
             // A constant-leaf pass stops at exhaustion (see g_constant_leaf_pass); the truncation is recorded.
             if (ConstantLeafExhausted(budget)) { ++g_fs_trunc_events; w0_trunc = true; break; }
             ++m2_scanned;
@@ -51727,7 +51754,9 @@ static TurnSolver::SearchLine FSLineTail(const GameState& state, int depth, int 
             // convention (see its declaration) -- reset before the apply so the read below is
             // THIS plan's breakpoint count, not a stale one. Write-only unless the lever is on.
             if (m2fmode != 0) { g_bp_fired_last = 0; }
+            if (m2_plain_rank) { g_bp_cands_last = 0; }   // one apply measures the list (see its decl)
             ApplyPlanDirect(s2, q, false, &bp, node_host_here ? &node_snap : nullptr);
+            if (m2_plain_rank) { m2_known_n.emplace(m2_nkey, g_bp_cands_last); }
             if (node_snap.pending)
             {
                 // ---- THE BREAKPOINT NODE (MTG_BP_NODE) -------------------------------------
