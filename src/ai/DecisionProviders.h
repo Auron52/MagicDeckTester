@@ -370,6 +370,12 @@ public:
     // costs a card, {R} and possibly pain: dominated by not casting it (or discarding it). A
     // provider narrowing, lossless for this list.
     std::vector<int> XCandidates(const GameState&, const CardDefinition&, int) const override;
+    // MTG_PD_ALL_M2 (USER 2026-09-29, measurement lever, default OFF): every hand cast is Main2 --
+    // attack first, then cast (a sweeper no longer throws away the attack of the bodies it kills,
+    // and no creature here has haste or feeds combat when cast). Activations stay in main 1.
+    std::optional<MainPhase> MainPhaseOverride(const GameState&, const CardDefinition&) const override;
+    bool ClassifiesMainPhases() const override;
+    bool PhaseFilterRootTurnOnly() const override;     // MTG_PD_M2_ROOT_ONLY (diagnostic)
     // A fail-to-find Green Sun's Zenith at X = 0 is a real line under Spellshock + a gain engine
     // (the cast trigger is the payoff) -- the twin of the Rolling Earthquake X = 0 rule above.
     bool OfferFailToFindPut(const GameState&, const CardDefinition&) const override;

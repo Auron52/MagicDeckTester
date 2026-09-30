@@ -465,6 +465,28 @@ TEST_CASE("Rolling Earthquake survival ceiling: no X below it, none above it unl
     heurarm::t_arm[heurarm::PD_QUAKE_NO_OVERKILL] = -1;
 }
 
+TEST_CASE("Rolling Earthquake two-turn lethal: max X past the ceiling when a second quake kills next turn")
+{
+    GameState s = Board2();
+    for (int k = 0; k < 7; ++k) { Put2(s, "Mountain"); }     // 7 mana: X <= 6 now, next turn 7 + drop
+    Put2(s, "Tamanoa");                                       // 2/4 -> ceiling 3
+    Hand2(s, "Rolling Earthquake");
+    Hand2(s, "Rolling Earthquake");
+    Hand2(s, "Mountain");
+    s.players[1].life = 14;                                   // 6 now + 7 next turn = 13: short
+    const CardDefinition& q = D("Rolling Earthquake");   // (below the ceiling: TOP_X trims at PLAN level)
+    heurarm::t_arm[heurarm::PD_QUAKE_TWO_TURN] = 1;
+    CHECK(Prov2().XCandidates(s, q, 6) == std::vector<int>{1, 2, 3});
+    s.players[1].life = 13;                                   // now exactly lethal over two turns
+    CHECK(Prov2().XCandidates(s, q, 6) == std::vector<int>{1, 2, 3, 6});
+    heurarm::t_arm[heurarm::PD_QUAKE_TWO_TURN] = 0;           // lever off: ceiling only
+    CHECK(Prov2().XCandidates(s, q, 6) == std::vector<int>{1, 2, 3});
+    s.players[0].hand.pop_back(); s.players[0].hand.pop_back();   // one quake, no land in hand
+    heurarm::t_arm[heurarm::PD_QUAKE_TWO_TURN] = 1;
+    CHECK(Prov2().XCandidates(s, q, 6) == std::vector<int>{1, 2, 3});
+    heurarm::t_arm[heurarm::PD_QUAKE_TWO_TURN] = -1;
+}
+
 TEST_CASE("Rolling Earthquake TOP-X: among plans differing only in X, the largest X under the ceiling")
 {
     auto xs_of = [](const GameState& e)

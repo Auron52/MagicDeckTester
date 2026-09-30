@@ -10137,17 +10137,56 @@ std::vector<int> PreventDamageProvider::XCandidates(const GameState& s, const Ca
         const int ceil_x  = std::min(hi, top);
         int kill_x = -1;                                  // smallest legal X past the ceiling that is lethal
         for (int x : xs) { if (x > ceil_x && x >= lethal_x) { kill_x = x; break; } }
+        // TWO-TURN LETHAL (MTG_PD_QUAKE_TWO_TURN, USER 2026-09-29): the max X also survives when a
+        // SECOND quake in hand kills next turn -- at next turn's max X (today's total mana, plus one
+        // land drop if a land is in hand, less the {R}). The drainer-less race (s83001 gi169: X=6
+        // then X=8) that the one-turn exception cannot see.
+        static const bool s_two_env = EnvOn("MTG_PD_QUAKE_TWO_TURN", false);
+        int two_x = -1;
+        if (over && top > ceil_x && top != kill_x
+            && heurarm::Flag(heurarm::PD_QUAKE_TWO_TURN, s_two_env))
+        {
+            int quakes = 0; bool land = false;
+            for (const auto& c : s.players[me].hand)
+            {
+                const CardDefinition* hd = CardDatabase::Instance().LookupCached(c);
+                if (hd != nullptr && hd->params.x_damage_each_creature_and_player) { ++quakes; }
+                if (c.IsLand()) { land = true; }
+            }
+            const int next_x = pool.Total() + (land ? 1 : 0) - def.card.m_mana_cost.ManaValue();
+            if (quakes >= 2 && (top + next_x) * heads >= opp_life) { two_x = top; }
+        }
         std::vector<int> out;
         for (int x : xs)
         {
             if (x == 0 && cast_trigger)          { out.push_back(x); continue; }
             if (under && x < floor_x)            { continue; }
-            if (over && x > ceil_x && x != kill_x) { continue; }
+            if (over && x > ceil_x && x != kill_x && x != two_x) { continue; }
             out.push_back(x);
         }
         if (!out.empty()) { xs.swap(out); }
     }
     return xs;
+}
+
+std::optional<DecisionProvider::MainPhase>
+PreventDamageProvider::MainPhaseOverride(const GameState&, const CardDefinition&) const
+{
+    static const bool s_env = EnvOn("MTG_PD_ALL_M2", false);
+    if (!heurarm::Flag(heurarm::PD_ALL_M2, s_env)) { return std::nullopt; }
+    return MainPhase::Main2;
+}
+
+bool PreventDamageProvider::PhaseFilterRootTurnOnly() const
+{
+    static const bool s_env = EnvOn("MTG_PD_M2_ROOT_ONLY", false);
+    return heurarm::Flag(heurarm::PD_M2_ROOT_ONLY, s_env);
+}
+
+bool PreventDamageProvider::ClassifiesMainPhases() const
+{
+    static const bool s_env = EnvOn("MTG_PD_ALL_M2", false);
+    return heurarm::Flag(heurarm::PD_ALL_M2, s_env);
 }
 
 int PreventDamageProvider::ManaSourceRank(const GameState& s, const CardDefinition& def) const

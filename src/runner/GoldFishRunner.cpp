@@ -123,6 +123,13 @@ bool GoldFishRunner::DeckUsesSecondMain(const Decklist& deck)
         if ((def->params.ping_all_cost.has_value() || def->params.x_damage_each_creature_and_player)
             && heurarm::Flag(heurarm::PD_SECOND_MAIN, s_pd_m2))
         { return true; }
+        // MTG_PD_ALL_M2 (USER 2026-09-29): the same phase opened for the ALL-CASTS-POST-COMBAT
+        // doctrine; PreventDamageProvider::MainPhaseOverride sends every cast there (same heurarm
+        // slot read by both halves, the Fungus M2_DEVOUR rule -- one half alone deletes casts).
+        static const bool s_pd_all_m2 = EnvOn("MTG_PD_ALL_M2", false);
+        if (def->params.x_damage_each_creature_and_player
+            && heurarm::Flag(heurarm::PD_ALL_M2, s_pd_all_m2))
+        { return true; }
         static const bool s_al_single_main = EnvOn("MTG_AL_SINGLE_MAIN");   // DEFAULT OFF
         if (def->params.lifegain_to_loss && !s_al_single_main) { return true; }
 
