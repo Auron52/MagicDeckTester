@@ -28,18 +28,45 @@ could not express is *"the play changed, and I have checked that it does not mat
 
 ## 2. The prize, measured
 
-Not an estimate — counted from the journal (`logs/fungus_journal_backup/`, 350 MB, 5,583,349 records):
+Measured by running the hatch against the real journal (`logs/fungus_journal_backup/`, 350 MB,
+5,583,349 records), not estimated:
+
+```
+[keepgen] RETAINED (MIXED PROVENANCE): 1530576 completed cell-sides / 16328781 rollouts
+          from play 36a65944fd138cd0 (commit 57c36b5c); skipped 3252991 partial records
+```
 
 | | cell-sides | rollouts |
 |---|---|---|
-| size-7, **completed** (`f=1`) | 970,364 | 5,245,821 |
-| sub-table, **at cap** (`n >= 30`) | 339,267 of 560,212 (60.6%) | 10,178,010 |
-| **retainable total** | | **15,423,831** |
-| everything the journal embodies | | 21,394,339 |
-| **retainable share** | | **72.1%** |
+| size-7, terminal (`f=1`) | 970,364 | 3,768,929 |
+| sub-table, at `sub_target` | 560,212 | 12,559,852 |
+| **retained** | **1,530,576** | **16,328,781** |
+| the run's own final counters (`roll7` + `rollsub`) | | 22,724,224 |
+| **retained share** | | **71.9%** |
 
-So the hatch protects roughly 72% of a 90.8-hour run. The other 28% is partial cell-sides, which the
-new engine re-rolls (see §4c).
+**The hatch protects ~72% of a 90.8-hour run.** Two things this measurement corrected in a first
+hand-estimate, both worth keeping because they are easy to get wrong the same way again:
+
+* **Size-7 is 3.77 M rollouts retained, not 5.25 M.** Taking `max(n)` per cell-side over-counts,
+  because a terminal record can *lower* a cell's count — `compute_refs`' reconcile truncates a
+  speculated cell back to its freeze point. The engine applies the terminal record's `n`, which is the
+  right number; a max-n scan is not.
+* **Sub-tables retain at the ADAPTIVE FLOOR, not at the cap.** This run has `bottoming: ADAPTIVE`, so
+  `sub_target` is `r0 = 2`, and *every* sub-cell qualifies as "completed" — not just the 60.6% that
+  reached the cap. That is consistent with what the run would itself have shipped, but "completed"
+  must not be read as "well sampled". The actual depth distribution is three-level:
+
+  | sub-cell depth | count | share |
+  |---|---|---|
+  | 2 (the adaptive floor) | 99,698 | 17.8% |
+  | 18 | 121,247 | 21.6% |
+  | 30 (cap) | 339,267 | 60.6% |
+
+  So 82.2% of retained sub-cells carry >= 18 rollouts, and the thin 17.8% at the floor are precisely
+  the ones `best_sub` already **excludes from the bottoming argmin** (that is the point of the adaptive
+  design) — so retaining them is low-risk, and also low-value.
+
+The 28% not retained is partial cell-sides, which the new engine re-rolls (§4c).
 
 ## 3. The statistics this rests on, stated plainly
 
@@ -178,6 +205,38 @@ One honest limit, printed in the report: flips are measured with **only the samp
 re-rolled**, so the figure is the flip rate attributable to the sample, not an extrapolation to the
 whole table.
 
+### First run against the real journal (2026-09-30)
+
+End-to-end on the cancelled Fungus journal, frozen `57c36b5c` retained into HEAD:
+
+```
+retained        : 1530576 cell-sides / 16328781 rollouts
+sample          : 24 cell-sides / 236 rollouts, PAIRED on identical seeds
+mean delta      : +0.0139 turns (se 0.0139, 95% CI +/- 0.0272)
+byte-identical  : 23/24 cell-sides (95.8%)
+worst cell-side : +0.333 turns (H=7 pd=0 idx=346045)
+keep flags      : 0 / 10,654,672 = 0%
+bottoming target: 0 / 10,654,672 = 0%
+```
+
+**Read that as a working demonstration, not as a verdict.** At n=24 the test is under-powered in a
+specific way: only 24 of 1,530,576 cell-sides were perturbed, so most of the table had no opportunity
+to flip. A 0% flip rate over 10.7 M decision slots sounds decisive and is not — the denominator is
+large because the table is large, not because the test was thorough. The default bar in this file was
+written for a 300–500 cell sample and should be judged at that size.
+
+**And the definitive verify should be run against the OPTIMISED engine, not this one.** The digest will
+move again when the search narrowing lands, so a large verify today measures a gap we are about to
+replace. What today's run establishes is that the mechanism works, retains what it claims, writes
+nothing, and reports the right metric.
+
+Two properties observed while running it, both worth knowing before sizing a real verify:
+
+* **The journal replay is the fixed cost** — 5.58 M records, ~1 minute, paid before any re-rolling.
+* **The re-roll is tail-bound at small n.** It parallelises per cell-side, so with 24 samples on a
+  24-core box the makespan is the single slowest cell-side; the run sat at ~1.5 cores for most of its
+  9 minutes waiting on one straggler. Size the sample well above the core count or accept a long tail.
+
 ### Cost warning
 
 The verify's cost is **unbounded by the same tail it is helping to fix** — this deck has single
@@ -224,12 +283,38 @@ identically by both engines. Diffing two caches is a free, stratified play-diver
 agreement rate on probe hands, not the keep/bottom flip rate. It is a strong proxy and a cheap one, not
 a substitute for §5.
 
-**A confound found and removed.** `scripts/mullgen.sh` runs generation with
+**A confound checked and cleared.** `scripts/mullgen.sh` runs generation with
 `MTG_DECISION_WORK_X=1000`, while the engine default is `0` (disarmed). A first pass compared the
-frozen cache against a HEAD cache built *without* that setting, so it conflated the 35 commits with the
-work-ceiling change and its 1.7% figure is **withdrawn**. The isolated number is below.
+frozen cache against a HEAD cache built *without* that setting, conflating the 35 commits with the
+work-ceiling change. Re-measured with both sides at `X=1000`. The ceiling turns out to be almost
+perfectly inert on this deck — **1 of 8,800 probe entries** (0.01%), and the d1/b3 play digest is
+`4b55aac85d0e0b77` either way — so the first pass was not materially confounded after all. Worth
+having checked; not worth a retraction.
 
-<!-- ISOLATED-DIVERGENCE -->
+### The number
+
+Frozen `57c36b5c` vs HEAD, **both at `MTG_DECISION_WORK_X=1000`**:
+
+| | |
+|---|---|
+| probe entries compared | 8,800 (400 per class x 22) |
+| entries that differ | **149 (1.69%)** |
+| mean delta over all entries | **−0.0017 turns** (HEAD marginally faster) |
+| delta histogram | −2: 2, −1: 81, +1: 62, +2: 4 |
+| worst class | `Psychotrope Thallid` 5.8%, then `Brightcap Badger` 3.5%, `Peat Bog` / `Mycoloth` 2.5% |
+
+**35 engine commits and 8,756 inserted lines of other agents' work move this deck's play on 1.7% of
+probe rollouts, with a mean effect under two thousandths of a turn, and the divergence is nearly
+symmetric** (81 down, 62 up, almost all ±1). Whatever those commits did, they did not do it to Fungus.
+
+That is the fact behind §6 reason 2: isolating on the gen branch would buy attribution against a
+baseline that is already close to zero. It also says retention across this particular gap is likely to
+pass the real test in §5 — *likely*, not proven, because the signature is a d5/b20 win-turn agreement
+rate and the thing that matters is the d1/b3 keep-flip rate.
+
+One aside worth noting: `Psychotrope Thallid` is both the worst-diverging class here and the card the
+slow-tail analysis found to be a **passenger** (lift 0.90x, not a driver of cost). Divergence and cost
+are landing on the same card for different reasons.
 
 ## 8. Interaction with the cost work, because it changes the calculus
 
