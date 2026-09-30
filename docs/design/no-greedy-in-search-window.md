@@ -301,6 +301,11 @@ duplicate entries (antilife/hinata run W3 at d5).
 95% of main-2 scans are at the horizon edge (remaining depth 0). Step 22 took back most of the cost;
 what is left is spread over the 2b variants and the 3b arm, both searched options the rule requires.
 
+**Step 27 on a SECOND held-out sample** (8 new seed bases 36000-50000, same cells, `logs/purge/big4x_*`),
+vs the committed tree: auras **-15** (17/2, t -3.44), fungus **-8** (8/0, t -2.83), melira -2 (24/27,
+t -0.23), antilife +3 (22/17, t +0.34). Pooled with the first held-out sample: auras -30 / 32,000,
+fungus -7 / 11,200, melira +7 / 5,600, antilife +11 / 32,000 (both within noise; neither yet <= 0).
+
 ## Next: in-range continuation duplicates (DEFERRED design, 2026-09-30)
 
 After steps 23-27 every deck's remaining loss vs the committed tree is budget churn (every slower
