@@ -39,7 +39,49 @@ is usable and absolute figures are not. The 64-game play-digest battery (~9 s) r
 and is included; its games are narrow-board, so it contributes low-odometer calls and dilutes rather
 than creates the signal below.
 
-## 2. Where the time goes — no single hot spot, and that IS the finding
+## 2a. CORRECTION (same day): "no hot spot" was the wrong framing
+
+USER: *"No hot spot is stupid. I'm talking about branching here. There are obviously hot spots."*
+Correct, and §2/§3 below are written around my error, so read this first.
+
+I answered *"where do CPU cycles go"* with a flat profile, found it diffuse, and let that framing
+overwrite the question actually asked — **where does the branching concentrate.** The branching hot
+spot is in the data in §4 and it is severe:
+
+| | share of calls | share of odometer space |
+|---|---|---|
+| `groups=5-8 board=16+` | **7.2%** | **64.5%** |
+| top four situation buckets | 27% | **93%** |
+
+The claim *"there is no equivalent win here"* in §2 is therefore **withdrawn as unsupported**. The win
+is not in a function, it is in **not generating those plans**. A diffuse flat profile is *consistent*
+with a concentrated branching hot spot rather than evidence against one: if one situation class builds
+most of the plans and each plan pays a spread of small per-plan costs, the cycles smear across a dozen
+functions while the cause stays in one place. That is exactly the shape here.
+
+**And the `Mycoloth` driver attribution in §4 is weak — do not act on it.** `odo` is the product over
+*all* groups (`Π(1 + |group_i|) × 2^independent`), while `driver` merely names the card owning the
+*largest* group. So "73.8% of odometer under `Mycoloth [+1 tied]`" does **not** mean Mycoloth causes
+it. Two further facts kill that reading:
+
+- **`MTG_FUNGUS_DEVOUR_CANDS` is already ADOPTED default ON**, so devour `k` is already a short
+  candidate list (fodder floor + contested bodies), not `0..own`. The obvious narrowing is done.
+- Working backwards from avg_odo 4,042 across `groups=5-8`: that is roughly **6 groups averaging size
+  ~3**, multiplying. No single group is large.
+
+**So the real statement of the hot spot is structural, not per-card:** on wide boards the solver
+jointly enumerates the **cross product of 5–8 simultaneously-open option groups**, and the
+subset-reject predicates in §2 (`SubsetOversubscribesSacFodder`, `SubsetWastesCreatureSacMana`,
+`SubsetHasDuplicateSacSource`, 6.76% combined) are the evidence of *why* it is joint rather than
+independent: those groups **compete for shared sac fodder and shared mana**, so they cannot simply be
+chosen separately.
+
+That reframes the whole problem from "find the slow function" to: **the enumeration is
+generate-then-reject against a shared-resource constraint, when the constraint could bound the walk
+instead.** Whether that is achievable is the open question — but it is a far more promising direction
+than anything in §2, and it is the direction §6.1 should have led with.
+
+## 2. Where the time goes — the flat profile (read §2a first)
 
 Flat profile, grouped by family (98.9% of samples accounted):
 
