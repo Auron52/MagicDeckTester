@@ -542,6 +542,56 @@ revisions, entirely because `rollsub` finished at 12.56 M against a reference-sc
 `roll7`'s 13.79 M is still the *unverified* half of that total — it assumes the reference's 9.06
 rollouts/cell-side transfers, and nothing has tested it yet because refine has not begun.
 
+### 2026-09-30 10:37Z (79.9 h in) — 80.3% done, and every projection this run has been optimistic
+
+**Overall: 21,153,688 of 26,349,058 rollouts = 80.3%.** Speculation is **91.2%** done (5,549,644 of
+6,088,384; 538,740 left). Refine escalation has still not started, `frozen=` is still `0/1522096`,
+journal 258.4 MB. The run is healthy — 24 of 27 threads in state `R`, journal age 0 s.
+
+**Productivity is falling monotonically, and that is the story of this whole run:**
+
+| sampled | rate | mean cores | rollouts/core-second |
+|---|---|---|---|
+| 15 min at speculation start | 84.3/s | 23.78 | **3.54** |
+| next 14.1 h | 61.3/s | 19.67 | **3.12** |
+| next 14.7 h | 45.7/s | 18.87 | **2.42** |
+
+The log says plainly why, and it is not scheduling: `SLOW-ROLLOUT` lines at **30,000–45,000 ms each**,
+and an all-time worst single rollout of **559,664 ms (9.3 minutes)** on `Utopia Mycon x4; Peat Bog;
+Forest x2`. The offenders cluster on `Saproling Burst` + `Wild Growth` + `Utopia Mycon` hands — the
+token-explosive board states. Escalation visits cells in index order but spends its *depth* on the
+marginal ones, so the hard cells arrive progressively. Hourly marginals over the last 16 h ran
+**12.7–90.3/s** with no idle cores at any point.
+
+| scenario | total | finish |
+|---|---|---|
+| free box (23.85 cores), refine same cost | 104.9 h (4.37 d) | Thu 10-01 11:33Z |
+| free box, refine 1.5x dearer | 116.1 h (4.84 d) | Thu 10-01 22:45Z |
+| contended as now (18.87 cores), refine same | 111.5 h (4.65 d) | Thu 10-01 18:09Z |
+| contended as now, refine 1.5x dearer | 125.7 h (5.24 d) | Fri 10-02 08:18Z |
+
+**Read the revision history before trusting any of these, because it has a direction:**
+
+| stated | projection |
+|---|---|
+| 09-28 21:47Z | 87–109 h |
+| 09-29 06:05Z | 86.5–101.8 h |
+| 09-29 19:56Z | 93.7–110.3 h |
+| 09-30 10:37Z | 104.9–125.7 h |
+
+**Every revision but one has moved later, and always for the same reason: the per-rollout cost was
+measured on easier work than what remained.** The floor sweep priced uniform R=2 work; the 15-minute
+window priced shallow speculation; each then under-priced what came next. Anyone re-projecting this
+run should assume the same bias applies to the table above — the `1.5x dearer` rows are the prudent
+ones, not the central ones, and refine escalation is the deepest and therefore dearest work in the
+run. Contention is now the *smaller* of the two effects (18.87 vs 23.85 cores is 21%; productivity has
+fallen 32%).
+
+The next milestone is real: at 91.2% of speculation, `compute_refs` should publish within a few hours
+and `phase=` should leave `floor` for the first time in the run. That is also the first direct
+measurement of whether the reference's 9.06 rollouts/cell-side transfers — the assumption the entire
+`roll7` target rests on, still untested. `phasewatch3.sh` is waiting on exactly that transition.
+
 ## The branch
 
 `gen/fungus-candb-mulligan-2026-09-27` → `57c36b5c`, the commit the journal records. Its `src` tree
