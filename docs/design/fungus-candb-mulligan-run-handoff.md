@@ -592,6 +592,49 @@ and `phase=` should leave `floor` for the first time in the run. That is also th
 measurement of whether the reference's 9.06 rollouts/cell-side transfers — the assumption the entire
 `roll7` target rests on, still untested. `phasewatch3.sh` is waiting on exactly that transition.
 
+### 2026-09-30 15:55Z (85.3 h in) — MILESTONE: `phase=refine`, and 59.7% froze in one step
+
+```
+monitor: 306934s  phase=refine  roll7=9132576 (4/s)  frozen=909147/1522096 (59.7%)
+         subwave=5 conv  journal=4954371 (0s ago)  cap=30
+```
+
+Three things landed together, and the first two are exactly as predicted:
+
+- **Speculation saturated at `roll7=9,132,576`** — precisely `2 x 1,522,096 + 4 x 1,522,096`, the
+  figure this document predicted when the mechanism was worked out at 51.0 h. The model of what
+  speculation is and what it costs was right.
+- **`compute_refs` published and `phase` left `floor`** for the first time in the run, after 85 h.
+- **`frozen` went 0 → 909,147 of 1,522,096 (59.7%) in a single monitor period**, and the journal banked
+  550,588 records in the same step. Those cell-sides were settled by the r≤6 speculation data alone;
+  the reconcile truncated them and no further escalation is owed on any of them. The reference did the
+  same thing at its own transition (0 → 79.7%).
+
+**But our freeze fraction is materially worse than the reference's, and that is the new headline
+risk.** 59.7% against 79.7% means **40.3% of cell-sides still need refine, against the reference's
+20.3% — twice the proportion.** That is consistent with this list being harder (singleton-heavy,
+more marginal keep calls), and it re-opens the question of what refine costs:
+
+| scaling | refine rollouts | vs. previous estimate |
+|---|---|---|
+| A: reference mean depth 9.06/cell-side (used until now) | 4,656,630 | — |
+| B: reference cost per **unfrozen** cell-side (13.87) | 8,499,157 | **1.83x A** |
+| absolute bound: `cap=30` on every unfrozen cell-side | 14,710,776 | 3.16x A |
+
+**B is the mechanistically sound one** — refine only touches unfrozen cell-sides, so scaling by their
+count beats scaling by a whole-population mean. A was wrong in the optimistic direction, which is the
+same bias this document already flagged against itself.
+
+**First refine measurement, ONE period only — do not lean on it.** 307234 s: `roll7` +9,787 and
+`frozen` +879, i.e. **11.1 rollouts per cell-side frozen**, against the reference's 13.87. On that
+figure the remaining refine is ~6.8 M, between A and B. One 300 s window is exactly what has misled
+this projection twice already; it needs hours, not minutes, and the box is at **12 of 24 cores**
+(loadavg 48) right now, so the neighbouring container is heavy again.
+
+**Also note the transition itself cost a near-total stall:** core share fell to **0.12** for one
+sample and took ~4 minutes to climb back, while `compute_refs`, the freeze pass and a 550 k-record
+journal write ran serially. Expect the same at the end of refine.
+
 ## The branch
 
 `gen/fungus-candb-mulligan-2026-09-27` → `57c36b5c`, the commit the journal records. Its `src` tree
