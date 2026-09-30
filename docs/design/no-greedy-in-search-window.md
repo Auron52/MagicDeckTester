@@ -256,6 +256,43 @@ USER 2026-09-30 approved the rule (*"Only newly arrived lands in second main wou
 as step 22. STILL OPEN against the per-deck bar: melira +19, antilife +10, auras +4 (4 games, all
 4 -> 5, including s20000 gi505 at both d3 and d5 -- a mechanism, not churn).
 
+**Auras, bisected** (`logs/purge/aurch`: the 4 games on every snapshot): all four flip at **step 3b**
+(the EMPTY arm), none elsewhere. All four recover at d8 b0 (`logs/purge/aurrec`); the three d5 games
+also recover at 4x budget. d3 s20000 gi505 stays T5 at 4x and 16x: base T1 plays Plains (T2 Kor
+Spiritdancer, T4 kill, Kor's aura draws doing the digging), 3b plays Horizon Canopy + Slippery Bogle
+and never casts Kor. `MTG_FSW_TRACE` at T1: every warm pass ties all seven T1 plans at T4 and keeps
+the first (Canopy + Bogle); in the commit pass base's d2 iteration scores Plains alone at T4, step
+22's scores it T5. That first read ("cut short by the budget") was WRONG: gi505 stays T5 at d3
+`--budget-ms 0` (step 3a T4, 3b T5), so it is not budget at all.
+
+**Root cause: the escalation beam counted list ENTRIES, not scored plans (step 23).** The heuristic
+escalation pass runs under a beam (d3: static width 20 at remaining depth <= 1; d5: the deck's
+value-ranked width). Its counter `_beam_i++` sat at the top of the plan loop, BEFORE the exits that
+skip a proven duplicate (a rank variant whose base measured the breakpoint empty, a node prefix a
+sibling reached, a post-apply state a sibling reached). Every such skip used up a slot. The purge adds
+exactly those entries (the EMPTY arm, axis variants), so the effective beam narrowed: under T1 Plains
+the T2 node scored 8 of its 10 plans and dropped Boulderloft Pathway + Kor Spiritdancer, the T4 line
+(traced with the new `MTG_FSW_PATH` instrument, which prefixes every `[fsw]`/`[fs-sim]`/`[m2t]` line
+with the root-to-node plan path). `MTG_ESC_BEAM=0` or `=40` restores T4. Fix: each duplicate-skip exit
+refunds its slot (`--_beam_i`), so width W means W scored plans. gi505 is T4 again at d3 b80 and b0.
+This is a general mechanism, not an auras one: any deck under a beam lost width to the purge's
+duplicate entries (antilife/hinata run W3 at d5).
+
+**Where the remaining cost is** (`logs/purge/costbis`, melira + antilife d3, 100 games each,
+`MTG_ROLLOUT_STATS`; units = the budget currency, virtual ms):
+
+| snapshot | units_total | fs_main2 | m2 plans / decision |
+|---|---|---|---|
+| base | 3.60M | 1.49M | 2.35 |
+| 2b (m2 breakpoint variants) | 3.93M | 1.88M | 3.20 |
+| 2c (m2 land drop) | 4.63M | 2.53M | 5.13 |
+| 3b (EMPTY arm) | 4.89M | 2.68M | 5.41 |
+| 19 / 21 | 4.51M | 2.33M | 5.48 |
+| **22** | **3.78M (1.05x)** | 1.71M | 3.79 |
+
+95% of main-2 scans are at the horizon edge (remaining depth 0). Step 22 took back most of the cost;
+what is left is spread over the 2b variants and the 3b arm, both searched options the rule requires.
+
 ## Deferred relocations (engine-resident PRUNES, no play change -- need an interface decision)
 
 These are option-RESTRICTING rules (allowed as heuristics) that still live in TurnSolver.cpp. They are
@@ -337,6 +374,7 @@ Snapshots: `logs/snapshots/purge-step<N>` (gitignored); per-game diff `logs/purg
 | 19 | relocations (enumeration prunes): the USER-doctrine prunes that sat in CollectActions -- Unexpectedly Absent never cast autonomously (both the opponent-target and the self-target form) and Jitte's non-combat modes -- become provider hooks `OffersTuckRemovalCast` / `OffersJitteNonCombatModes` (default false = the doctrine). LOCKSTEP HOLE fixed: the executor's safe-alt auto-fire lacked the rollout's `MTG_UNPRUNE=altpayload` suppression (inert at default). Unit tests `test_provider_prunes.cpp` (default vs overriding provider on EnumerateMainPlans). The magnet strive K>0 prune is a measured DOMINANCE fold (strictly fewer tokens for strictly more mana vs the passive opponent) -- lossless, stays | smoke vs 18 byte-identical | -- |
 | 21 | FIX (found by the per-deck overnight bisect): `SecondMainUnproductive` -- the Fungus deferred-cast gate (and the provider-opt-in productivity rule) -- asked only for a payable deferred CAST or a free activation, so with the main-2 land drop always live (2c) it skipped main 2 with the turn's drop still open and a land in hand, and its 0-cost path recorded a deliberate NO-LAND main 2. A main 1 that held its land (the defer-drop tie order under the value leaf's whole-turn ties) then lost the drop for the turn: fungus overnight d5 s4004 gi194 passed T1-T3 holding Forest + Utopia Mycon and never won (GT T6). Now an unused drop + a land in hand makes main 2 productive (land type read from the DATABASE -- a hand `Card`'s own type fields can be unset, which is why the first cut was inert). Only decks whose provider opts into either gate can move (today: Fungus) | fungus overnight searched: vs GT **+22 -> -2** (15 faster / 13 slower), vs step 19 -24 (31/12); fungus d0 byte-identical | fungus searched wall 1.25x vs step 19 (contended, different pools) |
 | 22 | The main-2 land drop offers only lands that ARRIVED after main 1 began (`GameState::m1start_hand_mask`, stamped at both worlds' main-1 start; `HeldLandBarredFromMain2`; human play exempt). USER-approved. A held land's main-2 copy re-derives a main-1 line (the search knows its draws) apart from ordering effects the pre-purge engine never had; the copies were 35% of main-2 plans. DEFER-THE-DROP tie order and `MTG_NO_DEFER_DROP` DELETED (holding a land now skips it). Unit test `test_m2_land_drop.cpp` (two arms that must differ). Rejected alongside: the value-leaf milliturn tie-break (`MTG_LINE_EST_TB`) and a root-turn-exempt variant | large paired run vs step 21: antilife -31 (t -3.15), melira -17 (t -2.25), fungus -2, auras 0; verified byte-identical to the measured arm (melira cells) | antilife+melira probe units 1.41x -> 1.12x of the pre-purge tree |
+| 23 | Escalation beam counts SCORED plans: the four duplicate-skip exits (armnew-declined rank variant, FSLineWin node prefix, FSLineWin post-apply `skip_dup`, m2 node prefix) refund their slot. Diagnostic `MTG_FSW_PATH` (root-to-node path on `[fsw]`/`[fs-sim]`/`[m2t]` lines) | large paired held-out run vs step 22: auras **-19** (21 faster / 2 slower, t -3.96); antilife, melira, fungus byte-identical. vs committed tree: auras **-15** (t -3.00, was +4) | auras d3 s20000 gi505 T5 -> T4 at b80 and b0 (was the 3b beam-crowding) |
 | **Regression checkpoint 3** (every slower game, with verdict, is listed for revisit in `docs/design/no-greedy-worse-cases.md`; ALL 66 recover at the definitive `--depth 8 --budget-ms 0` test) (step 19 = commit cd2908d9 vs GT = committed tree 3753dcf3, full tier) | searched depths **100 faster / 66 slower, net -33 turns**; d0 5 faster / 13 slower, +10 (all slivers d0). Biggest gains: hinata d3 s2002 -17, hinata/hinata2hg d3 -6 each, fivecolour/burn -4 per cell, giants -2 per cell. Of the 66 slower: 62 churn (recover at 4x/16x, `classify_turn_later.sh`), 3 variance (hinata d3 s2002 gi57/77/143: draws diverge at T3-T6 vs the committed-tree binary), 1 d3-only (th s2002 gi276: T7 at d3 for every budget to 64x, but T6 at d5 and d7 on both binaries -- recovers with DEPTH). USER bar 2026-09-30: per-deck slivers of churn can wait unless a case does not recover with more budget AND depth -- none remains. Per-deck searched net (games): th +5/1600, antilife +4/1100, fungus +4/600, melira +3/230, goblins +2/1100, slivers +2/1400, auras +1/2000 (all churn) vs hinata -19, burn -12, fivecolour -10, giants -6, creature_giving -2, hinata2hg -2, fivecolour2hg -2, kitty -1; the rest 0 -- tracked for the mitigation phase | -- | -- |
 
 ### Audit items re-examined and found COMPLIANT (no code change) -- 2026-09-30

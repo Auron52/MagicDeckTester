@@ -7002,6 +7002,8 @@ static void FsDumpPlan(const char* tag, const TurnSolver::Plan& p, int win)
 // root print too and nothing else does.
 static bool FsRootDumpSimOn() { static const bool v = EnvOn("MTG_FS_ROOT_DUMP_SIM"); return v; }
 static thread_local int g_fs_sim_trace = 0;
+// MTG_FSW_PATH dig instrument (see FSLineWin): the root-to-node plan path, per thread.
+static thread_local std::string g_fsw_path;
 struct FsSimTraceScope
 {
     bool on;
@@ -49112,7 +49114,7 @@ static int SimulateToEndImpl(GameState& state, int depth, int max_turns,
         { leafeval::Publish(leafeval::kOwnDeath); return max_turns + 1; }
         if (g_fs_sim_trace > 0)
         {
-            std::fprintf(stderr, "[fs-sim]    t%d m1 %s | after: %s opp=%d\n", state.turn_number,
+            std::fprintf(stderr, "[fs-sim] %s   t%d m1 %s | after: %s opp=%d\n", g_fsw_path.c_str(), state.turn_number,
                          FsPlanText(pre_plan).c_str(), FsSimBoardText(state).c_str(),
                          state.Opponent().life);
         }
@@ -51721,7 +51723,11 @@ static TurnSolver::SearchLine FSLineTail(const GameState& state, int depth, int 
                 const TranspositionTable::Key pend_key = BuildDedupKey(node_snap.state);
                 if (dupe_trace) { bpnode::PendTraceRecord(pend_key, DupeSig(q), node_snap.state); }
                 if (!node_prefix_seen.insert(pend_key).second)
-                { if (s_rollout_stats) { bpnode::g_prefix_dupes.fetch_add(1, std::memory_order_relaxed); } continue; }
+                {
+                    if (s_rollout_stats) { bpnode::g_prefix_dupes.fetch_add(1, std::memory_order_relaxed); }
+                    if (beam_here) { --_beam_i; }   // beam refund: a duplicate is not a scored slot
+                    continue;
+                }
                 // Level 2: the PEND state itself -- hand (so the cantrip's actual draw is visible)
                 // and library top, before any child is enumerated. Pairs with the child-state dump.
                 if (m2t_here)
@@ -52024,8 +52030,8 @@ static TurnSolver::SearchLine FSLineTail(const GameState& state, int depth, int 
                 FSLineWin(s2, depth, max_turns, std::min(cutoff, best.win_turn), second_main, tt, lc, budget);
             if (m2t_here)
             {
-                std::fprintf(stderr, "[m2t] T%d d%d q=%s sub=%d best=%d cutoff=%d\n",
-                             state.turn_number, depth, m2t_sum(q).c_str(), sub.win_turn,
+                std::fprintf(stderr, "[m2t] %s T%d d%d q=%s sub=%d best=%d cutoff=%d\n",
+                             g_fsw_path.c_str(), state.turn_number, depth, m2t_sum(q).c_str(), sub.win_turn,
                              best.win_turn, cutoff);
             }
             if (DomActive() && dom_arch) { domin::RecordWin(*dom_arch, dprobe, sub.win_turn); }
@@ -53144,6 +53150,10 @@ static TurnSolver::SearchLine FSLineWin(const GameState& state, int depth, int m
         // Value-guided escalation beam: expand only the top-W value-ranked plans (g_esc_beam_width), but only at
         // near-leaf nodes (beam_here); the top plies keep full exploration so the committed play is never pruned.
         // 0 = unlimited = byte-identical. pre is value-ordered above, so this keeps the best W lines.
+        // A slot is a SCORED plan: every exit below that skips a proven duplicate (a rank variant its
+        // base already measured empty, a node prefix or post-apply state a sibling reached) refunds
+        // it. Otherwise adding exact-duplicate options (the EMPTY arm, axis variants) narrows the beam
+        // and drops real lines -- auras s20505 gi505 lost its T4 kill that way at d3 b0.
         if (beam_here && _beam_i++ >= g_esc_beam_width) { ++g_fs_trunc_events; break; }
         // A constant-leaf pass stops at exhaustion (see g_constant_leaf_pass); the truncation is recorded.
         if (ConstantLeafExhausted(budget)) { ++g_fs_trunc_events; break; }
@@ -53188,6 +53198,7 @@ static TurnSolver::SearchLine FSLineWin(const GameState& state, int depth, int m
             {
                 if (s_rollout_stats)
                 { g_bp_armnew_declined.fetch_add(1, std::memory_order_relaxed); }
+                if (beam_here) { --_beam_i; }   // beam refund (see the beam check above)
                 continue;
             }
         }
@@ -53487,6 +53498,7 @@ static TurnSolver::SearchLine FSLineWin(const GameState& state, int depth, int m
             }
             if (rec_vals) { node_vals.push_back(node_best_val); }
             if (deferred_win) { break; }
+            if (beam_here && !node_fresh) { --_beam_i; }   // beam refund: a sibling's prefix
             continue;   // the pending base plan itself is never scored -- its children were
         }
         // Record for node-child dedup -- but only when the variant block below will not (its own
@@ -53549,6 +53561,7 @@ static TurnSolver::SearchLine FSLineWin(const GameState& state, int depth, int m
                 else if (p.bp_choice < 0)
                 { g_fs_pre_state_skips.fetch_add(1, std::memory_order_relaxed); }
                 if (rec_vals) { node_vals.push_back(max_turns + 1); }
+                if (beam_here) { --_beam_i; }   // beam refund (see the beam check above)
                 continue;
             }
         }
@@ -53632,8 +53645,20 @@ static TurnSolver::SearchLine FSLineWin(const GameState& state, int depth, int m
         }
         else
         {
+            // DIG INSTRUMENT (MTG_FSW_PATH, default off): the plan path from the search root, so an
+            // [fsw] line can be attributed to the root line it sits under.
+            static const bool s_fsw_path = EnvOn("MTG_FSW_PATH");
+            const std::size_t path_len = g_fsw_path.size();
+            if (s_fsw_path)
+            {
+                g_fsw_path += "T" + std::to_string(state.turn_number) + ":";
+                if (p.land_decided) { g_fsw_path += p.land_to_play + ";"; }
+                for (const Action& a : p.actions) { g_fsw_path += a.card_name; g_fsw_path += ","; }
+                g_fsw_path += "|";
+            }
             tail = FSLineTail(s, depth - 1, max_turns, std::min(cutoff, best.win_turn), second_main,
                               tt, lc, budget, &dom_arch, eot_ptr);
+            if (s_fsw_path) { g_fsw_path.resize(path_len); }
         }
         if (dork_contested)
         {
@@ -53714,7 +53739,8 @@ static TurnSolver::SearchLine FSLineWin(const GameState& state, int depth, int m
                     if (a.mint_gain > 0)       { sum += "m" + std::to_string(a.mint_gain); }
                     sum += ",";
                 }
-                std::fprintf(stderr, "[fsw] T%d d%d oppL=%d tc=%d p=%s fresh=%d after=%d tail=%d best=%d cutoff=%d\n",
+                std::fprintf(stderr, "[fsw] %s T%d d%d oppL=%d tc=%d p=%s fresh=%d after=%d tail=%d best=%d cutoff=%d\n",
+                             g_fsw_path.c_str(),
                              state.turn_number, depth,
                              state.players[1 - state.active_player_index].life,
                              p.tutor_choice,
