@@ -81,6 +81,89 @@ generate-then-reject against a shared-resource constraint, when the constraint c
 instead.** Whether that is achievable is the open question — but it is a far more promising direction
 than anything in §2, and it is the direction §6.1 should have led with.
 
+## 2b. THE PER-TURN VIEW, and what the shared-resource constraint actually rejects
+
+Measured with a new instrument, `MTG_BRANCH_SHAPE` (`TurnSolver.cpp`, `namespace shapestats`),
+default off and byte-identical when off (smoke 101/101, configs-changed 0). It answers the two things
+§6 listed as unknown, on the same replayed rollout.
+
+```
+MTG_DECISION_WORK_X=1000 MTG_BRANCH_SHAPE=1 MTG_BRANCH_STATS=1 \
+MTG_KEEP_REPLAY="Utopia Mycon x2; Hickory Woodlot x1; Doubling Season x2; Deathspore Thallid x1; Brightcap Badger x1" \
+MTG_KEEP_REPLAY_R=2 MTG_KEEP_REPLAY_PD=0 \
+MTG_EQUIV_CACHE=logs/fungus_retention/gencache.HEAD.x1000.json \
+MTG_KEEP_OUT_RAW=logs/fungus_retention/shape.raw.json \
+build/Release/mtg-analyze decks/Fungus/candidate-b-2026-09/Fungus.cod \
+  --cards-json src/cards/data/cards.json --gen-mulligan fast
+```
+
+### The real turns (§6.4, asked for twice, now answered)
+
+| turn | calls | sum_odo | plans | dedup | avg_odo | avg groups | avg board |
+|---|---|---|---|---|---|---|---|
+| 1 | 682 | 11,260 | 277 | 274 | 16.5 | 3.44 | 1.4 |
+| 2 | 2,779 | 69,251 | 5,073 | 4,419 | 24.9 | 3.88 | 2.8 |
+| 3 | 6,288 | 143,684 | 21,944 | 18,673 | 22.9 | 3.46 | 5.3 |
+| 4 | 13,619 | 380,732 | 76,425 | 67,916 | 28.0 | 2.72 | 7.6 |
+| 5 | 26,123 | 2,792,237 | 301,272 | 277,981 | 106.9 | 2.97 | 10.1 |
+| **6** | 24,219 | **41,283,327** | 1,245,159 | 956,302 | **1,704.6** | 3.74 | 12.8 |
+| 7 | 19,690 | 3,161,935 | 727,626 | 691,036 | 160.6 | 3.46 | 12.2 |
+| **8** | 22,459 | 8,175,380 | **2,757,165** | 2,745,272 | 364.0 | 4.32 | 15.5 |
+| | 115,859 | 56,017,806 | 5,134,941 | 4,761,873 | | | |
+
+**The cost is NOT spread across the turn range, and the two blowups are different blowups.**
+
+* **Turn 6 owns the odometer SPACE: 41.3 M of 56.0 M = 73.7%**, at avg_odo 1,704 — 5–16x every other
+  turn — from only 20.9% of the calls.
+* **Turn 8 owns the PLANS: 2.76 M of 5.13 M = 53.7%**, from a space of only 8.2 M (avg_odo 364).
+* So turn 6 is a wide space that prunes well (dedup removes 23.2%, the only turn where dedup earns
+  its keep), and turn 8 is a narrow space that prunes barely at all (dedup removes **0.4%**) and
+  simply builds everything it enumerates.
+
+Turn 8 is the horizon edge (`max_turns=8`), which fits `fungus-value-leaf-status.md`'s finding that
+99.7% of this deck's evaluations sit at the horizon edge. Half the constructed plans are built on the
+last turn the search will ever look at.
+
+### The subset funnel — the real work unit is 8.5x bigger than "5.4 M plans"
+
+| turn | subsets entered | dupSacSrc | wasteSacMana | overFodder | other | PASSED |
+|---|---|---|---|---|---|---|
+| 3 | 20,600 | 1,449 | 176 | 0 | 0 | 18,975 |
+| 4 | 219,740 | 16,602 | 14,746 | 16,186 | 0 | 172,206 |
+| 5 | 1,689,371 | 71,798 | 180,474 | 204,312 | 0 | 1,232,787 |
+| 6 | 7,143,659 | 347,537 | 452,700 | 884,971 | 0 | 5,458,451 |
+| 7 | 15,220,528 | 1,516,631 | 407,720 | 2,195,334 | 0 | 11,100,843 |
+| 8 | 19,370,442 | 1,603,940 | 936,120 | 2,080,275 | 0 | 14,750,107 |
+| **total** | **43,664,421** | 3,557,957 (8.15%) | 1,991,936 (4.56%) | 5,381,078 (12.32%) | **0** | 32,733,450 (74.97%) |
+
+Three things fall out, and the first is the most important:
+
+1. **The walk visits 43.7 M subsets to produce 5.1 M plans — 8.5 subsets per plan.** Every previous
+   number in this document (including my own "5.4 million constructed plans") understated the work
+   by nearly an order of magnitude. **43.7 M is the number an optimisation has to move.**
+2. **The shared-resource constraint rejects 25.03% of the walk** — and `other` is **exactly zero**.
+   No other predicate in that funnel rejects a single subset on this deck. §2a's reframing was right
+   about the mechanism: the only thing throwing work away here is fodder/mana contention.
+3. **The rejection is back-loaded**: turns 7 and 8 are 79% of all subset visits and 76% of all
+   rejects. It tracks board width, as the mechanism predicts.
+
+### How big is the prize, honestly
+
+25.03% of visits is what a leaf-level constraint currently discards. That is **not** a 4x, and the
+temptation to read it as one should be resisted — it caps a leaf-level fix at about **1.33x**.
+
+**And the obvious escalation does not work as stated.** I expected `SubsetOversubscribesSacFodder` to
+be monotone in the subset — if a prefix already oversubscribes, so does every extension — which would
+let the walk prune whole subtrees rather than leaves and blow well past 25%. Reading it, **it is not
+monotone**: adding a candidate can add *supply* as well as demand (`plan_fodder_credit` counts a cast
+creature as +1 body, and a spore pop as `k x spore_creates_tokens`), so a violating prefix can become
+legal by extending it with a creature cast.
+
+That does not kill prefix pruning, it just makes the sound version weaker than the leaf test: prune a
+prefix only when `demand > supply + (maximum fodder any remaining candidate could still add)`. That
+bound is computable and it cuts subtrees, so its saving in *visits* can exceed 25% even though it
+rejects fewer *leaves*. **Whether it does is the next measurement, and it is now a well-posed one.**
+
 ## 2. Where the time goes — the flat profile (read §2a first)
 
 Flat profile, grouped by family (98.9% of samples accounted):
@@ -178,8 +261,21 @@ naming: **on this deck, "the board is wide so copying is expensive" keeps being 
    the search is constructing millions of plans that are indistinguishable at the leaf, the question
    is whether they are distinguishable at all — and if not, where the earliest point is at which they
    could be collapsed.
-4. **Per-turn shape.** All of the above is per-rollout aggregate. Nothing here says *which turns* the
-   5.4 M plans land on. `SLOW-ROLLOUT` lines give the hand but not the turn profile.
+4. ~~**Per-turn shape.**~~ **ANSWERED in §2b** (`MTG_BRANCH_SHAPE`): turn 6 holds 73.7% of the
+   odometer space, turn 8 holds 53.7% of the constructed plans, and the walk visits 43.7 M subsets —
+   8.5x the plan count everything above is written around.
+
+5. **Does a sound prefix bound beat the leaf test?** Opened by §2b. The leaf-level shared-resource
+   reject rate is 25.03% of visits, which caps a leaf-level fix at ~1.33x. A prefix prune on
+   `demand > supply + max-remaining-credit` cuts subtrees instead, so it could save more visits than
+   it rejects leaves — but the constraint is not monotone, so the bound has to be the admissible one.
+   This is the highest-value next measurement.
+
+6. **Why does turn 8 dedup only 0.4%?** Every other turn removes 4-23%. Turn 8 builds 2.76 M plans
+   and discards almost nothing, on the horizon edge where `fungus-value-leaf-status.md` says 99.7% of
+   evaluations already sit. Either those plans are genuinely distinct, or the dedup key is too
+   specific exactly where it matters most — which is the same suspicion as the 42.6% memo hit rate in
+   item 2, one layer up.
 
 ## 7. Artifacts
 

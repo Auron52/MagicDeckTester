@@ -24226,6 +24226,154 @@ static bool BuildManaGateIndex(const ManaPool& pool, const std::vector<Action>& 
 //
 // Deliberately expensive (it enumerates the mana side separately) and env-gated to zero cost, because
 // this runs inside Solve -- the rollout leaf. Measurement builds only; delete once the design lands.
+// --- BRANCH SHAPE (MTG_BRANCH_SHAPE, off by default = zero cost) ------------------------------
+// Two questions `branchstats` structurally cannot answer, both raised by the Fungus slow-rollout
+// diagnosis (docs/design/fungus-slow-rollout-diagnosis-2026-09-30.md §6):
+//
+//   1. WHICH TURNS do the plans land on? Every existing instrument is a per-rollout aggregate, so
+//      "5.4 M plans for one rollout" says nothing about whether that is one catastrophic turn or a
+//      slow bleed across eight. Keyed by turn here.
+//   2. HOW MUCH of the cross product could the SHARED-RESOURCE constraint have excluded BEFORE the
+//      walk rather than after? §2a reframed the hot spot as generate-then-reject: 5-8 option groups
+//      are enumerated jointly because they compete for the same sac fodder and the same mana, and
+//      the three Subset* predicates then throw the conflicting combinations away. The ratio of
+//      rejects to passes, per turn, is the size of the prize for bounding the walk instead.
+//
+// It also records the GROUP-SIZE HISTOGRAM, because `driver` (the largest group) proved to be a bad
+// summary: odo is the product over ALL groups, so "6 groups averaging size 3" and "one group of 700"
+// are the same odometer and completely different problems.
+//
+// Fixed-size atomic slots rather than a map+mutex: the reject counters are incremented once per
+// visited SUBSET (millions per call), so a lock here would dominate the measurement it is taking.
+namespace shapestats
+{
+    inline bool Enabled() { static const bool v = EnvOn("MTG_BRANCH_SHAPE"); return v; }
+    constexpr int kMaxTurn = 64;                 // turns past this fold into the last slot
+    constexpr int kMaxGsz  = 9;                  // group sizes 1..8, 8 = "8 or more"
+
+    struct Slot
+    {
+        std::atomic<std::uint64_t> calls{0}, odo{0}, raw{0}, dedup{0};
+        std::atomic<std::uint64_t> groups{0}, ind{0}, board{0}, max_odo{0};
+        std::atomic<std::uint64_t> gsz[kMaxGsz];
+        // The subset funnel, per turn. `entered` counts visits; the three named predicates are the
+        // shared-resource constraint; `passed` is what survived every rule. entered - passed - the
+        // three = rejected by some other predicate, derived rather than instrumented at 15 sites.
+        std::atomic<std::uint64_t> entered{0}, rej_dup{0}, rej_mana{0}, rej_fodder{0}, passed{0};
+        Slot() { for (auto& g : gsz) { g.store(0); } }
+    };
+    inline Slot g_turn[kMaxTurn];
+
+    inline int Clamp(int turn) { return turn < 0 ? 0 : (turn >= kMaxTurn ? kMaxTurn - 1 : turn); }
+    inline void Bump(std::atomic<std::uint64_t>& a, std::uint64_t n = 1)
+    { a.fetch_add(n, std::memory_order_relaxed); }
+    inline void BumpMax(std::atomic<std::uint64_t>& a, std::uint64_t v)
+    { std::uint64_t cur = a.load(std::memory_order_relaxed);
+      while (v > cur && !a.compare_exchange_weak(cur, v, std::memory_order_relaxed)) {} }
+
+    // One EnumeratePlans call's shape.
+    inline void RecordShape(int turn, const std::vector<std::vector<int>>& groups, int num_ind,
+                            int board, double odo, std::uint64_t raw, std::uint64_t dedup)
+    {
+        Slot& s = g_turn[Clamp(turn)];
+        Bump(s.calls); Bump(s.odo, static_cast<std::uint64_t>(odo)); Bump(s.raw, raw);
+        Bump(s.dedup, dedup); Bump(s.groups, groups.size());
+        Bump(s.ind, static_cast<std::uint64_t>(num_ind));
+        Bump(s.board, static_cast<std::uint64_t>(board));
+        BumpMax(s.max_odo, static_cast<std::uint64_t>(odo));
+        for (const std::vector<int>& gp : groups)
+        {
+            const std::size_t z = gp.size() >= static_cast<std::size_t>(kMaxGsz - 1)
+                                ? static_cast<std::size_t>(kMaxGsz - 1) : gp.size();
+            Bump(s.gsz[z]);
+        }
+    }
+
+    struct Dumper
+    {
+        ~Dumper()
+        {
+            if (!Enabled()) { return; }
+            std::uint64_t tot_calls = 0, tot_odo = 0, tot_raw = 0, tot_ded = 0;
+            std::uint64_t t_ent = 0, t_dup = 0, t_mana = 0, t_fod = 0, t_pass = 0;
+            for (const Slot& s : g_turn)
+            {
+                tot_calls += s.calls; tot_odo += s.odo; tot_raw += s.raw; tot_ded += s.dedup;
+                t_ent += s.entered; t_dup += s.rej_dup; t_mana += s.rej_mana;
+                t_fod += s.rej_fodder; t_pass += s.passed;
+            }
+            if (tot_calls == 0 && t_ent == 0) { return; }
+
+            std::fprintf(stderr, "\n=== BRANCH SHAPE: per TURN (which turns the plans land on) ===\n");
+            std::fprintf(stderr, "%5s %10s %14s %12s %12s %9s %8s %8s %9s\n",
+                         "turn", "calls", "sum_odo", "plans", "dedup", "avg_odo", "avgGrp", "avgInd", "avgBoard");
+            for (int t = 0; t < kMaxTurn; ++t)
+            {
+                const Slot& s = g_turn[t];
+                const std::uint64_t c = s.calls;
+                if (c == 0) { continue; }
+                std::fprintf(stderr, "%5d %10llu %14llu %12llu %12llu %9.1f %8.2f %8.2f %9.1f\n", t,
+                    (unsigned long long)c, (unsigned long long)s.odo, (unsigned long long)s.raw,
+                    (unsigned long long)s.dedup, static_cast<double>(s.odo) / static_cast<double>(c),
+                    static_cast<double>(s.groups) / static_cast<double>(c),
+                    static_cast<double>(s.ind) / static_cast<double>(c),
+                    static_cast<double>(s.board) / static_cast<double>(c));
+            }
+            std::fprintf(stderr, "TOTAL calls=%llu odo=%llu plans=%llu dedup=%llu\n",
+                (unsigned long long)tot_calls, (unsigned long long)tot_odo,
+                (unsigned long long)tot_raw, (unsigned long long)tot_ded);
+
+            std::fprintf(stderr, "\n=== BRANCH SHAPE: option-GROUP SIZE histogram (odo is the product over ALL of these) ===\n");
+            std::fprintf(stderr, "%5s", "turn");
+            for (int z = 1; z < kMaxGsz - 1; ++z) { std::fprintf(stderr, " %9d", z); }
+            std::fprintf(stderr, " %9s\n", "8+");
+            for (int t = 0; t < kMaxTurn; ++t)
+            {
+                const Slot& s = g_turn[t];
+                if (s.calls == 0) { continue; }
+                std::fprintf(stderr, "%5d", t);
+                for (int z = 1; z < kMaxGsz; ++z)
+                { std::fprintf(stderr, " %9llu", (unsigned long long)s.gsz[z].load()); }
+                std::fprintf(stderr, "\n");
+            }
+
+            std::fprintf(stderr, "\n=== BRANCH SHAPE: subset funnel -- what the SHARED-RESOURCE constraint rejects AFTER generating ===\n");
+            std::fprintf(stderr, "%5s %14s %12s %12s %12s %12s %12s\n",
+                         "turn", "entered", "dupSacSrc", "wasteSacMana", "overFodder", "other", "PASSED");
+            for (int t = 0; t < kMaxTurn; ++t)
+            {
+                const Slot& s = g_turn[t];
+                const std::uint64_t e = s.entered;
+                if (e == 0) { continue; }
+                const std::uint64_t d = s.rej_dup, m = s.rej_mana, f = s.rej_fodder, p = s.passed;
+                const std::uint64_t oth = e > (d + m + f + p) ? e - (d + m + f + p) : 0;
+                std::fprintf(stderr, "%5d %14llu %12llu %12llu %12llu %12llu %12llu\n", t,
+                    (unsigned long long)e, (unsigned long long)d, (unsigned long long)m,
+                    (unsigned long long)f, (unsigned long long)oth, (unsigned long long)p);
+            }
+            const std::uint64_t t_oth = t_ent > (t_dup + t_mana + t_fod + t_pass)
+                                      ? t_ent - (t_dup + t_mana + t_fod + t_pass) : 0;
+            const double den = t_ent ? static_cast<double>(t_ent) : 1.0;
+            std::fprintf(stderr,
+                "TOTAL entered=%llu  dupSacSrc=%llu (%.2f%%)  wasteSacMana=%llu (%.2f%%)  "
+                "overFodder=%llu (%.2f%%)  other=%llu (%.2f%%)  PASSED=%llu (%.2f%%)\n",
+                (unsigned long long)t_ent,
+                (unsigned long long)t_dup,  100.0 * static_cast<double>(t_dup)  / den,
+                (unsigned long long)t_mana, 100.0 * static_cast<double>(t_mana) / den,
+                (unsigned long long)t_fod,  100.0 * static_cast<double>(t_fod)  / den,
+                (unsigned long long)t_oth,  100.0 * static_cast<double>(t_oth)  / den,
+                (unsigned long long)t_pass, 100.0 * static_cast<double>(t_pass) / den);
+            std::fprintf(stderr,
+                "  SHARED-RESOURCE rejects (the three named) = %llu = %.2f%% of subsets visited.\n"
+                "  That is the fraction of the walk a constraint-bounded enumeration could have\n"
+                "  skipped BEFORE generating, not the fraction of TIME it would save.\n",
+                (unsigned long long)(t_dup + t_mana + t_fod),
+                100.0 * static_cast<double>(t_dup + t_mana + t_fod) / den);
+        }
+    };
+    inline Dumper g_dumper;
+}
+
 namespace enumstats
 {
     inline bool Enabled() { static const bool v = EnvOn("MTG_ENUM_STATS"); return v; }
@@ -25751,6 +25899,12 @@ TurnSolver::Plan TurnSolver::SolveUncached(const GameState& state, bool is_pre_c
             }
         }
     }
+    // BRANCH SHAPE slot, resolved ONCE per enumeration rather than per subset visit: the turn is
+    // fixed for the whole walk, and `consider` runs tens of millions of times (43.7 M on one Fungus
+    // rollout), so even a cached-flag load belongs out here. nullptr => instrument off => the only
+    // per-visit cost is a null check.
+    shapestats::Slot* const shape = shapestats::Enabled()
+        ? &shapestats::g_turn[shapestats::Clamp(state.turn_number)] : nullptr;
     auto consider = [&](std::vector<int>& sel)
     {
         // Provenance for the fold's canonical-prefix rule, TAKEN (and cleared) at entry so a
@@ -25776,6 +25930,9 @@ TurnSolver::Plan TurnSolver::SolveUncached(const GameState& state, bool is_pre_c
         }
         std::sort(sel.begin(), sel.end());          // ascending -> matches the powerset's bit order
         if (enumstats::Enabled()) { enumstats::g_c_enter.fetch_add(1, std::memory_order_relaxed); }
+        // BRANCH SHAPE funnel: one visit. The three shared-resource predicates below each get a
+        // counter; everything else is derived as (entered - passed - those three) at dump time.
+        if (shape != nullptr) { shapestats::Bump(shape->entered); }
         // EVERY `pre.` TEST BELOW IS A NECESSARY CONDITION FOR ITS FILTER, computed once over
         // `cands` before the walk -- see SubsetFilterPre. A false bit means no selection out of
         // this candidate list can make that filter return true, so the skip is byte-identical.
@@ -25797,7 +25954,8 @@ TurnSolver::Plan TurnSolver::SolveUncached(const GameState& state, bool is_pre_c
         // Reject two SacForMana of the same source (its colour variants are mutually exclusive). Inert
         // without a SacForMana action (Lotus Bloom) -> byte-identical.
         if (pre.dup_source
-            && SubsetHasDuplicateSacSource(cands, sel, /*site=*/0, fold_from_odometer)) { return; }
+            && SubsetHasDuplicateSacSource(cands, sel, /*site=*/0, fold_from_odometer))
+        { if (shape != nullptr) { shapestats::Bump(shape->rej_dup); } return; }
         // Reject an Equip whose equipment/host is in hand and uncast by this subset (silent no-op).
         // Inert without an Equip candidate -> byte-identical. Kept in lockstep with the twin below.
         if (pre.equip && SubsetHasStrandedEquip(state, cands, sel)) { return; }
@@ -25814,12 +25972,14 @@ TurnSolver::Plan TurnSolver::SolveUncached(const GameState& state, bool is_pre_c
         // rituals-for-payoff guard already covers this on the credited/pool path; this also catches
         // the filter fallback, and keeps the rule identical on both sides. Inert without a creature
         // mana outlet -> byte-identical.
-        if (pre.creature_sac_mana && SubsetWastesCreatureSacMana(state, cands, sel, sac_tab)) { return; }
+        if (pre.creature_sac_mana && SubsetWastesCreatureSacMana(state, cands, sel, sac_tab))
+        { if (shape != nullptr) { shapestats::Bump(shape->rej_mana); } return; }
         // Reject a plan whose sac outlets together demand more fodder than the board has
         // (found by the Fungus Stage-5d sweep: two Saproling-gated outlets, one Saproling --
         // the second half silently no-opped at apply). Correctness, not a narrowing.
         if (pre.sac_fodder
-            && SubsetOversubscribesSacFodder(state, cands, sel, sac_tab, persist_arg)) { return; }
+            && SubsetOversubscribesSacFodder(state, cands, sel, sac_tab, persist_arg))
+        { if (shape != nullptr) { shapestats::Bump(shape->rej_fodder); } return; }
         // Reject a life-paid phyrexian variant whose full-mana twin is jointly payable (weak
         // dominance -- see the helper). Inert without a phyrexian card -> byte-identical.
         if (pre.phyrexian && SubsetPhyrexianDominated(state, cands, sel)) { return; }
@@ -25830,6 +25990,7 @@ TurnSolver::Plan TurnSolver::SolveUncached(const GameState& state, bool is_pre_c
         // same subset (CR 601.2c). Inert without a targeted trick -> byte-identical.
         if (pre.trick_target && SubsetHasMissingTrickTarget(state, cands, sel, pre.best_needs_body)) { return; }
         if (enumstats::Enabled()) { enumstats::g_c_rules.fetch_add(1, std::memory_order_relaxed); }   // passed the rules
+        if (shape != nullptr) { shapestats::Bump(shape->passed); }
         int mask = 0;
         for (int j : sel) { mask |= (1 << j); }
 
@@ -38182,6 +38343,19 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
             HinataInPlay(state) ? 1 : 0);
         branchstats::Record(driver, situ, odo,
                             static_cast<uint64_t>(plans.size()), static_cast<uint64_t>(deduped.size()));
+    }
+
+    // BRANCH SHAPE (independent of MTG_BRANCH_STATS -- it answers different questions; see the
+    // namespace). Recomputes odo locally so neither instrument depends on the other being on.
+    if (shapestats::Enabled())
+    {
+        double sodo = 1.0;
+        for (const std::vector<int>& gp : groups) { sodo *= (1.0 + static_cast<double>(gp.size())); }
+        sodo *= static_cast<double>(1u << std::min(num_ind, 24));
+        shapestats::RecordShape(state.turn_number, groups, num_ind,
+                                static_cast<int>(state.battlefield.size()), sodo,
+                                static_cast<std::uint64_t>(plans.size()),
+                                static_cast<std::uint64_t>(deduped.size()));
     }
 
     // Cast-ordering search (C): expand each action set into the DISTINCT orderings of its
