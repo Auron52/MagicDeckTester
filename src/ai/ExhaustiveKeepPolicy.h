@@ -55,6 +55,17 @@ struct ExhaustiveKeepPolicy
                                 // pooling identity: a doc/other-deck/GUI commit leaves it unchanged, so
                                 // sidecars from those commits stay poolable (see RunKeepMerge).
     int         effective_R = 0;
+    // MIXED PROVENANCE (empty for the normal single-engine case). Set when a generation RETAINED
+    // completed cell-sides from a foreign engine under MTG_KEEP_RETAIN_FOREIGN, and it names both
+    // engines plus how much came from each -- so a later consumer (a merge, an A/B, a human reading the
+    // sidecar) can see the artifact is mixed instead of trusting `play_digest` to mean one engine rolled
+    // all of it. A mixed profile presenting itself as single-engine is the failure this whole area keeps
+    // producing; see docs/design/keepgen-mixed-provenance-retention.md.
+    //
+    // JSON-ONLY on purpose: the binary keeptable cache (keeptable::Header) is DERIVED from this JSON and
+    // is consulted only at decision time, where provenance is explicitly unused -- so it carries no copy
+    // and needs no format bump. Read the JSON sidecar when auditing provenance, never the cache.
+    std::string provenance;
 
     // name -> bucket index; rebuilt by Index() after buckets are populated (loader/analyzer call it).
     std::map<std::string, int> name_to_bucket;

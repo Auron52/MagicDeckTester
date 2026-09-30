@@ -218,10 +218,39 @@ bool RolloutCfgAllows(const RolloutCfg& mine, const RolloutCfg& theirs, const ch
 //
 // Distinct from RolloutCfgAllows, which gates depth/budget/max_turns -- a run can match on those and
 // still play differently. Returns false when the caller must refuse.
+
+// ---- MIXED-PROVENANCE RETENTION: the escape hatch (docs/design/keepgen-mixed-provenance-retention.md)
+// MTG_KEEP_RETAIN_FOREIGN=<play_digest> admits ONE named foreign digest at the resume gate, so a
+// multi-day journal survives a play-logic change instead of being thrown away. USER decision, like
+// MTG_ALLOW_UNTESTED_DECK: an agent that wants it reports and stops.
+//
+// It must NAME the digest being admitted, never "=1". A blanket boolean would be settable by habit and
+// would survive into unrelated runs -- which is exactly how the original no-check-at-all hole behaved,
+// and the reason this gate exists. Naming it means the permission is scoped to one artifact and expires
+// on its own: the next engine's digest is a different string, so a stale export cannot silently admit it.
+//
+// Value-carrying flag -> raw getenv + parse, per coding-conventions rule 3 (EnvOn would discard the
+// value). "0" is treated as unset so `MTG_KEEP_RETAIN_FOREIGN=0` disables, matching the repo's
+// =0-means-off convention even though this is not a boolean.
+const std::string& RetainForeignDigest()
+{
+    static const std::string v = []() -> std::string {
+        const char* e = std::getenv("MTG_KEEP_RETAIN_FOREIGN");
+        if (e == nullptr || *e == '\0' || std::string(e) == "0") { return std::string(); }
+        return std::string(e);
+    }();
+    return v;
+}
+
+// `retained_out`, when non-null, reports whether acceptance came from the MIXED-PROVENANCE override
+// rather than from a genuine match. The caller MUST act on it: a retained resume is only sound for
+// COMPLETED cell-sides and must stamp provenance, so silently treating it as an ordinary match is the
+// defect this whole area keeps producing.
 bool PlayIdentityAllows(const std::string& mine_digest, const std::string& mine_commit,
                         const std::string& theirs_digest, const std::string& theirs_commit,
-                        const char* what, const std::string& path)
+                        const char* what, const std::string& path, bool* retained_out = nullptr)
 {
+    if (retained_out != nullptr) { *retained_out = false; }
     // The digest is the sharper test whenever both sides carry one: a doc-only / other-deck /
     // GUI-only commit bumps `commit` but leaves this deck's play (hence the digest) unchanged, and
     // stranding a multi-day journal over such a commit would be its own defect. This is also what
@@ -229,10 +258,37 @@ bool PlayIdentityAllows(const std::string& mine_digest, const std::string& mine_
     if (!mine_digest.empty() && !theirs_digest.empty())
     {
         if (mine_digest == theirs_digest) { return true; }
+        // The named-digest escape hatch. Only the journal/raw RESUME paths pass retained_out, so a
+        // consumer that cannot record provenance (or cannot restrict itself to completed cell-sides)
+        // still refuses -- the override is not a global "pool anything" switch.
+        if (retained_out != nullptr && !RetainForeignDigest().empty()
+            && RetainForeignDigest() == theirs_digest)
+        {
+            *retained_out = true;
+            std::cerr << "[keepgen] " << what << ": PLAY-DIGEST MISMATCH -- " << path << " was rolled by play "
+                      << theirs_digest << ", this run plays " << mine_digest
+                      << " -- RETAINING ANYWAY on user permission (MTG_KEEP_RETAIN_FOREIGN names this"
+                         " digest). This run is MIXED-PROVENANCE: only COMPLETED cell-sides are taken"
+                         " from the foreign engine, every record is stamped with its provenance, and the"
+                         " artifact will declare itself mixed. Verify with MTG_KEEP_RETAIN_VERIFY=<n>"
+                         " before shipping it.\n" << std::flush;
+            return true;
+        }
         std::cerr << "[keepgen] " << what << ": PLAY-DIGEST MISMATCH -- " << path << " was rolled by play "
                   << theirs_digest << ", this run plays " << mine_digest
                   << " -- REFUSING (its rollouts are not this run's rollouts; resuming would pool two"
-                     " engines into one sidecar)\n" << std::flush;
+                     " engines into one sidecar)\n";
+        if (RetainForeignDigest().empty())
+        {
+            std::cerr << "[keepgen]   (to retain it deliberately as a MIXED run, a USER may set"
+                         " MTG_KEEP_RETAIN_FOREIGN=" << theirs_digest << ")\n";
+        }
+        else
+        {
+            std::cerr << "[keepgen]   (MTG_KEEP_RETAIN_FOREIGN is set to '" << RetainForeignDigest()
+                      << "', which does NOT name this artifact's digest -- permission is per-digest)\n";
+        }
+        std::cerr << std::flush;
         return false;
     }
     if (!mine_commit.empty() && !theirs_commit.empty())
@@ -1148,7 +1204,8 @@ static void ReportNotableHands(std::ostream& os, const ExhaustiveKeepConfig& cfg
 static void WriteRuntimePolicy(std::ostream& os, const Decklist& deck, const MulliganProfile& profile,
                                const ExhaustiveKeepConfig& cfg, const std::vector<SizeTable>& tables,
                                const std::vector<int>& count, const EquivReport& eq,
-                               long long r0, const std::string& play_digest)
+                               long long r0, const std::string& play_digest,
+                               const std::string& provenance = std::string())
 {
     const int K = static_cast<int>(eq.classes.size());
 
@@ -1178,7 +1235,16 @@ static void WriteRuntimePolicy(std::ostream& os, const Decklist& deck, const Mul
             cfg.adaptive_bottom ? r0 : -1);
         ek.commit      = cfg.commit;
         ek.play_digest = play_digest;
+        ek.provenance  = provenance;      // empty unless this run RETAINED a foreign engine's rollouts
         MulliganProfile out = profile;
+        if (!provenance.empty())
+        {
+            os << "\nMIXED PROVENANCE: " << provenance << "\n"
+               << "  This profile's rollouts come from MORE THAN ONE ENGINE, by explicit user permission\n"
+               << "  (MTG_KEEP_RETAIN_FOREIGN). Its play_digest names the engine it will PLAY under, not\n"
+               << "  the only engine that rolled it -- read `provenance` in the sidecar before pooling it\n"
+               << "  or treating its rollouts as reproducible.\n";
+        }
         out.exhaustive_keep = std::make_shared<const ExhaustiveKeepPolicy>(std::move(ek));
         if (SaveDeckProfile(cfg.out_profile, out))
         { os << "\nexhaustive keep policy written to " << cfg.out_profile << "\n"; }
@@ -1194,7 +1260,8 @@ static void WriteRuntimePolicy(std::ostream& os, const Decklist& deck, const Mul
 static void WriteRawSidecar(std::ostream& os, const Decklist& deck, const ExhaustiveKeepConfig& cfg,
                             const std::vector<SizeTable>& tables, const EquivReport& eq, int min_size,
                             const std::string& play_digest, bool trace_on,
-                            const std::vector<std::string>& touch_names)
+                            const std::vector<std::string>& touch_names,
+                            const std::string& provenance = std::string())
 {
     const int K = static_cast<int>(eq.classes.size());
 
@@ -1211,6 +1278,11 @@ static void WriteRawSidecar(std::ostream& os, const Decklist& deck, const Exhaus
             { "probes", cfg.probes }, { "threshold", cfg.threshold }, { "K", K }, { "equiv_seed", cfg.equiv_seed }
         };
         StampRolloutCfg(root["meta"], RolloutCfgOf(cfg));   // what the samples were searched at
+        // MIXED PROVENANCE. The raw is the POOLABLE artifact, so it is the one place a mixed origin must
+        // never be inferable only from absence: `play_digest` names the engine that finished the table,
+        // and this names every engine whose rollouts are in it. RunKeepMerge still gates on play_digest
+        // (pooling a mixed chunk further is not automated) -- read this before doing it by hand.
+        if (!provenance.empty()) { root["meta"]["provenance"] = provenance; }
         // sub_target: the rollout count EVERY sub-table cell-side (H < 7) was supposed to reach --
         // the cap for a bottoming-FULL run, the floor when the sub-tables stay adaptive. Written so a
         // reader can check the bottoming half is actually sampled instead of inferring it from R.
@@ -2226,6 +2298,11 @@ void RunExhaustiveKeep(std::ostream& os, const Decklist& deck, const MulliganPro
     std::string journal_path;                // cfg.out_raw + ".journal"
     std::mutex journal_mtx;
     std::ofstream journal_f;
+    // MIXED-PROVENANCE: the id every record THIS process writes is stamped with. 0 = the engine that
+    // opened the journal (the overwhelmingly common case, and the value a record predating the field
+    // reads as); a retained resume declares a new id for itself with a `prov` line and sets this, so
+    // replaying the log can always tell which engine produced which cell-side.
+    int journal_prov = 0;
     // Refs fixed from the complete floor, restored on resume so the run is byte-identical (compute_refs
     // must see the r0-floor snapshot, not the current cnt): persisted in the REFS record and reloaded.
     bool refs_loaded = false;
@@ -2274,6 +2351,9 @@ void RunExhaustiveKeep(std::ostream& os, const Decklist& deck, const MulliganPro
         if (!journal_f.is_open()) { return; }
         journal_f << "{\"H\":" << H << ",\"i\":" << idx << ",\"p\":" << pd
                   << ",\"s\":" << s << ",\"q\":" << q << ",\"n\":" << n << ",\"f\":" << f;
+        // Only a mixed run pays the bytes: id 0 is the default on read, so an ordinary journal is
+        // byte-identical to what it was before provenance existed.
+        if (journal_prov != 0) { journal_f << ",\"g\":" << journal_prov; }
         if (fn > 0) { journal_f << ",\"fs\":" << fs << ",\"fq\":" << fq << ",\"fn\":" << fn; }
         if (sv != nullptr && !sv->empty())
         {
@@ -2707,6 +2787,28 @@ void RunExhaustiveKeep(std::ostream& os, const Decklist& deck, const MulliganPro
     // (that loads pri_V for a DIFFERENT commit; this reloads live accumulators for the SAME run).
     long long resume_loaded = 0;
     bool journal_resumed = false;
+    // MIXED-PROVENANCE RETENTION state (see RetainForeignDigest). `retain_active` means this run's
+    // accumulators will hold rollouts from a FOREIGN engine, admitted by named user permission:
+    //  * only COMPLETED cell-sides are taken (a partial is worth little and is where mixing is least
+    //    defensible -- the new engine simply re-rolls it);
+    //  * every record this run writes from here on is stamped with provenance id 1, and the journal
+    //    gains a `prov` line declaring what id 1 is, so the artifact cannot present itself as
+    //    single-engine;
+    //  * `retain_prov` holds the foreign side's identity for that declaration.
+    bool retain_active = false;
+    std::string retain_foreign_digest, retain_foreign_commit;
+    long long retained_cellsides = 0, retained_rollouts = 0, retained_skipped_partial = 0;
+    // Per-cell-side "this came from the foreign engine" marks, indexed [HAND-H][idx*2+pd] to match the
+    // SizeTable layout. Lazily sized (only a retained resume ever touches it).
+    std::vector<std::vector<char>> retain_prov(static_cast<std::size_t>(HAND - min_size) + 1);
+    // Non-empty => the journal already carries a provenance id claimed by a THIRD engine. Checked after
+    // the replay loop so a refusal aborts cleanly instead of half-applying records.
+    std::string prov_conflict;
+    // The rollout count a sub-table (H < 7) cell-side was supposed to reach -- the same derivation
+    // WriteRawSidecar stamps as `sub_target`. Sub-table records carry no f=1 terminal flag (only size-7
+    // does), so "completed" for them is `n >= sub_target`; without this the complete-only rule would
+    // silently retain half-sampled bottoming cells, which is where the argmin is noise.
+    const long long retain_sub_target = (!cfg.bottoming_enabled || cfg.adaptive_bottom) ? r0 : r_max;
     // ---- Journal replay (continuous path): prefer the per-cell journal over the out_raw snapshot -----
     // Reconstructs "what's done" from the append log: apply the highest-cnt record per cell-side (so it is
     // order-independent -- a later, lower-cnt record for the same cell can't clobber a completed one), set
@@ -2736,10 +2838,18 @@ void RunExhaustiveKeep(std::ostream& os, const Decklist& deck, const MulliganPro
                    && PlayIdentityAllows(play_digest, cfg.commit,
                                          m.value("play_digest", std::string()),
                                          m.value("commit", std::string()),
-                                         "RESUME(journal)", journal_path)
+                                         "RESUME(journal)", journal_path, &retain_active)
                    // A restart at another depth is a different run, not a continuation of this one.
                    && RolloutCfgAllows(RolloutCfgOf(cfg), RolloutCfgFromMeta(m), "RESUME(journal)",
                                        journal_path);
+            if (matched && retain_active)
+            {
+                retain_foreign_digest = m.value("play_digest", std::string());
+                retain_foreign_commit = m.value("commit", std::string());
+            }
+            // A refused resume must not leave retention latched -- the raw path below asks again, and a
+            // stale true would apply the complete-only rule to an artifact that was never admitted.
+            if (!matched) { retain_active = false; }
         }
         if (matched)
         {
@@ -2769,6 +2879,18 @@ void RunExhaustiveKeep(std::ostream& os, const Decklist& deck, const MulliganPro
                       refs_vgroll_loaded = true; }
                     continue;
                 }
+                if (e.contains("prov"))
+                {
+                    // A provenance declaration from an earlier RETAINED resume. Re-resuming our own mixed
+                    // run is fine (same id, same digest -> idempotent), but a THIRD engine appending under
+                    // an id another engine already claimed would silently mislabel whole swathes of the
+                    // table. Refuse that rather than produce an artifact whose provenance block lies.
+                    const int pid = e.value("prov", -1);
+                    const std::string pdig = e.value("play_digest", std::string());
+                    if (pid == 1 && !pdig.empty() && pdig != play_digest)
+                    { prov_conflict = pdig; break; }
+                    continue;
+                }
                 const int H = e.value("H", 0);
                 if (H > HAND || H < min_size) { continue; }
                 const int i = e.value("i", -1), pd = e.value("p", -1);
@@ -2777,6 +2899,13 @@ void RunExhaustiveKeep(std::ostream& os, const Decklist& deck, const MulliganPro
                 if (i < 0 || i >= static_cast<int>(t.comps.size())) { continue; }
                 const long long n = e.value("n", 0LL);
                 const bool terminal = (H == HAND && e.value("f", 0) == 1);
+                // MIXED-PROVENANCE: take COMPLETED cell-sides only. A partially-sampled cell carries
+                // few rollouts and is exactly where pooling two engines is least defensible, so the new
+                // engine re-rolls it from zero. Records this run itself wrote (g != 0) are ours and are
+                // exempt -- otherwise a retained run could never make partial progress of its own.
+                if (retain_active && e.value("g", 0) == 0
+                    && !(H == HAND ? terminal : (n >= retain_sub_target)))
+                { ++retained_skipped_partial; continue; }
                 // TERMINAL RECORDS OUTRANK HIGHER-n ONES. "Highest n wins" is right for the monotone
                 // case (a cell's count only grows), but compute_refs' reconcile can LOWER a cell's
                 // count: floor speculation runs a cell past r0 with no freeze test, then the reconcile
@@ -2807,6 +2936,15 @@ void RunExhaustiveKeep(std::ostream& os, const Decklist& deck, const MulliganPro
                 t.sumsq[i][pd] = e.value("q", 0.0);
                 t.cnt[i][pd]   = n;
                 if (terminal) { prune.frozen7[i][pd] = true; }
+                // Per-cell-side provenance. A single pooled `n` would hide the ratio that decides the
+                // pooled mean's bias (n_old/(n_old+n_new) x (mean_old - mean_new)), so the mix is tracked
+                // per cell-side and reported, not inferred from totals.
+                if (retain_active && e.value("g", 0) == 0)
+                {
+                    const std::size_t k = static_cast<std::size_t>(i) * 2 + static_cast<std::size_t>(pd);
+                    if (retain_prov[HAND - H].size() <= k) { retain_prov[HAND - H].resize(t.comps.size() * 2, 0); }
+                    retain_prov[HAND - H][k] = 1;
+                }
                 // Carry the r0 prefix of a cell resumed ABOVE the floor, so compute_refs sees the same
                 // prefix an uninterrupted run would have (refs are recomputed whenever no REFS record
                 // has been written yet -- exactly the window progress records now cover).
@@ -2830,11 +2968,46 @@ void RunExhaustiveKeep(std::ostream& os, const Decklist& deck, const MulliganPro
                     resumed_spec[k] = e["sv"].get<std::vector<double>>();
                 }
             }
+            if (!prov_conflict.empty())
+            {
+                os << "\nREFUSING to resume: " << journal_path << " is already MIXED -- provenance id 1 was"
+                      " claimed by play " << prov_conflict << ", and this run plays " << play_digest
+                   << ". Pooling a third engine into one sidecar is out of scope.\n";
+                std::cerr << "[keepgen] RESUME(journal): ALREADY-MIXED journal (id 1 = play " << prov_conflict
+                          << ", this run plays " << play_digest << ") -- pooling a THIRD engine is out of"
+                             " scope. ABORTING before anything is written.\n" << std::flush;
+                return;
+            }
             recompute();
             journal_resumed = (resume_loaded > 0) || refs_loaded;
+            // Tally the retained prize from the FINAL state (summing inside the loop would double-count
+            // a cell-side whose records were applied more than once).
+            if (retain_active)
+            {
+                for (int H = HAND; H >= min_size; --H)
+                {
+                    const SizeTable& t = tables[HAND - H];
+                    const std::vector<char>& mk = retain_prov[HAND - H];
+                    for (std::size_t i = 0; i < t.comps.size(); ++i)
+                        for (int pd = 0; pd < 2; ++pd)
+                        {
+                            const std::size_t k = i * 2 + static_cast<std::size_t>(pd);
+                            if (k < mk.size() && mk[k] && t.cnt[i][pd] > 0)
+                            { ++retained_cellsides; retained_rollouts += t.cnt[i][pd]; }
+                        }
+                }
+            }
             std::cerr << "[keepgen] RESUME(journal): reloaded " << resume_loaded << " cell-sides"
                       << (refs_loaded ? " + fixed refs" : "") << " from " << journal_path
                       << " -> continuing\n" << std::flush;
+            if (retain_active)
+            {
+                std::cerr << "[keepgen] RETAINED (MIXED PROVENANCE): " << retained_cellsides
+                          << " completed cell-sides / " << retained_rollouts << " rollouts from play "
+                          << retain_foreign_digest << " (commit " << retain_foreign_commit << "); skipped "
+                          << retained_skipped_partial << " partial records -- those cells re-roll on this"
+                          << " engine\n" << std::flush;
+            }
         }
         else
         {
@@ -2866,6 +3039,11 @@ void RunExhaustiveKeep(std::ostream& os, const Decklist& deck, const MulliganPro
                             && PlayIdentityAllows(play_digest, cfg.commit,
                                                   rm.value("play_digest", std::string()),
                                                   rm.value("commit", std::string()),
+                                                  // Retention is deliberately JOURNAL-ONLY (no
+                                                  // retained_out here): a raw snapshot records a
+                                                  // per-cell count but no terminal flag, so "completed
+                                                  // cell-side" -- the restriction that makes mixing
+                                                  // defensible at all -- is not expressible from it.
                                                   "RESUME", cfg.out_raw)
                             // Same reason as the journal: a checkpoint from a run at another depth is
                             // not this run's checkpoint, however well its fingerprints match.
@@ -2926,6 +3104,228 @@ void RunExhaustiveKeep(std::ostream& os, const Decklist& deck, const MulliganPro
         }
     }
 
+    // ---- RETENTION VERIFY (MTG_KEEP_RETAIN_VERIFY=<n>) ------------------------------------------
+    // THE SIMILARITY TEST. Retention is only as good as this check, and the mixing ratio decides how
+    // much it has to prove: at 15 R new against 30 R retained the old data carries two-thirds of the
+    // pooled weight, so a per-cell divergence is inherited, not diluted.
+    //
+    // Method: re-roll a sample of RETAINED cell-sides on THIS engine over the SAME rollout indices the
+    // retained record used. Because a rollout is a pure function of (seed_base, r, w, pd), that makes the
+    // comparison PAIRED on identical library permutations -- sampling noise cancels exactly and any delta
+    // IS the engine difference. (An earlier design drew independent samples and reported a CI; pairing is
+    // strictly better and costs the same.)
+    //
+    // The headline metric is the DECISION-FLIP RATE, not the mean. A keep table is an argmin over
+    // subcompositions, so a uniform shift changes nothing while a few sign flips near ties change the
+    // shipped policy -- and this deck is unusually tie-dense (67.8% of leaf evaluations tie), so it is
+    // unusually sensitive to small shifts. BuildPolicyFromTables is a PURE function of the tables, so the
+    // flip rate is computed exactly: build the policy on the retained values, build it again with the
+    // re-rolled values substituted, and diff the keep flags. Propagation is handled for free (a size-7
+    // cell feeds the threshold; a sub-cell feeds many hands' argmin).
+    //
+    // Diagnostic: writes NOTHING and returns before the journal is opened, so a verify can never touch
+    // the artifact it is judging.
+    if (const char* vfy = std::getenv("MTG_KEEP_RETAIN_VERIFY"); vfy && *vfy && std::string(vfy) != "0")
+    {
+        const long long want = std::max<long long>(1, std::atoll(vfy));
+        if (!retain_active)
+        {
+            os << "\nMTG_KEEP_RETAIN_VERIFY was set but this run retained nothing (no mixed-provenance"
+                  " resume happened) -- there is nothing to verify.\n";
+            std::cerr << "[keepgen] RETAIN-VERIFY: nothing retained -- set MTG_KEEP_RETAIN_FOREIGN=<digest>"
+                         " so the journal is admitted first\n" << std::flush;
+            return;
+        }
+        // Candidate pool: every retained cell-side. Kept as (H, idx, pd) so the stratification below can
+        // see hand size, which is the axis the table's structure turns on.
+        struct VCell { int H; int idx; int pd; long long n; double old_mean; };
+        std::vector<VCell> pool;
+        for (int H = HAND; H >= min_size; --H)
+        {
+            const SizeTable& t = tables[HAND - H];
+            const std::vector<char>& mk = retain_prov[HAND - H];
+            for (std::size_t i = 0; i < t.comps.size(); ++i)
+                for (int pd = 0; pd < 2; ++pd)
+                {
+                    const std::size_t k = i * 2 + static_cast<std::size_t>(pd);
+                    if (k >= mk.size() || !mk[k] || t.cnt[i][pd] <= 0) { continue; }
+                    pool.push_back({ H, static_cast<int>(i), pd, t.cnt[i][pd], t.V[i][pd] });
+                }
+        }
+        if (pool.empty())
+        { os << "\nRETAIN-VERIFY: no retained cell-sides found.\n"; return; }
+
+        // STRATIFY across hand size x pd x retained mean. Degenerate cells (a late/never win turn) must be
+        // represented: they are where two engines diverge most, and a uniform sample under-weights them
+        // because they are rare. Deterministic: a fixed salt so the same journal always verifies on the
+        // same sample, and re-running the check cannot shop for a friendlier one.
+        std::sort(pool.begin(), pool.end(), [](const VCell& a, const VCell& b) {
+            if (a.H != b.H) { return a.H > b.H; }
+            if (a.pd != b.pd) { return a.pd < b.pd; }
+            if (a.old_mean != b.old_mean) { return a.old_mean < b.old_mean; }
+            return a.idx < b.idx;
+        });
+        std::vector<VCell> sample;
+        if (static_cast<long long>(pool.size()) <= want) { sample = pool; }
+        else
+        {
+            // Systematic sampling on the sorted order: an even sweep through (H, pd, mean) hits every
+            // stratum in proportion, including the degenerate tail, with no bucket bookkeeping.
+            const double stride = static_cast<double>(pool.size()) / static_cast<double>(want);
+            for (long long s = 0; s < want; ++s)
+            {
+                const std::size_t j = std::min(pool.size() - 1,
+                    static_cast<std::size_t>((static_cast<double>(s) + 0.5) * stride));
+                sample.push_back(pool[j]);
+            }
+        }
+        long long sample_rollouts = 0;
+        for (const VCell& c : sample) { sample_rollouts += c.n; }
+        std::cerr << "[keepgen] RETAIN-VERIFY: re-rolling " << sample.size() << " of " << pool.size()
+                  << " retained cell-sides (" << sample_rollouts << " rollouts) on THIS engine, paired on"
+                     " identical seeds\n" << std::flush;
+
+        // Re-roll. One AIEngine per worker, identical construction to the generation's own workers, so
+        // the re-roll is the same rollout the gen would do -- not an approximation of it.
+        std::vector<double> new_sum(sample.size(), 0.0), new_sumsq(sample.size(), 0.0);
+        {
+            const int vthreads = std::max(1, std::min(concurrency_util::AffinityCpuCount(),
+                                                      static_cast<int>(sample.size())));
+            std::atomic<std::size_t> vc{ 0 };
+            std::atomic<long long> vdone{ 0 };
+            const auto tv0 = std::chrono::steady_clock::now();
+            auto vworker = [&]()
+            {
+                AIEngine ai(rollout_profile, cfg.depth, cfg.budget_ms);
+                ai.SetSearchPostCombat(second_main);
+                for (;;)
+                {
+                    const std::size_t k = vc.fetch_add(1);
+                    if (k >= sample.size()) { break; }
+                    const VCell& c = sample[k];
+                    const int w = work_idx[HAND - c.H][c.idx];
+                    if (w < 0) { continue; }
+                    double s = 0.0, q = 0.0;
+                    for (long long r = 0; r < c.n; ++r)
+                    { const double wt = run_one(ai, w, c.pd, r); s += wt; q += wt * wt; }
+                    new_sum[k] = s; new_sumsq[k] = q;
+                    const long long d = vdone.fetch_add(c.n) + c.n;
+                    if (k % 25 == 0)
+                    {
+                        std::cerr << "[keepgen] RETAIN-VERIFY: " << (k + 1) << "/" << sample.size()
+                                  << " cell-sides, " << d << "/" << sample_rollouts << " rollouts ("
+                                  << static_cast<long long>(std::chrono::duration<double>(
+                                         std::chrono::steady_clock::now() - tv0).count()) << "s)\n" << std::flush;
+                    }
+                }
+            };
+            std::vector<std::thread> vth;
+            for (int i = 0; i < vthreads; ++i) { vth.emplace_back(vworker); }
+            for (std::thread& th : vth) { th.join(); }
+        }
+
+        // ---- 1. Paired per-cell-side deltas --------------------------------------------------------
+        std::vector<double> deltas;
+        deltas.reserve(sample.size());
+        double worst = 0.0; std::size_t worst_k = 0;
+        long long identical = 0;
+        for (std::size_t k = 0; k < sample.size(); ++k)
+        {
+            const double nm = new_sum[k] / static_cast<double>(sample[k].n);
+            const double d  = nm - sample[k].old_mean;
+            deltas.push_back(d);
+            if (d == 0.0) { ++identical; }
+            if (std::abs(d) > std::abs(worst)) { worst = d; worst_k = k; }
+        }
+        double mean_d = 0.0;
+        for (double d : deltas) { mean_d += d; }
+        mean_d /= static_cast<double>(deltas.size());
+        double var_d = 0.0;
+        for (double d : deltas) { var_d += (d - mean_d) * (d - mean_d); }
+        var_d = deltas.size() > 1 ? var_d / static_cast<double>(deltas.size() - 1) : 0.0;
+        const double se_d = deltas.size() > 1 ? std::sqrt(var_d / static_cast<double>(deltas.size())) : 0.0;
+
+        // ---- 2. Decision-flip rate, from the policy itself -----------------------------------------
+        std::vector<std::vector<std::string>> vbmembers;
+        for (int b = 0; b < K; ++b) { vbmembers.push_back(eq.classes[b].members); }
+        const int vdeck = static_cast<int>(deck.mainboard.size());
+        const long long vbfloor = cfg.adaptive_bottom ? r0 : -1;
+        const ExhaustiveKeepPolicy pol_old = BuildPolicyFromTables(
+            tables, count, vbmembers, vdeck, cfg.max_mull, cfg.rollouts, cfg.bottoming_enabled, vbfloor);
+        // Substitute the re-rolled values, rebuild, then restore -- `tables` must be left exactly as the
+        // retained journal produced it (this path returns without writing, but a future caller might not).
+        std::vector<double> save_sum(sample.size()), save_sumsq(sample.size());
+        for (std::size_t k = 0; k < sample.size(); ++k)
+        {
+            SizeTable& t = tables[HAND - sample[k].H];
+            save_sum[k]   = t.sum[sample[k].idx][sample[k].pd];
+            save_sumsq[k] = t.sumsq[sample[k].idx][sample[k].pd];
+            t.sum[sample[k].idx][sample[k].pd]   = new_sum[k];
+            t.sumsq[sample[k].idx][sample[k].pd] = new_sumsq[k];
+        }
+        recompute();
+        const ExhaustiveKeepPolicy pol_new = BuildPolicyFromTables(
+            tables, count, vbmembers, vdeck, cfg.max_mull, cfg.rollouts, cfg.bottoming_enabled, vbfloor);
+        for (std::size_t k = 0; k < sample.size(); ++k)
+        {
+            SizeTable& t = tables[HAND - sample[k].H];
+            t.sum[sample[k].idx][sample[k].pd]   = save_sum[k];
+            t.sumsq[sample[k].idx][sample[k].pd] = save_sumsq[k];
+        }
+        recompute();
+
+        long long keep_slots = 0, keep_flips = 0, bot_slots = 0, bot_flips = 0;
+        for (const auto& kv : pol_old.keep)
+        {
+            auto it = pol_new.keep.find(kv.first);
+            if (it == pol_new.keep.end()) { continue; }
+            const std::size_t n = std::min(kv.second.size(), it->second.size());
+            for (std::size_t z = 0; z < n; ++z)
+            { ++keep_slots; if (kv.second[z] != it->second[z]) { ++keep_flips; } }
+        }
+        for (const auto& kv : pol_old.bottom_keep)
+        {
+            auto it = pol_new.bottom_keep.find(kv.first);
+            if (it == pol_new.bottom_keep.end()) { continue; }
+            const std::size_t n = std::min(kv.second.size(), it->second.size());
+            for (std::size_t z = 0; z < n; ++z)
+            { ++bot_slots; if (kv.second[z] != it->second[z]) { ++bot_flips; } }
+        }
+        const double keep_flip_pct = keep_slots ? 100.0 * static_cast<double>(keep_flips)
+                                                  / static_cast<double>(keep_slots) : 0.0;
+        const double bot_flip_pct  = bot_slots ? 100.0 * static_cast<double>(bot_flips)
+                                                 / static_cast<double>(bot_slots) : 0.0;
+
+        // ---- 3. Report. The THRESHOLD is the user's call; this states the numbers and the defaults it
+        // would be judged against, and never decides to ship anything.
+        os << "\n=== RETENTION SIMILARITY TEST (mixed-provenance) ===\n"
+           << "retained engine : play " << retain_foreign_digest << " (commit " << retain_foreign_commit << ")\n"
+           << "this engine     : play " << play_digest << " (commit " << cfg.commit << ")\n"
+           << "retained        : " << retained_cellsides << " cell-sides / " << retained_rollouts << " rollouts\n"
+           << "sample          : " << sample.size() << " cell-sides / " << sample_rollouts
+           << " rollouts, PAIRED on identical seeds\n"
+           << "\nwin-turn delta (this engine - retained), paired:\n"
+           << "  mean            : " << mean_d << " turns (se " << se_d << ", 95% CI +/- " << (1.96 * se_d) << ")\n"
+           << "  byte-identical  : " << identical << "/" << sample.size() << " cell-sides ("
+           << (100.0 * static_cast<double>(identical) / static_cast<double>(sample.size())) << "%)\n"
+           << "  worst cell-side : " << worst << " turns (H=" << sample[worst_k].H
+           << " pd=" << sample[worst_k].pd << " idx=" << sample[worst_k].idx << ")\n"
+           << "\nDECISION FLIPS (the metric that matters -- the table is an argmin):\n"
+           << "  keep flags      : " << keep_flips << "/" << keep_slots << " = " << keep_flip_pct << "%\n"
+           << "  bottoming target: " << bot_flips << "/" << bot_slots << " = " << bot_flip_pct << "%\n"
+           << "\nNOTE: flips are measured with ONLY the sampled cell-sides re-rolled, so this is the flip\n"
+              "rate attributable to the sample, not an extrapolation to the whole table. Scale it by\n"
+              "(retained cell-sides / sampled cell-sides) only if you are willing to assume the sample's\n"
+              "divergence is representative -- the stratification is designed so it roughly is.\n"
+           << "\nA defensible default to judge against (the USER sets the real bar): accept if the paired\n"
+              "mean CI is within +/-0.05 turns AND keep-flip < 1%; disclose and re-confirm between 1% and\n"
+              "5%; refuse above 5%.\n";
+        std::cerr << "[keepgen] RETAIN-VERIFY: mean delta " << mean_d << " +/- " << (1.96 * se_d)
+                  << " turns, keep-flip " << keep_flip_pct << "%, bottom-flip " << bot_flip_pct
+                  << "% -- wrote nothing\n" << std::flush;
+        return;   // diagnostic -> never proceed to the full gen
+    }
+
     // Open the journal for the continuous run BEFORE Pass A (so sub-table completions are journaled as
     // they happen -> a crash mid-Pass-A loses only in-flight sub-cells). Append when we resumed one (keep
     // its prior records + header); otherwise truncate and write a fresh fingerprint header on line 1.
@@ -2957,8 +3357,29 @@ void RunExhaustiveKeep(std::ostream& os, const Decklist& deck, const MulliganPro
                     // rebuild the comp ordering the cell indices refer to without the final raw.
                     { "buckets", jbuckets } };
                 StampRolloutCfg(meta, RolloutCfgOf(cfg));   // a restart at another depth must not resume this
+                // Provenance table: id -> the engine that produced records carrying that id. A fresh
+                // journal has exactly one entry, which is what an unstamped record (g absent => 0)
+                // means, so this is backward-compatible with every journal already on disk.
+                meta["provenance"] = nlohmann::json::array({
+                    nlohmann::json{ { "id", 0 }, { "play_digest", play_digest }, { "commit", cfg.commit } } });
                 journal_f << nlohmann::json({ { "meta", meta } }).dump() << "\n";
                 journal_f.flush();
+            }
+            else if (retain_active)
+            {
+                // A RETAINED resume appends to a journal whose header describes the FOREIGN engine, and
+                // the header is written once, so the incoming engine declares itself with its own record
+                // kind rather than rewriting line 1 (which would break the append-only durability the
+                // journal's whole design rests on). Everything this process writes from here is id 1.
+                journal_prov = 1;
+                journal_f << nlohmann::json{ { "prov", journal_prov },
+                                             { "play_digest", play_digest },
+                                             { "commit", cfg.commit },
+                                             { "retained_from", retain_foreign_digest } }.dump() << "\n";
+                journal_f.flush();
+                std::cerr << "[keepgen] journal: declared provenance id " << journal_prov << " = play "
+                          << play_digest << " (commit " << cfg.commit << "); records from the retained"
+                          << " engine keep id 0\n" << std::flush;
             }
         }
     }
@@ -4220,8 +4641,22 @@ void RunExhaustiveKeep(std::ostream& os, const Decklist& deck, const MulliganPro
 
     // ---- 6 / 6b. Serialize: the runtime policy, then the poolable raw chunk ---------------------
     // (play_digest is computed earlier -- the change-detection carry needs it -- and reused here.)
-    WriteRuntimePolicy(os, deck, profile, cfg, tables, count, eq, r0, play_digest);
-    WriteRawSidecar(os, deck, cfg, tables, eq, min_size, play_digest, trace_on, touch_names);
+    // MIXED PROVENANCE: one line naming both engines and the split, stamped into BOTH artifacts. Built
+    // here (not at the resume site) because retained_cellsides/retained_rollouts are only final once the
+    // run is -- the retained share is a property of the finished table, not of the resume.
+    std::string provenance_note;
+    if (retain_active)
+    {
+        std::ostringstream pv;
+        pv << "MIXED: retained " << retained_cellsides << " completed cell-sides / " << retained_rollouts
+           << " rollouts from play " << retain_foreign_digest << " (commit " << retain_foreign_commit
+           << "); the remainder rolled by play " << play_digest << " (commit " << cfg.commit
+           << "). Admitted by MTG_KEEP_RETAIN_FOREIGN (user permission). Not byte-reproducible.";
+        provenance_note = pv.str();
+    }
+    WriteRuntimePolicy(os, deck, profile, cfg, tables, count, eq, r0, play_digest, provenance_note);
+    WriteRawSidecar(os, deck, cfg, tables, eq, min_size, play_digest, trace_on, touch_names,
+                    provenance_note);
 
     ReportNotableHands(os, cfg, tables, P, rep, bucket_of, ref_ai);
     os << std::flush;

@@ -364,6 +364,8 @@ inline nlohmann::json ExhaustiveKeepToJsonObj(const ExhaustiveKeepPolicy& ek)
     e["bottoming_enabled"] = ek.bottoming_enabled;
     if (!ek.commit.empty())      { e["commit"]      = ek.commit; }
     if (!ek.play_digest.empty()) { e["play_digest"] = ek.play_digest; }
+    // Only a MIXED artifact carries this, so single-engine profiles are byte-identical to before.
+    if (!ek.provenance.empty())  { e["provenance"]  = ek.provenance; }
     json buckets = json::array();
     for (const std::vector<std::string>& b : ek.buckets)
     {
@@ -407,6 +409,7 @@ inline ExhaustiveKeepPolicy ExhaustiveKeepFromJsonObj(const nlohmann::json& e)
     ek.bottoming_enabled = e.value("bottoming_enabled", true);
     if (e.contains("commit"))            { ek.commit            = e["commit"].get<std::string>(); }
     if (e.contains("play_digest"))       { ek.play_digest       = e["play_digest"].get<std::string>(); }
+    if (e.contains("provenance"))        { ek.provenance        = e["provenance"].get<std::string>(); }
     if (e.contains("buckets"))
         for (const json& b : e["buckets"])
         {
@@ -752,6 +755,7 @@ inline bool SaveDeckProfile(const std::filesystem::path& path, const MulliganPro
     ekh["bottoming_enabled"] = ek.bottoming_enabled;
     if (!ek.commit.empty())      { ekh["commit"]      = ek.commit; }
     if (!ek.play_digest.empty()) { ekh["play_digest"] = ek.play_digest; }
+    if (!ek.provenance.empty())  { ekh["provenance"]  = ek.provenance; }
     json buckets = json::array();
     for (const std::vector<std::string>& b : ek.buckets)
     {

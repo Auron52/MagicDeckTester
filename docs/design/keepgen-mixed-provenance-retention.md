@@ -1,15 +1,14 @@
 # Retaining rollouts across a play-identity change (mixed-provenance generation)
 
-**Status: DESIGN, not built.** Requested by the user 2026-09-30, after the Fungus candidate-B
-mulligan generation was cancelled at 90.8 h with **12.56 M sub-table + 10.16 M size-7 rollouts** and
-63.7% of cell-sides frozen, on an engine whose play digest has since moved (`36a65944fd138cd0` →
-`4b55aac85d0e0b77`).
+**Status: BUILT (2026-09-30).** The escape hatch and its similarity test are implemented in
+`src/analyzer/ExhaustiveKeep.cpp`. Requested by the user after the Fungus candidate-B mulligan
+generation was cancelled at 90.8 h with 63.7% of cell-sides frozen, on an engine whose play digest has
+since moved (`36a65944fd138cd0` → `4b55aac85d0e0b77`).
 
-> *"I think it is a waste to fully throw away our results from the previously generated full rollouts.
-> I think I would like to allow a way to retain full rollouts that were generated that have similar
-> results when given user permission. So we would end up with a mixed run, like 15 R on this build and
-> the rest from the other. Reproducing this exactly is not crucial for me… though we could keep track
-> of how it was generated."*
+> *"Fungus is a good example of a case where it feels like a real waste to throw away. It's been
+> running for days and has done a significant amount of work. Even if we optimize without this rule we
+> likely still have to pay a major cost. It is necessary for us to have an escape hatch so we can retain
+> most of that work even if the rest is optimized."*
 
 ## 1. What currently happens, and why it is right by default
 
@@ -20,14 +19,29 @@ mulligan generation was cancelled at 90.8 h with **12.56 M sub-table + 10.16 M s
 That refusal exists because resume was once the **one reuse path with no such check**, and a gen
 restarted after a play-logic change silently continued into the same accumulators — producing a raw
 sidecar holding two engines' rollouts under fingerprints asserting they were poolable. Every other
-reuse route (prior-raw, probe-carry, equiv-cache, merge) gates this. **This design must not remove
-that default.** It adds a deliberate, narrow, recorded override.
+reuse route (prior-raw, probe-carry, equiv-cache, merge) gates this. **The default is unchanged.** What
+is added is a deliberate, narrow, recorded override.
 
 Note the gate is already tolerant in the right way: it prefers the `play_digest` over `commit`
 precisely so a docs/scheduling/instrumentation commit cannot strand a multi-day journal. What it
-cannot currently express is *"the play changed, and I have checked that it does not matter here."*
+could not express is *"the play changed, and I have checked that it does not matter here."*
 
-## 2. The statistics this rests on, stated plainly
+## 2. The prize, measured
+
+Not an estimate — counted from the journal (`logs/fungus_journal_backup/`, 350 MB, 5,583,349 records):
+
+| | cell-sides | rollouts |
+|---|---|---|
+| size-7, **completed** (`f=1`) | 970,364 | 5,245,821 |
+| sub-table, **at cap** (`n >= 30`) | 339,267 of 560,212 (60.6%) | 10,178,010 |
+| **retainable total** | | **15,423,831** |
+| everything the journal embodies | | 21,394,339 |
+| **retainable share** | | **72.1%** |
+
+So the hatch protects roughly 72% of a 90.8-hour run. The other 28% is partial cell-sides, which the
+new engine re-rolls (see §4c).
+
+## 3. The statistics this rests on, stated plainly
 
 A journal record is an accumulator, not a rollout list:
 
@@ -46,80 +60,182 @@ bias  =  (n_old / (n_old + n_new)) x (mean_old - mean_new)
 With the user's example (15 R new, ~30 R retained) the OLD data carries **two-thirds of the weight**,
 so a small per-cell divergence is not diluted — it is inherited. **This is the crux: the retention is
 only as good as the similarity test, and the mixing ratio decides how much the test has to prove.**
-That makes §4 the load-bearing part of this design, not §3.
+That makes §5 the load-bearing part of this design, not §4.
 
-## 3. Mechanism
+## 4. What was built
 
-### 3a. Permission must name the digest
+### 4a. Permission must name the digest
 
 ```
 MTG_KEEP_RETAIN_FOREIGN=36a65944fd138cd0        # the digest being admitted, never "=1"
 ```
 
 Naming the foreign digest explicitly is the point: a blanket boolean would be settable by habit and
-would survive into unrelated runs, which is how the original hole behaved. An unset or mismatched
-value keeps today's refusal exactly. This is a **USER decision**, like `MTG_ALLOW_UNTESTED_DECK` — an
-agent that wants it reports and stops.
+would survive into unrelated runs, which is how the original hole behaved. It also **expires on its
+own** — the next engine's digest is a different string, so a stale export cannot silently admit it.
+An unset or mismatched value keeps today's refusal exactly, and the refusal now prints the digest a
+user would have to name, plus a distinct message when the variable is set but names something else.
+This is a **USER decision**, like `MTG_ALLOW_UNTESTED_DECK` — an agent that wants it reports and stops.
 
-### 3b. Provenance is recorded per record, not per run
+Value-carrying flag, so it keeps a raw `getenv` + parse per `coding-conventions.md` rule 3; `=0` is
+treated as unset, matching the repo's `=0`-means-off convention.
 
-Add a provenance table to the journal/raw header and an index on each record:
+### 4b. Retention is JOURNAL-ONLY
+
+The raw-snapshot resume path still refuses. A raw records a per-cell count but **no terminal flag**, so
+"completed cell-side" — the restriction that makes mixing defensible at all — is not expressible from
+it. The journal is also where the prize actually is.
+
+### 4c. Only COMPLETED cell-sides are taken
+
+* size-7: requires the terminal record (`f=1`, frozen or capped).
+* sub-tables: they never carry `f=1`, so completion is `n >= sub_target`, using the same derivation
+  `WriteRawSidecar` stamps. Without that, half-sampled bottoming cells would be retained — and a
+  half-sampled sub-cell is exactly where `DecideBottom`'s argmin is noise.
+
+A partially-sampled cell carries few rollouts and is where pooling two engines is least defensible, so
+the new engine re-rolls it from zero. Records the *resuming* engine itself wrote are exempt, or a mixed
+run could never make partial progress of its own.
+
+### 4d. Provenance is recorded per record
+
+The journal header gains a `provenance` table; a retained resume appends a `prov` record declaring its
+own id (rather than rewriting line 1, which would break the append-only durability the journal's whole
+design rests on), and every record it writes carries `g`:
 
 ```json
-{"meta":{ ...,
-  "provenance":[ {"id":0,"play_digest":"36a65944fd138cd0","commit":"57c36b5c","rollouts":22719704},
-                 {"id":1,"play_digest":"4b55aac85d0e0b77","commit":"<new>","rollouts":0} ]}}
-{"H":7,"i":294127,"p":0,"s":41,"q":247,"n":7,"f":1,"g":0}      <- g = provenance id
+{"meta":{ ..., "provenance":[{"id":0,"play_digest":"36a65944fd138cd0","commit":"57c36b5c"}]}}
+{"prov":1,"play_digest":"4b55aac85d0e0b77","commit":"<new>","retained_from":"36a65944fd138cd0"}
+{"H":7,"i":294127,"p":0,"s":41,"q":247,"n":7,"f":1,"g":1}
 ```
 
 A record predating the field reads as `g=0` (the retained engine), which is correct for exactly the
-case this feature serves. The finished `.profile.json` then carries the same block, so **any later
-consumer can see the artifact is mixed** — the merge gate, an A/B, or a human. A mixed profile must
-never present itself as single-engine; that is the failure this whole area keeps producing.
+case this serves, so **every journal already on disk stays readable** and an ordinary run is
+byte-identical to before (the `g` field is only emitted when non-zero).
 
-Where a cell-side ends up with samples from both engines, its `n` splits per provenance
-(`n_by_prov`), because a single pooled `n` would hide the ratio that §2 says governs the bias.
+Both output artifacts then declare the mix: `ExhaustiveKeepPolicy::provenance` in the profile JSON and
+`meta.provenance` in the raw. A mixed profile must never present itself as single-engine; that is the
+failure this area keeps producing. The provenance string names both engines and the split, and the
+report prints a MIXED PROVENANCE block when one is written.
 
-### 3c. What may be retained
+Two deliberate limits, both recorded at the code:
 
-Only **completed** cell-sides (`f=1`, frozen or capped) and completed sub-table cells. A partially
-sampled cell-side is worth little and is where mixing is least defensible — the new engine should
-simply re-roll it. This also keeps the common case simple: the 63.7% already frozen is the prize.
+* **The binary keeptable cache carries no copy.** It is derived from the JSON and is consulted only at
+  decision time, where provenance is explicitly unused — so no format bump. Audit the JSON sidecar.
+* **`RunKeepMerge` is unchanged** and still gates on `play_digest`. Pooling a mixed chunk *further* is
+  not automated; the raw's `provenance` is there to be read before anyone does it by hand. (Follow-up.)
 
-## 4. The similarity test — the part that actually needs deciding
+A journal that is already mixed refuses a *third* engine, and does so before applying any record, so
+the refusal cannot half-load a table.
 
-"Similar results" has to be operational, and there is a cheap, honest version: **re-roll a stratified
-sample of retained cell-sides on the new engine and compare.**
+### 4e. A foreign influence that is NOT a retained cell value — the refs record
 
-1. Sample ~300–500 cell-sides, stratified across hand size, `pd`, and the retained mean win turn
-   (degenerate cells must be represented — they are where engines diverge most).
-2. Roll each to the same `R` the retained record used.
-3. Report, per stratum and overall:
-   * mean win-turn delta, with a paired CI;
-   * the **fraction of cell-sides whose keep/bottom DECISION flips**, which is what the table is for
-     and matters far more than the mean;
-   * the worst per-cell delta.
-4. Accept only on a stated threshold.
+Worth stating plainly because it is easy to miss: the journal's one-time `refs` record (the fixed
+`Dopt` and `vg` shrink targets) is replayed **unchanged**, so a retained resume makes freeze decisions
+about *new-engine* cells against targets the *foreign* engine derived. That is deliberate — refs are a
+shrink target, and recomputing them from a table that is 72% foreign values would be foreign-derived
+anyway, so reusing them is roughly equivalent and keeps freeze behaviour continuous across the resume.
+But it means the foreign engine's influence is slightly wider than "the cell-sides we retained", and a
+similarity test that comes back marginal should be read with that in mind.
 
-**The decision-flip rate is the right metric, not the mean.** A keep table is an argmax over
-sub-compositions; a uniform +0.05-turn shift changes nothing, while a handful of sign flips near
-ties changes the shipped policy. `leaf-eval` on this deck already reports **67.8% of leaf
-evaluations as ties**, so this table is unusually tie-dense and therefore unusually sensitive to
-small shifts — which argues for a *tighter* flip threshold here than one might pick generically.
+## 5. The similarity test — `MTG_KEEP_RETAIN_VERIFY=<n>`
 
-**The threshold is the user's call and I am not choosing it for them.** A defensible default to argue
-from: accept if the paired mean delta CI is within ±0.05 turns **and** the decision-flip rate is
-under 1%; disclose and require explicit re-confirmation between 1% and 5%; refuse above 5%. The
-sample itself costs ~500 rollouts — minutes, against the ~50 h the retention saves.
+**Correction to the original design.** It proposed re-rolling an independent sample and reporting a
+paired CI. Pairing can be made exact instead, and that is strictly better at the same cost: a rollout
+is a pure function of `(seed_base, r, w, pd)`, so re-rolling a retained cell-side **over the same
+rollout indices** compares the two engines on *identical library permutations*. Sampling noise cancels
+exactly, and any residual delta **is** the engine difference. That is what shipped.
 
-## 5. Interaction with the cost work, because it changes the calculus
+What it does:
 
-The user also noted: *"if we get lucky some of the optimizations may apply there (without breaking
-things)."* Two consequences, and they pull in opposite directions:
+1. Pools every retained cell-side, sorts by `(H, pd, retained mean)` and takes a **systematic sample**
+   across that order — an even sweep that hits every stratum in proportion, including the degenerate
+   late-win tail where engines diverge most. Deterministic, so the same journal always verifies on the
+   same sample and re-running cannot shop for a friendlier one.
+2. Re-rolls each on the current engine, in parallel, with the generation's own `AIEngine`
+   construction — the same rollout the gen would do, not an approximation.
+3. Reports the paired mean delta with its CI, how many cell-sides come back **byte-identical**, the
+   worst single cell-side, and the **decision-flip rate**.
+4. Writes nothing and returns before the journal is opened, so a verify cannot touch the artifact it is
+   judging.
+
+**The flip rate is computed exactly, not approximated.** `BuildPolicyFromTables` is a pure function of
+the tables, so the check builds the policy on the retained values, substitutes the re-rolled values,
+builds again, and diffs the `keep` flags and `bottom_keep` targets. Propagation comes for free: a
+size-7 cell feeds the mulligan threshold, a sub-cell feeds many hands' argmin.
+
+**The flip rate is the right metric, not the mean.** A keep table is an argmin over subcompositions; a
+uniform +0.05-turn shift changes nothing, while a handful of sign flips near ties changes the shipped
+policy. This deck reports **67.8% of leaf evaluations as ties**, so its table is unusually tie-dense
+and therefore unusually sensitive to small shifts — which argues for a *tighter* flip threshold here
+than one would pick generically.
+
+**The threshold is the user's call and the tool does not choose it.** The default it prints to argue
+from: accept if the paired mean CI is within ±0.05 turns **and** keep-flip is under 1%; disclose and
+require explicit re-confirmation between 1% and 5%; refuse above 5%.
+
+One honest limit, printed in the report: flips are measured with **only the sampled cell-sides
+re-rolled**, so the figure is the flip rate attributable to the sample, not an extrapolation to the
+whole table.
+
+### Cost warning
+
+The verify's cost is **unbounded by the same tail it is helping to fix** — this deck has single
+rollouts measured at 7 h 08 m, and the stratification deliberately includes degenerate cells. Start
+small (tens of cell-sides), read the progress lines, and scale up. It is a diagnostic you launched, so
+it is yours to kill.
+
+## 6. Which branch to optimise on
+
+The user also asked: *"It is arguable whether we should perhaps optimize on the branch to leave out
+work from other agents."*
+
+The case for it is real: the retained journal's engine **is** `gen/fungus-candb-mulligan-2026-09-27` @
+`57c36b5c`, so optimising there would make our narrowing the *only* digest delta, and any flip
+unambiguously ours.
+
+**Recommendation: optimise on the main line anyway.** Three reasons, in order of weight:
+
+1. **The gen branch has no trustworthy correctness gate.** Two commits since the freeze rebaselined
+   ground truth on all three tiers (`6b9f0cb2`, `88dd58db`). On that branch the regression suite would
+   diff against a GT no current binary produces, so it would be red for reasons unrelated to us —
+   exactly when we are making search-narrowing changes, the class of change that most needs a working
+   gate. The user's constraint was *"(without breaking things)"*, and optimising without a regression
+   gate is the opposite of that.
+2. **Attribution no longer requires isolation, because the foreign contribution is measurable
+   separately** (§7). Isolation was the only way to get attribution; it is not any more.
+3. **The divergence must be crossed exactly once, and later is worse.** 35 engine commits / 8,756
+   inserted lines already separate the two trees. Deferring that rebase makes it larger, and
+   CLAUDE.md requires a rebuild, a byte-identity re-check and `check_gt_logs.py` after any rebase
+   that replays engine changes. Two of those commits are also *perf* work
+   (`8843b134`, `9ed41927` `MTG_BOTTOM_NAME_DEDUPE` default ON) that a branch would forgo.
+
+The gen branch stays frozen as the **finish-as-is** escape route, which it already serves without
+carrying any new work. Both routes remain open and nothing needs deciding to keep them so.
+
+## 7. How much did the OTHER agents' work actually change this deck's play?
+
+This is answerable without running a generation, because the equivalence-discovery cache stores a
+`signature` per bucket class — a vector of probe win-turns, 400 per class, 8,800 in total — measured
+identically by both engines. Diffing two caches is a free, stratified play-divergence measurement.
+
+**Caveat that must travel with the number:** the signature is measured at *discovery* settings
+(depth 5 / budget 20 ms), not at the generation's (depth 1 / budget 3 ms), and it is a win-turn
+agreement rate on probe hands, not the keep/bottom flip rate. It is a strong proxy and a cheap one, not
+a substitute for §5.
+
+**A confound found and removed.** `scripts/mullgen.sh` runs generation with
+`MTG_DECISION_WORK_X=1000`, while the engine default is `0` (disarmed). A first pass compared the
+frozen cache against a HEAD cache built *without* that setting, so it conflated the 35 commits with the
+work-ceiling change and its 1.7% figure is **withdrawn**. The isolated number is below.
+
+<!-- ISOLATED-DIVERGENCE -->
+
+## 8. Interaction with the cost work, because it changes the calculus
 
 - A **pure scheduling or instrumentation** optimisation leaves the play digest untouched, so it needs
-  none of this — the existing gate already permits it. That is the lucky case and it is worth
-  checking for before reaching for this feature.
+  none of this — the existing gate already permits it. That is the lucky case and it is worth checking
+  for before reaching for this feature.
 - Any optimisation that **narrows the search** (collapsing option groups, bounding the odometer,
   pruning fungible subsets) changes play by construction and therefore moves the digest. Those are
   exactly the candidates in `fungus-slow-rollout-diagnosis-2026-09-30.md` §2a. So the faster the
@@ -131,22 +247,40 @@ similarity test is where that conflict gets adjudicated.** If a narrowing passes
 safe *and* the old data is retainable; if it fails, we learn the narrowing was not free — which is
 information we want either way. The test is therefore useful even when it refuses.
 
-## 6. What this does NOT do
+## 9. What this does NOT do
 
-- It does not make the run reproducible. The user has explicitly accepted that
-  (*"reproducing this exactly is not crucial"*), and §3b records the provenance so the artifact is at
-  least **honest** about it. A mixed profile should be re-derivable in outline, never byte-for-byte.
+- It does not make the run reproducible. The user explicitly accepted that (*"reproducing this exactly
+  is not crucial"*), and §4d records the provenance so the artifact is at least **honest** about it.
 - It does not license cross-DECK or cross-`RolloutCfg` pooling. `RolloutCfgAllows`
   (depth/budget/max_turns) stays a hard refusal: those change what a rollout *means*, not just how it
   plays.
 - It does not change the equivalence-discovery cache gate. A bucket structure from a different engine
-  is not a sampling question but a correctness one — the cell indices themselves would not correspond.
+  would be a correctness problem, not a sampling one — the cell indices would not correspond. **For
+  Fungus this was checked and is fine:** all 22 classes are singletons with identical membership at
+  both engines, so `bucket_fp` and `deck_fp` both match and the indices do correspond. Retention here
+  really is only a sampling question.
+- It does not teach `RunKeepMerge` about mixed chunks (§4d).
 
-## 7. Status of the prize being protected
+## 10. Status of the prize being protected
 
-`logs/fungus_journal_backup/` holds the cancelled run's journal (350 MB, 5,583,350 records),
-gencache and slow.log, verified byte-identical to what the run left behind. The engine that produced
-it is pinned by branch `gen/fungus-candb-mulligan-2026-09-27` @ `57c36b5c` plus
+`logs/fungus_journal_backup/` holds the cancelled run's journal (350 MB, 5,583,349 records), gencache
+and slow.log, verified byte-identical to what the run left behind — and re-verified against the live
+copies in the deck directory. The engine that produced it is pinned by branch
+`gen/fungus-candb-mulligan-2026-09-27` @ `57c36b5c` plus
 `logs/Fungus_candidate-b-2026-09_mullgen/mtg-analyze.frozen` (md5 `bb389d836c…`) and
-`cards.json.frozen` (md5 `2c4252fe…`). So **both routes remain open**: finish it as-is on the frozen
-engine, or retain it into a new run via this design. Nothing needs deciding to keep both available.
+`cards.json.frozen` (md5 `2c4252fe…`).
+
+The settings the journal requires for any resume, from its own header — a resume that misses one is
+refused, and `MTG_DECISION_WORK_X=1000` is the easy one to forget because it lives in `mullgen.sh`,
+not in the header:
+
+```
+commit 57c36b5c   play_digest 36a65944fd138cd0
+depth 1   budget_ms 3   max_turns 8   R 30   max_mull 6
+seed_base 1000000   equiv_seed 20260701   start_life 20   opp_heads 1
+MTG_DECISION_WORK_X=1000        (set by scripts/mullgen.sh, engine default is 0)
+```
+
+Note the campaign ran seven `mtg-analyze` invocations across three different d1/b3 digests
+(`f1f8288da6dff73e`, `e0ffdb608cd70b25`, `36a65944fd138cd0`); the journal header is the authoritative
+one for this artifact.
