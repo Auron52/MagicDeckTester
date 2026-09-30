@@ -301,6 +301,31 @@ duplicate entries (antilife/hinata run W3 at d5).
 95% of main-2 scans are at the horizon edge (remaining depth 0). Step 22 took back most of the cost;
 what is left is spread over the 2b variants and the 3b arm, both searched options the rule requires.
 
+## Next: in-range continuation duplicates (DEFERRED design, 2026-09-30)
+
+After steps 23-27 every deck's remaining loss vs the committed tree is budget churn (every slower
+game recovers at d8 b0; see `no-greedy-worse-cases.md`), and the budget curve says ~1.25x effective
+budget brings the four focus decks to <= 0. The largest remaining waste is main-2 applies that the
+post-apply dedup (steps 24/26) catches only AFTER they are billed: melira spends ~25% of its units on
+them. Census on step 27 (melira d3, 20 games; temporary counters, not committed):
+
+| duplicate origin (rank variants) | count | pre-apply provable? |
+|---|---|---|
+| rank variant whose continuation resolved EMPTY, equal to an ordinary (base) plan's state | 62,221 | only if n (the list length) is known before the apply -- today it is learned FROM the first variant's apply |
+| two ranks whose continuations cast the same cards (same-card copies) | 43,228 | needs a content-exact fold of the continuation list |
+| reordered / genuinely different continuations | 0 | -- |
+| (non-rank: ordinary 92k, EMPTY arm 26k) | 119,053 | -- |
+
+Two exact levers, each needing its own proof and the b0 digest-identity gate:
+1. **Base-measured n.** Have the BASE plan's apply report the list length at breakpoint 0
+   (`MTG_BP_ARM_NEW`'s `g_bp_base_lens` channel, default OFF, with its documented "exactly one
+   class-on breakpoint" condition). With n known and bp_at == 0, every rank >= n resolves EMPTY at the
+   first breakpoint exactly as the base plan does, and no later breakpoint exists (EMPTY ends the
+   phase) -- so all overrun ranks, including the first, are the base plan's state.
+2. **Content-exact continuation fold.** Two continuation entries that cast the same card NAMES in the
+   same order from interchangeable copies reach the same `BuildDedupKey` state; fold them where the
+   list is built, not by plan signature (the plan-signature dedupe was measured UNSOUND earlier).
+
 ## Deferred relocations (engine-resident PRUNES, no play change -- need an interface decision)
 
 These are option-RESTRICTING rules (allowed as heuristics) that still live in TurnSolver.cpp. They are
