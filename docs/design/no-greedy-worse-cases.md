@@ -146,3 +146,15 @@ PRE-EXISTING depth non-monotonicity as th gi211: the committed tree and step 22 
 and step 23/24 recover T6 at 4x. Both d8-b0 anomalies are open against the committed tree.
 
 **Update (step 25): fluctuator gi419 ROOT-CAUSED and FIXED** -- the go-off seed (unbounded-only) played an undecided land drop the executor did not reproduce, crediting a T6 kill play never made (`MTG_WINLESS_SEED=0` restored T6). Seeds now carry a decided land drop; gi419 is T6 at b0. **th gi211 is a different class**: it also never wins at d3 **b80** while winning T5 at its cell budget (b20), and the certificate is not involved (`MTG_WINLESS_CERT=0` still never wins) -- budget-non-monotone, the known th gi276 class, open.
+
+## Step 26 (main-2 ordinary-plan dedup), overnight tier vs step 24 -- 2026-09-30
+
+1 faster / 4 slower on hinata (antilife -5, antilife2hg -1, giants -1, goblins2hg -1 on the gain side).
+All four slower hinata games recover -- churn:
+
+| game | step 24 -> 26 | 4x budget | d8 b0 |
+|---|---|---|---|
+| hinata d3 s6006 gi390 | 6 -> 7 | 6 | 6 |
+| hinata d5 s4004 gi158 | 7 -> 8 | 7 | 6 |
+| hinata d5 s5005 gi224 | 7 -> 8 | 7 | 6 |
+| hinata d5 s6006 gi144 | 5 -> 8 | 5 | 5 |
