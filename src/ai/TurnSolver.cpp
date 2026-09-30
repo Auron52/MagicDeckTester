@@ -51697,9 +51697,10 @@ static TurnSolver::SearchLine FSLineTail(const GameState& state, int depth, int 
         // BuildDedupKey identity the m1 skip stakes on, and the sibling that reached the state
         // first was scored first, so under the strict `<` the later copy could never replace it.
         // Measured: melira's step-2b loss is budget only (2a == 2b on all 22 games at b0).
-        bool m2_variants_here = false;
-        for (const TurnSolver::Plan& q : post)
-        { if (PlanIsAxisVariant(q)) { m2_variants_here = true; break; } }
+        // ORDINARY plans too (step 26): 15% of antilife's main-2 plans were do-nothing duplicates of
+        // the appended empty plan (437k "pass" plans over 325k decisions), each paying an apply, an
+        // EOT and a leaf rollout. The exactness argument does not depend on the plan being a
+        // variant -- identical state, identical future, and the first copy was scored first.
         std::unordered_set<TranspositionTable::Key, TranspositionTable::KeyHash> m2_seen_states;
         for (const TurnSolver::Plan& q : post)
         {
@@ -51940,10 +51941,9 @@ static TurnSolver::SearchLine FSLineTail(const GameState& state, int depth, int 
                 if (dupe_trace)
                 { node_key_origin.emplace(plan_key, std::make_pair(uint8_t(0), DupeSig(q))); }
             }
-            if (m2_variants_here)   // post-apply variant dedup (see m2_seen_states)
-            {
+            {   // post-apply state dedup (see m2_seen_states)
                 const bool fresh = m2_seen_states.insert(BuildDedupKey(s2)).second;
-                if (!fresh && PlanIsAxisVariant(q))
+                if (!fresh)
                 {
                     g_m2_variant_dup_skips.fetch_add(1, std::memory_order_relaxed);
                     if (beam_here) { --_beam_i; }   // beam refund: a duplicate is not a scored slot
