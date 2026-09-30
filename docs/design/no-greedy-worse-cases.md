@@ -9,6 +9,14 @@ with `bash test/classify_turn_later.sh regression` (re-run at 4x and 16x budget)
 diffed with `test/explain_game.py` against the committed-tree binary. Full context:
 `docs/design/no-greedy-in-search-window.md` (step log, cost/churn ledger, checkpoint 3).
 
+**RECOVERABILITY -- PASSED (definitive test).** USER 2026-09-30: *"d8 b0 (unbounded) is the definitive
+test. There is no purpose to doing the bounded tests"* -- a bounded re-run either succeeds when d8 b0
+would or fails and proves nothing -- and *"Diverging draws is no excuse. It should still recover."* All
+66 games re-run with the purge binary at `--depth 8 --budget-ms 0` (one pooled batch,
+`logs/purge/d8b0_worse.json`): **66 / 66 reach at least their committed-tree win turn**, including the
+three draw-diverged Hinata games and th gi276. The 4x/16x verdicts in the table below are kept only as
+the record of which games churn at PLAY settings (the mitigation phase's input).
+
 **Standing bar.** Nothing below blocks: every game either recovers with more budget or depth, or is a
 different physical game (draws diverge). But churn is a cost to MINIMIZE, not excuse -- the mitigation
 phase works this list (exact-duplicate prunes first, then the budget share of the new options).
