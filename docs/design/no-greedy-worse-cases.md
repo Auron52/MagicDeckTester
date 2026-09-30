@@ -158,3 +158,17 @@ All four slower hinata games recover -- churn:
 | hinata d5 s4004 gi158 | 7 -> 8 | 7 | 6 |
 | hinata d5 s5005 gi224 | 7 -> 8 | 7 | 6 |
 | hinata d5 s6006 gi144 | 5 -> 8 | 5 | 5 |
+
+## Regression tier on step 27 (2026-09-30)
+
+Scenarios 118/118; reference replay gate PASS (0 play-drift, 0 enum-gap; 35 ok vs 28 at step 19,
+1 board-diverged vs 2, 0 shuffle-dead vs 1). Slower games not already in the 66-game set:
+
+| game | GT -> step 27 | 4x budget | d8 b0 |
+|---|---|---|---|
+| auras d3 s2002 gi94 | 4 -> 5 | 4 | 4 |
+| auras d3 s2002 gi428 | 5 -> 6 | 4 | 4 |
+| auras d3 s3003 gi117 | 5 -> 6 | 6 | 5 |
+| hinata d3 s2002 gi69 | 6 -> 7 | 6 | 6 |
+
+All recover at d8 b0 (gi428 beats GT there). Budget churn.
