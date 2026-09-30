@@ -120,3 +120,18 @@ slivers d0 s2002: 5 faster / 13 slower, +10 turns / 1000 (the runner lost the de
 mana sinks; see "Deferred: slivers d0 regression" in the purge doc and step 20). No other deck's d0
 cell moved.
 
+
+## Step 23 (beam refund), full overnight tier vs step 22 -- 2026-09-30
+
+34 faster / 2 slower (+1 hinata). Each slower game, step 23 binary:
+
+| game | step 22 -> 23 | 4x budget | d8 b0 | verdict |
+|---|---|---|---|---|
+| stompy d3 s6006 gi60 | 5 -> 6 | 5 | 5 | churn; recovers |
+| hinata d3 s7007 gi220 | 5 -> 6 | 6 | 5 | recovers at d8 b0 |
+| th d3 s5005 gi211 | 5 -> never | 5 | **never** | recovers at 4x; the d8 b0 failure is PRE-EXISTING (committed tree 3753dcf3 and step 22 also never win it at d8 b0, while winning T5 at d3 b80) |
+
+**OPEN (pre-existing, not the purge): th d3 s5005 gi211 is non-monotone in depth on the committed
+tree** -- T5 at d3 b80, no win at `--depth 8 --budget-ms 0`. A deeper unbounded search should never
+lose a win a shallower one finds; root-cause it before relying on d8 b0 as the recoverability test
+for treasure_hunt.
