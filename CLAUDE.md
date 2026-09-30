@@ -28,6 +28,29 @@ optimized); the regression harness expects a pre-built binary at `build/Release/
 
 ## Repository Conventions
 
+- **NO GREEDY PICK INSIDE THE SEARCH WINDOW — the ENGINE is heuristic-free (user hard rule,
+  2026-09-30).** The user's words: *"We need to make sure all of them are purged"*, *"I don't care
+  whether it is main 1 or 2"*, *"the code that calls that way should be deleted"*, *"Only heuristics
+  in the provider are allowed to interfere with the search and there just to prune options."*
+  * **Where heuristics may live:** in a `DecisionProvider`, and only to RESTRICT or ORDER options (a
+    tested one-option prune such as a fetch target is fine). The engine (TurnSolver, AIEngine,
+    SpellEffects, ManaPayment) makes no heuristic choice at any node with search depth remaining.
+  * **The only permitted greedy:** the playout policy BEYOND the horizon (remaining depth <= 0), the
+    depth-0 runner, and the standing attack / mana-payment exemptions.
+  * **Delete, don't lever.** A default-off flag that gates a missing searched capability is the same
+    defect. A host that takes a provider's top candidate out of several because it did not branch is
+    a greedy pick.
+  * **It is gated.** `TurnSolver::Solve()` requires a `GreedyPermit` naming a site from a closed enum
+    (`HorizonLeaf`, `D0Runner`); the constructor ABORTS if remaining depth > 0, in every build. Do not
+    add a site or a "diagnostic" exemption without the user.
+  * **What it has cost when it slipped:** a month of "audit clean" readings missed a live in-window
+    greedy (the instrument never counted the playout's main 2). Full history, the step log and every
+    worse case: `docs/design/no-greedy-in-search-window.md`, `docs/design/no-greedy-worse-cases.md`.
+  * **The adoption bar for a change here:** every slower game must recover at `--depth 8
+    --budget-ms 0`, and every DECK's aggregate must be net <= 0 vs the committed tree on a large
+    held-out sample (*"+1 is not neutral. 0 is neutral."*; the goal is *"overall better"*, not better
+    on the regression seeds).
+
 - **AGENT FAN-OUT IS EXPECTED — do NOT stop to ask before it (user directive, 2026-08-26).**
   Where a skill in this repo says to fan work out across subagents — the analyze-deck Stage 5d
   claude-play sweep, the Stage 2 per-card research fan-out, the Stage 5 verification verdicts —
