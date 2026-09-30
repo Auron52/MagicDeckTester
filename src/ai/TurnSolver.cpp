@@ -420,6 +420,7 @@ static std::atomic<long long> g_axis_sweep_vars{0};
 // Axis variants (bp_choice < 0) skipped by the post-apply state dedup -- proves PlanIsAxisVariant's
 // widening of the skip fires (a byte-identical A/B is not evidence on its own).
 static std::atomic<long long> g_axis_dup_skips{0};
+static std::atomic<long long> g_m2_variant_dup_skips{0};   // main-2 post-apply variant dedup (see m2_seen_states)
 static std::atomic<long long> g_axis_le_vars{0};   // Land's Edge fire-count variants emitted
 // CHAIN-SLOT OUTCOME (see g_bp_chain_ci_last). The three cells want three different answers:
 //   covered = the scan landed INSIDE wave 0's own window (ci < W), so rank ci already scored that
@@ -1517,6 +1518,7 @@ namespace
             std::cerr << "[rollout-stats] plan_axes etbcounter_variants=" << g_axis_etbcounter_vars.load()
                       << " sweep_variants=" << g_axis_sweep_vars.load()
                       << " axis_dup_skips=" << g_axis_dup_skips.load()
+                      << " m2_variant_dup_skips=" << g_m2_variant_dup_skips.load()
                       << " le_variants=" << g_axis_le_vars.load() << "\n";
             std::cerr << "[rollout-stats] nodrop_axes m1: enums=" << g_nodrop_enum[1].load()
                       << " axis_variants=" << g_nodrop_axis_vars[1].load()
@@ -51680,6 +51682,18 @@ static TurnSolver::SearchLine FSLineTail(const GameState& state, int depth, int 
         const int m2fmode = M2FixModeFor(state);
         std::vector<InternedName> m2fix_hand0;
         if (m2fmode >= 2 && g_m2fix_nest < 1) { m2fix_hand0 = M2FixHandNames(state); }
+        // POST-APPLY VARIANT DEDUP -- main 1's contract (FSLineWin's bp_seen_states / skip_dup),
+        // which main 2 never had: the memoized host appends wave-0 breakpoint variants (and the
+        // enumeration its axis variants), and every one was applied AND scored in full, EOT +
+        // recursion + leaf, even when its post-apply state is one a sibling already reached. A
+        // variant landing on a seen state is skipped; ordinary plans only record. EXACT: the same
+        // BuildDedupKey identity the m1 skip stakes on, and the sibling that reached the state
+        // first was scored first, so under the strict `<` the later copy could never replace it.
+        // Measured: melira's step-2b loss is budget only (2a == 2b on all 22 games at b0).
+        bool m2_variants_here = false;
+        for (const TurnSolver::Plan& q : post)
+        { if (PlanIsAxisVariant(q)) { m2_variants_here = true; break; } }
+        std::unordered_set<TranspositionTable::Key, TranspositionTable::KeyHash> m2_seen_states;
         for (const TurnSolver::Plan& q : post)
         {
             // The beam leaves plans unexplored, so a no-win from this node is not a refutation.
@@ -51918,6 +51932,16 @@ static TurnSolver::SearchLine FSLineTail(const GameState& state, int depth, int 
                 node_child_seen.insert(plan_key);
                 if (dupe_trace)
                 { node_key_origin.emplace(plan_key, std::make_pair(uint8_t(0), DupeSig(q))); }
+            }
+            if (m2_variants_here)   // post-apply variant dedup (see m2_seen_states)
+            {
+                const bool fresh = m2_seen_states.insert(BuildDedupKey(s2)).second;
+                if (!fresh && PlanIsAxisVariant(q))
+                {
+                    g_m2_variant_dup_skips.fetch_add(1, std::memory_order_relaxed);
+                    if (beam_here) { --_beam_i; }   // beam refund: a duplicate is not a scored slot
+                    continue;
+                }
             }
             // Self-lethal second main (Eidolon on-cast self-damage) -> we die to the
             // triggers before the spell resolves; not a viable line. See FSLineWin.
