@@ -144,3 +144,5 @@ fluctuator (+2), fungus (+2), kitty (+2), pirates (+2), stompy (+1) and melira (
 The one exception, **fluctuator d3 s4004 gi419** (base T6, step 23 T7, d8 b0 T7), is the same
 PRE-EXISTING depth non-monotonicity as th gi211: the committed tree and step 22 are also T7 at d8 b0,
 and step 23/24 recover T6 at 4x. Both d8-b0 anomalies are open against the committed tree.
+
+**Update (step 25): fluctuator gi419 ROOT-CAUSED and FIXED** -- the go-off seed (unbounded-only) played an undecided land drop the executor did not reproduce, crediting a T6 kill play never made (`MTG_WINLESS_SEED=0` restored T6). Seeds now carry a decided land drop; gi419 is T6 at b0. **th gi211 is a different class**: it also never wins at d3 **b80** while winning T5 at its cell budget (b20), and the certificate is not involved (`MTG_WINLESS_CERT=0` still never wins) -- budget-non-monotone, the known th gi276 class, open.

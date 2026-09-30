@@ -50443,6 +50443,7 @@ static bool WinlessCastSeedWins(const GameState& state, TurnSolver::Plan& out)
         ++built;
         TurnSolver::Plan seed;
         seed.land_to_play = land;
+        seed.land_decided = true;   // pinned, as the null seed's (see WinlessSeedWins)
         for (const Action* a : chosen) { if (a != nullptr) { seed.actions.push_back(*a); } }
         if (winlesscert::StatsOn())
         { winlesscert::g_cseed_plans.fetch_add(1, std::memory_order_relaxed); }
@@ -50462,6 +50463,12 @@ static bool WinlessCastSeedWins(const GameState& state, TurnSolver::Plan& out)
 static bool WinlessSeedWins(const GameState& state, TurnSolver::Plan& out)
 {
     TurnSolver::Plan seed;                 // cast nothing; the apply's tail runs the go-off
+    // The land drop is DECIDED (none). Left undecided, the scratch apply chose a land by itself and
+    // the executor, replaying the same plan, need not choose the same one -- fluctuator s4423 gi419
+    // at T6: the seed "won", the executor dealt 8 of the 9 and the game went to T7, at every depth
+    // unbounded. A seed claims only the kill its exact plan makes; a kill that needs a land drop is
+    // left to the plan search, which enumerates the drop.
+    seed.land_decided = true;
     if (WinlessSeedApplyWins(state, seed)) { out = std::move(seed); return true; }
     return false;
 }
