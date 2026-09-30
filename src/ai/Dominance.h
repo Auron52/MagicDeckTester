@@ -327,7 +327,10 @@ static_assert(sizeof(Player) == 200,
 // either: it gates only how a cost is COMPUTED, and the computed cost is already reflected in
 // whatever the line went on to pay (floating mana, tapped sources, board), all of which Build()
 // already folds.
-static_assert(sizeof(GameState) == 840,
+// +24 bytes (2026-09-30, rebased onto 840 on 2026-10-03; size set from a measured sizeof, main-2 land drop = newly arrived lands only): `m1start_hand_mask[2]` + `m1start_hand_turn`.
+// Classification: DERIVED -- stamped from the hand at the start of each pre-combat main, and the
+// dominance probe runs on turn-start states whose hand it already compares, so nothing to fold.
+static_assert(sizeof(GameState) == 864,
               "GameState changed size -- fold any new field into dominance::Build() (see the "
               "MAINTENANCE HAZARD note at the top of Dominance.h) before updating this number.");
 

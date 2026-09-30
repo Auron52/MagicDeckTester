@@ -197,6 +197,65 @@ Mitigation phase (after the purge, before Phase 2), in order:
 3. Churn: re-run every recorded churn game at 1x after (2); for what remains, sweep the budget
    share of the new options until the churn curve flattens, never by removing the option.
 
+## Per-deck quality after the purge (USER bar: every DECK net <= 0 vs GT; +1 is NOT neutral)
+
+Overnight 7-deck check, step 19 vs GT, held-out seeds, searched cells: th -16, goblins -10, slivers -4
+(better); auras +1, antilife +17, melira +17, fungus +22 (worse). USER: *"+1 is not neutral. 0 is
+neutral."*, and the goal is *"overall better"*, not better on the regression seeds -- a fix must be a
+general mechanism, validated on held-out samples.
+
+**Attribution** (`logs/purge/ovch`: the 96 changed overnight games of the four losing decks, replayed
+one game per job on every step snapshot; the base binary reproduces GT on all 96): step **2c** (the
+main-2 land drop, with its defer-drop tie order) carries fungus +21, antilife +21, melira +6; melira
+also takes +5 at 2b (m2 bp variants) and +4 at 9d; auras' single game moves at 3b.
+
+**Fungus -- a DEFECT, fixed (step 21).** `SecondMainUnproductive` ignored the open m2 land drop, so a
+main 1 that held its land lost the drop for the turn (fungus s4004 gi194 never won). Fungus overnight
+searched +22 -> **-2** vs GT.
+
+**Antilife / melira -- budget starvation.** Their slower games recover at d8 b0 (antilife s6006
+gi933 T5, melira s5005 gi80 T5). Probe (antilife d3 s4004 + melira d3 s5005, `MTG_ROLLOUT_STATS`):
+units_total 11.6M -> 16.4M (1.41x); decisions committing only d1 251 -> 519; the growth is
+`fs_main2` 3.9M -> 7.5M -- main-2 plans per decision 2.1 -> 5.0, 35% of them carrying a land. The
+m2 EOT closure (`eot_seen`) is NULL in this configuration, so nothing collapses a main-2 land line
+onto the main-1 line that played the same land.
+
+**The shared mechanism: plan ORDER decides leaf-tied lines.** `FSLineWin` keeps the FIRST line among
+equal win turns, and the value leaf rounds its milliturn estimate to a whole turn. So lines the leaf
+clearly separates tie (gi194 T1: pass / Forest / Forest+Mycon all "T6" at d5 b20; the unbounded
+re-search rates them 7 / 7 / 6), and plan order -- which the purge perturbed at many sites -- picks.
+
+Arms measured on the four decks' overnight searched cells (vs GT):
+
+| Arm | antilife | melira | fungus | auras |
+|---|---|---|---|---|
+| step 19 | +17 | +17 | +22 | +1 |
+| step 21 (m2-productive fix) | +17 | +17 | **-2** | +1 |
+| `MTG_NO_DEFER_DROP` (on step 19) | +21 | +17 | +2 | +1 |
+| `MTG_M2_DROP_NEW_ONLY` (m2 drop only for lands that arrived after main 1 began; defer off; units 1.41x -> 1.12x of base) | +9 | +4 | +2 | +1 |
+| `MTG_M2_DROP_NEW_ONLY=2` (same, but only BELOW the search root turn) | +16 | +6 | +1 | +1 |
+| `MTG_LINE_EST_TB` (break equal-win ties on the value leaf's raw milliturns) -- REJECTED | +20 | +13 | +1 | +1 |
+
+The milliturn tie-break is no better than plan order (melira churns 74 faster / 65 slower for -4), so
+the leaf's sub-turn resolution is not a usable ranking. The arm spread on antilife (+9 .. +21) is
+within its churn noise: ~30 changed games of +-1..4 turns, and they are chaotic -- a fetch cracked
+one turn earlier reshuffles the library (s6006 gi933: holding Windswept Heath T2-T4 wins T5, cracking
+it T2 never wins). Settled on a LARGE paired held-out sample instead (8 new seed bases per depth,
+`logs/purge/big_*`, same cells/settings as the overnight tier).
+
+**Large paired held-out result** (antilife 16,000 / auras 16,000 / fungus 5,600 / melira 2,800 games;
+paired per game, unwon = 9):
+
+| Arm vs committed tree 16bb8f85-base | antilife | melira | fungus | auras |
+|---|---|---|---|---|
+| step 21 | +41 (t +3.58) | +36 (t +3.26) | +3 (t +0.40) | +4 (t +2.00) |
+| step 22 = newly arrived lands only | +10 (t +1.47) | +19 (t +2.17) | +1 (t +0.58) | +4 (t +2.00) |
+| step 22 vs step 21 | **-31 (t -3.15)** | **-17 (t -2.25)** | -2 | 0 |
+
+USER 2026-09-30 approved the rule (*"Only newly arrived lands in second main would be okay"*); adopted
+as step 22. STILL OPEN against the per-deck bar: melira +19, antilife +10, auras +4 (4 games, all
+4 -> 5, including s20000 gi505 at both d3 and d5 -- a mechanism, not churn).
+
 ## Deferred relocations (engine-resident PRUNES, no play change -- need an interface decision)
 
 These are option-RESTRICTING rules (allowed as heuristics) that still live in TurnSolver.cpp. They are
@@ -277,6 +336,7 @@ Snapshots: `logs/snapshots/purge-step<N>` (gitignored); per-game diff `logs/purg
 | 18 | relocations (resolution picks): `HeuristicTopDisposition` -- the autonomous scry / surveil / reorder pick, called DIRECTLY by the engine at 4 play-path sites (ChooseTopDisposition, TopDispositionCandidates' candidate 0, ReorderCandidatesNarrow, ReorderTopNoShuffle) plus the claude-play default -- now routes through new hook `TopDispositionPick` (default = the old body, `DefaultTopDisposition`); Terastodon victim ORDER through new hook `EtbDestroyVictimClass` (all 3 sites: resolution loop, emission K cap, K projection); the revive MV-desc fallback moved into `ReviveCandidates`' base default and DELETED from the engine. Unit tests `test_provider_relocations.cpp` (3 two-arm tests) | smoke vs 17 byte-identical | -- |
 | 19 | relocations (enumeration prunes): the USER-doctrine prunes that sat in CollectActions -- Unexpectedly Absent never cast autonomously (both the opponent-target and the self-target form) and Jitte's non-combat modes -- become provider hooks `OffersTuckRemovalCast` / `OffersJitteNonCombatModes` (default false = the doctrine). LOCKSTEP HOLE fixed: the executor's safe-alt auto-fire lacked the rollout's `MTG_UNPRUNE=altpayload` suppression (inert at default). Unit tests `test_provider_prunes.cpp` (default vs overriding provider on EnumerateMainPlans). The magnet strive K>0 prune is a measured DOMINANCE fold (strictly fewer tokens for strictly more mana vs the passive opponent) -- lossless, stays | smoke vs 18 byte-identical | -- |
 | 21 | FIX (found by the per-deck overnight bisect): `SecondMainUnproductive` -- the Fungus deferred-cast gate (and the provider-opt-in productivity rule) -- asked only for a payable deferred CAST or a free activation, so with the main-2 land drop always live (2c) it skipped main 2 with the turn's drop still open and a land in hand, and its 0-cost path recorded a deliberate NO-LAND main 2. A main 1 that held its land (the defer-drop tie order under the value leaf's whole-turn ties) then lost the drop for the turn: fungus overnight d5 s4004 gi194 passed T1-T3 holding Forest + Utopia Mycon and never won (GT T6). Now an unused drop + a land in hand makes main 2 productive (land type read from the DATABASE -- a hand `Card`'s own type fields can be unset, which is why the first cut was inert). Only decks whose provider opts into either gate can move (today: Fungus) | fungus overnight searched: vs GT **+22 -> -2** (15 faster / 13 slower), vs step 19 -24 (31/12); fungus d0 byte-identical | fungus searched wall 1.25x vs step 19 (contended, different pools) |
+| 22 | The main-2 land drop offers only lands that ARRIVED after main 1 began (`GameState::m1start_hand_mask`, stamped at both worlds' main-1 start; `HeldLandBarredFromMain2`; human play exempt). USER-approved. A held land's main-2 copy re-derives a main-1 line (the search knows its draws) apart from ordering effects the pre-purge engine never had; the copies were 35% of main-2 plans. DEFER-THE-DROP tie order and `MTG_NO_DEFER_DROP` DELETED (holding a land now skips it). Unit test `test_m2_land_drop.cpp` (two arms that must differ). Rejected alongside: the value-leaf milliturn tie-break (`MTG_LINE_EST_TB`) and a root-turn-exempt variant | large paired run vs step 21: antilife -31 (t -3.15), melira -17 (t -2.25), fungus -2, auras 0; verified byte-identical to the measured arm (melira cells) | antilife+melira probe units 1.41x -> 1.12x of the pre-purge tree |
 | **Regression checkpoint 3** (every slower game, with verdict, is listed for revisit in `docs/design/no-greedy-worse-cases.md`; ALL 66 recover at the definitive `--depth 8 --budget-ms 0` test) (step 19 = commit cd2908d9 vs GT = committed tree 3753dcf3, full tier) | searched depths **100 faster / 66 slower, net -33 turns**; d0 5 faster / 13 slower, +10 (all slivers d0). Biggest gains: hinata d3 s2002 -17, hinata/hinata2hg d3 -6 each, fivecolour/burn -4 per cell, giants -2 per cell. Of the 66 slower: 62 churn (recover at 4x/16x, `classify_turn_later.sh`), 3 variance (hinata d3 s2002 gi57/77/143: draws diverge at T3-T6 vs the committed-tree binary), 1 d3-only (th s2002 gi276: T7 at d3 for every budget to 64x, but T6 at d5 and d7 on both binaries -- recovers with DEPTH). USER bar 2026-09-30: per-deck slivers of churn can wait unless a case does not recover with more budget AND depth -- none remains. Per-deck searched net (games): th +5/1600, antilife +4/1100, fungus +4/600, melira +3/230, goblins +2/1100, slivers +2/1400, auras +1/2000 (all churn) vs hinata -19, burn -12, fivecolour -10, giants -6, creature_giving -2, hinata2hg -2, fivecolour2hg -2, kitty -1; the rest 0 -- tracked for the mitigation phase | -- | -- |
 
 ### Audit items re-examined and found COMPLIANT (no code change) -- 2026-09-30

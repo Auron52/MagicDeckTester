@@ -294,6 +294,7 @@ add_executable(mtg-test
     test/unit/test_sac_rank_hook.cpp
     test/unit/test_provider_relocations.cpp
     test/unit/test_provider_prunes.cpp
+    test/unit/test_m2_land_drop.cpp
     test/unit/test_opponent_deck.cpp
     test/unit/test_breaching_clauses.cpp
     test/unit/test_edf_blink_target.cpp

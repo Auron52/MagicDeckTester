@@ -505,6 +505,7 @@ void GameEngine::DrawStep(GameState& state)
 void GameEngine::MainPhase(GameState& state, bool is_pre_combat)
 {
     state.phase = is_pre_combat ? Phase::PreCombatMain : Phase::PostCombatMain;
+    if (is_pre_combat) { state.StampMain1Hand(); }   // main-2 land drop: newly arrived lands only (lockstep w/ SimulateEndAndStartNextTurn)
     state.step  = Step::MainPhase;
 
     // Rad counters mill at the beginning of the PREcombat main only (see ApplyRadMill). Before the

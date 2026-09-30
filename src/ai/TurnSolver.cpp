@@ -2458,6 +2458,18 @@ static const int   s_dork_ramp     = s_dork_ramp_env ? std::atoi(s_dork_ramp_env
 // The m2 land drop is LIVE at this state: globally (MTG_MAIN2_DROP), or -- USER rule 2026-08-26
 // (MTG_M2_RECONSIDER, EngineFlags.h) -- because a STAGED land sits in hand that main-1 could not
 // have planned around. See the comment at the consider host for the full rationale.
+// MAIN-2 LAND DROP = NEWLY ARRIVED LANDS ONLY (USER 2026-09-30: "Only newly arrived lands in second
+// main would be okay"). A land already in hand when main 1 began was enumerated there, and the search
+// knows its draws, so playing it post-combat re-derives a main-1 line (the same end-of-turn state)
+// apart from ordering effects -- landfall after a main-1 cast, a fetch's shuffle after a cantrip, land
+// count during combat -- none of which the engine could express before the main-2 drop existed. What
+// main 2 genuinely adds is a land that ARRIVED since (drawn, tutored, revealed), so that is all it
+// offers. Measured: the held-land copies were 35% of all main-2 plans (units 1.41x -> 1.12x of the
+// pre-purge tree on antilife/melira). Human play is exempt -- the viewer never narrows a choice.
+static bool HeldLandBarredFromMain2(const GameState& s, const Card& c)
+{
+    return !HumanPlayActive() && s.HeldSinceMain1(c);
+}
 static bool M2DropLive(const GameState& s)
 {
     if (Main2DropEnabled()) { return true; }
@@ -4840,7 +4852,7 @@ static bool SecondMainUnproductive(const GameState& state)
     // left a CAST or a free ACTIVATION for main 2; they predate the searched main-2 land drop
     // (M2DropLive, always on since 2026-09-30), so they read "nothing to cast" as "nothing to do"
     // and skipped the phase with the turn's drop still open and a land in hand. The skip path
-    // then records a deliberate NO-LAND main 2, so a main 1 that held its land (the defer-drop
+    // then records a deliberate NO-LAND main 2, so a main 1 that held its land (the since-deleted defer-drop
     // tie order, or a plain value tie) lost the drop for the turn: Fungus overnight s4004 gi194
     // passed T1-T3 holding Forest + Utopia Mycon and never won (GT: T6). Reopening only ever ADDS
     // the legal land line back.
@@ -4853,7 +4865,8 @@ static bool SecondMainUnproductive(const GameState& state)
             {
                 // Type from the database: a hand Card's own type fields may be unset.
                 const CardDefinition* d = CardDatabase::Instance().LookupCached(c);
-                if (d != nullptr && d->card.IsLand()) { return false; }
+                if (d != nullptr && d->card.IsLand() && !HeldLandBarredFromMain2(state, c))
+                { return false; }
             }
         }
     }
@@ -38853,6 +38866,7 @@ static bool SimulateEndAndStartNextTurn(GameState& state)
     // side of the draw would mill a different set of cards in the rollout than in the real game.
     // No-op at 0 rad counters, i.e. everywhere but a deck holding Mariposa Military Base.
     ApplyRadMill(state, state.active_player_index);
+    state.StampMain1Hand();   // main-2 land drop: newly arrived lands only (lockstep w/ GameEngine::MainPhase)
     return true;
 }
 
@@ -47106,6 +47120,7 @@ static std::vector<TurnSolver::Plan> EnumeratePlansWithLandUncached(const GameSt
         for (const Card& c : ap.hand)
         {
             if (c.m_impulse_no_land) { continue; }   // Apex-exiled land: castable as a SPELL only, not enumerable as a land play
+            if (!is_pre_combat && HeldLandBarredFromMain2(state, c)) { continue; }
             const CardDefinition* front = CardDatabase::Instance().LookupCached(c);
             const CardDefinition* def = LandFaceDefOf(front);   // spell//land enumerable via its back
             if (!def) { continue; }
@@ -47130,6 +47145,7 @@ static std::vector<TurnSolver::Plan> EnumeratePlansWithLandUncached(const GameSt
         for (const Card& c : ap.hand)
         {
             if (c.m_impulse_no_land) { continue; }
+            if (!is_pre_combat && HeldLandBarredFromMain2(state, c)) { continue; }
             const CardDefinition* front = CardDatabase::Instance().LookupCached(c);
             const CardDefinition* def = LandFaceDefOf(front);   // spell//land enumerable via its back
             if (!def) { continue; }
@@ -47470,27 +47486,10 @@ static std::vector<TurnSolver::Plan> EnumeratePlansWithLandUncached(const GameSt
         }
     }
 
-    // DEFER-THE-DROP (USER 2026-08-16: "why not delay the land to main2 if we don't need it main
-    // 1?"). When the drop is STILL AVAILABLE post-combat (Main2DropEnabled) and this is the
-    // pre-combat main of a deck that actually plays a second one, holding the land is weakly
-    // dominant: a land played in main 2 is identical to the same land played in main 1 unless
-    // main 1 needed its mana -- and deferring buys the information about what main 2 wants.
-    //
-    // This is safe BY CONSTRUCTION rather than by heuristic: the flag only reorders plans that are
-    // already tied on wins_this_turn AND value, so a plan whose land actually pays for a main-1
-    // cast scores strictly higher and still wins. It is also why no colour-aware land ranker is
-    // needed here -- once the choice happens in main 2, the plan that plays the land AND casts the
-    // spell simply out-values the one that does not, and the search picks the right land itself.
-    //
-    // The motivating class (antilife gi=519, gi=367, gi=38): a ManaDork is Main2-classified, so
-    // main 1 has nothing to cast, every land ties, and the tie-break took the greedy "untapped +
-    // multicolour" pick -- a Godless Shrine over a Windswept Heath -- leaving the deck with NO
-    // green source and a Birds of Paradise it could no longer cast at all.
-    // Off-switch MTG_NO_DEFER_DROP=1 for the isolating A/B (the rule only ever fires under
-    // MTG_MAIN2_DROP, so the base engine is byte-identical either way).
-    static const bool s_no_defer_drop = EnvOn("MTG_NO_DEFER_DROP");
-    const bool defer_drop = is_pre_combat && state.uses_second_main && Main2DropEnabled()
-                         && !s_no_defer_drop;
+    // DEFER-THE-DROP (USER 2026-08-16) was DELETED 2026-09-30: it ordered the no-land plan first on a
+    // tie, assuming main 2 would play the held land. Main 2 now offers only newly arrived lands
+    // (HeldLandBarredFromMain2), so holding a land skips it for the turn, and ties (the value leaf
+    // rounds to whole turns) were then broken toward skipping: fungus s4004 gi194 held Forest T1-T3.
     const bool provider_hold = ResolveProvider(state).PreferHoldLandDrop(state, state.active_player_index);
     // "Don't play any fuel once you are going off. Just cycle everything." (USER 2026-09-05.)
     // Provider-owned; see DecisionProvider::HoldFuelWhileComboing. Resolved ONCE per enumeration
@@ -47499,7 +47498,6 @@ static std::vector<TurnSolver::Plan> EnumeratePlansWithLandUncached(const GameSt
     // and a correctness hazard if it ever became state-dependent.
     const bool hold_fuel =
         ResolveProvider(state).HoldFuelWhileComboing(state, state.active_player_index);
-    const bool hold_land = defer_drop || provider_hold;
     std::stable_sort(all.begin(), all.end(),
         [&](const TurnSolver::Plan& a, const TurnSolver::Plan& b)
         {
@@ -47538,22 +47536,6 @@ static std::vector<TurnSolver::Plan> EnumeratePlansWithLandUncached(const GameSt
                 {
                     // Provider hold (Burn banking a landfall drop) is unconditional, as before.
                     if (provider_hold) { return a_has < b_has; }
-                    // USER refinement, 2026-08-16: "defer it when you have nothing else going in
-                    // main 1 -- in that case it makes sense. Deferring it when you have main 1
-                    // plays is probably not a good idea."
-                    //
-                    // The first cut deferred whenever two plans tied on wins AND value, on the
-                    // argument that a land which pays for a main-1 cast scores strictly higher and
-                    // so still wins. Measurement refuted that: net was 0.0000 overall, but the
-                    // 4->5 bucket was ONE-SIDED, 22 games worse against 9 better -- deferring cost
-                    // turn-4 wins. Tied on `value` is NOT tied on TEMPO, so an equal-value plan
-                    // could still strand the mana. Gate on the actual condition instead: hold the
-                    // drop only when the no-land plan casts NOTHING this main phase.
-                    if (defer_drop)
-                    {
-                        const TurnSolver::Plan& noland = a_has ? b : a;
-                        if (noland.actions.empty()) { return a_has < b_has; }
-                    }
                     return a_has > b_has;
                 }
                 if (a_has && b_has)

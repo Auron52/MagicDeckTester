@@ -561,6 +561,14 @@ struct GameState
     // combat yet this turn), which every consumer treats as "assume productive".
     int                      hand_size_at_combat       = -1;
     int                      battlefield_at_combat     = -1;
+    // MAIN-1 START HAND (the main-2 land drop offers only lands NOT in it -- TurnSolver's
+    // HeldLandBarredFromMain2; distinct from the condemnation m1_hand): which deck cards (m_number 0..127)
+    // were in the active player's hand when this turn's pre-combat main began. Stamped at
+    // GameEngine::MainPhase(pre) and at the end of TurnSolver's SimulateEndAndStartNextTurn.
+    // m1start_hand_turn != turn_number => not stamped this turn (every card reads as NEW). No allocation:
+    // GameState is copied on every plan application.
+    uint64_t                 m1start_hand_mask[2]      = { 0, 0 };
+    int                      m1start_hand_turn         = -1;
     uint64_t                 game_seed             = 0;   // seed used to set up this game; used for mulligan reshuffles
     uint64_t                 search_count          = 0;   // # library SEARCHES (fetch/tutor) this game; seeds the
                                                           // deterministic mid-game shuffle (ShuffleAfterSearch).
@@ -765,6 +773,24 @@ struct GameState
     const Player& ActivePlayer() const { return players[active_player_index]; }
     Player&       Opponent()           { return players[1 - active_player_index]; }
     const Player& Opponent()     const { return players[1 - active_player_index]; }
+
+    // See m1start_hand_mask. StampMain1Hand records the active hand as main 1 begins; HeldSinceMain1 is
+    // true only for a deck card that was in that hand (tokens / unnumbered cards read as NEW).
+    void StampMain1Hand()
+    {
+        m1start_hand_mask[0] = m1start_hand_mask[1] = 0;
+        for (const Card& c : ActivePlayer().hand)
+        {
+            if (c.m_number >= 0 && c.m_number < 128)
+            { m1start_hand_mask[c.m_number >> 6] |= (1ULL << (c.m_number & 63)); }
+        }
+        m1start_hand_turn = turn_number;
+    }
+    bool HeldSinceMain1(const Card& c) const
+    {
+        if (m1start_hand_turn != turn_number || c.m_number < 0 || c.m_number >= 128) { return false; }
+        return (m1start_hand_mask[c.m_number >> 6] >> (c.m_number & 63)) & 1ULL;
+    }
 };
 
 // THE win predicate. Every "have we won?" test in BOTH worlds goes through here.
