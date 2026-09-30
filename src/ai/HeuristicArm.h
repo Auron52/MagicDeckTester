@@ -60,8 +60,6 @@ enum Slot : int
     LEAF_NOWIN_FORCE,         // MTG_LEAF_NOWIN_FORCE      force the tie-break past a provider opt-out
     M2_CAP1,                  // MTG_M2_CAP1               cap the interior m2 solve to depth 1
     M2_WAVES,                 // MTG_M2_WAVES              FSLineTail m2 loop runs the deferred wave phase
-    M2_AXES,                  // MTG_M2_AXES               m2 enumeration hosts append the sub-decision axes
-    M2_BPVARS,                // MTG_M2_BPVARS             m2 memoized host appends bp_choice variants (wave 0)
     M2_FIXPOINT,              // MTG_M2_FIXPOINT           re-solve m2 after a plan that fired a draw breakpoint
     M2_KEY_COARSE,            // MTG_M2_KEY_COARSE         interior-m2 solve memo keys on the m2 dependency set
     M2_FIX_UNFILTERED,        // MTG_M2_FIX_UNFILTERED     fixpoint kill-scan probes ALL plans, not just projected-lethal
@@ -96,7 +94,6 @@ enum Slot : int
     BP_SITE3_DEFER,           // MTG_BP_SITE3_DEFER        ...and keep it OUT OF WAVE 0 (cost only)
     BP_PARTITION_CANTRIP,     // MTG_BP_PARTITION_CANTRIP  THE PARTITION SHAPE for plain cantrips
     HINATA_ALL_MAIN2,         // MTG_HINATA_ALL_MAIN2      every cast is a SECOND-MAIN cast
-    MAIN2_DROP,               // MTG_MAIN2_DROP            the land drop is offered POST-combat too
     BP_NODE,                  // MTG_BP_NODE               plain-cantrip breakpoint = REAL SEARCH NODE
     HINATA_RANGE,             // MTG_HINATA_RANGE          condemnation RANGES: engine/find tiers' latest
     CANTRIP_ORDER,            // MTG_CANTRIP_ORDER         canonical cantrip order bans permutation chains
@@ -190,7 +187,6 @@ enum Slot : int
     // the BROKEN arm, kept to reproduce the finding, not a neutral one.
     BP_CONDEMN_SAME_TURN,     // MTG_BP_CONDEMN_SAME_TURN  a breakpoint snapshot describes ONE turn
     SNOW_CONDEMN,             // MTG_SNOW_CONDEMN        Snow opts into breakpoint condemnation
-    BP_EMPTY_ARM,             // MTG_BP_EMPTY_ARM        "done with this phase" as a scored arm
     BP_CONDEMN_NEW_OPTION,    // MTG_BP_CONDEMN_NEW_OPTION  spare when the site drew a payable card
     BP_CONDEMN_PLAN_CAST,     // MTG_BP_CONDEMN_PLAN_CAST  a plan that cast NOTHING declined nothing
     BP_ABILITY_DELTA,         // MTG_BP_ABILITY_DELTA    site 9 opens on a NEWLY activatable ability
@@ -217,7 +213,6 @@ enum Slot : int
     ETB_WATCHER_GATES,        // MTG_ETB_WATCHER_GATES     per-deck presence gates on the two ETB-cascade scans whose param test is INSIDE the walk (default ON)
     LAZY_LEAF,                // MTG_LAZY_LEAF             probe each pass LEAFLESS first; an in-window win needs no leaf at all (default OFF)
     BP_HAND_ENTRY,            // MTG_BP_HAND_ENTRY         a card entering hand OUTSIDE a cast apply arms site 10 too (default OFF)
-    BP_WAVEDROP_HOSTED,       // MTG_BP_WAVEDROP_HOSTED    the node's wave stand-down applies only where the node really HOSTS (default OFF)
     BP_ACQ_CLAUSE,            // MTG_BP_ACQ_CLAUSE         site 3's ACQUISITION family (tutor-to-hand/-top, Soulfire, Garth) is fanned out (default ON)
     BP_DIG_AXIS_FANOUT,       // MTG_BP_DIG_AXIS_FANOUT    a searched-dig-axis plan (dig_choice==1) gets the site-4 fan-out (default ON)
     BP_NEW_ONLY,              // MTG_BP_NEW_ONLY           a breakpoint emits ONLY continuations that use a card that arrived there (default ON since 2026-09-22)
@@ -345,8 +340,6 @@ inline const char* Name(int slot)
         "MTG_LEAF_NOWIN_FORCE",
         "MTG_M2_CAP1",
         "MTG_M2_WAVES",
-        "MTG_M2_AXES",
-        "MTG_M2_BPVARS",
         "MTG_M2_FIXPOINT",
         "MTG_M2_KEY_COARSE",
         "MTG_M2_FIX_UNFILTERED",
@@ -381,7 +374,6 @@ inline const char* Name(int slot)
         "MTG_BP_SITE3_DEFER",
         "MTG_BP_PARTITION_CANTRIP",
         "MTG_HINATA_ALL_MAIN2",
-        "MTG_MAIN2_DROP",
         "MTG_BP_NODE",
         "MTG_HINATA_RANGE",
         "MTG_CANTRIP_ORDER",
@@ -468,7 +460,6 @@ inline const char* Name(int slot)
         "MTG_SNOW_ACT_ORDER",
         "MTG_BP_CONDEMN_SAME_TURN",
         "MTG_SNOW_CONDEMN",
-        "MTG_BP_EMPTY_ARM",
         "MTG_BP_CONDEMN_NEW_OPTION",
         "MTG_BP_CONDEMN_PLAN_CAST",
         "MTG_BP_ABILITY_DELTA",
@@ -495,7 +486,6 @@ inline const char* Name(int slot)
         "MTG_ETB_WATCHER_GATES",
         "MTG_LAZY_LEAF",
         "MTG_BP_HAND_ENTRY",
-        "MTG_BP_WAVEDROP_HOSTED",
         "MTG_BP_ACQ_CLAUSE",
         "MTG_BP_DIG_AXIS_FANOUT",
         "MTG_BP_NEW_ONLY",

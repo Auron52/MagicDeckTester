@@ -590,6 +590,15 @@ struct Action
     // realised no win). 0 = not recorded (legacy record / lever off): the replay keeps its own.
     int rec_mana_casts  = 0;
     int rec_pump_target = 0;
+    // Which MAIN-LEVEL breakpoint of the apply produced this TOP-LEVEL breakpoint record (0 = the
+    // first). The executor replays each recorded segment at the matching main-level breakpoint.
+    // Before 2026-09-30 the whole top-level list replayed at the FIRST one, which is right only
+    // when every record came from it: a plan whose first continuation is EMPTY (the EMPTY arm, or a
+    // default continuation that casts nothing) and whose later breakpoint does act replayed that
+    // later continuation too early (treasure_hunt s2002 gi208: the recorded Frostboil + third Hunt
+    // ran after the FIRST Hunt, the base plan's second Hunt then could not pay, T4 kill -> T5).
+    // Nested records (breakpoint_casts) keep 0 -- they replay under their own recorded cast.
+    int rec_bp_ord = 0;
 };
 
 // Finds the optimal set of spells to cast in one main phase by exhaustive
@@ -941,6 +950,27 @@ public:
         // kind consumes.
         int ponder_choice = -1;
 
+        // OPTIONAL ETB COUNTER PAYMENT (Emiel the Blessed's "you may pay {G/W}"): -1 (default) ==
+        // the provider's answer (DecisionProvider::PaysOptionalEtbCounter); 0 = decline at every
+        // such trigger in this plan, 1 = pay whenever affordable. The axis emits the variant
+        // opposite the provider's default, so the search -- not a rule -- decides whether the
+        // counters are worth the mana this turn. One decision per plan (all triggers alike).
+        int etbcounter_choice = -1;
+
+        // END-OF-MAIN-1 SWEEP (Grove drip under a Remedy; Prevent Damage pain taps under a gain
+        // engine): -1 (default) == the rule (sweep unless a castable card could want the lands in
+        // main 2); 0 = never sweep; 1 = sweep even if main 2 might want the mana. The axis emits the
+        // 1 variant, so "damage now vs mana for main 2" is the SEARCH's call, not the rule's.
+        int sweep_choice = -1;
+
+        // LAND'S EDGE FIRE COUNT (end-of-main discard of lands for damage): -1 (default) == the
+        // provider's LandsEdgeFireCount; k >= 0 = discard min(k, lands then in hand). Consumed at
+        // the SAME end-of-main point the provider count used (after breakpoint continuations and
+        // digs have drawn), in ApplyPlanDirect and the executor alike -- so it is a pin, not an
+        // appended action, which would fire before those draws. Replaces the executor-only
+        // heuristic-vs-fire-all rollout trial that the search never saw.
+        int le_fire_choice = -1;
+
         // CLEANUP DISCARD (hand over its size limit at end of turn): which candidate of the
         // provider's ranked CleanupDiscardCandidates this turn's first shed takes. -1 (default) ==
         // the provider's top pick, byte-identical to no branch.
@@ -1113,13 +1143,40 @@ public:
         bool empty() const { return actions.empty(); }
     };
 
-    // Returns the highest-value feasible plan for one main phase.
-    // Uses a static evaluation function (no lookahead).
-    static Plan Solve(const GameState& state, bool is_pre_combat);
+    // ============================================================================================
+    // THE GREEDY PERMIT -- USER HARD RULE 2026-09-30 (docs/design/no-greedy-in-search-window.md):
+    // "We need to make sure all of them are purged ... the code that calls that way should be
+    // deleted ... I don't want to risk this coming back ever again." NO greedy pick anywhere inside
+    // the search window, main 1 or main 2; heuristics live ONLY in the providers and may ONLY prune.
+    //
+    // Solve() -- the greedy one-phase picker -- cannot be called without a GreedyPermit, and a permit
+    // names one of a CLOSED list of sites, each of which is OUTSIDE every search window:
+    //   HorizonLeaf -- a playout turn BEYOND the search horizon (remaining depth <= 0);
+    //   D0Runner    -- the depth-0 executor (an engine with no search at all: lookahead depth 0).
+    // The constructor ABORTS the process if the claim is false (depth left), so a regression dies in
+    // the first smoke run instead of silently shaping play. The static_assert below locks the list:
+    // adding a site means editing it, next to this note. DO NOT add a "diagnostic" or "cheap" site --
+    // a cost problem is answered by provider pruning or budget, never by a greedy substitute.
+    // ============================================================================================
+    enum class GreedySite : int { HorizonLeaf = 0, D0Runner = 1, kCount = 2 };
+    class GreedyPermit
+    {
+    public:
+        // `remaining_depth`: the search depth still available where the greedy pick is made
+        // (HorizonLeaf: the playout's remaining depth; D0Runner: the engine's lookahead depth).
+        GreedyPermit(GreedySite site, int remaining_depth);
+    };
+    static_assert(static_cast<int>(GreedySite::kCount) == 2,
+                  "USER HARD RULE 2026-09-30: no new greedy site inside the search window -- "
+                  "see docs/design/no-greedy-in-search-window.md before touching this list");
 
-    // The uncached greedy solve. Solve() is a thin wrapper that (under MTG_SOLVE_MEMO, search
-    // interiors only) memoizes this per decision -- see namespace solvememo in TurnSolver.cpp.
-    static Plan SolveUncached(const GameState& state, bool is_pre_combat);
+    // Returns the highest-value feasible plan for one main phase by a static evaluation (no
+    // lookahead) -- GREEDY: only with a permit (above).
+    static Plan Solve(const GameState& state, bool is_pre_combat, const GreedyPermit& permit);
+
+    // The uncached greedy solve behind Solve() (which memoizes it per decision under MTG_SOLVE_MEMO
+    // -- see namespace solvememo in TurnSolver.cpp). Same permit.
+    static Plan SolveUncached(const GameState& state, bool is_pre_combat, const GreedyPermit& permit);
 
     // THE SEARCH'S QUERY INTO THE COMBO OFF RULE TABLE (MTG_EDF_CO_ROOT / MTG_EDF_CO_LOOK).
     // Index of a candidate `DecisionProvider::ComboOffPossible` says wins this turn, or -1.

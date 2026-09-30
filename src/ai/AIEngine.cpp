@@ -375,29 +375,10 @@ static const bool  s_eval_rows_honest = EnvOn("MTG_EVAL_ROWS_HONEST");
 // (fixed: s_discard_reline). With both fixed it is monotone-better: held-out overnight 39 games
 // faster / 0 slower. See docs/design/searched-cleanup-discard.md.
 static const bool  s_searched_discard = EnvOn("MTG_SEARCHED_DISCARD", true);
-// MTG_REFUTED_FOLLOW -- ADOPTED DEFAULT ON 2026-09-03 (USER: "We should turn it on if it
-// improves performance (and has no regressions)"); `=0` restores per-turn re-search. USER
-// design, same day: "Once we have searched fully to the end of max_turn we should stop...
-// choosing a line that seems the best and following it out". When a top-level search covers
-// the FULL remaining horizon with zero truncation events (TurnSolver::TruncEvents() delta) and
-// finds no win, the game is PROVEN unwinnable -- later turns' searches explore a subset of the
-// refuted space, so re-proving the doom every turn is pure waste (historically the slowest
-// games are no-wins: the five-hour TH game was 100% no-win leaf lookups). The engine commits
-// the WHOLE best-graded lost line, follows it out, and answers uncovered phases with the
-// greedy plan; rollouts untouched. Outcome-identical by construction AND measured: 0 outcome
-// moves in 2000 paired games (th 1000 / hinata 500 / mirrorwing 500, seed 5500001), identical
-// averages; unwon games are <4% of games but were 19-46% of deck wall (indicative contended
-// wall: hinata -19% / th -33% / mw -46%). Unwon-game digests move (a followed line differs in
-// actions from a re-searched one) => GT rebaselined at adoption. Also bounds DEEP (d8 b0)
-// instrument runs: refutation fires as early as the horizon allows.
-// MTG_REFUTED_FOLLOW -- DEFAULT OFF since 2026-09-17 (=1 hatch). This was the LAST real-play greedy
-// DECISION at depth > 0: once the search reports refuted_full the executor stopped searching and played
-// TurnSolver::Solve() every remaining turn, on the premise that the game was PROVEN unwinnable. With
-// breakpoint continuations EMPTY rather than a greedy tail that premise no longer holds -- a refutation
-// is partly an artifact of the search declining to look. Turning it off is EXACTLY neutral on both tiers
-// (same SUM, same faster/slower, same win set, 64 cells' play changed) for 0.4% more work units, and it
-// takes "REAL main-phase decisions" to NONE on all 20 decks (MTG_M2_YIELD_STATS).
-static const bool  s_refuted_follow    = EnvOn("MTG_REFUTED_FOLLOW");
+// REFUTED-FOLLOW -- DELETED 2026-09-30 (USER HARD RULE: no greedy decision anywhere in the search
+// window, and the code that decides that way is deleted, not levered -- see
+// docs/design/no-greedy-in-search-window.md). It stopped searching once a no-win was "proven" and
+// played TurnSolver::Solve() for the rest of the game; it had been default OFF since 2026-09-17.
 // MTG_BP_RESOLVE_LAND (default ON, =0 hatch; adopted 2026-09-17) -- a RE-SOLVED breakpoint continuation's
 // LAND DROP. The plan-carried branch plays `extra.land_to_play` (see the TryPlaySpecificLand call
 // under bp_searched_here); the re-solve branch underneath never did, because it used to call the
@@ -412,18 +393,6 @@ static bool BpResolveLandEnabled()
     static const bool on = EnvOn("MTG_BP_RESOLVE_LAND", true);
     return on;
 }
-// MTG_REFUTED_LAND (default ON, =0 hatch; adopted 2026-09-17) -- the refuted-follow greedy plan's LAND DROP.
-// At depth > 0 the land drop is FOLDED INTO the search (fold_land), so the executor plays exactly
-// plan.land_to_play and nothing else. TurnSolver::Solve() never sets land_decided, so a
-// refuted-follow turn plays NO LAND AT ALL, every turn, for the rest of the game -- measured on
-// hinata regression d3 s3003 gi=111, which sits on an unplayed Mountain for three turns and then
-// misses a cost by exactly one mana. Mirror what depth 0 does for the same greedy plan: take the
-// drop with the executor's own greedy chooser BEFORE solving, so the plan can spend it.
-static bool RefutedLandEnabled()
-{
-    static const bool on = EnvOn("MTG_REFUTED_LAND", true);
-    return on;
-}
 // Drop the committed line when the searched discard deviates from the heuristic pick (the line was
 // searched assuming the heuristic shed). MTG_DISCARD_RELINE=0 keeps replaying the stale line.
 static const bool  s_discard_reline    = EnvOn("MTG_DISCARD_RELINE", true);
@@ -434,31 +403,6 @@ static const bool  s_discard_reline    = EnvOn("MTG_DISCARD_RELINE", true);
 // measured value, hinata +0.005..0.010 / antilife +0.007..0.008 on train seeds, is accepted as
 // the price of removing the class). =0 is the exact legacy hatch (probe + reline restored).
 static const bool  s_discard_node      = EnvOn("MTG_DISCARD_NODE", true);
-// MTG_SEARCHED_VIAL: the Aether Vial upkeep charge is a real BRANCH (charge / hold), not a rule.
-// Holding at the current count keeps this turn's free deploy of an MV-k creature; charging trades it
-// for an MV-(k+1) deploy next turn. The heuristic (WantVialCharge: hold while a creature of the
-// current MV is in hand, else climb) is a good default and an excellent tie-break, but it cannot see
-// which side actually wins the game -- so it is now the DEFAULT + TIE-BREAK of a searched decision,
-// exactly like the cleanup discard. MTG_SEARCHED_VIAL=0 restores the pure heuristic.
-// The trial resumes at ResumeAt::UpkeepTail (the charge is mid-upkeep -- resuming at Draw would
-// skip this turn's upkeep tokens); vials AFTER this one in the same loop are charged on the
-// heuristic first, or the trial would drop their counters entirely.
-// DEFAULT FLIPPED TO OFF 2026-08-30 alongside MTG_VIAL_AXIS (see EngineFlags.h for the measurement
-// and the user direction). This probe was already dead on the shipped path -- the axis owned the
-// decision and the design doc's follow-up marks the probe for deletion -- so leaving it default-ON
-// while the axis went default-OFF would have silently REVIVED a retired out-of-band probe as the
-// shipping decider, which is not what was measured. The measured configuration is both OFF: the
-// pure hand-aware heuristic.
-static const bool  s_searched_vial     = EnvOn("MTG_SEARCHED_VIAL", false);
-// MTG_DIVERGENCE_LOG=<file>: DIAGNOSTIC (diagnosis only, no play change). On the search-driven path,
-// at each real pre-combat main decision, ALSO compute the greedy d0 plan (TurnSolver::Solve) for the
-// SAME untouched state and append one JSONL record {seed,turn,diverge,search_land,search,greedy,feat[]}.
-// A state where the search and greedy plans differ is one the greedy rollout policy would misplay --
-// the raw material for classifying the d0/rollout gap as rule-shaped (state-determined) vs lookahead-
-// bound (draw-dependent). The game CONTINUES on the search plan (state is untouched here). Features are
-// the non-clairvoyant ExtractMidGameFeatures for clustering. Run SINGLE-THREADED for readable output.
-// Inert unless set. See docs/design/dragonstorm-d0-divergence-digest.md.
-static const char* s_divergence_log = std::getenv("MTG_DIVERGENCE_LOG");
 
 // Positions dropped because their label search was cut short (see EarliestWinReport::truncated).
 // A bounded run that silently emits fewer rows reads as "covered everything" when it did not, so
@@ -766,7 +710,6 @@ void AIEngine::HandleMulligan(GameState& state, int max_turns)
 
     // New game: drop any committed full-depth line from a previous game.
     m_committed_line.clear();
-    m_refuted_follow = false;
     m_discard_choice_pin = -1;
     m_vial_choice_pin    = -1;
     m_atk_release_pin    = -1;
@@ -2044,20 +1987,6 @@ void AIEngine::BottomCards(GameState& state, int count, int max_turns)
 // TakeTurn
 // ============================================================
 
-// Charge every Vial at or after `from_index` on the pure heuristic. Used to finish the upkeep loop a
-// searched charge trial interrupted: the trial resumes at UpkeepTail, which is PAST the loop, so
-// without this the later Vials silently lose the counter they would really have gained.
-static void ChargeRemainingVialsHeuristic(GameState& s, int from_index)
-{
-    for (int i = from_index; i < static_cast<int>(s.battlefield.size()); ++i)
-    {
-        Permanent& p = s.battlefield[i];
-        if (p.controller_index != s.active_player_index) { continue; }
-        const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
-        if (!d || !d->params.upkeep_adds_charge) { continue; }
-        if (ResolveProvider(s).WantVialCharge(s, p)) { ++p.charge_counters; }
-    }
-}
 
 bool AIEngine::DecideVialCharge(const GameState& state, const Permanent& vial)
 {
@@ -2090,46 +2019,9 @@ bool AIEngine::DecideVialCharge(const GameState& state, const Permanent& vial)
         m_vial_choice_pin = -1;
         return pinned;
     }
-    if (VialAxisEnabled()) { return heuristic; }   // axis owns the decision; the probe stays retired
-
-    // SEARCHED charge (mirrors the searched cleanup discard): roll the game out under BOTH answers
-    // and take the one that wins soonest, heuristic first so it owns every tie.
-    //   * Only with lookahead (depth > 0); at d0 this is inert => byte-identical greedy.
-    //   * NEVER inside a rollout (m_in_rollout): the trial's PlayOutFrom reaches this same upkeep,
-    //     so a nested searched pass would blow up exponentially. Rollout upkeeps use the heuristic.
-    if (!s_searched_vial || !LookaheadBottoming() || m_in_rollout) { return heuristic; }
-
-    // The Permanent is a reference INTO state.battlefield (GameEngine's upkeep loop hands us the
-    // live element), so its index is recoverable -- and needed, because the trial is a deep copy.
-    int vi = -1;
-    for (int i = 0; i < static_cast<int>(state.battlefield.size()); ++i)
-    { if (&state.battlefield[i] == &vial) { vi = i; break; } }
-    if (vi < 0) { return heuristic; }   // not a live battlefield element -> nothing to search
-
-    int win[2] = { 0, 0 };
-    const bool order[2] = { heuristic, !heuristic };   // heuristic FIRST: ties go to it
-    for (int k = 0; k < 2; ++k)
-    {
-        GameState trial = state;
-        if (order[k]) { ++trial.battlefield[vi].charge_counters; }
-        ChargeRemainingVialsHeuristic(trial, vi + 1);
-        win[k] = RolloutWinTurnFrom(std::move(trial), m_max_turns, GameEngine::ResumeAt::UpkeepTail);
-    }
-    static const bool s_vial_trace = EnvOn("MTG_VIAL_TRACE");
-    if (s_vial_trace)
-    {
-        std::cerr << "[vial_trace turn=" << state.turn_number << " counters=" << vial.charge_counters
-                  << " heur=" << (heuristic ? "charge" : "hold")
-                  << " win(heur)=" << win[0] << " win(alt)=" << win[1] << "]\n";
-    }
-    if (win[1] < win[0])
-    {
-        // DEVIATION from the heuristic: every plan in the committed line was searched (and this
-        // trial was rolled out) assuming the heuristic charge, so the line is now stale. Same
-        // reasoning as s_discard_reline -- drop it and let next turn re-search what we created.
-        if (s_discard_reline) { m_committed_line.clear(); }
-        return order[1];
-    }
+    // The out-of-band two-arm rollout probe (MTG_SEARCHED_VIAL, default off since 2026-08-30) is
+    // DELETED (USER HARD RULE 2026-09-30): an oracle replacing search judgment. The decision is the
+    // provider's WantVialCharge, or the searched axis when MTG_VIAL_AXIS opts in (pin above).
     return heuristic;
 }
 
@@ -2233,6 +2125,7 @@ bool AIEngine::TrySecondMainStrandedKill(GameState& state)
 bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
                         const std::function<void(GameState&)>& resolve_stack)
 {
+    m_le_fire_pin = -1;   // a phase whose plan pins nothing fires the provider's count
     // UNBUDGETED-PLAY LATCH (EngineFlags.h). THE one frame that holds the real play budget, so it
     // is the only honest place to decide "is this decision unbudgeted". Everything the latch arms
     // (today: the leaf table's no-win half) is dead code whenever m_budget_ms > 0, which is what
@@ -2314,7 +2207,7 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
     // Discard the stale line and take the caller's ONE extra pass (GameEngine calls TakeTurn a
     // second time on `true`): a fresh full-depth solve on the realised board, which can cast the
     // same card at a payable X or hold it. Search only (depth > 0, not a rollout, no external
-    // chooser). Same reline shape as MTG_DISCARD_RELINE / MTG_LE_RELINE.
+    // chooser). Same reline shape as MTG_DISCARD_RELINE (and the deleted MTG_LE_RELINE: Land's Edge is now a plan axis).
     static const bool s_drop_replan = EnvOn("MTG_EXEC_DROP_REPLAN");
     m_real_drop_this_pass = false;
     auto replan_after_drop = [&]() -> bool
@@ -3081,9 +2974,8 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
                   << (is_pre_combat_main ? " pre-combat main" : " post-combat main") << "\n";
         if (s_fd_trace)
         {
-            std::fprintf(stderr, "[fd] hand-back T%d pre=%d inherited committed_line=%zu refuted_follow=%d\n",
-                         state.turn_number, is_pre_combat_main ? 1 : 0, m_committed_line.size(),
-                         m_refuted_follow ? 1 : 0);
+            std::fprintf(stderr, "[fd] hand-back T%d pre=%d inherited committed_line=%zu\n",
+                         state.turn_number, is_pre_combat_main ? 1 : 0, m_committed_line.size());
         }
     }
 
@@ -3262,11 +3154,7 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
                 // line is computed once at a pre-combat main when exhausted; each phase
                 // then pops its plan. No non-convergence accounting yet (committed_win
                 // left unset).
-                // Refuted-follow: the game is proven unwinnable (full-coverage no-win, below), so
-                // skip the full search entirely -- the else-branch fallback plays the greedy plan.
-                // Never in a rollout: the PlayOut shares this engine and must search normally.
-                if (is_pre_combat_main && m_committed_line.empty()
-                    && !(s_refuted_follow && m_refuted_follow && !m_in_rollout))
+                if (is_pre_combat_main && m_committed_line.empty())
                 {
                     // m_shared_tt is non-null only during the bottoming loop, where
                     // the shared table lets sibling FullSearchLine calls reuse each
@@ -3319,11 +3207,6 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
                     // Per-decision reset for the fd-oracle's leaf-estimate diagnostic (no-op unless
                     // MTG_FD_ORACLE, which is the only thing that writes it).
                     if (s_fd_oracle) { TurnSolver::ResetLeafEstimate(); }
-                    // Refuted-follow precondition: a zero before/after delta means nothing was
-                    // truncated anywhere beneath this decision (budget skips, beams, wave skips
-                    // all count) -- required to read its no-win as full-coverage proof.
-                    const unsigned long long rf_trunc_before =
-                        s_refuted_follow ? TurnSolver::TruncEvents() : 0;
                     // Per-deck search-leaf fidelity (profile `search_leaf_depth`; -1 = engine
                     // default => byte-identical). Scoped to this decision; nested rollouts on this
                     // thread inherit it, which is the point -- the leaf IS the rollout.
@@ -3429,27 +3312,15 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
                     const bool verified_win =
                         !s_fd_always_research
                         && line.win_turn <= state.turn_number + searched_depth - 1;
-                    // FULL-COVERAGE REFUTATION (MTG_REFUTED_FOLLOW): no win exists within the
-                    // game cap, the committed pass covered every remaining turn (the recursion
-                    // hits the turn cap before the depth runs out, so leaves are terminal states,
-                    // not estimates), and nothing anywhere was truncated. Every later turn's
-                    // search explores a subset of this space: stop searching, keep the WHOLE
-                    // best-graded lost line and follow it out.
-                    const bool refuted_full =
-                        s_refuted_follow && !m_in_rollout
-                        && line.win_turn > m_max_turns
-                        && state.turn_number + searched_depth - 1 >= m_max_turns
-                        && TurnSolver::TruncEvents() == rf_trunc_before;
-                    if (refuted_full) { m_refuted_follow = true; }
                     if (s_fd_trace)
                     {
-                        std::fprintf(stderr, "[fd] T%d line win=%d searched_depth=%d verified=%d refuted_full=%d phases=%zu\n",
+                        std::fprintf(stderr, "[fd] T%d line win=%d searched_depth=%d verified=%d phases=%zu\n",
                                      state.turn_number, line.win_turn, searched_depth, verified_win ? 1 : 0,
-                                     refuted_full ? 1 : 0, line.phases.size());
+                                     line.phases.size());
                         for (const TurnSolver::PhasePlan& pp : line.phases)
                         { std::fprintf(stderr, "[fd]   phase pre=%d %s\n", pp.is_pre_combat ? 1 : 0, FdPlanText(pp.plan).c_str()); }
                     }
-                    if (!verified_win && !refuted_full && !line.phases.empty())
+                    if (!verified_win && !line.phases.empty())
                     {
                         // Keep the current turn only: its pre-combat phase plus any
                         // immediate second main (everything before the next pre-combat).
@@ -3490,30 +3361,6 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
                     // next turn; once a win enters the horizon the verified line is
                     // committed as usual. This plan carries no recorded breakpoint, so a
                     // draw engine in it re-solves (below).
-                    // Refuted-follow: the game is proven unwinnable, so the full-lookahead
-                    // fallback would re-prove the doom at full price -- play the greedy plan
-                    // instead (the follow-out policy for phases the committed line no longer
-                    // covers, e.g. after a re-line).
-                    if (s_refuted_follow && m_refuted_follow && !m_in_rollout)
-                    {
-                        // Counted as a REAL main-phase greedy decision at this depth
-                        // (MTG_M2_YIELD_STATS): this site had no counter, so the executor's
-                        // "main-phase decisions: NONE" line never covered it -- and a FALSE
-                        // refutation (the 2026-09-16 empty-node bug) plays the rest of the
-                        // game through exactly this branch.
-                        execgreedy::Record(m_lookahead_depth, m_in_rollout);
-                        // The drop first (MTG_REFUTED_LAND), exactly as the depth-0 route does, so
-                        // the greedy plan below is solved on a board that HAS the land.
-                        if (RefutedLandEnabled() && is_pre_combat_main
-                            && state.ActivePlayer().lands_played_this_turn
-                               < state.ActivePlayer().LandDropsAvailable())
-                        { TryPlayLand(state); }
-                        plan = TurnSolver::Solve(state, is_pre_combat_main);
-                        if (s_fd_trace)
-                        { std::fprintf(stderr, "[fd] T%d pre=%d GREEDY (refuted-follow) %s\n", state.turn_number,
-                                       is_pre_combat_main ? 1 : 0, FdPlanText(plan).c_str()); }
-                    }
-                    else
                     {
                     if (s_fd_trace)
                     { std::fprintf(stderr, "[fd] T%d pre=%d FALLBACK lookahead\n", state.turn_number, is_pre_combat_main ? 1 : 0); }
@@ -3598,62 +3445,9 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
             // the one the scored line simulated. Write-when->=0; m2 plans never carry the field.
             if (plan.atk_dork_release >= 0) { m_atk_release_pin = plan.atk_dork_release; }
 
-            // Divergence log (MTG_DIVERGENCE_LOG): on the search-driven path, compare the search's
-            // committed plan to what greedy d0 would do at this SAME untouched state (diagnosis only;
-            // the game continues on `plan`). See s_divergence_log / dragonstorm-d0-divergence-digest.md.
-            if (s_divergence_log && !m_in_rollout && is_pre_combat_main)
-            {
-                const TurnSolver::Plan greedy = TurnSolver::Solve(state, is_pre_combat_main);
-                auto casts_of = [](const TurnSolver::Plan& p) {
-                    std::vector<std::string> v;
-                    for (const Action& a : p.actions)
-                    {
-                        const char* k = a.kind == Action::Kind::ActivateVial       ? "vial:"
-                                      : a.kind == Action::Kind::CastFromGraveyard  ? "retrace:"
-                                      : a.kind == Action::Kind::DiscardToLandsEdge ? "LE:"
-                                      : "";
-                        std::string t = std::string(k) + a.card_name;
-                        if (!a.tutor_target.empty()) { t += ">" + a.tutor_target; }
-                        if (a.chosen_x > 0)          { t += "@X" + std::to_string(a.chosen_x); }
-                        v.push_back(t);
-                    }
-                    return v;
-                };
-                std::vector<std::string> sc = casts_of(plan), gc = casts_of(greedy);
-                std::vector<std::string> scs = sc, gcs = gc;
-                std::sort(scs.begin(), scs.end()); std::sort(gcs.begin(), gcs.end());
-                const bool diverge = (scs != gcs);
-                auto join = [](const std::vector<std::string>& v) {
-                    std::string s;
-                    for (size_t i = 0; i < v.size(); ++i) { if (i) { s += ", "; } s += v[i]; }
-                    return s.empty() ? std::string("(idle)") : s;
-                };
-                const std::vector<int> feat = ExtractMidGameFeatures(state, MidGamePlanSummary{});
-                static std::mutex s_dv_mtx;
-                std::lock_guard<std::mutex> lk(s_dv_mtx);
-                static std::ofstream dv_out(s_divergence_log, std::ios::app);
-                static bool dv_header = false;
-                if (dv_out.good())
-                {
-                    if (!dv_header)
-                    {
-                        dv_out << "# featnames:";
-                        for (int i = 0; i < static_cast<int>(MidGameFeature::Count); ++i)
-                        { dv_out << (i ? "," : " ") << MidGameFeatureName(static_cast<MidGameFeature>(i)); }
-                        dv_out << "\n";
-                        dv_header = true;
-                    }
-                    dv_out << "{\"seed\":" << state.game_seed
-                           << ",\"turn\":" << state.turn_number
-                           << ",\"diverge\":" << (diverge ? 1 : 0)
-                           << ",\"search_land\":\"" << (plan.land_decided ? plan.land_to_play : std::string())
-                           << "\",\"search\":\"" << join(sc) << "\""
-                           << ",\"greedy\":\"" << join(gc) << "\",\"feat\":[";
-                    for (size_t i = 0; i < feat.size(); ++i) { dv_out << (i ? "," : "") << feat[i]; }
-                    dv_out << "]}\n";
-                    dv_out.flush();
-                }
-            }
+            // (Divergence log MTG_DIVERGENCE_LOG -- DELETED 2026-09-30: it ran a greedy Solve() beside
+            // every searched decision; USER HARD RULE, no greedy call inside the search window, and no
+            // "diagnostic" exemption either. See docs/design/no-greedy-in-search-window.md.)
 
             // Non-convergence detection: only meaningful for real-game pre-combat
             // decisions (not the rollout's own searches, not second mains).
@@ -3802,7 +3596,8 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
             // (rollouts beyond the horizon / beyond what budget allows); a greedy DECISION here
             // would be a defect. Counted so the question is settled by measurement.
             execgreedy::Record(m_lookahead_depth, m_in_rollout);
-            plan = TurnSolver::Solve(state, is_pre_combat_main);
+            plan = TurnSolver::Solve(state, is_pre_combat_main,
+                                     TurnSolver::GreedyPermit(TurnSolver::GreedySite::D0Runner, m_lookahead_depth));
         }
     }
 
@@ -3883,6 +3678,7 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
     // Same for the Saga chapter I pick, so the realised free cast is the one that was scored.
     ScriptedSagaCh1 _ssc1_exec(plan.saga_ch1_choice);
     ScriptedReorder _sr_exec(plan.ponder_choice);   // executor/rollout lockstep for the Ponder disposition
+    ScriptedEtbCounter _sec_exec(plan.etbcounter_choice);   // lockstep: optional ETB counter payment
     ScriptedTutor _stut_exec(plan.tutor_choice);    // executor/rollout lockstep for the searched tutor
                                                     // pick (index resolved at the true state); -1 inert
     ScriptedSacLand _ssac_exec(plan.sac_pins);      // executor/rollout lockstep for the searched
@@ -4563,7 +4359,10 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
             // depth > 0 REQUIRED: at d0 there IS no search (the d0 runner is the greedy
             // configuration by design), and SolveWithLookahead(d0) is not byte-equal to
             // Solve() -- an unscoped first version moved a d0 GT cell (melira gi382).
-            if (!m_in_rollout && m_lookahead_depth > 0)
+            // NOT gated on m_in_rollout (USER HARD RULE 2026-09-30): an engine playing a scoring
+            // game (London-bottoming playouts) still has a search window at m_lookahead_depth, and
+            // a greedy re-solve inside it is the forbidden in-window greedy pick.
+            if (m_lookahead_depth > 0)
             {
                 if (execgreedy::Enabled())
                 { execgreedy::g_bp_searched.fetch_add(1, std::memory_order_relaxed); }
@@ -4580,7 +4379,8 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
             else
             {
                 execgreedy::Record(-1, m_in_rollout);
-                extra = TurnSolver::Solve(state, is_pre_combat_main);
+                extra = TurnSolver::Solve(state, is_pre_combat_main,
+                                     TurnSolver::GreedyPermit(TurnSolver::GreedySite::D0Runner, m_lookahead_depth));
             }
             // The re-solve's own LAND DROP (MTG_BP_RESOLVE_LAND) -- same rule, same karoo guard as
             // the plan-carried branch above, and played BEFORE the continuation's casts so its mana
@@ -4764,7 +4564,19 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
     // pass (which re-solves from the post-draw state with the remaining mana), so the
     // real game executes the same draw-breakpoint line the rollout searches.
     bool staged_break = false;
-    bool bp_replayed  = false;  // commit-the-line: recorded breakpoint replayed once
+    bool bp_replayed  = false;  // commit-the-line: recorded breakpoint replayed (first segment)
+    // Per-segment replay (Action::rec_bp_ord): the i-th main-level breakpoint replays the records
+    // stamped i. When every record is stamped 0 -- the common case -- the first trigger replays
+    // the whole list and the later ones replay nothing, exactly the historical behaviour.
+    int  rec_seg_next = 0;
+    auto replay_segment = [&]()
+    {
+        const int ord = rec_seg_next++;
+        std::vector<Action> seg;
+        for (const Action& r : plan.breakpoint_actions) { if (r.rec_bp_ord == ord) { seg.push_back(r); } }
+        if (!seg.empty()) { replay_recorded(seg); }
+        bp_replayed = true;
+    };
     // PARTITION truncation (MTG_EQUIP_DRAW_BP_INLINE) -- executor twin of ApplyPlanDirect's
     // bp_truncate. Once a site-6 continuation has run at the cast that drew, the rest of this
     // plan's casts belong to that continuation's section and the rollout did NOT apply them here;
@@ -4945,7 +4757,7 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
             if (s_full_depth && (is_draw_engine(a.card_name) || put_armed))
             {
                 if (fd_plan_committed)
-                { if (!bp_replayed) { replay_recorded(plan.breakpoint_actions); bp_replayed = true; } }
+                { replay_segment(); }
                 else
                 {
                     rdb_site = CardDatabase::Instance().Lookup(a.card_name);
@@ -5117,7 +4929,7 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
             if (s_full_depth && (is_draw_engine(a.card_name) || put_armed))
             {
                 if (fd_plan_committed)
-                { if (!bp_replayed) { replay_recorded(plan.breakpoint_actions); bp_replayed = true; } }
+                { replay_segment(); }
                 else
                 {
                     rdb_site = CardDatabase::Instance().Lookup(a.card_name);
@@ -5204,7 +5016,7 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
         if (s_full_depth && equip_bp_truncates(a.card_name))
         {
             if (fd_plan_committed)
-            { if (!bp_replayed) { replay_recorded(plan.breakpoint_actions); bp_replayed = true; } }
+            { replay_segment(); }
             else
             {
                 rdb_site = CardDatabase::Instance().Lookup(a.card_name);
@@ -5276,8 +5088,11 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
     // Auto-fire safe alt payloads (Invigorate / Skyshroud) deterministically once a Remedy is
     // live -> free face damage. Mirrors the rollout's FireSafeAltPayloads pass (so the realised
     // turn matches the searched line without any recording). Re-scan after each cast because it
-    // mutates the hand. No-op for decks without alt-cost cards.
-    if (!staged_break)
+    // mutates the hand. No-op for decks without alt-cost cards. SUPPRESSED under
+    // MTG_UNPRUNE=altpayload exactly like the rollout's twin (ApplyPlanDirect): there the safe alt
+    // is a searched cast, and auto-firing it here too was a lockstep hole (the realised game fired
+    // what the scored line had left to the search).
+    if (!staged_break && !DecisionUnpruned(UnprunedGate::AltPayload))
     {
         for (;;)
         {
@@ -5504,8 +5319,9 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
                         // Same searched re-solve as the main breakpoint site above (the pod
                         // trailing-pass twin); see the comment there. No greedy hatch.
                         execgreedy::RecordBpCause(plan.bp_choice >= 0);
-                        // depth > 0 REQUIRED -- see the main site's note (d0 is greedy by design).
-                        if (!m_in_rollout && m_lookahead_depth > 0)
+                        // depth > 0 REQUIRED -- see the main site's note (d0 is greedy by design);
+                        // never gated on m_in_rollout (USER HARD RULE 2026-09-30).
+                        if (m_lookahead_depth > 0)
                         {
                             if (execgreedy::Enabled())
                             { execgreedy::g_bp_searched.fetch_add(1, std::memory_order_relaxed); }
@@ -5519,7 +5335,8 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
                         else
                         {
                             execgreedy::Record(-1, m_in_rollout);
-                            extra = TurnSolver::Solve(state, is_pre_combat_main);
+                            extra = TurnSolver::Solve(state, is_pre_combat_main,
+                                     TurnSolver::GreedyPermit(TurnSolver::GreedySite::D0Runner, m_lookahead_depth));
                         }
                         // The re-solve's LAND DROP -- twin of the main site (MTG_BP_RESOLVE_LAND).
                         if (BpResolveLandEnabled() && extra.land_decided
@@ -5846,6 +5663,51 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
             { NoteActDrop(UntapCreatureDeadReason(state, state.active_player_index, a.sac_source_id),
                           a.card_name.str().c_str(), state.turn_number, a.cost.ManaValue()); }
         }
+        else if (a.kind == Action::Kind::AnimateLand)
+        {
+            // Mutavault (executor twin of ApplyPlanDirect's branch): precondition first so a
+            // stranded activation never pays; addressed by card number.
+            for (Permanent& p : state.battlefield)
+            {
+                if (p.controller_index != state.active_player_index) { continue; }
+                if (p.card.m_number != a.sac_source_id) { continue; }
+                if (p.tapped || p.is_animated) { break; }
+                ManaPool avail = AvailableManaPool(state);
+                const int num = p.card.m_number;
+                if (TapForCost(state, a.cost, avail, /*for_creature=*/false))
+                {
+                    for (Permanent& q : state.battlefield)
+                    { if (q.card.m_number == num) { q.is_animated = true; break; } }
+                    if (m_logger) { m_logger->LogAbility(num, bf_name(num), "animate"); }
+                }
+                break;
+            }
+        }
+        else if (a.kind == Action::Kind::TapForTokenPay)
+        {
+            // Sliver Hive / Basri (executor twin): {T} the source BEFORE paying (it must not fund its
+            // own activation), untap on an unpayable cost, then create the token; exert as the
+            // search's branch does.
+            const CardDefinition* td = CardDatabase::Instance().Lookup(a.card_name);
+            for (std::size_t pi = 0; pi < state.battlefield.size(); ++pi)
+            {
+                Permanent& p = state.battlefield[pi];
+                if (p.controller_index != state.active_player_index) { continue; }
+                if (p.card.m_number != a.sac_source_id) { continue; }
+                if (p.tapped || td == nullptr) { break; }
+                p.tapped = true;
+                ManaPool avail = AvailableManaPool(state);
+                if (!TapForCost(state, a.cost, avail, /*for_creature=*/true))
+                { state.battlefield[pi].tapped = false; break; }
+                const int num = a.sac_source_id;
+                CreateToken(state, state.active_player_index,
+                            td->params.tap_token_power, td->params.tap_token_toughness,
+                            td->params.tap_token_subtypes);
+                if (td->params.tap_token_exerts) { state.battlefield[pi].skip_next_untap = true; }
+                if (m_logger) { m_logger->LogAbility(num, bf_name(num), "create token"); }
+                break;
+            }
+        }
         else if (a.kind == Action::Kind::AttachAllEquipment)
         {
             // Balan attach-all (executor mirror -- same shared ApplyAttachAllEquipment).
@@ -6121,9 +5983,14 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
     // Treasure Hunt casts no draw engine from plan.actions, so nothing triggered
     // replay_recorded -- replay the recorded script here so the realised turn performs the
     // exact cycles/sacrifices and dug-Treasure-Hunt line the search committed.
-    if (!staged_break && fd_plan_committed && !bp_replayed && !plan.breakpoint_actions.empty())
+    // End-of-main catch-all: every recorded segment no main-level breakpoint trigger reached
+    // (all of them when none fired -- the historical case -- else only the later ordinals).
+    if (!staged_break && fd_plan_committed && !plan.breakpoint_actions.empty())
     {
-        replay_recorded(plan.breakpoint_actions);
+        std::vector<Action> rest;
+        for (const Action& r : plan.breakpoint_actions)
+        { if (r.rec_bp_ord >= rec_seg_next) { rest.push_back(r); } }
+        if (!rest.empty()) { replay_recorded(rest); }
         bp_replayed = true;
     }
 
@@ -6133,9 +6000,14 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
     // searched/committed line. After the cast loop so a spell that needed Grove's mana tapped it
     // first. Inert without a Remedy active + an untapped tap_opponent_lifegain land (every deck but
     // Anti-Lifegain).
-    if (is_pre_combat_main) { TapDripLandsIfUseful(state, state.active_player_index); }
-    // Prevent Damage pain sweep -- lockstep twin of ApplyPlanDirect's (armed only).
-    if (is_pre_combat_main) { TapPainSourcesIfUseful(state, state.active_player_index); }
+    // The plan's searched sweep choice (Plan::sweep_choice) -- lockstep with ApplyPlanDirect's pin.
+    {
+        ScriptedSweep _ssw_exec(plan.sweep_choice);
+        m_le_fire_pin = plan.le_fire_choice;   // Land's Edge fires after TakeTurn returns
+        if (is_pre_combat_main) { TapDripLandsIfUseful(state, state.active_player_index); }
+        // Prevent Damage pain sweep -- lockstep twin of ApplyPlanDirect's (armed only).
+        if (is_pre_combat_main) { TapPainSourcesIfUseful(state, state.active_player_index); }
+    }
 
     // SAME-MAIN GO-OFF: the realised-game half of ApplyPlanDirect's matching call (lockstep --
     // the search scored this plan WITH the go-off, so the executor must realise it too). Same
@@ -6147,18 +6019,17 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
         if (!had_blink) { EdfAutoGoOffAfterCasts(state, state.active_player_index); }
     }
 
-    // Animate lands and activate tap-token abilities with mana remaining after spells.
-    // Only in pre-combat main so any resulting creatures can attack this turn.
-    if (is_pre_combat_main)
-    {
-        // Reactive dig only on the non-committed paths (depth 0, or the develop-when-stuck
-        // fallback that carries no recorded script); committed turns already replayed their
-        // recorded digs above, so running it again would dig a second, off-line time.
-        if (!fd_plan_committed) { UseSurplusLandAbilities(state, resolve_stack); }
-        ManaPool remaining = AvailableManaPool(state);
-        AnimateLandsShared(state, &remaining);
-        ActivateTapTokensShared(state, &remaining);
-    }
+    // Reactive dig only on the non-committed paths (depth 0, or the develop-when-stuck fallback
+    // that carries no recorded script); committed turns already replayed their recorded digs
+    // above, so running it again would dig a second, off-line time. MAIN 1 ONLY -- deliberately
+    // NOT widened with ApplyPlanDirect's dig loop (D7, purge step 14): a searched main-2 dig is
+    // recorded in its plan and REPLAYED, while a main 2 the committed line left empty reaches here
+    // uncommitted and a heuristic dig would realise a cycle the search never modelled (fluctuator
+    // d3 s1001 gi87: a T3 main-2 Canyon Slough cycle spent a Drannith Stinger ping the T4 kill
+    // needed, T4 -> T5 at every budget).
+    if (is_pre_combat_main && !fd_plan_committed) { UseSurplusLandAbilities(state, resolve_stack); }
+    // (AnimateLandsShared / ActivateTapTokensShared deleted 2026-09-30: Mutavault and the token
+    // taps are searched plan actions, realised in exec_trailing_activations below.)
 
     // Restore any unplayed staged cards (still flagged m_is_staged in hand) back to
     // staged_cards, removing them from hand. Cards that were cast were already removed
@@ -7349,92 +7220,15 @@ void AIEngine::ActivateLandsEdge(GameState& state, bool is_pre_combat)
     }
     if (lands_in_hand == 0) { return; }
 
-    // Base firing count (shared with the search's ApplyPlanDirect so both model the
-    // same Land's Edge damage): fire all for lethal; else only the excess over the max
-    // hand size; else hold. See LandsEdgeHeuristicFireCount.
+    // The provider's count, or the count the executed plan's search pinned (Plan::le_fire_choice,
+    // lockstep with ApplyPlanDirect's end-of-main fire). The executor-only heuristic-vs-fire-all
+    // rollout trial that lived here is DELETED (USER HARD RULE 2026-09-30, no out-of-band pick
+    // inside the search window): the count is a searched plan axis, so the committed line was
+    // scored WITH it and there is no stale line to clear (the old MTG_LE_RELINE fix).
     int fire_count = ResolveProvider(state).LandsEdgeFireCount(state, rate);
-
-    // For depth > 0 outside a rollout: compare heuristic amount vs. firing all lands.
-    // The heuristic handles "fire for lethal" and "fire excess to prevent waste";
-    // the search handles the ambiguous "hold" case where early activation might win faster.
-    if (m_lookahead_depth > 0 && !m_in_rollout && fire_count < lands_in_hand)
-    {
-        // WHERE the trial rollouts resume. Land's Edge fires at the END of a main phase, so a trial
-        // captured here is mid-turn: the rest of THIS turn (combat, main 2, end step, and the
-        // CLEANUP DISCARD that sheds a flooded hand) still has to happen before the next turn
-        // begins. Resuming at NewTurn -- the default, and what this call passed until 2026-08-24 --
-        // skips all of it, which is exactly what RolloutWinTurnFrom's own comment forbids a
-        // mid-turn caller from doing: "the rest of that turn is skipped and the label describes a
-        // state the real game cannot reach". The two arms are not even skipping the same thing --
-        // firing empties the hand, so it is the HOLD arm that keeps, unshed, lands the real
-        // cleanup would have discarded.
-        //
-        // HONEST SCOPE: this is a latent contract fix, not the fix for the bug below. Swept over
-        // every Treasure Hunt cell at d0/d3/d5 on seeds 1001/2002/3003/4004/5005/6006/7007 --
-        // 10,725 games, the only deck in the repo with a Land's Edge -- it is BYTE-IDENTICAL to the
-        // old skip: 0 of 18 cells moved. It is inert only because TH's post-main-1 remainder
-        // happens not to change these particular projections. MTG_LE_TRIAL_NEWTURN=1 restores the
-        // old skip (A/B). See docs/design/th-colourless-first-s3003-gi301.md §7.3-7.4.
-        static const bool s_newturn = EnvOn("MTG_LE_TRIAL_NEWTURN");
-        const GameEngine::ResumeAt from =
-            s_newturn       ? GameEngine::ResumeAt::NewTurn
-            : is_pre_combat ? GameEngine::ResumeAt::Combat    // main 1 -> combat, main 2, end, cleanup
-                            : GameEngine::ResumeAt::End;      // main 2 -> end, cleanup
-
-        const int heur_count = fire_count;                    // pre-override, for the trace below
-
-        GameState trial_heuristic = state;
-        DoActivateLandsEdge(trial_heuristic, fire_count, rate, /*log=*/false);
-        int w_heuristic = RolloutWinTurnFrom(std::move(trial_heuristic), m_max_turns, from);
-
-        GameState trial_all = state;
-        DoActivateLandsEdge(trial_all, lands_in_hand, rate, /*log=*/false);
-        int w_all = RolloutWinTurnFrom(std::move(trial_all), m_max_turns, from);
-
-        if (w_all < w_heuristic)
-        {
-            // DEVIATION from the heuristic: burning every land leaves a board the committed line
-            // was never searched for. That line came out of a search whose inline executor
-            // (TurnSolver::ApplyPlanDirect) auto-fires LandsEdgeHeuristicFireCount and NEVER this
-            // fire-all override -- so every plan still queued in it was chosen on the assumption
-            // that the lands we are about to throw away are still in hand. It holds at minimum the
-            // rest of THIS turn (the second main), and when the search verified a win inside its
-            // horizon it holds the whole multi-turn line to that win (see the !verified_win
-            // truncation in TakeTurn) -- which is exactly the case that bites, because a verified
-            // win is precisely when the plan is most specific about the lands. Meanwhile the trial
-            // that justified firing rolled out on an EMPTY line (RolloutWinTurnFrom clears it) and
-            // so re-searched the board it actually created. Replaying the stale line is the
-            // train/serve split s_discard_reline and the searched vial already fix at their own
-            // deviation sites; Land's Edge is the third such site and was missed.
-            //
-            // Untreated it is not a small error. TH s3304 gi301: the trial ranks fire-all a turn-4
-            // win over hold's turn-5, and it is RIGHT about its own line -- re-searched, firing
-            // wins on 4. The realised game replayed the pre-fire line instead, which spends a land
-            // drop it no longer has and then cannot pay for the Treasure Hunt it planned
-            // ("[bp-pay] -> FAILED" at T5), and won on 6. No depth (to 8) or budget (to 60000)
-            // recovered it, because more search only builds a longer stale line.
-            // See docs/design/th-colourless-first-s3003-gi301.md.
-            static const bool s_le_reline = EnvOn("MTG_LE_RELINE", true);
-            if (s_le_reline) { m_committed_line.clear(); }
-            fire_count = lands_in_hand;
-        }
-
-        // MTG_LE_TRIAL: one line per fire-count decision -- the two trial projections and what was
-        // chosen. This is the instrument that settled the gi301 root cause: the pair `w_heur=5
-        // w_all=4` against a realised turn 6 is what shows the trial is right about a line the game
-        // will not play, which no amount of reading the call graph had made visible. Off by
-        // default, and the whole block is inside the depth>0 comparison, so it costs nothing.
-        static const bool s_le_trial = EnvOn("MTG_LE_TRIAL");
-        if (s_le_trial)
-        {
-            std::fprintf(stderr,
-                "[le-trial] t%d main%d opp_life=%d rate=%d lands_in_hand=%d heur=%d"
-                " w_heur=%d w_all=%d -> fire=%d\n",
-                state.turn_number, is_pre_combat ? 1 : 2, state.Opponent().life, rate,
-                lands_in_hand, heur_count, w_heuristic, w_all, fire_count);
-        }
-    }
-
+    if (m_le_fire_pin >= 0) { fire_count = m_le_fire_pin; }
+    m_le_fire_pin = -1;
+    (void)is_pre_combat;
     DoActivateLandsEdge(state, fire_count, rate);
 }
 

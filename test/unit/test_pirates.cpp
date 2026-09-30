@@ -391,7 +391,7 @@ TEST_CASE("Daring Buccaneer: the enumerator never offers the unaffordable two-Bu
         for (const TurnSolver::Plan& p : TurnSolver::EnumerateMainPlans(s, /*is_pre_combat=*/true))
         { max_casts = std::max(max_casts, BuccaneerCasts(p)); }
         CHECK(max_casts == 1);
-        CHECK(BuccaneerCasts(TurnSolver::Solve(s, true)) <= 1);
+        CHECK(BuccaneerCasts(TurnSolver::Solve(s, true, TurnSolver::GreedyPermit(TurnSolver::GreedySite::HorizonLeaf, 0))) <= 1);
     }
     {
         // Four Mountains pay both.

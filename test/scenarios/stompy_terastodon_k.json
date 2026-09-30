@@ -22,5 +22,5 @@
   "budget_ms": 0,
   "expect_win_turn": 7,
   "log_out": "logs/play/stompy_terastodon_k.json",
-  "_comment": "Terastodon ETB destroy-K is a SEARCHED axis (MTG_TERA_K=0 restores the v1 gap and this fails at win_turn=8). Lone Terastodon off 8 Forests, opponent at 20: bare 9 power needs three swings (T8); one 3/3 Elephant makes 12 -- two swings, T7. The USER's 2026-08-20 K-set offers exactly the smallest K per lethality window (here K=1 for the kill-the-turn-after-next window; K=0 is excluded because no other real threat can drop). The v1 engine wired K through chosen_x but never EMITTED K>0 -- this board reproduced that (T8, zero Elephants ever made)."
+  "_comment": "Terastodon ETB destroy-K is a SEARCHED axis (the MTG_TERA_K lever that restored the v1 gap -- failing this at win_turn=8 -- is deleted; K is DecisionProvider::EtbDestroyK). Lone Terastodon off 8 Forests, opponent at 20: bare 9 power needs three swings (T8); one 3/3 Elephant makes 12 -- two swings, T7. The USER's 2026-08-20 K-set offers exactly the smallest K per lethality window (here K=1 for the kill-the-turn-after-next window; K=0 is excluded because no other real threat can drop). The v1 engine wired K through chosen_x but never EMITTED K>0 -- this board reproduced that (T8, zero Elephants ever made)."
 }

@@ -26,6 +26,7 @@
 #include "cards/CardDatabase.h"
 #include "core/GameState.h"
 #include "core/HeuristicDefaults.h"
+#include "core/SpellEffects.h"
 
 #include <algorithm>
 #include <string>
@@ -211,4 +212,37 @@ TEST_CASE("EDF go-off count survives a saturated-refund tie, in EITHER battlefie
         REQUIRE(counts.size() >= 2);
         CHECK(counts.back() > 3);
     }
+}
+
+// ---- Emiel's optional {G/W} counter is a PROVIDER decision (USER 2026-09-30) ----------------------
+// "Emiel's counter, by the way, should almost never be paid." The engine used to pay it whenever
+// the float could, inside every search, rollout and real game. Now FireCreatureEnterWatchers asks
+// DecisionProvider::PaysOptionalEtbCounter: EldraziFlickerProvider declines, the base default pays.
+// Both arms run the SAME board with the SAME affordable float, so the only thing that can separate
+// them is the provider's answer -- the control arm must pay, or the decline arm proves nothing.
+namespace
+{
+int EmielCounterAfterEnter(const DecisionProvider* prov)
+{
+    GameState s;
+    s.active_player_index = 0;
+    s.m_provider = prov;
+    s.deck_has_etb_counter_payer = true;
+    Put(s, "Emiel the Blessed", 0, 100);
+    Put(s, "Eldrazi Displacer", 0, 103);
+    s.floating_mana.Add(Color::Green, 1);          // {G/W} is affordable from the float
+    FireCreatureEnterWatchers(s, 0, 1);            // the Displacer (index 1) enters
+    int n = 0;
+    for (const Counter& c : s.battlefield[1].counters)
+    { if (c.type == Counter::Type::PlusOnePlusOne) { n += c.count; } }
+    return n;
+}
+}   // namespace
+
+TEST_CASE("EDF: Emiel's optional {G/W} +1/+1 counter is declined by the deck's provider")
+{
+    EnsureCardsLoaded();
+    EldraziFlickerProvider edf;
+    CHECK(EmielCounterAfterEnter(&edf) == 0);
+    CHECK(EmielCounterAfterEnter(&DefaultProvider()) == 1);   // control: the base default pays
 }

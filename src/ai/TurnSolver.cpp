@@ -352,7 +352,7 @@ static std::atomic<long long> g_dedup_dup_firstvar{0};  // first reacher was its
 //              applies open one breakpoint it is a duplicate BY CONSTRUCTION.
 //   chain   -- MTG_BP_CHAIN_SLOT: the j-th continuation that opens a FURTHER breakpoint. When none
 //              does, BpChainCandIndex returns -1 and the slot resolves to EMPTY = the base plan.
-//   empty   -- MTG_BP_EMPTY_ARM (default off).
+//   empty   -- the EMPTY arm (unconditional since 2026-09-30).
 enum class BpArm { Base = 0, Rank, Unif, Chain, Empty, kCount };
 static std::atomic<long long> g_dedup_arm_all[static_cast<int>(BpArm::kCount)];
 static std::atomic<long long> g_dedup_arm_dup[static_cast<int>(BpArm::kCount)];
@@ -408,6 +408,19 @@ static std::atomic<long long> g_w0_chain_miss_nbp{0};    // ci < W but rank ci s
 // MTG_BP_W0_FSW_VERIFY: did the NOBP arm's claim hold? `bad` > 0 refutes the identity outright.
 static std::atomic<long long> g_w0_nobp_verify_ok{0};
 static std::atomic<long long> g_w0_nobp_verify_bad{0};
+// MTG_ROLLOUT_STATS firing counters for the NO-DROP axis path (2026-09-30): enumerations reaching it
+// per main, and the axis variants it appended there. The m1 half is the newly-opened route; a zero
+// here would mean the step that opened it can be byte-identical because nothing ran.
+static std::atomic<long long> g_nodrop_enum[2]{{0}, {0}};      // [0]=m2, [1]=m1
+static std::atomic<long long> g_nodrop_axis_vars[2]{{0}, {0}};
+// MTG_ROLLOUT_STATS firing counters for the 2026-09-30 plan axes (etb-counter, end-of-main-1 sweep):
+// variants emitted. A zero on a deck that should reach the axis means the step cannot have moved it.
+static std::atomic<long long> g_axis_etbcounter_vars{0};
+static std::atomic<long long> g_axis_sweep_vars{0};
+// Axis variants (bp_choice < 0) skipped by the post-apply state dedup -- proves PlanIsAxisVariant's
+// widening of the skip fires (a byte-identical A/B is not evidence on its own).
+static std::atomic<long long> g_axis_dup_skips{0};
+static std::atomic<long long> g_axis_le_vars{0};   // Land's Edge fire-count variants emitted
 // CHAIN-SLOT OUTCOME (see g_bp_chain_ci_last). The three cells want three different answers:
 //   covered = the scan landed INSIDE wave 0's own window (ci < W), so rank ci already scored that
 //             exact continuation -> a pure duplicate, losslessly skippable.
@@ -1501,6 +1514,14 @@ namespace
                     }
                 }
             }
+            std::cerr << "[rollout-stats] plan_axes etbcounter_variants=" << g_axis_etbcounter_vars.load()
+                      << " sweep_variants=" << g_axis_sweep_vars.load()
+                      << " axis_dup_skips=" << g_axis_dup_skips.load()
+                      << " le_variants=" << g_axis_le_vars.load() << "\n";
+            std::cerr << "[rollout-stats] nodrop_axes m1: enums=" << g_nodrop_enum[1].load()
+                      << " axis_variants=" << g_nodrop_axis_vars[1].load()
+                      << " | m2: enums=" << g_nodrop_enum[0].load()
+                      << " axis_variants=" << g_nodrop_axis_vars[0].load() << "\n";
             if (g_w0_nobp_skipped.load() > 0)
             {
                 std::cerr << "[rollout-stats] w0_nobp skipped=" << g_w0_nobp_skipped.load()
@@ -2901,6 +2922,15 @@ static thread_local int g_rollout_nest = 0;
 // them -- enable per-run (generation drivers; Melira probes) and flip the default only with a
 // rebaseline.
 static thread_local SearchBudget* g_greedy_charge_budget = nullptr;
+// Nonzero while the GREEDY picker (Solve/SolveUncached -- d0 runner, horizon leaf; both outside
+// every search window, GreedyPermit-checked) is enumerating. A searched-only plan dimension (the
+// replicate count fan) is NOT offered to it: greedy would pick among the variants by the ordering
+// hint, which measured worse than resolution's line-hold max (slivers d0 +36 turns / 1000 games).
+static thread_local int g_greedy_solve_nest = 0;
+// Plan::le_fire_choice for the apply in progress (-1 = the provider's LandsEdgeFireCount). Scoped
+// by ApplyPlanDirect; read at its end-of-main Land's Edge fire.
+static thread_local int g_le_fire_pin = -1;
+
 static bool GreedyChargeEnabled(const GameState& state)
 {
     // Per-JOB overridable (heurarm slot SOLVE_CHARGE): the env static alone makes a process ONE
@@ -3610,14 +3640,8 @@ static bool BpEnumBuildKey(const GameState& state, bool is_pre_combat,
                            TranspositionTable::Key* out);
 static BpEnumEntry* BpEnumEntryFor(const GameState& state, bool is_pre_combat,
                                    const TranspositionTable::Key* pre_key = nullptr);
-// MTG_BP_EMPTY_ARM -- emit the EMPTY continuation as a wave-0 arm at every breakpoint index.
-// See the emission site in the wave-0 fan-out for the full argument. DEFAULT OFF: it changes play
-// wherever a breakpoint fires, so it is a GT-moving change that has to be measured, not assumed.
-static bool BpEmptyArmEnabled()
-{
-    static const bool on = EnvOn("MTG_BP_EMPTY_ARM");
-    return heurarm::Flag(heurarm::BP_EMPTY_ARM, on);
-}
+// (MTG_BP_EMPTY_ARM deleted 2026-09-30: the EMPTY continuation is always a wave-0 arm at every
+// breakpoint index -- see the emission site in the wave-0 fan-out.)
 
 // MTG_BP_CANDS_ORDER -- VALUE-ORDER the breakpoint continuation list before anything indexes it.
 //
@@ -5591,7 +5615,8 @@ static TurnSolver::Plan SolveSecondMainInSearch(const GameState& state, int dept
         time_it ? std::chrono::steady_clock::now() : std::chrono::steady_clock::time_point{};
     const TurnSolver::Plan p =
         greedy_here
-            ? TurnSolver::Solve(state, false)
+            ? TurnSolver::Solve(state, false,
+                                TurnSolver::GreedyPermit(TurnSolver::GreedySite::HorizonLeaf, depth))
             : SearchedSecondMainMemoized(state, eff_depth, max_turns, budget, second_main, tt);
     if (time_it)
     {
@@ -13615,11 +13640,10 @@ static bool PonderAxisPartial()
 }
 // ORDER axis: branch on the disposition (which card ends up on TOP, plus shuffle) rather than only
 // keep-vs-shuffle. Ponder draws immediately, so the top card is the one received now.
-static bool PonderOrderAxis()
-{
-    static const bool on = EnvOn("MTG_PONDER_ORDER");
-    return on;
-}
+// UNCONDITIONAL since 2026-09-30 (MTG_PONDER_ORDER deleted; USER HARD RULE,
+// docs/design/no-greedy-in-search-window.md): with keep-vs-shuffle alone, WHICH looked-at card is
+// drawn right now was the resolution heuristic's pick, unbranched, inside the search window.
+static bool PonderOrderAxis() { return true; }
 static std::size_t PonderOrderWidth()
 {
     static const std::size_t w = []() -> std::size_t
@@ -13730,34 +13754,13 @@ static std::size_t LackeyAxisWidth()
     return w;
 }
 
-// MTG_M2_AXES (DEFAULT OFF -> byte-identical; heurarm slot for per-job pooling): the SECOND-MAIN
-// enumeration hosts append the same post-dedup sub-decision axes the m1 host has always had
-// (AppendSubdecisionAxes: ponder / tutor / etb-dig / sac / discard / vial / tap-reserve / dig;
-// the land-riding axes self-neutralize on landless m2 plans). Without it every axis is
-// M1-HOST-ONLY -- EnumeratePlansM2Memoized and the no-drop early return the interior m2 solve
-// reaches both returned before the fan-out, so an m2 cast of Ponder or a tutor resolved by
-// heuristic while the IDENTICAL m1 cast was searched. That capability asymmetry is the measured
-// root cause of hinata's systematic all-Main2 loss (28 worse / 4 better, gi=88 keep-vs-shuffle
-// flip; docs/design/searched-second-main-unconditional.md, ROOT CAUSE FOUND). Lossless class:
-// strictly ADDS scored variants, deletes none -- but it multiplies m2 plans, so the default
-// ships OFF until the cost/quality loop has run.
-static bool M2AxesEnabled()
-{
-    static const bool env_on = EnvOn("MTG_M2_AXES");
-    return heurarm::Flag(heurarm::M2_AXES, env_on);
-}
+// (MTG_M2_AXES deleted 2026-09-30, USER HARD RULE docs/design/no-greedy-in-search-window.md: the
+// second-main hosts ALWAYS append the m1 host's sub-decision axes. An m2 Ponder/tutor resolved by
+// heuristic while the identical m1 cast was searched is a greedy pick inside the search window.)
 
-// MTG_M2_BPVARS (DEFAULT OFF -> byte-identical; heurarm slot): EnumerateM2PlansBody also appends
-// the wave-0 searched-breakpoint variants (Plan::bp_choice) the m1 host has always had. The
-// second m1-only capability the 2026-09-06 residual dig surfaced: EnumeratePlansM2Memoized's
-// plans carry no bp_choice at all, so a NON-trailing continuation of an m2 plan is searched only
-// where BP_NODE hosting covers it. Note the m2-with-drop-live route and the no-drop early return
-// both already call AppendBreakpointVariants -- only the memoized host was bare.
-static bool M2BpVarsEnabled()
-{
-    static const bool env_on = EnvOn("MTG_M2_BPVARS");
-    return heurarm::Flag(heurarm::M2_BPVARS, env_on);
-}
+// (MTG_M2_BPVARS deleted 2026-09-30, USER HARD RULE docs/design/no-greedy-in-search-window.md: the
+// memoized m2 host ALWAYS appends the wave-0 bp_choice variants the m1 host has, so a non-trailing
+// continuation of an m2 plan is branched rather than left to the resolver's front candidate.)
 
 // MTG_M2_FIXPOINT: reader shared with the executor -- see EngineFlags.h (the lockstep rule).
 // The search-side hosts are FSLineTail's m2 loop (recursion; committed lines then carry
@@ -14108,21 +14111,15 @@ static bool BpNodeHostsThisTurn(const GameState& state)
     return true;
 }
 
-// MTG_BP_WAVEDROP_HOSTED -- gate the node's wave stand-down on the node actually hosting this turn.
-// Default OFF for the A/B only; the doctrine answer is ON, because a red measurement here is a
-// BUDGET problem to remedy, never authorization to keep an unchallengeable default
-// (USER 2026-09-05 / 09-17; docs/design/greedy-continuation-deletion-route.md).
-static bool BpWaveDropHostedOnly()
-{
-    static const bool on = EnvOn("MTG_BP_WAVEDROP_HOSTED");
-    return heurarm::Flag(heurarm::BP_WAVEDROP_HOSTED, on);
-}
+// (MTG_BP_WAVEDROP_HOSTED deleted 2026-09-30, USER HARD RULE docs/design/no-greedy-in-search-window.md:
+// the stand-down is ALWAYS gated on the node really hosting. The ungated form left site 3 with no
+// variants, no waves and no node on every non-hosting turn -- an unchallengeable canon.)
 
 // The node's wave stand-down AS IT APPLIES AT `state` -- BpNodeWaveDrop where the node hosts,
 // nothing where it does not. See BpNodeHostsThisTurn.
 static int BpNodeWaveDropAt(const GameState& state)
 {
-    if (BpWaveDropHostedOnly() && !BpNodeHostsThisTurn(state)) { return 0; }
+    if (!BpNodeHostsThisTurn(state)) { return 0; }
     return BpNodeWaveDrop();
 }
 
@@ -14313,6 +14310,9 @@ static uint64_t BpCandFingerprint(const TurnSolver::Plan& p, int blind = kBlindN
     fold(static_cast<uint64_t>(p.freshmode_choice + 2) * 43 + static_cast<uint64_t>(p.lackey_choice + 2));
     fold(static_cast<uint64_t>(p.ponder_choice + 2) * 47 + static_cast<uint64_t>(p.discard_choice + 2));
     fold(static_cast<uint64_t>(p.saga_target_choice + 2) * 59);
+    fold(static_cast<uint64_t>(p.etbcounter_choice + 2) * 67);
+    fold(static_cast<uint64_t>(p.sweep_choice + 2) * 71);
+    fold(static_cast<uint64_t>(p.le_fire_choice + 2) * 73);
     fold(static_cast<uint64_t>(p.saga_ch1_choice + 3) * 61);
     fold(static_cast<uint64_t>(p.vial_charge_choice + 2) * 53
          + static_cast<uint64_t>(p.searched_order ? 1 : 0));
@@ -14586,12 +14586,27 @@ static bool IsApplyEmptyPlan(const TurnSolver::Plan& p)
         && p.scry_choice == -1 && p.etbdig_choice == -1 && p.tutor_choice == -1 && p.rad_mode == -1
         && p.sac_pins.empty() && p.tapmode_choice == 0 && p.freshmode_choice == 0
         && p.lackey_choice == -1 && p.ponder_choice == -1 && p.discard_choice == -1
+        && p.etbcounter_choice == -1 && p.sweep_choice == -1 && p.le_fire_choice == -1
         && p.vial_charge_choice == -1 && p.saga_target_choice == -1
         && p.fling_victim_choice == -1 && p.tectonic_mode_choice == -1
         && p.tectonic_keep_choice == -1
         && p.saga_ch1_choice == -1
         && !p.searched_order && !p.vial_after_casts && p.atk_dork_release == -1
         && p.bp_choice == -1 && p.bp_at == 0 && !p.bp_all && !p.bp_wave0;
+}
+// A SUB-DECISION AXIS VARIANT: a plan that differs from a sibling base plan only by a pinned
+// resolution choice (breakpoint continuation, scry/ponder/tutor/dig pick, discard, Emiel counter,
+// end-of-main-1 sweep, ...). The post-apply state dedup may SKIP such a plan when an earlier
+// sibling already reached its state: a node's value is a function of its state, so the rollout
+// would be pure recomputation. This is how the purge's new axes stay exact-duplicate-free -- a pin
+// that turned out inert (a sweep with nothing kept back, a counter nobody could pay) lands on its
+// base plan's state and costs one apply, not a rollout (docs/design/no-greedy-in-search-window.md,
+// cost ledger). Ordinary plans still only RECORD (MTG_FS_PRE_STATE_SKIP widens that).
+static bool PlanIsAxisVariant(const TurnSolver::Plan& p)
+{
+    return p.bp_choice >= 0 || p.scry_choice >= 0 || p.etbdig_choice >= 0 || p.tutor_choice >= 0
+        || p.lackey_choice >= 0 || p.ponder_choice >= 0 || p.discard_choice >= 0
+        || p.etbcounter_choice >= 0 || p.sweep_choice >= 0 || p.le_fire_choice >= 0;
 }
 // Companion channel (filled by the k=0 apply's in-scope enumeration, node site 3 only): the
 // cands list contains an apply-empty entry, so the host's explicit EMPTY arm (kBpEmptyChoice)
@@ -15331,8 +15346,7 @@ static int BpWave0SiteMask(const GameState& state)
     // is not a re-ordering -- the wave walker is excluded too (see BpWaveSiteMask).
     // Under MTG_BP_NODE_D56 the same argument covers sites 5 and 6: whatever the node hosts, the
     // rank machinery must stand down for, or the two cover the same continuations twice.
-    // ...and only where the node really hosts (BpNodeWaveDropAt / MTG_BP_WAVEDROP_HOSTED): with the
-    // gate off this is the old unconditional drop, byte-identical.
+    // ...and only where the node really hosts (BpNodeWaveDropAt).
     if (BpNodeEnabled()) { out &= ~BpNodeWaveDropAt(state); }
     return out;
 }
@@ -15340,8 +15354,7 @@ static int BpWave0SiteMask(const GameState& state)
 // The site mask the DEFERRED WAVE machinery walks (BpWaveWalker slots + nested discovery). The
 // full BpSiteMask, minus the sites the node lever owns AT THIS STATE: such a slot would start the
 // node-hosted plans at rank 0 and re-search continuations the node already searched in full --
-// but only where the node is really hosting. This is the mask the site-3 fix acts on
-// (BpNodeWaveDropAt / MTG_BP_WAVEDROP_HOSTED); with the gate off it is the old unconditional drop.
+// but only where the node is really hosting (BpNodeWaveDropAt).
 static int BpWaveSiteMask(const GameState& state)
 {
     const int m = BpSiteMask();
@@ -19099,7 +19112,9 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
                 {
                     if (!bp.card.IsLand()) { any_nonland_permanent = true; break; }
                 }
-                if (HumanPlayActive() && def.params.allow_self_target && any_nonland_permanent)
+                const bool offer_self = HumanPlayActive()
+                    || ResolveProvider(state).OffersTuckRemovalCast(state, def, /*self_target=*/true);
+                if (offer_self && def.params.allow_self_target && any_nonland_permanent)
                 { /* fall through: emit */ }
                 else { continue; }
             }
@@ -19329,7 +19344,9 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
                 // has near-zero clock value and the cast only burns mana. Human play keeps the
                 // cast (the rollout resolution branch below stays live for replay);
                 // MTG_UNPRUNE=uacast is the standing A/B lever.
-                if (!HumanPlayActive() && !DecisionUnpruned(UnprunedGate::UACast)) { continue; }
+                if (!HumanPlayActive() && !DecisionUnpruned(UnprunedGate::UACast)
+                    && !ResolveProvider(state).OffersTuckRemovalCast(state, def, /*self_target=*/false))
+                { continue; }   // the provider's prune (default: never cast autonomously)
                 ManaCost tbase  = EffectiveCost(def, state);
                 ManaPool tpool  = AvailableManaPool(state);
                 int tpips = def.card.m_mana_cost.x_pips; if (tpips < 1) { tpips = 1; }
@@ -20994,7 +21011,7 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
             }
             continue;
         }
-        if (def.params.etb_destroy_own_noncreature_max > 0 && TeraKHeuristicEnabled())
+        if (def.params.etb_destroy_own_noncreature_max > 0)
         {
             if (HumanPlayActive() || DecisionUnpruned(UnprunedGate::TeraK))
             {
@@ -21031,13 +21048,13 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
         // simply not a plan. The count becomes a thing the person picks at QUEUE time, next to the
         // cast it competes with, instead of a dialog after the mana is already spent.
         //
-        // Fanned under human play (and MTG_UNPRUNE=replicate) only -- the autonomous plan space, and
-        // therefore all ground truth, is untouched by construction: with no variant emitted every
-        // action keeps replicate_count == -1 and resolution keeps the greedy-max sink.
-        // MTG_REPLICATE_DIM=0 is the revert hatch: no variant is fanned, so every replicate cast
-        // falls back to the pre-2026-08-26 behaviour (greedy-max sink + the resolution dialog).
-        // It exists because this moves the PAYMENT path for a replicate turn, and an A/B needs an
-        // arm; it is not a play lever (autonomous play never fans a variant either way).
+        // Fanned in EVERY mode (USER HARD RULE 2026-09-30, no greedy inside the search window): the
+        // autonomous plan space used to leave replicate_count == -1 and let resolution take the
+        // greedy max, which is the very sink the reports above describe. The provider may PRUNE the
+        // fan (DecisionProvider::ReplicateCounts, empty = every k); human play always gets it whole.
+        // An unpinned (-1) cast now reaches the resolution loop only beyond the search horizon: the
+        // greedy picker (g_greedy_solve_nest > 0, GreedyPermit-checked to sit outside every window)
+        // is not offered the fan and keeps resolution's line-hold max.
         // ---- DEVOUR (CR 702.81, Mycoloth "Devour 2") ---------------------------------------------
         // One cast variant per number of creatures devoured, k = 0 .. (own creatures on the
         // battlefield). Unlike the replicate fan below, this is enumerated in AUTONOMOUS play too,
@@ -21105,11 +21122,8 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
             continue;
         }
 
-        static const bool s_replicate_dim = EnvOn("MTG_REPLICATE_DIM", true);
-        if (s_replicate_dim
-            && def.card.IsCreature()
-            && CanReplicate(def, state.battlefield, state.active_player_index)
-            && (HumanPlayActive() || DecisionUnpruned(UnprunedGate::Replicate)))
+        if (def.card.IsCreature() && (g_greedy_solve_nest == 0 || HumanPlayActive())
+            && CanReplicate(def, state.battlefield, state.active_player_index))
         {
             // Replicate's additional cost is the spell's PRINTED mana cost (CR 702.56a) -- a cost
             // reduction applies to the total cost of the spell once, not per copy, so this is
@@ -21138,9 +21152,14 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
                 }
                 kmax = std::max(0, (pool - base_mv) / rep_mv);
             }
-            kmax = std::min(kmax, 8);   // sanity cap: a viewer plan list, not a search space
-            for (int k = 0; k <= kmax; ++k)
+            kmax = std::min(kmax, 8);   // sanity cap: 8 extra copies is past any pool the fleet reaches
+            std::vector<int> rep_ks;
+            if (!HumanPlayActive() && !DecisionUnpruned(UnprunedGate::Replicate))
+            { rep_ks = ResolveProvider(state).ReplicateCounts(state, def, kmax); }
+            if (rep_ks.empty()) { for (int k = 0; k <= kmax; ++k) { rep_ks.push_back(k); } }
+            for (int k : rep_ks)
             {
+                if (k < 0 || k > kmax) { continue; }
                 Action v = a;
                 v.replicate_count = k;
                 for (int c = 0; c < k; ++c) { AddManaCost(v.cost, printed); }
@@ -21153,6 +21172,22 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
                     // attack projection must count them (lockstep with the tokens apply pushes).
                     v.haste_attack_power += k * (a.haste_attack_power);
                 }
+                actions.push_back(std::move(v));
+            }
+            // ...plus "as many copies as the spare mana allows" (replicate_count -1), realised at
+            // resolution by the line-hold loop: every co-planned cast keeps its mana, the copies take
+            // what is genuinely left. A SEARCHED option, not a default -- the search picks it or a
+            // pinned count. It is the only form that can express a line whose OTHER casts get
+            // cheaper from the copies: a pinned k is priced statically into this cast's bill, which
+            // cannot see Thrumming Hivepool's affinity drop as the token Slivers enter (slivers d3
+            // s2002 gi155/169, s3003 gi115: Hivepool + Striking x2 on T4 read as unaffordable,
+            // T4 -> T5 at 1x/4x/16x). A variant that realises the same count as a pinned one lands on
+            // the same state and the post-apply dedup skips it. Not offered to human play (a person
+            // picks a count).
+            if (!HumanPlayActive() && kmax >= 1)
+            {
+                Action v = a;   // replicate_count stays -1
+                v.eval += kmax * EvalCard(def, state);
                 actions.push_back(std::move(v));
             }
             continue;
@@ -23009,7 +23044,8 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
         // Jitte outlet. Human play keeps both modes (never narrow the viewer);
         // MTG_UNPRUNE=jittemode is the standing pruned-vs-unpruned A/B lever.
         const bool jitte_modes_open = HumanPlayActive()
-                                   || DecisionUnpruned(UnprunedGate::JitteMode);
+                                   || DecisionUnpruned(UnprunedGate::JitteMode)
+                                   || ResolveProvider(state).OffersJitteNonCombatModes(state);
         for (const Permanent& p : state.battlefield)
         {
             if (!jitte_modes_open) { break; }
@@ -24124,7 +24160,11 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
             // Crackle's target-count range: the autonomous plan space -- and therefore all ground
             // truth -- is untouched by construction, and under human play the greedy sinks stand down
             // (see AnimateLandsShared / ActivateTapTokensShared) so the human's answer is the only one.
-            if (HumanPlayActive())
+            // AUTONOMOUS TOO since 2026-09-30 (USER HARD RULE, docs/design/no-greedy-in-search-window.md):
+            // the greedy post-cast sinks (AnimateLandsShared / ActivateTapTokensShared) are DELETED and
+            // these are the only route -- the search decides whether the spare mana animates a
+            // Mutavault or makes a Sliver, instead of an engine pass spending it by rule. The one
+            // prune left is the provider's (OffersExertTokenActivation, Basri's exert).
             {
                 // Mutavault: one action per un-animated, untapped animatable land it controls.
                 if (sd->params.can_animate && sd->params.animate_cost.has_value()
@@ -24142,7 +24182,9 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
                 }
                 // Sliver Hive: gated on the same "do you control a matching creature" clause the
                 // greedy checks, so a plan menu never offers a guaranteed no-op.
-                if (sd->params.tap_token_cost.has_value() && !src.tapped)
+                if (sd->params.tap_token_cost.has_value() && !src.tapped
+                    && (!sd->params.tap_token_exerts || HumanPlayActive()
+                        || ResolveProvider(state).OffersExertTokenActivation(state, *sd)))
                 {
                     bool gate_ok = sd->params.tap_token_requires_subtypes.empty();
                     for (const Permanent& q : state.battlefield)
@@ -25039,8 +25081,8 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
             std::stable_sort(pod_victim_idx.begin(), pod_victim_idx.end(),
                 [&](int a, int b)
                 {
-                    return SacExpendabilityRank(state.battlefield[a], /*source_id=*/-1, &pod_doomed)
-                         < SacExpendabilityRank(state.battlefield[b], /*source_id=*/-1, &pod_doomed);
+                    return SacExpendabilityRank(state, state.battlefield[a], /*source_id=*/-1, &pod_doomed)
+                         < SacExpendabilityRank(state, state.battlefield[b], /*source_id=*/-1, &pod_doomed);
                 });
             // MTG_POD_VICTIM_TOP (staged 2026-09-06, default 0 = off = every victim class): keep
             // only the N most-expendable victim CLASSES per pod -- persist bodies always emit
@@ -29247,6 +29289,8 @@ namespace solvememo
             || a.tutor_choice != b.tutor_choice || a.sac_pins != b.sac_pins
             || a.tapmode_choice != b.tapmode_choice || a.freshmode_choice != b.freshmode_choice
             || a.lackey_choice != b.lackey_choice || a.ponder_choice != b.ponder_choice
+            || a.etbcounter_choice != b.etbcounter_choice || a.sweep_choice != b.sweep_choice
+            || a.le_fire_choice != b.le_fire_choice
             || a.discard_choice != b.discard_choice || a.vial_charge_choice != b.vial_charge_choice
             || a.fling_victim_choice != b.fling_victim_choice
             || a.tectonic_mode_choice != b.tectonic_mode_choice
@@ -29304,7 +29348,23 @@ namespace solvememo
     inline Dumper g_dumper;
 }
 
-TurnSolver::Plan TurnSolver::Solve(const GameState& state, bool is_pre_combat)
+TurnSolver::GreedyPermit::GreedyPermit(GreedySite site, int remaining_depth)
+{
+    // A permit is a CLAIM that the greedy pick sits outside every search window. Checked in every
+    // build (not an assert that vanishes under NDEBUG): a false claim is the forbidden in-window
+    // greedy pick, and it must stop the run loudly.
+    if (remaining_depth > 0)
+    {
+        std::fprintf(stderr, "\nFATAL: greedy TurnSolver::Solve() requested INSIDE the search window "
+                             "(site %d, remaining depth %d). USER HARD RULE 2026-09-30 -- see "
+                             "docs/design/no-greedy-in-search-window.md.\n",
+                     static_cast<int>(site), remaining_depth);
+        std::fflush(stderr);
+        std::abort();
+    }
+}
+
+TurnSolver::Plan TurnSolver::Solve(const GameState& state, bool is_pre_combat, const GreedyPermit& permit)
 {
     // THE TRIPWIRE. This is the greedy plan chooser; entering it with search depth still on the
     // innermost frame is the doctrine violation the user has had removed three times. See
@@ -29317,7 +29377,7 @@ TurnSolver::Plan TurnSolver::Solve(const GameState& state, bool is_pre_combat)
     const bool memo_ok = solvememo::Enabled() && !HumanPlayActive()
                       && g_cantrip_order_site == nullptr
                       && (g_cs_solver_nest > 0 || g_fsline_nest > 0);
-    if (!memo_ok) { return SolveUncached(state, is_pre_combat); }
+    if (!memo_ok) { return SolveUncached(state, is_pre_combat, permit); }
 
     const TranspositionTable::Key k = BuildBreakpointKey(state, is_pre_combat);
     auto& cache = solvememo::t_cache;
@@ -29327,7 +29387,7 @@ TurnSolver::Plan TurnSolver::Solve(const GameState& state, bool is_pre_combat)
         solvememo::g_hits.fetch_add(1, std::memory_order_relaxed);
         if (solvememo::VerifyOn())
         {
-            const TurnSolver::Plan fresh = SolveUncached(state, is_pre_combat);
+            const TurnSolver::Plan fresh = SolveUncached(state, is_pre_combat, permit);
             solvememo::g_verified.fetch_add(1, std::memory_order_relaxed);
             if (!solvememo::SamePlan(fresh, it->second.plan))
             {
@@ -29346,7 +29406,7 @@ TurnSolver::Plan TurnSolver::Solve(const GameState& state, bool is_pre_combat)
     }
 
     solvememo::g_misses.fetch_add(1, std::memory_order_relaxed);
-    TurnSolver::Plan p = SolveUncached(state, is_pre_combat);
+    TurnSolver::Plan p = SolveUncached(state, is_pre_combat, permit);
     if (cache.size() >= solvememo::Cap())
     {
         cache.clear();
@@ -29356,8 +29416,11 @@ TurnSolver::Plan TurnSolver::Solve(const GameState& state, bool is_pre_combat)
     return p;
 }
 
-TurnSolver::Plan TurnSolver::SolveUncached(const GameState& state, bool is_pre_combat)
+TurnSolver::Plan TurnSolver::SolveUncached(const GameState& state, bool is_pre_combat,
+                                            const GreedyPermit& permit)
 {
+    (void)permit;   // the permit's constructor already enforced the claim
+    struct GreedyNest { GreedyNest() { ++g_greedy_solve_nest; } ~GreedyNest() { --g_greedy_solve_nest; } } _gn;
     RevealLogPause _rlp;  // planning: suppress scry/dig reveal logging (real play only)
     const Player& ap = state.ActivePlayer();
     ManaPool pool             = AvailableManaPool(state);
@@ -33276,6 +33339,10 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
     // pin because chapter I fires inside this apply, on the Saga's own enter.
     ScriptedSagaCh1 _ssc1(plan.saga_ch1_choice);
     ScriptedReorder _sr(plan.ponder_choice);   // searched Ponder disposition (own pin; see ScriptedReorder)
+    ScriptedEtbCounter _sec(plan.etbcounter_choice);   // searched optional ETB counter payment; -1 inert
+    ScriptedSweep _ssw(plan.sweep_choice);            // searched end-of-main-1 sweep; -1 = the rule
+    struct LeFirePin { int saved; explicit LeFirePin(int k) : saved(g_le_fire_pin) { g_le_fire_pin = k; }
+                       ~LeFirePin() { g_le_fire_pin = saved; } } _lefp(plan.le_fire_choice);
     ScriptedTutor _stut(plan.tutor_choice);    // searched tutor pick by index, resolved at the true
                                                // mid-plan state (MTG_TUTOR_AXIS_RESOLVE); -1 inert
     ScriptedSacLand _ssac(plan.sac_pins);      // searched sac-land picks, one per sac ordinal,
@@ -33328,6 +33395,32 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
     // already holds them -- but a main draw engine's OWN re-solve records into the
     // top-level out_breakpoint). See Action::breakpoint_casts.
     std::vector<std::vector<Action>*> sink_stack;
+    // Main-level breakpoint ordinal for the top-level records (Action::rec_bp_ord). A push of the
+    // top-level sink onto an EMPTY stack opens the next main-level breakpoint; the matching pop
+    // stamps every record appended while it was open. Nested sinks are not counted.
+    int         main_bp_ord     = -1;
+    std::size_t main_seg_start  = 0;
+    bool        main_seg_open   = false;
+    auto bp_sink_push = [&](std::vector<Action>* p)
+    {
+        if (sink_stack.empty() && p == out_breakpoint && out_breakpoint != nullptr)
+        {
+            ++main_bp_ord;
+            main_seg_start = out_breakpoint->size();
+            main_seg_open  = true;
+        }
+        sink_stack.push_back(p);
+    };
+    auto bp_sink_pop = [&]()
+    {
+        sink_stack.pop_back();
+        if (sink_stack.empty() && main_seg_open)
+        {
+            for (std::size_t i = main_seg_start; i < out_breakpoint->size(); ++i)
+            { (*out_breakpoint)[i].rec_bp_ord = main_bp_ord; }
+            main_seg_open = false;
+        }
+    };
 
     // Deferred plain-cantrip (Ponder/Preordain) re-solve. A plain DrawSpell cast at the
     // MAIN-plan level used to re-solve INLINE — casting freshly-affordable spells right
@@ -35510,13 +35603,13 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
             }
             else
             {
-                if (out_breakpoint && my_bp_sink) { sink_stack.push_back(my_bp_sink); }
+                if (out_breakpoint && my_bp_sink) { bp_sink_push(my_bp_sink); }
                 TurnSolver::Plan extra;
                 bp_searched_plan(0, extra);   // resolves to the plan's continuation or EMPTY
                 bp_play_searched_land(extra, my_bp_sink);
                 apply_continuation_precasts(extra);
                 apply_plan_actions(extra.actions, extra.searched_order);
-                if (out_breakpoint && my_bp_sink) { sink_stack.pop_back(); }
+                if (out_breakpoint && my_bp_sink) { bp_sink_pop(); }
             }
         }
         else if (def.tmpl == CardTemplate::DrawUntilNonland)
@@ -35540,7 +35633,7 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
             // Land's Edge ammo (no land played).
             if (!s_human_play)
             {
-                if (out_breakpoint && my_bp_sink) { sink_stack.push_back(my_bp_sink); }
+                if (out_breakpoint && my_bp_sink) { bp_sink_push(my_bp_sink); }
                 // Searched continuation when the plan carries one (bp_choice), else the static
                 // flood-keep/ranker drop + greedy Solve. bp_play_searched_land then applies the
                 // continuation's SEARCHED land: EnumeratePlansWithLand plays each candidate land
@@ -35551,7 +35644,7 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
                 bp_play_searched_land(extra, my_bp_sink);
                 apply_continuation_precasts(extra);
                 apply_plan_actions(extra.actions, extra.searched_order);
-                if (out_breakpoint && my_bp_sink) { sink_stack.pop_back(); }
+                if (out_breakpoint && my_bp_sink) { bp_sink_pop(); }
             }
             // Human play: Treasure Hunt's reveal is now in hand; the chooser re-fires so the
             // human plays a land / Land's Edge / another Treasure Hunt with the revealed cards.
@@ -35909,7 +36002,7 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
             // stages_cards branch above (lockstep with the executor's AIEngine breakpoint re-solve).
             if (!s_human_play)
             {
-                if (out_breakpoint && my_bp_sink) { sink_stack.push_back(my_bp_sink); }
+                if (out_breakpoint && my_bp_sink) { bp_sink_push(my_bp_sink); }
                 TurnSolver::Plan extra;
                 bp_searched_plan(2, extra);   // resolves to the plan's continuation or EMPTY
                 bp_play_searched_land(extra, my_bp_sink);
@@ -35917,7 +36010,7 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
                 // executor's breakpoint replay had the same gap) -- now the shared loop.
                 apply_continuation_precasts(extra);
                 apply_plan_actions(extra.actions, extra.searched_order);
-                if (out_breakpoint && my_bp_sink) { sink_stack.pop_back(); }
+                if (out_breakpoint && my_bp_sink) { bp_sink_pop(); }
             }
         }
         else if (def.params.destroy_all_enchantments)
@@ -35971,13 +36064,13 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
                 }
                 else if (def.params.cast_draw > 0)
                 {
-                    if (out_breakpoint && my_bp_sink) { sink_stack.push_back(my_bp_sink); }
+                    if (out_breakpoint && my_bp_sink) { bp_sink_push(my_bp_sink); }
                     TurnSolver::Plan extra;
                     bp_searched_plan(0, extra);   // resolves to the plan's continuation or EMPTY
                     bp_play_searched_land(extra, my_bp_sink);
                     apply_continuation_precasts(extra);
                     apply_plan_actions(extra.actions, extra.searched_order);
-                    if (out_breakpoint && my_bp_sink) { sink_stack.pop_back(); }
+                    if (out_breakpoint && my_bp_sink) { bp_sink_pop(); }
                 }
             }
         }
@@ -36164,7 +36257,7 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
                     // another Equipment under the watcher SHOULD open its own section. That is the
                     // partition recursing, not the nested-greedy re-solve the trick class avoids --
                     // this continuation is searched (bp_searched_plan) rather than greedy.
-                    if (out_breakpoint && my_bp_sink) { sink_stack.push_back(my_bp_sink); }
+                    if (out_breakpoint && my_bp_sink) { bp_sink_push(my_bp_sink); }
                     {
                         TurnSolver::CantripOrderScope _cos(&def, &hand_at_cast, &plan_cast_names,
                                                           BpClassifyActive(state), karoo_deferred,
@@ -36178,7 +36271,7 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
                         apply_continuation_precasts(extra);
                         apply_plan_actions(extra.actions, extra.searched_order);
                     }
-                    if (out_breakpoint && my_bp_sink) { sink_stack.pop_back(); }
+                    if (out_breakpoint && my_bp_sink) { bp_sink_pop(); }
                     // Set AFTER the continuation's own apply, so its section runs in full.
                     bp_truncate = true;
                 }
@@ -37433,11 +37526,8 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
                 // EXERT (CR 701.38, Basri, Tomorrow's Champion): the cost exerts the source, so it
                 // does not untap during its controller's next untap step. Set here as well as in
                 // ActivateTapTokensShared because these are two DIFFERENT routes to the same
-                // ability, not one shared path -- that function stands down under HumanPlayActive()
-                // and this branch is the human/viewer route. Missing it here was a real gap: the
-                // autonomous greedy pass now declines an exert cost by heuristic
-                // (MTG_GREEDY_EXERT_TOKEN), which makes THIS the only route the ability is normally
-                // reached by, i.e. exactly where an unmodelled exert would be a free untap.
+                // ability. Since 2026-09-30 this is the ONLY route (the greedy pass is deleted), for
+                // autonomous and human play alike -- an unmodelled exert here would be a free untap.
                 // Index access, not `p`: CreateToken just appended to the battlefield.
                 if (td->params.tap_token_exerts) { state.battlefield[pi].skip_next_untap = true; }
                 break;
@@ -37825,7 +37915,7 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
         TurnSolver::BpContinuationScope _cbs;
         canon_arm             = deferred_cantrip_site;   // audit only; see canonaudit::RecordWho
         deferred_cantrip_site = nullptr;
-        if (out_breakpoint) { sink_stack.push_back(out_breakpoint); }
+        if (out_breakpoint) { bp_sink_push(out_breakpoint); }
         TurnSolver::Plan extra;
         // Trick-armed (Gold Rush / draw-payload trick) => site 5 (searchable); equipment-ETB draw
         // (Puresteel) => site 6 (searchable); plain cantrip => site 3 (pruned). See
@@ -37912,7 +38002,7 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
         // its crack-less sibling (gi69 probe, 2026-08-13).
         apply_continuation_precasts(extra);
         apply_plan_actions(extra.actions, extra.searched_order);
-        if (out_breakpoint) { sink_stack.pop_back(); }
+        if (out_breakpoint) { bp_sink_pop(); }
     }
 
     // Dig when stuck (cycling / sacrifice-to-draw lands, e.g. Lonely Sandbar, Forgotten
@@ -37927,7 +38017,9 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
     // graveyard, fewer than two lands, or Land's Edge already lethal from the hand).
     // Plan::dig_choice (searched dig axis): 0 suppresses this plan's dig loop outright, 1 runs it
     // gated only on affordability, -1 (default, and every non-opted deck) keeps the heuristic.
-    if (!s_human_play && is_pre_combat && plan.dig_choice != 0
+    // BOTH mains (D7, purge step 14): main 2 used to be excluded, so a line that cycles or sacs a
+    // land in the second main was inexpressible -- lockstep with the executor's reactive dig.
+    if (!s_human_play && plan.dig_choice != 0
         && ResolveProvider(state).HasAnyDigSource(state))
     {
         // DigChain: both stopping conditions are provider-owned (see MaxDigsPerTurn /
@@ -38049,7 +38141,7 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
             }
             if (resolve_now)
             {
-                if (out_breakpoint) { sink_stack.push_back(my_bp_sink); }
+                if (out_breakpoint) { bp_sink_push(my_bp_sink); }
                 TurnSolver::Plan extra;
                 // Record only on the FALLBACK, like every other site: this counter's contract is
                 // "greedy Solve()s actually reached from inside the search", and bumping it before
@@ -38059,7 +38151,7 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
                 bp_play_searched_land(extra, my_bp_sink);
                 apply_continuation_precasts(extra);
                 apply_plan_actions(extra.actions, extra.searched_order);
-                if (out_breakpoint) { sink_stack.pop_back(); }
+                if (out_breakpoint) { bp_sink_pop(); }
                 // Legacy stops here ("once we have action we are no longer stuck"). A deck whose
                 // cycling IS the wincon must keep going: the re-solve just DEPLOYED a payoff (a
                 // free Hollow One), which is a reason to continue the chain, not to end the turn.
@@ -38094,6 +38186,7 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
             static const bool s_fd = !EnvOn("MTG_LEGACY_SEARCH");
             int fire_count = s_fd ? ResolveProvider(state).LandsEdgeFireCount(state, rate)
                                   : std::numeric_limits<int>::max();
+            if (g_le_fire_pin >= 0) { fire_count = g_le_fire_pin; }   // the plan's searched count
 
             std::vector<Card> keep;
             int fired = 0;
@@ -43935,9 +44028,8 @@ static void AppendBreakpointVariants(const GameState& state, std::vector<TurnSol
         // past W stay unreachable in wave 0, and a variant that has to reach its own bp_at still
         // cannot stop early (the deliberate L*W-not-W^L trade). Those are separate.
         //
-        // DEFAULT OFF pending measurement: it adds a bp_choice value the executor must resolve, and
-        // it shifts nothing else, but it changes play wherever a breakpoint fires -- every deck's GT.
-        if (BpEmptyArmEnabled())
+        // UNCONDITIONAL since 2026-09-30 (MTG_BP_EMPTY_ARM deleted; USER HARD RULE,
+        // docs/design/no-greedy-in-search-window.md): "done with this phase" is always a scored arm.
         {
             for (int at = 0; at < BpSearchDepth(); ++at)
             {
@@ -45659,6 +45751,152 @@ static void AppendSubdecisionAxes(const GameState& state, bool is_pre_combat,
                               std::make_move_iterator(extra.end()));
     }
 
+    // SEARCHED OPTIONAL ETB COUNTER (Emiel the Blessed's "you may pay {G/W}") -- 2026-09-30. The
+    // engine no longer decides this payment (USER HARD RULE, docs/design/no-greedy-in-search-window.md);
+    // the provider supplies the default (EldraziFlickerProvider declines: USER *"should almost never
+    // be paid"*), and this axis offers the OPPOSITE on every base plan that can trigger it, so the
+    // search keeps the lines where the counters ARE the combat damage (measured: EDF s71001 gi76 and
+    // s72001 gi124 lose a turn under a bare decline, at 1x, 4x and 16x budget). One variant per base
+    // plan; the pin applies to every trigger of the plan (Plan::etbcounter_choice).
+    if (!HumanPlayActive() && state.deck_has_etb_counter_payer)
+    {
+        auto pays_param = [](const CardDefinition* d)
+        {
+            return d != nullptr && d->params.other_creature_etb_counter_cost.has_value()
+                && d->params.other_creature_etb_counters > 0;
+        };
+        bool watcher = false;
+        for (const Permanent& pm : state.battlefield)
+        {
+            if (pm.controller_index == state.active_player_index
+                && pays_param(CardDatabase::Instance().LookupCached(pm.card))) { watcher = true; break; }
+        }
+        const int opposite =
+            ResolveProvider(state).PaysOptionalEtbCounter(state, state.active_player_index) ? 0 : 1;
+        std::vector<TurnSolver::Plan> extra;
+        for (const TurnSolver::Plan& p : all)
+        {
+            if (p.actions.empty() || p.etbcounter_choice >= 0) { continue; }
+            if (p.scry_choice >= 0 || p.bp_choice >= 0 || p.etbdig_choice >= 0
+                || p.lackey_choice >= 0 || p.ponder_choice >= 0 || p.tutor_choice >= 0
+                || p.discard_choice >= 0) { continue; }   // base plans only -- additive, not a product
+            bool live = watcher;
+            for (std::size_t ai = 0; !live && ai < p.actions.size(); ++ai)
+            {
+                const Action& a = p.actions[ai];
+                if (a.kind == Action::Kind::CastFromHand
+                    && pays_param(CardDatabase::Instance().Lookup(a.card_name))) { live = true; }
+            }
+            if (!live) { continue; }
+            TurnSolver::Plan v = p;
+            v.etbcounter_choice = opposite;
+            extra.push_back(std::move(v));
+        }
+        TRACE("etbcounter", "T%d etb-counter axis -> %zu variants", state.turn_number, extra.size());
+        g_axis_etbcounter_vars.fetch_add(static_cast<long long>(extra.size()), std::memory_order_relaxed);
+        all.insert(all.end(), std::make_move_iterator(extra.begin()),
+                              std::make_move_iterator(extra.end()));
+    }
+
+    // SEARCHED END-OF-MAIN-1 SWEEP (2026-09-30, USER HARD RULE docs/design/no-greedy-in-search-window.md).
+    // TapDripLandsIfUseful / TapPainSourcesIfUseful tap leftover drip / pain lands for their damage at
+    // the end of main 1 -- but only when no castable card in hand could want them in main 2. That
+    // keep-or-spend call was an engine rule; now the base plan keeps the rule and this axis adds the
+    // "sweep anyway" variant, so the search prices damage-now against mana-for-main-2. Emitted only
+    // where a sweep can do something: a Remedy-live drip deck, or an armed Prevent Damage board.
+    if (is_pre_combat && !HumanPlayActive())
+    {
+        const int ctrl = state.active_player_index;
+        bool live = state.dmg_events_armed;
+        if (!live && ResolveProvider(state).OpponentLifegainUseful(state, ctrl))
+        {
+            for (const Permanent& pm : state.battlefield)
+            {
+                if (pm.controller_index != ctrl) { continue; }
+                const CardDefinition* d = CardDatabase::Instance().LookupCached(pm.card);
+                if (d && d->params.tap_opponent_lifegain > 0) { live = true; break; }
+            }
+        }
+        if (live)
+        {
+            std::vector<TurnSolver::Plan> extra;
+            for (const TurnSolver::Plan& p : all)
+            {
+                if (p.sweep_choice >= 0 || p.etbcounter_choice >= 0 || p.le_fire_choice >= 0) { continue; }
+                if (p.scry_choice >= 0 || p.bp_choice >= 0 || p.etbdig_choice >= 0
+                    || p.lackey_choice >= 0 || p.ponder_choice >= 0 || p.tutor_choice >= 0
+                    || p.discard_choice >= 0) { continue; }   // base plans only
+                // No emission-time prune: a variant whose pin turns out inert (the rule would have
+                // swept anyway, or had nothing to sweep) lands on its base plan's state and the
+                // post-apply dedup skips it exactly (PlanIsAxisVariant). A hand-count guess here was
+                // measured (step 9c: 3.6% of variants) and was unsound across mid-plan draws.
+                TurnSolver::Plan v = p;
+                v.sweep_choice = 1;
+                extra.push_back(std::move(v));
+            }
+            g_axis_sweep_vars.fetch_add(static_cast<long long>(extra.size()), std::memory_order_relaxed);
+            all.insert(all.end(), std::make_move_iterator(extra.begin()),
+                                  std::make_move_iterator(extra.end()));
+        }
+    }
+
+    // SEARCHED LAND'S EDGE FIRE COUNT (Plan::le_fire_choice). The end-of-main discard used to be the
+    // provider's count in the search and an executor-only rollout trial (count vs fire-all) in the
+    // real game -- a second, out-of-band search the plan never saw. Every base plan now carries
+    // variants for the counts the PROVIDER keeps (LandsEdgeFireCandidates, default hold /
+    // fire-all -- the full 0..L fan was too wide to search). A variant equal to the provider's
+    // count lands on its base plan's state and the post-apply dedup skips it (PlanIsAxisVariant).
+    if (!HumanPlayActive())
+    {
+        const int ctrl = state.active_player_index;
+        bool le_live = false;
+        int  le_rate = 0;   // 0 while Land's Edge is only being cast by the plan
+        for (const Permanent& pm : state.battlefield)
+        {
+            if (pm.controller_index != ctrl) { continue; }
+            const CardDefinition* d = CardDatabase::Instance().LookupCached(pm.card);
+            if (d && d->params.discard_land_damage > 0)
+            { le_live = true; le_rate = std::max(le_rate, d->params.discard_land_damage); }
+        }
+        int lands_now = 0;
+        for (const Card& c : state.players[ctrl].hand)
+        {
+            if (c.m_is_staged) { continue; }
+            const CardDefinition* d = CardDatabase::Instance().LookupCached(c);
+            if (d ? d->card.IsLand() : c.IsLand()) { ++lands_now; }
+        }
+        std::vector<TurnSolver::Plan> extra;
+        for (const TurnSolver::Plan& p : all)
+        {
+            if (PlanIsAxisVariant(p) || p.le_fire_choice >= 0) { continue; }   // base plans only
+            bool casts_le = false;
+            if (!le_live)
+            {
+                for (const Action& a : p.actions)
+                {
+                    if (a.kind != Action::Kind::CastFromHand) { continue; }
+                    const CardDefinition* d = a.def ? a.def : CardDatabase::Instance().Lookup(a.card_name);
+                    if (d && d->params.discard_land_damage > 0) { casts_le = true; break; }
+                }
+            }
+            if (!le_live && !casts_le) { continue; }
+            const bool draws = PlanOpensBreakpoint(state, p) != 0;
+            const int  L = std::max(0, lands_now - (p.land_to_play.empty() ? 0 : 1));
+            if (L == 0 && !draws) { continue; }
+            // The provider prunes the fan (LandsEdgeFireCandidates; default hold / fire-all).
+            for (int k : ResolveProvider(state).LandsEdgeFireCandidates(state, le_rate, L))
+            {
+                if (k < 0) { continue; }
+                TurnSolver::Plan v = p;
+                v.le_fire_choice = k;
+                extra.push_back(std::move(v));
+            }
+        }
+        g_axis_le_vars.fetch_add(static_cast<long long>(extra.size()), std::memory_order_relaxed);
+        all.insert(all.end(), std::make_move_iterator(extra.begin()),
+                              std::make_move_iterator(extra.end()));
+    }
+
     // SEARCHED GOBLIN LACKEY PUT -- the same post-dedup fan-out, keyed on the BOARD rather than on a
     // cast: the trigger belongs to a Lackey already in play, not to anything in `actions`. Only the
     // pre-combat plan can carry it, since the put resolves in that combat's damage step.
@@ -46274,25 +46512,23 @@ static void AppendVialOrderVariants(const GameState& state, std::vector<TurnSolv
 }
 
 // One body for EnumeratePlansM2Memoized's three call points (memo-off fallback, verify
-// recompute, cache miss): the bare cast-only enumeration, plus -- under MTG_M2_AXES -- the m1
-// host's post-dedup sub-decision axis fan-out. Sharing one body is what keeps a verify recompute
-// from diverging from the cached list merely because the lever is on.
+// recompute, cache miss): the bare cast-only enumeration, plus the m1 host's post-dedup
+// sub-decision axis fan-out. Sharing one body keeps a verify recompute identical to the cached list.
 static std::vector<TurnSolver::Plan> EnumerateM2PlansBody(const GameState& state)
 {
     std::vector<TurnSolver::Plan> plans = EnumeratePlans(state, false);
-    // Wave-0 bp_choice variants (MTG_M2_BPVARS) BEFORE the axes, mirroring the m1 host's order
+    // Wave-0 bp_choice variants BEFORE the axes, mirroring the m1 host's order
     // (AppendBreakpointVariants first, axes second -- the axes' base-plan filters skip
     // bp_choice >= 0, which is what keeps the two additive rather than a cross product).
     // AppendBreakpointVariants self-gates on g_bp_enum_depth != 0.
-    if (M2BpVarsEnabled())
-    { AppendBreakpointVariants(state, plans); }
-    if (M2AxesEnabled() && g_bp_enum_depth == 0)
+    AppendBreakpointVariants(state, plans);
+    if (g_bp_enum_depth == 0)
     { AppendSubdecisionAxes(state, /*is_pre_combat=*/false, plans); }
     AppendVialOrderVariants(state, plans);   // self-gated on g_bp_enum_depth == 0
     return plans;
 }
 
-static constexpr std::size_t kPlanDomAssertedSize = 376;   // pinned; see the static_assert below
+static constexpr std::size_t kPlanDomAssertedSize = 392;   // pinned; see the static_assert below
 // ---- PLAN-LEVEL SUBSET DOMINANCE CENSUS (MTG_PLANDOM_CENSUS, default OFF) ----------------------
 //
 // USER 2026-09-25: *"We could also potentially skip candidates that play strictly less than an
@@ -46430,6 +46666,7 @@ static void PlanDomCensus(const std::vector<TurnSolver::Plan>& all)
             add(pl.lackey_choice); add(pl.fling_victim_choice);
             add(pl.tectonic_mode_choice); add(pl.tectonic_keep_choice);
             add(pl.ponder_choice); add(pl.discard_choice); add(pl.vial_charge_choice);
+            add(pl.etbcounter_choice); add(pl.sweep_choice); add(pl.le_fire_choice);
             add(pl.saga_target_choice); add(pl.saga_ch1_choice); add(pl.dig_choice);
             add(pl.bp_choice); add(pl.bp_at); add(pl.bp_all); add(pl.bp_wave0);
             add(pl.bp_sched);  add(pl.bp_base); add(pl.bp_self);
@@ -46531,13 +46768,21 @@ static std::vector<TurnSolver::Plan> EnumeratePlansWithLandUncached(const GameSt
         AppendHumanPlayDigPlans(state, plans);
         for (TurnSolver::Plan& p : plans) { p.land_decided = true; }
         AppendBreakpointVariants(state, plans);
-        // MTG_M2_AXES: the interior m2 solve (SearchedSecondMainMemoized -> SolveWithLookahead)
-        // arrives HERE -- second main, drop consumed -- so this early return is where its axis
-        // bareness lived. m1 no-drop re-solves stay bare (outside the measured defect's scope),
-        // and a breakpoint continuation derivation never fans (BpEnumEntryFor's rule; same
-        // guard AppendBreakpointVariants applies above).
-        if (!is_pre_combat && M2AxesEnabled() && g_bp_enum_depth == 0)
-        { AppendSubdecisionAxes(state, is_pre_combat, plans); }
+        // Sub-decision axes on the no-drop path, BOTH mains (unconditional since 2026-09-30, USER
+        // HARD RULE docs/design/no-greedy-in-search-window.md). The interior m2 solve arrives here
+        // (second main, drop consumed), and so does every main-1 RE-SOLVE after the land is down --
+        // the executor's post-draw breakpoint re-solve, most importantly. Both used to be bare, so a
+        // tutor / scry / Ponder cast there resolved by the provider's front pick while the same cast
+        // one solve earlier was searched. A breakpoint continuation derivation still never fans
+        // (BpEnumEntryFor's rule; same guard AppendBreakpointVariants applies above).
+        if (g_bp_enum_depth == 0)
+        {
+            const std::size_t n0 = plans.size();
+            AppendSubdecisionAxes(state, is_pre_combat, plans);
+            g_nodrop_enum[is_pre_combat ? 1 : 0].fetch_add(1, std::memory_order_relaxed);
+            g_nodrop_axis_vars[is_pre_combat ? 1 : 0].fetch_add(
+                static_cast<long long>(plans.size() - n0), std::memory_order_relaxed);
+        }
         // The vial-order axis runs on the no-drop path too (m1 AND m2): a Vial deck spends most of
         // its turns with no land left to play, which is exactly when the puts and casts pile up.
         AppendVialOrderVariants(state, plans);
@@ -48868,8 +49113,7 @@ static int SimulateToEndImpl(GameState& state, int depth, int max_turns,
                          FsPlanText(pre_plan).c_str(), FsSimBoardText(state).c_str(),
                          state.Opponent().life);
         }
-        AnimateLandsShared(state, nullptr);
-        ActivateTapTokensShared(state, nullptr);
+        // (AnimateLandsShared / ActivateTapTokensShared deleted 2026-09-30: the sinks are plan actions.)
 
         // Combat
         SimulateCombat(state);
@@ -49216,6 +49460,24 @@ static TranspositionTable::Key BuildDedupKey(const GameState& state)
 {
     TranspositionTable::Key k = BuildSimKey(state, 0, 0, false);
     if (CanonSimKeyOn()) { Fold(k, FsOrderSig(state)); }
+    // PENDING STATE PINS. A plan axis whose choice is consumed AFTER the apply returns (Lackey put
+    // in combat damage, fling / Tectonic at declare-attackers, cleanup discard, next turn's Vial
+    // charge / saga target) rides the state as a scripted_* field -- so two post-apply states that
+    // differ ONLY in a pending pin have DIFFERENT futures. BuildSimKey folds none of them; that was
+    // latent while only bp_choice variants (which never carry these pins) could skip on this key,
+    // and became a real collision once every axis variant could (PlanIsAxisVariant, purge step 9d:
+    // goblins d3/d5 gi44 lost a turn at every budget -- the Lackey variant was skipped as a dupe of
+    // its base plan). VALUE-GATED (folded only when set) so every pin-free key is byte-identical.
+    const int pins[] = { state.scripted_cheat_choice, state.scripted_fling_victim,
+                         state.scripted_tectonic_mode, state.scripted_tectonic_keep,
+                         state.scripted_discard_choice, state.scripted_vial_charge,
+                         state.scripted_saga_target };
+    for (int i = 0; i < static_cast<int>(sizeof(pins) / sizeof(pins[0])); ++i)
+    {
+        if (pins[i] != -1)
+        { Fold(k, 0x9e3779b97f4a7c15ULL ^ (static_cast<std::uint64_t>(i + 1) << 40)
+                     ^ static_cast<std::uint64_t>(static_cast<std::uint32_t>(pins[i]))); }
+    }
     return k;
 }
 
@@ -50083,8 +50345,6 @@ static bool WinlessSeedApplyWins(const GameState& state, TurnSolver::Plan& seed)
     if (s.ActivePlayer().life <= 0) { return false; }   // killed ourselves getting there
     if (!OpponentHasLost(s))
     {
-        AnimateLandsShared(s, nullptr);
-        ActivateTapTokensShared(s, nullptr);
         SimulateCombat(s);
         if (!OpponentHasLost(s)) { return false; }
     }
@@ -52737,7 +52997,7 @@ static TurnSolver::SearchLine FSLineWin(const GameState& state, int depth, int m
     // carries a bp_choice: ordinary plans are never deduped, so a deck with no variants (and any
     // run with MTG_BP_SEARCH=0) is byte-identical. Reuses the apply already done below.
     bool bp_variants_here = false;
-    for (const TurnSolver::Plan& p : pre) { if (p.bp_choice >= 0) { bp_variants_here = true; break; } }
+    for (const TurnSolver::Plan& p : pre) { if (PlanIsAxisVariant(p)) { bp_variants_here = true; break; } }
     std::unordered_set<TranspositionTable::Key, TranspositionTable::KeyHash> bp_seen_states;
     // MTG_BP_WAVE_PROBE only: which wave SLOT first reached each key, for the dup_self/dup_cross
     // split. Left empty (never inserted into) when the probe is off.
@@ -53178,8 +53438,6 @@ static TurnSolver::SearchLine FSLineWin(const GameState& state, int depth, int m
                     { pre_key_origin.emplace(child_key, std::make_pair(uint8_t(1), DupeSig(v))); }
                     if (s_rollout_stats) { pend_local.insert(child_key); }
                     if (s3.ActivePlayer().life <= 0) { continue; }   // self-kill guard, as above
-                    AnimateLandsShared(s3, nullptr);
-                    ActivateTapTokensShared(s3, nullptr);
                     SimulateCombat(s3);
                     if (OpponentHasLost(s3))   // wins THIS turn -> the earliest possible
                     {
@@ -53280,10 +53538,12 @@ static TurnSolver::SearchLine FSLineWin(const GameState& state, int depth, int m
             // It is a `continue`, not an erase, so bp_base / bp_self -- which ARE positional indices
             // into `pre` and are explicitly remapped after MoveOrderPlans sorts -- are untouched.
             const bool skip_dup = !fresh
-                && (p.bp_choice >= 0 || FsPreStateSkipOn());
+                && (PlanIsAxisVariant(p) || FsPreStateSkipOn());
             if (skip_dup)
             {
-                if (p.bp_choice < 0)
+                if (p.bp_choice < 0 && PlanIsAxisVariant(p))
+                { g_axis_dup_skips.fetch_add(1, std::memory_order_relaxed); }
+                else if (p.bp_choice < 0)
                 { g_fs_pre_state_skips.fetch_add(1, std::memory_order_relaxed); }
                 if (rec_vals) { node_vals.push_back(max_turns + 1); }
                 continue;
@@ -53296,8 +53556,6 @@ static TurnSolver::SearchLine FSLineWin(const GameState& state, int depth, int m
         // guard (`self_damage >= ap.life`) so commit-the-line never commits a suicide
         // (burn gi=492: two Eidolons + an extra Goblin Guide = 8 self-damage at 6 life).
         if (s.ActivePlayer().life <= 0) { if (rec_vals) { node_vals.push_back(max_turns + 1); } continue; }
-        AnimateLandsShared(s, nullptr);
-        ActivateTapTokensShared(s, nullptr);
         // SEARCHED DORK ATTACK/HOLD (MTG_DORK_ATK_SEARCH, EngineFlags.h; USER design
         // 2026-08-21): where the collapsed-main mana hold's verdict is CONTESTED (a held dork
         // whose released swing would deal damage -- DorkAtkContested), evaluate BOTH combat
@@ -53642,8 +53900,6 @@ static TurnSolver::SearchLine FSLineWin(const GameState& state, int depth, int m
                 }
                 if (BpWaveProbeOn()) { g_bp_wave_probe.rolled.fetch_add(1); }
                 if (s.ActivePlayer().life <= 0) { continue; }   // self-kill guard, as above
-                AnimateLandsShared(s, nullptr);
-                ActivateTapTokensShared(s, nullptr);
                 SimulateCombat(s);
                 // DIG INSTRUMENT (MTG_FSW_TRACE / MTG_FSW_TURN): the wave-phase twin of the main
                 // loop's [fsw] line, printed BEFORE the this-turn-kill return so a rank that kills
@@ -53815,8 +54071,6 @@ static TurnSolver::SearchLine FSLineWin(const GameState& state, int depth, int m
                 // from wave 0 BY PLAN, so a hit is a genuine same-state collapse, not a re-visit.
                 if (!bp_seen_states.insert(BuildDedupKey(s)).second) { return true; }
                 if (s.ActivePlayer().life <= 0) { return true; }   // self-kill guard, as above
-                AnimateLandsShared(s, nullptr);
-                ActivateTapTokensShared(s, nullptr);
                 SimulateCombat(s);
                 if (OpponentHasLost(s))       // wins THIS turn -> the earliest possible from here
                 {
@@ -55102,8 +55356,6 @@ TurnSolver::SearchLine TurnSolver::FullSearchLine(const GameState& state, int de
                 g_bp_trace_arm = BpTraceEnabled();
                 ApplyPlanDirect(copy, pp.plan, true);
                 g_bp_trace_arm = false;
-                AnimateLandsShared(copy, nullptr);
-                ActivateTapTokensShared(copy, nullptr);
                 SimulateCombat(copy);
             }
             else
@@ -56896,8 +57148,6 @@ TurnSolver::EarliestWinReport TurnSolver::EnumerateEarliestWins(const GameState&
             std::vector<Action> bp;
             ApplyPlanDirect(s, pre[i], true, &bp);
             if (s.ActivePlayer().life <= 0) { settled[i] = 1; continue; }   // -> max_turns+1
-            AnimateLandsShared(s, nullptr);
-            ActivateTapTokensShared(s, nullptr);
             SimulateCombat(s);
             if (OpponentHasLost(s))
             {
@@ -56973,8 +57223,6 @@ TurnSolver::EarliestWinReport TurnSolver::EnumerateEarliestWins(const GameState&
                 GameState& s = pass_buf;
                 std::vector<Action> bp;
                 ApplyPlanDirect(s, pre[i], true, &bp);
-                AnimateLandsShared(s, nullptr);
-                ActivateTapTokensShared(s, nullptr);
                 SimulateCombat(s);
                 const TurnSolver::SearchLine tail =
                     FSLineTail(s, dd, max_turns, cut, second_main, &tt_use, &lc_use, &budget);
@@ -57039,8 +57287,6 @@ TurnSolver::EarliestWinReport TurnSolver::EnumerateEarliestWins(const GameState&
                 int wt = max_turns + 1;
                 if (s.ActivePlayer().life > 0)
                 {
-                    AnimateLandsShared(s, nullptr);
-                    ActivateTapTokensShared(s, nullptr);
                     SimulateCombat(s);
                     if (OpponentHasLost(s)) { wt = state.turn_number; }
                     else
@@ -57120,8 +57366,6 @@ TurnSolver::EarliestWinReport TurnSolver::EnumerateEarliestWins(const GameState&
         }
         else
         {
-            AnimateLandsShared(s, nullptr);
-            ActivateTapTokensShared(s, nullptr);
             SimulateCombat(s);
             if (OpponentHasLost(s))
             {
@@ -57257,8 +57501,6 @@ TurnSolver::Plan TurnSolver::ReshuffleAvgChoosePlan(const GameState& state, int 
             {
                 if (is_pre_combat)
                 {
-                    AnimateLandsShared(s, nullptr);
-                    ActivateTapTokensShared(s, nullptr);
                     SimulateCombat(s);
                 }
                 if (OpponentHasLost(s))         // wins THIS turn (library-independent -> all k agree)
@@ -57493,7 +57735,7 @@ TurnSolver::Plan TurnSolver::SolveWithLookahead(const GameState& state, bool is_
         // empty plan"), so the one site where the distinction decides whether the leaf is a greedy
         // RELIANCE had no answer at all. NRVO'd; the flag gates only the counter, so play is
         // byte-identical.
-        Plan greedy_leaf = Solve(state, is_pre_combat);
+        Plan greedy_leaf = Solve(state, is_pre_combat, GreedyPermit(GreedySite::HorizonLeaf, depth));
         greedysite::RecordOutcome(90, !greedy_leaf.actions.empty());
         return greedy_leaf;
     }
@@ -57983,7 +58225,7 @@ TurnSolver::Plan TurnSolver::SolveWithLookahead(const GameState& state, bool is_
         // candidate's post-apply state but only SKIPS a bp_choice variant, so runs without variants
         // (and MTG_BP_SEARCH=0) never enter it and stay byte-identical.
         bool bp_variants_here = false;
-        for (const Plan& p : candidates) { if (p.bp_choice >= 0) { bp_variants_here = true; break; } }
+        for (const Plan& p : candidates) { if (PlanIsAxisVariant(p)) { bp_variants_here = true; break; } }
         std::unordered_set<TranspositionTable::Key, TranspositionTable::KeyHash> bp_seen_states;
         // What wave 0 learned about each (base plan, bp_at) slot, for the wave walker's stillborn
         // skip -- see BpWaveWalker::W0Len. FSLineWin has kept this since 2026-09-15; THIS loop, which
@@ -58350,10 +58592,11 @@ TurnSolver::Plan TurnSolver::SolveWithLookahead(const GameState& state, bool is_
                 { ++candidates_done; continue; }
                 if (bp_variants_here
                     && !bp_seen_states.insert(BuildDedupKey(copy)).second
-                    && plan.bp_choice >= 0)
-                { ++candidates_done; continue; }
-                AnimateLandsShared(copy, nullptr);
-                ActivateTapTokensShared(copy, nullptr);
+                    && PlanIsAxisVariant(plan))
+                {
+                    if (plan.bp_choice < 0) { g_axis_dup_skips.fetch_add(1, std::memory_order_relaxed); }
+                    ++candidates_done; continue;
+                }
 
                 // Combat this turn
                 SimulateCombat(copy);
@@ -58520,8 +58763,11 @@ TurnSolver::Plan TurnSolver::SolveWithLookahead(const GameState& state, bool is_
                 { ++candidates_done; continue; }
                 if (bp_variants_here
                     && !bp_seen_states.insert(BuildDedupKey(copy)).second
-                    && plan.bp_choice >= 0)
-                { ++candidates_done; continue; }
+                    && PlanIsAxisVariant(plan))
+                {
+                    if (plan.bp_choice < 0) { g_axis_dup_skips.fetch_add(1, std::memory_order_relaxed); }
+                    ++candidates_done; continue;
+                }
             }
 
             // End of this turn + start of next. The next turn's land drop is searched
@@ -58696,8 +58942,6 @@ TurnSolver::Plan TurnSolver::SolveWithLookahead(const GameState& state, bool is_
                         if (LaWaveDup(walker, v, copy, bp_seen_states, la_key_slot)) { continue; }
                         if (BpWaveProbeOn()) { g_bp_wave_probe.rolled.fetch_add(1);
                                                g_bp_wave_probe.la_rolled.fetch_add(1); }
-                        AnimateLandsShared(copy, nullptr);
-                        ActivateTapTokensShared(copy, nullptr);
                         SimulateCombat(copy);
                         if (OpponentHasLost(copy)) { report(state.turn_number, depth - 1); return v; }
                         if (second_main)
@@ -58806,8 +59050,6 @@ TurnSolver::Plan TurnSolver::SolveWithLookahead(const GameState& state, bool is_
                     // Post-apply dedup vs everything scored this pass (tranche plans are disjoint
                     // from wave 0 BY PLAN, so a hit is a genuine same-state collapse).
                     if (!bp_seen_states.insert(BuildDedupKey(copy)).second) { return true; }
-                    AnimateLandsShared(copy, nullptr);
-                    ActivateTapTokensShared(copy, nullptr);
                     SimulateCombat(copy);
                     if (OpponentHasLost(copy)) { won_out = true; return true; }
                     if (second_main)
@@ -58939,8 +59181,6 @@ TurnSolver::Plan TurnSolver::SolveWithLookahead(const GameState& state, bool is_
                 if (is_pre_combat)
                 {
                     ApplyPlanDirect(copy, plan, true);
-                    AnimateLandsShared(copy, nullptr);
-                    ActivateTapTokensShared(copy, nullptr);
                     SimulateCombat(copy);
                     if (OpponentHasLost(copy)) { return state.turn_number; }
                     if (second_main)

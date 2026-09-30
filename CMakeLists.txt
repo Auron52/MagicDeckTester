@@ -288,6 +288,12 @@ add_executable(mtg-test
     test/unit/test_bucket_policy.cpp
     test/unit/test_cost_reducers.cpp
     test/unit/test_subtype_registry.cpp
+    test/unit/test_cumulative_upkeep.cpp
+    test/unit/test_terastodon_k.cpp
+    test/unit/test_swords_redirect.cpp
+    test/unit/test_sac_rank_hook.cpp
+    test/unit/test_provider_relocations.cpp
+    test/unit/test_provider_prunes.cpp
     test/unit/test_opponent_deck.cpp
     test/unit/test_breaching_clauses.cpp
     test/unit/test_edf_blink_target.cpp

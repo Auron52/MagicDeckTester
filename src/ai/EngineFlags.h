@@ -15,23 +15,13 @@
 #include <utility>
 #include <vector>
 
-// MTG_MAIN2_DROP=1 -- measurement lever (DEFAULT OFF until the adoption A/B is accepted): offer
-// the turn's still-unused land drop in the POST-combat main for the autonomous search/executor,
-// as the rules allow (CR: a land may be played during either of your main phases). Human play has
-// always had this (EnumeratePlansWithLand's s_human_play_drop); the autonomous engine's
-// "second main is cast-only" assumption predates main-phase classification, under which a deck
-// can draw into a land in main 2 and must be able to play it (measured: hinata gi=99). Read by
-// BOTH the search (EnumeratePlansWithLand / FSLineTail / ApplyPlanDirect) and the executor
-// (AIEngine fold_land) -- shared reader per the lockstep rule. On adoption this flips to
-// default-ON with an MTG_NO_MAIN2_DROP hatch + GT rebaseline.
-inline bool Main2DropEnabled()
-{
-    // Per-job override (see HeuristicArm.h) so ONE pooled batch can carry both arms of the A/B --
-    // required to attribute the Hinata all-main-2 arm, which needs this flag, against a control
-    // that must not have it. -1 = unset => the env static => byte-identical off the batch path.
-    static const bool env_on = EnvOn("MTG_MAIN2_DROP");
-    return heurarm::Flag(heurarm::MAIN2_DROP, env_on);
-}
+// Main2DropEnabled -- ALWAYS TRUE since 2026-09-30 (MTG_MAIN2_DROP deleted; USER HARD RULE,
+// docs/design/no-greedy-in-search-window.md). The turn's still-unused land drop is offered in the
+// POST-combat main to the autonomous search and executor alike, as the rules allow (CR: a land may
+// be played in either main phase). A main 2 that cannot play the land it drew or tutored is a
+// capability gap the search cannot branch around -- a heuristic substitute inside the window.
+// Kept as a function (not inlined away) so the executor/search lockstep sites still read as one rule.
+inline bool Main2DropEnabled() { return true; }
 
 // MTG_UPKEEP_CALL=1 -- measurement lever (DEFAULT OFF until its adoption A/B is accepted): allow a
 // Call of the Wild activation in the UPKEEP, before the draw step, on a top the controller stacked

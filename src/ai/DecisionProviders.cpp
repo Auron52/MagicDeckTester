@@ -47,7 +47,7 @@
 // hook's ranked pick as its prune and tie-break:
 //   * cleanup DISCARD  -- AIEngine::ChooseDiscard      (MTG_SEARCHED_DISCARD)
 //   * scry-keep        -- Plan::scry_choice            (MTG_SCRY_SEARCH), land ETB dispositions
-//   * vial-charge      -- AIEngine::DecideVialCharge   (MTG_SEARCHED_VIAL)
+//   * vial-charge      -- AIEngine::DecideVialCharge   (provider WantVialCharge / opt-in MTG_VIAL_AXIS)
 // Human-play suppression, shared by both the global and per-gate forms: in a --claude-play
 // session (MTG_HUMAN_PLAY set) the engine's clairvoyant bottoming/keep rollout is an ENGINE
 // decision the human never makes, so un-pruning is suppressed there (a HumanPlaySuppress guard
@@ -657,6 +657,49 @@ static bool DuplicateEntryOrDeathHasUpside(const GameState& s, int controller,
 // Prune casting a legendary permanent we already control a copy of, when that card does nothing on
 // entry. See the hook comment in DecisionProvider.h for why the whitelist is positive rather than
 // an etb_* enumeration (the failure direction matters: a missed field would prune a GOOD cast).
+int DecisionProvider::EtbDestroyK(const GameState& s, int controller, const CardDefinition& def) const
+{
+    return ::ProjectEtbDestroyK(s, controller, def);
+}
+
+int DecisionProvider::SacExpendabilityRank(const GameState& s, const Permanent& v, int source_id,
+                                           const std::vector<int>* doomed_creators) const
+{
+    (void)s;
+    return ::DefaultSacExpendabilityRank(v, source_id, doomed_creators);
+}
+
+int DecisionProvider::EtbDestroyVictimClass(const GameState& s, int controller, const Permanent& q) const
+{
+    return ::DefaultEtbDestroyVictimClass(s, controller, q);
+}
+
+TopDisposition DecisionProvider::TopDispositionPick(const GameState& s, const std::vector<Card>& looked,
+                                                    LookKind kind, int keep_decision) const
+{
+    return ::DefaultTopDisposition(s, looked, kind, keep_decision);
+}
+
+std::vector<std::string> DecisionProvider::ReviveCandidates(const GameState& s, int controller,
+                                                            int max_power, int max_returns) const
+{
+    (void)max_returns;   // the consumer reads the first max_returns entries
+    struct Cand { int mv; std::string nm; };
+    std::vector<Cand> cands;
+    for (const Card& gc : s.players[controller].graveyard)
+    {
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(gc);
+        const Card& card = d ? d->card : gc;
+        if (!card.IsCreature() || card.m_power.value_or(0) > max_power) { continue; }
+        cands.push_back(Cand{card.m_mana_cost.ManaValue(), gc.m_name.str()});
+    }
+    std::sort(cands.begin(), cands.end(), [](const Cand& a, const Cand& b)
+              { if (a.mv != b.mv) { return a.mv > b.mv; } return a.nm < b.nm; });
+    std::vector<std::string> order;
+    for (const Cand& c : cands) { order.push_back(c.nm); }
+    return order;
+}
+
 bool DecisionProvider::OfferDuplicateLegendCast(const GameState& s, int controller,
                                                 const CardDefinition& def) const
 {

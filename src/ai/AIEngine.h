@@ -237,11 +237,9 @@ public:
         std::function<int(const std::vector<Card>&, int, const std::vector<char>&, int, int)>;
     void SetExternalBottomChooser(ExternalBottomChooser c) { m_external_bottom_chooser = std::move(c); }
 
-    // True if a charge counter should be added to `vial` this upkeep (called by GameEngine).
-    // SEARCHED with lookahead (roll the game out under charge and hold, earliest win wins, the
-    // heuristic breaks ties -- MTG_SEARCHED_VIAL=0 for the pure heuristic); the heuristic alone at
-    // d0 and inside rollouts. Consults the external vial chooser if set. Non-const because the
-    // searched pass rolls out through this same engine.
+    // True if a charge counter should be added to `vial` this upkeep (called by GameEngine): the
+    // executing plan's searched pin (Plan::vial_charge_choice, when MTG_VIAL_AXIS opts in), else the
+    // provider's WantVialCharge. Consults the external vial chooser if set.
     bool DecideVialCharge(const GameState& state, const Permanent& vial);
 
     // Mulligan keep-model GENERATOR hook (analyzer-only): clairvoyant "keep value" of an
@@ -288,7 +286,11 @@ private:
     bool                     m_tutor_deferred_drop = false;
     int                      m_max_turns         = 20;  // rollout horizon; kept in sync by SetMaxTurns
     bool                     m_search_post_combat  = false;
-    bool                     m_in_rollout          = false; // prevents recursive LE search in rollouts
+    bool                     m_in_rollout          = false; // rollout engine (no committed plan)
+    // Plan::le_fire_choice of the plan this main phase executed (-1 = the provider's count).
+    // Set in TakeTurn next to the sweep pin, consumed and cleared by ActivateLandsEdge, which
+    // GameEngine::MainPhase calls after TakeTurn returns. Reset at TakeTurn entry.
+    int                      m_le_fire_pin         = -1;
     // MTG_EXEC_DROP_REPLAN: a REAL-play cast of this TakeTurn pass could not be paid and was
     // dropped (CastSpellFromHand's !paid_ok branch). Read once at the end of TakeTurn.
     bool                     m_real_drop_this_pass = false;
@@ -354,13 +356,6 @@ private:
     // re-solve is condemned unless some enumerated post-draw plan uses one of these.
     std::vector<InternedName> m_m2_drawn;
 
-    // MTG_REFUTED_FOLLOW: this game is PROVEN unwinnable -- a top-level search covered the full
-    // remaining horizon (turn + searched_depth - 1 >= max_turns) with ZERO truncation events and
-    // found no win. Every later turn's search would explore a subset of that refuted space, so
-    // once set the engine follows the committed (best-graded lost) line out and, where the line
-    // does not cover a phase, plays the greedy plan -- no further full searches this game. Reset
-    // per game; never set from a rollout (the rollout PlayOut shares this engine by reference).
-    bool m_refuted_follow = false;
 
     // Cleanup-discard LOCKSTEP (Plan::discard_choice, the searched axis): the choice pinned by
     // the plan this turn is EXECUTING, consumed by the first shed of the real cleanup

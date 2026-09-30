@@ -1392,11 +1392,6 @@ public:
     // rollout-leaf Solve walks ~1M subsets and a d5 game hit 40+ min on one seed (300003 gi=2)
     // once the rollout learned Puresteel draws (enter-cascade fix). Off-switch MTG_NO_LETHAL_CUT.
     bool UseLethalShortCircuit() const override { return true; }
-    // Searched ROLLOUT m2 (the branch site is unconditionally searched engine-wide since
-    // 2026-09-05). This deck's conversion (USER 2026-08-19: "we drop the greedy solves entirely
-    // and follow the proper design") measured all four arms identical -- avg 5.0300, play digest
-    // 3e6ea44e9c15d572 -- under the old rollout default that chained to the branch opt-in, so the
-    // override preserves that measured configuration exactly.
     // The USER-reviewed cast order (review held 2026-08-19; see cast-order-rankings.md for the
     // ruling verbatim). Gated on MTG_KE_ORDER, default OFF -> byte-identical.
     int  CastOrderRank(const GameState&, const CardDefinition&) const override;
@@ -2352,6 +2347,19 @@ public:
     // demoted to tap LAST: for a {C} pip the candidate set is all-demoted (no change), for anything
     // else the payer now spends the colours first. Inert until such an ability is on the board.
     int ManaSourceRank(const GameState& s, const CardDefinition& def) const override;
+
+    // EMIEL'S {G/W} COUNTER: DECLINED (USER 2026-09-30: *"Emiel's counter, by the way, should almost
+    // never be paid. That would explain some of my headaches with that deck."*; earlier, seed 11
+    // 2026-09-09: *"realistically most of the time you shouldn't bother with that"*). Paying spends
+    // one {G/W}-payable mana per creature entering -- out of the same pool the next {2}{C} blink or
+    // a spell needs -- for a +1/+1 counter on a board whose bottleneck is mana, not power. A
+    // one-option provider heuristic (decline). The blink combo's own payer scope is untouched: it
+    // still pumps on the loop's last pass, which is the deck's counter kill.
+    bool PaysOptionalEtbCounter(const GameState& s, int controller) const override
+    {
+        (void)s; (void)controller;
+        return false;
+    }
 
     // The go-off recognizer: with the loop assembled and a SINK to cash the mana on (Shivan Gorge
     // damage, an {X} draw, or either of the two {T}-less Eldrazi sinks), the kill is arithmetic,

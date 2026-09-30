@@ -1255,11 +1255,25 @@ inline bool DripManaWantedLaterThisTurn(const GameState& state, int controller_i
     return best_mv > untapped - drips;
 }
 
+// Plan::sweep_choice pin (-1 = the keep-for-main-2 rule; 0 = no sweep; 1 = sweep regardless of main 2),
+// scoped by ApplyPlanDirect and the executor alike. Read by BOTH end-of-main-1 sweeps below.
+inline thread_local int g_endm1_sweep_pin = -1;
+struct ScriptedSweep
+{
+    explicit ScriptedSweep(int k) : saved(g_endm1_sweep_pin) { g_endm1_sweep_pin = k; }
+    ~ScriptedSweep() { g_endm1_sweep_pin = saved; }
+    ScriptedSweep(const ScriptedSweep&) = delete;
+    ScriptedSweep& operator=(const ScriptedSweep&) = delete;
+    int saved;
+};
+
 inline void TapDripLandsIfUseful(GameState& state, int controller_index)
 {
     if (!ResolveProvider(state).OpponentLifegainUseful(state, controller_index)) { return; }
-    // "Leftover" must mean genuinely leftover -- see DripManaWantedLaterThisTurn.
-    if (DripManaWantedLaterThisTurn(state, controller_index)) { return; }
+    if (g_endm1_sweep_pin == 0) { return; }   // a searched plan chose to keep every land
+    // "Leftover" must mean genuinely leftover -- see DripManaWantedLaterThisTurn -- unless a
+    // searched plan chose to sweep anyway (g_endm1_sweep_pin == 1).
+    if (g_endm1_sweep_pin != 1 && DripManaWantedLaterThisTurn(state, controller_index)) { return; }
     for (Permanent& p : state.battlefield)
     {
         if (p.controller_index != controller_index || p.tapped) { continue; }
@@ -4589,6 +4603,19 @@ struct EtbOptionalPayerScope
     ~EtbOptionalPayerScope() { g_etb_optional_payer = prev; }
 };
 
+// Plan::etbcounter_choice pin (-1 = ask the provider; 0 = decline; 1 = pay). Scoped by
+// ApplyPlanDirect and the executor alike, so a scored plan and its realised turn agree.
+inline thread_local int g_etb_counter_pin = -1;
+struct ScriptedEtbCounter
+{
+    explicit ScriptedEtbCounter(int k) : saved(g_etb_counter_pin) { g_etb_counter_pin = k; }
+    ~ScriptedEtbCounter() { g_etb_counter_pin = saved; }
+    ScriptedEtbCounter(const ScriptedEtbCounter&) = delete;
+    ScriptedEtbCounter& operator=(const ScriptedEtbCounter&) = delete;
+    int saved;
+};
+
+
 inline bool PayOptionalTriggerCost(GameState& state, const ManaCost& cost)
 {
     if (g_etb_optional_payer != nullptr) { return (*g_etb_optional_payer)(cost); }
@@ -4913,6 +4940,8 @@ inline void FireCreatureEnterWatchers(GameState& state, int entered_controller, 
     // loop re-enters its target every iteration, so N iterations put N counters on it. (The target
     // is summoning sick after every blink -- CR 400.7 -- so the huge creature attacks NEXT turn.)
     //
+    // (SUPERSEDED 2026-09-30: whether to pay is now DecisionProvider::PaysOptionalEtbCounter -- the
+    // EDF provider declines. The history below is kept for the reasoning it records.)
     // The payment is OPTIONAL and taken whenever it is affordable: against a passive opponent a
     // +1/+1 counter is monotone-good and there is nothing else the mana could be held for at this
     // point in the resolution. That is a RESOLUTION heuristic, not a searched branch -- disclosed
@@ -4953,6 +4982,14 @@ inline void FireCreatureEnterWatchers(GameState& state, int entered_controller, 
         if (!wd || !wd->params.other_creature_etb_counter_cost.has_value()
             || wd->params.other_creature_etb_counters <= 0) { continue; }
         const ManaCost c = wd->params.other_creature_etb_counter_cost.value();
+        // WHETHER to pay is the PROVIDER's call (DecisionProvider::PaysOptionalEtbCounter), unless a
+        // caller owns this payment through its own payer scope (the EDF blink loop).
+        // A searched plan's pin (Plan::etbcounter_choice) outranks the provider's default.
+        if (g_etb_optional_payer == nullptr
+            && !(g_etb_counter_pin >= 0
+                     ? g_etb_counter_pin == 1
+                     : ResolveProvider(state).PaysOptionalEtbCounter(state, watcher_ctrl)))
+        { continue; }
         if (!PayOptionalTriggerCost(state, c)) { continue; }
         int n = wd->params.other_creature_etb_counters;
         const std::string& usub = wd->params.other_creature_etb_counter_subtype;
@@ -6623,13 +6660,8 @@ void PerformMuxusReveal(GameState& state, int controller, const CardParams& pp);
 void PerformGenesisWave(GameState& state, int controller, int x, const std::string& source_name);
 
 // ---- Terastodon ETB-destroy heuristic (USER 2026-08-20) ---------------------------------------
-// One lever for the whole tweak (K-set narrowing at emission + the widened victim pool at
-// resolution): MTG_TERA_K, DEFAULT ON; =0 restores the v1 shape (full K fan over Forests only).
-inline bool TeraKHeuristicEnabled()
-{
-    static const bool v = EnvOn("MTG_TERA_K", true);
-    return v;
-}
+// K is the provider's (DecisionProvider::EtbDestroyK, default ProjectEtbDestroyK below); the
+// MTG_TERA_K lever that could restore the v1 shape is DELETED (no levers, USER 2026-09-30).
 
 // Victim ordering class for the ETB self-destroy (lower = eaten first), or -1 = not a valid
 // victim. USER: "widen the choice to all valid targets, but only if we run out of forests."
@@ -6640,19 +6672,25 @@ inline bool TeraKHeuristicEnabled()
 //   4  the reveal engine (Call of the Wild) LAST -- "Worldly Tutor into Call of the Wild
 //      activation is a real move for this deck" (USER), so it dies only when nothing else remains.
 // Within a class the destroy loop takes tapped before untapped. The widening past class 0 is
-// lever-gated; the resolution loop and the emission's target count share THIS predicate so the
+// unconditional (was MTG_TERA_K); the resolution loop and the emission's target count share THIS predicate so the
 // searched K can never exceed what resolution will actually destroy (lockstep by construction).
-inline int EtbDestroyVictimClass(const GameState& state, int controller, const Permanent& q)
+// The BASE provider's order (DecisionProvider::EtbDestroyVictimClass's default); engine code asks
+// the provider through EtbDestroyVictimClass(...) below.
+inline int DefaultEtbDestroyVictimClass(const GameState& state, int controller, const Permanent& q)
 {
     if (q.controller_index != controller || q.is_animated || q.card.IsCreature()) { return -1; }
     if (q.card.IsLand() && CardHasSubtype(q.card, "Forest")) { return 0; }
-    if (!TeraKHeuristicEnabled()) { return -1; }
     if (q.card.IsLand()) { return 1; }
     const CardDefinition* qd = CardDatabase::Instance().LookupCached(q.card);
     if (!qd) { return -1; }
     if (qd->params.activated_reveal_top_cost.has_value()) { return 4; }
     if (qd->params.mana_rock) { return 2; }
     return 3;
+}
+
+inline int EtbDestroyVictimClass(const GameState& state, int controller, const Permanent& q)
+{
+    return ResolveProvider(state).EtbDestroyVictimClass(state, controller, q);
 }
 
 // How many victims the widened pool holds right now -- the emission's cap on searched K.
@@ -7310,10 +7348,9 @@ inline void FireOwnEtbTriggers(GameState& state, int controller, int entered_ind
     // chosen_x carried on the cast (etb_kx; -1/0 = destroy nothing; kEtbKxHeuristic = "project K
     // here at resolution" -- BOTH the autonomous cast and every put path send it; only human
     // play's explicit fan carries a positive K). Victim order and pool: EtbDestroyVictimClass
-    // above (Forests first; the pool widens past them only under MTG_TERA_K).
-    if (p.etb_destroy_own_noncreature_max > 0 && etb_kx == kEtbKxHeuristic
-        && TeraKHeuristicEnabled())
-    { etb_kx = ProjectEtbDestroyK(state, controller, *def); }
+    // above (Forests first; the pool widens past them only when Forests run out).
+    if (p.etb_destroy_own_noncreature_max > 0 && etb_kx == kEtbKxHeuristic)
+    { etb_kx = ResolveProvider(state).EtbDestroyK(state, controller, *def); }
     if (p.etb_destroy_own_noncreature_max > 0 && etb_kx > 0)
     {
         int k = std::min(etb_kx, p.etb_destroy_own_noncreature_max);
@@ -7856,23 +7893,9 @@ inline void PerformReturnFromGraveyardToBattlefield(GameState& state, int contro
 {
     if (max_returns <= 0) { return; }
     Player& ap = state.players[controller];
+    // The provider's ranking (default: printed MV desc) -- no engine fallback.
     std::vector<std::string> order =
         ResolveProvider(state).ReviveCandidates(state, controller, max_power, max_returns);
-    if (order.empty())
-    {
-        struct Cand { int mv; std::string nm; };
-        std::vector<Cand> cands;
-        for (const Card& gc : ap.graveyard)
-        {
-            const CardDefinition* d = CardDatabase::Instance().LookupCached(gc);
-            const Card& card = d ? d->card : gc;
-            if (!card.IsCreature() || card.m_power.value_or(0) > max_power) { continue; }
-            cands.push_back(Cand{card.m_mana_cost.ManaValue(), gc.m_name.str()});
-        }
-        std::sort(cands.begin(), cands.end(), [](const Cand& a, const Cand& b)
-                  { if (a.mv != b.mv) { return a.mv > b.mv; } return a.nm < b.nm; });
-        for (const Cand& c : cands) { order.push_back(c.nm); }
-    }
     // Human-play revive override (--claude-play / viewer; bucket-B wiring 2026-09-05): the
     // person picks WHICH qualifying graveyard cards come back (up to max_returns, possibly
     // fewer -- "up to" is a real decline). Same multi-pick contract as the Defense of the
@@ -9654,8 +9677,11 @@ inline std::vector<int> DoomedTokenCreators(const GameState& state)
     return out;
 }
 
-inline int SacExpendabilityRank(const Permanent& v, int source_id,
-                               const std::vector<int>* doomed_creators = nullptr)
+// The BASE provider's rank (DecisionProvider::SacExpendabilityRank's default). Engine code never
+// calls this directly -- it asks the provider via SacExpendabilityRank(state, ...) below, so a deck
+// can re-rank its own fodder (USER HARD RULE 2026-09-30: heuristics live in providers).
+inline int DefaultSacExpendabilityRank(const Permanent& v, int source_id,
+                                      const std::vector<int>* doomed_creators = nullptr)
 {
     int rank = v.EffectivePower();                 // base: sac the weakest first
     const CardDefinition* d = CardDatabase::Instance().LookupCached(v.card);
@@ -9704,6 +9730,12 @@ inline int SacExpendabilityRank(const Permanent& v, int source_id,
     if (combo_enabler)                { rank += 5000; }    // loop enablers: keep hardest
     if (v.card.m_number == source_id) { rank += 100000; }  // sac the source last
     return rank;
+}
+
+inline int SacExpendabilityRank(const GameState& state, const Permanent& v, int source_id,
+                                const std::vector<int>* doomed_creators = nullptr)
+{
+    return ResolveProvider(state).SacExpendabilityRank(state, v, source_id, doomed_creators);
 }
 
 // Canonical (most-expendable) sacrifice victim for a creature-sac outlet: prefer a TOKEN, else the
@@ -9805,7 +9837,7 @@ inline int CanonicalSacVictim(const GameState& state, int controller, int source
         // enchantment", not "or an enchantment of that type").
         if (!need_sub.empty() && v.card.IsCreature() && !CardHasSubtype(v.card, need_sub))
         { continue; }
-        const int rank = SacExpendabilityRank(v, source_id, &doomed);
+        const int rank = SacExpendabilityRank(state, v, source_id, &doomed);
         if (rank < victim_rank) { victim_rank = rank; victim_id = v.card.m_number; }
         if (probe)
         {
@@ -10585,7 +10617,7 @@ inline std::vector<int> DevourRankOrder(const GameState& state, int controller)
     {
         const Permanent& v = state.battlefield[i];
         if (v.controller_index != controller || !v.card.IsCreature()) { continue; }
-        ranked.emplace_back(SacExpendabilityRank(v, /*source_id=*/0, &doomed), i);
+        ranked.emplace_back(SacExpendabilityRank(state, v, /*source_id=*/0, &doomed), i);
     }
     std::sort(ranked.begin(), ranked.end());
     std::vector<int> order;
@@ -14209,27 +14241,49 @@ inline void PerformUpkeepFading(GameState& state)
     }
 }
 
-// Varchild's War-Riders cumulative upkeep: +1 age counter, then the OPPONENT creates age_counters
-// tokens (upkeep_token_* spec; 1/1 red Survivor). ALWAYS PAID -- weakly dominant vs the passive
-// opponent (the gifts only feed our drains / DotH, and the 3/4 body is kept); pay-vs-sacrifice is
-// a disclosed auto-decision. Each gift enters via CreateToken -> the enter-watcher cascade
-// (Suture Priest drains). Iterates over the pre-existing battlefield size only (the created
-// tokens are appended and must not re-trigger anything here).
+// Varchild's War-Riders cumulative upkeep (CR 702.24a): +1 age counter, then EITHER the opponent
+// creates age_counters tokens (upkeep_token_* spec; 1/1 red Survivor) OR we sacrifice it. WHICH is
+// the provider's call (DecisionProvider::PaysCumulativeUpkeep; default pay -- weakly dominant vs the
+// passive opponent). Each gift enters via CreateToken -> the enter-watcher cascade (Suture Priest
+// drains). A declined upkeep sacrifices through SacrificePermanentAt, so death watchers fire.
+// Walks a SNAPSHOT of card numbers: gifts append to the battlefield and a sacrifice erases from it,
+// so a live index walk would skip or double-visit; created tokens never trigger anything here.
 inline void PerformUpkeepCumulativeGifts(GameState& state)
 {
     const int active = state.active_player_index;
-    const int n = static_cast<int>(state.battlefield.size());
-    for (int i = 0; i < n; ++i)
+    std::vector<int> sources;
+    for (const Permanent& p : state.battlefield)
     {
-        Permanent& p = state.battlefield[i];
         if (p.controller_index != active) { continue; }
         const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
-        if (!d || !d->params.cumulative_upkeep_opp_token) { continue; }
-        // CreateToken APPENDS to state.battlefield, which reallocates it and leaves `p` dangling --
-        // so the loop bound must not be re-read off `p` after the first token (that read is a
-        // use-after-free: ASAN 2026-08-25, READ of size 4 = age_counters). Latch the count first.
-        // The token subtypes come from `d`, which points into the CardDatabase and is unaffected.
-        const int gifts = ++p.age_counters;   // do NOT touch `p` past this point
+        if (d && d->params.cumulative_upkeep_opp_token) { sources.push_back(p.card.m_number); }
+    }
+    for (int num : sources)
+    {
+        int idx = -1;
+        for (int i = 0; i < static_cast<int>(state.battlefield.size()); ++i)
+        {
+            const Permanent& q = state.battlefield[i];
+            if (q.controller_index == active && q.card.m_number == num) { idx = i; break; }
+        }
+        if (idx < 0) { continue; }
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(state.battlefield[idx].card);
+        if (!d) { continue; }
+        // CreateToken APPENDS to state.battlefield, which reallocates it -- so the count is latched
+        // here and no Permanent reference is held across the gifts (ASAN 2026-08-25). `d` points into
+        // the CardDatabase and is unaffected.
+        const int gifts = ++state.battlefield[idx].age_counters;
+        if (!ResolveProvider(state).PaysCumulativeUpkeep(state, idx))
+        {
+            if (g_play_event_sink)
+            {
+                EmitPlayEvent(state.turn_number, "sacrifice",
+                              state.battlefield[idx].card.m_name.str()
+                              + ": cumulative upkeep not paid -- sacrificed");
+            }
+            SacrificePermanentAt(state, active, idx);
+            continue;
+        }
         for (int k = 0; k < gifts; ++k)
         {
             CreateToken(state, 1 - active, d->params.upkeep_token_power,
@@ -22805,7 +22859,7 @@ inline int SacPayFodderRank(const GameState& state, const Permanent& p, const Sa
     // The caller HOISTS the doomed-creator list: this is called once per candidate body inside a
     // battlefield loop, so computing it here is an O(board^2) pass (measured +48% CPU).
     return 500 + (SacPayFodderCostsAttack(state, p) ? 10000 : 0)
-               + SacExpendabilityRank(p, outlet.source_id, doomed_creators);
+               + SacExpendabilityRank(state, p, outlet.source_id, doomed_creators);
 }
 
 // How many activations the board can still pay for. NOTE IT COUNTS TAPPED BODIES TOO: sacrificing
@@ -25300,8 +25354,8 @@ inline void ApplyTopDisposition(GameState& state, std::vector<Card>& looked,
 // The provider-heuristic disposition -- reproduces the ORIGINAL ScryTop/SurveilTop/
 // ReorderTopOrShuffle behaviour so the autonomous search and normal play stay byte-identical.
 // keep_decision applies to Reorder only (-1 legacy heuristic, 0 forced shuffle, 1 forced keep).
-inline TopDisposition HeuristicTopDisposition(const GameState& state, const std::vector<Card>& looked,
-                                              LookKind kind, int keep_decision = -1)
+inline TopDisposition DefaultTopDisposition(const GameState& state, const std::vector<Card>& looked,
+                                            LookKind kind, int keep_decision = -1)
 {
     const int m = static_cast<int>(looked.size());
     TopDisposition disp;
@@ -25328,6 +25382,13 @@ inline TopDisposition HeuristicTopDisposition(const GameState& state, const std:
     for (int i = 0; i < m; ++i)
     { if (ResolveProvider(state).ScryKeepOnTop(state, looked[i])) { disp.top_order.push_back(i); } }
     return disp;
+}
+
+// Every engine consumer asks the PROVIDER (DecisionProvider::TopDispositionPick, default above).
+inline TopDisposition HeuristicTopDisposition(const GameState& state, const std::vector<Card>& looked,
+                                              LookKind kind, int keep_decision = -1)
+{
+    return ResolveProvider(state).TopDispositionPick(state, looked, kind, keep_decision);
 }
 
 // SEARCH-SCRIPTED disposition (see docs/design/searched-scry-disposition.md). A scry/surveil/reorder
@@ -27658,6 +27719,9 @@ inline void TryPumpThenSwordsRedirect(GameState& state, int active, int target_b
         if (!pp.target_own_creature)      { continue; }   // Invigorate-style +N/+M on a creature
         if (pp.power_bonus <= 0)          { continue; }
         if (!ControlsSubtype(state, active, pp.alt_cost_requires_subtype)) { continue; }  // a Forest
+        // Whether to redirect is the PROVIDER's (default yes: weakly dominant); the engine only
+        // realises the rules of the cast.
+        if (!ResolveProvider(state).RedirectPumpOntoRemovalTarget(state, active, target_bi, *d)) { continue; }
 
         // Fire the pump onto the Swords target, mirroring a normal alt-cost Invigorate cast:
         // pull it from hand, pay the alt lifegain, fire on-cast triggers (Aria verse) + prowess,
@@ -27728,7 +27792,9 @@ inline void TapPainSourcesIfUseful(GameState& state, int ctrl)
     // after every tap -- each hit is paid back before the next is taken.
     const bool pain_useful = ResolveProvider(state).SelfDamageUseful(state, ctrl);
     if (!pain_useful && nbarb == 0) { return; }
-    if (state.uses_second_main)
+    if (g_endm1_sweep_pin == 0) { return; }   // a searched plan chose to keep every land
+    // Keep-for-main-2 rule -- the default, overruled when a searched plan chose to sweep (pin 1).
+    if (state.uses_second_main && g_endm1_sweep_pin != 1)
     {
         int untapped = 0;
         for (const Permanent& p : state.battlefield)

@@ -69,6 +69,9 @@
 #include <cstdint>
 #include <optional>
 #include <string>
+
+struct TopDisposition;   // core/GameLogger.h
+enum class LookKind;     // core/GameLogger.h
 #include <vector>
 
 // A "scaled cast" variant of a spell whose mana cost depends on how much OUTPUT it commits -- the
@@ -218,11 +221,11 @@ public:
     // power 2 or less from your graveyard to the battlefield"): ordered card names to return.
     // A RESOLUTION-time pick (the trigger fires on paths no plan action carries -- a sac cost, a
     // Felidar flicker), same architectural position as SacTutorPutList. Empty (the default) =
-    // the shared deck-agnostic ranking in PerformReturnFromGraveyardToBattlefield (printed MV
-    // desc). Human play overrides via the `revive` chooser. Disclosed in Stage 6a.
+    // The DEFAULT is the deck-agnostic ranking (qualifying creature cards, printed MV desc, then
+    // name) -- a provider heuristic; the engine keeps no fallback of its own (USER HARD RULE
+    // 2026-09-30). Human play overrides via the `revive` chooser. Disclosed in Stage 6a.
     virtual std::vector<std::string>
-    ReviveCandidates(const GameState&, int /*controller*/, int /*max_power*/,
-                     int /*max_returns*/) const { return {}; }
+    ReviveCandidates(const GameState& s, int controller, int max_power, int max_returns) const;
 
     // FlickerTarget -- Felidar Guardian's ETB flicker ("you may exile another target permanent
     // you control, then return that card"): the target's card.m_number, or 0 to decline. Used on
@@ -348,6 +351,19 @@ public:
 
     // LandsEdgeFireCount -- how many lands to discard to a Land's Edge this activation.
     virtual int LandsEdgeFireCount(const GameState& s, int rate) const = 0;
+
+    // LandsEdgeFireCandidates -- the fire counts the SEARCH branches over besides the base plan's
+    // LandsEdgeFireCount (Plan::le_fire_choice; a count k fires min(k, lands then in hand), 99 =
+    // all). A PROVIDER PRUNE of 0..lands: the full fan measured too wide to search -- TH 2HG
+    // s1001 gi15 with 8-9 lands in hand fanned 10+ variants per base plan at every level, the T3
+    // search stopped at depth 1 and lost a verified T5 win at 1x/4x/16x budget. Default = the two
+    // arms the deleted executor trial weighed: HOLD everything, FIRE everything. A deck whose
+    // partial fires matter (keep a land for next turn's drop) widens it.
+    virtual std::vector<int> LandsEdgeFireCandidates(const GameState& /*s*/, int /*rate*/,
+                                                     int /*lands_in_hand*/) const
+    {
+        return { 0, 99 };
+    }
 
     // WantVialCharge -- whether to add an Aether Vial charge counter this upkeep.
     virtual bool WantVialCharge(const GameState& s, const Permanent& vial) const = 0;
@@ -759,8 +775,6 @@ public:
     // budget HEURISTICS (the solve memo, MTG_M2_SEARCH_DEPTH / M2_CAP1), never a greedy revert and
     // never a line-deleting gate. See docs/design/searched-second-main-unconditional.md.
 
-    // SearchesRolloutSecondMain -- the ROLLOUT site of the interior second main:
-    // SimulateToEndImpl's per-turn second main, i.e. the playout policy of the LEAF ESTIMATOR.
     // SearchesRolloutSecondMain -- DELETED 2026-10-01. The ROLLOUT site of the interior second main
     // is now SEARCHED for every deck at every depth > 0, with no hook and no lever, and
     // greedywindow::Require (TurnSolver.cpp) makes a re-introduction a hard abort.
@@ -1274,6 +1288,118 @@ public:
     // EnumeratePlansWithLand). DEFAULT false -> every other deck always develops (byte-identical); only
     // BurnProvider opts in, gated on lands-in-play.
     virtual bool PreferHoldLandDrop(const GameState& s, int controller) const { return false; }
+
+    // OffersExertTokenActivation -- whether a "{cost}, {T}, EXERT: create a token" ability (Basri,
+    // Tomorrow's Champion) is OFFERED to the autonomous search as a plan action. A PRUNE, owned here
+    // because the engine is heuristic-free (USER HARD RULE 2026-09-30,
+    // docs/design/no-greedy-in-search-window.md). DEFAULT false -- the USER's 2026-09-27 ruling: "for
+    // the cats I recommend you just disable that ability in a heuristic ... We shouldn't disable it
+    // entirely, since that doesn't make sense, but heuristically it does make sense." Exerting costs
+    // the source its next untap (a Knight body pumped by Exemplar / Marshal) for a 1/1 token. Human
+    // play is always offered the ability regardless. Non-exert token taps (Sliver Hive) are not
+    // affected by this hook -- they are always offered and the search decides.
+    virtual bool OffersExertTokenActivation(const GameState& s, const CardDefinition& src) const
+    {
+        (void)s; (void)src;
+        return false;
+    }
+
+    // PaysCumulativeUpkeep -- cumulative upkeep (CR 702.24a: put an age counter on it, then pay for
+    // EACH age counter or sacrifice it). Varchild's War-Riders' cost is "have an opponent create a 1/1
+    // Survivor" per counter. WHETHER to pay is a player decision, so it is the provider's, not the
+    // engine's (USER 2026-09-30: *"even Varchild's should be done with a provider heuristic in theory.
+    // At least this is a helpful way to design it for the future when we do 1v1"* -- against a real
+    // opponent the gifts become blockers and attackers and the answer stops being obvious).
+    // `perm_index` is the battlefield index, age counter ALREADY incremented. DEFAULT true: against
+    // the passive goldfish, paying is weakly dominant (the gifts only feed our drains; the body stays).
+    virtual bool PaysCumulativeUpkeep(const GameState& s, int perm_index) const
+    {
+        (void)s; (void)perm_index;
+        return true;
+    }
+
+    // EtbDestroyK -- Terastodon-style "destroy up to N of your noncreature permanents" ETB: how many
+    // to destroy when the entry carries no searched K (the autonomous cast and every PUT route send
+    // kEtbKxHeuristic). A ONE-OPTION provider heuristic (USER 2026-08-20/21): the default is the
+    // lethality-window projection ProjectEtbDestroyK (SpellEffects.h); the explicit 0..cap fan
+    // stays under human play and MTG_UNPRUNE=terak. Test: test_terastodon_k.cpp.
+    virtual int EtbDestroyK(const GameState& s, int controller, const CardDefinition& def) const;
+
+    // SacExpendabilityRank -- how expendable permanent `v` is as a SACRIFICE victim (LOWER =
+    // sacrificed first); `source_id` is the outlet's card number (sacrificed last). The one rank
+    // behind every creature-sac pick: the canonical single victim a sac-outlet action carries
+    // (BOUNDED narrowing -- the victims are fungible, one action per outlet), the multi-sac burst's
+    // apply-time picks, Devour's ladder, the sac-pay fodder order and the Pod victim emission order.
+    // A PROVIDER heuristic (USER HARD RULE 2026-09-30); the default is the shared engine rule
+    // (tokens / self-replacing first, lords and combo enablers deferred, source last).
+    // `doomed_creators` (may be null) lists the permanents that destroy their own tokens on leaving
+    // (DoomedTokenCreators; MTG_SAC_VICTIM_DOOMED), computed once per ranking pass by the caller.
+    // Test: test_sac_rank_hook.cpp.
+    virtual int SacExpendabilityRank(const GameState& s, const Permanent& v, int source_id,
+                                     const std::vector<int>* doomed_creators = nullptr) const;
+
+    // EtbDestroyVictimClass -- Terastodon's own-permanent victim ORDER class for `q` (lower = eaten
+    // first, -1 = not a victim). Shared by the resolution loop, the emission's K cap and the K
+    // projection, so the searched K can never exceed what resolution destroys. Default = the
+    // USER's 2026-08-20 order (Forests, other lands, rocks, other noncreatures, the reveal engine).
+    virtual int EtbDestroyVictimClass(const GameState& s, int controller, const Permanent& q) const;
+
+    // TopDispositionPick -- the autonomous scry / surveil / reorder disposition of the looked-at
+    // cards (keep_decision: Reorder only, -1 heuristic, 0 forced shuffle, 1 forced keep). It is
+    // candidate 0 of every searched top-disposition fan, so the engine's four call sites and the
+    // claude-play default all read it here. Default = HeuristicTopDisposition's original rule.
+    virtual TopDisposition TopDispositionPick(const GameState& s, const std::vector<Card>& looked,
+                                              LookKind kind, int keep_decision) const;
+
+    // OffersTuckRemovalCast -- whether the AUTONOMOUS search may cast a tuck removal (Unexpectedly
+    // Absent) at all; `self_target` = the no-opponent-creature form aimed at our own permanent.
+    // DEFAULT false, a provider PRUNE (USER doctrine 2026-08-14: "Unexpectedly Absent we can just
+    // not cast for now" -- removing a passive spawn has near-zero clock value). Human play and
+    // MTG_UNPRUNE=uacast always see the cast.
+    virtual bool OffersTuckRemovalCast(const GameState& s, const CardDefinition& def,
+                                       bool self_target) const
+    {
+        (void)s; (void)def; (void)self_target;
+        return false;
+    }
+
+    // OffersJitteNonCombatModes -- whether the AUTONOMOUS search enumerates an equipment's
+    // non-combat charge modes (Umezawa's Jitte -1/-1, gain 2). DEFAULT false, a provider PRUNE (USER
+    // doctrine 2026-08-14: "always use it for +2/+2 ... no reason to use any other mode in
+    // goldfishing"); combat's +2/+2 spend (JitteSpendCount) is then the only outlet. Human play and
+    // MTG_UNPRUNE=jittemode open both modes.
+    virtual bool OffersJitteNonCombatModes(const GameState& s) const
+    {
+        (void)s;
+        return false;
+    }
+
+    // RedirectPumpOntoRemovalTarget -- Anti-Lifegain pump-then-Swords: just before a lifegain-equals-
+    // power removal (Swords to Plowshares) exiles opponent creature `target_bi`, fire a free-alt
+    // Invigorate from hand onto THAT creature (the exile's life loss grows by the pump) instead of
+    // leaving it for the safe-alt pass to pump an own attacker. `pump_def` is the hand card. DEFAULT
+    // true: weakly dominant -- equal when the own creature could swing, strictly better when it
+    // cannot (docs/design/antilifegain-swords-targeting.md). A provider decision, not an engine rule
+    // (USER HARD RULE 2026-09-30). Test: test_swords_redirect.cpp.
+    virtual bool RedirectPumpOntoRemovalTarget(const GameState& s, int controller, int target_bi,
+                                               const CardDefinition& pump_def) const
+    {
+        (void)s; (void)controller; (void)target_bi; (void)pump_def;
+        return true;
+    }
+
+    // PaysOptionalEtbCounter -- "you may pay {cost}; if you do, put +1/+1 counter(s) on it" (Emiel the
+    // Blessed's other_creature_etb_counter_cost). The ENGINE does not decide an optional payment:
+    // it asks the provider (USER HARD RULE 2026-09-30, docs/design/no-greedy-in-search-window.md --
+    // the engine is heuristic-free, heuristics live in the provider and only restrict options).
+    // Consulted only when no caller has installed its own payer (EtbOptionalPayerScope -- the
+    // EDF blink loop owns the decision inside its combo, including the last-pass pump). DEFAULT
+    // true = the pre-2026-09-30 pay-when-affordable behaviour for any deck that has not decided.
+    virtual bool PaysOptionalEtbCounter(const GameState& s, int controller) const
+    {
+        (void)s; (void)controller;
+        return true;
+    }
 
     // HoldFuelWhileComboing -- "once you are going off, don't play any fuel; just cycle everything"
     // (USER, 2026-09-05, on Fluctuator). While the combo is live, every card in hand is AMMUNITION,
@@ -2091,21 +2217,22 @@ public:
     // Provider-owned for the same reason TutorSearchWidth is: the useful breadth is a per-deck fact.
     virtual int EtbDigSearchWidth() const { return 0; }
 
-    // ReplicateCounts -- Hatchery Sliver replicate: how many token copies to pay for on cast.
-    // Returns candidate counts in PREFERENCE order; index 0 is what a non-branching caller takes. A
-    // NEGATIVE entry means "as many as the pool affords" (greedy max), which is the default.
+    // ReplicateCounts -- Hatchery Sliver replicate: which token-copy counts the SEARCH may branch
+    // over for this cast (a PRUNE of 0..kmax; each count is priced into the cast's own bill, so an
+    // unaffordable one is never a plan). EMPTY = every count, the default. Entries outside
+    // 0..kmax are ignored. Human play and MTG_UNPRUNE=replicate always see the whole fan.
     //
-    // Provider-owned because greedy-max is a PER-DECK fact, not an engine truth. It is right for
-    // slivers -- a deck of one-drops and lords, where an extra body is almost always the best use of
-    // the mana -- and that is the deck that has the card today. It need not hold for a deck whose
-    // replicate target competes with an expensive payoff. Unlike firebreathing (whose pool is a
+    // Provider-owned because which counts are worth searching is a PER-DECK fact, not an engine
+    // truth (the pre-2026-09-30 engine took the greedy max at resolution). Max is usually right for
+    // slivers -- one-drops and lords, where an extra body is almost always the best use of the
+    // mana -- but not when a copy competes with a co-planned cast. Unlike firebreathing (whose pool is a
     // by-value copy, making greedy-max provably dominant), replicate taps REAL sources:
     // MTG_REPLICATE_TRACE measured 59 of 189 replicate events squeezing at least one hand card out of
     // affordability, so the pool is genuinely contended.
     virtual std::vector<int> ReplicateCounts(const GameState& /*s*/,
-                                             const CardDefinition& /*def*/) const
+                                             const CardDefinition& /*def*/, int /*kmax*/) const
     {
-        return std::vector<int>{ -1 };
+        return {};
     }
 
     // ---- Remaining engine built-ins, ported byte-identically -----------------------------------

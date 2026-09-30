@@ -80,7 +80,8 @@ TEST_CASE("Staunch Crewmate digs Daring Buccaneer and the leftover {R} casts it 
     s.players[0].library.push_back(CardEd("Daring Buccaneer", 30));  // the only Pirate in the top 4
     for (int k = 0; k < 10; ++k) { s.players[0].library.push_back(CardEd("Mountain", 40 + k)); }
 
-    const TurnSolver::Plan plan = TurnSolver::Solve(s, /*is_pre_combat=*/true);
+    const TurnSolver::Plan plan = TurnSolver::Solve(s, /*is_pre_combat=*/true,
+                                                   TurnSolver::GreedyPermit(TurnSolver::GreedySite::HorizonLeaf, 0));
     TurnSolver::ApplyPlan(s, plan, /*is_pre_combat=*/true);
 
     CHECK(OnBattlefield(s, "Staunch Crewmate"));

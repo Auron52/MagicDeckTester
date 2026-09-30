@@ -461,14 +461,8 @@ ManaCost SinkCostWithLineHold(const ManaCost& own);
 // their holds cannot drift apart.
 ManaCost LineCastCostTotal(const std::vector<Action>& acts);
 
-// Post-spell mana sinks (C1 unit 5): animate manlands (Mutavault) / tap-and-pay token abilities
-// (Sliver Hive), run pre-combat so the creatures can attack. Twin pairs
-// (AIEngine::{AnimateLands,ActivateTapTokens} / TurnSolver's Simulate{AnimateLands,TapTokens})
-// with one PRESERVED structural divergence each around the affordability gate -- see the
-// definitions. `available` = the executor's accounting pool, nullptr for the rollout (which also
-// selects the rollout's MTG_LEGACY_CCO_PAY hatch, the poolless caller being the only one with it).
-void AnimateLandsShared(GameState& state, ManaPool* available);
-void ActivateTapTokensShared(GameState& state, ManaPool* available);
+// (The post-spell greedy mana sinks AnimateLandsShared / ActivateTapTokensShared were deleted
+// 2026-09-30 -- see the note at their old definition in ManaPayment.cpp.)
 
 // ---- THE tap mechanic, shared -----------------------------------------------------------------
 // Tap ONE non-filter source for colour `col`, into `floating`, applying everything a real tap of
