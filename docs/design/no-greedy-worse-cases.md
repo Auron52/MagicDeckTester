@@ -135,3 +135,12 @@ cell moved.
 tree** -- T5 at d3 b80, no win at `--depth 8 --budget-ms 0`. A deeper unbounded search should never
 lose a win a shallower one finds; root-cause it before relying on d8 b0 as the recoverability test
 for treasure_hunt.
+
+## Small per-deck losers after step 23 -- recoverability (2026-09-30)
+
+Every game step 23 plays worse than the committed tree on the overnight tier for mirrorwing (+3),
+fluctuator (+2), fungus (+2), kitty (+2), pirates (+2), stompy (+1) and melira (+4): 32 games
+(`logs/purge/small_slow`). **31/32 recover at d8 b0; 29/32 already at 4x budget** -- budget churn.
+The one exception, **fluctuator d3 s4004 gi419** (base T6, step 23 T7, d8 b0 T7), is the same
+PRE-EXISTING depth non-monotonicity as th gi211: the committed tree and step 22 are also T7 at d8 b0,
+and step 23/24 recover T6 at 4x. Both d8-b0 anomalies are open against the committed tree.
