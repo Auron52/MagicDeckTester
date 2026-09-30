@@ -190,6 +190,14 @@ continuation lists, each paid for with a full prefix apply before the dedup sees
 performance item: a SOUND pre-apply dedup of continuation candidates (NB the plan-signature dedupe was
 measured UNSOUND in an earlier arc -- only a signature that provably implies state identity may skip).
 
+**Wall ledger after step 26** (full overnight tier, step 26 vs the committed tree, each run alone on
+the box; searched cells; `logs/purge/ov_s26` vs `logs/purge/ovbase`): hinata 1.70x, goblins2hg 1.54x,
+hinata2hg 1.43x, goblins 1.39x, giants 1.28x, fivecolour2hg 1.26x, kitty 1.20x, antilife2hg 1.19x,
+slivers/fivecolour 1.14x, melira/auras 1.11x, all others 0.95-1.09x. The budget is in units, so wall
+above units is work the units do not count (post-apply dedup keys, applies of duplicates, enumeration);
+the heaviest decks are the ones the purge helped most (hinata -151, giants -48, goblins -12). The
+pre-apply continuation dedup (below) remains the top performance item.
+
 Mitigation phase (after the purge, before Phase 2), in order:
 1. Clean paired CPU timing per deck (alternate base/new binary; d0 as the contention control).
 2. Exact-duplicate prunes for every new axis (a variant whose pin cannot change the plan's outcome
