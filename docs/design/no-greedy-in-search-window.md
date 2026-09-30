@@ -178,6 +178,18 @@ standing rule: budget churn must be minimized, not excused) -- it goes in the sa
 | 12-14b provider hooks, m2 dig | byte-identical (12, 13); 14b smoke wall 1.04x contended, 2 games changed | 0 | -- |
 | **Checkpoint (step 7 vs 3753dcf3)** | CPU 1.13x raw; d3 1.21x, d5 1.32x vs a d0 control that itself read 1.32x -> no clear net cost; **Hinata 1.7-2.4x wall: needs clean paired timing** | 58 of 64 slower games | -- |
 
+**d8 b0 runtime check (2026-09-30).** The 66 purge-slower games at `--depth 8 --budget-ms 0`, purge
+binary vs committed tree: quality never worse (2 better: hinata d3 s2002 gi143 T7 -> T6, hinata2hg d5
+s2002 gi21 T6 -> T5), but **3.72x total runtime** (843 s vs 227 s), concentrated in Hinata (up to 24.5x,
+hinata d5 s2002 gi21 0.5 s -> 12.5 s) and fungus d5 (5.4x). Bisected (hinata gi21, d8 b0): **step 3a**
+(0.37 s -> 4.33 s; later steps add little). Mechanism (`MTG_BP_WAVE_PROBE`): before 3a the waves never
+fired (nodes=0 -- the non-hosted breakpoints were the unbranched `cands.front()` hole 3a closed); after
+it, 45 wave nodes score 12,538 continuation entries with max rank 706, and **84% are post-apply state
+duplicates** (dupstate 10,541, self 8,897): same-card copies / orderings in a cantrip deck's huge
+continuation lists, each paid for with a full prefix apply before the dedup sees it. Not a bug; the top
+performance item: a SOUND pre-apply dedup of continuation candidates (NB the plan-signature dedupe was
+measured UNSOUND in an earlier arc -- only a signature that provably implies state identity may skip).
+
 Mitigation phase (after the purge, before Phase 2), in order:
 1. Clean paired CPU timing per deck (alternate base/new binary; d0 as the contention control).
 2. Exact-duplicate prunes for every new axis (a variant whose pin cannot change the plan's outcome
