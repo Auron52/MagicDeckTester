@@ -14909,10 +14909,13 @@ namespace w0collapse
     // hole is latent there, not active -- the arm escapes because the fixtures' committed decision
     // is taken in FSLineWin, which is the host the shipped skip never reached. That is a reason to
     // gate the correction behind a flag rather than to leave the identity undocumented.
+    // Per-JOB (heurarm) so the control and the tightened arm pool into ONE batch instead of one
+    // invocation each -- the adoption question here is a QUALITY question needing a large paired
+    // sample, and an env static pins one answer per process.
     inline bool NobpSite9FixOn()
     {
-        static const bool on = EnvOn("MTG_BP_NOBP_SITE9");
-        return on;
+        static const bool env_on = EnvOn("MTG_BP_NOBP_SITE9");
+        return heurarm::Flag(heurarm::BP_NOBP_SITE9, env_on);
     }
 
     // Does anything need to KNOW whether a base plan's apply suppressed a searched-only site? The
