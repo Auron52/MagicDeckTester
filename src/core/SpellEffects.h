@@ -22005,7 +22005,45 @@ inline bool TreasurePaySourceEnabled()
 }
 
 // ---- REPEATABLE creature-sac MANA OUTLETS as payment sources (§2b) ---------------------------
-// MTG_SAC_OUTLET_PAY / heurarm SAC_OUTLET_PAY -- DEFAULT OFF, built 2026-09-18 for the A/B.
+// MTG_SAC_OUTLET_PAY / heurarm SAC_OUTLET_PAY -- DEFAULT OFF: MEASURED 2026-10-01 and REGRESSING,
+// with the cause located. This is NOT a parked/unmeasured lever and NOT a rejected one -- it is a
+// lever with a known, named defect in front of it. Do not re-derive the measurement; fix the defect.
+//
+// THE NUMBERS (96-job pooled batch, 3 arms pinned per job, 4 paired blocks/cell, `units` as the cost
+// metric because units are deterministic). Quality is avg win turn, LOWER better:
+//   cell                games/arm   d(avg)     units     blocks better/worse
+//   shipped d5/b20          800    +0.0388   0.83751x        0 / 4
+//   shipped d3/b10        1,200    +0.0216   0.95817x        0 / 4
+//   candidate-b d0        4,000    +0.0232      n/a          0 / 4
+//   candidate-b d3/b10    2,000    +0.0110   0.71879x        0 / 4
+//   candidate-b d1/b3     2,000    +0.0095   0.52315x        1 / 3
+//   candidate-b d5/b20    1,200    +0.0075   0.75309x        2 / 2
+//   Goblins (on-policy)   8,000    -0.0014   1.01482x        3 / 1
+// So the COST prize is real and large (0.523x at candidate-b's own mulligan-generation cell d1/b3),
+// and the quality loss is small but SYSTEMATIC -- 0-better/4-worse at four separate cells is not
+// noise. Goblins (Skirk Prospector) is fine; the loss is Utopia Mycon's.
+//
+// ROOT CAUSE -- THE PLAN-ADDED-FODDER HOLE, not the fodder RANKING and not the greedy/backtracker
+// split noted below. Reproduced down to one game (shipped list, `--seed 620173 --game-index 173
+// --games 1 --depth 5 --budget-ms 20`: base wins turn 7, this lever never wins). Turn 4, board is
+// ONE untapped Forest + Utopia Mycon with 3 spore counters + Tukatongue Thallid; hand holds
+// Sporecrown Thallid {1}{G}. The real line is: remove 3 spore counters -> create a Saproling -> eat
+// that Saproling through Mycon for {G} -> plus the Forest, cast Sporecrown (a Saproling lord, so the
+// attack is 3 instead of 1). With the outlet's searched action SUPPRESSED, the cast is pruned before
+// it is ever tried, because the payability bound's §2b fodder term is SacPayFodderCount(state, ...)
+// evaluated on the board AS IT STANDS -- which holds ZERO Saprolings, since the body the line needs
+// is created by an EARLIER ACTION OF THE SAME PLAN. need=2, bound=1, and PaymentManaCovers reports a
+// PROOF of unpayability. In the OFF arm the explicit SacForMana action floats the mana, so the
+// subset machinery sees it and the cast survives.
+//
+// THIS IS THE SAME DEFECT CLASS THE TREE HAS ALREADY FIXED TWICE, and the fix doctrine is settled
+// (see SCALING SOURCE WIDENING and PendingLandAuraColorMask in TurnSolver.cpp): the gate is a
+// NECESSARY condition, so crediting what the plan WOULD add can only keep lines, never invent them,
+// and the genuinely-unpayable ones fall through to the real payment, which no-ops them. The repair is
+// to credit fodder the plan can CREATE this turn (free spore-counter Saproling makers) into the §2b
+// term of UntappedManaUpperBound -- the quantity bound, where the two prior fixes were colour gates.
+// Until that lands, this lever trades ~0.02-0.04 turns for its work saving and so fails the user's
+// own bar for it ("a cost change that we are aiming to not cost any quality").
 //
 // USER, 2026-09-17, on Utopia Mycon and then generalising it:
 //   "it's not clear to me whether we really need to search the sac ability for mana generation.

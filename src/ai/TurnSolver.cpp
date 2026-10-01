@@ -15411,9 +15411,35 @@ static std::vector<std::string> SacPoolTurnColorCandidates(const GameState& stat
     return colors;
 }
 
+// ADOPTED 2026-10-01, DEFAULT ON. =0 restores the deck-wide fan.
+//
+// USER ruling on the one thing it can lose: *"I think it's fine if we sometimes get the speculative
+// float wrong if we don't know what we want to use it on yet."* That is the whole lossy case (float
+// {B} before drawing into the black card the same turn), so with it accepted there is nothing left
+// holding this off.
+//
+// Evidence, candidate-b, `units` as the cost metric because units are DETERMINISTIC and so immune to
+// the shared box: gate blocked 100.00% -> 43.96%; held-out d3 800 games/arm +0.0013t at 0.92504x and
+// d5 600 games/arm +0.0000t at 0.97665x, with 8 of 8 held-out blocks cheaper (0.8809x-0.9863x). Train
+// d0 2,000/arm was avg-identical to 4 dp.
+//
+// RE-MEASURED 2026-10-01 in a 96-job pooled batch against BOTH the payment-source model and a true
+// baseline (every arm pins BOTH flags per job, so no arm inherits this default):
+//   cb_d0 4,000/arm +0.0005t | cb_d1 2,000/arm -0.0010t 0.94953x | cb_d3 2,000/arm -0.0010t 0.96912x
+//   cb_d5 1,200/arm +0.0000t 0.97036x (4/4 blocks tied on avg)   -- 4/4 blocks cheaper at every
+// budgeted cell. So it is quality-neutral and 3-5% cheaper on the list it is for.
+//
+// WHY THIS MOVES NO GROUND TRUTH -- now VERIFIED DIRECTLY, not inferred. Utopia Mycon is the ONLY
+// card in cards.json that sets sac_outlet_add_mana_any_color (Skirk Prospector is the only other sac
+// outlet and PINS {R}, so its fan is a singleton already), and the only lists holding it are the two
+// Fungus lists. The one in the regression suite (decks/Fungus/Fungus.cod) is MONO-GREEN, and the
+// 2026-10-01 batch measured it BYTE-IDENTICAL there: sh_d0 4,000 games/arm, sh_d3 1,200/arm and
+// sh_d5 800/arm each moved 0 of 4 digests with IDENTICAL unit totals, and Goblins (8,000/arm) was
+// likewise 0 of 4 with identical units. That Goblins cell is the scoping CONTROL: a pinned-colour
+// outlet must be untouched, and it is.
 bool SacPoolTurnColorEnabled()
 {
-    static const bool v = EnvOn("MTG_SAC_POOL_TURN_COLOR");
+    static const bool v = EnvOn("MTG_SAC_POOL_TURN_COLOR", true);
     return heurarm::Flag(heurarm::SAC_POOL_TURN_COLOR, v);
 }
 
