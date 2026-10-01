@@ -241,6 +241,7 @@ enum Slot : int
     FUNGUS_M2_ROOT,           // MTG_FUNGUS_M2_ROOT       ...and defer only at REAL decision turns: a projected future turn keeps Mycoloth in main 1 (measured NEUTRAL, default OFF)
     FUNGUS_DEVOUR_BIG_EXEMPT, // MTG_FUNGUS_DEVOUR_BIG_EXEMPT  ...and the ladder STOPS at the first big body (Sporesower/Sporecrown never eaten) instead of giving each a rung (default OFF; sub-mode of the above)
     FUNGUS_DEVOUR_LANDMARKS,  // MTG_FUNGUS_DEVOUR_LANDMARKS  devour k is a COMPUTED landmark menu (decline / free-fodder prefix / last-outlet / quest / eat-all), size independent of board width, instead of one rung per contested body (default OFF)
+    FUNGUS_DEVOUR_LETHAL,     // MTG_FUNGUS_DEVOUR_LETHAL  ...and a PROVEN kill collapses the menu to the single entry `own`: in the SECOND main the count cannot change this turn's combat, and eating everything maximises both the counters and the sac drain, so it DOMINATES every smaller k (default ON; the conservative projection is Mycoloth's own body alone next turn)
     RESCUE_TOTAL_GATE,        // MTG_RESCUE_TOTAL_GATE   skip the filter real-payment rescue when the flat failure is a TOTAL shortfall and every conversion source is total-preserving (default OFF)
     M2_EMPTY_FAST,            // MTG_M2_EMPTY_FAST        a PROVEN-EMPTY second main costs the recursion and nothing else: no state copy, no apply, no dedup key (ADOPTED default ON; =0 runs the do-nothing plan through the loop, which must be byte-identical)
     FOLD_SEARCH_ODO,          // MTG_FOLD_SEARCH_ODO      the SEARCH's private subset walk declares itself an odometer, so the canonical-prefix fold applies there too (default OFF)
@@ -490,6 +491,7 @@ inline const char* Name(int slot)
         "MTG_FUNGUS_M2_ROOT",
         "MTG_FUNGUS_DEVOUR_BIG_EXEMPT",
         "MTG_FUNGUS_DEVOUR_LANDMARKS",
+        "MTG_FUNGUS_DEVOUR_LETHAL",
         "MTG_RESCUE_TOTAL_GATE",
         "MTG_M2_EMPTY_FAST",
         "MTG_FOLD_SEARCH_ODO",

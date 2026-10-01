@@ -22586,7 +22586,8 @@ bool FungusProvider::DeferSacOutletPreCombat(const GameState& s, const Permanent
 // even compared to the devour payoff"*; Sporecrown *"may only do 3 on a board with just Mycoloth and
 // itself, so the sacrifice could be better with doubling season out"*. They point opposite ways,
 // which is why neither is hard-coded.
-std::vector<int> FungusProvider::DevourCountCandidates(const GameState& s, const CardDefinition&,
+std::vector<int> FungusProvider::DevourCountCandidates(const GameState& s,
+                                                       const CardDefinition& def,
                                                        int own) const
 {
     // ADOPTED default-ON 2026-09-23 (USER sign-off, Rule 0b). The measurement that licensed it:
@@ -22605,10 +22606,18 @@ std::vector<int> FungusProvider::DevourCountCandidates(const GameState& s, const
     // indistinguishable from a board that genuinely has nothing to narrow, which is precisely the
     // "the hook compiles, is byte-identical and never fires" failure ChooseDevourVictimIndices'
     // own trace exists to catch.
+    //
+    // AND IT NAMES THE PHASE, for the same reason the sibling [devour-enum] line does: the lethal
+    // collapse below fires ONLY post-combat, so "it never fired" is not a readable result until the
+    // trace says how many of these calls were even in the second main. `m2` here is the phase
+    // GameState really carries, not the solver's is_pre_combat argument -- which is the thing the
+    // collapse's gate tests, so this is the field that can prove the gate dead.
     static const bool s_trace = EnvOn("MTG_DEVOUR_TRACE");
+    const int trace_main = (s.phase == Phase::PostCombatMain) ? 2 : 1;
     const auto bail = [&](const char* why) -> std::vector<int>
     {
-        if (s_trace) { std::fprintf(stderr, "[devour-cands] own=%d FULL-FAN (%s)\n", own, why); }
+        if (s_trace)
+        { std::fprintf(stderr, "[devour-cands] m%d own=%d FULL-FAN (%s)\n", trace_main, own, why); }
         return {};
     };
 
@@ -22624,6 +22633,86 @@ std::vector<int> FungusProvider::DevourCountCandidates(const GameState& s, const
     const int me = s.active_player_index;
     const std::vector<int> ladder = DevourRankOrder(s, me);
     if (static_cast<int>(ladder.size()) != own) { return bail("ladder!=own"); }
+
+    // ---- THE LETHAL COLLAPSE (MTG_FUNGUS_DEVOUR_LETHAL, default ON) ---------------------------
+    // USER 2026-10-01: *"it should be easy to figure out when Mycoloth will be lethal, and it
+    // normally would be. That would be an easy choice there."* -- and the chain that led to it:
+    //
+    //   *"If our mycoloth would be lethal next turn it might make sense to bring Saproling Burst
+    //    down to one counter and sacrifice all of them."*
+    //   *"That is a real case for maxing it out."*  *"i.e. It can turn into 10 counters on Mycoloth."*
+    //   *"unless they can attack this turn putting the saprolings into Mycoloth is indeed better"*
+    //   *"And by the time we sacrifice to Mycoloth they would have already attacked. (second main)"*
+    //
+    // Same shape as FadeKLandmarks' k_win_now / k_win_next collapse, and the same soundness rule:
+    // A PROJECTED KILL NARROWS THE MENU TO ONE ENTRY, judged on the CONSERVATIVE projection,
+    // because narrowing may only be done on a k that can be PROVED to win.
+    //
+    // WHY THE ENTRY IS `own` AND NOT THE SMALLEST WINNING k -- which is the opposite of the fade
+    // axis, and for a concrete reason. There, spending a counter past the minimum SHRINKS every
+    // body already out, so the smallest winner dominates. Here eating a body past the minimum costs
+    // nothing that exists: k = own is simultaneously the maximum on the counter axis (more counters
+    // = a bigger Mycoloth and more Saprolings at every later upkeep) and on the drain axis (every
+    // body dies, so a Slimefoot sees the most deaths it can see), so it DOMINATES every smaller k
+    // rather than merely tying. That is the user's *"a real case for maxing it out"*.
+    //
+    // POST-COMBAT ONLY, AND THAT RESTRICTION IS THE WHOLE PROOF. In the second main this turn's
+    // combat is already over, so the devour count cannot change this turn's combat damage at all --
+    // the only this-turn damage left that k moves is the sacrifice drain, which is monotone in k.
+    // So no k wins SOONER than k = own, and "k = own wins next turn" is therefore enough to collapse.
+    // In the PRE-combat main the same collapse would be unsound: there every body eaten is an
+    // attacker removed from THIS combat, so a smaller k can win a whole turn earlier, and proving
+    // otherwise needs an upper bound on this turn's swing (lords and anthems included -- undercount
+    // it and the collapse deletes the win). Not attempted here; recorded as follow-up work in
+    // docs/design/fungus-fade-fodder-credit-gap.md. The restriction costs reach rather than value:
+    // MainPhaseOverride pins Mycoloth to Main2, so the m2 emission is the one searched play really
+    // plays, while the m1 emissions (87% of them, measured 2026-10-01) are the ones the phase filter
+    // removes again -- except at d0 and in greedy playout tails, where the filter stands down.
+    //
+    // THE PROJECTION IS DELIBERATELY THE CRUDEST SOUND ONE: Mycoloth's own body, alone, next turn.
+    // It counts the printed power plus the devour counters (doubled, because devour's enters-with
+    // counters route through PutPlusCounters) and NOTHING else -- no lord bonus (at k = own every
+    // lord has been eaten), no anthem, no surviving attacker, and none of the Saprolings the upkeep
+    // mints (those arrive summoning-sick and first attack the turn after). Every omission is in the
+    // pessimistic direction, which is the only direction a narrowing is allowed to be wrong in.
+    //
+    // PRICED, AND IT IS NOT A PERF LEVER -- do not cite it as one. It FIRES often (3,246 of 8,019
+    // post-combat calls, 40%, across opponent life 1..15 on 40 d3/b150 games) and it changes NO play
+    // (smoke 101/101 with play-changed 0 at both searched and d0; avg turns identical to four
+    // decimals in every cell), but the work it saves is 1.0024x at d3/b150, 1.0030x at d3/b10 and
+    // 1.0005x at d5/b20 on the engine's own deterministic `units` meter -- 0.05%-0.30%. The second
+    // main is gated by SecondMainNeedsDeferredCast and its subset space is a handful of actions, so
+    // collapsing a five-entry menu there collapses a sliver. Wall could not see this at all: a paired
+    // interleaved single-threaded A/B on a contended box gave per-pair ratios 0.82..1.36, which is
+    // why `units` is the instrument. It is kept because it is the USER's ruling expressed as a
+    // provable dominance collapse that cannot cost a line, not because it bought wall.
+    static const bool lethal_env = EnvOn("MTG_FUNGUS_DEVOUR_LETHAL", true);
+    if (heurarm::Flag(heurarm::FUNGUS_DEVOUR_LETHAL, lethal_env)
+        && s.phase == Phase::PostCombatMain)
+    {
+        // Phase is faithful in both worlds (GameEngine in the executor, SimulateCombat /
+        // SimulateEndAndStartNextTurn in the rollout) -- the same gate ReadyAttackPower relies on.
+        const int opp_life = s.players[static_cast<std::size_t>(1 - me)].life;
+        const int counters = (def.params.devour * own)
+                             << DoublerShift(s, me, /*for_tokens=*/false);
+        const int myco_next = std::max(0, def.card.m_power.value_or(0)) + counters;
+        if (s_trace)
+        {
+            // BOTH outcomes, because the interesting failure is "the gate was reached and the
+            // projection fell short", which is indistinguishable from "the gate was never reached"
+            // if only the firing case prints.
+            std::fprintf(stderr, "[devour-cands] m2 own=%d LETHAL-%s (ctr=%d pow_next=%d life=%d)\n",
+                         own, (opp_life > 0 && myco_next >= opp_life) ? "HIT" : "short",
+                         counters, myco_next, opp_life);
+        }
+        if (opp_life > 0 && myco_next >= opp_life)
+        {
+            // Deliberately ignores MTG_FUNGUS_DEVOUR_BIG_EXEMPT: that mode exists to keep a
+            // Sporesower or a Sporecrown off the menu because its 4 damage may beat the devour
+            // payoff. A proven kill settles that comparison outright.
+            return std::vector<int>{ own };
+        }
+    }
 
     // THE BEASTMASTER ASCENSION RESERVE. USER 2026-09-23: *"we need to keep Beastmaster Ascension in
     // mind ... If we need x critters next turn, we should leave that many up."*
@@ -22830,8 +22919,8 @@ std::vector<int> FungusProvider::DevourCountCandidates(const GameState& s, const
             std::string ks;
             for (std::size_t z = 0; z < cands.size(); ++z)
             { ks += (z ? "," : "") + std::to_string(cands[z]); }
-            std::fprintf(stderr, "[devour-cands] own=%d LANDMARKS k=[%s] (free=%d outlet=%d)\n",
-                         own, ks.c_str(), free_k, outlet_k);
+            std::fprintf(stderr, "[devour-cands] m%d own=%d LANDMARKS k=[%s] (free=%d outlet=%d)\n",
+                         trace_main, own, ks.c_str(), free_k, outlet_k);
         }
         return cands;
     }
