@@ -199,16 +199,41 @@ made legal by extension, and the sound prefix test is the strictly weaker
 `demand > supply + max-remaining-credit`. Re-associating the leaf needs no such weakening: it is the
 same test, same branches, same order.
 
-**Measured on the heaviest cell** (`MTG_SAC_FODDER_AGG=0` vs default, arms interleaved, 6 reps each):
+**Measured on the heaviest cell,** `MTG_SAC_FODDER_AGG=0` vs default, arms **interleaved** and
+reported **per pair** (an aggregate-only mean hides sign flips — see
+`wall-ab-aggregate-right-signs-wrong.md`):
 
-| arm | n | mean | min | max |
-|---|---|---|---|---|
-| `MTG_SAC_FODDER_AGG=0` (original leaf test) | 6 | 12,126 ms | 11,951 | 12,503 |
-| default (aggregate) | 6 | **10,722 ms** | 10,607 | 10,813 |
+| pair | off | on | ratio |
+|---|---|---|---|
+| 1 | 12,503 ms | 10,718 ms | 1.167x |
+| 2 | 12,004 | 10,624 | 1.130x |
+| 3 | 11,951 | 10,607 | 1.127x |
+| 4 | 12,049 | 10,807 | 1.115x |
+| 5 | 12,187 | 10,764 | 1.132x |
+| 6 | 12,060 | 10,813 | 1.115x |
+| 7 † | 16,200 | 13,679 | 1.184x |
+| 8 † | 15,238 | 13,152 | 1.159x |
 
-**1.131x, with no overlap between the arms,** and the rollout-config play digest `4b55aac85d0e0b77`
-identical on every run. Wall is credible here despite the contention the user flagged: the replay is
-single-threaded, the arms were interleaved, and the ranges are disjoint by 1.1 s.
+**mean 1.141x, median 1.131x, range 1.115–1.184x, and all eight pairs favour the aggregate.**
+Rollout-config play digest `4b55aac85d0e0b77` identical on all sixteen runs.
+
+† Pairs 7–8 were run at load ~13.7 against ~5.3 for 1–6. Both arms move up together and the *ratio*
+moves slightly in the aggregate's favour — which is the whole argument for pairing: absolute wall on
+this box is worth nothing right now, paired interleaved wall is worth plenty. (Hardware counters
+would have been better still, but this VM reports `instructions:u` as `<not supported>`, so there is
+no PMU to fall back on.)
+
+**And the symbol is gone from the profile, which is the independent check on the wall number.**
+Re-profiling the same replay after the change:
+
+| symbol | before | after |
+|---|---|---|
+| `SubsetOversubscribesSacFodder` (self, 3 clones) | 2.66% | **absent** |
+| `CardHasSubtype` | 1.49% | **0.41%** |
+| `BuildFodderIndex` (the new per-candidate pass) | — | 0.26% |
+
+So two thirds of every `CardHasSubtype` call in the engine was this one predicate's `board_supply`,
+and the index that replaces the whole thing costs 0.26%.
 
 **Equivalence is checked, not asserted.** `MTG_SAC_FODDER_AGG_VERIFY=1` runs both forms on every
 subset and prints the first disagreement. Zero mismatches on the Fungus replay and across the smoke
@@ -218,6 +243,33 @@ suite.
 prize but does not predict it. §2e finds that **visits do not predict it either**: 73.5% of visits
 was a real number and a real prize, but the way to collect it was to make each visit cheap, not to
 stop making visits. The profile is what distinguished the two, and it took ten minutes.
+
+#### What is on top now (same replay, after the change)
+
+| self | symbol | note |
+|---|---|---|
+| 5.93% | `SolveUncached`'s `consider` lambda | the subset body itself: cost folding, credits, scoring |
+| 3.30% | `EnumeratePlanPositions<SolveUncached>` | the odometer + the two-stage split's pair sort |
+| 2.30% | `BuildSimKey` | open question 2 — the 42.6% solve-memo hit rate lives here |
+| 2.29% | `operator new` | per-subset allocation; not yet attributed to a caller |
+| 1.98% | `CollectActions` | |
+| 1.66% | `ManaPool::CanPayFlat` | |
+| 1.48% | `SubsetHasDuplicateSacSource` | now the biggest subset filter |
+| 1.37% | `~vector<Action>` | Action vectors copied/destroyed per plan |
+| 1.04% | `SubsetWastesCreatureSacMana` | |
+
+**Two of these are the same shape as the one just fixed, and both are worth taking.**
+`SubsetWastesCreatureSacMana` is additive in exactly the same way (`spend` is a sum, the three flags
+are ORs) **and its death-payoff loop is a whole-battlefield walk with a `LookupCached` per permanent
+that depends on nothing but the board** — a per-call constant evaluated per subset, which is the
+`SubsetFilterPre` defect one more time. `SubsetHasDuplicateSacSource` is pairwise O(|sel|²) rather
+than a sum, so it needs a different idea.
+
+**`operator new` at 2.29% is the one to attribute next**, because an allocation per enumerated subset
+is a bigger structural problem than any single filter, and `~vector<Action>` at 1.37% beside it
+suggests the Action vectors are the source. Attributing it needs a call-graph profile with a working
+unwinder (this box has no frame pointers, so `--call-graph dwarf` is the only route and it did not
+resolve the allocator's callers cleanly).
 
 ### The subset funnel — the real work unit (NOTE: see §2d, this section's cross-walk ratio is wrong)
 
