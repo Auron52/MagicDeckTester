@@ -12488,6 +12488,83 @@ static inline bool FungibleEquipCopyViolated(const std::vector<int>& class_of,
     return false;
 }
 
+// MTG_EQUIP_COPY_SKIP -- turn the rejection above into a RADIX CUT instead of a per-position refusal.
+//
+// A REJECT PREDICATE IS NOT A COLLAPSE: the odometer still WALKS every position it refuses, so the
+// collapse above saves a rejected position's mana sum and inner loop but still pays its predicate
+// walk and its carry, and `space_odo` does not move at all. That is the lesson that already cost one
+// retired lever (FREE_EQUIP_MANDATORY) and one wrong conclusion
+// (docs/design/free-equip-dominance-collapse.md 3c), and the branch-shape instrument still prices
+// the full interchangeable-copy fold at 2.378x of this deck's whole-search odometer.
+//
+// THE JUMP, AND WHY IT IS EXACT. The canonical form requires a class's digits to be non-increasing
+// in group order, so a violation is a pair (prev, g) of class members with prev < g and
+// choice[prev] < choice[g]. Every position that follows this one until digit `prev` next CHANGES has
+// the same digits at `prev` and at `g`, so every one of them violates the same pair. The maximal safe
+// jump is therefore: raise digit `prev` to choice[g] and zero every digit below it. Positions passed
+// over all have choice[prev] in [old, choice[g]) with digits above `prev` untouched -- each still
+// violating -- so the set of positions ever EMITTED is bit-for-bit what the predicate alone produced.
+// It is a strict advance (choice[g] > choice[prev] by construction), so the walk cannot stall.
+//
+// `prev` is the LAST class member before g, not the first: it carries the largest stride among the
+// class members below g, so it is the furthest jump that is still provably safe. Jumping a
+// higher-indexed digit would pass over positions in which `prev` IS raised, and some of those are
+// canonical.
+//
+// Out-of-range is impossible by construction -- a class's members have identical option lists, so
+// choice[g] is a legal value for digit `prev` -- but it is checked rather than asserted, because the
+// fallback (decline the jump, let the ordinary carry run) is free and keeps this sound under any
+// future change to what a class may contain.
+// ADOPTED DEFAULT-ON 2026-10-01 (=0 is the hatch), on the USER's standing collapse doctrine --
+// *"Wasted work is wasted work regardless of the situation... judge a collapse on work removed and
+// soundness, never on whether wall fell"* -- and the wall is reported here rather than used as a
+// verdict:
+//     v2 held-out 40 seeds   digests identical 40/40   units identical PER GAME 40/40   ms 1.0067
+//     v1 (THE SUITE DECK) 20 digests identical 20/20   units identical PER GAME 20/20   ms 0.9982
+//     smoke 104/104 PASS, configs changed 0, play-changed 0
+// It removes roughly 58% of this deck's odometer POSITIONS (the instrument prices the fold at
+// 2.378x) and **no** measurable wall, and the two facts together are the finding: a position that
+// the predicate already refuses costs only its own predicate walk and carry, so WALKING it was never
+// the expense. What the collapse above is worth -- its 0.967x units -- is not walking but EVALUATING
+// the duplicate arrangements. Same family as the duplicate-state lesson: price the loop you mean to
+// change.
+//
+// Units identical PER GAME is also a safety property worth naming: budget units are charged per
+// `consider`/rollout, not per odometer position, so this lever cannot shift play under budget
+// pressure the way a memo cap can (MTG_NO_BP_PREFIX_CACHE is the counter-example).
+static bool EquipCopySkipEnabled()
+{
+    static const bool env = EnvOn("MTG_EQUIP_COPY_SKIP", true);
+    return heurarm::Flag(heurarm::EQUIP_COPY_SKIP, env);
+}
+
+// Violation test + the jump target. Returns true when the position is non-canonical; on true,
+// `fix_digit` is the group whose digit should be RAISED to `fix_value`. Same scan and the same
+// verdict as FungibleEquipCopyViolated -- it only also remembers WHERE the previous member was.
+static inline bool FungibleEquipCopyAdvance(const std::vector<int>& class_of,
+                                            const std::vector<int>& choice,
+                                            int& fix_digit, int& fix_value)
+{
+    int last[kMaxFungibleClasses];
+    int last_g[kMaxFungibleClasses];
+    for (int c = 0; c < kMaxFungibleClasses; ++c)
+    { last[c] = std::numeric_limits<int>::max(); last_g[c] = -1; }
+    for (size_t g = 0; g < class_of.size(); ++g)
+    {
+        const int c = class_of[g];
+        if (c < 0) { continue; }
+        if (choice[g] > last[c])
+        {
+            fix_digit = last_g[c];                 // -1 only if `last` was never set, impossible here
+            fix_value = choice[g];
+            return true;
+        }
+        last[c] = choice[g];
+        last_g[c] = static_cast<int>(g);
+    }
+    return false;
+}
+
 static bool MetalcraftEquipHoistEnabled()
 {
     static const bool env_on = EnvOn("MTG_METALCRAFT_EQUIP_HOIST");    // DEFAULT OFF
@@ -27680,6 +27757,10 @@ static void EnumeratePlanPositions(const std::vector<Action>& cands,
         }
     }
 
+    // MTG_EQUIP_COPY_SKIP, read once per call. Only the FLAT fallback below can use it: the split's
+    // Stage A judges mana-side digits alone (and the straddle guard above has already stood the
+    // predicate down if a class spanned the sides), while Stage B runs no group predicates at all.
+    const bool copy_skip_on = copy_pred_on && EquipCopySkipEnabled();
     // Flat position weights: the mixed-radix stride of each group digit (digit 0 is fastest, matching
     // the flat odometer's carry order), so a side's position contribution is just a weighted sum.
     std::vector<std::uint64_t> stride(num_groups, 1);
@@ -27738,10 +27819,18 @@ static void EnumeratePlanPositions(const std::vector<Action>& cands,
             bool done = false;
             while (!done)
             {
+                // MTG_EQUIP_COPY_SKIP: the same verdict, plus WHERE to jump to (see
+                // FungibleEquipCopyAdvance). Evaluated first now, which changes only which predicate
+                // gets to short-circuit, never the verdict.
+                int cp_fix_g = -1, cp_fix_v = 0;
+                const bool copy_viol = copy_pred_on
+                    && (copy_skip_on
+                            ? FungibleEquipCopyAdvance(copy_class, choice, cp_fix_g, cp_fix_v)
+                            : FungibleEquipCopyViolated(copy_class, choice));
                 const bool rejected =
-                       (any_splice && SpliceGroupChoiceRejected(sidx, groups, choice, splice_collapse_on))
+                       copy_viol
+                    || (any_splice && SpliceGroupChoiceRejected(sidx, groups, choice, splice_collapse_on))
                     || (accel_pred_on && NonPrefixAccelViolated(accel_order, choice))
-                    || (copy_pred_on && FungibleEquipCopyViolated(copy_class, choice))
                     || (dep_pred_on && EquipPieceDepViolated(equip_deps, choice, sel_mask));
                 if (!rejected)
                 {
@@ -27765,6 +27854,18 @@ static void EnumeratePlanPositions(const std::vector<Action>& cands,
                         { if (imask & (1u << b)) { sel.push_back(independent[b]); } }
                         if (!sel.empty() && extra_ok(sel)) { foldsel::g_from_odometer = true; emit(sel); }
                     }
+                }
+                // RADIX CUT: skip the entire run of positions that must violate the same pair,
+                // instead of stepping through them one at a time.
+                if (copy_viol && cp_fix_g >= 0
+                    && cp_fix_v <= static_cast<int>(groups[cp_fix_g].size()))
+                {
+                    for (int d = 0; d < cp_fix_g; ++d) { choice[d] = 0; }
+                    choice[cp_fix_g] = cp_fix_v;
+                    sel_mask = 0;
+                    for (int d = 0; d < num_groups && d < 64; ++d)
+                    { if (choice[d] > 0) { sel_mask |= 1ull << d; } }
+                    continue;
                 }
                 int t = 0;
                 for (; t < num_groups; ++t)
@@ -30323,6 +30424,10 @@ TurnSolver::Plan TurnSolver::SolveUncached(const GameState& state, bool is_pre_c
         // rebuilt per position -- see EquipPieceDepViolated's fast overload.
         std::uint64_t sel_mask = 0;
         const bool copy_pred_on = !copy_class.empty();
+        // MTG_EQUIP_COPY_SKIP (read once per call): jump the odometer past a rejected class
+        // arrangement instead of stepping through it. This walk holds the FULL choice vector, so the
+        // jump is exact here with no straddle question at all.
+        const bool copy_skip_on = copy_pred_on && EquipCopySkipEnabled();
         const bool dep_pred_on  = !equip_deps.Empty();
         // Canonical-prefix fold, hoisted to the digit (see BuildFoldPrefixMap): 65% of this walk's
         // subset visits on Snow are non-canonical positions whose whole inner loop is dead work.
@@ -30343,7 +30448,14 @@ TurnSolver::Plan TurnSolver::SolveUncached(const GameState& state, bool is_pre_c
             // See FungibleEquipCopyViolated. This walk holds the FULL choice vector, so unlike the
             // two-stage split it needs no straddle guard.
             const bool fold_viol = fold_pred_on && FoldPrefixViolated(fold_map, choice);
-            const bool copy_skip = (copy_pred_on && FungibleEquipCopyViolated(copy_class, choice))
+            // MTG_EQUIP_COPY_SKIP: the same verdict, plus WHERE the odometer may jump to -- see
+            // FungibleEquipCopyAdvance and the carry at the bottom of this loop.
+            int cp_fix_g = -1, cp_fix_v = 0;
+            const bool copy_viol = copy_pred_on
+                && (copy_skip_on
+                        ? FungibleEquipCopyAdvance(copy_class, choice, cp_fix_g, cp_fix_v)
+                        : FungibleEquipCopyViolated(copy_class, choice));
+            const bool copy_skip = copy_viol
                                 || (dep_pred_on && EquipPieceDepViolated(equip_deps, choice, sel_mask))
                                 || (fold_viol && !s_fold_odo_verify);
             int mcost = 0, mgain = 0, mgy = 0, mblock = 0;
@@ -30430,6 +30542,18 @@ TurnSolver::Plan TurnSolver::SolveUncached(const GameState& state, bool is_pre_c
                     : (mcost + pcost <= mana_bound);
                 if (!ok) { continue; }
                 if (vial_ok(sel)) { foldsel::g_from_odometer = true; consider(sel); }
+            }
+            // RADIX CUT (MTG_EQUIP_COPY_SKIP): every position from here until digit `cp_fix_g` next
+            // changes holds the same violating pair, so jump straight past them all.
+            if (copy_viol && cp_fix_g >= 0
+                && cp_fix_v <= static_cast<int>(groups[cp_fix_g].size()))
+            {
+                for (int d = 0; d < cp_fix_g; ++d) { choice[d] = 0; }
+                choice[cp_fix_g] = cp_fix_v;
+                sel_mask = 0;
+                for (int d = 0; d < num_groups && d < 64; ++d)
+                { if (choice[d] > 0) { sel_mask |= 1ull << d; } }
+                continue;
             }
             int g = 0;
             for (; g < num_groups; ++g)
@@ -40915,6 +41039,10 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
         // rebuilt per position -- see EquipPieceDepViolated's fast overload.
         std::uint64_t sel_mask = 0;
         const bool copy_pred_on = !copy_class.empty();
+        // MTG_EQUIP_COPY_SKIP (read once per call): jump the odometer past a rejected class
+        // arrangement instead of stepping through it. This walk holds the FULL choice vector, so the
+        // jump is exact here with no straddle question at all.
+        const bool copy_skip_on = copy_pred_on && EquipCopySkipEnabled();
         const bool dep_pred_on  = !equip_deps.Empty();
         // Canonical-prefix fold at the digit -- the twin of Solve's (see BuildFoldPrefixMap), with
         // ONE extra gate that is the whole reason this twin is not just a copy.
@@ -40936,7 +41064,14 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
             // class emits. Tested before the mana fold -- a skipped position's aggregate is dead work.
             // See FungibleEquipCopyViolated. This walk holds the FULL choice vector, so unlike the
             // two-stage split it needs no straddle guard.
-            const bool copy_skip = (copy_pred_on && FungibleEquipCopyViolated(copy_class, choice))
+            // MTG_EQUIP_COPY_SKIP: the same verdict, plus WHERE the odometer may jump to -- see
+            // FungibleEquipCopyAdvance and the carry at the bottom of this loop.
+            int cp_fix_g = -1, cp_fix_v = 0;
+            const bool copy_viol = copy_pred_on
+                && (copy_skip_on
+                        ? FungibleEquipCopyAdvance(copy_class, choice, cp_fix_g, cp_fix_v)
+                        : FungibleEquipCopyViolated(copy_class, choice));
+            const bool copy_skip = copy_viol
                                 || (dep_pred_on && EquipPieceDepViolated(equip_deps, choice, sel_mask))
                                 || (fold_pred_on && FoldPrefixViolated(fold_map, choice));
             int mcost = 0, mgain = 0, mgy = 0, mblock = 0;
@@ -41023,6 +41158,18 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
                 // a claim to CHECK at runtime, not to argue.
                 if (FoldSearchOdometerOn(state)) { foldsel::g_from_odometer = true; }
                 eval_and_push(sel);
+            }
+            // RADIX CUT (MTG_EQUIP_COPY_SKIP): every position from here until digit `cp_fix_g` next
+            // changes holds the same violating pair, so jump straight past them all.
+            if (copy_viol && cp_fix_g >= 0
+                && cp_fix_v <= static_cast<int>(groups[cp_fix_g].size()))
+            {
+                for (int d = 0; d < cp_fix_g; ++d) { choice[d] = 0; }
+                choice[cp_fix_g] = cp_fix_v;
+                sel_mask = 0;
+                for (int d = 0; d < num_groups && d < 64; ++d)
+                { if (choice[d] > 0) { sel_mask |= 1ull << d; } }
+                continue;
             }
             int g = 0;
             for (; g < num_groups; ++g)

@@ -553,3 +553,46 @@ concluding "absent", **count the classes the builder actually found**.
 Unit tests **2,641,296 / 2,641,296** (359/359 cases). Scenarios **125/125**. Default-OFF builds
 byte-identical to the pre-change binary on **5/5** v2 digests *and* units, re-checked after each of
 the two changes.
+
+### 7g. `MTG_EQUIP_COPY_SKIP` — the radix cut, and what it proves about the walk
+
+The collapse adopted in §7e is still a **reject predicate**: the odometer walks every position it
+refuses, so `space_odo` does not move and the instrument still prices the full interchangeable-copy
+fold at **2.378x of the whole search's odometer**. This lever closes that gap *without* the
+count-valued-group surgery first proposed (merge N groups into one, `2^N -> N+1`, which needs a
+multi-action digit and touches ~10 hot read sites of `groups[g][choice[g]-1]` across both twins).
+
+**The jump, and why it is exact.** Canonical form = a class's digits are non-increasing in group
+order, so a violation is a pair `(prev, g)` with `choice[prev] < choice[g]`. Every position until
+digit `prev` next *changes* holds both digits fixed and therefore violates the same pair, so raising
+`prev` to `choice[g]` and zeroing below it passes over exactly those. `prev` is the **last** class
+member before `g` — the largest stride below `g`, hence the furthest provably safe jump; a
+higher-indexed digit would pass over positions in which `prev` IS raised, some of them canonical.
+
+| | digests | units per game | ms |
+|---|---|---|---|
+| v2, held-out 40 seeds | **identical 40/40** | **identical 40/40** | 1.0067 |
+| v1 — THE SUITE DECK, 20 | **identical 20/20** | **identical 20/20** | 0.9982 |
+| smoke | 104/104 PASS | configs changed **0** | play-changed **0** |
+
+The base arm also reproduced §7e's arm **exactly** 40/40 and 20/20, so the predicate reordering the
+patch required changed nothing.
+
+**It removes ~58% of this deck's odometer positions and no measurable wall, and those two facts
+together are the finding.** A position the predicate already refuses costs only its own predicate
+walk and its carry — so *walking* it was never the expense. What §7e's 0.967x units actually buys is
+not walking the duplicates but **not evaluating** them. Same family as
+`duplicate-state-is-not-removable-work`: price the loop you mean to change.
+
+**Adopted default-ON** under the user's collapse doctrine (*"wasted work is wasted work regardless of
+the situation... judge a collapse on work removed and soundness, never on whether wall fell"*), with
+the wall reported rather than used as a verdict. One safety property worth naming: **units identical
+per game** means budget units are charged per `consider`/rollout and not per position, so unlike a
+memo cap this cannot shift play under budget pressure.
+
+**And it closes the odometer axis for this deck.** The remaining priced 2.378x is now *walked* at
+`N+1` per equip class rather than `2^N`; what is left on the hand-CAST side goes through
+`equiv_tag` / `FoldPrefixViolated`, whose own digit test is gated behind the reserved
+`MTG_FOLD_SEARCH_ODO` decision and measured at -0.8%. Given this result — walking is free, evaluating
+is not — the next lever should target **`consider()` call volume** (30.3M calls for 3.5M plans in one
+game), not the odometer.
