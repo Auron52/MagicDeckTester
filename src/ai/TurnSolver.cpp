@@ -56119,7 +56119,27 @@ TurnSolver::Plan TurnSolver::SolveWithLookahead(const GameState& state, bool is_
                                    any_before, classon_before,
                                    /*nobp_on=*/false, /*unif_on=*/false, /*chain_on=*/true);
             }
-            if ((nobp_here || w0nobp_here) && pl.bp_choice < 0 && g_bp_any_last == any_before)
+            // THE SITE-9 REPAIR, NOW ACTUALLY WIRED INTO THIS HOST (MTG_BP_NOBP_SITE9).
+            //
+            // `g_bp_any_last == any_before` means "this base plan's apply reached no breakpoint",
+            // and at site 9 that zero is UNINFORMATIVE rather than true: the gate short-circuits on
+            // `plan.bp_choice >= 0`, so for a base plan it is never evaluated at all and the plan is
+            // structurally BLIND to a decision that is really pending. Admitting it to `bp_nobp`
+            // then deletes real lines -- 25 mismatches of 41, two fixtures losing a turn at an
+            // UNBOUNDED budget, where there is no freed work to re-spend and so no churn defence.
+            //
+            // The FSLineWin twin (w0collapse::Record) has applied this term UNCONDITIONALLY since it
+            // was written -- a new path must not ship a known-false identity. THIS host did not
+            // apply it at all: MTG_BP_NOBP_SITE9 switched on the watch that SETS
+            // g_bp_searchonly_suppressed while nothing here ever read it, so the flag was a no-op
+            // for the shipped arm despite its own comment saying it closed the hole here too. That
+            // is the gap this term closes.
+            //
+            // STILL DEFAULT OFF, and deliberately: this host's skip is default ON, so tightening it
+            // skips strictly LESS and moves the committed line on every budgeted cell of every deck.
+            // With the flag off the condition is unchanged and every deck stays byte-identical.
+            if ((nobp_here || w0nobp_here) && pl.bp_choice < 0 && g_bp_any_last == any_before
+                && !(w0collapse::NobpSite9FixOn() && g_bp_searchonly_suppressed))
             { bp_nobp.insert(cand_index); }
             // Record what THIS apply saw, for the uniform sibling that has not run yet. Rank
             // variants only (`!bp_all`, a real rank), which is exactly the arm emitted first.
@@ -56258,6 +56278,11 @@ TurnSolver::Plan TurnSolver::SolveWithLookahead(const GameState& state, bool is_
             cand_index = static_cast<std::size_t>(&plan - candidates.data());
             any_before = g_bp_any_last;   // DELTA, not a reset -- see g_bp_any_last
             classon_before = g_bp_classon_last;   // ...and its enabled-class twin
+            // Per-apply, exactly as FSLineWin resets it: "did THIS apply suppress a searched-only
+            // site". The flag is thread_local and set-only at the gate, so without a reset here the
+            // first suppressing apply would make every LATER base plan on this thread look
+            // suppressed -- which would silently disarm the whole NOBP skip rather than tighten it.
+            if (w0collapse::NobpSite9Watch()) { g_bp_searchonly_suppressed = false; }
             // Chain-scan outcome is per-apply, so it RESETS (unlike the two monotonic counters
             // above): -2 means this apply never reached a chain slot at all.
             if (DedupCensusOn()) { g_bp_chain_ci_last = -2; }

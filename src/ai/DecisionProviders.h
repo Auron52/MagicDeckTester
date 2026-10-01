@@ -505,6 +505,19 @@ public:
 class TreasureHuntProvider : public DeckProvider
 {
 public:
+    // STOP EMITTING THE BREAKPOINT CHAIN ARM on this deck (DecisionProvider::BpChainSlotOptIn).
+    // The arm reserves a slot for the continuation that CONTINUES the chain; the fleet screen
+    // found that case (`past_W`) is 0.29% of all chain applies across the whole suite, and the
+    // rest land inside wave 0's own window or fall through to EMPTY.
+    //
+    // ADOPTED 2026-10-01 on held-out seeds, TWO cells, 800 games per arm per cell, arms
+    // innermost with a null arm per cell: units 0.9830 at d3/b10 and 0.9437 at d5/b20, quality
+    // 0 and -2 (BETTER) games of 800 in the two cells. ms 0.949 vs null 0.991.
+    // Both cells had to hold -- the d3-only screen changed one deck's verdict when d5 ran
+    // (mirrorwing flipped sign at exactly one quantum and is NOT adopted for that reason).
+    // `MTG_BP_CHAIN_SLOT=1` restores the fleet default here, which is how the A/B control
+    // survives adoption. Measurements: docs/design/snow-cost-2026-10-01.md 12.6 / 12.8.
+    int BpChainSlotOptIn() const override { return 0; }
     CertStance Certificate() const override
     { return { CertState::NotAssessed, "NOT ASSESSED. This deck kills by a dig/ramp shell -- establish the kill route before assuming combat" }; }
     const char* Name() const override { return "TreasureHunt"; }
@@ -634,6 +647,19 @@ public:
 class BurnProvider : public DeckProvider
 {
 public:
+    // STOP EMITTING THE BREAKPOINT CHAIN ARM on this deck (DecisionProvider::BpChainSlotOptIn).
+    // The arm reserves a slot for the continuation that CONTINUES the chain; the fleet screen
+    // found that case (`past_W`) is 0.29% of all chain applies across the whole suite, and the
+    // rest land inside wave 0's own window or fall through to EMPTY.
+    //
+    // ADOPTED 2026-10-01 on held-out seeds, TWO cells, 800 games per arm per cell, arms
+    // innermost with a null arm per cell: units 0.9850 at d3/b10 and 0.9274 at d5/b20, quality
+    // 0 and 0 games of 800 in the two cells. ms 0.926 vs null 0.994.
+    // Both cells had to hold -- the d3-only screen changed one deck's verdict when d5 ran
+    // (mirrorwing flipped sign at exactly one quantum and is NOT adopted for that reason).
+    // `MTG_BP_CHAIN_SLOT=1` restores the fleet default here, which is how the A/B control
+    // survives adoption. Measurements: docs/design/snow-cost-2026-10-01.md 12.6 / 12.8.
+    int BpChainSlotOptIn() const override { return 0; }
     CertStance Certificate() const override
     { return { CertState::NotAssessed, "NOT ASSESSED. This deck kills by direct damage, so a certificate must bound burn reach in hand+library, not just combat" }; }
     const char* Name() const override { return "Burn"; }
@@ -1253,6 +1279,19 @@ public:
 class EquipmentProvider : public DeckProvider
 {
 public:
+    // STOP EMITTING THE BREAKPOINT CHAIN ARM on this deck (DecisionProvider::BpChainSlotOptIn).
+    // The arm reserves a slot for the continuation that CONTINUES the chain; the fleet screen
+    // found that case (`past_W`) is 0.29% of all chain applies across the whole suite, and the
+    // rest land inside wave 0's own window or fall through to EMPTY.
+    //
+    // ADOPTED 2026-10-01 on held-out seeds, TWO cells, 800 games per arm per cell, arms
+    // innermost with a null arm per cell: units 0.9755 at d3/b10 and 0.9804 at d5/b20, quality
+    // 0 and 0 games of 800 in the two cells. this provider serves KittyEquipment alone ("no other deck carries the equipment gated params").
+    // Both cells had to hold -- the d3-only screen changed one deck's verdict when d5 ran
+    // (mirrorwing flipped sign at exactly one quantum and is NOT adopted for that reason).
+    // `MTG_BP_CHAIN_SLOT=1` restores the fleet default here, which is how the A/B control
+    // survives adoption. Measurements: docs/design/snow-cost-2026-10-01.md 12.6 / 12.8.
+    int BpChainSlotOptIn() const override { return 0; }
     CertStance Certificate() const override
     { return { CertState::NotAssessed, "NOT ASSESSED. Test: is combat the ONLY route to the opponent's life, and does nothing in the pool grant haste or untap? See SnowProvider/FungusProvider for the worked shape." }; }
     const char* Name() const override { return "Equipment"; }
@@ -1445,6 +1484,19 @@ public:
 class AurasProvider : public DeckProvider
 {
 public:
+    // STOP EMITTING THE BREAKPOINT CHAIN ARM on this deck (DecisionProvider::BpChainSlotOptIn).
+    // The arm reserves a slot for the continuation that CONTINUES the chain; the fleet screen
+    // found that case (`past_W`) is 0.29% of all chain applies across the whole suite, and the
+    // rest land inside wave 0's own window or fall through to EMPTY.
+    //
+    // ADOPTED 2026-10-01 on held-out seeds, TWO cells, 800 games per arm per cell, arms
+    // innermost with a null arm per cell: units 0.9692 at d3/b10 and 0.9144 at d5/b20, quality
+    // 0 and 0 games of 800 in the two cells. ms 0.873 against a null arm at 0.938, the only cell here where ms clears its own null outright.
+    // Both cells had to hold -- the d3-only screen changed one deck's verdict when d5 ran
+    // (mirrorwing flipped sign at exactly one quantum and is NOT adopted for that reason).
+    // `MTG_BP_CHAIN_SLOT=1` restores the fleet default here, which is how the A/B control
+    // survives adoption. Measurements: docs/design/snow-cost-2026-10-01.md 12.6 / 12.8.
+    int BpChainSlotOptIn() const override { return 0; }
     CertStance Certificate() const override
     { return { CertState::NotAssessed, "NOT ASSESSED. Test: is combat the ONLY route to the opponent's life, and does nothing in the pool grant haste or untap? See SnowProvider/FungusProvider for the worked shape." }; }
     const char* Name() const override { return "Auras"; }
@@ -1514,6 +1566,19 @@ public:
 class DragonsProvider : public DeckProvider
 {
 public:
+    // STOP EMITTING THE BREAKPOINT CHAIN ARM on this deck (DecisionProvider::BpChainSlotOptIn).
+    // The arm reserves a slot for the continuation that CONTINUES the chain; the fleet screen
+    // found that case (`past_W`) is 0.29% of all chain applies across the whole suite, and the
+    // rest land inside wave 0's own window or fall through to EMPTY.
+    //
+    // ADOPTED 2026-10-01 on held-out seeds, TWO cells, 800 games per arm per cell, arms
+    // innermost with a null arm per cell: units 0.9885 at d3/b10 and 0.9613 at d5/b20, quality
+    // 0 and 0 games of 800 in the two cells. ms 0.955 vs null 0.978; note this is DragonsProvider, NOT DragonstormProvider -- the chain arm is load-bearing on Dragonstorm and that deck is deliberately untouched.
+    // Both cells had to hold -- the d3-only screen changed one deck's verdict when d5 ran
+    // (mirrorwing flipped sign at exactly one quantum and is NOT adopted for that reason).
+    // `MTG_BP_CHAIN_SLOT=1` restores the fleet default here, which is how the A/B control
+    // survives adoption. Measurements: docs/design/snow-cost-2026-10-01.md 12.6 / 12.8.
+    int BpChainSlotOptIn() const override { return 0; }
     CertStance Certificate() const override
     { return { CertState::NotAssessed, "NOT ASSESSED. Test: is combat the ONLY route to the opponent's life, and does nothing in the pool grant haste or untap? See SnowProvider/FungusProvider for the worked shape." }; }
     const char* Name() const override { return "Dragons"; }
@@ -2135,6 +2200,19 @@ public:
 class PiratesProvider : public DeckProvider
 {
 public:
+    // STOP EMITTING THE BREAKPOINT CHAIN ARM on this deck (DecisionProvider::BpChainSlotOptIn).
+    // The arm reserves a slot for the continuation that CONTINUES the chain; the fleet screen
+    // found that case (`past_W`) is 0.29% of all chain applies across the whole suite, and the
+    // rest land inside wave 0's own window or fall through to EMPTY.
+    //
+    // ADOPTED 2026-10-01 on held-out seeds, TWO cells, 800 games per arm per cell, arms
+    // innermost with a null arm per cell: units 0.9751 at d3/b10 and 0.9666 at d5/b20, quality
+    // 0 and -1 (BETTER) games of 800 in the two cells. ms 0.981 vs null 0.984, i.e. ms is a null here and only units are claimed.
+    // Both cells had to hold -- the d3-only screen changed one deck's verdict when d5 ran
+    // (mirrorwing flipped sign at exactly one quantum and is NOT adopted for that reason).
+    // `MTG_BP_CHAIN_SLOT=1` restores the fleet default here, which is how the A/B control
+    // survives adoption. Measurements: docs/design/snow-cost-2026-10-01.md 12.6 / 12.8.
+    int BpChainSlotOptIn() const override { return 0; }
     CertStance Certificate() const override
     { return { CertState::NotAssessed,
                "NOT ASSESSED. Test: is combat the ONLY route to the opponent's life? It is NOT -- "
