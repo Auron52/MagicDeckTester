@@ -22042,8 +22042,80 @@ inline bool TreasurePaySourceEnabled()
 // and the genuinely-unpayable ones fall through to the real payment, which no-ops them. The repair is
 // to credit fodder the plan can CREATE this turn (free spore-counter Saproling makers) into the §2b
 // term of UntappedManaUpperBound -- the quantity bound, where the two prior fixes were colour gates.
-// Until that lands, this lever trades ~0.02-0.04 turns for its work saving and so fails the user's
-// own bar for it ("a cost change that we are aiming to not cost any quality").
+// THAT LANDED (the token-fodder repair, same day) and it transformed the numbers: post-fix the lever is
+// neutral-or-better and 15-31% cheaper at every SEARCHED cell but one, and at candidate-b's own
+// mulligan-generation cell (d1/b3) it is BOTH better (-0.0120t) and 0.68888x. The USER then asked for it
+// on: *"We need the optimizations. That was the whole point."*
+//
+// IT STILL CANNOT GO ON, AND THE BLOCKER IS CORRECTNESS, NOT QUALITY. Turning it on fails TWO scenario
+// fixtures (118 -> 116). They fail for DIFFERENT reasons and only one is cosmetic:
+//
+//   * `fungus_sac_fodder_on_board` -- VOCABULARY ONLY. Its `validate_line` names a `sacout=Utopia Mycon`
+//     ACTION, which this lever suppresses by design. The capability survives: the payment eats the
+//     on-board Saproling token and the cast still happens (that is what the token-fodder fix restored).
+//   * `fungus_sac_fodder_same_line_GAP` -- A GENUINE CAPABILITY LOSS, and it is the one that matters.
+//     Thallid Shell-Dweller holds EXACTLY 3 spore counters and the line MAKES its own Saproling, eats it
+//     through Mycon for the fourth mana, then casts Sporesower Thallid {2}{G}{G} off three Forests. The
+//     searched path can do this because MTG_SAC_FODDER_SAME_LINE (adopted 2026-09-24,
+//     `SameLineSacFodderSource`) fuses the create into the spend. THE PAYMENT PATH HAS NO EQUIVALENT: it
+//     can only eat bodies that ALREADY EXIST. So with the searched action suppressed the line is
+//     unreachable. USER on this capability, three times: *"Should be able to activate and sac in same
+//     line ideally, to avoid extra breakpoints."*
+//
+// Note what this means for SacPayPlanFodderCount above: it makes the enumerator believe the cost is
+// payable (the bound credits the body the line would make) and then the payment cannot assemble it, so
+// the plan is dropped. Bound and capability must land TOGETHER -- which is also the likeliest
+// explanation of the residual d0 regression (+0.0180t candidate-b / +0.0177t shipped, 0-better/4-worse
+// each), since d0 is the greedy with no search to find another route, and of shipped d5 (+0.0125t).
+//
+// THIS IS NOT A FIXTURE-SPECIFIC EDGE CASE. The fixture happens to use Thallid Shell-Dweller, which the
+// candidate-b list does not play -- but the MECHANISM is generic and central to that list: 9 of its 22
+// entries are free spore makers that are ALSO the sac outlet (4 Utopia Mycon, 1 Psychotrope Thallid,
+// 2 Vitaspore Thallid, 2 Deathspore Thallid; every one costs 3 counters and makes a Saproling). The
+// one-game repro of the original regression was exactly this shape with Mycon popping its OWN counters.
+//
+// *** USER RULING 2026-10-01 ON HOW TO FIX IT -- READ THIS BEFORE WRITING ANY CODE HERE. ***
+// The obvious fix (let the PAYMENT pop a spore maker to mint the body it is about to eat) was PROPOSED
+// AND REJECTED. Do not re-derive it. The user's words and reasons:
+//
+//   *"I'm not sure we want to change how we activate. I think it's better to leave that as-is."*
+//   *"you want the line that activates them when needed to win"* -- the activation is a real decision
+//     with its own value, so it belongs to the SEARCH, not to a payment side effect.
+//   *"the mana engine doesn't know which saprolings to consume, those already on the board (that may
+//     not be summoning sick) or those who come from the activations"* -- the payer lacks the context
+//     to choose correctly between them.
+//   *"It also puts a bit too much into the mana system itself. It shouldn't need to know how to get
+//     more fodder for an ability."*
+//
+// THE DIVISION OF LABOUR THE USER WANTS, which is the whole specification:
+//   *"the simplest would be to leave the saproling removal activations up to the search and the mana
+//    creation up to the payment engine"*, and *"you can only pay with saprolings that the search has
+//    produced at the time you need it"* -- but *"we still need to be able to use saprolings that are
+//    produced mid-line if the search does so."*
+//   On the wording, clarified by the user: *"By 'saproling removal activations' I meant using spore
+//   counters."* So the activation that is the SEARCH's business is the one that SPENDS spore counters to
+//   CREATE a Saproling (`spore_saproling_cost`) -- not anything that removes Saprolings. The sacrifice
+//   that turns a Saproling into mana is the PAYMENT's business.
+//
+// So: the payment NEVER creates fodder. It eats only bodies that exist. The search decides when to pop
+// a spore maker. The one thing that must work is that a body the search creates EARLIER IN THE SAME LINE
+// is visible to the payment of a LATER cast in that line.
+//
+// WHERE THE DEFECT ACTUALLY IS, then: not in the mana system at all, but at ENUMERATION. At APPLY time
+// this already works, because a plan applies sequentially and the spore activation has put its Saproling
+// on the board before the payer runs. Enumeration is what reads the plan-START battlefield, so a subset
+// whose mana comes from a body the same subset creates scores unpayable and is never offered. That is
+// the §"the plan-added fodder credit (stage 2)" hole in
+// docs/design/sac-mana-outlet-as-deferred-source.md.
+//
+// NOTE SacPayPlanFodderCount (above) IS NOT SUFFICIENT and measuring it proved that: it loosens the
+// upper BOUND and the have[] colour gate, which is necessary but not enough, because the subset's real
+// payability is still decided against the plan-start state. The remaining work is to make that check
+// run against the state WITH the subset's earlier free activations applied -- a SEQUENCING fix in the
+// enumerator, entirely on the search side of the line the user drew.
+//
+// Then: re-run logs/victim_ab/pay3.json (96 jobs, base/pay/npf) and re-check the two fixtures above.
+// Expect d0 to be where it shows, since d0 has no search to route around the missing line.
 //
 // USER, 2026-09-17, on Utopia Mycon and then generalising it:
 //   "it's not clear to me whether we really need to search the sac ability for mana generation.

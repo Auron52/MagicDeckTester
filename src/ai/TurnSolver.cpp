@@ -15413,9 +15413,7 @@ static std::vector<std::string> SacPoolTurnColorCandidates(const GameState& stat
     return colors;
 }
 
-// MEASURED AND APPROVED 2026-10-01, but HELD AT DEFAULT OFF FOR ONE SPECIFIC REASON -- read the
-// "WHY STILL OFF" paragraph before flipping it. This is NOT an unmeasured park and NOT a rejection;
-// the evidence below is complete and favourable, and the flip is this one line.
+// ADOPTED 2026-10-01, DEFAULT ON. =0 restores the deck-wide fan.
 //
 // USER ruling on the one thing it can lose: *"I think it's fine if we sometimes get the speculative
 // float wrong if we don't know what we want to use it on yet."* That is the whole lossy case (float
@@ -15442,28 +15440,25 @@ static std::vector<std::string> SacPoolTurnColorCandidates(const GameState& stat
 // likewise 0 of 4 with identical units. That Goblins cell is the scoping CONTROL: a pinned-colour
 // outlet must be untouched, and it is.
 //
-// WHY STILL OFF -- IT WOULD DISCARD AN IN-FLIGHT GENERATION, not because of any doubt about the
-// measurement. Fungus candidate-b has a BANKED mulligan-generation journal
-// (decks/Fungus/candidate-b-2026-09/Fungus.keepmodel.exhaustive.raw.json.journal, 350 MB) standing at
-// phase=refine, frozen=970,276/1,522,096 (63.7%) after 327,036 s = 90.8 HOURS of rollouts. A resume
-// keeps its banked cell-sides only while the keepgen PLAY DIGEST is unchanged (scripts/mullgen.sh:481:
-// "X=500 moves the digest and would discard every banked cell-side"), that digest is taken at
-// d5/budget 20, and this lever MOVES candidate-b's play there -- 1 of 4 block digests at cb_d5.
-// scripts/mullgen.sh runs build/Release/mtg-analyze, the LIVE binary, so the `.frozen` copies in the
-// log directory are provenance only and a resume WOULD pick this up. Trading 90.8 hours of banked
-// work for a 3-5% work saving is the wrong way round, so it waits for that generation to land.
+// ON THE IN-FLIGHT GENERATION, because this lever DOES move candidate-b's play at d5/b20 (1 of 4
+// block digests at cb_d5) and that is the config the keepgen play digest is taken at. It is NOT a
+// reason to hold the lever back, and holding it back was the wrong call when I first made it.
 //
-// Note the asymmetry that makes waiting cheap: the lever is quality-NEUTRAL, and a keep table maps
-// hands to expected WIN TURNS, so a table fitted without it stays valid when it is flipped on later.
-// That is exactly NOT true of MTG_SAC_OUTLET_PAY, which moves win turns and so must be settled BEFORE
-// any generation it will affect. The same care is why the breakpoint chain-arm drop (4b259c2e) was
-// engineered PLAY-IDENTICAL -- "safe to switch on in the MIDDLE of a generation, including mid-R".
+// The resume path for a MOVED digest already exists and is the right one: MTG_KEEP_RETAIN_FOREIGN
+// names the banked digest and retains only COMPLETED cell-sides, dropping partial ones
+// (`retained_skipped_partial` in ExhaustiveKeep.cpp) and stamping the artifact MIXED-PROVENANCE, with
+// MTG_KEEP_RETAIN_VERIFY=<n> to check it. That is resuming from a CLEAN R rather than forcing digest
+// equality -- see docs/design/keepgen-mixed-provenance-retention.md. USER 2026-10-01: *"I specifically
+// told you to make it resumable from a clean R rather than force the digest to be the same"* and *"We
+// need the optimizations. That was the whole point."*
 //
-// FLIP IT when the candidate-b generation completes (or when a restart is chosen anyway, which makes
-// the journal moot). Nothing else is pending.
+// Also note what a moved digest does NOT cost: discovery is cached in
+// `<stem>.keepmodel.gencache.json`, keyed on the BUCKET fingerprint and not on play, so candidate-b's
+// ~58-minute K=22 discovery is not re-paid. The journal holds rollout VALUES; the expensive structural
+// work survives independently.
 bool SacPoolTurnColorEnabled()
 {
-    static const bool v = EnvOn("MTG_SAC_POOL_TURN_COLOR");
+    static const bool v = EnvOn("MTG_SAC_POOL_TURN_COLOR", true);
     return heurarm::Flag(heurarm::SAC_POOL_TURN_COLOR, v);
 }
 
