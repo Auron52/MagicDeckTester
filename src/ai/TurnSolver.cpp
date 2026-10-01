@@ -1284,20 +1284,18 @@ static void DedupFamRecord(bool is_dup, const DedupFirstSeen& first, std::uint64
 // the frequency of the line a rank RANGE on Irencrag would make expressible -- measure it before
 // building the range. USER 2026-09-01: "It might be irrelevant enough to skip."
 static std::atomic<long long> g_iw_drops{0}, g_iw_drops_with_payoff{0};
-// MTG_FREE_EQUIP_DIAG=1: why the collapse did or did not arm, per enumeration. Exists because
-// "identical digests" on a collapse is ambiguous between INERT and NEVER FIRED, and this repo has
-// already shipped a widening whose digests matched because it emitted zero variants (memory
-// digest-equality-can-mean-broken). Counters only; no behaviour.
-static std::atomic<long long> g_feq_calls{0};      // enumerations that ran the builder
-static std::atomic<long long> g_feq_armed{0};      // ...that found >= 1 mandatory group
-static std::atomic<long long> g_feq_groups{0};     // mandatory groups found, summed
-static std::atomic<long long> g_feq_equip_groups{0};  // all-Equip groups seen (the denominator)
-static std::atomic<long long> g_feq_rej_cost{0};   // ...rejected: equip cost is not 0 right now
-static std::atomic<long long> g_feq_rej_attached{0};  // ...rejected: Equipment already attached
-static std::atomic<long long> g_feq_rej_host{0};   // ...rejected: host not already on battlefield
-static std::atomic<long long> g_feq_rej_params{0}; // ...rejected: not pure upside
-static std::atomic<long long> g_feq_disarm_shroud{0}; // frames disarmed by (b)
+// MTG_METALCRAFT_EQUIP_HOIST: frames where the same-turn flip makes equips free, and the equip
+// groups the stale enumeration stamp was the ONLY thing keeping in the odometer.
+static std::atomic<long long> g_mch_frames{0};
+static std::atomic<long long> g_mch_groups{0};
+static std::atomic<long long> g_fch_groups{0};   // MTG_FREE_CAST_HOIST: {0}-cast groups erased
 inline bool FreeEquipDiagOn() { static const bool v = EnvOn("MTG_FREE_EQUIP_DIAG"); return v; }
+inline void FreeEquipDiagNoteHoistFrame()
+{ if (FreeEquipDiagOn()) { g_mch_frames.fetch_add(1, std::memory_order_relaxed); } }
+inline void FreeEquipDiagNoteHoistGroup()
+{ if (FreeEquipDiagOn()) { g_mch_groups.fetch_add(1, std::memory_order_relaxed); } }
+inline void FreeEquipDiagNoteFreeCast()
+{ if (FreeEquipDiagOn()) { g_fch_groups.fetch_add(1, std::memory_order_relaxed); } }
 
 static std::atomic<long long> g_iw_subsets{0}, g_iw_subsets_with_payoff{0};
 static std::mutex g_iw_mu;
@@ -2093,17 +2091,14 @@ namespace
             long long site_tot = 0;
             for (int i = 0; i < unitsite::kSiteCount; ++i) { site_tot += unitsite::g_units[i].load(); }
             std::cerr << "[rollout-stats] units_total=" << site_tot << "\n";
-            if (g_feq_calls.load() > 0)
+            if (g_mch_frames.load() > 0 || g_mch_groups.load() > 0)
             {
-                std::cerr << "FREE_EQUIP_MANDATORY calls=" << g_feq_calls.load()
-                          << " armed=" << g_feq_armed.load()
-                          << " mandatory_groups=" << g_feq_groups.load()
-                          << " | equip_groups_seen=" << g_feq_equip_groups.load()
-                          << " rej: cost=" << g_feq_rej_cost.load()
-                          << " attached=" << g_feq_rej_attached.load()
-                          << " host=" << g_feq_rej_host.load()
-                          << " params=" << g_feq_rej_params.load()
-                          << " | disarm_shroud=" << g_feq_disarm_shroud.load() << "\n";
+                std::cerr << "METALCRAFT_EQUIP_HOIST frames=" << g_mch_frames.load()
+                          << " hoisted_groups=" << g_mch_groups.load() << "\n";
+            }
+            if (g_fch_groups.load() > 0)
+            {
+                std::cerr << "FREE_CAST_HOIST hoisted_groups=" << g_fch_groups.load() << "\n";
             }
             if (g_iw_drops.load() > 0)
             {
@@ -6186,6 +6181,99 @@ static int SameTurnMetalcraftEquipCredit(const GameState& state, const std::vect
         if (cands[j].kind == Action::Kind::Equip) { credit += cands[j].cost.generic; }
     }
     return credit;
+}
+
+// MTG_METALCRAFT_EQUIP_HOIST -- does this frame's OWN casts make the equips free? The precondition
+// for extending the AUTO-EQUIP collapse (see that block) across the same-turn metalcraft flip.
+//
+// The collapse's freeness test is `cands[j].cost.ManaValue() != 0`, and that cost is baked by the
+// Equip candidate block from EquipCostGenericNow(state) -- the artifact count as it stands at
+// ENUMERATION. So on the very turn the deck goes off (cast artifact #3, flip metalcraft ON, then
+// stack Colossus Hammers for {0}) every equip is stamped at its PRINTED cost, the collapse
+// declines, and the odometer powersets a take/skip family every member of which will cost {0} by
+// the time it is paid. That is the SAME stale stamp SameTurnMetalcraftEquipCredit exists to undo at
+// the affordability gate -- this is the same correction at the enumeration-SHAPE gate.
+//
+// USER, 2026-10-01: *"we expect to pay 0 equip costs, except potentially in rare cases where we
+// fail to go off."* The measured 93%-of-equip-groups-rejected-on-cost reading that made the
+// since-RETIRED FREE_EQUIP_MANDATORY collapse look vacuous was reading this stamp, not the price actually paid.
+//
+// Returns true iff SOME subset of this frame flips metalcraft on: a reducer is already on the
+// battlefield or is a cast candidate, AND the battlefield's artifacts plus the frame's artifact
+// casts reach the lowest such threshold. A frame-level UPPER bound by design -- it is the
+// precondition for hoisting, and the hoist's optimism is bounded at the apply, not here.
+//
+// SOUNDNESS, and the one place it is optimistic. A hoisted equip rides every subset without
+// contributing to the mana term, so in a subset that does NOT flip metalcraft it is scored as free
+// while really costing its printed generic. The PLAY is never wrong: casts are applied before the
+// trailing equip pass in both worlds, and the equip's own recompute then pays out of what the casts
+// left or declines outright (it does not attach for free) -- so the realised line is exactly the
+// un-equipped plan. The error is confined to that plan's SCORE, which is the disclosed optimism
+// class SameTurnMetalcraftEquipCredit already runs in by default, under the same
+// LeafReducerCreditEnabled law: optimism is sound exactly where a rollout validates it.
+static bool MetalcraftWillFreeEquips(const GameState& state, const std::vector<Action>& cands)
+{
+    const int controller = state.active_player_index;
+    int threshold = 0;
+    auto note_threshold = [&threshold](int t)
+    { if (t > 0 && (threshold == 0 || t < threshold)) { threshold = t; } };
+    for (const Permanent& p : state.battlefield)
+    {
+        if (p.controller_index != controller) { continue; }
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+        if (d) { note_threshold(d->params.metalcraft_equip_zero_artifacts); }
+    }
+    for (const Action& a : cands)
+    {
+        if (a.kind != Action::Kind::CastFromHand || a.def == nullptr) { continue; }
+        note_threshold(a.def->params.metalcraft_equip_zero_artifacts);
+    }
+    if (threshold <= 0) { return false; }
+    // Equipment ARE artifacts, so a cast Bonesplitter counts itself toward the threshold that makes
+    // the NEXT equip free -- the same accounting as the credit's.
+    int artifacts = CountControlledArtifacts(state, controller);
+    for (const Action& a : cands)
+    {
+        if (a.kind != Action::Kind::CastFromHand || a.def == nullptr) { continue; }
+        if (a.def->card.HasType(CardType::Artifact)) { ++artifacts; }
+    }
+    return artifacts >= threshold;
+}
+
+// DOUBLE-STRIKE DISARM for the metalcraft equip hoist. The hoist forces a group's single BEST
+// variant (max eval) into every subset, which is dominance only while the choice of HOST does not
+// change the rider's value. The USER's argument for collapsing the host in the first place names
+// its own precondition (2026-10-01, on KittyEquipment v2): *"There is no double-strike in the deck,
+// so we can just choose one creature and put all equipment on it."* With a double striker the rider
+// is DOUBLED on that host, so which creature carries it is a real decision and forcing a static
+// ranking's pick is a projection, not a fold.
+//
+// MEASURED, and this is why the gate exists rather than being argued: on KittyEquipment v1 -- the
+// SUITE deck, Kor Duelist + Balan -- the un-gated hoist was -25.3% units but lost a turn in 3 of 70
+// games across its d5 cells. v2 has no double-strike source at all, so it is unaffected. Checks the
+// battlefield AND the cast candidates, because a Balan cast in the same subset is exactly the case
+// the equip-host width policy already widens for.
+static bool FrameHasDoubleStrikeSource(const GameState& state, const std::vector<Action>& cands)
+{
+    auto ds_def = [](const CardDefinition* d) -> bool
+    {
+        if (d == nullptr) { return false; }
+        return d->card.HasKeyword(Keyword::DoubleStrike)
+            || d->params.double_strike_while_equipped
+            || d->params.double_strike_min_equipment > 0;
+    };
+    for (const Permanent& p : state.battlefield)
+    {
+        if (p.controller_index != state.active_player_index) { continue; }
+        if (p.card.HasKeyword(Keyword::DoubleStrike))                   { return true; }
+        if (ds_def(CardDatabase::Instance().LookupCached(p.card)))      { return true; }
+    }
+    for (const Action& a : cands)
+    {
+        if (a.kind != Action::Kind::CastFromHand) { continue; }
+        if (ds_def(a.def))                        { return true; }
+    }
+    return false;
 }
 
 // Forward decl of the real backtracking mana payment (defined below); used by the filter
@@ -12353,164 +12441,58 @@ static inline bool FungibleEquipCopyViolated(const std::vector<int>& class_of,
     return false;
 }
 
-// ---- MANDATORY FREE EQUIP (MTG_FREE_EQUIP_MANDATORY) ------------------------------------------
-// A FREE, pure-upside equip onto a host ALREADY on the battlefield is not a decision: its group may
-// not take the 0 ("skip") position, so the 2^k subset over k such digits collapses to the one
-// all-taken position. The argument is the USER's, 2026-10-01, on KittyEquipment v2: *"I think we
-// need to make a dominance argument."*
-//
-// WHY IT IS A DOMINANCE AND NOT A PREFERENCE. Attaching an Equipment whose equip cost is {0} right
-// now and whose attach carries no downside can never be worse than declining it:
-//   * Equipment do not COMPETE for a host -- a creature holds unlimited Equipment, so taking one
-//     attach never forecloses another (unlike a sac outlet's fodder or a mana source's {T});
-//   * nothing in the engine prices an attached Equipment as a cost. It still counts for metalcraft
-//     and for the artifact count, and Golem-Skin Gauntlets reads "each Equipment attached to IT",
-//     so piling more onto the same host strictly RAISES the Gauntlets' own bonus;
-//   * the attach is not spent: re-equipping later is legal, and if metalcraft switches OFF in the
-//     meantime the attachment is already paid for while an unattached copy becomes dear again. So
-//     attaching now weakly dominates attaching later, and strictly dominates never.
-// Same shape and same reasoning as MTG_SPORE_POP_ALL ("there is no benefit to waiting"), and like
-// it this is an EXACT collapse, not a heuristic narrowing.
-//
-// MEASURED (kitty v2, seed 2002, d3/b250, MTG_BRANCH_HEAVY): the heaviest decisions are 10 option
-// groups of which SEVEN are single-variant same-host free equips -- odo 2048, of which 2^7 is pure
-// subset waste -- and the shared-resource funnel rejects 0.00% of 36,672,476 subset visits, so
-// nothing downstream was removing them either. The group-size histogram is almost entirely size-1
-// (turn 6: 457,279 size-1 groups against 28,905 size-2), i.e. the odometer on this deck is a
-// product of binary take/skip digits, which is exactly the shape this collapses.
-//
-// THE THREE CARVE-OUTS ARE ENFORCED, NOT ARGUED -- an incomplete list is the documented failure
-// mode here (see BuildFungibleEquipClasses' "keep it exhaustive rather than argue reachability"):
-//   (a) THE HOST MUST ALREADY BE ON THE BATTLEFIELD. A host that only a CAST digit brings in makes
-//       the forced position illegal, which would delete real plans rather than fold them -- that is
-//       precisely the dependency MTG_EQUIP_PIECE_DEPS exists to model, and forcing a digit on top of
-//       it would fight that guard instead of composing with it.
-//   (b) equip_grants_shroud ANYWHERE IN THE FRAME DISARMS IT ENTIRELY. Equip targets ("attach to
-//       target creature you control"), so a Lightning Greaves that grants shroud to its own host
-//       makes every LATER equip onto that host an illegal target. Forcing digits could then
-//       manufacture a sequence with no legal order at all. Frame-wide rather than per-group because
-//       the illegality is created by one digit and suffered by the others.
-//   (c) equip_sacrifices_prior_host, and any negative bonus, are excluded outright.
-// Note what is NOT a carve-out: Colossus Hammer's "loses flying" is modelled by no param and is
-// inert regardless -- nothing blocks anywhere in this engine, so flying buys no evasion to lose.
-static bool FreeEquipMandatoryEnabled()
+static bool MetalcraftEquipHoistEnabled()
 {
-    static const bool env_on = EnvOn("MTG_FREE_EQUIP_MANDATORY");      // DEFAULT OFF
-    return heurarm::Flag(heurarm::FREE_EQUIP_MANDATORY, env_on);
+    static const bool env_on = EnvOn("MTG_METALCRAFT_EQUIP_HOIST");    // DEFAULT OFF
+    return heurarm::Flag(heurarm::METALCRAFT_EQUIP_HOIST, env_on);
 }
 
-// Totally free RIGHT NOW. The flat ints are the whole test: hybrid and phyrexian pips bake their
-// colour into them (see ManaCost's representation note), so an all-zero flat cost with no {X} is
-// free under every payment assignment there is.
-static inline bool EquipCostIsZeroNow(const ManaCost& c)
+static bool FreeCastHoistEnabled()
 {
-    return !c.has_x && c.x_pips == 0
-        && c.generic == 0 && c.white == 0 && c.blue == 0 && c.black == 0
-        && c.red == 0 && c.green == 0 && c.colorless == 0;
+    static const bool env_on = EnvOn("MTG_FREE_CAST_HOIST");           // DEFAULT OFF
+    return heurarm::Flag(heurarm::FREE_CAST_HOIST, env_on);
 }
 
-// Can ATTACHING this Equipment ever be worse than declining to? Exhaustive over CardParams' whole
-// equip_* surface as of 2026-10-01 -- a param added later that can hurt the host must be added here.
-static inline bool EquipAttachPureUpside(const CardDefinition* d)
+// Is CASTING this {0}-mana Equipment dominant -- i.e. is "don't cast it" never better? The
+// free-CAST axis of the USER's original framing (2026-10-01): *"It might require a kind of jump of
+// some sort to evaluate with all of the 0-mana cards out."* KittyEquipment v2 holds 14 of them
+// (Cathar's Shield x4, Bone Saw x4, Kite Shield, Accorder's Shield, Spidersilk Net, ...), each its
+// own hand-slot group, so a mid-game hand powersets take/skip over all of them.
+//
+// Unlike the metalcraft equip hoist this is EXACTLY mana-neutral: a {0} cast contributes nothing to
+// the odometer's mana term, so forcing it into every subset mis-prices nothing at all. There is no
+// optimism to bound -- only the dominance claim, and for an Equipment every axis the engine models
+// is monotone upward (the card data says the same; see Bone Saw's note in cards.json):
+//   * it is an ARTIFACT, so it advances metalcraft -- which only ever REDUCES costs;
+//   * it triggers the equipment-cast draw (Sram) and the equipment-ETB draw (Puresteel);
+//   * it is one more Equipment for a Golem-Skin Gauntlets host to count (equip_scale_power_*);
+//   * Dwalin's hone counters accrue to it while UNATTACHED and cash in on a later equip, which is
+//     the property that file already calls "what makes the hone axis monotone";
+//   * with Sigarda's Aid out it enters ATTACHED, bypassing the equip cost entirely.
+// Nothing in this engine prices a permanent on the battlefield as a cost, an Equipment has no body
+// and so can never be forced to attack, and casting it REDUCES hand size (so it cannot cause a
+// cleanup discard).
+//
+// Carve-outs, enforced rather than argued:
+//   * equip_grants_shroud -- with Sigarda's Aid the entrant AUTO-ATTACHES, and a shrouded host
+//     makes every later equip an illegal TARGET (CR 702.18b), so forcing the cast could manufacture
+//     a position whose remaining equips are unplayable. This is the same hazard the free-equip
+//     collapse disarms frame-wide, reached by a different route.
+//   * equip_sacrifices_prior_host (Grafted Wargear) and any negative bonus.
+//   * {X} in the cost -- an {X} spell is only nominally {0}.
+static bool FreeEquipmentCastIsDominant(const Action& a)
 {
-    if (d == nullptr)                                   { return false; }
-    const CardParams& p = d->params;
-    if (!p.is_equipment)                                { return false; }
-    if (p.equip_sacrifices_prior_host)                  { return false; }   // (c)
-    if (p.equip_grants_shroud)                          { return false; }   // (b), also per-group
-    if (p.equip_power_bonus < 0)                        { return false; }
-    if (p.equip_tough_bonus < 0)                        { return false; }
-    if (p.equip_scale_power_per_equipment < 0)          { return false; }
-    if (p.equip_scale_tough_per_equipment < 0)           { return false; }
-    return true;                                                            // haste/lifelink/
-}                                                                           // vigilance/charges: up
-
-// Groups whose 0 position is dominated, ascending. Choice-INDEPENDENT precompute, once per
-// enumeration (like BuildFungibleEquipClasses).
-static int BuildMandatoryFreeEquip(const GameState& state, const std::vector<Action>& cands,
-                                   const std::vector<std::vector<int>>& groups,
-                                   std::vector<int>& mand)
-{
-    mand.clear();
-    const bool diag = FreeEquipDiagOn();
-    if (diag) { g_feq_calls.fetch_add(1, std::memory_order_relaxed); }
-    // (b) frame-wide disarm: one shroud-granter poisons every other digit's legality.
-    for (const Action& a : cands)
-    {
-        if (a.kind != Action::Kind::Equip) { continue; }
-        const CardDefinition* d = a.def;
-        if (d != nullptr && d->params.equip_grants_shroud)
-        {
-            if (diag) { g_feq_disarm_shroud.fetch_add(1, std::memory_order_relaxed); }
-            return 0;
-        }
-    }
-    auto on_bf_mine = [&](int num, bool want_creature) -> bool
-    {
-        for (const Permanent& p : state.battlefield)
-        {
-            if (p.controller_index != state.active_player_index) { continue; }
-            if (p.card.m_number != num)                         { continue; }
-            return !want_creature || p.card.IsCreature();
-        }
-        return false;
-    };
-    for (std::size_t g = 0; g < groups.size(); ++g)
-    {
-        const std::vector<int>& mem = groups[g];
-        if (mem.empty()) { continue; }
-        bool ok = true;
-        bool any_equip = false;
-        for (int j : mem)
-        {
-            const Action& a = cands[j];
-            if (a.kind != Action::Kind::Equip)        { ok = false; break; }
-            any_equip = true;
-            if (!EquipCostIsZeroNow(a.cost))
-            { if (diag) { g_feq_rej_cost.fetch_add(1, std::memory_order_relaxed); } ok = false; break; }
-            if (a.sac_source_id <= 0 || a.sac_victim_id <= 0) { ok = false; break; }
-            // The Equipment itself must be ours, on the battlefield, and UNATTACHED: moving an
-            // already-attached copy off a host it is helping is a real decision, not a free gain.
-            const Permanent* src = nullptr;
-            for (const Permanent& p : state.battlefield)
-            {
-                if (p.controller_index != state.active_player_index) { continue; }
-                if (p.card.m_number != a.sac_source_id)             { continue; }
-                src = &p;
-                break;
-            }
-            if (src == nullptr || src->equipped_to != 0)
-            { if (diag) { g_feq_rej_attached.fetch_add(1, std::memory_order_relaxed); } ok = false; break; }
-            if (!on_bf_mine(a.sac_victim_id, true))                                   // (a)
-            { if (diag) { g_feq_rej_host.fetch_add(1, std::memory_order_relaxed); } ok = false; break; }
-            const CardDefinition* d = a.def ? a.def
-                                            : CardDatabase::Instance().LookupCached(src->card);
-            if (!EquipAttachPureUpside(d))
-            { if (diag) { g_feq_rej_params.fetch_add(1, std::memory_order_relaxed); } ok = false; break; }
-        }
-        if (diag && any_equip) { g_feq_equip_groups.fetch_add(1, std::memory_order_relaxed); }
-        if (ok) { mand.push_back(static_cast<int>(g)); }
-    }
-    if (diag && !mand.empty())
-    {
-        g_feq_armed.fetch_add(1, std::memory_order_relaxed);
-        g_feq_groups.fetch_add(static_cast<long long>(mand.size()), std::memory_order_relaxed);
-    }
-    return static_cast<int>(mand.size());
-}
-
-// Per-CHOICE check. Each mandatory digit is an INDEPENDENT unconditional requirement, so this is
-// valid on any subset of the digits it can see -- which is what lets the split walk run it per side
-// with no straddle guard (unlike FungibleEquipCopyViolated, which compares digits ACROSS groups).
-static inline bool MandatoryFreeEquipViolated(const std::vector<int>& mand,
-                                              const std::vector<int>& choice)
-{
-    for (int g : mand)
-    {
-        if (static_cast<std::size_t>(g) < choice.size() && choice[static_cast<std::size_t>(g)] <= 0)
-        { return true; }
-    }
-    return false;
+    if (a.kind != Action::Kind::CastFromHand)              { return false; }
+    if (a.def == nullptr)                                  { return false; }
+    if (a.cost.has_x || a.cost.ManaValue() != 0)           { return false; }
+    const CardParams& p = a.def->params;
+    if (!p.is_equipment)                                   { return false; }
+    if (p.equip_grants_shroud)                             { return false; }
+    if (p.equip_sacrifices_prior_host)                     { return false; }
+    if (p.equip_power_bonus < 0 || p.equip_tough_bonus < 0) { return false; }
+    if (p.equip_scale_power_per_equipment < 0)             { return false; }
+    if (p.equip_scale_tough_per_equipment < 0)             { return false; }
+    return true;
 }
 
 // ---- FOLD PREFIX: hoist the canonical-prefix rejection into the odometer -----------------------
@@ -12684,6 +12666,10 @@ struct EquipPieceDeps
 static void BuildEquipPieceDeps(const GameState& state, const std::vector<Action>& cands,
                                 const std::vector<std::vector<int>>& groups,
                                 const std::vector<int>& group_hand_index,
+                                // Casts FORCED into every subset (the auto-equip / free-cast
+                                // collapses erase their group), so a piece cast here has no
+                                // dependency left to enforce -- see cast_in_auto below.
+                                const std::vector<int>& auto_sel,
                                 EquipPieceDeps& out)
 {
     out.gs.clear();
@@ -12719,6 +12705,18 @@ static void BuildEquipPieceDeps(const GameState& state, const std::vector<Action
         }
         return mask;
     };
+    // Is this card's cast FORCED (hoisted out of `groups` into auto_sel)? Keyed the same way as
+    // cast_groups_of -- hand card number + action kind.
+    auto cast_in_auto = [&](int num) -> bool {
+        for (int j : auto_sel)
+        {
+            const Action& d = cands[j];
+            if (d.kind != Action::Kind::CastFromHand) { continue; }
+            if (d.hand_index < 0 || d.hand_index >= static_cast<int>(ap.hand.size())) { continue; }
+            if (ap.hand[d.hand_index].m_number == num) { return true; }
+        }
+        return false;
+    };
     // The mask is one bit per group, so a wider odometer than that falls back to the subset guard
     // rather than silently mis-pruning.
     if (groups.size() > 64) { return; }
@@ -12753,6 +12751,13 @@ static void BuildEquipPieceDeps(const GameState& state, const std::vector<Action
             {
                 if (nums[k] <= 0)   { req[c][k] = { true, 0 }; any = true; continue; }
                 if (on_bf(nums[k])) { continue; }                 // already there: no dependency
+                // FORCE-CAST in every subset: same "no dependency" case as already-on-battlefield.
+                // Without this a hoisted cast group is invisible to cast_groups_of, which returns
+                // mask 0 and stamps the equip {required, groups = 0} -- "needs a piece no group can
+                // ever cast", a permanently dead digit. That is exactly the jittemode=2 class the
+                // long note above records (docs/design/enumerated-but-unplayable-activations.md),
+                // and the free-cast hoist is what first makes a CAST group erasable.
+                if (cast_in_auto(nums[k])) { continue; }
                 req[c][k] = { true, cast_groups_of(nums[k]) };
                 any = true;
             }
@@ -27425,9 +27430,6 @@ static void EnumeratePlanPositions(const std::vector<Action>& cands,
                                    // equip digit -> the cast groups its pieces need; see
                                    // BuildEquipPieceDeps.
                                    const EquipPieceDeps& equip_deps,
-                                   // groups whose "skip" position is dominated (empty when the
-                                   // collapse is off or found nothing); see BuildMandatoryFreeEquip.
-                                   const std::vector<int>& mand_equip,
                                    // By const reference, NOT by value: Solve's `consider` closure
                                    // captures a dozen locals, and this is called once per rollout
                                    // node -- copying it per call is measurable.
@@ -27478,9 +27480,6 @@ static void EnumeratePlanPositions(const std::vector<Action>& cands,
     // wrong prune. One pass over the groups, once per call.
     bool copy_pred_on = !copy_class.empty();
     bool dep_pred_on  = !equip_deps.Empty();
-    // No straddle guard: every mandatory digit is its own unconditional requirement, so the test is
-    // valid on whatever digits the caller's vector holds (see MandatoryFreeEquipViolated).
-    const bool mand_pred_on = !mand_equip.empty();
     if (copy_pred_on || dep_pred_on)
     {
         std::vector<char> side(num_groups, 0);
@@ -27584,7 +27583,6 @@ static void EnumeratePlanPositions(const std::vector<Action>& cands,
                        (any_splice && SpliceGroupChoiceRejected(sidx, groups, choice, splice_collapse_on))
                     || (accel_pred_on && NonPrefixAccelViolated(accel_order, choice))
                     || (copy_pred_on && FungibleEquipCopyViolated(copy_class, choice))
-                    || (mand_pred_on && MandatoryFreeEquipViolated(mand_equip, choice))
                     || (dep_pred_on && EquipPieceDepViolated(equip_deps, choice, sel_mask));
                 if (!rejected)
                 {
@@ -27641,7 +27639,6 @@ static void EnumeratePlanPositions(const std::vector<Action>& cands,
                    (any_splice && SpliceGroupChoiceRejected(sidx, groups, full, splice_collapse_on))
                 || (accel_pred_on && NonPrefixAccelViolated(accel_order, full))
                 || (copy_pred_on && FungibleEquipCopyViolated(copy_class, full))
-                || (mand_pred_on && MandatoryFreeEquipViolated(mand_equip, full))
                 || (dep_pred_on && EquipPieceDepViolated(equip_deps, full));
             if (!rejected)
             {
@@ -29959,16 +29956,30 @@ TurnSolver::Plan TurnSolver::SolveUncached(const GameState& state, bool is_pre_c
                                 && provider.ConsolidatesEquips()
                                 && !DecisionUnpruned(UnprunedGate::EquipHost)
                                 && !HumanPlayActive();
+        // Will this frame's own casts make the equips free? (MTG_METALCRAFT_EQUIP_HOIST, default
+        // OFF.) Computed ONCE per call -- it is a property of the frame, not of a group.
+        const bool mc_hoist = auto_equip_on && MetalcraftEquipHoistEnabled()
+                           && !FrameHasDoubleStrikeSource(state, cands)
+                           && MetalcraftWillFreeEquips(state, cands);
+        if (mc_hoist) { FreeEquipDiagNoteHoistFrame(); }
         if (auto_equip_on)
         {
             for (int g = static_cast<int>(groups.size()) - 1; g >= 0; --g)
             {
                 bool all_free_equips = !groups[g].empty();
+                bool used_hoist      = false;
                 for (int j : groups[g])
                 {
-                    if (cands[j].kind != Action::Kind::Equip
-                        || cands[j].cost.ManaValue() != 0) { all_free_equips = false; break; }
+                    if (cands[j].kind != Action::Kind::Equip) { all_free_equips = false; break; }
+                    if (cands[j].cost.ManaValue() == 0) { continue; }   // free at the stamp
+                    // Not free at the stamp: hoist only on the promise of the same-turn flip, and
+                    // only for a cost metalcraft actually zeroes (pure generic, no {X}).
+                    if (!mc_hoist || cands[j].cost.has_x
+                        || cands[j].cost.generic != cands[j].cost.ManaValue())
+                    { all_free_equips = false; break; }
+                    used_hoist = true;
                 }
+                if (all_free_equips && used_hoist) { FreeEquipDiagNoteHoistGroup(); }
                 if (!all_free_equips) { continue; }
                 const int eq_num = cands[groups[g][0]].sac_source_id;
                 const Permanent* eqp = nullptr;
@@ -30011,6 +30022,25 @@ TurnSolver::Plan TurnSolver::SolveUncached(const GameState& state, bool is_pre_c
                 group_hand_index.erase(group_hand_index.begin() + g);
             }
             // Candidate order = subset apply order: keep the forced equips in enumeration order.
+            // FREE-CAST hoist (MTG_FREE_CAST_HOIST, default OFF): a {0}-mana Equipment cast is
+            // forced into every subset instead of powersetting take/skip over it. See
+            // FreeEquipmentCastIsDominant for the dominance argument and its carve-outs. Runs in
+            // the same block as the auto-equip collapse so auto_sel is sorted once, and BEFORE
+            // CapGroupsBySituationalRank for the same reason that one does.
+            if (FreeCastHoistEnabled())
+            {
+                for (int g = static_cast<int>(groups.size()) - 1; g >= 0; --g)
+                {
+                    // Single-variant groups only: a multi-variant cast group is a real choice of
+                    // MODE, and this collapse has an argument about whether to cast, not how.
+                    if (groups[g].size() != 1) { continue; }
+                    if (!FreeEquipmentCastIsDominant(cands[groups[g][0]])) { continue; }
+                    auto_sel.push_back(groups[g][0]);
+                    groups.erase(groups.begin() + g);
+                    group_hand_index.erase(group_hand_index.begin() + g);
+                    FreeEquipDiagNoteFreeCast();
+                }
+            }
             std::sort(auto_sel.begin(), auto_sel.end());
         }
     }
@@ -30064,12 +30094,7 @@ TurnSolver::Plan TurnSolver::SolveUncached(const GameState& state, bool is_pre_c
     // Equip piece dependencies -> reject a stranded equip at the DIGIT instead of at the subset.
     // Byte-identical (SubsetHasStrandedEquip rejects the same positions); see BuildEquipPieceDeps.
     EquipPieceDeps equip_deps;
-    if (EquipPieceDepsEnabled()) { BuildEquipPieceDeps(state, cands, groups, group_hand_index, equip_deps); }
-    // Free pure-upside equips onto an on-board host -> the "skip" position is dominated, so the
-    // group must take a member. Empty (and inert) unless the collapse is on. See
-    // BuildMandatoryFreeEquip for the dominance argument and its three carve-outs.
-    std::vector<int> mand_equip;
-    if (FreeEquipMandatoryEnabled()) { BuildMandatoryFreeEquip(state, cands, groups, mand_equip); }
+    if (EquipPieceDepsEnabled()) { BuildEquipPieceDeps(state, cands, groups, group_hand_index, auto_sel, equip_deps); }
     // Choice-independent inputs to the two splice predicates (name ids, copy positions, hand counts),
     // plus the lowest odometer digit that can change any predicate. See BuildSpliceOdometerIndex.
     std::unique_ptr<SpliceOdometerIndex> sidx_owned;
@@ -30140,7 +30165,6 @@ TurnSolver::Plan TurnSolver::SolveUncached(const GameState& state, bool is_pre_c
         std::uint64_t sel_mask = 0;
         const bool copy_pred_on = !copy_class.empty();
         const bool dep_pred_on  = !equip_deps.Empty();
-        const bool mand_pred_on = !mand_equip.empty();   // see MandatoryFreeEquipViolated
         // Canonical-prefix fold, hoisted to the digit (see BuildFoldPrefixMap): 65% of this walk's
         // subset visits on Snow are non-canonical positions whose whole inner loop is dead work.
         // Gated on pre.dup_source as well, so the skip can never outlive the leaf clause it mirrors.
@@ -30161,7 +30185,6 @@ TurnSolver::Plan TurnSolver::SolveUncached(const GameState& state, bool is_pre_c
             // two-stage split it needs no straddle guard.
             const bool fold_viol = fold_pred_on && FoldPrefixViolated(fold_map, choice);
             const bool copy_skip = (copy_pred_on && FungibleEquipCopyViolated(copy_class, choice))
-                                || (mand_pred_on && MandatoryFreeEquipViolated(mand_equip, choice))
                                 || (dep_pred_on && EquipPieceDepViolated(equip_deps, choice, sel_mask))
                                 || (fold_viol && !s_fold_odo_verify);
             int mcost = 0, mgain = 0, mgy = 0, mblock = 0;
@@ -30265,7 +30288,7 @@ TurnSolver::Plan TurnSolver::SolveUncached(const GameState& state, bool is_pre_c
     {
         EnumeratePlanPositions(cands, groups, independent, gate, mana_bound, *sidx, accel_order,
                                any_splice, splice_collapse_on, accel_prefix_on && any_accel,
-                               has_ind_accel, copy_class, equip_deps, mand_equip, vial_ok, consider);
+                               has_ind_accel, copy_class, equip_deps, vial_ok, consider);
     }
 
     return materialize_best();
@@ -39005,16 +39028,27 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
                                 && ResolveProvider(state).ConsolidatesEquips()
                                 && !DecisionUnpruned(UnprunedGate::EquipHost)
                                 && !HumanPlayActive();
+        // Same frame-level hoist as Solve's twin; see MetalcraftWillFreeEquips.
+        const bool mc_hoist = auto_equip_on && MetalcraftEquipHoistEnabled()
+                           && !FrameHasDoubleStrikeSource(state, cands)
+                           && MetalcraftWillFreeEquips(state, cands);
+        if (mc_hoist) { FreeEquipDiagNoteHoistFrame(); }
         if (auto_equip_on)
         {
             for (int g = static_cast<int>(groups.size()) - 1; g >= 0; --g)
             {
                 bool all_free_equips = !groups[g].empty();
+                bool used_hoist      = false;
                 for (int j : groups[g])
                 {
-                    if (cands[j].kind != Action::Kind::Equip
-                        || cands[j].cost.ManaValue() != 0) { all_free_equips = false; break; }
+                    if (cands[j].kind != Action::Kind::Equip) { all_free_equips = false; break; }
+                    if (cands[j].cost.ManaValue() == 0) { continue; }   // free at the stamp
+                    if (!mc_hoist || cands[j].cost.has_x
+                        || cands[j].cost.generic != cands[j].cost.ManaValue())
+                    { all_free_equips = false; break; }
+                    used_hoist = true;
                 }
+                if (all_free_equips && used_hoist) { FreeEquipDiagNoteHoistGroup(); }
                 if (!all_free_equips) { continue; }
                 const int eq_num = cands[groups[g][0]].sac_source_id;
                 const Permanent* eqp = nullptr;
@@ -39055,6 +39089,25 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
                 auto_sel.push_back(jbest);
                 groups.erase(groups.begin() + g);
                 group_hand_index.erase(group_hand_index.begin() + g);
+            }
+            // FREE-CAST hoist (MTG_FREE_CAST_HOIST, default OFF): a {0}-mana Equipment cast is
+            // forced into every subset instead of powersetting take/skip over it. See
+            // FreeEquipmentCastIsDominant for the dominance argument and its carve-outs. Runs in
+            // the same block as the auto-equip collapse so auto_sel is sorted once, and BEFORE
+            // CapGroupsBySituationalRank for the same reason that one does.
+            if (FreeCastHoistEnabled())
+            {
+                for (int g = static_cast<int>(groups.size()) - 1; g >= 0; --g)
+                {
+                    // Single-variant groups only: a multi-variant cast group is a real choice of
+                    // MODE, and this collapse has an argument about whether to cast, not how.
+                    if (groups[g].size() != 1) { continue; }
+                    if (!FreeEquipmentCastIsDominant(cands[groups[g][0]])) { continue; }
+                    auto_sel.push_back(groups[g][0]);
+                    groups.erase(groups.begin() + g);
+                    group_hand_index.erase(group_hand_index.begin() + g);
+                    FreeEquipDiagNoteFreeCast();
+                }
             }
             std::sort(auto_sel.begin(), auto_sel.end());
         }
@@ -40611,12 +40664,7 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
     { copy_class.clear(); }
     // Equip piece dependencies (mirrors Solve). See BuildEquipPieceDeps.
     EquipPieceDeps equip_deps;
-    if (EquipPieceDepsEnabled()) { BuildEquipPieceDeps(state, cands, groups, group_hand_index, equip_deps); }
-    // Free pure-upside equips onto an on-board host -> the "skip" position is dominated, so the
-    // group must take a member. Empty (and inert) unless the collapse is on. See
-    // BuildMandatoryFreeEquip for the dominance argument and its three carve-outs.
-    std::vector<int> mand_equip;
-    if (FreeEquipMandatoryEnabled()) { BuildMandatoryFreeEquip(state, cands, groups, mand_equip); }
+    if (EquipPieceDepsEnabled()) { BuildEquipPieceDeps(state, cands, groups, group_hand_index, auto_sel, equip_deps); }
     // Choice-independent inputs to the two splice predicates + the lowest predicate-relevant odometer
     // digit (mirrors Solve). See BuildSpliceOdometerIndex / MinPredicateDigit.
     std::unique_ptr<SpliceOdometerIndex> sidx_owned;
@@ -40709,7 +40757,6 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
         std::uint64_t sel_mask = 0;
         const bool copy_pred_on = !copy_class.empty();
         const bool dep_pred_on  = !equip_deps.Empty();
-        const bool mand_pred_on = !mand_equip.empty();   // see MandatoryFreeEquipViolated
         // Canonical-prefix fold at the digit -- the twin of Solve's (see BuildFoldPrefixMap), with
         // ONE extra gate that is the whole reason this twin is not just a copy.
         //
@@ -40731,7 +40778,6 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
             // See FungibleEquipCopyViolated. This walk holds the FULL choice vector, so unlike the
             // two-stage split it needs no straddle guard.
             const bool copy_skip = (copy_pred_on && FungibleEquipCopyViolated(copy_class, choice))
-                                || (mand_pred_on && MandatoryFreeEquipViolated(mand_equip, choice))
                                 || (dep_pred_on && EquipPieceDepViolated(equip_deps, choice, sel_mask))
                                 || (fold_pred_on && FoldPrefixViolated(fold_map, choice));
             int mcost = 0, mgain = 0, mgy = 0, mblock = 0;
@@ -40835,7 +40881,7 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
     {
         EnumeratePlanPositions(cands, groups, independent, gate, mana_bound, *sidx, accel_order,
                                any_splice, splice_collapse_on, accel_prefix_on && any_accel,
-                               has_ind_accel, copy_class, equip_deps, mand_equip,
+                               has_ind_accel, copy_class, equip_deps,
                                [](const std::vector<int>&) { return true; },
                                eval_and_push);
     }
