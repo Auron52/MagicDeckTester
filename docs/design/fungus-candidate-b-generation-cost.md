@@ -108,3 +108,49 @@ worked (`MTG_DEVOUR_TRACE`, the landmark menu, the proven-kill devour collapse).
       | grep dedup_why
 
     # cost: logs/snowperf/fungcand{ab,2,3}.py (gitignored apparatus; arms innermost + null arm)
+
+## THE 3x SUITE GATE BLOCKS THIS DECK (measured 2026-10-01)
+
+**candidate-b cannot legally reach either generator yet, and the reason is a number, not an oversight.**
+`scripts/mullgen.sh run` refuses (exit 3) for a deck with no regression-suite cases, and
+`MTG_ALLOW_UNTESTED_DECK=1` is explicitly *"a USER decision, never an agent's"*. The sanctioned way in
+is to add suite cases — which is gated on the **3x cost rule**.
+
+Measured in ONE pooled batch holding BOTH lists at the suite's own `fungus` case shapes (d0 1000, d3
+b10 150, d5 b20 75, seed 1001), so the comparison is contention-matched:
+
+| cell | shipped ms/game | candidate-b ms/game | ratio | shipped avg | candidate-b avg |
+|---|---|---|---|---|---|
+| d0 | 0.1 | 0.1 | 0.4x | 5.6810 | 6.3220 |
+| d3/b10 | 190.9 | 1993.2 | **10.4x** | 5.3800 | 5.3200 |
+| d5/b20 | 180.1 | **4032.5** | **22.4x** | 5.3867 | 5.2533 |
+
+The regime is comparable to `test/suite_cost.json` (it puts `fungus` at 224.49 ms/game against the
+190.9 measured here for the same list's worst searched cell).
+
+* Budget: **3 x fivecolour (1033.46) = 3100.4 ms/game**, fivecolour being the most expensive deck with
+  BOTH a value leaf and a mulligan profile.
+* candidate-b's worst searched cell is **4032.5 ms/game = 1.30x the budget — it FAILS**, and it is
+  **21.1x the shipped Fungus list** it is meant to replace.
+
+Per CLAUDE.md this settles the sequencing: *"If it is over 3x: do NOT add it and do NOT skip the
+suite... getting the deck into that range becomes the first goal, ahead of both generators. An
+intractable deck is a performance problem to fix, not a deck to quietly exempt."*
+
+**How close the existing levers get it** (applied to that worst cell, using the ratios measured the
+same day in `sac-mana-outlet-as-deferred-source.md`):
+
+| state | ms/game | vs budget |
+|---|---|---|
+| today | 4032.5 | 1.30x — over |
+| + `MTG_SAC_OUTLET_PAY` (0.85608x at cb_d5) | 3452.1 | 1.11x — over |
+| + `MTG_SAC_POOL_TURN_COLOR` (0.97036x) | 3349.8 | **1.08x — over** |
+
+So both of this session's levers together leave a **~7% gap**, and `MTG_SAC_OUTLET_PAY` is not adoptable
+yet anyway (it still regresses at d0 on both lists and at shipped d5). The chain-arm drop documented
+above is another ~1%. **Closing that last ~7% is the thing standing between this deck and its
+generators** — which makes the cost strand the critical path, not a side quest.
+
+Worth noting the quality side while this is open: candidate-b is **better than the shipped list at both
+searched cells** (−0.060t at d3, −0.133t at d5) and clearly **worse at d0** (+0.641t). A deck whose
+advantage only appears once the search is deep is exactly the shape that makes the cost gate bite.
