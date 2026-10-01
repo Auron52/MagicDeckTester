@@ -47,6 +47,24 @@ empty (= no narrowing) and only `EldraziFlickerProvider` overrides it. `FungusPr
 > search is very very limited. Usually we just pick." / "usually we have 1 choice. Occasionally we
 > have 2."
 
+### The principle underneath it (USER, stated last and it is the sharpest form)
+
+> "Usually you want to choose a land that is **not needed to cast the enchantment** so you can use
+> the mana the enchantment generates to pay back some or all of the cost."
+
+That is the real rule, and the table below is a **decidable proxy for it**. "Not needed to pay" is a
+property of the PAYMENT, which has not been solved when `CollectActions` enumerates the host — so the
+enumeration can only use the subset of the rule that is knowable in advance: a land that *cannot*
+produce a colour the aura's cost needs is guaranteed not to be needed for it. Secluded Courtyard is
+that case exactly. A land that CAN pay might still be spare, but proving it requires the payment.
+
+**The engine already does the full version in one place**, and it is the template if this is ever
+generalised: EDF's go-off loop calls `DeployLandAuraFromHand`, whose host *"comes from the provider's
+own `LandAuraHostCandidates` ranking, chosen AFTER the payment so the aura rides a land the payment
+left untapped, with `LandHasShroud` re-checked there"*. USER on extending it: *"We might be able to
+use that idea to improve things for EDF, even though it is much more difficult to do there than in
+Fungus."* Not pursued now — *"But for now, let's focus on Fungus."*
+
 ### Restated card-agnostically
 
 Two properties of the HOST, relative to the **Aura's own mana cost**:
@@ -98,6 +116,41 @@ is readable from inside `CollectActions`.
 and dropped **11,538 distinct plans** (`dedup` 750,223 → 738,685). With the exclusion in place
 `dedup` is **exactly** 750,223 — byte-equal to the unfolded arm.
 
+#### …but the user argues the exclusion may be unnecessary, and the measurement AGREES — yet is blind
+
+> "The problem with Karoo is that it can bounce a land with Wild Growth on it, but the engine will
+> automatically price that if this happens (and presumably avoid it most of the time) (and bouncing
+> the enchanted land means losing the enchantment)."
+
+**The premise is confirmed in code.** `BounceKarooLand` detaches every attachment from the bounced
+land (`aura_attached_to = 0`), and that was itself a fix the user prompted — *"You need to be careful
+of bounce lands when there are land enchantments out"*, 2026-09-17, with
+`test/scenarios/karoo_bounce_drops_land_aura.json` as its fixture (before it, replaying the same
+physical Forest re-attached the aura for free, two turns later, at no cost). So the aura really does
+go inert on bounce, the evaluator really does see the loss, and the bounce TARGET is a searched
+decision that can simply avoid the enchanted land.
+
+So the exclusion was A/B'd — `MTG_LAND_AURA_FOLD_KAROO=1` folds through the karoo branch:
+
+| | calls | odo | dedup | avg | scenarios | smoke |
+|---|---:|---:|---:|---:|---|---|
+| exclusion ON (shipped) | 201,894 | 4,118,633 | 750,223 | 5.4050 | 118/118 | 101/101 `play-changed=0` |
+| exclusion OFF | 198,724 | 4,069,216 | 738,685 | 5.4050 | 118/118 | 101/101 `play-changed=0` |
+
+A further 3,170 calls and 49,417 odometer positions, with **no play change anywhere the suite can
+see** and an identical average.
+
+**It stays ON anyway, and the reason is coverage, not doubt about the argument.** The recorded failure
+(s12 T3) is an **EldraziDisplacerFlicker** case, and EDF **is not in `test/regression_cases.sh`**. So
+the 101-cell `play-changed=0` is not evidence about the risk — it is evidence from decks that cannot
+exhibit it. Fungus's own karoo (Simic Growth Chamber) does not refute it either: a clean Fungus result
+is consistent with both "the exclusion is unnecessary" and "Fungus never hits the case". Flipping a
+default on measurement that structurally cannot see the hazard is the mistake
+`profile-before-optimizing`'s regime lesson is about, one level out.
+
+**This is now the SECOND decision blocked on the same gap** (the other being
+`MTG_LAND_AURA_HOST_PICK`). Getting EDF into the suite would unblock both at once.
+
 ### Measured, `fungus d3 s2002`, 200 games, `--threads 1`
 
 | arm | odo | plans | **dedup** | avg turns |
@@ -107,11 +160,56 @@ and dropped **11,538 distinct plans** (`dedup` 750,223 → 738,685). With the ex
 
 **61,980 plans removed (6.6%), 144,680 odometer positions removed (1.035x), and the distinct-plan set
 is bit-for-bit the same size.** That is the signature of a pure identity collapse: same answers,
-less work to reach them. Gates: unit 343/343, scenarios 118/118, smoke 101/101 `play-changed=0`.
+less work to reach them. Gates: unit 343/343, scenarios 118/118, smoke 101/101 `play-changed=0`,
+regression 140/140 `configs changed 0` `play-changed=0`.
+
+### WHY THE TOTAL IS SMALL — the decomposition, because "it barely moved" is the obvious next question
+
+Asked directly by the user. The instrument now prints the restricted ratio beside the total, so the
+chain is visible rather than argued:
+
+```
+axis reach      14,896 of 201,894 calls          =  7.38% of decisions
+odo on those    605,533 of 4,263,313             = 14.20% of the odometer
+fold on those   605,533 -> 360,044               =  1.68x
+removed         245,489 positions                =  5.76% of total odo
+whole search    4,263,313 -> 4,017,824           =  1.061x
+```
+
+CPU, three INTERLEAVED pairs, **user time** (not wall — the box is contended):
+
+| rep | fold off | fold on | ratio |
+|---|---:|---:|---:|
+| 1 | 21.08 s | 20.51 s | 1.028x |
+| 2 | 20.97 s | 20.64 s | 1.016x |
+| 3 | 20.94 s | 20.40 s | 1.026x |
+
+**~1.026x, and not noise:** all three pairs favour the fold and the within-arm spread
+(20.94–21.08) is far smaller than the between-arm gap. Note 5.8% of odometer buys 2.6% of CPU — the
+odometer over-predicts work by ~2x, the same direction as §2c's `−88% odo → −0.8% visits`.
+
+**The cause is REACH, not depth of cut.** Two Wild Growth in 60 cards: the axis needs a copy in hand,
+castable, with ≥2 legal hosts — true on 7% of decisions. On those it is 1.68x, not the ~6x the
+headline decision implies, because that decision (two 4-host groups, 25 slots) is the extreme tail.
+Typically one copy with 3–4 hosts turns ONE factor from ×5 to ×2 while the other ~3 groups in the
+product are untouched. **341→41 plans on one decision is 8.3x; across the search it is 1.06x.**
+
+A measurement note worth keeping: the first version of that counter reported "on touched calls,
+605,533" as **4,829,000** — a subset total LARGER than the whole-search total, which is impossible. A
+stale loop was summing whole TURNS containing any aura call on top of the per-call sums. The
+arithmetic exposed it, which is the argument for printing both the numerator and denominator rather
+than only the ratio.
 
 ## What did NOT ship: the heuristic pick (default OFF)
 
 `PickLandAuraHosts`, `MTG_LAND_AURA_HOST_PICK` (`=1` enables). Implements the table above.
+
+**SCOPED TO FUNGUS, by user instruction, via `DecisionProvider::UsesLandAuraHostHeuristic()`**
+(default false; `FungusProvider` overrides true). USER: *"My ideas were just a heuristic for
+Fungus"* and *"I wouldn't apply them to EDF in particular, though some of the concepts are similar to
+how you might simplify the logic there."* EDF's mana is deliberately complex and it has its own
+ranking. The opt-in is a separate virtual rather than living inside `LandAuraHostCandidates` because
+that hook does not receive the AURA, and the rule is stated relative to the aura's own cost.
 
 Two reasons it is off:
 
@@ -205,9 +303,11 @@ precedent for asserting an ATTACHMENT rather than a life total.
   plus the regression tier, given the net-neutral score)?
 * **Offer the karoo as a host on its own drop turn** (previous section) — adds the dominant line AND
   lets the fold collapse the rest. Needs a fixture first.
-* **`EldraziDisplacerFlicker` is not in the regression suite.** Until it is, the A/C/D rows of the
-  rule have no ground truth anywhere, and the 3x cost rule
-  (`scripts/suite_gate.py --cost decks/EldraziDisplacerFlicker`) has not been checked for it.
+* **`EldraziDisplacerFlicker` is not in the regression suite, and that now blocks TWO decisions** —
+  adopting `MTG_LAND_AURA_HOST_PICK` and dropping the karoo exclusion
+  (`MTG_LAND_AURA_FOLD_KAROO`). Both look free on every cell the suite has; neither can be refuted by
+  a suite that excludes the only deck able to exhibit the failure. Getting EDF in unblocks both.
+  Needs `scripts/suite_gate.py --cost decks/EldraziDisplacerFlicker` against the 3x rule first.
 * A measurement caveat worth keeping: once `pick` changes which land is enchanted, the arms play
   different games, so plan/call counts stop being a work metric (calls went *up*, 201,894 → 204,551).
   Only the play-identical fold admits a clean before/after on those counters.

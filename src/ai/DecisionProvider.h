@@ -1071,6 +1071,17 @@ public:
     virtual std::vector<int> LandAuraHostCandidates(const GameState& s, int controller) const
     { (void)s; (void)controller; return {}; }
 
+    // UsesLandAuraHostHeuristic -- opt in to the generic host heuristic (PickLandAuraHosts:
+    // "cannot pay the aura's own cost" > green non-depletion > Peat Bog > never Hickory).
+    // DEFAULT FALSE, and that default is a USER instruction, not caution. 2026-10-01: *"My ideas
+    // were just a heuristic for Fungus"* and *"I wouldn't apply them to EDF in particular, though
+    // some of the concepts are similar to how you might simplify the logic there."* EDF's mana is
+    // deliberately complex (its own yield ranking, pinned by
+    // test/scenarios/edf_shroud_blocks_second_aura.json), so a deck must ASK for this rule.
+    // It cannot live in LandAuraHostCandidates itself: that hook does not receive the AURA, and the
+    // rule is stated relative to the aura's own mana cost.
+    virtual bool UsesLandAuraHostHeuristic() const { return false; }
+
     // ShouldAttackWith -- combat: should this eligible creature be DECLARED as an attacker this turn?
     // The engine keeps combat eligibility (CanAttackFull: summoning sickness, tap state,
     // haste) and the damage MECHANISM; this is only the attack/hold DECISION over an

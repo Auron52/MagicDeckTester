@@ -1819,6 +1819,11 @@ public:
     // decides is where the residual counters sit, which is what the ruling above waives.
     // Behind heurarm FUNGUS_SPORE_POOL, default OFF -> byte-identical until the A/B is accepted.
     bool FoldSporeSourceIdentity() const override { return true; }
+    // The land-Aura host heuristic is THIS deck's rule (USER 2026-10-01: "In this deck the
+    // deduplication and heuristics should be relatively easy ... The rest of the lands are a tie").
+    // Fungus's 2x Wild Growth over 19 Forest + 3 Simic Growth Chamber is the shape it was stated
+    // for. Still gated by MTG_LAND_AURA_HOST_PICK, which is default OFF (it moves GT).
+    bool UsesLandAuraHostHeuristic() const override { return true; }
 
     // USER RULING 2026-09-23 (quoted in full in docs/design/fungus-token-search-cost.md Round 9):
     // *"Saprolings are a pretty safe bet. Thallid and extra Utopia Mycons also, Tukatongue, Thallid

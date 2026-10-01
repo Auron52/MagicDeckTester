@@ -16758,7 +16758,15 @@ static std::vector<int> FoldInterchangeableAuraHosts(const GameState& state,
     // aura stops being interchangeable exactly there. Fungus runs 3 Simic Growth Chamber, so this
     // deck has that hazard live. Folding at the CANDIDATE level is earlier than the signature, so
     // it must honour the same exclusion or it reintroduces the bug one layer up.
-    if (g_enum_karoo_drop) { return hosts; }
+    // MTG_LAND_AURA_FOLD_KAROO=1 folds THROUGH the karoo branch too, for the A/B the user's
+    // reasoning asks for: "it can bounce a land with Wild Growth on it, but the engine will
+    // automatically price that if this happens (and presumably avoid it most of the time)". If the
+    // bounce target is a real searched decision and the evaluator prices the aura loss, the search
+    // should simply not bounce the enchanted land -- in which case this exclusion is pure width and
+    // should go. DEFAULT OFF = keep the exclusion, because the recorded EDF failure (s12 T3) is
+    // evidence and the reasoning is a hypothesis.
+    static const bool s_fold_karoo = EnvOn("MTG_LAND_AURA_FOLD_KAROO");
+    if (g_enum_karoo_drop && !s_fold_karoo) { return hosts; }
 
     // How many land Auras could be cast this turn -> how many members of one class to keep.
     int keep = 0;
@@ -18430,8 +18438,13 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
                 // across the remaining CLASSES. Ordered this way so the heuristic sees one
                 // representative per class and its "exactly one green land out" test counts
                 // classes rather than copies.
+                // The sound identity fold is GENERIC (it collapses only lands that are the same
+                // card in the same state, so it cannot encode a deck's judgement). The heuristic
+                // pick is OPT-IN PER DECK -- USER: "My ideas were just a heuristic for Fungus ...
+                // I wouldn't apply them to EDF in particular."
                 aura_hosts = FoldInterchangeableAuraHosts(state, aura_hosts);
-                if (!provider_narrowed)
+                if (!provider_narrowed
+                    && ResolveProvider(state).UsesLandAuraHostHeuristic())
                 { aura_hosts = PickLandAuraHosts(state, aura_hosts, def); }
             }
             for (int tgt_num : aura_hosts)
@@ -25225,6 +25238,10 @@ namespace shapestats
         // Calls that carry at least one land-aura group -- the denominator that says whether a
         // big ratio on those calls is a big ratio on the SEARCH.
         std::atomic<std::uint64_t> aura_calls{0};
+        // ...and the odometer summed over ONLY those calls, unfolded and folded. This is the pair
+        // that explains why a dramatic per-decision collapse is a small total: the ratio here is
+        // the real effect, `aura_calls / calls` is the dilution.
+        std::atomic<std::uint64_t> odo_touched{0}, odo_touched_fold{0};
         std::atomic<std::uint64_t> gsz[kMaxGsz];
         // The subset funnel, per turn. `entered` counts visits; the three named predicates are the
         // shared-resource constraint; `passed` is what survived every rule. entered - passed - the
@@ -25280,7 +25297,12 @@ namespace shapestats
         if (odo_fold >= 0.0)
         {
             Bump(s.odo_fold, static_cast<std::uint64_t>(odo_fold));
-            if (odo_fold < odo) { Bump(s.aura_calls); }
+            if (odo_fold < odo)
+            {
+                Bump(s.aura_calls);
+                Bump(s.odo_touched,      static_cast<std::uint64_t>(odo));
+                Bump(s.odo_touched_fold, static_cast<std::uint64_t>(odo_fold));
+            }
         }
         if (odo_copyfold >= 0.0) { Bump(s.odo_copyfold, static_cast<std::uint64_t>(odo_copyfold)); }
         Bump(s.calls); Bump(s.odo, static_cast<std::uint64_t>(odo)); Bump(s.raw, raw);
@@ -25492,7 +25514,8 @@ namespace shapestats
                 // and quoting the second alone is how a narrow win gets sold as a broad one.
                 std::uint64_t f_tot = 0, f_calls = 0, f_odo_on = 0, f_fold_on = 0, c_tot = 0;
                 for (const Slot& s : g_turn)
-                { f_tot += s.odo_fold; f_calls += s.aura_calls; c_tot += s.odo_copyfold; }
+                { f_tot += s.odo_fold; f_calls += s.aura_calls; c_tot += s.odo_copyfold;
+                  f_odo_on += s.odo_touched; f_fold_on += s.odo_touched_fold; }
                 if (c_tot > 0)
                 {
                     std::fprintf(stderr,
@@ -25504,17 +25527,25 @@ namespace shapestats
                         (unsigned long long)tot_odo, (unsigned long long)c_tot,
                         c_tot ? (double)tot_odo / (double)c_tot : 0.0);
                 }
-                for (int t = 0; t < kMaxTurn; ++t)
-                { if (g_turn[t].aura_calls) { f_odo_on += g_turn[t].odo; f_fold_on += g_turn[t].odo_fold; } }
+                // (A first draft ALSO summed whole TURNS that contained any aura call into these two
+                // accumulators, on top of the per-call sums above. That double-counted, and showed
+                // up as a subset total LARGER than the whole-search total -- the arithmetic saying
+                // plainly that it was wrong. Per-call only.)
                 if (f_tot > 0)
                 {
                     std::fprintf(stderr,
                         "LAND-AURA HOST FOLD (priced, not applied): odo %llu -> %llu = %.3fx over the "
                         "WHOLE search;\n  it touches %llu of %llu calls (%.2f%%).  Per-turn rows above "
-                        "are unfolded.\n",
+                        "are unfolded.\n"
+                        "  WHY THE TOTAL IS SMALL: on the calls it DOES touch, odo %llu -> %llu = "
+                        "%.2fx.\n  That is the real effect; the %.2f%% reach is the dilution. The "
+                        "axis is absent from most decisions.\n",
                         (unsigned long long)tot_odo, (unsigned long long)f_tot,
                         f_tot ? (double)tot_odo / (double)f_tot : 0.0,
                         (unsigned long long)f_calls, (unsigned long long)tot_calls,
+                        tot_calls ? 100.0 * (double)f_calls / (double)tot_calls : 0.0,
+                        (unsigned long long)f_odo_on, (unsigned long long)f_fold_on,
+                        f_fold_on ? (double)f_odo_on / (double)f_fold_on : 0.0,
                         tot_calls ? 100.0 * (double)f_calls / (double)tot_calls : 0.0);
                 }
             }
