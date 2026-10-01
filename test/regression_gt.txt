@@ -1,8 +1,8 @@
-# Regression ground truth -- commit a0495afa  date 2026-09-29
+# Regression ground truth -- commit 4736ec40  date 2026-09-30
 # Promoted from accepted runs by 'regression.sh --accept' -- do not hand-edit.
-# accepted-with-regressions (smoke, 2026-09-29): WhiteKnights final list (Aether Vial paid by a Plains instead of a Venerable Knight, 23 lands, 8 one-drops, new K=14 table): deck DATA only, engine unchanged -- 3 of 4 whiteknights configs are FASTER (d0 -0.018, d3 -0.032, d5 -0.027) and only 2hg is slower, which is the exact format pattern round W measured for this payer.
-# accepted-with-regressions (regression, 2026-09-29): WhiteKnights final list (Vial paid by a Plains, 23 lands, 8 one-drops, K=14 table): deck DATA only, engine unchanged -- all 6 moved configs are whiteknights, searched splits dead even 103/101 and the d0 control is net FASTER 173/193, which is reshuffle noise around a small effect rather than a regression.
-# accepted-with-regressions (overnight, 2026-09-29): WhiteKnights final list (Vial paid by a Plains, 23 lands, 8 one-drops, K=14 table): deck DATA only, engine unchanged -- all 16 moved configs are whiteknights and the net is FASTER (mean -0.0043, 9 of 16 faster), with searched dead even 837/843 and the d0 control net faster 1344/1481.
+# accepted-with-regressions (smoke, 2026-09-30): MTG_ACT_LINE_HOLD adopted DEFAULT ON -- trailing-activation payment hole (docs/design/trailing-activation-payment-hole.md): the cast payment could not see the plan own trailing activations, so it tapped their {T} source or stranded a pip and the activation silently no-opped with no drops, no log line and no fd-diverge. Silent drop rate 24.3% -> 10.3% on snow, activations resolved +29.7%. Smoke: 6 configs move, all selesnya+snow; searched net BETTER -1.00 turn over 375 games; d0 +8.00 over 1000. The d0-only loss is a SEPARATE pre-existing defect this fix stops HIDING -- the greedy projection over-values a trailing activation (significant at d0, gone at d1, still gone at d5: the signature of a leaf-valuation error, not a payment one). CPU +28% on snow is VOLUME not overhead (payments +33% at -13% each); regression tier 2.7 -> 2.8 min vs a 45-min ceiling. Still carries the 2026-09-29 WhiteKnights list regression (Vial paid by a Plains, 23 lands, 8 one-drops, K=14 table; deck DATA only) -- unchanged by this engine flag, see git log of this file.
+# accepted-with-regressions (regression, 2026-09-30): MTG_ACT_LINE_HOLD adopted DEFAULT ON -- trailing-activation payment hole (docs/design/trailing-activation-payment-hole.md): the cast payment could not see the plan own trailing activations, so it tapped their {T} source or stranded a pip and the activation silently no-opped with no drops, no log line and no fd-diverge. Silent drop rate 24.3% -> 10.3% on snow, activations resolved +29.7%. Regression: 11 configs move (selesnya, snow, plus ONE stompy game at equal score); searched net BETTER -4.00 turns over 930 games, all 4 searched-slower games have DIVERGING DRAWS (variance, physically different games); reference corpus clean -- 0 play-drift, 0 enum-gap, 0 contract-fail over 355 refs; d0 +21.00 over 1000. The d0-only loss is a SEPARATE pre-existing defect this fix stops HIDING -- the greedy projection over-values a trailing activation (significant at d0, gone at d1, still gone at d5: the signature of a leaf-valuation error, not a payment one). CPU +28% on snow is VOLUME not overhead (payments +33% at -13% each); regression tier 2.7 -> 2.8 min vs a 45-min ceiling. Still carries the 2026-09-29 WhiteKnights list regression (Vial paid by a Plains, 23 lands, 8 one-drops, K=14 table; deck DATA only) -- unchanged by this engine flag, see git log of this file.
+# accepted-with-regressions (overnight, 2026-09-30): MTG_ACT_LINE_HOLD adopted DEFAULT ON -- trailing-activation payment hole (docs/design/trailing-activation-payment-hole.md): the cast payment could not see the plan own trailing activations, so it tapped their {T} source or stranded a pip and the activation silently no-opped with no drops, no log line and no fd-diverge. Silent drop rate 24.3% -> 10.3% on snow, activations resolved +29.7%. Overnight: 24 configs move; searched net +7.00 turns over 8350 games (+0.00084/game) of which selesnya is EXACTLY 0.00 over 6000 games and critter/melira 0.00 -- all of it snow, whose searched sign flips across tiers (+2/-3/+7), i.e. the metric quantum not an effect; held-out paired A/B over 31k games settles searched depth as neutral-or-better on every deck (selesnya 111/78 p=0.020, snow 90/91 null, melira+stompy zero divergence); d0 +94.00 over 9000. The d0-only loss is a SEPARATE pre-existing defect this fix stops HIDING -- the greedy projection over-values a trailing activation (significant at d0, gone at d1, still gone at d5: the signature of a leaf-valuation error, not a payment one). CPU +28% on snow is VOLUME not overhead (payments +33% at -13% each); regression tier 2.7 -> 2.8 min vs a 45-min ceiling. Still carries the 2026-09-29 WhiteKnights list regression (Vial paid by a Plains, 23 lands, 8 one-drops, K=14 table; deck DATA only) -- unchanged by this engine flag, see git log of this file.
 # Key: <deck>_<mode>_d<depth>_s<seed> = <avg>[/<play_digest>]   (avg = mean turn-to-win, unwon = max_turns+1)
 # Modes: smoke (<15m), regression (<45m), overnight (<8h); seeds disjoint.
 
@@ -105,9 +105,12 @@ giants_smoke_d5_s1001=5.7067/73c756433dc6f343
 pirates_smoke_d0_s1001=4.7520/e64028eacdff55df
 pirates_smoke_d3_s1001=4.3533/eb48c7624e15bba2
 pirates_smoke_d5_s1001=4.3467/b2d566fa3f324dd3
-snow_smoke_d0_s1001=6.6530/c7c70ac0a67b9dc8
-snow_smoke_d3_s1001=6.1200/7772be813ab10c77
-snow_smoke_d5_s1001=6.2200/cd2e2899289eb5c5
+selesnya_smoke_d0_s1001=6.2790/d22af24133b72d9e
+selesnya_smoke_d3_s1001=5.4600/9c9a98b4457d9033
+selesnya_smoke_d5_s1001=5.3733/6033391b05fe36cf
+snow_smoke_d0_s1001=6.6590/5ad044b773e23f9b
+snow_smoke_d3_s1001=6.1300/aa05d7dc1a92d37b
+snow_smoke_d5_s1001=6.2400/a64434f0cedb320b
 
 # --- regression ---
 fungus_regression_d0_s2002=5.7660/1660db6692cc5f51
@@ -182,7 +185,7 @@ fivecolour_regression_d5_s2002=4.8200/70eb77cefd5da4e5
 fivecolour_regression_d5_s3003=4.8500/da65720ad00ad020
 stompy_regression_d0_s2002=4.9750/037f4d0023565a00
 stompy_regression_d3_s2002=4.1700/3e05b0eb199afd3e
-stompy_regression_d3_s3003=4.1167/8c83515924137d28
+stompy_regression_d3_s3003=4.1167/78985aa8c9ec3335
 stompy_regression_d5_s2002=4.1640/b989d145d90220ec
 stompy_regression_d5_s3003=4.0880/7c8587f3d9f6d5ce
 minotaur_regression_d0_s2002=5.3460/6842b28e80a209a4
@@ -245,11 +248,16 @@ pirates_regression_d3_s2002=4.3600/c12535dafe57138a
 pirates_regression_d3_s3003=4.4267/236b766bea444e3f
 pirates_regression_d5_s2002=4.4000/090e6ddbc55749e1
 pirates_regression_d5_s3003=4.4133/665caa69b31754dc
-snow_regression_d0_s2002=6.6630/7dacf2ffa42d7539
-snow_regression_d3_s2002=6.1167/aea3bf6607304142
-snow_regression_d3_s3003=6.0167/e9e7986ad5baa35c
-snow_regression_d5_s2002=6.0333/2acdf4a6dee7ffcf
-snow_regression_d5_s3003=6.1333/f8d4fb5e092faca7
+selesnya_regression_d0_s2002=6.2470/2b8c3e964cbbbd0a
+selesnya_regression_d3_s2002=5.1867/219f9c4699b0efde
+selesnya_regression_d3_s3003=5.4200/74848d9402658e99
+selesnya_regression_d5_s2002=5.0533/9938ce594cdc9419
+selesnya_regression_d5_s3003=5.4267/761ad45580487236
+snow_regression_d0_s2002=6.6670/93adbb600cbceef0
+snow_regression_d3_s2002=6.1167/6f22ddbea71db2b0
+snow_regression_d3_s3003=5.9833/bcbb7d62fec107b7
+snow_regression_d5_s2002=6.0333/0354afd8a2b57626
+snow_regression_d5_s3003=6.1000/21f131406a6b5a8b
 
 # --- overnight ---
 fungus_overnight_d0_s4004=5.7015/e436c5c8cc8a74ce
@@ -484,7 +492,7 @@ critter_overnight_d0_s4004=4.6030/9ea4471196a10a08
 critter_overnight_d0_s6006=4.6075/e81b2bf65e25e402
 critter_overnight_d0_s8008=4.5965/be888e3a1902d6bf
 critter_overnight_d0_s10010=4.6225/2e4042cbc711d10b
-critter_overnight_d3_s4004=4.3480/6403c7aafccad9d8
+critter_overnight_d3_s4004=4.3480/ef42e13f6a141d12
 critter_overnight_d3_s5005=4.3510/5cd54aaee5fee600
 critter_overnight_d3_s6006=4.3740/51483aea46803e5d
 critter_overnight_d3_s7007=4.3690/f42b70be0281be57
@@ -498,11 +506,11 @@ melira_overnight_d0_s8008=6.3975/c65414699041c87b
 melira_overnight_d0_s10010=6.3880/ad55aa338c146a10
 melira_overnight_d3_s4004=4.8500/048dc8cb1b6bcafd
 melira_overnight_d3_s5005=4.7700/9892833554b02521
-melira_overnight_d3_s6006=4.7400/b610f4ac0d590891
+melira_overnight_d3_s6006=4.7400/23a5121c5988b186
 melira_overnight_d3_s7007=4.7550/e6d5b16143e68f90
 melira_overnight_d5_s4004=4.8200/577bc3575a01917d
 melira_overnight_d5_s5005=4.6667/88827e67cbae09cc
-melira_overnight_d5_s6006=4.7067/5b4236030b925df9
+melira_overnight_d5_s6006=4.7067/64134b1b79d84052
 melira_overnight_d5_s7007=4.7800/b6ada7aed964911e
 angels_overnight_d0_s4004=5.2840/34504888eaa834df
 angels_overnight_d0_s6006=5.2675/fb1a2e70a2853e7d
@@ -528,6 +536,18 @@ pirates_overnight_d5_s4004=4.3700/f418252a55d6fa5b
 pirates_overnight_d5_s5005=4.3740/a953fe2d77896474
 pirates_overnight_d5_s6006=4.3820/9a49da3f477a2cc5
 pirates_overnight_d5_s7007=4.3120/52184e5e357553df
+selesnya_overnight_d0_s4004=6.2650/a9f5d54003e75b02
+selesnya_overnight_d0_s6006=6.2945/a955be9965aca731
+selesnya_overnight_d0_s8008=6.2685/636fc085f08a8c95
+selesnya_overnight_d0_s10010=6.2935/490b7d747220a978
+selesnya_overnight_d3_s4004=5.2730/6672030a29126426
+selesnya_overnight_d3_s5005=5.3400/e3ff2080b2711bda
+selesnya_overnight_d3_s6006=5.3420/1af50e7420ea0886
+selesnya_overnight_d3_s7007=5.3200/6cfd4cb8ede09a3f
+selesnya_overnight_d5_s4004=5.2820/f0808b14851b8ffa
+selesnya_overnight_d5_s5005=5.3580/5666ea55cc6bac84
+selesnya_overnight_d5_s6006=5.3580/51452dedca3121a6
+selesnya_overnight_d5_s7007=5.2920/da934a2161cb7e5f
 giants_overnight_d0_s4004=6.0765/2ef74be2b70bf355
 giants_overnight_d0_s6006=6.0790/cf2bf7092289312e
 giants_overnight_d0_s8008=6.0740/48f6ab21086490b3
@@ -592,12 +612,12 @@ fluctuator_overnight_d5_s4004=3.5440/10f87a50929ee341
 fluctuator_overnight_d5_s5005=3.5520/843cbdb204ca7611
 fluctuator_overnight_d5_s6006=3.5600/8e5fcc33a50ac589
 fluctuator_overnight_d5_s7007=3.6360/41407f5fccd27d3b
-snow_overnight_d0_s4004=6.6460/3975768fe132fce0
-snow_overnight_d3_s4004=5.9733/1bf811b5624fb665
-snow_overnight_d3_s5005=5.9267/4dd5eba7cccce9aa
-snow_overnight_d3_s6006=6.0400/1e6410dfc89f9dd2
-snow_overnight_d3_s7007=6.0133/ec8635f81751fc5e
-snow_overnight_d5_s4004=5.9300/85e0aed9c6154ae7
-snow_overnight_d5_s5005=5.9400/7632539d9efc12cc
-snow_overnight_d5_s6006=6.0300/8ed8e5eb54f3d982
-snow_overnight_d5_s7007=6.1500/f2dec3084076b2b6
+snow_overnight_d0_s4004=6.6700/3fed9f86b1372464
+snow_overnight_d3_s4004=5.9800/390908d03d7afaea
+snow_overnight_d3_s5005=5.9333/f3d1d583fc1b1564
+snow_overnight_d3_s6006=6.0467/7ef2c52752d8c365
+snow_overnight_d3_s7007=6.0200/9a2257b7d08c80de
+snow_overnight_d5_s4004=5.9300/ad710b87be30fb6c
+snow_overnight_d5_s5005=5.9500/f9c3c27e581c6aa9
+snow_overnight_d5_s6006=6.0400/6230c6291682c114
+snow_overnight_d5_s7007=6.1600/39d8ff4000fc384c
