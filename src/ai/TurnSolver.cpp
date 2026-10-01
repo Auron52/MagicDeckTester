@@ -1289,6 +1289,8 @@ static std::atomic<long long> g_iw_drops{0}, g_iw_drops_with_payoff{0};
 static std::atomic<long long> g_mch_frames{0};
 static std::atomic<long long> g_mch_groups{0};
 static std::atomic<long long> g_fch_groups{0};   // MTG_FREE_CAST_HOIST: {0}-cast groups erased
+// BuildFoldPrefixMap arming -- see the disarm note there. Printed under MTG_ROLLOUT_STATS.
+static std::atomic<long long> g_fold_armed{0}, g_fold_disarm_auto{0}, g_fold_disarm_ind{0};
 inline bool FreeEquipDiagOn() { static const bool v = EnvOn("MTG_FREE_EQUIP_DIAG"); return v; }
 inline void FreeEquipDiagNoteHoistFrame()
 { if (FreeEquipDiagOn()) { g_mch_frames.fetch_add(1, std::memory_order_relaxed); } }
@@ -2099,6 +2101,13 @@ namespace
             if (g_fch_groups.load() > 0)
             {
                 std::cerr << "FREE_CAST_HOIST hoisted_groups=" << g_fch_groups.load() << "\n";
+            }
+            if (g_fold_armed.load() > 0 || g_fold_disarm_auto.load() > 0
+                || g_fold_disarm_ind.load() > 0)
+            {
+                std::cerr << "FOLD_PREFIX_MAP armed=" << g_fold_armed.load()
+                          << " disarmed_by_auto_sel=" << g_fold_disarm_auto.load()
+                          << " disarmed_by_independent=" << g_fold_disarm_ind.load() << "\n";
             }
             if (g_iw_drops.load() > 0)
             {
@@ -12541,8 +12550,17 @@ static int BuildFoldPrefixMap(const std::vector<Action>& cands,
     out.classes = 0;
     // A tagged action outside the odometer can supply a predecessor ord, so the choice vector alone
     // would no longer decide the rule. Disarm rather than approximate.
-    for (int j : independent) { if (cands[j].equiv_tag != 0) { return 0; } }
-    for (int j : auto_sel)    { if (cands[j].equiv_tag != 0) { return 0; } }
+    //
+    // DIAG (MTG_FOLD_DISARM_STATS): this disarm is GLOBAL -- one tagged action in auto_sel kills
+    // folding for EVERY class, including classes auto_sel never touches. That matters on an
+    // equipment deck, because the AUTO-EQUIP collapse (default ON since 2026-08-14) and the
+    // free-cast hoist both populate auto_sel by design, so a measured "the fold buys nothing" there
+    // is ambiguous between REFUTED and NEVER ARMED. Counters only; no behaviour.
+    for (int j : independent)
+    { if (cands[j].equiv_tag != 0) { g_fold_disarm_ind.fetch_add(1, std::memory_order_relaxed); return 0; } }
+    for (int j : auto_sel)
+    { if (cands[j].equiv_tag != 0) { g_fold_disarm_auto.fetch_add(1, std::memory_order_relaxed); return 0; } }
+    g_fold_armed.fetch_add(1, std::memory_order_relaxed);
 
     int  tags[kMaxFoldPrefixClasses];
     int  n   = 0;
