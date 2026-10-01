@@ -423,6 +423,130 @@ question, not a width question, and no prune addresses it. Likewise `enum-memo` 
 (1,234 / 88,145) and `solve-memo` at 21–29% are memo-key questions (`BuildSimKey`, 3.35% and the
 3rd-biggest symbol), not enumeration questions.
 
+### 2i. The heaviest turns and every branch on them — and a CORRECTION to §2g (2026-10-01)
+
+USER: *"I want to get back to finding the most serious chunks of branching. It would also be a big
+help if you can find the heaviest turns and get a list of all of the branches on it. If there is
+nothing obvious to cut there, then please show it to me."*
+
+The instrument already existed — `MTG_BRANCH_SHAPE=1 MTG_BRANCH_HEAVY=<N>` keeps the N heaviest
+individual `EnumeratePlans` calls ranked by subset visits, with every option group rendered. Two
+gaps in it were closed first, because without them the dump cannot be reviewed at all:
+
+* **`AbilityModeTag` had no case for `SporeSaproling`**, so Fungus's single most common activated
+  ability printed as `mode=mode9` on every line of the dump.
+* **The aura variants printed as `[cast | cast | cast]`** — no distinguishing field whatsoever. Which
+  land an Aura enchants is the *entire content* of a land-aura variant, so a reviewer could not tell
+  a real choice from a pure symmetry. Now rendered as `:host=Forest` / `:host=Simic Growth
+  Chamber(T)` (name + tap state, the two fields that decide interchangeability).
+
+#### Which turns are heaviest
+
+`fungus d3 s2002`, 200 games, `--threads 1`. 201,894 enumeration calls, 4,263,313 total odometer.
+
+| turn | calls | sum_odo | share of odo | plans | avg_odo | avgGrp |
+|-----:|------:|--------:|-------------:|------:|--------:|-------:|
+| 3 | 33,465 | 677,586 | 15.9% | 113,976 | 20.2 | 3.65 |
+| **4** | **63,841** | **1,596,771** | **37.5%** | 335,525 | 25.0 | 3.43 |
+| **5** | **55,994** | **1,038,769** | **24.4%** | 259,285 | 18.6 | 2.76 |
+| 6 | 25,659 | 476,882 | 11.2% | 129,584 | 18.6 | 2.63 |
+
+**Turns 4–5 are 62% of the odometer.** d5 agrees (turn 4 36%, turn 5 29%).
+
+#### What the heaviest decisions are actually made of
+
+The top decision is `odo=1152, turn=7, visits=527`. There is **no catastrophic decision anywhere** —
+mean width is ~21 and the single widest is 1,152. The cost is 200k calls of modest width, not a few
+explosions. Three shapes recur across the top 14:
+
+1. **The `Utopia Mycon` sac-for-mana group of 8** (`sacForMana:sacN=2..8`) — ranks 1, 3, 4. This is
+   the **adopted** count pool (`MTG_SAC_OUTLET_POOL`, 2.29x, see `fungus-token-search-cost.md`
+   Round 8), not an oversight. Its `plans == dedup` exactly (279/279, 204/204, 195/195): the pool
+   emits **zero duplicate plans**. It is already clean.
+2. **`Wild Growth` enumerated once per legal land host** — in 10 of the top 14. Rank 2 is the clean
+   case: `size=4 [cast:host=Forest | cast:host=Forest | cast:host=Forest | cast:host=Forest]`,
+   appearing **twice** (the deck runs 2 copies), i.e. 25 odometer slots on an axis with at most 4
+   distinct outcomes. `plans=341 dedup=41` — 88% of the plans at that decision are duplicates.
+   The card's own note explains it: *"WHICH land to enchant is a searched plan variant per legal
+   host."* `LandAuraHostCandidates` exists to narrow this, but the **base returns empty = no
+   narrowing** and only `EldraziFlickerProvider` overrides it; `FungusProvider` does not. On 19
+   Forests those hosts are overwhelmingly the same object.
+   **Rank 5 is why a naive collapse would be WRONG:** `[cast:host=Simic Growth Chamber |
+   cast:host=Forest | cast:host=Forest]` — the Chamber is a genuinely different land. Any fold here
+   must be by equivalence CLASS, not "keep one host".
+3. **The same card getting two separate size-1 groups** — `Beastmaster Ascension` twice in ranks 6
+   and 9, `Sporecrown Thallid` twice in 6, `Thallid` twice in 7, `Sporesower Thallid` twice in 3.
+   Two copies in hand, each multiplying the odometer by 2, when the real menu is "cast 0, 1 or 2".
+
+#### All three priced BEFORE building anything — and the obvious one is the worthless one
+
+Added as measurement-only counters (`MTG_BRANCH_SHAPE`, default off, nothing applied):
+
+| item | d3 | d5 | meter |
+|---|---:|---:|---|
+| **Re-enumeration** — the identical decision walked again | **1.92x** | 1.68x | **calls** |
+| Interchangeable-copy fold (hand copies + aura host classes) | 1.32x | 1.29x | odometer |
+| Land-aura host classes alone | 1.06x | 1.06x | odometer |
+
+**The symmetry that dominates the heavy list is worth 1.06x.** It touches only 7.38% of calls
+(14,896 of 201,894). This is the §2c lesson again in a new costume: ranking decisions by individual
+weight points at the most *conspicuous* structure, not the most *expensive* one. Had the dump been
+acted on without pricing, the work would have gone into the smallest of the three.
+
+The copy fold is priced by the formula `C(s+k,k)` instead of `(1+s)^k` for `k` interchangeable
+groups over `s` variant classes. `sac_victim_id` is deliberately KEPT in the signature, so it never
+claims the Saproling-victim symmetry it has not checked. **It is an ODOMETER number and must be
+discounted accordingly** — §2c measured −88% odometer buying −0.8% visits.
+
+#### The re-enumeration number, and why it is the serious one
+
+201,894 enumeration calls resolve to **105,235 distinct decisions**. The fingerprint is deliberately
+strict: turn, phase, battlefield (name / tapped / spore counters / controller), the **exact hand**,
+floating mana, both life totals, and the full option menu. A first draft keyed only on board + hand
+*size* and read 2.06x; adding hand contents, floating mana and life moved it only to **1.92x**, so
+the repeat is not an artefact of a loose key. Still unhashed — and so able only to shrink the prize,
+never grow it — are remaining search depth, graveyard/exile, library order, and non-spore counters.
+
+A second, independent instrument agrees. `MTG_CONSIDER_STATS` (built for the user's 2026-08-14
+question *"figure out where we are considering spells multiple times"*) reports **777,861 harvests
+over 542,498 distinct states = 30.3% duplicate calls**, concentrated in the FSLine nest:
+
+| site | calls | distinct | duplicate |
+|---|---:|---:|---:|
+| `solve.m1.fs2` | 274,766 | 176,963 | 97,803 (35.6%) |
+| `solve.m1.fs3` | 178,319 | 104,307 | 74,012 (41.5%) |
+| `solve.m1.fs1` | 106,880 | 85,497 | 21,383 (20.0%) |
+| `enum.m1.fs3` | 71,545 | 57,192 | 14,353 (20.1%) |
+
+`CollectActions` is the **top symbol in the profile at 3.80%**, and ~30% of its calls re-harvest a
+state it has already harvested.
+
+#### CORRECTION to §2g
+
+§2g called the two-stage gating item *"the largest remaining item by a wide margin"* at 1.19x fewer
+visits, and filed the memo question under *"NOT branching and should stop being treated as such"*.
+The first clause is **wrong**: re-enumeration is 1.92x of all enumeration calls, measured on the
+call meter rather than the odometer, and that is a wider margin than 1.19x. The second clause was
+right that it is a memo-key question rather than a width question — but §2g priced it only by the
+enum-memo's 1.4% hit rate, which understated it badly. The enum-memo is the **breakpoint**
+continuation cache (`BpEnumEntryFor`); it is consulted on 89,379 of 201,894 calls and does not cover
+the main `EnumeratePlans` path at all. **There is no memo on that path.**
+
+§2g's other findings stand: the odometer is tame, no subset filter is in the top 12, and the cell is
+21x cheaper than its comment claimed.
+
+#### Repro
+
+```
+MTG_BRANCH_SHAPE=1 MTG_BRANCH_HEAVY=14 build/Release/mtg decks/Fungus/Fungus.cod \
+  --profile decks/Fungus/Fungus.profile.json --games 200 --seed 2002 --depth 3 \
+  --budget-ms 10 --threads 1 2> dump.err
+MTG_CONSIDER_STATS=1 ... same cell ...      # the per-site duplicate-harvest table
+```
+
+Gates on the instrument change: unit 343/343, scenarios 118/118, smoke 101/101 `play-changed=0`.
+Everything added is inside `if (shapestats::Enabled())`, so the default path is untouched.
+
 ### 2h. `SubsetHasDuplicateSacSource`, half done — the per-clause preconditions (2026-10-01)
 
 `SubsetHasDuplicateSacSource` is **1.48% on the keep replay and 0.54% on the d3 regression cell** — the

@@ -24978,6 +24978,13 @@ namespace shapestats
     {
         std::atomic<std::uint64_t> calls{0}, odo{0}, raw{0}, dedup{0};
         std::atomic<std::uint64_t> groups{0}, ind{0}, board{0}, max_odo{0};
+        // The same odometer with the land-aura host symmetry collapsed (measurement only).
+        std::atomic<std::uint64_t> odo_fold{0};
+        // ...and with the FULL interchangeable-copy fold (hand copies + host classes).
+        std::atomic<std::uint64_t> odo_copyfold{0};
+        // Calls that carry at least one land-aura group -- the denominator that says whether a
+        // big ratio on those calls is a big ratio on the SEARCH.
+        std::atomic<std::uint64_t> aura_calls{0};
         std::atomic<std::uint64_t> gsz[kMaxGsz];
         // The subset funnel, per turn. `entered` counts visits; the three named predicates are the
         // shared-resource constraint; `passed` is what survived every rule. entered - passed - the
@@ -24994,6 +25001,29 @@ namespace shapestats
     };
     inline Slot g_turn[kMaxTurn];
 
+    // ---- RE-ENUMERATION CENSUS (how much of the walk is the SAME decision again) --------------
+    // The heavy capture's `seen` field showed one turn-8 decision enumerated 8 times, and
+    // [enum-memo] answers only ~1.4% of its lookups. Neither says what the whole search would save
+    // if an identical decision were never re-walked. This fingerprints (board, hand size, option
+    // menu) per EnumeratePlans call and counts distinct vs total.
+    // IT IS AN UPPER BOUND, deliberately: two calls agreeing on this fingerprint could still differ
+    // in a field it does not hash (floating mana, life, the rollout's remaining depth), so the real
+    // memo prize is at most this and probably less. Quoting it as the achievable win would be the
+    // same error as pricing a collapse by odometer.
+    inline std::mutex g_dec_mu;
+    inline std::unordered_set<std::uint64_t> g_dec_seen;
+    inline std::atomic<std::uint64_t> g_dec_calls{0};
+
+    inline void HashIn(std::uint64_t& h, std::uint64_t v)
+    { h ^= v + 0x9e3779b97f4a7c15ULL + (h << 6) + (h >> 2); }
+
+    inline void RecordDecisionKey(std::uint64_t key)
+    {
+        g_dec_calls.fetch_add(1, std::memory_order_relaxed);
+        std::lock_guard<std::mutex> lk(g_dec_mu);
+        g_dec_seen.insert(key);
+    }
+
     inline int Clamp(int turn) { return turn < 0 ? 0 : (turn >= kMaxTurn ? kMaxTurn - 1 : turn); }
     inline void Bump(std::atomic<std::uint64_t>& a, std::uint64_t n = 1)
     { a.fetch_add(n, std::memory_order_relaxed); }
@@ -25003,9 +25033,16 @@ namespace shapestats
 
     // One EnumeratePlans call's shape.
     inline void RecordShape(int turn, const std::vector<std::vector<int>>& groups, int num_ind,
-                            int board, double odo, std::uint64_t raw, std::uint64_t dedup)
+                            int board, double odo, std::uint64_t raw, std::uint64_t dedup,
+                            double odo_fold = -1.0, double odo_copyfold = -1.0)
     {
         Slot& s = g_turn[Clamp(turn)];
+        if (odo_fold >= 0.0)
+        {
+            Bump(s.odo_fold, static_cast<std::uint64_t>(odo_fold));
+            if (odo_fold < odo) { Bump(s.aura_calls); }
+        }
+        if (odo_copyfold >= 0.0) { Bump(s.odo_copyfold, static_cast<std::uint64_t>(odo_copyfold)); }
         Bump(s.calls); Bump(s.odo, static_cast<std::uint64_t>(odo)); Bump(s.raw, raw);
         Bump(s.dedup, dedup); Bump(s.groups, groups.size());
         Bump(s.ind, static_cast<std::uint64_t>(num_ind));
@@ -25058,6 +25095,10 @@ namespace shapestats
             case PermAbilityMode::SacDraw:        return "sacDraw";
             case PermAbilityMode::Drain:          return "drain";
             case PermAbilityMode::ExileTop:       return "exileTop";
+            case PermAbilityMode::IceCounter:     return "iceCounter";
+            case PermAbilityMode::GrantLifelink:  return "grantLifelink";
+            case PermAbilityMode::SporeSaproling: return "sporeSaproling";
+            case PermAbilityMode::PayToken:       return "payToken";
             default: return "mode" + std::to_string(static_cast<int>(m));
         }
     }
@@ -25185,6 +25226,58 @@ namespace shapestats
             std::fprintf(stderr, "TOTAL calls=%llu odo=%llu plans=%llu dedup=%llu\n",
                 (unsigned long long)tot_calls, (unsigned long long)tot_odo,
                 (unsigned long long)tot_raw, (unsigned long long)tot_ded);
+
+            {   // RE-ENUMERATION, priced. See RecordDecisionKey -- this is an UPPER bound.
+                const std::uint64_t dc = g_dec_calls.load();
+                std::size_t distinct = 0;
+                { std::lock_guard<std::mutex> lk(g_dec_mu); distinct = g_dec_seen.size(); }
+                if (dc > 0)
+                {
+                    std::fprintf(stderr,
+                        "RE-ENUMERATION (upper bound): %llu enumeration calls, %zu DISTINCT "
+                        "decisions = %.2fx repeat.\n  Key = turn, phase, battlefield "
+                        "(name/tapped/spore/controller), EXACT hand, floating mana, both lives,\n"
+                        "  and the full option menu. A perfect memo on it removes at most %.1f%% "
+                        "of the calls.\n  Still UNHASHED (so the real prize is smaller, never "
+                        "larger): remaining search depth,\n  graveyard/exile, library order, and "
+                        "counters other than spore.\n",
+                        (unsigned long long)dc, distinct,
+                        distinct ? (double)dc / (double)distinct : 0.0,
+                        dc ? 100.0 * (double)(dc - distinct) / (double)dc : 0.0);
+                }
+            }
+
+            {   // LAND-AURA HOST SYMMETRY, priced. Reported BOTH over the whole search and over
+                // only the calls it touches, because those two numbers answer different questions
+                // and quoting the second alone is how a narrow win gets sold as a broad one.
+                std::uint64_t f_tot = 0, f_calls = 0, f_odo_on = 0, f_fold_on = 0, c_tot = 0;
+                for (const Slot& s : g_turn)
+                { f_tot += s.odo_fold; f_calls += s.aura_calls; c_tot += s.odo_copyfold; }
+                if (c_tot > 0)
+                {
+                    std::fprintf(stderr,
+                        "INTERCHANGEABLE-COPY FOLD (priced, not applied): odo %llu -> %llu = %.3fx "
+                        "over the WHOLE search.\n  Collapses duplicate HAND COPIES of a card "
+                        "(today each copy is its own x2 group) and aura hosts of one\n  class, via "
+                        "C(s+k,k) instead of (1+s)^k. sac_victim_id is kept, so the Saproling-victim "
+                        "symmetry is NOT claimed.\n",
+                        (unsigned long long)tot_odo, (unsigned long long)c_tot,
+                        c_tot ? (double)tot_odo / (double)c_tot : 0.0);
+                }
+                for (int t = 0; t < kMaxTurn; ++t)
+                { if (g_turn[t].aura_calls) { f_odo_on += g_turn[t].odo; f_fold_on += g_turn[t].odo_fold; } }
+                if (f_tot > 0)
+                {
+                    std::fprintf(stderr,
+                        "LAND-AURA HOST FOLD (priced, not applied): odo %llu -> %llu = %.3fx over the "
+                        "WHOLE search;\n  it touches %llu of %llu calls (%.2f%%).  Per-turn rows above "
+                        "are unfolded.\n",
+                        (unsigned long long)tot_odo, (unsigned long long)f_tot,
+                        f_tot ? (double)tot_odo / (double)f_tot : 0.0,
+                        (unsigned long long)f_calls, (unsigned long long)tot_calls,
+                        tot_calls ? 100.0 * (double)f_calls / (double)tot_calls : 0.0);
+                }
+            }
 
             std::fprintf(stderr, "\n=== BRANCH SHAPE: option-GROUP SIZE histogram (odo is the product over ALL of these) ===\n");
             std::fprintf(stderr, "%5s", "turn");
@@ -39273,10 +39366,167 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
         double sodo = 1.0;
         for (const std::vector<int>& gp : groups) { sodo *= (1.0 + static_cast<double>(gp.size())); }
         sodo *= static_cast<double>(1u << std::min(num_ind, 24));
+
+        // PRICE THE LAND-AURA HOST SYMMETRY, measurement only -- nothing below changes a plan.
+        // A land Aura emits one variant PER LEGAL HOST ("WHICH land to enchant is a searched plan
+        // variant per legal host", Wild Growth's card note), and on a 19-Forest deck those hosts are
+        // overwhelmingly the SAME object: enchanting untapped Forest #1 vs #2 reaches an identical
+        // state. This recomputes the odometer with each aura group collapsed to one representative
+        // per distinct host CLASS, so the prize is sized before any fold is built.
+        //   reps = min(class_size, n_aura_groups) and NOT 1, because two auras on the same land
+        //   differ from two on different lands (Wild Growth's bonus rides each land's own tap), so
+        //   a class must keep enough members to serve every aura that could be cast this turn.
+        // The class key is (host name, tapped) -- the two fields that decide interchangeability.
+        // Simic Growth Chamber vs Forest is a REAL choice and stays split, which is why this is a
+        // class collapse and not "keep one host".
+        // PRICE THE FULL INTERCHANGEABLE-COPY FOLD. Two symmetries, one formula:
+        //   (a) WITHIN a group, variants that differ only in which identical object they name --
+        //       an aura host of the same (name, tapped) class.
+        //   (b) ACROSS groups, two copies of the SAME card in hand, which today each get their own
+        //       size-1 group and so multiply the odometer by 2 each. Ranks 6/7/9 show Beastmaster
+        //       Ascension, Sporecrown Thallid and Thallid all doing this.
+        // For k interchangeable groups over s interchangeable variant classes the distinct
+        // outcomes are the MULTISETS of size 0..k, i.e. C(s+k, k) -- against today's (1+s)^k.
+        // hand_index is excluded from the signature (that IS symmetry (b)); sac_victim_id is
+        // deliberately KEPT, so this never claims the Saproling-victim symmetry it has not checked.
+        double sodo_copyfold = 1.0;
+        {
+            std::map<std::string, std::pair<int, int>> fcls;   // sig -> (k groups, s classes)
+            for (const std::vector<int>& gp : groups)
+            {
+                std::set<std::string> vars;
+                for (int j : gp)
+                {
+                    const Action& a = cands[j];
+                    std::string v = shapestats::ActionKindTag(a.kind) + "|" + std::string(a.card_name)
+                                  + "|x" + std::to_string(a.chosen_x)
+                                  + "|d" + std::to_string(a.devour_count)
+                                  + "|s" + std::to_string(a.sac_count)
+                                  + "|m" + std::to_string(static_cast<int>(a.ability_mode))
+                                  + "|c" + std::string(a.chosen_float_color)
+                                  + "|v" + std::to_string(a.sac_victim_id);
+                    if (a.enchant_target != 0)
+                    {
+                        std::string hk = "?";
+                        for (const Permanent& hp : state.battlefield)
+                        {
+                            if (hp.card.m_number != a.enchant_target) { continue; }
+                            hk = hp.card.m_name.str() + (hp.tapped ? "|T" : "|U");
+                            break;
+                        }
+                        v += "|h" + hk;
+                    }
+                    vars.insert(v);
+                }
+                std::string sig;
+                for (const std::string& v : vars) { sig += v; sig += "#"; }
+                auto& e = fcls[sig];
+                ++e.first;
+                e.second = static_cast<int>(vars.size());
+            }
+            for (const auto& kv : fcls)
+            {
+                const double k = static_cast<double>(kv.second.first);
+                const double s = static_cast<double>(kv.second.second);
+                // C(s+k, k), computed multiplicatively to stay exact for the small k/s here.
+                double comb = 1.0;
+                for (double i = 1.0; i <= k; i += 1.0) { comb *= (s + i) / i; }
+                sodo_copyfold *= comb;
+            }
+            sodo_copyfold *= static_cast<double>(1u << std::min(num_ind, 24));
+        }
+
+        double sodo_fold = 1.0;
+        {
+            int n_aura_groups = 0;
+            for (const std::vector<int>& gp : groups)
+            {
+                if (!gp.empty() && cands[gp[0]].enchant_target != 0
+                    && cands[gp[0]].def != nullptr && cands[gp[0]].def->params.is_land_aura)
+                { ++n_aura_groups; }
+            }
+            for (const std::vector<int>& gp : groups)
+            {
+                std::size_t eff = gp.size();
+                if (!gp.empty() && cands[gp[0]].enchant_target != 0
+                    && cands[gp[0]].def != nullptr && cands[gp[0]].def->params.is_land_aura)
+                {
+                    std::map<std::string, int> cls;
+                    for (int j : gp)
+                    {
+                        std::string key = "?";
+                        for (const Permanent& hp : state.battlefield)
+                        {
+                            if (hp.card.m_number != cands[j].enchant_target) { continue; }
+                            key = hp.card.m_name.str() + (hp.tapped ? "|T" : "|U");
+                            break;
+                        }
+                        ++cls[key];
+                    }
+                    std::size_t kept = 0;
+                    for (const auto& kv : cls)
+                    { kept += std::min<std::size_t>(static_cast<std::size_t>(kv.second),
+                                                    static_cast<std::size_t>(std::max(1, n_aura_groups))); }
+                    eff = kept;
+                }
+                sodo_fold *= (1.0 + static_cast<double>(eff));
+            }
+            sodo_fold *= static_cast<double>(1u << std::min(num_ind, 24));
+        }
+
         shapestats::RecordShape(state.turn_number, groups, num_ind,
                                 static_cast<int>(state.battlefield.size()), sodo,
                                 static_cast<std::uint64_t>(plans.size()),
-                                static_cast<std::uint64_t>(deduped.size()));
+                                static_cast<std::uint64_t>(deduped.size()), sodo_fold,
+                                sodo_copyfold);
+
+        {   // RE-ENUMERATION fingerprint: the board, the hand size and the full option menu.
+            std::uint64_t key = 1469598103934665603ULL;
+            shapestats::HashIn(key, static_cast<std::uint64_t>(state.turn_number));
+            shapestats::HashIn(key, static_cast<std::uint64_t>(num_ind));
+            shapestats::HashIn(key, static_cast<std::uint64_t>(is_pre_combat ? 7 : 11));
+            // The fields a first draft omitted, added so the repeat factor is not an artefact of a
+            // loose key: the EXACT hand (not just its size), the floating pool, and both life
+            // totals. Floating mana in particular is the one that legitimately distinguishes two
+            // otherwise-identical mid-plan enumerations.
+            for (const Card& hc : state.ActivePlayer().hand)
+            { shapestats::HashIn(key, std::hash<std::string>{}(hc.m_name.str())); }
+            {
+                const ManaPool& fm = state.floating_mana;
+                shapestats::HashIn(key, static_cast<std::uint64_t>(fm.white) << 1);
+                shapestats::HashIn(key, static_cast<std::uint64_t>(fm.blue) << 4);
+                shapestats::HashIn(key, static_cast<std::uint64_t>(fm.black) << 7);
+                shapestats::HashIn(key, static_cast<std::uint64_t>(fm.red) << 10);
+                shapestats::HashIn(key, static_cast<std::uint64_t>(fm.green) << 13);
+                shapestats::HashIn(key, static_cast<std::uint64_t>(fm.colorless) << 16);
+                shapestats::HashIn(key, static_cast<std::uint64_t>(fm.wild) << 19);
+            }
+            for (const auto& pl : state.players)
+            { shapestats::HashIn(key, static_cast<std::uint64_t>(pl.life) << 23); }
+            for (const Permanent& hp : state.battlefield)
+            {
+                shapestats::HashIn(key, std::hash<std::string>{}(hp.card.m_name.str()));
+                shapestats::HashIn(key, static_cast<std::uint64_t>(hp.tapped ? 1 : 2));
+                shapestats::HashIn(key, static_cast<std::uint64_t>(hp.spore_counters) << 3);
+                shapestats::HashIn(key, static_cast<std::uint64_t>(hp.controller_index) << 11);
+            }
+            for (const std::vector<int>& gp : groups)
+            {
+                shapestats::HashIn(key, 0xABCDEF01ULL + gp.size());
+                for (int j : gp)
+                {
+                    const Action& a = cands[j];
+                    shapestats::HashIn(key, std::hash<std::string>{}(std::string(a.card_name)));
+                    shapestats::HashIn(key, static_cast<std::uint64_t>(a.kind));
+                    shapestats::HashIn(key, static_cast<std::uint64_t>(a.chosen_x + 1) << 5);
+                    shapestats::HashIn(key, static_cast<std::uint64_t>(a.devour_count + 2) << 9);
+                    shapestats::HashIn(key, static_cast<std::uint64_t>(a.sac_count + 1) << 13);
+                    shapestats::HashIn(key, static_cast<std::uint64_t>(a.enchant_target) << 17);
+                    shapestats::HashIn(key, static_cast<std::uint64_t>(a.hand_index + 1) << 21);
+                }
+            }
+            shapestats::RecordDecisionKey(key);
+        }
 
         // HEAVY CAPTURE: keep this call's full option-group breakdown if it is among the biggest.
         // Only builds the strings when the flag is on AND it might make the cut.
@@ -39349,6 +39599,22 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
                     if (!static_cast<const std::string&>(a.chosen_float_color).empty())
                     { line += ":colour=" + std::string(a.chosen_float_color); }
                     if (a.sac_victim_id != 0) { line += ":victim=" + std::to_string(a.sac_victim_id); }
+                    // WHICH host an Aura enchants is the ENTIRE content of a land-aura variant.
+                    // Without it a 4-wide Wild Growth group renders as four identical "cast"
+                    // entries, and a reviewer cannot tell a real choice from a pure symmetry --
+                    // which is the one judgement this dump exists to support. Name + tap state,
+                    // because those are exactly the fields that decide interchangeability.
+                    if (a.enchant_target != 0)
+                    {
+                        std::string host = "#" + std::to_string(a.enchant_target);
+                        for (const Permanent& hp : state.battlefield)
+                        {
+                            if (hp.card.m_number != a.enchant_target) { continue; }
+                            host = hp.card.m_name.str() + std::string(hp.tapped ? "(T)" : "");
+                            break;
+                        }
+                        line += ":host=" + host;
+                    }
                     if (a.alt_cost)           { line += ":alt"; }
                     if (a.splice_count != 0)  { line += ":splice=" + std::to_string(a.splice_count); }
                 }
