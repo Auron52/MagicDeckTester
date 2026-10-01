@@ -10639,7 +10639,8 @@ static inline bool SubsetOversubscribesSacFodderFast(const FodderIndex& fx,
 static bool SubsetWastesCreatureSacMana(const GameState& state,
                                         const std::vector<Action>& cands,
                                         const std::vector<int>& sel,
-                                        const std::vector<const CardDefinition*>* sac_src_def)
+                                        const std::vector<const CardDefinition*>* sac_src_def,
+                                        int board_death_payoff = -1)
 {
     if (!s_sac_waste_prune) { return false; }
     // NECESSARY-CONDITION PREPASS (2026-09-19, perf). Returning true requires ALL of: a creature
@@ -10686,7 +10687,12 @@ static bool SubsetWastesCreatureSacMana(const GameState& state,
         }
     }
     if (!has_creature_sac || spend > 0) { return false; }   // mana IS spent -> the sac may be paying for it
-    for (const Permanent& p : state.battlefield)            // a death payoff makes the body worth spending
+    // A death payoff makes the body worth spending. This test reads ONLY the board, which is frozen
+    // for the enumeration, so it is hoisted to SubsetFilterPre::board_death_payoff and passed in
+    // (-1 = no summary -> scan here, the unoptimised contract, same as `board_persist` next door).
+    // Same predicate either way.
+    if (board_death_payoff >= 0) { return board_death_payoff == 0; }
+    for (const Permanent& p : state.battlefield)
     {
         if (p.controller_index != state.active_player_index) { continue; }
         const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
@@ -10695,6 +10701,153 @@ static bool SubsetWastesCreatureSacMana(const GameState& state,
             || d->params.dies_trigger_impulse_exile) { return false; }
     }
     return true;
+}
+
+// ---- THE ADDITIVE FORM OF SubsetWastesCreatureSacMana (WasteIndex) -----------------------------
+//
+// Same defect, same fix, one filter along. `fungus-slow-rollout-diagnosis-2026-09-30.md` §2e named
+// this filter and SubsetHasDuplicateSacSource as "the same shape as the one just fixed, and both
+// worth taking"; this is the one that really is the same shape (the duplicate-source filter is
+// pairwise O(|sel|^2), not a sum, and needs a different idea). Read the predicate as arithmetic and
+// every term is a SUM or an OR over the selected actions:
+//
+//     spend              -- a SUM of cost.ManaValue() over sel
+//     any sac-for-mana    -- an OR over sel (the necessary-condition prepass)
+//     has_creature_sac    -- an OR over sel (reads sac_src_def[j], a SubsetFilterPre hoist)
+//     direct_damage       -- an OR over sel (the early-out, which also answers false)
+//     death payoff        -- a BOARD fact, identical for every subset
+//
+// So one precomputed term per CANDIDATE turns the per-subset body into |sel| integer adds. What that
+// replaces, per enumerated subset, is a ManaCost::ManaValue() call per selected action, two separate
+// walks of `sel`, and -- on every subset that reaches the end -- a walk of the WHOLE battlefield with
+// a LookupCached per permanent to ask a question whose answer cannot change while the enumeration
+// runs. On Fungus NO card in the list carries any dies-trigger payoff at all (checked against
+// cards.json, 2026-10-01), so that walk ran to completion and answered "no payoff" every single
+// time, on the deck whose boards are the widest in the suite.
+//
+// NOT A BOUND AND NOT AN APPROXIMATION -- the SAME test, re-associated, which is the same claim
+// FodderIndex makes and for the same reason. The one re-ordering worth naming: the original returns
+// false on the FIRST selected action with direct_damage > 0, before finishing the spend sum, whereas
+// the aggregate sums everything and then tests. Exact, because in that case the ANSWER is false
+// either way -- `direct_damage` is a rejection of the whole subset, not a term in the sum.
+//
+// WHEN IT STANDS DOWN (active=false -> the original function runs, unchanged):
+//   * MTG_SAC_WASTE_AGG=0 -- the A/B arm, and the hatch.
+//   * MTG_NO_SAC_WASTE_PRUNE -- the filter is off outright and the original answers false; building
+//     an index to reproduce a constant would be the waste this exists to remove.
+//   * no sac_src_def table -- `outlet` is exactly what that table resolves, so with no table the
+//     original's own per-subset board scan is the only correct form. The SubsetFilterPre instruments
+//     disarm the table, so they disarm this too, for the same reason they disarm the bits.
+// Every one of those keeps today's behaviour exactly, so a future caller that builds no index is
+// correct by default.
+
+// Widths match the original's arithmetic: `mv` is a mana value (int there too) and the three flags
+// are counted rather than OR-ed so the aggregate is a single add per field. The terms are per
+// CANDIDATE (a handful per enumeration), never per odometer position.
+struct WasteTerm
+{
+    int mv       = 0;   // -> spend             (cost.ManaValue(), a per-candidate constant)
+    int sac_mana = 0;   // -> any_sac_for_mana   (kind is SacForMana AND sac_source_id != 0)
+    int outlet   = 0;   // -> has_creature_sac   (... AND the source really is a creature-sac outlet)
+    int damage   = 0;   // -> the direct_damage early-out
+};
+
+struct WasteIndex
+{
+    bool active       = false;
+    bool death_payoff = false;      // a controlled permanent has a dies-trigger payoff
+    std::vector<WasteTerm> term;    // indexed by candidate
+};
+
+static bool WasteAggEnabled()
+{
+    // DEFAULT ON; =0 reverts to the original per-subset function (the A/B arm, and the hatch).
+    static const bool on = EnvOn("MTG_SAC_WASTE_AGG", true);
+    return on;
+}
+
+static bool WasteAggVerifyOn()
+{
+    // Default OFF. =1 runs BOTH forms on every subset and reports the first disagreement, which is
+    // how the equivalence claim above is checked against a real deck rather than asserted.
+    static const bool on = EnvOn("MTG_SAC_WASTE_AGG_VERIFY");
+    return on;
+}
+
+// Build the per-candidate terms. `sac_src_def` / `board_death_payoff` are the SubsetFilterPre hoists
+// -- the same ones the original reads -- so this sees exactly the sources that function would resolve.
+static void BuildWasteIndex(const std::vector<Action>& cands,
+                            const std::vector<const CardDefinition*>& sac_src_def,
+                            bool board_death_payoff, WasteIndex& wx)
+{
+    if (!WasteAggEnabled() || !s_sac_waste_prune) { return; }
+    if (sac_src_def.empty()) { return; }
+    wx.death_payoff = board_death_payoff;
+    wx.term.assign(cands.size(), WasteTerm{});
+    for (std::size_t j = 0; j < cands.size(); ++j)
+    {
+        const Action& a = cands[j];
+        WasteTerm&    t = wx.term[j];
+        t.mv     = a.cost.ManaValue();
+        t.damage = (a.direct_damage > 0) ? 1 : 0;
+        if (a.kind != Action::Kind::SacForMana || a.sac_source_id == 0) { continue; }
+        t.sac_mana = 1;
+        const CardDefinition* sd = sac_src_def[j];
+        if (sd != nullptr && sd->params.sac_creature_outlet) { t.outlet = 1; }
+    }
+    wx.active = true;
+}
+
+static inline bool SubsetWastesCreatureSacManaFast(const WasteIndex& wx,
+                                                   const GameState& state,
+                                                   const std::vector<Action>& cands,
+                                                   const std::vector<int>& sel,
+                                                   const std::vector<const CardDefinition*>* sac_src_def,
+                                                   int board_death_payoff)
+{
+    if (!wx.active)
+    { return SubsetWastesCreatureSacMana(state, cands, sel, sac_src_def, board_death_payoff); }
+    long long spend = 0;
+    int sac_mana = 0, outlet = 0, damage = 0;
+    for (int j : sel)
+    {
+        const WasteTerm& t = wx.term[static_cast<std::size_t>(j)];
+        spend    += t.mv;
+        sac_mana += t.sac_mana;
+        outlet   += t.outlet;
+        damage   += t.damage;
+    }
+    // Branch for branch against the original: the prepass, the direct_damage early-out, then
+    // `!has_creature_sac || spend > 0`, then the board fact. `spend <= 0` rather than `== 0` to
+    // reproduce `!(spend > 0)` exactly, whatever a future ManaValue() may return.
+    const bool fast = (sac_mana > 0) && (damage == 0) && (outlet > 0) && (spend <= 0)
+                      && !wx.death_payoff;
+    if (WasteAggVerifyOn())
+    {
+        // One line per process, so "0 mismatches" is never a vacuous pass: it says the fast path
+        // really ran on this deck, and against what board fact.
+        static std::atomic<bool> announced{false};
+        if (!announced.exchange(true))
+        {
+            std::fprintf(stderr, "[waste-agg] verify ARMED cands=%zu death_payoff=%d\n",
+                         wx.term.size(), wx.death_payoff ? 1 : 0);
+        }
+        const bool slow =
+            SubsetWastesCreatureSacMana(state, cands, sel, sac_src_def, board_death_payoff);
+        if (fast != slow)
+        {
+            std::fprintf(stderr, "[waste-agg] MISMATCH fast=%d slow=%d t%d sel=%zu |",
+                         fast ? 1 : 0, slow ? 1 : 0, state.turn_number, sel.size());
+            for (int j : sel)
+            {
+                std::fprintf(stderr, " %s/k%d", static_cast<const std::string&>(cands[j].card_name).c_str(),
+                             static_cast<int>(cands[j].kind));
+            }
+            std::fprintf(stderr, "\n");
+            return slow;   // the original is authoritative while verifying
+        }
+    }
+    return fast;
 }
 
 // Reject a subset that pays LIFE for a phyrexian pip the pool could have paid with MANA
@@ -10988,6 +11141,13 @@ struct SubsetFilterPre
     // not build one -- keeps the old behaviour exactly, which is the same contract as the bits.
     std::vector<const CardDefinition*> sac_src_def;   // per candidate; nullptr = none/not a sac action
     bool board_persist     = false;                   // meaningful only when sac_src_def is non-empty
+    // `board_death_payoff` is hoisted from SubsetWastesCreatureSacMana's FINAL test for the same
+    // reason `board_persist` is hoisted from the fodder filter's bail-out: a controlled permanent
+    // with a dies-trigger payoff makes a sacrificed body worth spending, so the filter answers false
+    // for every subset -- and that is a board property, not a subset one. Computed in the SAME
+    // battlefield walk as board_persist, so it costs two field reads, not a second pass. Meaningful
+    // only when sac_src_def is non-empty (see EMPTY MEANS NOT BUILT above).
+    bool board_death_payoff = false;
 };
 
 static SubsetFilterPre BuildSubsetFilterPre(const GameState& state, const std::vector<Action>& cands)
@@ -11076,8 +11236,22 @@ static SubsetFilterPre BuildSubsetFilterPre(const GameState& state, const std::v
         {
             if (perm.controller_index != state.active_player_index) { continue; }
             const CardDefinition* pd = CardDatabase::Instance().LookupCached(perm.card);
-            if (pd != nullptr && pd->params.persist) { p.board_persist = true; break; }
+            if (pd == nullptr) { continue; }
+            if (pd->params.persist) { p.board_persist = true; }
+            // SubsetWastesCreatureSacMana's final test, hoisted into this same walk (see the struct).
+            if (pd->params.dies_trigger_damage > 0 || pd->params.dies_trigger_creates_tokens > 0
+                || pd->params.dies_trigger_impulse_exile)
+            { p.board_death_payoff = true; }
+            if (p.board_persist && p.board_death_payoff) { break; }
         }
+        // A foregone `false` for the WHOLE enumeration -> skip the filter outright, which also skips
+        // its two walks of `sel`. This is the same contract as the bits above ("a false bit makes the
+        // filter's answer a foregone false, so skipping the call is byte-identical by construction"),
+        // with one difference worth naming against that comment's "the bits read only Action fields,
+        // never the board": this one IS a board fact. It is still exact, because the test it stands
+        // for reads only the board and the board is frozen for the enumeration -- so unlike a bit
+        // derived from `cands`, there is no selection that could make the answer true.
+        if (p.board_death_payoff) { p.creature_sac_mana = false; }
     }
     return p;
 }
@@ -26296,6 +26470,11 @@ TurnSolver::Plan TurnSolver::SolveUncached(const GameState& state, bool is_pre_c
     // original per-subset function runs. Lockstep twin in EnumeratePlans.
     FodderIndex fodx;
     if (pre.sac_fodder) { BuildFodderIndex(state, cands, pre.sac_src_def, pre.board_persist, fodx); }
+    // ...and of the creature-sac-mana filter (see WasteIndex). Lockstep twin in EnumeratePlans.
+    const int payoff_arg = pre.sac_src_def.empty() ? -1 : (pre.board_death_payoff ? 1 : 0);
+    WasteIndex wastx;
+    if (pre.creature_sac_mana)
+    { BuildWasteIndex(cands, pre.sac_src_def, pre.board_death_payoff, wastx); }
     // "{cost}, {T}" ability SELF-FUNDING debit (see PermAbilityTapDebitOf). State-only, so it is
     // built ONCE here and the per-subset path is a bool test plus a walk of the selection. Lockstep
     // twin of the scan in EnumeratePlans.
@@ -26610,7 +26789,8 @@ TurnSolver::Plan TurnSolver::SolveUncached(const GameState& state, bool is_pre_c
         // rituals-for-payoff guard already covers this on the credited/pool path; this also catches
         // the filter fallback, and keeps the rule identical on both sides. Inert without a creature
         // mana outlet -> byte-identical.
-        if (pre.creature_sac_mana && SubsetWastesCreatureSacMana(state, cands, sel, sac_tab))
+        if (pre.creature_sac_mana
+            && SubsetWastesCreatureSacManaFast(wastx, state, cands, sel, sac_tab, payoff_arg))
         { if (shape != nullptr) { shapestats::Bump(shape->rej_mana); ++callf.rej_mana; } return; }
         // Reject a plan whose sac outlets together demand more fodder than the board has
         // (found by the Fungus Stage-5d sweep: two Saproling-gated outlets, one Saproling --
@@ -36250,6 +36430,11 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
     // the build in Solve; inactive -> the original per-subset function runs.
     FodderIndex fodx;
     if (pre.sac_fodder) { BuildFodderIndex(state, cands, pre.sac_src_def, pre.board_persist, fodx); }
+    // ...and of the creature-sac-mana filter (see WasteIndex). Lockstep twin of the build in Solve.
+    const int payoff_arg = pre.sac_src_def.empty() ? -1 : (pre.board_death_payoff ? 1 : 0);
+    WasteIndex wastx;
+    if (pre.creature_sac_mana)
+    { BuildWasteIndex(cands, pre.sac_src_def, pre.board_death_payoff, wastx); }
     // "{cost}, {T}" ability SELF-FUNDING debit scan (see PermAbilityTapDebitOf). Lockstep twin of
     // the scan in Solve; inert on every board with no such ability -> byte-identical.
     std::vector<ManaPool> tap_debit;
@@ -36937,7 +37122,7 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
         // enumeration otherwise hands the search (Goblins gi44). Unlike the rituals-for-payoff guard
         // above, declining an in-play outlet keeps BOTH the outlet and the body, so there is no
         // "hold it for a later turn" trade for the search to arbitrate. See the helper.
-        if (pre.creature_sac_mana && SubsetWastesCreatureSacMana(state, cands, sel, sac_tab)) { if (eshape != nullptr) { shapestats::Bump(eshape->e_rej_mana); ++ecallf.rej_mana; } return; }
+        if (pre.creature_sac_mana && SubsetWastesCreatureSacManaFast(wastx, state, cands, sel, sac_tab, payoff_arg)) { if (eshape != nullptr) { shapestats::Bump(eshape->e_rej_mana); ++ecallf.rej_mana; } return; }
         // Reject a plan whose sac outlets together demand more fodder than the board has
         // (found by the Fungus Stage-5d sweep: two Saproling-gated outlets, one Saproling --
         // the second half silently no-opped at apply). Correctness, not a narrowing.

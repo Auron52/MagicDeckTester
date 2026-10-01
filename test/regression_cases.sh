@@ -360,9 +360,20 @@ SMOKE_CASES=(
 # (see SMOKE block). slivers must stay low regardless -- it spins on its heavy tail (s2002 d5
 # was 16.5 min at budget 200) for zero benefit. d0 has no search. Only antilife is new here.
 REGRESSION_CASES=(
-  # fungus: Hinata's sizing (d0 full + d3/d5 at both seeds). 1,331.1s CPU = the suite's heaviest.
-  # HALF OF IT IS SIX GAMES: seeds 2085/2031/3095 are pathological at BOTH d3 and d5 (d3_s2002
-  # gi83 alone is 208s of that case's 507s). See docs/design/fungus-token-search-cost.md.
+  # fungus: Hinata's sizing (d0 full + d3/d5 at both seeds).
+  # STALE COST NOTE, CORRECTED 2026-10-01 -- the numbers that were here are HISTORY, not a current
+  # cost, and must not be used to size or gate anything. They read: "1,331.1s CPU = the suite's
+  # heaviest. HALF OF IT IS SIX GAMES: seeds 2085/2031/3095 are pathological at BOTH d3 and d5
+  # (d3_s2002 gi83 alone is 208s of that case's 507s)."
+  # The prune work since (sac-outlet count pool, spore pool, the searched second main, per-subset
+  # payability, FodderIndex, WasteIndex) has collected nearly all of that: d3_s2002 now runs its 200
+  # games in 23.4s CPU single-threaded (measured --threads 1, 2026-10-01) against the 507s above, and
+  # gi83 replayed alone (--seed 2085 --game-index 83 --games 1) wins on turn 5 with 2,657 enumeration
+  # calls -- it is not a heavy game any more. Only that ONE cell was re-measured, so the block total
+  # above is simply unknown, not 1,331.1s.
+  # The GATED figure is test/suite_cost.json (refill with `suite_gate.py --measure-all` off ONE pooled
+  # tier run, never a per-deck loop). See docs/design/fungus-token-search-cost.md and
+  # docs/design/fungus-slow-rollout-diagnosis-2026-09-30.md.
   "fungus  0 2002 1000 0"
   "fungus  3 2002  200 10"
   "fungus  3 3003  200 10"

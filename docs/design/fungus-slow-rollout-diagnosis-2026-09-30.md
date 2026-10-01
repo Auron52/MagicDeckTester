@@ -271,6 +271,148 @@ suggests the Action vectors are the source. Attributing it needs a call-graph pr
 unwinder (this box has no frame pointers, so `--call-graph dwarf` is the only route and it did not
 resolve the allocator's callers cleanly).
 
+### 2f. The second filter of the same shape — `SubsetWastesCreatureSacMana` (2026-10-01)
+
+**§2e named this filter and `SubsetHasDuplicateSacSource` as "the same shape as the one just fixed,
+and both worth taking". This is the one that really is the same shape** — the duplicate-source filter
+is pairwise `O(|sel|²)` rather than a sum and still needs a different idea (see below). Read as
+arithmetic, every term of this one is a SUM or an OR over the selected actions:
+
+```
+spend              a SUM of cost.ManaValue() over sel
+any sac-for-mana   an OR  over sel   (the necessary-condition prepass)
+has_creature_sac   an OR  over sel   (reads sac_src_def[j], already a SubsetFilterPre hoist)
+direct_damage      an OR  over sel   (the early-out, which also answers false)
+death payoff       a BOARD fact -- identical for every subset
+```
+
+`WasteIndex` in `TurnSolver.cpp` is that re-association: one precomputed term per candidate, so the
+per-subset body becomes `|sel|` integer adds. What it replaces, per enumerated subset, is a
+`ManaCost::ManaValue()` call per selected action, two separate walks of `sel`, and — on every subset
+that reaches the end — a walk of the whole battlefield with a `LookupCached` per permanent.
+
+**The board walk was pure waste on this deck, and that is checkable rather than arguable.** No card in
+the Fungus list carries `dies_trigger_damage`, `dies_trigger_creates_tokens` or
+`dies_trigger_impulse_exile` (checked against `cards.json`, 2026-10-01), so the walk ran to completion
+and answered "no payoff" **every single time**, on the deck whose boards are the widest in the suite.
+
+**Two fixes, and the second is the bigger structural one.** The board fact is hoisted into
+`SubsetFilterPre` and computed in the SAME battlefield walk that already produces `board_persist` —
+two extra field reads, not a second pass. When it is TRUE the filter's answer is a foregone `false`
+for the whole enumeration, so `BuildSubsetFilterPre` now **clears `creature_sac_mana`** and the filter
+is skipped outright, including its walks of `sel`. That direction does nothing for Fungus (no payoff
+anywhere in the list) and everything for a deck that has one. It is also the first `SubsetFilterPre`
+bit derived from the BOARD rather than from `cands`, which the struct comment now calls out: it is
+exact because the test it stands for reads only the board, and the board is frozen for the
+enumeration, so no selection could make the answer true.
+
+**EXACT, not a bound — and checked rather than asserted.** `MTG_SAC_WASTE_AGG_VERIFY=1` runs both
+forms on every subset and prints the first disagreement. On Fungus d3/s2002 (200 games): the
+`[waste-agg] verify ARMED` line present, **zero mismatches**, avg turns 5.4050 — identical to the
+pre-change baseline. The ARMED line is load-bearing: without it, "zero mismatches" could equally mean
+the fast path never ran, which is the `unchanged-average-three-causes` trap one level down.
+
+The one re-ordering worth naming: the original returns false on the FIRST selected action with
+`direct_damage > 0`, before finishing the spend sum, whereas the aggregate sums everything and then
+tests. Exact, because the answer is false either way — `direct_damage` rejects the subset outright, it
+is not a term in the sum.
+
+**`units` is the WRONG meter for this change, by construction.** It makes each subset visit cheaper
+without altering how many subsets are visited, so the deterministic work meter reads identical on
+both arms and proves nothing. That is the opposite of `MTG_FUNGUS_DEVOUR_LETHAL`, where the collapse
+removed branches and `units` was exactly the right instrument. Pick the meter from what the change
+moves: wall (paired, interleaved, idle box) for cost-per-visit, `units` for visit counts.
+
+Hatch: `MTG_SAC_WASTE_AGG=0` reverts to the original per-subset function. It also stands down under
+`MTG_NO_SAC_WASTE_PRUNE` (the filter is off outright, so building an index to reproduce a constant
+would be the waste this exists to remove) and whenever no `sac_src_def` table was built — which is
+what the `SubsetFilterPre` instruments disarm, so they disarm this too, for the same reason.
+
+#### What it measured: 1.00x, and the profile says the cell was the wrong place to look
+
+**Honest result first: no measurable effect on the `fungus d3 s2002` regression cell.** Paired,
+interleaved, order-flipped, single-threaded, 200 games per run:
+
+| pair | off | on | ratio | |
+|---|---|---|---|---|
+| 1 | 21.06s | 21.16s | 0.9955x | clean |
+| 2 | 21.11 | 21.10 | 1.0007x | clean |
+| 3 | 21.04 | 20.86 | 1.0085x | clean |
+| 4 | 20.98 | 21.36 | 0.9823x | clean |
+| 5 | 20.98 | 20.94 | 1.0019x | clean |
+| 6 | 38.67 | 20.98 | 1.8432x | **CONTAMINATED** |
+| 7 | 44.50 | 25.44 | 1.7496x | **CONTAMINATED** |
+| 8 | 46.70 | 51.22 | 0.9116x | **CONTAMINATED** |
+
+Clean pairs: **median 1.0007x — no effect.** Pairs 6–8 are host load, not signal: the same 200 games
+that take 21s in pairs 1–5 take 38–51s there, and host loadavg went 3.36 → 23.41 across the run (and
+loadavg in this container is the HOST's, see `loadavg-is-the-hosts-not-ours.md`). Pair 8 caught both
+arms and reads 0.91x.
+
+**The aggregate of all eight pairs is 1.1576x, and it is a FALSE WIN.** Reporting it would have
+claimed a 15.8% improvement manufactured entirely out of noise that landed asymmetrically on the arms.
+This is `wall-ab-aggregate-right-signs-wrong.md` happening live, and it is the reason the per-pair
+rule exists: the per-pair column makes the contamination obvious at a glance, the aggregate hides it.
+
+**And the profile explains the 1.00x rather than leaving it a mystery** — which matters, because an
+unchanged number has three causes (no effect / never ran / backwards) and only a profile separates
+them. `perf record -e cpu-clock -F 499` on `build/Profile/mtg`, 200 games per arm:
+
+**`SubsetWastesCreatureSacMana` does not appear in EITHER arm's profile — including the arm with the
+aggregate OFF, i.e. the original per-subset form.** On this cell the filter is below the sampling
+floor, so there was nothing here to collect and 1.00x is the correct answer. We already know the path
+RUNS (the verify ARMED line), so this is "no effect *here*", not "never ran".
+
+The 1.04% figure §2e recorded for this filter came from the **keep-generation replay** (wide boards,
+long rollouts), not from a regression cell. **That measurement was not redone**, for two reasons worth
+recording: the `gencache.HEAD.json` in `logs/fungus_slowturn_analysis/` is now STALE against today's
+engine, so the replay re-runs discovery (8,800 rollouts at ~8/s ≈ 18 min **per arm**); and the box is
+contended, which makes wall from it worthless anyway. So the regime where this filter costs 1% is an
+**open measurement**, and the change is justified on exactness plus work-removed, not on a wall number.
+`CLAUDE.md`'s "collapse wasted search unconditionally" is the doctrine that makes that the right call.
+
+#### 2g. The branching question has a terminus, and on the regression cell it has arrived
+
+The user's method: *"keep pruning anything that seems unreasonable and then the any remaining
+unreasonable items should be more obvious. Once all of those are gone the expectation would be that
+whatever remains is not branching related."* Measured against the current engine, that state is here
+for `fungus d3/d5 s2002`:
+
+* **The odometer is tame.** `MTG_ENUM_STATS=1 MTG_ENUM_STATS_MIN=1000` over 200 games at d3 prints
+  **exactly one** shape above 1e3: `bound=1.02e+03 groups=8 ind=2` (= 2^8 x 2^2), eight single-member
+  groups plus one Mycon's two variants. d5/100 games is the same ceiling, `groups=9 ind=1`. Against
+  the historical `bound=4.92e+04 groups=6 ind=8` that motivated this whole ledger, the explosive
+  shapes are gone.
+* **No subset filter is in the top 12 of the profile any more.** What is on top is per-NODE cost:
+  `CollectActions` 3.80%, `BuildSimKey` 3.35%, `operator new` 3.35%, `SimulateEndAndStartNextTurn`
+  2.64%, `PrePlanAvailabilityKeys` 2.38%, the `consider` lambda 2.13%, `SolveUncached` 2.10%.
+* **The cell is 21x cheaper than its own suite comment claims.** `test/regression_cases.sh` still said
+  "1,331.1s CPU ... d3_s2002 gi83 alone is 208s of that case's 507s"; that cell now runs its 200 games
+  in **23.4s CPU** single-threaded, and gi83 replayed alone (`--seed 2085 --game-index 83`) wins on
+  turn 5 with 2,657 enumeration calls. It is not a heavy game. The comment has been corrected in place.
+
+**Two named branching items survive, both quantified, neither yet built:**
+
+1. **55.0% of payoff-side lines are unaffordable under EVERY mana line** (2,536,895 of 4,610,578 at
+   d3; 846,036 of 1,577,094 = 53.6% at d5). The diagnostic's own estimate for gating the pair walk in
+   two stages is **1.19x fewer visits** (9,668,047 vs 11,536,877). An unaffordable line is not a line,
+   so dropping it cannot cost quality — this is a lossless prune and the largest one left.
+2. **`SubsetHasDuplicateSacSource`**, the key-based rewrite described below.
+
+**And one item that is NOT branching and should stop being treated as such:** the leaf-tie rate is
+**52.2% at d3 and 67.1% at d5** (`published=60883 ties=31787`, `published=56261 ties=37754`). Two
+thirds of leaf evaluations at d5 cannot separate their branches. That is an EVALUATOR resolution
+question, not a width question, and no prune addresses it. Likewise `enum-memo` at a 1.4% hit rate
+(1,234 / 88,145) and `solve-memo` at 21–29% are memo-key questions (`BuildSimKey`, 3.35% and the
+3rd-biggest symbol), not enumeration questions.
+
+**What is left on this filter trio.** `SubsetHasDuplicateSacSource` (now the biggest at ~1.48%) is six
+clauses, each running its own `b = a+1` inner loop over `sel`, and every clause asks the same question
+in a different key: *do two selected actions share `(clause, sac_source_id)`* — or, for the free-cast
+clause, *share `hand_index` with differing `free_cast`*. "Does this multiset of keys contain a repeat"
+is `O(|sel|)` with one precomputed key per candidate, not six pairwise passes. That is the different
+idea §2e asked for; it is not built yet.
+
 ### The subset funnel — the real work unit (NOTE: see §2d, this section's cross-walk ratio is wrong)
 
 | turn | subsets entered | dupSacSrc | wasteSacMana | overFodder | other | PASSED |
