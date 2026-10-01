@@ -26144,6 +26144,12 @@ namespace shapestats
     // in a field it does not hash (floating mana, life, the rollout's remaining depth), so the real
     // memo prize is at most this and probably less. Quoting it as the achievable win would be the
     // same error as pricing a collapse by odometer.
+    // OWN FLAG (MTG_REENUM_CENSUS, default OFF) because it is the one counter here that is NOT
+    // cheap: a mutex + set insert PER EnumeratePlans call. Single-threaded that is fine, but a
+    // pooled `mtg --batch` on 24 workers would serialize every enumeration on this lock and the run
+    // would measure the instrument instead of the engine. Every other shapestats counter is a
+    // relaxed atomic add and is safe to leave on in a pooled run.
+    inline bool ReenumOn() { static const bool v = EnvOn("MTG_REENUM_CENSUS"); return v; }
     inline std::mutex g_dec_mu;
     inline std::unordered_set<std::uint64_t> g_dec_seen;
     inline std::atomic<std::uint64_t> g_dec_calls{0};
@@ -26153,6 +26159,7 @@ namespace shapestats
 
     inline void RecordDecisionKey(std::uint64_t key)
     {
+        if (!ReenumOn()) { return; }
         g_dec_calls.fetch_add(1, std::memory_order_relaxed);
         std::lock_guard<std::mutex> lk(g_dec_mu);
         g_dec_seen.insert(key);
@@ -26274,6 +26281,17 @@ namespace shapestats
     inline std::mutex         g_heavy_mtx;
     inline std::vector<Heavy> g_heavy;     // kept sorted DESC by odo, truncated to HeavyWant()
 
+    // LOCK-FREE ADMISSION FLOOR -- the visit count of the WEAKEST kept entry, 0 until the list is
+    // full. Without it this instrument is unusable in a pooled run: OfferHeavy took g_heavy_mtx on
+    // EVERY EnumeratePlans call, and the caller built the board string and one string per option
+    // group before calling. On 24 workers that serialises every enumeration behind one lock and the
+    // run measures the instrument instead of the engine. Callers test HeavyFloor() first and skip
+    // both the strings and the lock for the overwhelming majority of calls that cannot place.
+    // Relaxed ordering is fine: a stale floor only admits a call that then fails the real test
+    // under the lock, so the kept set is identical either way.
+    inline std::atomic<std::uint64_t> g_heavy_floor{0};
+    inline std::uint64_t HeavyFloor() { return g_heavy_floor.load(std::memory_order_relaxed); }
+
     inline void OfferHeavy(Heavy&& h)
     {
         const int want = HeavyWant();
@@ -26296,6 +26314,10 @@ namespace shapestats
         std::sort(g_heavy.begin(), g_heavy.end(),
                   [](const Heavy& a, const Heavy& b) { return a.f.entered > b.f.entered; });
         if (static_cast<int>(g_heavy.size()) > want) { g_heavy.resize(static_cast<std::size_t>(want)); }
+        // Publish the new floor only once the list is FULL -- raising it earlier would reject calls
+        // that belong in the empty slots.
+        if (static_cast<int>(g_heavy.size()) >= want)
+        { g_heavy_floor.store(g_heavy.back().f.entered, std::memory_order_relaxed); }
     }
 
     // Same line-tag + key=value convention as scripts/review_games.py: readable AND parseable, so
@@ -40985,6 +41007,7 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
                                 static_cast<std::uint64_t>(deduped.size()), sodo_fold,
                                 sodo_copyfold);
 
+        if (shapestats::ReenumOn())
         {   // RE-ENUMERATION fingerprint: the board, the hand size and the full option menu.
             std::uint64_t key = 1469598103934665603ULL;
             shapestats::HashIn(key, static_cast<std::uint64_t>(state.turn_number));
@@ -41035,7 +41058,10 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
 
         // HEAVY CAPTURE: keep this call's full option-group breakdown if it is among the biggest.
         // Only builds the strings when the flag is on AND it might make the cut.
-        if (shapestats::HeavyWant() > 0)
+        // Floor test FIRST: skips the per-group string building and the mutex for every call
+        // that cannot place. ecallf.entered is the ranking key, so this is the same predicate
+        // OfferHeavy applies -- just without paying for the strings to find out.
+        if (shapestats::HeavyWant() > 0 && ecallf.entered > shapestats::HeavyFloor())
         {
             shapestats::Heavy h;
             h.odo     = static_cast<std::uint64_t>(sodo);
