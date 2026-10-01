@@ -113,12 +113,20 @@ Note `provider_audit.py` only audits decklists that have a `.profile.json`, so t
 | 2 integration (serial) | **DONE** — all 14 cards in `cards.json`, build green |
 | 3 re-coverage to clean | **DONE — 0 missing, all 19 cards `full`** |
 | 4a provider routing | **DONE — two misroutes found and fixed; `provider=Equipment` verified** |
-| 2d-bis cost/field audits | pending (Scryfall was rate-limited by the fan-out) |
-| 4 baseline profile | pending |
-| 4-bis suite tiers | **NOT started** — user's call, see open question 2 |
-| 5 verification | pending |
-| 5h viewer-readiness | **overnight priority — user plays references in the morning** |
+| 2d-bis field audit | **DONE** — all hard fields match; 12/14 via snapshot, 2 HAND-VERIFIED (named) |
+| 2d-bis cost audit (`audit_card_costs.py`) | **UN-RUN** — Scryfall rate-limited all night by the fan-out. The snapshot's hard-field check covers cost/cmc for the 12, and the 2 were hand-checked, so nothing is unverified — but the dedicated cost audit itself did not run |
+| 4 baseline profile | **DONE** — written, cast-order verdict `STATUS_QUO_OK` |
+| 4a provider routing | **DONE — two misroutes fixed; `provider=Equipment` verified; all 29 decks unchanged** |
+| 5a mismatch harnesses | **DONE — nonconv 0/80, fd-diverge 0/60** |
+| 5d claude-play sweep | **DONE — 8 games, Opus. Zero engine bugs, zero data divergences** |
+| 5h viewer-readiness | **DONE with ONE KNOWN DEFECT** — deck is selectable and fully playable; the plan-space valve drops attach-equipment actions on artifact-heavy boards (see below) |
+| 5b multi-depth sweep | **UN-RUN** — the deck does not finish at d5 in a usable time (see the performance finding) |
+| 5c2 `leaf_tiebreak_check` | **UN-RUN** — same reason |
+| 4-bis suite tiers | **NOT started** — user's call, and blocked on cost anyway (see open question 2) |
 | value leaf / mulligan | blocked by the suite gate (confirmed: `suite_gate.py` refuses the variant path) |
+
+Commits: `03c68e63` (onboarding + the three engine defects) and `208cb158` (the P/T label fix +
+four scenarios + the snapshot refresh). **NOT PUSHED** — see open question 5.
 
 ## What was implemented (Stage 2, integrated serially 2026-10-01)
 
@@ -395,8 +403,72 @@ ranker also serves as rollout/leaf policy, so it is not purely cosmetic.
    resolved (`MTG_ALLOW_UNTESTED_DECK=1` is a USER decision, never an agent's).
 3. **`expected_buckets` / a `buckets.json` for v2.** Bucket ruling is user-only. v1's
    `KittyEquipment.buckets.json` is a ruling about v1's card pool and I will not copy or adapt it.
-4. **Deferrals** raised by the card research are PROVISIONAL until you sign them off; they will be
-   listed in the Stage 6a disclosure in the final report.
+4. **Deferrals** raised by the card research are PROVISIONAL until you sign them off. The full list
+   is in "Provisional deferrals" below.
+5. **Nothing is pushed.** Two commits sit on `phase-1-2-deck-analyzer`. I did not push because you
+   did not ask me to — but note this change set is exactly the platform-sensitive class CI exists
+   for: a new `Permanent` field (296 -> 304), new sim-key fields, a new counter type and a new
+   dominance axis. **The `determinism parity` job is the only Windows signal** and it cannot be
+   checked from this container. Say the word and I will push and watch it.
+6. **The next engineering goal, if you agree:** make the deck tractable at d3 (the gate cell). The
+   sweep handed us a concrete lead — see "the branching lead" below — and it is the thing standing
+   between this list and suite membership, the value leaf and the mulligan profile.
+
+## The branching lead (why the deck is slow, with evidence from the sweep)
+
+The sweep's agents independently reported the plan-space shape, and it lines up exactly with the
+performance finding:
+* turn 1 with five castable Equipment: **717 plans**, of which 120 are the orderings of one
+  5-Equipment cast set — and on that board **every ordering is outcome-identical** (no Sram,
+  Puresteel or Cid out, so no on-cast trigger and no cost reduction, and mana payment is forced).
+* a mid-go-off frame: `positions_full` **4.2e13**, and another reported **94,478,400,000,000**
+  combinations with 31,250 kept and 200 printed.
+* one frame was `4095 = 2^12 - 1` plans that all `cast: (nothing)` and differ only in WHICH subset
+  of 12 Equipment moves onto a summoning-sick creature.
+
+That is the signature of a product over interchangeable items, which is precisely the shape the
+standing "collapse wasted search" directive targets, and the precedent it cites — pooling the
+interchangeable sac outlets, worst odometer 4.61e+03 -> 2.02e+03 — is the same move. Two candidate
+collapses, both needing the usual soundness argument before adoption:
+1. **Fold cast-order permutations of free, trigger-neutral Equipment** when no on-cast watcher and
+   no cost reducer is on the battlefield and the casts are all {0}. Under those conditions the
+   orderings are provably identical, so this is an identity fold, not a heuristic narrowing.
+   CAREFUL: it stops being sound the moment a Sram/Puresteel/Cid is on the board or in the plan.
+2. **Fold same-host / no-op equip moves** and subsets that differ only by which interchangeable
+   +0/+N shield lands on the same host.
+Measure with `MTG_TURN_CENSUS` (built for this) and gate on `units` moving, not on wall clock.
+
+## Provisional deferrals — these need your sign-off
+
+None were decided unilaterally as "fine"; each is listed with why it is inert.
+1. **Deconstruction Hammer's granted activated ability** ("{3},{T}, Sacrifice: destroy target
+   artifact or enchantment"). Two legs: the passive opponent never controls an artifact or
+   enchantment, so no opponent target ever exists; and every own-side activation is strictly
+   dominated (spends {3}, taps the attacker, eats the Hammer AND a second own artifact — which can
+   flip metalcraft off — for zero upside, since this 60 has no sacrifice outlet, no artifact death
+   trigger and no graveyard-artifact payoff). It is OPTIONAL, so unlike a mandatory ETB there is no
+   forced negative to model.
+2. **Cid's "and Vehicle spells"** half, and the "or Vehicle" half of its rebuy filter — zero
+   Vehicles in this deck and zero in all of `cards.json`.
+3. **Cid's Jump** ("during your turn, Cid has flying") — nothing blocks anywhere in the engine, and
+   the engine has no turn-conditional keyword layer, so an unconditional grant would be unfaithful
+   while buying nothing.
+4. **Dragonfire Blade's "hexproof from monocolored"** — hexproof restricts only opponent-controlled
+   spells and abilities, and the passive opponent casts and activates nothing. Deliberately NOT
+   mapped to `equip_grants_shroud`, which in this engine is enforced against our OWN targeting and
+   would have locked ~30 Equipment off the host.
+5. **Spidersilk Net's reach** — `Keyword::Reach` has zero readers anywhere in the engine, and
+   nothing blocks.
+6. **Dwalin's first strike** — `Keyword::FirstStrike` has no readers at all and combat damage is one
+   event. (Note the contrast: DOUBLE strike is not inert here, so this is specifically the
+   first-strike-alone collapse.)
+7. **Sigarda's Aid's flash clause** — the only two readers relax a "stack is empty" gate the
+   goldfish never fails, and the deck holds zero Auras.
+8. **The reachable empty-library case, disclosed rather than deferred:** with 20 free Equipment and
+   W+1 draws per cast, the chain's branching factor goes supercritical at 3-4 Puresteels, so the
+   library really can empty mid-turn — and both draw sites SKIP on an empty library rather than
+   modelling CR 104.3c, so the engine would hand us a win where the rules give a loss. Previously
+   disclosed as unreachable on other decks; on THIS list it is reachable.
 
 ## Approved deferrals (v2)
 
