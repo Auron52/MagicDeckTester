@@ -16705,6 +16705,223 @@ static std::vector<int> FadeKLandmarks(const FadeBoardRead& r, int C, int cost, 
     return out;
 }
 
+// The enumeration branch whose land drop is a DEFERRED KAROO (EnumeratePlansWithLand's
+// add_for_land): true only while EnumeratePlans runs for that branch. Read by the autonomous plan
+// signature to keep land-Aura host variants distinct exactly there (MTG_EDF_AURA_HOST_SIG_KAROO),
+// and by FoldInterchangeableAuraHosts below for the same reason.
+static thread_local bool g_enum_karoo_drop = false;
+
+// MTG_LAND_AURA_HOST_FOLD -- collapse interchangeable "Enchant land" hosts. DEFAULT ON; =0 restores
+// one variant per legal land.
+//
+// A land Aura emits one CastFromHand variant per legal host ("WHICH land to enchant is a searched
+// plan variant per legal host", Wild Growth's card note). On a deck running 19 Forests those hosts
+// are overwhelmingly THE SAME OBJECT: enchanting untapped Forest #1 and untapped Forest #2 reach
+// states that differ only in which interchangeable permanent carries the aura. Those are copies of
+// one branch, not choices.
+//
+// SOUNDNESS IS BOUGHT BY BEING NARROW, not by enumerating what might differ. A host is eligible to
+// fold ONLY if it is provably featureless -- no counters of any kind, nothing attached to it, not
+// freshly played -- and two eligible hosts fold only on an exact (name, tapped) match. Any land
+// carrying a counter, an aura, or an Equipment keeps its own slot and is never folded with
+// anything, so a decorated land cannot be swallowed by a plain one of the same name. The failure
+// direction is therefore "kept a redundant variant", never "deleted a distinct line".
+//
+// ONE REPRESENTATIVE PER CLASS -- USER 2026-10-01: *"usually we have 1 choice. Occasionally we have
+// 2."* The occasional second choice comes from a DIFFERENT CLASS, not from a second member of the
+// same one: *"choose secluded courtyard if available, search on one green land or peat bog if not.
+// Never put it on Hickory unless that is your only land."* Secluded Courtyard, Peat Bog, Hickory
+// Woodlot and Forest are four distinct names and so four distinct classes here, all preserved; what
+// collapses is only Forest-vs-Forest.
+//
+// A first cut kept min(class_size, land-Auras-in-hand) members, reasoning that two auras on the SAME
+// land differ from two on different lands. They do not differ in the direction that matters: each
+// aura adds its bonus whenever ITS land is tapped, so tapping every land yields the same total
+// either way (2 Wild Growth over 4 Forests = 6 mana, stacked or spread), and when only a SUBSET is
+// tapped, stacking is weakly better (tap the double-enchanted land for 3 rather than one of two
+// 2-mana lands). Spreading is therefore never strictly better, which is what makes keeping one
+// member sound as well as what the user describes.
+static bool LandAuraHostFoldOn()
+{
+    static const bool on = EnvOn("MTG_LAND_AURA_HOST_FOLD", true);
+    return on;
+}
+
+static std::vector<int> FoldInterchangeableAuraHosts(const GameState& state,
+                                                     const std::vector<int>& hosts)
+{
+    if (!LandAuraHostFoldOn() || hosts.size() < 2) { return hosts; }
+    // THE KAROO EXCLUSION, inherited rather than rediscovered. The plan SIGNATURE already folds
+    // aura hosts (MTG_EDF_AURA_HOST_SIG) and was deliberately narrowed away from one branch:
+    // "The fold is only WRONG when this plan's land drop is a karoo -- the bounce is what takes
+    // the folded host (s12 T3)". A karoo returns a land to hand on ETB, so WHICH land carries the
+    // aura stops being interchangeable exactly there. Fungus runs 3 Simic Growth Chamber, so this
+    // deck has that hazard live. Folding at the CANDIDATE level is earlier than the signature, so
+    // it must honour the same exclusion or it reintroduces the bug one layer up.
+    if (g_enum_karoo_drop) { return hosts; }
+
+    // How many land Auras could be cast this turn -> how many members of one class to keep.
+    int keep = 0;
+    for (const Card& hc : state.ActivePlayer().hand)
+    {
+        const CardDefinition* hd = CardDatabase::Instance().LookupCached(hc);
+        if (hd != nullptr && hd->params.is_land_aura) { ++keep; }
+    }
+    if (keep < 1) { keep = 1; }
+    if (static_cast<int>(hosts.size()) <= keep) { return hosts; }
+
+    // Anything ATTACHED to a land makes that land distinguishable, so it must not fold. One pass
+    // over the battlefield collects every attachment target rather than rescanning per host.
+    std::set<int> attached_to;
+    for (const Permanent& p : state.battlefield)
+    {
+        if (p.aura_attached_to != 0) { attached_to.insert(p.aura_attached_to); }
+        if (p.equipped_to != 0)      { attached_to.insert(p.equipped_to); }
+    }
+
+    std::vector<int> out;
+    out.reserve(hosts.size());
+    std::map<std::string, int> seen;   // class key -> members already kept
+    for (int tgt : hosts)
+    {
+        const Permanent* lp = nullptr;
+        for (const Permanent& p : state.battlefield)
+        { if (p.card.m_number == tgt) { lp = &p; break; } }
+
+        // Unknown, decorated, or freshly-played lands are never folded -- they keep their slot.
+        const bool plain = lp != nullptr
+                        && attached_to.find(tgt) == attached_to.end()
+                        && !lp->entered_this_turn
+                        && lp->charge_counters == 0 && lp->verse_counters == 0
+                        && lp->lore_counters == 0   && lp->storage_counters == 0
+                        && lp->ice_counters == 0    && lp->age_counters == 0
+                        && lp->spore_counters == 0  && lp->fade_counters == 0
+                        && lp->quest_counters == 0;
+        if (!plain) { out.push_back(tgt); continue; }
+
+        const std::string key = lp->card.m_name.str() + (lp->tapped ? "|T" : "|U");
+        int& n = seen[key];
+        if (n < keep) { ++n; out.push_back(tgt); }
+    }
+    return out;
+}
+
+// MTG_LAND_AURA_HOST_PICK -- the USER's land-Aura host heuristic. DEFAULT **OFF**; =1 enables.
+//
+// WHY OFF, when the user specified the rule: it is a LOSSY narrowing and it MOVES GROUND TRUTH.
+// Measured on smoke with it on: `fungus_smoke_d0_s1001` and `fungus_smoke_d3_s1001` both change
+// digest at an IDENTICAL average (5.6810 -> 5.6810, 5.3800 -> 5.3800), `[searched] play-changed=1`
+// at the same score, `[d0] slower=1 faster=1 play-changed=27`. So it is net-neutral on quality and
+// removes work -- a good trade under the collapse doctrine -- but adopting it means re-accepting GT,
+// which is the user's call and not an agent's. The sound half (FoldInterchangeableAuraHosts) is
+// default ON precisely because it needs none of that: it is play-IDENTICAL.
+// Also note the main beneficiary is UNMEASURED: EldraziDisplacerFlicker is the deck whose land base
+// actually exercises the A/C/D classes, and it is not in test/regression_cases.sh at all.
+//
+// USER 2026-10-01, verbatim, because the rule is theirs and the wording carries the reasons:
+//   * "usually we have 1 choice. Occasionally we have 2." / "the search is very very limited.
+//      Usually we just pick."
+//   * "choose secluded courtyard if available, search on one green land or peat bog if not. Never
+//      put it on Hickory unless that is your only land."
+//   * "for peat bog we can skip searching it if there are 2 green lands out ... We can put it on
+//      one of them and pay with the other."
+//   * "we only search when we have 1 green land, peat bog and maybe hickory woodlot out."
+//   * "usually depletion lands are a bad idea, sometimes bounce lands can cause issues and which
+//      lands you tap to cast the wild growth is quite important."
+//
+// CARD-AGNOSTIC once stated as two properties of the HOST relative to the AURA'S OWN COST:
+//   PAYS   -- the land produces a colour that cost needs (a "green land", for Wild Growth's {G}).
+//   DEPLET -- enters_tapped_with_depletion > 0 (Peat Bog, Hickory Woodlot).
+// Four classes, best to worst:
+//   A  !PAYS !DEPLET  Secluded Courtyard. Enchanting it spends nothing you needed to CAST the aura
+//                     with, which is the whole point ("you might have to pay for it with the other
+//                     lands"). Take it; stop.
+//   B   PAYS !DEPLET  a plain green land -- the ordinary pick.
+//   C  !PAYS  DEPLET  Peat Bog. Non-green upside against depletion downside: a GENUINE tie, so it
+//                     stays a second branch -- but only while fewer than two B lands are out,
+//                     because with two you enchant one and pay with the other.
+//   D   PAYS  DEPLET  Hickory Woodlot. Dominated by B on both axes; offered only if nothing else is.
+// So the output is ONE host, except the single case {exactly one B} x {a C present} -> two.
+//
+// This is a HEURISTIC NARROWING, not an identity fold: unlike FoldInterchangeableAuraHosts it can
+// drop a line that differs. It is therefore gated at the call site behind the same HumanPlayActive
+// / UnprunedGate::LandAuraHost pair as the provider narrowing -- human play and the unpruned A/B
+// still see every land -- and it honours the karoo exclusion for the same reason the fold does.
+static bool LandAuraHostPickOn()
+{
+    static const bool on = EnvOn("MTG_LAND_AURA_HOST_PICK");   // DEFAULT OFF -- see the note above
+    return on;
+}
+
+static std::vector<int> PickLandAuraHosts(const GameState& state, const std::vector<int>& hosts,
+                                          const CardDefinition& aura_def)
+{
+    if (!LandAuraHostPickOn() || hosts.size() < 2 || g_enum_karoo_drop) { return hosts; }
+
+    // Which colours the AURA's own cost needs. A cost with no coloured pip (pure generic) makes
+    // every land a payer, which collapses A into B and is still correct.
+    const ManaCost& mc = aura_def.card.m_mana_cost;
+    const bool need[5] = { mc.white > 0, mc.blue > 0, mc.black > 0, mc.red > 0, mc.green > 0 };
+    if (!need[0] && !need[1] && !need[2] && !need[3] && !need[4]) { return hosts; }
+
+    std::vector<int> cls[4];                       // A, B, C, D
+    for (int tgt : hosts)
+    {
+        const Permanent* lp = nullptr;
+        for (const Permanent& p : state.battlefield)
+        { if (p.card.m_number == tgt) { lp = &p; break; } }
+        if (lp == nullptr) { return hosts; }       // cannot classify -> narrow nothing
+
+        const CardDefinition* ld = CardDatabase::Instance().LookupCached(lp->card);
+        if (ld == nullptr) { return hosts; }
+
+        bool pays = false;
+        for (Color c : ld->params.produces)
+        {
+            const int ci = static_cast<int>(c);
+            if (ci >= 0 && ci < 5 && need[ci]) { pays = true; break; }
+        }
+        const bool depl = ld->params.enters_tapped_with_depletion > 0;
+        std::vector<int>& bucket = cls[(pays ? 1 : 0) + (depl ? 2 : 0)];
+        // WITHIN a class, prefer a land that does NOT bounce ("sometimes bounce lands can cause
+        // issues"). Only an ordering inside an already-tied bucket, so it narrows nothing extra --
+        // but it stops `front()` from handing the aura to a karoo on battlefield order alone, which
+        // on Fungus decides between a Forest and a Simic Growth Chamber.
+        if (ld->params.etb_bounce_land) { bucket.push_back(tgt); }
+        else { bucket.insert(bucket.begin(), tgt); }
+    }
+    // index: 0 = !pays !depl (A), 1 = pays !depl (B), 2 = !pays depl (C), 3 = pays depl (D)
+    if (!cls[0].empty()) { return { cls[0].front() }; }                 // Secluded Courtyard: pick it
+    if (!cls[1].empty())
+    {
+        std::vector<int> out{ cls[1].front() };
+        // "we only search when we have 1 green land, peat bog ... out", and "we can skip searching
+        // [peat bog] if there are 2 green lands out".
+        //
+        // COUNT THE LANDS, NOT THE CLASSES. cls[1] has already been through the identity fold, so
+        // four Forests arrive here as ONE entry; testing cls[1].size() would read a four-Forest
+        // board as "one green land out" and open the Peat Bog branch exactly where the user says
+        // it should be closed. The board is the thing the rule is about, so count it directly.
+        int n_green_out = 0;
+        for (const Permanent& p : state.battlefield)
+        {
+            if (p.controller_index != state.active_player_index || !p.card.IsLand()) { continue; }
+            const CardDefinition* pd = CardDatabase::Instance().LookupCached(p.card);
+            if (pd == nullptr || pd->params.enters_tapped_with_depletion > 0) { continue; }
+            for (Color c : pd->params.produces)
+            {
+                const int ci = static_cast<int>(c);
+                if (ci >= 0 && ci < 5 && need[ci]) { ++n_green_out; break; }
+            }
+        }
+        if (n_green_out < 2 && !cls[2].empty()) { out.push_back(cls[2].front()); }
+        return out;
+    }
+    if (!cls[2].empty()) { return { cls[2].front() }; }
+    if (!cls[3].empty()) { return { cls[3].front() }; }                 // Hickory: only if forced
+    return hosts;
+}
+
 static std::vector<Action> CollectActions(const GameState& state, bool is_pre_combat)
 {
     const Player& ap = state.ActivePlayer();
@@ -18193,6 +18410,29 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
                 const std::vector<int> narrowed =
                     ResolveProvider(state).LandAuraHostCandidates(state, state.active_player_index);
                 if (!narrowed.empty()) { aura_hosts = narrowed; }
+                // THE PROVIDER WINS. A deck that supplies its own host ranking has justified it and
+                // may have it pinned by a fixture -- EldraziFlickerProvider ranks by mana yield and
+                // test/scenarios/edf_shroud_blocks_second_aura.json asserts the resulting
+                // attachment. The generic heuristic below is for decks whose provider does NOT
+                // narrow (Fungus), so it must not overrule one that does. Caught by that scenario
+                // failing when this guard was absent.
+                const bool provider_narrowed = !narrowed.empty();
+                // IDENTITY FOLD over interchangeable hosts (USER 2026-10-01: "we should definitely
+                // deduplicate anything that is obvious including Wild Growth targets"). Enchanting
+                // one untapped vanilla Forest reaches the same state as enchanting another, so the
+                // extra variants are copies of one branch, not choices -- measured at 19 Forests /
+                // 4 legal hosts / 2 copies = 25 odometer slots for at most 4 distinct outcomes,
+                // plans=341 dedup=41 on the heaviest such decision.
+                // THIS IS A NARROWING, NOT A REORDERING: it is gated like one, behind the same
+                // HumanPlayActive / UnprunedGate::LandAuraHost pair as the provider narrowing above,
+                // so human play and the 5f unpruned A/B still see every land.
+                // Sound identity fold first (Forest-vs-Forest), then the USER's heuristic pick
+                // across the remaining CLASSES. Ordered this way so the heuristic sees one
+                // representative per class and its "exactly one green land out" test counts
+                // classes rather than copies.
+                aura_hosts = FoldInterchangeableAuraHosts(state, aura_hosts);
+                if (!provider_narrowed)
+                { aura_hosts = PickLandAuraHosts(state, aura_hosts, def); }
             }
             for (int tgt_num : aura_hosts)
             {
@@ -36527,10 +36767,8 @@ static bool HumanEnumSaturated(const GameState& state,
     return sat;
 }
 
-// The enumeration branch whose land drop is a DEFERRED KAROO (EnumeratePlansWithLand's
-// add_for_land): true only while EnumeratePlans runs for that branch. Read by the autonomous plan
-// signature to keep land-Aura host variants distinct exactly there (MTG_EDF_AURA_HOST_SIG_KAROO).
-static thread_local bool g_enum_karoo_drop = false;
+// g_enum_karoo_drop is DEFINED ABOVE CollectActions (FoldInterchangeableAuraHosts reads it too, and
+// that runs earlier in the file). Its contract is documented at the definition.
 struct KarooDropEnumScope
 {
     bool prev;

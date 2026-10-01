@@ -535,6 +535,18 @@ the main `EnumeratePlans` path at all. **There is no memo on that path.**
 §2g's other findings stand: the odometer is tame, no subset filter is in the top 12, and the cell is
 21x cheaper than its comment claimed.
 
+#### FOLLOW-UP: the user ordered the dedup built anyway, and it is play-identical
+
+USER: *"Yes, we should definitely deduplicate anything that is obvious including Wild Growth
+targets."* Built, shipped default ON, and it is a **pure identity collapse** — 61,980 plans and
+144,680 odometer positions removed with the distinct-plan count **bit-for-bit unchanged** at 750,223.
+The 1.06x pricing above stands; the collapse is kept on the doctrine's basis (work removed +
+soundness), not on a wall number. The user also specified a full host-selection heuristic, which is
+built but default OFF because it moves GT. Both live in
+**`docs/design/land-aura-host-decision.md`** — including the measurement that the karoo exclusion was
+load-bearing (omitting it dropped 11,538 *distinct* plans) and the fixture that forced the
+"provider wins" guard.
+
 #### Repro
 
 ```
