@@ -41129,6 +41129,12 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
                     { line += ":tutor=" + std::string(a.tutor_target); }
                     if (!static_cast<const std::string&>(a.chosen_float_color).empty())
                     { line += ":colour=" + std::string(a.chosen_float_color); }
+                    // The OUTLET permanent, not the victim. Two groups of the same card name are
+                    // either one pooled family (one src) or N unpooled copies (N srcs), and the
+                    // victim alone cannot tell them apart -- both the pooled and the per-source
+                    // paths put the canonical victim on the count==1 variant and 0 on the burst.
+                    if (a.sac_source_id != 0) { line += ":src=" + std::to_string(a.sac_source_id); }
+                    if (a.pooled_sac)         { line += ":POOLED"; }
                     if (a.sac_victim_id != 0) { line += ":victim=" + std::to_string(a.sac_victim_id); }
                     // WHICH host an Aura enchants is the ENTIRE content of a land-aura variant.
                     // Without it a 4-wide Wild Growth group renders as four identical "cast"

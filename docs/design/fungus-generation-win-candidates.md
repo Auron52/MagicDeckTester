@@ -174,6 +174,84 @@ Secluded Courtyard:
 `keep-rollout` at 94.4% means the tail is the rollouts themselves, not discovery or the play-digest
 battery — so a per-rollout lever is the one that pays.
 
+## THE BIGGEST FINDING: the 2.29x sac-outlet pool is SILENTLY OFF on the new list
+
+**Not from any code change — from the decklist.** `MTG_SAC_OUTLET_POOL` collapses N interchangeable
+mana outlets onto one COUNT axis (adopted 2026-09-23, measured **2.29x on the heaviest Fungus cell**).
+Its emission site carries an explicit gate:
+
+```cpp
+// THE COLOUR FAN MUST BE A SINGLETON. With several candidate colours the outcome
+// depends on the colour MULTISET and not on the count alone, so a count axis would
+// not be the same enumeration. Those boards stay on the per-source path.
+if (pool_cols.size() == 1)
+```
+
+The OLD list is mono-green, so `ChosenFloatColorCandidates` returns `{G}` and the pool fires. **The
+NEW list plays black** (Blooming Marsh, Peat Bog, Slimefoot, Deathspore Thallid), so the fan is
+`{G, B}`, the gate fails, and **every Utopia Mycon drops back onto the per-source path.**
+
+Measured directly, by rendering `sac_source_id` and a `:POOLED` marker into the heavy dump:
+
+```
+OLD list, mono-green   GROUP size=8 Utopia Mycon [sacForMana:colour=G:src=58:POOLED:victim=1002
+                                                 | sacN=2 | sacN=3 | ... ]   -- ONE group, counts 1..8
+                       POOLED markers in run: 3
+NEW list, splashes B   GROUP size=4 Utopia Mycon [...:src=54:victim=1000 | ...]
+                       GROUP size=4 Utopia Mycon [...:src=55:victim=1000 | ...]   -- one group PER SOURCE
+                       POOLED markers in run: 0
+```
+
+With `distinct_physical_sources=4` for Utopia Mycon, the odometer takes `(1+4)^4` where one pooled
+count axis would do. That is why **Utopia Mycon · SacForMana is 44.0% of all candidate mass**
+(1,021,086 of 2,321,995). **Nothing reports that the pool stopped firing** — it simply does not,
+which is why this survived a deck rebuild unnoticed. The card's own note even predicted it: *"In this
+mono-green deck the fan returns the singleton {G} ... but it stays honest if the deck splashes."*
+
+### The fix the user specified: TWO heuristics
+
+USER: *"The mana sac should just be used as a mana source"* and *"We should have a heuristic for this."*
+
+**1. THE FLOAT COLOUR — this is what re-enables the pool.** Choose the colour by DEMAND instead of
+fanning it, so `pool_cols` is a singleton again. **But note it is a NARROWING, not an identity fold:**
+the fan exists because pools hold typed mana only and a wild token could illegally pay a multicolour
+mix, so the colour is deliberately enumerated rather than pinned. Pinning it can drop a line where the
+other colour was needed later in the same turn. So this is GT-moving and needs its A/B — unlike the
+Wild Growth fold, which was byte-identical.
+
+**2. THE VICTIM — a 3-class ranking, and it is a MODELLING rule, not just a tie-break.** USER, with the
+correction that Shroofus is *last* rather than excluded: *"The only different saprolings would be
+Shroofus Sproutsire (should be kept), 1/1 saprolings and Saproling Burst saprolings. Most of the time
+we should prioritize 1/1 saprolings unless the Saproling Burst saprolings are the same size or smaller.
+(or 1 P/T larger in the second main)"* / *"I don't mean never shroofus, but Shroofus should be the last
+to go."*
+
+The card text is what makes this ordering correct:
+
+* **Saproling Burst tokens** — *"This token's power and toughness are each equal to the number of fade
+  counters on Saproling Burst"*, and *"When this enchantment leaves the battlefield, destroy all tokens
+  created with it."* Burst has Fading 7, losing a counter per upkeep, so these tokens **shrink every
+  turn and are doomed when Burst fades out.** That is why their SIZE decides: a small one is nearly
+  free fodder, a large one is a real attacker worth keeping while Burst lives. (The `3x 0/0 Saproling
+  Token` on the heavy boards is this — Burst at zero counters.)
+* **Shroofus Sproutsire** — a 1/1 **Saproling** itself, so legal fodder, but it is the deck's
+  exponential engine (*"Whenever a Saproling you control deals combat damage to a player, create that
+  many 1/1 green Saproling creature tokens"*). Hence last, not forbidden.
+
+Resulting sacrifice order (first to go → last):
+
+1. **Saproling Burst tokens at P/T <= 1/1** (first main), or **<= 2/2 in the second main** — doomed,
+   and in the second main they will not attack again this turn anyway.
+2. **Plain 1/1 Saproling tokens.**
+3. **Saproling Burst tokens larger than that** — keep as attackers while Burst lives.
+4. **Shroofus Sproutsire** — last.
+
+This belongs in `CanonicalSacVictim`, which is also the function `victims_agree` calls per pool
+member — so a deterministic shared ranking keeps every Mycon agreeing and keeps the pool eligible.
+**On the boards measured the victims ALREADY agreed** (both `src=54` and `src=55` chose `victim=1000`),
+so the victim rule is a PLAY-QUALITY win plus insurance; the colour fan is what actually blocks pooling
+today. Those two should not be conflated when either is measured.
+
 ## Candidate wins, most promising first
 
 ### A. A TARGETED tail cap, not a bigger global `MTG_DECISION_WORK_X`
