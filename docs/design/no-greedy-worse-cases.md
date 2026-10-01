@@ -192,7 +192,7 @@ each checked on the committed-tree binary and on the step-27 snapshot at the sam
 | hinata2hg ov d5 s7007 gi75 | 5 | 6 | 6 | 6 | pre-existing |
 | hinata2hg ov d5 s6006 gi61 | 5 | 6 | 5 | 6 | lost at a step <= 27; OPEN |
 | hinata ov d5 s5005 gi13 | 6 | 7 | 6 | 7 | Gamble lockstep: the executor's index pick discards a Reality Spasm the verified T5 line casts; step 30 (canonical pick) -> T5 |
-| hinata reg d5 s2002 gi25 | 5 | 6 | 5 | 5 | **OPEN -- a verified line the executor does not realise.** The T1 search (searched depth 5, verified) commits a T5 win; at T5 the executor casts Soulfire Eruption, takes the line's EMPTY continuation at its look, then pops a SECOND main-2 phase (Island + Reality Spasm x6 + Gamble, without the Expressive Iteration the line holds) and the kill does not happen -> T6. Not the Gamble discard: search and executor both shed Ornithopter on the same hand. Exposed, not caused, by step 29a (the full Ponder order changes the T1 line: Preordain where the committed tree casts Ponder). Under step 30's canonical pick the game realises T5 |
+| hinata reg d5 s2002 gi25 | 5 | 6 | 5 | 5 | **FIXED (step 31, `rollout-executor-lockstep.md` #10): an unpaid executor cast replayed the next breakpoint segment.** The T1 search (searched depth 5, verified) commits a T5 win; at T5 the executor casts Soulfire Eruption, takes the line's EMPTY continuation at its look, then pops a SECOND main-2 phase (Island + Reality Spasm x6 + Gamble, without the Expressive Iteration the line holds) and the kill does not happen -> T6. Not the Gamble discard: search and executor both shed Ornithopter on the same hand. Exposed, not caused, by step 29a (the full Ponder order changes the T1 line: Preordain where the committed tree casts Ponder). Under step 30's canonical pick the game realises T5 |
 
 Per-deck searched cells still above GT -- all churn (their slower games recover at d8 b0): th reg +5,
 antilife ov +4, antilife2hg ov +3 / reg +2, slivers reg +2, mirrorwing ov +1, stompy ov +1,
@@ -203,3 +203,10 @@ Gamble game becomes a DIFFERENT game -- the d8-b0 recovery test does not apply t
 that failed to recover on the first candidate (which carried step 30) all recovered on that binary with
 only the pick reverted (32/33; the 33rd is gi61 above), and hinata_d0 matched GT exactly. So it is its own
 commit with its own GT.
+
+**Step 31 (2026-10-01): gi25 ROOT-CAUSED and FIXED.** The executor armed a committed-line breakpoint
+replay after a cast it could not pay, which the rollout never does (`apply_one` returns first), so the
+continuation recorded for the Gamble cast replayed at a failed Expressive Iteration. Now gated on a paid
+cast, committed-line replay only (`rollout-executor-lockstep.md` #10). gi25 -> T5 under the index pick it
+was found on. All three tiers turn-neutral (one regression cell's play digest moved at the same score).
+The other eight open games are unchanged by it.

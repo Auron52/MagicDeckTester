@@ -3782,6 +3782,18 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
                                    a.loyalty_ability);
         log_loyalty_if_fired(b, a.loyalty_ability);
     };
+    // Did the last cast_by_name actually cast? ApplyPlanDirect's apply_one RETURNS on a failed
+    // payment, before any breakpoint arming, so a cast the executor could not pay must not arm one
+    // either: the committed line stamps its breakpoint records by the ordinal of breakpoints that
+    // FIRED (rec_bp_ord), and counting an unpaid cast shifts every later segment. Measured:
+    // hinata reg d5 s2002 gi25 -- the line's T5 main 2 tries Expressive Iteration unpaid (both
+    // worlds fail it), the executor replayed the continuation recorded for the Gamble cast at that
+    // failed cast instead, and the verified T5 kill played out as T6.
+    // SCOPED TO THE COMMITTED-LINE REPLAY (fd_plan_committed), which is where the lockstep contract
+    // lives. The re-solving fallback (no committed line, and the d0 runner) has no rollout twin, and it
+    // LEANS on re-solving after a no-op cast to find another play: gating it too cost dragonstorm d0
+    // +1351 turns over the overnight tier and dragonstorm searched +4.
+    bool last_cast_paid = true;
     auto cast_by_name = [&](const std::string& name, const std::string& tutor_target = "",
                             int chosen_x = 0, int own_targets = 0, int ponder_keep = -1,
                             int crackle_targets = -1,   // -1 = legacy auto-max discount (see Action::crackle_targets)
@@ -3825,6 +3837,7 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
                 it = c;
             }
         }
+        last_cast_paid = false;
         if (it == ap.hand.end()) { m_pending_twobrid = 0; return; }   // consume-once even on a miss
         ManaPool available = AvailableManaPool(state);
         // MTG_EXEC_TAP_TRACE=1 (diagnosis only, default off): which permanents this EXECUTOR cast
@@ -3844,10 +3857,16 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
             std::fprintf(stderr, "\n");
         }
         const std::string cast_name = it->m_name.str();
+        const int         cast_num  = it->m_number;
         CastSpellFromHand(state, *it, available, 0, tutor_target, chosen_x, own_targets, ponder_keep,
                           crackle_targets, splice_count, chosen_float_color, enchant_target, free_cast,
                           bestow, replicate_count, convoke_green, convoke_other, phyrexian_life, evoke,
                           adventure);
+        // Paid <=> the card left the hand (an unpayable cast leaves it there). An unnumbered card
+        // cannot be told apart from a copy, so it keeps the old always-armed reading.
+        last_cast_paid = cast_num <= 0
+            || std::none_of(ap.hand.begin(), ap.hand.end(),
+                            [&](const Card& c) { return c.m_number == cast_num; });
         if (s_exec_tap_trace)
         {
             std::string line = "[exec-tap] T" + std::to_string(state.turn_number) + " " + cast_name + " tapped:";
@@ -4751,13 +4770,14 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
             if (a.kind != Action::Kind::CastFromHand || a.sacrifice_land) { continue; }
             if (a.alt_cost) { cast_alt(a.card_name, a.alt_lifegain); resolve_now(); continue; }
             m_pending_devour_count = a.devour_count; m_pending_twobrid = a.twobrid_colored; cast_by_name(a.card_name, a.tutor_target, a.chosen_x, a.soulfire_own_targets, a.ponder_keep, a.crackle_targets, a.splice_count, a.chosen_float_color, a.enchant_target, a.free_cast, a.bestow, a.replicate_count, a.convoke_green, a.convoke_other, a.phyrexian_life, a.evoke, a.adventure); note_draw_engine(a.card_name); resolve_now(); walker_cast_activation(a); fire_unlock();
+            const bool cast_paid = last_cast_paid;   // before any nested cast overwrites it
             // put_in_hand_armed() runs FIRST and unconditionally: it also arms the depth-0
             // second pass, which `s_full_depth &&` would short-circuit away.
             const bool put_armed = put_in_hand_armed(a.card_name);
             if (s_full_depth && (is_draw_engine(a.card_name) || put_armed))
             {
                 if (fd_plan_committed)
-                { replay_segment(); }
+                { if (cast_paid) { replay_segment(); } }
                 else
                 {
                     rdb_site = CardDatabase::Instance().Lookup(a.card_name);
@@ -4778,7 +4798,7 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
             else if (stage_draw_break(a.card_name)) { staged_break = true; break; }
             // PARTITION truncation: the continuation just decided the rest of this phase, so the
             // plan's remaining casts are not ours (see bp_trunc_exec). Mirrors ApplyPlanDirect.
-            if (equip_bp_truncates(a.card_name)) { bp_trunc_exec = true; break; }
+            if ((cast_paid || !fd_plan_committed) && equip_bp_truncates(a.card_name)) { bp_trunc_exec = true; break; }
         }
     }
     else
@@ -4923,13 +4943,14 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
                  && !ResolveProvider(state).CastEnablerFirst(state, a.card_name))
         {
             m_pending_devour_count = a.devour_count; m_pending_twobrid = a.twobrid_colored; cast_by_name(a.card_name, a.tutor_target, a.chosen_x, a.soulfire_own_targets, a.ponder_keep, a.crackle_targets, a.splice_count, a.chosen_float_color, a.enchant_target, a.free_cast, a.bestow, a.replicate_count, a.convoke_green, a.convoke_other, a.phyrexian_life, a.evoke, a.adventure); note_draw_engine(a.card_name); resolve_now(); walker_cast_activation(a); fire_unlock();
+            const bool cast_paid = last_cast_paid;   // before any nested cast overwrites it
             // put_in_hand_armed() runs FIRST and unconditionally: it also arms the depth-0
             // second pass, which `s_full_depth &&` would short-circuit away.
             const bool put_armed = put_in_hand_armed(a.card_name);
             if (s_full_depth && (is_draw_engine(a.card_name) || put_armed))
             {
                 if (fd_plan_committed)
-                { replay_segment(); }
+                { if (cast_paid) { replay_segment(); } }
                 else
                 {
                     rdb_site = CardDatabase::Instance().Lookup(a.card_name);
@@ -4950,7 +4971,7 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
             else if (stage_draw_break(a.card_name)) { staged_break = true; break; }
             // PARTITION truncation: the continuation just decided the rest of this phase, so the
             // plan's remaining casts are not ours (see bp_trunc_exec). Mirrors ApplyPlanDirect.
-            if (equip_bp_truncates(a.card_name)) { bp_trunc_exec = true; break; }
+            if ((cast_paid || !fd_plan_committed) && equip_bp_truncates(a.card_name)) { bp_trunc_exec = true; break; }
         }
     }
     }
@@ -5001,6 +5022,7 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
         }
         if (a.alt_cost) { cast_alt(a.card_name, a.alt_lifegain); resolve_now(); continue; }
         m_pending_devour_count = a.devour_count; m_pending_twobrid = a.twobrid_colored; cast_by_name(a.card_name, a.tutor_target, a.chosen_x, a.soulfire_own_targets, a.ponder_keep, a.crackle_targets, a.splice_count, a.chosen_float_color, a.enchant_target, a.free_cast, a.bestow, a.replicate_count, a.convoke_green, a.convoke_other, a.phyrexian_life, a.evoke, a.adventure); note_draw_engine(a.card_name); resolve_now(); walker_cast_activation(a); fire_unlock();
+        const bool cast_paid = last_cast_paid;   // before any nested cast overwrites it
         // SITE 6 (MTG_EQUIP_DRAW_BP_INLINE) is the first breakpoint class that can appear in a
         // CLEAN set: the branch comment above ("No draw engine here, so no breakpoint handling is
         // needed") held only because every other class carries an OrderingOpaque param and an
@@ -5016,7 +5038,7 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
         if (s_full_depth && equip_bp_truncates(a.card_name))
         {
             if (fd_plan_committed)
-            { replay_segment(); }
+            { if (cast_paid) { replay_segment(); } }
             else
             {
                 rdb_site = CardDatabase::Instance().Lookup(a.card_name);
@@ -5034,7 +5056,7 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
                 resolve_draw_breakpoint(0);
             }
         }
-        if (equip_bp_truncates(a.card_name)) { bp_trunc_exec = true; break; }
+        if ((cast_paid || !fd_plan_committed) && equip_bp_truncates(a.card_name)) { bp_trunc_exec = true; break; }
     }
     }
     }

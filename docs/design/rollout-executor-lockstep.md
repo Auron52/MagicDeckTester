@@ -479,3 +479,23 @@ The land **selection** heuristics are not twins and were left alone: the executo
 (untapped/tapped x multi/any, with a Reliquary pre-pass and the closing-window sub-order) and the
 rollout's `SimulateLandPlay` two-pass fallback (multi-colour, then any) are genuinely different
 policies. Unifying those is a behaviour change to be measured, not a refactor.
+
+## #10 — an UNPAID executor cast armed a breakpoint the rollout never opened (2026-10-01)
+
+`ApplyPlanDirect`'s `apply_one` returns on a failed payment, before any breakpoint arming. The
+executor's cast loops called `cast_by_name(...)` (void) and then armed / replayed the draw breakpoint on
+`is_draw_engine(name)` regardless of whether the cast happened -- the no-progress guard at
+`kMaxDrawBreakpointCalls` already recorded the symptom ("fires on is_draw_engine(NAME) regardless of
+whether the cast happened"). In a committed line the replay is per SEGMENT (`rec_bp_ord`: the i-th
+breakpoint that FIRED replays the records stamped i), so one unpaid cast shifts every later segment.
+
+Measured on hinata regression d5 s2002 gi25 (d8 unbounded): the verified T1 line's T5 main 2 tries
+Expressive Iteration unpaid (both worlds fail it, identically), then Reality Spasm X=6 untaps the lands,
+Gamble resolves, and the continuation recorded for Gamble casts Expressive Iteration -> Crackle with Power
+for the kill. The executor replayed that continuation at the FAILED Expressive Iteration instead -- with
+no mana, so it failed again -- and the kill played out as T6 (GT T5). Fix: `cast_by_name` records whether
+the card left the hand (`last_cast_paid`); every arming site, the site-6 partition truncation included,
+reads a per-cast snapshot of it taken before any nested cast -- but ONLY for the committed-line replay
+(`fd_plan_committed`), where the lockstep contract lives. The re-solving fallback (no committed line, and
+the d0 runner) has no rollout twin and leans on re-solving after a no-op cast to find another play:
+gating it as well cost dragonstorm d0 +1351 turns over the overnight tier. gi25: T5.
