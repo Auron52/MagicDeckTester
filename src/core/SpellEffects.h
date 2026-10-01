@@ -9157,7 +9157,34 @@ inline bool ApplyGraveyardPlayAbility(GameState& state, int controller, int sour
 //     a Celes-class gy-enter watcher CLOSES the persist loop; fodder value can never be worth
 //     it. Above the lords' tier on purpose. Param-gated -> byte-identical elsewhere;
 //   - sac the SOURCE last.
-inline int SacExpendabilityRank(const Permanent& v, int source_id)
+// MTG_SAC_VICTIM_DOOMED -- prefer a token whose CREATOR will destroy it. DEFAULT OFF; =1 enables.
+// MTG_SAC_VICTIM_ENGINE -- defer a combat-damage TOKEN ENGINE as fodder. DEFAULT OFF; =1 enables.
+// Both are USER-specified play heuristics (2026-10-01) and both MOVE PLAY, so they are measured
+// before adoption rather than defaulted on.
+inline bool SacVictimDoomedOn() { static const bool v = EnvOn("MTG_SAC_VICTIM_DOOMED"); return v; }
+inline bool SacVictimEngineOn() { static const bool v = EnvOn("MTG_SAC_VICTIM_ENGINE"); return v; }
+
+// The m_numbers of permanents that DESTROY THEIR OWN TOKENS when they leave the battlefield
+// (Saproling Burst: `fade_ltb_destroys_created_tokens`). Computed ONCE per ranking pass and passed
+// into SacExpendabilityRank, because the alternative -- resolving each token's creator inside the
+// rank -- is an O(board) scan inside an O(board log board) sort, i.e. exactly the board-width
+// quadratic this deck has already been bitten by four times. Returns empty for every deck holding
+// no such card, so the membership test below is free there.
+inline std::vector<int> DoomedTokenCreators(const GameState& state)
+{
+    std::vector<int> out;
+    if (!SacVictimDoomedOn()) { return out; }
+    for (const Permanent& p : state.battlefield)
+    {
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+        if (d != nullptr && d->params.fade_ltb_destroys_created_tokens)
+        { out.push_back(p.card.m_number); }
+    }
+    return out;
+}
+
+inline int SacExpendabilityRank(const Permanent& v, int source_id,
+                               const std::vector<int>* doomed_creators = nullptr)
 {
     int rank = v.EffectivePower();                 // base: sac the weakest first
     const CardDefinition* d = CardDatabase::Instance().LookupCached(v.card);
@@ -9171,8 +9198,38 @@ inline int SacExpendabilityRank(const Permanent& v, int source_id)
     const bool combo_enabler = d && (d->params.prevents_minus_counters
                                   || d->params.reduces_minus_counters_by_one
                                   || d->params.other_creature_gy_enter_team_counters > 0);
+    // A COMBAT-DAMAGE TOKEN ENGINE (Shroofus Sproutsire: "whenever a Saproling you control deals
+    // combat damage to a player, create that many 1/1 Saprolings"). It is a 1/1 SAPROLING, so it is
+    // legal fodder for a Saproling-eating outlet and its power alone ranks it alongside the tokens
+    // it makes -- but it is the deck's exponential engine. USER 2026-10-01: *"Shroofus Sproutsire
+    // (should be kept)"*, corrected to *"I don't mean never shroofus, but Shroofus should be the
+    // last to go."* So it is DEFERRED, not excluded -- the same treatment as a lord, which is what
+    // it functionally is. Same tier as `scaling` deliberately: it is a board-scaling payoff, and it
+    // stays below the persist-loop `combo_enabler` tier.
+    const bool token_engine = SacVictimEngineOn() && d
+                           && d->params.combat_damage_tokens_per_damage > 0;
+
+    // A DOOMED token: its creator destroys it on leaving (Saproling Burst). Fading removes a counter
+    // per upkeep and the token's P/T IS the counter count, so these bodies SHRINK every turn and die
+    // when the creator fades out -- a clock the board cannot stop. They are therefore strictly more
+    // expendable than a permanent body of the same size.
+    // THE MAGNITUDE IS THE USER'S RULE, not a taste: *"Most of the time we should prioritize 1/1
+    // saprolings unless the Saproling Burst saprolings are the same size or smaller."* Base rank is
+    // EffectivePower, so a -1 makes the doomed token win at EQUAL power (same size -> eat the doomed
+    // one) and lose at +1 power (bigger -> keep it as an attacker), which is exactly that sentence.
+    // The user's second clause -- *"(or 1 P/T larger in the second main)"* -- needs the PHASE, which
+    // this rank does not receive; it is recorded as the follow-up rather than guessed at here.
+    bool doomed = false;
+    if (doomed_creators != nullptr && !doomed_creators->empty()
+        && v.is_token && v.created_by_number != 0)
+    {
+        doomed = std::find(doomed_creators->begin(), doomed_creators->end(),
+                           v.created_by_number) != doomed_creators->end();
+    }
+
     if (v.is_token || self_replacing) { rank -= 1000; }    // tokens & Mogg: most expendable
-    if (scaling)                      { rank += 1000; }    // lords / scaling payoffs: keep (defer)
+    if (doomed)                       { rank -= 1; }       // doomed fade token: eat before an equal-size permanent
+    if (scaling || token_engine)      { rank += 1000; }    // lords / scaling payoffs / token engines: keep (defer)
     if (combo_enabler)                { rank += 5000; }    // loop enablers: keep hardest
     if (v.card.m_number == source_id) { rank += 100000; }  // sac the source last
     return rank;
@@ -9202,6 +9259,7 @@ inline int CanonicalSacVictim(const GameState& state, int controller, int source
     //   - sac the outlet SOURCE last.
     // Matters most for the Skirk multi-sac burst, which sacrifices several victims in one turn.
     int victim_id = -1; int victim_rank = std::numeric_limits<int>::max();
+    const std::vector<int> doomed = DoomedTokenCreators(state);
     for (const Permanent& v : state.battlefield)
     {
         if (v.controller_index != controller) { continue; }
@@ -9230,7 +9288,7 @@ inline int CanonicalSacVictim(const GameState& state, int controller, int source
         // enchantment", not "or an enchantment of that type").
         if (!need_sub.empty() && v.card.IsCreature() && !CardHasSubtype(v.card, need_sub))
         { continue; }
-        const int rank = SacExpendabilityRank(v, source_id);
+        const int rank = SacExpendabilityRank(v, source_id, &doomed);
         if (rank < victim_rank) { victim_rank = rank; victim_id = v.card.m_number; }
     }
     return victim_id;
@@ -9915,11 +9973,12 @@ struct DevourDeath { Card card; bool was_token; int minus_counters; };
 inline std::vector<int> DevourRankOrder(const GameState& state, int controller)
 {
     std::vector<std::pair<int,int>> ranked;   // (expendability rank, battlefield index)
+    const std::vector<int> doomed = DoomedTokenCreators(state);
     for (int i = 0; i < static_cast<int>(state.battlefield.size()); ++i)
     {
         const Permanent& v = state.battlefield[i];
         if (v.controller_index != controller || !v.card.IsCreature()) { continue; }
-        ranked.emplace_back(SacExpendabilityRank(v, /*source_id=*/0), i);
+        ranked.emplace_back(SacExpendabilityRank(v, /*source_id=*/0, &doomed), i);
     }
     std::sort(ranked.begin(), ranked.end());
     std::vector<int> order;
@@ -21986,10 +22045,13 @@ inline bool SacPayFodderCostsAttack(const GameState& state, const Permanent& p)
     return power > 0;
 }
 
-inline int SacPayFodderRank(const GameState& state, const Permanent& p, const SacPayOutlet& outlet)
+inline int SacPayFodderRank(const GameState& state, const Permanent& p, const SacPayOutlet& outlet,
+                            const std::vector<int>* doomed_creators = nullptr)
 {
+    // The caller HOISTS the doomed-creator list: this is called once per candidate body inside a
+    // battlefield loop, so computing it here is an O(board^2) pass (measured +48% CPU).
     return 500 + (SacPayFodderCostsAttack(state, p) ? 10000 : 0)
-               + SacExpendabilityRank(p, outlet.source_id);
+               + SacExpendabilityRank(p, outlet.source_id, doomed_creators);
 }
 
 // How many activations the board can still pay for. NOTE IT COUNTS TAPPED BODIES TOO: sacrificing

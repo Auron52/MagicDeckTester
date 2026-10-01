@@ -766,6 +766,11 @@ static bool TapForCostSharedOnceImpl(GameState& state, const ManaCost& cost_in, 
                 }
             }
             int ff_i = -1, ff_rank = 1 << 30;   // best kind-2 filter candidate (FeedFilterFirstOn reroute)
+            // HOISTED out of the per-permanent loop below: SacPayFodderRank is called once per
+            // candidate body, and resolving the doomed-token creators inside it made the whole pass
+            // O(board^2) -- measured at +48% CPU on Fungus candidate B before this hoist. Empty
+            // whenever MTG_SAC_VICTIM_DOOMED is off, so the default path does not even scan.
+            const std::vector<int> pay_doomed = DoomedTokenCreators(state);
             for (int i = 0; i < bn; ++i)
             {
                 Permanent& p = state.battlefield[i];
@@ -878,7 +883,7 @@ static bool TapForCostSharedOnceImpl(GameState& state, const ManaCost& cost_in, 
                 // §2b fodder is ranked by SacPayFodderRank, whose base 500 sits behind every real
                 // source on the board -- the user's "highest level of deferral", expressed as a
                 // tap-order rank rather than as a rule anyone has to enforce.
-                int rank = (kind == 5) ? SacPayFodderRank(state, p, sac_outlet)
+                int rank = (kind == 5) ? SacPayFodderRank(state, p, sac_outlet, &pay_doomed)
                                        : ResolveProvider(state).ManaSourceRank(state, *def);
                 // Filter {C} mode on a generic/{C} pip: least flexible mana on the board, so it
                 // spends just after a true {C}-only source and BEFORE any coloured land -- see

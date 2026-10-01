@@ -23932,11 +23932,15 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
                 if (v.controller_index == state.active_player_index
                     && v.card.IsCreature()) { pod_victim_idx.push_back(vi); }
             }
+            // Hoisted OUT of the comparator: the sort calls it O(n log n) times and it is an
+            // O(board) scan. Empty for every deck without a token-destroying creator, and empty
+            // whenever MTG_SAC_VICTIM_DOOMED is off, so this is free on the default path.
+            const std::vector<int> pod_doomed = DoomedTokenCreators(state);
             std::stable_sort(pod_victim_idx.begin(), pod_victim_idx.end(),
                 [&](int a, int b)
                 {
-                    return SacExpendabilityRank(state.battlefield[a], /*source_id=*/-1)
-                         < SacExpendabilityRank(state.battlefield[b], /*source_id=*/-1);
+                    return SacExpendabilityRank(state.battlefield[a], /*source_id=*/-1, &pod_doomed)
+                         < SacExpendabilityRank(state.battlefield[b], /*source_id=*/-1, &pod_doomed);
                 });
             // MTG_POD_VICTIM_TOP (staged 2026-09-06, default 0 = off = every victim class): keep
             // only the N most-expendable victim CLASSES per pod -- persist bodies always emit
