@@ -416,6 +416,17 @@ ranker also serves as rollout/leaf policy, so it is not purely cosmetic.
 
 ## The branching lead (why the deck is slow, with evidence from the sweep)
 
+> **SUPERSEDED 2026-10-01 — read `free-equip-dominance-collapse.md` instead.** This section's lead is
+> wrong in its central attribution, and the error is worth naming: the 717-plan / 120-ordering shape
+> below was measured on the **viewer** path. `OrderingSearchEnabled` is false unless
+> `MTG_SEARCH_ORDER`, `DecisionUnpruned(SearchOrder)` (viewer only) or `WantsCastOrderingSearch`
+> (Dragonstorm only), so **the autonomous search never pays the cast-ordering term at all**. Four
+> candidate collapses were then built or armed and all four refuted on 12 pooled seeds, and the
+> deck's own funnel rejects **0.00% of 36,672,476** subset visits — so this is not a
+> branching-redundancy problem and the residual is per-node. One collapse made the deck **10.9x
+> dearer** in walk work at identical play, because kitty's greedy walk is unpriced by the budget.
+> The numbers below are kept as the record of what was believed, not as a live lead.
+
 The sweep's agents independently reported the plan-space shape, and it lines up exactly with the
 performance finding:
 * turn 1 with five castable Equipment: **717 plans**, of which 120 are the orderings of one
