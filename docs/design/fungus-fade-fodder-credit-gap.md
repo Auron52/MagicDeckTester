@@ -243,8 +243,63 @@ toughness SBA on arrival."*
    *upper* bound on this turn's swing with lords and anthems included, and an undercount there deletes
    a win. Worth doing only if the m1 emissions are shown to cost real wall at d0 / in playout tails,
    where the phase pin stands down.
-6. Smaller, same family, not fixed here: the **spore** branch does not apply the token doubler, so it
-   under-credits under a Doubling Season — the same defect, in the same forbidden direction.
+6. ~~The **spore** branch does not apply the token doubler.~~ **FIXED 2026-10-01** —
+   `MTG_SAC_FODDER_SPORE_DOUBLER`, default ON. See §5 below.
+7. **Find a regime with two co-selected creature-sac outlets, or conclude the guard is play-inert.**
+   This is now the single open question for BOTH credits, fade and spore, and §5 is why: the
+   reservation ledger logged **zero rejects** across 40 games of searched Fungus, so neither credit can
+   change a decision there however wrong it is. The fade defect was caught in keep-model discovery at
+   d1/b3 on candidate B — a generation stage, not something to run casually (it writes a live keep
+   profile; use the `MTG_KEEP_OUT_*` redirects). Until that run happens, both fixes are correct and
+   latent, and should be described that way.
+
+---
+
+## §5 The spore twin: `MTG_SAC_FODDER_SPORE_DOUBLER` (default ON)
+
+The same defect as §3's, on the other card, in the same forbidden direction. The credit was
+
+```
+k x spore_creates_tokens          // no token doubler
+```
+
+while the apply mints the Saprolings through `CreateTokens`, whose own parameter is documented as
+*"tokens to make BEFORE doubling"*. The card's apply site states the throughput outright: *"under one
+Doubling Season this card's throughput is 4x: two spores per upkeep AND two Saprolings per
+activation."* So a pop under a Season really puts **twice** the bodies on the battlefield and the guard
+credited half — an **under**-count, which rejects a plan the deck can actually play.
+
+Fixed as a shared helper `SporeActivationBodies`, for the reason `FadeActivationLiveBodies` is one: the
+count is computed at **two** places that must agree (`plan_fodder_credit` and `BuildFodderIndex`'s
+aggregate mirror), and `MTG_SAC_FODDER_AGG_VERIFY` only proves those two agree with *each other* — it
+cannot notice that both are wrong the same way. (`plan_can_add`'s spore clause is untouched: it is an
+existence test, and a doubler cannot turn a body that exists into one that does not. And unlike the
+fade twin there is no survival test, because a spore Saproling is a plain 1/1 whose existence does not
+depend on the source's counters.)
+
+### "Byte-identical" has three causes, and here it is the second one
+
+Smoke 101/101 and regression 140/140, `play-changed 0`, scenarios 118/118 — same as the fade fix. But
+*why* is now measured rather than assumed, which the fade entry could not say:
+
+| 40 games, Fungus, d3/b150, `MTG_FODDER_TRACE=1` | |
+|---|---|
+| `SporeActivationBodies` calls | **88,616** |
+| …of those, calls where a doubler was live and the correction **changed the number** | **2,346** |
+| reservation-ledger **rejects logged** (either arm) | **0** |
+
+So the path is far from dead — it runs 88,616 times and the arithmetic really moves 2,346 times — but
+**no decision depends on it at this cell**, because the ledger's reject needs two co-selected
+creature-sac outlets and searched Fungus never assembles one. That is cause #2 (*never ran*, at the
+level that matters) and not cause #1 (*no effect*), and the distinction is the whole point: a future
+run can now tell them apart, because the tally prints
+`[fodder] spore-credit calls=N doubled=M` at exit and says `(correction NEVER BOUND in this run)` when
+`M` is zero.
+
+**What this says about the fade fix too.** Its 510-of-4,000 over-rejects were observed in keep-model
+discovery at d1/b3, not in play — and this measurement explains why the suite could never have shown
+them: in searched play there are no rejects *at all* to be wrong. Both credits are correct-and-latent,
+and item 7 is the one run that could change that.
 
 ---
 

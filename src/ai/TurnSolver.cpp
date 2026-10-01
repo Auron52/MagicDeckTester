@@ -9982,10 +9982,63 @@ static int FadeActivationLiveBodies(const GameState& state, const Action& a,
     // Tokens per activation AFTER the token doubler: CreateToken is where Doubling Season's token
     // half hooks, so one Season is two Saprolings per activation. Counting it is the GENEROUS
     // direction, which is the one this guard is allowed to err in. (The spore branch below does NOT
-    // apply the shift and so under-credits under a Season -- the same defect, smaller, and a
-    // separate play-affecting change; it is recorded in the design doc, not fixed here.)
+    // apply the shift and so under-credits under a Season -- the same defect, smaller. FIXED
+    // 2026-10-01 in SporeActivationBodies, below.)
     return k * (std::max(1, d.params.fade_creates_tokens)
                 << DoublerShift(state, state.active_player_index, /*for_tokens=*/true));
+}
+
+// The spore pop's twin of the above, and it exists for the SAME defect in the SAME direction: the
+// credit was `k x spore_creates_tokens` with no token doubler, while the apply mints the Saprolings
+// through CreateTokens, whose own parameter is documented as "tokens to make BEFORE doubling". So
+// under one Doubling Season a pop really puts TWICE the bodies on the battlefield and the guard
+// credited half -- which is an UNDER-count, and an under-count here rejects a plan the deck can
+// actually play. The card's apply site spells the throughput out: *"under one Doubling Season this
+// card's throughput is 4x: two spores per upkeep AND two Saprolings per activation."*
+//
+// A HELPER AND NOT TWO INLINE SHIFTS, for the reason FadeActivationLiveBodies is one: the COUNT is
+// computed at two places that must agree -- plan_fodder_credit and BuildFodderIndex's aggregate
+// mirror -- and MTG_SAC_FODDER_AGG_VERIFY only proves those two agree with EACH OTHER, so it cannot
+// notice that both are wrong the same way. (plan_can_add's spore clause is untouched: it is an
+// EXISTENCE test, and the doubler cannot turn a body that exists into one that does not.)
+//
+// NO SURVIVAL TEST, unlike the fade twin: a spore Saproling is a plain 1/1 whose existence does not
+// depend on the source's counters, so there is no 0/0-swept-on-arrival case to exclude.
+//
+// MTG_SAC_FODDER_SPORE_DOUBLER=0 is the arm. Default ON. It is separate from the fade flag because
+// it is a separate defect on a separate card and has to be attributable on its own.
+//
+// AND IT CARRIES ITS OWN REACHABILITY COUNTER, because "the suite is byte-identical" has three
+// causes -- no effect, NEVER RAN, or backwards -- and for a correction like this the second is by far
+// the likeliest. Measured 2026-10-01: the reservation ledger logged ZERO rejects across 40 games of
+// Fungus at d3/b150, so in searched play this credit cannot change a decision at all; the regime
+// where the sibling fade defect was caught is keep-model discovery at d1/b3 on candidate B, which is
+// a generation stage and is not run casually. MTG_FODDER_TRACE=1 prints the tally at exit so a future
+// run can say which of the three it is instead of guessing.
+static int SporeActivationBodies(const GameState& state, const Action& a, const CardDefinition& d)
+{
+    static const bool s_on = EnvOn("MTG_SAC_FODDER_SPORE_DOUBLER", true);
+    const int k    = std::max(1, a.chosen_x);
+    const int ntok = std::max(1, d.params.spore_creates_tokens);
+    // The OFF arm must not even CALL DoublerShift, so it is byte-identical to the pre-fix form.
+    if (!s_on) { return k * ntok; }
+    const int shift = DoublerShift(state, state.active_player_index, /*for_tokens=*/true);
+    static const bool s_trace = EnvOn("MTG_FODDER_TRACE");
+    if (s_trace)
+    {
+        struct Tally {
+            std::atomic<long long> calls{0}, doubled{0};
+            ~Tally() {
+                std::fprintf(stderr, "[fodder] spore-credit calls=%lld doubled=%lld%s\n",
+                             calls.load(), doubled.load(),
+                             doubled.load() == 0 ? "   (correction NEVER BOUND in this run)" : "");
+            }
+        };
+        static Tally s_t;
+        s_t.calls.fetch_add(1, std::memory_order_relaxed);
+        if (shift > 0) { s_t.doubled.fetch_add(1, std::memory_order_relaxed); }
+    }
+    return k * (ntok << shift);
 }
 
 // Inert for every deck without two co-selected creature-sac outlets -> byte-identical.
@@ -10196,8 +10249,7 @@ static bool SubsetOversubscribesSacFodder(const GameState& state,
                     && a.ability_mode == Action::AbilityMode::SporeSaproling
                     && matches(d->params.spore_token_subtypes))
                 {
-                    credit += std::max(1, a.chosen_x)
-                            * std::max(1, d->params.spore_creates_tokens);
+                    credit += SporeActivationBodies(state, a, *d);
                     continue;
                 }
                 // COUNTABLE, AND IT WAS MISSING -- a Saproling Burst fade activation. Same shape as
@@ -10502,7 +10554,9 @@ static void BuildFodderIndex(const GameState& state, const std::vector<Action>& 
             { t.credit[f] += 1; }
             if (spore_pop && matches(d->params.spore_token_subtypes))
             {
-                t.credit[f] += std::max(1, a.chosen_x) * std::max(1, d->params.spore_creates_tokens);
+                // Lockstep twin of plan_fodder_credit's spore clause -- one shared helper, for the
+                // same reason the fade clause below is one.
+                t.credit[f] += SporeActivationBodies(state, a, *d);
                 continue;   // the pop carries its own yield; it never reaches the clause below
             }
             // Lockstep twin of plan_fodder_credit's fade clause -- same helper, same lazily-computed
