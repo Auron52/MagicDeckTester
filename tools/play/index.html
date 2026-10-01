@@ -1403,6 +1403,7 @@ function queueActivation(src, opt){
     : opt.verb==='gyreturn' ? `${src}: tapping and sacrificing it to return ${opt.name} from your graveyard to your hand. Commit the phase to resolve it.`
     : opt.verb==='animate' ? `${src}: animating it — it becomes a creature and can attack this turn. Commit the phase to resolve it.`
     : opt.verb==='taptoken' ? `${src}: tapping it to create a token. Commit the phase to resolve it.`
+    : opt.verb==='taplife' ? `${src}: tapping it to gain 1 life for each Elf on the battlefield. Commit the phase to resolve it.`
     : opt.verb==='pod' ? `${src}: tapping it and sacrificing a creature to fetch ${opt.name}. You pick the victim when committing.`
     : opt.verb==='ooze' ? `${src}: paying {G} to exile ${opt.name} from a graveyard. Commit the phase to resolve it.`
     // Repeatable (no {T}, no sacrifice): say it STACKS, since that is the whole point of the flag
@@ -1887,7 +1888,7 @@ function zoneRow(items, cls='') { return `<div class="row ${cls}">${items.length
 // `dec` null, so the panel is hidden and the decision is unanswerable — the game just stalls on a
 // dead board (how lackey_put/echo/land_entry shipped: panel + wiring + commit written, whitelist
 // never updated). test/viewer_decision_types_check.js pins this list against src/main.cpp.
-const SUBDECISIONS = ['scry','reorder','surveil','target','vial_charge','bounce','sacrifice','dig','discard','divide','expressive_iteration','retrace_discard','replicate','mulligan','bottom','dragon','lightpaws','firebreathe','storage_hold','lackey_put','free_cast','demonstrate','echo','land_entry','tutor_etb','sac_tutor','revive','rummage','attach_host','flicker','treasurify','jitte','choose_color','attack_mode'];
+const SUBDECISIONS = ['scry','reorder','surveil','target','vial_charge','bounce','sacrifice','dig','discard','divide','expressive_iteration','retrace_discard','replicate','mulligan','bottom','dragon','lightpaws','firebreathe','storage_hold','lackey_put','free_cast','demonstrate','echo','land_entry','tutor_etb','sac_tutor','revive','rummage','attach_host','flicker','treasurify','jitte','choose_color','attack_mode','lifegain_counters'];
 // The plan the engine flagged as a go-off, or null.
 //
 // TWO STRENGTHS, and the button says which (USER 2026-09-10: *"we require a much more aggressive,
@@ -2275,6 +2276,7 @@ function renderPlanbar() {
               : p.verb==='gyreturn'  ? ' ⟳ sac → return ' + p.name
               : p.verb==='animate'   ? ' ⟳ animate'
               : p.verb==='taptoken'  ? ' ⟳ make a token'
+              : p.verb==='taplife'   ? ' ⟳ gain life per Elf'
               : p.verb==='equip'     ? ' ⟳ equip'
               : p.verb==='attachall' ? ' ⟳ attach all'
               : p.verb==='sfput'     ? ' ⟳ put from hand'
@@ -3532,6 +3534,7 @@ function renderDecisionPanel(d, dec){
                 || dec==='lightpaws' || dec==='firebreathe' || dec==='storage_hold' || dec==='jitte' || dec==='choose_color'
                 || dec==='lackey_put' || dec==='demonstrate' || dec==='echo' || dec==='tutor_etb' // centered card-image modals
                 || dec==='attack_mode'   // Tectonic Giant's modal attack trigger -- centred, like demonstrate
+                || dec==='lifegain_counters'   // Nykthos Paragon's once-each-turn team wave -- same shape
                 // free_cast is a modal ONLY for the walk-based sites (cascade / Breaching
                 // Dragonstorm / Creative Technique), whose card is in no visible zone. A from-hand
                 // charge (zone:"hand" -- World War Hulk chapter I, Maelstrom Archangel) is a bottom
@@ -3557,6 +3560,7 @@ function renderDecisionPanel(d, dec){
                   : dec==='free_cast' ? freeCastPanelHtml(d)
                   : dec==='demonstrate' ? demonstratePanelHtml(d)
                   : dec==='attack_mode' ? attackModePanelHtml(d)
+                  : dec==='lifegain_counters' ? lifegainCountersPanelHtml(d)
                   : dec==='tutor_etb' ? tutorPanelHtml(d)
                   : dec==='echo' ? echoPanelHtml(d)
                   : dec==='lightpaws' ? lightPawsPanelHtml(d)
@@ -3596,6 +3600,7 @@ function activationPickerHtml(pick){
                    : o.verb==='gyreturn'  ? `Sacrifice — return ${o.name} from your graveyard to your hand`
                    : o.verb==='animate'   ? `Animate ${o.name} — it becomes a creature and can attack`
                    : o.verb==='taptoken'  ? `Tap ${o.name} to create a token`
+                   : o.verb==='taplife'   ? `Tap ${o.name} — gain 1 life for each Elf on the battlefield`
                    // Always the single activation now: the go-off count is filtered out of the click
                    // path (clickActivationOptions) and lives on the COMBO OFF panel button instead,
                    // so this picker only ever offers real, one-at-a-time plays. Click it again to
@@ -4286,6 +4291,8 @@ function wireDecisionPanel(d, dec){
     panel.querySelectorAll('[data-demo]').forEach(b=>b.onclick=()=>commitDemonstrate(d, +b.dataset.demo));
   else if (dec==='attack_mode')
     panel.querySelectorAll('[data-atkmode]').forEach(b=>b.onclick=()=>commitAttackMode(d, +b.dataset.atkmode));
+  else if (dec==='lifegain_counters')
+    panel.querySelectorAll('[data-lgc]').forEach(b=>b.onclick=()=>commitLifegainCounters(d, +b.dataset.lgc));
   else if (dec==='tutor_etb')
     panel.querySelectorAll('[data-opt]').forEach(b=>b.onclick=()=>commitTutor(d, +b.dataset.opt));
   else if (dec==='echo')
@@ -4426,6 +4433,36 @@ function attackModePanelHtml(d){
   });
   h+=`</div>`;
   return h;
+}
+// Nykthos Paragon's "you may put that many +1/+1 counters on each creature you control. Do this only
+// once each turn." A COUNT (how many unused copies to spend on this life-gain event), not a card, so
+// it uses attackModePanelHtml's centred button column -- but the triggering permanent's art is shown
+// so the choice is anchored to the permanent that caused it, per the play-viewer principle that
+// decisions live in the dialog with images, never as text in the history panel.
+// Index 0 is DECLINE and it does NOT consume a use, which is the whole reason this is a real choice:
+// banking the wave for a bigger gain later in the same turn is a line.
+function lifegainCountersPanelHtml(d){
+  const n = (d.copies_unused!=null) ? d.copies_unused : 1;
+  const amt = (d.amount!=null) ? d.amount : 1;
+  const def = (d.heuristic_default!=null) ? d.heuristic_default : n;
+  const opts = d.options || Array.from({length:n+1}, (_,k)=>({index:k,
+    text: k===0 ? 'Decline (the use is NOT consumed)'
+                : `Spend ${k} of ${n}  ->  +${k*amt}/+${k*amt} on each creature you control`}));
+  let h=`<h3>Gained ${amt} life — ${esc(d.source||'')}</h3>`;
+  h+=`<div class="sub">You control <b>${n}</b> unused ${esc(d.source||'copy')}${n===1?'':'s'}. Each one you spend puts <b>${amt}</b> +1/+1 counter${amt===1?'':'s'} on <b>every</b> creature you control. Declining does <b>not</b> use one up — it can still fire on a later gain this turn.</div>`;
+  h+=`<div class="cardrow" style="justify-content:center;margin:8px 0">${cardMini(d.source||'', '', 'normal')}</div>`;
+  h+=`<div class="pbtns" style="justify-content:center;flex-direction:column;align-items:center;gap:6px">`;
+  opts.forEach(o=>{
+    const cls = (o.index===def) ? 'primary' : 'ghost';
+    h+=`<button class="${cls}" data-lgc="${o.index}">${esc(o.text)}${o.index===def?'  ·  AI':''}</button>`;
+  });
+  h+=`</div>`;
+  return h;
+}
+function commitLifegainCounters(d, v){
+  const amt = (d.amount!=null) ? d.amount : 1;
+  pushChoice(d, v, v===0 ? `${d.source||'Lifegain counters'}: declined (use not consumed)`
+                         : `${d.source||'Lifegain counters'}: spent ${v} — +${v*amt}/+${v*amt} on each creature`);
 }
 function commitAttackMode(d, v){
   const opts = d.options || [];

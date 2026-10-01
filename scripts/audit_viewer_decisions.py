@@ -83,6 +83,15 @@ MANIFEST = {
     # WriteAttackModeDecisionJson, GUI attackModePanelHtml). The MODE is also a searched plan
     # axis (Plan::tectonic_mode_choice) for the autonomous engine.
     "attack_trigger_modal":  ("attack_mode",          truthy),
+    # ---- SelesnyaLifegain (2026-09-30) ----
+    # Nykthos Paragon's "you MAY put that many +1/+1 counters on each creature you control. Do this
+    # only once each turn" -> the NEW `lifegain_counters` decision type (chooser
+    # g_play_lifegain_counters_chooser in the shared FireLifegainWatchers, emitter
+    # WriteLifegainCountersDecisionJson, GUI lifegainCountersPanelHtml). It keys on the ONCE-EACH-TURN
+    # param, not on the counter param, because that restriction is what makes the "may" a real
+    # choice: declining does NOT consume the use, so banking the wave for a bigger gain later in the
+    # same turn is a line. Reply = how many unused copies to spend (0 = decline).
+    "lifegain_counters_once_each_turn": ("lifegain_counters", truthy),
     # Mode B's "choose one of them" reuses the existing dig chooser.
     "attack_trigger_impulse_exile": ("dig",           positive),
     # Surtland Flinger's "you may sacrifice another creature" reuses the existing `sacrifice`
@@ -142,6 +151,13 @@ MANIFEST = {
     # picks the subset; the engine keeps the rule's play order). Surfaces as its own `dragon` type
     # (WriteDragonDecisionJson / dragonPanelHtml). Was `main_phase` while the selection was search-only.
     "tutor_to_battlefield":  ("dragon",               truthy),
+    # Genesis Wave: "you may put ANY NUMBER of permanent cards with mana value X or less from among
+    # them onto the battlefield". Reuses the generic multi-pick `dragon` type (the Bilbo precedent)
+    # from PerformGenesisWave; candidates = the already-legal revealed permanents, max_puts =
+    # candidates.size() (no cap), ai_set = DecisionProvider::GenesisWavePutPicks, and an EMPTY reply
+    # STANDS (put nothing). The value of X is a separate `main_phase` plan variant -- the {X}
+    # enumeration branch emits every legal X 0..max under HumanPlayActive().
+    "reveal_x_put_permanents": ("dragon",             truthy),
     "fetch_land_types":      ("main_phase",           truthy),
     # Resplendent Angel's "{3}{W}{W}{W}: +2/+2 and gains lifelink": routed OUT of the greedy combat
     # firebreathing converter and INTO a searched main-phase Action::Kind::ActivatePump (mode 3), so
@@ -195,6 +211,15 @@ MANIFEST = {
     "tap_damage_cost":       ("main_phase",           truthy),
     "tap_investigate_cost":  ("main_phase",           truthy),
     "tap_draw_cost":         ("main_phase",           truthy),
+    # SelesnyaLifegain (2026-09-30). Two more of the same family, both ActivatePermAbility board
+    # activations that ride the main-phase LINE. Neither has a target, an X, a mode or a "may", so
+    # there is nothing to choose AT RESOLUTION -- WHETHER (and which copy) is the whole decision.
+    #   Blighted Steppe "{3}{W},{T},Sacrifice this land: gain 2 life for each creature you control"
+    #   Wellwisher     "{T}: gain 1 life for each Elf on the battlefield"  (the ARMING key is the
+    #                  subtype: tap_lifegain_cost is DERIVED by the loader, so it never appears in
+    #                  cards.json and this gate would never see it)
+    "sac_lifegain_per_creature_cost": ("main_phase",  truthy),
+    "tap_lifegain_per_subtype":       ("main_phase",  truthy),
     # Snow deck (2026-09-06). The gated look-at-top (Scrying Sheets / Frost Augur): the
     # take-vs-decline surfaces via the shared dig chooser at the TapDraw resolution.
     "tap_draw_requires_top_supertype": ("dig",        truthy),
@@ -432,6 +457,18 @@ BOARD_ACTIVATIONS = {
     "gy_return_cost":                            ("verb:gyreturn",  truthy,   "gy_return_cost"),
     "gy_play_cost":                              ("verb:gyplay",    truthy,   None),  # Kaldring {T}
     "ice_counter_cost":                          ("activate",       truthy,   "ice_counter_cost"),
+    # SelesnyaLifegain (2026-09-30). The Steppe keeps the verbless `cast=<land>` convention every
+    # other land-borne PermAbilityMode uses (Shivan Gorge, Botanical Conservatory, Mariposa) -- a land
+    # is never in the cast multiset for a real hand cast, so the name is unambiguous. VERIFIABLE
+    # rather than structurally-never-offered like Bilbo's: the deck is 20 GW lands and {3}{W} is
+    # routinely affordable with a Steppe untapped.
+    "sac_lifegain_per_creature_cost":            ("activate",       truthy,
+                                                  "sac_lifegain_per_creature_cost"),
+    # Wellwisher needs its OWN verb: the action names the SOURCE, the deck runs two copies, and the
+    # cost is {T} alone -- so `cast=Wellwisher` cannot be told apart from hard-casting the copy in
+    # hand (the Deathrite `gyexile=` case), and the board_acts affordability probe cannot separate
+    # them either because it only picks up costs with a positive mana value. cost_from None = free.
+    "tap_lifegain_per_subtype":                  ("verb:taplife",   truthy,   None),
     "lifelink_grant_cost":                       ("activate",       truthy,   "lifelink_grant_cost"),  # Heliod {1}{W}
     "can_animate":                               ("verb:animate",   truthy,   "animate_cost"),
     "tap_token_cost":                            ("verb:taptoken",  truthy,   "tap_token_cost"),
@@ -745,6 +782,9 @@ INERT_PARAMS = {
     "etb_energy": "mandatory energy gain on ETB, no choice",
     "energy_per_colored_tap": "coloured-tap mode resolved inside the payment DFS (backtracked, like tap order); rides the cast -> main_phase. Cross-turn hoarding is a disclosed heuristic sub-choice",
     "tap_damage_each_opponent": "damage amount (rides tap_damage_cost)",
+    # ---- SelesnyaLifegain (2026-09-30) ----
+    "sac_lifegain_per_creature": "Blighted Steppe -- life gained PER CREATURE (2), a printed constant of the card; the activation itself rides sac_lifegain_per_creature_cost -> main_phase, and the total (2xN) is fixed by the board with nothing to pick at resolution (no target, no X, no mode, no 'may')",
+    "tap_lifegain_count_all": "Wellwisher -- COUNT SCOPE: true = 'each Elf on the battlefield' (both players, Priest of Titania's reading), false = 'Elves you control'. A reading of the oracle text, not a choice; the activation rides tap_lifegain_per_subtype -> main_phase / verb:taplife",
     "tap_draw_cost_less_per_rad": "cost-reduction detail (rides tap_draw_cost)",
     "reduces_creature_activation": "cost reduction (static, like hinata_cost_reducer)",
     # Emiel the Blessed's "you may pay {G/W} ... put a +1/+1 counter on it". A DISCLOSED
@@ -875,9 +915,43 @@ INERT_PARAMS = {
     "sac_outlet_self_only": "sac-outlet victim gating detail ('Sacrifice THIS creature' -- the source is the only legal victim, so the `sacrifice` decision is a forced non-choice; rides sac_creature_outlet -> activate)",
     # ---- CritterLifegain (2026-09-08) -- every trigger here is automatic and untargeted except Heliod's (MANIFEST) ----
     "lifegain_self_counters": "automatic 'whenever you gain life' trigger: +1/+1 counter on THIS creature (Ajani's Pridemate / Voice of the Blessed / the Ajani token) -- no target, no may",
+    "lifegain_self_counters_that_many": (
+        "the AMOUNT form of lifegain_self_counters above (Ageless Entity: 'whenever you gain life, put "
+        "THAT MANY +1/+1 counters on this creature'). Same class and the same absence of a decision -- "
+        "no target, no may, no amount to elect: the count is whatever the life-gain event gained, read "
+        "off the one shared GainLife hook. It is a SEPARATE param from the int above only because that "
+        "int alone sets the CritterLifegain archetype signature in DetectDecisionProvider, which is a "
+        "routing concern and not a viewer one"
+    ),
     "counter_threshold_flying_vigilance": "static keyword grant at N +1/+1 counters (Voice of the Blessed) -- no decision",
     "counter_threshold_indestructible": "static keyword grant at N +1/+1 counters (Voice of the Blessed) -- no decision",
     "lifegain_each_own_creature_counters": "automatic 'whenever you gain life' trigger: +1/+1 counter on EACH creature you control (Archangel of Thune), or on each creature of one subtype when lifegain_counters_subtypes narrows it (Lyra, Archangel of Dawn) -- no target, no may",
+    "lifegain_each_own_creature_counters_that_many": (
+        "the AMOUNT form of lifegain_each_own_creature_counters above (Nykthos Paragon: 'put THAT MANY "
+        "+1/+1 counters on each creature you control'). Pure amount scaling and no viewer choice of its "
+        "own -- the count is whatever the life-gain event gained, read off the one shared GainLife hook, "
+        "and the recipients are 'each creature you control' (untargeted, mandatory once the spend is "
+        "taken). The ONE decision on that card is WHETHER to spend a once-each-turn use, which rides "
+        "lifegain_counters_once_each_turn -> lifegain_counters in the MANIFEST. It is a SEPARATE param "
+        "from the int above only because that int alone sets the CritterLifegain archetype signature in "
+        "DetectDecisionProvider -- a routing concern, not a viewer one (the lifegain_self_counters_that_many "
+        "precedent)"
+    ),
+    # ---- SelesnyaLifegain: Blossoming Bogbeast's attack trigger -- mandatory, untargeted, no modes ----
+    "attack_trigger_lifegain": (
+        "automatic attack trigger (Blossoming Bogbeast: 'whenever this creature attacks, you gain 2 life') "
+        "-- mandatory, no target, no may, no amount to elect; fired at declare-attackers per attacking copy "
+        "by the shared ApplyAttackLifegainTeamPump. WHICH creatures attack is the already-wired `attackers` "
+        "decision"
+    ),
+    "attack_team_pump_per_life_gained": (
+        "the second half of the same printed trigger ('then creatures you control get +X/+X until end of "
+        "turn, where X is the amount of life you gained this turn') -- automatic, untargeted and team-wide, "
+        "so there is nothing to pick: the recipient set is 'creatures you control' and X is a computed "
+        "constant read off life_gained_this_turn. Trigger ORDER among simultaneous attack triggers (CR "
+        "603.3b) is deliberately not surfaced -- the engine has never offered trigger ordering, and the pump "
+        "is additive so no ordering changes X"
+    ),
     "lifegain_counters_subtypes": "RECIPIENT subtype filter on the trigger above (Lyra, Archangel of Dawn: 'each Angel you control') -- it narrows WHO gets a counter, it does not add a choice; the trigger stays automatic, untargeted and non-optional, so it is inert for the viewer exactly as its parent is",
     "own_creature_dies_lifegain": "automatic death trigger (Daxos: 'another creature you control dies, you gain 1') -- no choice",
     "toughness_equals_devotion_color": "CDA (Daxos's toughness = devotion to white) -- static, no choice",
@@ -959,6 +1033,13 @@ INERT_PARAMS = {
     # --- StompySurprise (mono-green elf ramp) ---
     "etb_life_floor": "automatic ETB life set (Elderscale Wurm), no choice",
     "mana_per_creature_count_all": "scaled-dork count scope detail (rides mana_per_creature_subtype)",
+    "mana_per_life_gained": (
+        "scaled-dork YIELD source (Accomplished Alchemist: '{T}: Add X mana of any one color, where X "
+        "is the amount of life you gained this turn'). The per-tap amount, not a choice -- the two {T} "
+        "abilities collapse to max(1, life gained) by weak dominance, so there is no mode to elect. "
+        "The one thing the human does pick, WHICH COLOUR, is the already-wired manual pre-tap colour "
+        "suffix (tap=<card>#<n>:G), not a new decision"
+    ),
     "mana_requires_land_subtype": "conditional mana gate (Arbor Elf); WHICH Forest untapped is fungible -- disclosed",
     "etb_team_pump_per_creature": "automatic ETB team pump (Craterhoof), no choice",
     "creature_enters_min_power": "enter-watcher power filter detail (Vaultborn)",
@@ -984,6 +1065,19 @@ INERT_PARAMS = {
     "grants_temp_haste": "automatic until-EOT grant to the chosen target (rides solo_target_trick)",
     "counters_on_target": "automatic counter on the chosen target (rides solo_target_trick)",
     "cast_lifegain": "automatic lifegain",
+    "cast_lifegain_ferocious": (
+        "the FEROCIOUS amount of an automatic untargeted lifegain (Feed the Clan: 'you gain 10 life "
+        "instead if you control a creature with power 4 or greater'). No choice anywhere: no target, "
+        "no mode, no 'may', no X -- the gate is a board CONDITION read off our own battlefield at "
+        "resolution, and both amounts are printed on the card. The player's only lever is the one "
+        "that is always wired: whether, and in what order, to cast it (main_phase)"
+    ),
+    "ferocious_min_power": (
+        "the threshold of the gate above (4, the ability word's fixed printed value). A condition "
+        "transcribed from the oracle, never elected -- same class as creature_enters_min_power (an "
+        "enter-watcher power filter) and equip_min_power (an attach legality gate), both already "
+        "classified here"
+    ),
     "grants_extra_land_drop": "automatic bonus land drop (the drop itself is the normal land choice)",
     "token_copy_of_target": "automatic token copy of the chosen target (rides solo_target_trick)",
     "etb_lifegain": "automatic land ETB lifegain (Kazandu Refuge)",

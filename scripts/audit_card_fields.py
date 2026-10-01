@@ -65,7 +65,21 @@ MODELED_ELSEWHERE_KEYWORDS = {
     #                        which IS modelled, via the saga_ch3_double_pt_target param.
     # NB "double" is a DIFFERENT string from "double strike" (Scryfall spells that one out,
     # cf. Lyra Dawnbringer's "First strike"), so this cannot mask a missing evasion keyword.
-    "fight", "double",
+    #   exert  (CR 701.38) -- Basri, Tomorrow's Champion, whose activated ability costs
+    #                        "{W}, {T}, Exert Basri". Exert is a keyword ACTION performed as part
+    #                        of a cost, so it is categorically not an innate property of the
+    #                        permanent -- the same class as fight/scry above, and it belongs here
+    #                        on principle rather than as a special case. It IS modelled, and
+    #                        precisely: CardParams::tap_token_exerts -> Permanent::skip_next_untap,
+    #                        honoured by GameEngine's untap step, priced by ManaPayment's greedy
+    #                        decline (MTG_GREEDY_EXERT_TOKEN, default off) and compared rather than
+    #                        pruned by Dominance. It also CANNOT become a Keyword enumerator even if
+    #                        we wanted the tag: Card::m_keyword_mask is uint32_t and the enum is
+    #                        already at 35 values, so a 36th would alias Deathtouch (see battle cry
+    #                        and soulbond below, and docs/design/keyword-mask-overflow.md). Grants
+    #                        no evasion and changes no combat legality, so stripping it cannot mask
+    #                        a missing combat keyword.
+    "fight", "double", "exert",
     # Keyword abilities this engine models via params / oracle logic, not a tag:
     "cycling", "scry", "surveil", "cascade", "retrace", "replicate",
     "affinity", "treasure",
