@@ -638,14 +638,20 @@ static bool TapForCostSharedOnceImpl(GameState& state, const ManaCost& cost_in, 
     const ManaGrant    mana_grant = LiveManaGrant(state, active);
     // Fodder is only ever considered for a permanent `usable()` REJECTS, so no permanent can be
     // offered twice in one pip selection (a Goblin mana dork taps at its own rank; it is not eaten).
-    auto fodder_ok = [&](const Permanent& p, const CardDefinition& def) -> bool
+    // `def` is NULLABLE: a TOKEN has no CardDefinition, and on this deck the fodder IS tokens (see
+    // IsSacPayFodder). Requiring one here is what made the §2b payment source unable to eat the very
+    // bodies MTG_SAC_OUTLET_PAY suppresses the searched actions for.
+    auto fodder_ok = [&](const Permanent& p, const CardDefinition* def) -> bool
     {
         if (!sac_outlet.valid()) { return false; }
         // The creature THIS cast is about to sacrifice as a cost is already spent (see
         // g_pay_sac_victim below); eating it too would spend one body twice.
         if (g_pay_sac_victim != 0 && p.card.m_number == g_pay_sac_victim) { return false; }
-        if (paying_snow && !def.card.HasSupertype(Supertype::Snow)) { return false; }
-        if (def.params.creature_mana_only && !for_creature) { return false; }
+        // Snow-pip restriction: with no definition we cannot prove the body is snow, so refuse --
+        // the pessimistic direction (a payable cast fails, never an unpayable one resolving).
+        if (paying_snow && !(def != nullptr && def->card.HasSupertype(Supertype::Snow))
+            && !p.card.HasSupertype(Supertype::Snow)) { return false; }
+        if (def != nullptr && def->params.creature_mana_only && !for_creature) { return false; }
         if (reserved_mask)
         {
             const std::size_t idx = static_cast<std::size_t>(&p - state.battlefield.data());
@@ -653,6 +659,7 @@ static bool TapForCostSharedOnceImpl(GameState& state, const ManaCost& cost_in, 
         }
         return IsSacPayFodder(p, def, sac_outlet);
     };
+
 
     auto usable = [&](const Permanent& p, const CardDefinition& def) -> bool
     {
@@ -800,9 +807,14 @@ static bool TapForCostSharedOnceImpl(GameState& state, const ManaCost& cost_in, 
                         && GrantedBodyCanTap(mana_grant, p))
                     { def = &GrantedManaFace(mana_grant.color); }
                 }
-                if (def == nullptr) { continue; }
-                const bool tap_ok = !p.tapped && usable(p, *def);
-                const bool fodder = !tap_ok && real_def != nullptr && fodder_ok(p, *real_def);
+                // DO NOT BAIL ON A MISSING DEFINITION HERE. TAPPING needs one (the produces list,
+                // the filter params); EATING does not -- the outlet is the permission and the body is
+                // the resource. A Saproling token has no CardDefinition at all, so the old
+                // `def == nullptr -> continue` (and the `real_def != nullptr` guard below) skipped
+                // exactly the fodder §2b exists to spend, which is why MTG_SAC_OUTLET_PAY measured
+                // cheaper AND worse: the searched actions were deleted and nothing replaced them.
+                const bool tap_ok = def != nullptr && !p.tapped && usable(p, *def);
+                const bool fodder = !tap_ok && fodder_ok(p, real_def);
                 if (!tap_ok && !fodder) { continue; }
                 int kind = 0;
                 if (fodder)

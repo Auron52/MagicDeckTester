@@ -22113,11 +22113,21 @@ inline SacPayOutlet LiveSacPayOutlet(const GameState& state, int controller)
 }
 
 // Is this permanent legal fodder for `outlet` right now?
-inline bool IsSacPayFodder(const Permanent& p, const CardDefinition& def,
+// `def` is NULLABLE and must stay that way. A TOKEN HAS NO CardDefinition -- there is no "Saproling"
+// entry in cards.json, so LookupCached returns null and Permanent::def_absent is true for every
+// Saproling this deck makes. Judging fodder through a definition therefore excluded ~all of Utopia
+// Mycon's actual fodder, which is what made MTG_SAC_OUTLET_PAY delete the outlet's searched actions
+// (the cost win) while the payment source that was supposed to replace them could almost never fire
+// (the measured quality loss). So test the PERMANENT's own card, exactly as the SEARCHED victim pick
+// does (`q.card.IsCreature()` / CardHasSubtype(q.card, ...) around line 11069) -- on-battlefield Cards
+// carry their masks, which is why that predicate works for tokens. [[tokens-have-no-card-definition]]
+inline bool IsSacPayFodder(const Permanent& p, const CardDefinition* def,
                            const SacPayOutlet& outlet)
 {
     if (!outlet.valid() || p.pay_sac_eaten) { return false; }
-    if (!def.card.IsCreature()) { return false; }
+    // Prefer the definition when there IS one (a real card's printed types), else the battlefield
+    // Card -- never require one.
+    if (!(def != nullptr ? def->card.IsCreature() : p.card.IsCreature())) { return false; }
     const CardParams& op = outlet.def->params;
     if (op.sac_outlet_excludes_self && p.card.m_number == outlet.source_id) { return false; }
     if (!op.sac_creature_requires_subtype.empty()
@@ -22198,11 +22208,73 @@ inline int SacPayFodderCount(const GameState& state, int controller, const SacPa
     for (const Permanent& p : state.battlefield)
     {
         if (&p == skip || p.controller_index != controller) { continue; }
-        if (p.def_absent) { continue; }   // see Permanent::def_absent (same `continue`, no call)
-        const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
-        if (!d || !IsSacPayFodder(p, *d, outlet)) { continue; }
+        // TOKENS COUNT. def_absent still skips the lookup (that is what the flag is for) but must NOT
+        // skip the BODY -- a Saproling token has no CardDefinition and is precisely the fodder this
+        // term exists to credit. See IsSacPayFodder.
+        const CardDefinition* d = p.def_absent ? nullptr
+                                              : CardDatabase::Instance().LookupCached(p.card);
+        if (!IsSacPayFodder(p, d, outlet)) { continue; }
         if (no_attackers && SacPayFodderCostsAttack(state, p)) { continue; }
         ++n;
+    }
+    return n;
+}
+
+// PLAN-ADDED FODDER: bodies this turn's line can CREATE and then eat, which the board-only count
+// above cannot see because they do not exist yet.
+//
+// THE DEFECT THIS REPAIRS (measured 2026-10-01; see the MTG_SAC_OUTLET_PAY read site). Shipped
+// Fungus, `--seed 620173 --game-index 173 --games 1 --depth 5 --budget-ms 20`: board is ONE untapped
+// Forest + Utopia Mycon with 3 spore counters, hand holds Sporecrown Thallid {1}{G}. The line is
+// remove 3 spore counters -> create a Saproling -> eat it through Mycon for {G} -> cast Sporecrown
+// off that plus the Forest. With the outlet's searched action suppressed, SacPayFodderCount reports
+// ZERO (no Saproling on the board yet), so the bound reads 1 against need 2 and PaymentManaCovers
+// turns that into a PROOF of unpayability -- deleting the cast before it is ever attempted. Without
+// the lever the explicit SacForMana action floats the mana, so the subset machinery sees it.
+//
+// SOUND IN THE DOCUMENTED DIRECTION. These bounds may only ever OVER-count: "a loose bound fails to
+// prune; a tight one prunes a payable cost". So crediting a body the line has not made yet can only
+// KEEP lines, never invent one -- a plan that cannot really assemble the mana fails at the real
+// payment, which no-ops it. That is the same division of labour SCALING SOURCE WIDENING and
+// PendingLandAuraColorMask (TurnSolver.cpp) already rely on; both are this defect class on a COLOUR
+// gate, where this one is the QUANTITY bound.
+//
+// NO CASTABILITY/ACTIVATION TEST, deliberately, for the same reason those two take none: a looser
+// necessary condition is still sound, and testing it here would re-enter the enumerator.
+// Scoped by construction -- every caller reaches this only through a valid SacPayOutlet, and
+// LiveSacPayOutlet returns none unless MTG_SAC_OUTLET_PAY is on, so the whole term is inert in the
+// lever's OFF arm and on every deck with no sac-mana outlet.
+inline bool SacPayPlanFodderEnabled()
+{
+    static const bool v = EnvOn("MTG_SAC_PAY_PLAN_FODDER", true);
+    return heurarm::Flag(heurarm::SAC_PAY_PLAN_FODDER, v);
+}
+
+inline int SacPayPlanFodderCount(const GameState& state, int controller,
+                                 const SacPayOutlet& outlet)
+{
+    if (!outlet.valid() || !SacPayPlanFodderEnabled()) { return 0; }
+    const CardParams& op = outlet.def->params;
+    int n = 0;
+    for (const Permanent& p : state.battlefield)
+    {
+        if (p.controller_index != controller) { continue; }
+        if (p.def_absent) { continue; }   // see Permanent::def_absent
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+        if (!d) { continue; }
+        const int cost = d->params.spore_saproling_cost;   // "remove three spore counters:"
+        const int per  = d->params.spore_creates_tokens;   // "...create a Saproling"
+        if (cost <= 0 || per <= 0 || p.spore_counters < cost) { continue; }
+        // The token has to be legal fodder for THIS outlet ("Sacrifice a Saproling"). Tokens carry
+        // no CardDefinition, so the subtype must be read from the CREATOR's token params.
+        if (!op.sac_creature_requires_subtype.empty())
+        {
+            bool subtype_ok = false;
+            for (const std::string& st : d->params.spore_token_subtypes)
+            { if (st == op.sac_creature_requires_subtype) { subtype_ok = true; break; } }
+            if (!subtype_ok) { continue; }
+        }
+        n += (p.spore_counters / cost) * per;
     }
     return n;
 }
@@ -26779,9 +26851,14 @@ inline int UntappedManaUpperBound(const GameState& state, bool for_creature,
     // would reject exactly the casts this lever exists to enable. The bound may only ever
     // OVER-count (a loose bound fails to prune; a tight one prunes a payable cost), and crediting
     // fodder the backtracker cannot actually reach errs in that safe direction.
+    // ...AND THE BODIES THE LINE ITSELF MAKES. SacPayFodderCount walks the battlefield, so it is
+    // blind to a Saproling this turn's own line creates by removing three spore counters -- which is
+    // exactly the body the measured regression needed (see SacPayPlanFodderCount). Same OVER-count
+    // licence as above: crediting it can only keep a line, never invent one.
     if (const SacPayOutlet so = LiveSacPayOutlet(state, active); so.valid())
     {
-        total += SacPayFodderCount(state, active, so)
+        total += (SacPayFodderCount(state, active, so)
+                  + SacPayPlanFodderCount(state, active, so))
                * std::max(1, so.def->params.sac_outlet_add_mana_amount);
     }
     return total;

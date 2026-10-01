@@ -298,7 +298,8 @@ enum Slot : int
     // purely from the neighbour's load. A pooled queue puts both arms on the box at once.
     SAC_VICTIM_DOOMED,        // MTG_SAC_VICTIM_DOOMED   a token its own creator will destroy (a faded-out Saproling Burst) is one step MORE expendable, so it loses a tie to an equal-power permanent body. USER: "prioritize 1/1 saprolings unless the Saproling Burst saprolings are the same size or smaller" (default OFF)
     SAC_VICTIM_ENGINE,        // MTG_SAC_VICTIM_ENGINE   a combat-damage TOKEN ENGINE (Shroofus Sproutsire) joins the `scaling` defer tier, so its 1/1 body is not eaten as ordinary Saproling fodder. USER: "I don't mean never shroofus, but Shroofus should be the last to go" -- DEFERRED, not excluded (default OFF)
-    SAC_POOL_TURN_COLOR,      // MTG_SAC_POOL_TURN_COLOR  the sac-outlet POOL's colour fan is scoped to THIS TURN's sinks (hand + battlefield + graveyard) instead of the deck-wide scan that includes the LIBRARY. Fungus candidate-b's black splash is 3 cards in 60, and because they sit in the library all game the fan is {G,B} on every board -- which trips the pool's singleton gate and silently disables the collapse on 100% of 4,425,133 gate arrivals (37.48% of them would otherwise pool). A HEURISTIC narrowing: it can drop a plan that floats {B} speculatively and then draws the black card the same turn (default OFF)
+    SAC_POOL_TURN_COLOR,      // MTG_SAC_POOL_TURN_COLOR  the sac-outlet POOL's colour fan is scoped to THIS TURN's sinks (hand + battlefield + graveyard) instead of the deck-wide scan that includes the LIBRARY. Fungus candidate-b's black splash is 3 cards in 60, and because they sit in the library all game the fan is {G,B} on every board -- which trips the pool's singleton gate and silently disables the collapse on 100% of 4,425,133 gate arrivals (37.48% of them would otherwise pool). A HEURISTIC narrowing: it can drop a plan that floats {B} speculatively and then draws the black card the same turn. MEASURED AND APPROVED 2026-10-01 (USER accepted the lossy case; quality-neutral, 3-5% cheaper, byte-identical on the suite's own mono-green Fungus list so it moves no GT) but HELD AT DEFAULT OFF: it moves candidate-b's play at d5/b20, which is the keepgen play digest, and would discard a 90.8-hour banked mulligan-generation journal. Flip when that generation lands -- see the read site's "WHY STILL OFF"
+    SAC_PAY_PLAN_FODDER,      // MTG_SAC_PAY_PLAN_FODDER credit fodder the LINE ITSELF creates (a Saproling made by removing three spore counters) into §2b's payability bound, which otherwise counts only bodies already on the battlefield. Repairs the measured MTG_SAC_OUTLET_PAY regression: the bound read 1 against need 2 and PROVED a payable Sporecrown Thallid unpayable, because the Saproling it eats is made by an earlier action of the SAME plan. Sound -- these bounds may only ever OVER-count -- and inert unless MTG_SAC_OUTLET_PAY is on, since LiveSacPayOutlet gates the whole term. Default ON
     COUNT
 };
 
@@ -559,6 +560,7 @@ inline const char* Name(int slot)
         "MTG_SAC_VICTIM_DOOMED",
         "MTG_SAC_VICTIM_ENGINE",
         "MTG_SAC_POOL_TURN_COLOR",
+        "MTG_SAC_PAY_PLAN_FODDER",
     };
     // The enum and this table are ONE mapping split across two lists: a slot added to one and not
     // the other silently shifts every lever after it (a manifest asking for lever X would set Y).

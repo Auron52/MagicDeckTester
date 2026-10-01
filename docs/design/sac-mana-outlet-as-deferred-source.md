@@ -1,8 +1,106 @@
 # Sac-for-mana outlets: model them as a LAST-RANKED MANA SOURCE, not a searched action
 
-**Status (2026-10-01): BUILT 2026-09-18, DEFAULT OFF, and its A/B IS RUNNING FOR THE FIRST TIME.**
-See §"WHY THIS WENT 13 DAYS UNMEASURED" at the bottom — the short version is that the A/B manifests
-were written and never executed, and the lever was then carried as *"believed measured"*.
+**Status (2026-10-01): MEASURED AT LAST, and the first measurement found a BUG rather than a verdict.
+Still DEFAULT OFF, but the residual is now small, located, and named.** See §"WHY THIS WENT 13 DAYS
+UNMEASURED" at the bottom for how it went unmeasured from 2026-09-18, and §"THE TOKEN-FODDER BUG" for
+what the measurement actually turned up.
+
+**A false start worth recording.** The first attempt at this A/B (`logs/victim_ab/pay_ab.json`, 72
+jobs) **died one second after launch and produced zero games**, and I reported it as healthy and
+saturating for the better part of an hour. Two causes, both avoidable:
+
+* The manifest pinned `depth` on the **Goblins** jobs, and Goblins' `value_play` block LOCKS
+  `target_depth=6`, which is a hard error (`MulliganProfile.h`: *"value_play depth is ENABLED for this
+  deck ... omit --depth"*). One bad job aborts the WHOLE batch. The fix is to OMIT `depth`/`budget_ms`
+  for a depth-locked deck and let the sidecar resolve them — `--ignore-play-profile` is the wrong
+  escape here, because `AIEngine.cpp` deliberately disables the value_play levers off-policy, so it
+  would have measured a configuration Goblins never ships.
+* I read **loadavg** as evidence the run was busy. Loadavg is the HOST's, not the container's, so it
+  showed 25 while our run was dead. The only instrument that answers "is MY batch busy" is the
+  `[batch] heartbeat: N/M workers busy` line — and silence from it is itself the signal.
+
+## THE RESULT (2026-10-01)
+
+ONE pooled batch, 96 jobs / 69,600 games, three arms pinned PER JOB via `heurarm` so no arm inherits a
+process default, 4 paired seed blocks per cell (same seeds across arms), seeds spaced by `games`.
+`units` is the cost metric because units are DETERMINISTIC — the budget converts via
+`NODES_PER_VIRTUAL_MS` and is never read off the clock — so the numbers are immune to the shared box.
+Manifest `logs/victim_ab/pay3.json`, arms `base` / `pay` / `npf` (`pay` minus the plan-fodder credit).
+
+| cell | games/arm | d(avg) BEFORE the bug fix | **d(avg) AFTER** | units | blocks better/worse |
+|---|---|---|---|---|---|
+| candidate-b d1/b3 *(the mulligan-generation cell)* | 2,000 | +0.0095 | **−0.0120** | **0.68888x** | 4 / 0 |
+| candidate-b d3/b10 | 2,000 | +0.0110 | **−0.0130** | 0.84870x | 3 / 1 |
+| candidate-b d5/b20 | 1,200 | +0.0075 | **−0.0175** | 0.85608x | 4 / 0 |
+| Goblins (on-policy d6/b40) | 8,000 | −0.0014 | **−0.0250** | 0.98556x | 4 / 0 |
+| shipped d3/b10 | 1,200 | +0.0216 | **−0.0000** | 0.95652x | 2 / 1 (1 tied) |
+| shipped d5/b20 | 800 | +0.0388 | +0.0125 | 0.81942x | 0 / 2 (2 tied) |
+| candidate-b d0 | 4,000 | +0.0232 | +0.0180 | n/a | 0 / 4 |
+| shipped d0 | 4,000 | −0.0063 | +0.0177 | n/a | 0 / 4 |
+
+So after the fix **every SEARCHED cell but `shipped d5` is neutral-or-better and 15–31% cheaper**, and
+the generation cell is **0.689x**. The residual sits in two places, and they are different problems:
+
+* **d0, both lists, 0-better/4-worse.** d0 is the greedy with no search at all, so the fodder RANK is
+  fully exposed with nothing to recover a mis-ordering. Leading hypothesis, untested:
+  `SacPayFodderCostsAttack` only asks whether a body would attack THIS turn, so eating a
+  summoning-sick Saproling reads as free when it costs NEXT turn's attack. The searched arms do not
+  care because the search sees the following turn; d0 cannot.
+* **shipped d5 (+0.0125t, 0 better / 2 worse / 2 tied).** Halved from +0.0388 but not gone.
+
+**The plan-fodder credit (`MTG_SAC_PAY_PLAN_FODDER`) measured near-INERT**: `npf` differs from `pay`
+by ≤0.0015t and ≤1% units at every cell. It is kept default ON because it repairs a real, documented
+blindness in the same class as SCALING SOURCE WIDENING, and it is very slightly positive at the three
+candidate-b searched cells — but it is NOT what fixed this lever, and it should not be credited with
+the table above.
+
+## THE TOKEN-FODDER BUG — what the measurement actually found
+
+The first numbers were "much cheaper and consistently worse", which is the signature of **deleting
+work and the capability with it**. It was not the ranking and not the documented greedy/backtracker
+split (the regression was present at d0, where the backtracker barely matters). It was this:
+
+> **There is no `Saproling` entry in `cards.json`.** So every Saproling TOKEN has
+> `Permanent::def_absent == true` and `LookupCached` returns `nullptr` — and the §2b payment path
+> required a `CardDefinition` at three separate points. On Fungus essentially ALL the fodder is
+> tokens, so the lever deleted the outlet's searched actions (the cost win) while the payment source
+> meant to replace them **could almost never fire**.
+
+The three points, all now fixed to judge the PERMANENT rather than demand a definition — exactly as
+the SEARCHED victim pick already does (`q.card.IsCreature()` / `CardHasSubtype(q.card, ...)`, since
+on-battlefield Cards carry their masks):
+
+1. `ManaPayment.cpp` — `if (def == nullptr) { continue; }` skipped the body before fodder was ever
+   considered. TAPPING needs a definition; EATING does not.
+2. `ManaPayment.cpp` — `real_def != nullptr && fodder_ok(p, *real_def)` gated the fodder branch off.
+3. `SpellEffects.h` — `SacPayFodderCount` opened with `if (p.def_absent) { continue; }`, so the
+   payability BOUND under-counted too, which is what turned a payable cast into a "proof" of
+   unpayability.
+
+Reproduced to a single game before and after (shipped list, `--seed 620173 --game-index 173 --games 1
+--depth 5 --budget-ms 20`): baseline wins T7, the lever did not win at all (T9), and after the fix it
+wins T8. Per-game dumps on that cell went from 25 worse / 4 better / **2 games lost outright** to the
+table above.
+
+**BASELINE-SAFE, verified not assumed:** smoke was run before and after the fix and produced the SAME
+7 changed configs with the SAME digests, so the repair is confined to the lever's ON arm. (It is
+reachable only through a valid `SacPayOutlet`, and `LiveSacPayOutlet` returns none unless
+`MTG_SAC_OUTLET_PAY` is on.)
+
+**The transferable lesson is the one already in the tree:** *tokens have no `CardDefinition`, and
+"bail on unknown" is how that becomes a silent capability hole.* It cost 1,900 of 5,106 sites once
+before. Here it did not crash or log anything — it just made a lever look like a bad idea.
+
+## WHY IT STILL SHIPS OFF
+
+Not doubt about the cost prize, which is large and real. Two reasons:
+
+1. The d0 and shipped-d5 regressions above are unresolved, and the USER's bar for THIS lever is their
+   own: *"this is a cost change that we are aiming to not cost any quality."*
+2. **It moves win turns, so it must be settled BEFORE any generation it will affect.** candidate-b has
+   a 90.8-hour banked keepgen journal at 63.7%; a lever that changes play invalidates a keep table
+   fitted to that play. This is the opposite case from `MTG_SAC_POOL_TURN_COLOR`, which is
+   quality-neutral and so can be flipped after a generation lands.
 
 USER, 2026-10-01, restating the original request and in effect re-asking for this:
 
@@ -15,27 +113,22 @@ in `sac-pool-colour-gate.md`: with `MTG_SAC_OUTLET_PAY` on there is no float col
 no colour fan, no singleton gate, and no speculative-black question at all — the payer makes black
 when a cost needs black.
 
-**The in-flight run (2026-10-01):** `logs/victim_ab/pay_ab.json` → `logs/victim_ab/pay_ab.out`,
-72 jobs / 15,600 games, ONE pooled batch, three arms pinned PER JOB so the process default is
-irrelevant:
+**The method that finally worked**, recorded because the first two attempts at this measurement both
+failed for method reasons rather than engine reasons:
 
-| arm | flags |
-|---|---|
-| `base` | `MTG_SAC_POOL_TURN_COLOR=false` — the pre-2026-10-01 baseline |
-| `tc` | `MTG_SAC_POOL_TURN_COLOR=true` — the colour narrowing alone |
-| `pay` | `MTG_SAC_OUTLET_PAY=true` + the above — this lever |
-
-Decks: Fungus `candidate-b-2026-09` **and Goblins** (Skirk Prospector is the same card shape, and
-Goblins is the one of the two in the regression suite, so it is the real gate). Cells d0 / d3 b10 /
-d5 b20, 4 paired seed blocks each, seeds spaced by `games`.
-
-**Read it against the bar below: avg win turn must not regress (any regression is disqualifying),
-and `units` is the cost metric** because units are deterministic and so immune to the shared box.
-**Built-in control:** Skirk pins `{R}`, so its fan is already a singleton — Goblins `base` and `tc`
-must come out IDENTICAL. If they differ, the colour narrowing is mis-scoped, not the pay lever.
-
-**If Fungus comes back quality-negative, suspect §"STILL MISSING: the plan-added fodder credit"
-FIRST, not the ranking.**
+* ONE pooled batch, every arm pinned PER JOB via `heurarm`, so the process default is irrelevant and
+  no per-arm wave is needed.
+* Arms must be **ISOLATED**. The dead first manifest pinned `MTG_SAC_OUTLET_PAY` *and*
+  `MTG_SAC_POOL_TURN_COLOR` together in its `pay` arm — a confounded arm that could not have told the
+  two halves apart, which mattered because the plan was to revert one if the other adopted.
+* **Pin every flag in every arm, including the ones you mean to be off.** The working tree had
+  `MTG_SAC_POOL_TURN_COLOR` defaulted ON at the time, so an arm with `flags: {}` would have been
+  silently tc-ON and not a baseline at all.
+* A **CONTROL cell whose answer is known in advance**: Skirk Prospector pins `{R}`, so Goblins
+  `base` and `tc` must be byte-identical. They were (0/4 digests, identical unit totals), which is
+  what licenses the claim that the narrowing is correctly scoped to any-colour outlets.
+* **Both lists**, because they disagree: the shipped list is mono-green and candidate-b splashes
+  black, and the lever's sign differs between them at d5.
 
 A `heurarm` slot rather than a bare env flag so both arms ride ONE pooled batch (an
 `EnvOn` static can only ever BE one arm, which forces the per-arm wave CLAUDE.md forbids). The OFF
@@ -282,10 +375,25 @@ set of callers holding a zone iterator, a battlefield reference or a cached inde
 knowable by reading. ASan is the tool; guessing is not. The §2a note *"No index survives a
 successful payment"* states the contract correctly — it was simply not being honoured.
 
-## STILL MISSING: the plan-added fodder credit (stage 2)
+## the plan-added fodder credit (stage 2) — NOW BUILT (2026-10-01), and it measured near-INERT
+
+**Implemented** as `SacPayPlanFodderCount` / `MTG_SAC_PAY_PLAN_FODDER` (default ON): for each
+permanent with a spore→token ability (`spore_saproling_cost` / `spore_creates_tokens`) whose token
+subtype is legal fodder for the outlet, credit `floor(counters / cost) * per` bodies into §2b's term
+of `UntappedManaUpperBound`, and into the `have[]` colour gate in `TurnSolver.cpp`. Sound for the
+documented reason these bounds state about themselves — they may only ever OVER-count, so crediting a
+body the line has not made yet can only KEEP a line, never invent one; a plan that cannot really
+assemble the mana fails at the real payment, which no-ops it.
+
+**But it was NOT the fix.** Measured against an otherwise identical arm (`npf`), it moves ≤0.0015t and
+≤1% units at every cell, and on the reproducing game it changed nothing on its own. The actual defect
+was the token-fodder bug above. Keep this section's distinction in mind when reading the history: the
+hole described below was real, and it was also **not what was costing the quality**. The honest
+ordering is *fix the capability first, then the bound* — a bound crediting fodder the payer then
+refuses to eat buys nothing.
 
 The user's load-bearing requirement — *"We do need to count saprolings (or goblins) that are added
-to the battlefield during the plan"* — **is not implemented.**
+to the battlefield during the plan"* — was, until this change, **not implemented**:
 
 At APPLY time it happens to work: the plan applies sequentially, so a spore activation earlier in
 the plan has already put its Saproling on the board when the payer runs. The hole is at

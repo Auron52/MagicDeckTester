@@ -1,17 +1,36 @@
 # The sac-outlet pool's colour gate: 3 cards in 60 disabled a collapse on 100% of boards
 
-> **SUPERSESSION WARNING (2026-10-01), read before adopting anything here.** The USER has redirected
-> this at the better fix: *"I'm not worried about presumptively holding black. We should be able to
-> just do it on demand. (i.e. sacrifice a saproling or tap a land)"* — which is
-> `MTG_SAC_OUTLET_PAY` / `docs/design/sac-mana-outlet-as-deferred-source.md`. With that lever on,
-> the mana outlet's searched actions are SUPPRESSED, so there is no float colour, no colour fan, no
-> singleton gate and no speculative-black question — this whole document's narrowing becomes inert
-> for Utopia Mycon. Its A/B is running now (`logs/victim_ab/pay_ab.json`).
+> **STATUS 2026-10-01, after both levers were measured in one batch — the supersession did NOT
+> happen, and this narrowing is MEASURED, APPROVED, AND WAITING ON ONE THING.**
 >
-> **UNCOMMITTED WORKING-TREE STATE:** `src/ai/TurnSolver.cpp` has `SacPoolTurnColorEnabled()` flipped
-> to **default ON** (committed state is OFF). Deliberately left uncommitted pending that A/B: if the
-> payment-source model adopts, REVERT the flip rather than ship two mechanisms for one problem. The
-> flip is measurement-neutral for the running A/B because all three arms pin the flag per job.
+> The earlier warning here said `MTG_SAC_OUTLET_PAY` would make this document inert, because with the
+> outlet's searched actions suppressed there is no float colour to narrow. That lever has now been
+> measured (`docs/design/sac-mana-outlet-as-deferred-source.md`) and it **ships OFF**: it still
+> regresses at d0 on both lists and at shipped d5. So this narrowing is NOT superseded and remains the
+> live mechanism. Keep the two separate: if the pay lever ever does adopt, revert this one rather than
+> ship two mechanisms for one problem.
+>
+> **The evidence here is confirmed and strengthened.** Re-measured 2026-10-01 in a 96-job pooled batch
+> with every arm pinning both flags per job: candidate-b d1/b3 −0.0010t at 0.94953x, d3/b10 −0.0010t at
+> 0.96912x, d5/b20 +0.0000t at 0.97036x with 4/4 blocks TIED on avg, d0 +0.0005t — 4 of 4 blocks
+> cheaper at every budgeted cell. Quality-neutral, 3–5% cheaper.
+>
+> **It moves NO ground truth, now verified rather than inferred** (three ways): Utopia Mycon is the only
+> card setting `sac_outlet_add_mana_any_color` and only the two Fungus lists hold it; the suite's own
+> mono-green list measured byte-identical (sh_d0 4,000/arm, sh_d3 1,200/arm, sh_d5 800/arm — 0 of 4
+> digests each at identical unit totals) as did Goblins (8,000/arm); and smoke run with the flag ON vs
+> `=0` produced the SAME 7 changed configs with the SAME digests.
+>
+> **WHY IT IS STILL DEFAULT OFF — one reason, and it is not doubt.** Flipping it would **discard a
+> 90.8-hour banked mulligan-generation journal.** candidate-b's keepgen journal stands at
+> `frozen=970,276/1,522,096` (63.7%); a resume keeps its banked cell-sides only while the keepgen PLAY
+> DIGEST is unchanged, that digest is taken at d5/b20, and this lever moves candidate-b's play there
+> (1 of 4 block digests at cb_d5). `scripts/mullgen.sh` runs the LIVE `build/Release/mtg-analyze`, so
+> the `.frozen` copies beside the journal are provenance only and a resume would pick this up.
+> Waiting is cheap *because the lever is quality-neutral*: a keep table maps hands to expected WIN
+> TURNS, which this does not move, so a table fitted without it stays valid when it is flipped on.
+> **Flip it when that generation lands, or if a restart is chosen anyway.** The working tree is clean —
+> the default lives in `SacPoolTurnColorEnabled()` and the flip is one line.
 
 **Status 2026-10-01: diagnosed, sized, and a first fix BUILT behind `MTG_SAC_POOL_TURN_COLOR`
 (default OFF). It recovers ~56% of the lost opportunity. The remaining ~44% needs a different
