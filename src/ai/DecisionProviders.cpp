@@ -22768,6 +22768,73 @@ std::vector<int> FungusProvider::DevourCountCandidates(const GameState& s, const
         const int kn = own + 1 - need_attackers;
         if (kn > 0 && kn < own) { cands.push_back(kn); }
     }
+
+    // ---- LANDMARK MENU (MTG_FUNGUS_DEVOUR_LANDMARKS, default OFF) ----------------------------
+    // USER 2026-10-01, after reading the heaviest decisions: *"We don't necessarily need to search
+    // that much for the devour targets. (if at all)"*
+    //
+    // WHY THE LADDER BELOW GOT WIDE, measured rather than assumed. On the generation's heaviest
+    // decision the ladder returned 13 of the 14 possible k -- it dropped exactly ONE rung. The cause
+    // is that a rung is emitted per CONTESTED body, and `big` is `EffectivePower() >= 2`: the eight
+    // Saproling Burst tokens on that board are not 1/1s, they are N/N where N is the Burst's
+    // remaining fade counters (RefreshFadeTokens keeps them all tracking it), so every one of them
+    // read as big and bought its own rung. The "fodder floor" the per-body ladder is built around
+    // did not exist on the board where it was supposed to pay.
+    //
+    // WHY A MENU IS THE RIGHT SHAPE HERE. Mycoloth's payoff COMPOUNDS -- devour 2 gives 2k counters
+    // (doubled under a Season) and `upkeep_tokens_per_plus_one_counter` mints a Saproling per counter
+    // EVERY upkeep -- while the only cost is the damage the eaten bodies would have dealt this
+    // combat (Mycoloth is summoning-sick the turn it lands). So the interesting k are a handful of
+    // boundaries, not a dense ladder, and they can be computed from the board the way
+    // FadeKLandmarks computes the Burst's k instead of searching it.
+    //
+    // THE MENU, at most five entries and INDEPENDENT OF BOARD WIDTH:
+    //   0            decline (already pushed)
+    //   free_k       the prefix that eats no attacker -- costs zero damage this combat
+    //   outlet_k     eat everything before the first irreplaceable outlet (last Mycon / Psychotrope)
+    //   quest rungs  the Beastmaster reserve (already pushed above, unchanged)
+    //   own          eat everything -- the compounding maximum
+    //
+    // QUALITY-AFFECTING, so it is default OFF and carries its own arm until measured. It is NOT a
+    // symmetry fold: eating 3 of eight identical N/N tokens really does differ from eating 5 (both
+    // in damage now and counters gained), so this drops real options and has to earn its place.
+    static const bool lm_env = EnvOn("MTG_FUNGUS_DEVOUR_LANDMARKS");
+    if (heurarm::Flag(heurarm::FUNGUS_DEVOUR_LANDMARKS, lm_env))
+    {
+        // The apply eats a PREFIX of the ladder, so a "k that eats only X" is an index.
+        int free_k = static_cast<int>(bodies.size());
+        for (std::size_t i = 0; i < bodies.size(); ++i)
+        { if (bodies[i].atk) { free_k = static_cast<int>(i); break; } }
+        if (free_k > 0 && free_k < own) { cands.push_back(free_k); }
+
+        int outlet_k = -1;
+        for (std::size_t i = 0; i < bodies.size(); ++i)
+        {
+            if (!bodies[i].key) { continue; }
+            // Only the LAST copy of an outlet is irreplaceable -- a surplus copy is fodder, which is
+            // the same look-ahead the per-body walk does below.
+            bool last = true;
+            for (std::size_t j = i + 1; j < bodies.size(); ++j)
+            { if (bodies[j].def == bodies[i].def) { last = false; break; } }
+            if (last) { outlet_k = static_cast<int>(i); break; }
+        }
+        if (outlet_k > 0 && outlet_k < own) { cands.push_back(outlet_k); }
+
+        cands.push_back(own);             // eat everything: the compounding maximum
+        std::sort(cands.begin(), cands.end());
+        cands.erase(std::unique(cands.begin(), cands.end()), cands.end());
+        while (!cands.empty() && cands.back() > own) { cands.pop_back(); }
+        if (static_cast<int>(cands.size()) >= own + 1) { return bail("landmarks did not narrow"); }
+        if (s_trace)
+        {
+            std::string ks;
+            for (std::size_t z = 0; z < cands.size(); ++z)
+            { ks += (z ? "," : "") + std::to_string(cands[z]); }
+            std::fprintf(stderr, "[devour-cands] own=%d LANDMARKS k=[%s] (free=%d outlet=%d)\n",
+                         own, ks.c_str(), free_k, outlet_k);
+        }
+        return cands;
+    }
     int end = static_cast<int>(bodies.size());
     int eaten_att  = 0;
     bool quest_rung = !(quest_live && need_attackers > 0 && att_avail >= need_attackers);
