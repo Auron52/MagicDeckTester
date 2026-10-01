@@ -4750,6 +4750,307 @@
    }
   },
   {
+   "name": "Ancient Den",
+   "mana_cost": "",
+   "types": [
+    "Artifact",
+    "Land"
+   ],
+   "subtypes": [],
+   "keywords": [],
+   "oracle_text": "{T}: Add {W}. [Artifact land, and the artifact half is LOAD-BEARING here: types Artifact+Land feed CountControlledArtifacts, which is a plain type-mask walk of the battlefield, so each Den counts toward Puresteel Paladin's metalcraft threshold of 3 and helps flip every equip to {0} (Colossus Hammer's printed equip is {8}) off the mana base alone. Counted with NO code change -- PlayLandFromHand enters the DEFINITION's card, so the type mask is populated, and the land is already in the state when that branch enumerates its casts. Enters UNTAPPED (unlike Remote Farm); template basic_land keeps every mana path identical to Plains, and the Land type keeps it out of cast enumeration. Not a basic (no Basic supertype / Plains subtype) -- inert, this deck runs no land tutor. No artifact-ness DOWNSIDE in this deck: no sacrifice-an-artifact cost exists in the engine (every chosen-victim sac path is creature-scoped) and the one artifact-destroy mode in the list (Deconstruction Hammer) is a deferred, strictly-dominated own-side ability.]",
+   "template": "basic_land",
+   "parameters": {
+    "produces": [
+     "W"
+    ]
+   }
+  },
+  {
+   "name": "Bone Saw",
+   "mana_cost": "{0}",
+   "types": [
+    "Artifact"
+   ],
+   "subtypes": [
+    "Equipment"
+   ],
+   "keywords": [
+    "Equip"
+   ],
+   "oracle_text": "Equipped creature gets +1/+0.\nEquip {1} [Fully modeled; nothing deferred. Its role in this deck is METALCRAFT + CARD FLOW rather than the +1/+0: a free artifact toward Puresteel's 3, a free Sram draw on cast, a free Puresteel draw on enter, and one more Equipment for a Golem-Skin Gauntlets host to count. equip {1} drops to {0} under metalcraft (EquipCostGenericNow) and is bypassed entirely by Sigarda's Aid's attach.]",
+   "template": "custom",
+   "parameters": {
+    "is_equipment": true,
+    "equip_cost_generic": 1,
+    "equip_power_bonus": 1
+   }
+  },
+  {
+   "name": "Cathar's Shield",
+   "mana_cost": "{0}",
+   "types": [
+    "Artifact"
+   ],
+   "subtypes": [
+    "Equipment"
+   ],
+   "keywords": [
+    "Equip"
+   ],
+   "oracle_text": "Equipped creature gets +0/+3 and has vigilance.\nEquip {3} [FULLY MODELED, including the vigilance grant (equip_grants_vigilance -> CreatureHasVigilance, consumed at the ONE site in the engine that reads vigilance at all: the shared combat core's attack-tap). Vigilance is deliberately NOT treated as an inert evasion keyword here -- it is not a blocking keyword, so the 'nothing blocks in the goldfish' argument that covers flying/trample/reach does NOT apply to it, and it is REACHABLE on this list: an attacking Cid, Freeflier Pilot can still pay its {2},{T} graveyard rebuy, and that rebuy has real fuel because Sram + Puresteel overdraw and the surplus is discarded at cleanup. The +0/+3 rides equip_tough_bonus (EquipBonusFor at every combat/projection site plus the SBA toughness re-check); equip {3} drops to {0} under Puresteel metalcraft. In the modeled engine this card is identical to the other +0/+3 shield, which makes any card-level A/B between them a null by construction.]",
+   "template": "custom",
+   "parameters": {
+    "is_equipment": true,
+    "equip_cost_generic": 3,
+    "equip_tough_bonus": 3,
+    "equip_grants_vigilance": true
+   }
+  },
+  {
+   "name": "Accorder's Shield",
+   "mana_cost": "{0}",
+   "types": [
+    "Artifact"
+   ],
+   "subtypes": [
+    "Equipment"
+   ],
+   "keywords": [
+    "Equip"
+   ],
+   "oracle_text": "Equipped creature gets +0/+3 and has vigilance. (Attacking doesn't cause it to tap.)\nEquip {3} [FULLY MODELED, including the vigilance grant (equip_grants_vigilance -> CreatureHasVigilance, consumed at the ONE site in the engine that reads vigilance at all: the shared combat core's attack-tap). Vigilance is deliberately NOT treated as an inert evasion keyword here -- it is not a blocking keyword, so the 'nothing blocks in the goldfish' argument that covers flying/trample/reach does NOT apply to it, and it is REACHABLE on this list: an attacking Cid, Freeflier Pilot can still pay its {2},{T} graveyard rebuy, and that rebuy has real fuel because Sram + Puresteel overdraw and the surplus is discarded at cleanup. The +0/+3 rides equip_tough_bonus (EquipBonusFor at every combat/projection site plus the SBA toughness re-check); equip {3} drops to {0} under Puresteel metalcraft. In the modeled engine this card is identical to the other +0/+3 shield, which makes any card-level A/B between them a null by construction.]",
+   "template": "custom",
+   "parameters": {
+    "is_equipment": true,
+    "equip_cost_generic": 3,
+    "equip_tough_bonus": 3,
+    "equip_grants_vigilance": true
+   }
+  },
+  {
+   "name": "Kite Shield",
+   "mana_cost": "{0}",
+   "types": [
+    "Artifact"
+   ],
+   "subtypes": [
+    "Equipment"
+   ],
+   "keywords": [
+    "Equip"
+   ],
+   "oracle_text": "Equipped creature gets +0/+3.\nEquip {3}",
+   "template": "custom",
+   "parameters": {
+    "is_equipment": true,
+    "equip_cost_generic": 3,
+    "equip_tough_bonus": 3
+   }
+  },
+  {
+   "name": "Spidersilk Net",
+   "mana_cost": "{0}",
+   "types": [
+    "Artifact"
+   ],
+   "subtypes": [
+    "Equipment"
+   ],
+   "keywords": [
+    "Equip"
+   ],
+   "oracle_text": "Equipped creature gets +0/+2 and has reach.\nEquip {2} [PARTIAL: 'has reach' not modeled; approved deferral -- WHY inert, two independent reasons: (1) Keyword::Reach is parsed by the keyword mapper but has ZERO readers anywhere in the engine, so it cannot change any state even on a card that prints it; (2) nothing blocks in the goldfish -- there is no declare-blockers logic at all and the passive opponent never attacks -- so reach-vs-not changes no outcome. Same class as Colossus Hammer's 'loses flying'. Contrast the +0/+3 shields' VIGILANCE grant, which IS modeled: vigilance has a live read (the attack-tap) and is reachable here, so it is not in this inert class. The +0/+2 is fully modeled (equip_tough_bonus); equip {2} drops to {0} under Puresteel metalcraft.]",
+   "template": "custom",
+   "parameters": {
+    "is_equipment": true,
+    "equip_cost_generic": 2,
+    "equip_tough_bonus": 2
+   }
+  },
+  {
+   "name": "Golem-Skin Gauntlets",
+   "mana_cost": "{1}",
+   "types": [
+    "Artifact"
+   ],
+   "subtypes": [
+    "Equipment"
+   ],
+   "keywords": [
+    "Equip"
+   ],
+   "oracle_text": "Equipped creature gets +1/+0 for each Equipment attached to it.\nEquip {2} [The grant is DYNAMIC -- the first equipment bonus in the pool that is not a constant. equip_scale_power_per_equipment=1 is multiplied by the number of Equipment attached to the HOST, counted INCLUDING this Gauntlets (it is itself attached to that creature), so a lone Gauntlets grants +1/+0. Summed inside EquipBonusFor beside the flat equip_power_bonus in ONE pass (sum of scalers x count, which is exact because every scaler on a host sees the same count), so all of that helper's sites -- real combat damage, both attack projections, the O-Naginata power gate and every SBA toughness re-check -- pick it up from one place and cannot drift. Multiple copies multiply: g scalers on a host holding k Equipment grant g*k. Toughness scaler is 0 (printed +1/+0). CRITICALLY, a dynamic bonus also had to be priced where an attach is RANKED: rider_delta priced it off the flat equip_power_bonus, which is 0 here, and the equip-emission gate drops a host that scores 0 -- so all three copies were castable and NEVER equippable in the pruned search, while human play (which opens every host) equipped them fine. Both rankers now call the shared EquipAttachDeltaFor, which reduces to equip_power_bonus whenever no scaler is involved and so is byte-identical for every other Equipment.]",
+   "template": "custom",
+   "parameters": {
+    "is_equipment": true,
+    "equip_cost_generic": 2,
+    "equip_scale_power_per_equipment": 1
+   }
+  },
+  {
+   "name": "Skateboard",
+   "mana_cost": "{1}",
+   "types": [
+    "Artifact"
+   ],
+   "subtypes": [
+    "Equipment"
+   ],
+   "keywords": [
+    "Equip"
+   ],
+   "oracle_text": "When this Equipment enters, tap target permanent.\nEquipped creature gets +1/+0 and has haste.\nEquip {1} [All four clauses MODELED. The +1/+0 rides equip_power_bonus; HASTE rides equip_grants_haste and is NOT inert -- the attack and tap gates both read it, so a Skateboard'd fresh body attacks the turn it lands, and it is already a searched axis (the haste-benefit host ranking); equip {1} drops to {0} under Puresteel metalcraft. PARTIAL -- the ETB's PAYOFF, not the clause: 'tap target permanent' is a MANDATORY targeted trigger over BOTH sides (CR 603.3d) and it FIRES every time, but no engine path reads an OPPONENT permanent's tapped state (spawns never attack, block or tap for mana), so against this opponent model it cannot change an outcome and carries no eval credit. WHY the TARGETING is still load-bearing: our own untapped lands are legal targets and tapping one is a REAL mana loss, so the auto-pick is a DOMINANCE LADDER, not a value heuristic -- an opponent permanent if one exists, else the Skateboard ITSELF, which is a provable no-op (no {T} ability, produces no mana, equipping is not a {T} cost, and the metalcraft artifact count ignores tapped). The source is always on the battlefield when the cascade runs, so a legal zero-cost target always exists and the 'trigger removed' branch is unreachable; the pick is deterministic, which matters because tapped is folded into the sim key. The human picks freely over the full both-sides set (the mandatory-ETB board-click shape).]",
+   "template": "custom",
+   "parameters": {
+    "is_equipment": true,
+    "equip_cost_generic": 1,
+    "equip_power_bonus": 1,
+    "equip_grants_haste": true,
+    "etb_tap_target_permanent": true
+   }
+  },
+  {
+   "name": "Dragonfire Blade",
+   "mana_cost": "{1}",
+   "types": [
+    "Artifact"
+   ],
+   "subtypes": [
+    "Equipment"
+   ],
+   "keywords": [
+    "Equip"
+   ],
+   "oracle_text": "Equipped creature gets +2/+2 and has hexproof from monocolored.\nEquip {4}. This ability costs {1} less to activate for each color of the creature it targets. [+2/+2 MODELED. The per-colour equip discount is MODELED (equip_cost_less_per_target_color=1): the host's colour count is subtracted at Equip ENUMERATION as well as at every payment site, floored at {0} (CR 601.2f) -- equip {3} onto mono-white Sram / Puresteel / Cid, equip {2} onto Dwalin, Weaponmaster ({1}{R/W} is BOTH red and white, CR 202.2b, which is why Dwalin also carries an explicit colors array), and {0} under Puresteel metalcraft, which SETS the cost to 0 and so stays the floor. Enumeration matters, not just payment: the viewer renders exactly the plans the enumerator produced, so a payment-only discount would leave a legal line un-expressible by both the search and the human; the host is known at enumeration time, so unlike the metalcraft flip (which can only ever get CHEAPER mid-plan) the cost can and must be exact. The host lookup goes through the card DEFINITION and checks the HAND as well as the battlefield, because the equip enumeration offers hosts still in hand and a hand card's colour mask is empty. PARTIAL: 'hexproof from monocolored' not modeled; WHY inert -- hexproof restricts only spells and abilities an OPPONENT controls (CR 702.11b), and the passive goldfish opponent never casts a spell or activates an ability, so no such object ever exists; the 'from monocolored' rider narrows it further, and unlike shroud it places no restriction on our OWN targeting. DELIBERATELY NOT mapped to equip_grants_shroud: shroud in this engine IS enforced against our own targeting, so reusing it would wrongly lock this deck's ~30 other Equipment off the host.]",
+   "template": "custom",
+   "parameters": {
+    "is_equipment": true,
+    "equip_cost_generic": 4,
+    "equip_power_bonus": 2,
+    "equip_tough_bonus": 2,
+    "equip_cost_less_per_target_color": 1
+   }
+  },
+  {
+   "name": "Deconstruction Hammer",
+   "mana_cost": "{W}",
+   "types": [
+    "Artifact"
+   ],
+   "subtypes": [
+    "Equipment"
+   ],
+   "keywords": [
+    "Equip"
+   ],
+   "oracle_text": "Equipped creature gets +1/+1 and has \"{3}, {T}, Sacrifice Deconstruction Hammer: Destroy target artifact or enchantment.\"\nEquip {1} [PARTIAL: the +1/+1 and Equip {1} are FULLY modeled (equip_power_bonus/equip_tough_bonus at every EquipBonusFor site; equip {1} drops to {0} under Puresteel metalcraft, and the Hammer itself counts toward that threshold because the count is a type-mask walk -- no param needed). NOTE the cast cost is COLORED {W}, the only coloured Equipment in this deck, so Cid's generic-only reduction cannot make it free. The GRANTED activated ability is PROVISIONALLY deferred 2026-10-01 as GOLDFISH-INERT, pending user sign-off. It is OPTIONAL, so unlike a MANDATORY ETB destroy there is no forced negative that must be modeled -- declining is always legal. Two legs: (1) the passive opponent controls NO artifact, enchantment or land (it only ever gets vanilla creature tokens), so an OPPONENT target never exists; (2) every OWN-side activation is STRICTLY DOMINATED by declining -- it spends {3}, taps the equipped creature (removing an attacker), sacrifices this Hammer (host loses +1/+1, artifact count -1, any hone counters on it, and -1 to a co-attached Golem-Skin Gauntlets) AND destroys a SECOND own permanent (artifact count -1 again, so metalcraft can flip OFF and Colossus Hammer's equip reverts {0}->{8}; or it eats an Ancient Den, which is a LAND), all for ZERO upside, because this 60 holds no sacrifice outlet, no artifact death trigger and no graveyard-artifact payoff -- Cid's rebuy only re-buys the Hammer for more mana and another tap. Note 'Sacrifice Deconstruction Hammer' is sacrifice THIS, not a choice of which artifact, so no sacrifice decision is dropped. Granting an ACTIVATED ability to the equipped HOST is also machinery the engine does not have (equip_grants_* covers haste/shroud/lifelink/vigilance only), i.e. Tier-3 work for a provably dominated line.]",
+   "template": "custom",
+   "parameters": {
+    "is_equipment": true,
+    "equip_cost_generic": 1,
+    "equip_power_bonus": 1,
+    "equip_tough_bonus": 1
+   }
+  },
+  {
+   "name": "Sram, Senior Edificer",
+   "mana_cost": "{1}{W}",
+   "types": [
+    "Creature"
+   ],
+   "supertypes": [
+    "Legendary"
+   ],
+   "subtypes": [
+    "Dwarf",
+    "Advisor"
+   ],
+   "keywords": [],
+   "power": 2,
+   "toughness": 2,
+   "oracle_text": "Whenever you cast an Aura, Equipment, or Vehicle spell, draw a card. [draw_on_cast_subtypes: fires in the shared on-cast trigger site (every cast path, executor + rollout) beside Kor Spiritdancer's draw_on_aura_cast, matched on the CAST CARD'S PRINTED SUBTYPE rather than on a param -- so all THREE printed arms are real code and the Vehicle arm fires the day a Vehicle is implemented (none exists in cards.json today). ON CAST, not on enter: it does NOT fire for an Equipment PUT onto the battlefield -- that is Puresteel Paladin's draw_on_equipment_etb -- and it WOULD fire for a countered spell (nothing counters in a goldfish). Gated on 'whenever YOU cast' (watcher controller == active). The draw is MANDATORY -- there is no 'may', unlike Puresteel and Kor -- so nothing is auto-resolved and there is no viewer decision to surface. STACKS with Puresteel: a CAST Equipment with W Paladins and a Sram out draws W+1 (Puresteel's draw loop counts every copy; only its METALCRAFT half is redundant across copies), while a PUT Equipment draws W. DISCLOSED 6a and NEWLY REACHABLE ON THIS LIST: both draw sites SKIP on an empty library rather than modelling CR 104.3c, and with 20 zero-cost Equipment at ~33% density the chain's branching factor (W+1)*0.33 goes supercritical at 3-4 Paladins, so the library really can empty inside one turn -- in which case the engine hands us a win where the rules give a loss. Not an infinite loop (each cast still needs a card from hand); the bound is the library, not the hand. Legendary with 4 copies: the duplicate-legend cast prune applies and is CORRECT here -- a second Sram is on the stack during its own cast and the legend-rule SBA kills it before it can watch anything.]",
+   "template": "vanilla_creature",
+   "parameters": {
+    "draw_on_cast_subtypes": [
+     "Aura",
+     "Equipment",
+     "Vehicle"
+    ]
+   }
+  },
+  {
+   "name": "Cid, Freeflier Pilot",
+   "mana_cost": "{1}{W}",
+   "types": [
+    "Creature"
+   ],
+   "supertypes": [
+    "Legendary"
+   ],
+   "subtypes": [
+    "Human",
+    "Warrior",
+    "Pilot"
+   ],
+   "keywords": [
+    "Jump"
+   ],
+   "power": 2,
+   "toughness": 2,
+   "oracle_text": "Equipment and Vehicle spells you cast cost {1} less to cast.\nJump — During your turn, Cid has flying.\n{2}, {T}: Return target Equipment or Vehicle card from your graveyard to your hand. [Cost reduction via reduces_spell_subtype 'Equipment' + amount 1 -- the existing Goblin Warchief reducer, first use on an ARTIFACT subtype rather than a creature type (the matcher already walks the cast card's subtypes, so Equipment matches exactly as Goblin does). reduces_spell_subtype_creature_only stays FALSE: Equipment spells are artifacts, and setting it true would delete the whole effect. Reduces GENERIC only, floored at 0 (CR 601.2f): the {0} shields are unchanged, every {1} Equipment becomes FREE, and the {W} Deconstruction Hammer is irreducible. Independent of Puresteel's metalcraft, which is the EQUIP cost, not the cast cost. THIS PARAM FORCED A PROVIDER-ROUTING FIX: reduces_spell_subtype ALONE sets the `goblin` archetype signature, which was tested BEFORE `equipment`, so this deck silently routed to GoblinsProvider (losing its own USER-reviewed cast order and TutorSearchWidth); the equipment return now precedes goblin. Cid is also ranked AHEAD of the Equipment it discounts in the cast order -- it otherwise tied with is_equipment at rank 8 and cheapest-first cast the free Equipment first, stranding the discount (the Minotaur Ragemonger bug). The {2},{T} rebuy rides Haven of the Spirit Dragon's gy_return machinery with gy_return_sacrifices_source FALSE: Cid TAPS but is NOT sacrificed, so the ability is repeatable across turns, and tapping it forgoes that turn's attack (Cid has no printed vigilance -- but a Cathar's/Accorder's Shield GRANTS it, which is exactly why that grant is modeled rather than deferred). One Action per distinct legal graveyard Equipment NAME, folded into the plan signature, so WHICH card returns is really searched and human-picked. Its fuel is real: Sram + Puresteel overdraw and the surplus is discarded at cleanup. PARTIAL: the 'and Vehicle spells' half is NOT modeled (the param is a single subtype string) and neither is the 'or Vehicle' half of the rebuy filter; WHY inert -- there are ZERO Vehicles in this deck and zero in all of cards.json, so no reachable state differs. PARTIAL: Jump ('during your turn, Cid has flying') is NOT modeled; WHY inert -- nothing blocks anywhere in this engine, so evasion cannot change an outcome; Keyword::Flying is deliberately not granted because the grant is turn-conditional and the engine has no layer for that, so an unconditional grant would be unfaithful while buying nothing. 'Jump' rides as an inert keyword tag so the Scryfall keywords field stays faithful. Legendary at 1 copy, so the legend rule never fires.]",
+   "template": "custom",
+   "parameters": {
+    "reduces_spell_subtype": "Equipment",
+    "reduces_spell_subtype_amount": 1,
+    "gy_return_cost": "{2}",
+    "gy_return_requires_subtype": "Equipment",
+    "gy_return_sacrifices_source": false
+   }
+  },
+  {
+   "name": "Sigarda's Aid",
+   "mana_cost": "{W}",
+   "types": [
+    "Enchantment"
+   ],
+   "subtypes": [],
+   "keywords": [],
+   "oracle_text": "You may cast Aura and Equipment spells as though they had flash.\nWhenever an Equipment you control enters, you may attach it to target creature you control. [PARTIAL: clause 1 ('as though they had flash') approved-deferred -- WHY inert: Keyword::Flash's only readers relax a 'stack is empty' gate inside the cast-timing test, and the engine enumerates casts exclusively in a main phase with an empty stack, so the relaxed gate is never the binding one and flash opens no window sorcery speed does not already give. Both paper payoffs need an opponent that ACTS: a post-declare-blockers surprise Hammer (no blocking exists in this engine) or an end-step cast to dodge removal (the passive opponent casts nothing). The deck also holds ZERO Auras, so half the clause has no object at all. Clause 2 FULLY MODELED: attach_equipment_on_etb fires at the UNIVERSAL enter cascade, inside the same is_equipment entrant gate as Puresteel's draw, so a CAST Equipment and a PUT one both trigger. The trigger TARGETS, so the legal host set EXCLUDES SHROUD (CR 702.18b) -- unlike Balan's attach-all and the attack-dig attach, neither of which targets -- and it respects equip_min_power. An entrant that arrived ALREADY attached defaults to declining the move, which also keeps Grafted Wargear's prior-host sacrifice off this path. WHICH host = provider EquipmentEtbAttachHost; the human gets the existing attach_host board-click chooser, whose -1 reply is the printed 'may'. Its order against Puresteel's draw is UNOBSERVABLE (a draw lands in hand and cannot change the legal host set). The attach bypasses the equip COST entirely; a plan whose Equip names the same host is already skipped by the same-host guard at both apply sites, so nothing double-pays. NOT an artifact -- this enchantment does NOT count toward Puresteel's metalcraft threshold (the 4 Ancient Den DO; the Plains and Remote Farm do not). Marginal-value note for whoever measures it: once metalcraft is live every equip is already {0}, so this card's unique contribution is concentrated on pre-metalcraft turns and on Colossus Hammer at equip {8} -- condition on artifact count before quoting any null for it.]",
+   "template": "custom",
+   "parameters": {
+    "attach_equipment_on_etb": true
+   }
+  },
+  {
+   "name": "Dwalin, Weaponmaster",
+   "mana_cost": "{1}{R/W}",
+   "types": [
+    "Creature"
+   ],
+   "supertypes": [
+    "Legendary"
+   ],
+   "subtypes": [
+    "Dwarf",
+    "Warrior"
+   ],
+   "keywords": [
+    "First strike"
+   ],
+   "colors": [
+    "R",
+    "W"
+   ],
+   "power": 2,
+   "toughness": 1,
+   "oracle_text": "First strike\nWhenever Dwalin enters or attacks, put a hone counter on each Equipment you control. [THE FIRST HONE COUNTER IN THIS FILE. ONE printed trigger with TWO conditions, modelled as one param read at two fire sites: the ENTERS half from the universal own-ETB cascade (so any enter route triggers it) and the ATTACKS half at DECLARE-ATTACKERS in BOTH worlds, beside the quest-counter attack trigger. BECAUSE THE ATTACK HALF RESOLVES IN THE DECLARE-ATTACKERS STEP, THE PUMP APPLIES TO THE SAME COMBAT -- the Beastmaster Ascension property -- which is why the two attack PROJECTIONS carry a matching addend: they read EquipBonusFor without firing the trigger, so without it the search under-rates attacking with Dwalin by one damage per Equipment attached to an attacker, a textbook projection-vs-executor divergence generator. THE +1/+0 IS INTRINSIC TO THE COUNTER, NOT TO DWALIN (the shield-counter class), so it is summed inside EquipBonusFor rather than at a Dwalin-specific site: one function, every combat/projection/SBA call site, and automatically correct for any future hone source. Counters live in a dedicated Permanent::hone_counters int (the spore/quest/fade pattern) and are folded into the plan sim key nonzero-gated, because the generic counter field records only the counter vector's SIZE -- the storage-counter key-hole defect this repo has already paid for once. Routed through the shared counter-put chokepoint, so Doubling Season correctly doubles them (CR 614). THE COUNTERS GO ON EVERY EQUIPMENT YOU CONTROL, ATTACHED OR NOT, which is what makes the dominance axis monotone: an unattached Equipment banks the bonus and cashes it on a later (metalcraft-free) equip, so a honed Colossus Hammer in play is a stored +N on top of its +10/+10. Hone counters are not artifacts and do not move the metalcraft count. An explicit colors array is carried because the {R/W} hybrid pip makes the card BOTH colours (CR 202.2b) and Dragonfire Blade's per-colour equip discount reads that count -- without it the Blade would silently cost {3} on Dwalin instead of {2}. Legend rule engine-enforced; inert at one copy. PARTIAL: FIRST STRIKE is parsed but structurally INERT -- Keyword::FirstStrike has no readers at all, there is no blocker path, and the combat damage step is collapsed into one event; WHY inert: the passive opponent never blocks, so strike ORDER cannot change an outcome. Note the contrast that makes this safe -- DOUBLE strike is NOT inert in this engine, so this is specifically the first-strike-alone collapse.]",
+   "template": "custom",
+   "parameters": {
+    "hone_counters_on_enter_or_attack": 1
+   }
+  },
+  {
    "name": "Umezawa's Jitte",
    "mana_cost": "{2}",
    "types": [

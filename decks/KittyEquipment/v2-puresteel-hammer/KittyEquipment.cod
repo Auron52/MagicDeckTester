@@ -1,0 +1,55 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<cockatrice_deck version="1">
+    <lastLoadedTimestamp>Thu Oct 1 03:44:09 2026</lastLoadedTimestamp>
+    <deckname></deckname>
+    <format></format>
+    <bannerCard providerId=""></bannerCard>
+    <comments></comments>
+    <tags/>
+    <zone name="main">
+        <card number="1" name="Cid, Freeflier Pilot" setShortName="FIC" collectorNumber="13" uuid="afa9e3e6-a633-46ad-b52a-48574b2f3d07"/>
+        <card number="1" name="Sigarda's Aid" setShortName="SIR" collectorNumber="43" uuid="83b07e61-e638-459e-8a51-d9d7ee3c578a"/>
+        <card number="4" name="Ancient Den" setShortName="AA2" collectorNumber="23" uuid="f9333d0e-e7b7-40e6-a510-3fcab1a9b655"/>
+        <card number="4" name="Cathar's Shield" setShortName="EMN" collectorNumber="192" uuid="61c18ffa-ffff-4dc4-9db0-d5f183c35e17"/>
+        <card number="4" name="Accorder's Shield" setShortName="EA3" collectorNumber="19" uuid="3b06e292-43ef-4def-b6a6-9b7816cc8599"/>
+        <card number="1" name="Dragonfire Blade" setShortName="PTDM" collectorNumber="240p" uuid="f6126a8f-5370-40ef-ae31-569ec907526d"/>
+        <card number="4" name="Bone Saw" setShortName="PLST" collectorNumber="OGW-161" uuid="b83a19c7-26ad-408d-aafd-5c76ea010b96"/>
+        <card number="4" name="Colossus Hammer"/>
+        <card number="4" name="Kite Shield" setShortName="PLST" collectorNumber="M12-210" uuid="2ec00f45-7c40-4ceb-a8d1-c36ba5143f43"/>
+        <card number="1" name="Deconstruction Hammer" setShortName="LCI" collectorNumber="9" uuid="0c7ba382-18c4-4833-b3d2-bd469ae2ad77"/>
+        <card number="3" name="Golem-Skin Gauntlets" setShortName="2XM" collectorNumber="259" uuid="ee198804-a247-46b9-be6e-71bbb5840401"/>
+        <card number="2" name="Skateboard" setShortName="TMT" collectorNumber="178" uuid="deadb6d8-3eea-4261-a07c-8536df89e85c"/>
+        <card number="4" name="Spidersilk Net" setShortName="DTK" collectorNumber="244" uuid="9561b47c-b863-463a-8a10-56fede2cb42c"/>
+        <card number="1" name="Dwalin, Weaponmaster" setShortName="HOB" collectorNumber="154" uuid="196d9287-a37d-4b27-a83b-a5489a54f081"/>
+        <card number="4" name="Puresteel Paladin"/>
+        <card number="4" name="Sram, Senior Edificer" setShortName="FCA" collectorNumber="3" uuid="084d7a61-ef18-42e3-8485-76ae9a36ef7b"/>
+        <card number="8" name="Plains"/>
+        <card number="2" name="Shadowspear"/>
+        <card number="4" name="Remote Farm"/>
+    </zone>
+    <zone name="side">
+        <card number="1" name="Adaptive Omnitool" setShortName="DRC" collectorNumber="16" uuid="1603aab8-731c-407a-bb44-625c36ace43e"/>
+        <card number="1" name="Bloodforged Battle-Axe" setShortName="MOC" collectorNumber="349" uuid="14f12690-377e-46ae-bbae-f17c27b6acb4"/>
+        <card number="1" name="Eater of Virtue" setShortName="PNEO" collectorNumber="245p" uuid="e8d1c676-658c-4f2c-bc20-09878ecddaf2"/>
+        <card number="1" name="Bonesplitter" setShortName="PLST" collectorNumber="MRD-146" uuid="bda22fad-8149-42fb-b915-2c2580efb353"/>
+        <card number="1" name="O-Naginata" setShortName="PLST" collectorNumber="SOK-157" uuid="96e7194c-e91e-4816-928c-01912d10e751"/>
+        <card number="1" name="Sol Ring" setShortName="BLC" collectorNumber="129" uuid="fff440c0-7e6a-46c2-9989-f1b5af20fd44"/>
+        <card number="1" name="Adelbert Steiner" setShortName="FIN" collectorNumber="3" uuid="1a67a991-1e52-4676-a2e3-2bc7aa943ab3"/>
+        <card number="1" name="Lavaspur Boots" setShortName="OTJ" collectorNumber="243" uuid="e50709de-e6ef-4dbc-af1e-290fed279f34"/>
+        <card number="1" name="Bureau Headmaster" setShortName="ACR" collectorNumber="296" uuid="58766566-6e19-4f74-bfce-5a61429ffaa9"/>
+        <card number="1" name="Kíli the Resourceful" setShortName="HOB" collectorNumber="17" uuid="1805532f-6d99-47d0-9529-5f5831a7fdc8"/>
+        <card number="1" name="Wrecking Ball Arm" setShortName="FIC" collectorNumber="100" uuid="e1f16620-08d6-49bd-9f75-d89ae46bfd1f"/>
+        <card number="1" name="Kor Duelist" setShortName="DCI" collectorNumber="32" uuid="e826b53c-5a6d-452f-bb57-2c4fd798f06d"/>
+        <card number="1" name="Greataxe" setShortName="AFR" collectorNumber="245" uuid="e840aef6-eec4-40dd-bbc4-6fd0b2b57805"/>
+        <card number="1" name="Armored Skyhunter" setShortName="SOC" collectorNumber="138" uuid="707e9d2e-3934-4b90-878d-4699ac1cbe89"/>
+        <card number="1" name="Umezawa's Jitte" setShortName="AA3" collectorNumber="23" uuid="e7cd4813-7794-448d-baca-6f894f749392"/>
+        <card number="1" name="Halvar, God of Battle" setShortName="KHM" collectorNumber="15" uuid="97502411-5c93-434c-b77b-ceb2c32feae7"/>
+        <card number="1" name="Danitha Capashen, Paragon" setShortName="CMM" collectorNumber="20" uuid="a11f77e4-edb6-43c6-b8ca-d4f62d26d0c0"/>
+        <card number="1" name="Sokka, Swordmaster" setShortName="TLE" collectorNumber="83" uuid="2fcfb238-121c-46b8-a4a9-1b45b4dbb4a0"/>
+        <card number="1" name="Swordsman's Steel" setShortName="MSC" collectorNumber="752" uuid="ae4ab04b-a3bd-40ea-9a71-df221cde4496"/>
+        <card number="1" name="Team Pennant" setShortName="STX" collectorNumber="260" uuid="be294c4e-712b-459c-a36c-e26ed5c27edb"/>
+        <card number="1" name="Leyline Axe"/>
+        <card number="1" name="Thran Power Suit"/>
+        <card number="1" name="Masterwork of Ingenuity"/>
+    </zone>
+</cockatrice_deck>

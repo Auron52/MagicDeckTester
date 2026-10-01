@@ -5814,7 +5814,8 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
                 && !EquipmentAttachedTo(state, state.active_player_index, a.sac_source_id, a.sac_victim_id)
                 && TapForCost(state,
                               EquipActionCostNow(state, state.active_player_index,
-                                                 a.sac_source_id, a.cost),
+                                                 a.sac_source_id, a.cost,
+                                                 a.sac_victim_id),
                               avail, /*for_creature=*/false))
             {
                 // Under MTG_EQUIP_LOG_TRUTH, decide BEFORE the apply whether it will attach, so the

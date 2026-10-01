@@ -115,6 +115,10 @@ enum class DomAxis : std::uint8_t
     // Appended after LoreCounters for the same reason it was appended: the raw array is indexed
     // by this enum. Zero on every permanent that is not a fading one, so no other deck moves.
     FadeCounters,        // Permanent::fade_counters     -- Saproling Burst (CR 702.32)
+    // Appended LAST, same reason as the two above: the raw array is indexed by this enum, so an
+    // axis inserted mid-list renumbers every existing one. Zero on every permanent that is not an
+    // Equipment a hone source has touched, so no other deck moves.
+    HoneCounters,        // Permanent::hone_counters     -- Dwalin, Weaponmaster
     _Count
 };
 
@@ -468,6 +472,20 @@ public:
     virtual int AttackDigAttachHost(
         const GameState& s, int controller, const Card& equip_card,
         const std::vector<int>& attacker_bf_indices) const;
+
+    // EquipmentEtbAttachHost -- Sigarda's Aid: "whenever an Equipment you control enters, you MAY
+    // attach it to target creature you control". WHICH creature (0 = decline, leaving it
+    // unattached). `candidate_bf_indices` is the rules-legal set the CALLER built -- controlled
+    // creatures, honouring equip_min_power and excluding shroud, because unlike the attack-dig
+    // attach this trigger TARGETS -- and, exactly as for SoulbondPartner, the provider only
+    // ORDERS that set: it never widens or narrows legality.
+    // Base rule (out-of-line) shares AttackDigAttachHost's scorer, but over the candidates passed
+    // in rather than attackers only: this fires at a main-phase ETB, where attackers are not yet
+    // declared. Declining is a real arm, not a formality -- re-hosting an already-attached
+    // Equipment can cost its prior host (Grafted Wargear).
+    virtual int EquipmentEtbAttachHost(
+        const GameState& s, int controller, const Card& equip_card,
+        const std::vector<int>& candidate_bf_indices) const;
 
     // SoulbondPartner -- CR 702.46b's "you MAY pair this creature with another unpaired creature":
     // WHICH of the legal unpaired creatures to pair with (0 = decline the optional pairing).
@@ -1470,6 +1488,12 @@ public:
             // tracks the count), and a later sacrifice taking them all with it.
             case DomAxis::FadeCounters:     return DomDir::MoreDominates;
             case DomAxis::QuestCounters:    return DomDir::MoreDominates;
+            // Hone counters are a pure stored pump (+1/+0 each to the equipped creature): no cap,
+            // no upkeep cost, no sink to spend them at and no aim-for-a-value shape, so unlike
+            // ChargeCounters more is never worse. They also sit on an UNATTACHED Equipment
+            // perfectly happily, banking the bonus for a later equip, so there is no board shape
+            // in which an extra one is a liability.
+            case DomAxis::HoneCounters:     return DomDir::MoreDominates;
             // Strictly better with FEWER.
             case DomAxis::MinusOneMinusOne: return DomDir::FewerDominates; // smaller creature
             // Deck-dependent or non-monotone -> exact match (see the note above). PoisonCounter is

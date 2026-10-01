@@ -640,6 +640,7 @@ void GameEngine::CombatPhase(GameState& state)
     // token block below, because tokens PUT onto the battlefield attacking were never declared
     // (CR 508.4) and must not trigger it. Mirrors TurnSolver::SimulateCombat (lockstep). Gated inert.
     ApplyAttackQuestCounters(state, state.active_player_index, atk_idx);
+    ApplyAttackHoneCounters(state, state.active_player_index, atk_idx);
 
     // Inferno Titan's attack half ("whenever this creature enters or attacks, it deals 3 damage"):
     // 3 to the opponent's face per attacking copy. Fired HERE, before the Adeline token block, for

@@ -94,6 +94,30 @@ KittyEquipment reuse notes (2026-08-13): the Armored Skyhunter attack-dig's *put
 `dig` type (`FireAttackDigAttach` → `g_play_dig_chooser`, source = the Skyhunter); only the attach
 host needed the new `attach_host` type above.
 
+KittyEquipment **v2-puresteel-hammer** reuse notes (2026-10-01): the new list adds two interactive
+choices and **neither needs a new decision type or any new wiring site** — both were confirmed
+present in the tree before being relied on, rather than assumed:
+* **Sigarda's Aid**, "whenever an Equipment you control enters, you may attach it to target creature
+  you control" → reuses **`attach_host`**, consulted from `FireEtbWatchers` (inside the existing
+  `is_equipment` entrant gate). The decisive precedent is **soulbond**, not the attack-dig attach:
+  soulbond already calls this exact chooser from inside that same enter cascade with `-1` as the
+  decline arm for a printed "you may", which is byte-for-byte the shape needed here. Two things
+  differ from the attack-dig attach and both matter: this trigger **TARGETS**, so shroud hosts are
+  excluded (CR 702.18b), and an entrant that arrived **already attached** is skipped (which also
+  keeps Grafted Wargear's prior-host sacrifice off this path).
+* **Skateboard**, "when this Equipment enters, tap target permanent" → reuses **`target`** via
+  `g_play_loyalty_chooser`, i.e. the same mandatory-both-sides ETB row Shriekmaw and Acidic Slime
+  use. Legal set is every permanent on both sides (CR 603.3d); a forced single target is not
+  prompted. Worth knowing when playing it: the tap's **payoff** against this opponent is zero (no
+  path reads an opponent permanent's tapped state), but the **choice is real** because our own
+  untapped lands are legal targets — the auto-pick is therefore a dominance ladder (an opponent
+  permanent, else the Skateboard itself, a provable no-op) rather than a value heuristic.
+
+Also new on that list but creating **no** decision: Dwalin's hone counters are mandatory and
+untargeted, so they surface only as a board **counter badge** (`hone`) — which is a display
+requirement, not an option: the counter total *is* each Equipment's hidden power bonus, exactly the
+reason the spore and quest badges are documented as required.
+
 Turntimber Symbiosis reuse note (2026-08-21): the `look_top_put_creature_count` put also reuses the
 `dig` type (`PerformLookTopPutCreature` → `g_play_dig_chooser`, source = `"<card> (put)"` — the
 marker keys the onto-the-battlefield wording in both the emitter note and `digPanelHtml`). Under

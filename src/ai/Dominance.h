@@ -170,7 +170,20 @@
 // grants it is consumed by the untap step, not by cleanup, so it must be COMPARED rather than
 // refused. Unlike colored_cast_lifegain_used_this_turn it FLIPS MID-TURN, which is why it is also
 // folded into TurnSolver's BuildSimKey (and thus the mid-turn breakpoint and dedup keys).
-static_assert(sizeof(Permanent) == 296,
+// 296 -> 304 (2026-10-01, KittyEquipment v2-puresteel-hammer): Permanent gained `hone_counters`
+// (Dwalin, Weaponmaster -- "whenever Dwalin enters or attacks, put a hone counter on each Equipment
+// you control", each granting +1/+0 to the equipped creature). THE TRIPWIRE DID FIRE on this one,
+// unlike the temp_double_strike / mana_tap_mark / lifegain_counters_used_this_turn entries above,
+// so the int did not land in padding. Classification: a DIRECTIONAL AXIS, folded in Build() below
+// as DomAxis::HoneCounters with MoreDominates -- a pure stored pump with no cap, no upkeep cost and
+// no sink to spend it at, so unlike ChargeCounters there is no aim-for-a-value shape and an extra
+// counter is never a liability (it banks happily on an UNATTACHED Equipment and cashes on a later
+// equip). NOT a boundary assertion: hone counters survive cleanup and the untap step, so refusing
+// them in AtCleanBoundary would refuse every comparison from the turn a Dwalin attacks onward.
+// Also folded into TurnSolver's BuildSimKey (nonzero-gated), because the attack half FLIPS
+// MID-TURN -- the Beastmaster Ascension property -- and the sim key's `/c` field records only
+// counters.SIZE, which is the storage-counter key-hole defect this repo has already paid for once.
+static_assert(sizeof(Permanent) == 304,
               "Permanent changed size -- fold any new field into dominance::Build() (see the "
               "MAINTENANCE HAZARD note at the top of Dominance.h) before updating this number.");
 // The point of CounterList: this is what makes the erase path a memmove. If a future field breaks
@@ -955,6 +968,7 @@ inline DomSnap Build(const GameState& s, const DecisionProvider& prov,
         raw[static_cast<std::size_t>(DomAxis::SporeCounters)]   = p.spore_counters;
         raw[static_cast<std::size_t>(DomAxis::FadeCounters)]    = p.fade_counters;
         raw[static_cast<std::size_t>(DomAxis::QuestCounters)]   = p.quest_counters;
+        raw[static_cast<std::size_t>(DomAxis::HoneCounters)]     = p.hone_counters;
         raw[static_cast<std::size_t>(DomAxis::Loyalty)]         = p.loyalty;
         for (const Counter& c : p.counters)
         {

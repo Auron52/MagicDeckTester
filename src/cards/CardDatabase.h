@@ -274,14 +274,20 @@ struct CardParams
     // Haven of the Spirit Dragon: "{2}, {T}, Sacrifice this land: Return target Dragon creature card
     // from your graveyard to your hand." Set gy_return_cost to enable (empty = no such ability).
     // gy_return_requires_subtype narrows the legal targets ("Dragon"; empty = any creature card);
-    // gy_return_requires_creature gates on the graveyard card being a creature. The source is TAPPED
-    // and SACRIFICED as part of the cost, so it can never pay its own {2} and never targets itself.
+    // gy_return_requires_creature gates on the graveyard card being a creature.
     // WHICH card to return is a real choice: the enumeration emits one Action per distinct legal
     // graveyard card NAME (carried on Action::tutor_target and folded into the plan signature), so
     // the search picks among them and the viewer surfaces every option -- never a "first match".
+    // gy_return_sacrifices_source (default TRUE = Haven's printed cost, so every existing card is
+    // byte-identical): when true the source is TAPPED and SACRIFICED as part of the cost, so it can
+    // never pay its own {2} and never targets itself. Cid, Freeflier Pilot sets it FALSE -- it taps
+    // but survives, which makes the ability REPEATABLE (once per turn) rather than one-shot, and
+    // means tapping it forgoes that turn's attack. Cid still never targets itself (not an
+    // Equipment), but a false value does NOT license assuming that in general.
     std::optional<ManaCost> gy_return_cost;
     std::string             gy_return_requires_subtype;
     bool                    gy_return_requires_creature = false;
+    bool                    gy_return_sacrifices_source = true;
 
     // restricted. Modelled as produces = [C, <colors>] + this flag: at payment time a non-creature
     // spell may take only {C} from the source (ProducesForPayment strips the colours), a creature
@@ -1336,8 +1342,40 @@ struct CardParams
     int  equip_power_bonus  = 0;
     int  equip_tough_bonus  = 0;
     bool equip_grants_lifelink = false;
+    // Cathar's Shield / Accorder's Shield ("equipped creature gets +0/+3 and has vigilance").
+    // Read by CreatureHasVigilance (SpellEffects.h), consumed at the ONE shared site that reads
+    // vigilance at all: Combat.cpp's attack-tap. Deliberately IMPLEMENTED rather than deferred --
+    // vigilance is not a blocking keyword, so the usual "nothing blocks in the goldfish" argument
+    // does not cover it, and it is reachable on KittyEquipment v2 (an attacking Cid, Freeflier
+    // Pilot can still pay its {T} rebuy). Contrast the same cards' REACH grant, which stays a
+    // bracket note because Keyword::Reach has no readers anywhere in the engine.
+    bool equip_grants_vigilance = false;
     int  equip_min_power    = 0;
     bool equip_sacrifices_prior_host = false;
+    // Dragonfire Blade: "Equip {4}. This ability costs {1} less to activate for each color of
+    // the creature it targets." The amount per colour (1). Applied by EquipCostGenericNow at
+    // ENUMERATION as well as at every payment site -- enumeration matters because the viewer
+    // renders exactly the plans the enumerator produced, so a payment-only discount would
+    // leave a legal line (equip onto a 2-colour host with only 2 mana up) un-expressible by
+    // either the search or the human. That is unlike the metalcraft flip, which can only ever
+    // make a cost CHEAPER mid-plan and so is safe to under-offer; here the host is known at
+    // enumeration time, so the cost can and must be exact. Floored at {0} (CR 601.2f).
+    int  equip_cost_less_per_target_color = 0;
+
+    // Golem-Skin Gauntlets ("equipped creature gets +1/+0 for EACH Equipment attached to it") --
+    // the first equipment bonus that is NOT a constant, the equipment analogue of the aura side's
+    // aura_scale_power/aura_scale_tough. The scaler is multiplied by the number of Equipment
+    // attached to the HOST, counted INCLUDING the scaling equipment itself (it is attached to that
+    // creature), so a lone Gauntlets grants +1/+0. Summed in EquipBonusFor beside the flat
+    // equip_power_bonus, so all of that helper's call sites -- Combat.cpp's real damage,
+    // TurnSolver's two attack projections, EquipGatePowerOf and every SBA toughness re-check --
+    // pick it up from the ONE place and cannot drift. Multiple copies multiply: g scalers on a host
+    // holding k Equipment grant g*k (exact, because every scaler sees the same k).
+    // CRITICAL: a dynamic bonus ALSO has to be priced where an attach is RANKED, or the equip
+    // action is never emitted -- see EquipAttachDeltaFor (SpellEffects.h), which rider_delta
+    // (TurnSolver) and AttackDigAttachHost (DecisionProviders) both call for exactly that reason.
+    int  equip_scale_power_per_equipment = 0;
+    int  equip_scale_tough_per_equipment = 0;
 
     // Umezawa's Jitte: equip_combat_damage_charges counters land on the Jitte each time the
     // equipped creature deals combat damage (collapsed to "to a player" -- approved: nothing
@@ -1376,6 +1414,34 @@ struct CardParams
     // mid-plan metalcraft flip (cast artifact #3, then equip) stays lockstep.
     bool draw_on_equipment_etb = false;
     int  metalcraft_equip_zero_artifacts = 0;
+
+    // Sigarda's Aid: "Whenever an Equipment you control enters, you may attach it to target
+    // creature you control." Same trigger CONDITION as draw_on_equipment_etb above (and wired
+    // inside the same is_equipment entrant gate in FireEtbWatchers, so it also fires on a PUT,
+    // not just a cast), but two things differ and both matter:
+    //   * it TARGETS, so the legal host set excludes shroud (CR 702.18b) -- unlike Balan's
+    //     attach-all and the attack-dig attach, neither of which targets;
+    //   * the printed "may" is a REAL decline arm, not an always-take like Puresteel's draw.
+    // An entrant that arrived ALREADY attached is skipped (the attack-dig put attaches before the
+    // cascade runs), which also keeps Grafted Wargear's prior-host sacrifice off this path.
+    // WHICH host: provider EquipmentEtbAttachHost; the human gets the existing attach_host
+    // chooser, whose -1 reply is the decline. The attach bypasses the equip COST entirely.
+    bool attach_equipment_on_etb = false;
+
+    // Dwalin, Weaponmaster: "Whenever Dwalin enters or attacks, put a hone counter on each
+    // Equipment you control." ONE printed trigger with TWO conditions -> one param read at two
+    // fire sites (the enters-or-attacks precedent already in cards.json): the own-ETB cascade and
+    // declare-attackers in BOTH worlds. Because the attack half resolves IN the declare-attackers
+    // step, the pump applies to the SAME combat -- so the attack PROJECTIONS need the addend too
+    // or the search systematically under-rates attacking (an fd-diverge generator).
+    // The +1/+0 is intrinsic to the COUNTER, not to Dwalin (the shield-counter class), so it is
+    // summed inside EquipBonusFor and would be correct for any future hone source. Counters go on
+    // EVERY Equipment you control, attached or not, so an unattached one banks the bonus and
+    // cashes it on a later (metalcraft-free) equip. Stored in Permanent::hone_counters -- a
+    // dedicated int, the spore/quest/fade pattern, NOT a Counter{} vector entry (BuildSimKey
+    // records only counters.SIZE, which is the storage-counter key-hole defect this repo has
+    // already paid for once).
+    int  hone_counters_on_enter_or_attack = 0;
 
     // Kemba, Kha Regent: at the controller's upkeep, create upkeep_token_power/toughness tokens
     // -- one per Equipment attached to THIS permanent (counted via Permanent::equipped_to).
@@ -1995,6 +2061,17 @@ struct CardParams
     // lockstep in executor + rollout); NO same-turn re-solve (the drawn card is a resource for later
     // turns -- conservative, avoids an fd-diverge re-solve; disclosed 6a). false => no trigger.
     bool draw_on_aura_cast = false;
+    // Sram, Senior Edificer: "Whenever you cast an Aura, Equipment, or Vehicle spell, draw a card."
+    // Same site as draw_on_aura_cast above, but matched on the cast card's PRINTED SUBTYPE rather
+    // than on a param, so all three printed arms are real code (the Vehicle arm fires the day a
+    // Vehicle is implemented; none exists today). Three things differ from Kor Spiritdancer:
+    //   * it is ON CAST, not on enter -- it must NOT fire for an Equipment PUT onto the battlefield
+    //     (Stoneforge / the attack-dig put); that is Puresteel's draw_on_equipment_etb;
+    //   * the draw is MANDATORY -- there is no "may" -- so nothing is auto-resolved and there is no
+    //     viewer decision to surface;
+    //   * it is gated on "whenever YOU cast" (watcher controller == active player).
+    // Empty => inert => every other deck byte-identical.
+    std::vector<std::string> draw_on_cast_subtypes;
 
     // --- Light-Paws, Emperor's Voice ---
     // "Whenever an Aura you control enters, if you cast it, search your library for an Aura card with mana
@@ -2104,6 +2181,21 @@ struct CardParams
     // human-surfaceable rather than stubbed. The don't-untap rider is NOT modelled: the passive
     // opponent never takes a turn, so it has no untap step to skip (bracket-noted on the entry).
     bool etb_tap_opp_creature = false;
+    // Skateboard: "When this Equipment enters, tap target permanent." MANDATORY and targeted, and
+    // unlike etb_tap_opp_creature above the legal set is EVERY permanent on BOTH sides (CR 603.3d)
+    // -- the Shriekmaw / Acidic Slime shape, which is why it needs its own param rather than
+    // reusing the opponent-creature one (that would silently do nothing in the game indices with
+    // no spawn, and could never express the own-side half of the legal set at all).
+    // The PAYOFF is provably 0 (no engine path reads an OPPONENT permanent's tapped state), but the
+    // TARGETING is NOT inert: our own untapped lands are legal targets and tapping one is a real
+    // mana loss. So the auto-pick is a DOMINANCE LADDER, not a value heuristic -- an opponent
+    // permanent if one exists, else the SOURCE ITSELF, which is a provable no-op (it has no {T}
+    // ability, produces no mana, equip reads no tapped state since equipping is not a {T} cost, and
+    // metalcraft's artifact count ignores tapped). The source is always on the battlefield when the
+    // cascade runs, so a zero-cost legal target always exists and we never have to tap a land.
+    // Keep the pick DETERMINISTIC: `tapped` is folded into BuildSimKey, so a scattered choice costs
+    // memo hit-rate. The human picks freely over the full both-sides set (board-click `target`).
+    bool etb_tap_target_permanent = false;
     // ETB "each opponent" ping ("deals N damage to each opponent and each creature/planeswalker
     // they control" — Goblin Chainwhirler 1). N to the opponent face (race-relevant, via the
     // OpponentGainsLife life-loss path so the win projection sees it) AND N to each permanent the

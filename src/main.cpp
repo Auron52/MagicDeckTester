@@ -168,6 +168,10 @@ static void JsonBattlefield(std::ostream& os, const GameState& s, int controller
         // a human cannot read their own board -- and it is also the number of activations left.
         if (p.fade_counters)    { cs.push_back({ "fade",      "fade",      p.fade_counters }); }
         if (p.quest_counters)   { cs.push_back({ "quest",     "quest",     p.quest_counters }); }
+        // Hone counters (Dwalin): NOT optional display -- the total IS the equipped
+        // creature's hidden power bonus, so without the badge the board's real power is
+        // unreadable. The spore/quest precedents are documented the same way.
+        if (p.hone_counters)    { cs.push_back({ "hone",      "hone",      p.hone_counters }); }
         // num = stable per-copy id; is_aura/is_equip + attached_to let the viewer draw an Aura or
         // an attached Equipment overlapping the creature (m_number) it enchants/equips
         // (0 = unattached). Additive display fields (equipment added 2026-08-14 -- attached
@@ -6608,6 +6612,7 @@ static int RunScenario(const std::filesystem::path& scenario_path)
             p.fade_counters     = e.value("fade_counters", 0);
             p.created_by_number = e.value("created_by_number", 0);
             p.quest_counters    = e.value("quest_counters", 0);
+            p.hone_counters     = e.value("hone_counters", 0);
             // "As this enters, choose a color" (Coldsteel Heart). A permanent STAGED directly onto
             // the battlefield never ran the as-enters replacement (FireOwnEtbTriggers fires only on
             // a real entry), so without this it would sit at chosen_color = -1 and silently fall

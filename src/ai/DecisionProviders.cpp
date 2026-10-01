@@ -954,6 +954,45 @@ std::vector<int> DecisionProvider::AttackDigPutCandidates(
 // equipment threshold), and equip_min_power (O-Naginata) filters illegal hosts. A non-attacker
 // realizes nothing this combat, so attackers-only is the value-greedy default; the human
 // chooser in the viewer may attach anywhere.
+// Sigarda's Aid's free attach. Same per-host scorer as AttackDigAttachHost below, but over the
+// candidate set the caller built (a main-phase ETB has no declared attackers yet). Ties to lower
+// card number, so the pick is deterministic -- which matters because it feeds the sim key.
+int DecisionProvider::EquipmentEtbAttachHost(
+    const GameState& s, int controller, const Card& equip_card,
+    const std::vector<int>& candidate_bf_indices) const
+{
+    const CardDefinition* ed = CardDatabase::Instance().LookupCached(equip_card);
+    if (ed == nullptr || !ed->params.is_equipment) { return 0; }
+    int best_num = 0, best_delta = -1;
+    for (int idx : candidate_bf_indices)
+    {
+        if (idx < 0 || idx >= static_cast<int>(s.battlefield.size())) { continue; }
+        const Permanent& h = s.battlefield[idx];
+        if (!h.card.IsCreature() && !h.is_animated) { continue; }
+        const int pw_now = EquipGatePowerOf(h, s);
+        const CardDefinition* hd = CardDatabase::Instance().LookupCached(h.card);
+        const int  n_now  = CountEquipmentAttachedTo(s, controller, h.card.m_number);
+        const bool ds_now = h.card.HasKeyword(Keyword::DoubleStrike)
+                         || HasDoubleStrikeFromEquipment(h, s);
+        bool ds_after = ds_now;
+        if (hd != nullptr)
+        {
+            if (hd->params.double_strike_while_equipped && n_now + 1 >= 1) { ds_after = true; }
+            if (hd->params.double_strike_min_equipment > 0
+                && n_now + 1 >= hd->params.double_strike_min_equipment) { ds_after = true; }
+        }
+        const int dpw = EquipAttachDeltaFor(s, controller, h.card.m_number, ed->params).first;
+        const int delta = (pw_now + dpw) * (ds_after ? 2 : 1) - pw_now * (ds_now ? 2 : 1);
+        if (delta > best_delta
+            || (delta == best_delta && best_num != 0 && h.card.m_number < best_num))
+        {
+            best_delta = delta;
+            best_num   = h.card.m_number;
+        }
+    }
+    return best_num;
+}
+
 int DecisionProvider::AttackDigAttachHost(
     const GameState& s, int /*controller*/, const Card& equip_card,
     const std::vector<int>& attacker_bf_indices) const
@@ -979,7 +1018,12 @@ int DecisionProvider::AttackDigAttachHost(
             if (hd->params.double_strike_min_equipment > 0
                 && n_now + 1 >= hd->params.double_strike_min_equipment) { ds_after = true; }
         }
-        const int delta = (pw_now + ed->params.equip_power_bonus) * (ds_after ? 2 : 1)
+        // Shared delta helper, not the flat equip_power_bonus -- see EquipAttachDeltaFor. A
+        // per-equipment scaler reads 0 there, which would rank every host identically; this host
+        // picker and TurnSolver's rider_delta call the same helper so the two cannot disagree.
+        const int dpw = EquipAttachDeltaFor(s, h.controller_index, h.card.m_number,
+                                            ed->params).first;
+        const int delta = (pw_now + dpw) * (ds_after ? 2 : 1)
                         - pw_now * (ds_now ? 2 : 1);
         if (delta > best_delta
             || (delta == best_delta && best_num != 0 && h.card.m_number < best_num))
@@ -11700,7 +11744,14 @@ const DecisionProvider& DetectDecisionProvider(const Decklist& deck)
         if (p.attack_dig_attach_count > 0 || p.equip_combat_damage_charges > 0
             || p.tap_put_from_hand_cost.has_value() || p.attach_all_equipment_cost.has_value()
             || p.metalcraft_equip_zero_artifacts || p.draw_on_equipment_etb
-            || p.upkeep_tokens_per_equipment > 0 || p.double_strike_while_equipped)
+            || p.upkeep_tokens_per_equipment > 0 || p.double_strike_while_equipped
+            // v2-puresteel-hammer additions, OR-ed from several different cards so a deckbuilding
+            // swap cannot silently lose the signature: Sigarda's Aid, Dwalin, Sram, the shields,
+            // Golem-Skin Gauntlets. Each is new + gated (0/false/empty inert), so no existing
+            // deck's routing moves.
+            || p.attach_equipment_on_etb || p.hone_counters_on_enter_or_attack > 0
+            || !p.draw_on_cast_subtypes.empty() || p.equip_grants_vigilance
+            || p.equip_scale_power_per_equipment > 0)
         {
             equipment = true;
         }
@@ -11833,6 +11884,26 @@ const DecisionProvider& DetectDecisionProvider(const Decklist& deck)
     // Mirrorwing/Zada swarm: MirrorwingProvider (Generic + the trick-target 5f prune); must WIN
     // OVER goblin (its Goblin Instigator sets that signature -- see the detection note above).
     if (mirrorwing) { return g_mirrorwing; }
+    // Equipment aggro. Must WIN OVER anti (Stoneforge Mystic's tutor_to_hand sets that signature
+    // on its own -- see the equipment detection note above), over goblin, AND over dragons. It is
+    // placed up here, above all four of minotaur/dragons/giants/melira_pod, rather than being
+    // threaded between them, because the params that misroute it are archetype-NEUTRAL and there
+    // are now TWO of them on a single card -- so moving it past one branch at a time just finds
+    // the next one. No other deck carries the equipment gated params, so hoisting it is inert for
+    // every other list.
+    //
+    // This is the EIGHTH and NINTH instance of the misroute class this file already records for
+    // Mirrorwing, StompySurprise, Minotaur, Dragons, Melira Pod, Fungus and Giants. Both live on
+    // KittyEquipment v2's Cid, Freeflier Pilot:
+    //   * `reduces_spell_subtype` ("Equipment and Vehicle spells you cast cost {1} less") ALONE
+    //     sets `goblin` -- the same param that misrouted Dragons via Dragonspeaker Shaman and
+    //     Giants via Stinkdrinker Daredevil;
+    //   * `gy_return_requires_subtype` ("{2}, {T}: return target Equipment card from your
+    //     graveyard to your hand") ALONE sets `dragons`.
+    // So, exactly as the Giants note says, removing either card would not fix it and the deck has
+    // to be routed above BOTH branches. Measured, not read: `mtg --batch` reported
+    // provider=Goblins and then provider=Dragons for this list before each hoist.
+    if (equipment) { return g_equipment; }
     // Goblins ride GoblinsProvider. This return WINS OVER anti (Goblin Matron's tutor_to_hand would
     // otherwise set anti and misroute the deck to AntiLifegainProvider) and over th/vial/burn/generic.
     // It sits below dragonstorm/hinata only for tidiness -- a Goblins deck carries none of those
@@ -11881,10 +11952,6 @@ const DecisionProvider& DetectDecisionProvider(const Decklist& deck)
     // outlets set that signature on their own (see the detection block note).
     if (melira_pod) { return g_melira_pod; }
     if (goblin) { return g_goblins; }
-    // Equipment aggro; must WIN OVER anti (Stoneforge Mystic's tutor_to_hand sets that signature
-    // on its own -- see the equipment detection note above). No other deck carries the equipment
-    // gated params, so exclusivity is preserved.
-    if (equipment) { return g_equipment; }
     // Creature Giving; must WIN OVER anti (see the gift detection note above).
     if (gift) { return g_creature_giving; }
     // FiveColour; must WIN OVER anti (its fetchlands set that signature on their own -- see the
@@ -16519,12 +16586,25 @@ int EquipmentProvider::CastOrderRank(const GameState& s, const CardDefinition& d
     // Order within the ruling's own list. The three tests are disjoint on this deck: no card
     // carries two of them (Paladin is the only metalcraft/equipment-ETB watcher, Stoneforge the
     // only Equipment tutor, and neither is an Equipment).
+    // Sram, Senior Edificer joins the Paladin at 6: it is the same KIND of card under the
+    // ruling's own information-first logic (a watcher that must be on the battlefield BEFORE the
+    // Equipment it profits from, or both halves are wasted). Sharing the tier is benign -- this
+    // is a stable_sort, and neither watcher triggers off the other (Sram is not an Equipment,
+    // Puresteel is not an Aura/Equipment/Vehicle spell), so their relative order cannot change
+    // the board.
     if (def.params.draw_on_equipment_etb
-        || def.params.metalcraft_equip_zero_artifacts > 0)      { return 6; }
+        || def.params.metalcraft_equip_zero_artifacts > 0
+        || !def.params.draw_on_cast_subtypes.empty())           { return 6; }
     if (def.params.tap_put_from_hand_cost.has_value()
         || (def.params.tutor_to_hand
             && std::find(def.params.tutor_types.begin(), def.params.tutor_types.end(),
                          std::string("Equipment")) != def.params.tutor_types.end())) { return 7; }
+    // A cost REDUCER must precede what it discounts (Cid, Freeflier Pilot). Without this it falls
+    // through to GenericProvider, which also returns 8 for reduces_spell_subtype -- the same tier
+    // as is_equipment below -- and the within-tier tie-break is cheapest-first, so the {0}/{1}
+    // Equipment would be cast BEFORE the {1}{W} Cid and the discount would never be realised.
+    // That is verbatim the Minotaur Ragemonger / Gnarled-Scarhide bug recorded in this file.
+    if (!def.params.reduces_spell_subtype.empty())              { return 7; }
     if (def.params.is_equipment)                                { return 8; }
     if (def.tmpl == CardTemplate::Removal)                      { return 30; }
     return GenericProvider::CastOrderRank(s, def);   // hosts (Duelist / Kemba / Balan / Skyhunter) = 10

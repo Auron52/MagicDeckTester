@@ -1,0 +1,85 @@
+{
+  "card_scores": {
+    "Accorder's Shield": [
+      -0.10545921578459971,
+      -0.6871444823663255
+    ],
+    "Ancient Den": [
+      -0.1682974559686885,
+      -0.3561643835616435
+    ],
+    "Bone Saw": [
+      -0.154977307110439,
+      -0.06256410256410216
+    ],
+    "Cathar's Shield": [
+      -0.3303511831707686,
+      -0.3423866915634015
+    ],
+    "Cid, Freeflier Pilot": [
+      -0.03472222222222232
+    ],
+    "Colossus Hammer": [
+      0.2615431717526828,
+      0.6665792464376255
+    ],
+    "Deconstruction Hammer": [
+      -0.6047692013024326
+    ],
+    "Dragonfire Blade": [
+      -0.5166506621142606
+    ],
+    "Dwalin, Weaponmaster": [
+      0.5533336082134177
+    ],
+    "Golem-Skin Gauntlets": [
+      0.08439501255911885
+    ],
+    "Kite Shield": [
+      -0.44651028881413435,
+      -0.07238214434710066
+    ],
+    "Plains": [
+      -0.018097039259162173,
+      0.028179667628235983,
+      -0.2654302219519611
+    ],
+    "Puresteel Paladin": [
+      1.6858194295944502,
+      -0.2616100511865982
+    ],
+    "Remote Farm": [
+      0.3001185068141412,
+      -0.46329294369208807
+    ],
+    "Shadowspear": [
+      -0.3736224726037971
+    ],
+    "Sigarda's Aid": [
+      -0.020778390473907393
+    ],
+    "Skateboard": [
+      0.04454156273406262
+    ],
+    "Spidersilk Net": [
+      -0.17606969361987002,
+      -0.7243184968427538
+    ],
+    "Sram, Senior Edificer": [
+      0.7447451105798271,
+      -0.1704467353951884
+    ]
+  },
+  "hand_score_threshold": -1e+18,
+  "mulligan": {
+    "bottom_order": "count_first",
+    "curve_check": "two_drop",
+    "max_lands": 5,
+    "min_color_sources": {},
+    "min_lands": 1,
+    "min_playable": 0,
+    "required_pieces": [],
+    "stop_at": 4
+  },
+  "version": 1
+}

@@ -420,6 +420,7 @@ static Keyword KeywordFromString(const std::string& s)
     if (s == "Fear")          { return Keyword::Fear; }       // inert tag; provably inert vs passive opp
     if (s == "Transmute")     { return Keyword::Transmute; }  // inert tag; mechanic is param-modelled
     if (s == "Eternalize")    { return Keyword::Eternalize; } // inert tag; mechanic is param-modelled
+    if (s == "Jump")          { return Keyword::Jump; }       // inert tag; see Keyword::Jump
     throw std::runtime_error("Unknown keyword: " + s);
 }
 
@@ -750,6 +751,7 @@ CardParams CardDatabase::BuildParamsFromJson(const json& params) const
         p.gy_return_cost = ManaCostFromString(params["gy_return_cost"].get<std::string>());
     p.gy_return_requires_subtype  = params.value("gy_return_requires_subtype", std::string());
     p.gy_return_requires_creature = params.value("gy_return_requires_creature", false);
+    p.gy_return_sacrifices_source = params.value("gy_return_sacrifices_source", true);
     p.upkeep_creates_tokens          = params.value("upkeep_creates_tokens", 0);
     p.upkeep_token_power             = params.value("upkeep_token_power", 0);
     p.upkeep_token_toughness         = params.value("upkeep_token_toughness", 0);
@@ -1022,8 +1024,13 @@ CardParams CardDatabase::BuildParamsFromJson(const json& params) const
     p.equip_power_bonus         = params.value("equip_power_bonus", 0);
     p.equip_tough_bonus         = params.value("equip_tough_bonus", 0);
     p.equip_grants_lifelink     = params.value("equip_grants_lifelink", false);
+    p.equip_grants_vigilance    = params.value("equip_grants_vigilance", false);
     p.equip_min_power           = params.value("equip_min_power", 0);
     p.equip_sacrifices_prior_host = params.value("equip_sacrifices_prior_host", false);
+    p.equip_scale_power_per_equipment = params.value("equip_scale_power_per_equipment", 0);
+    p.equip_cost_less_per_target_color =
+        params.value("equip_cost_less_per_target_color", 0);
+    p.equip_scale_tough_per_equipment = params.value("equip_scale_tough_per_equipment", 0);
     p.equip_combat_damage_charges = params.value("equip_combat_damage_charges", 0);
     p.charge_pump_power         = params.value("charge_pump_power", 0);
     p.charge_pump_tough         = params.value("charge_pump_tough", 0);
@@ -1038,6 +1045,9 @@ CardParams CardDatabase::BuildParamsFromJson(const json& params) const
             ManaCostFromString(params["attach_all_equipment_cost"].get<std::string>());
     }
     p.draw_on_equipment_etb     = params.value("draw_on_equipment_etb", false);
+    p.attach_equipment_on_etb   = params.value("attach_equipment_on_etb", false);
+    p.hone_counters_on_enter_or_attack =
+        params.value("hone_counters_on_enter_or_attack", 0);
     p.metalcraft_equip_zero_artifacts = params.value("metalcraft_equip_zero_artifacts", 0);
     p.upkeep_tokens_per_equipment = params.value("upkeep_tokens_per_equipment", false);
     p.attack_dig_attach_count   = params.value("attack_dig_attach_count", 0);
@@ -1168,6 +1178,8 @@ CardParams CardDatabase::BuildParamsFromJson(const json& params) const
     p.aura_self_buff_power      = params.value("aura_self_buff_power", 0);
     p.aura_self_buff_tough      = params.value("aura_self_buff_tough", 0);
     p.draw_on_aura_cast         = params.value("draw_on_aura_cast", false);
+    p.draw_on_cast_subtypes     = params.value("draw_on_cast_subtypes",
+                                               std::vector<std::string>{});
     p.aura_cast_tutor_attach    = params.value("aura_cast_tutor_attach", false);
 
     // --- Goblins tribal ---
@@ -1192,6 +1204,7 @@ CardParams CardDatabase::BuildParamsFromJson(const json& params) const
     p.etb_damage_any            = params.value("etb_damage_any", 0);
     p.etb_destroy_opp_creature  = params.value("etb_destroy_opp_creature", false);
     p.etb_tap_opp_creature      = params.value("etb_tap_opp_creature", false);
+    p.etb_tap_target_permanent  = params.value("etb_tap_target_permanent", false);
     p.etb_damage_equals_power   = params.value("etb_damage_equals_power", false);
     p.persist                   = params.value("persist", false);
     p.prevents_minus_counters   = params.value("prevents_minus_counters", false);

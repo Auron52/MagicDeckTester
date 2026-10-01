@@ -144,6 +144,14 @@ enum class Keyword
     // Eternalize (Timeless Witness): an INERT keyword-ability tag -- the mechanic is modelled
     // structurally via CardParams::eternalize_cost (Action::Kind::Eternalize + ApplyEternalize).
     Eternalize,
+    // Jump (Cid, Freeflier Pilot): an INERT keyword-ability tag, carried only so the keywords array
+    // stays faithful to Scryfall. It is a CONDITIONAL evasion grant ("during your turn, Cid has
+    // flying"), and Keyword::Flying is deliberately NOT granted instead: the engine has no layer
+    // for a turn-conditional keyword, so an unconditional grant would be unfaithful, while the
+    // conditional one buys nothing -- nothing blocks anywhere in this engine, so evasion cannot
+    // change an outcome. NOTE KeywordFromString THROWS on an unmapped keyword, so a cards.json
+    // entry listing "Jump" without this enumerator crashes card loading rather than degrading.
+    Jump,
     // Sentinel: MUST stay last. Keyword ordinals are bit indices into Card::m_keyword_mask (uint64_t).
     KeywordCount_
 };

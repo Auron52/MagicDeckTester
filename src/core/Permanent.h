@@ -533,6 +533,17 @@ struct Permanent
                                            // quest_anthem_threshold switches on the team pump at 7+).
                                            // Same dedicated-int rationale and the same byte-identity and
                                            // sim-key obligations as spore_counters above.
+    int       hone_counters        = 0;    // Hone counters (Dwalin, Weaponmaster; CardParams::
+                                           // hone_counters_on_enter_or_attack puts one on EACH
+                                           // Equipment you control, attached or not, on Dwalin's
+                                           // enter AND on its attack). Each grants +1/+0 to the
+                                           // equipped creature -- the bonus is intrinsic to the
+                                           // COUNTER, not to Dwalin, so it is summed inside
+                                           // EquipBonusFor and is automatically right for any
+                                           // future hone source. An UNATTACHED honed Equipment
+                                           // banks the bonus and cashes it on a later equip.
+                                           // Same dedicated-int rationale and the same byte-identity
+                                           // and sim-key obligations as spore_counters above.
     // Sakashima's Protege (CardParams::enter_as_copy_of_entrant): when the enter swap replaced the
     // entering card with the copied permanent's PRINTED card (CR 706.2), this holds the PRINTED
     // name of the card that was cast ("Sakashima's Protege"). DISPLAY-ONLY: set at both worlds'

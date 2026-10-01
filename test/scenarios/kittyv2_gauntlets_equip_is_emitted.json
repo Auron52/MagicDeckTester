@@ -1,0 +1,22 @@
+{
+ "_comment": "REGRESSION GUARD on a real defect this deck found (2026-10-01). rider_delta priced an attach off the FLAT equip_power_bonus, which is 0 for a per-equipment scaler, and the equip-emission gate drops a host scoring 0 -- so Golem-Skin Gauntlets was castable and NEVER equippable in the pruned search, while human play (which opens every host) equipped it fine, making the hole invisible in hand-played reference games. Both attach rankers now call the shared EquipAttachDeltaFor. Deliberately NO MTG_HUMAN_PLAY and NO MTG_UNPRUNED here: the whole point is that the PRUNED search emits the line. A bare Puresteel host makes the delta unambiguous (the Gauntlets alone grants +1).",
+ "deck": "decks/KittyEquipment/v2-puresteel-hammer/KittyEquipment.cod",
+ "turn": 3,
+ "on_the_play": true,
+ "max_turns": 3,
+ "active_life": 20,
+ "opponent_life": 20,
+ "battlefield": [
+  { "name": "Plains", "controller": 0, "tapped": false },
+  { "name": "Plains", "controller": 0, "tapped": false },
+  { "name": "Puresteel Paladin", "controller": 0, "tapped": false, "sick": false },
+  { "name": "Golem-Skin Gauntlets", "controller": 0, "tapped": false }
+ ],
+ "hand": [],
+ "library_filler": "Plains",
+ "library_size": 20,
+ "depth": 0,
+ "budget_ms": 0,
+ "validate_line": "equip=Golem-Skin Gauntlets",
+ "expect_verdict": "accept"
+}

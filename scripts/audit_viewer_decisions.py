@@ -375,6 +375,15 @@ MANIFEST = {
     # rules-legal partner set with the provider's SoulbondPartner pick preselected; that ranking is a
     # NARROWING of the autonomous search and is disclosed in Stage 6a.
     "soulbond":              ("attach_host",          truthy),
+    # Sigarda's Aid: "whenever an Equipment you control enters, you may attach it to target
+    # creature you control" -- REUSES the same attach_host board-click as soulbond and the
+    # attack-dig attach (the -1 reply is the printed "may"). No new decision type.
+    "attach_equipment_on_etb": ("attach_host",        truthy),
+    # Skateboard: "when this Equipment enters, tap target permanent" -- MANDATORY and targeted
+    # over BOTH sides, so it reuses the `target` board-click the mandatory ETB destroys use.
+    # Deliberately NOT in INERT_PARAMS: the payoff against this opponent is zero, but our OWN
+    # untapped lands are legal targets, so there is a genuine choice to surface.
+    "etb_tap_target_permanent": ("target",            truthy),
     # Umezawa's Jitte: counter-spend at combat is the turn-keyed `jitte` type (--jitte
     # side-channel, WriteJitteDecisionJson / jittePanelHtml); the -1/-1 and lifegain modes are
     # main_phase JitteModeAbility plan actions.
@@ -887,6 +896,13 @@ INERT_PARAMS = {
     "aura_enchant_requires": "aura enchant-target restriction (narrows the is_aura main_phase variants)",
     "aura_self_buff_power": "Kor static per-aura self-buff, computed P/T", "aura_self_buff_tough": "Kor static per-aura self-buff, computed P/T",
     "draw_on_aura_cast": "Kor may-draw auto-resolved as always-draw (strictly good in goldfish), no meaningful choice",
+    "draw_on_cast_subtypes": "Sram's on-cast draw is MANDATORY -- there is no 'may' at all (unlike Puresteel and Kor), so nothing is auto-resolved and there is no choice to surface",
+    "equip_scale_power_per_equipment": "Golem-Skin Gauntlets' dynamic +1/+0 per Equipment attached to the host. A static characteristic-modifying value with no target, mode, division or 'may'; the only decision on the card is WHICH host, which is the existing equip plan-line axis",
+    "equip_scale_tough_per_equipment": "toughness twin of equip_scale_power_per_equipment; same reasoning -- a static value, no choice",
+    "equip_grants_vigilance": "Cathar's / Accorder's Shield vigilance grant. A static keyword grant read only by the combat attack-tap; no target, no mode, no 'may'",
+    "equip_cost_less_per_target_color": "Dragonfire Blade's per-colour equip discount. A COST modifier, not a choice -- it changes the price of the existing equip plan line, and WHICH host (the thing the colour count reads) is already that line's own axis",
+    "hone_counters_on_enter_or_attack": "Dwalin's hone trigger is MANDATORY and UNTARGETED ('put a hone counter on EACH Equipment you control') -- no target, no mode, no division, no 'may', and no cost. Nothing to offer a human; the counter total is surfaced as a board badge, which is a display requirement rather than a decision",
+    "gy_return_sacrifices_source": "whether the gy-return source is sacrificed or merely tapped is a property of the printed COST, not a player choice. WHICH card returns is separately a real searched/human-picked decision, already mapped as verb:gyreturn",
     "fastland_max_other_lands": "static land property (conditional enters-tapped, Razorverge)",
     # --- Goblins: automatic triggers / static effects / computed detail (NO player choice) -----
     # Combat/attack triggers -- automatic, applied at declare-attackers, no choice:

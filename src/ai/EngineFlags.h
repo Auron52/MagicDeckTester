@@ -785,6 +785,24 @@ inline bool BpHandEntryEnabled()
     return heurarm::Flag(heurarm::BP_HAND_ENTRY, v);
 }
 
+// MTG_BP_CAST_SUBTYPE -- the site-10 fan-out route for a CAST-SUBTYPE draw watcher (Sram, Senior
+// Edificer: "whenever you cast an Aura, Equipment, or Vehicle spell, draw a card").
+//
+// DEFAULT ON, because the doctrine the canon audit enforces is not optional: an arming route
+// without a fan-out clause leaves the continuation as an unchallengeable cands.front() at ANY
+// depth or budget, and the audit's own instruction is to fix a nonzero `unreachable` "by giving
+// that site a clause ... never by suppressing the audit".
+//
+// It is nonetheless a FLAG rather than a bare clause because it is a genuine WIDENING with a real
+// cost, and on KittyEquipment v2 that cost is large: the route carried 16,306 of 25,282 canon
+// defaults (64.50%) -- the deck's whole engine is "cast a free Equipment, draw, cast another", so
+// almost every plan opens it. =0 restores the pre-fix behaviour for a clean A/B.
+inline bool BpCastSubtypeEnabled()
+{
+    static const bool v = EnvOn("MTG_BP_CAST_SUBTYPE", true);   // DEFAULT ON (2026-10-01); =0 reverts
+    return v;
+}
+
 // MTG_LEGACY_STATIC_TAPPED=1: classify land tapped-ness from the STATIC enters_tapped flag in the
 // land-priority passes, as before the dynamic fix (byte-identical A/B hatch). See
 // AIEngine::TryPlayLand and TurnSolver's greedy_land_name -- the two implement the same passes

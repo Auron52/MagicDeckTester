@@ -553,6 +553,7 @@ inline uint64_t FungibilityKey(const Permanent& p)
     // play out completely differently.
     Mix(h, static_cast<uint64_t>(p.fade_counters) << 48);
     Mix(h, static_cast<uint64_t>(p.quest_counters) << 32 | static_cast<uint64_t>(p.loyalty));
+    if (p.hone_counters != 0) { Mix(h, static_cast<uint64_t>(p.hone_counters) * 0x9E3779B1ull); }
     Mix(h, static_cast<uint64_t>(p.garth_chosen_mask) << 32 | static_cast<uint64_t>(p.chosen_subtype_id));
     Mix(h, static_cast<uint64_t>(p.chosen_color + 1));
     // An ATTACHED aura/equipment is keyed by what it is attached to, so two auras on different
@@ -2588,6 +2589,10 @@ static std::string BoardSignature(const GameState& s)
         if (p.spore_counters > 0) { e += "/sp" + std::to_string(p.spore_counters); }
         if (p.fade_counters > 0)  { e += "/fd" + std::to_string(p.fade_counters); }
         if (p.quest_counters > 0) { e += "/qu" + std::to_string(p.quest_counters); }
+        // Hone counters (Dwalin) MUST be keyed: the attack half flips them MID-TURN, and the
+        // generic `/c` field below records only counters.SIZE. Nonzero-gated, so every deck
+        // that cannot make one keeps its exact prior signature.
+        if (p.hone_counters > 0) { e += "/hn" + std::to_string(p.hone_counters); }
         e += "/p" + std::to_string(p.temp_power_bonus) + "," + std::to_string(p.temp_tough_bonus);
         if (p.temp_haste)   { e += "/h"; }    // Expedite until-EOT haste
         if (p.temp_lifelink){ e += "/ll"; }   // Heliod until-EOT lifelink grant
@@ -7455,6 +7460,9 @@ static int PendingAttackDamage(const GameState& state)
     // Titan by 3 a copy and mis-sequences Lightning Greaves (which makes both halves of the
     // trigger fire on the landing turn).
     dmg += CountAttackTriggerDamageAny(attackers);
+    // Dwalin: the hone trigger resolves IN the declare-attackers step, so the +1/+0 per
+    // counter applies to THIS combat. Without this the search reads the pre-trigger power.
+    dmg += CountAttackHonePump(state, active, attackers);
     // Tectonic Giant: 3 to each opponent, but ONLY when the resolved mode is the damage one --
     // resolved through the same ResolveAttackModalMode the combat uses, so the projection cannot
     // credit damage a mode-B trigger will not deal (the overshoot/fd-diverge class).
@@ -8889,7 +8897,8 @@ int TurnSolver::ApplyManaUnlockEquips(GameState& state, const std::vector<Action
         HasteUnlockedManaOf(state, a.sac_victim_id, add, add_nc);
         if (add.Total() <= 0) { continue; }
         if (!TapForCostDirect(state,
-                              EquipActionCostNow(state, active, a.sac_source_id, a.cost),
+                              EquipActionCostNow(state, active, a.sac_source_id, a.cost,
+                                                 a.sac_victim_id),
                               /*for_creature=*/false)) { continue; }
         ApplyEquip(state, active, a.sac_source_id, a.sac_victim_id);
         ++fired;
@@ -9314,6 +9323,7 @@ static bool PermIsPlainForFoldImpl(const GameState& state, const Permanent& p, i
     // Under MTG_FOLD_COUNTER_SOURCES that distinction moves into the TAG instead of gating
     // membership, so UNEQUAL counts still never share a class -- see the note above this function.
     if (!FoldCounterSourcesOn() && (p.spore_counters != 0 || p.quest_counters != 0
+                                    || p.hone_counters != 0
                                     || p.fade_counters != 0))
     { return false; }
     why = foldcensus::kTempHasteEtc;
@@ -9883,6 +9893,7 @@ static int ActivationEquivTag(const GameState& state, const Permanent& src, cons
         mix(static_cast<std::uint64_t>(src.spore_counters));
         mix(static_cast<std::uint64_t>(src.fade_counters));
         mix(static_cast<std::uint64_t>(src.quest_counters));
+        mix(static_cast<std::uint64_t>(src.hone_counters));
     }
     const int t = static_cast<int>(h & 0x7fffffff);
     return t == 0 ? 1 : t;   // never collide with "do not fold"
@@ -12262,7 +12273,7 @@ static int BuildFungibleEquipClasses(const GameState& state,
             // Unreachable today (the is_equipment gate below excludes every Fungus card), but this
             // list is "every field that can differentiate two copies" and an incomplete one is the
             // documented failure mode -- keep it exhaustive rather than argue reachability.
-            || src->spore_counters != 0 || src->quest_counters != 0
+            || src->spore_counters != 0 || src->quest_counters != 0 || src->hone_counters != 0
             || src->fade_counters != 0)
         { continue; }
         const CardDefinition* d = a0.def ? a0.def : CardDatabase::Instance().LookupCached(src->card);
@@ -21235,7 +21246,16 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
                         && st.n_att + 1 >= st.def->params.double_strike_min_equipment)
                     { ds_after = true; }
                 }
-                int delta = (st.pw + ed2->params.equip_power_bonus) * (ds_after ? 2 : 1)
+                // The power the host GAINS must come from the shared delta helper, not from the
+                // flat equip_power_bonus: for a per-equipment scaler (Golem-Skin Gauntlets) that
+                // field is 0, delta would be 0, and the `rd > 0` filter below plus the `kept` gate
+                // would drop the Equip action entirely -- the equipment would be castable and
+                // never equippable in the pruned search, while human play (which opens every
+                // host) equipped it fine. EquipAttachDeltaFor reduces to equip_power_bonus
+                // whenever no scaler is involved, so this is byte-identical for every other card.
+                const int dpw = EquipAttachDeltaFor(state, state.active_player_index, id,
+                                                    ed2->params).first;
+                int delta = (st.pw + dpw) * (ds_after ? 2 : 1)
                           - st.pw * (st.ds ? 2 : 1);
                 if (st.def != nullptr && st.def->params.upkeep_tokens_per_equipment)
                 { delta += 2; }                                        // Kemba: a 2/2 Cat per upkeep
@@ -21482,7 +21502,7 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
                             probe.kind          = Action::Kind::Equip;
                             probe.cost          = ManaCost{};
                             probe.cost.generic  = EquipCostGenericNow(state,
-                                                      state.active_player_index, *ed);
+                                                      state.active_player_index, *ed, h.id);
                             probe.sac_source_id = equips[e].second->m_number;
                             probe.sac_victim_id = h.id;
                             if (KembaLoopKind(state, probe, is_pre_combat) != KembaLoop::None)
@@ -21506,7 +21526,8 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
                     // same-turn flip (a plan casting artifact #3 still sees the printed cost at
                     // enumeration); the apply sites recompute, so payment is never wrong -- only
                     // cheaper. Disclosed 6a as a known conservative bound.
-                    a.cost.generic   = EquipCostGenericNow(state, state.active_player_index, *ed);
+                    a.cost.generic   = EquipCostGenericNow(state, state.active_player_index, *ed,
+                                                          h.id);
                     a.sac_source_id  = equips[e].second->m_number;
                     a.sac_victim_id  = h.id;
                     // Haste onto a fresh creature enables a whole attack; a rider attach is worth
@@ -36232,7 +36253,8 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
                 && !EquipmentAttachedTo(state, state.active_player_index, a.sac_source_id, a.sac_victim_id)
                 && TapForCostDirect(state,
                                     EquipActionCostNow(state, state.active_player_index,
-                                                       a.sac_source_id, a.cost),
+                                                       a.sac_source_id, a.cost,
+                                                       a.sac_victim_id),
                                     /*for_creature=*/false))
             { ApplyEquip(state, state.active_player_index, a.sac_source_id, a.sac_victim_id); }
         }
@@ -36862,6 +36884,7 @@ static void SimulateCombat(GameState& state)
     // token block below, because tokens PUT onto the battlefield attacking were never declared
     // (CR 508.4) and must not trigger it. Mirrors GameEngine::CombatPhase (executor). Gated inert.
     ApplyAttackQuestCounters(state, active, atk_idx);
+    ApplyAttackHoneCounters(state, active, atk_idx);
 
     // Inferno Titan's attack half: 3 to the opponent's face per attacking copy. Fired HERE,
     // before the Adeline token block, for the same CR 508.4 reason as the quest counters above.
@@ -41932,6 +41955,55 @@ static int PlanOpensBreakpoint(const GameState& state, const TurnSolver::Plan& p
             }
         }
     }
+    // Site 10 pre-scan, the CAST-SUBTYPE watcher (Sram, Senior Edificer: "whenever you cast an
+    // Aura, Equipment, or Vehicle spell, draw a card"). Same shape as aura_watcher above and it
+    // needs its own clause for the same reason: the draw belongs to the WATCHER, not to the
+    // Equipment resolving, so it is state-keyed, and a plan that casts Sram itself counts because
+    // the cast order resolves the creature ahead of the Equipment.
+    // MEASURED, not assumed: on KittyEquipment v2 the canon audit reported 16,306 of 25,282 canon
+    // defaults (64.50%) UNCHALLENGEABLE at site 10 with "NO ROUTE INTO THE VARIANT MACHINERY",
+    // armed by every Equipment in the list (Bone Saw 2409, Shadowspear 2501, Spidersilk Net 2236,
+    // Golem-Skin Gauntlets 2143, ...). That IS the deck's engine -- cast a free Equipment, draw,
+    // cast another -- so without this clause the search cannot challenge any of those
+    // continuations and takes cands.front() at any depth or budget. Site 6 (Puresteel's
+    // equipment-ETB draw) already had a route and audited clean at 0.
+    // Collect the UNION of watched subtypes rather than a bare bool: the watcher may be on the
+    // battlefield OR cast by this very plan, and "cast Sram, then cast an Equipment" is the COMMON
+    // line here (the cast order deliberately ranks the watcher at 6 and Equipment at 8). A
+    // battlefield-only test would miss exactly that case.
+    std::vector<std::string> watched_cast_subtypes;
+    if (BpPutInHandEnabled() && BpCastSubtypeEnabled())
+    {
+        auto absorb = [&](const CardDefinition* w)
+        {
+            if (!w || w->params.draw_on_cast_subtypes.empty()) { return; }
+            for (const std::string& t : w->params.draw_on_cast_subtypes)
+            {
+                if (std::find(watched_cast_subtypes.begin(), watched_cast_subtypes.end(), t)
+                    == watched_cast_subtypes.end())
+                { watched_cast_subtypes.push_back(t); }
+            }
+        };
+        for (const Permanent& perm : state.battlefield)
+        {
+            if (perm.controller_index != state.active_player_index) { continue; }
+            absorb(CardDatabase::Instance().LookupCached(perm.card));
+        }
+        for (const Action& a : p.actions)
+        {
+            if (a.kind != Action::Kind::CastFromHand) { continue; }
+            absorb(a.def ? a.def : CardDatabase::Instance().Lookup(a.card_name));
+        }
+    }
+    auto cast_subtype_watched = [&](const CardDefinition& cd)
+    {
+        for (const std::string& want : watched_cast_subtypes)
+        {
+            for (const std::string& cs : cd.card.m_subtypes)
+            { if (cs == want) { return true; } }
+        }
+        return false;
+    };
     // Site 10 pre-scan, the CREATURE-ENTERS watcher (Vaultborn Tyrant: "whenever another creature
     // you control enters, you gain 3 life and draw a card"). Third watcher of the same shape, and
     // the one the audit found carrying 100% of stompy's unchallengeable site-10 defaults: the draw
@@ -42135,6 +42207,10 @@ static int PlanOpensBreakpoint(const GameState& state, const TurnSolver::Plan& p
         // bp_searched_plan spells out what an un-fanned site costs, and nothing enforces it.
         if (BpPutInHandEnabled() && !TurnSolver::ParamKeyedDrawClass(state, *d)
             && ((aura_watcher && d->params.is_aura)
+                // Sram's arm: the watcher is out (or cast by this plan) AND this cast carries one
+                // of its subtypes. Matched on the cast card's PRINTED SUBTYPE, the same test the
+                // effect itself uses, so predicate and effect cannot drift.
+                || cast_subtype_watched(*d)
                 || d->params.etb_self_draw > 0
                 || d->params.cast_draw > 0
                 // MTG_BP_ETB_DIG: the ETB dig (Staunch Crewmate) -- unclaimed by ParamKeyedDrawClass
@@ -45204,7 +45280,11 @@ static std::vector<TurnSolver::Plan> EnumeratePlansWithLandUncached(const GameSt
         // Graveyard-return ability (its cost/target class is the behaviour).
         if (pp.gy_return_cost)                { s += "gr" + pp.gy_return_cost->ToString()
                                                   + pp.gy_return_requires_subtype
-                                                  + (pp.gy_return_requires_creature ? "c" : ""); }
+                                                  + (pp.gy_return_requires_creature ? "c" : "")
+                                                  // Cid taps instead of sacrificing; without
+                                                  // this two sources differing ONLY in that
+                                                  // flag fold to one signature.
+                                                  + (pp.gy_return_sacrifices_source ? "" : "t"); }
         // Board-scaled mana land (Three Tree City): yield scales with a subtype count.
         if (!pp.mana_per_creature_subtype.empty())
         { s += "sc" + pp.mana_per_creature_subtype
@@ -46971,6 +47051,8 @@ static TranspositionTable::Key BuildSimKey(const GameState& state, int depth, in
         { Fold(tk, 0x5B07E); Fold(tk, static_cast<uint64_t>(perm.spore_counters)); }
         if (perm.quest_counters > 0)
         { Fold(tk, 0xC0E57); Fold(tk, static_cast<uint64_t>(perm.quest_counters)); }
+        if (perm.hone_counters > 0)
+        { Fold(tk, 0x40E51); Fold(tk, static_cast<uint64_t>(perm.hone_counters)); }
         // Chosen creature type (Urza's Incubator): future-determining -- it decides WHICH spells the
         // permanent discounts. Today it is a deck-constant (DominantCreatureSubtypeId), so folding it
         // cannot actually split any state; it is folded anyway so that making the choice a real

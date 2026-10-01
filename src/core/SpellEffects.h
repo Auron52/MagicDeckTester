@@ -879,9 +879,16 @@ inline void TapLargestOppCreature(GameState&, int controller);
 inline int LethalToughness(const Permanent& p, const GameState& state);
 inline void FireOwnEtbTriggers(GameState&, int controller, int entered_index,
                            const std::string& chosen_tutor, int etb_kx);
+// Sigarda's Aid's free attach runs inside the ENTER cascade (FireEtbWatchers), which sits well
+// above both the attach primitive and the O-Naginata power gate it must honour. Same ordering
+// constraint the soulbond block beside it documents.
+inline void ApplyEquip(GameState& state, int controller, int equip_id, int creature_id);
+inline int  EquipGatePowerOf(const Permanent& host, const GameState& state);
 // Prevent Damage phase I3 ETBs (Shriekmaw / Acidic Slime / Timeless Witness), defined below.
 inline void ResolveEtbDestroyMandatory(GameState& state, int controller, int source_id,
                                        const CardDefinition& def);
+inline void ResolveEtbTapMandatory(GameState& state, int controller, int source_id,
+                                   const std::string& src_name);
 inline void ResolveEtbReturnGyToHand(GameState& state, int controller, const std::string& chosen,
                                      const std::string& source_name);
 inline bool EtbDestroyTargetLegal(const Permanent& q, const CardParams& p);
@@ -2096,6 +2103,14 @@ inline void PutFadeCounters(GameState& state, Permanent& p, int n)
     p.fade_counters += n << DoublerShift(state, p.controller_index, /*for_tokens=*/false);
 }
 
+// HONE counters (Dwalin, Weaponmaster). Routed through the same doubling chokepoint as every other
+// counter put: hone counters ARE counters (CR 614), so Doubling Season doubles them.
+inline void PutHoneCounters(GameState& state, Permanent& p, int n)
+{
+    if (n <= 0) { return; }
+    p.hone_counters += n << DoublerShift(state, p.controller_index, /*for_tokens=*/false);
+}
+
 inline void PutDepletionCounters(GameState& state, Permanent& p, int n)
 {
     if (n <= 0) { return; }
@@ -2896,18 +2911,65 @@ inline std::pair<int,int> EquipBonusFor(const Permanent& creature, const GameSta
     if (!creature.card.IsCreature() && !creature.is_animated) { return {0, 0}; }
     const int num  = creature.card.m_number;
     const int ctrl = creature.controller_index;
-    int pw = 0, tb = 0;
+    // ONE pass, three terms. `k` counts the Equipment attached to this host; the per-equipment
+    // scalers (Golem-Skin Gauntlets) are accumulated separately and multiplied by k at the end.
+    // That is EXACT rather than an approximation -- every scaler on the host sees the same k, and
+    // sum_i(s_i) * k == sum_i(s_i * k) -- and it is the reason this does NOT call
+    // CountEquipmentAttachedTo from inside `consider`: doing so would be O(n^2) with an extra
+    // LookupCached per pair, at one of the hottest helpers in the engine, on a deck that can hold
+    // ~30 Equipment. Hone counters are per-PERMANENT state, so they add straight into pw.
+    int pw = 0, tb = 0, k = 0, s_pw = 0, s_tb = 0;
     auto consider = [&](const Permanent& e)
     {
         if (e.equipped_to != num || e.controller_index != ctrl) { return; }
         if (e.def_absent) { return; }   // token: no definition -> the !d return below, without the call
         const CardDefinition* d = CardDatabase::Instance().LookupCached(e.card);
         if (!d || !d->params.is_equipment) { return; }
+        ++k;
         pw += d->params.equip_power_bonus;
         tb += d->params.equip_tough_bonus;
+        pw += e.hone_counters;          // intrinsic to the counter, not to its source
+        s_pw += d->params.equip_scale_power_per_equipment;
+        s_tb += d->params.equip_scale_tough_per_equipment;
     };
     if (attached_idx) { for (int i : *attached_idx) { consider(state.battlefield[i]); } }
     else              { for (const Permanent& e : state.battlefield) { consider(e); } }
+    pw += s_pw * k;
+    tb += s_tb * k;
+    return {pw, tb};
+}
+
+// Delta {power, toughness} the host `host_num` GAINS by attaching `incoming`. This exists because
+// a dynamic bonus cannot be priced by reading equip_power_bonus alone: for a per-equipment scaler
+// that field is 0, and a ranker that prices an attach at 0 DROPS the equip action entirely (see
+// rider_delta in TurnSolver -- `if (rd > 0)` then the `kept` gate `continue`s, which made all three
+// Golem-Skin Gauntlets permanently unplayable in the pruned search while human play, which opens
+// every host, equipped them fine). So every attach RANKER calls this, exactly as they all share
+// EquipGatePowerOf, so the two can never disagree.
+// Two terms beyond the flat bonus: `incoming`'s own scaler sees k+1 Equipment (itself included),
+// and every scaler ALREADY on the host gains one more Equipment to count.
+// Takes (controller, host_num) rather than a Permanent& so it also serves a prospective host still
+// in HAND, where k == 0 and the formula degenerates correctly.
+// Reduces to `incoming.equip_power_bonus` whenever no scaler is involved, so it is byte-identical
+// for every equipment shipped before Golem-Skin Gauntlets.
+inline std::pair<int,int> EquipAttachDeltaFor(const GameState& state, int controller,
+                                             int host_num, const CardParams& incoming)
+{
+    int k = 0, s_pw = 0, s_tb = 0;
+    for (const Permanent& e : state.battlefield)
+    {
+        if (e.equipped_to != host_num || e.controller_index != controller) { continue; }
+        if (e.def_absent) { continue; }
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(e.card);
+        if (!d || !d->params.is_equipment) { continue; }
+        ++k;
+        s_pw += d->params.equip_scale_power_per_equipment;
+        s_tb += d->params.equip_scale_tough_per_equipment;
+    }
+    const int pw = incoming.equip_power_bonus + s_pw
+                 + incoming.equip_scale_power_per_equipment * (k + 1);
+    const int tb = incoming.equip_tough_bonus + s_tb
+                 + incoming.equip_scale_tough_per_equipment * (k + 1);
     return {pw, tb};
 }
 
@@ -2924,6 +2986,85 @@ inline int CountEquipmentAttachedTo(const GameState& state, int controller, int 
     }
     return n;
 }
+
+// "Put a hone counter on each Equipment you control" -- the shared body of Dwalin's one printed
+// trigger, called from BOTH of its conditions (its own enter, and its attack). Counters go on
+// EVERY controlled Equipment, attached or not: an unattached one banks the bonus and cashes it on
+// a later equip, which is what makes the hone axis monotone.
+inline void ApplyHoneAllEquipment(GameState& state, int controller, int n)
+{
+    if (n <= 0) { return; }
+    for (Permanent& e : state.battlefield)
+    {
+        if (e.controller_index != controller) { continue; }
+        if (e.def_absent) { continue; }
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(e.card);
+        if (!d || !d->params.is_equipment) { continue; }
+        PutHoneCounters(state, e, n);
+    }
+}
+
+// The ATTACK half of Dwalin's trigger, fired at DECLARE-ATTACKERS in both worlds (beside
+// ApplyAttackQuestCounters). Because it resolves in the declare-attackers step, the pump applies
+// to THIS combat -- the Beastmaster Ascension property -- which is why the attack projections
+// carry CountAttackHonePump below. Self-only ("whenever DWALIN ... attacks", CR 508.2), so only a
+// DECLARED hone source fires it; a token put onto the battlefield attacking was never declared.
+inline void ApplyAttackHoneCounters(GameState& state, int controller,
+                                    const std::vector<int>& declared_attacker_indices)
+{
+    if (declared_attacker_indices.empty()) { return; }
+    const int bf_size = static_cast<int>(state.battlefield.size());
+    int total = 0;
+    for (int idx : declared_attacker_indices)
+    {
+        if (idx < 0 || idx >= bf_size) { continue; }
+        const Permanent& a = state.battlefield[idx];
+        if (a.controller_index != controller) { continue; }
+        if (a.def_absent) { continue; }
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(a.card);
+        if (!d || d->params.hone_counters_on_enter_or_attack <= 0) { continue; }
+        total += d->params.hone_counters_on_enter_or_attack;
+    }
+    // Accumulate first, then one pass: ApplyHoneAllEquipment walks the same battlefield vector the
+    // attacker indices point into, so resolving per-source inside that walk would be the only way
+    // to get an ordering surprise. Summing is also exact -- the puts are independent and additive.
+    ApplyHoneAllEquipment(state, controller, total);
+}
+
+// How much EXTRA attack power the declared attackers gain from hone triggers that will resolve in
+// this same declare-attackers step. The attack PROJECTIONS read EquipBonusFor without firing the
+// trigger, so without this addend the search values a hone attack at the pre-trigger number and
+// systematically under-rates attacking -- a textbook projection-vs-executor fd-diverge generator.
+// One counter lands on EVERY controlled Equipment, so the power gained is (counters put) x
+// (Equipment attached to an ATTACKING creature) -- unattached Equipment banks its counter but adds
+// nothing to this combat.
+inline int CountAttackHonePump(const GameState& state, int controller,
+                               const std::vector<int>& declared_attacker_indices)
+{
+    if (declared_attacker_indices.empty()) { return 0; }
+    const int bf_size = static_cast<int>(state.battlefield.size());
+    int per_equipment = 0;
+    for (int idx : declared_attacker_indices)
+    {
+        if (idx < 0 || idx >= bf_size) { continue; }
+        const Permanent& a = state.battlefield[idx];
+        if (a.controller_index != controller || a.def_absent) { continue; }
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(a.card);
+        if (!d || d->params.hone_counters_on_enter_or_attack <= 0) { continue; }
+        per_equipment += d->params.hone_counters_on_enter_or_attack;
+    }
+    if (per_equipment <= 0) { return 0; }
+    int armed = 0;
+    for (int idx : declared_attacker_indices)
+    {
+        if (idx < 0 || idx >= bf_size) { continue; }
+        const Permanent& a = state.battlefield[idx];
+        if (a.controller_index != controller) { continue; }
+        armed += CountEquipmentAttachedTo(state, controller, a.card.m_number);
+    }
+    return per_equipment * armed;
+}
+
 
 // Equipment-conditional double strike (creature-side flags): Kor Duelist ("as long as this
 // creature is equipped") and Balan ("as long as two or more Equipment are attached"). The third
@@ -3079,6 +3220,39 @@ inline bool CreatureHasLifelink(const Permanent& creature, const GameState& stat
             }
         }
         return false;
+    };
+    if (granter_idx)
+    {
+        for (int i : *granter_idx) { if (grants(state.battlefield[i])) { return true; } }
+        return false;
+    }
+    for (const Permanent& a : state.battlefield) { if (grants(a)) { return true; } }
+    return false;
+}
+
+// Does `creature` have vigilance -- from its own printed keyword, or granted by an attached
+// Equipment (Cathar's Shield / Accorder's Shield)? The lifelink helper's shape, narrowed: the only
+// grant source that exists today is equipment.
+// WHY THIS IS NOT INERT, unlike the other keywords these shields grant. Vigilance has a real,
+// live read in the shared combat core -- Combat.cpp's attack-tap -- so leaving an attacker
+// untapped genuinely changes state. It is NOT the "nothing blocks in the goldfish" class that
+// covers flying/trample/reach (vigilance is not a blocking keyword), and it is reachable on this
+// deck specifically: Cid, Freeflier Pilot has a {T} ability ("{2}, {T}: return target Equipment
+// from your graveyard to your hand") whose graveyard fuel is real here, because Sram + Puresteel
+// overdraw and the surplus is discarded at cleanup. So an attacking, vigilant Cid can still rebuy.
+// Equipment-only by design: the shields' other grant (reach) has ZERO readers anywhere in the
+// engine, so it stays a disclosed bracket note rather than a param.
+inline bool CreatureHasVigilance(const Permanent& creature, const GameState& state,
+                                 const std::vector<int>* granter_idx = nullptr)
+{
+    if (creature.card.HasKeyword(Keyword::Vigilance)) { return true; }
+    auto grants = [&](const Permanent& a)
+    {
+        if (a.controller_index != creature.controller_index) { return false; }
+        if (a.equipped_to != creature.card.m_number) { return false; }
+        if (a.def_absent) { return false; }
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(a.card);
+        return d && d->params.is_equipment && d->params.equip_grants_vigilance;
     };
     if (granter_idx)
     {
@@ -3375,7 +3549,23 @@ inline void FireOnCastTriggers(GameState& state, const CardDefinition& cast_def)
         // (card advantage is strictly good in a goldfish). Deterministic top-of-library draw,
         // lockstep in both cast paths; the drawn card is a resource for LATER turns (no same-turn
         // re-solve -- conservative, avoids an fd-diverge re-solve divergence; disclosed 6a).
-        if (def->params.draw_on_aura_cast && cast_def.params.is_aura)
+        // Sram, Senior Edificer: "Whenever you cast an Aura, Equipment, or Vehicle spell, draw a
+        // card." Shares the Kor Spiritdancer body below, but matches the cast card's PRINTED
+        // SUBTYPE and is gated on "whenever YOU cast". The draw is MANDATORY (no "may"), so
+        // nothing is auto-resolved here. NOTE the subtype test is an inline loop rather than a
+        // call to CardHasSubtype: that helper is defined BELOW this function, which is why the
+        // cast_trigger_creates_tokens clause above open-codes the same walk.
+        bool sram_subtype_hit = false;
+        if (!def->params.draw_on_cast_subtypes.empty() && p.controller_index == active)
+        {
+            for (const std::string& want : def->params.draw_on_cast_subtypes)
+            {
+                for (const std::string& cs : cast_def.card.m_subtypes)
+                { if (cs == want) { sram_subtype_hit = true; break; } }
+                if (sram_subtype_hit) { break; }
+            }
+        }
+        if ((def->params.draw_on_aura_cast && cast_def.params.is_aura) || sram_subtype_hit)
         {
             Player& kp = state.players[active];
             if (!kp.library.empty())
@@ -6215,6 +6405,77 @@ inline void FireEtbWatchers(GameState& state, int controller, int entered_index)
                     }
                 }
             }
+
+            // Sigarda's Aid: "whenever an Equipment you control enters, you MAY attach it to
+            // target creature you control." Deliberately placed AFTER the Puresteel draw loop
+            // above; the ordering between the two is UNOBSERVABLE (a draw lands in hand and
+            // cannot add or remove a legal host), but fixing it keeps the cascade deterministic.
+            // Captured BEFORE anything that can mutate the battlefield: ApplyEquip can sacrifice
+            // a prior host (Grafted Wargear) and invalidate entered_index.
+            const int eq_num = entered.card.m_number;
+            bool aid_here = false;
+            for (const Permanent& w : state.battlefield)
+            {
+                if (w.controller_index != ectrl) { continue; }
+                const CardDefinition* wd = CardDatabase::Instance().LookupCached(w.card);
+                if (wd && wd->params.attach_equipment_on_etb) { aid_here = true; break; }
+            }
+            // An entrant that arrived ALREADY attached is skipped: the attack-dig put attaches
+            // before this cascade runs, and declining the move is both the right default and what
+            // keeps Grafted Wargear's prior-host sacrifice off this path entirely.
+            if (aid_here && entered_index >= 0
+                && entered_index < static_cast<int>(state.battlefield.size())
+                && state.battlefield[entered_index].equipped_to == 0)
+            {
+                std::vector<int> cands;
+                for (int i = 0; i < static_cast<int>(state.battlefield.size()); ++i)
+                {
+                    const Permanent& h = state.battlefield[i];
+                    if (h.controller_index != ectrl) { continue; }
+                    if (!h.card.IsCreature() && !h.is_animated) { continue; }
+                    if (h.card.m_number == eq_num) { continue; }
+                    if (edef->params.equip_min_power > 0
+                        && EquipGatePowerOf(h, state) < edef->params.equip_min_power) { continue; }
+                    // This trigger TARGETS (CR 702.18b), unlike Balan's attach-all and the
+                    // attack-dig attach -- so shroud hosts are NOT legal. The one line a
+                    // copy-paste from the attack-dig block would get wrong.
+                    if (CreatureHasShroud(h, state)) { continue; }
+                    cands.push_back(i);
+                }
+                if (!cands.empty())
+                {
+                    int want = ResolveProvider(state).EquipmentEtbAttachHost(
+                        state, ectrl, entered.card, cands);
+                    // HUMAN PLAY: the same board-click decision type the Skyhunter attach and
+                    // soulbond use -- full rules-legal set, heuristic preselected, -1 declines
+                    // (the printed "you MAY"). The chooser never sees a narrowed list, and it is
+                    // nulled by RevealLogPause so this is inert in search and rollouts.
+                    if (g_play_attach_host_chooser)
+                    {
+                        int heur = -1;
+                        for (int i = 0; i < static_cast<int>(cands.size()); ++i)
+                        { if (state.battlefield[cands[i]].card.m_number == want) { heur = i; } }
+                        const int picked = (*g_play_attach_host_chooser)(
+                            state, ectrl, entered.card.m_name.str(), cands, heur);
+                        if (picked == -1) { want = 0; }
+                        else if (picked >= 0 && picked < static_cast<int>(cands.size()))
+                        { want = state.battlefield[cands[picked]].card.m_number; }
+                    }
+                    if (want != 0)
+                    {
+                        std::string hname = "creature #" + std::to_string(want);
+                        for (const Permanent& q : state.battlefield)
+                        { if (q.card.m_number == want) { hname = q.card.m_name.str(); break; } }
+                        ApplyEquip(state, ectrl, eq_num, want);
+                        if (g_play_event_sink && !g_tap_speculating)
+                        {
+                            EmitPlayEvent(state.turn_number, "trigger",
+                                          "Sigarda's Aid: attach " + entered.card.m_name.str()
+                                          + " -> " + hname);
+                        }
+                    }
+                }
+            }
         }
     }
     // Self-bounce watchers (Breaching Dragonstorm clause 2: "When a Dragon you control enters,
@@ -7126,6 +7387,25 @@ inline void FireOwnEtbTriggers(GameState& state, int controller, int entered_ind
             state.battlefield.erase(state.battlefield.begin() + static_cast<std::ptrdiff_t>(i));
             FireOppCreatureDies(state, dead_controller);
         }
+    }
+
+    // (1h) Dwalin, Weaponmaster's ENTERS half: "whenever Dwalin enters or attacks, put a hone
+    //      counter on each Equipment you control". Fired here, in the universal own-ETB cascade,
+    //      so EVERY enter route triggers it (a cast and a put alike); the ATTACKS half lives at
+    //      declare-attackers in both worlds (ApplyAttackHoneCounters). Dwalin itself is already on
+    //      the battlefield when its own trigger resolves, which matters not at all here (it is not
+    //      an Equipment) but is the same CR 603.6a timing the devotion burn below relies on.
+    if (p.hone_counters_on_enter_or_attack > 0)
+    { ApplyHoneAllEquipment(state, controller, p.hone_counters_on_enter_or_attack); }
+
+    // (1t) Skateboard's "when this Equipment enters, tap target permanent" -- mandatory and
+    //      targeted over both sides. Safe anywhere in this region: it never erases.
+    if (p.etb_tap_target_permanent && entered_index >= 0
+        && entered_index < static_cast<int>(state.battlefield.size()))
+    {
+        ResolveEtbTapMandatory(state, controller,
+                               state.battlefield[entered_index].card.m_number,
+                               state.battlefield[entered_index].card.m_name.str());
     }
 
     // (2) ETB single-target burn ("deals N damage to any target" -> opponent face; Twinshot 2)
@@ -8710,8 +8990,35 @@ inline int CountControlledArtifacts(const GameState& state, int controller)
 // block) and every payment site (rollout apply_one, ApplyManaUnlockEquips, the executor) so a
 // mid-plan metalcraft flip -- cast artifact #3, then equip -- stays lockstep. Multiple Paladins
 // are redundant, not cumulative (a static ability either applies or doesn't).
+// The number of COLOURS of the creature `host_id`, for Dragonfire Blade's "this ability costs {1}
+// less to activate for each color of the creature it targets". Must resolve through the card
+// DEFINITION and must look in the HAND as well as the battlefield: the equip enumeration offers
+// hosts still in hand (the cast-and-equip pair), and a hand card is a name-only placeholder whose
+// colour mask is EMPTY -- reading it directly would silently return 0 and lose the discount.
+inline int EquipTargetColorCount(const GameState& state, int controller, int host_id)
+{
+    if (host_id == 0) { return 0; }
+    for (const Permanent& p : state.battlefield)
+    {
+        if (p.controller_index != controller || p.card.m_number != host_id) { continue; }
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+        return d ? static_cast<int>(d->card.ColorCount()) : 0;
+    }
+    for (const Card& c : state.players[controller].hand)
+    {
+        if (c.m_number != host_id) { continue; }
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(c);
+        return d ? static_cast<int>(d->card.ColorCount()) : 0;
+    }
+    return 0;
+}
+
+// `host_id` (0 = unknown/not host-specific) exists for Dragonfire Blade, whose equip cost depends
+// on WHICH creature it targets. The metalcraft loop stays FIRST and unchanged: Puresteel grants an
+// ADDITIONAL equip {0} ability rather than reducing the printed one, so "metalcraft wins outright"
+// is exact rather than an approximation, and {0} is already the floor.
 inline int EquipCostGenericNow(const GameState& state, int controller,
-                               const CardDefinition& equip_def)
+                               const CardDefinition& equip_def, int host_id = 0)
 {
     for (const Permanent& p : state.battlefield)
     {
@@ -8721,7 +9028,14 @@ inline int EquipCostGenericNow(const GameState& state, int controller,
         if (CountControlledArtifacts(state, controller)
             >= d->params.metalcraft_equip_zero_artifacts) { return 0; }
     }
-    return equip_def.params.equip_cost_generic;
+    int cost = equip_def.params.equip_cost_generic;
+    if (equip_def.params.equip_cost_less_per_target_color > 0 && host_id != 0)
+    {
+        cost -= equip_def.params.equip_cost_less_per_target_color
+              * EquipTargetColorCount(state, controller, host_id);
+        if (cost < 0) { cost = 0; }        // CR 601.2f: a reduction never goes below zero
+    }
+    return cost;
 }
 
 // The Equip action's cost recomputed AT PAYMENT time. The enumeration bakes EquipCostGenericNow
@@ -8730,7 +9044,7 @@ inline int EquipCostGenericNow(const GameState& state, int controller,
 // sites (rollout apply_one, ApplyManaUnlockEquips, the AIEngine executor) call this so they can
 // never disagree. Falls back to the baked cost if the equipment is not on the battlefield.
 inline ManaCost EquipActionCostNow(const GameState& state, int controller, int equip_id,
-                                   const ManaCost& baked)
+                                   const ManaCost& baked, int host_id = 0)
 {
     for (const Permanent& p : state.battlefield)
     {
@@ -8739,7 +9053,7 @@ inline ManaCost EquipActionCostNow(const GameState& state, int controller, int e
         if (d && d->params.is_equipment)
         {
             ManaCost c;
-            c.generic = EquipCostGenericNow(state, controller, *d);
+            c.generic = EquipCostGenericNow(state, controller, *d, host_id);
             return c;
         }
     }
@@ -9045,13 +9359,30 @@ inline void ApplyGraveyardReturnAbility(GameState& state, int controller, int so
     }
     if (pick < 0) { return; }   // no legal target: the ability would not have been activated
 
-    // Costs are paid on activation (CR 601.2h/602.1): tap, then sacrifice the source to the
-    // graveyard, and only then resolve the return. The source is a Land, so it can never be its own
-    // target even though it is in the graveyard by the time we move the picked card.
-    // (`pick` stays valid: the sacrifice push_back only APPENDS to the graveyard.)
-    const Card sacrificed = state.battlefield[src].card;
-    state.battlefield.erase(state.battlefield.begin() + src);
-    state.players[controller].graveyard.push_back(sacrificed);
+    // Costs are paid on activation (CR 601.2h/602.1): tap, then -- for a source whose printed cost
+    // says so -- sacrifice it to the graveyard, and only then resolve the return.
+    //
+    // gy_return_sacrifices_source FALSE (Cid, Freeflier Pilot) taps WITHOUT sacrificing, which is
+    // what makes the ability repeatable across turns rather than one-shot, and is why tapping it
+    // forgoes that turn's attack. Haven of the Spirit Dragon keeps the default (true) and is
+    // byte-identical. Cid still cannot target itself -- it is not an Equipment -- but a false value
+    // does NOT license assuming that in general, which is why the pick is resolved before this.
+    std::string src_label;
+    if (d->params.gy_return_sacrifices_source)
+    {
+        // The source is a Land here, so it can never be its own target even though it is in the
+        // graveyard by the time we move the picked card.
+        // (`pick` stays valid: the sacrifice push_back only APPENDS to the graveyard.)
+        const Card sacrificed = state.battlefield[src].card;
+        src_label = sacrificed.m_name.str();
+        state.battlefield.erase(state.battlefield.begin() + src);
+        state.players[controller].graveyard.push_back(sacrificed);
+    }
+    else
+    {
+        src_label = state.battlefield[src].card.m_name.str();
+        state.battlefield[src].tapped = true;
+    }
 
     std::vector<Card>& gy2 = state.players[controller].graveyard;
     const Card returned = gy2[static_cast<std::size_t>(pick)];
@@ -9060,7 +9391,7 @@ inline void ApplyGraveyardReturnAbility(GameState& state, int controller, int so
     if (g_play_event_sink && !g_tap_speculating)
     {
         EmitPlayEvent(state.turn_number, "ability",
-                      sacrificed.m_name.str() + ": returned " + returned.m_name.str()
+                      src_label + ": returned " + returned.m_name.str()
                       + " from the graveyard to hand");
     }
 }
@@ -9697,6 +10028,62 @@ inline bool EtbDestroyAnyLegal(const GameState& state, const CardParams& p)
 {
     for (const Permanent& q : state.battlefield) { if (EtbDestroyTargetLegal(q, p)) { return true; } }
     return false;
+}
+
+// Skateboard: "When this Equipment enters, tap target permanent." MANDATORY and targeted, legal
+// set = EVERY permanent on BOTH sides (CR 603.3d) -- the Shriekmaw / Acidic Slime shape. Strictly
+// simpler than the destroy twin below: nothing is erased, so there is no index invalidation, no
+// indestructible check, no attachment fixup and no death cascade.
+//
+// The PAYOFF is provably 0 against this opponent model (no engine path reads an OPPONENT
+// permanent's tapped state), but the TARGETING is NOT inert -- our own untapped lands are legal
+// targets and tapping one is a real mana loss. So the auto-pick is a DOMINANCE LADDER, not a
+// value heuristic: an opponent permanent if one exists, else the SOURCE ITSELF, which is a
+// provable no-op (it has no {T} ability, produces no mana, equipping is not a {T} cost, and the
+// metalcraft artifact count ignores tapped). The source is always on the battlefield when this
+// runs, so a zero-cost legal target always exists and the "no legal target" branch is unreachable
+// -- we never have to tap a land. Deterministic by construction, which matters because `tapped`
+// is folded into BuildSimKey.
+inline void ResolveEtbTapMandatory(GameState& state, int controller, int source_id,
+                                   const std::string& src_name)
+{
+    std::vector<int> legal;
+    for (int i = 0; i < static_cast<int>(state.battlefield.size()); ++i)
+    { legal.push_back(i); }
+    if (legal.empty()) { return; }
+    int k = -1;
+    for (int i = 0; i < static_cast<int>(legal.size()); ++i)
+    {
+        const Permanent& q = state.battlefield[static_cast<std::size_t>(legal[i])];
+        if (q.controller_index != controller && !q.tapped) { k = i; break; }
+    }
+    if (k < 0)
+    {
+        for (int i = 0; i < static_cast<int>(legal.size()); ++i)
+        {
+            if (state.battlefield[static_cast<std::size_t>(legal[i])].card.m_number == source_id)
+            { k = i; break; }
+        }
+    }
+    if (k < 0) { k = 0; }
+    // HUMAN PLAY: the full both-sides legal set, the same board-click `target` shape the mandatory
+    // ETB destroys use. A forced single target is not a choice (CR 601.2c).
+    if (g_play_loyalty_chooser && legal.size() > 1)
+    {
+        const int c = (*g_play_loyalty_chooser)(state, controller, src_name,
+                                                "tapped (target permanent -- mandatory)", legal, k);
+        if (c >= 0 && c < static_cast<int>(legal.size())) { k = c; }
+    }
+    Permanent& q = state.battlefield[static_cast<std::size_t>(legal[static_cast<std::size_t>(k)])];
+    q.tapped = true;
+    if (g_play_event_sink && !g_tap_speculating)
+    {
+        EmitPlayEvent(state.turn_number, "trigger",
+                      src_name + ": taps "
+                      + (q.controller_index == controller ? std::string("your ")
+                                                          : std::string("the opponent's "))
+                      + q.card.m_name.str());
+    }
 }
 
 inline void ResolveEtbDestroyMandatory(GameState& state, int controller, int source_id,
@@ -12283,6 +12670,33 @@ inline int ResolveAttackModalMode(const GameState& state, int controller,
 // Projection twin of ApplyAttackTriggerDamage for PendingAttackDamage's const fast path. Must
 // agree EXACTLY with what the function above does, or the search over/under-projects lethal
 // (the fd-diverge / overshoot class).
+// Projection twin of CountAttackHonePump, over the attacker POINTER list the two attack
+// projections build (the index-taking form serves the real declare-attackers sites). Same closed
+// form: (counters a declared hone source puts) x (Equipment attached to an ATTACKING creature),
+// because one counter lands on every controlled Equipment but only an attached one adds power to
+// THIS combat. Without this addend the search values a hone attack at its pre-trigger power and
+// systematically under-rates attacking -- the projection-vs-executor fd-diverge class.
+inline int CountAttackHonePump(const GameState& state, int controller,
+                               const std::vector<const Permanent*>& attackers)
+{
+    int per_equipment = 0;
+    for (const Permanent* atk : attackers)
+    {
+        if (atk->controller_index != controller || atk->def_absent) { continue; }
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(atk->card);
+        if (d && d->params.hone_counters_on_enter_or_attack > 0)
+        { per_equipment += d->params.hone_counters_on_enter_or_attack; }
+    }
+    if (per_equipment <= 0) { return 0; }
+    int armed = 0;
+    for (const Permanent* atk : attackers)
+    {
+        if (atk->controller_index != controller) { continue; }
+        armed += CountEquipmentAttachedTo(state, controller, atk->card.m_number);
+    }
+    return per_equipment * armed;
+}
+
 inline int CountAttackTriggerDamageAny(
     const std::vector<const Permanent*>& attackers)
 {
