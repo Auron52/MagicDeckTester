@@ -124,7 +124,43 @@ Turn 8 is the horizon edge (`max_turns=8`), which fits `fungus-value-leaf-status
 99.7% of this deck's evaluations sit at the horizon edge. Half the constructed plans are built on the
 last turn the search will ever look at.
 
-### The subset funnel — the real work unit is 8.5x bigger than "5.4 M plans"
+### 2d. CORRECTION + the sharpest result so far: TWO walks, and one predicate (2026-10-01)
+
+**The correction first.** §2b reported "the walk visits 43.7 M subsets to produce 5.1 M plans — 8.5
+subsets per plan". **That is not a ratio of anything.** The reject counters were instrumented in
+`TurnSolver::SolveUncached` (the search's greedy subset walk) while the odometer, plan and dedup
+columns come from `EnumeratePlans` (the enumeration walk). They are two different enumerations in two
+different functions, and dividing one by the other is meaningless. Both are now measured apart:
+
+| walk | subset visits | rejected | dupSacSrc | wasteSacMana | overFodder |
+|---|---|---|---|---|---|
+| `SolveUncached` | 43,664,421 | **25.0%** | 8.15% | 4.56% | 12.32% |
+| `EnumeratePlans` | 11,927,667 | **39.3%** | 1.5% | 4.5% | **33.3%** |
+
+**And on the decisions that actually matter it is far more concentrated than either figure.** Ranking
+heavy decisions by subset VISITS rather than odometer (the odometer having been shown in §2c not to
+predict cost), the top three are all turn 6 and all look like this:
+
+```
+HEAVY rank=1 odo=88200 turn=6 board=22 hand=4 plans=368
+  FUNNEL visits=13076 dupSacSrc=0 wasteSacMana=0 overFodder=9612 other=0
+         PASSED=3464 rejectPct=73.5 visitsPerPlan=35.5
+```
+
+**73.5% of the walk is discarded, every bit of it by ONE predicate —
+`SubsetOversubscribesSacFodder` — and the other two reject nothing at all.** 35.5 visits per plan
+produced.
+
+The mechanism is exactly the shared-resource story §2a proposed, now pinned to a single gate: the
+board holds 8 Saprolings and several outlets that each want them (two Utopia Mycon, each offering a
+`sacN=5` activation — 10 demanded against 8 available — plus Psychotrope Thallid and Undercellar
+Myconid). The enumerator builds those combinations and then throws three-quarters of them away.
+
+**This replaces 25% as the size of the prize on the hot decisions.** A fodder bound applied *before*
+generating, rather than as a leaf test after, is now the one candidate with real mass behind it, and
+it is worth noting the bound only has to be good on turn-6-shaped boards to collect most of it.
+
+### The subset funnel — the real work unit (NOTE: see §2d, this section's cross-walk ratio is wrong)
 
 | turn | subsets entered | dupSacSrc | wasteSacMana | overFodder | other | PASSED |
 |---|---|---|---|---|---|---|

@@ -24260,6 +24260,13 @@ namespace shapestats
         // shared-resource constraint; `passed` is what survived every rule. entered - passed - the
         // three = rejected by some other predicate, derived rather than instrumented at 15 sites.
         std::atomic<std::uint64_t> entered{0}, rej_dup{0}, rej_mana{0}, rej_fodder{0}, passed{0};
+        // ...and the SAME funnel for EnumeratePlans' own walk. THESE ARE TWO DIFFERENT
+        // ENUMERATIONS and must never be pooled: `entered` above is TurnSolver::SolveUncached's
+        // greedy subset walk; `e_entered` here is EnumeratePlans' odometer walk, which is the one
+        // the odo/plans/dedup columns describe. An earlier draft of the diagnosis divided one by the
+        // other and reported "8.5 subsets per plan", which is not a ratio of anything.
+        std::atomic<std::uint64_t> e_entered{0}, e_rej_dup{0}, e_rej_mana{0}, e_rej_fodder{0},
+                                   e_passed{0};
         Slot() { for (auto& g : gsz) { g.store(0); } }
     };
     inline Slot g_turn[kMaxTurn];
@@ -24342,6 +24349,15 @@ namespace shapestats
         return v;
     }
 
+    // One EnumeratePlans call's subset funnel. Non-atomic by design (see the declaration site).
+    struct CallFunnel
+    {
+        std::uint64_t entered = 0, rej_dup = 0, rej_mana = 0, rej_fodder = 0, passed = 0;
+        std::uint64_t other() const
+        { const std::uint64_t k = rej_dup + rej_mana + rej_fodder + passed;
+          return entered > k ? entered - k : 0; }
+    };
+
     struct Heavy
     {
         std::uint64_t odo = 0;
@@ -24350,6 +24366,7 @@ namespace shapestats
         std::vector<std::string> groups;   // one rendered line per option group
         std::string board_desc;
         std::uint64_t seen = 1;            // times this exact decision was re-enumerated
+        CallFunnel    f;                   // the work this one decision actually did
     };
     inline std::mutex         g_heavy_mtx;
     inline std::vector<Heavy> g_heavy;     // kept sorted DESC by odo, truncated to HeavyWant()
@@ -24359,19 +24376,22 @@ namespace shapestats
         const int want = HeavyWant();
         if (want == 0) { return; }
         std::lock_guard<std::mutex> lk(g_heavy_mtx);
-        if (static_cast<int>(g_heavy.size()) >= want && h.odo <= g_heavy.back().odo) { return; }
+        // RANKED BY SUBSET VISITS, the work unit -- not by odometer, which was measured to be a
+        // space nobody walks (see the devour A/B: -88% odo on the top decision, -0.8% visits).
+        if (static_cast<int>(g_heavy.size()) >= want && h.f.entered <= g_heavy.back().f.entered)
+        { return; }
         // DISTINCT decisions only. The first run returned three copies of one turn-6 state, which
         // burns the slots and hides the variety a reviewer needs -- and the recurrence is itself
         // recorded, as `seen`, because a heavy decision re-entered identically is a memo question.
         for (Heavy& e : g_heavy)
         {
-            if (e.odo == h.odo && e.turn == h.turn && e.groups == h.groups
-                && e.board_desc == h.board_desc)
+            if (e.odo == h.odo && e.turn == h.turn && e.f.entered == h.f.entered
+                && e.groups == h.groups && e.board_desc == h.board_desc)
             { ++e.seen; return; }
         }
         g_heavy.push_back(std::move(h));
         std::sort(g_heavy.begin(), g_heavy.end(),
-                  [](const Heavy& a, const Heavy& b) { return a.odo > b.odo; });
+                  [](const Heavy& a, const Heavy& b) { return a.f.entered > b.f.entered; });
         if (static_cast<int>(g_heavy.size()) > want) { g_heavy.resize(static_cast<std::size_t>(want)); }
     }
 
@@ -24381,8 +24401,8 @@ namespace shapestats
     {
         std::lock_guard<std::mutex> lk(g_heavy_mtx);
         if (g_heavy.empty()) { return; }
-        std::fprintf(stderr, "\n=== BRANCH SHAPE: the %d HEAVIEST individual decisions "
-                             "(what the branching is MADE OF) ===\n", (int)g_heavy.size());
+        std::fprintf(stderr, "\n=== BRANCH SHAPE: the %d HEAVIEST individual decisions, ranked by "
+                             "SUBSET VISITS (the work unit) ===\n", (int)g_heavy.size());
         for (std::size_t i = 0; i < g_heavy.size(); ++i)
         {
             const Heavy& h = g_heavy[i];
@@ -24392,6 +24412,15 @@ namespace shapestats
                 i + 1, (unsigned long long)h.odo, h.turn, h.board, h.hand, h.ngroups, h.num_ind,
                 (unsigned long long)h.plans, (unsigned long long)h.dedup,
                 (unsigned long long)h.seen);
+            std::fprintf(stderr,
+                "  FUNNEL visits=%llu dupSacSrc=%llu wasteSacMana=%llu overFodder=%llu other=%llu "
+                "PASSED=%llu rejectPct=%.1f visitsPerPlan=%.1f\n",
+                (unsigned long long)h.f.entered, (unsigned long long)h.f.rej_dup,
+                (unsigned long long)h.f.rej_mana, (unsigned long long)h.f.rej_fodder,
+                (unsigned long long)h.f.other(), (unsigned long long)h.f.passed,
+                h.f.entered ? 100.0 * (double)(h.f.rej_dup + h.f.rej_mana + h.f.rej_fodder)
+                              / (double)h.f.entered : 0.0,
+                h.plans ? (double)h.f.entered / (double)h.plans : 0.0);
             std::fprintf(stderr, "  BOARD %s\n", h.board_desc.c_str());
             for (const std::string& g : h.groups)
             { std::fprintf(stderr, "  GROUP %s\n", g.c_str()); }
@@ -24475,6 +24504,26 @@ namespace shapestats
                 (unsigned long long)t_oth,  100.0 * static_cast<double>(t_oth)  / den,
                 (unsigned long long)t_pass, 100.0 * static_cast<double>(t_pass) / den);
             DumpHeavy();
+            {   // The OTHER walk, reported apart -- see the Slot comment on why pooling them lies.
+                std::uint64_t e_ent = 0, e_dup = 0, e_mana = 0, e_fod = 0, e_pass = 0;
+                for (const Slot& s2 : g_turn)
+                { e_ent += s2.e_entered; e_dup += s2.e_rej_dup; e_mana += s2.e_rej_mana;
+                  e_fod += s2.e_rej_fodder; e_pass += s2.e_passed; }
+                const double ed = e_ent ? (double)e_ent : 1.0;
+                std::fprintf(stderr,
+                    "\n=== BRANCH SHAPE: the TWO walks, measured apart ===\n"
+                    "WALK name=SolveUncached visits=%llu rejectPct=%.2f passed=%llu\n"
+                    "WALK name=EnumeratePlans visits=%llu rejectPct=%.2f passed=%llu "
+                    "dupSacSrc=%llu wasteSacMana=%llu overFodder=%llu\n"
+                    "  These are DIFFERENT enumerations. The odo/plans/dedup columns describe\n"
+                    "  EnumeratePlans only; dividing SolveUncached visits by EnumeratePlans plans\n"
+                    "  is not a ratio of anything.\n",
+                    (unsigned long long)t_ent,
+                    100.0 * (double)(t_dup + t_mana + t_fod) / den, (unsigned long long)t_pass,
+                    (unsigned long long)e_ent,
+                    100.0 * (double)(e_dup + e_mana + e_fod) / ed, (unsigned long long)e_pass,
+                    (unsigned long long)e_dup, (unsigned long long)e_mana, (unsigned long long)e_fod);
+            }
             std::fprintf(stderr,
                 "  SHARED-RESOURCE rejects (the three named) = %llu = %.2f%% of subsets visited.\n"
                 "  That is the fraction of the walk a constraint-bounded enumeration could have\n"
@@ -26017,6 +26066,13 @@ TurnSolver::Plan TurnSolver::SolveUncached(const GameState& state, bool is_pre_c
     // per-visit cost is a null check.
     shapestats::Slot* const shape = shapestats::Enabled()
         ? &shapestats::g_turn[shapestats::Clamp(state.turn_number)] : nullptr;
+    // PER-CALL funnel, so a heavy decision can be ranked by the work it actually does (subset
+    // VISITS) rather than by its odometer. Measured 2026-10-01: an 88% odometer cut on the heaviest
+    // decision moved visits by 0.8% and the wall not at all, so the odometer is the wrong axis to
+    // rank on. Plain non-atomic counters: one EnumeratePlans call's walk is single-threaded (the pool
+    // parallelises across rollouts, never inside a walk), and the walk completes before the record
+    // site below reads it.
+    shapestats::CallFunnel callf;
     auto consider = [&](std::vector<int>& sel)
     {
         // Provenance for the fold's canonical-prefix rule, TAKEN (and cleared) at entry so a
@@ -26044,7 +26100,7 @@ TurnSolver::Plan TurnSolver::SolveUncached(const GameState& state, bool is_pre_c
         if (enumstats::Enabled()) { enumstats::g_c_enter.fetch_add(1, std::memory_order_relaxed); }
         // BRANCH SHAPE funnel: one visit. The three shared-resource predicates below each get a
         // counter; everything else is derived as (entered - passed - those three) at dump time.
-        if (shape != nullptr) { shapestats::Bump(shape->entered); }
+        if (shape != nullptr) { shapestats::Bump(shape->entered); ++callf.entered; }
         // EVERY `pre.` TEST BELOW IS A NECESSARY CONDITION FOR ITS FILTER, computed once over
         // `cands` before the walk -- see SubsetFilterPre. A false bit means no selection out of
         // this candidate list can make that filter return true, so the skip is byte-identical.
@@ -26067,7 +26123,7 @@ TurnSolver::Plan TurnSolver::SolveUncached(const GameState& state, bool is_pre_c
         // without a SacForMana action (Lotus Bloom) -> byte-identical.
         if (pre.dup_source
             && SubsetHasDuplicateSacSource(cands, sel, /*site=*/0, fold_from_odometer))
-        { if (shape != nullptr) { shapestats::Bump(shape->rej_dup); } return; }
+        { if (shape != nullptr) { shapestats::Bump(shape->rej_dup); ++callf.rej_dup; } return; }
         // Reject an Equip whose equipment/host is in hand and uncast by this subset (silent no-op).
         // Inert without an Equip candidate -> byte-identical. Kept in lockstep with the twin below.
         if (pre.equip && SubsetHasStrandedEquip(state, cands, sel)) { return; }
@@ -26085,13 +26141,13 @@ TurnSolver::Plan TurnSolver::SolveUncached(const GameState& state, bool is_pre_c
         // the filter fallback, and keeps the rule identical on both sides. Inert without a creature
         // mana outlet -> byte-identical.
         if (pre.creature_sac_mana && SubsetWastesCreatureSacMana(state, cands, sel, sac_tab))
-        { if (shape != nullptr) { shapestats::Bump(shape->rej_mana); } return; }
+        { if (shape != nullptr) { shapestats::Bump(shape->rej_mana); ++callf.rej_mana; } return; }
         // Reject a plan whose sac outlets together demand more fodder than the board has
         // (found by the Fungus Stage-5d sweep: two Saproling-gated outlets, one Saproling --
         // the second half silently no-opped at apply). Correctness, not a narrowing.
         if (pre.sac_fodder
             && SubsetOversubscribesSacFodder(state, cands, sel, sac_tab, persist_arg))
-        { if (shape != nullptr) { shapestats::Bump(shape->rej_fodder); } return; }
+        { if (shape != nullptr) { shapestats::Bump(shape->rej_fodder); ++callf.rej_fodder; } return; }
         // Reject a life-paid phyrexian variant whose full-mana twin is jointly payable (weak
         // dominance -- see the helper). Inert without a phyrexian card -> byte-identical.
         if (pre.phyrexian && SubsetPhyrexianDominated(state, cands, sel)) { return; }
@@ -26102,7 +26158,7 @@ TurnSolver::Plan TurnSolver::SolveUncached(const GameState& state, bool is_pre_c
         // same subset (CR 601.2c). Inert without a targeted trick -> byte-identical.
         if (pre.trick_target && SubsetHasMissingTrickTarget(state, cands, sel, pre.best_needs_body)) { return; }
         if (enumstats::Enabled()) { enumstats::g_c_rules.fetch_add(1, std::memory_order_relaxed); }   // passed the rules
-        if (shape != nullptr) { shapestats::Bump(shape->passed); }
+        if (shape != nullptr) { shapestats::Bump(shape->passed); ++callf.passed; }
         int mask = 0;
         for (int j : sel) { mask |= (1 << j); }
 
@@ -36251,6 +36307,12 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
             }
         }
     }
+    // BRANCH SHAPE, EnumeratePlans side. Resolved ONCE per enumeration (the turn is fixed for the
+    // walk) so the per-visit cost with the flag off is a null check. `ecallf` is the per-CALL funnel
+    // that lets a heavy decision be ranked by the work it does rather than by its odometer.
+    shapestats::Slot* const eshape = shapestats::Enabled()
+        ? &shapestats::g_turn[shapestats::Clamp(state.turn_number)] : nullptr;
+    shapestats::CallFunnel ecallf;
     // Evaluate one selected combination (a list of candidate indices) and, if
     // feasible, append the resulting plan. Mirrors the former per-mask body.
     std::function<void(const std::vector<int>&)> eval_and_push_body;
@@ -36276,6 +36338,9 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
     };
     eval_and_push_body = [&](const std::vector<int>& sel)
     {
+        // BRANCH SHAPE, EnumeratePlans side. Distinct from SolveUncached's funnel: this is the
+        // odometer walk the odo/plans/dedup columns actually describe.
+        if (eshape != nullptr) { shapestats::Bump(eshape->e_entered); ++ecallf.entered; }
         const bool fold_from_odometer = foldsel::Take();   // see foldsel / consider()
         // SATURATED SUBSET COLLAPSE: keep ONE variant per distinct (action, target) and drop the
         // cross-product BETWEEN them beyond `sat_max_actions` chosen actions. The forced free equips
@@ -36381,7 +36446,7 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
         // Reject two SacForMana of the same source (mutually-exclusive colour variants). Inert
         // without a SacForMana action -> byte-identical.
         if (pre.dup_source
-            && SubsetHasDuplicateSacSource(cands, sel, /*site=*/1, fold_from_odometer)) { return; }
+            && SubsetHasDuplicateSacSource(cands, sel, /*site=*/1, fold_from_odometer)) { if (eshape != nullptr) { shapestats::Bump(eshape->e_rej_dup); ++ecallf.rej_dup; } return; }
         // Reject an Equip whose equipment/host is in hand and uncast by this subset (silent no-op).
         // Inert without an Equip candidate -> byte-identical. Kept in lockstep with Solve's twin.
         if (pre.equip && SubsetHasStrandedEquip(state, cands, sel)) { return; }
@@ -36398,12 +36463,12 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
         // enumeration otherwise hands the search (Goblins gi44). Unlike the rituals-for-payoff guard
         // above, declining an in-play outlet keeps BOTH the outlet and the body, so there is no
         // "hold it for a later turn" trade for the search to arbitrate. See the helper.
-        if (pre.creature_sac_mana && SubsetWastesCreatureSacMana(state, cands, sel, sac_tab)) { return; }
+        if (pre.creature_sac_mana && SubsetWastesCreatureSacMana(state, cands, sel, sac_tab)) { if (eshape != nullptr) { shapestats::Bump(eshape->e_rej_mana); ++ecallf.rej_mana; } return; }
         // Reject a plan whose sac outlets together demand more fodder than the board has
         // (found by the Fungus Stage-5d sweep: two Saproling-gated outlets, one Saproling --
         // the second half silently no-opped at apply). Correctness, not a narrowing.
         if (pre.sac_fodder
-            && SubsetOversubscribesSacFodder(state, cands, sel, sac_tab, persist_arg)) { return; }
+            && SubsetOversubscribesSacFodder(state, cands, sel, sac_tab, persist_arg)) { if (eshape != nullptr) { shapestats::Bump(eshape->e_rej_fodder); ++ecallf.rej_fodder; } return; }
         // Reject a life-paid phyrexian variant whose full-mana twin is jointly payable (weak
         // dominance -- lockstep twin of Solve::consider's call; see the helper).
         if (pre.phyrexian && SubsetPhyrexianDominated(state, cands, sel)) { return; }
@@ -36412,6 +36477,7 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
         // Reject a targeted trick whose target is neither on the battlefield nor cast by this
         // same subset (CR 601.2c). Inert without a targeted trick -> byte-identical.
         if (pre.trick_target && SubsetHasMissingTrickTarget(state, cands, sel, pre.best_needs_body)) { return; }
+        if (eshape != nullptr) { shapestats::Bump(eshape->e_passed); ++ecallf.passed; }
         // Reject a sequenced restricted aura (injected above) with no in-subset enabler on its target.
         // No-op unless AppendSequencedAuraCandidates injected such a candidate (aura decks) -> byte-identical
         // otherwise. Gated by SeqAuraOrderingEnabled() (default on; MTG_LEGACY_NO_SEQ_AURA = viewer-only).
@@ -38482,6 +38548,7 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
             h.ngroups = static_cast<int>(groups.size());
             h.plans   = static_cast<std::uint64_t>(plans.size());
             h.dedup   = static_cast<std::uint64_t>(deduped.size());
+            h.f       = ecallf;
             // Board: non-land permanents named, tokens collapsed to a count -- the same readability
             // rule review_games.py uses, and for the same reason (48 identical Saprolings is a
             // number; listing them buries the few permanents that decide the turn).
