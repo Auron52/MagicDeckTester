@@ -9533,8 +9533,40 @@ static bool FoldVerifyOn()
 }
 static thread_local bool g_in_fold_verify = false;
 
+// ---- PER-CLAUSE PRECONDITIONS FOR SubsetHasDuplicateSacSource ---------------------------------
+//
+// The filter is SEVEN independent "do two selected actions collide on one source" clauses, and each
+// one opens by testing `cands[sel[a]].kind` for every selected action -- so a deck with no
+// planeswalker, no Garth, no blink outlet and no free cast still pays four kind comparisons per
+// selected action PER ENUMERATED SUBSET to re-establish that it is not playing those cards. Same
+// defect as the SubsetFilterPre bits, one level in: inert means returns false, not is skipped.
+//
+// Each bit below is a NECESSARY CONDITION for its clause, computed once per enumeration: a clause can
+// only fire if TWO selected candidates match it, which no selection can supply when fewer than two
+// candidates in `cands` match. A clear bit therefore makes that clause's answer a foregone false.
+//
+// This only ever SKIPS a clause that would have returned false, so it does not reorder anything, does
+// not change which clause reports a rejection, and leaves the equiv_tag canonical-prefix clause and
+// every bfcensus/FoldVerify counter reached exactly as before. Byte-identical by construction, with
+// no instrument-disarm needed -- unlike the two sac filters next door.
+//
+// Default ~0u = every clause live = today's behaviour, so any caller that passes nothing (the fold
+// VERIFIER at the recoverability check, deliberately) keeps the unoptimised filter.
+enum : unsigned
+{
+    kDupSacMana  = 1u << 0,   // two SacForMana on one source
+    kDupFreeCast = 1u << 1,   // two free casts in one bank slot
+    kDupHandFree = 1u << 2,   // a hand slot's paid cast paired with its own free variant
+    kDupLoyalty  = 1u << 3,   // two loyalty abilities on one walker (CR 606.3)
+    kDupGarth    = 1u << 4,   // two Garth activations on one Garth
+    kDupBlink    = 1u << 5,   // two blink activations on one outlet
+    kDupPermAbil = 1u << 6,   // two {T} ability activations on one source
+    kDupAll      = ~0u
+};
+
 static bool SubsetHasDuplicateSacSource(const std::vector<Action>& cands, const std::vector<int>& sel,
-                                        int site, bool from_odometer);
+                                        int site, bool from_odometer,
+                                        unsigned dup_clause = kDupAll);
 
 // For a selection the canonical-prefix rule is about to reject, BUILD ITS TWIN and check the twin
 // is a legal selection: every class member replaced by the same-class member holding ord 0..k-1.
@@ -9637,7 +9669,8 @@ static void VerifyFoldRecoverable(const std::vector<Action>& cands, const std::v
 }
 
 static bool SubsetHasDuplicateSacSource(const std::vector<Action>& cands, const std::vector<int>& sel,
-                                        int site, bool from_odometer)
+                                        int site, bool from_odometer,
+                                        unsigned dup_clause)
 {
     if (BfCensusOn())
     {
@@ -9658,7 +9691,7 @@ static bool SubsetHasDuplicateSacSource(const std::vector<Action>& cands, const 
     }
     for (size_t a = 0; a < sel.size(); ++a)
     {
-        if (cands[sel[a]].kind == Action::Kind::SacForMana)
+        if ((dup_clause & kDupSacMana) != 0 && cands[sel[a]].kind == Action::Kind::SacForMana)
         {
             for (size_t b = a + 1; b < sel.size(); ++b)
             {
@@ -9668,7 +9701,7 @@ static bool SubsetHasDuplicateSacSource(const std::vector<Action>& cands, const 
         }
         // Free-cast bank slots (Maelstrom Archangel): two free casts may not share a slot, so a
         // plan spends at most free_casts_available of them.
-        if (cands[sel[a]].free_cast)
+        if ((dup_clause & kDupFreeCast) != 0 && cands[sel[a]].free_cast)
         {
             for (size_t b = a + 1; b < sel.size(); ++b)
             {
@@ -9680,7 +9713,8 @@ static bool SubsetHasDuplicateSacSource(const std::vector<Action>& cands, const 
         // the odometer can now pair a card's paid cast with its own free variant -- the same
         // physical card cast twice. Reject the pair here (inert for every deck without free casts:
         // free_cast is never set for them).
-        if (cands[sel[a]].kind == Action::Kind::CastFromHand && cands[sel[a]].hand_index >= 0)
+        if ((dup_clause & kDupHandFree) != 0
+            && cands[sel[a]].kind == Action::Kind::CastFromHand && cands[sel[a]].hand_index >= 0)
         {
             for (size_t b = a + 1; b < sel.size(); ++b)
             {
@@ -9690,7 +9724,7 @@ static bool SubsetHasDuplicateSacSource(const std::vector<Action>& cands, const 
             }
         }
         // Planeswalkers: one loyalty ability per walker per turn (CR 606.3).
-        if (cands[sel[a]].kind == Action::Kind::ActivateLoyalty)
+        if ((dup_clause & kDupLoyalty) != 0 && cands[sel[a]].kind == Action::Kind::ActivateLoyalty)
         {
             for (size_t b = a + 1; b < sel.size(); ++b)
             {
@@ -9699,7 +9733,7 @@ static bool SubsetHasDuplicateSacSource(const std::vector<Action>& cands, const 
             }
         }
         // Garth One-Eye: one activation per Garth per plan (the {T} cost).
-        if (cands[sel[a]].kind == Action::Kind::GarthActivate)
+        if ((dup_clause & kDupGarth) != 0 && cands[sel[a]].kind == Action::Kind::GarthActivate)
         {
             for (size_t b = a + 1; b < sel.size(); ++b)
             {
@@ -9710,7 +9744,7 @@ static bool SubsetHasDuplicateSacSource(const std::vector<Action>& cands, const 
         // Blink: one outlet does ONE thing per plan. Two variants of the same Displacer would be
         // two different (target, count) pairs -- mutually exclusive, not a legal pair. (Activating
         // an outlet twice at different counts is already expressible as one larger count.)
-        if (cands[sel[a]].kind == Action::Kind::ActivateBlink)
+        if ((dup_clause & kDupBlink) != 0 && cands[sel[a]].kind == Action::Kind::ActivateBlink)
         {
             for (size_t b = a + 1; b < sel.size(); ++b)
             {
@@ -9719,7 +9753,7 @@ static bool SubsetHasDuplicateSacSource(const std::vector<Action>& cands, const 
             }
         }
         // Permanent ability: one {T} per source across every mode (the Deathrite precedent).
-        if (cands[sel[a]].kind == Action::Kind::ActivatePermAbility)
+        if ((dup_clause & kDupPermAbil) != 0 && cands[sel[a]].kind == Action::Kind::ActivatePermAbility)
         {
             for (size_t b = a + 1; b < sel.size(); ++b)
             {
@@ -11148,6 +11182,14 @@ struct SubsetFilterPre
     // battlefield walk as board_persist, so it costs two field reads, not a second pass. Meaningful
     // only when sac_src_def is non-empty (see EMPTY MEANS NOT BUILT above).
     bool board_death_payoff = false;
+    // Per-CLAUSE preconditions for SubsetHasDuplicateSacSource (see the kDup* enum). `dup_source`
+    // above is one bit for the whole filter -- true as soon as ANY clause is live, which on a deck
+    // with a single sac outlet still pays the other six clauses' kind comparisons per selected
+    // action per subset. This narrows that to the clauses whose populations can actually collide.
+    // Deliberately placed AFTER the positional aggregate init below, which sets the 18 leading
+    // bools; a member added here keeps its initialiser (kDupAll = every clause live = unoptimised),
+    // which is the same "forgetting one costs speed, never correctness" contract as the bits.
+    unsigned dup_clause = kDupAll;
 };
 
 static SubsetFilterPre BuildSubsetFilterPre(const GameState& state, const std::vector<Action>& cands)
@@ -11217,6 +11259,47 @@ static SubsetFilterPre BuildSubsetFilterPre(const GameState& state, const std::v
     // compute per subset, not a weaker precondition, so it cannot err in either direction.
     if (best_target)
     { p.best_needs_body = FindBestOwnAttacker(state, state.active_player_index) < 0 ? 1 : 0; }
+
+    // Per-clause populations for SubsetHasDuplicateSacSource. A clause needs TWO selected candidates
+    // that match it, so fewer than two matches in `cands` makes its answer a foregone false. A
+    // separate pass rather than counters threaded through the switch above: `cands` is a handful per
+    // enumeration, and keeping it isolated means the clause conditions sit next to each other where
+    // they can be read against the filter.
+    if (p.dup_source)
+    {
+        int n_sacmana = 0, n_free = 0, n_handcast = 0, n_loyalty = 0, n_garth = 0, n_blink = 0,
+            n_permabil = 0;
+        for (const Action& a : cands)
+        {
+            if (a.free_cast) { ++n_free; }
+            switch (a.kind)
+            {
+                case Action::Kind::SacForMana:         ++n_sacmana;  break;
+                case Action::Kind::ActivateLoyalty:    ++n_loyalty;  break;
+                case Action::Kind::GarthActivate:      ++n_garth;    break;
+                case Action::Kind::ActivateBlink:      ++n_blink;    break;
+                case Action::Kind::ActivatePermAbility: ++n_permabil; break;
+                case Action::Kind::CastFromHand:
+                    if (a.hand_index >= 0) { ++n_handcast; }
+                    break;
+                default: break;
+            }
+        }
+        unsigned m = 0;
+        if (n_sacmana  >= 2) { m |= kDupSacMana;  }
+        if (n_free     >= 2) { m |= kDupFreeCast; }
+        // The hand-slot clause pairs a paid cast with its OWN free variant, so it needs at least one
+        // free cast AND two hand casts sharing a slot. One free cast is the cheap necessary half.
+        if (n_free >= 1 && n_handcast >= 2) { m |= kDupHandFree; }
+        if (n_loyalty  >= 2) { m |= kDupLoyalty;  }
+        if (n_garth    >= 2) { m |= kDupGarth;    }
+        if (n_blink    >= 2) { m |= kDupBlink;    }
+        if (n_permabil >= 2) { m |= kDupPermAbil; }
+        p.dup_clause = m;
+        // The equiv_tag canonical-prefix clause is NOT one of these seven and has no bit: it rejects
+        // on a single selected action's ord, so no population count bounds it. `dup_source` still
+        // gates the call itself, and that bit already accounts for it.
+    }
 
     // The sac-source table (see the struct). Built only when a filter that reads it can actually
     // run -- otherwise the walk below is itself the waste it exists to remove.
@@ -26771,7 +26854,8 @@ TurnSolver::Plan TurnSolver::SolveUncached(const GameState& state, bool is_pre_c
         // Reject two SacForMana of the same source (its colour variants are mutually exclusive). Inert
         // without a SacForMana action (Lotus Bloom) -> byte-identical.
         if (pre.dup_source
-            && SubsetHasDuplicateSacSource(cands, sel, /*site=*/0, fold_from_odometer))
+            && SubsetHasDuplicateSacSource(cands, sel, /*site=*/0, fold_from_odometer,
+                                           pre.dup_clause))
         { if (shape != nullptr) { shapestats::Bump(shape->rej_dup); ++callf.rej_dup; } return; }
         // Reject an Equip whose equipment/host is in hand and uncast by this subset (silent no-op).
         // Inert without an Equip candidate -> byte-identical. Kept in lockstep with the twin below.
@@ -37105,7 +37189,7 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
         // Reject two SacForMana of the same source (mutually-exclusive colour variants). Inert
         // without a SacForMana action -> byte-identical.
         if (pre.dup_source
-            && SubsetHasDuplicateSacSource(cands, sel, /*site=*/1, fold_from_odometer)) { if (eshape != nullptr) { shapestats::Bump(eshape->e_rej_dup); ++ecallf.rej_dup; } return; }
+            && SubsetHasDuplicateSacSource(cands, sel, /*site=*/1, fold_from_odometer, pre.dup_clause)) { if (eshape != nullptr) { shapestats::Bump(eshape->e_rej_dup); ++ecallf.rej_dup; } return; }
         // Reject an Equip whose equipment/host is in hand and uncast by this subset (silent no-op).
         // Inert without an Equip candidate -> byte-identical. Kept in lockstep with Solve's twin.
         if (pre.equip && SubsetHasStrandedEquip(state, cands, sel)) { return; }

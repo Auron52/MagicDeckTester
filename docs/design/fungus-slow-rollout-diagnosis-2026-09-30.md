@@ -358,10 +358,21 @@ rule exists: the per-pair column makes the contamination obvious at a glance, th
 unchanged number has three causes (no effect / never ran / backwards) and only a profile separates
 them. `perf record -e cpu-clock -F 499` on `build/Profile/mtg`, 200 games per arm:
 
-**`SubsetWastesCreatureSacMana` does not appear in EITHER arm's profile — including the arm with the
-aggregate OFF, i.e. the original per-subset form.** On this cell the filter is below the sampling
-floor, so there was nothing here to collect and 1.00x is the correct answer. We already know the path
-RUNS (the verify ARMED line), so this is "no effect *here*", not "never ran".
+| symbol | arm OFF (original) | arm ON (aggregate) |
+|---|---|---|
+| `SubsetWastesCreatureSacMana` | **0.10%** | **absent** |
+| `SubsetHasDuplicateSacSource` | 0.54% | 0.44% (same code; the delta is noise) |
+
+**The symbol DID leave the profile — the change does what it was built to do — and it was only 0.10%
+of this cell to begin with.** That is the whole explanation of the 1.0007x: a tenth of a percent is
+one or two orders of magnitude below what a 21-second wall A/B on a contended box can resolve. So the
+reading is "the fix works, and this cell is the wrong place to price it", not "no effect".
+
+*(CORRECTION, same session: I first reported this symbol as "absent from EITHER arm". That was wrong
+— my `grep` was truncated by a `head -8` that filled with `LookupCached` clones, so the line was cut
+off rather than missing. `false-absence-from-truncated-reads.md`, applied to my own evidence. The
+table above is the full read. Commit 6b591882's message carries the uncorrected claim; it was already
+pushed, so the correction lives here rather than in a rewritten history.)*
 
 The 1.04% figure §2e recorded for this filter came from the **keep-generation replay** (wide boards,
 long rollouts), not from a regression cell. **That measurement was not redone**, for two reasons worth
@@ -394,9 +405,15 @@ for `fungus d3/d5 s2002`:
 **Two named branching items survive, both quantified, neither yet built:**
 
 1. **55.0% of payoff-side lines are unaffordable under EVERY mana line** (2,536,895 of 4,610,578 at
-   d3; 846,036 of 1,577,094 = 53.6% at d5). The diagnostic's own estimate for gating the pair walk in
-   two stages is **1.19x fewer visits** (9,668,047 vs 11,536,877). An unaffordable line is not a line,
-   so dropping it cannot cost quality — this is a lossless prune and the largest one left.
+   d3; 846,036 of 1,577,094 = 53.6% at d5). An unaffordable line is not a line, so dropping it cannot
+   cost quality — this is lossless, and the largest remaining item by a wide margin over the sub-1%
+   filters. **But read the prize carefully: it is 1.19x, not 55%.** The diagnostic models two-stage
+   cost as `m_kept + p_lines + pairs_live` (576,151 + 4,610,578 + 4,481,318 = 9,668,047) against the
+   flat 11,536,877 pairs, i.e. **1.19x fewer VISITS** — because you still enumerate every payoff line
+   once even when no mana line can pay it. And §2c/§2e already established that neither the odometer
+   nor the visit count predicts cost, only bounds it: the fodder prize was collected by making each
+   visit cheap, not by making fewer visits. So 1.19x fewer visits is an upper bound on a restructure
+   whose per-visit costs differ from today's, and it needs a profile before it is worth building.
 2. **`SubsetHasDuplicateSacSource`**, the key-based rewrite described below.
 
 **And one item that is NOT branching and should stop being treated as such:** the leaf-tie rate is
@@ -406,12 +423,50 @@ question, not a width question, and no prune addresses it. Likewise `enum-memo` 
 (1,234 / 88,145) and `solve-memo` at 21–29% are memo-key questions (`BuildSimKey`, 3.35% and the
 3rd-biggest symbol), not enumeration questions.
 
-**What is left on this filter trio.** `SubsetHasDuplicateSacSource` (now the biggest at ~1.48%) is six
-clauses, each running its own `b = a+1` inner loop over `sel`, and every clause asks the same question
-in a different key: *do two selected actions share `(clause, sac_source_id)`* — or, for the free-cast
-clause, *share `hand_index` with differing `free_cast`*. "Does this multiset of keys contain a repeat"
-is `O(|sel|)` with one precomputed key per candidate, not six pairwise passes. That is the different
-idea §2e asked for; it is not built yet.
+### 2h. `SubsetHasDuplicateSacSource`, half done — the per-clause preconditions (2026-10-01)
+
+`SubsetHasDuplicateSacSource` is **1.48% on the keep replay and 0.54% on the d3 regression cell** — the
+biggest of the trio and the first of them visible in BOTH regimes. It is **seven** independent
+"do two selected actions collide on one source" clauses, and each opens by testing
+`cands[sel[a]].kind` for every selected action. Fungus plays cards for two of them: it has no
+planeswalker, no Garth, no blink outlet and no free cast, and still paid four kind comparisons per
+selected action **per enumerated subset** to re-establish that.
+
+**The built half: per-clause preconditions.** Each clause needs TWO selected candidates that match it,
+so fewer than two matches in `cands` makes its answer a foregone false. `SubsetFilterPre` now carries a
+`dup_clause` bitmask (the `kDup*` enum) beside its existing single `dup_source` bit — and the gap is
+exactly the slack, because `dup_source` is set true by a **single** participating candidate, which is
+the weaker condition.
+
+Unlike the two sac filters next door this needs **no instrument disarm**: it only skips clauses that
+would have returned false, so nothing is reordered, no clause changes which one reports a rejection,
+and the `equiv_tag` canonical-prefix clause and every `bfcensus` / `FoldVerify` counter are reached
+exactly as before. The fold VERIFIER at the recoverability check deliberately keeps the default
+`kDupAll` — it has no `SubsetFilterPre` and must ask the full filter. Play is byte-identical on every
+counter of the d3 cell.
+
+**NOT separately measurable, and the attempt to measure it went wrong in a way worth recording.** On
+this cell the symbol is ~0.4–0.5% and the mask removes a handful of integer comparisons inside it, so
+the effect is below what a single perf run resolves. Worse, the before/after I tried to take is
+**invalid**: `perf record --no-buildid` makes `perf report` resolve addresses against the binary *on
+disk now*, so rebuilding `build/Profile/mtg` for the "after" silently destroyed the "before" sample.
+The tell was the old profile printing the NEW signature (`..., int, bool, unsigned int`) for a
+parameter that did not exist when it was recorded, and reporting 0.04% for a symbol that had measured
+0.44% against its own binary an hour earlier. **Both numbers in that comparison were junk.** A perf A/B
+has to record both arms before any rebuild — trivial with one binary plus a runtime flag, impossible
+across two builds unless you keep the binaries or drop `--no-buildid`.
+
+So this is kept on the same basis as §2f: exact, byte-identical, provably-dead work removed, per
+`CLAUDE.md`'s collapse-waste-unconditionally doctrine — **not** on a measured win.
+
+**The unbuilt half, still the different idea §2e asked for.** Every clause asks the same question in a
+different key: *do two selected actions share `(clause, sac_source_id)`* — or, for the hand-slot clause,
+*share `hand_index` with differing `free_cast`*. "Does this multiset of keys contain a repeat" is
+`O(|sel|)` with one precomputed key per candidate, not seven pairwise passes, and that is the
+algorithmic win rather than the constant-factor one taken here. It interacts with the census
+instruments (splitting the pairwise clauses from the `equiv_tag` pass changes which counters a rejected
+subset reaches), so it needs the disarm treatment and a `*_VERIFY` twin — build it that way or not at
+all.
 
 ### The subset funnel — the real work unit (NOTE: see §2d, this section's cross-walk ratio is wrong)
 
