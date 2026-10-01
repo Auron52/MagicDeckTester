@@ -460,7 +460,6 @@ public:
     // The ROLLOUT site's playout policy (the branch site is unconditionally searched engine-wide
     // since 2026-09-05; searched-second-main-unconditional.md). AL DECLINES the searched rollout
     // on measurement. See the .cpp note.
-    bool SearchesRolloutSecondMain() const override;
     bool PhaseFilterRootTurnOnly() const override;
     // The FiveColour condemnation doctrine, AL arm (USER 2026-08-21: one condemnation across a
     // turn's phases and breakpoints; AL first). MTG_AL_CONDEMN / MTG_AL_BP_CONDEMN, both
@@ -1135,11 +1134,6 @@ public:
     // MTG_5C_PHASE: per-deck opt-in to the pre-combat Main2 filter (this deck actually plays a
     // second main), activating the override above with the USER's 2026-08-19 phase rules.
     bool        ClassifiesMainPhases() const override;
-    // MTG_5C_SSM: the ROLLOUT site's searched m2 (the branch site is unconditionally searched
-    // engine-wide since 2026-09-05). This deck's adoption (2026-08-21) measured BOTH sites on --
-    // the old rollout default chained to the branch opt-in -- so the override preserves that
-    // measured configuration exactly.
-    bool        SearchesRolloutSecondMain() const override;
     // MTG_5C_CONDEMN: the order-condemnation post-combat filter (base hook note) -- main 2
     // continues with main 1's condemnation list instead of re-litigating the whole hand.
     // Measurement lever, default OFF pending the per-deck A/B.
@@ -1397,7 +1391,6 @@ public:
     // and follow the proper design") measured all four arms identical -- avg 5.0300, play digest
     // 3e6ea44e9c15d572 -- under the old rollout default that chained to the branch opt-in, so the
     // override preserves that measured configuration exactly.
-    bool SearchesRolloutSecondMain() const override { return true; }
     // The USER-reviewed cast order (review held 2026-08-19; see cast-order-rankings.md for the
     // ruling verbatim). Gated on MTG_KE_ORDER, default OFF -> byte-identical.
     int  CastOrderRank(const GameState&, const CardDefinition&) const override;

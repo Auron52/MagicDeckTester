@@ -3406,27 +3406,6 @@ bool AntiLifegainProvider::ClassifiesMainPhases() const
     return AlPhaseEnabled();
 }
 
-bool AntiLifegainProvider::SearchesRolloutSecondMain() const
-{
-    // The ROLLOUT site is the leaf estimator's PLAYOUT POLICY, not a decision -- a plan that is
-    // scored, never played. Declined here since 2026-08-22 on measurement: searching it cost +12
-    // turns at d3 / +1 at d5 per 3000 train games, robust across 5 shuffle realisations and 4
-    // DECOUPLED search salts, and NON-MONOTONE (removing the rollout's m2 entirely costs +7, so
-    // greedy is an interior optimum -- more playout fidelity is not more ranking accuracy).
-    // ~2/3 of the cost was budget dilution: the rollout charges the shared budget per simulated
-    // turn-step, starving the outer candidate loop.
-    //
-    // USER 2026-08-23: "We shouldn't have any greedy within the searched window." MTG_AL_SSM_ROLLOUT
-    // is the lever to re-open that, default OFF until the measurement says it can ship -- and the
-    // strict-win route to try first is MTG_M2_CAP1, which caps the interior solve to depth 1 so it
-    // is still SEARCHED (no greedy pick) without compounding against the iterative-deepening pass.
-    static const bool env_on = EnvOn("MTG_AL_SSM_ROLLOUT");
-    // Scoped to the phase split being live (a real split is what hands the interior m2 real
-    // decisions; without it a searched playout m2 is pure dilution). The branch site needs no
-    // scoping any more -- it is searched engine-wide (searched-second-main-unconditional.md).
-    return heurarm::Flag(heurarm::AL_SSM_ROLLOUT, env_on) && AlPhaseEnabled();
-}
-
 bool AntiLifegainProvider::CondemnsPassedMainPhase() const
 {
     // ORDER CONDEMNATION for the split (USER 2026-08-21: "within a turn all breakpoints and
@@ -3434,7 +3413,9 @@ bool AntiLifegainProvider::CondemnsPassedMainPhase() const
     // Main 2 continues with main 1's condemnation list instead of re-litigating the hand;
     // membership decided once, at m1 (the base-hook contract). Every consumption site gates on
     // MainPhaseFilterActive, so this binds only with the split live -- the && here just makes
-    // the scoping explicit, mirroring MTG_AL_SSM_ROLLOUT.
+    // the scoping explicit. (This used to say "mirroring MTG_AL_SSM_ROLLOUT"; that lever and the
+    // SearchesRolloutSecondMain hook it fed were DELETED 2026-10-01 -- no greedy in the search
+    // window, by abort rather than by default.)
     // MEASURED INERT-AT-COST (2026-08-21, decouple ensemble salts 1-2, 8000 games/salt over
     // PHASE): quality +0 (0w/0b) / +3 (2w/0b) -- the lever BINDS (126k searched drops per 300
     // games, MTG_ROLLOUT_STATS) but everything it deletes is a line AL's search never preferred
@@ -9395,19 +9376,6 @@ const char* FiveColourProvider::CastOrderTierName(int rank) const
 bool FiveColourProvider::ClassifiesMainPhases() const
 {
     return Fc5PhaseEnabled();
-}
-
-bool FiveColourProvider::SearchesRolloutSecondMain() const
-{
-    // The ROLLOUT site's searched m2 -- the branch site is unconditionally searched engine-wide
-    // since 2026-09-05 (searched-second-main-unconditional.md). This deck's adoption (2026-08-21,
-    // USER: "change it to searched if we can do so without much additional cost"; =0 hatch)
-    // measured BOTH sites on, because the old rollout default chained to the branch opt-in -- the
-    // enum memo absorbed the cost (pre-memo +9% wall -> +0.7% post-memo), and the suite A/B was
-    // digest-only at identical averages. This override preserves that measured configuration
-    // exactly; scoped to the phase spec being live, as the adoption was.
-    static const bool on = EnvOn("MTG_5C_SSM", true);
-    return on && Fc5PhaseEnabled();
 }
 
 bool FiveColourProvider::CondemnsPassedMainPhase() const

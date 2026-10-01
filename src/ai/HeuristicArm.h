@@ -58,7 +58,6 @@ enum Slot : int
     LEAF_TB_PERMS,            // MTG_LEAF_TB_PERMS         ...on a PERMANENT COUNT under the life term
     LEAF_TB_NONLAND,          // MTG_LEAF_TB_NONLAND       ...on NON-LAND permanents only
     LEAF_NOWIN_FORCE,         // MTG_LEAF_NOWIN_FORCE      force the tie-break past a provider opt-out
-    AL_SSM_ROLLOUT,           // MTG_AL_SSM_ROLLOUT        AL also searches the ROLLOUT's per-turn m2
     M2_CAP1,                  // MTG_M2_CAP1               cap the interior m2 solve to depth 1
     M2_WAVES,                 // MTG_M2_WAVES              FSLineTail m2 loop runs the deferred wave phase
     M2_AXES,                  // MTG_M2_AXES               m2 enumeration hosts append the sub-decision axes
@@ -300,7 +299,6 @@ enum Slot : int
     SAC_VICTIM_ENGINE,        // MTG_SAC_VICTIM_ENGINE   a combat-damage TOKEN ENGINE (Shroofus Sproutsire) joins the `scaling` defer tier, so its 1/1 body is not eaten as ordinary Saproling fodder. USER: "I don't mean never shroofus, but Shroofus should be the last to go" -- DEFERRED, not excluded (default OFF)
     SAC_POOL_TURN_COLOR,      // MTG_SAC_POOL_TURN_COLOR  the sac-outlet POOL's colour fan is scoped to THIS TURN's sinks (hand + battlefield + graveyard) instead of the deck-wide scan that includes the LIBRARY. Fungus candidate-b's black splash is 3 cards in 60, and because they sit in the library all game the fan is {G,B} on every board -- which trips the pool's singleton gate and silently disables the collapse on 100% of 4,425,133 gate arrivals (37.48% of them would otherwise pool). A HEURISTIC narrowing: it can drop a plan that floats {B} speculatively and then draws the black card the same turn. ADOPTED default ON 2026-10-01 (USER accepted the lossy case; quality-neutral, 3-5% cheaper, byte-identical on the suite's own mono-green Fungus list so it moves no GT). It moves candidate-b's play at d5/b20 and so moves the keepgen play digest -- resume a banked generation across that with MTG_KEEP_RETAIN_FOREIGN (clean-R retention: completed cell-sides only), NOT by holding this off
     SAC_PAY_PLAN_FODDER,      // MTG_SAC_PAY_PLAN_FODDER credit fodder the LINE ITSELF creates (a Saproling made by removing three spore counters) into §2b's payability bound, which otherwise counts only bodies already on the battlefield. Repairs the measured MTG_SAC_OUTLET_PAY regression: the bound read 1 against need 2 and PROVED a payable Sporecrown Thallid unpayable, because the Saproling it eats is made by an earlier action of the SAME plan. Sound -- these bounds may only ever OVER-count -- and inert unless MTG_SAC_OUTLET_PAY is on, since LiveSacPayOutlet gates the whole term. Default ON
-    SSM_ROLLOUT,              // MTG_SSM_ROLLOUT  the ROLLOUT site of the interior second main is SEARCHED whenever depth > 0, for EVERY deck, instead of greedy-unless-the-provider-opted-in (SearchesRolloutSecondMain, which defaulted FALSE). *** USER DOCTRINE, re-asserted 2026-10-01: "There should be no greedy in the search window! Full stop!" and "We either do not consider the main at all, or we search it." *** The same ruling is already recorded verbatim at AntiLifegainProvider::SearchesRolloutSecondMain as USER 2026-08-23 ("We shouldn't have any greedy within the searched window") and was then parked behind a default-OFF lever on MEASUREMENT grounds (+12 turns/3000 games at d3 on AL). The user has now ruled that the measurement does not overrule the doctrine, so this ships ON and MTG_SSM_ROLLOUT=0 is a measurement hatch for the doctrine-VIOLATING arm, not a supported configuration. Scope: depth > 0 only -- at depth <= 0 the rollout site stays greedy, which is NOT an exception to the ruling but the horizon playout itself (greedy beyond the horizon is permitted by USER 2026-09-05, and rescuing depth<=0 re-enters the solve with no decrementing bound). Pair with MTG_M2_CAP1 if budget dilution shows up: AL measured ~2/3 of searching's cost as dilution, and the cap keeps it SEARCHED at one ply. Default ON
     COUNT
 };
 
@@ -336,7 +334,6 @@ inline const char* Name(int slot)
         "MTG_LEAF_TB_PERMS",
         "MTG_LEAF_TB_NONLAND",
         "MTG_LEAF_NOWIN_FORCE",
-        "MTG_AL_SSM_ROLLOUT",
         "MTG_M2_CAP1",
         "MTG_M2_WAVES",
         "MTG_M2_AXES",
@@ -562,7 +559,6 @@ inline const char* Name(int slot)
         "MTG_SAC_VICTIM_ENGINE",
         "MTG_SAC_POOL_TURN_COLOR",
         "MTG_SAC_PAY_PLAN_FODDER",
-        "MTG_SSM_ROLLOUT",
     };
     // The enum and this table are ONE mapping split across two lists: a slot added to one and not
     // the other silently shifts every lever after it (a manifest asking for lever X would set Y).

@@ -743,35 +743,17 @@ public:
 
     // SearchesRolloutSecondMain -- the ROLLOUT site of the interior second main:
     // SimulateToEndImpl's per-turn second main, i.e. the playout policy of the LEAF ESTIMATOR.
-    // *** SUPERSEDED 2026-10-01 -- THIS HOOK NO LONGER DECIDES WHETHER GREEDY IS ALLOWED. ***
-    // USER: "There should be no greedy in the search window! Full stop!" and "We either do not
-    // consider the main at all, or we search it." MTG_SSM_ROLLOUT (heurarm::SSM_ROLLOUT, default ON)
-    // now searches this site for EVERY deck whenever depth > 0; see the gate in TurnSolver.cpp for
-    // the full ruling and the depth<=0 scope. An override to `true` here is therefore redundant but
-    // harmless (it is OR'd in, so it keeps that deck searched when MTG_SSM_ROLLOUT=0 is used to
-    // measure the doctrine-violating arm). An override to `false` NO LONGER HAS ANY EFFECT, and
-    // adding one to make a deck cheaper is the thing the ruling forbids.
+    // SearchesRolloutSecondMain -- DELETED 2026-10-01. The ROLLOUT site of the interior second main
+    // is now SEARCHED for every deck at every depth > 0, with no hook and no lever, and
+    // greedywindow::Require (TurnSolver.cpp) makes a re-introduction a hard abort.
     //
-    // THE MEASUREMENT BELOW STILL STANDS AS A MEASUREMENT -- it is retained because it says what
-    // this costs, not because it licenses an opt-out. The user has ruled that it does not.
-    //
-    // Not a decision: a scoring device. Greedy here WAS by DESIGN ("HONEST where you SCORE"), and
-    // this was the ONE place in this area a provider could still choose:
-    //
-    // Anti-Lifegain measured the split and it is large and one-directional. Searching the rollout
-    // site costs +12 turns / 3000 train games at d3, reproduced in all five shuffle realisations
-    // (+52 / 30,000) and all four DECOUPLED search salts (+43 / 12,000), so it is neither
-    // draw-order variance nor reshuffle clairvoyance. It is also non-monotone: dropping the
-    // rollout's m2 entirely costs +7, i.e. greedy is an interior optimum -- more playout fidelity
-    // is not more ranking accuracy. Roughly two thirds of the cost is budget dilution and the
-    // rest survives 20x budget. See docs/design/antilife-main-phase-split.md 2026-08-22y.
-    //
-    // DEFAULT false = the greedy playout. A deck that measured the searched rollout as part of an
-    // adopted package (fivecolour, KittyEquipment -- adopted when this hook chained to the old
-    // branch-site opt-in) overrides to true to keep its measured behaviour. Structural guard, not
-    // hook-controllable: at depth <= 0 the rollout site is ALWAYS greedy -- rescuing it re-enters
-    // the solve with no decrementing bound.
-    virtual bool SearchesRolloutSecondMain() const { return false; }
+    // USER: "There should be no greedy in the search window! Full stop!" / "I want to end this with
+    // code deletion. I don't want it coming on again." The hook existed because the identical ruling
+    // (USER 2026-08-23) had been parked behind a default-OFF lever when searching measured worse on
+    // ONE deck -- see the gate in TurnSolver::SolveSecondMainInSearch for the ruling, the adoption
+    // measurement and why the depth<=0 playout is not an exception. The AL measurement that justified
+    // the opt-out is preserved in docs/design/antilife-main-phase-split.md; it did not reproduce at
+    // the deck's shipped cell.
 
     // M2FixpointOptIn -- the per-deck ADOPTION hook for the second-main fixpoint
     // (MTG_M2_FIXPOINT; EngineFlags.h M2FixpointMode and the M2FixModeFor resolver in

@@ -2824,10 +2824,11 @@ static bool HasteDorkCreditEnabled() { return !g_no_haste_dork_credit; }
 // MTG_M2_D0_SEARCHED) and the per-deck opt-in hook are DELETED; the shipping evidence and the
 // budget-remedy ladder (memo -> depth cap -> cost heuristics; never a greedy revert, never a
 // line-deleting gate) are in docs/design/searched-second-main-unconditional.md. The ROLLOUT site
-// -- the leaf estimator's playout policy, a scoring device rather than a decision -- keeps the
-// greedy playout unless the deck's provider opted its measured configuration in
-// (SearchesRolloutSecondMain), and is ALWAYS greedy at depth <= 0 (structural: the rescued call
-// would re-enter the solve with no decrementing bound).
+// -- the leaf estimator's playout policy -- is SEARCHED at every depth > 0 for every deck since
+// 2026-10-01 (no hook, no lever: SearchesRolloutSecondMain was DELETED, and greedywindow::Require
+// aborts on a re-introduction). It is ALWAYS greedy at depth <= 0, which is the horizon playout
+// itself rather than an exception (structural: the rescued call would re-enter the solve with no
+// decrementing bound).
 
 // Play a post-combat main INSIDE the search. ONE function for all three sites (the candidate loop,
 // the deferred-wave loop, and the rollout's future turns) so they cannot drift apart -- the drift
@@ -4879,6 +4880,89 @@ static bool SecondMainUnproductive(const GameState& state)
     return true;
 }
 
+// =================================================================================================
+// NO GREEDY INSIDE THE SEARCH WINDOW -- A FATAL TRIPWIRE, NOT A FLAG
+// =================================================================================================
+//
+// *** USER DIRECTIVE 2026-10-01, and it is the REASON this is an abort rather than a counter: ***
+//   "I want to end this with code deletion. I don't want it coming on again."
+//   "It has been a long time since I started pushing agents to remove this and it keeps recurring.
+//    One of the agents even mentioned throwing an error or aborting if we hit greedy in the search
+//    window. I think I would like to do that as I am seriously tired of this coming back."
+//   "It needs to cause a full failure to run if it happens anywhere." / "So that we are forced to
+//    fix it."
+//
+// THE RULE. `TurnSolver::Solve()` is the greedy one-shot plan chooser -- it picks a main-phase play
+// without searching. The governing doctrine (USER 2026-09-05, verbatim in
+// docs/design/greedy-in-the-searched-window-status.md) permits greedy in exactly four places:
+// beyond the search horizon, this-turn combo go-off heuristics, mana allocation, and non-dork
+// attack decisions. Only the FIRST of those can reach this function, so the invariant is simply:
+//
+//     TurnSolver::Solve() may be entered only where the search has NO depth left to spend.
+//
+// WHY A COUNTER WAS NOT ENOUGH, which is the whole point. greedysite below already counted this and
+// printed it, behind MTG_M2_YIELD_STATS -- off by default. A diagnostic nobody runs cannot stop a
+// regression, and the history here is three separate re-introductions (the per-deck interior-m2
+// opt-ins, deleted 2026-09-05; the bp-continuation fallbacks, deleted 2026-09-17; and the rollout
+// second main, deleted 2026-10-01). Each was removed, each came back as a new code path, and each
+// was invisible until someone went looking. This makes the invariant unskippable.
+//
+// WHY THE DEPTH IS A FRAME AND NOT ONE GLOBAL. The question "is there depth left" is LOCAL: the
+// playout's per-turn solve legitimately runs at `turn_depth` (search_leaf_depth, normally 0) while
+// an outer SolveWithLookahead frame still holds depth 5. Keying on the outermost frame would abort
+// every run on a legal playout. So every function that carries a search depth opens a Frame with
+// ITS OWN depth, and the guard reads the innermost -- which is the depth the dispatching site is
+// actually operating at. kNoSearch means no search frame is on the stack at all (the live
+// executor's own turn), where greedy is the normal d0 play path.
+//
+// IF THIS TRIPS: do not silence it and do not add a flag to bypass it. The dispatch site it names
+// is a main-phase decision inside the searched window; route it through the search (the ladder is
+// in searched-second-main-unconditional.md), or -- with USER APPROVAL, never an agent's call --
+// stop considering that phase at all. Those are the only two sanctioned outcomes, per USER
+// 2026-10-01: "We either do not consider the main at all, or we search it."
+namespace greedywindow
+{
+inline constexpr int kNoSearch = -1;          // no search frame on the stack -> greedy is the play path
+inline thread_local int t_depth = kNoSearch;  // innermost search frame's REMAINING depth
+
+// RAII. Unconditional (not behind a flag): one thread-local int store per search frame, which is a
+// decision-scale write, and a guard that can be configured off is the thing the user asked to end.
+struct Frame
+{
+    int prev;
+    explicit Frame(int d) : prev(t_depth) { t_depth = d; }
+    ~Frame() { t_depth = prev; }
+};
+
+[[noreturn]] inline void Trip(const char* site, int depth)
+{
+    std::fprintf(stderr,
+        "\n*** FATAL: GREEDY PLAN CHOICE INSIDE THE SEARCH WINDOW ***\n"
+        "    site: %s\n"
+        "    the innermost search frame still has depth %d remaining, so this decision had search\n"
+        "    budget available and took a one-shot heuristic instead.\n"
+        "\n"
+        "    This is a DOCTRINE VIOLATION, not a tuning question (USER 2026-09-05 / 2026-10-01):\n"
+        "    greedy is permitted only BEYOND the search horizon, for this-turn combo go-off\n"
+        "    heuristics, mana allocation, and non-dork attack decisions.\n"
+        "\n"
+        "    Fix it by routing this site through the search, or -- WITH USER APPROVAL ONLY -- by not\n"
+        "    considering the phase at all. Do NOT add a flag to bypass this check; it is deliberately\n"
+        "    fatal because this class of regression has been removed three times and returned three\n"
+        "    times. See docs/design/greedy-in-the-searched-window-status.md.\n\n",
+        site, depth);
+    std::fflush(stderr);
+    // abort(), not an exception: a throw can be caught by a worker-thread boundary and demoted to a
+    // per-job error, which is exactly the "invisible until someone looks" failure this replaces.
+    std::abort();
+}
+
+inline void Require(const char* site)
+{
+    if (t_depth > 0) { Trip(site, t_depth); }
+}
+}
+
 // MTG_M2_YIELD_STATS -- what does the post-combat main actually PRODUCE? (diagnostic, inert by
 // default). The candidate-side picture (MTG_CONSIDER_STATS) says the second main is the single
 // biggest consumer of enumeration on an equipment deck; it cannot say whether that enumeration
@@ -5048,7 +5132,8 @@ namespace m2yield
     inline std::atomic<uint64_t> g_searched{0}, g_greedy_hook{0}, g_greedy_depth{0};
     // ...split by CALL SITE, because they are two different things: the BRANCH site is a real
     // decision (searched unconditionally since 2026-09-05), the ROLLOUT site is the leaf
-    // estimator's playout policy (SearchesRolloutSecondMain).
+    // estimator's playout policy -- also searched at every depth > 0 since 2026-10-01, so
+    // g_greedy_hook can now only be nonzero on a doctrine violation that greedywindow would abort.
     inline std::atomic<uint64_t> g_br_s{0}, g_br_g{0}, g_ro_s{0}, g_ro_g{0};
     inline std::atomic<uint64_t> g_br_d0{0}, g_ro_d0{0};   // depth<=0 arrivals per site
     inline std::atomic<uint64_t> g_br_d0s{0};              // ...branch d<=0 now ALWAYS searched (1 ply)
@@ -5388,48 +5473,61 @@ static TurnSolver::Plan SolveSecondMainInSearch(const GameState& state, int dept
     // (searched-design-deck-rollout.md §3c; rule + budget-remedy ladder in
     // searched-second-main-unconditional.md).
     //
-    // The ROLLOUT site (the leaf estimator's playout policy -- a scoring device, not a decision)
-    // keeps the greedy playout unless the deck's provider adopted the searched configuration
-    // (SearchesRolloutSecondMain; AL measured greedy as an interior OPTIMUM there). At depth <= 0
+    // The ROLLOUT site (the leaf estimator's playout policy) is SEARCHED at every depth > 0 for
+    // every deck -- the provider opt-in it used to need is deleted; see the ruling below. At depth <= 0
     // the rollout site is ALWAYS greedy, and that is structural rather than a preference: the
     // rescued call re-enters SolveWithLookahead(is_pre_combat=false, depth=1), whose own rollout
     // re-enters this function at depth 0 with in_rollout=true, and `depth` passes through
     // SimulateToEndImpl UNCHANGED -- rescuing there recurses without a decrementing bound.
     // OPTIMISTIC where you BRANCH, HONEST where you SCORE.
-    const DecisionProvider& prov = ResolveProvider(state);
-    // *** USER DOCTRINE, re-asserted 2026-10-01 -- READ THIS BEFORE WEAKENING THE GATE BELOW. ***
+    // *** USER DOCTRINE 2026-10-01 -- THERE IS NOTHING TO CONFIGURE HERE, BY DESIGN. ***
     //   "There should be no greedy in the search window! Full stop!"
     //   "We either do not consider the main at all, or we search it."
-    // This is the SECOND time the ruling has been given: it is already recorded verbatim at
-    // AntiLifegainProvider::SearchesRolloutSecondMain as USER 2026-08-23 ("We shouldn't have any
-    // greedy within the searched window"), where it was then parked behind a default-OFF lever
-    // (MTG_AL_SSM_ROLLOUT) because searching measured WORSE on that deck (+12 turns / 3000 train
-    // games at d3, non-monotone). The user has now ruled that the measurement does not overrule the
-    // doctrine. So the rollout site is SEARCHED for EVERY deck whenever depth > 0, and the old
-    // greedy-unless-the-provider-opted-in default is gone.
+    //   "I want to end this with code deletion. I don't want it coming on again."
     //
-    // WHAT THE depth > 0 SCOPE IS, because it is NOT an exception to the ruling. depth <= 0 at this
-    // site IS the horizon playout -- the same leaf whose first main is site 90's greedy Solve -- and
-    // greedy BEYOND the horizon is permitted by USER 2026-09-05 ("greedy is allowed only beyond the
-    // search horizon"). Searching it is also structurally impossible as written: the rescued call
-    // re-enters SolveWithLookahead(depth=1), whose own rollout returns here at depth 0 with
-    // in_rollout=true, and `depth` passes through SimulateToEndImpl UNCHANGED -- so it recurses
-    // without a decrementing bound. Closing that needs a decrementing rescue bound, not a flag.
+    // So the rollout site is SEARCHED for every deck at every depth > 0, with NO lever and NO
+    // provider hook. What was deleted to get here: DecisionProvider::SearchesRolloutSecondMain and
+    // its three overrides, plus the two per-deck levers that fed it (MTG_AL_SSM_ROLLOUT, MTG_5C_SSM).
+    // The ruling had already been given once -- USER 2026-08-23, "We shouldn't have any greedy within
+    // the searched window" -- and was parked behind a default-OFF lever because searching measured
+    // worse on ONE deck (+12 turns / 3000 games at AL d3, 2026-08-22). That is the failure mode the
+    // deletion exists to prevent: a doctrine kept as a default is a doctrine that comes back.
     //
-    // THE OTHER SANCTIONED ROUTE IS NOT MINE TO TAKE. "Do not consider the main at all" is
-    // explicitly allowed by the ruling and measured CHEAPER than searching on AL (removing the
-    // rollout m2 entirely cost +7 where searching cost +12) -- but the USER added: *"not considering
-    // the main is something that you should get user approval for at some point if that is the right
-    // call"*. So it is a PROPOSAL to bring back with measurement, never a default an agent picks.
+    // WHY IT WAS A HOLE RATHER THAN A PREFERENCE (user's framing, and it is the sharpest statement of
+    // the bug): the rollout's per-turn depth is a SETTING -- search_leaf_depth, resolved as
+    // `turn_depth` below. Raising it is how you buy more search and fewer rollout opportunities. But
+    // this site stayed greedy unless a provider opted in, so raising the setting bought a searched
+    // FIRST main and left the SECOND main on the d0 heuristic. The setting could not deliver what it
+    // claimed. USER: "this greedy within search was a big hole in that".
     //
-    // If searching shows budget dilution, the first remedy is MTG_M2_CAP1 (one-ply interior solve --
-    // still searched, no greedy pick), which is what the AL note names as the strict-win route.
-    // MTG_SSM_ROLLOUT=0 restores the old per-deck behaviour EXACTLY (the `||` keeps the three
-    // opted-in providers true) and exists to measure the doctrine-VIOLATING arm, not to ship it.
-    static const bool s_ssm_rollout_env = EnvOn("MTG_SSM_ROLLOUT", true);
-    const bool ssm_rollout = heurarm::Flag(heurarm::SSM_ROLLOUT,
-                                           s_ssm_rollout_env || prov.SearchesRolloutSecondMain());
-    const bool searched = !in_rollout || (ssm_rollout && depth > 0);
+    // ADOPTED ON MEASUREMENT FIRST (a63f5240, at the user's instruction "let's do this after measuring
+    // and adopting"): six searched cells, zero regressions -- Fungus d3/d5 and candidate-b d3/d5 all
+    // improved, AntiLifegain's own policy cell identical to 4dp at -0.56%/-0.08% units, and d0
+    // byte-identical on both lists. Suite: smoke 7 of 9 changed configs digest-only with both moved
+    // averages better; regression 12 of 16 digest-only, net -0.0150.
+    //
+    // THE depth > 0 SCOPE IS NOT AN EXCEPTION TO THE RULING. depth <= 0 here IS the horizon playout --
+    // the same leaf whose first main is site 90's greedy Solve -- and greedy beyond the horizon is
+    // permitted by USER 2026-09-05. The user confirmed the boundary explicitly: *"I don't want to
+    // change the rollout logic. That is fine as-is. I just want to make certain we don't miss anything
+    // in the search window."* Searching depth <= 0 is also structurally impossible as written: the
+    // rescued call re-enters SolveWithLookahead(depth=1), whose own rollout returns here at depth 0
+    // with in_rollout=true, and `depth` passes through SimulateToEndImpl UNCHANGED -- it would recurse
+    // with no decrementing bound.
+    //
+    // THE OTHER SANCTIONED ROUTE IS NOT AN AGENT'S TO TAKE. "Do not consider the main at all" is
+    // allowed by the ruling and measured CHEAPER than searching on AL (dropping the rollout m2
+    // entirely cost +7 where searching cost +12), but the USER added: *"not considering the main is
+    // something that you should get user approval for at some point if that is the right call"*.
+    // Bring it back as a proposal with measurement; never pick it as a default.
+    //
+    // If searching ever shows budget dilution, the remedy is MTG_M2_CAP1 (one-ply interior solve --
+    // still SEARCHED, no greedy pick), which is what the AL note names as the strict-win route. It was
+    // not needed at adoption: `on` and `on + MTG_M2_CAP1` produced identical digests on AL.
+    const bool searched = !in_rollout || depth > 0;
+    // The frame greedywindow::Require reads. Opened with THIS site's depth so a greedy dispatch is
+    // judged against the depth it actually had, never against an outer frame's.
+    const greedywindow::Frame _gw(depth);
     // MTG_M2_SEARCH_DEPTH=<n>: cap the interior m2 solve's depth (value-carrying; unset/<=0 = no
     // cap = full sub_depth, the 5C-adopted behaviour). n=1 is the "lean form" second-main-greedy.md
     // item 2 recorded: enumerate the m2 candidate set and score each with ONE playout, instead of
@@ -27968,6 +28066,11 @@ namespace solvememo
 
 TurnSolver::Plan TurnSolver::Solve(const GameState& state, bool is_pre_combat)
 {
+    // THE TRIPWIRE. This is the greedy plan chooser; entering it with search depth still on the
+    // innermost frame is the doctrine violation the user has had removed three times. See
+    // greedywindow above for the rule, the frame semantics and what to do if this fires.
+    greedywindow::Require(is_pre_combat ? "TurnSolver::Solve (pre-combat main)"
+                                        : "TurnSolver::Solve (second main)");
     // Memo only inside a search decision (a driver frame is on the stack): the decision epoch is
     // fresh there, and the live executor path stays untouched by construction. A bound
     // MTG_CANTRIP_ORDER site bypasses (the ban changes Solve's candidate set per site).
@@ -55821,6 +55924,10 @@ TurnSolver::Plan TurnSolver::SolveWithLookahead(const GameState& state, bool is_
         ~SolverNestGuard() { --g_cs_solver_nest; }
     } _cs_nest;
     if (enforce_budget) { ++g_decision_epoch; }
+    // The search-window frame greedywindow::Require reads: THIS host's remaining depth. The depth<=0
+    // base case below is the horizon leaf and is the one legal greedy dispatch; opening the frame with
+    // `depth` is what makes that legal and makes a depth>0 dispatch fatal.
+    const greedywindow::Frame _gw(depth);
     GreedyChargeGuard _gcg(state, budget);   // MTG_SOLVE_CHARGE: greedy walks under this host bill here
     // Per-decision TOTAL work ceiling (MTG_DECISION_WORK_X, default 0 = off; DecisionWorkMeter.h):
     // limit = base budget x multiplier, armed ONLY at the outermost real budgeted decision --
