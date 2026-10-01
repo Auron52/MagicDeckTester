@@ -106,6 +106,10 @@ Note `SubsetOversubscribesSacFodder` (~line 7599) *already* reasons about this
 correctly in the other direction: its `plan_can_add` lambda explicitly credits
 "any token the action creates that carries the filter subtype", including
 `spore_token_subtypes`. The subset guard understands mid-plan replenishment; the
+<!-- CORRECTION 2026-10-01: only for SPORE pops. It credited a FADE pop (Saproling Burst) as ZERO,
+     so it rejected "drain the Burst, feed the outlets" -- 510 of the first 4,000 traced rejects on one
+     keep-rollout. Fixed, MTG_SAC_FODDER_FADE_CREDIT default ON; see
+     docs/design/fungus-fade-fodder-credit-gap.md. The sentence below is right about the emitter. -->
 candidate emitter does not.
 
 **2. The apply order is wrong even if it were emitted.** `apply_continuation_precasts`

@@ -9906,6 +9906,88 @@ static const bool s_sac_waste_prune = !EnvOn("MTG_NO_SAC_WASTE_PRUNE");
 // Demand is grouped by the outlet's victim FILTER, because two outlets requiring different subtypes
 // do not compete for the same bodies. A burst carries its count in sac_count.
 //
+// ---- PROJECTED FADE BODIES (the fade-credit gap, fixed 2026-10-01) ----------------------------
+//
+// THE DEFECT THESE TWO HELPERS CLOSE. `plan_fodder_credit` below counted the Saprolings a plan's
+// SPORE pop will create and counted ZERO for the Saprolings the same plan's Saproling Burst FADE
+// activation will create: `fade_token_subtypes` was in neither of its lists -- not the credited
+// ones, not the six that set `unbounded` -- so a FadeSaproling activation contributed nothing and
+// the guard judged the plan against the PRE-ACTIVATION board. Measured on one Fungus keep-rollout,
+// 510 of the first 4,000 traced rejects named a fade activation, 36 of them literally this:
+//
+//   [fodder] REJECT filt=Saproling sup=1 cr=0 dem=2 |
+//            Saproling Burst/k26/x5  Utopia Mycon/k7  Utopia Mycon/k7
+//
+// Drain the Burst five times, feed two Utopia Mycon. Legal, and the line the deck is built around.
+// The guard's own comment names this as the one direction it may not err in: "a missed reject leaves
+// the pre-existing apply-time degradation exactly as it was, whereas an over-reject would delete a
+// line the deck can really play." See docs/design/fungus-fade-fodder-credit-gap.md.
+//
+// Toughness a FRESH token of these subtypes already has from lords/anthems. The same ComputeLordBonus
+// call ReadFadeBoard's sap_anthem_t and SweepDeadFadeTokens both make, so the survival test below is
+// the engine's own answer rather than a second opinion about it. Auras and Equipment are deliberately
+// absent: they cannot be attached to a token that does not exist yet.
+static int ProjectedTokenAnthemToughness(const GameState& state, int me,
+                                         const std::vector<std::string>& subtypes)
+{
+    Card tok;
+    tok.AddType(CardType::Creature);
+    tok.m_subtypes  = subtypes;
+    tok.m_power     = 0;
+    tok.m_toughness = 0;
+    const BoardSources bs = GatherBoardSources(state.battlefield, me);
+    return ComputeLordBonus(tok, state, me, false, nullptr, &bs.lords, &bs.anthems).second;
+}
+
+// How many LIVE bodies a Saproling Burst fade activation adds to the board. Zero for every other
+// action, so this is inert for every deck without a fading token-maker.
+//
+// THE SURVIVAL TEST IS THE POINT, and it is the USER's observation (2026-10-01): *"even 0 would work
+// if a lord is on board ... usually the saprolings would die when it hits zero, but with the extra
+// toughness they survive."* A fade token's P/T is a characteristic-defining ability reading the
+// SOURCE's remaining counter total -- RefreshFadeTokens writes it straight onto the Card -- so an
+// activation that empties the Burst mints 0/0s that SweepDeadFadeTokens kills on the spot, UNLESS a
+// Sporecrown Thallid or a live Beastmaster Ascension lifts them. Crediting those as fodder would be
+// an over-credit: the guard's safe direction, but it would re-open the apply-time no-op the guard
+// exists to prevent, so the test is made rather than skipped.
+//
+// `anthem_t` is passed IN because it costs a GatherBoardSources + ComputeLordBonus and is a board
+// property, identical for every candidate and every subset of one enumeration. Callers compute it
+// once, lazily -- never per subset.
+static int FadeActivationLiveBodies(const GameState& state, const Action& a,
+                                   const CardDefinition& d, int anthem_t)
+{
+    // DEFAULT ON; =0 restores the pre-2026-10-01 behaviour (fade pops credited as zero). It exists
+    // because the suite says this change moves NO play -- 140 regression cases byte-identical,
+    // including five Fungus cases at d0/d3/d5 -- so the only place it can still pay is the
+    // keep-generation regime at d1/b3, which is where the over-reject was found and which has not
+    // been A/B'd. Without an arm that measurement is not possible.
+    static const bool s_on = EnvOn("MTG_SAC_FODDER_FADE_CREDIT", true);
+    if (!s_on) { return 0; }
+    if (a.kind != Action::Kind::ActivatePermAbility
+        || a.ability_mode != Action::AbilityMode::FadeSaproling
+        || d.params.fade_token_subtypes.empty()) { return 0; }
+    int counters = -1;
+    for (const Permanent& p : state.battlefield)
+    {
+        if (p.controller_index != state.active_player_index) { continue; }
+        if (p.card.m_number != a.sac_source_id) { continue; }
+        counters = p.fade_counters;
+        break;
+    }
+    if (counters < 0) { return 0; }   // source not on the battlefield -> claim nothing
+    const int k    = std::max(1, a.chosen_x);
+    const int left = counters - k * std::max(1, d.params.fade_saproling_cost);
+    if (left + anthem_t <= 0) { return 0; }   // minted 0/0 and swept on the spot
+    // Tokens per activation AFTER the token doubler: CreateToken is where Doubling Season's token
+    // half hooks, so one Season is two Saprolings per activation. Counting it is the GENEROUS
+    // direction, which is the one this guard is allowed to err in. (The spore branch below does NOT
+    // apply the shift and so under-credits under a Season -- the same defect, smaller, and a
+    // separate play-affecting change; it is recorded in the design doc, not fixed here.)
+    return k * (std::max(1, d.params.fade_creates_tokens)
+                << DoublerShift(state, state.active_player_index, /*for_tokens=*/true));
+}
+
 // Inert for every deck without two co-selected creature-sac outlets -> byte-identical.
 static bool SubsetOversubscribesSacFodder(const GameState& state,
                                           const std::vector<Action>& cands,
@@ -10005,6 +10087,16 @@ static bool SubsetOversubscribesSacFodder(const GameState& state,
             if (d != nullptr && d->params.persist) { return false; }
         }
     }
+    // Lazily computed, at most ONCE per call, and only when a fade activation is actually selected
+    // (see FadeActivationLiveBodies). Every deck without a fading token-maker never touches it.
+    int  fade_anthem_t    = 0;
+    bool fade_anthem_done = false;
+    auto fade_anthem = [&](const std::vector<std::string>& subs) -> int
+    {
+        if (!fade_anthem_done)
+        { fade_anthem_t = ProjectedTokenAnthemToughness(state, me, subs); fade_anthem_done = true; }
+        return fade_anthem_t;
+    };
     auto plan_can_add = [&](const std::string& filt) -> bool
     {
         for (int j : sel)
@@ -10036,6 +10128,11 @@ static bool SubsetOversubscribesSacFodder(const GameState& state,
             if (SacOutletPoolEnabled()
                 && (a.kind == Action::Kind::SacForMana
                     || a.kind == Action::Kind::SacCreatureOutlet)) { continue; }
+            // A Saproling Burst fade activation that mints bodies which SURVIVE (see the helper).
+            if (matches(d->params.fade_token_subtypes)
+                && FadeActivationLiveBodies(state, a, *d,
+                                            fade_anthem(d->params.fade_token_subtypes)) > 0)
+            { return true; }
             // Any token the action creates that carries the filter subtype.
             if (matches(d->params.spore_token_subtypes)
                 || matches(d->params.upkeep_token_subtypes)
@@ -10101,6 +10198,17 @@ static bool SubsetOversubscribesSacFodder(const GameState& state,
                 {
                     credit += std::max(1, a.chosen_x)
                             * std::max(1, d->params.spore_creates_tokens);
+                    continue;
+                }
+                // COUNTABLE, AND IT WAS MISSING -- a Saproling Burst fade activation. Same shape as
+                // the spore pop above (k is a searched axis in chosen_x), with one extra condition:
+                // the bodies have to SURVIVE being minted. See FadeActivationLiveBodies.
+                if (a.kind == Action::Kind::ActivatePermAbility
+                    && a.ability_mode == Action::AbilityMode::FadeSaproling
+                    && matches(d->params.fade_token_subtypes))
+                {
+                    credit += FadeActivationLiveBodies(state, a, *d,
+                                                       fade_anthem(d->params.fade_token_subtypes));
                     continue;
                 }
                 // ZERO, AND DELIBERATELY NOT UNBOUNDED -- the two credits that are certainly not
@@ -10331,6 +10439,17 @@ static void BuildFodderIndex(const GameState& state, const std::vector<Action>& 
         fx.supply[f] = supply;
     }
 
+    // Lazily computed ONCE for the whole enumeration, and only if a fade activation is a candidate
+    // at all -- it costs a GatherBoardSources + ComputeLordBonus, which is why it is never per subset.
+    int  fade_anthem_t    = 0;
+    bool fade_anthem_done = false;
+    auto fade_anthem = [&](const std::vector<std::string>& subs) -> int
+    {
+        if (!fade_anthem_done)
+        { fade_anthem_t = ProjectedTokenAnthemToughness(state, me, subs); fade_anthem_done = true; }
+        return fade_anthem_t;
+    };
+
     fx.term.assign(cands.size(), FodderTerm{});
     for (int j = 0; j < static_cast<int>(cands.size()); ++j)
     {
@@ -10367,6 +10486,8 @@ static void BuildFodderIndex(const GameState& state, const std::vector<Action>& 
         if (is_sac) { continue; }   // the sac activation itself adds nothing
         const bool spore_pop = (a.kind == Action::Kind::ActivatePermAbility
                                 && a.ability_mode == Action::AbilityMode::SporeSaproling);
+        const bool fade_pop  = (a.kind == Action::Kind::ActivatePermAbility
+                                && a.ability_mode == Action::AbilityMode::FadeSaproling);
         for (int f = 0; f < nslots; ++f)
         {
             const std::string& F = filt[f];
@@ -10383,6 +10504,14 @@ static void BuildFodderIndex(const GameState& state, const std::vector<Action>& 
             {
                 t.credit[f] += std::max(1, a.chosen_x) * std::max(1, d->params.spore_creates_tokens);
                 continue;   // the pop carries its own yield; it never reaches the clause below
+            }
+            // Lockstep twin of plan_fodder_credit's fade clause -- same helper, same lazily-computed
+            // anthem, so the two forms cannot disagree (MTG_SAC_FODDER_AGG_VERIFY proves it).
+            if (fade_pop && matches(d->params.fade_token_subtypes))
+            {
+                t.credit[f] += FadeActivationLiveBodies(state, a, *d,
+                                                        fade_anthem(d->params.fade_token_subtypes));
+                continue;
             }
             if (matches(d->params.dies_token_subtypes)
                 || matches(d->params.sac_outlet_token_subtypes)

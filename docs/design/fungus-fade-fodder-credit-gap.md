@@ -1,7 +1,10 @@
 # Fungus: the fodder guard credits spore pops but not FADE pops
 
-**Status: DEFECT CONFIRMED, NOT YET FIXED.** Found 2026-10-01 while checking a user observation about
-Mycoloth. Play-affecting (it ADDS plans), so it needs its own A/B rather than riding a perf commit.
+**Status: FIXED 2026-10-01, `MTG_SAC_FODDER_FADE_CREDIT` DEFAULT ON.** Found while checking a user
+observation about Mycoloth. The fix removes **486 of the 510** measured over-rejects and leaves the
+sound ones; it moves **no play in the suite** (140 regression cases byte-identical, including five
+Fungus cases at d0/d3/d5). So this is a latent-correctness fix, not a measured win — see "Severity,
+stated honestly" at the end.
 
 ## The defect in one line
 
@@ -138,10 +141,78 @@ Season, as a `(4+2k)/(4+2k)` that attacks next turn and mints a Saproling per co
 and if so narrow to the smallest winning `k`. Judge it on the **conservative** projection, since it is
 a narrowing — the asymmetry `FadeKLandmarks` documents at length (`_lo` to suppress, `_hi` to admit).
 
-## Order of work
+## What was built, and what it measured
 
-1. Fix the fade credit (above). It is a bug in the forbidden direction and should not wait on anything.
-   A/B it on its own: it adds plans, so win turn can move.
-2. Confirm Mycoloth is enumerated in the second main.
-3. Only then revisit `DevourCountCandidates` — dropping the this-turn rungs and adding the lethal
-   projection, as one measured change.
+`ProjectedTokenAnthemToughness` + `FadeActivationLiveBodies` in `TurnSolver.cpp`, called from the three
+places that now cannot disagree: `plan_fodder_credit` (the reserve path), `plan_can_add` (the
+reserve-off path), and `BuildFodderIndex` (the aggregate form). `MTG_SAC_FODDER_AGG_VERIFY=1` runs the
+aggregate and the original on every subset and reports the first disagreement — 0 mismatches on the
+Fungus replay and across the smoke suite.
+
+Same hand, same trace, before and after:
+
+| | fade-activation rejects | of sampled |
+|---|---|---|
+| before | **510** | 4,000 |
+| after | **24** | 4,000 |
+
+And the 24 survivors are *correct*, which the arithmetic now shows on its face:
+
+```
+before:  sup=1 cr=0 dem=2 | Saproling Burst/k26/x2  Vitaspore Thallid/k9  Utopia Mycon/k7
+after :  sup=1 cr=2 dem=4 | Saproling Burst/k26/x2  Vitaspore Thallid/k9  Utopia Mycon/k7 x3
+```
+
+The credit is now 2 — the two bodies the drain really makes — so supply+credit = 3, and the surviving
+reject is a *wider* selection: four outlet activations against three bodies, which genuinely
+over-promises by one. The enumeration reaches those deeper plans only because the shallow ones are no
+longer killed.
+
+**The anthem is computed ONCE per enumeration, lazily, and only if a fade activation is a candidate**
+(it costs a `GatherBoardSources` + `ComputeLordBonus`). It is never per subset — that is the whole
+point of the aggregate it rides on.
+
+## Severity, stated honestly
+
+* **In the enumeration it is real and large**: 486 of 510 traced rejects were deleting legal plans.
+* **In the suite it is invisible**: smoke 101/101 and regression 140/140 byte-identical, Fungus
+  included (d0/d3/d5). The over-reject needs ≥ 2 sac-outlet activations co-selected with a fade drain,
+  and the suite's searched play apparently does not reach that shape — it was found in a
+  **keep-generation rollout at d1/b3**, hand
+  `Saproling Burst x2; Utopia Mycon x1; Forest x2; Doubling Season x1; Mycoloth x1`.
+* **So the place it can still pay is mulligan generation, and that is UNMEASURED.**
+  `MTG_SAC_FODDER_FADE_CREDIT=0` exists as the arm for exactly that measurement.
+
+## Correction to the older doc
+
+`sac-fodder-created-in-the-same-line.md` says of this guard: *"The subset guard understands mid-plan
+replenishment; the candidate emitter does not."* That was true of **spore** pops and false of **fade**
+pops, which is the hole above. The adopted same-line fusion itself handles fade correctly
+(`SameLineFodderKind::Fade`), and `MakeSameLineSacFodder` re-checks the board afterwards for precisely
+the reason this fix needed a survival test — its own comment: *"a 0/0 fade token can die to the
+toughness SBA on arrival."*
+
+## Order of remaining work
+
+1. ~~Fix the fade credit.~~ **DONE** (above).
+2. ~~Confirm Mycoloth is enumerated in the second main.~~ **CONFIRMED — and it was already built for
+   the user's own reason.** `GoldFishRunner::DeckUsesSecondMain` whitelists `devour > 0` and
+   `FungusProvider::MainPhaseOverride` returns `MainPhase::Main2` for it and `Main1` for everything
+   else, both behind `MTG_FUNGUS_M2_DEVOUR` (default ON). Recorded there from the user on 2026-09-23:
+   *"doing mycoloth in the second main is important, because you want to attack with existing
+   creatures and then sacrifice them."* That comment already names the Beastmaster consequence too.
+3. **Revisit `DevourCountCandidates` — but the analysis above needs correcting.** Because Mycoloth is
+   cast in the SECOND main, the bodies that attacked are already **tapped** when the devour axis is
+   enumerated, so `CanAttackFull` is false for them and the attack-protecting machinery is **already
+   self-inert**: `free_k` collapses to `own` and is then not pushed (the push requires
+   `free_k < own`), and the ladder's this-turn quest rung never fires because no `bodies[i].atk` is
+   true. So there is probably nothing to *remove* — which also explains why the landmark menu's
+   measured narrowing came from dropping the `big`-body rungs rather than from `free_k`. **Verify with
+   `MTG_DEVOUR_TRACE=1`, which prints `free=` and `outlet=`, before acting on it.**
+4. The **lethal projection** is then the one real addition left, and it is the user's point: *"it
+   should be easy to figure out when Mycoloth will be lethal, and it normally would be. That would be
+   an easy choice there."* Mirror `FadeKLandmarks`' `k_win_now` / `k_win_next` collapse — judged on the
+   CONSERVATIVE projection, because narrowing to one entry may only be done on a `k` that can be
+   *proven* to win.
+5. Smaller, same family, not fixed here: the **spore** branch does not apply the token doubler, so it
+   under-credits under a Doubling Season — the same defect, in the same forbidden direction.
