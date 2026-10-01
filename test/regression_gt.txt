@@ -1,8 +1,7 @@
-# Regression ground truth -- commit 4736ec40  date 2026-09-30
+# Regression ground truth -- commit 4b259c2e  date 2026-10-01
 # Promoted from accepted runs by 'regression.sh --accept' -- do not hand-edit.
-# accepted-with-regressions (smoke, 2026-09-30): MTG_ACT_LINE_HOLD adopted DEFAULT ON -- trailing-activation payment hole (docs/design/trailing-activation-payment-hole.md): the cast payment could not see the plan own trailing activations, so it tapped their {T} source or stranded a pip and the activation silently no-opped with no drops, no log line and no fd-diverge. Silent drop rate 24.3% -> 10.3% on snow, activations resolved +29.7%. Smoke: 6 configs move, all selesnya+snow; searched net BETTER -1.00 turn over 375 games; d0 +8.00 over 1000. The d0-only loss is a SEPARATE pre-existing defect this fix stops HIDING -- the greedy projection over-values a trailing activation (significant at d0, gone at d1, still gone at d5: the signature of a leaf-valuation error, not a payment one). CPU +28% on snow is VOLUME not overhead (payments +33% at -13% each); regression tier 2.7 -> 2.8 min vs a 45-min ceiling. Still carries the 2026-09-29 WhiteKnights list regression (Vial paid by a Plains, 23 lands, 8 one-drops, K=14 table; deck DATA only) -- unchanged by this engine flag, see git log of this file.
-# accepted-with-regressions (regression, 2026-09-30): MTG_ACT_LINE_HOLD adopted DEFAULT ON -- trailing-activation payment hole (docs/design/trailing-activation-payment-hole.md): the cast payment could not see the plan own trailing activations, so it tapped their {T} source or stranded a pip and the activation silently no-opped with no drops, no log line and no fd-diverge. Silent drop rate 24.3% -> 10.3% on snow, activations resolved +29.7%. Regression: 11 configs move (selesnya, snow, plus ONE stompy game at equal score); searched net BETTER -4.00 turns over 930 games, all 4 searched-slower games have DIVERGING DRAWS (variance, physically different games); reference corpus clean -- 0 play-drift, 0 enum-gap, 0 contract-fail over 355 refs; d0 +21.00 over 1000. The d0-only loss is a SEPARATE pre-existing defect this fix stops HIDING -- the greedy projection over-values a trailing activation (significant at d0, gone at d1, still gone at d5: the signature of a leaf-valuation error, not a payment one). CPU +28% on snow is VOLUME not overhead (payments +33% at -13% each); regression tier 2.7 -> 2.8 min vs a 45-min ceiling. Still carries the 2026-09-29 WhiteKnights list regression (Vial paid by a Plains, 23 lands, 8 one-drops, K=14 table; deck DATA only) -- unchanged by this engine flag, see git log of this file.
 # accepted-with-regressions (overnight, 2026-09-30): MTG_ACT_LINE_HOLD adopted DEFAULT ON -- trailing-activation payment hole (docs/design/trailing-activation-payment-hole.md): the cast payment could not see the plan own trailing activations, so it tapped their {T} source or stranded a pip and the activation silently no-opped with no drops, no log line and no fd-diverge. Silent drop rate 24.3% -> 10.3% on snow, activations resolved +29.7%. Overnight: 24 configs move; searched net +7.00 turns over 8350 games (+0.00084/game) of which selesnya is EXACTLY 0.00 over 6000 games and critter/melira 0.00 -- all of it snow, whose searched sign flips across tiers (+2/-3/+7), i.e. the metric quantum not an effect; held-out paired A/B over 31k games settles searched depth as neutral-or-better on every deck (selesnya 111/78 p=0.020, snow 90/91 null, melira+stompy zero divergence); d0 +94.00 over 9000. The d0-only loss is a SEPARATE pre-existing defect this fix stops HIDING -- the greedy projection over-values a trailing activation (significant at d0, gone at d1, still gone at d5: the signature of a leaf-valuation error, not a payment one). CPU +28% on snow is VOLUME not overhead (payments +33% at -13% each); regression tier 2.7 -> 2.8 min vs a 45-min ceiling. Still carries the 2026-09-29 WhiteKnights list regression (Vial paid by a Plains, 23 lands, 8 one-drops, K=14 table; deck DATA only) -- unchanged by this engine flag, see git log of this file.
+# accepted-with-regressions (regression, 2026-10-01): 2 searched slower are both auras d5/d3 and both analyzed: gi117 5->6 is budget CHURN (recovers to 5 at 4x and 16x); gi428 4->5 PERSISTS and is attributable to the chain-arm opt-out (same game: chain_on=T4 24,690 units, chain_off=T5 57,067 units), accepted because the d5 pair NETS ZERO (s2002 +0.0020, s3003 -0.0020 = a game gained) matching the 1,600-game A/B at +0.0, and auras buys -8.6% units at d5; auras past_W=0.41% is nonzero so the arm has real value there and is the first chain adoption to revisit.
 # Key: <deck>_<mode>_d<depth>_s<seed> = <avg>[/<play_digest>]   (avg = mean turn-to-win, unwon = max_turns+1)
 # Modes: smoke (<15m), regression (<45m), overnight (<8h); seeds disjoint.
 
@@ -14,11 +13,11 @@ slivers_smoke_d0_s1001=4.6400/ecb48ca9a240322b
 slivers_smoke_d3_s1001=4.2480/d6e6ed28a06bcf71
 slivers_smoke_d5_s1001=4.1867/768ac7b6f827eed2
 burn_smoke_d0_s1001=4.4620/e667d678badfdd47
-burn_smoke_d3_s1001=4.3400/e69a909272e2bba3
+burn_smoke_d3_s1001=4.3400/99c259bacd406ed0
 burn_smoke_d5_s1001=4.3520/2b1c2344e1ae10b3
 th_smoke_d0_s1001=5.5480/2c26a469bba22630
 th_smoke_d3_s1001=4.1000/ea9dc2c896a78524
-th_smoke_d5_s1001=4.0133/0cf65c3986003125
+th_smoke_d5_s1001=4.0000/73b4630ff2d7900b
 knights_smoke_d0_s1001=4.5400/7b7884e574def764
 knights_smoke_d3_s1001=4.3920/968b2503ca205ded
 knights_smoke_d5_s1001=4.3867/d5adbe3f95541d38
@@ -35,8 +34,8 @@ dragonstorm_smoke_d0_s1001=5.4320/f5da38d6684d4ce0
 dragonstorm_smoke_d3_s1001=4.5533/30a62f5b68b2b319
 dragonstorm_smoke_d5_s1001=4.5200/db5874513c4b01f3
 auras_smoke_d0_s1001=4.3660/6efc1c000fae9de5
-auras_smoke_d3_s1001=4.1333/8f735595fbb0c3a6
-auras_smoke_d5_s1001=4.1200/974edf37c6d2ce47
+auras_smoke_d3_s1001=4.1300/92b5aa8bc5bd8bf0
+auras_smoke_d5_s1001=4.1200/c1cccd9e310b6d49
 goblins_smoke_d0_s1001=4.0680/d613ca2b28813f89
 goblins_smoke_d3_s1001=3.6467/34b31119188e09c2
 goblins_smoke_d5_s1001=3.5867/f1b4c5ede81eda7a
@@ -84,7 +83,7 @@ fluctuator2hg_smoke_d3_s1001=3.5467/ee0b5b7d7aba9d1b
 angels2hg_smoke_d3_s1001=5.1900/e420a20addcbf2a2
 slivers2hg_smoke_d3_s1001=4.8200/60f7078e6e53e52d
 burn2hg_smoke_d3_s1001=5.8400/17cdfbfc7739cd84
-th2hg_smoke_d3_s1001=4.5200/9274dcd09b005624
+th2hg_smoke_d3_s1001=4.5200/13e68b9f3ee9c2d1
 dragonstorm2hg_smoke_d3_s1001=4.7600/6ef7717d2bf426d4
 auras2hg_smoke_d3_s1001=4.5200/202d405e5c62800b
 creature_giving2hg_smoke_d3_s1001=5.0000/93d2e87daed0be9f
@@ -109,8 +108,8 @@ selesnya_smoke_d0_s1001=6.2790/d22af24133b72d9e
 selesnya_smoke_d3_s1001=5.4600/9c9a98b4457d9033
 selesnya_smoke_d5_s1001=5.3733/6033391b05fe36cf
 snow_smoke_d0_s1001=6.6590/5ad044b773e23f9b
-snow_smoke_d3_s1001=6.1300/aa05d7dc1a92d37b
-snow_smoke_d5_s1001=6.2400/a64434f0cedb320b
+snow_smoke_d3_s1001=6.1300/d1b94d6d93bf3d02
+snow_smoke_d5_s1001=6.2400/352027dece3833e8
 
 # --- regression ---
 fungus_regression_d0_s2002=5.7660/1660db6692cc5f51
@@ -129,9 +128,9 @@ burn_regression_d3_s3003=4.2460/e511e1c63635c6ac
 burn_regression_d5_s2002=4.3400/37c768db40ca5cba
 burn_regression_d5_s3003=4.2460/83f00c9145329588
 th_regression_d0_s2002=5.5150/1e27ffa9f5eff92f
-th_regression_d3_s2002=4.1380/f86167bc0ecda764
-th_regression_d3_s3003=3.9800/735b722f3e65db6f
-th_regression_d5_s2002=4.0600/6af5d67497a9005a
+th_regression_d3_s2002=4.1380/4708c08038f7576f
+th_regression_d3_s3003=3.9800/12326219c7860536
+th_regression_d5_s2002=4.0600/4c7b969d67453c3c
 th_regression_d5_s3003=3.9867/86d1ed559882b739
 knights_regression_d0_s2002=4.5610/e26a3c4f720c1148
 knights_regression_d3_s2002=4.2967/0579df80e5e36735
@@ -159,10 +158,10 @@ dragonstorm_regression_d3_s3003=4.5233/73da67c4ff1ca378
 dragonstorm_regression_d5_s2002=4.3160/5dab7536d41a8932
 dragonstorm_regression_d5_s3003=4.5240/716a4758ad032b10
 auras_regression_d0_s2002=4.3520/11c53eccf71c7ff2
-auras_regression_d3_s2002=4.0860/44fb32cf7d57a254
-auras_regression_d3_s3003=4.1720/db526c39aed55391
-auras_regression_d5_s2002=4.0760/ace17fcfd9225734
-auras_regression_d5_s3003=4.1600/dacf88918974a442
+auras_regression_d3_s2002=4.0860/58f60a1a75998559
+auras_regression_d3_s3003=4.1720/3f063e95b446e8ee
+auras_regression_d5_s2002=4.0780/966b8b0152e5ca64
+auras_regression_d5_s3003=4.1580/58d10d73933ff5df
 goblins_regression_d0_s2002=4.1030/00ab13d7b1178999
 goblins_regression_d3_s2002=3.8067/8d760f4f52791fdb
 goblins_regression_d3_s3003=3.8367/66ea9e74dac157ea
@@ -185,7 +184,7 @@ fivecolour_regression_d5_s2002=4.8200/70eb77cefd5da4e5
 fivecolour_regression_d5_s3003=4.8500/da65720ad00ad020
 stompy_regression_d0_s2002=4.9750/037f4d0023565a00
 stompy_regression_d3_s2002=4.1700/3e05b0eb199afd3e
-stompy_regression_d3_s3003=4.1167/78985aa8c9ec3335
+stompy_regression_d3_s3003=4.1167/8c83515924137d28
 stompy_regression_d5_s2002=4.1640/b989d145d90220ec
 stompy_regression_d5_s3003=4.0880/7c8587f3d9f6d5ce
 minotaur_regression_d0_s2002=5.3460/6842b28e80a209a4
@@ -246,7 +245,7 @@ giants_regression_d5_s3003=5.7467/2431fe7c4cbe6623
 pirates_regression_d0_s2002=4.7560/3f2186ab1411ab79
 pirates_regression_d3_s2002=4.3600/c12535dafe57138a
 pirates_regression_d3_s3003=4.4267/236b766bea444e3f
-pirates_regression_d5_s2002=4.4000/090e6ddbc55749e1
+pirates_regression_d5_s2002=4.4000/2da8841acf81be19
 pirates_regression_d5_s3003=4.4133/665caa69b31754dc
 selesnya_regression_d0_s2002=6.2470/2b8c3e964cbbbd0a
 selesnya_regression_d3_s2002=5.1867/219f9c4699b0efde
@@ -255,7 +254,7 @@ selesnya_regression_d5_s2002=5.0533/9938ce594cdc9419
 selesnya_regression_d5_s3003=5.4267/761ad45580487236
 snow_regression_d0_s2002=6.6670/93adbb600cbceef0
 snow_regression_d3_s2002=6.1167/6f22ddbea71db2b0
-snow_regression_d3_s3003=5.9833/bcbb7d62fec107b7
+snow_regression_d3_s3003=5.9833/85e8d5e45ff557c1
 snow_regression_d5_s2002=6.0333/0354afd8a2b57626
 snow_regression_d5_s3003=6.1000/21f131406a6b5a8b
 
