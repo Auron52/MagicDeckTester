@@ -24289,6 +24289,117 @@ namespace shapestats
         }
     }
 
+    // ---- HEAVY-CALL CAPTURE (MTG_BRANCH_HEAVY=<N>) -------------------------------------------
+    // The per-turn table says WHICH turns branch; it cannot say WHAT the branching was made of, so
+    // it cannot be reviewed. This keeps the N heaviest individual EnumeratePlans calls by odometer
+    // with their full option-group breakdown and the board that produced them -- so a reviewer
+    // (human or agent) can look at one real decision and say "those options should not all be open"
+    // or "this needs a heuristic". Same audience rule as scripts/review_games.py.
+    // Short, stable tags. Only the kinds that actually turn up in the decks under review get a
+    // name; anything else prints its enum value, which is enough to grep for and cannot go stale.
+    inline std::string ActionKindTag(Action::Kind k)
+    {
+        switch (k)
+        {
+            case Action::Kind::CastFromHand:       return "cast";
+            case Action::Kind::PlayLand:           return "land";
+            case Action::Kind::SacForMana:         return "sacForMana";
+            case Action::Kind::SacCreatureOutlet:  return "sacOutlet";
+            case Action::Kind::TapForTokens:       return "tapTokens";
+            case Action::Kind::TapForTokenPay:     return "tapTokenPay";
+            case Action::Kind::ActivatePermAbility:return "permAbility";
+            case Action::Kind::ActivatePump:       return "pump";
+            case Action::Kind::Equip:              return "equip";
+            case Action::Kind::DigDraw:            return "dig";
+            case Action::Kind::AnimateLand:        return "animateLand";
+            case Action::Kind::UntapCreature:      return "untap";
+            default: return "kind" + std::to_string(static_cast<int>(k));
+        }
+    }
+
+    inline std::string AbilityModeTag(PermAbilityMode m)
+    {
+        switch (m)
+        {
+            case PermAbilityMode::None:           return "";
+            case PermAbilityMode::TapDamage:      return "tapDamage";
+            case PermAbilityMode::TapInvestigate: return "investigate";
+            case PermAbilityMode::TapDraw:        return "tapDraw";
+            case PermAbilityMode::SacDraw:        return "sacDraw";
+            case PermAbilityMode::Drain:          return "drain";
+            case PermAbilityMode::ExileTop:       return "exileTop";
+            default: return "mode" + std::to_string(static_cast<int>(m));
+        }
+    }
+
+    inline int HeavyWant()
+    {
+        static const int v = []() -> int {
+            const char* e = std::getenv("MTG_BRANCH_HEAVY");
+            if (e == nullptr || *e == '\0' || std::string(e) == "0") { return 0; }
+            return std::max(1, std::atoi(e));
+        }();
+        return v;
+    }
+
+    struct Heavy
+    {
+        std::uint64_t odo = 0;
+        int turn = 0, board = 0, hand = 0, num_ind = 0, ngroups = 0;
+        std::uint64_t plans = 0, dedup = 0;
+        std::vector<std::string> groups;   // one rendered line per option group
+        std::string board_desc;
+        std::uint64_t seen = 1;            // times this exact decision was re-enumerated
+    };
+    inline std::mutex         g_heavy_mtx;
+    inline std::vector<Heavy> g_heavy;     // kept sorted DESC by odo, truncated to HeavyWant()
+
+    inline void OfferHeavy(Heavy&& h)
+    {
+        const int want = HeavyWant();
+        if (want == 0) { return; }
+        std::lock_guard<std::mutex> lk(g_heavy_mtx);
+        if (static_cast<int>(g_heavy.size()) >= want && h.odo <= g_heavy.back().odo) { return; }
+        // DISTINCT decisions only. The first run returned three copies of one turn-6 state, which
+        // burns the slots and hides the variety a reviewer needs -- and the recurrence is itself
+        // recorded, as `seen`, because a heavy decision re-entered identically is a memo question.
+        for (Heavy& e : g_heavy)
+        {
+            if (e.odo == h.odo && e.turn == h.turn && e.groups == h.groups
+                && e.board_desc == h.board_desc)
+            { ++e.seen; return; }
+        }
+        g_heavy.push_back(std::move(h));
+        std::sort(g_heavy.begin(), g_heavy.end(),
+                  [](const Heavy& a, const Heavy& b) { return a.odo > b.odo; });
+        if (static_cast<int>(g_heavy.size()) > want) { g_heavy.resize(static_cast<std::size_t>(want)); }
+    }
+
+    // Same line-tag + key=value convention as scripts/review_games.py: readable AND parseable, so
+    // an agent can split it and a human reads the same bytes.
+    inline void DumpHeavy()
+    {
+        std::lock_guard<std::mutex> lk(g_heavy_mtx);
+        if (g_heavy.empty()) { return; }
+        std::fprintf(stderr, "\n=== BRANCH SHAPE: the %d HEAVIEST individual decisions "
+                             "(what the branching is MADE OF) ===\n", (int)g_heavy.size());
+        for (std::size_t i = 0; i < g_heavy.size(); ++i)
+        {
+            const Heavy& h = g_heavy[i];
+            std::fprintf(stderr,
+                "\nHEAVY rank=%zu odo=%llu turn=%d board=%d hand=%d groups=%d independent=%d "
+                "plans=%llu dedup=%llu reenumerated=%llu\n",
+                i + 1, (unsigned long long)h.odo, h.turn, h.board, h.hand, h.ngroups, h.num_ind,
+                (unsigned long long)h.plans, (unsigned long long)h.dedup,
+                (unsigned long long)h.seen);
+            std::fprintf(stderr, "  BOARD %s\n", h.board_desc.c_str());
+            for (const std::string& g : h.groups)
+            { std::fprintf(stderr, "  GROUP %s\n", g.c_str()); }
+            std::fprintf(stderr,
+                "  ODOMETER = product over groups of (1+size) x 2^%d independent\n", h.num_ind);
+        }
+    }
+
     struct Dumper
     {
         ~Dumper()
@@ -24363,6 +24474,7 @@ namespace shapestats
                 (unsigned long long)t_fod,  100.0 * static_cast<double>(t_fod)  / den,
                 (unsigned long long)t_oth,  100.0 * static_cast<double>(t_oth)  / den,
                 (unsigned long long)t_pass, 100.0 * static_cast<double>(t_pass) / den);
+            DumpHeavy();
             std::fprintf(stderr,
                 "  SHARED-RESOURCE rejects (the three named) = %llu = %.2f%% of subsets visited.\n"
                 "  That is the fraction of the walk a constraint-bounded enumeration could have\n"
@@ -38356,6 +38468,85 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
                                 static_cast<int>(state.battlefield.size()), sodo,
                                 static_cast<std::uint64_t>(plans.size()),
                                 static_cast<std::uint64_t>(deduped.size()));
+
+        // HEAVY CAPTURE: keep this call's full option-group breakdown if it is among the biggest.
+        // Only builds the strings when the flag is on AND it might make the cut.
+        if (shapestats::HeavyWant() > 0)
+        {
+            shapestats::Heavy h;
+            h.odo     = static_cast<std::uint64_t>(sodo);
+            h.turn    = state.turn_number;
+            h.board   = static_cast<int>(state.battlefield.size());
+            h.hand    = static_cast<int>(state.ActivePlayer().hand.size());
+            h.num_ind = num_ind;
+            h.ngroups = static_cast<int>(groups.size());
+            h.plans   = static_cast<std::uint64_t>(plans.size());
+            h.dedup   = static_cast<std::uint64_t>(deduped.size());
+            // Board: non-land permanents named, tokens collapsed to a count -- the same readability
+            // rule review_games.py uses, and for the same reason (48 identical Saprolings is a
+            // number; listing them buries the few permanents that decide the turn).
+            {
+                std::map<std::string, int> tok;
+                std::vector<std::string> perms;
+                int lands = 0;
+                for (const Permanent& p : state.battlefield)
+                {
+                    if (p.controller_index != state.active_player_index) { continue; }
+                    const std::string nm = p.card.m_name.str();
+                    if (p.card.IsLand())      { ++lands; }
+                    else if (p.is_token)      { ++tok[nm]; }
+                    else                      { perms.push_back(nm); }
+                }
+                std::string bd = "lands=" + std::to_string(lands) + " perms=";
+                for (std::size_t z = 0; z < perms.size(); ++z)
+                { bd += (z ? "," : "") + perms[z]; }
+                if (perms.empty()) { bd += "-"; }
+                bd += " tokens=";
+                if (tok.empty()) { bd += "0"; }
+                else
+                {
+                    bool first = true;
+                    for (const auto& kv : tok)
+                    { bd += (first ? "" : ",") + std::to_string(kv.second) + "x" + kv.first; first = false; }
+                }
+                std::replace(bd.begin(), bd.end(), ' ', ' ');
+                h.board_desc = bd;
+            }
+            // One line per option group: the card, the group size, and what actually DISTINGUISHES
+            // the variants -- which is the part a reviewer needs to judge whether they all deserve
+            // to be separate search branches.
+            for (const std::vector<int>& gp : groups)
+            {
+                std::string line = "size=" + std::to_string(gp.size()) + " card="
+                                 + (gp.empty() ? std::string("-")
+                                               : std::string(cands[gp[0]].card_name));
+                line += " variants=[";
+                for (std::size_t z = 0; z < gp.size(); ++z)
+                {
+                    const Action& a = cands[gp[z]];
+                    if (z) { line += " | "; }
+                    line += shapestats::ActionKindTag(a.kind);
+                    if (a.chosen_x != 0)      { line += ":X=" + std::to_string(a.chosen_x); }
+                    // Mycoloth's devour k is a SEARCHED axis and is the single biggest source of
+                    // group size on Fungus, so it must be visible or a 13-variant group renders as
+                    // 13 identical "cast" entries and looks like a duplication bug.
+                    if (a.devour_count >= 0)  { line += ":devour=" + std::to_string(a.devour_count); }
+                    if (a.sac_count != 1)     { line += ":sacN=" + std::to_string(a.sac_count); }
+                    if (a.ability_mode != Action::AbilityMode::None)
+                    { line += ":mode=" + shapestats::AbilityModeTag(a.ability_mode); }
+                    if (!static_cast<const std::string&>(a.tutor_target).empty())
+                    { line += ":tutor=" + std::string(a.tutor_target); }
+                    if (!static_cast<const std::string&>(a.chosen_float_color).empty())
+                    { line += ":colour=" + std::string(a.chosen_float_color); }
+                    if (a.sac_victim_id != 0) { line += ":victim=" + std::to_string(a.sac_victim_id); }
+                    if (a.alt_cost)           { line += ":alt"; }
+                    if (a.splice_count != 0)  { line += ":splice=" + std::to_string(a.splice_count); }
+                }
+                line += "]";
+                h.groups.push_back(line);
+            }
+            shapestats::OfferHeavy(std::move(h));
+        }
     }
 
     // Cast-ordering search (C): expand each action set into the DISTINCT orderings of its
